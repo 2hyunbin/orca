@@ -225,6 +225,13 @@ export function PluginEnvironmentConnectionDialog({
                   'Identity file (optional)'
                 )}
               </Label>
+              <p className="text-xs text-muted-foreground">
+                {translate(
+                  'auto.components.settings.PluginEnvironmentConnectionDialog.credentialHost',
+                  'SSH configuration, identity files and the agent belong to {{host}}.',
+                  { host: hostLabel }
+                )}
+              </p>
               <Input
                 id={id}
                 value={identityFile}

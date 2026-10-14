@@ -60,10 +60,12 @@ export async function openPluginHostReview(
       throw new Error('The plugin review connection is no longer available')
     }
   }
+  let sshSupported = false
   try {
     current()
     const ready = await open(expected)
     current()
+    sshSupported = ready.sshSupported === true
     if (ready.sessionId !== expected.sessionId || ready.runtimeId !== expected.runtimeId) {
       throw new Error('The plugin review belongs to another host or server instance')
     }
@@ -72,6 +74,7 @@ export async function openPluginHostReview(
     throw error
   }
   return {
+    sshSupported,
     current,
     close,
     onChanged: (listener: (change: PluginChangeEvent) => void) => {

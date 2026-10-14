@@ -114,7 +114,7 @@ function RemoteProviderConnection({
           opened.close()
           return
         }
-        setHost({ api: opened.api, hostLabel, isRemote: true })
+        setHost({ api: opened.api, hostLabel, isRemote: true, environmentId })
       })
       .catch(() => {
         if (!lifetime.signal.aborted) {

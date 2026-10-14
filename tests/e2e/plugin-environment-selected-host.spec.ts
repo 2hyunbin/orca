@@ -20,7 +20,14 @@ test('the selected host catalog installs and approves its provider before all si
 }, testInfo) => {
   const fixture = await createPluginCatalogFixture({
     environmentRecipes: true,
-    environmentPortable: true
+    environmentPortable: true,
+    environmentConnection: {
+      type: 'ssh',
+      host: '127.0.0.1',
+      port: 9,
+      username: 'owned-fixture',
+      projectRoot: '/owned-project'
+    }
   })
   const hostSession = createRestartSession(testInfo, fixture.gitEnvironment)
   const clientSession = createRestartSession(testInfo)
@@ -134,6 +141,24 @@ test('the selected host catalog installs and approves its provider before all si
     const devbox = provider.locator('[data-environment-resource-id="devbox"]')
     await expect(devbox).toHaveAttribute('data-environment-state', 'running')
     await capture('selected-host-inventory-native')
+    await devbox.getByRole('button', { name: 'Connect', exact: true }).click()
+    const sshReview = page.getByRole('dialog', { name: 'Connect to environment', exact: true })
+    await expect(sshReview).toContainText('Company control host')
+    await expect(sshReview).toContainText('owned-fixture@127.0.0.1:9')
+    await expect(sshReview).toContainText(
+      'SSH configuration, identity files and the agent belong to Company control host.'
+    )
+    await capture('remote-provider-ssh-review-native')
+    await sshReview.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(sshReview).toBeHidden()
+    for (const ownPage of [page, host.page]) {
+      expect(
+        await ownPage.evaluate(async () =>
+          (await window.api.ssh.listTargets()).some((target) => target.environmentProvider)
+        )
+      ).toBe(false)
+    }
+
     await provider.getByRole('button', { name: 'Create environment', exact: true }).click()
     const create = page.getByRole('dialog', { name: 'Create environment', exact: true })
     await expect(create).toContainText('Company control host')
@@ -160,7 +185,7 @@ test('the selected host catalog installs and approves its provider before all si
     }
     await expect(devbox).toHaveAttribute('data-environment-state', 'running')
     const marker = await readFile(join(fixture.root, 'provider-executed'), 'utf8')
-    expect(marker.trim().split('\n')).toHaveLength(6)
+    expect(marker.trim().split('\n')).toHaveLength(7)
     const runtime = JSON.parse(
       await readFile(join(fixture.root, 'provider-executed.runtime.json'), 'utf8')
     )
@@ -208,7 +233,9 @@ test('the selected host catalog installs and approves its provider before all si
           scope:
             'Two owned production desktop profiles with real encrypted paired RPC; selected-host provider UI; no corporate fleet or full Node deployment qualification',
           selectedEnvironmentId: environmentId,
-          actualHostProviderInvocations: 6,
+          actualHostProviderInvocations: 7,
+          explicitLifecycleActions: 6,
+          sshReviewUsesControlHostInventoryWithoutSavingOrDialing: true,
           runtimeVersion: runtime.version,
           localProviderCatalogEmpty: true,
           catalogInstallAndApprovalOnSelectedHost: true,

@@ -15,7 +15,11 @@ export async function openPluginEnvironmentProviderSession(
   if (!invoke) {
     throw new Error('Update Orca to manage providers on the selected host')
   }
-  const { current, close, onChanged } = await openPluginHostReview(input, onRetired, signal)
+  const { current, close, onChanged, sshSupported } = await openPluginHostReview(
+    input,
+    onRetired,
+    signal
+  )
   const expected = { ...input }
   const call = async <Method extends EnvironmentProviderRuntimeMethod>(
     method: Method,
@@ -27,6 +31,28 @@ export async function openPluginEnvironmentProviderSession(
     return result
   }
   const api: PluginEnvironmentHostApi = {
+    ...(sshSupported
+      ? {
+          prepareEnvironmentProviderSsh: (
+            args: Parameters<
+              NonNullable<PluginEnvironmentHostApi['prepareEnvironmentProviderSsh']>
+            >[0]
+          ) => call('prepareSsh', { input: args }),
+          saveEnvironmentProviderSsh: (
+            args: Parameters<NonNullable<PluginEnvironmentHostApi['saveEnvironmentProviderSsh']>>[0]
+          ) => call('saveSsh', { input: args }),
+          discardEnvironmentProviderSshReview: (
+            args: Parameters<
+              NonNullable<PluginEnvironmentHostApi['discardEnvironmentProviderSshReview']>
+            >[0]
+          ) => call('discardSsh', { input: args }),
+          connectEnvironmentProviderSsh: (
+            args: Parameters<
+              NonNullable<PluginEnvironmentHostApi['connectEnvironmentProviderSsh']>
+            >[0]
+          ) => call('connectSsh', { input: args })
+        }
+      : {}),
     listEnvironmentProviders: () => call('list', {}),
     listSavedEnvironmentProviders: () => call('listSaved', {}),
     configureEnvironmentProvider: (review) => call('configure', { input: review }),

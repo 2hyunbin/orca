@@ -7,6 +7,7 @@ export type PluginEnvironmentHost = {
   api: PluginEnvironmentHostApi
   hostLabel: string
   isRemote: boolean
+  environmentId?: string
 }
 export const PluginEnvironmentHostContext = createContext<PluginEnvironmentHost | null>(null)
 

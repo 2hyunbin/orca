@@ -13,6 +13,7 @@ export type PluginEnvironmentHostApi = Pick<
   | 'cancelEnvironmentProvider'
   | 'prepareEnvironmentProviderMigration'
   | 'commitEnvironmentProviderMigration'
+  | 'connectEnvironmentProviderSsh'
   | 'prepareEnvironmentProviderSsh'
   | 'saveEnvironmentProviderSsh'
   | 'discardEnvironmentProviderSshReview'

@@ -82,8 +82,9 @@ export function DirectoryPluginDetail({
           <h3 className="text-sm font-semibold">Install in Orca</h3>
           <ol className="list-decimal space-y-2 pl-5 text-sm leading-5 text-muted-foreground">
             <li>
-              Open Settings → Plugins. Turn on Plugin system if needed, then Browse → Manage
-              sources. Add this Git catalog and ref if they are not already listed.
+              Open Settings and choose the host where you want the plugin. Open Plugins, turn on
+              Plugin system if needed, then Manage sources. Add this Git catalog and ref if they are
+              not already listed.
             </li>
             <li>
               Search for{' '}

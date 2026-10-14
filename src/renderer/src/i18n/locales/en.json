@@ -12918,7 +12918,8 @@
           "updateSave": "Update & connect",
           "saving": "Saving connection…",
           "updateSummary": "Updating will close the old connection. This host keeps its workspaces, history and managed server.",
-          "details": "Connection details"
+          "details": "Connection details",
+          "credentialHost": "SSH configuration, identity files and the agent belong to {{host}}."
         },
         "PluginEnvironmentConnectionResources": {
           "reviewError": "Could not confirm this machine’s current connection details. Refresh inventory and check the provider before connecting.",

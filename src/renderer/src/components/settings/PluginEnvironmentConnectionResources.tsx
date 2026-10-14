@@ -1,3 +1,6 @@
+import { getEnvironmentSshStateGeneration } from '@/store/slices/runtime-environment-ssh'
+import { resyncRuntimeEnvironmentSshTargets } from '@/runtime/runtime-environment-ssh-state'
+import type { SshConnectionState } from '../../../../shared/ssh-types'
 import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
@@ -8,7 +11,10 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
-import { sshTargetConnectFailureText } from '@/ssh/ssh-host-server-status-copy'
+import {
+  sshConnectFailureText,
+  sshTargetConnectFailureText
+} from '@/ssh/ssh-host-server-status-copy'
 import { compactIpcErrorMessage } from '@/lib/ipc-error'
 import { PluginEnvironmentResources } from './PluginEnvironmentResources'
 import { PluginEnvironmentConnectionDialog } from './PluginEnvironmentConnectionDialog'
@@ -21,7 +27,7 @@ export function PluginEnvironmentConnectionResources({
   provider: PluginEnvironmentProviderEntry
   onReviewing(operationId: string | null): void
 }): React.JSX.Element {
-  const { api: providerApi, isRemote } = usePluginEnvironmentHost()
+  const { api: providerApi, isRemote, environmentId } = usePluginEnvironmentHost()
   const [preview, setPreview] = useState<EnvironmentProviderSshPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pending = useRef<string | null>(null)
@@ -82,9 +88,13 @@ export function PluginEnvironmentConnectionResources({
   }
   const save = async (identityFile?: string): Promise<void> => {
     const api = providerApi.saveEnvironmentProviderSsh
-    if (!preview || !api || isRemote) {
+    if (!preview || !api) {
       throw new Error('Provider SSH support is unavailable')
     }
+    if (isRemote && !environmentId) {
+      throw new Error('The selected SSH control host is unavailable')
+    }
+    const generation = environmentId ? getEnvironmentSshStateGeneration(environmentId) : undefined
     const target = await api({
       ticketId: preview.ticketId,
       ...(preview.endpointUpdate ? { approveEndpointUpdate: true as const } : {}),
@@ -96,8 +106,26 @@ export function PluginEnvironmentConnectionResources({
     reviewTicket.current = null
     setPreview(null)
     try {
-      useAppStore.getState().setSshTargetsMetadata(await window.api.ssh.listTargets())
-      const state = await window.api.ssh.connect({ targetId: target.id })
+      let state: SshConnectionState | null
+      if (isRemote) {
+        if (!environmentId || !providerApi.connectEnvironmentProviderSsh || !target.generation) {
+          throw new Error('Provider SSH connection support is unavailable on this host')
+        }
+        state = await providerApi.connectEnvironmentProviderSsh({
+          operationId: createBrowserUuid(),
+          targetId: target.id,
+          expectedGeneration: target.generation
+        })
+        if (mounted.current && state && generation !== undefined) {
+          useAppStore
+            .getState()
+            .setEnvironmentSshConnectionState(environmentId, target.id, state, generation)
+          void resyncRuntimeEnvironmentSshTargets(environmentId).catch(() => undefined)
+        }
+      } else {
+        useAppStore.getState().setSshTargetsMetadata(await window.api.ssh.listTargets())
+        state = await window.api.ssh.connect({ targetId: target.id })
+      }
       if (!state || state.status !== 'connected') {
         throw new Error('SSH connection was not confirmed')
       }
@@ -107,9 +135,18 @@ export function PluginEnvironmentConnectionResources({
           'auto.components.settings.PluginEnvironmentConnectionResources.connectionError',
           'Could not connect. Check its credentials and host-key trust in SSH Hosts.'
         )
-        const reason =
-          compactIpcErrorMessage(sshTargetConnectFailureText(target.id, cause, fallback)) ??
-          fallback
+        const message = isRemote
+          ? sshConnectFailureText(
+              environmentId
+                ? useAppStore
+                    .getState()
+                    .sshStateByEnvironment.get(environmentId)
+                    ?.connectionStates.get(target.id)
+                : undefined,
+              cause instanceof Error ? cause.message : fallback
+            )
+          : sshTargetConnectFailureText(target.id, cause, fallback)
+        const reason = compactIpcErrorMessage(message) ?? fallback
         setError(
           translate(
             'auto.components.settings.PluginEnvironmentConnectionResources.savedConnectionError',
@@ -121,7 +158,9 @@ export function PluginEnvironmentConnectionResources({
     }
   }
   const supported = Boolean(
-    !isRemote && providerApi.prepareEnvironmentProviderSsh && providerApi.saveEnvironmentProviderSsh
+    providerApi.prepareEnvironmentProviderSsh &&
+    providerApi.saveEnvironmentProviderSsh &&
+    (!isRemote || providerApi.connectEnvironmentProviderSsh)
   )
   return (
     <>
