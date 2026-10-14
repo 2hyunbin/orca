@@ -89,8 +89,10 @@ export class RuntimeManagedWorktreeQueries {
         this.isVisible(worktree, matchers.get(worktree.repoId), sourceDefaultsSupported)
     )
     // See `listingKnownHostIds`: a scoped listing must still name the host it was asked about.
-    const knownHostIds = listingKnownHostIds(scopedRepo, () =>
-      withoutHiddenHosts(this.deps.listKnownHostIds(), runtimeHiddenHostIds(this.deps.getStore()))
+    // A selector may still name a hidden repo; its host must stay out of the scope either way.
+    const knownHostIds = withoutHiddenHosts(
+      listingKnownHostIds(scopedRepo, () => this.deps.listKnownHostIds()),
+      runtimeHiddenHostIds(this.deps.getStore())
     )
     const page = buildWorktreeListingPage(worktrees, limit, knownHostIds)
     return {
