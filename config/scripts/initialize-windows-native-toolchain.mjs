@@ -133,16 +133,16 @@ export function initializeWindowsNativeToolchain() {
   }
 }
 
-export function prepareWindowsNodeRuntime() {
+export function prepareWindowsNodeRuntime(runProcess = runProcessSync) {
   const script = join(import.meta.dirname, 'ensure-native-runtime.mjs')
-  const check = runProcessSync({
+  const check = runProcess({
     program: process.execPath,
     args: [script, '--check-only'],
     stdio: 'pipe',
     timeoutMs: null
   })
   const compilerEnvironment = check.code === 0 ? undefined : initializeWindowsNativeToolchain()
-  const result = runProcessSync({
+  const result = runProcess({
     program: process.execPath,
     args: [script, '--runtime=node'],
     env: compilerEnvironment

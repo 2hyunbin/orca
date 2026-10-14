@@ -1,14 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { describe, expect, it, vi } from 'vitest'
 import {
   hasWindowsCompilerSelection,
   mergeWindowsCompilerEnvironment,
   parseWindowsCompilerEnvironment,
   prepareWindowsNodeRuntime
 } from './initialize-windows-native-toolchain.mjs'
-
-vi.mock('@orca/process-host', () => ({ runProcessSync: vi.fn() }))
-afterEach(() => vi.resetAllMocks())
 
 const receipt = [
   'Developer Command Prompt banner, not an environment variable',
@@ -70,10 +66,10 @@ describe('Windows native compiler environment scope', () => {
   })
 
   it('uses the original preparation and environment after a passing warm probe', () => {
-    vi.mocked(runProcessSync).mockReturnValue({ code: 0 })
-    expect(prepareWindowsNodeRuntime()).toBe(0)
-    expect(runProcessSync).toHaveBeenCalledTimes(2)
-    expect(runProcessSync).toHaveBeenLastCalledWith(
+    const runProcess = vi.fn(() => ({ code: 0 }))
+    expect(prepareWindowsNodeRuntime(runProcess)).toBe(0)
+    expect(runProcess).toHaveBeenCalledTimes(2)
+    expect(runProcess).toHaveBeenLastCalledWith(
       expect.objectContaining({
         args: [expect.stringContaining('ensure-native-runtime.mjs'), '--runtime=node'],
         env: process.env,
@@ -83,7 +79,7 @@ describe('Windows native compiler environment scope', () => {
   })
 
   it('propagates native preparation failure after a passing warm probe', () => {
-    vi.mocked(runProcessSync).mockReturnValueOnce({ code: 0 }).mockReturnValueOnce({ code: 9 })
-    expect(prepareWindowsNodeRuntime()).toBe(9)
+    const runProcess = vi.fn().mockReturnValueOnce({ code: 0 }).mockReturnValueOnce({ code: 9 })
+    expect(prepareWindowsNodeRuntime(runProcess)).toBe(9)
   })
 })
