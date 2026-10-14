@@ -14,7 +14,6 @@ import {
   jiraAddIssueComment,
   jiraGetIssue,
   jiraIssueComments,
-  jiraListAssignableUsers,
   jiraListPriorities,
   jiraListTransitions,
   jiraUpdateIssue
@@ -23,8 +22,7 @@ import type {
   JiraComment,
   JiraIssue,
   JiraPriority,
-  JiraTransition,
-  JiraUser
+  JiraTransition
 } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { translate } from '@/i18n/i18n'
@@ -56,7 +54,6 @@ export default function JiraIssueWorkspace({
   const [commentsError, setCommentsError] = useState<string | null>(null)
   const [transitions, setTransitions] = useState<JiraTransition[]>([])
   const [priorities, setPriorities] = useState<JiraPriority[]>([])
-  const [users, setUsers] = useState<JiraUser[]>([])
   const [pendingField, setPendingField] = useState<string | null>(null)
   const [titleDraft, setTitleDraft] = useState('')
   const [labelsDraft, setLabelsDraft] = useState('')
@@ -107,7 +104,6 @@ export default function JiraIssueWorkspace({
       setCommentsError(null)
       setTransitions([])
       setPriorities([])
-      setUsers([])
       setCommentDraft('')
       optimisticCommentsRef.current = []
       return
@@ -142,16 +138,14 @@ export default function JiraIssueWorkspace({
 
     void Promise.all([
       jiraListTransitions(providerSettings, issue.key, issue.siteId),
-      jiraListPriorities(providerSettings, issue.siteId),
-      jiraListAssignableUsers(providerSettings, issue.key, undefined, issue.siteId)
+      jiraListPriorities(providerSettings, issue.siteId)
     ])
-      .then(([nextTransitions, nextPriorities, nextUsers]) => {
+      .then(([nextTransitions, nextPriorities]) => {
         if (requestId !== requestIdRef.current) {
           return
         }
         setTransitions(nextTransitions)
         setPriorities(nextPriorities)
-        setUsers(nextUsers)
       })
       .catch(() => {})
 
@@ -326,7 +320,7 @@ export default function JiraIssueWorkspace({
               pendingField={pendingField}
               transitions={transitions}
               priorities={priorities}
-              users={users}
+              sourceContext={sourceContext}
               mutateIssue={mutateIssue}
             />
 
