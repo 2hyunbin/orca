@@ -161,10 +161,12 @@ export function saveOrcaCloudSession(
   options: { spentOnFailure?: boolean } = {}
 ): OrcaCloudSessionPersistence {
   const key = orcaCloudSessionKey(profileId, userDataPath)
-  unsavedRotations.delete(key)
   try {
-    return writeOrcaCloudSession(profileId, userDataPath, session)
+    const persistence = writeOrcaCloudSession(profileId, userDataPath, session)
+    unsavedRotations.delete(key)
+    return persistence
   } catch (error) {
+    // A failed non-rotating write throws as before and leaves any unsaved rotation pending.
     if (!options.spentOnFailure) {
       throw error
     }

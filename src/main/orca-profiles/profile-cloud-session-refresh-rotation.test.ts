@@ -240,6 +240,30 @@ describe('cloud session refresh-token rotation', () => {
     expect(existsSync(getOrcaCloudSessionPath('profile-1', userDataPath))).toBe(false)
   })
 
+  it('keeps an unsaved rotation when a later capability save also fails', async () => {
+    const server = createRotatingAuthServer(Date.now)
+    signIn()
+    Object.assign(writeFailure, { code: 'EPERM', onlyFile: 'account-session.json.enc' })
+
+    for (let renewal = 0; renewal < 12; renewal++) {
+      await readFreshOrcaCloudSession(config, active, userDataPath).catch(() => undefined)
+      expect(() =>
+        commitCloudSessionRelink(
+          'profile-1',
+          userDataPath,
+          takeCloudSessionTicket('profile-1', userDataPath),
+          {
+            capabilities: { flags: { 'relay.use': true }, refreshedAt: Date.now() }
+          }
+        )
+      ).toThrow('EPERM')
+      vi.advanceTimersByTime(BROKER_RETRY_MS)
+    }
+
+    expect(server.sent).toEqual(['refresh-0'])
+    expect(server.revoked).toBe(false)
+  })
+
   it('ends the renewal loop on a 401 even when the revocation cannot be written', async () => {
     const server = createRotatingAuthServer(Date.now)
     signIn()
