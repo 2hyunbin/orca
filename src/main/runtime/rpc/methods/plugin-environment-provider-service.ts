@@ -1,3 +1,5 @@
+import { sshTargetStackAvailable } from '../../../ssh/ssh-target-registry'
+import { environmentProviderSshAuthorizerAvailable } from '../../../ssh/environment-provider-ssh-admission'
 import type { PluginEnvironmentProviderService } from '../../../plugins/plugin-environment-provider-service'
 import { environmentProviderControllerForService } from '../../../plugins/plugin-environment-provider-controller'
 
@@ -18,4 +20,10 @@ export function requireEnvironmentProviderRpcController() {
     throw new Error('Environment providers are unavailable on this control host')
   }
   return environmentProviderControllerForService(service)
+}
+
+export function environmentProviderSshRpcAvailable(): boolean {
+  return (
+    service !== null && sshTargetStackAvailable() && environmentProviderSshAuthorizerAvailable()
+  )
 }

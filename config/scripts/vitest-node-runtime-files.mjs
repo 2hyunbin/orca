@@ -55,6 +55,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-environment-provider-service.integration.test.ts',
   'src/main/plugins/plugin-environment-provider-saved-history.integration.test.ts',
   'src/main/plugins/plugin-environment-provider-ssh.integration.test.ts',
+  'src/main/plugins/plugin-environment-provider-ssh-connections.integration.test.ts',
   'src/main/plugins/plugin-environment-provider-endpoint.integration.test.ts',
   'src/main/plugins/plugin-environment-adapter.integration.test.ts',
   'src/main/runtime/rpc/methods/plugin-environment-providers.integration.test.ts',

@@ -11,7 +11,7 @@ import type {
 import type { PluginEnvironmentProviderRecoveryResult } from './plugin-environment-provider-recovery-api'
 import type { PluginEnvironmentProviderMigrationPreview } from './plugin-environment-provider-migration-api'
 import type { EnvironmentProviderSshPreview } from './plugin-environment-provider-ssh-api'
-import type { SshTarget } from '../ssh-types'
+import type { SshConnectionState, SshTarget } from '../ssh-types'
 
 export const environmentProviderRuntimeInputs = {
   list: input.pluginEnvironmentProviderRuntimeListSchema,
@@ -24,6 +24,7 @@ export const environmentProviderRuntimeInputs = {
   recover: input.pluginEnvironmentProviderRuntimeRecoverSchema,
   prepareMigration: input.pluginEnvironmentProviderRuntimePrepareMigrationSchema,
   commitMigration: input.pluginEnvironmentProviderRuntimeCommitMigrationSchema,
+  connectSsh: input.pluginEnvironmentProviderRuntimeConnectSshSchema,
   prepareSsh: input.pluginEnvironmentProviderRuntimePrepareSshSchema,
   saveSsh: input.pluginEnvironmentProviderRuntimeSaveSshSchema,
   discardSsh: input.pluginEnvironmentProviderRuntimeDiscardSshSchema,
@@ -41,6 +42,7 @@ export type EnvironmentProviderRuntimeResults = {
   recover: PluginEnvironmentProviderRecoveryResult
   prepareMigration: PluginEnvironmentProviderMigrationPreview
   commitMigration: PluginEnvironmentProviderEntry[]
+  connectSsh: SshConnectionState | null
   prepareSsh: EnvironmentProviderSshPreview
   saveSsh: SshTarget
   discardSsh: boolean

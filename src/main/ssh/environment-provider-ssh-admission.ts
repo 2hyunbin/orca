@@ -26,3 +26,7 @@ export async function admitEnvironmentProviderSshTarget(
   }
   return lease
 }
+
+export function environmentProviderSshAuthorizerAvailable(): boolean {
+  return authorize !== null
+}

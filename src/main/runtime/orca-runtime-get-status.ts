@@ -1,5 +1,11 @@
-import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-environment-provider-runtime-capability'
-import { environmentProviderRpcAvailable } from './rpc/methods/plugin-environment-provider-service'
+import {
+  PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY,
+  PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY
+} from '../../shared/plugins/plugin-environment-provider-runtime-capability'
+import {
+  environmentProviderSshRpcAvailable,
+  environmentProviderRpcAvailable
+} from './rpc/methods/plugin-environment-provider-service'
 import { pluginManagementRpcAvailable } from './rpc/methods/plugin-management'
 import { PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-management-api'
 import { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
@@ -117,6 +123,9 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     )
     if (hasOffscreen || hasHeadlessCommands) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
+    }
+    if (environmentProviderSshRpcAvailable()) {
+      capabilities.push(PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY)
     }
     if (pluginManagementRpcAvailable()) {
       capabilities.push(PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY)

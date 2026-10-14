@@ -6,6 +6,7 @@ import {
   PluginEnvironmentProviderSshReviews,
   type PluginEnvironmentProviderSshOptions
 } from './plugin-environment-provider-ssh-reviews'
+import { PluginEnvironmentProviderSshConnections } from './plugin-environment-provider-ssh-connections'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { PluginEnvironmentProviderReview } from '../../shared/plugins/plugin-environment-provider-api'
 import {
@@ -20,6 +21,7 @@ import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 
 /** Fresh inventory is reviewed separately from SSH credentials and host-key trust. */
 export class PluginEnvironmentProviderSsh {
+  private readonly connections = new PluginEnvironmentProviderSshConnections()
   private readonly contexts: PluginEnvironmentProviderContextStore
   private readonly reviews: PluginEnvironmentProviderSshReviews
   private readonly lifetime = new AbortController()
@@ -55,15 +57,31 @@ export class PluginEnvironmentProviderSsh {
       : this.reviews.prepare(...args)
   }
   save(...args: Parameters<PluginEnvironmentProviderSshReviews['save']>) {
-    return this.options.track
-      ? this.options.track(() => this.reviews.save(...args))
-      : this.reviews.save(...args)
+    const save = async () => {
+      const target = await this.reviews.save(...args)
+      this.connections.remember(args[0], target)
+      return target
+    }
+    return this.options.track ? this.options.track(save) : save()
   }
   revokeOwner(ownerKey: string): void {
+    this.connections.revokeOwner(ownerKey)
     this.reviews.revokeOwner(ownerKey)
   }
   discard(ownerKey: string, ticketId: string): boolean {
     return this.reviews.discard(ownerKey, ticketId)
+  }
+
+  connectSavedTarget(ownerKey: string, targetId: string, generation: number, signal: AbortSignal) {
+    const connect = () =>
+      this.connections.connect(
+        ownerKey,
+        targetId,
+        generation,
+        AbortSignal.any([signal, this.lifetime.signal]),
+        (target) => this.authorize(target)
+      )
+    return this.options.track ? this.options.track(connect) : connect()
   }
 
   async authorize(target: SshTarget) {
@@ -240,6 +258,7 @@ export class PluginEnvironmentProviderSsh {
       lease.controller.abort()
     }
     this.leases.clear()
+    this.connections.clear()
     this.reviews.dispose()
   }
 }

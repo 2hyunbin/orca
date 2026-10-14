@@ -11,6 +11,7 @@ import {
   pluginEnvironmentProviderReviewSchema
 } from '../../shared/plugins/plugin-environment-provider-api'
 import {
+  pluginEnvironmentProviderSshConnectSchema,
   pluginEnvironmentProviderSshPrepareSchema,
   pluginEnvironmentProviderSshSaveSchema,
   pluginEnvironmentProviderSshDiscardSchema
@@ -28,7 +29,7 @@ export type PluginEnvironmentProviderOperations = Pick<
   ssh?: Pick<
     PluginEnvironmentProviderService['ssh'],
     'prepare' | 'save' | 'revokeOwner' | 'discard'
-  >
+  > & { connectSavedTarget?: PluginEnvironmentProviderService['ssh']['connectSavedTarget'] }
   recover?: PluginEnvironmentProviderService['recover']
   prepareMigration?: PluginEnvironmentProviderService['prepareMigration']
   commitMigration?: PluginEnvironmentProviderService['commitMigration']
@@ -139,15 +140,34 @@ export class PluginEnvironmentProviderController {
       return preview
     })
   }
-  saveSsh(owner: PluginEnvironmentProviderRequestOwner, input: unknown) {
+  async saveSsh(owner: PluginEnvironmentProviderRequestOwner, input: unknown) {
     const { ticketId, identityFile, approveEndpointUpdate } =
       pluginEnvironmentProviderSshSaveSchema.parse(input)
     const ssh = this.service.ssh
     if (!ssh) {
       throw new Error('Provider SSH management is unavailable')
     }
-    return ssh.save(owner.reviewKey ?? owner.key, ticketId, identityFile, approveEndpointUpdate)
+    const target = await ssh.save(
+      owner.reviewKey ?? owner.key,
+      ticketId,
+      identityFile,
+      approveEndpointUpdate
+    )
+    owner.signal.throwIfAborted()
+    return target
   }
+  connectSsh(owner: PluginEnvironmentProviderRequestOwner, input: unknown) {
+    const request = pluginEnvironmentProviderSshConnectSchema.parse(input)
+    const ssh = this.service.ssh
+    const connect = ssh?.connectSavedTarget?.bind(ssh)
+    if (!connect) {
+      throw new Error('Provider SSH management is unavailable')
+    }
+    return this.operations.run(owner, request.operationId, (signal) =>
+      connect(owner.reviewKey ?? owner.key, request.targetId, request.expectedGeneration, signal)
+    )
+  }
+
   discardSsh(owner: PluginEnvironmentProviderRequestOwner, input: unknown): boolean {
     const { ticketId } = pluginEnvironmentProviderSshDiscardSchema.parse(input)
     return this.service.ssh?.discard(owner.reviewKey ?? owner.key, ticketId) ?? false

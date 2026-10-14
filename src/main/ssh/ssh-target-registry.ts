@@ -105,3 +105,13 @@ export function setSshConnectionManagerResolver(
 export function getSshConnectionManager(): SshConnectionManager | null {
   return registeredGetSshConnectionManager?.() ?? null
 }
+
+export function sshTargetStackAvailable(): boolean {
+  return Boolean(
+    sshStore &&
+    registeredConnectSshTarget &&
+    registeredGetSshState &&
+    registeredSshTargetMutations &&
+    getSshConnectionManager()
+  )
+}

@@ -33,3 +33,9 @@ export type EnvironmentProviderSshPreview = {
     savedIdentityFile: boolean
   }
 }
+
+export const pluginEnvironmentProviderSshConnectSchema = z.strictObject({
+  operationId: z.uuid(),
+  targetId: z.string().min(1).max(256),
+  expectedGeneration: z.number().int().positive()
+})

@@ -12,6 +12,7 @@ import {
   pluginEnvironmentProviderMigrationCommitSchema
 } from './plugin-environment-provider-migration-api'
 import {
+  pluginEnvironmentProviderSshConnectSchema,
   pluginEnvironmentProviderSshPrepareSchema,
   pluginEnvironmentProviderSshSaveSchema,
   pluginEnvironmentProviderSshDiscardSchema
@@ -68,4 +69,9 @@ export const pluginEnvironmentProviderRuntimeDiscardSshSchema = z.strictObject({
 export const pluginEnvironmentProviderRuntimeCancelSchema = z.strictObject({
   runtimeId,
   input: pluginEnvironmentProviderCancelSchema
+})
+
+export const pluginEnvironmentProviderRuntimeConnectSshSchema = z.strictObject({
+  runtimeId,
+  input: pluginEnvironmentProviderSshConnectSchema
 })

@@ -1,7 +1,14 @@
 import { defineMethod, type RpcContext } from '../core'
-import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../../../shared/plugins/plugin-environment-provider-runtime-capability'
-import { requireEnvironmentProviderRpcController } from './plugin-environment-provider-service'
 import {
+  PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY,
+  PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY
+} from '../../../../shared/plugins/plugin-environment-provider-runtime-capability'
+import {
+  environmentProviderSshRpcAvailable,
+  requireEnvironmentProviderRpcController
+} from './plugin-environment-provider-service'
+import {
+  pluginEnvironmentProviderRuntimeConnectSshSchema,
   pluginEnvironmentProviderRuntimeListSchema,
   pluginEnvironmentProviderRuntimeListSavedSchema,
   pluginEnvironmentProviderRuntimeConfigureSchema,
@@ -37,6 +44,22 @@ function owner(context: RpcContext, runtimeId: string) {
 }
 
 export const PLUGIN_ENVIRONMENT_PROVIDER_METHODS = [
+  defineMethod({
+    name: 'plugins.environments.connectSsh',
+    permission: 'host-admin',
+    params: pluginEnvironmentProviderRuntimeConnectSshSchema,
+    handler: (params, context) => {
+      const requestOwner = owner(context, params.runtimeId)
+      if (
+        !context.clientCapabilities?.includes(PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY) ||
+        !environmentProviderSshRpcAvailable()
+      ) {
+        throw new Error('Provider SSH connection requires support on the selected control host')
+      }
+      return requireEnvironmentProviderRpcController().connectSsh(requestOwner, params.input)
+    }
+  }),
+
   defineMethod({
     name: 'plugins.environments.list',
     permission: 'host-admin',

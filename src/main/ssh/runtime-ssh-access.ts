@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto'
+import { fingerprintSshTargetConnection as fingerprintRuntimeSshTarget } from './ssh-target-connection-fingerprint'
+export { fingerprintSshTargetConnection as fingerprintRuntimeSshTarget } from './ssh-target-connection-fingerprint'
 import {
   RuntimeSshAccessLinkRequestSchema,
   RuntimeSshAccessUnlinkRequestSchema,
@@ -27,26 +28,6 @@ import {
 import { verifyRuntimeEnvironmentSshTunnel } from './runtime-ssh-access-verification'
 
 type TargetClaims = ReturnType<typeof requireManagedOrcadInfrastructure>['claims']
-
-export function fingerprintRuntimeSshTarget(target: SshTarget): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        host: target.host,
-        port: target.port,
-        username: target.username,
-        configHost: target.configHost,
-        identityFile: target.identityFile,
-        identityAgent: target.identityAgent,
-        identitiesOnly: target.identitiesOnly,
-        gssapiAuthentication: target.gssapiAuthentication,
-        proxyCommand: target.proxyCommand,
-        jumpHost: target.jumpHost,
-        systemSshConnectionReuse: target.systemSshConnectionReuse
-      })
-    )
-    .digest('hex')
-}
 
 function requireTarget(claims: TargetClaims, targetId: string): SshTarget & { generation: number } {
   const target = claims.listTargets().find((entry) => entry.id === targetId)

@@ -4,6 +4,8 @@ import {
   type PluginManagementMethod,
   type PluginManagementResults
 } from './plugin-management-api'
+import type { SshConnectionState } from '../ssh-types'
+import type { pluginEnvironmentProviderSshConnectSchema } from './plugin-environment-provider-ssh-api'
 import { z } from 'zod'
 import { environmentProviderRuntimeInputs } from './plugin-environment-provider-runtime-calls'
 import { pluginChangeEventSchema, type PluginChangeEvent } from './plugin-change-event'
@@ -55,6 +57,7 @@ export const pluginEnvironmentProviderSessionCallSchema = z.discriminatedUnion('
     'commitMigration',
     environmentProviderRuntimeInputs.commitMigration.omit({ runtimeId: true })
   ),
+  call('connectSsh', environmentProviderRuntimeInputs.connectSsh.omit({ runtimeId: true })),
   call('prepareSsh', environmentProviderRuntimeInputs.prepareSsh.omit({ runtimeId: true })),
   call('saveSsh', environmentProviderRuntimeInputs.saveSsh.omit({ runtimeId: true })),
   call('discardSsh', environmentProviderRuntimeInputs.discardSsh.omit({ runtimeId: true })),
@@ -66,13 +69,16 @@ export const pluginManagementSessionCallSchema = z.strictObject({
   request: pluginManagementRequestSchema
 })
 export type PluginEnvironmentProviderSessionApi = {
+  connectEnvironmentProviderSsh?: (
+    input: z.infer<typeof pluginEnvironmentProviderSshConnectSchema>
+  ) => Promise<SshConnectionState | null>
   callPluginManagementSession?: <Method extends PluginManagementMethod>(input: {
     sessionId: string
     request: PluginManagementRequest
   }) => Promise<PluginManagementResults[Method]>
   openEnvironmentProviderSession?: (
     input: PluginEnvironmentProviderSessionOpen
-  ) => Promise<{ sessionId: string; runtimeId: string }>
+  ) => Promise<{ sessionId: string; runtimeId: string; sshSupported?: boolean }>
   callEnvironmentProviderSession?: <Method extends EnvironmentProviderRuntimeMethod>(input: {
     sessionId: string
     method: Method

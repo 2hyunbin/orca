@@ -16,7 +16,10 @@ import {
 import type { RuntimeRpcResponse } from '../runtime-rpc-envelope'
 import { unwrapRuntimeRpcResult } from '../runtime-rpc-result'
 import { waitForPromiseWithSignal } from '../abort-signal-reason'
-import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from './plugin-environment-provider-runtime-capability'
+import {
+  PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY,
+  PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY
+} from './plugin-environment-provider-runtime-capability'
 import { pluginChangeEventSchema, type PluginChangeEvent } from './plugin-change-event'
 import {
   environmentProviderRuntimeInputs,
@@ -38,6 +41,7 @@ const statusSchema = z.object({
 export class PluginEnvironmentProviderRuntimeClient {
   private readonly connection: RemoteRuntimeRequestConnection
   private readonly lifetime = new AbortController()
+  private capabilities: readonly string[] = []
   private admission?: Promise<void>
   private observation?: Promise<void>
   private observationId?: string
@@ -55,6 +59,7 @@ export class PluginEnvironmentProviderRuntimeClient {
       { ...pairing, credential: { ...pairing.credential } },
       [
         PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY,
+        PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY,
         ...(purpose === 'management' ? [PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY] : [])
       ],
       {
@@ -70,7 +75,7 @@ export class PluginEnvironmentProviderRuntimeClient {
     input: EnvironmentProviderRuntimeInput<Method>,
     timeoutMs = method === 'prepareMigration'
       ? 16 * 660_000
-      : method === 'execute' || method === 'recover'
+      : method === 'execute' || method === 'recover' || method === 'connectSsh'
         ? 660_000
         : 15_000
   ): Promise<EnvironmentProviderRuntimeResults[Method]> {
@@ -81,6 +86,9 @@ export class PluginEnvironmentProviderRuntimeClient {
     })
     try {
       await this.ready()
+      if (method === 'connectSsh' && !this.supportsProviderSsh()) {
+        throw new Error('Provider SSH connection is unavailable on this host')
+      }
       this.lifetime.signal.throwIfAborted()
       const response = await this.connection.request<EnvironmentProviderRuntimeResults[Method]>(
         `plugins.environments.${method}`,
@@ -131,6 +139,10 @@ export class PluginEnvironmentProviderRuntimeClient {
       this.close()
       throw error
     }
+  }
+
+  supportsProviderSsh(): boolean {
+    return this.capabilities.includes(PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY)
   }
 
   onChanged(listener: (change: PluginChangeEvent) => void): () => void {
@@ -219,6 +231,7 @@ export class PluginEnvironmentProviderRuntimeClient {
         await this.connection.request('status.get', undefined, 15_000, this.lifetime.signal)
       )
     )
+    this.capabilities = status.capabilities
     if (status.runtimeId !== this.runtimeId) {
       throw new Error('Environment provider review belongs to another server instance')
     }

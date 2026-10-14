@@ -85,7 +85,11 @@ export class PluginEnvironmentProviderSessions {
       })
       await session.client.observe()
       this.requireCurrent(session)
-      return { sessionId: input.sessionId, runtimeId: input.runtimeId }
+      return {
+        sessionId: input.sessionId,
+        runtimeId: input.runtimeId,
+        ...(session.client.supportsProviderSsh() ? { sshSupported: true } : {})
+      }
     } catch (error) {
       this.retire(input.sessionId, session)
       session.lease?.close()
