@@ -1,3 +1,5 @@
+import { toast } from 'sonner'
+import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import type { TaskPageComposerActionsModel } from '../../use-task-page-composer-actions'
 import { LoaderCircle } from 'lucide-react'
 import { JiraIcon } from '@/components/icons/JiraIcon'
@@ -18,6 +20,8 @@ export function TaskPageJiraContent({
 }): React.JSX.Element | null {
   const {
     jiraStatus,
+    jiraHasWorkspace,
+    getJiraIssueWorkspaces,
     jiraStatusReady,
     jiraConnected,
     selectedJiraSiteId,
@@ -121,26 +125,47 @@ export function TaskPageJiraContent({
             </div>
           ) : null}
 
-          {!jiraLoading && jiraIssues.length === 0 && !jiraError && !jiraStatus.credentialError ? (
+          {!jiraLoading &&
+          displayedJiraIssues.length === 0 &&
+          !jiraError &&
+          !jiraStatus.credentialError ? (
             <div className="px-4 py-10 text-center">
               <p className="text-sm font-medium text-foreground">
                 {translate('auto.components.TaskPage.eba87f2edb', 'No Jira issues found')}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {jiraSearchInput
+                {jiraHasWorkspace
                   ? translate(
-                      'auto.components.TaskPage.f51e254d35',
-                      'Try different search terms or JQL.'
+                      'jira.workspace.empty',
+                      'Link a Jira issue to a workspace, or choose another view.'
                     )
-                  : translate(
-                      'auto.components.TaskPage.94d900518d',
-                      'No issues match the selected preset.'
-                    )}
+                  : jiraSearchInput
+                    ? translate(
+                        'auto.components.TaskPage.f51e254d35',
+                        'Try different search terms or JQL.'
+                      )
+                    : translate(
+                        'auto.components.TaskPage.94d900518d',
+                        'No issues match the selected preset.'
+                      )}
               </p>
             </div>
           ) : null}
 
           <TaskPageJiraIssueList
+            getIssueWorkspaces={getJiraIssueWorkspaces}
+            onOpenWorkspace={(workspace) => {
+              if (
+                activateAndRevealWorktree(workspace.id, { navigationIntent: 'user-open' }) === false
+              ) {
+                toast.error(
+                  translate(
+                    'jira.workspace.openFailed',
+                    'Unable to open the workspace linked to this Jira issue.'
+                  )
+                )
+              }
+            }}
             formatUpdatedAt={formatRelativeTime}
             getStatusTone={getJiraStatusTone}
             issues={sortedJiraIssues}

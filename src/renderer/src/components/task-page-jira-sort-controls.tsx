@@ -63,7 +63,7 @@ export function TaskPageJiraSortControls({
 
   return (
     <>
-      <div className="grid h-8 flex-none grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_64px] items-center gap-3 border-b border-border/50 bg-muted/25 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground @max-3xl:!hidden @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_64px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_72px]">
+      <div className="grid h-8 flex-none grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_104px] items-center gap-3 border-b border-border/50 bg-muted/25 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground @max-3xl:!hidden @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_104px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_104px]">
         {columns.map((column) => (
           <button
             key={column.id}

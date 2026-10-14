@@ -1,14 +1,25 @@
 import type { TaskPageLinearBoardModel } from './use-task-page-linear-board'
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { findTaskPageJiraIssue } from '@/components/task-page-jira-cache-selectors'
 import {
   getSingleJiraProjectScope,
   getTaskPageJiraStatusOrderScopeKey
 } from '@/components/task-page-jira-status-order'
+import {
+  buildJiraIssueWorkspaceAttachmentIndex,
+  collectLinkedJiraIssueRefs,
+  findJiraIssueWorkspaceAttachmentsInIndex
+} from '@/lib/jira-issue-workspace-attachment'
+import { filterLinkedJiraIssues } from './task-page-jira-linked-issues'
 import { sortJiraIssues } from './jira-issue-sorter'
 export function useTaskPageJiraListProjection(model: TaskPageLinearBoardModel) {
   const {
     jiraTaskSourceContext,
+    jiraHasWorkspace,
+    appliedJiraSearch,
+    linearAttachmentWorkspaces,
+    jiraStatus,
+    selectedJiraSiteId,
     jiraTaskSourceScopeKey,
     jiraCacheSnapshot,
     jiraIssues,
@@ -17,9 +28,33 @@ export function useTaskPageJiraListProjection(model: TaskPageLinearBoardModel) {
     jiraOrderDirection,
     jiraPrioritiesBySite
   } = model
+  const jiraIssueAttachmentIndex = useMemo(
+    () => buildJiraIssueWorkspaceAttachmentIndex(linearAttachmentWorkspaces),
+    [linearAttachmentWorkspaces]
+  )
+  const getJiraIssueWorkspaces = useCallback(
+    (issue: Parameters<typeof findJiraIssueWorkspaceAttachmentsInIndex>[1]) =>
+      findJiraIssueWorkspaceAttachmentsInIndex(
+        jiraIssueAttachmentIndex,
+        issue,
+        jiraTaskSourceContext
+      ),
+    [jiraIssueAttachmentIndex, jiraTaskSourceContext]
+  )
+  const linkedJiraIssueRefs = useMemo(
+    () =>
+      collectLinkedJiraIssueRefs(
+        linearAttachmentWorkspaces,
+        jiraStatus.sites ?? [],
+        selectedJiraSiteId,
+        jiraTaskSourceContext
+      ),
+    [linearAttachmentWorkspaces, jiraStatus.sites, selectedJiraSiteId, jiraTaskSourceContext]
+  )
+  const linkedJiraIssueRefsSignature = JSON.stringify(linkedJiraIssueRefs)
   const displayedJiraIssues = useMemo(
     () =>
-      jiraIssues.map(
+      (jiraHasWorkspace ? filterLinkedJiraIssues(jiraIssues, appliedJiraSearch) : jiraIssues).map(
         (issue) =>
           findTaskPageJiraIssue(
             jiraCacheSnapshot.issueCache,
@@ -31,7 +66,14 @@ export function useTaskPageJiraListProjection(model: TaskPageLinearBoardModel) {
             }
           ) ?? issue
       ),
-    [jiraIssues, jiraCacheSnapshot.issueCache, jiraCacheSnapshot.searchCache, jiraTaskSourceContext]
+    [
+      jiraIssues,
+      jiraHasWorkspace,
+      appliedJiraSearch,
+      jiraCacheSnapshot.issueCache,
+      jiraCacheSnapshot.searchCache,
+      jiraTaskSourceContext
+    ]
   )
   const displayedJiraProjectScope = useMemo(
     () => getSingleJiraProjectScope(displayedJiraIssues),
@@ -52,19 +94,15 @@ export function useTaskPageJiraListProjection(model: TaskPageLinearBoardModel) {
       jiraPrioritiesBySite
     )
   }, [displayedJiraIssues, jiraOrderBy, jiraOrderDirection, jiraPrioritiesBySite])
-  // New Linear project dialog state
-  const nextModel = model as typeof model & {
-    displayedJiraIssues: typeof displayedJiraIssues
-    displayedJiraProjectScope: typeof displayedJiraProjectScope
-    displayedJiraStatusOrderScopeKey: typeof displayedJiraStatusOrderScopeKey
-    displayedJiraStatusOrder: typeof displayedJiraStatusOrder
-    sortedJiraIssues: typeof sortedJiraIssues
-  }
-  nextModel.displayedJiraIssues = displayedJiraIssues
-  nextModel.displayedJiraProjectScope = displayedJiraProjectScope
-  nextModel.displayedJiraStatusOrderScopeKey = displayedJiraStatusOrderScopeKey
-  nextModel.displayedJiraStatusOrder = displayedJiraStatusOrder
-  nextModel.sortedJiraIssues = sortedJiraIssues
-  return nextModel
+  return Object.assign(model, {
+    displayedJiraIssues,
+    displayedJiraProjectScope,
+    displayedJiraStatusOrderScopeKey,
+    displayedJiraStatusOrder,
+    sortedJiraIssues,
+    getJiraIssueWorkspaces,
+    linkedJiraIssueRefs,
+    linkedJiraIssueRefsSignature
+  })
 }
 export type TaskPageJiraListProjectionModel = ReturnType<typeof useTaskPageJiraListProjection>

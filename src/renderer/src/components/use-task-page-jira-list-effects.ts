@@ -8,10 +8,14 @@ import {
 import { createTaskPageJiraLoadFailureState } from '@/components/task-page-jira-load-state'
 import { searchTaskPageJiraIssues } from '@/components/task-page-jira-search'
 import { JIRA_ITEM_LIMIT, TASK_SEARCH_DEBOUNCE_MS } from './task-page-source-context'
+import { readLinkedJiraIssues } from './task-page-jira-linked-issues'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffectsModel) {
   const {
     settings,
+    jiraHasWorkspace,
+    linkedJiraIssueRefs,
+    linkedJiraIssueRefsSignature,
     setTaskResumeState,
     searchJiraIssues,
     listJiraIssues,
@@ -60,6 +64,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
       jiraQuery: appliedJiraSearch.trim()
     })
   }, [appliedJiraSearch, setTaskResumeState, taskResumeApplied, jiraSearchPersistReadyRef])
+  const jiraRemoteSearch = jiraHasWorkspace ? '' : appliedJiraSearch
   const previousJiraRefreshNonceRef = useRef(jiraRefreshNonce)
   useEffect(() => {
     if (!taskResumeApplied) {
@@ -78,24 +83,27 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setJiraError(null)
     setJiraJqlRejection(null)
     setJiraErrorDetailsOpen(false)
-    const trimmed = appliedJiraSearch.trim()
-    const request =
-      trimmed.length > 0
+    const trimmed = jiraRemoteSearch.trim()
+    const request = jiraHasWorkspace
+      ? readLinkedJiraIssues(linkedJiraIssueRefs, searchJiraIssues, jiraTaskSourceContext, force)
+      : trimmed.length > 0
         ? searchTaskPageJiraIssues(trimmed, (jql) =>
             searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
               sourceContext: jiraTaskSourceContext,
               force
             })
-          )
+          ).then((result) => ({ ...result, error: null }))
         : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
             sourceContext: jiraTaskSourceContext,
             force
-          }).then((issues) => ({ issues, jqlRejection: null }))
+          }).then((issues) => ({ issues, jqlRejection: null, error: null }))
     void request
-      .then(({ issues, jqlRejection }) => {
+      .then((result) => {
+        const { issues, jqlRejection } = result
         if (cancelled) {
           return
         }
+        setJiraError(result.error)
         setJiraIssues(issues)
         setJiraJqlRejection(jqlRejection)
         setJiraLoading(false)
@@ -137,8 +145,10 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     taskSource,
     jiraConnected,
     selectedJiraSiteId,
-    appliedJiraSearch,
+    jiraRemoteSearch,
     activeJiraPreset,
+    jiraHasWorkspace,
+    linkedJiraIssueRefsSignature,
     jiraRefreshNonce,
     taskResumeApplied,
     jiraTaskSourceContext,

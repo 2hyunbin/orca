@@ -17,6 +17,9 @@ function createModel(): TaskPageLinearCollectionEffectsModel {
     selectedJiraSiteId: 'site-1',
     taskSource: 'jira',
     jiraTaskSourceContext: null,
+    jiraHasWorkspace: false,
+    linkedJiraIssueRefs: [],
+    linkedJiraIssueRefsSignature: '[]',
     jiraTaskSourceScopeKey: 'fixture',
     jiraSearchPersistReadyRef: { current: true },
     taskResumeApplied: true,
@@ -49,6 +52,56 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
     vi.clearAllMocks()
     listJiraIssues.mockResolvedValue([])
     searchJiraIssues.mockResolvedValue([])
+  })
+
+  it('loads linked keys directly and does not reread them for local search text', async () => {
+    const model = createModel()
+    model.jiraHasWorkspace = true
+    model.linkedJiraIssueRefs = [{ key: 'APP-1', siteId: 'site-1' }]
+    model.linkedJiraIssueRefsSignature = JSON.stringify(model.linkedJiraIssueRefs)
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    expect(listJiraIssues).not.toHaveBeenCalled()
+    expect(searchJiraIssues).toHaveBeenCalledWith('key = APP-1', 1, {
+      sourceContext: null,
+      siteId: 'site-1',
+      force: false
+    })
+    model.appliedJiraSearch = 'login'
+    rerender()
+    await waitFor(() => expect(model.setJiraLoading).toHaveBeenLastCalledWith(false))
+    expect(searchJiraIssues).toHaveBeenCalledTimes(1)
+    model.jiraRefreshNonce = 1
+    rerender()
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(2))
+    expect(searchJiraIssues).toHaveBeenLastCalledWith('key = APP-1', 1, {
+      sourceContext: null,
+      siteId: 'site-1',
+      force: true
+    })
+  })
+
+  it('ignores a linked read that completes after the source changes', async () => {
+    const model = createModel()
+    model.jiraHasWorkspace = true
+    model.linkedJiraIssueRefs = [{ key: 'APP-1', siteId: 'site-1' }]
+    model.linkedJiraIssueRefsSignature = JSON.stringify(model.linkedJiraIssueRefs)
+    let complete: (value: []) => void = () => {}
+    searchJiraIssues.mockImplementationOnce(
+      () =>
+        new Promise<[]>((resolve) => {
+          complete = resolve
+        })
+    )
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    model.taskSource = 'linear'
+    rerender()
+    await act(async () => {
+      complete([])
+      await Promise.resolve()
+    })
+    expect(model.setJiraIssues).not.toHaveBeenCalled()
   })
 
   it('passes force only for a refresh nonce change', async () => {

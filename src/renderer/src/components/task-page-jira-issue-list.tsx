@@ -6,6 +6,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
+import { JiraLinkedWorkspaceAction } from './JiraLinkedWorkspaceAction'
+import type { Worktree } from '../../../shared/worktree/types'
 import type { JiraIssue, JiraProjectStatusOrder } from '../../../shared/jira-types'
 
 export type TaskPageJiraIssueSection = {
@@ -15,6 +17,8 @@ export type TaskPageJiraIssueSection = {
 }
 
 type TaskPageJiraIssueListProps = {
+  getIssueWorkspaces?: (issue: JiraIssue) => readonly Worktree[]
+  onOpenWorkspace?: (workspace: Worktree) => void
   formatUpdatedAt: (updatedAt: string) => string
   getStatusTone: (categoryKey: string) => string
   issues: JiraIssue[]
@@ -85,6 +89,8 @@ function isSelectedIssue(issue: JiraIssue, selectedIssue: JiraIssue | null): boo
 }
 
 function JiraIssueRow({
+  getIssueWorkspaces,
+  onOpenWorkspace,
   formatUpdatedAt,
   getStatusTone,
   issue,
@@ -93,6 +99,8 @@ function JiraIssueRow({
   selected,
   showSiteContext
 }: {
+  getIssueWorkspaces?: (issue: JiraIssue) => readonly Worktree[]
+  onOpenWorkspace?: (workspace: Worktree) => void
   formatUpdatedAt: (updatedAt: string) => string
   getStatusTone: (categoryKey: string) => string
   issue: JiraIssue
@@ -101,6 +109,7 @@ function JiraIssueRow({
   selected: boolean
   showSiteContext: boolean
 }): React.JSX.Element {
+  const workspaces = getIssueWorkspaces?.(issue) ?? []
   const labels = issue.labels.slice(0, 3)
   const contextLabel =
     showSiteContext && issue.siteName
@@ -126,7 +135,7 @@ function JiraIssueRow({
         }
       }}
       className={cn(
-        'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_64px] @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_64px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_72px]',
+        'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_104px] @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_104px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_104px]',
         selected && 'bg-accent'
       )}
     >
@@ -225,29 +234,38 @@ function JiraIssueRow({
         </TooltipContent>
       </Tooltip>
 
-      <div className="flex shrink-0 items-center justify-end gap-1 @3xl:opacity-0 @3xl:transition-opacity @3xl:group-hover/row:opacity-100 @3xl:group-focus-within/row:opacity-100">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={(event) => {
-                event.stopPropagation()
-                onStartWorkspace(issue)
-              }}
-              aria-label={translate(
-                'auto.components.TaskPage.ff90d0abc7',
-                'Start workspace from {{value0}}',
-                { value0: issue.key }
-              )}
-            >
-              <ArrowRight className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.components.TaskPage.9497f2787c', 'Start workspace')}
-          </TooltipContent>
-        </Tooltip>
+      <div className="flex shrink-0 items-center justify-end gap-1">
+        {onOpenWorkspace && workspaces.length > 0 ? (
+          <JiraLinkedWorkspaceAction
+            issue={issue}
+            workspaces={workspaces}
+            onOpenWorkspace={onOpenWorkspace}
+            onStartWorkspace={onStartWorkspace}
+          />
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onStartWorkspace(issue)
+                }}
+                aria-label={translate(
+                  'auto.components.TaskPage.ff90d0abc7',
+                  'Start workspace from {{value0}}',
+                  { value0: issue.key }
+                )}
+              >
+                <ArrowRight className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={6}>
+              {translate('auto.components.TaskPage.9497f2787c', 'Start workspace')}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -276,6 +294,8 @@ function JiraIssueRow({
 }
 
 export function TaskPageJiraIssueList({
+  getIssueWorkspaces,
+  onOpenWorkspace,
   formatUpdatedAt,
   getStatusTone,
   issues,
@@ -335,6 +355,8 @@ export function TaskPageJiraIssueList({
               {section.issues.map((issue) => (
                 <JiraIssueRow
                   key={`${issue.siteId ?? 'site'}:${issue.id || issue.key}`}
+                  getIssueWorkspaces={getIssueWorkspaces}
+                  onOpenWorkspace={onOpenWorkspace}
                   formatUpdatedAt={formatUpdatedAt}
                   getStatusTone={getStatusTone}
                   issue={issue}
