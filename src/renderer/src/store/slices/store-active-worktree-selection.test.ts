@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { installAttentionScreen } from './workspace-attention/workspace-unread-characterization-fixture'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { buildWorktreeComparator } from '@/components/sidebar/smart-sort'
 import {
@@ -92,10 +93,8 @@ describe('setActiveWorktree', () => {
       refreshGitHubForWorktreeIfStale: vi.fn()
     })
 
+    installAttentionScreen(store, true)
     store.getState().setActiveWorktree(worktreeId)
-    expect(store.getState().worktreesByRepo.repo1[0].isUnread).toBe(true)
-    // The on-screen scan's arrival read.
-    store.getState().readOnScreenAttention([{ worktreeId, tabId: 'none' }], { settleFlags: true })
 
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.isUnread).toBe(false)

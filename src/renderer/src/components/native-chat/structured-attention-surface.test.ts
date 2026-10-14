@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { setPresenceGated } from '@/hooks/agent-auto-ack-presence'
 import { createStructuredAttentionSurface } from './structured-attention-surface'
 import { createTestStore, makeTabGroup, makeUnifiedTab } from '@/store/slices/store-test-helpers'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+
+// The user is present unless a test says otherwise.
+beforeEach(() => setPresenceGated(false))
+afterEach(() => setPresenceGated(true))
 
 const WORKSPACE = 'wt-1'
 const GROUP = 'group-1'

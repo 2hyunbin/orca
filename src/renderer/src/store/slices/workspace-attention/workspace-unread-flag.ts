@@ -6,7 +6,8 @@ import {
   folderWorkspaceMatchesHost
 } from '../worktrees/listing/detected-worktree-meta'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
-import type { FolderWorkspace } from '../../../../../shared/folder-workspace-types'
+import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
+import type { AppState } from '../../types'
 import { persistPassiveWorktreeMetaForOwner } from '../worktrees/listing/worktree-owner-settings'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
 import { workspaceHasLiveMarker } from './workspace-live-markers'
@@ -94,28 +95,33 @@ export function clearWorkspaceUnreadFlag(
   set: WorkspaceAttentionSet,
   get: WorkspaceAttentionGet,
   worktreeId: string,
-  /** Folder rows share an id across hosts; when known, only that host's row is read. */
+  /** Folder rows share an id across hosts: the on-screen host's row, or null for every row. */
   executionHostId?: ExecutionHostId | null
 ): void {
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId
-    const isTarget = (workspace: FolderWorkspace): boolean =>
-      workspace.id === folderWorkspaceId &&
-      (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
-    if (!get().folderWorkspaces.find(isTarget)?.isUnread) {
+    const cleared = get().folderWorkspaces.filter(
+      (workspace) =>
+        workspace.id === folderWorkspaceId &&
+        workspace.isUnread &&
+        (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
+    )
+    if (cleared.length === 0) {
       return
     }
     // Why: flip locally first so repeated reads dedupe on the guard above before the IPC round-trip lands.
     set((s) => ({
       folderWorkspaces: s.folderWorkspaces.map((workspace) =>
-        isTarget(workspace) ? { ...workspace, isUnread: false } : workspace
+        cleared.includes(workspace) ? { ...workspace, isUnread: false } : workspace
       )
     }))
-    if (executionHostId) {
-      void get().updateFolderWorkspace(folderWorkspaceId, { isUnread: false }, { executionHostId })
-    } else {
-      void get().updateFolderWorkspace(folderWorkspaceId, { isUnread: false })
+    for (const workspace of cleared) {
+      void get().updateFolderWorkspace(
+        folderWorkspaceId,
+        { isUnread: false },
+        { executionHostId: getRepoExecutionHostId(workspace) }
+      )
     }
     return
   }
@@ -157,7 +163,12 @@ export function clearWorkspaceUnreadFlag(
   )
 }
 
-/** The flag follows its markers — a read or removal clears it once no live marker remains. */
+/**
+ * The flag follows its markers — a read or removal clears it once no live marker remains.
+ * Why every same-id folder row without a host: tabs are keyed by workspace id, not host, so a
+ * marker can't be attributed to one host's row; a row is lowered only when the shared id has no
+ * live marker at all, so purging host A's tabs lowers host B only if B holds none either.
+ */
 export function settleWorkspaceUnreadFlag(
   set: WorkspaceAttentionSet,
   get: WorkspaceAttentionGet,
@@ -169,6 +180,14 @@ export function settleWorkspaceUnreadFlag(
   if (!workspaceHasLiveMarker(get(), worktreeId)) {
     clearWorkspaceUnreadFlag(set, get, worktreeId, executionHostId)
   }
+}
+
+/** The host whose row is on screen: the active workspace's, else null (every same-id row). */
+export function onScreenHostId(
+  state: Pick<AppState, 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'>,
+  worktreeId: string
+): ExecutionHostId | null {
+  return worktreeId === state.activeWorktreeId ? state.activeWorkspaceExecutionHostId : null
 }
 
 /** The flag {@link clearWorkspaceUnreadFlag} would clear. */

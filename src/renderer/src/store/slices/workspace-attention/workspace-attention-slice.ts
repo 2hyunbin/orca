@@ -2,9 +2,17 @@ import type { StateCreator } from 'zustand'
 import type { AgentAttentionUnreadReason } from '@/attention/agent-attention-contract'
 import type { AppState } from '../../types'
 import type { WorkspaceAttentionSlice } from './workspace-attention-contract'
-import { collectRemovedAttention, dismissReadNotifications } from './attention-removal-follow-up'
+import {
+  collectRemovedAttention,
+  dismissReadNotifications,
+  sameMarkers
+} from './attention-removal-follow-up'
 import { removeTabsAttention } from './subject-attention-transitions'
-import { markWorkspaceUnreadFlag, settleWorkspaceUnreadFlag } from './workspace-unread-flag'
+import {
+  markWorkspaceUnreadFlag,
+  onScreenHostId,
+  settleWorkspaceUnreadFlag
+} from './workspace-unread-flag'
 import { workspaceMarkerTabIds } from './workspace-live-markers'
 import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
 
@@ -50,15 +58,18 @@ export const createWorkspaceAttentionSlice: StateCreator<
         : { unreadAgentCompletionPanes: { ...s.unreadAgentCompletionPanes, [paneKey]: reason } }
     )
   }
-  const removeMarkers = (tabIds: Iterable<string>): void => {
+  /** Removes every marker of the tabs and dismisses their panes' notifications; true if any. */
+  const removeAndDismiss = (tabIds: Iterable<string>): boolean => {
+    const before = get()
     set((s) => {
       const next = removeTabsAttention(s, tabIds)
-      return next.unreadTerminalTabs === s.unreadTerminalTabs &&
-        next.unreadTerminalPanes === s.unreadTerminalPanes &&
-        next.unreadAgentCompletionPanes === s.unreadAgentCompletionPanes
-        ? s
-        : next
+      return sameMarkers(s, next) ? s : next
     })
+    const removed = collectRemovedAttention(before, get())
+    if (removed) {
+      dismissReadNotifications(removed.paneKeys)
+    }
+    return removed !== null
   }
   const paneAttentionEnabled = (): boolean => get().settings?.experimentalTerminalAttention === true
 
@@ -91,40 +102,22 @@ export const createWorkspaceAttentionSlice: StateCreator<
         markPaneUnread(subjectKey, reason)
       }
     },
-    readOnScreenAttention: (targets, { settleFlags }) => {
-      const before = get()
-      removeMarkers(targets.map((target) => target.tabId))
-      const removed = collectRemovedAttention(before, get())
-      // Why the targets' own workspaces: a tab id two workspaces share must settle the one on screen.
-      // `settleFlags` also reads a flag with no marker behind it (Mark as unread, restart, another
-      // client) when its workspace comes on screen, not on every later scan of the same screen.
-      if (removed || settleFlags) {
-        const { activeWorktreeId, activeWorkspaceExecutionHostId } = get()
-        for (const { worktreeId } of targets) {
-          if (worktreeId !== null) {
-            settleWorkspaceUnreadFlag(
-              set,
-              get,
-              worktreeId,
-              worktreeId === activeWorktreeId ? activeWorkspaceExecutionHostId : null
-            )
-          }
+    readOnScreenAttention: ({ workspaceIds, targets }, { screenArrived }) => {
+      const removed = removeAndDismiss(targets.map((target) => target.tabId))
+      // Why on arrival even with nothing removed: a flag with no marker behind it (Mark as unread,
+      // restart, another client) is read when the screen moves to it, not on every later scan.
+      if (removed || screenArrived) {
+        for (const workspaceId of workspaceIds) {
+          settleWorkspaceUnreadFlag(set, get, workspaceId, onScreenHostId(get(), workspaceId))
         }
-      }
-      if (removed) {
-        dismissReadNotifications(removed.paneKeys)
       }
     },
     setWorkspaceUnreadByUser: (worktreeId, isUnread, executionHostId) => {
       if (!isUnread) {
-        const before = get()
-        removeMarkers(workspaceMarkerTabIds(before, worktreeId))
-        const removed = collectRemovedAttention(before, get())
-        if (removed) {
-          dismissReadNotifications(removed.paneKeys)
-        }
+        removeAndDismiss(workspaceMarkerTabIds(get(), worktreeId))
       }
-      // Why: a manual toggle is host-scoped, unlike reads, which settle every row with the id.
+      // Why: the toggle writes only the clicked host's row; the markers it removes are
+      // workspace-wide because tabs, and so markers, are keyed by workspace id, not host.
       void get().updateWorktreeMeta(worktreeId, { isUnread }, { executionHostId })
     }
   }

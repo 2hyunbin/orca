@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { setPresenceGated } from '@/hooks/agent-auto-ack-presence'
 import { createTerminalAttentionSurface } from './terminal-attention-surface'
 import {
   createTestStore,
@@ -9,6 +10,10 @@ import {
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../../shared/constants'
 import { resolveAgentAttention } from '@/attention/agent-attention-policy'
+
+// The user is present unless a test says otherwise.
+beforeEach(() => setPresenceGated(false))
+afterEach(() => setPresenceGated(true))
 
 const WORKSPACE = 'wt-1'
 const TAB = 'tab-1'

@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { installAttentionScreen } from './workspace-attention/workspace-unread-characterization-fixture'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
@@ -110,12 +111,8 @@ it('reads only the selected folder owner on screen and persists to that host', (
     updateFolderWorkspace
   })
 
+  installAttentionScreen(store, true)
   activate()
-  expect(store.getState().folderWorkspaces.map((folder) => folder.isUnread)).toEqual([true, true])
-  // The on-screen scan's arrival read.
-  store.getState().readOnScreenAttention([{ worktreeId: FOLDER_KEY, tabId: 'none' }], {
-    settleFlags: true
-  })
 
   expect(store.getState().folderWorkspaces.map((folder) => folder.isUnread)).toEqual([true, false])
   expect(updateFolderWorkspace).toHaveBeenCalledWith(

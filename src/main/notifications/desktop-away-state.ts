@@ -1,4 +1,4 @@
-export const MOBILE_NOTIFICATION_AWAY_SECONDS = 180
+import { MOBILE_NOTIFICATION_AWAY_SECONDS } from '../../shared/desktop-away-threshold'
 
 type IdleMonitor = {
   getSystemIdleState(threshold: number): string

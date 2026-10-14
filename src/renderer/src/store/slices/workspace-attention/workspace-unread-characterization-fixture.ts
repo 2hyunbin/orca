@@ -9,7 +9,7 @@ import {
   resetFloatingWorkspaceUnreadSelectorCacheForTest,
   selectFloatingWorkspaceHasUnread
 } from '@/store/selectors'
-import { startViewedAttentionScan } from '@/hooks/viewed-attention-scan'
+import { startOnScreenAttentionScan } from '@/hooks/on-screen-attention-scan'
 
 // Store setup and observables for the unread characterization suites; the events live in the driver.
 
@@ -42,10 +42,8 @@ export function installAttentionMockApi(): Mock<
 /** The window the production on-screen scan runs in, driven by the test. */
 export type AttentionScreen = {
   setWindowOnScreen: (onScreen: boolean) => void
-  /** Window-level trusted input (pointerdown, keydown outside xterm). */
+  /** Trusted window input: pointerdown, pointermove, or a capture-phase keydown (xterm included). */
   input: () => void
-  /** A keystroke into xterm, which never reaches the window listeners. */
-  terminalInput: () => void
 }
 
 const screens = new WeakMap<AttentionStore, AttentionScreen>()
@@ -62,7 +60,12 @@ export function screenOf(store: AttentionStore): AttentionScreen {
  * Runs the hook's scan against `store`, with the window's visibility+focus behind a fake document
  * so marking and the scan read the same gate; no native idle query keeps it synchronous.
  */
-function installAttentionScreen(store: AttentionStore, onScreen: boolean): void {
+export function installAttentionScreen(
+  store: AttentionStore,
+  onScreen: boolean,
+  /** The desktop idle answer; undefined runs ungated, like a browser. */
+  desktopAway?: boolean
+): void {
   let windowOnScreen = onScreen
   vi.stubGlobal('document', {
     get visibilityState() {
@@ -72,17 +75,12 @@ function installAttentionScreen(store: AttentionStore, onScreen: boolean): void 
   })
   let rescan = (): void => {}
   let input = (): void => {}
-  let terminalInput = (): void => {}
-  startViewedAttentionScan(store, {
-    readDesktopAway: null,
+  startOnScreenAttentionScan(store, {
+    readDesktopAway: desktopAway === undefined ? null : async () => desktopAway,
     subscribeStructuredViews: () => () => {},
     subscribePresenceSignals: (onRescan, onInput) => {
       rescan = onRescan
       input = onInput
-      return () => {}
-    },
-    subscribeTerminalInput: (onInput) => {
-      terminalInput = onInput
       return () => {}
     }
   })
@@ -91,8 +89,7 @@ function installAttentionScreen(store: AttentionStore, onScreen: boolean): void 
       windowOnScreen = next
       rescan()
     },
-    input: () => input(),
-    terminalInput: () => terminalInput()
+    input: () => input()
   })
 }
 
@@ -100,6 +97,7 @@ export function createAttentionStore(options?: {
   experimental?: boolean
   /** Orca's window starts visible and focused unless false. */
   windowOnScreen?: boolean
+  desktopAway?: boolean
 }): {
   store: AttentionStore
   persists: () => PersistCall[]
@@ -132,7 +130,7 @@ export function createAttentionStore(options?: {
     },
     updateFolderWorkspace
   })
-  installAttentionScreen(store, options?.windowOnScreen !== false)
+  installAttentionScreen(store, options?.windowOnScreen !== false, options?.desktopAway)
   return {
     store,
     persists: () => {
@@ -158,11 +156,14 @@ export function addLiveTerminalTab(
   store: AttentionStore,
   worktreeId: string,
   tabId: string,
-  leafId: string = LEAF_1
+  leafId: string = LEAF_1,
+  targetGroupId?: string
 ): PaneTarget {
-  store
-    .getState()
-    .createUnifiedTab(worktreeId, 'terminal', { id: `unified-${tabId}`, entityId: tabId })
+  store.getState().createUnifiedTab(worktreeId, 'terminal', {
+    id: `unified-${tabId}`,
+    entityId: tabId,
+    ...(targetGroupId ? { targetGroupId } : {})
+  })
   const ptyId = `pty-${tabId}`
   const s = store.getState()
   store.setState({

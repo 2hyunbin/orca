@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getDefaultSettings } from '../../../shared/constants'
-import { resolveAutoAckTabTargets } from './useAutoAckViewedAgent'
+import { resolveAutoAckTabTargets } from './agent-auto-ack-targets'
 import { acknowledgeViewedAutoAckTarget } from './agent-auto-ack-surfaces'
 import {
   createTestStore,
@@ -85,7 +85,9 @@ function runAutoAckScan(store: TestStore): void {
   for (const target of targets) {
     acknowledgeViewedAutoAckTarget(store.getState(), target)
   }
-  store.getState().readOnScreenAttention(targets, { settleFlags: true })
+  store
+    .getState()
+    .readOnScreenAttention({ workspaceIds: [WORKSPACE], targets }, { screenArrived: true })
 }
 
 /** Whether the workspace flag survives the scan's settle. */

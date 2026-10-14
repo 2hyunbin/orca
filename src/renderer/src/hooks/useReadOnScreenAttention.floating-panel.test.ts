@@ -3,7 +3,7 @@
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentAutoAckPresence from './agent-auto-ack-presence'
-import { useAutoAckViewedAgent } from './useAutoAckViewedAgent'
+import { useReadOnScreenAttention } from './useReadOnScreenAttention'
 import { useAppStore } from '../store'
 import { selectFloatingWorkspaceHasUnread } from '../store/selectors'
 import { makeTab, makeTabGroup, makeUnifiedTab } from '../store/slices/store-session-test-harness'
@@ -71,7 +71,7 @@ function openFloatingPanel(): void {
   useAppStore.getState().setFloatingWorkspacePanelOpen(true)
 }
 
-describe('useAutoAckViewedAgent — floating workspace panel visibility', () => {
+describe('useReadOnScreenAttention — floating workspace panel visibility', () => {
   beforeEach(() => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
     seedFloatingCompletion()
@@ -83,7 +83,7 @@ describe('useAutoAckViewedAgent — floating workspace panel visibility', () => 
   })
 
   it('keeps the attention dot lit while the panel is closed and clears it once it opens', () => {
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
 
     // The dot is the only signal a closed panel has, so a store write while hidden must not ack it.
     useAppStore.setState((state) => ({
@@ -142,7 +142,7 @@ describe('useAutoAckViewedAgent — floating workspace panel visibility', () => 
       }
     })
 
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
 
     useAppStore.setState((state) => ({
       unreadAgentCompletionPanes: {
@@ -174,10 +174,10 @@ it('does not acknowledge the regular workspace for a colliding floating tab', ()
   openFloatingPanel()
   const read = vi.spyOn(useAppStore.getState(), 'readOnScreenAttention')
   try {
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
     expect(read).toHaveBeenCalled()
     expect(
-      read.mock.calls.flatMap(([targets]) => targets.map((target) => target.worktreeId))
+      read.mock.calls.flatMap(([screen]) => screen.targets.map((target) => target.worktreeId))
     ).not.toContain('regular')
   } finally {
     cleanup()

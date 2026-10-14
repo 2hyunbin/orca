@@ -10,36 +10,15 @@ type MarkerRecord = Readonly<Record<string, StoredAgentAttentionUnread>>
 
 export type LiveMarkerSources = {
   tabsByWorktree?: Readonly<Record<string, readonly Pick<TerminalTab, 'id'>[]>>
-  unifiedTabsByWorktree?: Readonly<Record<string, readonly Pick<Tab, 'id' | 'contentType'>[]>>
+  /** `entityId` names a chat's current session; readers without it (the Dock) skip completions. */
+  unifiedTabsByWorktree?: Readonly<
+    Record<string, readonly (Pick<Tab, 'id' | 'contentType'> & { entityId?: string })[]>
+  >
   unreadTerminalTabs?: MarkerRecord
 }
 
-/** A tab marker on a live terminal or structured chat tab — the Dock's folder rule. */
-export function hasLiveTabMarker(sources: LiveMarkerSources, workspaceId: string): boolean {
-  return Boolean(
-    sources.tabsByWorktree?.[workspaceId]?.some((tab) => sources.unreadTerminalTabs?.[tab.id]) ||
-    sources.unifiedTabsByWorktree?.[workspaceId]?.some(
-      (tab) => tab.contentType === 'agent-session' && sources.unreadTerminalTabs?.[tab.id]
-    )
-  )
-}
-
-/** Tab ids that can own a marker in a workspace: terminal tabs and structured chat tabs. */
-export function workspaceMarkerTabIds(
-  sources: LiveMarkerSources,
-  workspaceId: string
-): Set<string> {
-  const tabIds = new Set<string>()
-  for (const tab of sources.tabsByWorktree?.[workspaceId] ?? []) {
-    tabIds.add(tab.id)
-  }
-  for (const tab of sources.unifiedTabsByWorktree?.[workspaceId] ?? []) {
-    if (tab.contentType === 'agent-session') {
-      tabIds.add(tab.id)
-    }
-  }
-  return tabIds
-}
+/** A tab that can own markers: a terminal tab, or a structured chat with its current session. */
+export type MarkerTab = { id: string; sessionId: string | null }
 
 /** Pane keys are `${tabId}:${leafId}` and tab ids never contain ":". */
 export function paneKeyTabId(paneKey: string): string | null {
@@ -47,38 +26,50 @@ export function paneKeyTabId(paneKey: string): string | null {
   return separator > 0 ? paneKey.slice(0, separator) : null
 }
 
+/** The tabs of a workspace that can own a marker. */
+export function workspaceMarkerTabs(sources: LiveMarkerSources, workspaceId: string): MarkerTab[] {
+  const tabs: MarkerTab[] = (sources.tabsByWorktree?.[workspaceId] ?? []).map((tab) => ({
+    id: tab.id,
+    sessionId: null
+  }))
+  for (const tab of sources.unifiedTabsByWorktree?.[workspaceId] ?? []) {
+    if (tab.contentType === 'agent-session') {
+      tabs.push({ id: tab.id, sessionId: tab.entityId ?? null })
+    }
+  }
+  return tabs
+}
+
+/** A tab marker on a live terminal or structured chat tab — the Dock's folder rule. */
+export function hasLiveTabMarker(sources: LiveMarkerSources, workspaceId: string): boolean {
+  return workspaceMarkerTabs(sources, workspaceId).some((tab) =>
+    Boolean(sources.unreadTerminalTabs?.[tab.id])
+  )
+}
+
+export function workspaceMarkerTabIds(
+  sources: LiveMarkerSources,
+  workspaceId: string
+): Set<string> {
+  return new Set(workspaceMarkerTabs(sources, workspaceId).map((tab) => tab.id))
+}
+
 /** What the workspace flag follows: a tab or completion marker on a live tab. */
 export function workspaceHasLiveMarker(
-  sources: Omit<LiveMarkerSources, 'unifiedTabsByWorktree'> & {
-    unifiedTabsByWorktree?: Readonly<
-      Record<string, readonly Pick<Tab, 'id' | 'contentType' | 'entityId'>[]>
-    >
-    unreadAgentCompletionPanes: MarkerRecord
-  },
+  sources: LiveMarkerSources & { unreadAgentCompletionPanes: MarkerRecord },
   workspaceId: string
 ): boolean {
-  if (hasLiveTabMarker(sources, workspaceId)) {
-    return true
-  }
-  const completionKeys = Object.keys(sources.unreadAgentCompletionPanes)
-  if (completionKeys.length === 0) {
-    return false
-  }
-  const terminalTabIds = new Set((sources.tabsByWorktree?.[workspaceId] ?? []).map((tab) => tab.id))
-  if (
-    completionKeys.some((paneKey) => {
-      const tabId = paneKeyTabId(paneKey)
-      return tabId !== null && terminalTabIds.has(tabId)
-    })
-  ) {
-    return true
-  }
-  // Why the current session's key only: a tab rebound to a new session no longer owns the old one.
-  return (sources.unifiedTabsByWorktree?.[workspaceId] ?? []).some(
+  const completionTabIds = new Set(
+    Object.keys(sources.unreadAgentCompletionPanes).map(paneKeyTabId)
+  )
+  return workspaceMarkerTabs(sources, workspaceId).some(
     (tab) =>
-      tab.contentType === 'agent-session' &&
-      Boolean(
-        sources.unreadAgentCompletionPanes[structuredAgentSessionPaneKey(tab.id, tab.entityId)]
-      )
+      Boolean(sources.unreadTerminalTabs?.[tab.id]) ||
+      // Why the current session's key only: a tab rebound to a new session no longer owns the old one.
+      (tab.sessionId === null
+        ? completionTabIds.has(tab.id)
+        : Boolean(
+            sources.unreadAgentCompletionPanes[structuredAgentSessionPaneKey(tab.id, tab.sessionId)]
+          ))
   )
 }

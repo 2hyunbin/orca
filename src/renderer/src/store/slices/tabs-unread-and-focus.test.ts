@@ -297,7 +297,12 @@ describe('TabsSlice', () => {
         unreadTerminalTabs: { [tabId]: true as const, 'other-tab': true as const }
       })
 
-      store.getState().readOnScreenAttention([{ worktreeId: WT, tabId }], { settleFlags: false })
+      store
+        .getState()
+        .readOnScreenAttention(
+          { workspaceIds: [WT], targets: [{ worktreeId: WT, tabId }] },
+          { screenArrived: false }
+        )
 
       expect(store.getState().unreadTerminalTabs).toEqual({ 'other-tab': true })
     })
@@ -308,7 +313,10 @@ describe('TabsSlice', () => {
 
       store
         .getState()
-        .readOnScreenAttention([{ worktreeId: WT, tabId: 'bell-tab-1' }], { settleFlags: false })
+        .readOnScreenAttention(
+          { workspaceIds: [WT], targets: [{ worktreeId: WT, tabId: 'bell-tab-1' }] },
+          { screenArrived: false }
+        )
 
       // Same reference => no-op. Downstream selectors must not re-render.
       expect(store.getState().unreadTerminalTabs).toBe(initial)
@@ -367,7 +375,7 @@ describe('TabsSlice', () => {
       if (!groupBId) {
         throw new Error('createEmptySplitGroup returned null')
       }
-      store.getState().createUnifiedTab(WT, 'terminal', { targetGroupId: groupBId })
+      const tabB = store.getState().createUnifiedTab(WT, 'terminal', { targetGroupId: groupBId })
       // Focus Group B first so the active group is not A.
       store.getState().focusGroup(WT, groupBId)
 
@@ -380,12 +388,19 @@ describe('TabsSlice', () => {
       // Clicking Group A's chrome re-focuses it without calling activateTab (active tab unchanged).
       store.getState().focusGroup(WT, groupAId)
 
-      expect(resolveAutoAckTabTargets(store.getState())).toEqual([
-        { tabId: tabA.entityId, worktreeId: WT, surfaceKind: 'terminal' }
-      ])
+      expect(resolveAutoAckTabTargets(store.getState())[0]).toEqual({
+        tabId: tabA.entityId,
+        worktreeId: WT,
+        surfaceKind: 'terminal'
+      })
+      expect(resolveAutoAckTabTargets(store.getState())).toContainEqual({
+        tabId: tabB.entityId,
+        worktreeId: WT,
+        surfaceKind: 'terminal'
+      })
     })
 
-    it('puts only the focused group on screen, so a split sibling keeps its marker', () => {
+    it('puts the active tab of every side-by-side group on screen', () => {
       const tabA = store.getState().createUnifiedTab(WT, 'terminal')
       const groupAId = store.getState().groupsByWorktree[WT][0].id
       const groupBId = store.getState().createEmptySplitGroup(WT, groupAId, 'right')
@@ -393,22 +408,14 @@ describe('TabsSlice', () => {
         throw new Error('createEmptySplitGroup returned null')
       }
       const tabB = store.getState().createUnifiedTab(WT, 'terminal', { targetGroupId: groupBId })
-
-      store.setState({
-        unreadTerminalTabs: {
-          [tabA.entityId]: true as const,
-          [tabB.entityId]: true as const
-        },
-        activeWorktreeId: WT,
-        activeView: 'terminal'
-      })
+      store.setState({ activeWorktreeId: WT, activeView: 'terminal' })
 
       store.getState().focusGroup(WT, groupAId)
 
       expect(resolveAutoAckTabTargets(store.getState())).toEqual([
-        { tabId: tabA.entityId, worktreeId: WT, surfaceKind: 'terminal' }
+        { tabId: tabA.entityId, worktreeId: WT, surfaceKind: 'terminal' },
+        { tabId: tabB.entityId, worktreeId: WT, surfaceKind: 'terminal' }
       ])
-      expect(store.getState().unreadTerminalTabs[tabB.entityId]).toBe(true)
     })
   })
 })

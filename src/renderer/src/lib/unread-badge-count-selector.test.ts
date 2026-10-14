@@ -96,9 +96,12 @@ describe('Dock unread count against the sidebar (#23363)', () => {
 
     store.getState().setActiveWorktree(BELL_WORKTREE)
     // The on-screen scan reads the visited tab.
-    store.getState().readOnScreenAttention([{ worktreeId: BELL_WORKTREE, tabId }], {
-      settleFlags: true
-    })
+    store
+      .getState()
+      .readOnScreenAttention(
+        { workspaceIds: [BELL_WORKTREE], targets: [{ worktreeId: BELL_WORKTREE, tabId }] },
+        { screenArrived: true }
+      )
     store.getState().setActiveWorktree(OTHER_WORKTREE)
 
     expect(sidebarUnreadCount(store)).toBe(0)
@@ -112,9 +115,13 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     raiseAttention(store, BELL_WORKTREE, bellTabId)
     store.getState().setActiveWorktree(BELL_WORKTREE)
 
-    store.getState().readOnScreenAttention([{ worktreeId: BELL_WORKTREE, tabId: typedTabId }], {
-      settleFlags: true
-    })
+    store.getState().readOnScreenAttention(
+      {
+        workspaceIds: [BELL_WORKTREE],
+        targets: [{ worktreeId: BELL_WORKTREE, tabId: typedTabId }]
+      },
+      { screenArrived: true }
+    )
 
     expect(store.getState().unreadTerminalTabs[bellTabId]).toBe('terminal-bell')
     expect(sidebarUnreadCount(store)).toBe(1)

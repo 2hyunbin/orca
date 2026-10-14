@@ -17,16 +17,12 @@ import { isRemoteExecutionHostPtyId } from '../remote-execution-host-pty'
 import { retireLiveAgentRowOnConfirmedProcessExit } from './confirmed-process-exit-row-retire'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
-import { signalTerminalInputPresence } from '@/hooks/agent-auto-ack-presence'
 
 /** Keydown intent, PTY fit binding, side-effect fact consumption, and the agent completion coordinator. */
 export function installTerminalKeydownFit(session: ConnectPanePtySession): void {
   session.onTerminalKeyDown = (event: KeyboardEvent): void => {
     if (isPlainEscapeKeyEvent(event)) {
       session.setPendingTerminalInputIntent('plain-escape')
-      // Why: plain Escape produces real terminal input (\x1b), so it is a
-      // genuine "user is here" signal before the early return.
-      signalTerminalInputPresence()
       return
     }
     if (isCtrlCKeyEvent(event)) {
@@ -35,9 +31,8 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       }
       session.setPendingTerminalInputIntent('ctrl-c')
     }
-    // Why: only keydowns that will produce real terminal input are the
-    // "user is here" signal; modifier-only presses, autorepeat, and Cmd/Ctrl+C
-    // copy chords with an active selection are not.
+    // Why: only keydowns that will produce real terminal input reach the sample
+    // below; modifier-only presses, autorepeat, and copy chords do not.
     if (
       event.repeat ||
       event.key === 'Alt' ||
@@ -63,7 +58,6 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
     if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       session.sampleVisiblePaneForegroundAgent()
     }
-    signalTerminalInputPresence()
   }
   // Why: infer only from focused xterm key events. Raw PTY bytes cannot
   // distinguish plain Escape from Alt/meta sequences, and programmatic writes

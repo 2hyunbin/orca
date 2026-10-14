@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveAutoAckTabTargets } from './useAutoAckViewedAgent'
+import { resolveAutoAckTabTargets } from './agent-auto-ack-targets'
 import {
   computeAgentAcknowledgementTargets,
   computeLapsedManualUnreadProtections,
@@ -34,7 +34,7 @@ function ackTargets(store: TestStore, tabId: string, leafId: string): string[] {
 // shell label; pty-connection.ts:onAgentExited fires removeAgentStatus before
 // the live `done` row could be auto-acked. The retention sync snapshots the
 // `done` row into retainedAgentsByPaneKey carrying a fresh stateStartedAt.
-// Pre-fix: useAutoAckViewedAgent only walked the live map, so the retained
+// Pre-fix: useReadOnScreenAttention only walked the live map, so the retained
 // row's stateStartedAt > ackAt forever. Fix: walk both maps.
 //
 // We test the pure helper (computeAgentAcknowledgementTargets) rather than the hook so the
@@ -259,22 +259,40 @@ describe('agent completion pane unread store marker', () => {
       [paneKey]: 'agent-completion'
     })
 
-    store.getState().readOnScreenAttention([{ worktreeId: 'wt-1', tabId: 'tab-1' }], {
-      settleFlags: false
-    })
+    store
+      .getState()
+      .readOnScreenAttention(
+        { workspaceIds: ['wt-1'], targets: [{ worktreeId: 'wt-1', tabId: 'tab-1' }] },
+        { screenArrived: false }
+      )
     expect(store.getState().unreadAgentCompletionPanes).toEqual({})
   })
 })
 
 describe('resolveAutoAckTabTargets', () => {
   const FLOATING_TAB_ID = 'tab-floating'
+  /** One group per workspace showing `tabIds[worktreeId]`. */
+  const withActiveTabs = (tabIds: Record<string, string>) => ({
+    groupsByWorktree: Object.fromEntries(
+      Object.entries(tabIds).map(([worktreeId, tabId]) => [
+        worktreeId,
+        [{ id: `${worktreeId}-group`, activeTabId: tabId }]
+      ])
+    ),
+    activeGroupIdByWorktree: Object.fromEntries(
+      Object.keys(tabIds).map((worktreeId) => [worktreeId, `${worktreeId}-group`])
+    ),
+    unifiedTabsByWorktree: Object.fromEntries(
+      Object.entries(tabIds).map(([worktreeId, tabId]) => [
+        worktreeId,
+        [makeUnifiedTab({ id: tabId, worktreeId, groupId: `${worktreeId}-group` })]
+      ])
+    )
+  })
   const baseState = {
     activeView: 'terminal',
     activeWorktreeId: 'wt-1',
-    getActiveTab: (worktreeId: string) =>
-      worktreeId === FLOATING_TERMINAL_WORKTREE_ID
-        ? makeUnifiedTab({ id: FLOATING_TAB_ID, worktreeId, groupId: 'floating-group' })
-        : makeUnifiedTab({ id: 'tab-1', worktreeId, groupId: 'main-group' }),
+    ...withActiveTabs({ [FLOATING_TERMINAL_WORKTREE_ID]: FLOATING_TAB_ID, 'wt-1': 'tab-1' }),
     settings: { ...getDefaultSettings('/home/test'), floatingTerminalEnabled: true },
     floatingWorkspacePanelOpen: true
   }
@@ -310,6 +328,38 @@ describe('resolveAutoAckTabTargets', () => {
     ])
   })
 
+  it('scans the active tab of every visible group of a split layout', () => {
+    const state = {
+      ...baseState,
+      ...panelClosed,
+      groupsByWorktree: {
+        'wt-1': [
+          { id: 'left', activeTabId: 'tab-1' },
+          { id: 'right', activeTabId: 'tab-2' }
+        ]
+      },
+      activeGroupIdByWorktree: { 'wt-1': 'right' },
+      layoutByWorktree: {
+        'wt-1': {
+          type: 'split' as const,
+          direction: 'horizontal' as const,
+          first: { type: 'leaf' as const, groupId: 'left' },
+          second: { type: 'leaf' as const, groupId: 'right' }
+        }
+      },
+      unifiedTabsByWorktree: {
+        'wt-1': [
+          makeUnifiedTab({ id: 'tab-1', worktreeId: 'wt-1', groupId: 'left' }),
+          makeUnifiedTab({ id: 'tab-2', worktreeId: 'wt-1', groupId: 'right' })
+        ]
+      }
+    }
+    expect(resolveAutoAckTabTargets(state)).toEqual([
+      { tabId: 'tab-2', worktreeId: 'wt-1', surfaceKind: 'terminal' },
+      { tabId: 'tab-1', worktreeId: 'wt-1', surfaceKind: 'terminal' }
+    ])
+  })
+
   it('scans nothing outside the terminal view with the panel closed', () => {
     expect(
       resolveAutoAckTabTargets({ ...baseState, ...panelClosed, activeView: 'activity' })
@@ -320,8 +370,10 @@ describe('resolveAutoAckTabTargets', () => {
     expect(
       resolveAutoAckTabTargets({
         ...baseState,
-        getActiveTab: (worktreeId: string) =>
-          makeUnifiedTab({ id: FLOATING_TAB_ID, worktreeId, groupId: 'group' })
+        ...withActiveTabs({
+          [FLOATING_TERMINAL_WORKTREE_ID]: FLOATING_TAB_ID,
+          'wt-1': FLOATING_TAB_ID
+        })
       })
     ).toEqual([
       { tabId: FLOATING_TAB_ID, worktreeId: FLOATING_TERMINAL_WORKTREE_ID, surfaceKind: 'terminal' }

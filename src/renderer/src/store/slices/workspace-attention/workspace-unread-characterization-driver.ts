@@ -54,9 +54,9 @@ export function completeAgentTurn(
   })
 }
 
-/** terminal-keydown-fit.ts: a keydown that produces real terminal input; only a presence signal. */
+/** A keydown in a pane: the window's capture-phase keydown, only a presence signal. */
 export function typeInPane(store: AttentionStore, _target: PaneTarget): void {
-  screenOf(store).terminalInput()
+  screenOf(store).input()
 }
 
 /** A pointerdown anywhere in the window: the scan's trusted-input presence signal. */

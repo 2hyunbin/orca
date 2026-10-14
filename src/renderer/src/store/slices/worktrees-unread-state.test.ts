@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { installAttentionScreen } from './workspace-attention/workspace-unread-characterization-fixture'
 import type { AppState } from '../types'
 import { makeDetectedResult } from './worktrees-detected-listing-fixtures'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
@@ -154,7 +155,10 @@ describe('worktree unread (show-until-interact)', () => {
       [
         'readOnScreenAttention',
         (s: AppState) =>
-          s.readOnScreenAttention([{ worktreeId, tabId: 'no-tab' }], { settleFlags: true })
+          s.readOnScreenAttention(
+            { workspaceIds: [worktreeId], targets: [{ worktreeId: worktreeId, tabId: 'no-tab' }] },
+            { screenArrived: true }
+          )
       ],
       ['bumpWorktreeActivity', (s: AppState) => s.bumpWorktreeActivity(worktreeId)]
     ] as const) {
@@ -271,12 +275,13 @@ describe('worktree unread (show-until-interact)', () => {
       detectedWorktreesByRepo: { repo1: detected }
     } as Partial<AppState>)
 
+    installAttentionScreen(store, true)
+    store.setState({ activeView: 'settings' })
     store.getState().setActiveWorktree(hidden.id)
+    // Settings is not the workspace's own view, so nothing is on screen yet.
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
-    // The on-screen scan's arrival read.
-    store.getState().readOnScreenAttention([{ worktreeId: hidden.id, tabId: 'none' }], {
-      settleFlags: true
-    })
+
+    store.setState({ activeView: 'terminal' })
 
     expect(store.getState().activeWorktreeId).toBe(hidden.id)
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(false)

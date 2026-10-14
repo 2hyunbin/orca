@@ -21,7 +21,7 @@ import { omitRecordKeys } from '../slices/worktrees/teardown/record-key-omission
 import { deleteNativeChatComposerDraftsForTab } from '@/components/native-chat/native-chat-composer-draft-store'
 import { dropNativeChatPendingAttachmentsForTab } from '@/components/native-chat/native-chat-pending-attachment-cache'
 import { noteAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
-import { settleRemovedAttention } from '../slices/workspace-attention/attention-removal-follow-up'
+import { settleAttentionRemovedBy } from '../slices/workspace-attention/attention-removal-follow-up'
 
 export function createTerminalTabCloseActions(
   set: TerminalStoreSet,
@@ -49,198 +49,199 @@ export function createTerminalTabCloseActions(
           tabId
         })
       }
-      const attentionBefore = get()
-      set((s) => {
-        // Why hoisted: omitRecordKeys takes an iterable, and this closes over one
-        // array instead of allocating a fresh [tabId] at each of the call sites below.
-        const closingTabIds = [tabId]
-        const omitByTabId = <T>(record: Record<string, T>): Record<string, T> =>
-          omitRecordKeys(record, closingTabIds)
-        const next = { ...s.tabsByWorktree }
-        let closedTab: TerminalTab | null = null
-        let closedWorktreeId: string | null = null
-        for (const wId of Object.keys(next)) {
-          const before = next[wId]
-          const closing = before.find((t) => t.id === tabId)
-          if (closing) {
-            closingWorktreeId = wId
-            // The user closing a launch tab whose agent is still starting: that close wins.
-            if (
-              closeReason === 'user' &&
-              closing.agentLaunchPane &&
-              !closing.agentLaunchPane.outcome
-            ) {
-              noteAgentLaunchPaneClosedByUser(tabId, closing.agentLaunchPane.leafId)
+      settleAttentionRemovedBy(set, get, () =>
+        set((s) => {
+          // Why hoisted: omitRecordKeys takes an iterable, and this closes over one
+          // array instead of allocating a fresh [tabId] at each of the call sites below.
+          const closingTabIds = [tabId]
+          const omitByTabId = <T>(record: Record<string, T>): Record<string, T> =>
+            omitRecordKeys(record, closingTabIds)
+          const next = { ...s.tabsByWorktree }
+          let closedTab: TerminalTab | null = null
+          let closedWorktreeId: string | null = null
+          for (const wId of Object.keys(next)) {
+            const before = next[wId]
+            const closing = before.find((t) => t.id === tabId)
+            if (closing) {
+              closingWorktreeId = wId
+              // The user closing a launch tab whose agent is still starting: that close wins.
+              if (
+                closeReason === 'user' &&
+                closing.agentLaunchPane &&
+                !closing.agentLaunchPane.outcome
+              ) {
+                noteAgentLaunchPaneClosedByUser(tabId, closing.agentLaunchPane.leafId)
+              }
+              // Why: capture the first-matched tab's snapshot for the Cmd+Shift+T reopen stack (see capturedSnapshot below).
+              if (!closedTab) {
+                closedTab = closing
+                closedWorktreeId = wId
+              }
             }
-            // Why: capture the first-matched tab's snapshot for the Cmd+Shift+T reopen stack (see capturedSnapshot below).
-            if (!closedTab) {
-              closedTab = closing
-              closedWorktreeId = wId
+            const after = before.filter((t) => t.id !== tabId)
+            if (after.length !== before.length) {
+              next[wId] = after
             }
           }
-          const after = before.filter((t) => t.id !== tabId)
-          if (after.length !== before.length) {
-            next[wId] = after
-          }
-        }
-        // Why mirrored here and never persisted: main records the close through the intent below,
-        // and the direct-SSH pull merge reads this synchronously, so a pull landing before main
-        // answered would otherwise re-add the tab. Goes away when that merge moves to main.
-        const nextClosedTombstones =
-          intentReason && closedWorktreeId && opts?.remoteCloseOwnedByHost !== true
-            ? {
-                ...s.closedTerminalTabTombstonesByTabId,
-                [tabId]: {
-                  closedAt: Date.now(),
-                  worktreeId: closedWorktreeId,
-                  reason: intentReason
+          // Why mirrored here and never persisted: main records the close through the intent below,
+          // and the direct-SSH pull merge reads this synchronously, so a pull landing before main
+          // answered would otherwise re-add the tab. Goes away when that merge moves to main.
+          const nextClosedTombstones =
+            intentReason && closedWorktreeId && opts?.remoteCloseOwnedByHost !== true
+              ? {
+                  ...s.closedTerminalTabTombstonesByTabId,
+                  [tabId]: {
+                    closedAt: Date.now(),
+                    worktreeId: closedWorktreeId,
+                    reason: intentReason
+                  }
                 }
-              }
-            : s.closedTerminalTabTombstonesByTabId
-        // Why: only explicit user closes feed the Cmd+Shift+T reopen stack; cleanup/PTY-exit closes must not pollute undo history.
-        const closedPosition =
-          closedWorktreeId && closedTab
-            ? getRecentlyClosedTabPosition(s, closedWorktreeId, closedTab.id)
-            : undefined
-        const capturedSnapshot =
-          closeReason === 'user' &&
-          opts?.captureRecentlyClosed !== false &&
-          closedTab &&
-          closedWorktreeId
-            ? {
-                ...(closedTab.startupCwd ? { startupCwd: closedTab.startupCwd } : {}),
-                ...(closedTab.shellOverride ? { shellOverride: closedTab.shellOverride } : {}),
-                ...(closedTab.customTitle ? { customTitle: closedTab.customTitle } : {}),
-                ...(closedTab.color ? { color: closedTab.color } : {}),
-                ...(closedPosition ? { position: closedPosition } : {})
-              }
-            : null
-        const nextExpanded = omitByTabId(s.expandedPaneByTabId)
-        const nextCanExpand = omitByTabId(s.canExpandPaneByTabId)
-        const nextLayouts = omitByTabId(s.terminalLayoutsByTabId)
-        const nextLocalOnlyScrollback = omitByTabId(s.localOnlyScrollbackByTabId)
-        const nextPtyIdsByTabId = omitByTabId(s.ptyIdsByTabId)
-        const nextLastKnownRelay = omitByTabId(s.lastKnownRelayPtyIdByTabId)
-        const nextDeferredSshSessionIdsByTabId = omitByTabId(s.deferredSshSessionIdsByTabId)
-        const nextPendingReconnectPtyIdByTabId = omitByTabId(s.pendingReconnectPtyIdByTabId)
-        const nextRuntimePaneTitlesByTabId = omitByTabId(s.runtimePaneTitlesByTabId)
-        const nextUnverifiedPtyLossTabIds = omitUnverifiedPtyLossTabIds(s.unverifiedPtyLossTabIds, [
-          tabId
-        ])
-        // Why: unchanged marker records keep their reference, so unrelated closes don't force full-state selector re-eval.
-        const attentionPatch = removeTabsAttention(s, closingTabIds)
-        const nextLastTerminalInputAtByPaneKey = removePaneKeysByTabPrefix(
-          s.lastTerminalInputAtByPaneKey,
-          tabId
-        )
-        const nextSleepingAgentSessionsByPaneKey = retiresSession
-          ? removeSleepingAgentSessionsForTab(s.sleepingAgentSessionsByPaneKey, tabId)
-          : s.sleepingAgentSessionsByPaneKey
-        const nextPendingStartupByTabId = omitByTabId(s.pendingStartupByTabId)
-        const nextAutomaticAgentResumeClaimsByTabId = omitByTabId(
-          s.automaticAgentResumeClaimsByTabId
-        )
-        const nextNativeChatLaunchPromptByTabId = omitByTabId(s.nativeChatLaunchPromptByTabId)
-        const nextNativeChatLaunchDraftByTabId = omitByTabId(s.nativeChatLaunchDraftByTabId)
-        const nextPendingInitialCwdByTabId = omitByTabId(s.pendingInitialCwdByTabId)
-        const nextPendingSetupSplitByTabId = omitByTabId(s.pendingSetupSplitByTabId)
-        const nextPendingIssueCommandSplitByTabId = omitByTabId(s.pendingIssueCommandSplitByTabId)
-        // Why: cache timer keys are `${tabId}:${leafId}` composites; remove all entries for the closing tab.
-        const nextCacheTimer = removePaneKeysByTabPrefix(s.cacheTimerByKey, tabId)
-        // Why: keep activeTabIdByWorktree in sync when closing a background-worktree tab, else the stale remembered tab falls back to tabs[0] on switch.
-        let nextActiveTabIdByWorktree = s.activeTabIdByWorktree
-        for (const [wId, tabs] of Object.entries(next)) {
-          if (nextActiveTabIdByWorktree[wId] !== tabId) {
-            continue
+              : s.closedTerminalTabTombstonesByTabId
+          // Why: only explicit user closes feed the Cmd+Shift+T reopen stack; cleanup/PTY-exit closes must not pollute undo history.
+          const closedPosition =
+            closedWorktreeId && closedTab
+              ? getRecentlyClosedTabPosition(s, closedWorktreeId, closedTab.id)
+              : undefined
+          const capturedSnapshot =
+            closeReason === 'user' &&
+            opts?.captureRecentlyClosed !== false &&
+            closedTab &&
+            closedWorktreeId
+              ? {
+                  ...(closedTab.startupCwd ? { startupCwd: closedTab.startupCwd } : {}),
+                  ...(closedTab.shellOverride ? { shellOverride: closedTab.shellOverride } : {}),
+                  ...(closedTab.customTitle ? { customTitle: closedTab.customTitle } : {}),
+                  ...(closedTab.color ? { color: closedTab.color } : {}),
+                  ...(closedPosition ? { position: closedPosition } : {})
+                }
+              : null
+          const nextExpanded = omitByTabId(s.expandedPaneByTabId)
+          const nextCanExpand = omitByTabId(s.canExpandPaneByTabId)
+          const nextLayouts = omitByTabId(s.terminalLayoutsByTabId)
+          const nextLocalOnlyScrollback = omitByTabId(s.localOnlyScrollbackByTabId)
+          const nextPtyIdsByTabId = omitByTabId(s.ptyIdsByTabId)
+          const nextLastKnownRelay = omitByTabId(s.lastKnownRelayPtyIdByTabId)
+          const nextDeferredSshSessionIdsByTabId = omitByTabId(s.deferredSshSessionIdsByTabId)
+          const nextPendingReconnectPtyIdByTabId = omitByTabId(s.pendingReconnectPtyIdByTabId)
+          const nextRuntimePaneTitlesByTabId = omitByTabId(s.runtimePaneTitlesByTabId)
+          const nextUnverifiedPtyLossTabIds = omitUnverifiedPtyLossTabIds(
+            s.unverifiedPtyLossTabIds,
+            [tabId]
+          )
+          // Why: unchanged marker records keep their reference, so unrelated closes don't force full-state selector re-eval.
+          const attentionPatch = removeTabsAttention(s, closingTabIds)
+          const nextLastTerminalInputAtByPaneKey = removePaneKeysByTabPrefix(
+            s.lastTerminalInputAtByPaneKey,
+            tabId
+          )
+          const nextSleepingAgentSessionsByPaneKey = retiresSession
+            ? removeSleepingAgentSessionsForTab(s.sleepingAgentSessionsByPaneKey, tabId)
+            : s.sleepingAgentSessionsByPaneKey
+          const nextPendingStartupByTabId = omitByTabId(s.pendingStartupByTabId)
+          const nextAutomaticAgentResumeClaimsByTabId = omitByTabId(
+            s.automaticAgentResumeClaimsByTabId
+          )
+          const nextNativeChatLaunchPromptByTabId = omitByTabId(s.nativeChatLaunchPromptByTabId)
+          const nextNativeChatLaunchDraftByTabId = omitByTabId(s.nativeChatLaunchDraftByTabId)
+          const nextPendingInitialCwdByTabId = omitByTabId(s.pendingInitialCwdByTabId)
+          const nextPendingSetupSplitByTabId = omitByTabId(s.pendingSetupSplitByTabId)
+          const nextPendingIssueCommandSplitByTabId = omitByTabId(s.pendingIssueCommandSplitByTabId)
+          // Why: cache timer keys are `${tabId}:${leafId}` composites; remove all entries for the closing tab.
+          const nextCacheTimer = removePaneKeysByTabPrefix(s.cacheTimerByKey, tabId)
+          // Why: keep activeTabIdByWorktree in sync when closing a background-worktree tab, else the stale remembered tab falls back to tabs[0] on switch.
+          let nextActiveTabIdByWorktree = s.activeTabIdByWorktree
+          for (const [wId, tabs] of Object.entries(next)) {
+            if (nextActiveTabIdByWorktree[wId] !== tabId) {
+              continue
+            }
+            if (nextActiveTabIdByWorktree === s.activeTabIdByWorktree) {
+              nextActiveTabIdByWorktree = { ...s.activeTabIdByWorktree }
+            }
+            nextActiveTabIdByWorktree[wId] = tabs[0]?.id ?? null
           }
-          if (nextActiveTabIdByWorktree === s.activeTabIdByWorktree) {
-            nextActiveTabIdByWorktree = { ...s.activeTabIdByWorktree }
+          // Why: keep tabBarOrderByWorktree in sync so stale terminal IDs don't linger and shift positions on later tab operations.
+          let nextTabBarOrderByWorktree: Record<string, string[]> = s.tabBarOrderByWorktree
+          for (const wId of Object.keys(s.tabBarOrderByWorktree)) {
+            const order = s.tabBarOrderByWorktree[wId]
+            if (!order?.includes(tabId)) {
+              continue
+            }
+            if (nextTabBarOrderByWorktree === s.tabBarOrderByWorktree) {
+              nextTabBarOrderByWorktree = { ...s.tabBarOrderByWorktree }
+            }
+            nextTabBarOrderByWorktree[wId] = order.filter((entryId) => entryId !== tabId)
           }
-          nextActiveTabIdByWorktree[wId] = tabs[0]?.id ?? null
-        }
-        // Why: keep tabBarOrderByWorktree in sync so stale terminal IDs don't linger and shift positions on later tab operations.
-        let nextTabBarOrderByWorktree: Record<string, string[]> = s.tabBarOrderByWorktree
-        for (const wId of Object.keys(s.tabBarOrderByWorktree)) {
-          const order = s.tabBarOrderByWorktree[wId]
-          if (!order?.includes(tabId)) {
-            continue
+          // Why: clean up unconsumed snapshot/cold-restore data (e.g. tab closed before TerminalPane mounted) to prevent unbounded store growth across restarts.
+          let nextSnapshots = s.pendingSnapshotByPtyId
+          let nextColdRestores = s.pendingColdRestoreByPtyId
+          const closingPtyIds = new Set([
+            ...retirementPlan.localOrSshPtyIds,
+            ...retirementPlan.runtimeTerminals.map((terminal) => terminal.ptyId),
+            ...retirementPlan.cleanupOnlyPtyIds,
+            ...retirementPlan.unroutablePtyIds
+          ])
+          for (const closingId of closingPtyIds) {
+            if (closingId in nextSnapshots) {
+              nextSnapshots = { ...nextSnapshots }
+              delete nextSnapshots[closingId]
+            }
+            if (closingId in nextColdRestores) {
+              nextColdRestores = { ...nextColdRestores }
+              delete nextColdRestores[closingId]
+            }
           }
-          if (nextTabBarOrderByWorktree === s.tabBarOrderByWorktree) {
-            nextTabBarOrderByWorktree = { ...s.tabBarOrderByWorktree }
+          return {
+            tabsByWorktree: next,
+            activeTabId: s.activeTabId === tabId ? null : s.activeTabId,
+            activeTabIdByWorktree: nextActiveTabIdByWorktree,
+            ptyIdsByTabId: nextPtyIdsByTabId,
+            lastKnownRelayPtyIdByTabId: nextLastKnownRelay,
+            deferredSshSessionIdsByTabId: nextDeferredSshSessionIdsByTabId,
+            pendingReconnectPtyIdByTabId: nextPendingReconnectPtyIdByTabId,
+            runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId,
+            ...(nextUnverifiedPtyLossTabIds !== s.unverifiedPtyLossTabIds
+              ? { unverifiedPtyLossTabIds: nextUnverifiedPtyLossTabIds }
+              : {}),
+            ...(nextSleepingAgentSessionsByPaneKey !== s.sleepingAgentSessionsByPaneKey
+              ? { sleepingAgentSessionsByPaneKey: nextSleepingAgentSessionsByPaneKey }
+              : {}),
+            ...(nextClosedTombstones !== s.closedTerminalTabTombstonesByTabId
+              ? { closedTerminalTabTombstonesByTabId: nextClosedTombstones }
+              : {}),
+            ...attentionPatch,
+            lastTerminalInputAtByPaneKey: nextLastTerminalInputAtByPaneKey,
+            expandedPaneByTabId: nextExpanded,
+            canExpandPaneByTabId: nextCanExpand,
+            terminalLayoutsByTabId: nextLayouts,
+            localOnlyScrollbackByTabId: nextLocalOnlyScrollback,
+            pendingStartupByTabId: nextPendingStartupByTabId,
+            automaticAgentResumeClaimsByTabId: nextAutomaticAgentResumeClaimsByTabId,
+            nativeChatLaunchPromptByTabId: nextNativeChatLaunchPromptByTabId,
+            nativeChatLaunchDraftByTabId: nextNativeChatLaunchDraftByTabId,
+            pendingInitialCwdByTabId: nextPendingInitialCwdByTabId,
+            pendingSetupSplitByTabId: nextPendingSetupSplitByTabId,
+            pendingIssueCommandSplitByTabId: nextPendingIssueCommandSplitByTabId,
+            cacheTimerByKey: nextCacheTimer,
+            tabBarOrderByWorktree: nextTabBarOrderByWorktree,
+            pendingSnapshotByPtyId: nextSnapshots,
+            pendingColdRestoreByPtyId: nextColdRestores,
+            ...(capturedSnapshot && closedWorktreeId
+              ? {
+                  recentlyClosedTerminalTabsByWorktree: pushClosedTerminalTabSnapshot(
+                    s.recentlyClosedTerminalTabsByWorktree,
+                    closedWorktreeId,
+                    capturedSnapshot
+                  ),
+                  recentlyClosedTabKindsByWorktree: pushRecentlyClosedTabKind(
+                    s.recentlyClosedTabKindsByWorktree,
+                    closedWorktreeId,
+                    'terminal'
+                  )
+                }
+              : {})
           }
-          nextTabBarOrderByWorktree[wId] = order.filter((entryId) => entryId !== tabId)
-        }
-        // Why: clean up unconsumed snapshot/cold-restore data (e.g. tab closed before TerminalPane mounted) to prevent unbounded store growth across restarts.
-        let nextSnapshots = s.pendingSnapshotByPtyId
-        let nextColdRestores = s.pendingColdRestoreByPtyId
-        const closingPtyIds = new Set([
-          ...retirementPlan.localOrSshPtyIds,
-          ...retirementPlan.runtimeTerminals.map((terminal) => terminal.ptyId),
-          ...retirementPlan.cleanupOnlyPtyIds,
-          ...retirementPlan.unroutablePtyIds
-        ])
-        for (const closingId of closingPtyIds) {
-          if (closingId in nextSnapshots) {
-            nextSnapshots = { ...nextSnapshots }
-            delete nextSnapshots[closingId]
-          }
-          if (closingId in nextColdRestores) {
-            nextColdRestores = { ...nextColdRestores }
-            delete nextColdRestores[closingId]
-          }
-        }
-        return {
-          tabsByWorktree: next,
-          activeTabId: s.activeTabId === tabId ? null : s.activeTabId,
-          activeTabIdByWorktree: nextActiveTabIdByWorktree,
-          ptyIdsByTabId: nextPtyIdsByTabId,
-          lastKnownRelayPtyIdByTabId: nextLastKnownRelay,
-          deferredSshSessionIdsByTabId: nextDeferredSshSessionIdsByTabId,
-          pendingReconnectPtyIdByTabId: nextPendingReconnectPtyIdByTabId,
-          runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId,
-          ...(nextUnverifiedPtyLossTabIds !== s.unverifiedPtyLossTabIds
-            ? { unverifiedPtyLossTabIds: nextUnverifiedPtyLossTabIds }
-            : {}),
-          ...(nextSleepingAgentSessionsByPaneKey !== s.sleepingAgentSessionsByPaneKey
-            ? { sleepingAgentSessionsByPaneKey: nextSleepingAgentSessionsByPaneKey }
-            : {}),
-          ...(nextClosedTombstones !== s.closedTerminalTabTombstonesByTabId
-            ? { closedTerminalTabTombstonesByTabId: nextClosedTombstones }
-            : {}),
-          ...attentionPatch,
-          lastTerminalInputAtByPaneKey: nextLastTerminalInputAtByPaneKey,
-          expandedPaneByTabId: nextExpanded,
-          canExpandPaneByTabId: nextCanExpand,
-          terminalLayoutsByTabId: nextLayouts,
-          localOnlyScrollbackByTabId: nextLocalOnlyScrollback,
-          pendingStartupByTabId: nextPendingStartupByTabId,
-          automaticAgentResumeClaimsByTabId: nextAutomaticAgentResumeClaimsByTabId,
-          nativeChatLaunchPromptByTabId: nextNativeChatLaunchPromptByTabId,
-          nativeChatLaunchDraftByTabId: nextNativeChatLaunchDraftByTabId,
-          pendingInitialCwdByTabId: nextPendingInitialCwdByTabId,
-          pendingSetupSplitByTabId: nextPendingSetupSplitByTabId,
-          pendingIssueCommandSplitByTabId: nextPendingIssueCommandSplitByTabId,
-          cacheTimerByKey: nextCacheTimer,
-          tabBarOrderByWorktree: nextTabBarOrderByWorktree,
-          pendingSnapshotByPtyId: nextSnapshots,
-          pendingColdRestoreByPtyId: nextColdRestores,
-          ...(capturedSnapshot && closedWorktreeId
-            ? {
-                recentlyClosedTerminalTabsByWorktree: pushClosedTerminalTabSnapshot(
-                  s.recentlyClosedTerminalTabsByWorktree,
-                  closedWorktreeId,
-                  capturedSnapshot
-                ),
-                recentlyClosedTabKindsByWorktree: pushRecentlyClosedTabKind(
-                  s.recentlyClosedTabKindsByWorktree,
-                  closedWorktreeId,
-                  'terminal'
-                )
-              }
-            : {})
-        }
-      })
-      settleRemovedAttention(set, get, attentionBefore)
+        })
+      )
       if (intentReason && closingWorktreeId && opts?.remoteCloseOwnedByHost !== true) {
         commitTerminalSurfaceClose(closingWorktreeId, { kind: 'tab', tabId }, intentReason)
       }

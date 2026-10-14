@@ -27,9 +27,10 @@ describe('worktree no-op notifications', () => {
       groupId: null,
       reason: 'agent-completion'
     })
-    before.readOnScreenAttention([{ worktreeId: 'missing', tabId: 'missing' }], {
-      settleFlags: true
-    })
+    before.readOnScreenAttention(
+      { workspaceIds: ['missing'], targets: [{ worktreeId: 'missing', tabId: 'missing' }] },
+      { screenArrived: true }
+    )
     before.bumpWorktreeActivity('missing')
     before.clearWorktreeDeleteState('missing')
     before.seedActiveWorktreeLastVisitedIfMissing()

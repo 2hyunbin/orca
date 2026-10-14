@@ -2,6 +2,7 @@ import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-con
 import type { AppState } from '../../types'
 import { movePaneKeyedRecord, removePaneKeys } from '../agent-status-pane-keyed-records'
 import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
+import { paneKeyTabId } from './workspace-live-markers'
 
 // Marker removals that ride inside another slice's `set()`. Unchanged records keep their
 // reference. Removal never touches the workspace flag.
@@ -13,12 +14,11 @@ type Markers = Pick<
 >
 type PaneMarkers = Pick<Markers, 'unreadTerminalPanes' | 'unreadAgentCompletionPanes'>
 
-// Pane keys are `${tabId}:${leafId}` and tab ids never contain ":".
 function paneKeysOfTabs(record: MarkerRecord, tabIds: ReadonlySet<string>): Set<string> {
   return new Set(
     Object.keys(record).filter((paneKey) => {
-      const separator = paneKey.indexOf(':')
-      return separator > 0 && tabIds.has(paneKey.slice(0, separator))
+      const tabId = paneKeyTabId(paneKey)
+      return tabId !== null && tabIds.has(tabId)
     })
   )
 }

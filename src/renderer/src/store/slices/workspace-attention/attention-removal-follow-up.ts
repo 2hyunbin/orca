@@ -4,7 +4,7 @@ import { collectLeafIds } from '@/components/terminal-pane/terminal-pane-layout-
 import type { AppState } from '../../types'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
 import { settleWorkspaceUnreadFlag } from './workspace-unread-flag'
-import { paneKeyTabId } from './workspace-live-markers'
+import { paneKeyTabId, workspaceMarkerTabs } from './workspace-live-markers'
 
 /** The state a marker removal is diffed against; any earlier `get()` satisfies it. */
 export type AttentionRemovalSnapshot = Pick<
@@ -26,7 +26,10 @@ export type RemovedAttention = {
   paneKeys: Set<string>
 }
 
-function sameMarkers(before: AttentionRemovalSnapshot, after: AttentionRemovalSnapshot): boolean {
+export function sameMarkers(
+  before: Pick<AppState, MarkerKey>,
+  after: Pick<AppState, MarkerKey>
+): boolean {
   return (
     before.unreadTerminalTabs === after.unreadTerminalTabs &&
     before.unreadTerminalPanes === after.unreadTerminalPanes &&
@@ -38,15 +41,18 @@ function findTabOwner(
   state: AttentionRemovalSnapshot,
   tabId: string
 ): { workspaceId: string; structuredPaneKey: string | null } | null {
-  for (const [workspaceId, tabs] of Object.entries(state.tabsByWorktree)) {
-    if (tabs.some((tab) => tab.id === tabId)) {
-      return { workspaceId, structuredPaneKey: null }
-    }
-  }
-  for (const [workspaceId, tabs] of Object.entries(state.unifiedTabsByWorktree)) {
-    const tab = tabs.find((item) => item.id === tabId && item.contentType === 'agent-session')
+  const workspaceIds = new Set([
+    ...Object.keys(state.tabsByWorktree),
+    ...Object.keys(state.unifiedTabsByWorktree)
+  ])
+  for (const workspaceId of workspaceIds) {
+    const tab = workspaceMarkerTabs(state, workspaceId).find((candidate) => candidate.id === tabId)
     if (tab) {
-      return { workspaceId, structuredPaneKey: structuredAgentSessionPaneKey(tab.id, tab.entityId) }
+      return {
+        workspaceId,
+        structuredPaneKey:
+          tab.sessionId === null ? null : structuredAgentSessionPaneKey(tab.id, tab.sessionId)
+      }
     }
   }
   return null
@@ -109,15 +115,17 @@ export function dismissReadNotifications(paneKeys: ReadonlySet<string>): void {
 }
 
 /**
- * After a removal `set()` (close, sleep, hibernate, retire, purge): settle the flag of each
- * workspace that lost a marker and dismiss the removed panes' notifications. No-op when no
- * marker was removed, so closing an unmarked tab keeps a manual unread.
+ * Runs a marker-removing `set()` (close, sleep, hibernate, retire, purge, superseded turn), then
+ * settles the flag of each workspace that lost a marker and dismisses the removed panes'
+ * notifications. No-op when no marker was removed, so closing an unmarked tab keeps a manual unread.
  */
-export function settleRemovedAttention(
+export function settleAttentionRemovedBy(
   set: WorkspaceAttentionSet,
   get: WorkspaceAttentionGet,
-  before: AttentionRemovalSnapshot
+  remove: () => void
 ): void {
+  const before = get()
+  remove()
   const removed = collectRemovedAttention(before, get())
   if (!removed) {
     return

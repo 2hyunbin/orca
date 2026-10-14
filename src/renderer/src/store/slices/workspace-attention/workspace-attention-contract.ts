@@ -9,6 +9,12 @@ export type WorkspaceAttentionGet = Parameters<StateCreator<AppState>>[1]
 
 export type OnScreenAttentionTarget = { worktreeId: string | null; tabId: string }
 
+/** What a visible, focused window shows: its workspaces (main and floating) and their tabs. */
+export type OnScreenAttention = {
+  workspaceIds: readonly string[]
+  targets: readonly OnScreenAttentionTarget[]
+}
+
 export type TerminalPaneAttentionTarget = {
   worktreeId: string
   tabId: string
@@ -28,13 +34,12 @@ export type WorkspaceAttentionSlice = {
   /** An admitted, unviewed agent completion or prompt (terminal or structured chat). */
   markAgentAttentionUnread: (write: AgentAttentionUnreadWrite) => void
   /**
-   * The tabs on screen in a visible, focused window are read — every marker of each tab.
-   * `settleFlags` also settles their workspaces' flags when the screen just arrived on them.
+   * The tabs on screen in a visible, focused window with the user present are read — every
+   * marker of each. `screenArrived` is true when the set of on-screen tabs (or the on-screen
+   * workspace, host or window focus) changed since the last read; a tab switch counts. Then each
+   * on-screen workspace's flag is settled even when nothing was removed.
    */
-  readOnScreenAttention: (
-    targets: readonly OnScreenAttentionTarget[],
-    options: { settleFlags: boolean }
-  ) => void
+  readOnScreenAttention: (screen: OnScreenAttention, options: { screenArrived: boolean }) => void
   /** Sidebar "Mark as read" (also removes every marker in the workspace) / "Mark as unread". */
   setWorkspaceUnreadByUser: (
     worktreeId: string,

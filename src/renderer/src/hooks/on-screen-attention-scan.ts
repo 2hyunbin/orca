@@ -5,7 +5,12 @@ import {
   type AgentSubjectRead,
   type StructuredSubjectRead
 } from '@/attention/agent-subject-read-actions'
-import { createAutoAckPresenceCheck } from './agent-auto-ack-presence'
+import {
+  createAutoAckPresenceCheck,
+  isPresenceConfirmed,
+  notePresence,
+  setPresenceGated
+} from './agent-auto-ack-presence'
 import type { AppState } from '@/store/types'
 import { selectFloatingWorkspacePanelVisible } from '@/store/floating-workspace-panel-selector'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
@@ -18,7 +23,11 @@ import {
   computeAgentAcknowledgementTargets,
   computeLapsedManualUnreadProtections
 } from '@/attention/agent-attention-acknowledgement'
-import { isWorkspaceFlagSet } from '@/store/slices/workspace-attention/workspace-unread-flag'
+import {
+  isWorkspaceFlagSet,
+  onScreenHostId
+} from '@/store/slices/workspace-attention/workspace-unread-flag'
+import { paneKeyTabId } from '@/store/slices/workspace-attention/workspace-live-markers'
 import { isOrcaWindowForegroundFocused } from '@/components/terminal-pane/terminal-notification-pane-visibility'
 
 type ScanStore = {
@@ -26,54 +35,56 @@ type ScanStore = {
   subscribe: (listener: () => void) => () => void
 }
 
-/** The window the scan runs in; the hook binds the real document, tests bind a fake. */
-export type ViewedAttentionEnvironment = {
-  /** Null where there is no native idle capability (browsers): the window gate stands alone. */
+/**
+ * The window the scan runs in. Window visibility+focus is read from the real document (the
+ * characterization fixture stubs it), so marking and the scan share one window check.
+ */
+export type OnScreenAttentionEnvironment = {
+  /** Null where there is no native idle query (browsers): the window gate stands alone. */
   readDesktopAway: (() => Promise<boolean | undefined>) | null
   subscribeStructuredViews: (onView: (view: StructuredSubjectRead) => void) => () => void
   /** `onRescan`: visibility/focus changed. `onInput`: trusted input proves presence. */
   subscribePresenceSignals: (onRescan: () => void, onInput: () => void) => () => void
-  /** Terminal keystrokes, which xterm stops before they reach the window. */
-  subscribeTerminalInput: (onInput: () => void) => () => void
 }
 
-function hasMarkerOfTab(record: Record<string, unknown>, tabId: string): boolean {
-  for (const key in record) {
-    if (key.length > tabId.length && key.charCodeAt(tabId.length) === 58 && key.startsWith(tabId)) {
-      return true
-    }
+/** The workspaces on screen: an open floating panel, and the active workspace in its own view. */
+function onScreenWorkspaceIds(s: AppState): string[] {
+  const workspaceIds = selectFloatingWorkspacePanelVisible(s) ? [FLOATING_TERMINAL_WORKTREE_ID] : []
+  if (s.activeView === 'terminal' && s.activeWorktreeId) {
+    workspaceIds.push(s.activeWorktreeId)
   }
-  return false
+  return workspaceIds
 }
 
 function hasMarkersOnScreen(s: AppState, targets: readonly AutoAckTabTarget[]): boolean {
-  return targets.some(
-    ({ tabId }) =>
-      Boolean(s.unreadTerminalTabs[tabId]) ||
-      hasMarkerOfTab(s.unreadTerminalPanes, tabId) ||
-      hasMarkerOfTab(s.unreadAgentCompletionPanes, tabId)
+  const tabIds = new Set(targets.map((target) => target.tabId))
+  const onScreen = (paneKey: string): boolean => tabIds.has(paneKeyTabId(paneKey) ?? '')
+  return (
+    targets.some(({ tabId }) => Boolean(s.unreadTerminalTabs[tabId])) ||
+    Object.keys(s.unreadTerminalPanes).some(onScreen) ||
+    Object.keys(s.unreadAgentCompletionPanes).some(onScreen)
   )
 }
 
 /**
- * On screen means read: while the window is visible and focused, the agents on the visible tabs
- * are acknowledged and every unread marker of those tabs is read.
+ * On screen means read: while the window is visible and focused and the user is present, the
+ * agents on the visible tabs are acknowledged and every unread marker of those tabs is read.
  * Scans live + retained maps: Codex's title-revert (pty-connection.ts:onAgentExited) migrates `done` rows to retained mid-race — see docs/codex-agent-row-bold-stuck.md.
  */
-export function startViewedAttentionScan(
+export function startOnScreenAttentionScan(
   store: ScanStore,
-  env: ViewedAttentionEnvironment
+  env: OnScreenAttentionEnvironment
 ): () => void {
+  setPresenceGated(env.readDesktopAway !== null)
   // Why: the store uses plain create() (no subscribeWithSelector), so manually track the slices we depend on to skip unrelated updates.
   // Init to undefined so the first maybeAck() (on mount) always passes the ref guard and scans.
   let lastActiveView: unknown = undefined
   let lastActiveTabId: unknown = undefined
   let lastActiveWorktreeId: unknown = undefined
-  let lastActiveWorkspaceGroupId: unknown = undefined
-  let lastActiveWorkspaceGroups: unknown = undefined
-  let lastFloatingWorkspaceActiveTabId: unknown = undefined
-  let lastFloatingWorkspaceGroupId: unknown = undefined
-  let lastFloatingWorkspaceGroups: unknown = undefined
+  let lastActiveHostId: unknown = undefined
+  let lastActiveGroupIds: unknown = undefined
+  let lastGroups: unknown = undefined
+  let lastGroupLayouts: unknown = undefined
   let lastAgentStatus: unknown = undefined
   let lastRetained: unknown = undefined
   let lastAcknowledged: unknown = undefined
@@ -82,7 +93,7 @@ export function startViewedAttentionScan(
   let lastUnreadTerminalPanes: unknown = undefined
   let lastUnreadAgentCompletionPanes: unknown = undefined
   let lastFloatingPanelVisible = false
-  // The screen last read; null after the window left the screen, so its return is an arrival.
+  // The screen last read, or null when none has been read since the window or workspace left.
   let lastReadScreenKey: string | null = null
 
   // `force` re-scans after a presence signal the store never sees.
@@ -102,34 +113,21 @@ export function startViewedAttentionScan(
     view?: StructuredSubjectRead
   }): void => {
     const s = store.getState()
-    const activeWorktreeId = s.activeWorktreeId
-    const activeWorkspaceGroupId = activeWorktreeId
-      ? (s.activeGroupIdByWorktree[activeWorktreeId] ?? null)
-      : null
-    const activeWorkspaceGroups = activeWorktreeId
-      ? s.groupsByWorktree[activeWorktreeId]
-      : undefined
-    const floatingWorkspaceActiveTabId =
-      s.activeTabIdByWorktree[FLOATING_TERMINAL_WORKTREE_ID] ?? null
-    const floatingWorkspaceGroupId =
-      s.activeGroupIdByWorktree[FLOATING_TERMINAL_WORKTREE_ID] ?? null
-    const floatingWorkspaceGroups = s.groupsByWorktree[FLOATING_TERMINAL_WORKTREE_ID]
-    // Why only the opening edge: opening puts an already-active floating tab on screen, so it
-    // must scan; closing must not, or it would lapse a mark-unread on the tab the user left.
+    // Why both edges: opening puts the floating tab on screen; closing moves the screen back.
     const floatingPanelVisible = selectFloatingWorkspacePanelVisible(s)
-    const floatingPanelOpened = floatingPanelVisible && !lastFloatingPanelVisible
+    const floatingPanelClosed = !floatingPanelVisible && lastFloatingPanelVisible
+    const floatingPanelToggled = floatingPanelVisible !== lastFloatingPanelVisible
     lastFloatingPanelVisible = floatingPanelVisible
     if (
       !options?.force &&
-      !floatingPanelOpened &&
+      !floatingPanelToggled &&
       s.activeView === lastActiveView &&
       s.activeTabId === lastActiveTabId &&
-      activeWorktreeId === lastActiveWorktreeId &&
-      activeWorkspaceGroupId === lastActiveWorkspaceGroupId &&
-      activeWorkspaceGroups === lastActiveWorkspaceGroups &&
-      floatingWorkspaceActiveTabId === lastFloatingWorkspaceActiveTabId &&
-      floatingWorkspaceGroupId === lastFloatingWorkspaceGroupId &&
-      floatingWorkspaceGroups === lastFloatingWorkspaceGroups &&
+      s.activeWorktreeId === lastActiveWorktreeId &&
+      s.activeWorkspaceExecutionHostId === lastActiveHostId &&
+      s.activeGroupIdByWorktree === lastActiveGroupIds &&
+      s.groupsByWorktree === lastGroups &&
+      s.layoutByWorktree === lastGroupLayouts &&
       s.agentStatusByPaneKey === lastAgentStatus &&
       s.retainedAgentsByPaneKey === lastRetained &&
       s.acknowledgedAgentsByPaneKey === lastAcknowledged &&
@@ -144,12 +142,11 @@ export function startViewedAttentionScan(
     // Presence signals force a rescan; unrelated writes must not retry an away result.
     lastActiveView = s.activeView
     lastActiveTabId = s.activeTabId
-    lastActiveWorktreeId = activeWorktreeId
-    lastActiveWorkspaceGroupId = activeWorkspaceGroupId
-    lastActiveWorkspaceGroups = activeWorkspaceGroups
-    lastFloatingWorkspaceActiveTabId = floatingWorkspaceActiveTabId
-    lastFloatingWorkspaceGroupId = floatingWorkspaceGroupId
-    lastFloatingWorkspaceGroups = floatingWorkspaceGroups
+    lastActiveWorktreeId = s.activeWorktreeId
+    lastActiveHostId = s.activeWorkspaceExecutionHostId
+    lastActiveGroupIds = s.activeGroupIdByWorktree
+    lastGroups = s.groupsByWorktree
+    lastGroupLayouts = s.layoutByWorktree
     lastAgentStatus = s.agentStatusByPaneKey
     lastRetained = s.retainedAgentsByPaneKey
     lastAcknowledged = s.acknowledgedAgentsByPaneKey
@@ -159,19 +156,18 @@ export function startViewedAttentionScan(
     lastUnreadAgentCompletionPanes = s.unreadAgentCompletionPanes
 
     // Why: tab-active only proxies "seen"; gate on window visible+focused so away-time transitions don't silently clear the bold signal.
-    if (!isOrcaWindowForegroundFocused()) {
+    const workspaceIds = isOrcaWindowForegroundFocused() ? onScreenWorkspaceIds(s) : []
+    if (workspaceIds.length === 0) {
       lastReadScreenKey = null
       return
     }
+    // An editor, browser or empty workspace has no targets but still reads its flag on arrival.
     const targets = resolveAutoAckTabTargets(s)
-    // Why no protection reset here: zero targets just means nothing is on screen
-    // (Settings, browser, an overlay) — a transient view switch must not lapse an
-    // explicit mark-unread the user just made.
-    if (targets.length === 0) {
-      lastReadScreenKey = ''
-      return
-    }
-    const screenKey = targets.map((target) => `${target.worktreeId}\n${target.tabId}`).join('\n\n')
+    const screenKey = [
+      s.activeWorkspaceExecutionHostId,
+      ...workspaceIds,
+      ...targets.map((target) => `${target.worktreeId}:${target.tabId}`)
+    ].join('\n')
     const arrived = screenKey !== lastReadScreenKey
     const reads =
       options?.reads ??
@@ -188,23 +184,20 @@ export function startViewedAttentionScan(
           ? { ...read, structured: view }
           : read
       })
-    if (!options?.presenceConfirmed && env.readDesktopAway !== null) {
+    if (!options?.presenceConfirmed && !isPresenceConfirmed()) {
       const records = readAgentAttentionTurnRecords(s)
       const hasAttention =
         hasMarkersOnScreen(s, targets) ||
+        (arrived &&
+          workspaceIds.some((workspaceId) =>
+            isWorkspaceFlagSet(s, workspaceId, onScreenHostId(s, workspaceId))
+          )) ||
         targets.some((target) => {
           const subjectKey = surfaceForAutoAckTarget(s, target).resolveViewedSubjectKey(
             target.tabId
           )
           return (
             computeAgentAcknowledgementTargets(records, subjectKey).length > 0 ||
-            (arrived &&
-              target.worktreeId !== null &&
-              isWorkspaceFlagSet(
-                s,
-                target.worktreeId,
-                target.worktreeId === s.activeWorktreeId ? s.activeWorkspaceExecutionHostId : null
-              )) ||
             (options?.force &&
               reads.some((read) => read.subjectKey === subjectKey && read.structured))
           )
@@ -219,25 +212,29 @@ export function startViewedAttentionScan(
     // Why before the writes below: they re-enter this scan synchronously, which must not see an arrival again.
     lastReadScreenKey = screenKey
     pendingPresenceReads = undefined
-    const activeSubjectKeys = new Set<string>()
-    for (const target of targets) {
-      const subjectKey = surfaceForAutoAckTarget(s, target).resolveViewedSubjectKey(target.tabId)
-      if (subjectKey) {
-        activeSubjectKeys.add(subjectKey)
+    // Why not with no target, nor on a panel close alone: an empty or non-agent view, or the tab
+    // the user just closed the panel on, is not "moved on" — lapsing would drop a mark-unread.
+    if (targets.length > 0 && !floatingPanelClosed) {
+      const activeSubjectKeys = new Set<string>()
+      for (const target of targets) {
+        const subjectKey = surfaceForAutoAckTarget(s, target).resolveViewedSubjectKey(target.tabId)
+        if (subjectKey) {
+          activeSubjectKeys.add(subjectKey)
+        }
       }
-    }
-    // Protection lapses when the user moves on to another subject or the agent takes a new
-    // turn; a still-active subject with an unchanged turn keeps its explicit mark-unread.
-    const lapsedProtections = computeLapsedManualUnreadProtections(
-      {
-        liveTurns: s.agentStatusByPaneKey,
-        retainedTurns: s.retainedAgentsByPaneKey,
-        manuallyUnreadTurnStartedAt: s.manuallyUnreadTurnsByPaneKey
-      },
-      activeSubjectKeys
-    )
-    if (lapsedProtections.length > 0) {
-      s.clearManuallyUnreadTurns(lapsedProtections)
+      // Protection lapses when the user moves on to another subject or the agent takes a new
+      // turn; a still-active subject with an unchanged turn keeps its explicit mark-unread.
+      const lapsedProtections = computeLapsedManualUnreadProtections(
+        {
+          liveTurns: s.agentStatusByPaneKey,
+          retainedTurns: s.retainedAgentsByPaneKey,
+          manuallyUnreadTurnStartedAt: s.manuallyUnreadTurnsByPaneKey
+        },
+        activeSubjectKeys
+      )
+      if (lapsedProtections.length > 0) {
+        s.clearManuallyUnreadTurns(lapsedProtections)
+      }
     }
 
     for (const target of targets) {
@@ -248,7 +245,7 @@ export function startViewedAttentionScan(
         readViewed: options?.force
       })
     }
-    store.getState().readOnScreenAttention(targets, { settleFlags: arrived })
+    store.getState().readOnScreenAttention({ workspaceIds, targets }, { screenArrived: arrived })
   }
   // Why: run once on mount to catch a restored session that already has agents on the visible tab.
   maybeAck({ force: true })
@@ -257,20 +254,21 @@ export function startViewedAttentionScan(
   const stopViews = env.subscribeStructuredViews((view) => maybeAck({ force: true, view }))
   const stopPresenceSignals = env.subscribePresenceSignals(
     () => maybeAck({ force: true }),
-    () => maybeAck({ force: true, presenceConfirmed: true })
-  )
-  // Why only while a presence check is parked: keystrokes are the hottest path in the app.
-  const stopTerminalInput = env.subscribeTerminalInput(() => {
-    if (pendingPresenceReads !== undefined) {
-      pendingPresenceReads = undefined
-      maybeAck({ force: true, presenceConfirmed: true })
+    () => {
+      notePresence()
+      // Why only while a presence check is parked: input is the hottest path in the app, and an
+      // unparked rescan would only re-read the screen that store writes and views already read.
+      if (pendingPresenceReads !== undefined) {
+        pendingPresenceReads = undefined
+        maybeAck({ force: true, presenceConfirmed: true })
+      }
     }
-  })
+  )
   return () => {
     presence.dispose()
     unsubscribe()
     stopViews()
     stopPresenceSignals()
-    stopTerminalInput()
+    setPresenceGated(true)
   }
 }

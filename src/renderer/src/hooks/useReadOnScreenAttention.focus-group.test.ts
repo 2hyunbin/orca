@@ -3,7 +3,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentAutoAckPresence from './agent-auto-ack-presence'
-import { useAutoAckViewedAgent } from './useAutoAckViewedAgent'
+import { useReadOnScreenAttention } from './useReadOnScreenAttention'
 import { useAppStore } from '../store'
 import { makeTab, makeTabGroup, makeUnifiedTab } from '../store/slices/store-session-test-harness'
 import { structuredAgentSessionPaneKey } from '../../../shared/structured-agent-session-projection'
@@ -24,7 +24,7 @@ const CHAT_TAB = 'chat-tab'
 const CHAT_SESSION = 'chat-session'
 const CHAT_SUBJECT = structuredAgentSessionPaneKey(CHAT_TAB, CHAT_SESSION)
 
-describe('useAutoAckViewedAgent focus-group transitions', () => {
+describe('useReadOnScreenAttention focus-group transitions', () => {
   beforeEach(() => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
     useAppStore.setState({
@@ -82,7 +82,7 @@ describe('useAutoAckViewedAgent focus-group transitions', () => {
   })
 
   it('rescans when focusing a group whose structured tab becomes visible', () => {
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
     expect(useAppStore.getState().unreadAgentCompletionPanes[CHAT_SUBJECT]).toBe('agent-completion')
 
     act(() => {

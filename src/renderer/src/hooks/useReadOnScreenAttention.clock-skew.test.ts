@@ -3,7 +3,7 @@
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentAutoAckPresence from './agent-auto-ack-presence'
-import { useAutoAckViewedAgent } from './useAutoAckViewedAgent'
+import { useReadOnScreenAttention } from './useReadOnScreenAttention'
 import { useAppStore } from '../store'
 import { makeTab, makeTabGroup, makeUnifiedTab } from '../store/slices/store-session-test-harness'
 import { makePaneKey } from '../../../shared/stable-pane-id'
@@ -87,7 +87,7 @@ function instrumentAcknowledgeAgents(): string[][] {
   return calls
 }
 
-describe('useAutoAckViewedAgent — clock-skewed execution host', () => {
+describe('useReadOnScreenAttention — clock-skewed execution host', () => {
   let realAcknowledgeAgents: (paneKeys: string[]) => void
 
   beforeEach(() => {
@@ -108,7 +108,7 @@ describe('useAutoAckViewedAgent — clock-skewed execution host', () => {
     seedFutureStampedTurn(NOW + SKEW_MS)
     const calls = instrumentAcknowledgeAgents()
 
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
 
     expect(calls).toEqual([[PANE_KEY]])
     const ackAt = useAppStore.getState().acknowledgedAgentsByPaneKey[PANE_KEY] ?? 0
@@ -117,7 +117,7 @@ describe('useAutoAckViewedAgent — clock-skewed execution host', () => {
 
   it('leaves nothing to re-scan for a future-stamped turn on the next store write', () => {
     seedFutureStampedTurn(NOW + SKEW_MS)
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
 
     const calls = instrumentAcknowledgeAgents()
     useAppStore.setState((state) => ({
@@ -131,7 +131,7 @@ describe('useAutoAckViewedAgent — clock-skewed execution host', () => {
     seedFutureStampedTurn(NOW - 5_000)
     const calls = instrumentAcknowledgeAgents()
 
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
 
     expect(calls).toEqual([[PANE_KEY]])
   })
@@ -140,7 +140,7 @@ describe('useAutoAckViewedAgent — clock-skewed execution host', () => {
     seedFutureStampedTurn(NOW - 5_000)
     useAppStore.getState().acknowledgeAgents([PANE_KEY])
 
-    renderHook(() => useAutoAckViewedAgent())
+    renderHook(() => useReadOnScreenAttention())
     useAppStore.getState().unacknowledgeAgents([PANE_KEY])
 
     expect(useAppStore.getState().acknowledgedAgentsByPaneKey[PANE_KEY]).toBeUndefined()

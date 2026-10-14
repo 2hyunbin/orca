@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setPresenceGated } from '@/hooks/agent-auto-ack-presence'
 import { dispatchTerminalNotification } from './use-notification-dispatch'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../shared/agent-status-types'
 import { buildAgentNotificationId } from '../../../../shared/agent-notification-id'
@@ -14,6 +15,10 @@ import {
   stubDocumentFocus,
   type NotificationDispatchMockState
 } from './notification-dispatch-test-harness'
+
+// The user is present unless a test says otherwise.
+beforeEach(() => setPresenceGated(false))
+afterEach(() => setPresenceGated(true))
 
 vi.mock('@/store', async () => {
   const harness = await import('./notification-dispatch-test-harness')

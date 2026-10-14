@@ -211,9 +211,11 @@ describe('worktree remote runtime mutations', () => {
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
     expect(store.getState().updateFolderWorkspace).toHaveBeenCalledTimes(1)
-    expect(store.getState().updateFolderWorkspace).toHaveBeenCalledWith(folderWorkspace.id, {
-      isUnread: false
-    })
+    expect(store.getState().updateFolderWorkspace).toHaveBeenCalledWith(
+      folderWorkspace.id,
+      { isUnread: false },
+      { executionHostId: 'local' }
+    )
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
@@ -251,9 +253,12 @@ describe('worktree remote runtime mutations', () => {
       folderWorkspace.id,
       expect.objectContaining({ isUnread: true })
     )
-    expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(2, folderWorkspace.id, {
-      isUnread: false
-    })
+    expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(
+      2,
+      folderWorkspace.id,
+      { isUnread: false },
+      { executionHostId: 'local' }
+    )
   })
 
   // A rejected folder update reconciles the optimistic write away, so reporting
