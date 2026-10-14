@@ -204,6 +204,8 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
         try {
           releaseDebugger = acquireElectronDebugger(wc).release
           const send: GuestCdpSender = (method, params) => wc.debugger.sendCommand(method, params)
+          const guardFocus = (): Promise<() => void> =>
+            this.browserManager.guardUserFocusForAgentInput(target.webContentsId)
           await dispatchPageKeyEvent(
             wc,
             {
@@ -213,7 +215,8 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
               ...event,
               ...(parsed.text === null ? {} : { text: parsed.text, unmodifiedText: parsed.text })
             },
-            send
+            send,
+            guardFocus
           )
           await dispatchPageKeyEvent(
             wc,
@@ -223,7 +226,8 @@ export abstract class AgentBrowserBridgeInteractionCommands extends AgentBrowser
               // Why: the self bit is keydown-only -- Blink reports shiftKey false on the Shift keyup.
               modifiers: parsed.modifiers & ~parsed.selfModifier
             },
-            send
+            send,
+            guardFocus
           )
           return { pressed: key }
         } catch (error) {

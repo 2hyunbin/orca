@@ -13,6 +13,8 @@ function fakePage(type: string) {
     getType: vi.fn(() => type),
     focus: vi.fn(),
     sendInputEvent: vi.fn(),
+    setIgnoreMenuShortcuts: vi.fn(),
+    isDestroyed: vi.fn(() => false),
     selectAll: vi.fn(),
     copy: vi.fn(),
     cut: vi.fn(),
@@ -150,6 +152,46 @@ describe('dispatchPageKeyEvent', () => {
     expect(page.sendInputEvent).toHaveBeenCalledTimes(2)
   })
 
+  it('guards the user’s focus for Tab, which can leave the page for Orca’s window', async () => {
+    const { page, webContents } = fakePage('webview')
+    const release = vi.fn()
+    const guardFocus = vi.fn(async () => release)
+
+    await dispatchPageKeyEvent(
+      webContents,
+      { type: 'rawKeyDown', key: 'Tab' },
+      fakeSender(),
+      guardFocus
+    )
+    await dispatchPageKeyEvent(
+      webContents,
+      { type: 'keyDown', key: 'a', text: 'a' },
+      fakeSender(),
+      guardFocus
+    )
+
+    expect(guardFocus).toHaveBeenCalledTimes(1)
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(page.focus).not.toHaveBeenCalled()
+  })
+
+  it('does not send Tab when the user’s focus cannot be guarded', async () => {
+    const { page, webContents } = fakePage('webview')
+
+    await expect(
+      dispatchPageKeyEvent(
+        webContents,
+        { type: 'rawKeyDown', key: 'Tab' },
+        fakeSender(),
+        async () => {
+          throw new Error('unavailable')
+        }
+      )
+    ).rejects.toThrow('unavailable')
+
+    expect(page.sendInputEvent).not.toHaveBeenCalled()
+  })
+
   it('runs editing commands on the guest', async () => {
     const { page, webContents } = fakePage('webview')
 
@@ -162,16 +204,18 @@ describe('dispatchPageKeyEvent', () => {
     expect(page.selectAll).toHaveBeenCalledTimes(1)
   })
 
-  it('focuses the guest and uses CDP when focus sits in a child frame', async () => {
+  it('borrows focus for CDP when focus sits in a child frame, then gives it back', async () => {
     const { page, webContents } = fakePage('webview')
     const send = fakeSender(true)
+    const release = vi.fn()
     const params = { type: 'keyDown', key: 'z', text: 'z' }
 
-    await dispatchPageKeyEvent(webContents, params, send)
+    await dispatchPageKeyEvent(webContents, params, send, async () => release)
 
     expect(page.sendInputEvent).not.toHaveBeenCalled()
     expect(page.focus).toHaveBeenCalledTimes(1)
     expect(send).toHaveBeenLastCalledWith('Input.dispatchKeyEvent', params)
+    expect(release).toHaveBeenCalledTimes(1)
   })
 
   it('keeps CDP input for pages outside an Orca window', async () => {
@@ -192,8 +236,8 @@ describe('routePageTextInsertion', () => {
     const { page, webContents } = fakePage('webview')
     const send = fakeSender()
 
-    const deliver = await routePageTextInsertion(webContents, { text: 'hi' }, send)
-    await deliver({ text: 'hi' })
+    const route = await routePageTextInsertion(webContents, { text: 'hi' }, send)
+    await route.deliver({ text: 'hi' })
 
     expect(page.focus).not.toHaveBeenCalled()
     expect(page.sendInputEvent.mock.calls.map(([event]) => event.keyCode)).toEqual(['h', 'i'])
@@ -203,15 +247,22 @@ describe('routePageTextInsertion', () => {
     ])
   })
 
-  it('focuses before delivering over CDP when text cannot be typed', async () => {
+  it('borrows focus to deliver over CDP when text cannot be typed', async () => {
     const { page, webContents } = fakePage('webview')
     const send = fakeSender()
+    const release = vi.fn()
+    const guardFocus = vi.fn(async () => release)
 
-    const deliver = await routePageTextInsertion(webContents, { text: 'a\nb' }, send)
+    const route = await routePageTextInsertion(webContents, { text: 'a\nb' }, send, guardFocus)
     expect(page.focus).toHaveBeenCalledTimes(1)
-    await deliver({ text: 'a\nb' })
+    await route.deliver({ text: 'a\nb' })
 
+    // Why: the caller releases, so an insert abandoned before delivery still gives focus back.
+    expect(route.release).toBe(release)
     expect(page.sendInputEvent).not.toHaveBeenCalled()
-    expect(send.mock.calls).toEqual([['Input.insertText', { text: 'a\nb' }]])
+    expect(send.mock.calls).toEqual([
+      ['Emulation.setFocusEmulationEnabled', { enabled: true }],
+      ['Input.insertText', { text: 'a\nb' }]
+    ])
   })
 })
