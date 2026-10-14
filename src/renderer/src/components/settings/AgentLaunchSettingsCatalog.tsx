@@ -11,6 +11,7 @@ import {
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
 } from '../../../../shared/tui-agent-launch-defaults'
+import { isNewWorkspaceSetupOnlyDefault } from '../../../../shared/new-workspace-setup-only'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import { useDetectedAgents, type AgentDetectionTarget } from '@/hooks/useDetectedAgents'
@@ -109,7 +110,10 @@ export function AgentLaunchSettingsCatalog({
   return (
     <>
       <AgentDefaultSetting
-        defaultAgent={settings.defaultTuiAgent}
+        defaultAgent={
+          isNewWorkspaceSetupOnlyDefault(settings) ? 'setup-only' : settings.defaultTuiAgent
+        }
+        allowSetupOnly={settings.newWorkspaceSetupOnly !== undefined}
         detectedIds={detectedIds}
         enabledDetectedAgents={detectedAgents.filter((agent) =>
           isTuiAgentEnabled(agent.id, settings.disabledTuiAgents)
@@ -119,7 +123,13 @@ export function AgentLaunchSettingsCatalog({
           'settings.agents.hostDefaults',
           'Defaults for new agents on the selected host.'
         )}
-        onSetDefault={(agent) => save({ type: 'default', agent })}
+        onSetDefault={(agent) =>
+          save({
+            type: 'default',
+            agent: agent === 'setup-only' ? 'blank' : agent,
+            ...(agent === 'setup-only' ? { setupOnly: true } : {})
+          })
+        }
       />
       {renderPermissions(settings.permissionMode, (mode) => save({ type: 'permissions', mode }))}
       <AgentDetectionCatalog

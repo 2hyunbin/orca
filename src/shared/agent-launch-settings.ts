@@ -1,6 +1,10 @@
 import type { GlobalSettings } from './global-settings-types'
 import type { TuiAgent } from './tui-agent'
 import {
+  buildDefaultAgentSettingsUpdate,
+  isNewWorkspaceSetupOnlyDefault
+} from './new-workspace-setup-only'
+import {
   buildAgentAvailabilitySettingsUpdate,
   normalizeDisabledTuiAgents
 } from './tui-agent-selection'
@@ -15,6 +19,7 @@ export type AgentLaunchSettingsSource = Partial<
   Pick<
     GlobalSettings,
     | 'defaultTuiAgent'
+    | 'newWorkspaceSetupOnly'
     | 'disabledTuiAgents'
     | 'agentCmdOverrides'
     | 'agentDefaultArgs'
@@ -24,6 +29,7 @@ export type AgentLaunchSettingsSource = Partial<
 
 export type AgentLaunchSettings = {
   defaultTuiAgent: GlobalSettings['defaultTuiAgent']
+  newWorkspaceSetupOnly?: boolean
   disabledTuiAgents: TuiAgent[]
   agentCmdOverrides: NonNullable<GlobalSettings['agentCmdOverrides']>
   agentDefaultArgs: NonNullable<GlobalSettings['agentDefaultArgs']>
@@ -32,7 +38,7 @@ export type AgentLaunchSettings = {
 }
 
 export type AgentLaunchSettingsMutation =
-  | { type: 'default'; agent: GlobalSettings['defaultTuiAgent'] }
+  | { type: 'default'; agent: GlobalSettings['defaultTuiAgent']; setupOnly?: boolean }
   | { type: 'availability'; agent: TuiAgent; enabled: boolean }
   | { type: 'permissions'; mode: Exclude<AgentPermissionMode, 'mixed'> }
   | { type: 'command'; agent: TuiAgent; value: string }
@@ -45,6 +51,7 @@ export function projectAgentLaunchSettings(
 ): AgentLaunchSettings {
   return {
     defaultTuiAgent: settings.defaultTuiAgent ?? null,
+    newWorkspaceSetupOnly: isNewWorkspaceSetupOnlyDefault(settings),
     disabledTuiAgents: normalizeDisabledTuiAgents(settings.disabledTuiAgents),
     agentCmdOverrides: { ...settings.agentCmdOverrides },
     agentDefaultArgs: normalizeTuiAgentArgsRecord(settings.agentDefaultArgs),
@@ -65,7 +72,9 @@ export function agentLaunchSettingsMutationUpdates(
 ): AgentLaunchSettingsSource {
   switch (mutation.type) {
     case 'default':
-      return { defaultTuiAgent: mutation.agent }
+      return buildDefaultAgentSettingsUpdate(
+        mutation.agent === 'blank' && mutation.setupOnly === true ? 'setup-only' : mutation.agent
+      )
     case 'availability':
       return buildAgentAvailabilitySettingsUpdate(
         {

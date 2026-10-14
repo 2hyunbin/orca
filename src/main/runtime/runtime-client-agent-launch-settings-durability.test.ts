@@ -110,6 +110,27 @@ describe('durable execution-host launch settings', () => {
     expect(readState().settings.agentDefaultArgs.claude).toBe('--durable-marker')
   })
 
+  it('rolls back both None fields when the database write fails', async () => {
+    const { store, authority } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    const before = store.getSettings().defaultTuiAgent
+    authority.failNextWrite()
+    try {
+      await expect(
+        controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+      ).rejects.toThrow('profile_state_write_failed')
+    } finally {
+      await store.flushPendingOrThrowAsync().catch(() => {})
+    }
+    expect(store.getSettings().defaultTuiAgent).toBe(before)
+    expect(store.getSettings().newWorkspaceSetupOnly).toBe(false)
+    await controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+    expect(controller.getAgentLaunch()).toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: true
+    })
+  })
+
   it('rejects a failed disk write, rolls back its settings, and allows an explicit retry', async () => {
     const { store, authority, readState } = await fixture()
     const controller = new RuntimeClientSettingsController(store)
@@ -190,6 +211,27 @@ describe('durable execution-host launch settings', () => {
       '__proto__',
       'constructor'
     ])
+  })
+
+  it('preserves a newer blank choice when a pending None write fails', async () => {
+    const { store, authority } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    authority.failNextWrite()
+    const gate = authority.pause()
+    const first = controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+    const refused = expect(first).rejects.toThrow('profile_state_write_failed')
+    try {
+      await gate.started.promise
+      store.updateSettings({ defaultTuiAgent: 'blank', newWorkspaceSetupOnly: false })
+    } finally {
+      gate.finish.resolve()
+    }
+    await refused
+    expect(controller.getAgentLaunch()).toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: false
+    })
+    await store.flushPendingOrThrowAsync()
   })
 
   it('preserves a newer legacy full-map write when an older mutation fails', async () => {
