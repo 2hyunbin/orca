@@ -5,6 +5,7 @@ import {
   cloudSessionIdentityKey,
   readLiveCloudSessionMutation,
   recordCloudSessionIdentityMutationIfCurrent,
+  type CloudSessionIdentity,
   type CloudSessionMutationSnapshot
 } from './profile-cloud-session-mutation'
 import { type OrcaCloudSession, updateStoredOrcaCloudSession } from './profile-cloud-session-store'
@@ -23,7 +24,8 @@ export function saveRotatedCloudSession(
   userDataPath: string,
   spent: OrcaCloudSession,
   rotated: OrcaCloudSessionExchangeResponse,
-  snapshot: CloudSessionMutationSnapshot
+  snapshot: CloudSessionMutationSnapshot,
+  linkedIdentity: CloudSessionIdentity
 ): OrcaCloudSession {
   const live = readLiveCloudSessionMutation(profileId, userDataPath)
   if (!live) {
@@ -56,7 +58,13 @@ export function saveRotatedCloudSession(
     throw new StaleCloudSessionMutationError()
   }
   if (ownsFence) {
-    relinkAfterRotation(profileId, userDataPath, rotated, live, sameIdentity)
+    relinkAfterRotation(
+      profileId,
+      userDataPath,
+      rotated,
+      live,
+      sameIdentity ? null : linkedIdentity
+    )
   }
   return saved
 }
@@ -66,19 +74,29 @@ function relinkAfterRotation(
   userDataPath: string,
   rotated: OrcaCloudSessionExchangeResponse,
   live: CloudSessionMutationSnapshot,
-  sameIdentity: boolean
+  linked: CloudSessionIdentity | null
 ): void {
+  let advanced: CloudSessionMutationSnapshot | null = null
   try {
-    if (!sameIdentity) {
+    if (linked) {
       console.warn('[orca-cloud] refresh reported a different active org; relinking to it')
       const rotatedIdentity = cloudSessionIdentity(profileId, rotated.cloud)
-      if (!recordCloudSessionIdentityMutationIfCurrent(rotatedIdentity, userDataPath, live)) {
+      advanced = recordCloudSessionIdentityMutationIfCurrent(rotatedIdentity, userDataPath, live)
+      if (!advanced) {
         return
       }
     }
     linkOrcaProfileToCloud(profileId, rotated.cloud, userDataPath)
   } catch (error) {
-    // The tokens are already saved; a stale link heals on the next capability refresh.
+    // Why: a fence left on the new org while the link keeps the old one would fail every
+    // later capability refresh; roll it back so fence and link agree again.
+    if (linked && advanced) {
+      try {
+        recordCloudSessionIdentityMutationIfCurrent(linked, userDataPath, advanced)
+      } catch {
+        // The tokens are saved either way; only the link stays stale.
+      }
+    }
     console.warn(
       '[orca-cloud] could not update the profile link after a refresh:',
       error instanceof Error ? error.message : String(error)

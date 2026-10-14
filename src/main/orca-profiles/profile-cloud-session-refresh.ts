@@ -201,7 +201,14 @@ async function refreshStoredCloudSession(
     ) {
       throw new StaleCloudSessionMutationError()
     }
-    return saveRotatedCloudSession(active.profile.id, userDataPath, session, refreshed, snapshot)
+    return saveRotatedCloudSession(
+      active.profile.id,
+      userDataPath,
+      session,
+      refreshed,
+      snapshot,
+      expectedIdentity
+    )
   })()
   inflightCloudSessionRefreshes.set(key, task)
   try {

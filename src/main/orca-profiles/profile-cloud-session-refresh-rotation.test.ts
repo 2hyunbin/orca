@@ -84,6 +84,8 @@ import {
 import {
   captureCloudSessionMutation,
   cloudSessionIdentity,
+  cloudSessionIdentityKey,
+  readLiveCloudSessionMutation,
   recordCloudSessionIdentityMutation,
   tombstoneCloudSession
 } from './profile-cloud-session-mutation'
@@ -347,6 +349,23 @@ describe('cloud session refresh-token rotation', () => {
     expect(server.revoked).toBe(false)
     const stored = readOrcaCloudSession('profile-1', userDataPath)
     expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+  })
+
+  it('rolls the fence back when relinking to a server-reported org fails', async () => {
+    createRotatingAuthServer(Date.now, { ...cloud, activeOrgId: 'org-2' })
+    signIn()
+    linkMock.mockImplementationOnce(() => {
+      throw new Error('EBUSY: profile index locked')
+    })
+
+    await readFreshOrcaCloudSession(config, active, userDataPath)
+
+    const stored = readOrcaCloudSession('profile-1', userDataPath)
+    expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+    // Fence and link both still name org-1, so a later capability refresh can save.
+    expect(readLiveCloudSessionMutation('profile-1', userDataPath)?.identityKey).toBe(
+      cloudSessionIdentityKey(cloudSessionIdentity('profile-1', cloud))
+    )
   })
 
   it('keeps a still-valid session file when a non-rotating save cannot be written', async () => {
