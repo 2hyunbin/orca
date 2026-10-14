@@ -25,6 +25,8 @@ import { qualifyProviderEndpointRestart } from './helpers/plugin-provider-endpoi
 import { qualifyProviderManagedWorkspace } from './helpers/plugin-provider-managed-workspace'
 import { qualifyProviderManagedGit } from './helpers/plugin-provider-managed-git'
 import { qualifyProviderWorkspaceReopen } from './helpers/plugin-provider-workspace-reopen'
+import { qualifyProviderChildRestart } from './helpers/plugin-provider-child-restart'
+import { reserveLocalPort } from './helpers/reserve-local-port'
 
 async function dismissUsageNotice(page: Page): Promise<void> {
   const dismiss = page.getByRole('button', { name: 'Got it', exact: true })
@@ -44,7 +46,9 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
   test.setTimeout(300_000)
   await mkdir(getPluginEvidenceDirectory(), { recursive: true })
   ensureDockerSshHostImage(process.cwd())
-  const target = startDockerSshHostTarget(testInfo)
+  const port = await reserveLocalPort()
+  await port.release()
+  const target = startDockerSshHostTarget(testInfo, { publishedPort: port.port })
   const fixture = await createPluginCatalogFixture({
     environmentRecipes: true,
     environmentPortable: true,
@@ -256,6 +260,7 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
         environmentId: managed.environmentId
       })
     await capturePluginEvidence(page, testInfo, 'node-provider-wake-native', app)
+    let childRestart: Awaited<ReturnType<typeof qualifyProviderChildRestart>> | undefined
     const endpointMigration = await qualifyProviderEndpointMigration({
       page,
       app,
@@ -280,6 +285,14 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
           managedEnvironmentId: managed.environmentId
         })
         await qualifyProviderWorkspaceReopen({ page, app, testInfo })
+        childRestart = await qualifyProviderChildRestart({
+          page,
+          app,
+          testInfo,
+          target,
+          managedEnvironmentId: managed.environmentId,
+          fixtureRoot: fixture.root
+        })
       }
     })
     const runtime = JSON.parse(
@@ -311,6 +324,7 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
           sleepRetiresContact: true,
           wakeKeepsManagedIdentity: true,
           endpointMigration,
+          childRestart,
           endpointCancelPreservesTarget: true,
           endpointApprovalRequiredBeforeSshTraffic: true,
           encryptedRemoteCensusAfterEndpointMigration: true,

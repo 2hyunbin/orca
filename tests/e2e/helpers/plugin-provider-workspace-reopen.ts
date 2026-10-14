@@ -10,6 +10,7 @@ export async function qualifyProviderWorkspaceReopen(input: {
   page: Page
   app: ElectronApplication
   testInfo: TestInfo
+  captureName?: string
 }): Promise<void> {
   const machine = input.page.locator('[data-environment-resource-id="devbox"]')
   await machine.getByRole('button', { name: /^(Connect|Reconnect)$/u }).click()
@@ -35,7 +36,7 @@ export async function qualifyProviderWorkspaceReopen(input: {
   await capturePluginEvidence(
     input.page,
     input.testInfo,
-    'node-provider-saved-workspace-reopened-native',
+    input.captureName ?? 'node-provider-saved-workspace-reopened-native',
     input.app
   )
   expect(await input.page.evaluate(() => Boolean(window.__store))).toBe(false)

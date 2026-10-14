@@ -208,7 +208,8 @@ export function writeDockerSshHostTargetFile(
 }
 
 export function startDockerSshHostTarget(
-  testInfo: Pick<TestInfo, 'workerIndex'>
+  testInfo: Pick<TestInfo, 'workerIndex'>,
+  options?: { publishedPort: number }
 ): DockerSshHostTarget {
   const host = process.env.ORCA_E2E_SSH_TARGET_HOST?.trim() || '127.0.0.1'
   if (host === 'localhost' || host === '::1' || host.startsWith('127.')) {
@@ -234,7 +235,7 @@ export function startDockerSshHostTarget(
         '--name',
         containerName,
         '-p',
-        `${bindHost}::22`,
+        `${bindHost}:${options?.publishedPort ?? ''}:22`,
         '-e',
         `AUTHORIZED_KEY=${publicKey}`,
         getDockerSshHostImage(),
