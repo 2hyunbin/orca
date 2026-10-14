@@ -9,7 +9,11 @@ import type { HeadlessAutomationDispatchContext } from './headless-dispatch-runn
 import { runHeadlessAutomationDispatch } from './headless-dispatch-runner'
 import type { AutomationRunTargetResult } from './run-target-resolution'
 import { createAutomationDispatchToken } from './dispatch-tokens'
-import { NO_DISPATCH_HOST, sendRendererDispatch } from './dispatch-refusal'
+import {
+  NO_DISPATCH_HOST,
+  describeScheduledRefusal,
+  sendRendererDispatch
+} from './dispatch-refusal'
 
 export type AutomationRendererChannel = Pick<WebContents, 'isDestroyed' | 'send'>
 
@@ -100,8 +104,12 @@ export async function requestAutomationDispatch(
     return returnDurable(run)
   }
   let target = resolveCurrentTarget()
-  if (!target.ok || (!ctx.getRenderer() && !ctx.headlessDispatcher)) {
-    return refuse(target.ok ? NO_DISPATCH_HOST : target.error)
+  const refusal = describeScheduledRefusal({
+    target,
+    canDispatch: Boolean(ctx.getRenderer() || ctx.headlessDispatcher)
+  })
+  if (refusal || !target.ok) {
+    return refuse(refusal ?? NO_DISPATCH_HOST)
   }
   await ctx.runs.updateRun({
     runId: run.id,
@@ -115,8 +123,10 @@ export async function requestAutomationDispatch(
     return returnDurable(run)
   }
   target = resolveCurrentTarget()
-  if (!target.ok) {
-    return refuse(target.error)
+  // A WSL move may have started during the claim; refuse before the worktree create would throw.
+  const lateRefusal = describeScheduledRefusal({ target, canDispatch: true })
+  if (lateRefusal || !target.ok) {
+    return refuse(lateRefusal ?? NO_DISPATCH_HOST)
   }
   const renderer = ctx.getRenderer()
   if (renderer) {

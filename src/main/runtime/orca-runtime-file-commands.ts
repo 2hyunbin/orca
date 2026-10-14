@@ -28,6 +28,7 @@ import {
 } from './files/chat-scratch-file-root'
 
 import type { RuntimeStore } from './runtime-store-contract'
+import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import type { Repo } from '../../shared/repo-types'
 
@@ -149,6 +150,10 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
     persistMaterializedPushTarget: (worktreeId, pushTarget) => {
       const store = this.store
       if (!store?.setWorktreeMeta) {
+        return
+      }
+      // Bookkeeping incidental to the push: a project a WSL move is taking skips it, not the push.
+      if (isWslMoveWorktreeBlocked(worktreeId, store.getWorktreeMeta?.(worktreeId)?.hostId)) {
         return
       }
       store.setWorktreeMeta(worktreeId, { pushTarget })

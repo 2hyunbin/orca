@@ -30,6 +30,7 @@ import type { CommitMessageAgentEnvironmentResolvers } from '../text-generation/
 import type { AgentGenerationFailureOutput } from '../text-generation/agent-failure-output'
 import { resolveGenerationTarget } from './first-work-generation-target'
 import { runFolderWorkspaceTitleAutoRename } from './first-work-workspace-title-rename'
+import { isWslMoveRepoBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 
 export type FirstWorkBranchRenameEvent = {
   paneKey: string
@@ -50,6 +51,8 @@ export type FirstWorkBranchRenameDeps = {
   getCurrentDisplayName: (worktreeId: string) => string | undefined
   /** Current workspace path for non-git folder workspaces. */
   getFolderWorkspacePath?: (worktreeId: string) => string | undefined
+  /** True while a WSL move is taking the folder workspace, or the WSL host owns it. */
+  isFolderWorkspaceWslMoveBlocked?: (worktreeId: string) => boolean
   /** True while a workspace title is waiting for the first agent message. */
   isPendingFirstAgentMessageRename?: (worktreeId: string) => boolean
   /** True only for Orca-created worktrees whose branch Orca is allowed to rename. */
@@ -176,6 +179,10 @@ async function runAutoRename(
     return stop('folder project has no branch to rename', true)
   }
   const worktreePath = parsed.worktreePath
+  // Before any git command; retry keeps the rename pending until the move settles.
+  if (isWslMoveRepoBlocked(repo)) {
+    return retry('a WSL move is taking the project')
+  }
 
   // Why: a runtime row's connectionId names the server's own SSH target; that host owns the branch, never this client.
   const route = resolveGitRouteForHost(getRepoExecutionHostId(repo))
@@ -235,6 +242,10 @@ async function runAutoRename(
     params,
     target
   )
+  // Generation takes seconds; a move may have started meanwhile.
+  if (isWslMoveRepoBlocked(repo)) {
+    return retry('a WSL move started during generation')
+  }
   if (!generated.success) {
     // Transient failure: retry on a later event; skip the badge for a user-canceled generation.
     if (!generated.canceled) {
