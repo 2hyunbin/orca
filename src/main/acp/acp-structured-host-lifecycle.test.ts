@@ -247,7 +247,7 @@ describe('closing or stopping a Grok chat while it starts', () => {
     await host.close(SESSION, 'user-close')
   })
 
-  it('stops a starting child even when Stop names an earlier turn', async () => {
+  it('leaves a starting child alone when Stop names an earlier turn', async () => {
     const { rig, host } = await openHostRig({
       script: (agent) => agent.on('initialize', () => {})
     })
@@ -257,11 +257,12 @@ describe('closing or stopping a Grok chat while it starts', () => {
       envelope: envelope('agentSession.cancel', { turnId: 'turn-of-an-old-child' }),
       turnId: 'turn-of-an-old-child'
     })
+    expect(await stopping).toMatchObject({ ok: true, value: { cancelled: false } })
     await rig.settle()
-    expect(rig.child().closes).toBeGreaterThan(0)
+    expect(rig.child().closes).toBe(0)
+    expect(rig.child().exited).toBe(false)
     await host.close(SESSION, 'user-close')
     await attaching
-    await stopping
   })
 
   it('never spawns a child for a start closed while its launch was still resolving', async () => {
