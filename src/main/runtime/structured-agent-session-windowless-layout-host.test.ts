@@ -14,12 +14,18 @@ import { closeTestJournalHostDatabases } from '../native-chat/agent-session-jour
 import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { seedTestAgentSessionRecordStore } from './agent-session-record-store-test-harness'
 import { OrcaRuntimeService } from './orca-runtime'
+import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
 import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
 } from './structured-agent-session-runtime'
 
 const WT = 'workspace-1'
+// Session ids are 8 to 128 characters; a shorter one is not a readable record.
+const CHAT_A = 'chat-a-0001'
+const CHAT_B = 'chat-b-0002'
+const CHAT_GONE = 'chat-gone-0003'
+const CHAT_SSH = 'chat-ssh-0004'
 let root: string
 
 beforeEach(async () => {
@@ -90,6 +96,26 @@ function installHost(runtime: OrcaRuntimeService) {
   })
 }
 
+/** A runtime whose startup restore installs a host rooted at `root`, with no PTY daemon. */
+function restoringRuntime(runtime: OrcaRuntimeService): void {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.
+  const internal = runtime as unknown as {
+    hasPersistedStructuredAgentSessionStore(): boolean
+    ensureStructuredAgentSessionHost(): Promise<unknown>
+    refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
+  }
+  internal.hasPersistedStructuredAgentSessionStore = () => true
+  internal.ensureStructuredAgentSessionHost = () => installHost(runtime)
+  internal.refreshMobileSessionPtyRecords = async () => new Set<string>()
+}
+
+function shown(...sessionIds: string[]) {
+  return sessionIds.map((sessionId) => ({
+    tabId: structuredAgentSessionTabId(sessionId),
+    sessionId
+  }))
+}
+
 function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
   return (state.session.unifiedTabs?.[WT] ?? [])
     .filter((tab) => tab.contentType === 'agent-session')
@@ -99,40 +125,72 @@ function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
 describe('a windowless chat tab against the chat host', () => {
   it('leaves the layout when the host hides the chat', async () => {
     await seedTestAgentSessionRecordStore(root, {
-      records: [released('chat-a'), released('chat-b')],
-      sessionTabs: ['chat-a', 'chat-b'].map((sessionId) => ({
-        tabId: structuredAgentSessionTabId(sessionId),
-        sessionId
-      }))
+      records: [released(CHAT_A), released(CHAT_B)],
+      sessionTabs: shown(CHAT_A, CHAT_B)
     })
-    const { runtime, state } = await runtimeWithSavedChats(['chat-a', 'chat-b'])
-    expect(savedChatIds(state)).toEqual(['chat-a', 'chat-b'])
+    const { runtime, state } = await runtimeWithSavedChats([CHAT_A, CHAT_B])
+    expect(savedChatIds(state)).toEqual([CHAT_A, CHAT_B])
     const host = await installHost(runtime)
+    expect(host.deps.store.getRecord(CHAT_A)).not.toBeNull()
 
-    await host.setSessionTabVisibility('chat-a', false)
+    await host.setSessionTabVisibility(CHAT_A, false)
 
-    expect(savedChatIds(state)).toEqual(['chat-b'])
+    expect(savedChatIds(state)).toEqual([CHAT_B])
   })
 
-  it('leaves the layout at startup when the chat record is gone', async () => {
+  it('leaves the layout at startup when the chat record is gone, and keeps a listed one', async () => {
     await seedTestAgentSessionRecordStore(root, {
-      records: [released('chat-b')],
-      sessionTabs: [{ tabId: structuredAgentSessionTabId('chat-b'), sessionId: 'chat-b' }]
+      records: [released(CHAT_B)],
+      sessionTabs: shown(CHAT_B)
     })
-    const { runtime, state } = await runtimeWithSavedChats(['chat-gone', 'chat-b'])
-    expect(savedChatIds(state)).toEqual(['chat-gone', 'chat-b'])
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.
-    const internal = runtime as unknown as {
-      hasPersistedStructuredAgentSessionStore(): boolean
-      ensureStructuredAgentSessionHost(): Promise<unknown>
-      refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
-    }
-    internal.hasPersistedStructuredAgentSessionStore = () => true
-    internal.ensureStructuredAgentSessionHost = () => installHost(runtime)
-    internal.refreshMobileSessionPtyRecords = async () => new Set<string>()
+    const { runtime, state } = await runtimeWithSavedChats([CHAT_GONE, CHAT_B])
+    expect(savedChatIds(state)).toEqual([CHAT_GONE, CHAT_B])
+    restoringRuntime(runtime)
 
     await runtime.restoreStructuredAgentSessionTabs()
 
-    expect(savedChatIds(state)).toEqual(['chat-b'])
+    expect(savedChatIds(state)).toEqual([CHAT_B])
+  })
+
+  it('keeps the tab of a chat whose record this build cannot read', async () => {
+    // An id the current record shape rejects stands in for a record a newer build wrote.
+    await seedTestAgentSessionRecordStore(root, {
+      records: [released(CHAT_B), released('short')],
+      sessionTabs: shown(CHAT_B)
+    })
+    const { runtime, state } = await runtimeWithSavedChats(['short', CHAT_B])
+    restoringRuntime(runtime)
+
+    await runtime.restoreStructuredAgentSessionTabs()
+
+    expect(savedChatIds(state)).toEqual(['short', CHAT_B])
+  })
+
+  it("leaves another execution host's chat tab alone at startup", async () => {
+    await seedTestAgentSessionRecordStore(root, {
+      records: [released(CHAT_B)],
+      sessionTabs: shown(CHAT_B)
+    })
+    const { runtime, state } = await runtimeWithSavedChats([CHAT_B])
+    state.session = withOpenedAgentSessionTab('ssh:box', state.session, WT, {
+      sessionId: CHAT_SSH,
+      agent: 'codex',
+      tabId: structuredAgentSessionTabId(CHAT_SSH)
+    })!
+    restoringRuntime(runtime)
+
+    await runtime.restoreStructuredAgentSessionTabs()
+
+    expect(savedChatIds(state)).toEqual([CHAT_B, CHAT_SSH])
+  })
+
+  it('prunes nothing at startup when the store has no tab index', async () => {
+    await seedTestAgentSessionRecordStore(root, { records: [released(CHAT_B)] })
+    const { runtime, state } = await runtimeWithSavedChats([CHAT_GONE, CHAT_B])
+    restoringRuntime(runtime)
+
+    await runtime.restoreStructuredAgentSessionTabs()
+
+    expect(savedChatIds(state)).toEqual([CHAT_GONE, CHAT_B])
   })
 })
