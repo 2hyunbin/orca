@@ -827,7 +827,7 @@ export async function runReservePlacementSimulation(
   // A host demoted behind its row: its next answer, from any director, is that row or above it.
   const reassignAbove = new Map<string, { cellId: string; epoch: number }>()
   // Only under localTieBreak: even directors keep the lower cell id of a level divergence, odd ones the higher.
-  function keepsThisSeat(
+  function faultKeepsThisSeat(
     director: SimDirector,
     cellId: string,
     epoch: number,
@@ -853,7 +853,7 @@ export async function runReservePlacementSimulation(
         if (row && diverged && live && live.joinedAt === seat.joinedAt && live.demoted && !faults.noRowAheadDemote) {
           const thisSeat = { cellId, epoch: seat.epoch }
           const rowSeat = { cellId: row.cellId, epoch: row.epoch }
-          if (keepsThisSeat(director, cellId, seat.epoch, row)) judge(director, host, rowSeat, thisSeat)
+          if (faultKeepsThisSeat(director, cellId, seat.epoch, row)) judge(director, host, rowSeat, thisSeat)
           else {
             judge(director, host, thisSeat, rowSeat)
             raiseRowFloor(director, host, row.epoch)
@@ -864,7 +864,7 @@ export async function runReservePlacementSimulation(
           if (behindRow.has(key)) violate(8, `${host}@${seat.epoch} on ${cellId} still behind row @${row.epoch}`)
           behindRow.set(key, clock.now)
           if (faults.noRowAheadDemote) continue
-          if (keepsThisSeat(director, cellId, seat.epoch, row)) {
+          if (faultKeepsThisSeat(director, cellId, seat.epoch, row)) {
             const rowSeat = director.views.get(row.cellId)?.seats.get(host)
             if (rowSeat && rowSeat.epoch === row.epoch && !rowSeat.demoted) {
               demoteFor(director, host, row.cellId, rowSeat, { cellId, epoch: seat.epoch })
