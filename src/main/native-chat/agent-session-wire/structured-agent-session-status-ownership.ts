@@ -12,7 +12,7 @@ import {
   serializeAgentStatusSubject,
   type AgentStatusStructuredSessionSubject
 } from '../../../shared/agent-status-subject'
-import type { SavedStructuredSessionEntry } from '../../../shared/structured-agent-session-saved-status'
+import type { SavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 
 export type StructuredAgentSessionStatusSink = {
   publish: (
@@ -29,7 +29,7 @@ export type StructuredAgentSessionStatusSink = {
   /** The child records the sink holds for that subject, as the views every surface reads. */
   readChildWork?: (subject: AgentStatusStructuredSessionSubject) => AgentChildWorkView[]
   /** Each chat's status as the last run saved it, for startup to show before anything opens. */
-  readSavedStatuses?: () => SavedStructuredSessionEntry[]
+  readSavedStatuses?: () => SavedStructuredSessionStatus[]
   dropSavedStatus?: (sessionId: string) => void
   /** The records those views project, with the host-only facts no view carries. */
   readChildWorkRecords?: (subject: AgentStatusStructuredSessionSubject) => AgentChildWorkRecord[]

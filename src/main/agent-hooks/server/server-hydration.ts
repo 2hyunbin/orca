@@ -12,6 +12,7 @@ import { seedCodexStateFromSnapshot } from '../../../shared/agent-hook-listener/
 import { AGENT_STATUS_PERSISTED_HYDRATION_MODE } from '../../../shared/agent-status-legacy-adapter'
 import { HYDRATE_MAX_AGE_MS, LAST_STATUS_FILE_VERSION } from './server-constants'
 import type { EnrichedAgentHookEventPayload, LastStatusFile } from './server-types'
+import { parseSavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 import {
   authorityCommitmentsMatch,
   dropHydratedIdleClaudeSubagents,
@@ -74,7 +75,10 @@ export abstract class AgentHookServerHydration extends AgentHookServerTabCleanup
       : null
     // No age limit: each entry dies with its chat's record or tab, or is replaced by its next save.
     for (const [sessionId, entry] of Object.entries(read?.file.structuredSessions ?? {})) {
-      this.savedStructuredStatuses.set(sessionId, entry)
+      const saved = parseSavedStructuredSessionStatus(sessionId, entry)
+      if (saved) {
+        this.savedStructuredStatuses.set(sessionId, saved)
+      }
     }
   }
 

@@ -21,7 +21,6 @@ import {
 } from '../../../shared/structured-agent-session-status-started-at'
 import { structuredStatusLegacyEvent } from './server-structured-status-row'
 import {
-  parseSavedStructuredSessionStatus,
   savedStructuredSessionStatusChanged,
   savedStructuredSessionSummary
 } from '../../../shared/structured-agent-session-saved-status'
@@ -142,14 +141,10 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
     this.emitEnrichedStatus(after)
   }
 
-  /** Written at once, and only when what a restart would show changes: a crash right after a turn
-   *  ends must still find the end, and a streamed delta is never worth a write. */
+  /** Saved only when what a restart would show changes: a streamed delta is never worth a write. */
   private saveStructuredStatus(summary: AgentSessionStatusSummary): void {
     const next = savedStructuredSessionSummary(summary)
-    const previous = parseSavedStructuredSessionStatus(
-      summary.sessionId,
-      this.savedStructuredStatuses.get(summary.sessionId)
-    )
+    const previous = this.savedStructuredStatuses.get(summary.sessionId)
     if (next && savedStructuredSessionStatusChanged(previous?.summary, next)) {
       this.savedStructuredStatuses.set(summary.sessionId, { summary: next })
       this.scheduleStatusPersist()

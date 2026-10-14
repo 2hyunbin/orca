@@ -91,7 +91,7 @@ async function turnState(): Promise<string | undefined> {
 }
 
 const savedIds = () =>
-  statusStore.server.readSavedStructuredStatuses().map((entry) => entry.sessionId)
+  statusStore.server.readSavedStructuredStatuses().map((entry) => entry.summary.sessionId)
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-saved-status-startup-'))
@@ -130,18 +130,19 @@ describe('a chat a crash cut mid-turn', () => {
         })
       }
       expect(statusStore.server.readSavedStructuredStatuses()).toEqual([
-        { sessionId: SESSION, saved: { summary: expect.objectContaining({ status: 'idle' }) } }
+        { summary: expect.objectContaining({ sessionId: SESSION, status: 'idle' }) }
       ])
     }
   )
 
   it("reads Couldn't confirm when its agent may still be running, as its open writes", async () => {
-    // An owner proven alive that this platform does not stop: released with no proof of death.
+    // An owner on another host outlives this restart, and no probe here can tell it is gone.
+    await seedTestAgentSessionRecordStore(root, { records: [crashedRecord(SESSION, 'ssh:other')] })
+    store = await openTestAgentSessionRecordStore(root)
     await relaunch(
       { [SESSION]: savedEntry('working') },
-      { outcome: 'identity-matched', matchedOn: ['spawn-token'] }
+      { outcome: 'indeterminate', reason: 'no scan here' }
     )
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
 
     await startUp()
 
@@ -214,7 +215,7 @@ describe('a chat that was settled at the restart', () => {
     await relaunch({ [SESSION]: idle })
     await host.journalSnapshot(SESSION)
     // What startup read before that open saved over it.
-    statusStore.sink.readSavedStatuses = () => [{ sessionId: SESSION, saved: idle }]
+    statusStore.sink.readSavedStatuses = () => [idle]
 
     await startUp()
 

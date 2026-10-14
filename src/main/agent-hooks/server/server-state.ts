@@ -29,6 +29,7 @@ import type { SpoolRecord } from '../../../shared/agent-hook-spool'
 import { createAgentStatusStore, type AgentStatusStore } from '../../../shared/agent-status-store'
 import { AGENT_STATUS_2A_CURRENT_PRODUCER_MODE } from '../../../shared/agent-status-legacy-adapter'
 import type { AgentStatusSubject } from '../../../shared/agent-status-subject'
+import type { SavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 import type {
   AgentHookAuthorityEvidence,
   AgentHookProviderSessionIdentity,
@@ -147,8 +148,8 @@ export abstract class AgentHookServerState {
   protected paneKeyAliasPersistenceListener: PaneKeyAliasPersistenceListener | null = null
   // Why: on-disk last-status cache path; null without a userDataPath (tests), where persistence is a no-op and only in-memory replay applies.
   protected lastStatusFilePath: string | null = null
-  // Why raw: an entry a newer build wrote is written back as it was until this build saves that chat.
-  protected savedStructuredStatuses = new Map<string, unknown>()
+  // Why: native chats have no status hooks, so their last statuses ride beside the CLI rows.
+  protected savedStructuredStatuses = new Map<string, SavedStructuredSessionStatus>()
   // Why: a file this build cannot read is another build's; with hooks off nothing else rewrites it.
   protected statusFileForeign = false
   // Why: with status hooks off nothing hydrates the CLI rows, so a native chat's save writes them back as read.

@@ -5,10 +5,7 @@
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
-import type {
-  SavedStructuredSessionEntry,
-  SavedStructuredSessionStatus
-} from '../../../shared/structured-agent-session-saved-status'
+import type { SavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { structuredAgentSessionRecordSummaryFields } from './structured-agent-session-status-summary'
 
@@ -37,7 +34,7 @@ export async function restoreSavedStructuredAgentSessionStatuses(input: {
   listed: readonly string[]
   /** Chats undelivered orchestration mail waits on. */
   owedMail: readonly string[]
-  saved: readonly SavedStructuredSessionEntry[]
+  saved: readonly SavedStructuredSessionStatus[]
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** A record a newer build wrote: its saved status is that build's, so it is kept. */
   isUnreadable: (sessionId: string) => boolean
@@ -53,16 +50,13 @@ export async function restoreSavedStructuredAgentSessionStatuses(input: {
 }): Promise<void> {
   const listed = new Set(input.listed)
   const cut: string[] = []
-  for (const { sessionId, saved } of input.saved) {
+  for (const saved of input.saved) {
+    const { sessionId } = saved.summary
     const record = input.getRecord(sessionId)
     if (!record) {
       if (!input.isUnreadable(sessionId)) {
         input.dropSaved(sessionId)
       }
-      continue
-    }
-    if (!saved) {
-      // Another build's entry: kept as written until this chat's own save replaces it.
       continue
     }
     if (wasCut(saved)) {

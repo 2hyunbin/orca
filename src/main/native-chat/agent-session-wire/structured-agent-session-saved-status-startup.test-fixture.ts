@@ -29,7 +29,7 @@ export const NEVER_WRITTEN = 'session-never-written-2'
 /** Older than any age limit a saved status could have been given. */
 export const NINE_DAYS_AGO = Date.now() - 9 * 24 * 60 * 60 * 1000
 
-export function crashedRecord(sessionId = SESSION): AgentSessionRecord {
+export function crashedRecord(sessionId = SESSION, ownerHostId = 'local'): AgentSessionRecord {
   return {
     schemaVersion: 2,
     sessionId,
@@ -55,7 +55,7 @@ export function crashedRecord(sessionId = SESSION): AgentSessionRecord {
       handoffStage: null,
       provenHandleLinkId: 'link-13',
       ownerProcess: {
-        hostId: 'local',
+        hostId: ownerHostId,
         pid: 12_546,
         processStartTimeMs: STARTED_AT,
         spawnToken: 'spawn-crashed'

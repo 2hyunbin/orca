@@ -130,7 +130,7 @@ export type LastStatusFile = {
   entries: Record<string, PersistedAgentHookEventPayload>
   authorityCommitments?: Record<string, PersistedAgentHookAuthorityCommitment>
   /** Native chats' `SavedStructuredSessionStatus` by session id; a build that predates the key
-   *  ignores it. Read entry by entry, so one this build cannot parse is kept as written. */
+   *  ignores it. Read entry by entry, so a malformed one drops alone. */
   structuredSessions?: Record<string, unknown>
 }
 

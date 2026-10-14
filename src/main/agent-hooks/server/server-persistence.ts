@@ -11,10 +11,7 @@ import type {
 import { authorityCommitmentsMatch } from './server-persistence-validation'
 import { AgentHookServerHydration } from './server-hydration'
 import { AtomicSnapshotWriter } from '../../persistence/atomic-snapshot-writer'
-import {
-  parseSavedStructuredSessionStatus,
-  type SavedStructuredSessionEntry
-} from '../../../shared/structured-agent-session-saved-status'
+import type { SavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 
 export abstract class AgentHookServerPersistence extends AgentHookServerHydration {
   private statusSnapshotWriter: AtomicSnapshotWriter | null = null
@@ -88,12 +85,8 @@ export abstract class AgentHookServerPersistence extends AgentHookServerHydratio
     }
   }
 
-  /** Every saved entry; one this build cannot read is null, and stays in the file as written. */
-  readSavedStructuredStatuses(): SavedStructuredSessionEntry[] {
-    return [...this.savedStructuredStatuses].map(([sessionId, entry]) => ({
-      sessionId,
-      saved: parseSavedStructuredSessionStatus(sessionId, entry)
-    }))
+  readSavedStructuredStatuses(): SavedStructuredSessionStatus[] {
+    return [...this.savedStructuredStatuses.values()]
   }
 
   // Why: leading-edge throttle — an isolated change is written on the next turn, while a stream of

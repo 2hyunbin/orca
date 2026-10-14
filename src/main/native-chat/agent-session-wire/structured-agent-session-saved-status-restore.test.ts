@@ -5,7 +5,7 @@ import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../shared/agent-session-record.test-fixture'
-import type { SavedStructuredSessionEntry } from '../../../shared/structured-agent-session-saved-status'
+import type { SavedStructuredSessionStatus } from '../../../shared/structured-agent-session-saved-status'
 import {
   restoreSavedStructuredAgentSessionStatuses,
   restoredStructuredSessionSummary
@@ -24,18 +24,15 @@ function saved(
   sessionId: string,
   status: AgentSessionStatusSummary['status'] = 'working',
   fields: Partial<AgentSessionStatusSummary> = {}
-): SavedStructuredSessionEntry {
+): SavedStructuredSessionStatus {
   return {
-    sessionId,
-    saved: {
-      summary: {
-        sessionId,
-        status,
-        latestPrompt: 'refactor the parser',
-        updatedAt: 40_000,
-        statusStartedAt: 39_000,
-        ...fields
-      }
+    summary: {
+      sessionId,
+      status,
+      latestPrompt: 'refactor the parser',
+      updatedAt: 40_000,
+      statusStartedAt: 39_000,
+      ...fields
     }
   }
 }
@@ -44,8 +41,8 @@ describe("a settled chat's restored row", () => {
   it("is the journal's half as saved and the record's half from the record", () => {
     const entry = saved('chat', 'idle', { turnOutcome: 'failure' })
 
-    expect(restoredStructuredSessionSummary(entry.saved!, record('chat'))).toEqual({
-      ...entry.saved!.summary,
+    expect(restoredStructuredSessionSummary(entry, record('chat'))).toEqual({
+      ...entry.summary,
       workspaceId: 'workspace-1',
       agent: 'claude',
       model: 'model-on-the-record',
@@ -56,7 +53,7 @@ describe("a settled chat's restored row", () => {
 })
 
 function restoreInput(
-  entries: SavedStructuredSessionEntry[],
+  entries: SavedStructuredSessionStatus[],
   records: AgentSessionRecord[],
   listed: string[],
   owedMail: string[] = [],
@@ -143,22 +140,6 @@ describe('restoring saved statuses at startup', () => {
     await restoreSavedStructuredAgentSessionStatuses(input)
 
     expect(input.dropSaved.mock.calls).toEqual([['closed'], ['gone']])
-    expect(input.restoreSaved).not.toHaveBeenCalled()
-    expect(input.settle).not.toHaveBeenCalled()
-  })
-
-  it("keeps a newer build's entries: one it cannot parse, and one for a record it cannot read", async () => {
-    const { input } = restoreInput(
-      [{ sessionId: 'unparsed', saved: null }, saved('newer-record')],
-      [record('unparsed')],
-      ['unparsed', 'newer-record'],
-      [],
-      ['newer-record']
-    )
-
-    await restoreSavedStructuredAgentSessionStatuses(input)
-
-    expect(input.dropSaved).not.toHaveBeenCalled()
     expect(input.restoreSaved).not.toHaveBeenCalled()
     expect(input.settle).not.toHaveBeenCalled()
   })

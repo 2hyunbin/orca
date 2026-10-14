@@ -47,6 +47,8 @@ function readFile(): {
   entries?: Record<string, unknown>
   structuredSessions?: Record<string, unknown>
 } {
+  // Writes are throttled in the background; read what the next write would land.
+  servers.forEach((server) => server.flushStatusPersistSync())
   return JSON.parse(readFileSync(lastStatusPath(), 'utf8'))
 }
 
@@ -190,35 +192,8 @@ describe('loading native chat statuses', () => {
     const server = await start()
 
     expect(server.readSavedStructuredStatuses()).toEqual([
-      { sessionId: CHAT, saved: { summary: expect.objectContaining({ status: 'working' }) } }
+      { summary: expect.objectContaining({ status: 'working' }) }
     ])
-  })
-
-  it("writes a newer build's entries back as they were, until this build saves that chat", async () => {
-    const newer = {
-      summary: { sessionId: CHAT, status: 'paused', latestPrompt: 'x', updatedAt: 1 },
-      extra: true
-    }
-    const other = {
-      summary: { sessionId: 'other', status: 'idle', latestPrompt: 'y', updatedAt: 2, future: 1 }
-    }
-    writeFile({ version: 2, entries: {}, structuredSessions: { [CHAT]: newer, other } })
-    const server = await start()
-
-    expect(server.readSavedStructuredStatuses().map((entry) => entry.saved !== null)).toEqual([
-      false,
-      true
-    ])
-    server.dropSavedStructuredStatus('missing')
-    const another = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
-    server.ingestStructuredStatus(
-      live({ sessionId: another }),
-      makeStructuredAgentStatusSubject(LOCATION, another)
-    )
-    expect(readFile().structuredSessions).toMatchObject({ [CHAT]: newer, other })
-
-    server.ingestStructuredStatus(live(), SUBJECT)
-    expect(savedChat()).toMatchObject({ summary: { status: 'working' } })
   })
 
   it('loads and saves with status hooks off, writing back the CLI rows it never hydrated', async () => {

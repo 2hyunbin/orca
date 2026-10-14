@@ -19,12 +19,6 @@ export type SavedStructuredSessionSummary = Pick<
 
 export type SavedStructuredSessionStatus = { summary: SavedStructuredSessionSummary }
 
-/** A saved entry as startup reads it: `saved` is null for one this build cannot parse. */
-export type SavedStructuredSessionEntry = {
-  sessionId: string
-  saved: SavedStructuredSessionStatus | null
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
