@@ -87,11 +87,7 @@ async function startHost(): Promise<void> {
     adapter: {
       open: ({ acquisitionGeneration }) =>
         new Promise((resolve) => {
-          openGates.set(acquisitionGeneration!, (model) =>
-            resolve({
-              reportedOptions: { model }
-            })
-          )
+          openGates.set(acquisitionGeneration!, (model) => resolve({ reportedOptions: { model } }))
         }),
       acquire,
       dispatch,
@@ -298,6 +294,8 @@ describe('a start that ends before it proves itself', () => {
     })
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(closeSession).toHaveBeenCalled()
+    const rows = (await host.journalSnapshot(SESSION)).items.map(({ body }) => body)
+    expect(rows).toContainEqual({ kind: 'status', text: 'Cancellation requested.' })
     expect(dispatch).not.toHaveBeenCalled()
     expect(startupAttemptOpen()).toBe(false)
   })
@@ -481,7 +479,7 @@ describe('a chat after startup permission backfill', () => {
       await restartWith(publishFirst)
       await heldBehindStart('hello')
       expect(acquire.mock.calls.at(-1)![0].permissionMode).toBe(mode)
-      await host.handleAdapterEvent(startedEvent())
+      await proveOpen()
       await vi.advanceTimersByTimeAsync(50)
       await host.flushStreamedEvents(SESSION)
       expect(store.getRecord(SESSION)?.options?.permissionMode).toBe(mode)
