@@ -11,6 +11,7 @@ import { loadWorkspaceLayout } from '../../../shared/workspace-layout/workspace-
 import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
+import { createTestStore } from '../store/slices/store-test-helpers'
 import {
   bootWindowFromPartitions,
   diffStartupWindowViews,
@@ -111,10 +112,12 @@ describe('the window shows the same session before and after the shared Loader r
     async (name, { hostId, build }) => {
       const stored = build()
       const storedView = projectStartupWindowView(
-        await bootWindowFromPartitions([{ hostId, session: stored }])
+        await bootWindowFromPartitions(createTestStore(), [{ hostId, session: stored }])
       )
       const normalizedView = projectStartupWindowView(
-        await bootWindowFromPartitions([{ hostId, session: normalize(hostId, stored) }])
+        await bootWindowFromPartitions(createTestStore(), [
+          { hostId, session: normalize(hostId, stored) }
+        ])
       )
       // The window must show the stored workspaces at all, or an empty view hides differences.
       for (const [key, rows] of Object.entries(stored.tabsByWorktree)) {

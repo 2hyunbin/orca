@@ -18,7 +18,7 @@ import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { fetchWorkspaceSessionWithRuntimeHostOwners } from '@/lib/workspace-session-host-hydration'
 import { collectFolderWorkspaceKeysFromSession } from '@/lib/workspace-session-hydration-keys'
 import type { AppState } from '../store/types'
-import { createTestStore } from '../store/slices/store-test-helpers'
+import type { createTestStore } from '../store/slices/store-test-helpers'
 import { reconcileHydratedWorkspaceTabModels } from './reconcile-hydrated-workspace-tab-models'
 
 /** One stored session partition and the host it is stored under. */
@@ -54,8 +54,12 @@ function firstPaintRepos(partitions: readonly StoredPartition[]): AppState['repo
   return [...repos.values()]
 }
 
-/** Runs the same hydration calls, in the same order, as `use-app-startup-hydration.ts`. */
+/**
+ * Runs the same hydration calls, in the same order, as `use-app-startup-hydration.ts`, on a fresh
+ * test store the caller creates.
+ */
 export async function bootWindowFromPartitions(
+  store: ReturnType<typeof createTestStore>,
   partitions: readonly StoredPartition[]
 ): Promise<AppState> {
   let minted = 0
@@ -63,7 +67,6 @@ export async function bootWindowFromPartitions(
   const randomUUID = vi
     .spyOn(globalThis.crypto, 'randomUUID')
     .mockImplementation(() => `00000000-0000-4000-8000-${String(++minted).padStart(12, '0')}`)
-  const store = createTestStore()
   store.setState({ repos: firstPaintRepos(partitions) })
   const read = async (hostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID) =>
     structuredClone(
