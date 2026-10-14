@@ -217,7 +217,7 @@ jobs:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
-          bun --bun run check:process-host-imports
+          bun config/scripts/check-import-boundaries.mjs
 
       - name: Check main-process sync launches
         if: '!cancelled()'
@@ -357,10 +357,6 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: bun config/scripts/check-layout-writer-ratchets.mjs
 
-      - name: Check compatibility-folder imports
-        if: needs.code_paths.outputs.static_analysis == 'true'
-        run: bun config/scripts/check-compat-boundary-imports.mjs
-
       - name: Check Node runtime pin
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: pnpm run check:node-runtime-pin
@@ -434,7 +430,7 @@ jobs:
 
       - name: Verify localization coverage
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run verify:localization-coverage
+        run: bun config/scripts/audit-localization-coverage.mjs --check
 
       - wait: [localization-catalogs, localization-extraction]
 
@@ -907,7 +903,7 @@ jobs:
       - name: Install WebKit for the drawer check
         id: webkit
         background: true
-        run: pnpm exec playwright install --with-deps webkit
+        run: pnpm exec playwright-core install --with-deps webkit
 
       # The entry lives in mobile/ so one React resolves; without this every RN import is nothing.
       - uses: ./.github/actions/install-mobile-dependencies
