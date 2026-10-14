@@ -1,13 +1,14 @@
 # phase-o-1 · Release blueprint
 
-_2026-10-09. Accepted design for this phase. Implementation remains in progress; the [full contract and evidence](phase-o-1.md) track what has actually passed. This blueprint takes precedence over older proposals._
+_Updated 2026-10-14. Accepted design for this phase. Implementation remains in progress; the [full contract and evidence](phase-o-1.md) track what has actually passed. This blueprint takes precedence over older proposals._
 
 ## What the user gets
 
-One place to discover, install, update and manage plugins. Start with three families, using the same source, identity, release and approval system:
+One place to discover, install, update and manage plugins. Start with four families, using the same source, identity, release and approval system. Company environment providers are P0:
 
 | Family                  | First release                                                       | Typical journey              |
 | ----------------------- | ------------------------------------------------------------------- | ---------------------------- |
+| P0 environment providers | Company CLI adapters for long-lived devboxes and temporary sandboxes | Review account → create/list/sleep/wake/archive/delete → connect → open workspace |
 | Interface languages     | A community locale; included Spanish through the data-plugin path   | Install → Use language       |
 | Coding-language syntax  | Two independent grammar packs; included Typst through the same path | Install → open matching file |
 | Additional file formats | A general read-only viewer API, proven by XLSX and binary STL       | Install → Review → open file |
@@ -20,7 +21,7 @@ Existing appearance and experimental panel functionality stays available. Future
 
 | Decision                  | Concrete outcome                                                                                                                                          |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Start small               | Three author templates: locale, syntax and file viewer. Ship a community locale, two independent syntax packs, XLSX and binary STL viewers                |
+| Start small               | Four author templates: locale, syntax, file viewer and environment adapter. Ship the data/viewer cohort and a reviewed company CLI recipe workflow |
 | One package system        | All families use the same qualified identity, strict manifest, compatibility checks, exact releases, installation and approval storage                    |
 | Separate domain contracts | Locale resources, syntax registrations and document sessions have distinct APIs and lifetimes; installing a locale never creates a worker                 |
 | Data is enforced          | Locale/syntax-only packages use `data`. Any added execution must declare the corresponding profile, validate and receive fresh review before activation   |
@@ -38,7 +39,7 @@ The app and public website consume the same versioned catalog. Only the app adds
 ```text
 Plugins              Browse | Installed | Sources
 Search name, publisher, language or file type…
-All | Interface languages | Coding languages | File viewers | Appearance
+All | Interface languages | Coding languages | File viewers | Environments | Appearance
 Cards | Split view
 
 Preview   Name · Publisher · Version
@@ -108,6 +109,10 @@ Discover → stage exact release → validate manifest + artifacts + compatibili
 Local development edits pass through the same classifier. Editing a language manifest to `trusted-worker` cannot reuse its data approval. No candidate code runs to determine its own permissions, and no candidate may replace the verified current generation before the required review succeeds. Persist the installed pin and approval separately from enabled and selected preferences.
 
 ## Concrete runtime boundaries
+
+**Environment recipes:** exact reviewed CLI commands run on the selected control host, with an explicit account/tenant context and durable operation receipts. Installation executes no provider code. Company adapters support create, list, delete, sleep, wake and archive for their declared machine lifetimes. SSH handoff uses Orca’s existing saved targets, generation checks, host-key trust and managed-server deployment. Data-only locale/syntax packages cannot declare these instructions.
+
+An already-paired controller can expose its managed child through encrypted temporary sessions. The desktop stores an inert controller-bound reference and derives a credential for one child route/generation in memory. Credentials and commands stay on the execution host. Re-pairing, revoked source/account approval and stale generations refuse access; loss of contact remains unverifiable. Reviewed address changes refresh the descriptor while preserving the saved child identity and its projects. See [managed workspace design](environment-managed-workspaces.md).
 
 **Locales:** English stays in core as recovery text. An exported English kit records per-entry source hashes; changed translations become stale and fall back to English. Validate placeholders and plurals. Security-sensitive copy stays core-reviewed. Show coverage and freshness separately. An opt-in refresh job can propose changes; it cannot stamp translations reviewed or publish them automatically.
 
@@ -298,3 +303,25 @@ This qualifies macOS desktop review/registration/error/restart over owned Git/CL
 ### Repository-shipped provider adapters · 2026-10-13
 
 The P0 company-provider author contract now supports a prebuilt single ESM adapter through Orca’s pinned Node runtime, alongside literal installed company CLIs. [The portable adapter contract](environment-portable-adapters.md) defines current-source artifact capture, protocol-2 account binding, full-account approval, cancellation, runtime-preparation refusal and offline authoring. This reduces company integration setup while preserving independent source, SSH destination and changed-endpoint review. Paired control-host lifecycle, active remote endpoint migration and remaining original release gates stay open.
+
+### Paired control-host backend and Node shutdown · 2026-10-13
+
+[The control-host contract](environment-control-hosts.md) now binds provider RPC to a negotiated authenticated runtime socket and the exact server instance, with one shared desktop/paired operation budget. Node composition uses its own profile, source consent and verified runtime. An active-shutdown check exposed and fixed the missing provider writer/process drain before profile release; packaging exposed and fixed plugin-engine comparison against the deployment artifact version. Real encrypted RPC covers all six actions, lost-response receipt recovery without replay, old/mobile refusal and active shutdown. Selected-host settings/catalog UI, full Node deployment/SSH registration and original release/platform gates remain open.
+
+### Review-owned provider client · 2026-10-13
+
+The shared provider client keeps one authenticated socket and checks the selected server instance, protocol and provider capability before calling any of the fourteen strict methods. A disconnected review cannot reconnect or replay commands. Real paired Node checks confirm migration tickets only on their reviewing socket, refuse sibling/replacement sockets, execute all six lifecycle actions and recover a lost applied creation without another mutation. Twenty isolated checks/four files, Node/web types and six focused quality configurations pass. This adds a transport foundation; the renderer bridge and selected-host catalog/settings remain the next implementation.
+
+### Selected-host provider settings · 2026-10-13
+
+The trusted desktop session bridge and rendered provider settings now pin the saved host, pairing, server instance and requesting window. Account setup, six lifecycle actions, recovery, migration and history use that host; old dialogs and late replies are retired on host changes. Negotiated host events refresh metadata without polling or provider execution. Real production pairing across two isolated desktop profiles passes all six actions through pinned Node 24.21.0, proves desktop separation, preserves history through host switches and receives an external host disable as saved inventory. The native journey passes in 23.2s with hidden windows and no debug store. Remote catalog/source installation and SSH connection administration remain the next required implementation, alongside full Node deployment and original release/platform gates.
+
+
+## Catalog control-host checkpoint — 13 October 2026
+
+The catalog backend and native review bridge now reuse desktop services and pin the selected host/window/connection. The strict paired method rejects arbitrary settings, forged consent, mobile or unnegotiated callers and another runtime instance. Approval checks the live reviewer after asynchronous release validation. Shutdown drains catalog/source writes before profile release. Plugin secrets now use the protected host backend; weak encryption and unknown vault formats fail closed. Exact archive evidence is in `reports/plugin-system/evidence/exact-layer-37-20261013/catalog-checkpoint.json`. The catalog renderer and production remote-install journey remain required; accepted inert Git work can finish only on its original host after disconnect. SSH composition and original release gates remain open.
+
+
+## Selected-host catalog qualified — 13 October 2026
+
+The production renderer now manages catalog sources, releases, approvals, installed state and plugin preferences on the selected control host. All reviews identify it; switching hosts retires the previous session and late replies. Native testing exposed notification bursts exhausting request ownership before approval; coalescing reads and queuing one follow-up refresh fixes the failure. A twenty-event regression passes. Inventory-only events leave catalog preferences alone, and language choices transfer metadata without catalogs. Exact archive: 68 checks/ten files, Node/web typing, localization and changed-code quality pass. The production catalog-to-lifecycle journey passes in 23.6 seconds with two isolated profiles, real pairing, six actual pinned-runtime commands, no debug store and all windows hidden. Four catalog and ten lifecycle captures are saved permanently. Directory-to-app target selection, remote SSH administration, full Node deployment and original release/platform gates remain required.

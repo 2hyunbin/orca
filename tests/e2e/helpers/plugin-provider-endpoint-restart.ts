@@ -29,6 +29,14 @@ export async function qualifyProviderEndpointRestart(input: {
 }): Promise<void> {
   const receipts = join(input.fixtureRoot, 'provider-executed.receipts.json')
   const beforeMutations = await readFile(receipts, 'utf8')
+  const before = unwrapRuntimeRpcResult(
+    await input.hostClient.request<OrcadManagedRuntimeStatus>(
+      'managedServer.status',
+      { selector: input.managedEnvironmentId },
+      60_000
+    )
+  )
+  expect(before.terminals.liveSessions).not.toBeNull()
   input.hostClient.close()
   await input.host.restart({ abrupt: true, cold: true })
   const client = new RemoteRuntimeRequestConnection(
@@ -69,7 +77,7 @@ export async function qualifyProviderEndpointRestart(input: {
       )
     )
     expect(census.environmentId).toBe(input.managedEnvironmentId)
-    expect(census.terminals.liveSessions).toBe(0)
+    expect(census.terminals.liveSessions).toBe(before.terminals.liveSessions)
     await input.page.evaluate(async (selector) => {
       const result = await window.api.runtimeEnvironments.connect({ selector })
       if (!result.ok) {

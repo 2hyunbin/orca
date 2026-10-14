@@ -6,6 +6,7 @@ import {
 } from '@stablyai/playwright-test'
 import { execDockerSshHostTargetCommand, type DockerSshHostTarget } from './docker-ssh-host-target'
 import { capturePluginEvidence } from './plugin-evidence'
+import { browseManagedProject, returnToProviderSettings } from './plugin-provider-project-browser'
 
 export async function qualifyProviderManagedWorkspace(input: {
   page: Page
@@ -27,15 +28,7 @@ export async function qualifyProviderManagedWorkspace(input: {
     'node-provider-workspace-selected-native',
     input.app
   )
-  await dialog.getByRole('button', { name: /^Browse folder\b/u }).click()
-  const pathInput = dialog.getByPlaceholder('Type to filter or enter a path…', { exact: true })
-  await pathInput.fill('/tmp/orca-provider-workspace/')
-  await expect(dialog.getByText('child-proof.txt', { exact: true })).toBeVisible()
-  await pathInput.press('Enter')
-  const select = dialog.getByRole('button', { name: 'Select folder', exact: true })
-  await expect(select).toHaveAttribute('title', '/tmp/orca-provider-workspace')
-  await expect(select).toBeEnabled()
-  await select.click()
+  await browseManagedProject(input.page, '/tmp/orca-provider-workspace', 'child-proof.txt')
   await dialog.getByRole('button', { name: 'Open as Folder', exact: true }).click()
   await expect(dialog).toBeHidden({ timeout: 30_000 })
   await input.page.keyboard.press('Escape')
@@ -51,6 +44,9 @@ export async function qualifyProviderManagedWorkspace(input: {
     .click()
   const composer = input.page.getByRole('dialog')
   await expect(composer).toBeVisible()
+  await composer
+    .getByPlaceholder('Workspace name', { exact: true })
+    .fill('Provider folder workspace')
   await capturePluginEvidence(
     input.page,
     input.testInfo,
@@ -123,19 +119,5 @@ export async function qualifyProviderManagedWorkspace(input: {
   await input.page.keyboard.type('exit')
   await input.page.keyboard.press('Enter')
   expect(await input.page.evaluate(() => Boolean(window.__store))).toBe(false)
-  const dismiss = input.page.getByRole('button', { name: 'Got it', exact: true })
-  if (await dismiss.isVisible()) {
-    await dismiss.click()
-  }
-  await input.page.getByRole('button', { name: 'Settings', exact: true }).click()
-  await input.page.getByRole('combobox', { name: 'Host', exact: true }).click()
-  await input.page.getByRole('option', { name: 'Company Node host', exact: true }).click()
-  await input.page.getByRole('button', { name: 'SSH Hosts', exact: true }).click()
-  if (!(await machine.isVisible())) {
-    const provider = input.page.locator(
-      '[data-environment-provider-id="stablyai.orca-environments-devpods/devpods"]'
-    )
-    await provider.getByRole('button', { name: 'Refresh inventory', exact: true }).click()
-  }
-  await expect(machine).toBeVisible()
+  await returnToProviderSettings(input.page)
 }

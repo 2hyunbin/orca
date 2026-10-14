@@ -26,6 +26,14 @@ export async function qualifyProviderEndpointMigration(input: {
   afterConnected?(target: SshEditableTarget): Promise<void>
 }): Promise<{ targetId: string; previousGeneration: number; nextGeneration: number }> {
   const { page, app, testInfo, saved, hostClient } = input
+  const before = unwrapRuntimeRpcResult(
+    await hostClient.request<OrcadManagedRuntimeStatus>(
+      'managedServer.status',
+      { selector: input.managedEnvironmentId },
+      60_000
+    )
+  )
+  expect(before.terminals.liveSessions).not.toBeNull()
   const sockets = new Set<Socket>()
   let accepted = 0
   const endpoint = createServer((socket) => {
@@ -164,7 +172,7 @@ export async function qualifyProviderEndpointMigration(input: {
       )
     )
     expect(census.environmentId).toBe(input.managedEnvironmentId)
-    expect(census.terminals.liveSessions).toBe(0)
+    expect(census.terminals.liveSessions).toBe(before.terminals.liveSessions)
     await capturePluginEvidence(page, testInfo, 'node-provider-endpoint-connected-native', app)
     await input.afterConnected?.(updated)
     return {

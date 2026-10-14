@@ -23,6 +23,8 @@ import { capturePluginEvidence, getPluginEvidenceDirectory } from './helpers/plu
 import { qualifyProviderEndpointMigration } from './helpers/plugin-provider-endpoint-migration'
 import { qualifyProviderEndpointRestart } from './helpers/plugin-provider-endpoint-restart'
 import { qualifyProviderManagedWorkspace } from './helpers/plugin-provider-managed-workspace'
+import { qualifyProviderManagedGit } from './helpers/plugin-provider-managed-git'
+import { qualifyProviderWorkspaceReopen } from './helpers/plugin-provider-workspace-reopen'
 
 async function dismissUsageNotice(page: Page): Promise<void> {
   const dismiss = page.getByRole('button', { name: 'Got it', exact: true })
@@ -230,6 +232,7 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
     )
     await capturePluginEvidence(page, testInfo, 'node-provider-ssh-connected-native', app)
     await qualifyProviderManagedWorkspace({ page, app, testInfo, target })
+    await qualifyProviderManagedGit({ page, app, testInfo, target })
     await machine.getByRole('button', { name: 'Sleep', exact: true }).click()
     const sleep = page.getByRole('dialog', { name: 'Sleep environment', exact: true })
     await sleep.getByRole('button', { name: 'Sleep environment', exact: true }).click()
@@ -261,11 +264,11 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
       saved,
       hostClient,
       managedEnvironmentId: managed.environmentId,
-      afterConnected: (updated) => {
+      afterConnected: async (updated) => {
         if (!host || !hostClient) {
           throw new Error('The owned Node host is unavailable for restart qualification')
         }
-        return qualifyProviderEndpointRestart({
+        await qualifyProviderEndpointRestart({
           page,
           app,
           testInfo,
@@ -276,6 +279,7 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
           target: updated,
           managedEnvironmentId: managed.environmentId
         })
+        await qualifyProviderWorkspaceReopen({ page, app, testInfo })
       }
     })
     const runtime = JSON.parse(

@@ -67,3 +67,11 @@ The gateway capability remains unadvertised. Custom-path/relay, mixed-peer, nati
 The desktop stores a controller-bound reference and derives an audience-bound credential for its canonical child route. Root-path or wrong-generation authentication refuses that credential. An older controller cannot accept the wrapped value as its ordinary paired bearer, even if its transport accepts unrelated paths. Removing or re-pairing the controller blocks dependent references. Child status retains the child runtime identity and reports the authenticated controller device to the desktop; temporary child session credentials remain private.
 
 After reviewing and connecting a provider resource, **Open workspace** uses the existing Add Project dialog with the child selected. It supports Git projects and non-Git folders without changing the default settings host. While the requested host is absent or unavailable, project creation waits instead of falling back to Local. Rendered native qualification remains required before claiming this journey is complete.
+
+## Native workspace qualification
+
+The hidden production desktop, packaged Darwin Node controller and owned Linux SSH server now qualify both project types through normal UI. The folder journey creates a workspace, runs a terminal command, reads a file and verifies its saved edit in the child filesystem. The Git journey imports the child repository, creates a real worktree/branch, runs a terminal command and opens its actual README in the rich editor. Neither journey uses a renderer debug store.
+
+The same run sleeps/wakes the provider machine, reviews its changed SSH endpoint, compares the authoritative terminal census before and after migration, cold-restarts the controller and verifies the census remains unchanged. After reconnecting and refreshing the reviewed child descriptor, the user reopens the existing named folder workspace and reads the earlier saved edit. The controller restart does not replay provider mutations. Native windows stay hidden.
+
+This is real SSH, deployment, encrypted terminal/file traffic and workspace persistence. The fleet lifecycle CLI is an owned fixture, not a corporate provider. A child-server restart, competing clients, publication interruption, custom-path/relay, Windows/WSL, the full release matrix and remaining phase acceptance gates still require evidence.
