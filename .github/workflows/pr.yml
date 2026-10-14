@@ -74,6 +74,9 @@ jobs:
             /README.md
             /docs/readme/
             /.github/scripts/check-root-directory-entries.mjs
+            /.github/scripts/check-required-pr-context.mjs
+            /.github/workflows/
+            /config/.bun-version
             /config/scripts/check-readme-local-links.mjs
             /config/scripts/pr-code-change-scope.mjs
             /config/scripts/pr-layout-oracle-route.mjs
@@ -93,6 +96,14 @@ jobs:
       # The full Git index retains link targets outside the sparse working tree.
       - name: Check README local links
         run: node config/scripts/check-readme-local-links.mjs
+
+      - name: Set up Bun for required workflow validation
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: config/.bun-version
+
+      - name: Check required PR context ownership
+        run: bun .github/scripts/check-required-pr-context.mjs
 
       # Readiness changes eligibility for advisory tests, not the already-tested source.
       - name: Find identical successful required checks
@@ -1479,6 +1490,7 @@ jobs:
       ref: ${{ github.event.pull_request.head.sha }}
 
   verify:
+    name: PR checks passed
     if: ${{ !cancelled() }}
     needs:
       - code_paths
