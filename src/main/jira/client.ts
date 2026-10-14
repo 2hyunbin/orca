@@ -123,6 +123,7 @@ export async function connect(
       authType,
       ...(apiBaseUrl ? { apiBaseUrl } : {})
     }
+    clearAttachmentImagesForSite(id)
     saveToken(id, apiToken)
     const file = getSiteFile()
     writeSiteFile({

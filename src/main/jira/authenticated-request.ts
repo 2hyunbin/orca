@@ -114,7 +114,8 @@ export async function requestWithCredentials(
   headers.set('Authorization', authHeader(email, apiToken, authType))
   const response = await jiraFetch(`${siteUrl}${path}`, {
     ...init,
-    headers
+    headers,
+    ...(isJiraGatewayBaseUrl(siteUrl) ? { redirect: 'error' as const } : {})
   })
   if (!response.ok) {
     throw await toJiraApiError(response, `${siteUrl}${path}`)
@@ -138,7 +139,8 @@ export async function jiraRequest<T>(
   const url = `${apiBaseUrl(client.site)}${path}`
   const response = await jiraFetch(url, {
     ...init,
-    headers
+    headers,
+    ...(isJiraGatewayBaseUrl(apiBaseUrl(client.site)) ? { redirect: 'error' as const } : {})
   })
   if (!response.ok) {
     throw await toJiraApiError(response, url)
@@ -180,7 +182,10 @@ export async function jiraRequestBinary(
   headers.set('Accept', '*/*')
   headers.set('User-Agent', JIRA_API_USER_AGENT)
   headers.set('Authorization', client.authorization)
-  const response = await jiraFetch(requestUrl.toString(), { headers })
+  const response = await jiraFetch(requestUrl.toString(), {
+    headers,
+    ...(isJiraGatewayBaseUrl(apiBaseUrl(client.site)) ? { redirect: 'error' as const } : {})
+  })
   if (!response.ok) {
     throw await toJiraApiError(response, requestUrl.toString())
   }
