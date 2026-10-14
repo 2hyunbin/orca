@@ -111,7 +111,7 @@ describe('macOS browser leftovers during updates', () => {
     expect(deps.readProcesses).not.toHaveBeenCalled()
   })
 
-  it.each([123, 999, '123', null])(
+  it.skipIf(process.platform === 'win32').each([123, 999, '123', null])(
     'validates the real profile metadata before recovery (%s)',
     async (pid) => {
       const profile = await mkdtemp('/tmp/orcad-browser-')

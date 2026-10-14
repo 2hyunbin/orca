@@ -12,7 +12,8 @@ const {
   killAllPtyMock,
   getMacUpdateRunningInstancesMock,
   prepareShipItStagingMock,
-  recoverBrowserSidecarsMock
+  recoverBrowserSidecarsMock,
+  describeBrowserBlockersMock
 } = vi.hoisted(() => {
   const appEventHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
   const eventHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
@@ -89,6 +90,9 @@ const {
     isMock: { dev: false },
     getMacUpdateRunningInstancesMock: vi.fn(async (): Promise<number[]> => []),
     recoverBrowserSidecarsMock: vi.fn(async (_executable: string, pids: number[]) => pids),
+    describeBrowserBlockersMock: vi.fn(async (_executable: string, pids: number[]) =>
+      pids.map((pid) => ({ pid, kind: 'unknown' as const }))
+    ),
     prepareShipItStagingMock: vi.fn((): Promise<void> | null => null),
     killAllPtyMock: vi.fn()
   }
@@ -136,8 +140,7 @@ vi.mock('./macos-update-running-instances', () => ({
 
 vi.mock('./updater/mac-browser-sidecar-recovery', () => ({
   recoverMacBrowserSidecars: recoverBrowserSidecarsMock,
-  describeMacUpdateBlockers: async (_executable: string, pids: number[]) =>
-    pids.map((pid) => ({ pid, kind: 'unknown' }))
+  describeMacUpdateBlockers: describeBrowserBlockersMock
 }))
 
 // Why: no registered serve supervisors here, so every blocker is refused as before parking existed.
@@ -185,6 +188,11 @@ describe('updater mac install handoff', () => {
     recoverBrowserSidecarsMock
       .mockReset()
       .mockImplementation(async (_executable: string, pids: number[]) => pids)
+    describeBrowserBlockersMock
+      .mockReset()
+      .mockImplementation(async (_executable: string, pids: number[]) =>
+        pids.map((pid) => ({ pid, kind: 'unknown' as const }))
+      )
     prepareShipItStagingMock.mockReset().mockReturnValue(null)
     autoUpdaterMock.downloadUpdate.mockResolvedValue([])
     vi.unstubAllGlobals()
@@ -467,9 +475,25 @@ describe('updater mac install handoff', () => {
       setupAutoUpdater({ webContents: { send } } as never, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654, 10718])
+      let finishDescription: () => void = () => undefined
+      describeBrowserBlockersMock.mockImplementationOnce(async (_executable, pids) => {
+        await new Promise<void>((resolve) => {
+          finishDescription = resolve
+        })
+        return pids.map((pid) => ({ pid, kind: 'unknown' as const }))
+      })
 
       quitAndInstall()
       await vi.advanceTimersByTimeAsync(1000)
+      expect(describeBrowserBlockersMock).toHaveBeenCalledOnce()
+      expect(isQuittingForUpdate()).toBe(true)
+      expect(send).not.toHaveBeenCalledWith('updater:quitAndInstallAborted')
+      const probeCount = getMacUpdateRunningInstancesMock.mock.calls.length
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(getMacUpdateRunningInstancesMock).toHaveBeenCalledTimes(probeCount)
+      finishDescription()
+      await vi.advanceTimersByTimeAsync(0)
 
       expect(onBeforeQuit).not.toHaveBeenCalled()
       expect(autoUpdaterMock.quitAndInstall).not.toHaveBeenCalled()

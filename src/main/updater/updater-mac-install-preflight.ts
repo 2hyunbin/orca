@@ -45,6 +45,7 @@ export abstract class UpdaterMacInstallPreflight extends UpdaterPackageRecovery 
           })
         : null
     if (park && park.kind === 'refused') {
+      const instances = await describeMacUpdateBlockers(process.execPath, park.pids)
       this.resetQuitForUpdateState()
       this.mainWindowRef?.webContents.send('updater:quitAndInstallAborted')
       this.sendInstallFailureStatus({
@@ -54,7 +55,7 @@ export abstract class UpdaterMacInstallPreflight extends UpdaterPackageRecovery 
         message: serveInstallRefusalMessage(park),
         installBlock: {
           reason: park.reason === 'unregistered' ? 'running-instances' : park.reason,
-          instances: await describeMacUpdateBlockers(process.execPath, park.pids)
+          instances
         }
       })
       recordUpdaterLifecycle('macos_install_blocked_by_running_instances', {
