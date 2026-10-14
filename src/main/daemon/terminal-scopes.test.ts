@@ -4,12 +4,12 @@ import {
   PTY_PROCESS_CEILING_ENV,
   resolvePtyProcessCeiling,
   type LinuxCeilingRuntime
-} from './pty-process-ceiling'
+} from './terminal-scopes'
 import {
   currentPtyProcessCeiling,
   setPtyProcessCeilingForTest,
   wrapPtySpawnForCeiling
-} from './pty-process-ceiling-runtime'
+} from './terminal-scopes-runtime'
 import {
   confirmPtyProcessCeiling,
   describePtyProcessCeiling,

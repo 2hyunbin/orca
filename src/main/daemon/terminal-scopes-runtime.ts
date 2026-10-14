@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { runProcessSync } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
-import { resolvePtyProcessCeiling, type LinuxCeilingRuntime } from './pty-process-ceiling'
+import { resolvePtyProcessCeiling, type LinuxCeilingRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
 
 let currentState: PtyProcessCeilingState = { state: 'off', reason: 'disabled' }
