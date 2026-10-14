@@ -32,7 +32,8 @@ import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
-import { defaultScopeSource } from '@/lib/default-creation-host'
+import { defaultScopeHost, defaultScopeSource } from '@/lib/default-creation-host'
+import { getTaskSourceCacheScope } from '../../../shared/task-source-context'
 
 type JiraIssueWorkspaceProps = {
   issue: JiraIssue | null
@@ -48,7 +49,10 @@ export default function JiraIssueWorkspace({
   sourceContext
 }: JiraIssueWorkspaceProps): React.JSX.Element {
   const settings = useAppStore((s) => s.settings)
-  const providerSettings = sourceContext ?? defaultScopeSource(settings)
+  const providerSettings = useMemo(
+    () => sourceContext ?? defaultScopeSource(settings),
+    [settings, sourceContext]
+  )
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
@@ -70,6 +74,11 @@ export default function JiraIssueWorkspace({
 
   const displayed = fullIssue ?? issue
   const siteId = displayed?.siteId ?? undefined
+  const metadataKey = JSON.stringify([
+    sourceContext ? getTaskSourceCacheScope(sourceContext) : defaultScopeHost(settings),
+    siteId,
+    displayed?.key
+  ])
 
   const loadComments = useCallback(
     async (targetIssue: JiraIssue, requestId: number): Promise<void> => {
@@ -365,6 +374,7 @@ export default function JiraIssueWorkspace({
             />
 
             <JiraIssueMetadataBar
+              key={metadataKey}
               displayed={displayed}
               pendingField={pendingField}
               transitions={transitions}
