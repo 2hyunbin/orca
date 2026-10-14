@@ -2,7 +2,11 @@
 // layout is a complete record of the host's tabs.
 
 import type { AgentType } from '../../shared/agent-status-types'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../shared/execution-host'
 import { applyLayoutCommand } from '../../shared/workspace-layout/workspace-layout-commands'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
@@ -73,7 +77,7 @@ export type SavedAgentSessionTab = { worktreeId: string; hostId: ExecutionHostId
 /**
  * This host's chats with a saved tab, by session, in every partition: a tab can be left in one
  * whose runtime id rotated (#18202). A tab stamped with another execution host is that host's chat,
- * listed in its index, not this one's.
+ * listed in its index, not this one's; so is an unstamped tab in an SSH partition.
  */
 export function listSavedAgentSessionTabs(store: {
   getWorkspaceSessionHostIds?: () => ExecutionHostId[]
@@ -84,7 +88,10 @@ export function listSavedAgentSessionTabs(store: {
     const session = store.getWorkspaceSession?.(hostId)
     for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
       for (const tab of tabs) {
-        const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
+        // An unstamped tab is the partition's: an SSH partition's chats run on that host.
+        const ownHost = tab.executionHostId
+          ? tab.executionHostId === LOCAL_EXECUTION_HOST_ID
+          : parseExecutionHostId(hostId)?.kind !== 'ssh'
         if (tab.contentType === 'agent-session' && ownHost) {
           saved.set(tab.entityId, [...(saved.get(tab.entityId) ?? []), { worktreeId, hostId }])
         }

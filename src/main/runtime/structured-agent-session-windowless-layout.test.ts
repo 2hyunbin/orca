@@ -48,6 +48,17 @@ function chat(sessionId: string) {
   return { sessionId, agent: 'codex' as const, tabId: `structured-agent-session-${sessionId}` }
 }
 
+/** A layout saved before tabs carried their execution host. */
+function unstamped(session: WorkspaceSessionState): WorkspaceSessionState {
+  const unifiedTabs = Object.fromEntries(
+    Object.entries(session.unifiedTabs ?? {}).map(([worktreeId, tabs]) => [
+      worktreeId,
+      tabs.map(({ executionHostId: _host, ...tab }) => tab)
+    ])
+  )
+  return { ...session, unifiedTabs }
+}
+
 function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
   return (state.session.unifiedTabs?.[WT] ?? [])
     .filter((tab) => tab.contentType === 'agent-session')
@@ -138,9 +149,12 @@ describe('a chat tab on a host with no window', () => {
       // This host's tab, left in a rotated runtime partition (#18202).
       ['runtime:env-old', withOpenedAgentSessionTab('local', empty, WT, chat('chat-1'))!],
       // A chat that runtime runs, which this host's index never lists.
-      ['runtime:env-x', withOpenedAgentSessionTab('runtime:env-x', empty, WT, chat('chat-x'))!]
+      ['runtime:env-x', withOpenedAgentSessionTab('runtime:env-x', empty, WT, chat('chat-x'))!],
+      // An SSH host's chat in a layout saved before tabs were stamped with their host.
+      ['ssh:box', unstamped(withOpenedAgentSessionTab('local', empty, WT, chat('chat-ssh'))!)]
     ])
     const remote = sessions.get('runtime:env-x')
+    const ssh = sessions.get('ssh:box')
     const store = {
       getRepos: () => [],
       getSettings: () => ({}),
@@ -156,10 +170,12 @@ describe('a chat tab on a host with no window', () => {
 
     runtime.onStructuredSessionTabHidden('chat-1')
     runtime.onStructuredSessionTabHidden('chat-x')
+    runtime.onStructuredSessionTabHidden('chat-ssh')
 
     expect(sessions.get('runtime:env-old')?.unifiedTabs?.[WT] ?? []).toEqual([])
     expect(sessions.get('local')).toBe(empty)
     expect(sessions.get('runtime:env-x')).toBe(remote)
+    expect(sessions.get('ssh:box')).toBe(ssh)
   })
 
   it('keeps its saved tab when a failed close put it back in the index', async () => {
