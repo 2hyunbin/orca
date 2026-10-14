@@ -9,7 +9,8 @@ import type { OrcadMigrationBlobKind } from '../../../shared/orcad-migration-blo
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
 import {
   ORCAD_MIGRATION_TERMINAL_RESTORE_HINTS_KEY,
-  parseOrcadMigrationTerminalRestoreHintsText
+  parseOrcadMigrationTerminalRestoreHintsText,
+  type OrcadMigrationTerminalRestoreHint
 } from '../../../shared/orcad-migration-terminal-restore-hints'
 import { syncDirectoryDurablySync } from '../../durable-file-write'
 import {
@@ -20,7 +21,10 @@ import {
   orcadMigrationStagingKey,
   type OrcadMigrationRequestIdentity
 } from './orcad-migration-staged-file'
-import type { OrcadTerminalRestoreHintStore } from './orcad-terminal-restore-hint-store'
+import type {
+  OrcadTerminalRestoreHintPlacement,
+  OrcadTerminalRestoreHintStore
+} from './orcad-terminal-restore-hint-store'
 
 type OrcadMigrationBlobContentCheck = (bytes: Buffer) => void
 
@@ -59,13 +63,15 @@ export type OrcadMigrationBlobInstall = {
   migration: OrcadMigrationRequestIdentity
   root: string
   terminalRestoreHints: OrcadTerminalRestoreHintStore
+  /** The worktree that owns the pane on this host, or null when the pane is not here. */
+  paneWorktreeId: (paneKey: string) => string | null
   now: number
 }
 
 /**
  * Idempotent: a blob already installed is only deleted, and the hint store remembers installed
  * migrations so a retry never revives a hint a pane already took. A write failure keeps the blob
- * for the next commit retry.
+ * for the next retry: a commit retry, a catalog-state query, or the next store load.
  */
 export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobInstall): void {
   installTerminalRestoreHints(install)
@@ -86,7 +92,11 @@ function installTerminalRestoreHints(install: OrcadMigrationBlobInstall): void {
   if (!install.terminalRestoreHints.hasInstalledMigration(migrationKey)) {
     try {
       const document = parseOrcadMigrationTerminalRestoreHintsText(decodeUtf8(bytes))
-      install.terminalRestoreHints.install(migrationKey, document.hints, install.now)
+      install.terminalRestoreHints.install(
+        { migrationKey, migrationId: install.migration.migrationId },
+        placeHints(document.hints, install.paneWorktreeId),
+        install.now
+      )
     } catch (error) {
       if (!isHintFormatError(error)) {
         throw error
@@ -101,6 +111,17 @@ function installTerminalRestoreHints(install: OrcadMigrationBlobInstall): void {
   }
   rmSync(path, { force: true })
   syncDirectoryDurablySync(dirname(path))
+}
+
+// A hint whose pane is not in this host's session has no worktree to scope it to, so it is dropped.
+function placeHints(
+  hints: readonly OrcadMigrationTerminalRestoreHint[],
+  paneWorktreeId: (paneKey: string) => string | null
+): OrcadTerminalRestoreHintPlacement[] {
+  return hints.flatMap((hint) => {
+    const worktreeId = paneWorktreeId(hint.paneKey)
+    return worktreeId ? [{ ...hint, worktreeId }] : []
+  })
 }
 
 function decodeUtf8(bytes: Buffer): string {

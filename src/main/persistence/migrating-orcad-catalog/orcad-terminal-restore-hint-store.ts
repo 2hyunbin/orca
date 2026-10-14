@@ -1,6 +1,6 @@
 /**
- * Installed restore hints on the destination, keyed by paneKey, until the pane's first create
- * takes its hint. A small fsync'd JSON file beside the received blobs rather than profile state:
+ * Installed restore hints on the destination, keyed by paneKey, until the pane's first spawn
+ * consumes its hint. A small fsync'd JSON file beside the received blobs rather than profile state:
  * it is host-local, never synced or sent anywhere, and every change must be durable on its own.
  */
 import { readFileSync } from 'node:fs'
@@ -15,17 +15,25 @@ import {
 } from '../../../shared/orcad-migration-terminal-restore-hints'
 import { ensureOrcadMigrationDirectory } from './orcad-migration-staged-file'
 
-const STORE_VERSION = 1
+const STORE_VERSION = 2
 const INSTALLED_DIRECTORY = 'installed'
 const STORE_FILE = 'terminal-restore-hints.json'
 // A pane not reopened within a month is not coming back through this migration.
 export const ORCAD_TERMINAL_RESTORE_HINT_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_INSTALLED_MIGRATIONS = 256
 
-type InstalledTerminalRestoreHint = OrcadMigrationTerminalRestoreHint & {
-  migrationKey: string
-  installedAt: number
+/** A received hint placed in the worktree that owns its pane on this host. */
+export type OrcadTerminalRestoreHintPlacement = OrcadMigrationTerminalRestoreHint & {
+  worktreeId: string
 }
+
+export type OrcadTerminalRestoreHintMigration = {
+  migrationKey: string
+  migrationId: string
+}
+
+type InstalledTerminalRestoreHint = OrcadTerminalRestoreHintPlacement &
+  OrcadTerminalRestoreHintMigration & { installedAt: number }
 
 type TerminalRestoreHintStoreDocument = {
   version: typeof STORE_VERSION
@@ -34,17 +42,21 @@ type TerminalRestoreHintStoreDocument = {
   installedMigrationKeys: string[]
 }
 
+const MIGRATION_KEY = /^[a-f0-9]{32}$/
+
 const StoreDocumentSchema = z.object({
   version: z.literal(STORE_VERSION),
   hints: z.array(
     z.object({
       paneKey: z.string().refine(isOrcadMigrationTerminalRestoreHintPaneKey),
       cwd: z.string().refine(isOrcadMigrationTerminalRestoreHintCwd),
-      migrationKey: z.string().regex(/^[a-f0-9]{32}$/),
+      worktreeId: z.string().min(1),
+      migrationKey: z.string().regex(MIGRATION_KEY),
+      migrationId: z.string().min(1),
       installedAt: z.number().int().nonnegative()
     })
   ),
-  installedMigrationKeys: z.array(z.string().regex(/^[a-f0-9]{32}$/))
+  installedMigrationKeys: z.array(z.string().regex(MIGRATION_KEY))
 })
 
 export class OrcadTerminalRestoreHintStore {
@@ -63,12 +75,12 @@ export class OrcadTerminalRestoreHintStore {
 
   /** Newer hints replace older ones for the same pane; the oldest drop past the count cap. */
   install(
-    migrationKey: string,
-    hints: readonly OrcadMigrationTerminalRestoreHint[],
+    migration: OrcadTerminalRestoreHintMigration,
+    hints: readonly OrcadTerminalRestoreHintPlacement[],
     now: number
   ): void {
     const current = this.load()
-    if (current.installedMigrationKeys.includes(migrationKey)) {
+    if (current.installedMigrationKeys.includes(migration.migrationKey)) {
       return
     }
     const incoming = new Set(hints.map((hint) => hint.paneKey))
@@ -77,7 +89,9 @@ export class OrcadTerminalRestoreHintStore {
       ...hints.map((hint) => ({
         paneKey: hint.paneKey,
         cwd: hint.cwd,
-        migrationKey,
+        worktreeId: hint.worktreeId,
+        migrationKey: migration.migrationKey,
+        migrationId: migration.migrationId,
         installedAt: now
       }))
     ]
@@ -85,7 +99,7 @@ export class OrcadTerminalRestoreHintStore {
       {
         version: STORE_VERSION,
         hints: merged.slice(-MAX_ORCAD_MIGRATION_TERMINAL_RESTORE_HINTS),
-        installedMigrationKeys: [...current.installedMigrationKeys, migrationKey].slice(
+        installedMigrationKeys: [...current.installedMigrationKeys, migration.migrationKey].slice(
           -MAX_INSTALLED_MIGRATIONS
         )
       },
@@ -93,18 +107,31 @@ export class OrcadTerminalRestoreHintStore {
     )
   }
 
-  /** Removes the pane's hint durably and returns its cwd; a taken hint is never offered again. */
-  take(paneKey: string, now: number): string | null {
-    const current = this.load()
-    const hint = current.hints.find((entry) => entry.paneKey === paneKey)
-    if (!hint) {
+  /** The pane's hinted cwd if it was moved into `worktreeId`; never removes it. */
+  peek(paneKey: string, worktreeId: string, now: number): string | null {
+    const hint = this.load().hints.find((entry) => entry.paneKey === paneKey)
+    if (!hint || hint.worktreeId !== worktreeId) {
       return null
     }
-    this.write(
-      { ...current, hints: current.hints.filter((entry) => entry.paneKey !== paneKey) },
-      now
-    )
     return now - hint.installedAt > ORCAD_TERMINAL_RESTORE_HINT_TTL_MS ? null : hint.cwd
+  }
+
+  /** Durably removes the pane's hint, whichever worktree it named; a no-op when it has none. */
+  consume(paneKey: string, now: number): void {
+    this.dropWhere((hint) => hint.paneKey === paneKey, now)
+  }
+
+  /** Drops hints for panes of worktrees this host no longer owns. */
+  dropForWorktrees(matchesWorktreeId: (worktreeId: string) => boolean, now: number): void {
+    this.dropWhere((hint) => matchesWorktreeId(hint.worktreeId), now)
+  }
+
+  private dropWhere(matches: (hint: InstalledTerminalRestoreHint) => boolean, now: number): void {
+    const current = this.load()
+    if (!current.hints.some(matches)) {
+      return
+    }
+    this.write({ ...current, hints: current.hints.filter((hint) => !matches(hint)) }, now)
   }
 
   private write(next: TerminalRestoreHintStoreDocument, now: number): void {
@@ -130,6 +157,21 @@ export class OrcadTerminalRestoreHintStore {
     }
     this.document = readStoreDocument(this.path)
     return this.document
+  }
+}
+
+/**
+ * For project removal: a removed project's panes never come back by these keys unless a later
+ * migration brings them, and that migration carries its own hints. Never blocks the removal.
+ */
+export function dropOrcadTerminalRestoreHintsForWorktrees(
+  store: OrcadTerminalRestoreHintStore,
+  matchesWorktreeId: (worktreeId: string) => boolean
+): void {
+  try {
+    store.dropForWorktrees(matchesWorktreeId, Date.now())
+  } catch (error) {
+    console.warn('[orcad-migration] dropping terminal restore hints failed:', error)
   }
 }
 

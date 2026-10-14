@@ -23,6 +23,7 @@ import type {
 } from '../scheduling-automations/automation-owner-projection'
 import type { ProfileStatePersistenceAuthority } from './profile-state-authority'
 import type { AutomationRun } from '../../../shared/automations-types'
+import { OrcadTerminalRestoreHintStore } from '../migrating-orcad-catalog/orcad-terminal-restore-hint-store'
 
 export type DurableProfileStateMutation<T> = {
   value: T
@@ -48,6 +49,8 @@ export class StoreRuntimeState {
   readonly terminalScrollbackSnapshotStorage: TerminalScrollbackSnapshotStorage
   /** Staged and received migration blobs (see orcad-migration-blob-staging.ts). */
   readonly orcadMigrationBlobRoot: string
+  /** Shared so project removal can drop hints for panes this host no longer owns. */
+  readonly orcadTerminalRestoreHints: OrcadTerminalRestoreHintStore
   /** Scrollback refs each in-flight migration export still reads, keyed by migration id. */
   readonly retainedScrollbackRefsByMigrationId = new Map<string, ReadonlySet<string>>()
   writeTimer: ReturnType<typeof setTimeout> | null = null
@@ -116,5 +119,6 @@ export class StoreRuntimeState {
       fallbackSnapshotRoot: legacySnapshotRoot === profileSnapshotRoot ? null : legacySnapshotRoot
     }
     this.orcadMigrationBlobRoot = join(dirname(this.dataFile), 'orcad-migration-blobs')
+    this.orcadTerminalRestoreHints = new OrcadTerminalRestoreHintStore(this.orcadMigrationBlobRoot)
   }
 }

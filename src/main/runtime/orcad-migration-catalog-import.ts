@@ -43,15 +43,15 @@ export async function commitStagedOrcadMigrationCatalogDurably(args: {
   return result
 }
 
-/** After the durable commit, and on every retry of it, so a crash mid-install is finished later. */
+/** After the durable commit, on its retries and state queries; the store load retries too. */
 function installReceivedBlobs(
-  store: OrcadMigrationCatalogCommitStore,
+  store: Partial<Pick<Store, 'installOrcadMigrationReceivedBlobs'>>,
   manifest: OrcadMigrationManifest
 ): void {
   try {
     store.installOrcadMigrationReceivedBlobs?.(manifest)
   } catch (error) {
-    // The catalog is committed; a blob kept by a failed install is retried with the next commit.
+    // The catalog is committed; a failed install keeps its blob for the next retry.
     console.error('[orcad-migration] installing received blobs failed:', error)
   }
 }
@@ -72,11 +72,17 @@ export async function abortStagedOrcadMigrationCatalogDurably(args: {
 }
 
 export function getOrcadMigrationCatalogState(args: {
-  store: Partial<Pick<Store, 'getOrcadMigrationCatalogState'>>
+  store: Partial<
+    Pick<Store, 'getOrcadMigrationCatalogState' | 'installOrcadMigrationReceivedBlobs'>
+  >
   manifest: OrcadMigrationManifest
 }): OrcadMigrationCatalogState {
   // SAFETY: Returned or mutable Store slots retain their original native missing-method failure.
-  return args.store.getOrcadMigrationCatalogState!(args.manifest)
+  const result = args.store.getOrcadMigrationCatalogState!(args.manifest)
+  if (result.state === 'committed') {
+    installReceivedBlobs(args.store, args.manifest)
+  }
+  return result
 }
 
 function flushMigrationState(
@@ -84,5 +90,8 @@ function flushMigrationState(
   signal?: AbortSignal
 ): Promise<void> {
   // SAFETY: Returned or mutable Store slots retain their original native missing-method failure.
-  return store.flushPendingOrThrowAsync!({ signal, drainToStableGeneration: false })
+  return store.flushPendingOrThrowAsync!({
+    signal,
+    drainToStableGeneration: false
+  })
 }

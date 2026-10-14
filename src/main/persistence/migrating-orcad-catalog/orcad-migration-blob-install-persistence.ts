@@ -1,15 +1,21 @@
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
+import type { PersistedState } from '../../../shared/persisted-state-types'
+import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import { findOrcadMigrationImportReceipt } from './orcad-catalog-receipt-ledger'
 import { installOrcadMigrationReceivedBlobs } from './orcad-migration-blob-installers'
-import { OrcadTerminalRestoreHintStore } from './orcad-terminal-restore-hint-store'
+import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-file'
 
-type OrcadMigrationBlobInstallRuntime = Pick<StoreRuntimeState, 'state' | 'orcadMigrationBlobRoot'>
+type OrcadMigrationBlobInstallRuntime = Pick<
+  StoreRuntimeState,
+  'state' | 'orcadMigrationBlobRoot' | 'orcadTerminalRestoreHints'
+>
+
+type ClockOptions = { now?: () => Date }
 
 const orcadMigrationBlobInstallContext = Symbol('OrcadMigrationBlobInstallPersistence')
 type OrcadMigrationBlobInstallContext = {
   runtime: OrcadMigrationBlobInstallRuntime
-  terminalRestoreHints: OrcadTerminalRestoreHintStore
 }
 
 /** The destination's committed migration blobs, installed into host-local state and consumed. */
@@ -17,10 +23,7 @@ export class OrcadMigrationBlobInstallPersistence {
   readonly [orcadMigrationBlobInstallContext]: OrcadMigrationBlobInstallContext
 
   constructor(runtime: OrcadMigrationBlobInstallRuntime) {
-    this[orcadMigrationBlobInstallContext] = {
-      runtime,
-      terminalRestoreHints: new OrcadTerminalRestoreHintStore(runtime.orcadMigrationBlobRoot)
-    }
+    this[orcadMigrationBlobInstallContext] = { runtime }
   }
 
   /**
@@ -29,29 +32,89 @@ export class OrcadMigrationBlobInstallPersistence {
    */
   installOrcadMigrationReceivedBlobs(
     manifest: OrcadMigrationManifest,
-    options: { now?: () => Date } = {}
+    options: ClockOptions = {}
   ): void {
-    const context = this[orcadMigrationBlobInstallContext]
-    const receipt = findOrcadMigrationImportReceipt(context.runtime.state, manifest)
+    const receipt = findOrcadMigrationImportReceipt(
+      this[orcadMigrationBlobInstallContext].runtime.state,
+      manifest
+    )
     if (receipt?.manifestSha256 !== manifest.manifestSha256) {
       return
     }
-    installOrcadMigrationReceivedBlobs({
-      migration: manifest,
-      root: context.runtime.orcadMigrationBlobRoot,
-      terminalRestoreHints: context.terminalRestoreHints,
-      now: (options.now ?? (() => new Date()))().getTime()
-    })
+    installCommitted(this[orcadMigrationBlobInstallContext].runtime, manifest, options)
   }
 
-  /** The moved pane's last folder, once; later creates of the same pane get null. */
-  takeOrcadMigrationTerminalRestoreHint(
+  /** Finishes installs a crash or failed write left behind; every receipt on disk is durable. */
+  installPendingOrcadMigrationReceivedBlobs(options: ClockOptions = {}): void {
+    const { runtime } = this[orcadMigrationBlobInstallContext]
+    for (const receipt of [
+      ...(runtime.state.orcadMigrationImportReceipts ?? []),
+      ...(runtime.state.orcadMigrationEvictedReceipts ?? [])
+    ]) {
+      try {
+        installCommitted(runtime, receipt, options)
+      } catch (error) {
+        console.error(
+          `[orcad-migration] installing received blobs for ${receipt.migrationId} failed:`,
+          error
+        )
+      }
+    }
+  }
+
+  /** The moved pane's last folder while its hint is installed for this worktree; never removes it. */
+  peekOrcadMigrationTerminalRestoreHint(
     paneKey: string,
-    options: { now?: () => Date } = {}
+    worktreeId: string,
+    options: ClockOptions = {}
   ): string | null {
-    return this[orcadMigrationBlobInstallContext].terminalRestoreHints.take(
+    return this[orcadMigrationBlobInstallContext].runtime.orcadTerminalRestoreHints.peek(
       paneKey,
-      (options.now ?? (() => new Date()))().getTime()
+      worktreeId,
+      clock(options)
     )
   }
+
+  /** Called once the pane spawned: whatever cwd that create used, it was the restore. */
+  consumeOrcadMigrationTerminalRestoreHint(paneKey: string, options: ClockOptions = {}): void {
+    this[orcadMigrationBlobInstallContext].runtime.orcadTerminalRestoreHints.consume(
+      paneKey,
+      clock(options)
+    )
+  }
+}
+
+function installCommitted(
+  runtime: OrcadMigrationBlobInstallRuntime,
+  migration: OrcadMigrationRequestIdentity,
+  options: ClockOptions
+): void {
+  installOrcadMigrationReceivedBlobs({
+    migration,
+    root: runtime.orcadMigrationBlobRoot,
+    terminalRestoreHints: runtime.orcadTerminalRestoreHints,
+    paneWorktreeId: (paneKey) => findPaneWorktreeId(runtime.state, paneKey),
+    now: clock(options)
+  })
+}
+
+function clock(options: ClockOptions): number {
+  return (options.now ?? (() => new Date()))().getTime()
+}
+
+// The commit merged the moved session in with its worktree ids unchanged.
+function findPaneWorktreeId(state: PersistedState, paneKey: string): string | null {
+  const tabId = parsePaneKey(paneKey)?.tabId
+  if (!tabId) {
+    return null
+  }
+  const sessions = [state.workspaceSession, ...Object.values(state.workspaceSessionsByHostId ?? {})]
+  for (const session of sessions) {
+    for (const [worktreeId, tabs] of Object.entries(session?.tabsByWorktree ?? {})) {
+      if (tabs.some((tab) => tab.id === tabId)) {
+        return worktreeId
+      }
+    }
+  }
+  return null
 }

@@ -29,6 +29,8 @@ import type { WriteSchedulingOperations } from './write-scheduling'
 import { scheduleSave } from './write-scheduling'
 import { pruneDeregisteredRepoUiResidue } from './repo-lifecycle-ui-residue'
 import { isWslMoveProjectSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
+import { dropOrcadTerminalRestoreHintsForWorktrees } from '../migrating-orcad-catalog/orcad-terminal-restore-hint-store'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 
 // A paused WSL move keeps its local rows for a downgrade.
 function removeLocalRepoSession(
@@ -46,6 +48,7 @@ type RepoLifecycleOperationsRuntime = Pick<
   | 'repoOrderOperations'
   | 'repoUpdateOperations'
   | 'state'
+  | 'orcadTerminalRestoreHints'
 >
 
 const repoLifecycleOperationsContext = Symbol('RepoLifecycleOperations')
@@ -89,6 +92,7 @@ export class RepoLifecycleOperations {
     )
     if (!idStillPresent) {
       retireLocalWorktreeScanGeneration(id)
+      dropRepoRestoreHints(this, id)
       delete this[repoLifecycleOperationsContext].runtime.state.sparsePresetsByRepo[id]
       delete this[repoLifecycleOperationsContext].runtime.state.retiredWorktreeNamesByRepo?.[id]
     }
@@ -131,6 +135,7 @@ export class RepoLifecycleOperations {
     }
     for (const repoId of orphanRepoIds) {
       retireLocalWorktreeScanGeneration(repoId)
+      dropRepoRestoreHints(this, repoId)
       pruneWorktreeStateForRepo(this, repoId, null)
       state.workspaceSession = removeLocalRepoSession(state.workspaceSession, repoId)
       state.workspaceSessionsByHostId = removeRepoFromHostWorkspaceSessions(
@@ -182,6 +187,13 @@ export class RepoLifecycleOperations {
   ): Repo | null {
     return getRepoUpdateOperations(this).updateRepo(id, updates, hostId)
   }
+}
+
+function dropRepoRestoreHints(owner: RepoLifecycleOperations, repoId: string): void {
+  dropOrcadTerminalRestoreHintsForWorktrees(
+    owner[repoLifecycleOperationsContext].runtime.orcadTerminalRestoreHints,
+    (worktreeId) => getRepoIdFromWorktreeId(worktreeId) === repoId
+  )
 }
 
 export function getRepoOrderOperations(
