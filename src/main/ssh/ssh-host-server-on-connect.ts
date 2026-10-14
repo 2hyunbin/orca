@@ -25,6 +25,7 @@ import {
   type ManagedServerUpdateDeps
 } from './managed-server-update-check'
 import { managedResultAfterUpdate, unservedManagedResult } from './managed-server-serving-gate'
+import { orcadMigrationConflictGuidance } from './orcad-migration-conflict-guidance'
 import {
   classifyOrcadHostUnavailable,
   ORCAD_TUNNEL_UNAVAILABLE_REASON
@@ -238,6 +239,10 @@ function setupFailed(
   console.warn('[ssh] Managed Orca server setup failed; using the relay this session:', error)
   reportHostServerSetupError(deps.report, target, trace, error)
   const unavailable = classifyOrcadHostUnavailable(error)
+  const conflict = empty ? null : orcadMigrationConflictGuidance(error)
+  if (conflict) {
+    return unfinished(target, deps, unavailable, empty, 'refused', conflict)
+  }
   const detail = error instanceof Error ? error.message : String(error)
   return unfinished(target, deps, unavailable, empty, 'failed', detail)
 }
@@ -306,7 +311,7 @@ async function unfinished(
   deps: HostServerOnConnectDeps,
   unavailable: string | null,
   empty: boolean,
-  reason: 'deferred' | 'failed',
+  reason: 'deferred' | 'failed' | 'refused',
   failure: string
 ): Promise<HostServerOnConnectResult> {
   try {

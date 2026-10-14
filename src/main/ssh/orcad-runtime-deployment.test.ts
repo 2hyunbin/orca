@@ -339,6 +339,43 @@ describe('createManagedOrcadEnvironment', () => {
       }
     )
 
+    it('pairs a relay migration with the running build too, under its journaled fence', async () => {
+      target = { ...target, orcadFence: { environmentId: 'env-m' }, generation: 9 }
+      writeOrcadMigrationSourceCutover(
+        userDataPath,
+        orcadMigrationCutoverFixture('m-1', 'ssh-1', { generation: 9, environmentId: 'env-m' })
+      )
+      const result = await createManagedOrcadEnvironment(userDataPath, {
+        name: 'Managed',
+        sshTargetId: 'ssh-1',
+        migration: true
+      })
+
+      // Its own deploy would wait on a terminal count only the paired server can give.
+      expect(mocks.deploy).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ outcome: 'already-current', activeVersion: OTHER })
+      expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual(['env-m'])
+      expect(target.orcadProvisioning).toBeUndefined()
+    })
+
+    it('starts nothing for a migration whose running build is unverifiable', async () => {
+      target = { ...target, orcadFence: { environmentId: 'env-m' }, generation: 9 }
+      writeOrcadMigrationSourceCutover(
+        userDataPath,
+        orcadMigrationCutoverFixture('m-1', 'ssh-1', { generation: 9, environmentId: 'env-m' })
+      )
+      mocks.wake.mockResolvedValueOnce({ outcome: 'unverifiable' })
+      await expect(
+        createManagedOrcadEnvironment(userDataPath, {
+          name: 'Managed',
+          sshTargetId: 'ssh-1',
+          migration: true
+        })
+      ).rejects.toThrow('process state is unverifiable')
+      expect(mocks.deploy).not.toHaveBeenCalled()
+      expect(listEnvironments(userDataPath)).toEqual([])
+    })
+
     it('deploys its own build as before when forced', async () => {
       await createManagedOrcadEnvironment(userDataPath, {
         name: 'Managed',
