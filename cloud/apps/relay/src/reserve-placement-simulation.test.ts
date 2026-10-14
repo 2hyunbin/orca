@@ -42,8 +42,9 @@ function expectInvariants(report: SimulationReport): void {
 }
 
 describe('step 5 deterministic simulation', () => {
+  // Invariant 9 (dead-man) never trips here; its own tests below cover it.
   it.each(SEEDS)(
-    'holds invariants 1-8 (9 in its own tests) across mixed versions, lagging polls, restarts and database stalls (seed %i)',
+    'holds invariants 1-8 across mixed versions, lagging polls, restarts and database stalls (seed %i)',
     async (seed) => {
       const report = await runReservePlacementSimulation({
         seed,

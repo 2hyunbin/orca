@@ -427,7 +427,8 @@ export type SimulationReport = {
   rowAheadDemotions: number
   // Demotions whose winner is level with the loser (same epoch, another cell): the tie-break's cases.
   levelDemotions: number
-  // Divergences two or more directors judged: the cases where invariant 4 can break.
+  // Level divergences (same epoch, two cells) two or more directors judged: the only cases where
+  // invariant 4 can break, since a higher epoch wins for every director.
   contestedDivergences: number
   // Row-ahead demotions per demoted host: a repair that converges needs one.
   rowAheadDemotionsPerHost: { max: number; p99: number }
@@ -765,13 +766,16 @@ export async function runReservePlacementSimulation(
   const namedWinners = new Map<string, { won: string; by: string }>()
   const contested = new Set<string>()
   const demotedFor = new Map<string, string>()
-  function judge(director: SimDirector, host: string, loser: string, won: string): void {
+  type JudgedSeat = { cellId: string; epoch: number }
+  function judge(director: SimDirector, host: string, loserSeat: JudgedSeat, wonSeat: JudgedSeat): void {
+    const loser = `${loserSeat.cellId}@${loserSeat.epoch}`
+    const won = `${wonSeat.cellId}@${wonSeat.epoch}`
     const divergence = `${host}\u0000${[loser, won].sort().join('\u0000')}`
     const named = namedWinners.get(divergence)
     if (named === undefined) namedWinners.set(divergence, { won, by: director.id })
     else if (named.won !== won) {
       violate(4, `${director.id} names ${won} over ${loser} for ${host}; ${named.by} named ${named.won}`)
-    } else if (named.by !== director.id && !contested.has(divergence)) {
+    } else if (named.by !== director.id && loserSeat.epoch === wonSeat.epoch && !contested.has(divergence)) {
       contested.add(divergence)
       report.contestedDivergences += 1
     }
@@ -785,7 +789,7 @@ export async function runReservePlacementSimulation(
   ): void {
     const loser = `${cellId}@${seat.epoch}`
     const won = `${winner.cellId}@${winner.epoch}`
-    judge(director, host, loser, won)
+    judge(director, host, { cellId, epoch: seat.epoch }, winner)
     if (winner.epoch === seat.epoch) report.levelDemotions += 1
     const cell = cellById.get(cellId)!
     clock.schedule(config.rttMs(cell.region), () => {
@@ -822,6 +826,18 @@ export async function runReservePlacementSimulation(
   const demotedBehindRow = new Map<string, number>()
   // A host demoted behind its row: its next answer, from any director, is that row or above it.
   const reassignAbove = new Map<string, { cellId: string; epoch: number }>()
+  // Only under localTieBreak: even directors keep the lower cell id of a level divergence, odd ones the higher.
+  function keepsThisSeat(
+    director: SimDirector,
+    cellId: string,
+    epoch: number,
+    row: { cellId: string; epoch: number }
+  ): boolean {
+    return !!faults.localTieBreak && row.epoch === epoch && (cellId < row.cellId) === (director.index % 2 === 0)
+  }
+  function raiseRowFloor(director: SimDirector, host: string, epoch: number): void {
+    director.rowFloors.set(host, Math.max(epoch, director.rowFloors.get(host) ?? 0))
+  }
   function reconcileLedger(director: SimDirector): void {
     if (!database.up || director.old) return
     for (const [cellId, view] of director.views) {
@@ -833,32 +849,30 @@ export async function runReservePlacementSimulation(
         const diverged = row && (row.epoch > seat.epoch || (row.epoch === seat.epoch && row.cellId !== cellId))
         // A map that has not yet seen another director's demotion still judges the seat; the
         // cell drops the demote, but the winner it names must be the same.
+        // relay-server.ts raises the floor on every demote, so a dropped one raises it too.
         if (row && diverged && live && live.joinedAt === seat.joinedAt && live.demoted && !faults.noRowAheadDemote) {
-          const keepsThisSeat =
-            faults.localTieBreak && row.epoch === seat.epoch && (cellId < row.cellId) === (director.index % 2 === 0)
-          const thisSeat = `${cellId}@${seat.epoch}`
-          const rowSeat = `${row.cellId}@${row.epoch}`
-          if (keepsThisSeat) judge(director, host, rowSeat, thisSeat)
-          else judge(director, host, thisSeat, rowSeat)
+          const thisSeat = { cellId, epoch: seat.epoch }
+          const rowSeat = { cellId: row.cellId, epoch: row.epoch }
+          if (keepsThisSeat(director, cellId, seat.epoch, row)) judge(director, host, rowSeat, thisSeat)
+          else {
+            judge(director, host, thisSeat, rowSeat)
+            raiseRowFloor(director, host, row.epoch)
+          }
         }
         if (row && diverged && live && live.joinedAt === seat.joinedAt && !live.demoted) {
           const key = `${director.id}\u0000${host}\u0000${cellId}\u0000${seat.joinedAt}`
           if (behindRow.has(key)) violate(8, `${host}@${seat.epoch} on ${cellId} still behind row @${row.epoch}`)
           behindRow.set(key, clock.now)
           if (faults.noRowAheadDemote) continue
-          if (faults.localTieBreak && row.epoch === seat.epoch) {
-            // Even directors keep the lower cell id, odd ones the higher.
-            const keepsThisSeat = (cellId < row.cellId) === (director.index % 2 === 0)
+          if (keepsThisSeat(director, cellId, seat.epoch, row)) {
             const rowSeat = director.views.get(row.cellId)?.seats.get(host)
-            if (keepsThisSeat) {
-              if (rowSeat && rowSeat.epoch === row.epoch && !rowSeat.demoted) {
-                demoteFor(director, host, row.cellId, rowSeat, { cellId, epoch: seat.epoch })
-              }
-              continue
+            if (rowSeat && rowSeat.epoch === row.epoch && !rowSeat.demoted) {
+              demoteFor(director, host, row.cellId, rowSeat, { cellId, epoch: seat.epoch })
             }
+            continue
           }
           report.rowAheadDemotions += 1
-          director.rowFloors.set(host, Math.max(row.epoch, director.rowFloors.get(host) ?? 0))
+          raiseRowFloor(director, host, row.epoch)
           rowAheadDemotionsByHost.set(host, (rowAheadDemotionsByHost.get(host) ?? 0) + 1)
           // A director that had not seen the leave may re-place level with the row once; a later
           // divergence (a newer row) may demote the host again. One row never takes a third.
