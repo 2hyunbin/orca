@@ -16,6 +16,7 @@ import type { AutomaticAgentResumeClaim, CodexRestartNotice } from './terminal-c
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TerminalActions } from './terminal-actions'
+import type { AgentPaneLaunchRequest } from '../../../../shared/agent-pane-launch-request'
 
 export type TerminalState = {
   tabsByWorktree: Record<string, TerminalTab[]>
@@ -52,6 +53,8 @@ export type TerminalState = {
       resumeProviderSession?: AgentProviderSessionMetadata
       launchToken?: string
       launchAgent?: TuiAgent
+      /** The agent launch the pane's own spawn starts, instead of `command`. */
+      agentLaunch?: AgentPaneLaunchRequest
       agentArgsOverride?: string | null
       draftPrompt?: string
       sessionOptions?: Record<string, SessionOptionValue>
