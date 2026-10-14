@@ -50,11 +50,6 @@
         "$rpc": "null"
       }
     },
-    "177ab8f3e63e": {
-      "name": "taskStateHydrated",
-      "ordinal": 63,
-      "value": false
-    },
     "179ed1933972": {
       "name": "preflight.check#1",
       "ordinal": 46,
@@ -79,16 +74,6 @@
       "settlement": {
         "status": "pending",
         "startedAt": 0
-      }
-    },
-    "1825a87a7ca8": {
-      "hydrated": false,
-      "settings": {
-        "defaultTuiAgent": "codex",
-        "disabledTuiAgents": ["claude"],
-        "hostSettingOverrides": {},
-        "prBotAuthorOverrides": ["bot-user"],
-        "visibleTaskProviders": ["github", "linear"]
       }
     },
     "1f75fb0d92bd": {
@@ -134,6 +119,11 @@
       "ordinal": 1,
       "value": false
     },
+    "3186562055fb": {
+      "name": "provider",
+      "ordinal": 63,
+      "value": "github"
+    },
     "37580b6fcf9d": {
       "name": "showLinearViewPicker",
       "ordinal": 5,
@@ -151,11 +141,6 @@
       "name": "showLinearConnect",
       "ordinal": 9,
       "value": false
-    },
-    "43b6d419b9a7": {
-      "name": "error",
-      "ordinal": 62,
-      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
     },
     "45e466d86a07": {
       "name": "showLinearWorkspacePicker",
@@ -200,6 +185,11 @@
       "name": "showGitHubProjectFieldsPicker",
       "ordinal": 23,
       "value": false
+    },
+    "47d8fb4dc2fa": {
+      "name": "jiraFilter",
+      "ordinal": 69,
+      "value": "assigned"
     },
     "480611a829c9": {
       "name": "preflight.check#1",
@@ -323,6 +313,28 @@
         "startedAt": 0
       }
     },
+    "58c52d8b7c76": {
+      "hydrated": true,
+      "settings": {
+        "defaultTuiAgent": "codex",
+        "disabledTuiAgents": ["claude"],
+        "hostSettingOverrides": {},
+        "prBotAuthorOverrides": ["bot-user"],
+        "visibleTaskProviders": ["github", "linear"]
+      }
+    },
+    "59d693e0473a": {
+      "name": "githubProjectSettings",
+      "ordinal": 70,
+      "value": {
+        "activeProject": {
+          "$rpc": "null"
+        },
+        "lastViewByProject": {},
+        "pinned": [],
+        "recent": []
+      }
+    },
     "6060d4b9b1d3": {
       "name": "error",
       "ordinal": 53,
@@ -434,6 +446,11 @@
         }
       }
     },
+    "632b3eba0010": {
+      "name": "visibleProviders",
+      "ordinal": 62,
+      "value": ["github", "linear"]
+    },
     "6e8e6076a1ea": {
       "name": "linear.status#1",
       "ordinal": 52,
@@ -479,6 +496,11 @@
       "name": "showSortPicker",
       "ordinal": 16,
       "value": false
+    },
+    "71ac87a5a2f4": {
+      "name": "githubMode",
+      "ordinal": 64,
+      "value": "items"
     },
     "796a64aabbc9": {
       "name": "showGitLabViewPicker",
@@ -542,6 +564,11 @@
       "ordinal": 22,
       "value": false
     },
+    "86cfb41d0cb8": {
+      "name": "linearFilter",
+      "ordinal": 68,
+      "value": "all"
+    },
     "86ed8e03ac41": {
       "name": "ui.get#1",
       "ordinal": 45,
@@ -581,6 +608,11 @@
       "ordinal": 10,
       "value": false
     },
+    "8a48acc3bcf6": {
+      "name": "query",
+      "ordinal": 71,
+      "value": "is:issue is:open"
+    },
     "8b6f54f81646": {
       "name": "linearConnected",
       "ordinal": 56,
@@ -590,6 +622,11 @@
       "name": "showGitHubProjectViewPicker",
       "ordinal": 21,
       "value": false
+    },
+    "8ef027c71140": {
+      "name": "githubKind",
+      "ordinal": 67,
+      "value": "issues"
     },
     "90ca04055722": {
       "name": "showLinearGroupPicker",
@@ -706,6 +743,11 @@
           }
         }
       }
+    },
+    "a57d68d030ff": {
+      "name": "appliedQuery",
+      "ordinal": 72,
+      "value": "is:issue is:open"
     },
     "ace3d3315687": {
       "name": "showGitLabFilterPicker",
@@ -851,23 +893,6 @@
         }
       }
     },
-    "c3c5549a74cd": {
-      "name": "jiraConnection",
-      "ordinal": 64,
-      "value": {
-        "connected": false,
-        "credentialError": {
-          "$rpc": "null"
-        },
-        "selection": {
-          "$rpc": "null"
-        },
-        "sites": [],
-        "unavailableReason": {
-          "$rpc": "null"
-        }
-      }
-    },
     "c4b6b5ed0b10": {
       "name": "showCreateTargetPicker",
       "ordinal": 31,
@@ -943,6 +968,23 @@
         "startedAt": 0
       }
     },
+    "d495531e67be": {
+      "name": "jiraConnection",
+      "ordinal": 74,
+      "value": {
+        "connected": false,
+        "credentialError": {
+          "$rpc": "null"
+        },
+        "selection": {
+          "$rpc": "null"
+        },
+        "sites": [],
+        "unavailableReason": {
+          "$rpc": "null"
+        }
+      }
+    },
     "d4db291a4c50": {
       "name": "pendingProjectGitHubMerge",
       "ordinal": 34,
@@ -978,6 +1020,11 @@
           "$rpc": "null"
         }
       }
+    },
+    "dc148a8a8aa1": {
+      "name": "taskStateHydrated",
+      "ordinal": 73,
+      "value": true
     },
     "e33ddcc01bba": {
       "name": "preflight.check#1",
@@ -1031,12 +1078,22 @@
         "$rpc": "undefined"
       }
     },
+    "ed9151884cb7": {
+      "name": "defaultGitHubPreset",
+      "ordinal": 65,
+      "value": "issues"
+    },
     "f3dafd073b87": {
       "name": "actionItem",
       "ordinal": 25,
       "value": {
         "$rpc": "null"
       }
+    },
+    "f4841617ad9d": {
+      "name": "githubPreset",
+      "ordinal": 66,
+      "value": "issues"
     },
     "f54965c37b48": {
       "name": "githubProjectHiddenFieldIdsByView",
@@ -1175,7 +1232,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1226,9 +1283,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1254,7 +1321,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1305,9 +1372,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1333,7 +1410,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1384,9 +1461,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1412,7 +1499,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1463,9 +1550,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1491,7 +1588,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1542,9 +1639,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1570,7 +1677,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1621,9 +1728,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1649,7 +1766,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1700,9 +1817,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1728,7 +1855,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1779,9 +1906,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },
@@ -1807,7 +1944,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "1825a87a7ca8",
+          "state": "58c52d8b7c76",
           "effects": [
             "301bdbdf1dec",
             "7b0ad7b958dd",
@@ -1858,9 +1995,19 @@
             "96952d24ad82",
             "2f9b87c56373",
             "4e99f4f15c83",
-            "43b6d419b9a7",
-            "177ab8f3e63e",
-            "c3c5549a74cd"
+            "632b3eba0010",
+            "3186562055fb",
+            "71ac87a5a2f4",
+            "ed9151884cb7",
+            "f4841617ad9d",
+            "8ef027c71140",
+            "86cfb41d0cb8",
+            "47d8fb4dc2fa",
+            "59d693e0473a",
+            "8a48acc3bcf6",
+            "a57d68d030ff",
+            "dc148a8a8aa1",
+            "d495531e67be"
           ]
         }
       },

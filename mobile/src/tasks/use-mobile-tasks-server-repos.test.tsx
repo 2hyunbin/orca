@@ -148,9 +148,13 @@ function issue(title: string) {
 /** A desktop relaying to `runtime:vm`, whose repo list `vmRepoList` answers. */
 function desktop(
   vmRepoList: () => Promise<unknown> = async () => ({ repos: VM_REPOS }),
-  hostsList: () => Promise<unknown> = async () => ({ hosts: HOSTS })
+  hostsList: () => Promise<unknown> = async () => ({ hosts: HOSTS }),
+  jiraStatus: () => Promise<RpcResponse> = async () => reply({})
 ): FakeSession {
   return recording(new FakeSession('connected'), async (method, executionHost) => {
+    if (method === 'jira.status') {
+      return jiraStatus()
+    }
     if (method === 'mobileRelay.hosts.list') {
       return reply(await hostsList())
     }
@@ -255,15 +259,8 @@ function ranOn(client: FakeSession, method: string): string[] {
 
 describe('Tasks screen repos on the desktop and its servers', () => {
   it('hydrates other providers while Jira status is pending and ignores the previous host reply', async () => {
-    const client = desktop()
-    const answer = client.sendRequest.getMockImplementation()
-    if (!answer) {
-      throw new Error('Desktop request fixture is missing')
-    }
     const jiraStatus = deferred<RpcResponse>()
-    client.sendRequest.mockImplementation((method, params, options) =>
-      method === 'jira.status' ? jiraStatus.promise : answer(method, params, options)
-    )
+    const client = desktop(undefined, undefined, () => jiraStatus.promise)
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
     await settle()
     expect(model().taskStateHydrated).toBe(true)

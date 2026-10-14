@@ -1,4 +1,4 @@
-import type { TaskProvider } from '../../../src/shared/task-providers'
+import { isTaskProvider, type TaskProvider } from '../../../src/shared/task-providers'
 import { resolveVisibleTaskProvider } from './mobile-tasks-dependencies'
 import { normalizeJiraFilter } from './mobile-jira-issue-filters'
 import {
@@ -6,7 +6,6 @@ import {
   type TaskResumeState,
   getTaskPresetQuery,
   githubKindFromQuery,
-  isTaskProvider,
   normalizeGitHubPreset,
   normalizeLinearFilter,
   scopeGitHubTaskSearch
