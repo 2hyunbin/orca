@@ -37,7 +37,7 @@ function kinds(options: readonly { kind: string }[]): string[] {
 }
 
 describe('tab create entry history placement', () => {
-  it('lands history below every file match and above new-file and search', () => {
+  it('lands history below exact and literal file matches and above new-file and search', () => {
     const placed = insertHistoryRowsBelowFileMatches(
       [
         fileOption('README.md', 'exact-basename'),
@@ -54,26 +54,27 @@ describe('tab create entry history placement', () => {
     expect(placed[3]).toMatchObject({ option: { id: 'new-file:readme' } })
   })
 
-  it.each(['literal-basename', 'fuzzy'] as const)('stays below a lone %s file row', (matchKind) => {
-    const placed = insertHistoryRowsBelowFileMatches(
-      [fileOption('docs/readme-notes.md', matchKind), searchOption],
-      rows
-    )
+  it.each(['exact-path', 'exact-basename', 'literal-basename'] as const)(
+    'stays below a lone %s file row',
+    (matchKind) => {
+      const placed = insertHistoryRowsBelowFileMatches(
+        [fileOption('docs/readme-notes.md', matchKind), searchOption],
+        rows
+      )
 
-    expect(kinds(placed)).toEqual(['entry', 'history', 'entry'])
-    expect(placed[0]).toMatchObject({ option: { id: 'existing-file:docs/readme-notes.md' } })
-  })
+      expect(kinds(placed)).toEqual(['entry', 'history', 'entry'])
+      expect(placed[0]).toMatchObject({ option: { id: 'existing-file:docs/readme-notes.md' } })
+    }
+  )
 
-  // The phrase-query ordering: the classifier puts search first, and history
-  // still has to end up under the fuzzy files that follow it.
-  it('sinks past fuzzy files the classifier ranked below web search', () => {
+  it('keeps history above search and scattered fuzzy file matches', () => {
     const placed = insertHistoryRowsBelowFileMatches(
       [searchOption, fileOption('docs/readme-notes.md', 'fuzzy'), newFileOption],
       rows
     )
 
-    expect(kinds(placed)).toEqual(['entry', 'entry', 'history', 'entry'])
-    expect(placed[1]).toMatchObject({ option: { id: 'existing-file:docs/readme-notes.md' } })
+    expect(kinds(placed)).toEqual(['history', 'entry', 'entry', 'entry'])
+    expect(placed[2]).toMatchObject({ option: { id: 'existing-file:docs/readme-notes.md' } })
   })
 
   it('leads the entry block when no file or typed url matched at all', () => {

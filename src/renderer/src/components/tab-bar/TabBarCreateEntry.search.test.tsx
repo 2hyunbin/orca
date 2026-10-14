@@ -134,6 +134,47 @@ describe('TabBarCreateEntry search behavior', () => {
     )
   })
 
+  it.each([false, true])(
+    'ranks linear.app pages above fuzzy files (visited root: %s)',
+    (visitedRoot) => {
+      fileListMock.current.files = [
+        'mobile/rpc-foundation/goldens/matrix-transport.capability-probe-status.get-1.json',
+        'mobile/rpc-foundation/goldens/matrix-files.terminal-path-tap-files.open-1.json',
+        'mobile/rpc-foundation/goldens/matrix-files.terminal-path-tap-files.resolveterminalpath-1.json'
+      ]
+      const url = visitedRoot ? 'https://linear.app/' : 'https://linear.app/acme/issues'
+      useAppStore.setState({
+        browserUrlHistory: [
+          {
+            url,
+            normalizedUrl: url.replace(/\/$/, ''),
+            title: 'Linear',
+            lastVisitedAt: 1,
+            visitCount: 1
+          }
+        ]
+      })
+      const onOpenEntry = vi.fn().mockResolvedValue(undefined)
+      renderEntry({ onOpenEntry })
+      setQuery('linear.app')
+
+      const rows = [...container.querySelectorAll('[role="option"]')]
+      const pageIndex = rows.findIndex((row) => row.textContent?.includes('Open page'))
+      const fileIndex = rows.findIndex((row) => row.textContent?.includes('Open file'))
+      expect(pageIndex).toBeGreaterThanOrEqual(0)
+      expect(fileIndex).toBeGreaterThan(pageIndex)
+      expect(container.querySelector('[aria-selected="true"]')?.textContent).toContain('linear.app')
+      submit()
+      expect(onOpenEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          classification: visitedRoot
+            ? { kind: 'explicit-url', url }
+            : { kind: 'host-url', url: 'https://linear.app/' }
+        })
+      )
+    }
+  )
+
   it.each(['a', 'ab', 'asciinema'])('waits for an exact filename before arming %s', (query) => {
     fileListMock.current = { files: [], loading: true, loadError: null }
     const onOpenEntry = vi.fn().mockResolvedValue(undefined)
