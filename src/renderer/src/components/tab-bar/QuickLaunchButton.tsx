@@ -1,4 +1,5 @@
 import React, { useCallback, useSyncExternalStore } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { DropdownMenuItem, DropdownMenuShortcut } from '@/components/ui/dropdown-menu'
@@ -23,6 +24,11 @@ import {
   subscribeHostStructuredAgents
 } from '@/runtime/host-structured-agents'
 import { withManagedRuntimeChatAgents } from '@/lib/managed-runtime-chat-agents'
+import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
+import {
+  readLocalRuntimeCapabilitiesOrUnknown,
+  subscribeLocalRuntimeCapabilitiesKnown
+} from '@/runtime/local-runtime-capabilities'
 
 export type QuickLaunchAgentMenuItemsProps = {
   worktreeId: string
@@ -231,8 +237,32 @@ function QuickLaunchAgentMenuItemsInner({
     hostStructuredAgentsVersion,
     hostStructuredAgentsVersion
   )
+  useSyncExternalStore(
+    subscribeLocalRuntimeCapabilitiesKnown,
+    readLocalRuntimeCapabilitiesOrUnknown,
+    readLocalRuntimeCapabilitiesOrUnknown
+  )
+  const routeStore = useAppStore(
+    useShallow((state): AgentLaunchRouteStore => ({
+      settings: state.settings,
+      runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId,
+      worktreesByRepo: state.worktreesByRepo,
+      folderWorkspaces: state.folderWorkspaces,
+      projectGroups: state.projectGroups,
+      repos: state.repos,
+      projects: state.projects,
+      activeRepoId: state.activeRepoId,
+      activeWorktreeId: state.activeWorktreeId,
+      activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId,
+      detectedWorktreesByRepo: state.detectedWorktreesByRepo,
+      restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
+      runtimeEnvironments: state.runtimeEnvironments,
+      runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
+      removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds
+    }))
+  )
   const offeredIds = detectedIds
-    ? withManagedRuntimeChatAgents(useAppStore.getState(), worktreeId, detectedIds)
+    ? withManagedRuntimeChatAgents(routeStore, worktreeId, detectedIds)
     : null
   const enabledDetectedIds = offeredIds ? filterEnabledTuiAgents(offeredIds, disabledAgents) : []
   const agents = offeredIds ? orderAgents(defaultAgent, enabledDetectedIds) : []
