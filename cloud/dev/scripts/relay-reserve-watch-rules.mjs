@@ -8,12 +8,14 @@ const MINUTE_MS = 60_000
 export const RESERVE_WATCH_RULES = {
   // The roll ladder's warn line: max(1.5x, background + 20), so a zero background is not tripped
   // by one 503. Three complete minutes in a row, not two. The read spans more minutes than that so
-  // its newest point shows how far the series is published.
+  // a late publishing front still leaves three published minutes to judge.
   director503: {
     multiple: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMultiple,
     marginPerMinute: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMarginPerMinute,
     consecutiveMinutes: 3,
-    readMinutes: 10
+    readMinutes: 10,
+    // Cloud Run publishes a minute's request count up to 3 minutes late.
+    publishDelayMs: 3 * MINUTE_MS
   },
   // The cell closes a demoted seat after 60 s (DEMOTION_CLOSE_MS); 30 s more covers a director's
   // map still holding the closed seat.
@@ -49,10 +51,11 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
   }
 }
 
-// The background from the per-minute counts before the flip, read once those minutes are past the
-// publishing delay. A gap among published points had no 503s; no point at all is no evidence.
-export function measuredBackground(perMinute, minutes) {
-  if (!minutes.some((minute) => minute in perMinute)) return null
+// The background from the per-minute 503 counts before the flip. `publishedThrough` is the newest
+// minute any response code has a point for: a 503 minute at or before it with no point had none,
+// and the background waits (null) until it covers the last minute.
+export function measuredBackground(perMinute, minutes, publishedThrough) {
+  if (minutes.length === 0 || publishedThrough === null || publishedThrough < minutes.at(-1)) return null
   const background = backgroundOf({ minutes, series: minutes.map((minute) => perMinute[minute] ?? 0), unverified: false })
   return { medianPerMinute: background.medianPerMinute, minutes: background.minutes, source: 'measured' }
 }
@@ -60,6 +63,8 @@ export function measuredBackground(perMinute, minutes) {
 const pass = (detail = {}) => ({ status: 'pass', ...detail })
 const trip = (reason, detail = {}) => ({ status: 'trip', reason, ...detail })
 const unverifiable = (reason) => ({ status: 'unverifiable', reason })
+// Not readable yet by design, so it does not count toward the unverifiable streak.
+const pending = (reason) => ({ status: 'pending', reason })
 
 function judgeDeadMan(cell) {
   if (!cell.ok) return unverifiable(cell.error)
@@ -90,22 +95,26 @@ function judgeOverrun(cell) {
 
 // Fleet-wide director 503s: no existing signal attributes a 503 to the cell a host was bound for,
 // so a problem local to one cell can stay under the fleet's line. This proxy can miss.
-function judgeDirector503(read, background) {
-  if (!background) return unverifiable('no 503 background yet')
+function judgeDirector503(read, state, at) {
+  const { multiple, marginPerMinute, consecutiveMinutes, publishDelayMs } = RESERVE_WATCH_RULES.director503
+  const { background } = state
+  if (!background) {
+    const publishesAt = state.flippedAt === null ? null : Math.floor(state.flippedAt / MINUTE_MS) * MINUTE_MS + publishDelayMs
+    if (publishesAt !== null && at < publishesAt) return pending('the 503 background before the flip is not published yet')
+    return unverifiable('no 503 background yet')
+  }
   if (!read.ok) return unverifiable(read.error)
-  const { multiple, marginPerMinute, consecutiveMinutes } = RESERVE_WATCH_RULES.director503
   const perMinute = background.medianPerMinute
   const above = Math.max(perMinute * multiple, perMinute + marginPerMinute)
-  const recent = read.minutes.slice(-consecutiveMinutes)
-  // Minute keys sort as time. A gap before the newest point had no 503s; a minute after it is not
-  // published yet, and an empty series is no evidence.
-  const published = Object.keys(read.perMinute).sort().at(-1)
-  if (published === undefined) return unverifiable('the director 503 series is empty')
-  const unpublished = recent.find((minute) => minute > published)
-  if (unpublished !== undefined) return unverifiable(`director 503s for ${unpublished} are not published yet`)
+  // Minute keys sort as time. Only minutes the publishing front has reached are judged: a 503
+  // minute there with no point had none, one past it is not published yet and is left out.
+  if (read.publishedThrough === null) return unverifiable('the director request series is empty')
+  const recent = read.minutes.filter((minute) => minute <= read.publishedThrough).slice(-consecutiveMinutes)
+  if (recent.length < consecutiveMinutes) {
+    return unverifiable(`director requests are published only through ${read.publishedThrough}`)
+  }
   const counts = recent.map((minute) => read.perMinute[minute] ?? 0)
   const detail = { backgroundPerMinute: perMinute, above, recent: Object.fromEntries(recent.map((m, i) => [m, counts[i]])) }
-  if (recent.length < consecutiveMinutes) return unverifiable(`fewer than ${consecutiveMinutes} complete 503 minutes`)
   if (counts.every((count) => count > above)) {
     return trip(`director 503s above ${above}/min for ${consecutiveMinutes} min (${counts.join(', ')})`, detail)
   }
@@ -171,7 +180,7 @@ function judgeLedgerDrift(cell, ledger, aboveSince, at) {
 
 /**
  * One sample. `sample.cell` is the cell's runtime-status, `director503` the complete minutes of
- * director 503s, `ledger` the placing directors' newest ledger summaries, `seatBehindRow` this
+ * director 503s with the request series' publishing front (`publishedThrough`), `ledger` the placing directors' newest ledger summaries, `seatBehindRow` this
  * cell's reconcile reports in the lookback. Each is `{ ok: false, error }` when it could not be read.
  */
 export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
@@ -196,7 +205,7 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
   const rules = {
     deadMan: judgeDeadMan(cell),
     overrun: judgeOverrun(cell),
-    director503: judgeDirector503(sample.director503, state.background),
+    director503: judgeDirector503(sample.director503, state, at),
     duplicateSeat: duplicate.verdict,
     hostDrop: cell.ok ? judgeHostDrop(next.hosts) : unverifiable(cell.error),
     ledgerDrift: ledger.verdict
@@ -208,7 +217,9 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
     return { state: next, rules, line: sampleLine(next, sample, rules) }
   }
   const missing = RULE_NAMES.filter((name) => rules[name].status === 'unverifiable')
-  next.unverifiableStreak = missing.length > 0 ? state.unverifiableStreak + 1 : 0
+  const waiting = RULE_NAMES.some((name) => rules[name].status === 'pending')
+  // A pending rule holds the streak where it was: neither evidence of health nor a gap.
+  next.unverifiableStreak = missing.length > 0 ? state.unverifiableStreak + 1 : waiting ? state.unverifiableStreak : 0
   if (next.unverifiableStreak >= unverifiableLimit) {
     next.state = 'tripped'
     next.verdict =

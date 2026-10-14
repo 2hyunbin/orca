@@ -825,19 +825,26 @@ refused. It trips on, in this order:
 | Ledger drift | Queued plus dropped rows in each director's newest `orca_relay_reserve_ledger_summary`, over the cell's controls, above 0.5% for 2 minutes | Proxy that can only over-count: the summaries are fleet-wide, so exact only while this is the only reserve cell |
 
 Any rule it cannot read in a sample makes that sample unverifiable; `unverifiable-limit` such
-samples in a row is a trip of its own. Missing 503 data is never zero: an empty series, a minute
-after the newest published point, or an unparseable timestamp is unverifiable. A gap between
-published points is a minute with no 503s. A cell whose switch file no longer says reserve ends the
-watch without a write.
+samples in a row is a trip of its own. The 503 read takes every response code in one query, and the
+newest minute any code has a point for is how far the series is published: a 503 minute at or
+before it with no point had no 503s, so a quiet fleet reads zero. Minutes past it are left out, not
+counted; fewer than 3 published minutes in the read, no request series at all, or an unparseable
+timestamp is unverifiable. Until the minutes before `flipped-at` are published (3 minutes past
+it) the 503 rule is pending, which does not add to the streak. The duplicate rule keys a seat by
+director instance, so a director restart (a new instance id) starts its first-seen clock over. A
+cell whose switch file no longer says reserve ends the watch without a write.
 
 In `write` mode a watch that fails, times out or is cancelled before a verdict flips the cell back
-as a trip would. The flip back holds no concurrency group: GitHub keeps one pending run per group
-and a newer one cancels it, so a flip back queued in the flag workflow's group could be dropped by
-any later flag dispatch. The flag tool's generation check (CAS) orders it against other writes
-instead; on a conflict it re-reads and retries, up to 5 times, while the switch file still says
-reserve, and stops if it already says db. A cell that does not answer runtime-status cannot take
-the ordinary flip back: the run fails and prints the exact break-glass inputs for `Operate Relay
-Production Cell Flags` (`set=admitMode=default`, `break-glass=BREAK GLASS <cell-id>`).
+as a trip would; the flip-back job and each of its steps run on `always()`, so a cancel during the
+lease wait does not skip the write. A force-cancel can still stop it. The workflow's only group is
+its own per-cell one, which a running run never yields. It stays out of the flag workflow's group
+because GitHub keeps one pending run per group and a newer one cancels it, so a flip back queued
+there could be dropped by any later flag dispatch, and a watch held there would block manual writes
+for hours. The flag tool's generation check (CAS) orders it against other writes instead; on a
+conflict it re-reads and retries, up to 5 times, while the switch file still says reserve, and stops
+if it already says db. A cell that still does not answer runtime-status after 4 tries with backoff
+cannot take the ordinary flip back: the run fails and prints the exact break-glass inputs for
+`Operate Relay Production Cell Flags` (`set=admitMode=default`, `break-glass=BREAK GLASS <cell-id>`).
 
 ## Mobile push gateway
 

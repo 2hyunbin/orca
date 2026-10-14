@@ -10,8 +10,10 @@ import {
 } from './relay-reserve-watch-rules.mjs'
 import {
   FLIP_BACK_ATTEMPTS,
+  FLIP_BACK_RUNTIME_ATTEMPTS,
   flipBack,
   parseWatchArguments,
+  parseWatchSegment,
   readDirector503Minutes,
   readSeatBehindRowSample,
   recordOutcome,
@@ -40,7 +42,7 @@ const minutesBefore = (at, count) =>
   )
 const quiet503 = (at, perMinute = 10) => {
   const minutes = minutesBefore(at, 3)
-  return { ok: true, minutes, perMinute: Object.fromEntries(minutes.map((minute) => [minute, perMinute])) }
+  return { ok: true, minutes, perMinute: Object.fromEntries(minutes.map((minute) => [minute, perMinute])), publishedThrough: minutes.at(-1) }
 }
 const sampleAt = (at, overrides = {}) => ({
   at,
@@ -82,7 +84,12 @@ test('503s trip only after three complete minutes over max(1.5x background, back
   const state = freshState({ background: { medianPerMinute: 100, source: 'input' } })
   const series = (counts) => {
     const minutes = minutesBefore(START, 3)
-    return { ok: true, minutes, perMinute: Object.fromEntries(minutes.map((minute, index) => [minute, counts[index]])) }
+    return {
+      ok: true,
+      minutes,
+      perMinute: Object.fromEntries(minutes.map((minute, index) => [minute, counts[index]])),
+      publishedThrough: minutes.at(-1)
+    }
   }
   const twoOver = evaluateWatchSample(state, sampleAt(START, { director503: series([151, 140, 200]) }), LIMIT)
   assert.equal(twoOver.state.state, 'watching')
@@ -95,27 +102,44 @@ test('503s trip only after three complete minutes over max(1.5x background, back
   const zero = freshState({ background: { medianPerMinute: 0, source: 'input' } })
   assert.equal(evaluateWatchSample(zero, sampleAt(START, { director503: series([5, 5, 5]) }), LIMIT).state.state, 'watching')
   assert.equal(evaluateWatchSample(zero, sampleAt(START, { director503: series([21, 21, 21]) }), LIMIT).state.state, 'tripped')
-  // A gap before the newest point had none.
+  // A published minute with no 503 point had none.
   const gap = series([151, 160, 170])
   delete gap.perMinute[gap.minutes[1]]
   assert.equal(evaluateWatchSample(state, sampleAt(START, { director503: gap }), LIMIT).state.state, 'watching')
 })
 
-test('missing 503 data is unverifiable, never zero', () => {
-  const state = freshState()
-  const minutes = minutesBefore(START, 3)
+test('a quiet fleet with no 503 series at all reads zero, not unverifiable', () => {
+  const minutes = minutesBefore(START, 10)
+  const quiet = { ok: true, minutes, perMinute: {}, publishedThrough: minutes.at(-1) }
+  const [result] = run([sampleAt(START, { director503: quiet })], freshState({ background: { medianPerMinute: 0, source: 'measured' } }))
+  assert.equal(result.rules.director503.status, 'pass')
+  assert.deepEqual(Object.values(result.rules.director503.recent), [0, 0, 0])
+  assert.equal(result.state.unverifiableStreak, 0)
+  assert.deepEqual(measuredBackground({}, minutes, minutes.at(-1)), { medianPerMinute: 0, minutes: 10, source: 'measured' })
+})
+
+test('503 minutes past the publishing front are left out, and only no front at all is unverifiable', () => {
+  const state = freshState({ background: { medianPerMinute: 100, source: 'input' } })
+  const minutes = minutesBefore(START, 10)
   const judge = (director503) => evaluateWatchSample(state, sampleAt(START, { director503 }), LIMIT)
-  // An empty series.
-  const empty = judge({ ok: true, minutes, perMinute: {} })
+  // The front is two minutes behind: the three minutes before it are judged, the two after are not.
+  const over = Object.fromEntries(minutes.map((minute) => [minute, 500]))
+  const behind = judge({ ok: true, minutes, perMinute: over, publishedThrough: minutes[7] })
+  assert.equal(behind.rules.director503.status, 'trip')
+  assert.deepEqual(Object.keys(behind.rules.director503.recent), minutes.slice(5, 8))
+  // A sparse 503 series: minutes after its last point but within the front are zero, not late.
+  const sparse = judge({ ok: true, minutes, perMinute: { [minutes[2]]: 500 }, publishedThrough: minutes.at(-1) })
+  assert.equal(sparse.rules.director503.status, 'pass')
+  assert.equal(sparse.state.unverifiableStreak, 0)
+  // No request series at all.
+  const empty = judge({ ok: true, minutes, perMinute: {}, publishedThrough: null })
   assert.equal(empty.rules.director503.status, 'unverifiable')
-  assert.match(empty.rules.director503.reason, /series is empty/)
+  assert.match(empty.rules.director503.reason, /request series is empty/)
   assert.equal(empty.state.unverifiableStreak, 1)
-  // The newest minute is not published yet: points stop before it.
-  const late = judge({ ok: true, minutes, perMinute: { [minutes[0]]: 500, [minutes[1]]: 500 } })
-  assert.equal(late.rules.director503.status, 'unverifiable')
-  assert.match(late.rules.director503.reason, new RegExp(`${minutes[2]} are not published yet`))
-  // Fewer complete minutes than the rule needs.
-  assert.equal(judge({ ok: true, minutes: minutes.slice(1), perMinute: { [minutes[2]]: 1 } }).rules.director503.status, 'unverifiable')
+  // A front too far behind to leave three published minutes in the read.
+  const stale = judge({ ok: true, minutes, perMinute: {}, publishedThrough: minutes[1] })
+  assert.equal(stale.rules.director503.status, 'unverifiable')
+  assert.match(stale.rules.director503.reason, new RegExp(`published only through ${minutes[1]}`))
 })
 
 // A Cloud Monitoring or Cloud Logging reader over fakes, as the watch builds one.
@@ -156,12 +180,16 @@ test('a seat-behind-row key carries the director instance and cell beside the ep
   assert.deepEqual(read.reports.map((report) => report.key), [`a/${CELL}/7:8`, `b/${CELL}/7:8`])
 })
 
-test('the measured background is the median of the minutes before the flip, gaps as zero, none as no evidence', () => {
+test('the measured background is the median of the minutes before the flip, published gaps as zero', () => {
   const minutes = ['2026-10-14T11:47', '2026-10-14T11:48', '2026-10-14T11:49']
-  assert.equal(measuredBackground({ '2026-10-14T11:48': 30 }, minutes).medianPerMinute, 0)
-  assert.equal(measuredBackground({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, minutes).medianPerMinute, 20)
-  assert.equal(measuredBackground({}, minutes), null)
-  assert.equal(measuredBackground({}, []), null)
+  const front = minutes[2]
+  assert.equal(measuredBackground({ '2026-10-14T11:48': 30 }, minutes, front).medianPerMinute, 0)
+  assert.equal(measuredBackground({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, minutes, front).medianPerMinute, 20)
+  assert.equal(measuredBackground({}, minutes, '2026-10-14T11:52').medianPerMinute, 0)
+  // Not published through the last minute yet, or no request series: no background yet.
+  assert.equal(measuredBackground({ [minutes[0]]: 10 }, minutes, minutes[1]), null)
+  assert.equal(measuredBackground({}, minutes, null), null)
+  assert.equal(measuredBackground({}, [], front), null)
 })
 
 test('any overrun trips at once', () => {
@@ -236,7 +264,7 @@ test('unreadable data is never healthy: N samples in a row with any gap trip', (
   const gaps = [
     { cell: unreadable },
     { ledger: { ok: false, error: 'no placing director logged a ledger summary' } },
-    { director503: { ok: false, error: 'director 503 metric read failed', perMinute: {}, minutes: [] } }
+    { director503: { ok: false, error: 'director 503 metric read failed', perMinute: {}, minutes: [], publishedThrough: null } }
   ]
   const results = run(gaps.map((gap, minute) => sampleAt(START + minute * MINUTE, gap)))
   assert.deepEqual(results.map((result) => result.state.unverifiableStreak), [1, 2, 3])
@@ -307,7 +335,9 @@ test('the 503 background needs flipped-at or an explicit value; flipped-at must 
 function fakeSources({
   cell = () => ({}),
   ledger = () => [{ timestamp: new Date(START).toISOString(), labels: { instanceId: 'a' }, jsonPayload: { pending: 0, dropped: 0 } }],
-  per503 = () => 10
+  per503 = () => 10,
+  // Requests of every other code per minute; zero is a minute with no traffic at all.
+  perOther = () => 1_000
 } = {}) {
   let samples = 0
   const monitoringSpans = []
@@ -333,11 +363,19 @@ function fakeSources({
       const params = new URL(text).searchParams
       const span = { startedAt: Date.parse(params.get('interval.startTime')), endedAt: Date.parse(params.get('interval.endTime')) }
       monitoringSpans.push(span)
-      const points = []
-      for (let minute = span.startedAt; minute < span.endedAt; minute += MINUTE) {
-        points.push({ interval: { endTime: new Date(minute + MINUTE).toISOString() }, value: { int64Value: String(per503(minute)) } })
+      assert.equal(params.get('aggregation.groupByFields'), 'metric.label."response_code"')
+      assert.doesNotMatch(params.get('filter'), /response_code/)
+      // Cloud Monitoring returns no point for a minute with no requests of that code.
+      const seriesOf = (code, count) => {
+        const points = []
+        for (let minute = span.startedAt; minute < span.endedAt; minute += MINUTE) {
+          if (count(minute) > 0) {
+            points.push({ interval: { endTime: new Date(minute + MINUTE).toISOString() }, value: { int64Value: String(count(minute)) } })
+          }
+        }
+        return points.length === 0 ? [] : [{ metric: { labels: { response_code: code } }, points }]
       }
-      return new Response(JSON.stringify({ timeSeries: [{ points }] }))
+      return new Response(JSON.stringify({ timeSeries: [...seriesOf('200', perOther), ...seriesOf('503', per503)] }))
     }
     throw new Error(`unexpected fetch ${text}`)
   }
@@ -607,8 +645,10 @@ test('the 503 background is the 10 minutes before flipped-at, read once they are
       sleep: async (ms) => { clock += ms },
       log: (line) => lines.push(JSON.parse(line))
     })
-    assert.deepEqual(lines.map((line) => line.rules.director503.status), ['unverifiable', 'unverifiable', 'pass'])
-    assert.equal(lines[0].rules.director503.reason, 'no 503 background yet')
+    // Pending until then, and pending is not a gap: the streak stays at zero.
+    assert.deepEqual(lines.map((line) => line.rules.director503.status), ['pending', 'pending', 'pass'])
+    assert.match(lines[0].rules.director503.reason, /background before the flip is not published yet/)
+    assert.deepEqual(lines.map((line) => line.unverifiableStreak), [0, 0, 0])
     const baseline = sources.monitoringSpans.find((span) => span.endedAt === START - MINUTE)
     assert.equal(baseline.startedAt, START - 11 * MINUTE)
     assert.deepEqual(state.background, { medianPerMinute: 4, minutes: 10, source: 'measured' })
@@ -618,6 +658,92 @@ test('the 503 background is the 10 minutes before flipped-at, read once they are
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('a quiet fleet with zero director 503s watches on and never trips', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    let clock = START
+    const config = parseAt(
+      watchValues({
+        'state-file': join(directory, 'state.json'),
+        'segment-minutes': '20',
+        'flipped-at': new Date(START - 2 * MINUTE).toISOString()
+      })
+    )
+    const lines = []
+    const state = await watchSegment(config, {
+      ...fakeSources({ per503: () => 0 }),
+      idToken: 'id',
+      retryDelayMs: 0,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms },
+      log: (line) => lines.push(JSON.parse(line))
+    })
+    assert.equal(state.state, 'watching')
+    assert.equal(lines.length, 20)
+    assert.deepEqual(state.background, { medianPerMinute: 0, minutes: 10, source: 'measured' })
+    assert.ok(lines.slice(1).every((line) => line.rules.director503.status === 'pass'))
+    assert.ok(lines.every((line) => line.unverifiableStreak === 0))
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('no request series at all is unverifiable and trips at the limit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    let clock = START
+    const config = parseAt(watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': '10', 'background-503-per-minute': '0', 'flipped-at': '' }))
+    const state = await watchSegment(config, {
+      ...fakeSources({ per503: () => 0, perOther: () => 0 }),
+      idToken: 'id',
+      retryDelayMs: 0,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms },
+      log: () => {}
+    })
+    assert.equal(state.state, 'tripped')
+    assert.match(state.verdict, /unverifiable: 3 samples in a row could not read director503/)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('a later segment judges flipped-at against the watch start, so a long watch does not age it out', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    const stateFile = join(directory, 'state.json')
+    const values = watchValues({ 'state-file': stateFile, 'flipped-at': new Date(START - 23 * 60 * MINUTE).toISOString() })
+    const later = START + 4 * 60 * MINUTE
+    await writeFile(stateFile, JSON.stringify(freshState()))
+    assert.equal((await parseWatchSegment(values, later)).flippedAt, START - 23 * 60 * MINUTE)
+    // The first segment (no state file yet) still refuses it, and records refused.
+    await rm(stateFile)
+    await assert.rejects(parseWatchSegment(values, later), /more than 24 hours/)
+    assert.equal(JSON.parse(await readFile(stateFile, 'utf8')).state, 'refused')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('a slow runtime-status reply is retried before the flip back calls for break glass', async () => {
+  const { fetchImpl: answering, uploads } = fakeFlipBack()
+  let runtimeCalls = 0
+  // fetchAdminOnceMore makes two tries per read; the first read's two both fail.
+  const fetchImpl = async (url, init) => {
+    if (String(url).endsWith('/v1/admin/runtime-status') && (runtimeCalls += 1) <= 2) return new Response('', { status: 503 })
+    return answering(url, init)
+  }
+  const lines = []
+  const sleeps = []
+  const result = await flipBack(flipValues(), flipDependencies(fetchImpl, lines, sleeps))
+  assert.equal(result.written, true)
+  assert.equal(uploads(), 1)
+  assert.deepEqual(lines.filter((line) => line.event === 'orca_relay_reserve_watch_runtime_retry').map((line) => line.attempt), [1])
+  assert.ok(!lines.some((line) => line.event === 'orca_relay_reserve_watch_break_glass_required'))
+  assert.ok(sleeps.includes(2_000))
+  assert.ok(FLIP_BACK_RUNTIME_ATTEMPTS > 1)
 })
 
 const watchWorkflow = readRelayWorkflow('operate-relay-production-reserve-watch.yml')
@@ -636,6 +762,10 @@ test('workflow: neither job takes the flag workflow group, which would let a new
 
 test('workflow: a watch that failed or was cancelled without a verdict flips back too', () => {
   const flip = jobOf('flip-back')
+  // A cancel re-evaluates each step: every flip-back step must run on always() too.
+  const steps = flip.slice(flip.indexOf('\n    steps:\n')).split(/\n      - /).slice(1)
+  assert.equal(steps.length, 6)
+  for (const step of steps) assert.match(step, /\n\s+if: \$\{\{ always\(\) \}\}/, step.split('\n')[0])
   assert.match(flip, /if: \$\{\{ always\(\) && vars\.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && needs\.watch\.result != 'skipped'/)
   assert.match(flip, /!contains\(fromJSON\('\["completed","stopped","refused"\]'\), needs\.watch\.outputs\.state\)/)
   // Every segment checks its ID token's shape, and runs the one shared command.

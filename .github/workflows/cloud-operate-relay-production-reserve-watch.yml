@@ -48,8 +48,7 @@ permissions:
   contents: read
   id-token: write
 
-# One watch per cell. Neither job takes the flag workflow's group: a watch would hold manual
-# writes behind it for hours, and a pending flip back there could be cancelled by a newer run.
+# One watch per cell; why not the flag workflow's group: cloud/docs/relay-workflows.md.
 concurrency:
   group: relay-production-reserve-watch-${{ inputs.cell-id }}
   cancel-in-progress: false
@@ -238,18 +237,22 @@ jobs:
     # A flip back waits for the cell to lease every control: 8-50 minutes, scaled to its controls.
     timeout-minutes: 60
     environment: production
-    # No concurrency group: GitHub keeps one pending run per group and a newer one cancels it, so
-    # a queued flip back could be dropped. The flag tool's CAS orders it against other writes.
+    # Only the run's per-cell group above, which a running run never yields (cancel-in-progress off).
+    # Every step runs on always() too: a cancel during the lease wait would otherwise skip the write.
+    # A force-cancel still stops it; nothing in a workflow can prevent that.
     env:
       VERDICT: ${{ needs.watch.outputs.verdict || format('the watch ended {0} without a verdict', needs.watch.result) }}
     steps:
       - uses: actions/checkout@v4
+        if: ${{ always() }}
 
       - uses: actions/setup-node@v4
+        if: ${{ always() }}
         with:
           node-version: 24
 
       - id: google-auth
+        if: ${{ always() }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
@@ -259,10 +262,12 @@ jobs:
           id_token_include_email: true
 
       - uses: google-github-actions/setup-gcloud@v2
+        if: ${{ always() }}
         with:
           skip_install: true
 
       - name: Flip the cell back to db, or preview it
+        if: ${{ always() }}
         env:
           ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth.outputs.id_token }}
         run: |

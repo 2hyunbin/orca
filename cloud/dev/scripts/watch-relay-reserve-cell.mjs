@@ -6,9 +6,7 @@
 //            ID token lasts an hour). State carries over in --state-file. Writes nothing.
 // outcome:   the job's state and verdict, from the state file.
 // flip-back: the flag tool's admitMode=db write (or its dry run), then exits non-zero with the
-//            watch's verdict. It holds no concurrency group: GitHub keeps one pending run per
-//            group and a newer one cancels it, so a queued flip back could be dropped. The flag
-//            tool's CAS orders it against any other write instead.
+//            watch's verdict. Why it holds no flag-workflow group: docs/relay-workflows.md.
 import { execFile } from 'node:child_process'
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
@@ -21,7 +19,7 @@ import {
   readRuntime,
   WRITE_CONFIRMATION
 } from './operate-relay-cell-flags.mjs'
-import { readDirector503PerMinute, readLogEntries } from './relay-same-cap-shadow-gate.mjs'
+import { readDirectorRequestsByCodePerMinute, readLogEntries } from './relay-same-cap-shadow-gate.mjs'
 import { minutesOf } from './relay-same-cap-shadow-gate-verdict.mjs'
 import {
   evaluateWatchSample,
@@ -36,13 +34,14 @@ export const SAMPLE_INTERVAL_MS = MINUTE_MS
 export const MAX_WATCH_MINUTES = 300
 // Below the hour an ID token lasts, with room for the segment's last sample.
 export const MAX_SEGMENT_MINUTES = 55
-// Cloud Run publishes a minute's request count up to 3 minutes late.
-const METRIC_DELAY_MS = 3 * MINUTE_MS
+const METRIC_DELAY_MS = RESERVE_WATCH_RULES.director503.publishDelayMs
 const BACKGROUND_MINUTES = 10
 // A flipped-at older than this is a typo or a stale dispatch, not this flip.
 const MAX_FLIPPED_AT_AGE_MS = 24 * 60 * MINUTE_MS
 export const FLIP_BACK_ATTEMPTS = 5
 const FLIP_BACK_BACKOFF_MS = 2_000
+// One slow runtime-status reply is not a dead cell: retried this often before break glass.
+export const FLIP_BACK_RUNTIME_ATTEMPTS = 4
 const SAMPLE_READ_BUDGET_MS = 40_000
 const LOG_ENTRY_LIMIT = 1_000
 
@@ -59,6 +58,7 @@ export function dbFlipRequest(values) {
   return parseCellFlagsRequest({ ...values, set: 'admitMode=db', 'expected-generation': '0' })
 }
 
+// `now` is the watch's start: a later segment of a long watch must not age flipped-at out.
 function parseFlippedAt(raw, now) {
   if (raw === '') return null
   const at = Date.parse(raw)
@@ -126,20 +126,28 @@ export async function readCellSample(fetchImpl, request, idToken, wait) {
 }
 
 const minuteFloor = (at) => Math.floor(at / MINUTE_MS) * MINUTE_MS
-const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: [] })
+const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: [], publishedThrough: null })
 
-// The `minutes` whole minutes that end at the minute boundary `endedAt`.
+// The `minutes` whole minutes that end at the minute boundary `endedAt`: the 503 counts, and the
+// newest minute any response code has a point for. The director always serves something, so that
+// front is how far the 503 series is published; no front at all is no evidence.
 export async function readDirector503Minutes(reader, { projectId, directorService, endedAt, minutes }) {
   const span = { startedAt: new Date(endedAt - minutes * MINUTE_MS), endedAt: new Date(endedAt) }
   let read
   try {
-    read = await readDirector503PerMinute(reader, { config: { projectId, directorService }, span })
+    read = await readDirectorRequestsByCodePerMinute(reader, { config: { projectId, directorService }, span })
   } catch (error) {
     // A point with an unparseable end time has no minute.
     return failed503Read(`director 503 metric unreadable: ${error instanceof Error ? error.message : error}`)
   }
   if (read.failed) return failed503Read('director 503 metric read failed')
-  return { ok: true, perMinute: read.perMinute, minutes: minutesOf(span) }
+  const published = Object.values(read.byCode).flatMap((perMinute) => Object.keys(perMinute)).sort()
+  return {
+    ok: true,
+    perMinute: read.byCode['503'] ?? {},
+    minutes: minutesOf(span),
+    publishedThrough: published.at(-1) ?? null
+  }
 }
 
 function directorLogFilter(directorService, event, sinceAt) {
@@ -224,6 +232,20 @@ async function loadState(path) {
   return text === null ? null : JSON.parse(text)
 }
 
+// A segment's config. Later segments check flipped-at against the watch's start; bad inputs before
+// the first sample are refused, so no flip back follows a typo.
+export async function parseWatchSegment(values, now = Date.now()) {
+  const existing = values['state-file'] ? await loadState(values['state-file']) : null
+  try {
+    return parseWatchArguments(values, Number.isFinite(existing?.startedAt) ? existing.startedAt : now)
+  } catch (error) {
+    if (values['state-file'] && existing === null) {
+      await writeFile(values['state-file'], JSON.stringify({ state: 'refused', verdict: error.message }))
+    }
+    throw error
+  }
+}
+
 export async function watchSegment(config, dependencies) {
   const now = dependencies.now ?? Date.now
   const sleep = dependencies.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
@@ -252,7 +274,7 @@ export async function watchSegment(config, dependencies) {
         endedAt: baselineEndsAt,
         minutes: BACKGROUND_MINUTES
       })
-      state = { ...state, background: read.ok ? measuredBackground(read.perMinute, read.minutes) : null }
+      state = { ...state, background: read.ok ? measuredBackground(read.perMinute, read.minutes, read.publishedThrough) : null }
     }
     const reader = createReader(deps, request.projectId)
     // Serialised: concurrent Logging reads are what earn a 429.
@@ -305,11 +327,23 @@ function breakGlassInputs(request, generation) {
   }
 }
 
+async function readRuntimeRetrying(fetchImpl, request, idToken, sleep, log) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readRuntime(fetchImpl, request, idToken, sleep)
+    } catch (error) {
+      if (attempt >= FLIP_BACK_RUNTIME_ATTEMPTS) throw error
+      log(JSON.stringify({ event: 'orca_relay_reserve_watch_runtime_retry', cellId: request.cellId, attempt, message: error instanceof Error ? error.message : String(error) }))
+      await sleep(FLIP_BACK_BACKOFF_MS * 2 ** (attempt - 1))
+    }
+  }
+}
+
 /**
  * The flag tool's admitMode=db write at the generation read just now. A generation conflict (some
  * other write landed first) is re-read and retried while the switch file still says reserve; a
- * file that already says db is done. A cell that does not answer needs break glass, which only an
- * operator may type.
+ * file that already says db is done. A cell that still does not answer after the runtime retries
+ * needs break glass, which only an operator may type.
  */
 export async function flipBack(values, dependencies) {
   const log = dependencies.log ?? console.log
@@ -335,7 +369,7 @@ export async function flipBack(values, dependencies) {
       return result
     }
     try {
-      await readRuntime(fetchImpl, base, dependencies.idToken, sleep)
+      await readRuntimeRetrying(fetchImpl, base, dependencies.idToken, sleep, log)
     } catch (error) {
       const inputs = breakGlassInputs(base, current.generation)
       log(JSON.stringify({ event: 'orca_relay_reserve_watch_break_glass_required', cellId: base.cellId, inputs }))
@@ -392,16 +426,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     } else if (!idToken) {
       throw new Error('ORCA_RELAY_ADMIN_ID_TOKEN is required')
     } else if (command === 'watch') {
-      let config
-      try {
-        config = parseWatchArguments(values)
-      } catch (error) {
-        // Bad inputs before the first sample: refused, so no flip back follows a typo.
-        if (values['state-file'] && (await loadState(values['state-file'])) === null) {
-          await writeFile(values['state-file'], JSON.stringify({ state: 'refused', verdict: error.message }))
-        }
-        throw error
-      }
+      const config = await parseWatchSegment(values)
       const state = await watchSegment(config, {
         idToken,
         runGcloud: (args, { timeoutMs }) =>
