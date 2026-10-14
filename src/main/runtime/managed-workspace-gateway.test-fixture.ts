@@ -15,9 +15,11 @@ import type { ManagedWorkspaceHosts } from './managed-workspace-gateway-contract
 export async function managedWorkspaceGatewayFixture() {
   const cleanups: (() => Promise<void> | void)[] = []
   const calls = { controller: 0, child: 0 }
-  async function server(kind: 'controller' | 'child') {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-workspace-gateway-'))
-    cleanups.push(() => rmSync(directory, { recursive: true, force: true }))
+  async function server(kind: 'controller' | 'child', previousDirectory?: string) {
+    const directory = previousDirectory ?? mkdtempSync(join(tmpdir(), 'orca-workspace-gateway-'))
+    if (!previousDirectory) {
+      cleanups.push(() => rmSync(directory, { recursive: true, force: true }))
+    }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The sibling RPC integration fixture's store implements the status and socket surfaces used here.
     const runtime = new OrcaRuntimeService(makeStore() as never)
     const rpc = new OrcaRuntimeRpcServer({
@@ -71,10 +73,16 @@ export async function managedWorkspaceGatewayFixture() {
     if (!pairing) {
       throw new Error('invalid pairing')
     }
-    return { rpc, runtime, pairing, connection: pairedRuntimeConnectionFromOffer(pairing) }
+    return {
+      directory,
+      rpc,
+      runtime,
+      pairing,
+      connection: pairedRuntimeConnectionFromOffer(pairing)
+    }
   }
   try {
-    const child = await server('child')
+    let child = await server('child')
     const controller = await server('controller')
     let current = true
     let generation = 1
@@ -113,9 +121,17 @@ export async function managedWorkspaceGatewayFixture() {
     }
     return {
       calls,
-      child,
+      get child() {
+        return child
+      },
       controller,
       gateway,
+      restartChild: async () => {
+        const previous = child
+        await previous.rpc.stop()
+        child = await server('child', previous.directory)
+        child.connection = { ...previous.connection, endpoint: child.connection.endpoint }
+      },
       resolving: () => resolving,
       closedHosts: () => closedHosts,
       retire: () => {

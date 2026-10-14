@@ -61,6 +61,36 @@ it('passes binary traffic through both encrypted sessions', async () => {
   expect(f.calls).toEqual({ controller: 0, child: 1 })
 })
 
+it('retires old sessions and reacquires the child after its server restarts', async () => {
+  const f = await fixture()
+  const closed = vi.fn()
+  const text = vi.fn()
+  const socket = await openRemoteRuntimePassthroughSocket(
+    f.gateway,
+    [],
+    { onText: text, onBinary: vi.fn(), onClose: closed },
+    { timeoutMs: 5000 }
+  )
+  cleanups.push(() => socket.close())
+  socket.send(JSON.stringify({ id: 'before', method: 'terminal.gatewayProbe', params: {} }))
+  await vi.waitFor(() => expect(text).toHaveBeenCalledTimes(1))
+  const previousRuntimeId = f.child.runtime.getRuntimeId()
+  const previousKey = f.child.pairing.publicKeyB64
+  await f.restartChild()
+  await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1))
+  expect(f.child.runtime.getRuntimeId()).not.toBe(previousRuntimeId)
+  expect(previousKey).toBeTruthy()
+  expect(f.child.pairing.publicKeyB64).toBe(previousKey)
+  expect(socket.send('stale work')).toBe(false)
+  const result = await sendRemoteRuntimeRequest(f.gateway, 'terminal.gatewayProbe', {}, 10000)
+  expect(result).toMatchObject({
+    ok: true,
+    _meta: { runtimeId: f.child.runtime.getRuntimeId() },
+    result: { kind: 'child' }
+  })
+  expect(f.calls).toEqual({ controller: 0, child: 2 })
+})
+
 it('preserves user content containing the private session token', async () => {
   const f = await fixture()
   const registry = f.child.rpc.getDeviceRegistry()

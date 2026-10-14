@@ -103,6 +103,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/native-chat/structured-chat-naming-status-hook.test.ts',
   'src/main/runtime/agent-session-conversation-name-store.test.ts',
   'src/main/runtime/structured-session-mail-redrive-wiring.test.ts',
+  'src/main/runtime/managed-workspace-gateway.integration.test.ts',
+  'src/main/runtime/managed-workspace-gateway-client-isolation.integration.test.ts',
   'src/main/runtime/rpc/ws-transport.test.ts',
   'src/main/runtime/rpc/dispatcher-transport-parity.test.ts',
   // Bun resolves 'ws' to its built-in client, which bypasses the patched package.
