@@ -17,9 +17,9 @@ const { listLiveDaemonPtyIds } = vi.hoisted(() => ({
 vi.mock('../../../daemon/daemon-provider-state', () => ({ listLiveDaemonPtyIds }))
 
 let userDataPath: string
-const store = { getRepo: () => undefined, getFolderWorkspace: () => undefined } as never
+// No store: a readable journal never needs one.
 const accept = (worktreeId: string, sessionId?: string) =>
-  Promise.resolve(assertWorkspaceAcceptsNewPty(store, worktreeId, sessionId))
+  Promise.resolve(assertWorkspaceAcceptsNewPty(undefined, worktreeId, sessionId))
 
 beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-spawn-'))

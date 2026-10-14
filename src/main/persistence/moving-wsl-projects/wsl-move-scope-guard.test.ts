@@ -30,12 +30,15 @@ afterEach(() => {
 })
 const asRepo = (row: { id: string }) => ({ repoId: row.id })
 
+const repoPaths = new Map([
+  ['repo-wsl', '\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'],
+  ['repo-win', 'C:\\src\\app']
+])
 const store = {
-  getRepo: (id: string) =>
-    ({
-      'repo-wsl': { path: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\app' },
-      'repo-win': { path: 'C:\\src\\app' }
-    })[id] as never,
+  getRepo: (id: string) => {
+    const path = repoPaths.get(id)
+    return path === undefined ? undefined : { path }
+  },
   getFolderWorkspace: () => undefined
 }
 const writable = (workspaceId: string) => () => assertWslMoveWorkspaceWritable(store, workspaceId)

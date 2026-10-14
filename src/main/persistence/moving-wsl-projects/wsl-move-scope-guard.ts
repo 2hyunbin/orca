@@ -12,7 +12,6 @@ import { resolve } from 'node:path'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../shared/wsl-paths'
-import type { Store } from '../../persistence'
 import { onWslMoveJournalChange } from './wsl-move-cutover-journal'
 import { resolveWslMoveFence, type WslMoveFenceState } from './wsl-move-fence'
 
@@ -26,7 +25,11 @@ export class WslMoveProjectFencedError extends Error {
   }
 }
 
-type ProjectStore = Pick<Store, 'getRepo' | 'getFolderWorkspace'>
+/** Only the project paths, read when the journal is unreadable. */
+type ProjectStore = {
+  getRepo: (repoId: string) => { path: string } | undefined
+  getFolderWorkspace: (folderWorkspaceId: string) => { folderPath: string } | undefined
+}
 
 /** An unreadable journal fences every WSL project and hides none: never edit, never lose a row. */
 type FenceView = { readable: true; state: WslMoveFenceState } | { readable: false }
