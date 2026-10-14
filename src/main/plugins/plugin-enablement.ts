@@ -33,6 +33,7 @@ export async function applyPluginConsent(input: {
   reviewedRevision?: PluginConsentRequest['reviewedRevision']
   decision: PluginConsentRequest['decision']
   originWebContentsId?: number
+  assertCurrent?: () => void
 }): Promise<void> {
   await (input.pluginService.findValidPlugin(input.pluginKey)?.manifest.manifestVersion === 2
     ? serializePluginMutation(getUserPluginsDir(input.pluginService.options.userDataPath), () =>
@@ -44,6 +45,7 @@ export async function applyPluginConsent(input: {
 
 async function recordPluginConsent(input: Parameters<typeof applyPluginConsent>[0]): Promise<void> {
   const { store, pluginService, pluginKey } = input
+  input.assertCurrent?.()
   const plugin = pluginService.findValidPlugin(pluginKey)
   if (!plugin) {
     throw new Error(`cannot record consent for unknown plugin ${pluginKey}`)
@@ -67,6 +69,7 @@ async function recordPluginConsent(input: Parameters<typeof applyPluginConsent>[
     }
   }
   const settings = store.getSettings()
+  input.assertCurrent?.()
   const disabled = new Set(normalizePluginIdList(settings.disabledPlugins))
   const consents = normalizePluginConsents(settings.pluginConsents)
   if (input.decision === 'approve') {

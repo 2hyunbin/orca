@@ -9,7 +9,7 @@ import type { PluginMarketplaceService } from './plugin-marketplace-service'
 import type { PluginService } from './plugin-service'
 
 export async function installMarketplaceDataPlugin(input: {
-  store: Store
+  store: Pick<Store, 'getSettings' | 'updateSettings'>
   pluginService: PluginService
   marketplace: PluginMarketplaceService
   installer: PluginMarketplaceInstaller
@@ -17,6 +17,7 @@ export async function installMarketplaceDataPlugin(input: {
   marketplaceCommit: string
   pluginKey: string
   originWebContentsId?: number
+  assertCurrent?: () => void
 }): Promise<
   | { kind: 'installed'; pluginKey: string }
   | { kind: 'review'; preview: PluginMarketplaceInstallPreview }
@@ -78,7 +79,8 @@ export async function installMarketplaceDataPlugin(input: {
       reviewedFingerprint: installed.consentFingerprint,
       reviewedRevision: fingerprintPluginReview(installed.consentFingerprint, result.contentHash),
       decision: 'approve',
-      originWebContentsId: input.originWebContentsId
+      originWebContentsId: input.originWebContentsId,
+      assertCurrent: input.assertCurrent
     })
   }
   return { kind: 'installed', pluginKey }

@@ -1,135 +1,54 @@
 import { registerPluginRendererHandler } from './plugin-renderer-ipc'
-import { z } from 'zod'
-import { PLUGIN_COMMIT_PATTERN } from '../../shared/plugins/plugin-install-lockfile'
-import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
-import { pluginMarketplaceGitSourceSchema } from '../../shared/plugins/plugin-marketplace'
-import type { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
-import type { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
-import { PLUGIN_MARKETPLACE_SOURCE_ID_PATTERN } from '../plugins/plugin-marketplace-store'
 import type { PluginService } from '../plugins/plugin-service'
 import type { Store } from '../persistence'
-import { installMarketplaceDataPlugin } from '../plugins/plugin-marketplace-data-action'
-import { installReviewedMarketplaceUpdate } from '../plugins/plugin-marketplace-reviewed-update'
-import { pluginReviewedMarketplaceUpdateSchema } from '../../shared/plugins/plugin-reviewed-update'
+import {
+  PluginMarketplaceController,
+  type PluginMarketplaceControllerServices
+} from '../plugins/plugin-marketplace-controller'
 import { isTrustedBrowserRenderer } from './browser-renderer-trust'
 
-export type PluginMarketplaceHandlerServices = {
-  marketplace: PluginMarketplaceService
-  installer: PluginMarketplaceInstaller
-}
-
-const sourceIdSchema = z.string().regex(PLUGIN_MARKETPLACE_SOURCE_ID_PATTERN)
-const removeMarketplaceSchema = z.strictObject({ sourceId: sourceIdSchema })
-const refreshMarketplaceSchema = z.strictObject({ sourceId: sourceIdSchema.optional() })
-const marketplacePluginSchema = z.strictObject({
-  marketplaceSourceId: sourceIdSchema,
-  pluginKey: z.string().refine(isQualifiedPluginKey, 'invalid qualified plugin key')
-})
-const installMarketplacePluginSchema = marketplacePluginSchema.extend({
-  marketplaceCommit: z.string().regex(PLUGIN_COMMIT_PATTERN),
-  resolvedCommit: z.string().regex(PLUGIN_COMMIT_PATTERN)
-})
-const installedPluginSchema = z.strictObject({
-  pluginKey: z.string().refine(isQualifiedPluginKey, 'invalid qualified plugin key')
-})
+export type PluginMarketplaceHandlerServices = PluginMarketplaceControllerServices
 
 export function registerPluginMarketplaceHandlers(
   pluginService: PluginService,
   services: PluginMarketplaceHandlerServices,
   store?: Store
 ): void {
-  registerPluginRendererHandler('plugins:listMarketplaces', () =>
-    services.marketplace.listSources()
+  const controller = new PluginMarketplaceController(pluginService, services, store)
+  registerPluginRendererHandler('plugins:listMarketplaces', () => controller.listMarketplaces())
+  registerPluginRendererHandler('plugins:addMarketplace', (_event, input: unknown) =>
+    controller.addMarketplace(input)
   )
-  registerPluginRendererHandler('plugins:addMarketplace', async (_event, args: unknown) => {
-    const source = pluginMarketplaceGitSourceSchema.parse(args)
-    return services.marketplace.addSource(source)
-  })
-  registerPluginRendererHandler('plugins:removeMarketplace', async (_event, args: unknown) => {
-    const { sourceId } = removeMarketplaceSchema.parse(args)
-    await services.marketplace.removeSource(sourceId)
-    return services.marketplace.listSources()
-  })
-  registerPluginRendererHandler('plugins:refreshMarketplaces', async (_event, args: unknown) => {
-    const { sourceId } = refreshMarketplaceSchema.parse(args ?? {})
-    return sourceId
-      ? [await services.marketplace.refreshSource(sourceId)]
-      : services.marketplace.refreshAll()
-  })
+  registerPluginRendererHandler('plugins:removeMarketplace', (_event, input: unknown) =>
+    controller.removeMarketplace(input)
+  )
+  registerPluginRendererHandler('plugins:refreshMarketplaces', (_event, input: unknown) =>
+    controller.refreshMarketplaces(input)
+  )
   registerPluginRendererHandler('plugins:listMarketplacePlugins', () =>
-    services.marketplace.listPlugins()
+    controller.listMarketplacePlugins()
   )
-  registerPluginRendererHandler(
-    'plugins:previewMarketplacePlugin',
-    async (_event, args: unknown) => {
-      const parsed = marketplacePluginSchema.parse(args)
-      return services.installer.preview(parsed.marketplaceSourceId, parsed.pluginKey)
-    }
+  registerPluginRendererHandler('plugins:previewMarketplacePlugin', (_event, input: unknown) =>
+    controller.previewMarketplacePlugin(input)
   )
-  registerPluginRendererHandler(
-    'plugins:installMarketplacePlugin',
-    async (_event, args: unknown) => {
-      const result = await services.installer.install(installMarketplacePluginSchema.parse(args))
-      if (result.ok) {
-        await pluginService.refresh()
-      }
-      return result
-    }
+  registerPluginRendererHandler('plugins:installMarketplacePlugin', (_event, input: unknown) =>
+    controller.installMarketplacePlugin(input)
   )
   if (store) {
-    registerPluginRendererHandler(
-      'plugins:approveMarketplaceUpdate',
-      async (event, args: unknown) => {
-        if (
-          !isTrustedBrowserRenderer(event.sender) ||
-          event.senderFrame !== event.sender.mainFrame
-        ) {
-          return { ok: false, error: 'plugin update requires the trusted application window' }
-        }
-        return installReviewedMarketplaceUpdate({
-          request: pluginReviewedMarketplaceUpdateSchema.parse(args),
-          store,
-          pluginService,
-          installer: services.installer,
-          originWebContentsId: event.sender.id
-        })
+    registerPluginRendererHandler('plugins:approveMarketplaceUpdate', (event, input: unknown) => {
+      if (!isTrustedBrowserRenderer(event.sender) || event.senderFrame !== event.sender.mainFrame) {
+        return { ok: false, error: 'plugin update requires the trusted application window' }
       }
-    )
-    registerPluginRendererHandler(
-      'plugins:installMarketplaceDataPlugin',
-      async (event, args: unknown) => {
-        const parsed = marketplacePluginSchema
-          .extend({
-            marketplaceCommit: z.string().regex(PLUGIN_COMMIT_PATTERN)
-          })
-          .parse(args)
-        return installMarketplaceDataPlugin({
-          ...parsed,
-          ...services,
-          store,
-          pluginService,
-          originWebContentsId: event.sender.id
-        })
-      }
+      return controller.approveMarketplaceUpdate(input, event.sender.id)
+    })
+    registerPluginRendererHandler('plugins:installMarketplaceDataPlugin', (event, input: unknown) =>
+      controller.installMarketplaceDataPlugin(input, event.sender.id)
     )
   }
-  registerPluginRendererHandler(
-    'plugins:previewMarketplaceUpdate',
-    async (_event, args: unknown) => {
-      const { pluginKey } = installedPluginSchema.parse(args)
-      return services.installer.previewInstalledUpdate(pluginKey)
-    }
+  registerPluginRendererHandler('plugins:previewMarketplaceUpdate', (_event, input: unknown) =>
+    controller.previewMarketplaceUpdate(input)
   )
-  registerPluginRendererHandler(
-    'plugins:rollbackMarketplacePlugin',
-    async (_event, args: unknown) => {
-      const { pluginKey } = installedPluginSchema.parse(args)
-      await pluginService.deactivatePlugin(pluginKey)
-      const result = await services.installer.rollback(pluginKey)
-      if (result.ok) {
-        await pluginService.refresh()
-      }
-      return result
-    }
+  registerPluginRendererHandler('plugins:rollbackMarketplacePlugin', (_event, input: unknown) =>
+    controller.rollbackMarketplacePlugin(input)
   )
 }

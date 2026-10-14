@@ -11,10 +11,11 @@ import type { PluginService } from './plugin-service'
 
 export async function installReviewedMarketplaceUpdate(input: {
   request: PluginReviewedMarketplaceUpdate
-  store: Store
+  store: Pick<Store, 'getSettings' | 'updateSettings'>
   pluginService: PluginService
   installer: PluginMarketplaceInstaller
   originWebContentsId?: number
+  assertCurrent?: () => void
 }): Promise<PluginInstallResult> {
   const { store, pluginService, installer } = input
   const request = { ...input.request }
@@ -55,6 +56,7 @@ export async function installReviewedMarketplaceUpdate(input: {
     contentHash: request.contentHash,
     currentContentHash: request.currentContentHash,
     commitApproval: () => {
+      input.assertCurrent?.()
       const settings = store.getSettings()
       if (
         !pluginService.options.isPluginSystemEnabled() ||

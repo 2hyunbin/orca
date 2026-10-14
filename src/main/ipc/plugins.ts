@@ -6,13 +6,8 @@ import type {
   PluginPanelActionOutcome,
   PluginPanelEntry
 } from '../../shared/plugins/plugin-panel-bridge'
-import { getUserPluginsDir, getPluginsDataDir } from '../plugins/plugin-discovery'
-import {
-  installPluginFromGit,
-  installPluginFromLocalPath,
-  readPluginLockfile,
-  removeInstalledPlugin
-} from '../plugins/plugin-install'
+import { installPluginForHost, removePluginForHost } from '../plugins/plugin-install-controller'
+import { pluginManagementInstallSchema } from '../../shared/plugins/plugin-management-api'
 import { applyPluginConsent, applyPluginEnablement } from '../plugins/plugin-enablement'
 import type { PluginService } from '../plugins/plugin-service'
 import { bindPluginPanelOwnerLifecycle } from '../plugins/plugin-panel-owner-lifecycle'
@@ -24,16 +19,11 @@ import {
 } from '../plugins/plugin-syntax-client-projection'
 import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
 import { pluginConsentRequestSchema } from '../../shared/plugins/plugin-consent-request'
-import { normalizePluginIdList } from '../../shared/plugins/plugin-consent-state'
 import { registerPluginEnvironmentProviderHandlers } from './plugin-environment-providers'
 import { registerPluginEnvironmentProviderSessionHandlers } from './plugin-environment-provider-sessions'
 import { bindPluginSettingsDiscovery } from './plugin-settings-discovery'
 import { registerPluginViewerGuestHandlers } from './plugin-viewer-guests'
 import { registerPluginViewerTabHandlers } from './plugin-viewer-tabs'
-import {
-  isAllowedPluginGitUrl,
-  type PluginLockfile
-} from '../../shared/plugins/plugin-install-lockfile'
 import {
   registerPluginMarketplaceHandlers,
   type PluginMarketplaceHandlerServices
@@ -59,18 +49,8 @@ const invokeCommandArgsSchema = z.object({
   args: z.unknown().optional()
 })
 
-const installArgsSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('local-path'), path: z.string().min(1) }),
-  z.object({
-    kind: z.literal('git'),
-    url: z.string().trim().min(1).refine(isAllowedPluginGitUrl, 'git URL must use HTTPS or SSH'),
-    // Why: installs must stay reproducible even when callers bypass renderer validation.
-    ref: z.string().trim().min(1)
-  })
-])
-
-export function parsePluginInstallArgs(args: unknown): z.infer<typeof installArgsSchema> {
-  return installArgsSchema.parse(args)
+export function parsePluginInstallArgs(args: unknown) {
+  return pluginManagementInstallSchema.parse(args)
 }
 
 const removeArgsSchema = z.object({
@@ -83,23 +63,7 @@ const logsArgsSchema = z.object({ pluginKey: z.string().min(1) })
 export { listPluginsForClients } from '../plugins/plugin-client-list'
 import { listPluginsForClients } from '../plugins/plugin-client-list'
 
-export function canRemoveInstalledPlugin(
-  pluginService: Pick<PluginService, 'getDiscovered' | 'isBundledDataPlugin'>,
-  pluginKey: string,
-  lock?: PluginLockfile
-): boolean {
-  return (
-    lock?.plugins[pluginKey]?.source.kind !== 'bundled' &&
-    pluginService
-      .getDiscovered()
-      .some(
-        (plugin) =>
-          plugin.pluginKey === pluginKey &&
-          !plugin.isDev &&
-          !pluginService.isBundledDataPlugin(plugin)
-      )
-  )
-}
+export { canRemoveInstalledPlugin } from '../plugins/plugin-removal-policy'
 
 export function registerPluginHandlers(
   store: Store,
@@ -256,63 +220,17 @@ export function registerPluginHandlers(
     return pluginService.invokeCommand(parsed.pluginKey, parsed.commandId, parsed.args)
   })
 
-  registerPluginRendererHandler('plugins:install', async (_event, args: unknown) => {
-    await pluginService.whenReady()
-    const parsed = parsePluginInstallArgs(args)
-    const pluginsDir = getUserPluginsDir(pluginService.options.userDataPath)
-    const hostVersion = pluginService.options.hostVersion
-    const blockedPluginReason = (pluginKey: string): string | null =>
-      pluginService.options.getPluginKillListEntry?.(pluginKey)?.reason ?? null
-    const result =
-      parsed.kind === 'local-path'
-        ? await installPluginFromLocalPath({
-            pluginsDir,
-            sourcePath: parsed.path,
-            hostVersion,
-            blockedPluginReason
-          })
-        : await installPluginFromGit({
-            pluginsDir,
-            url: parsed.url,
-            ref: parsed.ref,
-            hostVersion,
-            blockedPluginReason
-          })
-    if (result.ok) {
-      await pluginService.refresh()
-    }
-    return result
-  })
-
-  registerPluginRendererHandler('plugins:remove', async (event, args: unknown) => {
-    await pluginService.whenReady()
-    const parsed = removeArgsSchema.parse(args)
-    const pluginsDir = getUserPluginsDir(pluginService.options.userDataPath)
-    const lock = await readPluginLockfile(pluginsDir)
-    if (!canRemoveInstalledPlugin(pluginService, parsed.pluginKey, lock)) {
-      throw new Error(`cannot remove protected or non-installed plugin ${parsed.pluginKey}`)
-    }
-    await pluginService.removePlugin(parsed.pluginKey, () =>
-      removeInstalledPlugin({
-        pluginsDir,
-        pluginsDataDir: getPluginsDataDir(pluginService.options.userDataPath),
-        pluginKey: parsed.pluginKey
-      })
+  registerPluginRendererHandler('plugins:install', (_event, args: unknown) =>
+    installPluginForHost(pluginService, args)
+  )
+  registerPluginRendererHandler('plugins:remove', (event, args: unknown) =>
+    removePluginForHost(
+      pluginService,
+      store,
+      removeArgsSchema.parse(args).pluginKey,
+      event.sender.id
     )
-    // Drop the stale consent so a later reinstall re-prompts from scratch.
-    const settings = store.getSettings()
-    const consents = { ...settings.pluginConsents }
-    delete consents[parsed.pluginKey]
-    const disabledPlugins = normalizePluginIdList(settings.disabledPlugins).filter(
-      (pluginKey) => pluginKey !== parsed.pluginKey
-    )
-    store.updateSettings(
-      { pluginConsents: consents, disabledPlugins },
-      { notifyListeners: true, originWebContentsId: event.sender.id }
-    )
-    await pluginService.refresh()
-    return listPluginsForClients(pluginService)
-  })
+  )
 
   registerPluginRendererHandler('plugins:getLogs', async (_event, args: unknown) => {
     const parsed = logsArgsSchema.parse(args)
