@@ -11,6 +11,40 @@ import AgentCombobox from './AgentCombobox'
 afterEach(cleanup)
 
 describe('AgentCombobox', () => {
+  it('lets a blank selection replace the saved None default', () => {
+    const onSetDefault = vi.fn()
+    render(
+      <AgentCombobox
+        agents={[]}
+        value={null}
+        onValueChange={vi.fn()}
+        allowBlankTerminal
+        defaultAgent="blank"
+        onSetDefault={onSetDefault}
+        setupOnly={{ selected: false, isDefault: true, onSelect: vi.fn() }}
+      />
+    )
+    fireEvent.contextMenu(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set as default' }))
+    expect(onSetDefault).toHaveBeenCalledWith('blank')
+  })
+
+  it('shows None without a suffix and saves it through its own default action', () => {
+    const onSetDefault = vi.fn()
+    render(
+      <AgentCombobox
+        agents={[]}
+        value={null}
+        onValueChange={vi.fn()}
+        allowBlankTerminal
+        setupOnly={{ selected: true, isDefault: false, onSelect: vi.fn(), onSetDefault }}
+      />
+    )
+    expect(screen.getByRole('combobox').textContent).toBe('None')
+    fireEvent.contextMenu(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set as default' }))
+    expect(onSetDefault).toHaveBeenCalledOnce()
+  })
   it('sets the closed trigger selection as the default agent', () => {
     const onSetDefault = vi.fn()
     render(

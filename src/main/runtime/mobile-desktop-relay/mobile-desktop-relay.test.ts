@@ -55,6 +55,7 @@ function relayWithPhone(
 ) {
   const syncCalls: unknown[] = []
   const server = { capable: true }
+  const desktop = { nativeChatDefault: true }
   const hosts: MobileDesktopRelayHosts = {
     list: () => ({
       environments: [],
@@ -84,7 +85,8 @@ function relayWithPhone(
       { phoneKey: 'phone-1', name: 'iPhone via Mac' },
       { phoneKey: 'phone-2', name: 'iPad via Mac' }
     ],
-    allocateStreamId: () => 1
+    allocateStreamId: () => 1,
+    nativeChatDefault: () => desktop.nativeChatDefault
   })
   const replies: string[] = []
   let capabilities: readonly string[] = ['cap.a']
@@ -102,11 +104,52 @@ function relayWithPhone(
     replies,
     syncCalls,
     server,
+    desktop,
     setCapabilities: (next: string[]) => (capabilities = next)
   }
 }
 
 describe('MobileDesktopRelay', () => {
+  it("stamps the desktop's chat default onto relayed launches only", async () => {
+    sockets.length = 0
+    const { relay, phone, desktop } = relayWithPhone()
+    const frame = (id: string, method: string, params: Record<string, unknown>) =>
+      JSON.stringify({ id, deviceToken: 'desktop-token', method, params })
+    const target = { kind: 'existing', worktree: 'id:wt-1' }
+    // A phone-supplied value never wins over the desktop's own setting.
+    relay.forward(
+      phone,
+      'env-1',
+      { id: 'l1', method: 'agent.launch' },
+      frame('l1', 'agent.launch', { agent: 'claude', target, nativeChatDefault: false })
+    )
+    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(1))
+    desktop.nativeChatDefault = false
+    relay.forward(
+      phone,
+      'env-1',
+      { id: 'l2', method: 'agent.launchReplay' },
+      frame('l2', 'agent.launchReplay', { agent: 'claude', target, operationId: 'op' })
+    )
+    relay.forward(
+      phone,
+      'env-1',
+      { id: 'l3', method: 'terminal.list' },
+      frame('l3', 'terminal.list', { worktree: 'id:wt-1' })
+    )
+    await vi.waitFor(() => expect(sockets[0]?.sent.length).toBe(3))
+    const sent = sockets[0]!.sent.map((text) => JSON.parse(text))
+    expect(sent[0].params).toEqual({ agent: 'claude', target, nativeChatDefault: true })
+    expect(sent[1].params).toEqual({
+      agent: 'claude',
+      target,
+      operationId: 'op',
+      nativeChatDefault: false
+    })
+    expect(sent[2].params).toEqual({ worktree: 'id:wt-1' })
+    relay.dispose()
+  })
+
   it('signs in with exactly the phone capabilities and mirrors its updates without a second answer', async () => {
     sockets.length = 0
     const { relay, phone, replies, setCapabilities } = relayWithPhone()
