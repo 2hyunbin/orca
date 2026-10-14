@@ -124,7 +124,7 @@ describe('the managed tunnel’s transport', () => {
     expect(chosen.forward.start).toHaveBeenCalledOnce()
     expect(chosen.stdio.start).toHaveBeenCalledTimes(2)
     // A stale `ssh -L` from an earlier Orca may still hold the persisted port.
-    expect(chosen.reserveLocalPort).toHaveBeenCalledWith(options.localPort)
+    expect(chosen.reserveLocalPort).toHaveBeenCalledWith(conn, options)
 
     generation = 2
     await chosen.transport.start(conn, options)
