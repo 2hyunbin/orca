@@ -1,4 +1,3 @@
-import type { Issue } from '@linear/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { mapLinearIssue } from './mappers'
 
@@ -24,9 +23,19 @@ function createIssue() {
   }
 }
 
-function mapFixture(issue: object, options: Parameters<typeof mapLinearIssue>[1] = {}) {
+type IssueFixture = Omit<
+  ReturnType<typeof createIssue>,
+  'state' | 'team' | 'labels' | 'children'
+> & {
+  state: ReturnType<typeof createIssue>['state'] | Promise<undefined>
+  team: ReturnType<typeof createIssue>['team'] | Promise<undefined>
+  labels: () => Promise<{ nodes: typeof labelNodes } | null>
+  children: (options?: { first: number }) => Promise<{ nodes: typeof childNodes } | null>
+}
+
+function mapFixture(issue: IssueFixture, options: Parameters<typeof mapLinearIssue>[1] = {}) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Fixtures supply every mapper-read member; malformed optional connections deliberately exercise its catches.
-  return mapLinearIssue(issue as Issue, options)
+  return mapLinearIssue(issue as never, options)
 }
 
 describe('mapLinearIssue optional connections', () => {
