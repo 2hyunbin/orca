@@ -88,13 +88,17 @@ async function searchIssuesForClient(
       }),
       signal
     })
+    if (collectPages && !Array.isArray(result.issues)) {
+      throw new Error('Jira returned an invalid issue page.')
+    }
     issues.push(...(result.issues ?? []).map((issue) => mapJiraIssue(entry.site, issue)))
-    if (
-      !collectPages ||
-      issues.length >= limit ||
-      result.isLast === true ||
-      !result.nextPageToken
-    ) {
+    if (!collectPages || issues.length >= limit || result.isLast === true) {
+      return issues.slice(0, limit)
+    }
+    if (!result.nextPageToken) {
+      if (result.isLast === false) {
+        throw new Error('Jira returned an incomplete issue page.')
+      }
       return issues.slice(0, limit)
     }
     if (typeof result.nextPageToken !== 'string' || seenTokens.has(result.nextPageToken)) {

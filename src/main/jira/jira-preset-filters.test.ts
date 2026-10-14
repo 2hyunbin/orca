@@ -234,6 +234,20 @@ describe('Jira preset filters', () => {
     expect(jiraRequest).toHaveBeenCalledTimes(3)
   })
 
+  it.each([
+    { isLast: true },
+    { issues: null, isLast: true },
+    { issues: [issue('ALP-1', false, false)], isLast: false },
+    { issues: [], isLast: false, nextPageToken: '' }
+  ])('rejects a malformed or incomplete Cloud issue page: %j', async (response) => {
+    jiraRequest
+      .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
+      .mockResolvedValueOnce(response)
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 3, 'cloud')).rejects.toThrow(/issue page/)
+    expect(jiraRequest).toHaveBeenCalledTimes(2)
+  })
+
   it('stops when a batch reaches the requested limit even if another token exists', async () => {
     jiraRequest
       .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
