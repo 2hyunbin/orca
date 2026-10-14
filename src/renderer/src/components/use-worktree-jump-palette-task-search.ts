@@ -11,15 +11,12 @@ import {
 import type { WorktreeJumpPaletteStoreState } from './use-worktree-jump-palette-store-state'
 import type { WorktreeJumpPaletteLocalState } from './use-worktree-jump-palette-local-state'
 import type { WorktreeJumpPaletteFilter } from './use-worktree-jump-palette-filter'
-import {
-  getRepoExecutionHostId,
-  getSettingsFocusedExecutionHostId
-} from '../../../shared/execution-host'
+import { getRepoExecutionHostId } from '../../../shared/execution-host'
 import { TASK_SEARCH_DEBOUNCE_MS } from './task-page-source-context'
 
 type Input = Pick<WorktreeJumpPaletteStoreState, 'visible' | 'repos' | 'settings'> &
   Pick<WorktreeJumpPaletteLocalState, 'query' | 'filter'> &
-  Pick<WorktreeJumpPaletteFilter, 'hostOptions' | 'filterModel'>
+  Pick<WorktreeJumpPaletteFilter, 'hostOptions' | 'filterModel' | 'defaultHostId'>
 type SearchSnapshot = {
   key: string
   session: object
@@ -37,7 +34,8 @@ export function useWorktreeJumpPaletteTaskSearch({
   settings,
   filter,
   hostOptions,
-  filterModel
+  filterModel,
+  defaultHostId
 }: Input) {
   const connectionScope = useAppStore(
     useShallow((state) => ({
@@ -65,7 +63,7 @@ export function useWorktreeJumpPaletteTaskSearch({
   const requestKey = JSON.stringify([
     query.trim(),
     effectiveFilter,
-    getSettingsFocusedExecutionHostId(settings),
+    defaultHostId,
     settings?.visibleTaskProviders,
     repos.map((repo) => [
       repo.id,
@@ -84,6 +82,7 @@ export function useWorktreeJumpPaletteTaskSearch({
       query: query.trim(),
       repos,
       settings,
+      accountBackedTaskSourceHostId: defaultHostId,
       filter: effectiveFilter,
       hostLabels,
       signal

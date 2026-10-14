@@ -15,6 +15,7 @@ import type {
   JiraTransition,
   JiraViewer
 } from '../../../shared/jira-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { searchLocalJiraIssues } from './local-jira-search-cancellation'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
@@ -54,7 +55,12 @@ async function readRemoteJiraPayload<TResult>(
 }
 
 export async function jiraStatus(settings: RuntimeJiraSettings): Promise<JiraConnectionStatus> {
-  const target = getJiraRuntimeTarget(settings)
+  return jiraStatusForTarget(getJiraRuntimeTarget(settings))
+}
+
+export async function jiraStatusForTarget(
+  target: RuntimeClientTarget
+): Promise<JiraConnectionStatus> {
   return parseJiraConnectionStatus(
     target.kind === 'environment'
       ? await callRuntimeRpc<unknown>(target, 'jira.status', undefined, { timeoutMs: 15_000 })
@@ -120,10 +126,19 @@ export async function jiraSearchIssues(
   siteId?: JiraSiteSelection | null,
   signal?: AbortSignal
 ): Promise<JiraIssue[]> {
+  return jiraSearchIssuesForTarget(getJiraRuntimeTarget(settings), jql, limit, siteId, signal)
+}
+
+export async function jiraSearchIssuesForTarget(
+  target: RuntimeClientTarget,
+  jql: string,
+  limit?: number,
+  siteId?: JiraSiteSelection | null,
+  signal?: AbortSignal
+): Promise<JiraIssue[]> {
   if (!isRuntimeProviderSearchQueryWithinLimit(jql)) {
     return []
   }
-  const target = getJiraRuntimeTarget(settings)
   const args = { jql, limit, siteId: siteId ?? undefined }
   if (target.kind === 'environment') {
     return callRuntimeRpc<JiraIssue[]>(target, 'jira.searchIssues', args, {

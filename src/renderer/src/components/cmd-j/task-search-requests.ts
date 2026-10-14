@@ -1,12 +1,15 @@
 import { useAppStore } from '@/store'
-import { linearSearchIssues, linearStatus } from '@/runtime/runtime-linear-client'
+import { linearSearchIssuesForTarget, linearStatusForTarget } from '@/runtime/runtime-linear-client'
+import { jiraSearchIssuesForTarget, jiraStatusForTarget } from '@/runtime/runtime-jira-client'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import { gitLabApiFor } from '@/runtime/gitlab-owner-api'
 import { resolveJiraSourceHostId } from '@/lib/jira-source-host'
 import {
   getRepoExecutionHostId,
-  getSettingsFocusedExecutionHostId,
-  parseExecutionHostId
+  parseExecutionHostId,
+  type ExecutionHostId
 } from '../../../../shared/execution-host'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   normalizeTaskSourceContext,
   type TaskSourceContext
@@ -34,6 +37,7 @@ export function createCmdJTaskSearchRequests(args: {
   query: string
   repos: readonly Repo[]
   settings: GlobalSettings | null
+  accountBackedTaskSourceHostId: ExecutionHostId
   filter: PaletteFilterState
   hostLabels: ReadonlyMap<string, string>
   signal: AbortSignal
@@ -130,7 +134,7 @@ export function createCmdJTaskSearchRequests(args: {
     ? filter.hostIds
     : filter.repoIds.length
       ? [...new Set(eligibleRepos.map(getRepoExecutionHostId))]
-      : [getSettingsFocusedExecutionHostId(settings)]
+      : [args.accountBackedTaskSourceHostId]
   const accountRequestIds = new Set<string>()
   for (const requestedHostId of hostIds) {
     const parsed = parseExecutionHostId(requestedHostId)
@@ -152,7 +156,8 @@ export function createCmdJTaskSearchRequests(args: {
           ? resolveJiraSourceHostId({ workspaceHostId: requestedHostId })
           : parsed.id
       const requestId = `${provider}:${hostId}`
-      if (accountRequestIds.has(requestId)) {
+      const target = ipcOrRuntimeTargetForHostId(hostId)
+      if (!target || accountRequestIds.has(requestId)) {
         continue
       }
       const hostLabel = hostLabels.get(hostId) ?? hostId
@@ -178,8 +183,8 @@ export function createCmdJTaskSearchRequests(args: {
             return []
           }
           return provider === 'linear'
-            ? searchLinear(source, query, signal, initialRepo?.id ?? null, hostLabel)
-            : searchJira(source, query, signal, initialRepo?.id ?? null, hostLabel)
+            ? searchLinear(source, target, query, signal, initialRepo?.id ?? null, hostLabel)
+            : searchJira(source, target, query, signal, initialRepo?.id ?? null, hostLabel)
         }
       })
     }
@@ -189,17 +194,18 @@ export function createCmdJTaskSearchRequests(args: {
 
 async function searchLinear(
   source: TaskSourceContext,
+  target: RuntimeClientTarget,
   query: string,
   signal: AbortSignal,
   initialRepoId: string | null,
   hostLabel: string
 ): Promise<CmdJTaskSearchResult[]> {
-  const status = await linearStatus(source)
+  const status = await linearStatusForTarget(target)
   if (signal.aborted || !status.connected) {
     return []
   }
   const workspaceId = status.selectedWorkspaceId ?? status.activeWorkspaceId ?? undefined
-  const issues = await linearSearchIssues(source, query, RESULT_LIMIT, workspaceId)
+  const issues = await linearSearchIssuesForTarget(target, query, RESULT_LIMIT, workspaceId)
   return issues.flatMap((issue) => {
     const itemSource = normalizeTaskSourceContext({
       ...source,
@@ -227,19 +233,19 @@ async function searchLinear(
 
 async function searchJira(
   source: TaskSourceContext,
+  target: RuntimeClientTarget,
   query: string,
   signal: AbortSignal,
   initialRepoId: string | null,
   hostLabel: string
 ): Promise<CmdJTaskSearchResult[]> {
-  const state = useAppStore.getState()
-  const status = await state.readJiraStatus(source)
+  const status = await jiraStatusForTarget(target)
   if (signal.aborted || !status.connected) {
     return []
   }
   const siteId = status.selectedSiteId ?? status.activeSiteId ?? undefined
   const issues = await searchJiraIssuesByKeyOrText(query, (jql) =>
-    state.searchJiraIssues(jql, RESULT_LIMIT, { sourceContext: source, siteId, signal })
+    jiraSearchIssuesForTarget(target, jql, RESULT_LIMIT, siteId, signal)
   )
   return issues.flatMap((issue) => {
     const itemSource =

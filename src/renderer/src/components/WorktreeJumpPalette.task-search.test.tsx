@@ -7,8 +7,15 @@ import { createGlobalSettingsFixture } from '../../../shared/global-settings-tes
 import { jiraTaskIssue as issue } from './cmd-j/task-search.test-fixture'
 import { makeRepo, makeWorktree } from './worktree-jump-palette-test-fixtures'
 import type * as ReactI18next from 'react-i18next'
+import type * as RuntimeJiraClient from '@/runtime/runtime-jira-client'
+import { jiraSearchIssuesForTarget, jiraStatusForTarget } from '@/runtime/runtime-jira-client'
 import WorktreeJumpPalette from './WorktreeJumpPalette'
 
+vi.mock('@/runtime/runtime-jira-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof RuntimeJiraClient>()),
+  jiraStatusForTarget: vi.fn(),
+  jiraSearchIssuesForTarget: vi.fn()
+}))
 vi.mock('@/components/workspace-emoji/WorkspaceEmojiSuggestionPopover', () => ({
   WorkspaceEmojiSuggestionPopover: () => null
 }))
@@ -58,18 +65,14 @@ vi.mock('@/components/ui/command', () => ({
 }))
 
 const initial = useAppStore.getInitialState()
-const search = vi.fn().mockResolvedValue([issue])
+const search = vi.mocked(jiraSearchIssuesForTarget)
 const openTaskPage = vi.fn()
 beforeEach(() => {
   useAppStore.setState(initial, true)
   search.mockReset().mockResolvedValue([issue])
-  openTaskPage.mockClear()
-  useAppStore.setState({
-    activeModal: 'worktree-palette',
-    repos: [],
-    worktreesByRepo: {},
-    settings: createGlobalSettingsFixture({ visibleTaskProviders: ['jira'] }),
-    readJiraStatus: vi.fn().mockResolvedValue({
+  vi.mocked(jiraStatusForTarget)
+    .mockReset()
+    .mockResolvedValue({
       connected: true,
       viewer: null,
       selectedSiteId: 'all',
@@ -82,8 +85,13 @@ beforeEach(() => {
           accountId: 'other'
         }
       ]
-    }),
-    searchJiraIssues: search,
+    })
+  openTaskPage.mockClear()
+  useAppStore.setState({
+    activeModal: 'worktree-palette',
+    repos: [],
+    worktreesByRepo: {},
+    settings: createGlobalSettingsFixture({ visibleTaskProviders: ['jira'] }),
     openTaskPage
   })
 })
@@ -100,9 +108,11 @@ it('finds an unlinked Jira task from keywords and opens detail with the returned
   })
   expect(screen.getByText('Tasks')).toBeTruthy()
   expect(search).toHaveBeenCalledWith(
+    { kind: 'local' },
     'text ~ "login redirect*"',
     expect.any(Number),
-    expect.objectContaining({ siteId: 'all', signal: expect.any(AbortSignal) })
+    'all',
+    expect.any(AbortSignal)
   )
   await act(async () => {
     fireEvent.click(screen.getByText('Fix login redirect'))
@@ -148,7 +158,7 @@ it('discards a previous query response and aborts its Jira request', async () =>
   render(<WorktreeJumpPalette />)
   fireEvent.change(screen.getByLabelText('Palette search'), { target: { value: 'old query' } })
   await waitFor(() => expect(search).toHaveBeenCalledTimes(1))
-  const firstSignal = search.mock.calls[0]?.[2]?.signal
+  const firstSignal = search.mock.calls[0]?.[4]
   search.mockResolvedValueOnce([{ ...issue, title: 'Current query result' }])
   fireEvent.change(screen.getByLabelText('Palette search'), { target: { value: 'current query' } })
   await waitFor(() => expect(screen.queryByText('Current query result')).not.toBeNull())

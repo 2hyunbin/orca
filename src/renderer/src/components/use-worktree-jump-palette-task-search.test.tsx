@@ -9,12 +9,13 @@ import { buildPaletteFilterModel } from './cmd-j/palette-filter-options'
 import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
 
 vi.mock('./cmd-j/task-search-requests', () => ({ createCmdJTaskSearchRequests: vi.fn() }))
-const input = {
+const input: Parameters<typeof useWorktreeJumpPaletteTaskSearch>[0] = {
   visible: true,
   query: 'login redirect',
   settings: createGlobalSettingsFixture({ visibleTaskProviders: ['jira'] }),
   repos: [],
   hostOptions: [],
+  defaultHostId: 'local',
   filter: EMPTY_PALETTE_FILTER,
   filterModel: buildPaletteFilterModel({
     repos: [],
@@ -77,7 +78,38 @@ it('ignores unrelated settings and repo object identity changes', async () => {
   ])
   const { rerender } = renderHook(useWorktreeJumpPaletteTaskSearch, { initialProps: input })
   await act(async () => vi.advanceTimersByTimeAsync(300))
-  rerender({ ...input, settings: { ...input.settings }, repos: [] })
+  rerender({
+    ...input,
+    settings: createGlobalSettingsFixture({ visibleTaskProviders: ['jira'] }),
+    repos: []
+  })
   await act(async () => vi.advanceTimersByTimeAsync(500))
   expect(run).toHaveBeenCalledTimes(1)
+})
+
+it('cancels old searches and ignores their replies after the captured palette host changes', async () => {
+  let finishOldRequest: (results: (typeof jiraTaskResult)[]) => void = () => {}
+  const oldRequest = new Promise<(typeof jiraTaskResult)[]>((resolve) => {
+    finishOldRequest = resolve
+  })
+  const run = vi
+    .fn<() => Promise<(typeof jiraTaskResult)[]>>()
+    .mockReturnValueOnce(oldRequest)
+    .mockResolvedValue([{ ...jiraTaskResult, id: 'new-owner-result' }])
+  vi.mocked(createCmdJTaskSearchRequests).mockReturnValue([
+    { id: 'jira', provider: 'jira', hostLabel: 'Local', run }
+  ])
+  const { result, rerender } = renderHook(useWorktreeJumpPaletteTaskSearch, { initialProps: input })
+  await act(async () => vi.advanceTimersByTimeAsync(300))
+  const previousArgs = vi.mocked(createCmdJTaskSearchRequests).mock.calls[0]?.[0]
+  expect(previousArgs?.accountBackedTaskSourceHostId).toBe('local')
+  rerender({ ...input, defaultHostId: 'runtime:new-owner' })
+  expect(previousArgs?.signal.aborted).toBe(true)
+  await act(async () => vi.advanceTimersByTimeAsync(300))
+  expect(createCmdJTaskSearchRequests).toHaveBeenLastCalledWith(
+    expect.objectContaining({ accountBackedTaskSourceHostId: 'runtime:new-owner' })
+  )
+  expect(run).toHaveBeenCalledTimes(2)
+  await act(async () => finishOldRequest([{ ...jiraTaskResult, id: 'old-owner-result' }]))
+  expect(result.current.taskItems.map((item) => item.id)).toEqual(['new-owner-result'])
 })
