@@ -91,6 +91,7 @@ const HOST_SUPPORT = {
   queuedCommands: false,
   statusFeed: true,
   quietRepeatedStop: true,
+  sendOptions: false,
   conversationStop: false
 }
 

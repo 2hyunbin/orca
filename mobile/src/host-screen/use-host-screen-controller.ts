@@ -103,7 +103,7 @@ export function useHostScreenController({
   }
   const showNewWorktree = resolvedRouteActionState.showNewWorktree
 
-  const displayWorktrees = useHostDisplayWorktrees(connState, state)
+  const displayWorktrees = useHostDisplayWorktrees(connState, state, hostId)
   const sectionsResult = useWorkspaceSections({
     displayWorktrees,
     sortMode: state.sortMode,

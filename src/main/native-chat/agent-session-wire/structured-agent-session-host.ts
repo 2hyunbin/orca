@@ -128,6 +128,7 @@ export class StructuredAgentSessionHost {
       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
       stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
+      mutationContext: () => this.mutationContext(),
       clientDelivery: this.clientDelivery
     })
     this.restore = reveal.createStructuredAgentSessionHostRestore(deps, {

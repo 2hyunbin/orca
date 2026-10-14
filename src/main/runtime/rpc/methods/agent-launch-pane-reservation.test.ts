@@ -76,6 +76,19 @@ describe('a launch into an existing workspace', () => {
     })
   })
 
+  // An AI button's click names no operation: the host writes no record for it, so a record store
+  // that cannot open never stops it.
+  it('starts a reserved pane with no operation id even when the launch record cannot open', async () => {
+    setAgentLaunchRecordStore(null)
+    const runtime = runtimeStub({ settings: TERMINAL_ONLY })
+
+    const result = await launch({ ...EXISTING_LAUNCH, paneKey: PANE_KEY }, runtime)
+
+    expect(result.outcome.kind).toBe('terminal')
+    expect(terminalOptions(runtime)).toMatchObject({ tabId: TAB_ID, leafId: LEAF_ID })
+    expect(runtime.openAgentSessionRecordStore).not.toHaveBeenCalled()
+  })
+
   it('leaves the pane to the runtime when the caller reserved none', async () => {
     // Every shipped caller sends nothing; its options must not gain a key.
     const runtime = runtimeStub({ settings: TERMINAL_ONLY })

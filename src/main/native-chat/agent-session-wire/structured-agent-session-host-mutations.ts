@@ -8,7 +8,6 @@
 // an operation only the provider can perform starts it before admission.
 
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
-import { performSetOption } from './structured-agent-session-turns-options'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -54,9 +53,9 @@ import type { StructuredAgentSessionCaller } from './structured-agent-session-ho
 import {
   readStructuredAgentSessionOptions,
   IN_PROCESS_OPTIONS_READER,
-  recordStructuredAgentSessionOptionIntent,
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
+import { writeStructuredAgentSessionOption } from './structured-agent-session-message-options'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -66,6 +65,7 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
+    options?: Readonly<Record<string, string>>
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the
@@ -220,17 +220,7 @@ export async function setStructuredAgentSessionOption(
           get conversationWrite() {
             return atRest() ? (true as const) : undefined
           },
-          run: async (ctx) => {
-            if (atRest()) {
-              return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
-            }
-            const wait = context.acquireAborts.begin(params.envelope.sessionId)
-            try {
-              return await performSetOption(ctx, params, wait.signal)
-            } finally {
-              wait.end()
-            }
-          }
+          run: (ctx) => writeStructuredAgentSessionOption(context, ctx, params)
         },
         (ledger) =>
           atRest()
