@@ -8,7 +8,7 @@
 3 src/main/ipc/pty/pane/stable-owner.ts
 1 src/main/ipc/pty/runtime/spawn-commit.ts
 1 src/main/ipc/renderer-shutdown-checkpoint.ts
-1 src/main/ipc/runtime-environment-removal-cleanup.ts
+1 src/main/runtime/runtime-environment-retirement.ts # Existing host-retirement write moved from IPC
 1 src/main/ipc/runtime-environment-session-reconcile.ts
 3 src/main/ipc/session.ts
 6 src/main/orca-profiles/profile-project-session-state.ts

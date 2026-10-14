@@ -42,15 +42,13 @@ describe('waiting file tabs and atomic viewer resolution', () => {
   it('refuses core resolution and preserves selected-file intent across viewer choice', () => {
     const store = makeStore()
     usePluginFileViewerStore.setState({ status: 'ready', viewers: [viewer], syntaxPacks: [] })
-    const id = store
-      .getState()
-      .openFile({
-        ...input,
-        mode: 'file-opening',
-        readOnly: true,
-        pluginViewerUserSelectedFile: true,
-        fileOpening: { readOnly: true }
-      })
+    const id = store.getState().openFile({
+      ...input,
+      mode: 'file-opening',
+      readOnly: true,
+      pluginViewerUserSelectedFile: true,
+      fileOpening: { readOnly: true }
+    })
     expect(store.getState().resolveFileOpening(id, 'core')).toBe(false)
     expect(store.getState().resolveFileOpening(id, viewer.key)).toBe(true)
     expect(store.getState().openFiles[0]).toMatchObject({
@@ -149,6 +147,72 @@ describe('waiting file tabs and atomic viewer resolution', () => {
     store.setState({ worktreesByRepo: {}, repos: [] })
     expect(store.getState().resolveFileOpening(next, 'core')).toBe(false)
     expect(store.getState().openFiles[0]?.mode).toBe('file-opening')
+  })
+  it('merges pin, preview, MRU and pending focus in one store publication', () => {
+    const store = makeStore()
+    const coreId = store.getState().openFile(input, { preview: true, fileViewer: 'core' })
+    const id = store.getState().openFile(input, { preview: false })
+    const [core, pending] = store.getState().unifiedTabsByWorktree['wt-1']!
+    if (!core || !pending) {
+      throw new Error('Expected both editor tabs')
+    }
+    store.setState({
+      unifiedTabsByWorktree: { 'wt-1': [core, { ...pending, isPinned: true }] },
+      groupsByWorktree: {
+        'wt-1': store.getState().groupsByWorktree['wt-1']!.map((group) => ({
+          ...group,
+          recentTabIds: [core.id, pending.id]
+        }))
+      },
+      pendingEditorFocusRequest: {
+        fileId: id,
+        worktreeId: 'wt-1',
+        viewStateId: pending.id,
+        expiresAt: Date.now() + 1000,
+        token: 1
+      }
+    })
+    const published = vi.fn()
+    const unsubscribe = store.subscribe(published)
+    expect(store.getState().resolveFileOpening(id, 'core')).toBe(true)
+    unsubscribe()
+    expect(published).toHaveBeenCalledTimes(1)
+    expect(store.getState().unifiedTabsByWorktree['wt-1']).toEqual([
+      { ...core, isPinned: true, isPreview: undefined }
+    ])
+    expect(store.getState().groupsByWorktree['wt-1']![0]).toMatchObject({
+      activeTabId: core.id,
+      tabOrder: [core.id],
+      recentTabIds: [core.id]
+    })
+    expect(store.getState().pendingEditorFocusRequest).toMatchObject({
+      fileId: coreId,
+      viewStateId: core.id
+    })
+  })
+  it('keeps both panes when the destination document is already open in another split', () => {
+    const store = makeStore()
+    const left = store.getState().ensureWorktreeRootGroup('wt-1')
+    const right = store.getState().createEmptySplitGroup('wt-1', left, 'right')
+    if (!right) {
+      throw new Error('Expected second split')
+    }
+    const coreId = store.getState().openFile(input, { targetGroupId: left, fileViewer: 'core' })
+    store.getState().setEditorDraft(coreId, 'Keep this dirty document')
+    store.getState().markFileDirty(coreId, true)
+    const pendingId = store.getState().openFile(input, { targetGroupId: right })
+    const before = store.getState()
+    expect(before.unifiedTabsByWorktree['wt-1']).toHaveLength(2)
+    expect(store.getState().resolveFileOpening(pendingId, 'core')).toBe(true)
+    expect(store.getState().layoutByWorktree).toBe(before.layoutByWorktree)
+    expect(store.getState().openFiles).toHaveLength(1)
+    expect(store.getState().editorDrafts[coreId]).toBe('Keep this dirty document')
+    const tabs = store.getState().unifiedTabsByWorktree['wt-1']!
+    expect(tabs.map((tab) => tab.groupId)).toEqual([left, right])
+    expect(tabs.map((tab) => tab.entityId)).toEqual([coreId, coreId])
+    expect(
+      store.getState().groupsByWorktree['wt-1']!.find((group) => group.id === right)
+    ).toMatchObject({ activeTabId: tabs[1]?.id, tabOrder: [tabs[1]?.id] })
   })
   it('resolves only current approved identities, including after metadata withdrawal', () => {
     const store = makeStore()

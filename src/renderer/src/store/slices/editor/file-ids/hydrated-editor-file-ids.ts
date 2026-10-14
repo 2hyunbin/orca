@@ -127,7 +127,8 @@ export function areStringArraysEqual(
 
 export function migrateHydratedEditorTabsAndGroups(
   state: Pick<AppState, 'unifiedTabsByWorktree' | 'groupsByWorktree'>,
-  migrationsByWorktree: Record<string, Map<string, string>>
+  migrationsByWorktree: Record<string, Map<string, string>>,
+  mergePaneTabs = false
 ): Partial<Pick<AppState, 'unifiedTabsByWorktree' | 'groupsByWorktree'>> {
   let tabsChanged = false
   let groupsChanged = false
@@ -140,7 +141,7 @@ export function migrateHydratedEditorTabsAndGroups(
       continue
     }
     const tabIdMigrations = new Map<string, string>()
-    const nextTabs = tabs.map((tab) => {
+    let nextTabs = tabs.map((tab) => {
       // Why: widened for the shared live-move rekey — a move retargets every editor-family tab (diff/conflict-review/check-details), not only plain 'editor'.
       if (!isEditorTabContentType(tab.contentType)) {
         return tab
@@ -156,6 +157,35 @@ export function migrateHydratedEditorTabsAndGroups(
       }
       return { ...tab, id: nextId, entityId: nextEntityId }
     })
+    if (mergePaneTabs) {
+      const promoted = new Map<string, { isPinned?: boolean; isPreview?: boolean }>()
+      nextTabs = nextTabs.filter((tab, index) => {
+        if (tabs[index]?.entityId === tab.entityId || tab.contentType !== 'editor') {
+          return true
+        }
+        const targetIndex = tabs.findIndex(
+          (candidate) =>
+            candidate.groupId === tab.groupId &&
+            candidate.contentType === 'editor' &&
+            candidate.entityId === tab.entityId
+        )
+        const target = targetIndex === -1 ? undefined : nextTabs[targetIndex]
+        if (!target) {
+          return true
+        }
+        tabsChanged = true
+        tabIdMigrations.set(tabs[index]!.id, target.id)
+        tabIdMigrations.set(tab.id, target.id)
+        promoted.set(target.id, {
+          isPinned: target.isPinned || tab.isPinned || undefined,
+          isPreview: target.isPreview && tab.isPreview ? true : undefined
+        })
+        return false
+      })
+      nextTabs = nextTabs.map((tab) =>
+        promoted.has(tab.id) ? { ...tab, ...promoted.get(tab.id) } : tab
+      )
+    }
     if (tabIdMigrations.size > 0) {
       tabIdMigrationsByWorktree[worktreeId] = tabIdMigrations
     }
