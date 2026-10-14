@@ -106,7 +106,9 @@ export function TaskPageJiraFilters({
             error={jiraSavedFiltersError}
             onRetry={retryJiraSavedFilters}
             onApply={async (filter) => {
-              await applyJiraSavedFilter(filter)
+              if (await applyJiraSavedFilter(filter)) {
+                setJiraHasWorkspace(false)
+              }
             }}
             onCreate={createJiraSavedFilter}
             onUpdate={updateJiraSavedFilter}
