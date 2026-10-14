@@ -70,7 +70,10 @@ function readFence(userDataPath: string): FenceView {
   try {
     return { readable: true, state: resolveWslMoveFence(userDataPath) }
   } catch (error) {
-    console.warn('[wsl-move] Journal unreadable; keeping WSL projects read-only:', error)
+    console.warn(
+      '[wsl-move] Journal unreadable; keeping WSL projects read-only, sessions unfrozen:',
+      error
+    )
     return { readable: false }
   }
 }
@@ -251,33 +254,25 @@ export function isWslMoveWorkspaceBlocked(
   return !!workspaceId && isWslMoveProjectBlocked(store, wslMoveProjectRefForWorkspace(workspaceId))
 }
 
-/**
- * True once a move has paused the workspace's project: its session must stay as the quiesce left
- * it. An unreadable journal freezes every WSL project's session, as it fences them.
- */
-export function isWslMoveWorkspaceSessionFrozen(
-  store: ProjectStore | undefined,
-  workspaceId: string
-): boolean {
+/** True once a move has paused the project: its session must stay as the quiesce left it. */
+export function isWslMoveProjectSessionFrozen(ref: WslMoveProjectRef | null): boolean {
   const fence = loaded?.view
-  const ref = wslMoveProjectRefForWorkspace(workspaceId)
-  if (!ref || !fence) {
-    return false
-  }
-  if (fence.readable) {
-    return inScope(fence.state.sessionFrozen, ref)
-  }
-  return !store || isWslUncPath(projectPath(store, ref) ?? '')
+  return !!ref && !!fence?.readable && inScope(fence.state.sessionFrozen, ref)
 }
 
-/** Whether any move has a frozen session; lets the hot write path skip the per-workspace scan. */
+export function isWslMoveWorkspaceSessionFrozen(workspaceId: string): boolean {
+  return isWslMoveProjectSessionFrozen(wslMoveProjectRefForWorkspace(workspaceId))
+}
+
+/**
+ * Whether any move has a frozen session; lets the hot write path skip the per-workspace scan.
+ * An unreadable journal freezes nothing: the edit fence already refuses visibly, and no move can
+ * proceed without a readable journal, so freezing would only discard sessions silently.
+ */
 export function hasWslMoveFrozenSessions(): boolean {
   const fence = loaded?.view
-  if (!fence) {
+  if (!fence?.readable) {
     return false
-  }
-  if (!fence.readable) {
-    return true
   }
   const { sessionFrozen } = fence.state
   return sessionFrozen.repoIds.size > 0 || sessionFrozen.folderWorkspaceIds.size > 0

@@ -61,7 +61,12 @@ export class SessionSnapshotOperations {
     if (runtime.durableMutationPhase === 'rollback') {
       this.assertSnapshotAdmission(true)
       // The fieldwise rollback already preserves newer edits; renderer rebasing would undo it.
-      this.publishSession(session, resolved)
+      this.publishSession(
+        resolved === LOCAL_EXECUTION_HOST_ID
+          ? keepWslMoveFrozenSessionsForStore(session, runtime.state.workspaceSession)
+          : session,
+        resolved
+      )
       return
     }
     if (resolved === LOCAL_EXECUTION_HOST_ID) {
@@ -105,7 +110,7 @@ export class SessionSnapshotOperations {
     }
     if (resolved === LOCAL_EXECUTION_HOST_ID) {
       const { state } = this[sessionSnapshotOperationsContext].runtime
-      next = keepWslMoveFrozenSessionsForStore(next, state.workspaceSession, state)
+      next = keepWslMoveFrozenSessionsForStore(next, state.workspaceSession)
     }
     this.publishSession(next, resolved)
   }

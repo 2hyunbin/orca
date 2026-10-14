@@ -17,6 +17,7 @@ import { preserveRuntimeAuthoredWorkspaceSessionFields } from '../runtime-author
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { findWorktreeIdForTab } from '../restoring-sessions/pane-identity-migration'
 import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
+import { isWslMoveWorkspaceSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
 import {
   removeWorkspaceSessionOwner,
   workspaceSessionPartitionIdsForHost
@@ -142,6 +143,10 @@ export function removeWorkspaceSessionOwnerInPartition(
   options: { advanceTerminalTopologyRevision?: boolean }
 ): void {
   if (!hasPersistedWorkspaceSession(owner, resolved)) {
+    return
+  }
+  // A paused WSL move keeps its local rows for a downgrade.
+  if (resolved === LOCAL_EXECUTION_HOST_ID && isWslMoveWorkspaceSessionFrozen(worktreeId)) {
     return
   }
   const current = owner.getWorkspaceSession(resolved)

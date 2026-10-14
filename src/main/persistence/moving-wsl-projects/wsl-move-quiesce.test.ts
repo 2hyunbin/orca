@@ -90,6 +90,59 @@ describe('quiesceWslMove', () => {
     expect(deps.sleepWorkspaces).not.toHaveBeenCalled()
   })
 
+  it('gates again under the fence and refuses a pane that turned busy, without sleeping', async () => {
+    const phases: (WslMoveCutover['phase'] | undefined)[] = []
+    let calls = 0
+    const { deps, journal, removed } = harness()
+    deps.gateInputs = async () => {
+      phases.push(journal.at(-1))
+      calls += 1
+      const foreground = calls === 1 ? 'shell-idle' : 'process-running'
+      return {
+        panes: [{ ...idlePane, foreground }],
+        runningAutomationRunIds: [],
+        activeDispatchIds: []
+      }
+    }
+    const result = await quiesceWslMove(cutover(), scope, deps)
+
+    expect(phases).toEqual([undefined, 'source-fenced'])
+    expect(result).toMatchObject({
+      outcome: 'refused',
+      reason: 'terminals-blocked',
+      blockers: [{ kind: 'process-running', ids: ['tab-1:leaf-1'] }],
+      fenceLifted: true
+    })
+    expect(deps.sleepWorkspaces).not.toHaveBeenCalled()
+    expect(removed).toEqual(['move-1'])
+  })
+
+  it('refuses a second quiesce of the same distro while the first runs', async () => {
+    let releaseSleep: () => void = () => undefined
+    const first = harness({
+      sleepWorkspaces: () =>
+        new Promise((resolve) => {
+          releaseSleep = () => resolve({ failedWorktreeIds: [] })
+        })
+    })
+    const running = quiesceWslMove(cutover(), scope, first.deps)
+    await vi.waitFor(() => expect(first.journal).toEqual(['source-fenced']))
+
+    const second = harness()
+    await expect(quiesceWslMove(cutover('move-2'), scope, second.deps)).resolves.toEqual({
+      outcome: 'refused',
+      reason: 'quiesce-in-progress',
+      fenceLifted: true
+    })
+    expect(second.journal).toEqual([])
+
+    releaseSleep()
+    await expect(running).resolves.toMatchObject({ outcome: 'quiesced' })
+    await expect(quiesceWslMove(cutover('move-2'), scope, second.deps)).resolves.toMatchObject({
+      outcome: 'quiesced'
+    })
+  })
+
   it.each([
     ['renderer_unavailable', 'renderer-unavailable'],
     ['worktree_sleep_timeout', 'sleep-timed-out'],

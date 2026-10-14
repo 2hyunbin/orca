@@ -45,6 +45,8 @@ export type WslMoveQuiesceDeps = {
 
 export type WslMoveQuiesceRefusalReason =
   | 'terminals-blocked'
+  /** Another quiesce for the same distro is still running in this process. */
+  | 'quiesce-in-progress'
   | 'fence-failed'
   | 'renderer-unavailable'
   | 'sleep-timed-out'
@@ -75,6 +77,9 @@ export type WslMoveQuiesceResult =
 
 type Refusal = Extract<WslMoveQuiesceResult, { outcome: 'refused' }>
 
+// Journal keys with a quiesce running in this process; the journal alone cannot order two of them.
+const quiescingJournalKeys = new Set<string>()
+
 export async function quiesceWslMove(
   prepared: WslMoveCutover,
   scope: WslMoveQuiesceScope,
@@ -83,6 +88,22 @@ export async function quiesceWslMove(
   if (prepared.phase !== 'prepared') {
     throw new Error('wsl_move_not_prepared')
   }
+  if (quiescingJournalKeys.has(prepared.journalKey)) {
+    return { outcome: 'refused', reason: 'quiesce-in-progress', fenceLifted: true }
+  }
+  quiescingJournalKeys.add(prepared.journalKey)
+  try {
+    return await quiesceUnderLock(prepared, scope, deps)
+  } finally {
+    quiescingJournalKeys.delete(prepared.journalKey)
+  }
+}
+
+async function quiesceUnderLock(
+  prepared: WslMoveCutover,
+  scope: WslMoveQuiesceScope,
+  deps: WslMoveQuiesceDeps
+): Promise<WslMoveQuiesceResult> {
   const gate = assessWslMoveTerminals(await deps.gateInputs())
   if (gate.verdict === 'blocked') {
     return {
@@ -115,6 +136,16 @@ export async function quiesceWslMove(
       console.warn('[wsl-move] Could not lift the fence after a refused quiesce:', error)
       return { outcome: 'refused', ...refusal, fenceLifted: false }
     }
+  }
+
+  try {
+    // The fence blocks new terminals, not commands typed into open shells; a sub-second window remains.
+    const fencedGate = assessWslMoveTerminals(await deps.gateInputs())
+    if (fencedGate.verdict === 'blocked') {
+      return refuse({ reason: 'terminals-blocked', blockers: fencedGate.blockers })
+    }
+  } catch (error) {
+    return refuse({ reason: 'quiesce-failed', detail: describe(error) })
   }
 
   try {

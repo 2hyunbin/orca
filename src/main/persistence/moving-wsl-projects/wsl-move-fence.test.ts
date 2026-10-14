@@ -18,8 +18,16 @@ describe('WSL move fence', () => {
       'blobs-transferred',
       { fenced: ['repo-1', 'notes'], hidden: [], sessionFrozen: ['repo-1', 'notes'] }
     ],
-    ['destination-committed', { fenced: [], hidden: ['repo-1', 'notes'], sessionFrozen: [] }],
-    ['retained', { fenced: [], hidden: ['repo-1', 'notes'], sessionFrozen: [] }]
+    // Through commit: the retained local session is what a downgrade restores.
+    [
+      'destination-committed',
+      { fenced: [], hidden: ['repo-1', 'notes'], sessionFrozen: ['repo-1', 'notes'] }
+    ],
+    [
+      'client-rewritten',
+      { fenced: [], hidden: ['repo-1', 'notes'], sessionFrozen: ['repo-1', 'notes'] }
+    ],
+    ['retained', { fenced: [], hidden: ['repo-1', 'notes'], sessionFrozen: ['repo-1', 'notes'] }]
   ] as const)('%s', (phase, expected) => {
     const record = cutover(
       'move-1',
@@ -38,7 +46,7 @@ describe('WSL move fence', () => {
     expect(ids(state)).toEqual({
       fenced: ['repo-2'],
       hidden: ['repo-1'],
-      sessionFrozen: ['repo-2']
+      sessionFrozen: ['repo-1', 'repo-2']
     })
   })
 })

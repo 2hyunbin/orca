@@ -12,7 +12,8 @@ vi.mock('electron', () => ({
   }
 }))
 
-const { requestWorktreeSleepFromRenderer } = await import('./worktree-sleep-request-relay')
+const { requestWorktreeSleepFromRenderer, worktreeSleepTimeoutMs } =
+  await import('./worktree-sleep-request-relay')
 
 class FakeContents extends EventEmitter {
   destroyed = false
@@ -69,13 +70,15 @@ describe('requestWorktreeSleepFromRenderer', () => {
 
   it.each([
     ['the window closes', (target: FakeWindow) => target.emit('closed')],
-    ['the renderer dies', (target: FakeWindow) => target.webContents.emit('render-process-gone')]
+    ['the renderer dies', (target: FakeWindow) => target.webContents.emit('render-process-gone')],
+    ['the renderer reloads', (target: FakeWindow) => target.webContents.emit('did-start-loading')]
   ])('rejects renderer_unavailable when %s', async (_name, lose) => {
     const pending = requestWorktreeSleepFromRenderer(window, ['wt-1'])
     lose(window)
     await expect(pending).rejects.toThrow('renderer_unavailable')
     expect(ipcEmitter.listenerCount('ui:worktreeSleepResponse')).toBe(0)
     expect(window.webContents.listenerCount('destroyed')).toBe(0)
+    expect(window.webContents.listenerCount('did-start-loading')).toBe(0)
   })
 
   it('rejects renderer_unavailable up front when the renderer is already gone', async () => {
@@ -89,9 +92,21 @@ describe('requestWorktreeSleepFromRenderer', () => {
   it('times out instead of waiting forever', async () => {
     vi.useFakeTimers()
     const pending = requestWorktreeSleepFromRenderer(window, ['wt-1'])
-    const settled = expect(pending).rejects.toThrow('worktree_sleep_timeout')
-    await vi.advanceTimersByTimeAsync(60_000)
+    let done = false
+    const settled = expect(pending.finally(() => (done = true))).rejects.toThrow(
+      'worktree_sleep_timeout'
+    )
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(done).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
     await settled
     expect(ipcEmitter.listenerCount('ui:worktreeSleepResponse')).toBe(0)
+  })
+
+  it('scales the wait with the workspaces, capped at five minutes', () => {
+    expect(worktreeSleepTimeoutMs(0)).toBe(20_000)
+    expect(worktreeSleepTimeoutMs(3)).toBe(50_000)
+    expect(worktreeSleepTimeoutMs(28)).toBe(300_000)
+    expect(worktreeSleepTimeoutMs(500)).toBe(300_000)
   })
 })

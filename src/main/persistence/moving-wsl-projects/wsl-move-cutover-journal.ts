@@ -81,7 +81,8 @@ export function listWslMoveCutoverChain(
 }
 
 /**
- * Durable before it returns. A new move into a distro must extend the head of its chain, and only
+ * Durable before it returns. A record starts at `prepared` and then advances one phase at a time
+ * from the one on disk. A new move into a distro must extend the head of its chain, and only
  * once that head finished: one in-flight move per distro (design, section 4.3).
  */
 export function writeWslMoveCutover(userDataPath: string, cutover: WslMoveCutover): void {
@@ -97,6 +98,10 @@ export function writeWslMoveCutover(userDataPath: string, cutover: WslMoveCutove
   const chain = listWslMoveCutoverChain(userDataPath, parsed.journalKey)
   const existing = chain.find((entry) => entry.migrationId === parsed.migrationId)
   const head = chain.at(-1)
+  // Compare-and-swap: a writer whose record was lifted underneath it must not recreate the fence.
+  if (!existing && parsed.phase !== 'prepared') {
+    throw new Error('wsl_move_record_missing')
+  }
   if (existing) {
     assertWslMoveUpdate(existing, parsed, head)
   } else if (!head) {
@@ -129,6 +134,9 @@ function assertWslMoveUpdate(
   const order = (phase: WslMoveCutover['phase']): number => WSL_MOVE_CUTOVER_PHASES.indexOf(phase)
   if (order(next.phase) < order(existing.phase)) {
     throw new Error('wsl_move_phase_regressed')
+  }
+  if (order(next.phase) > order(existing.phase) + 1) {
+    throw new Error('wsl_move_phase_skipped')
   }
   if (head && head.migrationId !== existing.migrationId && next.phase !== existing.phase) {
     throw new Error('wsl_move_superseded')

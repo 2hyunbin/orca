@@ -4,8 +4,9 @@
  * scope it names is the manifest's own (design, section 4.3).
  *
  * - Fenced (read-only): from `source-fenced` until the host owns the projects. Edits and new
- *   terminals are refused; from `quiesced` on, their session stays as the quiesce left it.
+ *   terminals are refused.
  * - Hidden: once the destination committed. The source rows stay (retained) but are not listed.
+ * - Session frozen: from `quiesced` on, hidden or not, the session stays as the quiesce left it.
  */
 import type { WslMoveCutover, WslMoveCutoverPhase } from '../../../shared/wsl-move/wsl-move-cutover'
 import { WSL_MOVE_CUTOVER_PHASES } from '../../../shared/wsl-move/wsl-move-cutover'
@@ -21,7 +22,7 @@ export type WslMoveFenceState = {
   fenced: WslMoveScopeIds
   /** Rows the WSL host now owns: kept for a downgrade, never listed. */
   hidden: WslMoveScopeIds
-  /** Fenced rows already paused: their session stays as the quiesce left it. */
+  /** Rows already paused, through commit: their session stays as the quiesce left it. */
   sessionFrozen: WslMoveScopeIds
 }
 
@@ -49,7 +50,8 @@ export function wslMoveFenceFromCutovers(
       continue // `prepared` touches nothing on the source.
     }
     addScope(target, cutover)
-    if (target === fenced && index >= SESSION_FROZEN_FROM) {
+    // Through commit too: the retained local rows are what a downgrade restores.
+    if (index >= SESSION_FROZEN_FROM) {
       addScope(sessionFrozen, cutover)
     }
   }
