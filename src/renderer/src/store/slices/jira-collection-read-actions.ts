@@ -1,5 +1,6 @@
 import { normalizeJiraStatusSelection } from '../../../../shared/jira-quick-filters'
-import { jiraListIssues, jiraSearchIssues } from '@/runtime/runtime-jira-client'
+import { jiraListIssuesForTarget, jiraSearchIssues } from '@/runtime/runtime-jira-client'
+import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
 import { isIntegrationCredentialDecryptionError } from '../../../../shared/integration-credential-errors'
 import type { JiraIssue, JiraSiteSelection } from '../../../../shared/jira-types'
 import type { JiraSlice, JiraSliceGet, JiraSliceSet } from './jira-slice-contract'
@@ -170,9 +171,13 @@ export function createJiraCollectionReadActions(
         return inflight.promise
       }
       let entry: InflightJiraReadRequest<JiraIssue[]>
-      const request = filters
-        ? jiraListIssues(scope.settings, filter, limit, siteId, filters)
-        : jiraListIssues(scope.settings, filter, limit, siteId)
+      const request = jiraListIssuesForTarget(
+        getJiraRuntimeTarget(scope.settings),
+        filter,
+        limit,
+        siteId,
+        filters
+      )
       const promise = request
         .then((issues) => {
           if (

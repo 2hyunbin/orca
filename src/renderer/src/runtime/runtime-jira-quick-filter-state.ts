@@ -5,12 +5,11 @@ import {
   type JiraQuickFilterState
 } from '../../../shared/jira-quick-filters'
 import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rpc-client'
-import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
 export async function readJiraQuickFilterState(
-  source: RuntimeJiraSettings
+  target: RuntimeClientTarget
 ): Promise<JiraQuickFilterState> {
-  const target = getJiraRuntimeTarget(source)
   if (target.kind === 'environment') {
     await assertRuntimeEnvironmentCapability(
       target.environmentId,
@@ -29,10 +28,9 @@ export async function readJiraQuickFilterState(
 }
 
 export async function writeJiraQuickFilterState(
-  source: RuntimeJiraSettings,
+  target: RuntimeClientTarget,
   state: JiraQuickFilterState
 ): Promise<JiraQuickFilterState> {
-  const target = getJiraRuntimeTarget(source)
   if (target.kind === 'environment') {
     await assertRuntimeEnvironmentCapability(
       target.environmentId,

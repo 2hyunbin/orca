@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useTaskPageJiraQuickFilters } from './use-task-page-jira-quick-filters'
 import type { JiraQuickFilterState } from '../../../shared/jira-quick-filters'
+import { UNRESOLVED_OWNER_HOST_ID, toRuntimeExecutionHostId } from '../../../shared/execution-host'
 const { read, write } = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }))
 vi.mock('@/runtime/runtime-jira-quick-filter-state', () => ({
   readJiraQuickFilterState: read,
@@ -12,19 +13,55 @@ beforeEach(() => {
   vi.resetAllMocks()
 })
 afterEach(cleanup)
-function model(host: string): Parameters<typeof useTaskPageJiraQuickFilters>[0] {
+function model(
+  host: string | null,
+  accountHost = 'account-owner'
+): Parameters<typeof useTaskPageJiraQuickFilters>[0] {
   return {
-    settings: null,
+    accountBackedTaskSourceHostId: toRuntimeExecutionHostId(accountHost),
     taskSource: 'jira',
     taskResumeApplied: true,
-    jiraTaskSourceContext: {
-      kind: 'task-source',
-      provider: 'jira',
-      projectId: 'project',
-      hostId: `runtime:${host}`
-    }
+    jiraTaskSourceContext: host
+      ? {
+          kind: 'task-source',
+          provider: 'jira',
+          projectId: 'project',
+          hostId: toRuntimeExecutionHostId(host)
+        }
+      : null
   }
 }
+it('uses the captured account owner without a source context and keeps source ownership first', async () => {
+  read.mockResolvedValue({ statuses: ['Blocked'] })
+  write.mockResolvedValue({ statuses: ['Open'] })
+  const { result, rerender } = renderHook(
+    ({ sourceHost }) => useTaskPageJiraQuickFilters(model(sourceHost)),
+    { initialProps: { sourceHost: '' } }
+  )
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  expect(read).toHaveBeenLastCalledWith({ kind: 'environment', environmentId: 'account-owner' })
+  await act(async () => result.current.selectJiraStatuses(['Open']))
+  expect(write).toHaveBeenLastCalledWith(
+    { kind: 'environment', environmentId: 'account-owner' },
+    { statuses: ['Open'] }
+  )
+  rerender({ sourceHost: 'source-owner' })
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  expect(read).toHaveBeenLastCalledWith({ kind: 'environment', environmentId: 'source-owner' })
+})
+it('does not load or write status filters for an unresolved owner', async () => {
+  const { result } = renderHook(() =>
+    useTaskPageJiraQuickFilters({
+      ...model(null),
+      accountBackedTaskSourceHostId: UNRESOLVED_OWNER_HOST_ID
+    })
+  )
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  await act(async () => result.current.selectJiraStatuses(['Open']))
+  expect(result.current.jiraQuickFiltersReady).toBe(false)
+  expect(read).not.toHaveBeenCalled()
+  expect(write).not.toHaveBeenCalled()
+})
 it('restores selection after remount and waits for writes to reach the host', async () => {
   read
     .mockResolvedValueOnce({ statuses: ['Blocked'] })
@@ -97,4 +134,17 @@ it('keeps unsupported-host empty selection stable across renders', async () => {
   rerender()
   expect(result.current.selectedJiraStatuses).toBe(first)
   expect(result.current.jiraQuickFiltersReady).toBe(false)
+})
+it('does not send a status filter action retained from a previous account owner', async () => {
+  read.mockResolvedValue({ statuses: ['Blocked'] })
+  const { result, rerender } = renderHook(
+    ({ accountHost }) => useTaskPageJiraQuickFilters(model(null, accountHost)),
+    { initialProps: { accountHost: 'host-a' } }
+  )
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  const oldAction = result.current.selectJiraStatuses
+  rerender({ accountHost: 'host-b' })
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  await act(async () => oldAction(['Open']))
+  expect(write).not.toHaveBeenCalled()
 })

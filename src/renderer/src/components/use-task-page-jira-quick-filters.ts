@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { defaultScopeSource } from '@/lib/default-creation-host'
-import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import {
   readJiraQuickFilterState,
   writeJiraQuickFilterState
@@ -15,13 +14,12 @@ import { translate } from '@/i18n/i18n'
 const EMPTY_QUICK_FILTER_STATE: JiraQuickFilterState = { statuses: [] }
 type JiraQuickFilterModel = Pick<
   TaskPageLinearViewStateModel,
-  'jiraTaskSourceContext' | 'settings' | 'taskResumeApplied' | 'taskSource'
+  'jiraTaskSourceContext' | 'accountBackedTaskSourceHostId' | 'taskResumeApplied' | 'taskSource'
 >
 
 export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
-  const source = model.jiraTaskSourceContext ?? defaultScopeSource(model.settings)
-  const target = getJiraRuntimeTarget(source)
-  const ownerKey = target.kind === 'environment' ? target.environmentId : 'local'
+  const ownerKey = model.jiraTaskSourceContext?.hostId ?? model.accountBackedTaskSourceHostId
+  const target = useMemo(() => ipcOrRuntimeTargetForHostId(ownerKey), [ownerKey])
   const [snapshot, setSnapshot] = useState({
     ownerKey: '',
     state: normalizeJiraQuickFilterState(undefined)
@@ -33,14 +31,12 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
   const ownerRef = useRef(ownerKey)
   const epochRef = useRef(0)
   const writePendingRef = useRef(false)
-  const sourceRef = useRef(source)
-  sourceRef.current = source
   if (ownerRef.current !== ownerKey) {
     epochRef.current += 1
     ownerRef.current = ownerKey
     writePendingRef.current = false
   }
-  const ready = snapshot.ownerKey === ownerKey
+  const ready = target !== null && snapshot.ownerKey === ownerKey
   const state = ready ? snapshot.state : EMPTY_QUICK_FILTER_STATE
   useEffect(() => {
     if (!model.taskResumeApplied || model.taskSource !== 'jira') {
@@ -50,7 +46,11 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     setLoading(true)
     setPending(false)
     setError(null)
-    void readJiraQuickFilterState(sourceRef.current)
+    if (!target) {
+      setLoading(false)
+      return
+    }
+    void readJiraQuickFilterState(target)
       .then((next) => {
         if (!cancelled) {
           setSnapshot({ ownerKey, state: next })
@@ -73,10 +73,10 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     return () => {
       cancelled = true
     }
-  }, [ownerKey, model.taskResumeApplied, model.taskSource, refresh])
+  }, [ownerKey, target, model.taskResumeApplied, model.taskSource, refresh])
 
   const select = async (statuses: string[]): Promise<void> => {
-    if (!ready || loading || writePendingRef.current) {
+    if (!ready || loading || writePendingRef.current || !target || ownerRef.current !== ownerKey) {
       return
     }
     const expectedOwner = ownerKey
@@ -87,7 +87,7 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     setPending(true)
     setError(null)
     try {
-      const next = await writeJiraQuickFilterState(sourceRef.current, { statuses })
+      const next = await writeJiraQuickFilterState(target, { statuses })
       if (stillCurrent()) {
         setSnapshot({ ownerKey: expectedOwner, state: next })
       }

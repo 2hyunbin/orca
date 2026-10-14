@@ -6,6 +6,7 @@ import { createJiraSlice } from './jira'
 const { list } = vi.hoisted(() => ({ list: vi.fn() }))
 vi.mock('@/runtime/runtime-jira-client', () => ({
   jiraListIssues: list,
+  jiraListIssuesForTarget: list,
   jiraSearchIssues: vi.fn()
 }))
 beforeEach(() => {

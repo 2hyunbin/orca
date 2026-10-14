@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { jiraListIssues } from './runtime-jira-client'
+import { jiraListIssues, jiraListIssuesForTarget } from './runtime-jira-client'
 import {
   readJiraQuickFilterState,
   writeJiraQuickFilterState
@@ -31,7 +31,7 @@ it('keeps the old request shape when no statuses are selected', async () => {
 })
 it('gates status list filters on the called execution host', async () => {
   rpc.mockResolvedValue([])
-  await jiraListIssues(target, 'all', 50, 'site-a', { statuses: ['In Progress'] })
+  await jiraListIssuesForTarget(target, 'all', 50, 'site-a', { statuses: ['In Progress'] })
   expect(assertCapability).toHaveBeenCalledWith(
     'jira-owner',
     JIRA_STATUS_FILTER_RUNTIME_CAPABILITY,

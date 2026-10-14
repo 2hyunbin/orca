@@ -26,6 +26,7 @@ import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rp
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
 import {
   jiraGetIssueForTarget,
@@ -159,7 +160,16 @@ export async function jiraListIssues(
   siteId?: JiraSiteSelection | null,
   filters?: JiraIssueListFilters
 ): Promise<JiraIssue[]> {
-  const target = getJiraRuntimeTarget(settings)
+  return jiraListIssuesForTarget(getJiraRuntimeTarget(settings), filter, limit, siteId, filters)
+}
+
+export async function jiraListIssuesForTarget(
+  target: RuntimeClientTarget,
+  filter?: JiraIssueFilter,
+  limit?: number,
+  siteId?: JiraSiteSelection | null,
+  filters?: JiraIssueListFilters
+): Promise<JiraIssue[]> {
   const args = { filter, limit, siteId: siteId ?? undefined, ...(filters ? { filters } : {}) }
   if (target.kind === 'environment') {
     if (filters?.statuses?.length) {
