@@ -13,7 +13,7 @@ export const MAX_CODEX_RECORDED_TURN_ENDS = 64
 
 /** How a primary-thread turn ended, as Codex reported it. */
 export type CodexTurnEnd =
-  | { status: 'completed' }
+  | { status: 'completed'; detail?: ProviderDiagnostic }
   | { status: 'interrupted' }
   | { status: 'failed'; detail?: ProviderDiagnostic; notSignedIn?: true }
 
@@ -56,12 +56,14 @@ export type CodexDispatchEchoes = {
   opened: (threadId: string, turnId: string) => void
   /** Whether Codex opened this turn: an `error` naming one it never opened is that turn's end. */
   hasOpened: (threadId: string, turnId: string) => boolean
+  /** A prompt hook's refusal reason, held only until that turn ends. */
+  noteTurnRejection: (threadId: string, turnId: string, detail: ProviderDiagnostic) => void
+  takeTurnRejection: (threadId: string, turnId: string) => ProviderDiagnostic | undefined
   /** The latest armed send's answered turn a wait left unopened, neither open nor ended: Codex may
    *  still open it, though no wait is spent on it again. */
   answeredTurnLeftUnopened: (threadId: string, openTurnIds: ReadonlySet<string>) => string | null
   /**
-   * Records a turn's end and returns the sends bound to it that it settles: all of them unless it
-   * completed, which echoes its pending input first, so one it never echoed waits for recovery. An
+   * Records a turn's end and returns its unechoed sends: a completed turn refused them. An
    * interrupt withdraws an un-echoed send, steered or the turn's own input: neither reached history.
    */
   endTurn: (
@@ -87,11 +89,11 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
     }
   >()
   const endedTurns = new Map<string, CodexTurnEnd>()
+  const turnRejections = new Map<string, ProviderDiagnostic>()
   const unopenedTurns = new Set<string>()
   const openedTurns = new Set<string>()
   let nextSequence = 0
   const turnKey = (threadId: string, turnId: string): string => JSON.stringify([threadId, turnId])
-  const settles = (end: CodexTurnEnd): boolean => end.status !== 'completed'
   const leftUnopened = (threadId: string, turnId: string): void => {
     unopenedTurns.add(turnKey(threadId, turnId))
     for (const oldest of unopenedTurns) {
@@ -138,7 +140,7 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
       }
       entry.turn = { threadId, turnId, via }
       const end = endedTurns.get(turnKey(threadId, turnId)) ?? null
-      if (end && settles(end)) {
+      if (end) {
         armed.delete(clientMessageId)
       }
       return end
@@ -158,6 +160,24 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
       }
     },
     hasOpened: (threadId, turnId) => openedTurns.has(turnKey(threadId, turnId)),
+    noteTurnRejection: (threadId, turnId, detail) => {
+      const key = turnKey(threadId, turnId)
+      if (!endedTurns.has(key) && !turnRejections.has(key)) {
+        turnRejections.set(key, detail)
+      }
+      for (const oldest of turnRejections.keys()) {
+        if (turnRejections.size <= MAX_CODEX_RECORDED_TURN_ENDS) {
+          break
+        }
+        turnRejections.delete(oldest)
+      }
+    },
+    takeTurnRejection: (threadId, turnId) => {
+      const key = turnKey(threadId, turnId)
+      const detail = turnRejections.get(key)
+      turnRejections.delete(key)
+      return detail
+    },
     endTurn: (threadId, turnId, end) => {
       const turn = turnKey(threadId, turnId)
       endedTurns.delete(turn)
@@ -167,9 +187,6 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
           break
         }
         endedTurns.delete(oldest)
-      }
-      if (!settles(end)) {
-        return []
       }
       const settled = [...armed].flatMap(([clientMessageId, entry]) =>
         entry.turn && turnKey(entry.turn.threadId, entry.turn.turnId) === turn
@@ -191,6 +208,7 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
     clear: () => {
       armed.clear()
       endedTurns.clear()
+      turnRejections.clear()
       unopenedTurns.clear()
       openedTurns.clear()
       nextSequence = 0

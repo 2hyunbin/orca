@@ -136,23 +136,6 @@ describe('a Codex send its turn ended without echoing', () => {
     ])
   })
 
-  it('stays pending, still armed, when its turn completes without echoing it', async () => {
-    const rig = await turnEndRig()
-    await rig.sendAndOpen('client-1')
-
-    rig.turns.end('completed')
-    expect(rig.settlements).toEqual([])
-
-    // Codex echoes before a completed end; this late one only proves the send is still armed.
-    rig.turns.echo('client-1')
-    expect(rig.settlements).toEqual([
-      expect.objectContaining({
-        clientMessageId: 'client-1',
-        providerIdentity: expect.objectContaining({ turnId: 'turn-1' })
-      })
-    ])
-  })
-
   it('accepts a send its turn echoed, with its key, exactly once', async () => {
     const rig = await turnEndRig()
     await rig.sendAndOpen('client-1')
@@ -253,22 +236,6 @@ describe('a Codex send its turn ended without echoing', () => {
     expect(rig.settlements).toEqual([])
   })
 
-  it('leaves a send pending, still armed, when its answer is read after its turn completed', async () => {
-    const rig = await turnEndRig()
-    const release = rig.turns.holdNextAnswer()
-    const sending = rig.send('client-1')
-    await vi.waitFor(() => expect(rig.turns.turnId).toBe('turn-1'))
-    rig.turns.start()
-    rig.turns.end('completed')
-    release()
-
-    await expect(sending).resolves.toEqual({ state: 'admitted' })
-    expect(rig.settlements).toEqual([])
-    rig.turns.echo('client-1')
-    expect(rig.settledIds()).toEqual(['client-1'])
-    expect(rig.settlements[0]).toHaveProperty('providerIdentity')
-  })
-
   it('leaves a send whose answer timed out to its echo', async () => {
     const rig = await turnEndRig()
     rig.codex.routes['turn/start'] = () => {
@@ -358,7 +325,7 @@ describe('the turn a withdrawn Codex send names', () => {
     })
   })
 
-  it('is not named when its turn completes without echoing it: the send stays pending', async () => {
+  it('is refused in its completed turn even when the answer arrives after that end', async () => {
     const rig = await turnEndRig()
     const release = rig.turns.holdNextAnswer()
     const sending = rig.send('client-1')
@@ -367,9 +334,12 @@ describe('the turn a withdrawn Codex send names', () => {
     rig.turns.end('completed')
     release()
 
-    await expect(sending).resolves.toEqual({ state: 'admitted' })
-    await rig.sendAndOpen('client-2')
-    rig.turns.end('completed')
+    await expect(sending).resolves.toMatchObject({
+      state: 'rejected',
+      rejection: { kind: 'providerRejected' },
+      answeredInTurn: { turn: rig.turnRecords[0], via: 'start' }
+    })
+    rig.turns.echo('client-1')
     expect(rig.settlements).toEqual([])
   })
 })

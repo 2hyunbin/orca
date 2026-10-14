@@ -2,11 +2,9 @@
 // steered send waits in Codex's pending input, which the interrupt clears; a send that opened the
 // turn is saved as the turn cancels, but Codex hard-aborts that save after 100 ms, so it is lost
 // or reaches only the model's context, and the thread history shows no user message either way.
-// So it is withdrawn, as a Stop's host-side withdrawal is. Any other end records pending
-// input before `turn/completed`, a failed turn after its `error` frame, so only that
-// frame settles: a failed turn that never echoed the send refused it, in Codex's words,
-// and a completed one leaves it pending for the journal's recovery on exit. A turn Codex never
-// opened has no `turn/completed`: before 0.148 its final `error` is its end (`unopenedTurnFailure`).
+// So it is withdrawn, as a Stop's host-side withdrawal is. Other ends record accepted input
+// before `turn/completed`, so an unechoed send is refused, including one a prompt hook blocked.
+// A turn Codex never opened has no `turn/completed`: before 0.148 its final `error` is its end.
 
 import {
   agentSessionFailureFact,
@@ -106,11 +104,11 @@ export function readCodexTurnEnd(method: string, params: unknown): CodexTurnEnd 
   return { status: 'completed' }
 }
 
-/** How an ended turn settles a send it never echoed; null leaves the send to its echo. */
+/** How an ended turn settles a send it never echoed. */
 export function codexTurnEndRejection(
   end: CodexTurnEnd,
   account?: CodexSession['account']
-): AgentJournalDispatchRejection | null {
+): AgentJournalDispatchRejection {
   if (end.status === 'interrupted') {
     return agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' })
   }
@@ -122,7 +120,32 @@ export function codexTurnEndRejection(
       })
     )
   }
-  return null
+  return codexDispatchRejection(
+    agentSessionFailureFact('providerRejected', end.detail ? { detail: end.detail } : {}),
+    account
+  )
+}
+
+function notePromptHookRejection(
+  session: Pick<CodexSession, 'threadId' | 'dispatchEchoes'>,
+  params: unknown,
+  turnId: string
+): void {
+  const run = readCodexJournalRecord(readCodexJournalRecord(params).run)
+  if (
+    run.eventName !== 'userPromptSubmit' ||
+    (run.status !== 'blocked' && run.status !== 'stopped')
+  ) {
+    return
+  }
+  const entries = Array.isArray(run.entries) ? run.entries.map(readCodexJournalRecord) : []
+  const reason = entries.find((entry) => entry.kind === 'feedback' || entry.kind === 'stop')
+  const warning = entries.find((entry) => entry.kind === 'warning')
+  const text = reason?.text ?? warning?.text
+  const detail = typeof text === 'string' ? providerDiagnostic(text, 'person') : undefined
+  if (detail) {
+    session.dispatchEchoes.noteTurnRejection(session.threadId, turnId, detail)
+  }
 }
 
 /** Records a turn Codex opened, ahead of the frames that may report the thread idle before it ends. */
@@ -144,31 +167,33 @@ export function settleCodexSendsInEndedTurn(
   settle: (settlement: CodexTurnEndSettlement) => void
 ): void {
   const turnId = readCodexTurnId(frame.params)
-  const end = turnId
-    ? (readCodexTurnEnd(frame.method, frame.params) ??
-      unopenedTurnFailure(session, frame.method, frame.params, turnId))
-    : null
-  if (
-    !turnId ||
-    !end ||
-    (readCodexThreadId(frame.params) ?? session.threadId) !== session.threadId
-  ) {
+  if (!turnId || (readCodexThreadId(frame.params) ?? session.threadId) !== session.threadId) {
     return
   }
-  const rejection = codexTurnEndRejection(end, session.account)
+  if (frame.method === 'hook/completed') {
+    notePromptHookRejection(session, frame.params, turnId)
+    return
+  }
+  const end =
+    readCodexTurnEnd(frame.method, frame.params) ??
+    unopenedTurnFailure(session, frame.method, frame.params, turnId)
+  if (!end) {
+    return
+  }
+  const detail = session.dispatchEchoes.takeTurnRejection(session.threadId, turnId)
+  const settledEnd = end.status === 'completed' && detail ? { ...end, detail } : end
+  const rejection = codexTurnEndRejection(settledEnd, session.account)
   for (const { clientMessageId, via } of session.dispatchEchoes.endTurn(
     session.threadId,
     turnId,
-    end
+    settledEnd
   )) {
-    if (rejection) {
-      settle({
-        clientMessageId,
-        state: 'rejected',
-        ...codexAnsweredTurn(session, frame.sessionId, turnId, via),
-        ...rejection
-      })
-    }
+    settle({
+      clientMessageId,
+      state: 'rejected',
+      ...codexAnsweredTurn(session, frame.sessionId, turnId, via),
+      ...rejection
+    })
   }
 }
 

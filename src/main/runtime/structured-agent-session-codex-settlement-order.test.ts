@@ -40,6 +40,7 @@ import {
   stopStructuredAgentSessionRuntime
 } from './structured-agent-session-runtime'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
+import { owesStructuredAgentSessionWork } from '../../shared/structured-agent-session-owed-work'
 
 const CALLER = { callerKey: 'codex-settlement-order-test' }
 const MODEL = {
@@ -182,6 +183,43 @@ afterEach(async () => {
 })
 
 describe('a settlement Codex proves keeps its place behind the frame that proved it', () => {
+  it('settles a hook-refused prompt when its turn completes, and the next send runs', async () => {
+    const sent = await send('blocked prompt')
+    await vi.waitFor(() => expect(answers).toBe(1))
+    turns.start()
+    handlers?.onNotification?.('hook/completed', {
+      threadId: THREAD,
+      turnId: 'turn-1',
+      run: {
+        eventName: 'userPromptSubmit',
+        status: 'blocked',
+        entries: [{ kind: 'feedback', text: 'Prompt blocked by policy.' }]
+      }
+    })
+    turns.end('completed')
+
+    await host.flushStreamedEvents(SESSION)
+    await vi.waitFor(() => expect(seqOf(dispatchRow(sent, 'rejected'))).toBeDefined())
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.submissions.find((entry) => entry.clientMessageId === sent)).toMatchObject({
+      dispatchState: 'rejected',
+      rejection: {
+        kind: 'providerRejected',
+        detail: { text: 'Prompt blocked by policy.', audience: 'person' }
+      }
+    })
+    expect(owesStructuredAgentSessionWork(snapshot.items, snapshot.submissions, fence)).toBe(false)
+    const ended = seqOf((entry) => turnOf(entry)?.state === 'completed')
+    expect(seqOf(dispatchRow(sent, 'rejected'))).toBeGreaterThan(ended!)
+
+    const next = await send('allowed prompt')
+    await vi.waitFor(() => expect(answers).toBe(2))
+    turns.start()
+    turns.echo(next)
+    turns.end('completed')
+    await vi.waitFor(() => expect(seqOf(dispatchRow(next, 'accepted'))).toBeDefined())
+  })
+
   it('rejects a send only after the failed turn that refused it has ended', async () => {
     const sent = await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
