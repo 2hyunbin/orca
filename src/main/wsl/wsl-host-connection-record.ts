@@ -34,7 +34,3 @@ export function toWslHostStatus(
     detail: status.state === 'failed' || status.state === 'unverifiable' ? status.reason : null
   }
 }
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}

@@ -3,6 +3,7 @@
  * reports, and connect only for the user. A stopped distro boots on an explicit add or connect,
  * or while a project or terminal the user has open needs it; never for background work.
  */
+import { errorMessage } from '../../shared/error-message'
 import {
   addWslHostEnvironment,
   removeWslHostEnvironment
@@ -22,11 +23,7 @@ import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import { wslHostSshManagedRefusal } from './wsl-host-ssh-orcad-conflict'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
-import {
-  errorMessage,
-  persistWslHostConnection,
-  toWslHostStatus
-} from './wsl-host-connection-record'
+import { persistWslHostConnection, toWslHostStatus } from './wsl-host-connection-record'
 import {
   admitWslHostDistro,
   sameWslDistro,

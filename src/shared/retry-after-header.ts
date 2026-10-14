@@ -1,6 +1,6 @@
-// Relay director Retry-After: delta-seconds or HTTP-date. Null means the server
+// Retry-After (RFC 9110): delta-seconds or HTTP-date. Null means the server
 // asked for no pacing, so the caller keeps its own backoff.
-export function parseRelayRetryAfterMs(
+export function parseRetryAfterHeaderMs(
   value: string | null | undefined,
   maxMs: number,
   nowMs = Date.now()
