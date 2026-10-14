@@ -16,6 +16,8 @@ import {
 } from '../transport/client-context-connection-metrics'
 import { useWorkspaceSections } from '../worktree/use-workspace-sections'
 import { useHostDisplayWorktrees } from './use-host-display-worktrees'
+import { useHostProjectCatalogs } from './use-host-project-catalogs'
+import { buildProjectSectionCatalog } from '../worktree/project-section-catalog'
 import { useHostRepoMetadata } from './use-host-repo-metadata'
 import { useHostScreenIdentity } from './use-host-screen-identity'
 import { useHostScreenState } from './use-host-screen-state'
@@ -23,6 +25,8 @@ import { useHostViewSettings } from './use-host-view-settings'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
 import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
 import { useHostDisplay } from '../transport/use-host-display'
+
+const NO_REPOS: readonly never[] = []
 
 export type HostScreenProps = {
   // When true, rendered as the persistent tablet sidebar by the host layout, not as its own routed screen.
@@ -104,6 +108,18 @@ export function useHostScreenController({
   const showNewWorktree = resolvedRouteActionState.showNewWorktree
 
   const displayWorktrees = useHostDisplayWorktrees(connState, state, hostId)
+  const allHostProjectCatalog = useHostProjectCatalogs({
+    client,
+    connState,
+    hostId,
+    hostCapabilities,
+    servers: state.serverWorkspaces.hosts
+  })
+  const projectCatalog = useMemo(
+    () =>
+      buildProjectSectionCatalog(allHostProjectCatalog, state.visibleHostIds, state.projectOrderBy),
+    [allHostProjectCatalog, state.visibleHostIds, state.projectOrderBy]
+  )
   const sectionsResult = useWorkspaceSections({
     displayWorktrees,
     sortMode: state.sortMode,
@@ -112,8 +128,8 @@ export function useHostScreenController({
     groupMode: state.groupMode,
     pinnedIds: state.pinnedIds,
     showPinnedInGroups: state.showPinnedInGroups,
-    repoIdsByName: state.repoIdsByName,
-    repoColorsByName: state.repoColorsByName,
+    projectCatalog,
+    filterCatalogRepos: allHostProjectCatalog?.repos ?? NO_REPOS,
     collapsedGroups: state.collapsedGroups,
     workspaceStatuses: state.workspaceStatuses
   })

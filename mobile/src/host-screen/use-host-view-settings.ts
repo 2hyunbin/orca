@@ -32,6 +32,7 @@ export function useHostViewSettings(args: {
     setFilters,
     setGroupMode,
     setSortMode,
+    setProjectOrderBy,
     setVisibleHostIds,
     setWorkspaceStatuses,
     sortMode,
@@ -112,6 +113,9 @@ export function useHostViewSettings(args: {
       }
       applyViewState(applyDesktopViewSettings(viewStateRef.current, ui))
       setVisibleHostIds(readVisibleHostIds(ui.visibleWorkspaceHostIds))
+      if (ui.projectOrderBy) {
+        setProjectOrderBy(ui.projectOrderBy)
+      }
     } catch {
       // Transient transport failure; retry on the next focus/connect.
     }

@@ -5,8 +5,13 @@ import {
   LOCAL_EXECUTION_HOST_ID,
   toRuntimeExecutionHostId
 } from './execution-host'
-import { normalizeProjectHostSetupRow } from './project-catalog-row-normalization'
-import type { ProjectHostSetup } from './project-types'
+import {
+  normalizeProjectHostSetupRow,
+  normalizeProjectHostSetupRows,
+  normalizeProjectRows
+} from './project-catalog-row-normalization'
+import type { ProjectHostSetupProjection } from './project-host-setup-projection'
+import type { Project, ProjectHostSetup } from './project-types'
 import type { Repo } from './repo-types'
 import type { RuntimeClientTarget } from './runtime-client-target'
 
@@ -40,5 +45,25 @@ export function adoptEndpointProjectHostSetup(
     runtimeOwnerEnvironmentId: target.environmentId,
     // Why: paired clients route through the HUB and must not treat its private SSH target as client-local configuration.
     connectionId: null
+  }
+}
+
+/** An endpoint's `project.list` and `projectHostSetup.list` answers as a client's projection. */
+export function adoptEndpointProjectCatalog(
+  target: RuntimeClientTarget,
+  projects: readonly Project[],
+  setups: readonly ProjectHostSetup[]
+): ProjectHostSetupProjection {
+  if (target.kind === 'local') {
+    return {
+      projects: normalizeProjectRows([...projects]),
+      setups: normalizeProjectHostSetupRows([...setups])
+    }
+  }
+  return {
+    // Why projects too: the same wire response carries them, and a remote host on another
+    // Orca version can publish a row whose declared field types do not hold.
+    projects: normalizeProjectRows([...projects]),
+    setups: setups.map((setup) => adoptEndpointProjectHostSetup(target, setup))
   }
 }

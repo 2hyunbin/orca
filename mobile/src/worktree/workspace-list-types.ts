@@ -1,6 +1,8 @@
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { AgentWorkingMode } from '../../../src/shared/agent-status-types'
 import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { ProjectSectionRepo } from '../../../src/shared/project-section-grouping'
+import type { Repo } from '../../../src/shared/repo-types'
 
 export type Worktree = {
   sectionListKey?: string
@@ -67,4 +69,14 @@ export type FilterState = {
   alwaysShowDefaultBranch?: boolean
 }
 
-export type Section = { key: string; title: string; icon?: 'pin'; data: Worktree[] }
+/** A repo as Project sections read it: the desktop's catalog record, or one a row stands in for. */
+export type SectionRepo = ProjectSectionRepo & Partial<Pick<Repo, 'badgeColor' | 'repoIcon'>>
+
+export type Section = {
+  key: string
+  title: string
+  icon?: 'pin'
+  /** Under Project grouping, the repo whose colour and icon the header shows, as on the desktop. */
+  repo?: SectionRepo
+  data: Worktree[]
+}

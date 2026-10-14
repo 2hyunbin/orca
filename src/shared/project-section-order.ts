@@ -1,5 +1,11 @@
 // Labels and order of the desktop sidebar's project sections, shared so the paired phone matches.
-import type { ProjectSectionEntry, ProjectSectionRepo } from './project-section-grouping'
+import {
+  addItemToProjectSection,
+  ensureProjectSectionForRepo,
+  type ProjectGroupingIndex,
+  type ProjectSectionEntry,
+  type ProjectSectionRepo
+} from './project-section-grouping'
 import { getRepoDisplayLabelKey, getRepoDisplayLabelsByPath } from './repo-display-labels'
 import type { ProjectOrderBy } from './ui-chrome-types'
 
@@ -183,4 +189,35 @@ export function orderProjectSections<
   // Why: project header order is its own user choice (projectOrderBy), decoupled from workspace
   // sortBy. Manual uses the canonical repoOrder; Recent follows activity.
   return sortProjectEntries(Array.from(sections.entries()), projectOrderBy, repoOrder)
+}
+
+/**
+ * The labelled, ordered project sections for rows and for empty-project placeholders: the steps
+ * the desktop sidebar's buildRows takes under Group by Project, for a client with no pending,
+ * imported or inbox rows to file.
+ */
+export function buildProjectSections<
+  Item extends ActivityItem,
+  R extends ProjectSectionRepo
+>(args: {
+  items: readonly Item[]
+  repoIdOf: (item: Item) => string
+  placeholderRepoIds: Iterable<string>
+  repoMap: ReadonlyMap<string, R>
+  projectIndex: ProjectGroupingIndex | null
+  repoOrder: ReadonlyMap<string, number> | undefined
+  projectOrderBy: ProjectOrderBy
+}): [string, ProjectSectionEntry<Item, R>][] {
+  const sections = new Map<string, ProjectSectionEntry<Item, R>>()
+  for (const item of args.items) {
+    addItemToProjectSection(sections, item, args.repoIdOf(item), args.repoMap, args.projectIndex)
+  }
+  for (const repoId of args.placeholderRepoIds) {
+    ensureProjectSectionForRepo(sections, repoId, args.repoMap, args.projectIndex, {
+      requireRepo: true
+    })
+  }
+  return withRepoSectionDisplayLabels(
+    orderProjectSections(sections, args.repoMap, args.repoOrder, args.projectOrderBy)
+  )
 }

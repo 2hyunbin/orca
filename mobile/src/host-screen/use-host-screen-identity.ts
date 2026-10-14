@@ -24,9 +24,7 @@ export function useHostScreenIdentity(args: {
     setHostStoredDescriptor,
     setLastKnownWorktrees,
     setPinnedIds,
-    setRepoColorsByName,
     setRepoHostIdByRepoId,
-    setRepoIconsByName,
     setShowPinnedInGroups,
     setWorktrees,
     setWorktreesLoaded
@@ -59,8 +57,6 @@ export function useHostScreenIdentity(args: {
     setHostName('')
     setHostStoredDescriptor(null)
     setError('')
-    setRepoColorsByName(new Map())
-    setRepoIconsByName(new Map())
     setRepoHostIdByRepoId(new Map())
     setHostLabelById(new Map())
     setHostHealthById(new Map())

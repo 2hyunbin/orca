@@ -13,7 +13,7 @@ import type {
   MobileViewState
 } from '../worktree/workspace-view-settings'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
-import type { MobileHostRepoIcon } from './host-screen-reply-schema'
+import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
@@ -39,8 +39,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [optimisticActiveWorktreeIdentity, setOptimisticActiveWorktreeIdentity] = useState<
     string | null
   >(null)
-  const [repoColorsByName, setRepoColorsByName] = useState<Map<string, string>>(new Map())
-  const [repoIconsByName, setRepoIconsByName] = useState<Map<string, MobileHostRepoIcon>>(new Map())
   const [hostName, setHostName] = useState('')
   // The stored name identity, loaded with the name so the header can label an offline host.
   const [hostStoredDescriptor, setHostStoredDescriptor] = useState<{
@@ -66,8 +64,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
     DEFAULT_MOBILE_WORKSPACE_STATUSES
   )
-  // displayName → repo id: filters key on repo id, but section headers/rows key on displayName, so bridge the two.
-  const [repoIdsByName, setRepoIdsByName] = useState<Map<string, string>>(new Map())
+  // The desktop's project header order (ui.get projectOrderBy), read only.
+  const [projectOrderBy, setProjectOrderBy] = useState<ProjectOrderBy>('manual')
   // Host-label inputs for rows: repo → host, SSH/override labels, and the host's own platform.
   const [repoHostIdByRepoId, setRepoHostIdByRepoId] = useState<Map<string, ExecutionHostId>>(
     new Map()
@@ -133,10 +131,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     newWorktreeModalVisibleRef,
     optimisticActiveWorktreeIdentity,
     pinnedIds,
-    repoColorsByName,
     repoHostIdByRepoId,
-    repoIconsByName,
-    repoIdsByName,
+    projectOrderBy,
     repoMetadataFetchedAtRef,
     routeActionState,
     search,
@@ -159,10 +155,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setLastKnownWorktrees,
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
-    setRepoColorsByName,
     setRepoHostIdByRepoId,
-    setRepoIconsByName,
-    setRepoIdsByName,
+    setProjectOrderBy,
     setRouteActionState,
     setSearch,
     setServerNotice,

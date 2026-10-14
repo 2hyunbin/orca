@@ -5,7 +5,6 @@ import { setCachedRepos } from '../cache/repo-cache'
 import type { RpcAcceptedResult } from '../transport/rpc-accepted-result'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState, RpcResponse } from '../transport/types'
-import { repoColor } from '../worktree/repo-color'
 import {
   buildHostLabelById,
   buildRepoHostIdByRepoId
@@ -61,10 +60,7 @@ export function useHostRepoMetadata(args: {
     setHostLabelById,
     setHostHealthById,
     setHostPlatform,
-    setRepoColorsByName,
-    setRepoHostIdByRepoId,
-    setRepoIconsByName,
-    setRepoIdsByName
+    setRepoHostIdByRepoId
   } = state
 
   const fetchRepoMetadata = useCallback(
@@ -101,22 +97,6 @@ export function useHostRepoMetadata(args: {
           const catalog = repos.value
           repoMetadataFetchedAtRef.current = Date.now()
           setCachedRepos(requestHostId, catalog)
-          setRepoColorsByName(
-            new Map(
-              catalog.map((repo) => [
-                repo.displayName,
-                repo.badgeColor || repoColor(repo.displayName)
-              ])
-            )
-          )
-          setRepoIconsByName(
-            new Map(
-              catalog.flatMap((repo) =>
-                repo.repoIcon ? [[repo.displayName, repo.repoIcon] as const] : []
-              )
-            )
-          )
-          setRepoIdsByName(new Map(catalog.map((repo) => [repo.displayName, repo.id])))
           setRepoHostIdByRepoId(buildRepoHostIdByRepoId(catalog))
           // Why: rows name their host when the list spans hosts or an SSH host may be unhealthy,
           // so a local-only catalog never pays for the label lookups. Counted over repos, not the
