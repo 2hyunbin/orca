@@ -11,8 +11,8 @@ import { fileIdentity } from './session-search-file-cursor'
 import type { SessionSearchFileWrite } from './session-search-index-writer'
 import type { SessionSearchStore } from './session-search-store'
 
-// Keep aligned with session-scanner-agent-parser.ts and session-scanner-sidecar-enrichment.ts.
-const SELF_CONTAINED_TRANSCRIPT_AGENTS = {
+// File-read assumptions are checked by session-search-transcript-dependencies.test.ts.
+export const SELF_CONTAINED_TRANSCRIPT_AGENTS = {
   claude: true,
   qoder: true,
   codebuddy: true,
