@@ -143,4 +143,18 @@ describe('the managed tunnel’s transport', () => {
     })
     await expect(chosen.transport.start(conn, options)).rejects.toThrow(/exit 255/)
   })
+
+  it('never records a refusal answered before a reconnect against the new transport', async () => {
+    const chosen = select('unverifiable', 'refused')
+    chosen.checkForward.mockImplementationOnce(async () => {
+      generation = 2
+      return 'refused'
+    })
+    await chosen.transport.start(conn, options)
+    chosen.checkForward.mockResolvedValue('allowed')
+    await expect(chosen.transport.start(conn, options)).resolves.toMatchObject({
+      entry: { id: 'forward' }
+    })
+    expect(chosen.forward.start).toHaveBeenCalledTimes(2)
+  })
 })

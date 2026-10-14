@@ -48,12 +48,14 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
 
   async start(conn: SshConnection, options: PortForwardStartOptions): Promise<StartedPortForward> {
     const { forwards, probe, checkForward } = this.dependencies
-    if (this.refusedGenerations.get(conn) === conn.getConnectGeneration()) {
-      return this.startBridge(conn, options)
+    // Why captured: a refusal answered by a transport that reconnected meanwhile is not the new one's.
+    const generation = conn.getConnectGeneration()
+    if (this.refusedGenerations.get(conn) === generation) {
+      return this.startBridge(conn, options, generation)
     }
     // Why only on refusal: an unverifiable answer keeps the forward, as before this transport.
     if ((await probe(conn, options.remotePort)) === 'refused') {
-      return this.startBridge(conn, options)
+      return this.startBridge(conn, options, generation)
     }
     const forward = forwards.find((provider) => provider.canHandle(conn))
     if (!forward) {
@@ -72,7 +74,7 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     const verdict = await checkForward(started)
     if (verdict === 'refused') {
       await started.close()
-      return this.startBridge(conn, options)
+      return this.startBridge(conn, options, generation)
     }
     if (exits.length > 0) {
       throw new Error(`The managed Orca server tunnel closed while it was checked: ${exits[0]}`)
@@ -83,9 +85,10 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
 
   private async startBridge(
     conn: SshConnection,
-    options: PortForwardStartOptions
+    options: PortForwardStartOptions,
+    generation: number
   ): Promise<StartedPortForward> {
-    this.refusedGenerations.set(conn, conn.getConnectGeneration())
+    this.refusedGenerations.set(conn, generation)
     if (!this.dependencies.stdio.canHandle(conn)) {
       throw new Error(
         'This SSH host refuses TCP forwarding, and the managed Orca server tunnel has no other route.'
