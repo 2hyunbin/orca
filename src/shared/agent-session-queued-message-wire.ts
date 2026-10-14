@@ -31,15 +31,6 @@ export type AgentSessionQueuedMessagesResumeResult = {
   resumed: boolean
 }
 
-export const AGENT_SESSION_MAX_QUEUED_CLEAR_IDS = 512
-
-/** The captured host cards were withdrawn together; a concurrently dispatched card stays sent. */
-export type AgentSessionQueuedMessagesClearResult = {
-  withdrawn: string[]
-  dispatched: string[]
-  missing: string[]
-}
-
 /** One draft the host holds for this conversation, published whole-list on the
  *  subscribe stream and on history pages. Text-only v1. */
 export type AgentSessionQueuedMessage = {

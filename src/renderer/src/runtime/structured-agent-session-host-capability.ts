@@ -4,7 +4,6 @@ import {
   AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY,
-  AGENT_SESSION_QUEUED_MESSAGES_CLEAR_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RECOVERY_CAPABILITY,
   type RuntimeCapability
 } from '../../../shared/protocol-version'
@@ -138,14 +137,5 @@ export function useStructuredAgentSessionHostEditsQueuedMessages(
   return useStructuredAgentSessionHostCapability(
     target,
     AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY
-  )
-}
-
-export function useStructuredAgentSessionHostClearsQueuedMessages(
-  target: RuntimeClientTarget
-): boolean {
-  return useStructuredAgentSessionHostCapability(
-    target,
-    AGENT_SESSION_QUEUED_MESSAGES_CLEAR_RUNTIME_CAPABILITY
   )
 }

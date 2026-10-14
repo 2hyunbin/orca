@@ -53,7 +53,6 @@ function controller(
   return {
     cards,
     queueCapable,
-    clearSupported: true,
     clearCapable: true,
     ...edits,
     pause,

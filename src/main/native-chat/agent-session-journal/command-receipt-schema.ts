@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import type Database from '../../sqlite/sync-database'
 import { readAgentSessionRefusalReference } from '../../../shared/agent-session-wire-refusals'
-import { AGENT_SESSION_MAX_QUEUED_CLEAR_IDS } from '../../../shared/agent-session-queued-message-wire'
 
 export const commandReceiptScopeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('global') }),
@@ -29,12 +28,6 @@ export const commandReceiptResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('queued-draft'),
     messageId: z.string().min(1)
-  }),
-  z.strictObject({
-    kind: z.literal('queued-clear'),
-    withdrawn: z.array(z.string().min(1)).max(AGENT_SESSION_MAX_QUEUED_CLEAR_IDS),
-    dispatched: z.array(z.string().min(1)).max(AGENT_SESSION_MAX_QUEUED_CLEAR_IDS),
-    missing: z.array(z.string().min(1)).max(AGENT_SESSION_MAX_QUEUED_CLEAR_IDS)
   }),
   /** An accepted prompt answer, kept whole: no rewind or later revision changes its replay. Its
    *  values are the resolution the prompt's row holds, bounded as that row is. */

@@ -12,13 +12,12 @@ import type {
   AgentJournalSubmission
 } from '../../../src/shared/agent-session-journal-types'
 import { agentSessionVisibleFailureFacts } from '../../../src/shared/agent-session-visible-failures'
+import { mapSettledWithConcurrency } from '../../../src/shared/map-with-concurrency'
 import type {
   AgentSessionQueuedMessageDeleteResult,
   AgentSessionQueuedMessagesResumeResult,
-  AgentSessionQueuedMessagesClearResult,
   AgentSessionSendResult
 } from '../../../src/shared/agent-session-wire'
-import { AGENT_SESSION_MAX_QUEUED_CLEAR_IDS } from '../../../src/shared/agent-session-queued-message-wire'
 import {
   mobileQueueHasResumableCard,
   mobileQueuedMessageCards,
@@ -30,6 +29,8 @@ import type {
 } from './mobile-structured-queued-message-feed'
 import type { MobileStructuredAgentMutate } from './use-mobile-structured-agent-mutation'
 
+const CLEAR_DELETE_CONCURRENCY = 8
+
 /** `onCopied` runs once the card's text is in the composer, before its Delete leaves. */
 export type MobileQueuedMessageEdit = (messageId: string, onCopied?: () => void) => Promise<boolean>
 
@@ -40,7 +41,7 @@ export type MobileStructuredQueuedMessageControls = {
   send: (messageId: string) => Promise<boolean>
   /** Discard the draft. */
   delete: (messageId: string) => Promise<boolean>
-  clear: ((messageIds: string[]) => Promise<boolean>) | undefined
+  clear: (messageIds: string[]) => Promise<boolean>
   /** Copy the card's shown text into the composer, then delete the card. */
   edit: MobileQueuedMessageEdit
   /** The whole queue's pause, shown above the cards; null when it sends on its own. */
@@ -61,7 +62,6 @@ export function useMobileStructuredQueuedMessageControls(args: {
   /** The chat shows the agent working: a command card offers no send then. */
   agentWorking?: boolean
   mutate: MobileStructuredAgentMutate
-  clearSupported?: boolean
   /** The active pane's live composer, Edit's copy target; absent = Edit refuses. False when
    *  nothing was copied. */
   appendComposerText: ((text: string) => boolean) | undefined
@@ -143,27 +143,37 @@ export function useMobileStructuredQueuedMessageControls(args: {
   )
   const clear = useCallback(
     async (messageIds: string[]): Promise<boolean> => {
-      if (
-        !args.clearSupported ||
-        messageIds.length === 0 ||
-        messageIds.length > AGENT_SESSION_MAX_QUEUED_CLEAR_IDS
-      ) {
+      if (messageIds.length === 0) {
         return false
       }
-      const result = await mutate<AgentSessionQueuedMessagesClearResult>(
-        'agentSession.queuedMessagesClear',
-        'agentSession.queuedMessagesClear',
-        { messageIds }
+      const results = await mapSettledWithConcurrency(
+        messageIds,
+        CLEAR_DELETE_CONCURRENCY,
+        (messageId) =>
+          mutate<AgentSessionQueuedMessageDeleteResult>(
+            'agentSession.queuedMessageDelete',
+            'agentSession.queuedMessageDelete',
+            { messageId }
+          )
       )
-      if (result.status !== 'accepted') {
-        return false
-      }
-      if (result.value.dispatched.length > 0) {
+      const dispatched = results.some(
+        (result) =>
+          result.status === 'fulfilled' &&
+          result.value.status === 'accepted' &&
+          !result.value.value.deleted &&
+          result.value.value.disposition === 'dispatched'
+      )
+      if (dispatched) {
         onSendError('This message was already sent.')
       }
-      return resolved(result.value.dispatched.length === 0)
+      return resolved(
+        !dispatched &&
+          results.every(
+            (result) => result.status === 'fulfilled' && result.value.status === 'accepted'
+          )
+      )
     },
-    [args.clearSupported, mutate, onSendError, resolved]
+    [mutate, onSendError, resolved]
   )
   const edit = useCallback<MobileQueuedMessageEdit>(
     async (messageId, onCopied) => {
@@ -202,8 +212,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
     cards,
     send,
     delete: deleteDraft,
-    clear:
-      args.clearSupported && cards.length <= AGENT_SESSION_MAX_QUEUED_CLEAR_IDS ? clear : undefined,
+    clear,
     edit,
     pause,
     resume,

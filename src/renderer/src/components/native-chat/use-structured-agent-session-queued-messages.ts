@@ -6,15 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
+import { mapSettledWithConcurrency } from '../../../../shared/map-with-concurrency'
 import type {
   AgentSessionQueuedMessage,
   AgentSessionQueuedMessageDeleteResult,
-  AgentSessionQueuedMessagesClearResult,
   AgentSessionQueuedMessagesResumeResult,
   AgentSessionQueuePause,
   AgentSessionSendResult
 } from '../../../../shared/agent-session-wire'
-import { AGENT_SESSION_MAX_QUEUED_CLEAR_IDS } from '../../../../shared/agent-session-queued-message-wire'
 import {
   useStructuredAgentSessionQueuedEdit,
   type QueuedEditTransport,
@@ -36,8 +35,6 @@ export type StructuredAgentSessionQueuedMessagesController = {
   /** The host queues sends. Without it a card can still show — a message the host kept unsent —
    *  but queueing settings and the steer chord would do nothing. */
   queueCapable: boolean
-  clearSupported: boolean
-  /** This host accepts atomic bulk withdrawal and no optimistic send is still awaiting admission. */
   clearCapable: boolean
   /** Why the queue holds cards Resume would send: the header row above them. A string reason: a
    *  newer host may name one this build does not know. */
@@ -62,6 +59,7 @@ export type StructuredAgentSessionQueuedMessagesController = {
 }
 
 const NO_SENDS: readonly StructuredAgentSessionPendingSend[] = []
+const CLEAR_DELETE_CONCURRENCY = 8
 
 function alreadySentNotice(): void {
   toast.error(
@@ -72,7 +70,6 @@ function alreadySentNotice(): void {
 export function useStructuredAgentSessionQueuedMessages(args: {
   /** Host advertises `agent-session.queued-messages.v1` and the transport has a fence. */
   enabled: boolean
-  clearSupported?: boolean
   queuedMessages: readonly AgentSessionQueuedMessage[] | null
   queuePause: AgentSessionQueuePause | null
   submissions: readonly AgentJournalSubmission[]
@@ -210,39 +207,52 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   }, [mutate])
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
-  const clearCapable =
-    args.clearSupported === true &&
-    cards.length <= AGENT_SESSION_MAX_QUEUED_CLEAR_IDS &&
-    !cards.some((card) => card.hold === 'sending')
-  const clearingRef = useRef(false)
+  const clearCapable = !cards.some((card) => card.hold === 'sending')
   const clear = useCallback(async (): Promise<boolean> => {
-    if (clearingRef.current || !clearCapable) {
+    if (!clearCapable) {
       return false
     }
-    const messageIds = cards.map((card) => card.messageId)
+    const messageIds = cardsRef.current
+      .filter((card) => card.hold !== 'sending')
+      .map((card) => card.messageId)
     if (messageIds.length === 0) {
       return false
     }
-    clearingRef.current = true
-    try {
-      const result = await mutate<AgentSessionQueuedMessagesClearResult>(
-        'agentSession.queuedMessagesClear',
-        'agentSession.queuedMessagesClear',
-        { messageIds }
-      )
-      if (result?.dispatched.length) {
-        alreadySentNotice()
-      }
-      return result !== null && result.dispatched.length === 0
-    } finally {
-      clearingRef.current = false
+    const results = await mapSettledWithConcurrency(
+      messageIds,
+      CLEAR_DELETE_CONCURRENCY,
+      (messageId) =>
+        args.editTransport.write<AgentSessionQueuedMessageDeleteResult>(
+          'agentSession.queuedMessageDelete',
+          'agentSession.queuedMessageDelete',
+          { messageId }
+        )
+    )
+    const dispatched = results.some(
+      (result) =>
+        result.status === 'fulfilled' &&
+        result.value.kind === 'done' &&
+        !result.value.value.deleted &&
+        result.value.value.disposition === 'dispatched'
+    )
+    const failure = results.find(
+      (result) => result.status === 'fulfilled' && result.value.kind === 'not-done'
+    )
+    if (failure?.status === 'fulfilled' && failure.value.kind === 'not-done') {
+      toast.error(failure.value.notice)
     }
-  }, [cards, clearCapable, mutate])
+    if (dispatched) {
+      alreadySentNotice()
+    }
+    return (
+      !dispatched &&
+      results.every((result) => result.status === 'fulfilled' && result.value.kind === 'done')
+    )
+  }, [args.editTransport, clearCapable])
 
   return {
     cards,
     queueCapable: enabled,
-    clearSupported: args.clearSupported === true,
     clearCapable,
     pause,
     resume,

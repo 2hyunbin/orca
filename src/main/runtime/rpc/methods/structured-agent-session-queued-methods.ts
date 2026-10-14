@@ -10,7 +10,6 @@ import {
 } from './structured-agent-session-gate'
 import {
   QueuedMessageActionParams,
-  QueuedMessagesClearParams,
   QueuedMessageUpdateParams,
   QueuedMessageEditHoldParams,
   QueuedMessagesResumeParams
@@ -50,13 +49,6 @@ export const STRUCTURED_AGENT_SESSION_QUEUED_METHODS = [
     params: QueuedMessageActionParams,
     handler: async (params, ctx) =>
       requireSessionHost(ctx, params.envelope.sessionId).queuedMessageDelete(callerFor(ctx), params)
-  }),
-  defineMethod({
-    name: 'agentSession.queuedMessagesClear',
-    permission: 'workspace',
-    params: QueuedMessagesClearParams,
-    handler: async (params, ctx) =>
-      requireSessionHost(ctx, params.envelope.sessionId).queuedMessagesClear(callerFor(ctx), params)
   }),
   defineMethod({
     name: 'agentSession.queuedMessagesResume',

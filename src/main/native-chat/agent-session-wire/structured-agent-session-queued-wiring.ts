@@ -9,7 +9,6 @@ import type {
 } from './structured-agent-session-host-types'
 import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import { StructuredAgentSessionQueuedMessageDrain } from './structured-agent-session-queued-messages'
-import { clearQueuedStructuredAgentMessages } from './structured-agent-session-queued-clear'
 import {
   deleteQueuedStructuredAgentMessage,
   resumeStructuredAgentQueue,
@@ -85,10 +84,6 @@ export function wireStructuredAgentSessionQueuedMessages(
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof deleteQueuedStructuredAgentMessage>[2]
     ) => deleteQueuedStructuredAgentMessage(context(), caller, params),
-    queuedMessagesClear: (
-      caller: StructuredAgentSessionCaller,
-      params: Parameters<typeof clearQueuedStructuredAgentMessages>[2]
-    ) => clearQueuedStructuredAgentMessages(context(), caller, params),
     queuedMessagesResume: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof resumeStructuredAgentQueue>[2]

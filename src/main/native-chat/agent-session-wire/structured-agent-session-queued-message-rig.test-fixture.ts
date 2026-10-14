@@ -143,17 +143,6 @@ export async function createQueuedMessageTestRig(
     })
   }
 
-  function clearQueued(
-    messageIds: string[],
-    clientOperationId = hostTestOperationId(),
-    caller = QUEUED_RIG_CALLER
-  ) {
-    return host.queuedMessagesClear(caller, {
-      envelope: envelope({ messageIds }, 'agentSession.queuedMessagesClear', clientOperationId),
-      messageIds
-    })
-  }
-
   async function submission(id: string): Promise<AgentJournalSubmission | undefined> {
     return (await host.journalSnapshot(SESSION)).submissions.find(
       (entry) => entry.clientMessageId === id
@@ -315,7 +304,6 @@ export async function createQueuedMessageTestRig(
     stop,
     sendNow,
     deleteQueued,
-    clearQueued,
     submission,
     handoff,
     handoffId,

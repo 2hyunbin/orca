@@ -63,14 +63,13 @@ function renderController(initialProps: ControllerInput = {}) {
   const stateRef = { current: { fence: 1 } }
   return renderHook(
     (input: ControllerInput) => {
-      const { mutate } = useStructuredAgentSessionMutate({
+      const { mutate, write } = useStructuredAgentSessionMutate({
         sessionId: 'session-1',
         target: { kind: 'local' },
         stateRef
       })
       return useStructuredAgentSessionQueuedMessages({
         enabled: true,
-        clearSupported: true,
         queuedMessages: input.queuedMessages ?? [card('held')],
         queuePause: input.queuePause === undefined ? { reason: 'stopped' } : input.queuePause,
         submissions: [],
@@ -78,7 +77,7 @@ function renderController(initialProps: ControllerInput = {}) {
         isWorking: false,
         composerScopeKey: undefined,
         mutate,
-        editTransport: NO_EDIT
+        editTransport: { ...NO_EDIT, write }
       })
     },
     { initialProps }

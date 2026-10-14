@@ -8,7 +8,6 @@ export const MOBILE_AGENT_SESSION_RPC_METHODS = [
   'agentSession.cancel',
   'agentSession.queuedMessageSend',
   'agentSession.queuedMessageDelete',
-  'agentSession.queuedMessagesClear',
   'agentSession.queuedMessageUpdate',
   'agentSession.queuedMessageEditHold',
   'agentSession.queuedMessagesResume',

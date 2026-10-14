@@ -433,27 +433,25 @@ describe('mobile structured queued messages', () => {
       expect(onSendError).toHaveBeenCalledWith('This message was already sent.')
     })
 
-    it('Clear all sends one snapshot request only to a capable host', async () => {
-      sendRequest.mockImplementation(async (method) =>
-        method === 'agentSession.queuedMessagesClear'
-          ? mutationOk({ withdrawn: ['draft-1'], dispatched: [], missing: [] })
+    it('Clear all deletes every shown card on the existing host contract', async () => {
+      const ids = ['draft-1', 'draft-2']
+      sendRequest.mockImplementation(async (method, params) =>
+        method === 'agentSession.queuedMessageDelete'
+          ? fieldsOf(params).messageId === 'draft-1'
+            ? mutationOk({ deleted: true, messageId: 'draft-1' })
+            : mutationOk({ deleted: false, messageId: 'draft-2', disposition: 'missing' })
           : method === 'agentSession.options'
             ? ok({ models: [], current: {} })
             : ok({})
       )
       await mountSession(
-        CAPABLE,
-        snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
-      )
-      await act(async () => expect(await hook!.queued.clear?.(['draft-1'])).toBe(true))
-      expect(requestOf('agentSession.queuedMessagesClear').params.messageIds).toEqual(['draft-1'])
-      expect(calls('agentSession.queuedMessageDelete')).toHaveLength(0)
-      unmountSession()
-      await mountSession(
         LEGACY,
-        snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
+        snapshotEvent({ queuedMessages: ids.map((messageId) => queuedDraft({ messageId })) })
       )
-      expect(hook!.queued.clear).toBeUndefined()
+      expect(hook!.queued.clear).toBeDefined()
+      await act(async () => expect(await hook!.queued.clear(ids)).toBe(true))
+      expect(calls('agentSession.queuedMessageDelete')).toHaveLength(2)
+      expect(requestOf('agentSession.queuedMessageDelete', 1).params.messageId).toBe('draft-2')
     })
 
     it('Edit copies the card’s shown text into the composer before its delete leaves', async () => {

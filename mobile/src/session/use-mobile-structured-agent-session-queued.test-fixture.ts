@@ -16,18 +16,13 @@ export const CAPABLE: StructuredAgentSessionHostSupport = {
   promptCancel: false,
   questionAnswers: false,
   queuedMessages: true,
-  queuedMessagesClear: true,
   queuedCommands: false,
   statusFeed: false,
   quietRepeatedStop: false,
   sendOptions: false,
   conversationStop: false
 }
-export const LEGACY: StructuredAgentSessionHostSupport = {
-  ...CAPABLE,
-  queuedMessages: false,
-  queuedMessagesClear: false
-}
+export const LEGACY: StructuredAgentSessionHostSupport = { ...CAPABLE, queuedMessages: false }
 
 export function ok(result: unknown): RpcResponse {
   return { id: 'request-1', ok: true, result, _meta: { runtimeId: 'runtime-1' } }

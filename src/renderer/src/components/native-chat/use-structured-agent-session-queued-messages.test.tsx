@@ -40,11 +40,18 @@ function createHarness(
     enabled?: boolean
     composerScopeKey?: string | undefined
     mutateResult?: (call: MutateCall) => unknown
-    clearSupported?: boolean
+    clearPending?: Promise<void>
     sending?: StructuredAgentSessionPendingSend[]
   } = {}
 ) {
   const mutateCalls: MutateCall[] = []
+  const writeCalls: MutateCall[] = []
+  const clearWrite: StructuredAgentSessionWrite = async <T,>(...call: MutateCall) => {
+    writeCalls.push(call)
+    await overrides.clearPending
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Clear calls this test writer only for queuedMessageDelete.
+    return { kind: 'done', value: { deleted: true, messageId: call[2].messageId } as T }
+  }
   const mutate = vi.fn(async (...call: MutateCall) => {
     mutateCalls.push(call)
     return overrides.mutateResult ? overrides.mutateResult(call) : null
@@ -52,7 +59,6 @@ function createHarness(
   const rendered = renderHook(() =>
     useStructuredAgentSessionQueuedMessages({
       enabled: overrides.enabled ?? true,
-      clearSupported: overrides.clearSupported,
       queuedMessages: overrides.queuedMessages ?? [draft('draft-1', 1), draft('draft-2', 2)],
       queuePause: null,
       submissions: [],
@@ -62,10 +68,15 @@ function createHarness(
       composerScopeKey: 'composerScopeKey' in overrides ? overrides.composerScopeKey : SCOPE,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each scripted answer is the result shape of the one mutate it responds to; generic erasure cannot express that.
       mutate: mutate as StructuredAgentSessionMutate,
-      editTransport: { target: { kind: 'local' }, sessionId: 'session', capable: false, write }
+      editTransport: {
+        target: { kind: 'local' },
+        sessionId: 'session',
+        capable: false,
+        write: clearWrite
+      }
     })
   )
-  return { ...rendered, mutate, mutateCalls }
+  return { ...rendered, mutate, mutateCalls, writeCalls, clearWrite }
 }
 
 beforeEach(() => {
@@ -77,19 +88,36 @@ afterEach(() => {
 })
 
 describe('queued message actions', () => {
-  it('sends one bounded host snapshot for Clear all', async () => {
+  it('deletes shown host cards with bounded concurrency while Resume and Steer stay available', async () => {
+    const ids = Array.from({ length: 10 }, (_, index) => `draft-${index + 1}`)
+    const release = Promise.withResolvers<void>()
     const harness = createHarness({
-      clearSupported: true,
-      mutateResult: () => ({ withdrawn: ['draft-1', 'draft-2'], dispatched: [], missing: [] })
+      clearPending: release.promise,
+      queuedMessages: ids.map((id, index) => draft(id, index + 1))
     })
-    await act(async () => expect(await harness.result.current.clear()).toBe(true))
-    expect(harness.mutateCalls).toEqual([
-      [
-        'agentSession.queuedMessagesClear',
-        'agentSession.queuedMessagesClear',
-        { messageIds: ['draft-1', 'draft-2'] }
-      ]
-    ])
+    expect(harness.result.current.clearCapable).toBe(true)
+    let pending: Promise<boolean> = Promise.resolve(false)
+    await act(async () => {
+      pending = harness.result.current.clear()
+      await Promise.resolve()
+    })
+    expect(harness.writeCalls).toEqual(
+      ids
+        .slice(0, 8)
+        .map((messageId) => [
+          'agentSession.queuedMessageDelete',
+          'agentSession.queuedMessageDelete',
+          { messageId }
+        ])
+    )
+    await act(async () => expect(await harness.result.current.resume()).toBe(false))
+    expect(
+      harness.mutateCalls.some(([method]) => method === 'agentSession.queuedMessagesResume')
+    ).toBe(true)
+    expect(harness.result.current.steerNewest()).toBe(true)
+    release.resolve()
+    await act(async () => expect(await pending).toBe(true))
+    expect(harness.writeCalls).toHaveLength(ids.length)
   })
 
   it('keeps Clear all unavailable while a local send has no host card', async () => {
@@ -103,7 +131,7 @@ describe('queued message actions', () => {
       phase: 'sending',
       issued: true
     }
-    const harness = createHarness({ clearSupported: true, sending: [pending] })
+    const harness = createHarness({ sending: [pending] })
     expect(harness.result.current.cards.map((card) => card.messageId)).toContain('pending')
     expect(harness.result.current.clearCapable).toBe(false)
     await act(async () => expect(await harness.result.current.clear()).toBe(false))

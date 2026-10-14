@@ -110,7 +110,6 @@ export function NativeChatQueuedMessageList({
               pause={pause}
               resuming={controller.resuming}
               clearCapable={controller.clearCapable}
-              clearSupported={controller.clearSupported}
               expanded={expanded}
               listId={listId}
               onToggle={() => setExpanded(!expanded)}
@@ -166,7 +165,6 @@ function NativeChatQueueHeader({
   pause,
   resuming,
   clearCapable,
-  clearSupported,
   expanded,
   listId,
   onToggle,
@@ -178,7 +176,6 @@ function NativeChatQueueHeader({
   pause: { reason: string } | null
   resuming: boolean
   clearCapable: boolean
-  clearSupported: boolean
   expanded: boolean
   listId: string
   onToggle: () => void
@@ -212,18 +209,16 @@ function NativeChatQueueHeader({
       ) : null}
       {pause ? (
         <>
-          {clearSupported ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              disabled={!clearCapable}
-              onClick={onClearAll}
-            >
-              <Trash2 />
-              {translate('components.native-chat.queuedMessages.clearAll', 'Clear all')}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            disabled={!clearCapable}
+            onClick={onClearAll}
+          >
+            <Trash2 />
+            {translate('components.native-chat.queuedMessages.clearAll', 'Clear all')}
+          </Button>
           <Button type="button" variant="ghost" size="xs" disabled={resuming} onClick={onResume}>
             <Play />
             {translate('components.native-chat.queuedMessages.resume', 'Resume')}
