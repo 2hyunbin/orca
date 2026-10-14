@@ -385,6 +385,7 @@ export default function JiraIssueWorkspace({
 
             <JiraIssueWorkspaceContent
               displayed={displayed}
+              imageTarget={owner}
               titleDraft={titleDraft}
               setTitleDraft={setTitleDraft}
               labelsDraft={labelsDraft}

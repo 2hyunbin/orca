@@ -105,6 +105,7 @@ export async function getProjectStatusOrder(
     // avoids a second metadata request and keeps duplicate names unambiguous.
     const seenStatusIds = new Set<string>()
     const statusIdsByColumn: string[][] = []
+    const boardColumns: NonNullable<JiraProjectStatusOrder['columns']> = []
     for (const column of columns) {
       const statuses = asRecord(column).statuses
       if (!Array.isArray(statuses)) {
@@ -121,8 +122,12 @@ export async function getProjectStatusOrder(
       if (columnStatusIds.length > 0) {
         statusIdsByColumn.push(columnStatusIds)
       }
+      const name = asString(asRecord(column).name).trim()
+      if (name) {
+        boardColumns.push({ name, statusIds: columnStatusIds })
+      }
     }
-    return { statusIdsByColumn }
+    return { statusIdsByColumn, ...(boardColumns.length ? { columns: boardColumns } : {}) }
   } catch (error) {
     if (isAuthError(error)) {
       clearToken(entry.site.id)

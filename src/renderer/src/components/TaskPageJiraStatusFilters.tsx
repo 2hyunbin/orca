@@ -24,6 +24,7 @@ export function TaskPageJiraStatusFilters({
     jiraTaskSourceScopeKey,
     selectedJiraSiteId,
     activeJiraPreset,
+    jiraCurrentSprint,
     jiraSearchInput,
     setJiraSearchInput,
     setAppliedJiraSearch,
@@ -38,7 +39,10 @@ export function TaskPageJiraStatusFilters({
     jiraStatusCatalog?.scopeKey === scopeKey ? jiraStatusCatalog.items : [],
     selectedJiraStatuses
   )
-  const preview = buildJiraPresetJql(activeJiraPreset, { statuses: selectedJiraStatuses })
+  const preview = buildJiraPresetJql(activeJiraPreset, {
+    statuses: selectedJiraStatuses,
+    currentSprint: jiraCurrentSprint
+  })
   const disabled =
     !jiraQuickFiltersReady ||
     jiraQuickFiltersLoading ||

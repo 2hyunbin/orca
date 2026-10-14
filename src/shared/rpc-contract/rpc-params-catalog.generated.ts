@@ -316,6 +316,7 @@ import {
 } from './hosted-review-params'
 import {
   AssignableUsers,
+  AttachmentImage,
   CancelGenerateIssueSummary,
   Connect,
   CreateIssue as CreateIssueOfJiraParams,
@@ -984,6 +985,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'hostedReview.forBranch': HostedReviewForBranch,
   'hostedReview.getCreationEligibility': HostedReviewCreationEligibility,
   'jira.addIssueComment': IssueCommentOfJiraParams,
+  'jira.attachmentImage': AttachmentImage,
   'jira.cancelGenerateIssueSummary': CancelGenerateIssueSummary,
   'jira.connect': Connect,
   'jira.createIssue': CreateIssueOfJiraParams,

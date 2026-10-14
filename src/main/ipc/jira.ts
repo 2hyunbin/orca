@@ -1,9 +1,11 @@
 import { JiraIssueListFiltersParam } from '../../shared/rpc-contract/jira-quick-filter-params'
 import { ipcMain } from 'electron'
+import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import { connect, disconnect, getStatus, selectSite, testConnection } from '../jira/client'
 import { _resetPreflightCache } from './preflight'
 import { JiraCancellableRequests } from './jira-cancellable-requests'
 import { registerJiraUserSearchHandlers } from './jira-user-search'
+import { registerJiraProjectMetadataHandlers } from './jira-project-metadata'
 import {
   addIssueComment,
   createIssue,
@@ -11,11 +13,7 @@ import {
   getIssueSummary,
   getIssueComments,
   getProjectStatusOrder,
-  listCreateFields,
-  listIssueTypes,
   listIssues,
-  listPriorities,
-  listProjects,
   listTransitions,
   searchIssues,
   updateIssue
@@ -183,12 +181,20 @@ export function registerJiraHandlers(): void {
     }
   )
 
-  ipcMain.handle('jira:getIssue', async (_event, args: { key: string; siteId?: string }) => {
-    if (typeof args?.key !== 'string' || !args.key.trim()) {
-      return null
+  ipcMain.handle(
+    'jira:getIssue',
+    async (_event, args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) => {
+      if (typeof args?.key !== 'string' || !args.key.trim()) {
+        return null
+      }
+      return getIssue(
+        args.key.trim(),
+        normalizeSiteId(args.siteId),
+        false,
+        args.mediaFormat === 'reference' ? 'reference' : undefined
+      )
     }
-    return getIssue(args.key.trim(), normalizeSiteId(args.siteId))
-  })
+  )
 
   ipcMain.handle(
     'jira:lookupIssueSummary',
@@ -262,47 +268,22 @@ export function registerJiraHandlers(): void {
     }
   )
 
-  ipcMain.handle('jira:issueComments', async (_event, args: { key: string; siteId?: string }) => {
-    if (typeof args?.key !== 'string' || !args.key.trim()) {
-      return []
-    }
-    return getIssueComments(args.key.trim(), normalizeSiteId(args.siteId))
-  })
-
-  ipcMain.handle('jira:listProjects', async (_event, args?: { siteId?: JiraSiteSelection }) => {
-    return listProjects(normalizeSiteSelection(args?.siteId))
-  })
-
   ipcMain.handle(
-    'jira:listIssueTypes',
-    async (_event, args: { projectIdOrKey: string; siteId?: string }) => {
-      if (typeof args?.projectIdOrKey !== 'string' || !args.projectIdOrKey.trim()) {
+    'jira:issueComments',
+    async (_event, args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) => {
+      if (typeof args?.key !== 'string' || !args.key.trim()) {
         return []
       }
-      return listIssueTypes(args.projectIdOrKey.trim(), normalizeSiteId(args.siteId))
-    }
-  )
-
-  ipcMain.handle(
-    'jira:listCreateFields',
-    async (_event, args: { projectIdOrKey: string; issueTypeId: string; siteId?: string }) => {
-      if (typeof args?.projectIdOrKey !== 'string' || !args.projectIdOrKey.trim()) {
-        return []
-      }
-      if (typeof args?.issueTypeId !== 'string' || !args.issueTypeId.trim()) {
-        return []
-      }
-      return listCreateFields(
-        args.projectIdOrKey.trim(),
-        args.issueTypeId.trim(),
-        normalizeSiteId(args.siteId)
+      return getIssueComments(
+        args.key.trim(),
+        normalizeSiteId(args.siteId),
+        false,
+        args.mediaFormat === 'reference' ? 'reference' : undefined
       )
     }
   )
 
-  ipcMain.handle('jira:listPriorities', async (_event, args?: { siteId?: string }) => {
-    return listPriorities(normalizeSiteId(args?.siteId))
-  })
+  registerJiraProjectMetadataHandlers(normalizeSiteId)
 
   registerJiraUserSearchHandlers()
 
