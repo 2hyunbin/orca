@@ -123,10 +123,17 @@ describe('a password prompt the server gives up on', () => {
       createCallbacks({ onCredentialRequest })
     )
 
-    await conn.connect()
+    const connecting = conn.connect()
+    await vi.waitFor(() => expect(onCredentialRequest).toHaveBeenCalled())
+    const answered = onCredentialRequest.mock.results[0].value
+    await answered
+    // Answered but not yet used by the retry: a background dial must not replace it.
+    await vi.waitFor(() => expect(conn?.isAwaitingCredential()).toBe(true), { timeout: 1_000 })
+    await connecting
 
     expect(conn.getState().status).toBe('connected')
     expect(onCredentialRequest).toHaveBeenCalledTimes(1)
+    expect(conn.isAwaitingCredential()).toBe(false)
   }, 15_000)
 
   it('stops after the user cancels the prompt the server abandoned', async () => {

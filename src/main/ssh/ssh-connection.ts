@@ -277,9 +277,13 @@ export class SshConnection {
     return this.cachedPassphrase != null || this.cachedPassword != null
   }
 
-  /** The user has a credential dialog open for this connection. */
+  /** The user is answering a prompt, or answered one this connection's own retry has yet to use. */
   isAwaitingCredential(): boolean {
-    return this.openCredentialPrompts > 0
+    if (this.openCredentialPrompts > 0) {
+      return true
+    }
+    const retrying = this.state.status === 'connecting' || this.state.status === 'reconnecting'
+    return retrying && !this.signInVerified && this.hasCachedCredential()
   }
 
   /** Null unless the host accepted it, so a wrong password is asked for again, not replayed. */
