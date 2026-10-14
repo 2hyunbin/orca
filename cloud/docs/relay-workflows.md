@@ -813,7 +813,14 @@ It samples once a minute for up to 300 minutes, re-authenticating every 55-minut
 an ID token lasts an hour, and logs one JSON line per sample. The 503 background must predate the
 flip: give `flipped-at` (when the reserve write applied; the background is the median of the 10
 minutes before it) or `background-503-per-minute`, which overrides it. With neither, the watch is
-refused. It trips on, in this order:
+refused. A watch dispatched before the reserve write applied waits up to 10 minutes for the cell to
+report reserve, judging nothing meanwhile; a cell that never does ends the watch refused, without a
+write. It also refuses to start while any run holds the Cloud SQL rollout lease (same-cap and
+capacity rolls hold it for their whole run, and it names no cell), or when that lease cannot be
+read. It only reads the lease: holding it for hours would block every rollout. Pausing on a roll
+that starts mid-watch was not built, since a pause blinds the stop rules for the roll's length and
+a flip back mid-roll races its drain, so do not start a roll on a watched cell. It trips on, in
+this order:
 
 | Rule | Signal | Exact or proxy |
 |---|---|---|
@@ -829,7 +836,9 @@ samples in a row is a trip of its own. The 503 read takes every response code in
 newest minute any code has a point for is how far the series is published: a 503 minute at or
 before it with no point had no 503s, so a quiet fleet reads zero. Minutes past it are left out, not
 counted; fewer than 3 published minutes in the read, no request series at all, or an unparseable
-timestamp is unverifiable. This assumes the codes publish together; one code lagging the others
+timestamp is unverifiable. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which
+every placing director logs each minute, in the same query and window: with no summary from the
+last 150 s in it, the read is blind and the sample unverifiable, not zero duplicates. This assumes the codes publish together; one code lagging the others
 delays a trip by its lag but cannot hide one, because a later read sees its points. Until the minutes before `flipped-at` are published (3 minutes past
 it) the 503 rule is pending, which does not add to the streak. The duplicate rule keys a seat by
 director instance, so a director restart (a new instance id) starts its first-seen clock over. A
@@ -848,6 +857,12 @@ conflict it re-reads and retries, up to 5 times, while the switch file still say
 if it already says db. A cell that still does not answer runtime-status after 4 tries with backoff
 cannot take the ordinary flip back: the run fails and prints the exact break-glass inputs for
 `Operate Relay Production Cell Flags` (`set=admitMode=default`, `break-glass=BREAK GLASS <cell-id>`).
+
+An operator watches the run; nothing pages. A flip back that did not land (no ID token, a failed
+login, a cell that does not answer) raises an `::error::` annotation naming the cell and a
+`FLIP BACK FAILED` summary heading, as the clock-skew monitor raises its alarm, and the cell must
+then be flipped to db by hand. The workflow logs in only once the root Terraform that adds it to
+the shared deploy identity's provider condition is applied.
 
 ## Mobile push gateway
 

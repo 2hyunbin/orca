@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +18,7 @@ import {
   readDirector503Minutes,
   readSeatBehindRowSample,
   recordOutcome,
+  rolloutLeaseRefusal,
   watchSegment
 } from './watch-relay-reserve-cell.mjs'
 import { readRelayWorkflow } from './relay-repository.mjs'
@@ -142,6 +144,14 @@ test('503 minutes past the publishing front are left out, and only no front at a
   assert.match(stale.rules.director503.reason, new RegExp(`published only through ${minutes[1]}`))
 })
 
+const SEAT_EVENT = 'orca_relay_reserve_ledger_seat_behind_row'
+const SUMMARY_EVENT = 'orca_relay_reserve_ledger_summary'
+const summaryLine = (at, instanceId = 'a') => ({
+  timestamp: new Date(at).toISOString(),
+  labels: { instanceId },
+  jsonPayload: { event: SUMMARY_EVENT, pending: 0, dropped: 0 }
+})
+
 // A Cloud Monitoring or Cloud Logging reader over fakes, as the watch builds one.
 const fakeReader = ({ fetch: fetchImpl = async () => new Response('{}'), runGcloud = async () => ({ stdout: 'token' }) } = {}) => ({
   fetch: fetchImpl,
@@ -164,7 +174,7 @@ test('an unparseable timestamp makes the read unverifiable', async () => {
   assert.equal(read503.ok, false)
   assert.match(read503.error, /unreadable/)
   const seats = await readSeatBehindRowSample(
-    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([{ timestamp: 'garbage', jsonPayload: { epoch: 1, rowEpoch: 2 } }]) }) }),
+    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([summaryLine(START), { timestamp: 'garbage', jsonPayload: { epoch: 1, rowEpoch: 2 } }]) }) }),
     { directorService: 'orca-cloud-relay', cellId: CELL, at: START }
   )
   assert.equal(seats.ok, false)
@@ -172,12 +182,34 @@ test('an unparseable timestamp makes the read unverifiable', async () => {
 })
 
 test('a seat-behind-row key carries the director instance and cell beside the epochs', async () => {
-  const entry = (instanceId) => ({ timestamp: new Date(START).toISOString(), labels: { instanceId }, jsonPayload: { cellId: CELL, epoch: 7, rowEpoch: 8 } })
+  const entry = (instanceId) => ({ timestamp: new Date(START).toISOString(), labels: { instanceId }, jsonPayload: { event: SEAT_EVENT, epoch: 7, rowEpoch: 8 } })
   const read = await readSeatBehindRowSample(
-    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([entry('a'), entry('b')]) }) }),
+    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([entry('a'), summaryLine(START), entry('b')]) }) }),
     { directorService: 'orca-cloud-relay', cellId: CELL, at: START }
   )
   assert.deepEqual(read.reports.map((report) => report.key), [`a/${CELL}/7:8`, `b/${CELL}/7:8`])
+})
+
+test('the duplicate read carries a positive control: no fresh ledger summary in it is unverifiable, not zero', async () => {
+  const filters = []
+  const readWith = (entries) =>
+    readSeatBehindRowSample(
+      fakeReader({ runGcloud: async (args) => (filters.push(args[2]), { stdout: JSON.stringify(entries) }) }),
+      { directorService: 'orca-cloud-relay', cellId: CELL, at: START }
+    )
+  // One read, one window: the control rides the same filter as the seat lines.
+  assert.deepEqual(await readWith([summaryLine(START - 30_000)]), { ok: true, reports: [] })
+  assert.match(filters[0], new RegExp(`\\(\\(jsonPayload\\.event="${SEAT_EVENT}" AND jsonPayload\\.cellId="${CELL}"\\) OR jsonPayload\\.event="${SUMMARY_EVENT}"\\)`))
+  assert.match(filters[0], /resource\.labels\.service_name="orca-cloud-relay"/)
+  for (const entries of [[], [summaryLine(START - 10 * MINUTE)]]) {
+    const blind = await readWith(entries)
+    assert.equal(blind.ok, false)
+    assert.match(blind.error, /no fresh ledger summary \(positive control\)/)
+  }
+  // Blind is a gap in the sample, which counts toward the unverifiable streak.
+  const [gap] = run([sampleAt(START, { seatBehindRow: await readWith([]) })])
+  assert.equal(gap.rules.duplicateSeat.status, 'unverifiable')
+  assert.equal(gap.state.unverifiableStreak, 1)
 })
 
 test('the measured background is the median of the minutes before the flip, published gaps as zero', () => {
@@ -287,11 +319,35 @@ test('unreadable data is never healthy: N samples in a row with any gap trip', (
 
 test('a cell no longer in reserve stops the watch without a write; one never in reserve is refused', () => {
   const dbCell = healthyCell({ admitModeConfigured: 'db', admitModeEffective: 'reserve' })
-  const [refused] = run([sampleAt(START, { cell: dbCell })])
-  assert.equal(refused.state.state, 'refused')
   const later = run([sampleAt(START), sampleAt(START + MINUTE, { cell: dbCell })])
   assert.equal(later.at(-1).state.state, 'stopped')
   assert.match(later.at(-1).state.verdict, /is not in reserve mode \(switch file says db\)/)
+  // Never reserve within the wait: refused, which the workflow does not flip back.
+  const never = run(Array.from({ length: 12 }, (_, minute) => sampleAt(START + minute * MINUTE, { cell: dbCell })))
+  assert.equal(never.at(-1).state.state, 'refused')
+  assert.equal(never.length, 11)
+  assert.match(never.at(-1).state.verdict, /did not report reserve mode within 10 min \(switch file says db\)/)
+})
+
+test('a watch dispatched before the reserve write applied waits for it, then judges as usual', () => {
+  const dbCell = healthyCell({ admitModeConfigured: 'db', admitModeEffective: 'db' })
+  const results = run([
+    sampleAt(START, { cell: dbCell, ledger: { ok: false, error: 'not yet' } }),
+    sampleAt(START + MINUTE, { cell: dbCell }),
+    sampleAt(START + 2 * MINUTE),
+    sampleAt(START + 3 * MINUTE, { cell: healthyCell({ enforcedUnits: 2_500 }) })
+  ])
+  // Waiting samples judge nothing: not a dead-man trip on a db cell, not a gap.
+  assert.deepEqual(results.slice(0, 2).map((result) => result.state.state), ['watching', 'watching'])
+  assert.equal(results[0].rules.reserve.status, 'pending')
+  assert.deepEqual(Object.keys(results[0].rules), ['reserve'])
+  assert.deepEqual(results.map((result) => result.state.unverifiableStreak), [0, 0, 0, 0])
+  assert.equal(results[2].state.reserveSeenAt, START + 2 * MINUTE)
+  assert.equal(results[2].rules.overrun.status, 'pass')
+  assert.equal(results[3].state.state, 'tripped')
+  // Once seen in reserve, a later db reads as a hand flip back, not a refusal.
+  const after = run([sampleAt(START + 2 * MINUTE), sampleAt(START + 3 * MINUTE, { cell: dbCell })], results[0].state)
+  assert.equal(after.at(-1).state.state, 'stopped')
 })
 
 const watchValues = (overrides = {}) => ({
@@ -334,10 +390,13 @@ test('the 503 background needs flipped-at or an explicit value; flipped-at must 
 // A cell, Cloud Monitoring and Cloud Logging, answering from `script` per sample.
 function fakeSources({
   cell = () => ({}),
-  ledger = () => [{ timestamp: new Date(START).toISOString(), labels: { instanceId: 'a' }, jsonPayload: { pending: 0, dropped: 0 } }],
+  // Logged at each sample's minute, so it stays fresh for the positive control.
+  ledger = (sample) => [{ timestamp: new Date(START + (sample - 1) * MINUTE).toISOString(), labels: { instanceId: 'a' }, jsonPayload: { pending: 0, dropped: 0 } }],
   per503 = () => 10,
   // Requests of every other code per minute; zero is a minute with no traffic at all.
-  perOther = () => 1_000
+  perOther = () => 1_000,
+  seatControl = true,
+  rolloutLease = null
 } = {}) {
   let samples = 0
   const monitoringSpans = []
@@ -382,10 +441,12 @@ function fakeSources({
   const runGcloud = async (args) => {
     if (args[0] === 'auth') return { stdout: 'token' }
     const filter = args[2]
-    if (filter.includes('orca_relay_reserve_ledger_summary')) return { stdout: JSON.stringify(ledger(samples)) }
+    const summaries = ledger(samples).map((entry) => ({ ...entry, jsonPayload: { ...entry.jsonPayload, event: SUMMARY_EVENT } }))
+    if (filter.includes(SEAT_EVENT)) return { stdout: JSON.stringify(seatControl ? summaries : []) }
+    if (filter.includes(SUMMARY_EVENT)) return { stdout: JSON.stringify(ledger(samples)) }
     return { stdout: '[]' }
   }
-  return { fetchImpl, runGcloud, monitoringSpans }
+  return { fetchImpl, runGcloud, monitoringSpans, readRolloutLease: async () => rolloutLease }
 }
 
 test('a segment samples once a minute, carries state to the next segment, and stops on a trip', async () => {
@@ -437,7 +498,8 @@ test('a sample that cannot read its sources counts as unverifiable rather than c
     })
     assert.equal(state.state, 'tripped')
     assert.equal(state.samples, 3)
-    assert.match(state.verdict, /unverifiable: 3 samples in a row could not read ledgerDrift/)
+    // No summary also blinds the duplicate rule, whose positive control it is.
+    assert.match(state.verdict, /unverifiable: 3 samples in a row could not read duplicateSeat, ledgerDrift/)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -781,7 +843,7 @@ test('workflow: a watch that failed or was cancelled without a verdict flips bac
   const flip = jobOf('flip-back')
   // A cancel re-evaluates each step: every flip-back step must run on always() too.
   const steps = flip.slice(flip.indexOf('\n    steps:\n')).split(/\n      - /).slice(1)
-  assert.equal(steps.length, 6)
+  assert.equal(steps.length, 7)
   for (const step of steps) assert.match(step, /\n\s+if: \$\{\{ always\(\) \}\}/, step.split('\n')[0])
   assert.match(flip, /if: \$\{\{ always\(\) && vars\.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && needs\.watch\.result != 'skipped'/)
   assert.match(flip, /!contains\(fromJSON\('\["completed","stopped","refused"\]'\), needs\.watch\.outputs\.state\)/)
@@ -789,4 +851,47 @@ test('workflow: a watch that failed or was cancelled without a verdict flips bac
   const segments = watchWorkflow.match(/run: bash -c "\$\{WATCH_SEGMENT\}"/g) ?? []
   assert.equal(segments.length, 6)
   assert.match(jobOf('watch'), /process\.env\.ORCA_RELAY_ADMIN_ID_TOKEN/)
+})
+
+test('a live rollout lease refuses the watch before its first sample; an expired one does not', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    const stateFile = join(directory, 'state.json')
+    const output = join(directory, 'out')
+    const config = parseAt(watchValues({ 'state-file': stateFile, 'github-output': output, 'segment-minutes': '1' }))
+    const lease = (expiresAt) => ({ record: { expires_at: expiresAt }, holder: 'Deploy Relay Production Same-Cap (run 9)' })
+    let clock = START
+    const dependencies = (rolloutLease) => ({
+      ...fakeSources({ rolloutLease }),
+      idToken: 'id',
+      retryDelayMs: 0,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms },
+      log: () => {}
+    })
+    const held = await watchSegment(config, dependencies(lease(START + MINUTE)))
+    assert.equal(held.state, 'refused')
+    assert.match(held.verdict, /a rollout holds the Cloud SQL rollout lease until .*Same-Cap \(run 9\)/)
+    assert.equal(JSON.parse(await readFile(stateFile, 'utf8')).state, 'refused')
+    assert.match(await readFile(output, 'utf8'), /^state=refused\n/)
+    await rm(stateFile)
+    assert.equal((await watchSegment(config, dependencies(lease(START - 1)))).state, 'watching')
+    // Only the first segment checks: a later one carries on from its state file.
+    assert.equal((await watchSegment(config, dependencies(lease(clock + MINUTE)))).state, 'watching')
+    // A lease it cannot read refuses too, as the lease action fails closed.
+    assert.match(await rolloutLeaseRefusal(async () => { throw new Error('403') }, START), /lease is unreadable \(403\)/)
+    assert.equal(await rolloutLeaseRefusal(async () => null, START), null)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('workflow: a flip back that did not land raises an error annotation and fails the job', () => {
+  const flip = jobOf('flip-back')
+  const alarm = flip.slice(flip.indexOf('- name: Alarm when the flip back did not land'))
+  assert.match(alarm, /grep -qs '"event":"orca_relay_reserve_watch_flip_back"' "\$\{RUNNER_TEMP\}\/relay-reserve-flip-back\.jsonl"/)
+  assert.match(alarm, /echo "::error title=Reserve flip back FAILED for \$\{CELL_ID\}::/)
+  assert.match(alarm, /\n\s+exit 1\n/)
+  // The flip-back line names only the write's own event, never its conflict retries.
+  assert.match(readFileSync(new URL('./watch-relay-reserve-cell.mjs', import.meta.url), 'utf8'), /event: 'orca_relay_reserve_watch_flip_back',\n/)
 })

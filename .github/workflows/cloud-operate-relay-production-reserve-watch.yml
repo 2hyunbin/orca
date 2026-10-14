@@ -2,6 +2,9 @@ name: Operate Relay Production Reserve Watch
 
 # Watches one cell already switched to reserve mode and flips it back to db on the first stop
 # rule it trips (step 5 design §9). Manual only. dry-run evaluates and logs, writes nothing.
+# An operator watches the run: a flip back that did not land raises an ::error:: annotation, the
+# alarm the clock-skew monitor raises, and nothing pages. Refuses to start while a rollout holds
+# the Cloud SQL rollout lease.
 on:
   workflow_dispatch:
     inputs:
@@ -285,6 +288,21 @@ jobs:
             --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
             --confirmation "${CONFIRMATION}" --verdict "${VERDICT}" \
             | tee "${RUNNER_TEMP}/relay-reserve-flip-back.jsonl"
+
+      # The flip-back line is logged only once the write (or its dry-run plan) finished; without
+      # it a missing token, a failed login or a silent cell left the cell in reserve, unwatched.
+      - name: Alarm when the flip back did not land
+        if: ${{ always() }}
+        run: |
+          if grep -qs '"event":"orca_relay_reserve_watch_flip_back"' "${RUNNER_TEMP}/relay-reserve-flip-back.jsonl"; then
+            exit 0
+          fi
+          echo "::error title=Reserve flip back FAILED for ${CELL_ID}::${CELL_ID} may still be in reserve mode with no watch. Flip it to db by hand with Operate Relay Production Cell Flags (set=admitMode=db), or with the break-glass inputs logged above if the cell does not answer. Verdict: ${VERDICT}"
+          {
+            echo "## FLIP BACK FAILED: ${CELL_ID} may still be in reserve mode"
+            echo "Flip it to db by hand with Operate Relay Production Cell Flags."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit 1
 
       - name: Audit summary
         if: ${{ always() }}

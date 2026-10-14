@@ -21,6 +21,8 @@ import {
 } from './operate-relay-cell-flags.mjs'
 import { readDirectorRequestsByCodePerMinute, readLogEntries } from './relay-same-cap-shadow-gate.mjs'
 import { minutesOf } from './relay-same-cap-shadow-gate-verdict.mjs'
+import { PRODUCTION_LEASE } from './cloud-sql-rollout-lock-census.mjs'
+import { RELAY_REPOSITORY_ROOT } from './relay-repository.mjs'
 import {
   evaluateWatchSample,
   initialWatchState,
@@ -151,11 +153,14 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
   }
 }
 
-function directorLogFilter(directorService, event, sinceAt) {
+const LEDGER_SUMMARY_EVENT = 'orca_relay_reserve_ledger_summary'
+const SEAT_BEHIND_ROW_EVENT = 'orca_relay_reserve_ledger_seat_behind_row'
+
+function directorLogFilter(directorService, eventClause, sinceAt) {
   return [
     'resource.type="cloud_run_revision"',
     `resource.labels.service_name="${directorService}"`,
-    `jsonPayload.event="${event}"`,
+    eventClause,
     `timestamp>="${new Date(sinceAt).toISOString()}"`
   ].join(' AND ')
 }
@@ -163,7 +168,7 @@ function directorLogFilter(directorService, event, sinceAt) {
 // Newest summary per director instance; queued plus dropped rows are the ones not in Postgres.
 export async function readLedgerSample(reader, { directorService, at }) {
   const read = await readLogEntries(reader, {
-    filter: directorLogFilter(directorService, 'orca_relay_reserve_ledger_summary', at - RESERVE_WATCH_RULES.ledgerSummaryMaxAgeMs),
+    filter: directorLogFilter(directorService, `jsonPayload.event="${LEDGER_SUMMARY_EVENT}"`, at - RESERVE_WATCH_RULES.ledgerSummaryMaxAgeMs),
     projection: 'json(timestamp,labels.instanceId,jsonPayload.pending,jsonPayload.dropped)',
     limit: LOG_ENTRY_LIMIT
   })
@@ -189,28 +194,36 @@ export async function readLedgerSample(reader, { directorService, at }) {
   return { ok: true, unwrittenRows, directors: newest.size }
 }
 
+// The same read also takes the ledger summary every placing director logs each minute, as a
+// positive control: with no fresh summary in it, no seat-behind-row line is blindness, not zero.
 export async function readSeatBehindRowSample(reader, { directorService, cellId, at }) {
   const read = await readLogEntries(reader, {
-    filter: `${directorLogFilter(
+    filter: directorLogFilter(
       directorService,
-      'orca_relay_reserve_ledger_seat_behind_row',
+      `((jsonPayload.event="${SEAT_BEHIND_ROW_EVENT}" AND jsonPayload.cellId="${cellId}") OR jsonPayload.event="${LEDGER_SUMMARY_EVENT}")`,
       at - RESERVE_WATCH_RULES.duplicateSeat.lookbackMs
-    )} AND jsonPayload.cellId="${cellId}"`,
-    projection: 'json(timestamp,labels.instanceId,jsonPayload.epoch,jsonPayload.rowEpoch)',
+    ),
+    projection: 'json(timestamp,labels.instanceId,jsonPayload.event,jsonPayload.epoch,jsonPayload.rowEpoch)',
     limit: LOG_ENTRY_LIMIT
   })
   if (read.failed) return failedRead(read.error)
   if (read.entries.length >= LOG_ENTRY_LIMIT) return failedRead('seat-behind-row read truncated')
   const reports = []
+  let controlSeen = false
   for (const entry of read.entries) {
     const reportedAt = Date.parse(entry.timestamp)
-    const { epoch, rowEpoch } = entry.jsonPayload ?? {}
     if (!Number.isFinite(reportedAt)) return failedRead('seat-behind-row line with an unparseable timestamp')
+    if (entry.jsonPayload?.event === LEDGER_SUMMARY_EVENT) {
+      controlSeen ||= reportedAt >= at - RESERVE_WATCH_RULES.ledgerSummaryMaxAgeMs
+      continue
+    }
+    const { epoch, rowEpoch } = entry.jsonPayload ?? {}
     if (epoch === undefined || rowEpoch === undefined) return failedRead('seat-behind-row line without epochs')
     // Everything the line carries but its time, which differs on every report of one seat. A
     // proxy for the host: two hosts sharing it read as one seat, so it can only over-count.
     reports.push({ at: reportedAt, key: `${entry.labels?.instanceId ?? 'unknown'}/${cellId}/${epoch}:${rowEpoch}` })
   }
+  if (!controlSeen) return failedRead('seat-behind-row read holds no fresh ledger summary (positive control)')
   return { ok: true, reports }
 }
 
@@ -226,6 +239,41 @@ function createReader(dependencies, projectId) {
     deadlineAt: now() + SAMPLE_READ_BUDGET_MS,
     projectId
   }
+}
+
+/**
+ * Same-cap and capacity rolls hold the Cloud SQL rollout lease for the whole run; it names no
+ * cell, so any live holder refuses the watch's start. Read only: holding it for hours would block
+ * every rollout. An unreadable lease refuses too (fail closed, as the lease action does).
+ */
+export async function rolloutLeaseRefusal(readRolloutLease, now) {
+  try {
+    const existing = await readRolloutLease()
+    if (!existing || existing.record.expires_at <= now) return null
+    return (
+      `a rollout holds the Cloud SQL rollout lease until ${new Date(existing.record.expires_at).toISOString()} ` +
+      `(${existing.holder}); start the watch after it ends`
+    )
+  } catch (error) {
+    return `the Cloud SQL rollout lease is unreadable (${error instanceof Error ? error.message : error}); refusing to start`
+  }
+}
+
+// The lease action's own reader, resolved from the repository root because this tree's depth
+// differs between the two repositories' copies.
+async function readProductionRolloutLease() {
+  const action = new URL('.github/actions/cloud-sql-rollout-lease/', RELAY_REPOSITORY_ROOT)
+  const [{ CloudSqlRolloutLease, describeHolder }, { createAccessTokenSource }] = await Promise.all([
+    import(new URL('storage-lease.mjs', action).href),
+    import(new URL('gcloud-access-token.mjs', action).href)
+  ])
+  const lease = new CloudSqlRolloutLease({
+    bucket: PRODUCTION_LEASE.bucket,
+    objectName: PRODUCTION_LEASE.object,
+    accessToken: createAccessTokenSource()
+  })
+  const existing = await lease.read()
+  return existing && { record: existing.record, holder: describeHolder(existing.record) }
 }
 
 // Only a missing file is a fresh watch. Anything else that is not a state fails the segment, which
@@ -262,15 +310,23 @@ export async function watchSegment(config, dependencies) {
   const log = dependencies.log ?? console.log
   const deps = { ...dependencies, now, sleep, fetchImpl: dependencies.fetchImpl ?? fetch }
   const { request, directorService } = config
-  let state =
-    (await loadState(config.stateFile)) ??
-    initialWatchState({
+  let state = await loadState(config.stateFile)
+  if (state === null) {
+    const refusal = await rolloutLeaseRefusal(dependencies.readRolloutLease, now())
+    if (refusal) {
+      state = { state: 'refused', verdict: refusal }
+      await writeFile(config.stateFile, JSON.stringify(state))
+      if (config.githubOutput) await writeOutcome(config.githubOutput, state)
+      return state
+    }
+    state = initialWatchState({
       cellId: request.cellId,
       startedAt: now(),
       durationMinutes: config.durationMinutes,
       background503PerMinute: config.background503PerMinute,
       flippedAt: config.flippedAt
     })
+  }
   if (state.cellId !== request.cellId) throw new Error(`state file is for ${state.cellId}, not ${request.cellId}`)
   const segmentEndsAt = now() + config.segmentMinutes * MINUTE_MS
   while (state.state === 'watching' && now() < segmentEndsAt) {
@@ -439,6 +495,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       const config = await parseWatchSegment(values)
       const state = await watchSegment(config, {
         idToken,
+        readRolloutLease: readProductionRolloutLease,
         runGcloud: (args, { timeoutMs }) =>
           execFileAsync('gcloud', args, { maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL' })
       })

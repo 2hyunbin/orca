@@ -24,7 +24,9 @@ export const RESERVE_WATCH_RULES = {
   hostDrop: { share: 0.05, windowMs: 5 * MINUTE_MS, minHosts: 10 },
   ledgerDrift: { share: 0.005, sustainMs: 2 * MINUTE_MS },
   // A placing director logs its ledger summary every 60 s; none in this long is no evidence.
-  ledgerSummaryMaxAgeMs: 150_000
+  ledgerSummaryMaxAgeMs: 150_000,
+  // A watch dispatched before the reserve write applies waits this long for the cell to report it.
+  reserveApplyWaitMs: 10 * MINUTE_MS
 }
 
 // Precedence: the first tripped rule names the verdict, so exact signals come before proxies. The
@@ -46,6 +48,7 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
     background:
       background503PerMinute === null ? null : { medianPerMinute: background503PerMinute, source: 'input' },
     hosts: [],
+    reserveSeenAt: null,
     ledgerAboveSince: null,
     seatBehindRowFirstSeen: {}
   }
@@ -188,12 +191,21 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
   const next = { ...state, samples: state.samples + 1 }
   const { cell } = sample
   if (cell.ok && cell.admitModeConfigured !== 'reserve') {
-    // Someone else flipped it back (or it never was reserve): nothing left to watch.
-    next.state = state.samples === 0 ? 'refused' : 'stopped'
-    next.verdict = `${state.cellId} is not in reserve mode (switch file says ${cell.admitModeConfigured})`
+    const seen = state.reserveSeenAt !== null
+    if (!seen && at < state.startedAt + RESERVE_WATCH_RULES.reserveApplyWaitMs) {
+      // Not judged, and the streak holds: the reserve write may not have applied yet.
+      const rules = { reserve: pending(`switch file says ${cell.admitModeConfigured}; waiting for reserve to apply`) }
+      return { state: next, rules, line: sampleLine(next, sample, rules) }
+    }
+    // Someone else flipped it back (or it never became reserve): nothing left to watch.
+    next.state = seen ? 'stopped' : 'refused'
+    next.verdict = seen
+      ? `${state.cellId} is not in reserve mode (switch file says ${cell.admitModeConfigured})`
+      : `${state.cellId} did not report reserve mode within ${RESERVE_WATCH_RULES.reserveApplyWaitMs / MINUTE_MS} min (switch file says ${cell.admitModeConfigured})`
     return { state: next, rules: {}, line: sampleLine(next, sample, {}) }
   }
   if (cell.ok) {
+    next.reserveSeenAt = state.reserveSeenAt ?? at
     next.hosts = [...state.hosts, { at, controls: cell.controls, draining: cell.draining }].filter(
       (entry) => entry.at > at - RESERVE_WATCH_RULES.hostDrop.windowMs
     )
