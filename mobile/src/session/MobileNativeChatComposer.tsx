@@ -11,7 +11,10 @@ import {
 } from 'react-native'
 import { ImagePlus, Mic, Square, X } from 'lucide-react-native'
 import { colors, radii, spacing } from '../theme/mobile-theme'
-import { structuredSlashCommands } from '../../../src/shared/structured-agent-session-composer'
+import {
+  isStructuredAgentSessionComposerCommand,
+  structuredSlashCommands
+} from '../../../src/shared/structured-agent-session-composer'
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
 import {
   applyAutocomplete,
@@ -336,7 +339,10 @@ export function MobileNativeChatComposer({
             <MobileNativeChatSendButton
               key={sendSurfaceId}
               canSend={canSend}
-              offersChoice={sendChoiceEnabled}
+              offersChoice={
+                sendChoiceEnabled &&
+                !isStructuredAgentSessionComposerCommand(value, agent ?? undefined)
+              }
               onSend={handleSend}
             />
           </View>

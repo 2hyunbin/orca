@@ -154,6 +154,37 @@ describe('MobileNativeChatComposer', () => {
     expect(onSend).toHaveBeenLastCalledWith('correction')
   })
 
+  it('keeps host commands on plain Send while offering the choice for pass-through commands', async () => {
+    const onSend = vi.fn().mockResolvedValue(true)
+    const props = {
+      agent: 'codex',
+      value: '/compact',
+      onChangeText: vi.fn(),
+      onSend,
+      sendChoiceEnabled: true,
+      sendSurfaceId: 'tab-a',
+      getSendCompletionGeneration: getCurrentSendCompletionGeneration
+    }
+    await act(async () => {
+      renderer = create(createElement(MobileNativeChatComposer, props))
+    })
+    const button = () => renderer!.root.findByProps({ accessibilityLabel: 'Send message' })
+    expect(button().props.onLongPress).toBeUndefined()
+    await act(async () => button().props.onPress())
+    expect(onSend).toHaveBeenCalledWith('/compact')
+    expect(renderer!.root.findAllByType('BottomDrawer')).toHaveLength(0)
+
+    await act(async () => {
+      renderer!.update(
+        createElement(MobileNativeChatComposer, { ...props, value: '/goal ship it' })
+      )
+    })
+    await act(async () => button().props.onLongPress())
+    const steer = renderer!.root.findByType('BottomDrawer').findAllByType('Pressable')[1]
+    await act(async () => steer.props.onPress())
+    expect(onSend).toHaveBeenLastCalledWith('/goal ship it', 'steer')
+  })
+
   it('stacks the input above the composer action row', async () => {
     await render(vi.fn().mockResolvedValue(true), vi.fn())
 
