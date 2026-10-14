@@ -27,6 +27,21 @@ export async function commitPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawn
   return commitPtyWithOpenCodePromptIntent(ctx, () => commitReservedPtyIpcSpawn(ctx))
 }
 
+/** What became of a requested resume, on every result the renderer receives. */
+function resumeDisposition(ctx: PtyIpcSpawnState) {
+  // Why: the pane asked to resume and got a fresh session instead; only the
+  // renderer can say so, and a reattach never ran this launch command.
+  if (ctx.result.isReattach) {
+    return {}
+  }
+  return {
+    ...(ctx.codexResumeLaunch.notifyResumeUnavailable || ctx.resumeRefusal
+      ? { agentResumeUnavailable: true as const }
+      : {}),
+    ...(ctx.resumeRefusal ? { agentResumeRefused: ctx.resumeRefusal.verdict } : {})
+  }
+}
+
 async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawnResult> {
   const args = ctx.args
   admitPtyReattachOwnership(ctx.deps.runtime, ctx.result)
@@ -87,11 +102,10 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
       ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.result.id, ctx.result.incarnationId)
       ctx.pendingRegistrationPtyId = null
       // The renderer drains this incarnation's buffered output and exit without publishing it live.
-      return resolvePaneSpawnReservation(
-        ctx.paneSpawnReservationKey,
-        ctx.paneSpawnReservation,
-        ctx.result
-      )
+      return resolvePaneSpawnReservation(ctx.paneSpawnReservationKey, ctx.paneSpawnReservation, {
+        ...ctx.result,
+        ...resumeDisposition(ctx)
+      })
     }
     ctx.pendingRegistrationPtyId = null
   } else if (ctx.pendingRegistrationPtyId) {
@@ -193,15 +207,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
     ...(ctx.startupCwdFallback && !ctx.result.isReattach
       ? { startupCwdFallback: ctx.startupCwdFallback }
       : {}),
-    // Why: the pane asked to resume and got a fresh session instead; only the
-    // renderer can say so, and a reattach never ran this launch command.
-    ...((ctx.codexResumeLaunch.notifyResumeUnavailable || ctx.agentResumeRefused) &&
-    !ctx.result.isReattach
-      ? { agentResumeUnavailable: true as const }
-      : {}),
-    ...(ctx.agentResumeRefused && !ctx.result.isReattach
-      ? { agentResumeRefused: true as const }
-      : {})
+    ...resumeDisposition(ctx)
   }
   // Why: renderer tab state cannot reliably infer background and reattached PTYs in the daemon inventory.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)

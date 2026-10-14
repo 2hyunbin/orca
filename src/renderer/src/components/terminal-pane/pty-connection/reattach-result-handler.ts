@@ -95,6 +95,9 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     }
 
     if (connectResult?.exitedBeforeAttach) {
+      if (connectResult.agentResumeUnavailable) {
+        session.showSessionRestoredBanner('resume-unavailable')
+      }
       // Why: the transport already delivered the dead session's final frame + exit; treat as terminal state, not a failed reattach.
       return true
     }

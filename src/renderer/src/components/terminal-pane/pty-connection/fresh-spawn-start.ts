@@ -180,6 +180,10 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         if (connectResult?.agentResumeRefused) {
           session.clearRegisteredStartupLaunchConfig()
         }
+        if (connectResult?.agentResumeRefused === 'unverifiable') {
+          // Why: the saved session may have been consumed before this spawn; keep it for the next try.
+          session.keepUnrunResumeHandle(startupOverride)
+        }
         if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
           session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
             ...(coldRestore ? { launchToken: coldRestore.launchToken } : {}),

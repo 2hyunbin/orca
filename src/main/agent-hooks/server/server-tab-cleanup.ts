@@ -10,16 +10,21 @@ export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
    *  forget the pane's claim on it here, with no resumable remnant, and tell renderers to forget
    *  theirs. A row for another conversation is left alone. */
   forgetRefusedPaneResume(paneKey: string, refused: RefusedPaneResume): void {
-    const row = this.state.lastStatusByPaneKey.get(this.resolvePaneKeyAlias(paneKey))
+    // Why the owner's key: a moved pane's row, and the renderer's state for it, live under it.
+    const ownerKey = this.resolvePaneKeyAlias(paneKey)
+    const row = this.state.lastStatusByPaneKey.get(ownerKey)
+    const clear = { paneKey: ownerKey, refusedResume: refused }
     if (
       row &&
       row.payload.agentType === refused.agent &&
       agentProviderSessionsEqual(refused.agent, row.providerSession, refused.providerSession)
     ) {
-      this.dropStatusEntry(row.paneKey, { preserveResumeIdentity: false })
+      this.dropStatusEntry(ownerKey, { preserveResumeIdentity: false })
+      this.emitPaneStatusCleared(clear)
+      return
     }
-    // Why renderers only: main's own subscribers heard the drop; a pane-wide clear would end a row kept above.
-    this.onPaneStatusCleared?.({ paneKey, refusedResume: refused })
+    // Why renderers only: the pane's row is another conversation's, which other subscribers keep.
+    this.onPaneStatusCleared?.(clear)
   }
 
   /** Drop every status/cache claim attributable to a closed tab prefix. */

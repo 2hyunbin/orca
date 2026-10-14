@@ -24,6 +24,9 @@ export type SpawnResumeOwnership =
   | { verdict: 'unowned' }
   | { verdict: 'unverifiable' }
 
+/** A verdict that stops the resume: the pane starts its plain shell instead. */
+export type SpawnResumeRefusal = Exclude<SpawnResumeOwnership, { verdict: 'unowned' }>
+
 /**
  * Whether a pane's saved resume names a conversation a native chat owns: one that reached the pane
  * through a chat that leaked the pane's identity, or that later moved into a chat. Null when the

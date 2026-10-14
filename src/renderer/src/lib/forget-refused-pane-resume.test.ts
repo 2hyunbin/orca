@@ -7,11 +7,11 @@ const PANE = 'tab-floating:11111111-1111-4111-8111-111111111111'
 const CHAT = { key: 'session_id' as const, id: 'chat-session' }
 const TITLE = { agent: 'claude' as const, sessionId: CHAT.id, title: 'the chat prompt' }
 
-function saved(paneKey: string, id: string): SleepingAgentSessionRecord {
+function saved(paneKey: string, id: string, worktreeId = 'wt'): SleepingAgentSessionRecord {
   const providerSession = { key: 'session_id' as const, id }
   return {
     paneKey,
-    worktreeId: 'wt',
+    worktreeId,
     agent: 'claude',
     providerSession,
     prompt: '',
@@ -22,13 +22,15 @@ function saved(paneKey: string, id: string): SleepingAgentSessionRecord {
 }
 
 describe('forgetRefusedPaneResume', () => {
-  it('forgets the chat conversation as any pane resume, and leaves the chat and others alone', () => {
+  it("forgets the chat conversation as this workspace's pane resume, and leaves the chat and others alone", () => {
     const store = createTestStore()
     store.setState({
       sleepingAgentSessionsByPaneKey: {
         [PANE]: saved(PANE, CHAT.id),
         'tab-floating:alias': saved('tab-floating:alias', CHAT.id),
-        'tab-other:leaf': saved('tab-other:leaf', 'other-session')
+        'tab-other:leaf': saved('tab-other:leaf', 'other-session'),
+        // The same id saved on another host's worktree is another conversation.
+        'tab-ssh:leaf': saved('tab-ssh:leaf', CHAT.id, 'ssh-wt')
       },
       tabsByWorktree: {
         wt: [makeTab({ id: 'tab-floating', worktreeId: 'wt', aiVaultTitle: TITLE })],
@@ -40,7 +42,10 @@ describe('forgetRefusedPaneResume', () => {
     forgetRefusedPaneResume(store.getState(), PANE, { agent: 'claude', providerSession: CHAT })
 
     const state = store.getState()
-    expect(Object.keys(state.sleepingAgentSessionsByPaneKey)).toEqual(['tab-other:leaf'])
+    expect(Object.keys(state.sleepingAgentSessionsByPaneKey)).toEqual([
+      'tab-other:leaf',
+      'tab-ssh:leaf'
+    ])
     expect(state.agentLaunchConfigByPaneKey[PANE]).toBeUndefined()
     expect(state.tabsByWorktree.wt![0]!.aiVaultTitle).toBeNull()
     expect(state.tabsByWorktree.chat![0]!.aiVaultTitle).toEqual(TITLE)

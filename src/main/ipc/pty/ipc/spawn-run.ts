@@ -40,11 +40,11 @@ function restoreProvisionalPtySize(ctx: PtyIpcSpawnState): void {
 /** Retires a chat-owned resume on the host as soon as it is refused, so the cleanup never waits on
  *  this spawn finishing or a pane receiving its result. */
 function forgetRefusedResume(ctx: PtyIpcSpawnState): void {
-  if (!ctx.refusedResume || !ctx.stablePaneKey) {
+  if (ctx.resumeRefusal?.verdict !== 'owned' || !ctx.stablePaneKey) {
     return
   }
   try {
-    agentHookServer.forgetRefusedPaneResume(ctx.stablePaneKey, ctx.refusedResume)
+    agentHookServer.forgetRefusedPaneResume(ctx.stablePaneKey, ctx.resumeRefusal.refused)
   } catch (error) {
     // Why not thrown: the shell still starts, and the next restore refuses and retries the cleanup.
     console.warn('[pty] could not forget a resume a native chat owns', error)

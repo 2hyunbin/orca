@@ -206,16 +206,15 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
   const ownership = ctx.preAdoptedStablePane
     ? null
     : await nativeChatSpawnResumeOwnership(ctx.deps.runtime, args, ctx.expectedWslDistro)
-  // Why only automatic restores refuse an unknown owner: a resume the user asked for must not be
-  // blocked by bookkeeping, and the kept saved session is retried on the next restore.
+  // Why an unknown owner refuses all but a user's resume: bookkeeping must not block what the user
+  // asked for, and every automatic restore keeps its saved session for the next try.
   if (
     ownership?.verdict === 'owned' ||
-    (ownership?.verdict === 'unverifiable' && args.spawnIntent === 'automatic-restore')
+    (ownership?.verdict === 'unverifiable' && args.spawnIntent !== 'user-resume')
   ) {
-    ctx.refusedResume = ownership.verdict === 'owned' ? ownership.refused : null
+    ctx.resumeRefusal = ownership
     dropAgentLaunch(args)
     ctx.isClaudeLaunch = false
-    ctx.agentResumeRefused = true
   }
   const initialSelectionTarget = getCodexSelectionTargetForPty(
     initialShellOverride,

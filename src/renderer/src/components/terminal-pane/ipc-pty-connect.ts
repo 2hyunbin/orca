@@ -147,8 +147,12 @@ export async function connectIpcPty(
       return {
         id: spawnResult.id,
         exitedBeforeAttach: true,
-        // Why kept: a shell that replaced a resume and then exited never resumed the agent.
-        ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {})
+        // Why kept: a shell that replaced a resume and then exited never resumed the agent, and a
+        // refused plan must still not be registered or consume the saved session.
+        ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
+        ...(spawnResult.agentResumeRefused
+          ? { agentResumeRefused: spawnResult.agentResumeRefused }
+          : {})
       }
     }
     if (context.isDestroyed()) {
