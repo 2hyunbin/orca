@@ -3,6 +3,7 @@ import { pairedRuntimeBrowserClientHostsPage } from '../browser/paired-runtime-b
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import {
   getPreferredPairingOffer,
+  isWslHostRuntimeEnvironment,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
 import {
@@ -31,7 +32,7 @@ export function retireMobileDesktopRelayEnvironment(environmentId: string): void
  */
 function listRelayableEnvironments(userDataPath: string) {
   return listEnvironments(userDataPath).filter(
-    (environment) => environment.orcadDeployment?.kind !== 'wsl'
+    (environment) => !isWslHostRuntimeEnvironment(environment)
   )
 }
 
