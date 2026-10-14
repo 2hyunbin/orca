@@ -64,6 +64,7 @@ describe('resolveLocalGitUsername', () => {
   let originRemoteUrl: string | undefined
   let remoteUrls: Record<string, string>
   let currentBranch: string
+  let defaultBaseRef: string | null
 
   beforeEach(() => {
     vi.resetAllMocks()
@@ -72,16 +73,9 @@ describe('resolveLocalGitUsername', () => {
     originRemoteUrl = undefined
     remoteUrls = {}
     currentBranch = ''
+    defaultBaseRef = null
 
     gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
-      if (args[0] === 'config' && args[1] === '--list') {
-        return {
-          stdout: Object.entries(gitConfig)
-            .map(([key, value]) => `${key}\n${value}\0`)
-            .join(''),
-          stderr: ''
-        }
-      }
       if (args[0] === 'config' && args[1] === '--get') {
         const value = gitConfig[args[2]]
         if (value !== undefined) {
@@ -105,6 +99,9 @@ describe('resolveLocalGitUsername', () => {
       }
       if (args[0] === 'branch' && args[1] === '--show-current') {
         return { stdout: `${currentBranch}\n`, stderr: '' }
+      }
+      if (args[0] === 'for-each-ref' && defaultBaseRef) {
+        return { stdout: `${defaultBaseRef}\0\n`, stderr: '' }
       }
       if (args[0] === 'symbolic-ref') {
         // origin/HEAD unset — resolveDefaultBaseRefViaExec falls through to probes.
@@ -154,65 +151,107 @@ describe('resolveLocalGitUsername', () => {
       authoritative: true
     })
     expect(gitExecFileAsyncMock.mock.calls.map(([args]) => args)).toEqual([
-      ['config', '--list', '-z'],
-      ['remote']
+      ['config', '--get', 'github.user'],
+      ['config', '--get', 'user.username'],
+      ['remote'],
+      ['config', '--get', 'user.name']
     ])
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
   })
 
-  it('shares one config read across branch remote and author-name fallbacks', async () => {
+  it('reads a successful branch remote once when current and default branches match', async () => {
     originRemoteUrl = 'https://gitlab.com/stablyai/orca.git'
     currentBranch = 'main'
+    defaultBaseRef = 'refs/heads/main'
     gitConfig['branch.main.remote'] = 'origin'
     gitConfig['user.name'] = 'gitlab-user'
-    const original = gitExecFileAsyncMock.getMockImplementation()!
-    gitExecFileAsyncMock.mockImplementation(async (...args) => {
-      if (args[0][0] === 'for-each-ref') {
-        return { stdout: 'refs/heads/main\0\n', stderr: '' }
-      }
-      return original(...args)
+
+    await expect(resolveLocalGitUsernameDetailed('/repo')).resolves.toEqual({
+      username: 'gitlab-user',
+      authoritative: true
     })
-
-    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('gitlab-user')
-
     expect(gitExecFileAsyncMock.mock.calls.filter(([args]) => args[0] === 'config')).toEqual([
-      [['config', '--list', '-z'], { cwd: '/repo', timeout: 5000 }]
+      [['config', '--get', 'github.user'], { cwd: '/repo', timeout: 5000 }],
+      [['config', '--get', 'user.username'], { cwd: '/repo', timeout: 5000 }],
+      [['config', '--get', 'branch.main.remote'], { cwd: '/repo', timeout: 5000 }],
+      [['config', '--get', 'user.name'], { cwd: '/repo', timeout: 5000 }]
     ])
-    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(5)
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(8)
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
   })
 
-  it('reads a fresh config snapshot for another resolution or repo', async () => {
-    gitConfig['user.username'] = 'first-user'
-    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('first-user')
-    gitConfig['user.username'] = 'second-user'
-    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('second-user')
-    await expect(resolveLocalGitUsername('/other-repo')).resolves.toBe('second-user')
+  it('keeps separate current and default branch remote probes', async () => {
+    originRemoteUrl = 'https://gitlab.com/stablyai/orca.git'
+    remoteUrls.upstream = 'https://github.com/stablyai/orca.git'
+    currentBranch = 'feature'
+    defaultBaseRef = 'refs/heads/main'
+    gitConfig['branch.feature.remote'] = 'origin'
+    gitConfig['branch.main.remote'] = 'upstream'
+    ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: 'gh-demo\n', stderr: '' })
 
-    expect(gitExecFileAsyncMock.mock.calls.map(([args, options]) => [args, options.cwd])).toEqual([
-      [['config', '--list', '-z'], '/repo'],
-      [['config', '--list', '-z'], '/repo'],
-      [['config', '--list', '-z'], '/other-repo']
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('gh-demo')
+    expect(
+      gitExecFileAsyncMock.mock.calls
+        .map(([args]) => args)
+        .filter((args) => args[0] === 'config' && args[2].startsWith('branch.'))
+    ).toEqual([
+      ['config', '--get', 'branch.feature.remote'],
+      ['config', '--get', 'branch.main.remote']
     ])
   })
 
-  it('keeps individual config reads when a snapshot is unavailable', async () => {
-    gitConfig['user.username'] = 'configured-user'
+  it.each([
+    { first: 'failed', value: null },
+    { first: 'missing', value: null },
+    { first: 'empty', value: '' },
+    { first: 'local', value: '.' }
+  ])('retries a $first same-branch remote probe', async ({ first, value }) => {
+    originRemoteUrl = 'https://gitlab.com/stablyai/orca.git'
+    remoteUrls.upstream = 'https://github.com/stablyai/orca.git'
+    currentBranch = 'main'
+    defaultBaseRef = 'refs/heads/main'
     const original = gitExecFileAsyncMock.getMockImplementation()!
+    let branchReads = 0
     gitExecFileAsyncMock.mockImplementation(async (...args) => {
-      if (args[0][0] === 'config' && args[0][1] === '--list') {
-        throw makeExecError('snapshot unavailable')
+      if (args[0].join(' ') === 'config --get branch.main.remote') {
+        branchReads++
+        if (branchReads === 1) {
+          if (value === null) {
+            throw makeExecError(first, { code: first === 'failed' ? 'ETIMEDOUT' : '1' })
+          }
+          return { stdout: `${value}\n`, stderr: '' }
+        }
+        return { stdout: 'upstream\n', stderr: '' }
       }
       return original(...args)
     })
+    ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: 'gh-demo\n', stderr: '' })
 
-    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('configured-user')
+    await expect(resolveLocalGitUsernameDetailed('/repo')).resolves.toEqual({
+      username: 'gh-demo',
+      authoritative: true
+    })
+    expect(branchReads).toBe(2)
+  })
 
-    expect(gitExecFileAsyncMock.mock.calls.map(([args]) => args)).toEqual([
-      ['config', '--list', '-z'],
-      ['config', '--get', 'github.user'],
-      ['config', '--get', 'user.username']
-    ])
+  it('reads branch remotes again for another resolution and repo', async () => {
+    originRemoteUrl = 'https://gitlab.com/stablyai/orca.git'
+    remoteUrls.upstream = 'https://github.com/stablyai/orca.git'
+    currentBranch = 'main'
+    defaultBaseRef = 'refs/heads/main'
+    gitConfig['branch.main.remote'] = 'origin'
+    gitConfig['user.name'] = 'gitlab-user'
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('gitlab-user')
+
+    gitConfig['branch.main.remote'] = 'upstream'
+    ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: 'gh-demo\n', stderr: '' })
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('gh-demo')
+    await expect(resolveLocalGitUsername('/other-repo')).resolves.toBe('gh-demo')
+    expect(
+      gitExecFileAsyncMock.mock.calls
+        .filter(([args]) => args.join(' ') === 'config --get branch.main.remote')
+        .map(([, options]) => options.cwd)
+    ).toEqual(['/repo', '/repo', '/other-repo'])
   })
 
   it('keeps remote fallback probes when remote enumeration fails', async () => {
