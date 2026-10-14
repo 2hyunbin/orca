@@ -13,7 +13,6 @@ import { useAppStore } from '@/store'
 import {
   jiraAddIssueCommentForTarget,
   jiraGetIssueForTarget,
-  jiraListAssignableUsersForTarget,
   jiraListPrioritiesForTarget,
   jiraUpdateIssueForTarget
 } from '@/runtime/runtime-jira-client'
@@ -21,17 +20,18 @@ import type {
   JiraComment,
   JiraIssue,
   JiraMutationResult,
-  JiraPriority,
-  JiraUser
+  JiraPriority
 } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
-import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
+import { useJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
 import { getJiraReadIdentity } from '@/store/slices/jira-read-coordination'
 import { defaultScopeHost } from '@/lib/default-creation-host'
 import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
+import { getEnvironmentRuntimeContextKey } from '@/lib/provider-runtime-context'
+import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 import {
   editedJiraIssueFields,
   mergeJiraIssueHydration,
@@ -60,12 +60,12 @@ export default function JiraIssueWorkspace({
     () => (sourceContext ? taskSourceRuntimeTarget(sourceContext) : defaultScopeHost(settings)),
     [settings, sourceContext]
   )
+  const runtimeContextKey = getEnvironmentRuntimeContextKey(runtimeTargetEnvironmentId(owner))
   const mutationContextKey = getJiraReadIdentity(settings, sourceContext).contextKey
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
   const [priorities, setPriorities] = useState<JiraPriority[]>([])
-  const [users, setUsers] = useState<JiraUser[]>([])
   const [pendingField, setPendingField] = useState<string | null>(null)
   const [titleDraft, setTitleDraft] = useState('')
   const [labelsDraft, setLabelsDraft] = useState('')
@@ -112,38 +112,46 @@ export default function JiraIssueWorkspace({
     setPendingField(null)
     setCommentSubmitting(false)
     setCommentDraft('')
-    setFullIssue(issue)
-    setIssueLoading(Boolean(issue))
-    setComments([])
-    setCommentsError(null)
-    setTransitions([])
-    setTransitionsError(null)
-    optimisticCommentsRef.current = []
     if (!issue) {
+      setFullIssue(null)
+      setIssueLoading(false)
+      setComments([])
       setCommentsLoading(false)
+      setCommentsError(null)
+      setTransitions([])
+      setTransitionsError(null)
       setTransitionsLoading(false)
       setPriorities([])
-      setUsers([])
+      optimisticCommentsRef.current = []
       return
     }
 
     const requestId = requestIdRef.current
+    optimisticCommentsRef.current = []
     editedFieldsRef.current = new Set()
+    setFullIssue(issue)
     setTitleDraft(issue.title)
     setLabelsDraft(issue.labels.join(', '))
+    setComments([])
+    setCommentsError(null)
+    setTransitions([])
+    setTransitionsError(null)
+    setIssueLoading(true)
 
     void jiraGetIssueForTarget(owner, issue.key, issue.siteId)
       .then((result) => {
-        if (requestId !== requestIdRef.current || !result) {
+        if (requestId !== requestIdRef.current) {
           return
         }
-        const edited = new Set(editedFieldsRef.current)
-        setFullIssue((current) => mergeJiraIssueHydration(result, current, edited))
-        if (!edited.has('title')) {
-          setTitleDraft(result.title)
-        }
-        if (!edited.has('labels')) {
-          setLabelsDraft(result.labels.join(', '))
+        if (result) {
+          const edited = new Set(editedFieldsRef.current)
+          setFullIssue((current) => mergeJiraIssueHydration(result, current, edited))
+          if (!edited.has('title')) {
+            setTitleDraft(result.title)
+          }
+          if (!edited.has('labels')) {
+            setLabelsDraft(result.labels.join(', '))
+          }
         }
       })
       .catch(() => {})
@@ -153,16 +161,12 @@ export default function JiraIssueWorkspace({
         }
       })
 
-    void Promise.all([
-      jiraListPrioritiesForTarget(owner, issue.siteId),
-      jiraListAssignableUsersForTarget(owner, issue.key, undefined, issue.siteId)
-    ])
-      .then(([nextPriorities, nextUsers]) => {
+    void jiraListPrioritiesForTarget(owner, issue.siteId)
+      .then((nextPriorities) => {
         if (requestId !== requestIdRef.current) {
           return
         }
         setPriorities(nextPriorities)
-        setUsers(nextUsers)
       })
       .catch(() => {})
 
@@ -270,22 +274,13 @@ export default function JiraIssueWorkspace({
     ]
   )
 
-  const handleSaveTitle = useCallback(() => {
-    const title = titleDraft.trim()
-    if (displayed && title && title !== displayed.title) {
-      void mutateIssue('title', { title }, { title })
-    } else if (displayed) {
-      setTitleDraft(displayed.title)
-    }
-  }, [displayed, mutateIssue, titleDraft])
-
-  const handleSaveLabels = useCallback(() => {
-    const labels = labelsDraft
-      .split(',')
-      .map((label) => label.trim())
-      .filter(Boolean)
-    void mutateIssue('labels', { labels }, { labels })
-  }, [labelsDraft, mutateIssue])
+  const { handleSaveTitle, handleSaveLabels, actionItems } = useJiraIssueWorkspaceActions({
+    displayed,
+    titleDraft,
+    labelsDraft,
+    setTitleDraft,
+    mutateIssue
+  })
 
   const handleSubmitComment = useCallback(async (): Promise<void> => {
     if (!displayed || commentSubmitting) {
@@ -341,11 +336,6 @@ export default function JiraIssueWorkspace({
     }
   }, [commentDraft, commentSubmitting, displayed, owner, optimisticCommentsRef, setComments])
 
-  const actionItems = useMemo(
-    () => (displayed ? getJiraIssueWorkspaceActions(displayed) : []),
-    [displayed]
-  )
-
   return (
     <Sheet open={issue !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
@@ -387,7 +377,9 @@ export default function JiraIssueWorkspace({
               transitionsError={transitionsError}
               reloadTransitions={() => void loadTransitions(displayed, requestIdRef.current)}
               priorities={priorities}
-              users={users}
+              sourceContext={sourceContext}
+              owner={owner}
+              runtimeContextKey={runtimeContextKey}
               mutateIssue={mutateIssue}
             />
 

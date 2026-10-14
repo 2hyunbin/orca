@@ -53,6 +53,7 @@
       },
       "JiraIssueWorkspace": {
         "2a829a2f00": "priority",
+        "54649eaeab": "+ Assignee",
         "693be070d0": "transition",
         "9ebee71962": "labels",
         "b8e2079d96": "assignee",

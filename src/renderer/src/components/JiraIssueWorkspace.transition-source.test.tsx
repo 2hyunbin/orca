@@ -2,8 +2,9 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JiraIssue, JiraTransition } from '../../../shared/jira-types'
+import type { JiraConnectionStatus, JiraIssue, JiraTransition } from '../../../shared/jira-types'
 import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
+import type { AppState } from '@/store/types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import type { JiraIssueMetadataBar } from './jira-issue-workspace-chrome'
 import JiraIssueWorkspace from './JiraIssueWorkspace'
@@ -11,17 +12,28 @@ import JiraIssueWorkspace from './JiraIssueWorkspace'
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   transitions: vi.fn(),
+  readJiraStatus: vi.fn(async (): Promise<JiraConnectionStatus> => ({
+    connected: false,
+    viewer: null
+  })),
   settings: { activeRuntimeEnvironmentId: 'environment-a' }
 }))
+type TransitionStoreBoundary = Pick<
+  AppState,
+  | 'jiraStatus'
+  | 'jiraStatusContextKey'
+  | 'jiraConnectionRevisions'
+  | 'readJiraStatus'
+  | 'patchJiraIssue'
+> & { settings: { activeRuntimeEnvironmentId: string } }
 vi.mock('@/store', () => ({
-  useAppStore: (
-    selector: (state: {
-      settings: { activeRuntimeEnvironmentId: string }
-      patchJiraIssue: () => void
-    }) => unknown
-  ) =>
+  useAppStore: (selector: (state: TransitionStoreBoundary) => unknown) =>
     selector({
       settings: mocks.settings,
+      jiraStatus: { connected: false, viewer: null },
+      jiraStatusContextKey: null,
+      jiraConnectionRevisions: {},
+      readJiraStatus: mocks.readJiraStatus,
       patchJiraIssue: () => {}
     })
 }))

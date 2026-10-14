@@ -2,7 +2,9 @@ import { ArrowRight, LoaderCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { JiraUserOptionList } from '@/components/jira-user-picker'
+import { JiraIssueAssigneeControl } from '@/components/jira-issue-assignee-control'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { JiraIssueTransitionControl } from './jira-issue-transition-control'
 import { translate } from '@/i18n/i18n'
 import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
@@ -11,8 +13,7 @@ import type {
   JiraIssueUpdate,
   JiraMutationResult,
   JiraPriority,
-  JiraTransition,
-  JiraUser
+  JiraTransition
 } from '../../../shared/jira-types'
 
 /** Header row for an open Jira issue: key, summary, and workspace actions. */
@@ -83,7 +84,9 @@ export function JiraIssueMetadataBar({
   transitionsError,
   reloadTransitions,
   priorities,
-  users,
+  sourceContext,
+  owner,
+  runtimeContextKey,
   mutateIssue
 }: {
   displayed: JiraIssue
@@ -93,7 +96,9 @@ export function JiraIssueMetadataBar({
   transitionsError: string | null
   reloadTransitions: () => void
   priorities: JiraPriority[]
-  users: JiraUser[]
+  sourceContext?: TaskSourceContext | null
+  owner: RuntimeClientTarget
+  runtimeContextKey: string
   mutateIssue: (
     field: string,
     updates: JiraIssueUpdate,
@@ -154,40 +159,14 @@ export function JiraIssueMetadataBar({
         </PopoverContent>
       </Popover>
 
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={pendingField === 'assignee'}
-            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:bg-muted/40 disabled:opacity-50"
-          >
-            {displayed.assignee?.displayName ??
-              translate('auto.components.JiraIssueWorkspace.54649eaeab', '+ Assignee')}
-            {pendingField === 'assignee' ? <LoaderCircle className="size-3 animate-spin" /> : null}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="popover-scroll-content scrollbar-sleek w-56 p-1" align="start">
-          <button
-            type="button"
-            onClick={() =>
-              void mutateIssue('assignee', { assigneeAccountId: null }, { assignee: undefined })
-            }
-            className="flex w-full items-center rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent"
-          >
-            {translate('auto.components.JiraIssueWorkspace.0b6b5646ed', 'Unassigned')}
-          </button>
-          <JiraUserOptionList
-            users={users}
-            onSelect={(user) =>
-              void mutateIssue(
-                'assignee',
-                { assigneeAccountId: user.accountId },
-                { assignee: user }
-              )
-            }
-          />
-        </PopoverContent>
-      </Popover>
+      <JiraIssueAssigneeControl
+        issue={displayed}
+        disabled={pendingField !== null}
+        sourceContext={sourceContext}
+        owner={owner}
+        runtimeContextKey={runtimeContextKey}
+        mutateIssue={mutateIssue}
+      />
     </div>
   )
 }
