@@ -40,7 +40,7 @@ async function choose(
     />
   )
   fireEvent.click(screen.getByRole('button', { name: 'Change status: Open' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Close', exact: true }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
   return onTransition
 }
 
@@ -67,7 +67,7 @@ describe('Jira transition control', () => {
     }
     const mutate = await choose([transition])
     expect(mutate).not.toHaveBeenCalled()
-    const submit = screen.getByRole('button', { name: 'Change status', exact: true })
+    const submit = screen.getByRole('button', { name: 'Change status' })
     expect(submit.hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('combobox'))
     fireEvent.click(await screen.findByRole('option', { name: 'Fixed' }))
