@@ -19,6 +19,7 @@ vi.mock('@orca/process-host', async (importOriginal) => ({
   spawnProcess: spawnProcessMock
 }))
 
+import { BROWSER_SIDECAR_OWNER_ENV } from '../../shared/browser-sidecar-lifetime'
 import { ElectronServeBrowserProcess } from './electron-serve-browser-process'
 
 const FAKE_SIDECAR = join(import.meta.dirname, '__fixtures__', 'fake-orcad-electron-sidecar.cjs')
@@ -132,6 +133,13 @@ afterEach(async () => {
 })
 
 describe('ElectronServeBrowserProcess start-up', () => {
+  it('opens an owner IPC channel for automatic browser cleanup after parent loss', async () => {
+    await startProvider()
+    expect(spawnSpec().stdio).toEqual(['pipe', 'pipe', 'pipe', 'ipc'])
+    expect(spawnSpec().serialization).toBe('json')
+    expect(spawnSpec().env?.[BROWSER_SIDECAR_OWNER_ENV]).toBe('1')
+  })
+
   it('does not launch when startup is already cancelled', async () => {
     const processHandle = new ElectronServeBrowserProcess(INSTALLED_EXECUTABLE)
     started.push(processHandle)

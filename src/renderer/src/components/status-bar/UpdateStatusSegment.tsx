@@ -1,5 +1,5 @@
 import React from 'react'
-import { AlertCircle, CheckCircle2, Download } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Clock3, Download, Loader2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '../../store'
 import { translate } from '@/i18n/i18n'
@@ -40,6 +40,34 @@ export function UpdateStatusSegment({
           'auto.components.status.bar.UpdateStatusSegment.fd1d3b3a1d',
           'Update downloading, {{value0}} percent. Click to expand.',
           { value0: pct }
+        )
+      }
+    }
+    if (status.state === 'error' && status.installBlock) {
+      return {
+        icon: <Clock3 className="size-3 text-muted-foreground" />,
+        label: translate('updates.installBlock.waitingLabel', 'Update waiting'),
+        tooltip: translate(
+          'updates.installBlock.waitingTooltip',
+          'The update is downloaded. Close other Orca instances, then retry.'
+        ),
+        ariaLabel: translate(
+          'updates.installBlock.waitingAriaLabel',
+          'Update waiting for other Orca instances. Click to expand.'
+        )
+      }
+    }
+    if (status.state === 'downloaded' && status.installing) {
+      return {
+        icon: <Loader2 className="size-3 animate-spin text-muted-foreground" />,
+        label: translate('updates.installBlock.preparingLabel', 'Preparing update'),
+        tooltip: translate(
+          'updates.installBlock.preparingSummary',
+          'Checking running Orca instances before restarting.'
+        ),
+        ariaLabel: translate(
+          'updates.installBlock.preparingAriaLabel',
+          'Preparing update. Click to expand.'
         )
       }
     }
