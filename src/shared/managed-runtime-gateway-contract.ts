@@ -60,7 +60,7 @@ export function parseManagedRuntimeGatewayRoute(
   try {
     decoded = decodeURIComponent(pathname)
   } catch {
-    return isReservedManagedPath(pathname) ? { kind: 'invalid' } : { kind: 'root' }
+    return { kind: 'invalid' }
   }
   if (!isReservedManagedPath(decoded)) {
     return { kind: 'root' }

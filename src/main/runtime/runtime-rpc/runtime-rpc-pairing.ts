@@ -9,6 +9,8 @@ import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
 import { MobileDesktopRelay } from '../mobile-desktop-relay/mobile-desktop-relay'
+import { ManagedWorkspaceGateway } from '../managed-workspace-gateway'
+import type { ManagedWorkspaceHosts } from '../managed-workspace-gateway-contract'
 import type { MobileDesktopRelayHosts } from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
 import { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-host-catalog'
 import { getHostDisplayLabelOverrides } from '../../../shared/host-setting-overrides'
@@ -104,6 +106,17 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
       ? new MobileRelayHostCatalog({
           hosts,
           hostLabelOverrides: () => getHostDisplayLabelOverrides(this.runtime.getClientSettings())
+        })
+      : null
+  }
+
+  setManagedWorkspaceHosts(hosts: ManagedWorkspaceHosts | null): void {
+    void this.managedWorkspaceGateway?.dispose()
+    this.managedWorkspaceGateway = hosts
+      ? new ManagedWorkspaceGateway({
+          hosts,
+          registry: () => this.deviceRegistry,
+          permission: (method) => this.dispatcher.methodPermission(method)
         })
       : null
   }

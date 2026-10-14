@@ -18,3 +18,8 @@ export type ManagedRuntimeSessionGrant = {
   token: string
   expiresAt: number
 }
+export const ManagedRuntimeSessionGrantSchema = z.strictObject({
+  deviceId: z.string().min(1).max(128),
+  token: z.string().regex(/^[0-9a-f]{48}$/u),
+  expiresAt: z.number().finite().positive()
+})

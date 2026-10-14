@@ -31,6 +31,7 @@ import type {
   PairingOfferUnavailable
 } from './runtime-rpc-pairing-types'
 import { DEFAULT_WS_PORT } from './runtime-rpc-pairing-types'
+import type { ManagedWorkspaceGateway } from '../managed-workspace-gateway'
 
 export class RuntimeRpcState {
   protected readonly runtime: OrcaRuntimeService
@@ -76,6 +77,7 @@ export class RuntimeRpcState {
   protected mobileRelayPairingProvider: MobileRelayPairingProvider | null = null
   // Why nullable: launch sets both for every runtime process; in-process test servers may not.
   protected mobileDesktopRelay: MobileDesktopRelay | null = null
+  protected managedWorkspaceGateway: ManagedWorkspaceGateway | null = null
   protected mobileRelayHostCatalog: MobileRelayHostCatalog | null = null
   // Why: lets an automatic mint install a provider whose launch-time construction failed.
   protected mobileRelayPairingProviderInstaller: (() => Promise<unknown>) | null = null

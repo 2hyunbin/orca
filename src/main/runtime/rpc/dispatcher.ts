@@ -30,6 +30,7 @@ import { mapDispatcherError } from './dispatcher-error-response'
 import { createDispatcherStreamingFeatureEmitter } from './dispatcher-streaming-feature-emitter'
 import { recordRuntimeFeatureInteraction } from './runtime-feature-interaction'
 import type { RpcCallerScope } from './rpc-caller-scope'
+import type { RpcMethodPermission } from './rpc-method-permission'
 import { admitRpcRequest } from './rpc-request-admission-prologue'
 
 export type DispatcherOptions = {
@@ -90,6 +91,10 @@ export class RpcDispatcher {
       }
       return mapDispatcherError(request, meta, error)
     }
+  }
+
+  methodPermission(name: string): RpcMethodPermission | undefined {
+    return this.registry.get(name)?.permission
   }
 
   // Why: streaming dispatch sends multiple responses through the reply callback instead of a Promise.

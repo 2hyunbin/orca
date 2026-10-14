@@ -13,12 +13,18 @@ import { E2EEChannel, type E2EEAuthenticatedDevice } from './e2ee-channel'
 import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { RpcBinarySender } from './rpc-binary-sender'
+import type { ManagedWorkspaceRoute } from '../managed-workspace-gateway-contract'
 
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
 export type MobileSocketTransportMetadata =
   // webClient: the Orca web bundle marked its upgrade; webOrigin: that page's origin.
-  | { transport: 'direct'; webOrigin?: string; webClient?: true }
+  | {
+      transport: 'direct'
+      webOrigin?: string
+      webClient?: true
+      managedGateway?: ManagedWorkspaceRoute
+    }
   | {
       transport: 'relay'
       relayHostId: string

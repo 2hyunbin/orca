@@ -151,3 +151,9 @@ describe('device principal', () => {
     })
   })
 })
+
+it('uses the public device identity for a managed session without exposing its bearer as a client ID', () => {
+  const principal = devicePrincipalOf(legacyRow({ scope: 'runtime', runtimeLease: true }))
+  expect(principal.clientId).toBe('device-1')
+  expect(principal.clientId).not.toBe('legacy-token')
+})

@@ -15,7 +15,10 @@ import {
   type WebSocketMessageHandler
 } from './node-websocket-lifecycle'
 import { RemoteRuntimeServerHeartbeat } from './remote-runtime-server-heartbeat'
-import { parseManagedRuntimeGatewayRoute } from '../../../shared/managed-runtime-gateway-contract'
+import {
+  parseManagedRuntimeGatewayRoute,
+  type ManagedRuntimeGatewayRoute
+} from '../../../shared/managed-runtime-gateway-contract'
 
 const WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES = 1024 * 1024
 // Why: one desktop remote-host client can hold many concurrent streams, so keep the cap high enough that stale streams don't starve control RPCs.
@@ -47,6 +50,7 @@ export type WebSocketTransportOptions = {
   preferPinnedPort?: boolean
   // Why: deterministic ports tried before an OS-assigned one, so a fallback stays stable across reboots.
   fallbackLadder?: readonly number[]
+  managedGatewayAvailable?: () => boolean
 }
 
 export class WebSocketTransport implements RpcTransport {
@@ -60,6 +64,11 @@ export class WebSocketTransport implements RpcTransport {
   private readonly fallbackPort: number | undefined
   private readonly preferPinnedPort: boolean
   private readonly fallbackLadder: readonly number[]
+  private readonly managedGatewayAvailable: () => boolean
+  private readonly managedRoutes = new WeakMap<
+    WebSocket,
+    Extract<ManagedRuntimeGatewayRoute, { kind: 'managed' }>
+  >()
   private persistedFallbackBindFailed = false
   private httpServer: HttpsServer | HttpServer | null = null
   private readonly webPages = new WeakMap<WebSocket, { webOrigin?: string; webClient: true }>()
@@ -82,7 +91,8 @@ export class WebSocketTransport implements RpcTransport {
     staticRoot,
     fallbackPort,
     preferPinnedPort,
-    fallbackLadder
+    fallbackLadder,
+    managedGatewayAvailable
   }: WebSocketTransportOptions) {
     this.host = host
     this.port = port
@@ -98,6 +108,7 @@ export class WebSocketTransport implements RpcTransport {
     this.fallbackPort = fallbackPort
     this.preferPinnedPort = preferPinnedPort === true
     this.fallbackLadder = fallbackLadder ?? []
+    this.managedGatewayAvailable = managedGatewayAvailable ?? (() => false)
   }
 
   // True when the persisted fallback was tried and refused, so the caller can drop it.
@@ -117,6 +128,12 @@ export class WebSocketTransport implements RpcTransport {
   /** The Orca web bundle that opened `ws` (it marks its upgrade), with its page origin. */
   webPageOf(ws: WebSocket): { webOrigin?: string; webClient: true } | undefined {
     return this.webPages.get(ws)
+  }
+
+  managedRouteOf(
+    ws: WebSocket
+  ): Extract<ManagedRuntimeGatewayRoute, { kind: 'managed' }> | undefined {
+    return this.managedRoutes.get(ws)
   }
 
   setClientId(ws: WebSocket, clientId: string): void {
@@ -227,9 +244,16 @@ export class WebSocketTransport implements RpcTransport {
         rejectNodeWebSocketOverCapacity(ws)
         return
       }
-      if (parseManagedRuntimeGatewayRoute(request.url).kind !== 'root') {
+      const route = parseManagedRuntimeGatewayRoute(request.url)
+      if (
+        route.kind === 'invalid' ||
+        (route.kind === 'managed' && !this.managedGatewayAvailable())
+      ) {
         rejectNodeWebSocketConnection(ws, 1008, 'Managed workspace gateway is unavailable')
         return
+      }
+      if (route.kind === 'managed') {
+        this.managedRoutes.set(ws, route)
       }
       if (hasWebClientUpgradeMarker(request.url)) {
         const origin = request.headers.origin

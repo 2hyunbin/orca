@@ -16,7 +16,7 @@ Reuse the existing managed-server registration, saved target generations, runtim
 
 A public descriptor carries version, controller runtime identity, environment identity, child runtime identity, SSH target identity and target generation. It contains no credentials. Route `/_orca/managed/<encoded-environment-id>/<generation>` is reserved for this connection. The descriptor is not an authorization grant.
 
-The capability `managedServer.workspace-gateway.v1` must be negotiated before constructing a gateway endpoint. It is deliberately not advertised yet. Current transport rejects this namespace, including malformed and noncanonical variants, before handing messages to root RPC. Rejected connections retain the existing capacity limit and bounded close timeout. Other legacy transport paths retain their behavior.
+The capability `managedServer.workspace-gateway.v1` must be negotiated before constructing a gateway endpoint. It is deliberately not advertised yet. Transport rejects this namespace unless a gateway is composed; malformed and noncanonical variants always refuse before root RPC. Rejected connections retain the existing capacity limit and bounded close timeout. Other legacy transport paths retain their behavior.
 
 Root-path direct WS/WSS endpoints are the initial route-construction contract. Custom paths and relay endpoints refuse construction. Their support needs a separately negotiated transport path; do not silently downgrade to the controller or claim those endpoints are qualified.
 
@@ -46,4 +46,16 @@ The controller renews within a 30-second lease; it never receives an immortal de
 
 Binary input revalidates the authenticated principal before entering runtime stream handlers. The existing encrypted passthrough now sends binary input through its existing bounded outbound queue, preserving one session for text and binary traffic. Real localhost encrypted-session checks cover input/output, revoked socket closure and refused binary delivery. The test stream is a controlled RPC fixture, not a native terminal or a complete controller gateway.
 
-This makes child delegation and its transport usable for the forthcoming gateway. It does not make provider workspace access available in the desktop yet. The production normal-UI journey above remains required.
+This makes child delegation and its transport usable by the gateway below. It does not make provider workspace access available in the desktop yet. The production normal-UI journey above remains required.
+
+## Implemented encrypted forwarding · 14 October 2026
+
+Both runtime compositions install a gateway backed by saved managed-server ownership. It resolves the current target fence and generation, requires a confirmed child runtime identity, admits the current provider approval and reuses the existing managed connection lease. Caller-supplied endpoints are ignored. Provider withdrawal and transport retirement close contact. Registration, credentials and reconciliation are checked again after connection preparation.
+
+Each incoming encrypted socket owns one private child session. Method permissions come from the controller's existing RPC registry and current authenticated principal. Pairing administration, credential promotion, nested delegation and unknown methods refuse access. Child sessions start with no optional desktop-control grant. Grant changes invalidate the incoming link. Text and binary requests travel through the existing encrypted passthrough; controller workspace dispatch never handles them.
+
+Terminal identity fields are remapped separately from commands and file contents. Multiplex subscribe frames preserve stream identity and sequence; input bytes stay intact. Temporary sessions use public device IDs as runtime client IDs so presence cannot expose a bearer. Pending setup has byte, frame and global-opening bounds. Cancellation discards queued work; shutdown drains private-session revocation before host teardown. A stale or unavailable connection returns an actionable reconnect/update error.
+
+Qualification uses two real localhost encrypted RPC servers with controlled store and binary-stream fixtures. Separate resolver checks hold connection preparation while changing credentials, and verify ownership, generation, confirmed identity and provider withdrawal. This is backend integration proof, not a native terminal, real SSH gateway, or normal-UI workspace journey.
+
+The gateway capability remains unadvertised. Child discovery, persisted links, controller-aware client authentication and the ordinary desktop workspace flow remain required. Newly deployed servers with unconfirmed identity refuse routing until discovery verifies them. Custom-path/relay, mixed-peer, native interruption and full platform/release gates remain open.

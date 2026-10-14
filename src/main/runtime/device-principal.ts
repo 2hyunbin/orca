@@ -20,7 +20,7 @@ export function devicePrincipalOf(device: DeviceEntry): DevicePrincipal {
   return {
     deviceId: device.deviceId,
     scope: device.scope,
-    clientId: device.token ?? device.deviceId,
+    clientId: device.runtimeLease ? device.deviceId : (device.token ?? device.deviceId),
     callerFingerprint:
       device.callerFingerprint ??
       fingerprintAuthenticatedPairingCredential(device.token ?? `device:${device.deviceId}`),

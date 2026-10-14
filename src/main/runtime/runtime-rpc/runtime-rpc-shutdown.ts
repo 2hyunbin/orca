@@ -42,6 +42,8 @@ export class RuntimeRpcShutdown extends RuntimeRpcMobilePairing {
       publishHostDescriptor(this.runtime.getRuntimeId(), null)
     }
     this.mobileSocketWiring?.dispose()
+    await this.managedWorkspaceGateway?.dispose()
+    this.managedWorkspaceGateway = null
     this.mobileSocketWiring = null
     this.detachWebSocketWiring = null
     const stopResults = await Promise.allSettled(

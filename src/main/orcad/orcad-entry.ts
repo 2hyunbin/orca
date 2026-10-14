@@ -359,6 +359,8 @@ async function startOrcadRuntime(
     pinnedBindHost: bindHost,
     ...(options.port !== undefined ? { wsPort: options.port, preferPinnedWsPort: true } : {})
   })
+  const { createManagedWorkspaceHosts } = await import('../runtime/managed-workspace-hosts')
+  rpc.setManagedWorkspaceHosts(createManagedWorkspaceHosts(runtimeUserDataPath))
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
   await rpc.start()

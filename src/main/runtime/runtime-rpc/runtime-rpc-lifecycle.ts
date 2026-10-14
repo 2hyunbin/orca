@@ -190,11 +190,13 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
       staticRoot: this.webClientRoot,
       ...(options.fallbackPort !== undefined ? { fallbackPort: options.fallbackPort } : {}),
       ...(options.preferPinnedPort ? { preferPinnedPort: true } : {}),
-      fallbackLadder: wsFallbackPortLadder(this.wsPort)
+      fallbackLadder: wsFallbackPortLadder(this.wsPort),
+      managedGatewayAvailable: () => this.managedWorkspaceGateway !== null
     })
     const mobileSocketWiring = this.ensureMobileSocketWiring(deviceRegistry, e2eeKeypair)
     this.detachWebSocketWiring = mobileSocketWiring.attachTransport(wsTransport, (ws) => ({
       transport: 'direct',
+      managedGateway: wsTransport.managedRouteOf(ws),
       ...wsTransport.webPageOf(ws)
     }))
 
@@ -233,6 +235,20 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
       deviceRegistry,
       e2eeKeypair,
       onText: (socket, plaintext, reply, sendBinary) => {
+        if (socket.transport.transport === 'direct' && socket.transport.managedGateway) {
+          this.lastClientRequestAt = Date.now()
+          this.managedWorkspaceGateway?.text(
+            socket,
+            socket.transport.managedGateway,
+            plaintext,
+            reply,
+            sendBinary
+          )
+          if (!this.managedWorkspaceGateway) {
+            socket.ws.terminate()
+          }
+          return
+        }
         void this.trackClientRequest(() =>
           this.handleWebSocketMessage(
             plaintext,
@@ -247,9 +263,19 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
       },
       onBinary: (socket, bytes) => {
         this.lastClientRequestAt = Date.now()
+        if (socket.transport.transport === 'direct' && socket.transport.managedGateway) {
+          this.managedWorkspaceGateway?.binary(socket, bytes)
+          if (!this.managedWorkspaceGateway) {
+            socket.ws.terminate()
+          }
+          return
+        }
         this.handleWebSocketBinaryMessage(bytes, socket.ws)
       },
       onReady: (socket) => {
+        if (socket.transport.transport === 'direct' && socket.transport.managedGateway) {
+          return
+        }
         // Why: first authenticated mobile/remote client (direct WS and
         // cloud relay both attach here) starts path-candidate tracking.
         // Activation is a local-host concern: candidate buffers live on the
@@ -266,6 +292,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
           return
         }
         this.abortWebSocketDispatches(socket.ws)
+        this.managedWorkspaceGateway?.close(socket.ws)
         this.mobileDesktopRelay?.closePhoneConnection(socket.connectionId)
         // Why: subscriptions and binary streams are socket-scoped, but disconnect state is device-scoped across transports.
         this.runtime.cleanupSubscriptionsForConnection(socket.connectionId)

@@ -16,6 +16,7 @@ it.each([
   '/_orca/managed/child/0',
   '/%5forca/managed/child/2',
   '/%5forca/managed/%zz/2',
+  '/%255forca/managed/%zz/2',
   '/_orca/managed'
 ])('refuses unsupported gateway %s before delivering root messages', async (path) => {
   const transport = new WebSocketTransport({ host: '127.0.0.1', port: 0 })

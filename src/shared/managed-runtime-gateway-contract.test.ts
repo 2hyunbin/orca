@@ -68,6 +68,8 @@ describe('managed runtime gateway identity', () => {
     '/_orca/managed/env/2/extra',
     '/_orca/managed/%zz/2',
     '/%5forca/managed/%zz/2',
+    '/%255forca/managed/%zz/2',
+    '/legacy/%zz',
     '/_orca/managed',
     '/_orca/managed?extra=1',
     '/_orca\\managed\\env\\2',
