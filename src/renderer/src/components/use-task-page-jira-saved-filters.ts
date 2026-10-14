@@ -1,5 +1,5 @@
 import { createNonSecureContextUuid } from '../../../shared/non-secure-context-uuid'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import {
   mutateJiraSavedFilters,
@@ -18,6 +18,9 @@ type JiraSavedFilterModel = Pick<
   'jiraTaskSourceContext' | 'accountBackedTaskSourceHostId' | 'taskResumeApplied' | 'taskSource'
 >
 
+type JiraSavedFilterOwner = { ownerKey: string; enabled: boolean }
+type JiraSavedFilterLifetime = { owner: JiraSavedFilterOwner; pending: boolean }
+
 export function useTaskPageJiraSavedFilters(
   model: JiraSavedFilterModel,
   setQuery: (jql: string) => void
@@ -29,22 +32,32 @@ export function useTaskPageJiraSavedFilters(
     state: normalizeJiraSavedFilterState(undefined)
   })
   const [loading, setLoading] = useState(true)
-  const [pending, setPending] = useState(false)
+  const [pendingLifetime, setPendingLifetime] = useState<JiraSavedFilterLifetime | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
   const loadedOwnerRef = useRef<string | null>(null)
-  const ownerRef = useRef(ownerKey)
-  const ownerEpochRef = useRef(0)
-  if (ownerRef.current !== ownerKey) {
-    ownerEpochRef.current += 1
-    ownerRef.current = ownerKey
-  }
-  const ownerEpoch = ownerEpochRef.current
+  const enabled = model.taskResumeApplied && model.taskSource === 'jira'
+  const owner = useMemo(() => ({ ownerKey, enabled }), [ownerKey, enabled])
+  const lifetimeRef = useRef<JiraSavedFilterLifetime | null>(null)
+  const pending = pendingLifetime?.owner === owner
+  useLayoutEffect(() => {
+    if (!owner.enabled) {
+      return
+    }
+    const lifetime = { owner, pending: false }
+    lifetimeRef.current = lifetime
+    return () => {
+      if (lifetimeRef.current === lifetime) {
+        lifetimeRef.current = null
+      }
+    }
+  }, [owner])
   const state =
     snapshot.ownerKey === ownerKey ? snapshot.state : normalizeJiraSavedFilterState(undefined)
   const ready = target !== null && snapshot.ownerKey === ownerKey
   useEffect(() => {
-    if (!model.taskResumeApplied || model.taskSource !== 'jira') {
+    const lifetime = lifetimeRef.current
+    if (!lifetime || lifetime.owner !== owner) {
       return
     }
     let cancelled = false
@@ -52,15 +65,14 @@ export function useTaskPageJiraSavedFilters(
       setQuery('')
     }
     setLoading(true)
-    setPending(false)
     setError(null)
-    if (!target) {
-      setLoading(false)
-      return
-    }
-    void readJiraSavedFilterState(target)
-      .then((next) => {
-        if (cancelled) {
+    const load = async (): Promise<void> => {
+      try {
+        if (!target) {
+          return
+        }
+        const next = await readJiraSavedFilterState(target)
+        if (cancelled || lifetimeRef.current !== lifetime) {
           return
         }
         setSnapshot({ ownerKey, state: next })
@@ -71,58 +83,57 @@ export function useTaskPageJiraSavedFilters(
           setQuery('')
         }
         loadedOwnerRef.current = ownerKey
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
+      } catch (reason) {
+        if (!cancelled && lifetimeRef.current === lifetime) {
           setError(
             reason instanceof Error
               ? reason.message
               : translate('jira.savedFilters.loadFailed', 'Could not load saved Jira filters.')
           )
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
+      } finally {
+        if (!cancelled && lifetimeRef.current === lifetime) {
           setLoading(false)
         }
-      })
+      }
+    }
+    void load()
     return () => {
       cancelled = true
     }
-  }, [ownerKey, target, model.taskSource, model.taskResumeApplied, refresh, setQuery])
+  }, [owner, ownerKey, target, refresh, setQuery])
 
-  const mutate = async (mutation: JiraSavedFilterMutation): Promise<void> => {
-    if (
-      !ready ||
-      pending ||
-      !target ||
-      ownerRef.current !== ownerKey ||
-      ownerEpochRef.current !== ownerEpoch
-    ) {
-      return
+  const mutate = async (mutation: JiraSavedFilterMutation): Promise<boolean> => {
+    const lifetime = lifetimeRef.current
+    if (!ready || !target || !lifetime || lifetime.owner !== owner || lifetime.pending) {
+      return false
     }
-    const expectedOwner = ownerKey
-    const expectedEpoch = ownerEpoch
-    setPending(true)
+    lifetime.pending = true
+    setPendingLifetime(lifetime)
     setError(null)
     try {
       const next = await mutateJiraSavedFilters(target, mutation)
-      if (ownerRef.current !== expectedOwner || ownerEpochRef.current !== expectedEpoch) {
-        return
+      if (lifetimeRef.current !== lifetime) {
+        return false
       }
-      setSnapshot({ ownerKey: expectedOwner, state: next })
+      setSnapshot({ ownerKey, state: next })
       if (mutation.kind === 'select') {
-        const active = next.filters.find((filter) => filter.id === next.activeFilterId)
+        const active = next.filters.find(
+          (filter) => filter.id === mutation.id && filter.id === next.activeFilterId
+        )
         if (active) {
           setQuery(active.jql)
+        } else if (mutation.id !== null) {
+          return false
         }
       } else if (mutation.kind === 'save' && next.activeFilterId === mutation.filter.id) {
         setQuery(mutation.filter.jql)
       } else if (mutation.kind === 'delete' && state.activeFilterId === mutation.id) {
         setQuery('')
       }
+      return true
     } catch (reason) {
-      if (ownerRef.current === expectedOwner && ownerEpochRef.current === expectedEpoch) {
+      if (lifetimeRef.current === lifetime) {
         setError(
           reason instanceof Error
             ? reason.message
@@ -131,8 +142,9 @@ export function useTaskPageJiraSavedFilters(
       }
       throw reason
     } finally {
-      if (ownerRef.current === expectedOwner && ownerEpochRef.current === expectedEpoch) {
-        setPending(false)
+      lifetime.pending = false
+      if (lifetimeRef.current === lifetime) {
+        setPendingLifetime(null)
       }
     }
   }
@@ -145,12 +157,19 @@ export function useTaskPageJiraSavedFilters(
     jiraSavedFiltersError: error,
     retryJiraSavedFilters: () => setRefresh((value) => value + 1),
     applyJiraSavedFilter: (filter: JiraSavedFilter) => mutate({ kind: 'select', id: filter.id }),
-    createJiraSavedFilter: (filter: { name: string; jql: string }) =>
-      mutate({ kind: 'save', filter: { ...filter, id: createNonSecureContextUuid() } }),
-    updateJiraSavedFilter: (id: string, filter: { name: string; jql: string }) =>
-      mutate({ kind: 'save', filter: { ...filter, id } }),
-    deleteJiraSavedFilter: (id: string) => mutate({ kind: 'delete', id }),
-    clearJiraSavedFilterSelection: () =>
-      state.activeFilterId ? mutate({ kind: 'select', id: null }) : Promise.resolve()
+    createJiraSavedFilter: async (filter: { name: string; jql: string }) => {
+      await mutate({ kind: 'save', filter: { ...filter, id: createNonSecureContextUuid() } })
+    },
+    updateJiraSavedFilter: async (id: string, filter: { name: string; jql: string }) => {
+      await mutate({ kind: 'save', filter: { ...filter, id } })
+    },
+    deleteJiraSavedFilter: async (id: string) => {
+      await mutate({ kind: 'delete', id })
+    },
+    clearJiraSavedFilterSelection: async () => {
+      if (state.activeFilterId) {
+        await mutate({ kind: 'select', id: null })
+      }
+    }
   }
 }

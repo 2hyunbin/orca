@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { startTransition, Suspense } from 'react'
 import { useTaskPageJiraSavedFilters } from './use-task-page-jira-saved-filters'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -138,7 +139,7 @@ it('ignores a late write response from an owner that was left', async () => {
     { initialProps: { host: 'host-a' } }
   )
   await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
-  let pending: Promise<void> = Promise.resolve()
+  let pending = Promise.resolve(false)
   act(() => {
     pending = result.current.applyJiraSavedFilter(filter)
   })
@@ -235,16 +236,16 @@ it.each(['success', 'failure'] as const)(
       { initialProps: { host: 'host-a' } }
     )
     await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
-    let oldWrite = Promise.resolve()
+    let oldWrite = Promise.resolve(false)
     act(() => {
-      oldWrite = result.current.applyJiraSavedFilter(filter).catch(() => {})
+      oldWrite = result.current.applyJiraSavedFilter(filter).catch(() => false)
     })
     rerender({ host: 'host-b' })
     await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
     rerender({ host: 'host-a' })
     await waitFor(() => expect(read).toHaveBeenCalledTimes(3))
     await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
-    let newWrite = Promise.resolve()
+    let newWrite = Promise.resolve(false)
     act(() => {
       newWrite = result.current.applyJiraSavedFilter(filter)
     })
@@ -266,3 +267,68 @@ it.each(['success', 'failure'] as const)(
     expect(setQuery).toHaveBeenCalledWith(filter.jql)
   }
 )
+it('applies only the committed owner while another owner render is suspended', async () => {
+  read.mockResolvedValue(initial)
+  mutate.mockResolvedValue(initial)
+  const setQuery = vi.fn()
+  const suspended = new Promise(() => {})
+  const { result, rerender } = renderHook(
+    ({ host, suspend }) => {
+      const filters = useTaskPageJiraSavedFilters(model(host), setQuery)
+      if (suspend) {
+        throw suspended
+      }
+      return filters
+    },
+    {
+      initialProps: { host: 'host-a', suspend: false },
+      wrapper: ({ children }) => <Suspense fallback={null}>{children}</Suspense>
+    }
+  )
+  await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
+  const committedAction = result.current.applyJiraSavedFilter
+  act(() => {
+    startTransition(() => rerender({ host: 'host-b', suspend: true }))
+  })
+  await act(async () => {
+    expect(await committedAction(filter)).toBe(true)
+  })
+  expect(mutate).toHaveBeenCalledWith(
+    { kind: 'environment', environmentId: 'host-a' },
+    { kind: 'select', id: filter.id }
+  )
+  expect(read).toHaveBeenCalledTimes(1)
+})
+it('reports false for skipped, stale, or unapplied selections and true only after applying JQL', async () => {
+  read.mockResolvedValue(initial)
+  const setQuery = vi.fn()
+  const { result, unmount } = renderHook(() =>
+    useTaskPageJiraSavedFilters(model('host-a'), setQuery)
+  )
+  await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
+  setQuery.mockClear()
+  mutate.mockResolvedValueOnce({ filters: [filter], activeFilterId: null })
+  await act(async () => {
+    expect(await result.current.applyJiraSavedFilter(filter)).toBe(false)
+  })
+  expect(setQuery).not.toHaveBeenCalled()
+  let resolveApply: (value: typeof initial) => void = () => {}
+  mutate.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveApply = resolve
+      })
+  )
+  let applying = Promise.resolve(false)
+  act(() => {
+    applying = result.current.applyJiraSavedFilter(filter)
+  })
+  await act(async () => {
+    expect(await result.current.applyJiraSavedFilter(filter)).toBe(false)
+  })
+  unmount()
+  resolveApply(initial)
+  expect(await applying).toBe(false)
+  expect(setQuery).not.toHaveBeenCalled()
+  expect(mutate).toHaveBeenCalledTimes(2)
+})

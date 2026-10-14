@@ -105,7 +105,9 @@ export function TaskPageJiraFilters({
             loading={jiraSavedFiltersLoading}
             error={jiraSavedFiltersError}
             onRetry={retryJiraSavedFilters}
-            onApply={applyJiraSavedFilter}
+            onApply={async (filter) => {
+              await applyJiraSavedFilter(filter)
+            }}
             onCreate={createJiraSavedFilter}
             onUpdate={updateJiraSavedFilter}
             onDelete={deleteJiraSavedFilter}
