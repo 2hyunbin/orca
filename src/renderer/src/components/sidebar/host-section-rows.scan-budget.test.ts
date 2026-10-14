@@ -88,9 +88,12 @@ describe('host section header scan budget', () => {
   })
 
   it('skips repeated empty localizations without publishing the header to that host', () => {
-    const rows = lane(20)
-    const counts = globalHeader(rows)
+    const sourceRows = lane(20)
+    const counts = new Map(globalHeader(sourceRows))
     counts.delete('local')
+    const rows = sourceRows.map((row) =>
+      row.type === 'header' && row.key === 'all' ? { ...row, hostWorktreeCounts: counts } : row
+    )
     const reads = vi.spyOn(counts, 'get')
     const result = section(rows)
 
