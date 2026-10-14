@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 import type { JiraConnectionStatus, JiraIssue, JiraUser } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import type { AppState } from '@/store/types'
@@ -23,7 +25,7 @@ const status: JiraConnectionStatus = {
   viewer: { ...self, email: null }
 }
 vi.mock('@/runtime/runtime-jira-client', () => ({
-  jiraListAssignableUsers: boundary.search,
+  jiraListAssignableUsersForTarget: boundary.search,
   jiraSearchUsers: vi.fn()
 }))
 vi.mock('@/store', () => ({
@@ -56,7 +58,13 @@ const source: TaskSourceContext = {
   hostId: 'runtime:remote'
 }
 function mount(
-  options: { selected?: JiraIssue; sourceContext?: TaskSourceContext; pendingField?: string } = {}
+  options: {
+    selected?: JiraIssue
+    sourceContext?: TaskSourceContext
+    pendingField?: string
+    owner?: RuntimeClientTarget
+    runtimeContextKey?: string
+  } = {}
 ) {
   const mutateIssue = vi.fn(async () => {})
   const props = {
@@ -65,6 +73,12 @@ function mount(
     priorities: [],
     pendingField: options.pendingField ?? null,
     mutateIssue,
+    owner:
+      options.owner ??
+      (options.sourceContext
+        ? taskSourceRuntimeTarget(options.sourceContext)
+        : { kind: 'local' as const }),
+    runtimeContextKey: options.runtimeContextKey ?? 'local#0',
     sourceContext: options.sourceContext
   }
   return { mutateIssue, props, ...render(<JiraIssueMetadataBar {...props} />) }
@@ -97,12 +111,7 @@ describe('Existing Jira issue assignee', () => {
     boundary.search.mockResolvedValue([{ accountId: 'beth', displayName: 'Beth' }])
     fireEvent.change(search, { target: { value: 'Beth' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Beth' }))
-    expect(boundary.search).toHaveBeenLastCalledWith(
-      { kind: 'default-scope', settings: null },
-      'ENG-1',
-      'Beth',
-      'site-1'
-    )
+    expect(boundary.search).toHaveBeenLastCalledWith({ kind: 'local' }, 'ENG-1', 'Beth', 'site-1')
     expect(mutateIssue).toHaveBeenCalledWith(
       'assignee',
       { assigneeAccountId: 'beth' },
@@ -136,7 +145,12 @@ describe('Existing Jira issue assignee', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
     await screen.findByRole('button', { name: 'Ada' })
-    expect(boundary.search).toHaveBeenLastCalledWith(source, 'ENG-1', '', 'site-1')
+    expect(boundary.search).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'remote' },
+      'ENG-1',
+      '',
+      'site-1'
+    )
     boundary.readJiraStatus.mockReturnValue(new Promise(() => {}))
     rerender(
       <JiraIssueMetadataBar {...props} sourceContext={{ ...source, accountLabel: 'other' }} />
@@ -161,6 +175,47 @@ describe('Existing Jira issue assignee', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
     expect(screen.queryByRole('button', { name: 'Old user' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Assign to me (Zoe me)' })).toBeNull()
+  })
+  it('routes an account owner independently of settings and drops the old owner search', async () => {
+    let finishOldSearch = (_users: JiraUser[]): void => {}
+    boundary.statusKey = 'runtime:account-a#0'
+    boundary.search.mockReturnValue(
+      new Promise<JiraUser[]>((resolve) => {
+        finishOldSearch = resolve
+      })
+    )
+    const { rerender, props } = mount({
+      owner: { kind: 'environment', environmentId: 'account-a' },
+      runtimeContextKey: 'runtime:account-a#0'
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
+    await waitFor(() =>
+      expect(boundary.search).toHaveBeenCalledWith(
+        { kind: 'environment', environmentId: 'account-a' },
+        'ENG-1',
+        '',
+        'site-1'
+      )
+    )
+    boundary.search.mockResolvedValue([{ accountId: 'new', displayName: 'New owner user' }])
+    rerender(
+      <JiraIssueMetadataBar
+        {...props}
+        owner={{ kind: 'environment', environmentId: 'account-b' }}
+        runtimeContextKey="runtime:account-b#0"
+      />
+    )
+    await act(async () => finishOldSearch([{ accountId: 'old', displayName: 'Old owner user' }]))
+    expect(screen.queryByRole('button', { name: 'Assign to me (Zoe me)' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Assignee' }))
+    await screen.findByRole('button', { name: 'New owner user' })
+    expect(screen.queryByRole('button', { name: 'Old owner user' })).toBeNull()
+    expect(boundary.search).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'account-b' },
+      'ENG-1',
+      '',
+      'site-1'
+    )
   })
   it('disables both assignment actions while another field saves', () => {
     mount({ pendingField: 'title' })

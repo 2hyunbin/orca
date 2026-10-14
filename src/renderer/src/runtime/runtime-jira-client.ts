@@ -27,6 +27,7 @@ export { jiraLookupIssueSummary, jiraReadStatus } from './runtime-jira-summary-c
 export {
   jiraCreateIssue,
   jiraListAssignableUsers,
+  jiraListAssignableUsersForTarget,
   jiraListAssignableUsersForProject,
   jiraSearchUsers
 } from './runtime-jira-user-fields-client'

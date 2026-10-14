@@ -10,13 +10,17 @@ import type {
   JiraIssueCommentComposer,
   JiraIssueWorkspaceContent
 } from './jira-issue-workspace-content'
+import type { JiraIssueMetadataBar } from './jira-issue-workspace-chrome'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import JiraIssueWorkspace from './JiraIssueWorkspace'
 
 type PendingRead<T> = {
   key: string
+  owner: RuntimeClientTarget
   resolve: (value: T) => void
   reject: (error: Error) => void
 }
+type MetadataProps = ComponentProps<typeof JiraIssueMetadataBar>
 type ComposerProps = ComponentProps<typeof JiraIssueCommentComposer>
 type JiraStoreBoundary = Pick<AppState, 'patchJiraIssue'> & {
   settings: Pick<NonNullable<AppState['settings']>, 'activeRuntimeEnvironmentId'>
@@ -27,7 +31,8 @@ const boundary = vi.hoisted(
     issues: PendingRead<JiraIssue | null>[]
     comments: PendingRead<JiraComment[]>[]
     composer: ComposerProps | null
-  } => ({ issues: [], comments: [], composer: null })
+    metadata: MetadataProps | null
+  } => ({ issues: [], comments: [], composer: null, metadata: null })
 )
 
 vi.mock('@/store', () => {
@@ -41,12 +46,17 @@ vi.mock('@/store', () => {
 })
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('@/runtime/runtime-jira-client', () => {
-  function request<T>(queue: PendingRead<T>[], key: string): Promise<T> {
-    return new Promise((resolve, reject) => queue.push({ key, resolve, reject }))
+  function request<T>(
+    queue: PendingRead<T>[],
+    owner: RuntimeClientTarget,
+    key: string
+  ): Promise<T> {
+    return new Promise((resolve, reject) => queue.push({ key, owner, resolve, reject }))
   }
   return {
-    jiraGetIssue: (_settings: unknown, key: string) => request(boundary.issues, key),
-    jiraIssueComments: (_settings: unknown, key: string) => request(boundary.comments, key),
+    jiraGetIssue: (owner: RuntimeClientTarget, key: string) => request(boundary.issues, owner, key),
+    jiraIssueComments: (owner: RuntimeClientTarget, key: string) =>
+      request(boundary.comments, owner, key),
     jiraListTransitions: async () => [],
     jiraListPriorities: async () => [],
     jiraListAssignableUsers: async () => [],
@@ -70,7 +80,10 @@ vi.mock('./jira-issue-workspace-chrome', () => ({
   JiraIssueWorkspaceHeader: ({ issueLoading }: { issueLoading: boolean }) => (
     <div data-testid="issue-loading">{String(issueLoading)}</div>
   ),
-  JiraIssueMetadataBar: () => null
+  JiraIssueMetadataBar: (props: MetadataProps) => {
+    boundary.metadata = props
+    return null
+  }
 }))
 vi.mock('./jira-issue-workspace-content', () => ({
   JiraIssueWorkspaceContent: (props: ComponentProps<typeof JiraIssueWorkspaceContent>) => (
@@ -125,7 +138,10 @@ function comment(id: string): JiraComment {
   return { id, body: id, createdAt: '2026-10-02' }
 }
 
-async function render(selected: JiraIssue | null): Promise<void> {
+async function render(
+  selected: JiraIssue | null,
+  source: TaskSourceContext | null = sourceContext
+): Promise<void> {
   if (!root) {
     throw new Error('Missing React root')
   }
@@ -134,7 +150,7 @@ async function render(selected: JiraIssue | null): Promise<void> {
     mountedRoot.render(
       <JiraIssueWorkspace
         issue={selected}
-        sourceContext={sourceContext}
+        sourceContext={source}
         onUse={() => {}}
         onClose={() => {}}
       />
@@ -184,10 +200,35 @@ afterEach(async () => {
   boundary.issues.length = 0
   boundary.comments.length = 0
   boundary.composer = null
+  boundary.metadata = null
   document.body.replaceChildren()
 })
 
 describe('Jira issue workspace request lifetime', () => {
+  it('passes the captured source owner to metadata and hydration instead of the default host', async () => {
+    await render(issue(), { ...sourceContext, hostId: 'runtime:source-owner' })
+    const metadata = boundary.metadata
+    if (!metadata) {
+      throw new Error('Missing Jira metadata')
+    }
+    expect(metadata.owner).toEqual({ kind: 'environment', environmentId: 'source-owner' })
+    expect(metadata.runtimeContextKey).toBe('runtime:source-owner#0')
+    expect(take(boundary.issues).owner).toBe(metadata.owner)
+    expect(take(boundary.comments).owner).toBe(metadata.owner)
+  })
+
+  it('shares one default owner between metadata and hydration when no source is selected', async () => {
+    await render(issue(), null)
+    const metadata = boundary.metadata
+    if (!metadata) {
+      throw new Error('Missing Jira metadata')
+    }
+    expect(metadata.owner).toEqual({ kind: 'environment', environmentId: 'environment-1' })
+    expect(metadata.runtimeContextKey).toBe('runtime:environment-1#0')
+    expect(take(boundary.issues).owner).toBe(metadata.owner)
+    expect(take(boundary.comments).owner).toBe(metadata.owner)
+  })
+
   it('discards late detail and comments after closing the mounted workspace', async () => {
     await render(issue())
     await render(null)

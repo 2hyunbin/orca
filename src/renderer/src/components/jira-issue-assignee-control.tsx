@@ -1,56 +1,54 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { JiraUserPicker } from '@/components/jira-user-picker'
 import { getJiraSelfUser } from '@/components/jira-self-user'
 import { useJiraSourceConnection } from '@/components/new-workspace/use-jira-source-connection'
 import { useAppStore } from '@/store'
-import { defaultScopeSource } from '@/lib/default-creation-host'
 import { compareBaseSensitivityLocaleText } from '@/lib/locale-text-collators'
-import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
-import { jiraListAssignableUsers } from '@/runtime/runtime-jira-client'
+import { jiraListAssignableUsersForTarget } from '@/runtime/runtime-jira-client'
 import { translate } from '@/i18n/i18n'
 import {
   getTaskSourceCacheScope,
   type TaskSourceContext
 } from '../../../shared/task-source-context'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { JiraIssue, JiraIssueUpdate, JiraUser } from '../../../shared/jira-types'
 
 export function JiraIssueAssigneeControl({
   issue,
   disabled,
   sourceContext,
+  owner,
+  runtimeContextKey,
   mutateIssue
 }: {
   issue: JiraIssue
   disabled: boolean
   sourceContext?: TaskSourceContext | null
+  owner: RuntimeClientTarget
+  runtimeContextKey: string
   mutateIssue: (
     field: string,
     updates: JiraIssueUpdate,
     optimistic?: Partial<JiraIssue>
   ) => Promise<unknown>
 }): React.JSX.Element {
-  const settings = useAppStore((state) => state.settings)
   const defaultStatus = useAppStore((state) => state.jiraStatus)
   const defaultStatusKey = useAppStore((state) => state.jiraStatusContextKey)
   const connection = useJiraSourceConnection({
     enabled: true,
     sourceContext: sourceContext ?? null
   })
-  const providerSettings = useMemo(
-    () => sourceContext ?? defaultScopeSource(settings),
-    [settings, sourceContext]
-  )
   const status = sourceContext
     ? connection.status
-    : defaultStatusKey === getProviderRuntimeContextKey(settings)
+    : defaultStatusKey === runtimeContextKey
       ? defaultStatus
       : null
   const self = getJiraSelfUser(status, issue.siteId)
   const selfAccountId = self?.accountId
   const searchUsers = useCallback(
     async (query: string) => {
-      const found = await jiraListAssignableUsers(providerSettings, issue.key, query, issue.siteId)
+      const found = await jiraListAssignableUsersForTarget(owner, issue.key, query, issue.siteId)
       return [...found].sort((a, b) => {
         if ((a.accountId === selfAccountId) !== (b.accountId === selfAccountId)) {
           return a.accountId === selfAccountId ? -1 : 1
@@ -61,7 +59,7 @@ export function JiraIssueAssigneeControl({
         )
       })
     },
-    [issue.key, issue.siteId, providerSettings, selfAccountId]
+    [issue.key, issue.siteId, owner, selfAccountId]
   )
   const assign = (user: JiraUser | null): void => {
     if (disabled) {
@@ -73,15 +71,13 @@ export function JiraIssueAssigneeControl({
       { assignee: user ?? undefined }
     )
   }
-  const sourceKey = sourceContext
-    ? getTaskSourceCacheScope(sourceContext)
-    : getProviderRuntimeContextKey(settings)
+  const sourceKey = sourceContext ? getTaskSourceCacheScope(sourceContext) : runtimeContextKey
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <div className="w-40">
         <JiraUserPicker
           key={JSON.stringify([sourceKey, issue.siteId, issue.key])}
-          providerSettings={providerSettings}
+          providerSettings={owner}
           siteId={issue.siteId}
           value={
             issue.assignee?.accountId ??

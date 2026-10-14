@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { JiraIssueAssigneeControl } from '@/components/jira-issue-assignee-control'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
@@ -90,6 +91,8 @@ export function JiraIssueMetadataBar({
   transitions,
   priorities,
   sourceContext,
+  owner,
+  runtimeContextKey,
   mutateIssue
 }: {
   displayed: JiraIssue
@@ -97,6 +100,8 @@ export function JiraIssueMetadataBar({
   transitions: JiraTransition[]
   priorities: JiraPriority[]
   sourceContext?: TaskSourceContext | null
+  owner: RuntimeClientTarget
+  runtimeContextKey: string
   mutateIssue: (
     field: string,
     updates: JiraIssueUpdate,
@@ -184,6 +189,8 @@ export function JiraIssueMetadataBar({
         issue={displayed}
         disabled={pendingField !== null}
         sourceContext={sourceContext}
+        owner={owner}
+        runtimeContextKey={runtimeContextKey}
         mutateIssue={mutateIssue}
       />
     </div>
