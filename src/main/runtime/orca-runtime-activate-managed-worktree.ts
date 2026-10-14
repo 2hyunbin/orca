@@ -313,6 +313,7 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
       defaultTabs?: CreateWorktreeResult['defaultTabs']
       primaryTerminalHandle?: string | null
       hasStartupTerminal: boolean
+      setupOnly?: boolean
       setupCommandPlatform: 'windows' | 'posix'
       observeSetupCompletion?: boolean
       // Why: when the agent startup is sequenced to wait for setup

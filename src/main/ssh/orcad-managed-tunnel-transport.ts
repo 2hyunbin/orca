@@ -16,8 +16,14 @@ import {
   type TcpForwardingVerdict
 } from './ssh-tcp-forwarding-probe'
 import { Ssh2PortForwardProvider } from './ssh2-port-forward-provider'
-import { SystemSshPortForwardProvider } from './system-ssh-port-forward-provider'
-import { reserveLocalForwardPort } from './system-ssh-forward-process'
+import {
+  SystemSshPortForwardProvider,
+  systemSshForwardBuildArgsOptions
+} from './system-ssh-port-forward-provider'
+import {
+  buildSystemSshPortForwardArgs,
+  reserveLocalForwardPort
+} from './system-ssh-forward-process'
 
 type OrcadManagedTunnelTransportDependencies = {
   forwards: SshPortForwardProvider[]
@@ -25,7 +31,7 @@ type OrcadManagedTunnelTransportDependencies = {
   probe: (conn: SshConnection, port: number) => Promise<TcpForwardingVerdict>
   checkForward: (forward: StartedPortForward) => Promise<TcpForwardingVerdict>
   /** Frees the persisted local port (an orphaned `ssh -L` may hold it) before the bridge binds. */
-  reserveLocalPort: (localPort: number) => Promise<unknown>
+  reserveLocalPort: (conn: SshConnection, options: PortForwardStartOptions) => Promise<unknown>
 }
 
 export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvider {
@@ -38,7 +44,7 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
       stdio: new OrcadStdioBridgePortForwardProvider(),
       probe: probeTcpForwarding,
       checkForward: checkForwardChannel,
-      reserveLocalPort: reserveLocalForwardPort
+      reserveLocalPort: reserveBridgeLocalPort
     }
   ) {}
 
@@ -96,10 +102,28 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     }
     // Why: a closed `ssh -L` (ours, or one an earlier Orca orphaned) may still hold the port.
     if (options.localPort !== 0) {
-      await this.dependencies.reserveLocalPort(options.localPort)
+      await this.dependencies.reserveLocalPort(conn, options)
     }
     const started = await this.dependencies.stdio.start(conn, options)
     rememberOrcadTunnelTransport(options.connectionId, 'stdio_bridge')
     return started
   }
+}
+
+/** Only system SSH ever spawned an `ssh -L`, so only there can one be left holding the port. */
+export function reserveBridgeLocalPort(
+  conn: SshConnection,
+  options: PortForwardStartOptions
+): Promise<number> {
+  if (!conn.usesSystemSshTransport()) {
+    return reserveLocalForwardPort(options.localPort)
+  }
+  const orphanArgs = buildSystemSshPortForwardArgs(
+    conn.getTarget(),
+    options.localPort,
+    options.remoteHost,
+    options.remotePort,
+    systemSshForwardBuildArgsOptions(conn)
+  )
+  return reserveLocalForwardPort(options.localPort, orphanArgs)
 }
