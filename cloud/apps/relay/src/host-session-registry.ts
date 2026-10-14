@@ -1267,8 +1267,8 @@ export class HostSessionRegistry {
               connectionInclusionWatermark,
               assignmentLease
             ).catch((error: unknown) => {
-              // guardSessionTask closes the socket, so a dependency failure (a check that threw
-              // instead of answering) refuses the hello.
+              // guardSessionTask closes the socket, so any throw refuses the hello as beforeCheck,
+              // including one after the database answered (e.g. in send or the session lookup).
               settlePreAuth('refused', 'beforeCheck')
               throw error
             }),
@@ -1516,6 +1516,7 @@ export class HostSessionRegistry {
         performance.now() - assignmentReadStartedAt
       )
     }
+    // The `combined` role compares the epoch without querying but is still labelled db.
     if (!admittedFromMemory) path = 'db'
     if (!assignmentValid) {
       refuse(RELAY_CLOSE_CODE.WRONG_CELL, 'wrong assignment epoch')
