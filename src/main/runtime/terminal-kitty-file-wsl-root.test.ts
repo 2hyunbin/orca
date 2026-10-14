@@ -67,6 +67,18 @@ describe('authoritative WSL Kitty file roots', () => {
     expect(handle.close).toHaveBeenCalledOnce()
   })
 
+  it('allows only guest temporary roots for a floating WSL terminal', async () => {
+    const owner = { workspacePath: null, wslDistro: 'Ubuntu' }
+    await expect(readTerminalKittyFile({ path: '/tmp/claude-image' }, owner)).resolves.toEqual({
+      base64: 'SU1BR0U='
+    })
+    expect(open).toHaveBeenCalledWith(`${ROOT}\\tmp\\claude-image`, expect.any(Number))
+    await expect(readTerminalKittyFile({ path: '/mnt/c/repo/image' }, owner)).rejects.toThrow(
+      'outside this terminal'
+    )
+    expect(realpath).not.toHaveBeenCalledWith(null)
+  })
+
   it('uses the native path for the guest Windows drive mount', async () => {
     await expect(readTerminalKittyFile({ path: '/mnt/c/repo/image' }, OWNER)).resolves.toEqual({
       base64: 'SU1BR0U='

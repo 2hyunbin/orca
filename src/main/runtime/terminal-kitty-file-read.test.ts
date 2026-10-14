@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { link, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { link, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { readTerminalKittyFile, resolveKittyFilePath } from './terminal-kitty-file-read'
 import { TERMINAL_KITTY_FILE_MAX_BYTES } from '../../shared/terminal-kitty-file'
+import * as terminalArtifacts from './runtime-file-commands-terminal-artifact-access'
 import { TerminalReadKittyFile } from '../../shared/rpc-contract/terminal-unary-params'
 
 const roots: string[] = []
@@ -40,6 +41,20 @@ describe('PTY-owned Kitty file reads', () => {
     const path = join(root, 'temporary')
     await writeFile(path, Buffer.from([0, 255, 128, 1]))
     expect(await readTerminalKittyFile({ path }, owner)).toEqual({ base64: 'AP+AAQ==' })
+  })
+
+  it('restricts a floating terminal to temporary roots without granting a workspace', async () => {
+    const { root, path } = await fixture()
+    const temporary = join(root, 'allowed-temp')
+    await mkdir(temporary)
+    vi.spyOn(terminalArtifacts, 'localTerminalArtifactRoots').mockResolvedValue([
+      await realpath(temporary)
+    ])
+    const image = join(temporary, 'image')
+    await writeFile(image, 'IMAGE')
+    const owner = { workspacePath: null, wslDistro: null }
+    expect(await readTerminalKittyFile({ path: image }, owner)).toEqual({ base64: 'SU1BR0U=' })
+    await expect(readTerminalKittyFile({ path }, owner)).rejects.toThrow('outside this terminal')
   })
 
   it('rejects directories and multiply-linked files', async () => {

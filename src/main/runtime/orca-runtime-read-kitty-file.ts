@@ -1,4 +1,5 @@
 import { OrcaRuntimeWithResolveWorktreeSelector } from './orca-runtime-resolve-worktree-selector'
+import { isFloatingWorkspaceId } from '../../shared/floating-workspace-worktree'
 import { getProviderForPty } from '../ipc/pty/provider/registry'
 import { readTerminalKittyFile } from './terminal-kitty-file-read'
 import type {
@@ -26,11 +27,13 @@ export class OrcaRuntimeWithReadKittyFile extends OrcaRuntimeWithResolveWorktree
     if (request.expectedIncarnationId && request.expectedIncarnationId !== incarnation) {
       throw new Error('terminal_handle_stale')
     }
-    const workspace = await this.resolveWorktreeSelector(`id:${pty.worktreeId}`)
+    const workspacePath = isFloatingWorkspaceId(pty.worktreeId)
+      ? null
+      : (await this.resolveWorktreeSelector(`id:${pty.worktreeId}`)).path
     const result = await readTerminalKittyFile(
       request,
       {
-        workspacePath: workspace.path,
+        workspacePath,
         wslDistro: this.wslDistroByPtyId.get(ptyId) ?? pty.wslDistro
       },
       signal

@@ -18,22 +18,23 @@ import { localTerminalArtifactRoots } from './runtime-file-commands-terminal-art
 
 export async function readTerminalKittyFile(
   request: TerminalKittyFileRequest,
-  owner: { workspacePath: string; wslDistro: string | null },
+  owner: { workspacePath: string | null; wslDistro: string | null },
   signal?: AbortSignal
 ): Promise<TerminalKittyFileResult> {
   signal?.throwIfAborted()
   const path = resolveKittyFilePath(request.path, owner.wslDistro)
-  const workspacePath = owner.wslDistro
-    ? toWindowsWslPath(toLinuxPath(owner.workspacePath), owner.wslDistro)
-    : owner.workspacePath
+  const workspacePath =
+    owner.workspacePath && owner.wslDistro
+      ? toWindowsWslPath(toLinuxPath(owner.workspacePath), owner.wslDistro)
+      : owner.workspacePath
   const [canonical, workspaceRoot, tempRoots] = await Promise.all([
     realpath(path),
-    realpath(workspacePath),
+    workspacePath ? realpath(workspacePath) : null,
     localTerminalArtifactRoots(
-      owner.wslDistro ? toWindowsWslUncPath('/', owner.wslDistro) : workspacePath
+      owner.wslDistro ? toWindowsWslUncPath('/', owner.wslDistro) : (workspacePath ?? '')
     )
   ])
-  const roots = [workspaceRoot, ...tempRoots]
+  const roots = workspaceRoot ? [workspaceRoot, ...tempRoots] : tempRoots
   if (!roots.some((root) => kittyFileInsideRoot(root, canonical, owner.wslDistro !== null))) {
     throw new Error('Kitty image file is outside this terminal workspace and temporary folders')
   }

@@ -4,14 +4,9 @@ import { resolveClaudeCommand } from '../../src/shared/node-cli-command-resoluti
 import { createClaudePluginImageFixture } from './helpers/claude-plugin-image-fixture'
 import { expect, test } from './helpers/orca-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
-import {
-  execInTerminal,
-  sendToTerminal,
-  waitForActivePanePtyId,
-  waitForActiveTerminalManager,
-  waitForTerminalOutput
-} from './helpers/terminal'
+import { execInTerminal, sendToTerminal, waitForActiveTerminalManager } from './helpers/terminal'
 import { enableInlineImages } from './helpers/terminal-inline-image-proof'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../src/shared/constants'
 import { nodeTerminalCommand } from './terminal-node-command'
 
 const enabled = process.env.ORCA_REAL_CLAUDE_PLUGIN_TEST === '1'
@@ -24,8 +19,10 @@ test.use({
 test.skip(!enabled, 'Set ORCA_REAL_CLAUDE_PLUGIN_TEST=1 to run the installed Claude UI')
 
 for (const acceleration of ['off', 'on'] as const) {
-  for (const managed of [false, true]) {
-    test(`@headful ${acceleration}: real Claude plugin ${managed ? 'managed launch renders bytes and host files' : 'reports unsupported automatic detection'}`, async ({
+  for (const surface of ['bare', 'workspace', 'floating'] as const) {
+    const managed = surface !== 'bare'
+    const floating = surface === 'floating'
+    test(`@headful ${acceleration}: real Claude plugin ${managed ? `${surface} managed launch renders bytes and host files` : 'reports unsupported automatic detection'}`, async ({
       orcaPage
     }, testInfo) => {
       await waitForSessionReady(orcaPage)
@@ -40,12 +37,13 @@ for (const acceleration of ['off', 'on'] as const) {
         command,
         managed ? 'managed' : false
       )
+      let tabId = await orcaPage.evaluate(() => window.__store!.getState().activeTabId)
       if (managed) {
-        await orcaPage.evaluate(
-          (startupCommand) => {
+        tabId = await orcaPage.evaluate(
+          ({ startupCommand, floatingWorktreeId }) => {
             const store = window.__store!
             const state = store.getState()
-            const worktreeId = state.activeWorktreeId
+            const worktreeId = floatingWorktreeId ?? state.activeWorktreeId
             if (!worktreeId) {
               throw new Error('Missing managed Claude workspace')
             }
@@ -53,33 +51,77 @@ for (const acceleration of ['off', 'on'] as const) {
               launchAgent: 'claude',
               pendingStartup: { command: startupCommand, launchAgent: 'claude' }
             })
-            state.setActiveTab(tab.id)
-            state.setActiveTabType('terminal', worktreeId)
+            state.activateTab(tab.id)
+            return tab.id
           },
-          nodeTerminalCommand([launcher])
+          {
+            startupCommand: nodeTerminalCommand([launcher]),
+            floatingWorktreeId: floating ? FLOATING_TERMINAL_WORKTREE_ID : null
+          }
         )
-        await waitForActiveTerminalManager(orcaPage)
       }
-      const ptyId = await waitForActivePanePtyId(orcaPage)
+      if (floating) {
+        await orcaPage.evaluate(async () => {
+          await window.__store!.getState().updateSettings({ floatingTerminalEnabled: true })
+        })
+        await expect(orcaPage.locator('[data-floating-terminal-panel]')).toBeAttached()
+        await orcaPage.evaluate(() =>
+          window.dispatchEvent(new Event('orca-toggle-floating-terminal'))
+        )
+        await expect(orcaPage.locator('[data-floating-terminal-panel]')).toBeVisible()
+      }
+      await expect
+        .poll(() =>
+          orcaPage.evaluate(
+            (id) => id && window.__paneManagers?.get(id)?.getActivePane()?.container.dataset.ptyId,
+            tabId
+          )
+        )
+        .toBeTruthy()
+      const ptyId = await orcaPage.evaluate(
+        (id) => id && window.__paneManagers?.get(id)?.getActivePane()?.container.dataset.ptyId,
+        tabId
+      )
+      if (!ptyId) {
+        throw new Error('Missing Claude test terminal')
+      }
+      const waitForOutput = async (text: string, timeout = 15_000) => {
+        await expect
+          .poll(
+            () =>
+              orcaPage.evaluate((id) => {
+                const manager = id ? window.__paneManagers?.get(id) : undefined
+                const pane = manager?.getActivePane()
+                return pane?.serializeAddon?.serialize() ?? ''
+              }, tabId),
+            { timeout }
+          )
+          .toContain(text)
+      }
       try {
         if (!managed) {
           await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([launcher]))
         }
         await expect
           .poll(() =>
-            orcaPage.evaluate(() => {
-              const tabId = window.__store!.getState().activeTabId
+            orcaPage.evaluate((tabId) => {
               const manager = tabId && window.__paneManagers?.get(tabId)
               const pane = manager && manager.getActivePane()
               return Boolean(manager && pane && manager.hasWebglRenderer(pane.id))
-            })
+            }, tabId)
           )
           .toBe(acceleration === 'on')
-        await waitForTerminalOutput(orcaPage, 'IMAGE_ACCEPTANCE_bytes', 30_000)
+        await waitForOutput('IMAGE_ACCEPTANCE_bytes', 30_000)
         expect(JSON.parse(readFileSync(gateReceipt, 'utf8'))).toEqual({
           flag: managed ? '1' : null
         })
-        const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
+        const screen = orcaPage
+          .locator(
+            floating
+              ? '[data-floating-terminal-panel] .pane:visible .xterm-screen'
+              : '.pane:visible .xterm-screen'
+          )
+          .first()
         const colors = async (name: string) => {
           const notice = orcaPage.getByRole('status', {
             name: 'Usage display is now compact',
@@ -108,7 +150,7 @@ for (const acceleration of ['off', 'on'] as const) {
           return counts
         }
         if (!managed) {
-          await waitForTerminalOutput(orcaPage, 'SYNTHETIC_IMAGE_FALLBACK', 15_000)
+          await waitForOutput('SYNTHETIC_IMAGE_FALLBACK')
           expect(await colors('automatic-fallback.png')).toEqual({
             red: 0,
             blue: 0,
@@ -127,7 +169,7 @@ for (const acceleration of ['off', 'on'] as const) {
           )
           .toBe(true)
         await sendToTerminal(orcaPage, ptyId, '/image-acceptance file\r')
-        await waitForTerminalOutput(orcaPage, 'IMAGE_ACCEPTANCE_STAGE_file', 15_000)
+        await waitForOutput('IMAGE_ACCEPTANCE_STAGE_file')
         await expect
           .poll(
             async () => {
@@ -138,7 +180,7 @@ for (const acceleration of ['off', 'on'] as const) {
           )
           .toBe(true)
         await sendToTerminal(orcaPage, ptyId, '/image-acceptance clear\r')
-        await waitForTerminalOutput(orcaPage, 'IMAGE_ACCEPTANCE_STAGE_clear', 15_000)
+        await waitForOutput('IMAGE_ACCEPTANCE_STAGE_clear')
         await expect
           .poll(() => colors('cleared.png'), { timeout: 15_000 })
           .toEqual({ red: 0, blue: 0, green: 0, yellow: 0 })
