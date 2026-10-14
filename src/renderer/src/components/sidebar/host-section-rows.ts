@@ -198,6 +198,7 @@ export function addHostSectionRows(args: {
   let pendingRows: Extract<Row, { type: 'header' }>[] = []
   let pendingRowsWereUsed = false
   const pendingRowsKeyByHostId = new Map<ExecutionHostId, string>()
+  const checkedPendingRowsHostIds = new Set<ExecutionHostId>()
   const flushUnusedPendingRows = (): void => {
     if (pendingRows.length === 0 || pendingRowsWereUsed) {
       return
@@ -229,7 +230,8 @@ export function addHostSectionRows(args: {
     const rowHostId = getRowHostId(row, args.defaultHostId)
     if (rowHostId) {
       const hostRows = rowsByHostId.get(rowHostId) ?? []
-      if (pendingRows.length > 0) {
+      if (pendingRows.length > 0 && !checkedPendingRowsHostIds.has(rowHostId)) {
+        checkedPendingRowsHostIds.add(rowHostId)
         const localizedPendingRows = localizePendingRowsForHost(pendingRows, rowHostId)
         const pendingRowsKey = getPendingRowsKey(localizedPendingRows)
         if (
@@ -251,6 +253,7 @@ export function addHostSectionRows(args: {
       flushUnusedPendingRows()
       pendingRows = [row]
       pendingRowsWereUsed = false
+      checkedPendingRowsHostIds.clear()
     } else {
       globalRows.push(row)
     }
