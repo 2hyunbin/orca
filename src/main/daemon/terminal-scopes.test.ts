@@ -32,15 +32,15 @@ vi.mock('./daemon-cgroup-scope', async (importOriginal) => {
   }
 })
 
-const SLICE_CGROUP = '/user.slice/user-1000.slice/user@1000.service/orca_ptys_1f_2e.slice'
-const SCOPE_ON = { on: expect.objectContaining({ slice: 'orca_ptys_1f_2e.slice' }) }
+const SLICE_CGROUP =
+  '/user.slice/user-1000.slice/user@1000.service/orca_ptys_orca_daemon_1f_2e.slice'
+const SCOPE_ON = { on: expect.objectContaining({ slice: 'orca_ptys_orca_daemon_1f_2e.slice' }) }
 
 type Call = { program: string; args: string[] }
 
 /** A user manager that may reject OOMPolicy on scopes and enforces `pidsMax` on each one. */
 function fakeManager({ oomPolicy = true, pidsMax = 'max\n', sliceStarts = true } = {}) {
   const calls: Call[] = []
-  const detached: Call[] = []
   const run = vi.fn((program: string, args: string[]) => {
     calls.push({ program, args })
     if (program === 'busctl') {
@@ -54,10 +54,7 @@ function fakeManager({ oomPolicy = true, pidsMax = 'max\n', sliceStarts = true }
     }
     return { code: 0, timedOut: false, stdout: '' }
   })
-  const runDetached = (program: string, args: string[]) => {
-    detached.push({ program, args })
-  }
-  return { calls, detached, run, runDetached }
+  return { calls, run }
 }
 
 function linuxInput(
@@ -71,7 +68,6 @@ function linuxInput(
     unifiedCgroup: () => true,
     findExecutable: (name: string) => `/usr/bin/${name}`,
     run: manager.run,
-    runDetached: manager.runDetached,
     ...overrides
   }
 }
@@ -83,11 +79,11 @@ describe('resolveTerminalScopes', () => {
     expect(resolved.ceiling).toEqual({ state: 'off', reason: 'disabled' })
     expect(resolved.scopes).toEqual({
       on: {
-        slice: 'orca_ptys_1f_2e.slice',
+        slice: 'orca_ptys_orca_daemon_1f_2e.slice',
         sliceCgroupPath: `/sys/fs/cgroup${SLICE_CGROUP}`,
         systemdRun: '/usr/bin/systemd-run',
         envBinary: '/usr/bin/env',
-        launchId: '1f_2e',
+        launchId: 'orca_daemon_1f_2e',
         properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s']
       }
     })
@@ -101,7 +97,7 @@ describe('resolveTerminalScopes', () => {
         'org.freedesktop.systemd1.Manager',
         'StartTransientUnit',
         'ssa(sv)a(sa(sv))',
-        'orca_ptys_1f_2e.slice',
+        'orca_ptys_orca_daemon_1f_2e.slice',
         'fail',
         '2',
         'BindsTo',
@@ -120,24 +116,11 @@ describe('resolveTerminalScopes', () => {
       '--scope',
       '--quiet',
       '--collect',
-      '--slice=orca_ptys_1f_2e.slice',
+      '--slice=orca_ptys_orca_daemon_1f_2e.slice',
       '--property=OOMPolicy=continue',
       '--property=TimeoutStopSec=5s'
     ])
-    // Not waited for: its result changes nothing.
     expect(manager.calls).toHaveLength(2)
-    expect(manager.detached).toEqual([
-      {
-        program: 'systemctl',
-        args: [
-          '--user',
-          'set-property',
-          '--runtime',
-          'orca-daemon-1f-2e.scope',
-          'ManagedOOMPreference=avoid'
-        ]
-      }
-    ])
   })
 
   it('drops only OOMPolicy where scopes reject it', () => {
@@ -181,7 +164,7 @@ describe('resolveTerminalScopes', () => {
       '--user',
       '--no-block',
       'stop',
-      'orca_ptys_1f_2e.slice'
+      'orca_ptys_orca_daemon_1f_2e.slice'
     ])
   })
 
@@ -192,7 +175,7 @@ describe('resolveTerminalScopes', () => {
       state: 'on',
       limit: 2048,
       mechanism: 'systemd-slice',
-      unit: 'orca_ptys_1f_2e.slice',
+      unit: 'orca_ptys_orca_daemon_1f_2e.slice',
       controlGroup: SLICE_CGROUP
     })
     expect(resolved.scopes).toMatchObject({

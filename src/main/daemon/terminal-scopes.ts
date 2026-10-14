@@ -13,8 +13,8 @@
  * (Windows); it stays off by default.
  */
 import { accessSync, constants, existsSync } from 'node:fs'
-import { delimiter, dirname, isAbsolute, join } from 'node:path'
-import { runProcessSync, spawnProcess } from '@orca/process-host'
+import { basename, delimiter, dirname, isAbsolute, join } from 'node:path'
+import { runProcessSync } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import type {
   PtyProcessCeilingOffReason,
@@ -40,21 +40,13 @@ type Runner = (
 const defaultRunner: Runner = (program, args, env) =>
   runProcessSync({ program, args, env, timeoutMs: 5_000 })
 
-type DetachedRunner = (program: string, args: string[], env: NodeJS.ProcessEnv) => void
-
-const defaultDetachedRunner: DetachedRunner = (program, args, env) => {
-  const child = spawnProcess({ program, args, env, stdio: 'ignore' })
-  child.on('error', () => {})
-  child.unref()
-}
-
 /** What the Linux wrap needs at spawn time; never reported, only used. */
 export type TerminalScopeRuntime = {
   slice: string
   sliceCgroupPath: string
   systemdRun: string
   envBinary: string
-  /** Sanitized launch nonce, shared by the slice and every scope name. */
+  /** The daemon scope's name, sanitized; shared by the slice and every scope name. */
   launchId: string
   /** `--property=` values every terminal scope gets; each one was accepted by the probe. */
   properties: string[]
@@ -103,7 +95,6 @@ type ResolveInput = {
   /** From `ownFreshDaemonScope`: the daemon's own scope, only when its launcher created it. */
   daemonScope: string | null
   run?: Runner
-  runDetached?: DetachedRunner
   findExecutable?: (name: string) => string | null
   unifiedCgroup?: () => boolean
   setWindowsLimit?: (limit: number) => boolean
@@ -155,9 +146,8 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
     return off('systemd_run_missing')
   }
   const run = input.run ?? defaultRunner
-  const runDetached = input.runDetached ?? defaultDetachedRunner
   const managerEnv = userManagerEnv(input.env)
-  const launchId = sanitizeId(input.daemonScope.replace(/^orca-daemon-|\.scope$/g, ''))
+  const launchId = sanitizeId(basename(input.daemonScope, '.scope'))
   const slice = terminalSliceName(launchId)
   try {
     const created = run(
@@ -213,13 +203,6 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
         continue
       }
       const sliceControlGroup = dirname(cgroupLine.slice('0::'.length))
-      // Why best-effort: oomd should pick a terminal before the daemon that holds every
-      // terminal's scrollback; older systemd ignores or rejects it, which changes nothing.
-      runDetached(
-        'systemctl',
-        ['--user', 'set-property', '--runtime', input.daemonScope, 'ManagedOOMPreference=avoid'],
-        managerEnv
-      )
       // Why verify: managers without pids delegation accept TasksMax and enforce nothing.
       const enforced = limit !== null && pidsMax?.trim() === String(limit)
       return {
