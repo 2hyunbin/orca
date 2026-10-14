@@ -4,6 +4,9 @@ import { OrcaRuntimeWithGetStructuredAgentSessionCreateSupport } from './orca-ru
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { collectSavedStructuredAgentSessionIds } from './saved-structured-agent-session-restoration'
 import { restoreStructuredAgentSessionTabPublications } from './structured-agent-session-tab-restoration'
+import { chatTabChangesMatchingIndex } from './structured-agent-session-tab-index-seed'
+import { chatTabId } from './agent-session-tab-layout'
+import { structuredSessionTabRetired } from './structured-worker-custody'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type {
   RuntimeMobileSessionAgentTab,
@@ -31,6 +34,10 @@ import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
+export type AgentLaunchScope = Parameters<
+  OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce['getAgentLaunchPlatformForWorkspace']
+>[0]
+
 export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRuntimeWithGetStructuredAgentSessionCreateSupport {
   protected async restoreStructuredAgentSessionTabsOnce(): Promise<void> {
     const profileIds = collectSavedStructuredAgentSessionIds(
@@ -49,6 +56,27 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
           })
         }
         this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
+      },
+      reconcile: (restored) => {
+        const host = getStructuredAgentSessionHost()
+        const changes = chatTabChangesMatchingIndex(
+          this.store?.getWorkspaceSession?.(LOCAL_EXECUTION_HOST_ID)?.unifiedTabs ?? {},
+          restored.map((session) => ({
+            worktreeId: session.workspaceId,
+            open: {
+              sessionId: session.sessionId,
+              agent: session.agent,
+              tabId: chatTabId(session.sessionId)
+            }
+          })),
+          (sessionId) =>
+            !!host &&
+            structuredSessionTabRetired(host, sessionId) &&
+            !host.deps?.store?.isSessionUnreadable?.(sessionId)
+        )
+        for (const [worktreeId, worktreeChanges] of changes) {
+          this.changeWindowlessChatTabs(worktreeId, worktreeChanges)
+        }
       },
       project: (session) =>
         this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
@@ -92,6 +120,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
         })
     }
     if (!input.signal?.aborted) {
+      this.saveWindowlessAgentSessionTab(input.workspaceId, input)
       this.projectStructuredAgentSessionTab(input)
     }
   }
@@ -261,7 +290,9 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
   }
 
   protected getAgentLaunchPlatformForWorkspace(
-    scope: TerminalWorkspaceLaunchScope
+    scope: Pick<TerminalWorkspaceLaunchScope, 'repo' | 'path'> & {
+      connectionId?: string | null
+    }
   ): NodeJS.Platform {
     return agentLaunchPlatformForScope(this.requireStore(), scope)
   }

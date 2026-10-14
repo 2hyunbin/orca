@@ -1,6 +1,10 @@
 import { beforeAll, expect, it, vi } from 'vitest'
 import { registerMainProcessIpcHandlers } from '../../../startup/main-process-ipc-bootstrap'
-import { HOST_TEST_SESSION } from '../../../native-chat/agent-session-wire/structured-agent-session-host-test-data'
+import {
+  HOST_TEST_LOCATION,
+  HOST_TEST_SESSION
+} from '../../../native-chat/agent-session-wire/structured-agent-session-host-test-data'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { editPersistedTestAgentSessionStore } from '../../agent-session-record-store-test-harness'
 import {
   WORKTREE,
@@ -125,29 +129,59 @@ it.each([
   }
 )
 
-it('the terminal gate resolves while history is held and the full owner finishes without a later renderer request', async () => {
-  await saveChats()
+it('a close cancels the older windowless restore without a saved or live ghost, then reopens once', async () => {
+  await saveChats(true)
+  let layout: WorkspaceSessionState = {
+    activeRepoId: null,
+    activeWorktreeId: HOST_TEST_LOCATION.workspaceId,
+    activeTabId: null,
+    tabsByWorktree: {},
+    terminalLayoutsByTabId: {}
+  }
+  Object.assign(runtime, {
+    getWorkspaceSessionForWorktree: () => layout,
+    getWorkspaceSessionHostIdForWorktree: () => 'local',
+    setWorkspaceSessionForWorktree: (_id: string, next: WorkspaceSessionState) => {
+      layout = next
+    }
+  })
+  const savedIds = () =>
+    (layout.unifiedTabs?.[HOST_TEST_LOCATION.workspaceId] ?? []).map((tab) => tab.entityId)
   controlPreparation()
   const reached = deferred()
   const release = deferred()
-  const readHistory = host.restoreReadableSessions.bind(host)
-  const history = vi.spyOn(host, 'restoreReadableSessions').mockImplementation(async (ids) => {
+  const history = host.restoreReadableSessions.bind(host)
+  vi.spyOn(host, 'restoreReadableSessions').mockImplementationOnce(async (ids) => {
     reached.resolve()
     await release.promise
-    await readHistory(ids)
+    await history(ids)
   })
+  const restoring = runtime.restoreStructuredAgentSessionTabs()
+  await reached.promise
+  vi.spyOn(store, 'setSessionTabVisibility').mockRejectedValueOnce(new Error('disk failure'))
   try {
-    await prepareViaIpc()
-    await reached.promise
-    expect(history).toHaveBeenCalledOnce()
-    expect((await snapshot()).tabs).toEqual([])
+    expect(
+      await call('session.tabs.close', {
+        worktree: WORKTREE,
+        tabId: `agent-session:${HOST_TEST_SESSION}`,
+        reason: 'user'
+      })
+    ).toMatchObject({ ok: true, result: { closed: true } })
   } finally {
     release.resolve()
   }
-  await vi.waitFor(async () =>
-    expect((await snapshot()).tabs.map((tab) => tab.id)).toEqual([
-      `agent-session:${HOST_TEST_SESSION}`
-    ])
-  )
-  expect(history).toHaveBeenCalledOnce()
+  await restoring
+  expect(savedIds()).toEqual(['second-startup-entry-chat'])
+  expect((await snapshot()).tabs.map((tab) => tab.id)).toEqual([
+    'agent-session:second-startup-entry-chat'
+  ])
+  expect(await call('agentSession.reveal', { sessionId: HOST_TEST_SESSION })).toMatchObject({
+    ok: true,
+    result: { ok: true }
+  })
+  expect(savedIds()).toEqual(['second-startup-entry-chat', HOST_TEST_SESSION])
+  expect((await snapshot()).tabs.map((tab) => tab.id)).toEqual([
+    'agent-session:second-startup-entry-chat',
+    `agent-session:${HOST_TEST_SESSION}`
+  ])
 })

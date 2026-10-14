@@ -12,6 +12,7 @@ export async function restoreStructuredAgentSessionTabPublications(input: {
   profileIds: readonly string[]
   prepare?: () => Promise<void>
   hydrate: () => void
+  reconcile?: (sessions: readonly RestoredSession[]) => void
   project: (session: RestoredSession) => void
 }): Promise<void> {
   await getStructuredAgentSessionClosesInFlight(input.runtime).runRestoration(async (attempt) => {
@@ -62,6 +63,12 @@ export async function restoreStructuredAgentSessionTabPublications(input: {
         sessionIds: []
       }
       const visible = new Set(current.present ? current.sessionIds : eligible)
+      input.reconcile?.(
+        restored.filter(
+          (session) =>
+            !attempt.signalFor(session.sessionId).aborted && visible.has(session.sessionId)
+        )
+      )
       for (const session of restored) {
         if (!attempt.signalFor(session.sessionId).aborted && visible.has(session.sessionId)) {
           input.project(session)
