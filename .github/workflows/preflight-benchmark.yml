@@ -1,4 +1,4 @@
-name: Combined preflight performance experiment
+name: Combined preflight same-runner comparisons
 'on':
   push:
     branches:
@@ -9,9 +9,10 @@ permissions:
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
 jobs:
-  replay:
-    name: combined replay ${{ matrix.order }} ${{ matrix.arm }}
+  host0:
+    name: combined same host 0
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
     steps:
     - name: Checkout
       uses: actions/checkout@v6
@@ -40,24 +41,33 @@ jobs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version-file: config/.bun-version
-    - name: Record checks start
-      run: 'mkdir -p .build/combined-replay
+    - name: Record runner resources
+      run: 'uname -a
 
-        node -e "require(''node:fs'').writeFileSync(''.build/combined-replay/start.json'', JSON.stringify({started:Date.now(),arm:''${{
-        matrix.arm }}'',order:${{ matrix.order }}}))"'
-    - name: Check process-host imports
+        lscpu
+
+        free -m
+
+        bun --version
+
+        node --version'
+    - name: '0 baseline: Record checks start'
+      run: 'mkdir -p .build/same-host-0-0-baseline
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-0-0-baseline/start.json'',JSON.stringify({started:Date.now(),arm:''baseline'',order:0,host:0,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '0 baseline: Check process-host imports'
       if: '!cancelled()'
-      id: process-host-imports
+      id: h0-r0-process-host-imports
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
-        \ 0; fi\nif [ '${{ matrix.arm }}' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n\
-        \  bun config/scripts/check-import-boundaries.mjs\nfi\n"
-    - name: Check main-process sync launches
+        \ 0; fi\nif [ 'baseline' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '0 baseline: Check main-process sync launches'
       if: '!cancelled()'
-      id: main-sync-spawn-ratchet
+      id: h0-r0-main-sync-spawn-ratchet
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -67,9 +77,9 @@ jobs:
         bun --bun run check:main-sync-spawn-ratchet
 
         '
-    - name: Lint
+    - name: '0 baseline: Lint'
       if: '!cancelled()'
-      id: root-lint
+      id: h0-r0-root-lint
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -79,9 +89,9 @@ jobs:
         pnpm exec oxlint --format github
 
         '
-    - name: Reject low-evidence patterns
+    - name: '0 baseline: Reject low-evidence patterns'
       if: '''true'' == ''true'''
-      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ '${{ matrix.arm }}' = baseline ]; then\nnode --input-type=module\
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'baseline' = baseline ]; then\nnode --input-type=module\
         \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
         \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
         \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
@@ -93,10 +103,10 @@ jobs:
         \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
         \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
         \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
-    - wait: root-lint
-    - name: Enforce focused code-quality plugins
+    - wait: h0-r0-root-lint
+    - name: '0 baseline: Enforce focused code-quality plugins'
       if: '!cancelled()'
-      id: native-code-quality
+      id: h0-r0-native-code-quality
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -106,15 +116,15 @@ jobs:
         pnpm run audit:code-quality:native
 
         '
-    - name: Enforce type-aware code-quality baseline
+    - name: '0 baseline: Enforce type-aware code-quality baseline'
       if: '''true'' == ''true'''
       run: pnpm run audit:code-quality:type-aware
-    - wait: native-code-quality
+    - wait: h0-r0-native-code-quality
     - uses: ./.github/actions/install-mobile-dependencies
       if: '''true'' == ''true'' && ''false'' == ''true'''
-    - name: Enforce changed-code quality
+    - name: '0 baseline: Enforce changed-code quality'
       if: '!cancelled()'
-      id: changed-code-quality
+      id: h0-r0-changed-code-quality
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -124,13 +134,13 @@ jobs:
         pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
 
         '
-    - name: Enforce React Doctor on changed lines
+    - name: '0 baseline: Enforce React Doctor on changed lines'
       if: '''true'' == ''true'''
       run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
-    - wait: changed-code-quality
-    - name: Typecheck
+    - wait: h0-r0-changed-code-quality
+    - name: '0 baseline: Typecheck'
       if: '!cancelled()'
-      id: typecheck
+      id: h0-r0-typecheck
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -140,16 +150,16 @@ jobs:
         pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
 
         '
-    - name: Check Zustand selector fan-out budget
+    - name: '0 baseline: Check Zustand selector fan-out budget'
       if: '''true'' == ''true'''
       run: pnpm run check:zustand-selector-fanout
-    - name: Check reliability gate manifest
+    - name: '0 baseline: Check reliability gate manifest'
       if: '''true'' == ''true'''
       run: pnpm run check:reliability-gates
-    - name: Enforce dead design-system classes
+    - name: '0 baseline: Enforce dead design-system classes'
       if: '''true'' == ''true'''
       run: pnpm run check:dead-classes
-    - name: Check VM runtime rollback compatibility
+    - name: '0 baseline: Check VM runtime rollback compatibility'
       if: '''true'' == ''true'''
       env:
         BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
@@ -160,30 +170,30 @@ jobs:
         \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
         \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
         \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
-    - name: Enforce max-lines ratchet
+    - name: '0 baseline: Enforce max-lines ratchet'
       if: '''true'' == ''true'''
       run: pnpm run check:max-lines-ratchet
-    - name: Enforce ts-nocheck ratchet
+    - name: '0 baseline: Enforce ts-nocheck ratchet'
       if: '''true'' == ''true'''
       run: pnpm run check:ts-nocheck-ratchet
-    - name: Enforce runtime Electron-import ratchet
+    - name: '0 baseline: Enforce runtime Electron-import ratchet'
       if: '''true'' == ''true'''
       run: pnpm run check:runtime-electron-ratchet
-    - name: Enforce focus-read ratchet
+    - name: '0 baseline: Enforce focus-read ratchet'
       if: '''true'' == ''true'''
       run: pnpm run check:focus-read-ratchet
-    - name: Enforce layout-writer ratchets
+    - name: '0 baseline: Enforce layout-writer ratchets'
       if: '''true'' == ''true'''
       run: bun config/scripts/check-layout-writer-ratchets.mjs
-    - name: Baseline compatibility-folder imports
-      if: '''true'' == ''true'' && matrix.arm == ''baseline'''
+    - name: '0 baseline: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''baseline'' == ''baseline'''
       run: bun config/scripts/check-compat-boundary-imports.mjs
-    - name: Check Node runtime pin
+    - name: '0 baseline: Check Node runtime pin'
       if: '''true'' == ''true'''
       run: pnpm run check:node-runtime-pin
-    - name: Verify localization extraction
+    - name: '0 baseline: Verify localization extraction'
       if: '!cancelled()'
-      id: localization-extraction
+      id: h0-r0-localization-extraction
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -195,7 +205,7 @@ jobs:
         \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
         \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
         \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
-    - name: Boot orcad and round-trip a terminal
+    - name: '0 baseline: Boot orcad and round-trip a terminal'
       if: '''true'' == ''true'''
       env:
         BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
@@ -205,21 +215,21 @@ jobs:
         \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
         )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
         \ run smoke:orcad-terminal\nfi\n"
-    - name: Verify the generated RPC params catalog
+    - name: '0 baseline: Verify the generated RPC params catalog'
       if: '''true'' == ''true'''
       run: pnpm run verify:rpc-params-catalog
-    - name: Verify the generated ACP protocol schema
+    - name: '0 baseline: Verify the generated ACP protocol schema'
       if: '''true'' == ''true'''
       run: pnpm run verify:acp-protocol
-    - name: Verify bundled skill guides
+    - name: '0 baseline: Verify bundled skill guides'
       if: '''true'' == ''true'''
       run: pnpm run verify:bundled-skill-guides
-    - name: Verify skill freshness manifest
+    - name: '0 baseline: Verify skill freshness manifest'
       if: '''true'' == ''true'''
       run: pnpm run verify:skill-bundle-manifest
-    - name: Verify localization catalogs
+    - name: '0 baseline: Verify localization catalogs'
       if: '!cancelled()'
-      id: localization-catalogs
+      id: h0-r0-localization-catalogs
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -229,28 +239,28 @@ jobs:
         pnpm run verify:localization-catalogs
 
         '
-    - name: Verify localization coverage
+    - name: '0 baseline: Verify localization coverage'
       if: '''true'' == ''true'''
-      run: if [ '${{ matrix.arm }}' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+      run: if [ 'baseline' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
         --check; fi
     - wait:
-      - localization-catalogs
-      - localization-extraction
-    - name: Guard against project-owned .d.ts in preload/shared
+      - h0-r0-localization-catalogs
+      - h0-r0-localization-extraction
+    - name: '0 baseline: Guard against project-owned .d.ts in preload/shared'
       if: '''true'' == ''true'''
       run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
         \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
         \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
         \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
-    - name: Check feature wall asset budget
+    - name: '0 baseline: Check feature wall asset budget'
       if: '''true'' == ''true'''
       run: pnpm check:feature-wall-assets
-    - name: Verify macOS entitlements
+    - name: '0 baseline: Verify macOS entitlements'
       if: '''true'' == ''true'''
       run: pnpm verify:macos-entitlements
-    - name: Plan unit selection
+    - name: '0 baseline: Plan unit selection'
       if: '!cancelled()'
-      id: unit-plan
+      id: h0-r0-unit-plan
       background: true
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
@@ -262,46 +272,1704 @@ jobs:
         node config/scripts/ci-unit-plan.mjs
 
         '
-    - wait: typecheck
-    - wait: process-host-imports
-    - wait: main-sync-spawn-ratchet
-    - wait: unit-plan
-    - name: Record checks finish
-      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/combined-replay/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/combined-replay/duration.json',JSON.stringify(v));console.log(v)"
-    - uses: actions/upload-artifact@v7
-      if: '''true'' == ''true'''
+    - wait: h0-r0-typecheck
+    - wait: h0-r0-process-host-imports
+    - wait: h0-r0-main-sync-spawn-ratchet
+    - wait: h0-r0-unit-plan
+    - name: '0 baseline: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-0-0-baseline/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-0-0-baseline/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '0 baseline: Upload measurements'
+      uses: actions/upload-artifact@v7
       with:
-        name: combined-replay-${{ matrix.order }}-${{ matrix.arm }}
-        path: '.build/combined-replay/
+        name: same-host-0-0-baseline
+        path: '.build/same-host-0-0-baseline/
 
           ci-shards/unit-selection.json'
         retention-days: 14
-    - name: Set up Bun for Mobile CI tool tests
+    - name: '1 candidate: Record checks start'
+      run: 'mkdir -p .build/same-host-0-1-candidate
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-0-1-candidate/start.json'',JSON.stringify({started:Date.now(),arm:''candidate'',order:1,host:0,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '1 candidate: Check process-host imports'
+      if: '!cancelled()'
+      id: h0-r1-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'candidate' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '1 candidate: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h0-r1-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '1 candidate: Lint'
+      if: '!cancelled()'
+      id: h0-r1-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '1 candidate: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'candidate' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h0-r1-root-lint
+    - name: '1 candidate: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h0-r1-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '1 candidate: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h0-r1-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '1 candidate: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h0-r1-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '1 candidate: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h0-r1-changed-code-quality
+    - name: '1 candidate: Typecheck'
+      if: '!cancelled()'
+      id: h0-r1-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '1 candidate: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '1 candidate: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '1 candidate: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '1 candidate: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '1 candidate: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '1 candidate: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '1 candidate: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '1 candidate: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '1 candidate: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '1 candidate: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''candidate'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '1 candidate: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '1 candidate: Verify localization extraction'
+      if: '!cancelled()'
+      id: h0-r1-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '1 candidate: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '1 candidate: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '1 candidate: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '1 candidate: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '1 candidate: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '1 candidate: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h0-r1-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '1 candidate: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'candidate' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h0-r1-localization-catalogs
+      - h0-r1-localization-extraction
+    - name: '1 candidate: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '1 candidate: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '1 candidate: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '1 candidate: Plan unit selection'
+      if: '!cancelled()'
+      id: h0-r1-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h0-r1-typecheck
+    - wait: h0-r1-process-host-imports
+    - wait: h0-r1-main-sync-spawn-ratchet
+    - wait: h0-r1-unit-plan
+    - name: '1 candidate: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-0-1-candidate/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-0-1-candidate/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '1 candidate: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-0-1-candidate
+        path: '.build/same-host-0-1-candidate/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+    - name: '2 candidate: Record checks start'
+      run: 'mkdir -p .build/same-host-0-2-candidate
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-0-2-candidate/start.json'',JSON.stringify({started:Date.now(),arm:''candidate'',order:2,host:0,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '2 candidate: Check process-host imports'
+      if: '!cancelled()'
+      id: h0-r2-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'candidate' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '2 candidate: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h0-r2-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '2 candidate: Lint'
+      if: '!cancelled()'
+      id: h0-r2-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '2 candidate: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'candidate' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h0-r2-root-lint
+    - name: '2 candidate: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h0-r2-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '2 candidate: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h0-r2-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '2 candidate: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h0-r2-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '2 candidate: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h0-r2-changed-code-quality
+    - name: '2 candidate: Typecheck'
+      if: '!cancelled()'
+      id: h0-r2-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '2 candidate: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '2 candidate: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '2 candidate: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '2 candidate: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '2 candidate: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '2 candidate: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '2 candidate: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '2 candidate: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '2 candidate: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '2 candidate: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''candidate'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '2 candidate: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '2 candidate: Verify localization extraction'
+      if: '!cancelled()'
+      id: h0-r2-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '2 candidate: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '2 candidate: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '2 candidate: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '2 candidate: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '2 candidate: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '2 candidate: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h0-r2-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '2 candidate: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'candidate' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h0-r2-localization-catalogs
+      - h0-r2-localization-extraction
+    - name: '2 candidate: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '2 candidate: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '2 candidate: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '2 candidate: Plan unit selection'
+      if: '!cancelled()'
+      id: h0-r2-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h0-r2-typecheck
+    - wait: h0-r2-process-host-imports
+    - wait: h0-r2-main-sync-spawn-ratchet
+    - wait: h0-r2-unit-plan
+    - name: '2 candidate: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-0-2-candidate/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-0-2-candidate/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '2 candidate: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-0-2-candidate
+        path: '.build/same-host-0-2-candidate/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+    - name: '3 baseline: Record checks start'
+      run: 'mkdir -p .build/same-host-0-3-baseline
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-0-3-baseline/start.json'',JSON.stringify({started:Date.now(),arm:''baseline'',order:3,host:0,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '3 baseline: Check process-host imports'
+      if: '!cancelled()'
+      id: h0-r3-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'baseline' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '3 baseline: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h0-r3-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '3 baseline: Lint'
+      if: '!cancelled()'
+      id: h0-r3-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '3 baseline: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'baseline' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h0-r3-root-lint
+    - name: '3 baseline: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h0-r3-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '3 baseline: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h0-r3-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '3 baseline: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h0-r3-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '3 baseline: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h0-r3-changed-code-quality
+    - name: '3 baseline: Typecheck'
+      if: '!cancelled()'
+      id: h0-r3-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '3 baseline: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '3 baseline: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '3 baseline: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '3 baseline: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '3 baseline: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '3 baseline: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '3 baseline: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '3 baseline: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '3 baseline: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '3 baseline: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''baseline'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '3 baseline: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '3 baseline: Verify localization extraction'
+      if: '!cancelled()'
+      id: h0-r3-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '3 baseline: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '3 baseline: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '3 baseline: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '3 baseline: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '3 baseline: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '3 baseline: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h0-r3-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '3 baseline: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'baseline' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h0-r3-localization-catalogs
+      - h0-r3-localization-extraction
+    - name: '3 baseline: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '3 baseline: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '3 baseline: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '3 baseline: Plan unit selection'
+      if: '!cancelled()'
+      id: h0-r3-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h0-r3-typecheck
+    - wait: h0-r3-process-host-imports
+    - wait: h0-r3-main-sync-spawn-ratchet
+    - wait: h0-r3-unit-plan
+    - name: '3 baseline: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-0-3-baseline/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-0-3-baseline/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '3 baseline: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-0-3-baseline
+        path: '.build/same-host-0-3-baseline/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+  host1:
+    name: combined same host 1
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: ef019795cc7fe15e97014b47229e484b236799e7
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-pnpm-store: 'false'
+    - uses: ./.github/actions/install-node-dependencies
       if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+        cache-pnpm-store: 'false'
+    - name: Set up Bun for preflight checks
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version-file: config/.bun-version
-    - name: Test Mobile CI tools and runtime routing
-      if: '''false'' == ''true'''
+    - name: Record runner resources
+      run: 'uname -a
+
+        lscpu
+
+        free -m
+
+        bun --version
+
+        node --version'
+    - name: '0 candidate: Record checks start'
+      run: 'mkdir -p .build/same-host-1-0-candidate
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-1-0-candidate/start.json'',JSON.stringify({started:Date.now(),arm:''candidate'',order:0,host:1,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '0 candidate: Check process-host imports'
+      if: '!cancelled()'
+      id: h1-r0-process-host-imports
+      background: true
       env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'candidate' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '0 candidate: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h1-r0-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '0 candidate: Lint'
+      if: '!cancelled()'
+      id: h1-r0-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '0 candidate: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'candidate' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h1-r0-root-lint
+    - name: '0 candidate: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h1-r0-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '0 candidate: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h1-r0-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '0 candidate: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h1-r0-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '0 candidate: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h1-r0-changed-code-quality
+    - name: '0 candidate: Typecheck'
+      if: '!cancelled()'
+      id: h1-r0-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '0 candidate: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '0 candidate: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '0 candidate: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '0 candidate: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '0 candidate: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '0 candidate: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '0 candidate: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '0 candidate: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '0 candidate: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '0 candidate: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''candidate'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '0 candidate: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '0 candidate: Verify localization extraction'
+      if: '!cancelled()'
+      id: h1-r0-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '0 candidate: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
         ORCA_BACKGROUND_LAUNCH: '1'
-        ORCA_BALANCE_UNIT_SHARDS: '1'
-      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
-        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
-        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
-        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
-    strategy:
-      max-parallel: 4
-      fail-fast: false
-      matrix:
-        include:
-        - order: 0
-          arm: baseline
-        - order: 1
-          arm: candidate
-        - order: 2
-          arm: candidate
-        - order: 3
-          arm: baseline
-    env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '0 candidate: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '0 candidate: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '0 candidate: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '0 candidate: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '0 candidate: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h1-r0-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '0 candidate: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'candidate' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h1-r0-localization-catalogs
+      - h1-r0-localization-extraction
+    - name: '0 candidate: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '0 candidate: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '0 candidate: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '0 candidate: Plan unit selection'
+      if: '!cancelled()'
+      id: h1-r0-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h1-r0-typecheck
+    - wait: h1-r0-process-host-imports
+    - wait: h1-r0-main-sync-spawn-ratchet
+    - wait: h1-r0-unit-plan
+    - name: '0 candidate: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-1-0-candidate/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-1-0-candidate/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '0 candidate: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-1-0-candidate
+        path: '.build/same-host-1-0-candidate/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+    - name: '1 baseline: Record checks start'
+      run: 'mkdir -p .build/same-host-1-1-baseline
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-1-1-baseline/start.json'',JSON.stringify({started:Date.now(),arm:''baseline'',order:1,host:1,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '1 baseline: Check process-host imports'
+      if: '!cancelled()'
+      id: h1-r1-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'baseline' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '1 baseline: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h1-r1-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '1 baseline: Lint'
+      if: '!cancelled()'
+      id: h1-r1-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '1 baseline: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'baseline' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h1-r1-root-lint
+    - name: '1 baseline: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h1-r1-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '1 baseline: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h1-r1-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '1 baseline: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h1-r1-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '1 baseline: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h1-r1-changed-code-quality
+    - name: '1 baseline: Typecheck'
+      if: '!cancelled()'
+      id: h1-r1-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '1 baseline: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '1 baseline: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '1 baseline: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '1 baseline: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '1 baseline: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '1 baseline: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '1 baseline: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '1 baseline: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '1 baseline: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '1 baseline: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''baseline'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '1 baseline: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '1 baseline: Verify localization extraction'
+      if: '!cancelled()'
+      id: h1-r1-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '1 baseline: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '1 baseline: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '1 baseline: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '1 baseline: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '1 baseline: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '1 baseline: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h1-r1-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '1 baseline: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'baseline' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h1-r1-localization-catalogs
+      - h1-r1-localization-extraction
+    - name: '1 baseline: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '1 baseline: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '1 baseline: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '1 baseline: Plan unit selection'
+      if: '!cancelled()'
+      id: h1-r1-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h1-r1-typecheck
+    - wait: h1-r1-process-host-imports
+    - wait: h1-r1-main-sync-spawn-ratchet
+    - wait: h1-r1-unit-plan
+    - name: '1 baseline: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-1-1-baseline/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-1-1-baseline/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '1 baseline: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-1-1-baseline
+        path: '.build/same-host-1-1-baseline/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+    - name: '2 baseline: Record checks start'
+      run: 'mkdir -p .build/same-host-1-2-baseline
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-1-2-baseline/start.json'',JSON.stringify({started:Date.now(),arm:''baseline'',order:2,host:1,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '2 baseline: Check process-host imports'
+      if: '!cancelled()'
+      id: h1-r2-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'baseline' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '2 baseline: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h1-r2-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '2 baseline: Lint'
+      if: '!cancelled()'
+      id: h1-r2-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '2 baseline: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'baseline' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h1-r2-root-lint
+    - name: '2 baseline: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h1-r2-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '2 baseline: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h1-r2-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '2 baseline: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h1-r2-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '2 baseline: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h1-r2-changed-code-quality
+    - name: '2 baseline: Typecheck'
+      if: '!cancelled()'
+      id: h1-r2-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '2 baseline: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '2 baseline: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '2 baseline: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '2 baseline: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '2 baseline: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '2 baseline: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '2 baseline: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '2 baseline: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '2 baseline: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '2 baseline: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''baseline'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '2 baseline: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '2 baseline: Verify localization extraction'
+      if: '!cancelled()'
+      id: h1-r2-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '2 baseline: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '2 baseline: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '2 baseline: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '2 baseline: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '2 baseline: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '2 baseline: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h1-r2-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '2 baseline: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'baseline' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h1-r2-localization-catalogs
+      - h1-r2-localization-extraction
+    - name: '2 baseline: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '2 baseline: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '2 baseline: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '2 baseline: Plan unit selection'
+      if: '!cancelled()'
+      id: h1-r2-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h1-r2-typecheck
+    - wait: h1-r2-process-host-imports
+    - wait: h1-r2-main-sync-spawn-ratchet
+    - wait: h1-r2-unit-plan
+    - name: '2 baseline: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-1-2-baseline/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-1-2-baseline/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '2 baseline: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-1-2-baseline
+        path: '.build/same-host-1-2-baseline/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
+    - name: '3 candidate: Record checks start'
+      run: 'mkdir -p .build/same-host-1-3-candidate
+
+        node -e "const fs=require(''node:fs''),cp=require(''node:child_process'');fs.writeFileSync(''.build/same-host-1-3-candidate/start.json'',JSON.stringify({started:Date.now(),arm:''candidate'',order:3,host:1,checkoutSha:cp.execFileSync(''git'',[''rev-parse'',''HEAD''],{encoding:''utf8''}).trim()}))"'
+    - name: '3 candidate: Check process-host imports'
+      if: '!cancelled()'
+      id: h1-r3-process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\nif [ 'candidate' = baseline ]; then\n  bun --bun run check:process-host-imports\nelse\n  bun config/scripts/check-import-boundaries.mjs\n\
+        fi\n"
+    - name: '3 candidate: Check main-process sync launches'
+      if: '!cancelled()'
+      id: h1-r3-main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: '3 candidate: Lint'
+      if: '!cancelled()'
+      id: h1-r3-root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: '3 candidate: Reject low-evidence patterns'
+      if: '''true'' == ''true'''
+      run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ 'candidate' = baseline ]; then\nnode --input-type=module\
+        \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
+        \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\nBASELINE\nfi\nbun --smol node_modules/oxlint/bin/oxlint\
+        \ --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings\n"
+    - wait: h1-r3-root-lint
+    - name: '3 candidate: Enforce focused code-quality plugins'
+      if: '!cancelled()'
+      id: h1-r3-native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: '3 candidate: Enforce type-aware code-quality baseline'
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: h1-r3-native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: '3 candidate: Enforce changed-code quality'
+      if: '!cancelled()'
+      id: h1-r3-changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+
+        '
+    - name: '3 candidate: Enforce React Doctor on changed lines'
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
+    - wait: h1-r3-changed-code-quality
+    - name: '3 candidate: Typecheck'
+      if: '!cancelled()'
+      id: h1-r3-typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: '3 candidate: Check Zustand selector fan-out budget'
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: '3 candidate: Check reliability gate manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: '3 candidate: Enforce dead design-system classes'
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: '3 candidate: Check VM runtime rollback compatibility'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: '3 candidate: Enforce max-lines ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: '3 candidate: Enforce ts-nocheck ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: '3 candidate: Enforce runtime Electron-import ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: '3 candidate: Enforce focus-read ratchet'
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: '3 candidate: Enforce layout-writer ratchets'
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-layout-writer-ratchets.mjs
+    - name: '3 candidate: Baseline compatibility-folder imports'
+      if: '''true'' == ''true'' && ''candidate'' == ''baseline'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: '3 candidate: Check Node runtime pin'
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: '3 candidate: Verify localization extraction'
+      if: '!cancelled()'
+      id: h1-r3-localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
+        \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: '3 candidate: Boot orcad and round-trip a terminal'
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
+        \ run smoke:orcad-terminal\nfi\n"
+    - name: '3 candidate: Verify the generated RPC params catalog'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: '3 candidate: Verify the generated ACP protocol schema'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: '3 candidate: Verify bundled skill guides'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: '3 candidate: Verify skill freshness manifest'
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: '3 candidate: Verify localization catalogs'
+      if: '!cancelled()'
+      id: h1-r3-localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: '3 candidate: Verify localization coverage'
+      if: '''true'' == ''true'''
+      run: if [ 'candidate' = baseline ]; then pnpm run verify:localization-coverage; else bun config/scripts/audit-localization-coverage.mjs
+        --check; fi
+    - wait:
+      - h1-r3-localization-catalogs
+      - h1-r3-localization-extraction
+    - name: '3 candidate: Guard against project-owned .d.ts in preload/shared'
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: '3 candidate: Check feature wall asset budget'
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: '3 candidate: Verify macOS entitlements'
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: '3 candidate: Plan unit selection'
+      if: '!cancelled()'
+      id: h1-r3-unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: h1-r3-typecheck
+    - wait: h1-r3-process-host-imports
+    - wait: h1-r3-main-sync-spawn-ratchet
+    - wait: h1-r3-unit-plan
+    - name: '3 candidate: Record checks finish'
+      run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/same-host-1-3-candidate/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/same-host-1-3-candidate/duration.json',JSON.stringify(v));console.log(v)"
+    - name: '3 candidate: Upload measurements'
+      uses: actions/upload-artifact@v7
+      with:
+        name: same-host-1-3-candidate
+        path: '.build/same-host-1-3-candidate/
+
+          ci-shards/unit-selection.json'
+        retention-days: 14
