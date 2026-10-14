@@ -60,7 +60,6 @@
 4 src/renderer/src/store/slices/browser/browser-tab-focus-actions.ts
 2 src/renderer/src/store/slices/browser/create-browser-slice.ts
 1 src/renderer/src/store/slices/direct-ssh-terminal-recovery.ts
-1 src/renderer/src/store/slices/editor/actions/chat-visual-tab-actions.ts
 9 src/renderer/src/store/slices/editor/actions/check-run-details-actions.ts
 7 src/renderer/src/store/slices/editor/actions/close-file-action.ts
 1 src/renderer/src/store/slices/editor/actions/git-status-actions.ts

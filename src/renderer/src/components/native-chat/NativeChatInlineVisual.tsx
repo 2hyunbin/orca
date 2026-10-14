@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { SquareArrowOutUpRight } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { useAppStore } from '@/store'
+import { openFileInBrowserTab } from '@/lib/file-preview'
 import { NATIVE_CHAT_VISUAL_RESERVED_HEIGHT, NativeChatVisualFrame } from './NativeChatVisualFrame'
 import { observeTranscriptVisibility } from './NativeChatTranscriptChrome'
 import type { NativeChatVisualOwner } from './native-chat-visual-owner'
@@ -15,6 +16,14 @@ export function NativeChatVisualUnavailable(): React.JSX.Element {
       {translate('components.native-chat.visualUnavailable', 'Visualization unavailable')}
     </p>
   )
+}
+
+/** Opens the visual like any HTML file of the chat's workspace: rendered, its source a click away. */
+function openNativeChatVisualFile(worktreeId: string, path: string): void {
+  const plan = openFileInBrowserTab({ filePath: path, worktreeId })
+  if (plan.status === 'unsupported') {
+    toast.error(plan.message)
+  }
 }
 
 /**
@@ -33,7 +42,6 @@ export function NativeChatInlineVisual({
   const boxRef = useRef<HTMLDivElement | null>(null)
   const [near, setNear] = useState(false)
   const [retired, setRetired] = useState(false)
-  const openChatVisualTab = useAppStore((state) => state.openChatVisualTab)
   const state = useNativeChatVisualDocument(
     { target: owner.target, sessionId: owner.sessionId, file },
     near
@@ -64,7 +72,6 @@ export function NativeChatInlineVisual({
           <NativeChatVisualFrame
             document={state.document}
             title={label}
-            layout="inline"
             themeScope={boxRef}
             onRetired={() => setRetired(true)}
           />
@@ -75,14 +82,7 @@ export function NativeChatInlineVisual({
                   variant="outline"
                   size="icon-xs"
                   aria-label={openLabel}
-                  onClick={() =>
-                    openChatVisualTab(owner.worktreeId, {
-                      target: owner.target,
-                      sessionId: owner.sessionId,
-                      file,
-                      title
-                    })
-                  }
+                  onClick={() => openNativeChatVisualFile(owner.worktreeId, state.document.path)}
                 >
                   <SquareArrowOutUpRight />
                 </Button>
