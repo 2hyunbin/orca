@@ -61,6 +61,12 @@ function harness(options: {
       mail.filter(
         (message) => !received.has(message.id) && !input.excludeTypes.includes(message.type)
       ),
+    getAllMessagesForHandle: () => mail.slice(-1),
+    getMessageById: (id: string) => {
+      const row = mail.find((message) => message.id === id)
+      return row && { ...row, read: received.has(id) ? 1 : 0 }
+    },
+    markAsReadAndDelivered: markAsRead,
     markAsRead,
     markAsDelivered: vi.fn()
   }
@@ -474,6 +480,9 @@ describe('forgetting one settled worker', () => {
     const db = {
       getDispatchContextById: () => ({ run_id: 'run_1' }),
       getUndeliveredUnreadMessages: () => [mailRow('m1', 3, 'dispatch:d1')],
+      getAllMessagesForHandle: () => [mailRow('m1', 3, 'dispatch:d1')],
+      getMessageById: () => ({ ...mailRow('m1', 3, 'dispatch:d1'), read: 0 }),
+      markAsReadAndDelivered: vi.fn(),
       markAsRead: vi.fn(),
       markAsDelivered: vi.fn()
     }
@@ -558,6 +567,12 @@ describe('a mailbox a /clear moves while its send is in flight', () => {
     const db = {
       getDispatchContextById: () => ({ run_id: 'run_1' }),
       getUndeliveredUnreadMessages: () => mail.filter((message) => !pointed.has(message.id)),
+      getAllMessagesForHandle: () => mail.slice(-1),
+      getMessageById: (id: string) => {
+        const row = mail.find((message) => message.id === id)
+        return row && { ...row, read: pointed.has(id) ? 1 : 0 }
+      },
+      markAsReadAndDelivered: (ids: string[]) => ids.forEach((id) => pointed.add(id)),
       markAsRead: (ids: string[]) => ids.forEach((id) => pointed.add(id)),
       markAsDelivered: () => {}
     }

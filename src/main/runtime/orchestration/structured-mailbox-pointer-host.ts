@@ -173,7 +173,8 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
         callerKey: input.dispatchId
           ? structuredPointerCallerKey(input.dispatchId)
           : structuredSessionPointerCallerKey(input.sessionId),
-        onAnswered: input.onAnswered,
+        onAnswered: (refusal) =>
+          input.onAnswered?.(refusal?.code !== AGENT_SESSION_NOT_ATTACHED.code),
         turn: {
           body: input.body,
           delivery: pointerDelivery(host, input.sessionId),

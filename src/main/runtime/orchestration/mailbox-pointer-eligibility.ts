@@ -44,7 +44,8 @@ export function selectOrchestrationPointerBatch(input: {
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined
   excludeOutstandingDelivery?: boolean
-  excludeMessageIds?: readonly string[]
+  afterSequence?: number
+  throughSequence?: number
 }): MessageRow[] {
   if (hasUnfilteredOrchestrationWaiter(input.waiters)) {
     return []
@@ -59,7 +60,8 @@ export function selectOrchestrationPointerBatch(input: {
     excludeTypes: [...excludedTypes],
     limit: ORCHESTRATION_DELIVERY_BATCH_LIMIT,
     excludeOutstandingDelivery: input.excludeOutstandingDelivery,
-    excludeMessageIds: input.excludeMessageIds
+    afterSequence: input.afterSequence,
+    throughSequence: input.throughSequence
   })
 }
 

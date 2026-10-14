@@ -31,6 +31,36 @@ export type StructuredMailSubmission = Pick<
 /** An id this process minted for one message's send. */
 export type StructuredMailOperation = { operationId: string; mintedAtMs: number }
 
+export type StructuredMailSubmissionIndex = {
+  byOperationId: ReadonlyMap<string, StructuredMailSubmission>
+  byMessageId: ReadonlyMap<string, StructuredMailSubmission>
+  latestSubmittedAt: number
+  latestAcceptedAt: number
+}
+
+/** First operation match and last mail match, exactly as the journal's ordered lookups. */
+export function indexStructuredMailSubmissions(
+  submissions: readonly StructuredMailSubmission[]
+): StructuredMailSubmissionIndex {
+  const byOperationId = new Map<string, StructuredMailSubmission>()
+  const byMessageId = new Map<string, StructuredMailSubmission>()
+  let latestSubmittedAt = -Infinity
+  let latestAcceptedAt = -Infinity
+  for (const entry of submissions) {
+    if (!byOperationId.has(entry.clientMessageId)) {
+      byOperationId.set(entry.clientMessageId, entry)
+    }
+    if (entry.mailMessageId) {
+      byMessageId.set(entry.mailMessageId, entry)
+    }
+    latestSubmittedAt = Math.max(latestSubmittedAt, entry.submittedAt)
+    if (entry.dispatchState === 'accepted') {
+      latestAcceptedAt = Math.max(latestAcceptedAt, entry.submittedAt)
+    }
+  }
+  return { byOperationId, byMessageId, latestSubmittedAt, latestAcceptedAt }
+}
+
 /**
  * What to do with one message's send, given the id this process minted for it and the session's
  * recorded sends.
@@ -50,27 +80,27 @@ export function decideStructuredMailAttempt(input: {
   messageId: string
   /** The session's recorded sends; a rewind may have dropped this process's. */
   submissions: readonly StructuredMailSubmission[]
+  submissionIndex?: StructuredMailSubmissionIndex
   mintedByThisProcess: StructuredMailOperation | undefined
   now: number
 }): StructuredMailAttempt {
-  const { submissions, mintedByThisProcess } = input
-  const recorded = submissions.findLast((entry) => entry.mailMessageId === input.messageId)
+  const { mintedByThisProcess } = input
+  const index = input.submissionIndex ?? indexStructuredMailSubmissions(input.submissions)
+  const recorded = index.byMessageId.get(input.messageId)
   const last =
     mintedByThisProcess ??
     (recorded && { operationId: recorded.clientMessageId, mintedAtMs: recorded.submittedAt })
   if (!last) {
     return 'mint'
   }
-  const sent = submissions.find((entry) => entry.clientMessageId === last.operationId)
+  const sent = index.byOperationId.get(last.operationId)
   if (sent?.dispatchState === 'accepted') {
     return 'stamp'
   }
   if (sent?.dispatchState === 'pending') {
     return 'park'
   }
-  const ranSince = submissions.some(
-    (entry) => entry.dispatchState === 'accepted' && entry.submittedAt > last.mintedAtMs
-  )
+  const ranSince = index.latestAcceptedAt > last.mintedAtMs
   const tooOldToAdmit =
     !sent && input.now - last.mintedAtMs > AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS
   return ranSince || !mintedByThisProcess || tooOldToAdmit ? 'mint' : 'reuse'
@@ -88,11 +118,13 @@ export type StructuredMailOperationResolution =
 export function resolveStructuredMailOperation(args: {
   messageId: string
   submissions: readonly StructuredMailSubmission[]
+  submissionIndex?: StructuredMailSubmissionIndex
   mintedByThisProcess: StructuredMailOperation | undefined
   now?: number
 }): StructuredMailOperationResolution {
   const now = args.now ?? Date.now()
-  const attempt = decideStructuredMailAttempt({ ...args, now })
+  const submissionIndex = args.submissionIndex ?? indexStructuredMailSubmissions(args.submissions)
+  const attempt = decideStructuredMailAttempt({ ...args, submissionIndex, now })
   if (attempt === 'stamp' || attempt === 'park') {
     return { kind: attempt }
   }
@@ -104,10 +136,7 @@ export function resolveStructuredMailOperation(args: {
     operation: {
       operationId: mintAgentSessionOperationId(now),
       // On the journal's clock too, so a backward clock step cannot date an earlier turn after it.
-      mintedAtMs: args.submissions.reduce(
-        (latest, entry) => Math.max(latest, entry.submittedAt),
-        now
-      )
+      mintedAtMs: Math.max(now, submissionIndex.latestSubmittedAt)
     }
   }
 }

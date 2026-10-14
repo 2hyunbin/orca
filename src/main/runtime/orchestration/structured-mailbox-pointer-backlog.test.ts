@@ -28,17 +28,18 @@ function lane(db: OrchestrationDb, host: StructuredMailboxPointerHost) {
   })
 }
 
-it('sends past fifty pending reports before any acceptance, and drains a queued backlog', async () => {
-  for (const pending of [true, false]) {
+it('visits all reports in order across pending, accepted and failed prefixes without consuming earlier mail', async () => {
+  for (const state of ['pending', 'queued', 'accepted', 'unknown', 'rejected'] as const) {
     const db = new OrchestrationDb(':memory:')
-    const submissions: StructuredMailSubmission[] = []
+    const submissions = new Map<string, StructuredMailSubmission>()
+    const providerStarts = new Set<string>()
     const issued: string[] = []
     const settles: ((outcome: StructuredPointerSendOutcome) => void)[] = []
     const report = () => db.insertMessage({ from: 'term_worker', to: MAILBOX, subject: 'report' })
     try {
       const messages = Array.from({ length: 51 }, report)
       const delivery = lane(db, {
-        readSessionFacts: async () => ({ submissions }),
+        readSessionFacts: async () => ({ submissions: [...submissions.values()] }),
         currentFence: () => 1,
         currentContextClearOperationId: () => undefined,
         send: (input) => {
@@ -49,21 +50,23 @@ it('sends past fifty pending reports before any acceptance, and drains a queued 
             throw new Error('mail identity missing')
           }
           issued.push(messageId)
-          submissions.push({
+          providerStarts.add(input.operationId)
+          submissions.set(input.operationId, {
             clientMessageId: input.operationId,
             mailMessageId: messageId,
-            dispatchState: 'pending',
+            dispatchState: state === 'queued' ? 'accepted' : state,
             submittedAt: Date.now()
           })
           input.onAnswered?.()
-          return pending
+          return state === 'pending'
             ? new Promise((resolve) => settles.push(resolve))
-            : Promise.resolve({ kind: 'queued' })
+            : Promise.resolve(state === 'queued' ? { kind: 'queued' } : { kind: 'sent', state })
         }
       })
       delivery.deliverForHandle(MAILBOX)
       await vi.waitFor(() => expect(issued).toEqual(messages.map((message) => message.id)), WAIT)
-      if (pending) {
+      expect(providerStarts.size).toBe(51)
+      if (state === 'pending') {
         expect(db.getUnreadMessages(MAILBOX)).toHaveLength(51)
         settles.forEach((settle) => settle({ kind: 'sent', state: 'unknown' }))
         // Once the wait expires, durable pending submissions still cannot hide newer mail.
@@ -72,6 +75,14 @@ it('sends past fifty pending reports before any acceptance, and drains a queued 
         await vi.waitFor(() => expect(issued.at(-1)).toBe(next.id), WAIT)
         expect(issued).toHaveLength(52)
         settles.at(-1)?.({ kind: 'sent', state: 'unknown' })
+      } else if (state === 'unknown' || state === 'rejected') {
+        expect(db.getUnreadMessages(MAILBOX)).toHaveLength(51)
+        delivery.onJournalActivity(HOST_TEST_SESSION)
+        await vi.waitFor(() => expect(issued).toHaveLength(102), WAIT)
+        expect(issued.slice(51)).toEqual(messages.map((message) => message.id))
+        expect(providerStarts.size).toBe(51)
+        await new Promise((resolve) => setImmediate(resolve))
+        expect(issued).toHaveLength(102)
       } else {
         await vi.waitFor(() => expect(db.getUnreadMessages(MAILBOX)).toEqual([]), WAIT)
       }
@@ -96,7 +107,7 @@ it('recovers a durable queued receipt after host replacement without another ful
       return declared ? { ...declared, steering: 'queue' } : null
     })
     const message = db.insertMessage({ from: 'term_worker', to: MAILBOX, subject: 'one report' })
-    const mark = vi.spyOn(db, 'markAsRead').mockImplementationOnce(() => {
+    const mark = vi.spyOn(db, 'markAsReadAndDelivered').mockImplementationOnce(() => {
       throw new Error('interrupted receipt')
     })
     lane(db, createStructuredMailboxPointerHost()).deliverForHandle(MAILBOX)

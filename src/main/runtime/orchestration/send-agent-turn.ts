@@ -51,7 +51,7 @@ export type StructuredSessionTurnSend = {
   callerKey: string
   turn: StructuredSessionTurn
   /** The host answered, before any wait for the send to settle. */
-  onAnswered?: () => void
+  onAnswered?: (refusal?: AgentSessionWireRefusal) => void
 }
 
 /**
@@ -134,7 +134,7 @@ async function sendStructuredSessionTurn(
     delivery: turn.delivery === 'queue' ? 'queue-if-active' : undefined
   })
   const result = await send.host.send({ callerKey: send.callerKey }, message)
-  send.onAnswered?.()
+  send.onAnswered?.(result.ok ? undefined : result.refusal)
   if (!result.ok) {
     return { kind: 'refused', refusal: result.refusal }
   }

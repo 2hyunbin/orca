@@ -19,7 +19,8 @@ export type UndeliveredUnreadMessageOptions = {
   limit?: number
   /** Leave out what an unacknowledged `check` batch already handed this mailbox's reader. */
   excludeOutstandingDelivery?: boolean
-  excludeMessageIds?: readonly string[]
+  afterSequence?: number
+  throughSequence?: number
 }
 
 export type MessagePriority = 'normal' | 'high' | 'urgent'

@@ -8,7 +8,7 @@ import type {
 } from './structured-mailbox-pointer-delivery'
 import {
   resolveStructuredMailOperation,
-  type StructuredMailOperation
+  type StructuredMailSubmissionIndex
 } from './structured-pointer-operation-id'
 import {
   retainReasonForDispatch,
@@ -16,7 +16,7 @@ import {
   type StructuredPointerRetainReason
 } from './structured-session-pointer-delivery'
 import { structuredMailBody } from './structured-mail-source'
-import { markStructuredMailReceived } from './structured-mailbox-pointer-batch'
+import type { StructuredMailOperationOwner } from './structured-mail-operation-owners'
 
 /** Sends one message, or replays its send; false when the session cannot take any. */
 export async function sendStructuredMailboxMessage(
@@ -27,32 +27,39 @@ export async function sendStructuredMailboxMessage(
   attempt: {
     key: string
     session: StructuredPointerSessionFacts
+    submissionIndex: StructuredMailSubmissionIndex
+    contextClearOperationId: string | undefined
     fence: number
     retain: (reason: StructuredPointerRetainReason) => void
-    answered: () => void
-    progressed: () => void
+    answered: (attached?: boolean) => void
   },
   deps: {
     host: StructuredMailboxPointerHost
     senderName: SenderNameResolver
     getCliCommand: () => OrchestrationCliCommand
-    mintedOperations: Map<string, StructuredMailOperation>
+    mintedOperations: Map<string, StructuredMailOperationOwner>
   }
 ): Promise<boolean> {
+  let owner = deps.mintedOperations.get(attempt.key)
   const resolved = resolveStructuredMailOperation({
     messageId: message.id,
     submissions: attempt.session.submissions,
-    mintedByThisProcess: deps.mintedOperations.get(attempt.key)
+    submissionIndex: attempt.submissionIndex,
+    mintedByThisProcess: owner
   })
   if (resolved.kind === 'park') {
     attempt.retain('turn-unsettled')
     return true
   }
   if (resolved.kind === 'send') {
-    // A new admission advances the drain; replaying a retained verdict does not.
-    const newlyIssued =
-      deps.mintedOperations.get(attempt.key)?.operationId !== resolved.operation.operationId
-    deps.mintedOperations.set(attempt.key, resolved.operation)
+    owner = {
+      ...resolved.operation,
+      sessionId: target.sessionId,
+      contextClearOperationId: attempt.contextClearOperationId,
+      mailboxHandle,
+      messageId: message.id
+    }
+    deps.mintedOperations.set(attempt.key, owner)
     const outcome = await deps.host.send({
       sessionId: target.sessionId,
       dispatchId: target.dispatchId,
@@ -66,12 +73,7 @@ export async function sendStructuredMailboxMessage(
         senderName: deps.senderName,
         cliCommand: deps.getCliCommand()
       }),
-      onAnswered: () => {
-        attempt.answered()
-        if (newlyIssued) {
-          attempt.progressed()
-        }
-      }
+      onAnswered: attempt.answered
     })
     if (outcome.kind === 'unattached') {
       attempt.retain('session-not-attached')
@@ -85,8 +87,105 @@ export async function sendStructuredMailboxMessage(
     }
   }
   // Sent, queued, or a send this lane gave up waiting on that ran after all.
-  markStructuredMailReceived(db, message.id)
-  deps.mintedOperations.delete(attempt.key)
-  attempt.progressed()
+  db.markAsReadAndDelivered([message.id])
+  if (deps.mintedOperations.get(attempt.key) === owner) {
+    deps.mintedOperations.delete(attempt.key)
+  }
+  return true
+}
+
+/** One page admits in order, advancing on host answer rather than provider consumption. */
+export async function sendStructuredMailboxPage(input: {
+  db: OrchestrationDb
+  mailboxHandle: string
+  target: StructuredPointerTarget
+  unread: readonly MessageRow[]
+  session: StructuredPointerSessionFacts
+  contextClearOperationId: string | undefined
+  submissionIndex: StructuredMailSubmissionIndex
+  fence: number
+  isCurrent: () => boolean
+  retain: (reason: StructuredPointerRetainReason) => void
+  prune: (key?: string) => void
+  host: StructuredMailboxPointerHost
+  senderName: SenderNameResolver
+  getCliCommand: () => OrchestrationCliCommand
+  mintedOperations: Map<string, StructuredMailOperationOwner>
+  sendsInFlight: Map<string, StructuredPointerTarget>
+}): Promise<boolean> {
+  const {
+    db,
+    mailboxHandle,
+    target,
+    unread,
+    session,
+    contextClearOperationId,
+    submissionIndex,
+    fence,
+    isCurrent
+  } = input
+  const sessionId = target.sessionId
+  // Oldest first, each its own send. The next is issued once the host has answered this one,
+  // never after the agent takes it in; one held in doubt does not hold back the ones after it.
+  for (const message of unread) {
+    if (!isCurrent()) {
+      return false
+    }
+    if (message.type === 'heartbeat') {
+      // Already reconciled when sent; sending each beat would interrupt the chat every time.
+      db.markAsReadAndDelivered([message.id])
+      continue
+    }
+    const key = JSON.stringify([sessionId, contextClearOperationId ?? null, message.id])
+    if (input.sendsInFlight.has(key)) {
+      continue
+    }
+    let answered = (_attached?: boolean): void => undefined
+    const issued = new Promise<boolean>((resolve) => {
+      answered = (attached = true) => resolve(attached)
+    })
+    const retain = (reason: StructuredPointerRetainReason) => {
+      if (input.sendsInFlight.get(key) === target) {
+        input.retain(reason)
+      }
+    }
+    input.sendsInFlight.set(key, target)
+    const outcome = sendStructuredMailboxMessage(
+      db,
+      mailboxHandle,
+      target,
+      message,
+      {
+        key,
+        session,
+        fence,
+        retain,
+        answered,
+        contextClearOperationId,
+        submissionIndex
+      },
+      {
+        host: input.host,
+        senderName: input.senderName,
+        getCliCommand: input.getCliCommand,
+        mintedOperations: input.mintedOperations
+      }
+    )
+      .catch(() => {
+        retain(retainReasonForDispatch('unknown'))
+        return true
+      })
+      .finally(() => {
+        if (input.sendsInFlight.get(key) === target) {
+          input.sendsInFlight.delete(key)
+        }
+        input.prune(key)
+      })
+    // What settles after this pass is its own: nothing awaits it once issued.
+    outcome.catch(() => undefined)
+    if (!(await Promise.race([issued, outcome]))) {
+      return false
+    }
+  }
   return true
 }

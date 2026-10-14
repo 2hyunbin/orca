@@ -1,54 +1,39 @@
-import type { OrchestrationDb } from './db'
+import type { MessageRow, OrchestrationDb } from './db'
+import { yieldToEventLoop } from '../../../shared/event-loop-yield'
 import {
   selectOrchestrationPointerBatch,
   type OrchestrationMessageWaiter
 } from './mailbox-pointer-eligibility'
-import type {
-  StructuredMailboxPointerHost,
-  StructuredPointerTarget
-} from './structured-mailbox-pointer-delivery'
 
-/** Exclude pending mail before the limit, leaving the next batch in mailbox order. */
-export async function readStructuredMailboxBatch(input: {
+/** Each page moves past its last row, including failures; arrivals belong to the next pass. */
+export async function visitStructuredMailboxPages(input: {
   db: OrchestrationDb
   mailboxHandle: string
-  target: StructuredPointerTarget
+  throughSequence: number
   reservedTypes: ReadonlySet<string> | undefined
-  waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
-  host: StructuredMailboxPointerHost
-  pendingSends: Iterable<{ contextKey: string; messageId: string }>
-}) {
-  const session = await input.host.readSessionFacts(input.target.sessionId)
-  const contextClearOperationId = input.host.currentContextClearOperationId(input.target.sessionId)
-  const contextKey = JSON.stringify([input.target.sessionId, contextClearOperationId])
-  const excluded = new Set(
-    Array.from(input.pendingSends)
-      .filter((send) => send.contextKey === contextKey)
-      .map((send) => send.messageId)
-  )
-  for (const submission of session?.submissions ?? []) {
-    if (submission.dispatchState === 'pending' && submission.mailMessageId) {
-      excluded.add(submission.mailMessageId)
-    }
-  }
-  return {
-    session,
-    contextClearOperationId,
-    contextKey,
-    hasPending: excluded.size > 0,
-    unread: selectOrchestrationPointerBatch({
+  getWaiters: () => ReadonlySet<OrchestrationMessageWaiter> | undefined
+  isCurrent: () => boolean
+  attempt: (messages: readonly MessageRow[]) => Promise<boolean>
+}): Promise<void> {
+  let afterSequence: number | undefined
+  while (input.isCurrent()) {
+    const unread = selectOrchestrationPointerBatch({
       db: input.db,
       mailboxHandle: input.mailboxHandle,
-      waiters: input.waiters,
+      waiters: input.getWaiters(),
       reservedTypes: input.reservedTypes,
       excludeOutstandingDelivery: true,
-      excludeMessageIds: [...excluded]
+      afterSequence,
+      throughSequence: input.throughSequence
     })
+    const last = unread.at(-1)
+    if (!last || !(await input.attempt(unread))) {
+      return
+    }
+    afterSequence = last.sequence
+    if (afterSequence >= input.throughSequence) {
+      return
+    }
+    await yieldToEventLoop()
   }
-}
-
-/** The chat has it, so `check` must not hand it out again. */
-export function markStructuredMailReceived(db: OrchestrationDb, messageId: string): void {
-  db.markAsRead([messageId])
-  db.markAsDelivered([messageId])
 }

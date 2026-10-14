@@ -35,7 +35,7 @@ async function idleEdges(sessionId: string): Promise<void> {
 }
 
 /** Coordinator mail to the peer chat's Dispatch, its send lost with the provider. */
-async function heldDispatchMail(): Promise<string> {
+async function heldDispatchMail(): Promise<{ mailbox: string; messageId: string }> {
   await openChat(COORDINATOR)
   const chat = await openChat(PEER_CHAT)
   const { taskId } = await coordinatorRunAndTask()
@@ -52,10 +52,10 @@ async function heldDispatchMail(): Promise<string> {
   await idleEdges(PEER_CHAT)
   expect(chat.turns).toHaveLength(1)
   expect(db.getUndeliveredUnreadMessages(mailbox, undefined, {})).toHaveLength(1)
-  return mailbox
+  return { mailbox, messageId: db.getUndeliveredUnreadMessages(mailbox, undefined, {})[0]!.id }
 }
 
-/** The chat's next turn, the person's; resolves to the session's provider once its edges ran. */
+/** Settle the revived provider's first turn; recovered mail may precede the person's send. */
 async function nextTurn(sessionId: string): Promise<{ turns: { text: string }[] }> {
   const before = codex.connections.length
   expect(await sendUserMessage(sessionId, 'again')).toMatchObject({ ok: true })
@@ -67,26 +67,45 @@ async function nextTurn(sessionId: string): Promise<{ turns: { text: string }[] 
   return revived
 }
 
+async function expectRecoveredMail(
+  sessionId: string,
+  revived: { turns: { text: string }[] },
+  held: { mailbox: string; messageId: string }
+): Promise<void> {
+  await vi.waitFor(() => expect(revived.turns).toHaveLength(2), WAIT)
+  const texts = revived.turns.map(turnText)
+  expect(texts.filter((text) => text === 'again')).toHaveLength(1)
+  const mailIndex = texts.findIndex((text) => MAIL.test(text))
+  expect(texts.filter((text) => MAIL.test(text))).toEqual([
+    expect.stringContaining(`reply --id ${held.messageId}`)
+  ])
+  if (mailIndex > 0) {
+    await settleTurn(sessionId, mailIndex)
+  }
+  await vi.waitFor(
+    () => expect(db.getUndeliveredUnreadMessages(held.mailbox, undefined, {})).toEqual([]),
+    WAIT
+  )
+}
+
 describe("a chat worker's held Dispatch mail is sent again", () => {
   // Also covered by the restored-mail repoint a restart schedules; this pins the end result.
   it('after a restart', async () => {
-    await heldDispatchMail()
+    const held = await heldDispatchMail()
     restartRuntime()
 
     const revived = await nextTurn(PEER_CHAT)
 
-    await vi.waitFor(() => expect(revived.turns).toHaveLength(2), WAIT)
-    expect(turnText(revived.turns[1]!)).toMatch(MAIL)
+    await expectRecoveredMail(PEER_CHAT, revived, held)
   })
 
   it('in the same chat after /clear', async () => {
-    await heldDispatchMail()
+    const held = await heldDispatchMail()
     const cleared = await clearChat(PEER_CHAT)
     expect(cleared).toBe(PEER_CHAT)
 
     const revived = await nextTurn(cleared)
 
-    await vi.waitFor(() => expect(revived.turns).toHaveLength(2), WAIT)
-    expect(turnText(revived.turns[1]!)).toMatch(MAIL)
+    await expectRecoveredMail(cleared, revived, held)
   })
 })
