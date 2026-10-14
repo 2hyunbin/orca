@@ -11,22 +11,34 @@ import { fileIdentity } from './session-search-file-cursor'
 import type { SessionSearchFileWrite } from './session-search-index-writer'
 import type { SessionSearchStore } from './session-search-store'
 
-// External messages and metadata can change without moving the candidate file's stat.
-const SELF_CONTAINED_TRANSCRIPT_AGENTS: ReadonlySet<AiVaultAgent> = new Set([
-  'claude',
-  'qoder',
-  'codebuddy',
-  'gemini',
-  'copilot',
-  'hermes',
-  'openclaw',
-  'pi',
-  'omp',
-  'prime-agent',
-  'droid',
-  'muse',
-  'jcode'
-])
+// Keep aligned with session-scanner-agent-parser.ts and session-scanner-sidecar-enrichment.ts.
+const SELF_CONTAINED_TRANSCRIPT_AGENTS = {
+  claude: true,
+  qoder: true,
+  codebuddy: true,
+  codex: false, // session_index.jsonl supplies titles.
+  gemini: true,
+  copilot: true,
+  cursor: false, // Sibling chat metadata enriches the transcript.
+  antigravity: false, // Workspace history enriches the transcript separately.
+  opencode: false, // SQLite or a separate message directory.
+  opencode2: false,
+  zcode: false,
+  grok: false, // chat_history.jsonl supplies messages.
+  hermes: true,
+  rovo: false, // session_context.json supplies messages.
+  openclaw: true,
+  pi: true,
+  omp: true,
+  'prime-agent': true,
+  droid: true,
+  cline: false, // A .messages.json sidecar supplies messages.
+  devin: false, // sessions.db supplies metadata.
+  kimi: false, // agents/main/wire.jsonl supplies messages.
+  muse: true,
+  jcode: true,
+  kiro: false // A .jsonl sidecar supplies messages.
+} satisfies Record<AiVaultAgent, boolean>
 
 /**
  * The search index as a consumer of the transcript reader.
@@ -49,7 +61,7 @@ export class SessionSearchIndexConsumer implements TranscriptConsumer {
     const { candidate } = start
     if (
       start.mode === 'replace' &&
-      SELF_CONTAINED_TRANSCRIPT_AGENTS.has(candidate.agent) &&
+      SELF_CONTAINED_TRANSCRIPT_AGENTS[candidate.agent] &&
       (candidate.file.sidecar === undefined || candidate.file.sidecar === 'none') &&
       this.store.coversTranscript(candidate)
     ) {

@@ -491,9 +491,10 @@ it('fences a first-ever read whose file was removed before it committed', () => 
 })
 
 it('replaces the previous generation without ever showing both', async () => {
-  replayTranscriptRead({ messages: userMessages('firstgeneration', 10) })
+  const candidate = syntheticCandidate()
+  replayTranscriptRead({ candidate, messages: userMessages('firstgeneration', 10) })
   replayTranscriptRead({
-    candidate: syntheticCandidate({ mtimeMs: 1740000000001 }),
+    candidate: syntheticCandidate({ mtimeMs: candidate.file.mtimeMs + 1 }),
     messages: userMessages('secondgeneration', 10)
   })
 
@@ -544,9 +545,10 @@ it('replaces a generation by cutting the old one loose, not by deleting it inlin
 })
 
 it('drains what a replace cut loose without being asked', async () => {
-  replayTranscriptRead({ messages: userMessages('firstgeneration', 200) })
+  const candidate = syntheticCandidate()
+  replayTranscriptRead({ candidate, messages: userMessages('firstgeneration', 200) })
   replayTranscriptRead({
-    candidate: syntheticCandidate({ mtimeMs: 1740000000001 }),
+    candidate: syntheticCandidate({ mtimeMs: candidate.file.mtimeMs + 1 }),
     messages: userMessages('secondgeneration', 3)
   })
 

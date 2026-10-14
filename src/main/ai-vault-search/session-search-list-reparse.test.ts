@@ -39,10 +39,13 @@ it('keeps current search rows when a cold history list rereads the same transcri
 })
 
 it('still replaces a changed transcript', () => {
-  replayTranscriptRead({ messages })
-  const before = sessionRow()
-  const candidate = syntheticCandidate({ mtimeMs: 1740000000001 })
+  const candidate = syntheticCandidate()
   replayTranscriptRead({ candidate, messages })
+  const before = sessionRow()
+  replayTranscriptRead({
+    candidate: syntheticCandidate({ mtimeMs: candidate.file.mtimeMs + 1 }),
+    messages
+  })
   expect(sessionRow()).not.toEqual(before)
 })
 
