@@ -20,11 +20,12 @@ import {
 import { createPluginCatalogFixture } from './helpers/plugin-catalog-fixture'
 import { createRestartSession } from './helpers/orca-restart'
 import { capturePluginEvidence, getPluginEvidenceDirectory } from './helpers/plugin-evidence'
+import { qualifyProviderEndpointMigration } from './helpers/plugin-provider-endpoint-migration'
 
 async function dismissUsageNotice(page: Page): Promise<void> {
-  const notice = page.getByRole('status', { name: 'Usage display is now compact', exact: true })
-  if (await notice.isVisible()) {
-    await notice.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  const dismiss = page.getByRole('button', { name: 'Got it', exact: true })
+  if (await dismiss.isVisible()) {
+    await dismiss.click()
   }
 }
 
@@ -249,6 +250,15 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
         environmentId: managed.environmentId
       })
     await capturePluginEvidence(page, testInfo, 'node-provider-wake-native', app)
+    const endpointMigration = await qualifyProviderEndpointMigration({
+      page,
+      app,
+      testInfo,
+      fixtureRoot: fixture.root,
+      saved,
+      hostClient,
+      managedEnvironmentId: managed.environmentId
+    })
     const runtime = JSON.parse(
       await readFile(join(fixture.root, 'provider-executed.runtime.json'), 'utf8')
     )
@@ -277,6 +287,10 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
           encryptedRemoteCensus: server.terminals,
           sleepRetiresContact: true,
           wakeKeepsManagedIdentity: true,
+          endpointMigration,
+          endpointCancelPreservesTarget: true,
+          endpointApprovalRequiredBeforeSshTraffic: true,
+          encryptedRemoteCensusAfterEndpointMigration: true,
           nativeWindowsHidden: true,
           debugStoreExposed: false
         },
