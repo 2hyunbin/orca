@@ -12,12 +12,15 @@ import {
 import {
   addWorktreeMock,
   assertWorktreeCleanForRemovalMock,
+  forceDeleteLocalBranchMock,
   gitExecFileAsyncMock,
   killAllProcessesForWorktreeMock,
   listWorktreesMock,
   removeWorktreeMock
 } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
+import { rememberPreservedBranchCleanupTarget } from './worktrees/removal/preserved-branch-cleanup'
+import * as issueCommandFile from '../issue-command-file'
 
 vi.mock('electron', async () =>
   (await import('./worktrees-test-module-mocks')).electronModuleMock()
@@ -84,10 +87,41 @@ describe('worktree IPC under a WSL move', () => {
     expect(store.removeWorktreeMeta).not.toHaveBeenCalled()
   })
 
+  it('refuses a preserved-branch delete before any Git work', async () => {
+    rememberPreservedBranchCleanupTarget(
+      MOVING,
+      'local',
+      { preservedBranch: { branchName: 'feature', head: 'abc123' } },
+      undefined,
+      undefined
+    )
+    await expect(
+      handlers['worktrees:forceDeletePreservedBranch'](null, {
+        worktreeId: MOVING,
+        branchName: 'feature',
+        expectedHead: 'abc123',
+        hostId: 'local'
+      })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
+    expect(forceDeleteLocalBranchMock).not.toHaveBeenCalled()
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses an issue-command write before touching the file', async () => {
+    const write = vi.spyOn(issueCommandFile, 'writeIssueCommand').mockResolvedValue(undefined)
+    await expect(
+      handlers['hooks:writeIssueCommand'](null, { repoId: 'repo-1', content: 'run' })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
+    expect(write).not.toHaveBeenCalled()
+    write.mockRestore()
+  })
+
   it('drops passive metadata quietly and refuses a user edit', () => {
     const updateMeta = (worktreeId: string, updates: object) =>
       handlers['worktrees:updateMeta'](null, { worktreeId, updates })
-    expect(updateMeta(MOVING, { isUnread: true })).toBeNull()
+    expect(updateMeta(MOVING, { isUnread: false })).toBeNull()
+    expect(updateMeta(MOVING, { isUnread: true, lastActivityAt: 1 })).toBeNull()
+    expect(() => updateMeta(MOVING, { isUnread: true })).toThrow(WslMoveProjectFencedError)
     expect(() => updateMeta(MOVING, { comment: 'x' })).toThrow(WslMoveProjectFencedError)
     expect(store.setWorktreeMeta).not.toHaveBeenCalled()
     updateMeta(STAYING, { comment: 'x' })

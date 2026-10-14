@@ -34,7 +34,11 @@ import {
   countRepoWorkspacesWithMetadata,
   describeProjectRemovalRefusal
 } from './project-removal-impact'
-import { assertWslMoveReposWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  assertWslMoveHostSetupIdWritable,
+  assertWslMoveHostSetupWritable,
+  assertWslMoveReposWritable
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -94,6 +98,7 @@ export class RuntimeProjectHostSetupController {
     if (!store?.createProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupWritable(store, args)
     const result = store.createProjectHostSetup(args)
     if (!result) {
       throw new Error(`Project not found: ${args.projectId}`)
@@ -142,6 +147,7 @@ export class RuntimeProjectHostSetupController {
     if (!store?.updateProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupIdWritable(store, args.setupId)
     const result = store.updateProjectHostSetup(args)
     if (!result) {
       throw new Error(`Project host setup not found: ${args.setupId}`)
@@ -163,6 +169,7 @@ export class RuntimeProjectHostSetupController {
     if (!store?.deleteProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupIdWritable(store, args.setupId)
     if (args.force === false) {
       this.assertSetupRemovalIsUnused(store, args.setupId)
     }
@@ -241,6 +248,11 @@ export class RuntimeProjectHostSetupController {
     if (!store) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveHostSetupWritable(store, {
+      projectId: args.projectId,
+      hostId: getRepoExecutionHostId(initialRepo),
+      repoId: initialRepo.id
+    })
     let repo = initialRepo
     let setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     if (setup.projectId !== args.projectId) {

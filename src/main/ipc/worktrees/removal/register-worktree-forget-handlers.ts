@@ -176,6 +176,7 @@ export function registerWorktreeForgetHandlers(context: WorktreeIpcContext): voi
       if (!repo) {
         throw new Error(`Repo not found: ${repoId}`)
       }
+      assertWslMoveRepoWritable(store, repo)
       if (isFolderRepo(repo)) {
         throw new Error('Folder workspaces do not have local Git branches.')
       }

@@ -111,12 +111,28 @@ export function isWslMoveProjectBlocked(
   store: ProjectStore | undefined,
   ref: WslMoveProjectRef | null
 ): boolean {
+  return matchesFence(store, ref, true)
+}
+
+/** Only while a move is taking the project; one the WSL host already owns is not fenced. */
+export function isWslMoveProjectFenced(
+  store: ProjectStore | undefined,
+  ref: WslMoveProjectRef | null
+): boolean {
+  return matchesFence(store, ref, false)
+}
+
+function matchesFence(
+  store: ProjectStore | undefined,
+  ref: WslMoveProjectRef | null,
+  includeHidden: boolean
+): boolean {
   const fence = loaded?.view
   if (!ref || !fence) {
     return false
   }
   if (fence.readable) {
-    return inScope(fence.state.fenced, ref) || inScope(fence.state.hidden, ref)
+    return inScope(fence.state.fenced, ref) || (includeHidden && inScope(fence.state.hidden, ref))
   }
   return !store || isWslUncPath(projectPath(store, ref) ?? '')
 }
@@ -133,9 +149,13 @@ export function assertWslMoveProjectWritable(
 // Background bookkeeping a move drops quietly; anything else is a user edit and is refused.
 const PASSIVE_WORKSPACE_UPDATE_KEYS: ReadonlySet<string> = new Set(['isUnread', 'lastActivityAt'])
 
+// Activity carries lastActivityAt and a read clears unread; a bare `isUnread: true` is a user's mark-unread.
 export function isPassiveWorkspaceUpdate(updates: object): boolean {
   const keys = Object.keys(updates)
-  return keys.length > 0 && keys.every((key) => PASSIVE_WORKSPACE_UPDATE_KEYS.has(key))
+  if (keys.length === 0 || !keys.every((key) => PASSIVE_WORKSPACE_UPDATE_KEYS.has(key))) {
+    return false
+  }
+  return 'lastActivityAt' in updates || ('isUnread' in updates && updates.isUnread === false)
 }
 
 /** A move only takes local projects; the same repo id on another host is a different project. */
@@ -153,13 +173,50 @@ export function assertWslMoveRepoWritable(
   }
 }
 
-/** A catalog project spans its source repos; a move taking any of them freezes the whole project. */
+/**
+ * A catalog project spans its source repos; a move taking any of them freezes the whole project.
+ * A repo the WSL host already owns does not, or the project's settings would freeze for good.
+ */
 export function assertWslMoveReposWritable(
   store: ProjectStore | undefined,
   repoIds: readonly string[]
 ): void {
-  for (const repoId of repoIds) {
-    assertWslMoveProjectWritable(store, { repoId })
+  if (repoIds.some((repoId) => isWslMoveProjectFenced(store, { repoId }))) {
+    throw new WslMoveProjectFencedError()
+  }
+}
+
+type HostSetupStore = ProjectStore & {
+  getProjects?: () => readonly { id: string; sourceRepoIds: readonly string[] }[]
+  getProjectHostSetups?: () => readonly {
+    id: string
+    projectId: string
+    hostId: string
+    repoId: string
+  }[]
+}
+
+/** A setup on this machine edits its project's local checkouts, so it waits out a move taking one. */
+export function assertWslMoveHostSetupWritable(
+  store: HostSetupStore | undefined,
+  setup: { projectId: string; hostId: string; repoId?: string }
+): void {
+  if (!isWslMoveSourceHost(setup.hostId)) {
+    return
+  }
+  const project = store?.getProjects?.().find((entry) => entry.id === setup.projectId)
+  const repoIds = [...(setup.repoId ? [setup.repoId] : []), ...(project?.sourceRepoIds ?? [])]
+  assertWslMoveReposWritable(store, repoIds)
+}
+
+/** By id, for update and delete; an unknown id is left to the store's own not-found. */
+export function assertWslMoveHostSetupIdWritable(
+  store: HostSetupStore | undefined,
+  setupId: string
+): void {
+  const setup = store?.getProjectHostSetups?.().find((entry) => entry.id === setupId)
+  if (setup) {
+    assertWslMoveHostSetupWritable(store, setup)
   }
 }
 
@@ -219,9 +276,10 @@ function withoutHidden<T extends HostedRow>(rows: T[], toRef: (row: T) => WslMov
   if (hidden.repoIds.size === 0 && hidden.folderWorkspaceIds.size === 0) {
     return rows
   }
-  return rows.filter((row) => !isLocalRow(row) || !inScope(hidden, toRef(row)))
+  return rows.filter((row) => !isLocalWslMoveRow(row) || !inScope(hidden, toRef(row)))
 }
 
-function isLocalRow(row: HostedRow): boolean {
+/** A row on this machine, the only kind a move takes. */
+export function isLocalWslMoveRow(row: HostedRow): boolean {
   return !row.connectionId && isWslMoveSourceHost(row.executionHostId)
 }

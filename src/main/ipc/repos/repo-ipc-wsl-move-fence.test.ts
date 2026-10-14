@@ -85,9 +85,15 @@ describe('folderWorkspaces:update under a WSL move', () => {
     await expect(
       invoke('folderWorkspaces:update', {
         folderWorkspaceId: workspace.id,
-        updates: { isUnread: true }
+        updates: { isUnread: true, lastActivityAt: 1 }
       })
     ).resolves.toMatchObject({ id: workspace.id, isUnread: workspace.isUnread })
+    await expect(
+      invoke('folderWorkspaces:update', {
+        folderWorkspaceId: workspace.id,
+        updates: { isUnread: true }
+      })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
     await expect(
       invoke('folderWorkspaces:update', {
         folderWorkspaceId: workspace.id,

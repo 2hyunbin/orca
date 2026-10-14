@@ -18,7 +18,10 @@ import {
   parseProjectGroupIpcArgs
 } from './repo-ipc-arg-schemas'
 import { visibleFolderWorkspaces } from '../../ssh/orcad-retained-source'
-import { shouldDropWslMoveProjectUpdate } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  isLocalWslMoveRow,
+  shouldDropWslMoveProjectUpdate
+} from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 export function registerFolderWorkspaceHandlers(
   mainWindow: BrowserWindow,
@@ -78,9 +81,14 @@ export function registerFolderWorkspaceHandlers(
         rawArgs,
         'invalid_folder_workspace_update_args'
       )
+      const existing = store.getFolderWorkspace(args.folderWorkspaceId)
       const ref = { folderWorkspaceId: args.folderWorkspaceId }
-      if (shouldDropWslMoveProjectUpdate(store, ref, args.updates)) {
-        return store.getFolderWorkspace(args.folderWorkspaceId) ?? null
+      if (
+        existing &&
+        isLocalWslMoveRow(existing) &&
+        shouldDropWslMoveProjectUpdate(store, ref, args.updates)
+      ) {
+        return existing
       }
       if (
         typeof args.updates.folderPath === 'string' &&

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { Repo } from '../../shared/repo-types'
 import { normalizeSparseDirectories } from '../ipc/sparse-checkout-directories'
 import type { RuntimeStore } from './runtime-store-contract'
-import { assertWslMoveProjectWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import { assertWslMoveRepoWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeRepositorySparsePresetDependencies = {
   getStore: () => RuntimeStore | null
@@ -57,7 +57,7 @@ export class RuntimeRepositorySparsePresets {
       throw new Error('runtime_unavailable')
     }
     const repo = await this.deps.resolveRepo(repoSelector)
-    assertWslMoveProjectWritable(store, { repoId: repo.id })
+    assertWslMoveRepoWritable(store, repo)
     const name = normalizeName(args.name)
     const directories = normalizeDirectories(args.directories)
     const now = Date.now()

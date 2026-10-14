@@ -224,7 +224,8 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
 
   protected readonly repositoryIssueCommand = new RuntimeRepositoryIssueCommand({
     resolveRepo: (selector) => this.resolveRepoSelector(selector),
-    getLocalGitArgs: (repo) => this.getLocalGitExecutionOptionArgs(repo)
+    getLocalGitArgs: (repo) => this.getLocalGitExecutionOptionArgs(repo),
+    getStore: () => this.store
   })
 
   protected readonly clientHostedBrowserRows = new ClientHostedBrowserRowPublisher({

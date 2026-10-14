@@ -21,6 +21,8 @@ import {
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import {
   assertWslMoveProjectWritable,
+  assertWslMoveRepoWritable,
+  isLocalWslMoveRow,
   shouldDropWslMoveProjectUpdate
 } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
@@ -132,7 +134,7 @@ export class RuntimeProjectGroupController {
       throw new Error('runtime_unavailable')
     }
     const repo = await this.deps.resolveRepo(repoSelector)
-    assertWslMoveProjectWritable(store, { repoId: repo.id })
+    assertWslMoveRepoWritable(store, repo)
     const moved = store.moveProjectToGroup(repo.id, groupId, order)
     if (!moved) {
       throw new Error('repo_not_found')
@@ -204,8 +206,13 @@ export class RuntimeProjectGroupController {
     if (!store?.updateFolderWorkspace) {
       throw new Error('runtime_unavailable')
     }
-    if (shouldDropWslMoveProjectUpdate(store, { folderWorkspaceId }, updates)) {
-      return store.getFolderWorkspaces?.().find((entry) => entry.id === folderWorkspaceId) ?? null
+    const existing = store.getFolderWorkspaces?.().find((entry) => entry.id === folderWorkspaceId)
+    if (
+      existing &&
+      isLocalWslMoveRow(existing) &&
+      shouldDropWslMoveProjectUpdate(store, { folderWorkspaceId }, updates)
+    ) {
+      return existing
     }
     if (typeof updates.folderPath === 'string' && updates.folderPath.trim().length > 0) {
       const workspace = store
@@ -239,8 +246,10 @@ export class RuntimeProjectGroupController {
     if (!store?.removeFolderWorkspace) {
       throw new Error('runtime_unavailable')
     }
-    assertWslMoveProjectWritable(store, { folderWorkspaceId })
     const workspace = store.getFolderWorkspaces?.().find((entry) => entry.id === folderWorkspaceId)
+    if (workspace && isLocalWslMoveRow(workspace)) {
+      assertWslMoveProjectWritable(store, { folderWorkspaceId })
+    }
     if (workspace) {
       const worktreeId = folderWorkspaceKey(folderWorkspaceId)
       // Why: a mixed-host group has no single PTY target; forgetting the

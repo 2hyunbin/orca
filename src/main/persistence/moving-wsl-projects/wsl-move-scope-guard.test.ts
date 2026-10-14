@@ -17,6 +17,7 @@ import {
   isPassiveWorkspaceUpdate,
   isWslMoveFenceLoaded,
   isWslMoveProjectBlocked,
+  isWslMoveProjectFenced,
   isWslMoveSourceHost,
   loadWslMoveFence,
   shouldDropWslMoveProjectUpdate,
@@ -160,8 +161,10 @@ describe('WSL move edit guard', () => {
     )
 
   it.each([
-    [{ isUnread: true }, true],
-    [{ lastActivityAt: 1, isUnread: false }, true],
+    [{ isUnread: true, lastActivityAt: 1 }, true],
+    [{ lastActivityAt: 1 }, true],
+    [{ isUnread: false }, true],
+    [{ isUnread: true }, false],
     [{}, false],
     [{ isUnread: true, displayName: 'x' }, false],
     [{ comment: 'x' }, false]
@@ -172,7 +175,10 @@ describe('WSL move edit guard', () => {
   it('drops passive updates to a blocked project and refuses user edits', () => {
     fenceRepo1AndNotes()
     const notes = { folderWorkspaceId: 'notes' }
-    expect(shouldDropWslMoveProjectUpdate(undefined, notes, { isUnread: true })).toBe(true)
+    expect(shouldDropWslMoveProjectUpdate(undefined, notes, { isUnread: false })).toBe(true)
+    expect(() => shouldDropWslMoveProjectUpdate(undefined, notes, { isUnread: true })).toThrow(
+      WslMoveProjectFencedError
+    )
     expect(() => shouldDropWslMoveProjectUpdate(undefined, notes, { name: 'x' })).toThrow(
       WslMoveProjectFencedError
     )
@@ -191,6 +197,16 @@ describe('WSL move edit guard', () => {
       WslMoveProjectFencedError
     )
     expect(() => assertWslMoveReposWritable(undefined, ['repo-2'])).not.toThrow()
+  })
+
+  it('freezes catalog settings only while a source repo is mid-move', () => {
+    writeWslMoveCutover(
+      userDataPath,
+      cutover('move-1', 'destination-committed', {}, { repoIds: ['repo-1'] })
+    )
+    expect(isWslMoveProjectFenced(undefined, { repoId: 'repo-1' })).toBe(false)
+    expect(isWslMoveProjectBlocked(undefined, { repoId: 'repo-1' })).toBe(true)
+    expect(() => assertWslMoveReposWritable(undefined, ['repo-1', 'repo-2'])).not.toThrow()
   })
 
   it('only fences a repo row that runs on this machine', () => {
