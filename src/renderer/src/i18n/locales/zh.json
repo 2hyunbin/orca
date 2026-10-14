@@ -14,6 +14,10 @@
   "githubChecks": {
     "retrying": "正在重试...",
     "logsNotYetAvailable": "日志输出尚不可用。",
+    "logsLoadErrorDetails": "无法加载日志。请使用刷新重试。",
+    "logsLoadErrorSidebar": "无法加载日志。请打开查看完整详细信息，然后使用刷新重试。",
+    "logsEmpty": "未返回日志输出。",
+    "logsNotRequested": "未请求日志摘录。每项检查最多加载五个失败作业的日志摘录。",
     "noLogExcerpt": "没有可用的日志摘录。",
     "refreshingDetails": "正在刷新检查详情…"
   },

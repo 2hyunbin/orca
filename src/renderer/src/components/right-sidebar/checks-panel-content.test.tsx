@@ -451,7 +451,10 @@ describe('CheckJobLogTail', () => {
     'shows truthful legacy absence for %s / %s without empty Copy',
     (status, conclusion, expected) => {
       const markup = renderWithTooltips(
-        React.createElement(CheckJobLogTail, { job: { status, conclusion, logTail: null } })
+        React.createElement(CheckJobLogTail, {
+          job: { status, conclusion, logTail: null },
+          surface: 'sidebar'
+        })
       )
       if (expected) {
         expect(markup).toContain(expected)
@@ -468,6 +471,7 @@ describe('CheckJobLogTail', () => {
         TooltipProvider,
         null,
         React.createElement(CheckJobLogTail, {
+          surface: 'sidebar',
           job: {
             logTail: 'Error: expected true to be false',
             status: 'completed',
@@ -488,6 +492,7 @@ describe('CheckJobLogTail', () => {
         TooltipProvider,
         null,
         React.createElement(CheckJobLogTail, {
+          surface: 'details',
           job: {
             logTail: 'Error: expected true to be false',
             status: 'completed',

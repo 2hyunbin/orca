@@ -569,7 +569,7 @@ describe('mounted store-driven details refresh', () => {
     'preserves the actual viewer and both offsets through deferred %s requests and Strict Mode',
     async (result) => {
       const fixture = createEditorTabsStore().getState()
-      const payload = readingDetails()
+      const payload = readingDetails(undefined, 'available')
       let resolve: (details: PRCheckRunDetails | null) => void = () => {}
       let reject: (reason: Error) => void = () => {}
       const fetch = vi.fn(

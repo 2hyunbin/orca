@@ -98,7 +98,10 @@ export function claimCheckReadingIntent(
 
 function seedJobs(owner: string, details: PRCheckRunDetails, isCurrent: () => boolean): void {
   for (const { identity } of checkJobIdentities(details.jobs)
-    .filter(({ job }) => resolveStepOutcome(job) === 'failure' && Boolean(job.logTail))
+    .filter(
+      ({ job }) =>
+        resolveStepOutcome(job) === 'failure' && (Boolean(job.logTail) || job.logState === 'error')
+    )
     .slice(0, 5)) {
     if (!isCurrent()) {
       return
@@ -151,7 +154,19 @@ export function reconcileCheckDetailsReadingCache(
     checkJobIdentities(next.details.jobs).map(({ job, identity }) => [identity, job])
   )
   for (const { job, identity } of checkJobIdentities(previous.details?.jobs ?? [])) {
-    const text = nextJobs.get(identity)?.logTail
+    const nextJob = nextJobs.get(identity)
+    const text = nextJob?.logTail
+    if (!text && (job.logTail || job.logState === 'error') && nextJob?.logState !== 'error') {
+      const intentSuffix = `::intent:${encodeURIComponent(identity)}`
+      for (const key of scrollTopCache.keys()) {
+        if (!isCurrent()) {
+          return
+        }
+        if (key.endsWith(intentSuffix) && cacheOwner(key, tabId, context)) {
+          scrollTopCache.delete(key)
+        }
+      }
+    }
     if (!job.logTail || job.logTail === text) {
       continue
     }

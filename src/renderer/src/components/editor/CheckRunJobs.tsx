@@ -169,6 +169,7 @@ function JobCard({
 
       <CheckJobLogTail
         job={job}
+        surface="details"
         jobIdentity={identity}
         expanded={jobFailed}
         positionOwner={owner}

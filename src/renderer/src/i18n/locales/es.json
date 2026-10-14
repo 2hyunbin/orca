@@ -14,6 +14,10 @@
   "githubChecks": {
     "retrying": "Reintentando…",
     "logsNotYetAvailable": "La salida del registro aún no está disponible.",
+    "logsLoadErrorDetails": "No se pudieron cargar los registros. Usa Actualizar para reintentarlo.",
+    "logsLoadErrorSidebar": "No se pudieron cargar los registros. Abre Ver detalles completos y usa Actualizar para reintentarlo.",
+    "logsEmpty": "No se devolvió ninguna salida del registro.",
+    "logsNotRequested": "No se solicitó el extracto del registro. Se cargan como máximo cinco extractos de trabajos fallidos por comprobación.",
     "noLogExcerpt": "No hay ningún extracto del registro disponible.",
     "refreshingDetails": "Actualizando los detalles de la comprobación…"
   },

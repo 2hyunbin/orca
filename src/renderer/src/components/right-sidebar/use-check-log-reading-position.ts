@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
+import type { PRCheckJob } from '../../../../shared/github/check-types'
 import { scrollTopCache } from '@/lib/scroll-cache'
 import {
   checkLogDigest,
@@ -13,17 +14,37 @@ import {
 } from './check-log-initial-diagnostic-position'
 
 export function useCheckLogReadingPosition(
-  text: string,
+  logTail: string | null,
   expanded: boolean,
   job: string,
-  owner?: CheckDetailsReadingOwner
+  owner?: CheckDetailsReadingOwner,
+  logState?: PRCheckJob['logState']
 ) {
+  const text = logTail ?? ''
+  const pendingError = !text && logState === 'error'
   const ref = useRef<HTMLPreElement>(null)
-  const localIntent = useRef(true)
+  const localIntent = useRef(Boolean(text) || logState === 'error')
   const localPosition = useRef<number | undefined>(undefined)
   const digest = useMemo(() => (expanded && text ? checkLogDigest(text) : ''), [expanded, text])
   useLayoutEffect(() => {
     const pre = ref.current
+    if (expanded && !text) {
+      if (!pendingError) {
+        localIntent.current = false
+        return
+      }
+      return owner?.register({
+        job,
+        text: logTail,
+        start: () => {
+          owner.claim(job)
+        },
+        retire: () => undefined,
+        cancel: () => {
+          localIntent.current = false
+        }
+      })
+    }
     if (!pre || !expanded || !text) {
       return
     }
@@ -51,6 +72,6 @@ export function useCheckLogReadingPosition(
         return anchor ? measureInitialCheckLogScrollTop(pre, anchor) : 0
       }
     })
-  }, [digest, expanded, job, owner, text])
+  }, [digest, expanded, job, logTail, owner, pendingError, text])
   return ref
 }
