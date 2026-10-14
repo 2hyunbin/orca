@@ -13,7 +13,8 @@ import {
 export type MobileStructuredAgentMutate = <TValue>(
   method: string,
   fingerprintMethod: string,
-  fields: Record<string, unknown>
+  fields: Record<string, unknown>,
+  shouldReportError?: () => boolean
 ) => Promise<StructuredAgentSessionMutationResult<TValue>>
 
 export function useMobileStructuredAgentMutate(args: {
@@ -28,7 +29,8 @@ export function useMobileStructuredAgentMutate(args: {
     async <TValue>(
       method: string,
       fingerprintMethod: string,
-      fields: Record<string, unknown>
+      fields: Record<string, unknown>,
+      shouldReportError?: () => boolean
     ): Promise<StructuredAgentSessionMutationResult<TValue>> => {
       const current = stateRef.current
       if (!client || !sessionId || !enabled || current.fence === null) {
@@ -53,7 +55,9 @@ export function useMobileStructuredAgentMutate(args: {
       if (result.status === 'unknown') {
         return result
       }
-      onSendError(result.message)
+      if (shouldReportError?.() !== false) {
+        onSendError(result.message)
+      }
       return { status: 'rejected' }
     },
     [client, enabled, onSendError, sessionId, stateRef]

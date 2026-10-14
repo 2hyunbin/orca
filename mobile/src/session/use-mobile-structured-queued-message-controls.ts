@@ -60,7 +60,6 @@ export function useMobileStructuredQueuedMessageControls(args: {
   client: RpcClient | null
   enabled: boolean
   editCapable: boolean | null
-  captureComposerTextAppender?: () => ((text: string) => boolean) | undefined
   agentName?: string
   journalItems?: readonly AgentJournalRenderItem[]
   queuedMessages: MobileQueuedMessageFeed
@@ -102,8 +101,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
     ...args,
     enabled: args.enabled && args.editCapable === true,
     messages: queuedMessages,
-    cards,
-    captureComposerTextAppender: () => args.captureComposerTextAppender?.() ?? appendComposerText
+    cards
   })
   const resolved = useCallback(
     (accepted: boolean): boolean => {

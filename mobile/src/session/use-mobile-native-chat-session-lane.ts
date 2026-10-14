@@ -34,7 +34,7 @@ export function useMobileNativeChatSessionLane({
   sessionId: string | null
   sourceIdentity: Parameters<typeof useMobileNativeChatSession>[0]['sourceIdentity']
   hostSupport: StructuredAgentSessionHostSupport | null
-  /** The active pane's live composer; a queued card's Edit copies through it.
+  /** The active pane's live composer for older-host queued Edit's copy-first fallback.
    *  A ref because the drafts (and their append) mount after this lane. */
   appendComposerTextRef: { readonly current: (text: string) => boolean }
   enabled: boolean
@@ -63,7 +63,6 @@ export function useMobileNativeChatSessionLane({
     sourceIdentity,
     hostSupport,
     appendComposerText,
-    captureComposerTextAppender: () => appendComposerTextRef.current,
     enabled,
     // Holds are connection-scoped; dropping this on transport loss lets the hook
     // reacquire the provider without clearing the cached transcript.

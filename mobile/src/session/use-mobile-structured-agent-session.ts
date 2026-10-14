@@ -53,10 +53,8 @@ export function useMobileStructuredAgentSession(args: {
   /** Capability facts from the shared runtime status probe; null follows the legacy wire. */
   hostSupport: StructuredAgentSessionHostSupport | null
   agent: string | null
-  /** The active pane's live composer; Edit copies a card's text through it. */
+  /** The active pane's live composer for older-host Edit's copy-first fallback. */
   appendComposerText?: (text: string) => boolean
-  /** Captures the originating draft before a later tab switch retargets the live composer. */
-  captureComposerTextAppender?: () => ((text: string) => boolean) | undefined
   onSendError: MobileNativeChatSendErrorReporter
   /** Called on any accepted queued-card action; retires the route's failure banner. */
   onActionResolved?: () => void
@@ -244,7 +242,6 @@ export function useMobileStructuredAgentSession(args: {
     sessionId,
     editCapable: hostSupport ? hostSupport.queuedMessageEdit === true : null,
     enabled: enabled && connected,
-    captureComposerTextAppender: args.captureComposerTextAppender,
     mutate,
     appendComposerText,
     onSendError,
