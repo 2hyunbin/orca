@@ -69,7 +69,7 @@ declare global {
   interface Window {
     __store?: AppStore
     __dictationMeterE2E?: { publish(meter: DictationMeterState): void }
-    __paneManagers?: Map<string, PaneManagerLike>
+    __paneManagers?: Map<string, PaneManager>
     __REACT_DEVTOOLS_GLOBAL_HOOK__?: ReactCommitHook
     __tabsRenderedPerCommit?: number[]
   }

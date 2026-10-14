@@ -1,9 +1,9 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { environmentOperationActionLabel } from './plugin-environment-operation-copy'
 import { useRef, useState } from 'react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type { EnvironmentRecipeJournalOperation } from '../../../../shared/plugins/plugin-environment-recipe-journal'
 import { isEnvironmentRecipeOperationUnresolved } from '../../../../shared/plugins/plugin-environment-recipe-journal'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
@@ -29,13 +29,14 @@ export function PluginEnvironmentRecoveryDialog({
   onClose(): void
   onInspected(): void
 }): React.JSX.Element {
+  const { api: providerApi, hostLabel } = usePluginEnvironmentHost()
   const intent = useRef(current).current
   const [busy, setBusy] = useState(false)
   const query = useRef<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const check = async (): Promise<void> => {
     const configuration = intent.provider.configuration
-    const inspect = window.api.plugins.recoverEnvironmentProvider
+    const inspect = providerApi.recoverEnvironmentProvider
     if (query.current || !inspect || configuration.status !== 'ready') {
       return
     }
@@ -78,7 +79,7 @@ export function PluginEnvironmentRecoveryDialog({
       return
     }
     try {
-      const stopped = await window.api.plugins.cancelEnvironmentProvider?.({ operationId })
+      const stopped = await providerApi.cancelEnvironmentProvider?.({ operationId })
       if (!stopped) {
         setError(
           translate(
@@ -114,7 +115,7 @@ export function PluginEnvironmentRecoveryDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {intent.provider.name} · {getLocalExecutionHostLabel()}
+            {intent.provider.name} · {hostLabel}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

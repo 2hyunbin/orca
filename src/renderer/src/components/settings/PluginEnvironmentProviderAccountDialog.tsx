@@ -1,8 +1,9 @@
+import { useMountedRef } from '@/hooks/useMountedRef'
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useId, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import { translate } from '@/i18n/i18n'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
@@ -24,14 +25,16 @@ export function PluginEnvironmentProviderAccountDialog({
   onConfigured(providers: PluginEnvironmentProviderEntry[]): void
   onClose(): void
 }): React.JSX.Element {
+  const { api: providerApi, hostLabel } = usePluginEnvironmentHost()
   const provider = useRef(current).current
   const [contextId, setContextId] = useState('')
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  const mounted = useMountedRef()
   const id = useId()
   const save = async (): Promise<void> => {
-    const configure = window.api.plugins.configureEnvironmentProvider
+    const configure = providerApi.configureEnvironmentProvider
     if (busyRef.current || !contextId.trim() || !configure) {
       return
     }
@@ -40,9 +43,14 @@ export function PluginEnvironmentProviderAccountDialog({
     setError(null)
     try {
       const result = await configure({ ...provider.review, contextId: contextId.trim() })
-      onConfigured(result)
-      onClose()
+      if (mounted.current) {
+        onConfigured(result)
+        onClose()
+      }
     } catch {
+      if (!mounted.current) {
+        return
+      }
       setError(
         translate(
           'auto.components.settings.PluginEnvironmentProviderAccountDialog.saveError',
@@ -51,7 +59,9 @@ export function PluginEnvironmentProviderAccountDialog({
       )
     } finally {
       busyRef.current = false
-      setBusy(false)
+      if (mounted.current) {
+        setBusy(false)
+      }
     }
   }
   return (
@@ -72,7 +82,7 @@ export function PluginEnvironmentProviderAccountDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {provider.name} · {getLocalExecutionHostLabel()}
+            {provider.name} · {hostLabel}
           </DialogDescription>
         </DialogHeader>
         <form

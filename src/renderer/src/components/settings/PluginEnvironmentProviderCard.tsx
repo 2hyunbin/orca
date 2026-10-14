@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { PluginEnvironmentMigrationDialog } from './PluginEnvironmentMigrationDialog'
 import { PluginEnvironmentPreviousHistory } from './PluginEnvironmentPreviousHistory'
 import { usePluginEnvironmentInventory } from './use-plugin-environment-inventory'
@@ -7,7 +8,7 @@ import {
   isEnvironmentRecipeResourceInventoryUnconfirmed,
   environmentRecipeRecoveredResourceId
 } from '../../../../shared/plugins/plugin-environment-recipe-journal'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import type {
   PluginEnvironmentProviderEntry,
@@ -43,6 +44,7 @@ export function PluginEnvironmentProviderCard({
   provider: PluginEnvironmentProviderEntry
   onSetUp(): void
 }): React.JSX.Element {
+  const { api: providerApi } = usePluginEnvironmentHost()
   const { snapshot, loading, readError, load } = usePluginEnvironmentInventory(provider)
   const review = reviewedAccount(provider)
   const [error, setError] = useState<string | null>(null)
@@ -51,11 +53,21 @@ export function PluginEnvironmentProviderCard({
   const [migrating, setMigrating] = useState(false)
   const [intent, setIntent] = useState<PluginEnvironmentActionIntent | null>(null)
   const mounted = useMountedRef()
+  useEffect(
+    () => () => {
+      if (operation.current) {
+        void providerApi
+          .cancelEnvironmentProvider?.({ operationId: operation.current })
+          .catch(() => undefined)
+      }
+    },
+    [providerApi]
+  )
   const run = async (
     actionIntent: PluginEnvironmentActionIntent,
     parameters: Record<string, string> = {}
   ): Promise<void> => {
-    const execute = window.api.plugins.executeEnvironmentProvider
+    const execute = providerApi.executeEnvironmentProvider
     const account = reviewedAccount(actionIntent.provider)
     if (operation.current || !execute || !account) {
       return
@@ -242,7 +254,7 @@ export function PluginEnvironmentProviderCard({
               onClick={() => {
                 const operationId = running ?? pending?.operationId
                 if (operationId) {
-                  void window.api.plugins
+                  void providerApi
                     .cancelEnvironmentProvider?.({ operationId })
                     .then((stopped) => {
                       if (!stopped) {
@@ -343,7 +355,7 @@ export function PluginEnvironmentProviderCard({
       ) : null}
       {(provider.configuration.status === 'ready' ||
         provider.configuration.status === 'migration-required') &&
-      window.api.plugins.prepareEnvironmentProviderMigration ? (
+      providerApi.prepareEnvironmentProviderMigration ? (
         <Button
           variant="ghost"
           size="sm"
@@ -380,8 +392,7 @@ export function PluginEnvironmentProviderCard({
           onStop={() => {
             const operationId = operation.current
             return operationId
-              ? (window.api.plugins.cancelEnvironmentProvider?.({ operationId }) ??
-                  Promise.resolve(false))
+              ? (providerApi.cancelEnvironmentProvider?.({ operationId }) ?? Promise.resolve(false))
               : Promise.resolve(false)
           }}
         />

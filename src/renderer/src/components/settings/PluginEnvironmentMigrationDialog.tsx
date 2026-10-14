@@ -1,7 +1,7 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useId, useRef, useState } from 'react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type { PluginEnvironmentProviderMigrationPreview } from '../../../../shared/plugins/plugin-environment-provider-migration-api'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
@@ -26,6 +26,7 @@ export function PluginEnvironmentMigrationDialog({
   onClose(): void
   onConfigured(): void
 }): React.JSX.Element {
+  const { api: providerApi, hostLabel } = usePluginEnvironmentHost()
   const provider = useRef(current).current
   const [contextId, setContextId] = useState(
     'contextId' in provider.configuration ? provider.configuration.contextId : ''
@@ -37,7 +38,7 @@ export function PluginEnvironmentMigrationDialog({
   const [error, setError] = useState<string | null>(null)
   const id = useId()
   const prepare = async (): Promise<void> => {
-    const prepare = window.api.plugins.prepareEnvironmentProviderMigration
+    const prepare = providerApi.prepareEnvironmentProviderMigration
     if (pending.current || committing.current || !prepare || !contextId.trim()) {
       return
     }
@@ -62,7 +63,7 @@ export function PluginEnvironmentMigrationDialog({
     }
   }
   const commit = async (): Promise<void> => {
-    const commit = window.api.plugins.commitEnvironmentProviderMigration
+    const commit = providerApi.commitEnvironmentProviderMigration
     if (!preview || committing.current || pending.current || !commit) {
       return
     }
@@ -91,7 +92,7 @@ export function PluginEnvironmentMigrationDialog({
       return
     }
     try {
-      const stopped = await window.api.plugins.cancelEnvironmentProvider?.({ operationId: queryId })
+      const stopped = await providerApi.cancelEnvironmentProvider?.({ operationId: queryId })
       if (!stopped && pending.current === queryId) {
         setError(
           translate(
@@ -129,7 +130,7 @@ export function PluginEnvironmentMigrationDialog({
             )}
           </DialogTitle>
           <DialogDescription>
-            {provider.name} · {getLocalExecutionHostLabel()}
+            {provider.name} · {hostLabel}
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[50vh] space-y-4 overflow-y-auto scrollbar-sleek">

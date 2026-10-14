@@ -1,6 +1,6 @@
+import { usePluginEnvironmentHostLabel } from './plugin-environment-host-context'
 import { useId, useRef, useState } from 'react'
 import type { EnvironmentProviderSshPreview } from '../../../../shared/plugins/plugin-environment-provider-ssh-api'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { Button } from '../ui/button'
@@ -24,6 +24,7 @@ export function PluginEnvironmentConnectionDialog({
   onClose(): void
   onSave(identityFile?: string): Promise<void>
 }): React.JSX.Element {
+  const hostLabel = usePluginEnvironmentHostLabel()
   const preview = useRef(current).current
   const connection = preview.resource.connection
   const previous = preview.endpointUpdate?.previousConnection
@@ -94,7 +95,7 @@ export function PluginEnvironmentConnectionDialog({
                 )}
           </DialogTitle>
           <DialogDescription>
-            {preview.resource.name} · {getLocalExecutionHostLabel()}
+            {preview.resource.name} · {hostLabel}
             {previous ? (
               <span className="mt-2 block">
                 {translate(

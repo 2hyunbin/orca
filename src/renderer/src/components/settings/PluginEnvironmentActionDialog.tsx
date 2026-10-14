@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHostLabel } from './plugin-environment-host-context'
 import { useId, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
@@ -5,7 +6,6 @@ import type {
   EnvironmentRecipeAction,
   EnvironmentRecipeResource
 } from '../../../../shared/environment-recipe-protocol'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -36,6 +36,7 @@ export function PluginEnvironmentActionDialog({
   onRun(parameters: Record<string, string>): Promise<void>
   onStop(): Promise<boolean>
 }): React.JSX.Element {
+  const hostLabel = usePluginEnvironmentHostLabel()
   const intent = useRef(current).current
   const [values, setValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -113,7 +114,7 @@ export function PluginEnvironmentActionDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {intent.provider.name} · {getLocalExecutionHostLabel()}
+            {intent.provider.name} · {hostLabel}
             {intent.resource ? ` · ${intent.resource.name}` : ''}
           </DialogDescription>
         </DialogHeader>

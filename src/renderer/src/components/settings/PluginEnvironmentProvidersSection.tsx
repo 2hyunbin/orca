@@ -1,8 +1,8 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type { PluginEnvironmentProviderSavedEntry } from '../../../../shared/plugins/plugin-environment-provider-saved-history-api'
-import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
@@ -16,6 +16,7 @@ export function PluginEnvironmentProvidersSection({
 }: {
   onBrowsePlugins(): void
 }): React.JSX.Element {
+  const { api: providerApi, hostLabel } = usePluginEnvironmentHost()
   const [providers, setProviders] = useState<PluginEnvironmentProviderEntry[]>([])
   const [saved, setSaved] = useState<PluginEnvironmentProviderSavedEntry[]>([])
   const [savedError, setSavedError] = useState(false)
@@ -29,13 +30,13 @@ export function PluginEnvironmentProvidersSection({
     const attempt = ++generation.current
     setLoading(true)
     try {
-      const list = window.api.plugins.listEnvironmentProviders
+      const list = providerApi.listEnvironmentProviders
       if (!list) {
         throw new Error('Unsupported provider host')
       }
       const [active, historical] = await Promise.allSettled([
         list(),
-        window.api.plugins.listSavedEnvironmentProviders?.() ?? Promise.resolve([])
+        providerApi.listSavedEnvironmentProviders?.() ?? Promise.resolve([])
       ])
       if (mounted.current && generation.current === attempt) {
         setSaved(historical.status === 'fulfilled' ? historical.value : [])
@@ -62,10 +63,10 @@ export function PluginEnvironmentProvidersSection({
         setLoading(false)
       }
     }
-  }, [mounted])
+  }, [providerApi, mounted])
   useEffect(() => {
     void refresh()
-    const stop = window.api.plugins.onChanged((event) => {
+    const stop = providerApi.onChanged((event) => {
       if (event.contentPacksChanged || event.environmentProviderId) {
         void refresh()
       }
@@ -74,7 +75,11 @@ export function PluginEnvironmentProvidersSection({
       generation.current += 1
       stop()
     }
-  }, [refresh])
+  }, [providerApi, refresh])
+  const searchLabel = translate(
+    'auto.components.settings.PluginEnvironmentProvidersSection.search',
+    'Search environment providers'
+  )
   const normalized = query.trim().toLocaleLowerCase()
   const visible = providers.filter((provider) =>
     `${provider.name} ${provider.pluginKey} ${provider.description}`
@@ -112,7 +117,7 @@ export function PluginEnvironmentProvidersSection({
             {translate(
               'auto.components.settings.PluginEnvironmentProvidersSection.host',
               'Provider commands run on {{host}}.',
-              { host: getLocalExecutionHostLabel() }
+              { host: hostLabel }
             )}
           </p>
         </div>
@@ -138,18 +143,12 @@ export function PluginEnvironmentProvidersSection({
         </div>
       </div>
       {providers.length + inactiveSaved.length > 1 ? (
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label={translate(
-              'auto.components.settings.PluginEnvironmentProvidersSection.search',
-              'Search environment providers'
-            )}
-          />
-        </div>
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label={searchLabel}
+          placeholder={searchLabel}
+        />
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">

@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import {
   environmentOperationActionLabel,
   environmentOperationObservationLabel,
@@ -25,6 +26,7 @@ export function PluginEnvironmentOperationHistory({
   busy: boolean
   onInspected?(): void
 }): React.JSX.Element | null {
+  const { api: providerApi } = usePluginEnvironmentHost()
   const [intent, setIntent] = useState<PluginEnvironmentRecoveryIntent | null>(null)
   const [count, setCount] = useState(10)
   if (!operations.length) {
@@ -37,7 +39,7 @@ export function PluginEnvironmentOperationHistory({
     provider?.recoverySupported &&
     provider.configuration.status === 'ready' &&
     onInspected &&
-    window.api.plugins.recoverEnvironmentProvider
+    providerApi.recoverEnvironmentProvider
   return (
     <div className="space-y-3 border-t border-border pt-3">
       {unresolved.map((operation) => (

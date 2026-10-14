@@ -99,6 +99,19 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    id: 'plugins.selected-control-host-providers',
+    specs: ['tests/e2e/plugin-environment-selected-host.spec.ts'],
+    matches: (file) =>
+      isProductSource(file) &&
+      (file === 'src/main/ipc/runtime-environment-connection-lease.ts' ||
+        file.startsWith('src/main/ipc/plugin-environment-provider-sessions') ||
+        file.startsWith('src/shared/plugins/plugin-environment-provider-runtime-client') ||
+        file.startsWith('src/shared/plugins/plugin-environment-provider-session') ||
+        file.startsWith('src/renderer/src/runtime/plugin-environment-provider-') ||
+        file.startsWith('src/renderer/src/components/settings/PluginEnvironment') ||
+        file === 'src/renderer/src/components/settings/plugin-environment-host-context.ts')
+  },
+  {
     id: 'plugins.environment-ssh-connections',
     specs: [
       'tests/e2e/plugin-environment-ssh.spec.ts',

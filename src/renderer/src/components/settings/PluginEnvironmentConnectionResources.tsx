@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
@@ -20,6 +21,7 @@ export function PluginEnvironmentConnectionResources({
   provider: PluginEnvironmentProviderEntry
   onReviewing(operationId: string | null): void
 }): React.JSX.Element {
+  const { api: providerApi, isRemote } = usePluginEnvironmentHost()
   const [preview, setPreview] = useState<EnvironmentProviderSshPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pending = useRef<string | null>(null)
@@ -28,18 +30,18 @@ export function PluginEnvironmentConnectionResources({
   useEffect(
     () => () => {
       if (pending.current) {
-        void window.api.plugins.cancelEnvironmentProvider?.({ operationId: pending.current })
+        void providerApi.cancelEnvironmentProvider?.({ operationId: pending.current })
       }
       if (reviewTicket.current) {
-        void window.api.plugins
+        void providerApi
           .discardEnvironmentProviderSshReview?.({ ticketId: reviewTicket.current })
           .catch(() => {})
       }
     },
-    []
+    [providerApi]
   )
   const prepare = async (resource: EnvironmentRecipeResource): Promise<void> => {
-    const api = window.api.plugins.prepareEnvironmentProviderSsh
+    const api = providerApi.prepareEnvironmentProviderSsh
     if (pending.current || !api || provider.configuration.status !== 'ready') {
       return
     }
@@ -58,7 +60,7 @@ export function PluginEnvironmentConnectionResources({
         reviewTicket.current = result.ticketId
         setPreview(result)
       } else {
-        void window.api.plugins
+        void providerApi
           .discardEnvironmentProviderSshReview?.({ ticketId: result.ticketId })
           .catch(() => {})
       }
@@ -79,8 +81,8 @@ export function PluginEnvironmentConnectionResources({
     }
   }
   const save = async (identityFile?: string): Promise<void> => {
-    const api = window.api.plugins.saveEnvironmentProviderSsh
-    if (!preview || !api) {
+    const api = providerApi.saveEnvironmentProviderSsh
+    if (!preview || !api || isRemote) {
       throw new Error('Provider SSH support is unavailable')
     }
     const target = await api({
@@ -119,8 +121,7 @@ export function PluginEnvironmentConnectionResources({
     }
   }
   const supported = Boolean(
-    window.api.plugins.prepareEnvironmentProviderSsh &&
-    window.api.plugins.saveEnvironmentProviderSsh
+    !isRemote && providerApi.prepareEnvironmentProviderSsh && providerApi.saveEnvironmentProviderSsh
   )
   return (
     <>
@@ -139,7 +140,7 @@ export function PluginEnvironmentConnectionResources({
           onClose={() => {
             reviewTicket.current = null
             setPreview(null)
-            void window.api.plugins
+            void providerApi
               .discardEnvironmentProviderSshReview?.({ ticketId: preview.ticketId })
               .catch(() => {})
           }}

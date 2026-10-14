@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useRef, useState } from 'react'
 import type {
   PluginEnvironmentProviderSavedEntry,
@@ -15,6 +16,7 @@ export function PluginEnvironmentSavedProviderCard({
 }: {
   entry: PluginEnvironmentProviderSavedEntry
 }): React.JSX.Element {
+  const { api: providerApi } = usePluginEnvironmentHost()
   const [history, setHistory] = useState<PluginEnvironmentProviderSavedHistory | null>(null)
   const [offset, setOffset] = useState(0)
   const [count, setCount] = useState(25)
@@ -23,7 +25,7 @@ export function PluginEnvironmentSavedProviderCard({
   const pending = useRef(false)
   const mounted = useMountedRef()
   const load = async (next: number): Promise<void> => {
-    const read = window.api.plugins.savedEnvironmentProviderSnapshot
+    const read = providerApi.savedEnvironmentProviderSnapshot
     if (pending.current || !read) {
       return
     }

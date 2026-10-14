@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type { EnvironmentRecipeJournal } from '../../../../shared/plugins/plugin-environment-recipe-journal'
@@ -5,6 +6,7 @@ import { translate } from '@/i18n/i18n'
 import { useMountedRef } from '@/hooks/useMountedRef'
 
 export function usePluginEnvironmentInventory(provider: PluginEnvironmentProviderEntry) {
+  const { api: providerApi } = usePluginEnvironmentHost()
   const [snapshot, setSnapshot] = useState<EnvironmentRecipeJournal | null>(null)
   const [loading, setLoading] = useState(
     provider.configuration.status === 'ready' ||
@@ -19,7 +21,7 @@ export function usePluginEnvironmentInventory(provider: PluginEnvironmentProvide
       return
     }
     const attempt = ++readGeneration.current
-    const read = window.api.plugins.environmentProviderSnapshot
+    const read = providerApi.environmentProviderSnapshot
     if (!read) {
       return
     }
@@ -44,10 +46,10 @@ export function usePluginEnvironmentInventory(provider: PluginEnvironmentProvide
         setLoading(false)
       }
     }
-  }, [mounted, provider.configuration, provider.review])
+  }, [providerApi, mounted, provider.configuration, provider.review])
   useEffect(() => {
     void load()
-    const stop = window.api.plugins.onChanged((event) => {
+    const stop = providerApi.onChanged((event) => {
       if (event.environmentProviderId === provider.providerId) {
         void load()
       }
@@ -56,6 +58,6 @@ export function usePluginEnvironmentInventory(provider: PluginEnvironmentProvide
       readGeneration.current += 1
       stop()
     }
-  }, [load, provider.providerId])
+  }, [providerApi, load, provider.providerId])
   return { snapshot, loading, readError, load }
 }

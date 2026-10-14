@@ -1,3 +1,4 @@
+import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { useRef, useState } from 'react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type { PluginEnvironmentProviderHistory } from '../../../../shared/plugins/plugin-environment-provider-history-api'
@@ -17,6 +18,7 @@ export function PluginEnvironmentPreviousHistory({
   provider: PluginEnvironmentProviderEntry
   count: number
 }): React.JSX.Element | null {
+  const { api: providerApi } = usePluginEnvironmentHost()
   const [history, setHistory] = useState<PluginEnvironmentProviderHistory>(null)
   const [offset, setOffset] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -24,7 +26,7 @@ export function PluginEnvironmentPreviousHistory({
   const mounted = useMountedRef()
   const [error, setError] = useState(false)
   const load = async (page: number): Promise<void> => {
-    const read = window.api.plugins.previousEnvironmentProviderSnapshot
+    const read = providerApi.previousEnvironmentProviderSnapshot
     const configured = provider.configuration
     if (pending.current || !read || !('contextId' in configured)) {
       return
