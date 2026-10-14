@@ -65,6 +65,9 @@ vi.mock('@/components/settings/TerminalSetupScriptSection', () => ({
 vi.mock('@/components/settings/TerminalWindowsShellSection', () => ({
   TerminalWindowsShellSection: () => null
 }))
+vi.mock('@/components/settings/TerminalWindowsAdministratorSection', () => ({
+  TerminalWindowsAdministratorSection: () => null
+}))
 vi.mock('@/components/settings/SearchableSetting', () => ({
   SearchableSetting: ({ children }: { children: ReactNode }) => <>{children}</>
 }))
