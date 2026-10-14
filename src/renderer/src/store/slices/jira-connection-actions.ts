@@ -42,6 +42,7 @@ function hasJiraStatusChanged(
     previous.connected !== next.connected ||
     previous.credentialError !== next.credentialError ||
     previous.credentialProtection !== next.credentialProtection ||
+    previous.supportsScopedTokens !== next.supportsScopedTokens ||
     previous.activeSiteId !== next.activeSiteId ||
     !shallow(previous.viewer, next.viewer) ||
     getSelectedJiraSiteId(previous) !== getSelectedJiraSiteId(next) ||

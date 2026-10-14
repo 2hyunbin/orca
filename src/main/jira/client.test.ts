@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import type * as Os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadJiraClientModule, type SafeStorageMockOptions } from './client-test-harness'
 
 const OLD_FETCH = globalThis.fetch
 const { closeAllConnectionsMock, netFetchMock, resolveProxyMock, setProxyMock } = vi.hoisted(
@@ -13,11 +13,6 @@ const { closeAllConnectionsMock, netFetchMock, resolveProxyMock, setProxyMock } 
     setProxyMock: vi.fn()
   })
 )
-
-type SafeStorageMockOptions = {
-  encryptionAvailable?: boolean
-  decryptString?: (value: Buffer) => string
-}
 
 let tempHome = ''
 let fetchMock: ReturnType<typeof vi.fn>
@@ -89,46 +84,12 @@ function writeMultiSiteFiles(
   }
 }
 
-async function loadClientModule(options: SafeStorageMockOptions = {}) {
-  vi.resetModules()
-  vi.doMock('electron', () => ({
-    net: { fetch: netFetchMock },
-    session: {
-      defaultSession: {
-        closeAllConnections: closeAllConnectionsMock,
-        resolveProxy: resolveProxyMock,
-        setProxy: setProxyMock
-      }
-    }
-  }))
-  // Why here and not in beforeEach: vi.resetModules() above gives the http-client module
-  // a fresh singleton, so the port must be installed on that instance. The electron net
-  // mock alone is inert now that Jira fetches through the port.
-  const { setMainHttpClient } = await import('../network/http-client')
-  setMainHttpClient({
-    fetch: (url, init) => netFetchMock(url, init),
-    proxySession: () => ({ resolveProxy: resolveProxyMock, setProxy: setProxyMock }) as never
-  })
-  const { setSecretStore } = await import('../../shared/secret-store')
-  setSecretStore({
-    isEncryptionAvailable: () => options.encryptionAvailable ?? false,
-    encryptString: (value) => Buffer.from(value),
-    decryptString: options.decryptString ?? ((value) => value.toString('utf-8')),
-    describeProtectionGap: () => null
-  })
-  vi.doMock('os', async () => {
-    const actual = await vi.importActual<typeof Os>('os')
-    return { ...actual, homedir: () => tempHome }
-  })
-
-  // One import call per reset so the split modules share a single graph (and
-  // thus one copy of the request queue / credential caches) per test.
-  const [client, queue, api] = await Promise.all([
-    import('./client'),
-    import('./request-queue'),
-    import('./authenticated-request')
-  ])
-  return { ...client, ...queue, ...api }
+function loadClientModule(options: SafeStorageMockOptions = {}) {
+  return loadJiraClientModule(
+    { closeAllConnectionsMock, netFetchMock, resolveProxyMock, setProxyMock },
+    tempHome,
+    options
+  )
 }
 
 beforeEach(() => {

@@ -19929,5 +19929,9 @@
     "browser": "Browser",
     "editor": "Editor",
     "terminal": "Terminal"
-  }
+  },
+  "jira.connect.scopedTokenGuide": "Scoped tokens need read:jira-work, write:jira-work, and read:jira-user. Leave email empty to use Bearer authentication.",
+  "jira.connect.oldHostGuide": "This remote runtime requires an email and an unscoped API token. Update the remote runtime to use scoped tokens.",
+  "jira.connect.scopedDescription": "Use a Jira Cloud site URL and API token to browse issues. Scoped tokens can omit the email.",
+  "jira.connect.optionalEmail": "Atlassian email (optional for scoped tokens)"
 }

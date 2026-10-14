@@ -11,6 +11,8 @@ export type JiraSite = {
   displayName: string
   accountId: string
   authType?: JiraAuthType
+  // REST gateway for scoped Cloud tokens; siteUrl remains the browse-link origin.
+  apiBaseUrl?: string
 }
 
 export type JiraViewer = {
@@ -34,6 +36,8 @@ export type JiraConnectionStatus = {
   // 'plaintext' when any stored token is unsealed, so Settings can warn. Optional:
   // an older remote host omits it, and absent must read as "unknown", not "sealed".
   credentialProtection?: SecretAtRestProtection | null
+  // Absent on older remote hosts, which require a Cloud email and unscoped token.
+  supportsScopedTokens?: boolean
 }
 
 export type JiraProject = {
@@ -140,8 +144,7 @@ export type JiraIssueFilter = 'assigned' | 'reported' | 'all' | 'done'
 
 export type JiraConnectArgs = {
   siteUrl: string
-  // Ignored for 'server' auth: self-hosted PATs authenticate via Bearer
-  // header alone, so the email field may be empty.
+  // Empty for Bearer authentication: self-hosted PAT or scoped Cloud token.
   email: string
   apiToken: string
   authType?: JiraAuthType
