@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   getPathMock,
+  ipcHandleMock,
   listEnvironmentsMock,
   callRuntimeEnvironmentMock,
   registerCliHandlersMock,
@@ -72,6 +73,7 @@ const {
   registerEmulatorVideoStreamHandlersMock
 } = vi.hoisted(() => ({
   getPathMock: vi.fn(() => '/test/user-data'),
+  ipcHandleMock: vi.fn(),
   listEnvironmentsMock: vi.fn(() => []),
   callRuntimeEnvironmentMock: vi.fn(),
   registerCliHandlersMock: vi.fn(),
@@ -143,6 +145,7 @@ const {
 }))
 
 vi.mock('electron', () => ({
+  ipcMain: { handle: ipcHandleMock },
   app: {
     getPath: getPathMock,
     once: vi.fn()
@@ -544,6 +547,9 @@ describe('registerCoreHandlers', () => {
 
     const aiVaultOptions = registerAiVaultHandlersMock.mock.calls[0]?.[0]
     expect(aiVaultOptions).toBeDefined()
+    expect(ipcHandleMock).toHaveBeenCalledWith('aiVault:resolveSession', expect.any(Function))
+    expect(ipcHandleMock).toHaveBeenCalledWith('aiVault:cancelResolveSession', expect.any(Function))
+    expect(aiVaultOptions.selectedRequestCancellations).toBeDefined()
     // Registration happens once per module: later tests reach these handlers through here.
     registeredAiVaultOptions = aiVaultOptions
     registeredRuntime = runtime
@@ -687,12 +693,12 @@ describe('registerCoreHandlers', () => {
     await expect(
       aiVaultOptions.prepareRuntimeSessionResume('env-123', prepareArgs)
     ).resolves.toEqual({ useRealCodexHome: true })
-    expect(callRuntimeEnvironmentMock).toHaveBeenLastCalledWith(
+    expect(callRuntimeEnvironmentMock.mock.lastCall?.slice(0, 4)).toEqual([
       '/test/user-data',
       'env-123',
       'aiVault.prepareSessionResume',
       prepareArgs
-    )
+    ])
   })
 
   // Session history and terminal resume are not chats: the refusal chats get leaves them no host

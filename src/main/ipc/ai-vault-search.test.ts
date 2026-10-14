@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { clearSearch, handlers, sshSearch, sshHostInfos, runtimeSearch } = vi.hoisted(() => ({
-  clearSearch: vi.fn(),
-  handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
-  sshSearch: vi.fn(),
-  sshHostInfos: vi.fn<() => { targetId: string }[]>(() => []),
-  runtimeSearch: vi.fn()
-}))
+const { clearSearch, spawnService, handlers, sshSearch, sshHostInfos, runtimeSearch } = vi.hoisted(
+  () => ({
+    clearSearch: vi.fn(),
+    spawnService: vi.fn(() => {
+      throw new Error('Search boundary must not spawn a selected reader.')
+    }),
+    handlers: new Map<string, (...args: unknown[]) => Promise<unknown>>(),
+    sshSearch: vi.fn(),
+    sshHostInfos: vi.fn<() => { targetId: string }[]>(() => []),
+    runtimeSearch: vi.fn()
+  })
+)
 vi.mock('../ai-vault/session-scanner-service-spawn', () => ({
-  clearSessionSearchInService: clearSearch
+  clearSessionSearchInService: clearSearch,
+  spawnAiVaultServiceProcess: spawnService
 }))
 vi.mock('electron', () => ({
   ipcMain: {
@@ -47,6 +53,7 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
+  expect(spawnService).not.toHaveBeenCalled()
   setSessionSearchService(null)
   setStructuredAgentSessionHost(null)
 })

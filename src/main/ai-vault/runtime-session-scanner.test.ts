@@ -158,12 +158,13 @@ describe('runtime AI Vault session scanner', () => {
     await expect(prepareRuntimeAiVaultSessionResume('/user-data', 'env-1', args)).resolves.toEqual({
       useRealCodexHome: true
     })
-    expect(mocks.callRuntimeEnvironment).toHaveBeenCalledWith(
+    expect(mocks.callRuntimeEnvironment).toHaveBeenCalledOnce()
+    expect(mocks.callRuntimeEnvironment.mock.lastCall?.slice(0, 4)).toEqual([
       '/user-data',
       'env-1',
       'aiVault.prepareSessionResume',
       args
-    )
+    ])
   })
 
   it('keeps a repinned account home instead of stripping it', async () => {

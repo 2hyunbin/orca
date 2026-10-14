@@ -10,19 +10,27 @@ import {
   RUNTIME_CAPABILITIES
 } from '../../../../shared/protocol-version'
 
-const { scanAiVaultSessionsInService, resolveAiVaultSessionTitlesInService } = vi.hoisted(() => ({
-  scanAiVaultSessionsInService:
-    vi.fn<
-      (options: AiVaultServiceScanOptions, signal?: AbortSignal) => Promise<AiVaultListResult>
-    >(),
-  resolveAiVaultSessionTitlesInService: vi.fn()
-}))
+const { scanAiVaultSessionsInService, resolveAiVaultSessionTitlesInService, spawnService } =
+  vi.hoisted(() => ({
+    scanAiVaultSessionsInService:
+      vi.fn<
+        (options: AiVaultServiceScanOptions, signal?: AbortSignal) => Promise<AiVaultListResult>
+      >(),
+    resolveAiVaultSessionTitlesInService: vi.fn(),
+    spawnService: vi.fn(() => {
+      throw new Error('RPC boundary must not spawn a scanner child.')
+    })
+  }))
 
-vi.mock('../../../ai-vault/session-scanner-service-spawn', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
+vi.mock('../../../ai-vault/session-scanner-service-spawn', () => ({
+  spawnAiVaultServiceProcess: spawnService,
+  resetAiVaultScannerServiceForTests: vi.fn(),
+  clearAiVaultServiceRestartCircuit: vi.fn(),
   scanAiVaultSessionsInService,
   resolveAiVaultSessionTitlesInService
 }))
+
+afterEach(() => expect(spawnService).not.toHaveBeenCalled())
 
 import {
   AI_VAULT_METHODS,
