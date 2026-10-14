@@ -267,8 +267,9 @@ describe("useMobileStructuredAgentSession and the host's Stopping", () => {
         queuedMessages: false,
         queuedCommands: false,
         quietRepeatedStop: false,
-        conversationStop: false,
-        statusFeed
+        statusFeed,
+        sendOptions: false,
+        conversationStop: false
       },
       agent: 'codex',
       onSendError
