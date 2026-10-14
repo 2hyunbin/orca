@@ -120,8 +120,9 @@ export async function provisionWorktreeTerminals(
   let setupTerminalHandle: string | null = null
   let shellSkippedForSetup = false
   try {
-    const settings = host.getSettings()
-    const setupLaunchMode = settings.setupScriptLaunchMode ?? 'new-tab'
+    const setupLaunchMode = args.setup
+      ? (host.getSettings().setupScriptLaunchMode ?? 'new-tab')
+      : 'new-tab'
     // A cleared creation choice leaves Setup as the only surface; splits still need a shell.
     const setupOnly =
       args.setup !== undefined && setupLaunchMode === 'new-tab' && args.setupOnly === true
