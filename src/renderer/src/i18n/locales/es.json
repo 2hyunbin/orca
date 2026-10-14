@@ -19908,5 +19908,36 @@
     "browser": "Navegador",
     "editor": "Editor",
     "terminal": "Terminal"
+  },
+  "updates": {
+    "installBlock": {
+      "instancesLabel": "Instancias que usan Orca",
+      "browserLabel": "Navegador en segundo plano",
+      "serverLabel": "Servidor en segundo plano",
+      "windowLabel": "Otra ventana de Orca",
+      "instanceLabel": "Otra instancia de Orca",
+      "processId": "PID {{pid}}",
+      "preparingTitle": "Preparando tu actualización",
+      "preparingSummary": "Comprobando las instancias de Orca en ejecución antes de reiniciar.",
+      "later": "Más tarde",
+      "retainedDownload": "Orca sigue abierto. No necesitas descargar la actualización de nuevo.",
+      "retryInstallation": "Reintentar instalación",
+      "waitingLabel": "Actualización en espera",
+      "busyTitle": "Otra instancia de Orca se está actualizando",
+      "busySummary": "Otra instancia de Orca ya está instalando una actualización.",
+      "busyGuidance": "Espera un momento y vuelve a intentarlo. Tu actualización descargada está lista.",
+      "unresponsiveTitle": "Esperando a los servidores en segundo plano",
+      "unresponsiveSummary": "Orca no pudo terminar de pausar sus servidores en segundo plano para la actualización.",
+      "unresponsiveGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "readyTitle": "Tu actualización está lista",
+      "serverSummary": "Un servidor de Orca en segundo plano sigue usando esta aplicación.",
+      "instanceSummary": "Otra instancia de Orca sigue usando esta aplicación.",
+      "serverGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "mixedGuidance": "Cierra las demás ventanas de Orca y detén el servidor desde el terminal o el servicio que lo inició. Los dispositivos conectados se desconectarán. Después, vuelve a intentarlo.",
+      "instanceGuidance": "Cierra las demás instancias de Orca y vuelve a intentarlo. Tu actualización descargada se mantendrá lista.",
+      "waitingAriaLabel": "Actualización en espera de otras instancias de Orca. Haz clic para expandir.",
+      "preparingLabel": "Preparando actualización",
+      "preparingAriaLabel": "Preparando actualización. Haz clic para expandir."
+    }
   }
 }
