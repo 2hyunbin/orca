@@ -336,7 +336,6 @@ function createDeps(overrides: Record<string, unknown> = {}) {
       mockStoreState.ptyIdsByTabId = { ...byTab, [tabId]: next }
     }),
     markTerminalBell: vi.fn(),
-    readTerminalPaneOnInput: vi.fn(),
     dispatchNotification: vi.fn(),
     onShowSessionRestoredBanner: vi.fn(),
     setCacheTimerStartedAt: vi.fn(),

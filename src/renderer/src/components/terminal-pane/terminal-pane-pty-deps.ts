@@ -67,7 +67,6 @@ export function createTerminalPanePtyDeps(args: {
     clearRuntimePaneTitle: deps.clearRuntimePaneTitle,
     updateTabPtyId: deps.updateTabPtyId,
     markTerminalBell: deps.markTerminalBell,
-    readTerminalPaneOnInput: deps.readTerminalPaneOnInput,
     onShowSessionRestoredBanner: deps.onShowSessionRestoredBanner,
     dispatchNotification: deps.dispatchNotification,
     setCacheTimerStartedAt: deps.setCacheTimerStartedAt,

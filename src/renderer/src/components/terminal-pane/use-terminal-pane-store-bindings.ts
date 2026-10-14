@@ -11,7 +11,6 @@ export function useTerminalPaneStoreBindings(controller: TerminalPaneChatControl
   const {
     clearRuntimePaneTitle,
     clearTabPtyId,
-    readTerminalPaneOnInput,
     consumeTabIssueCommandSplit,
     consumeTabSetupSplit,
     consumeTabStartupCommand,
@@ -56,7 +55,6 @@ export function useTerminalPaneStoreBindings(controller: TerminalPaneChatControl
     updateTabPtyId,
     clearTabPtyId,
     markTerminalBell,
-    readTerminalPaneOnInput,
     openSpacePage,
     refreshWorkspaceSpace,
     settings,

@@ -125,7 +125,10 @@ describe('useUnreadDockBadge', () => {
     act(() =>
       useAppStore
         .getState()
-        .readTerminalPaneOnInput({ worktreeId: worktree.id, tabId: '', paneKey: null })
+        .readOnScreenAttention(
+          { workspaceIds: [worktree.id], targets: [{ worktreeId: worktree.id, tabId: tab.id }] },
+          { screenArrived: true }
+        )
     )
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(4)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
@@ -174,7 +177,10 @@ describe('useUnreadDockBadge', () => {
     act(() =>
       useAppStore
         .getState()
-        .readTerminalPaneOnInput({ worktreeId: 'repo::worktree-0', tabId: '', paneKey: null })
+        .readOnScreenAttention(
+          { workspaceIds: ['repo::worktree-0'], targets: [] },
+          { screenArrived: true }
+        )
     )
     expect(renders).toBe(rendersAfterMount + 2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)

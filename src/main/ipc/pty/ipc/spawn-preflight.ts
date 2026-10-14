@@ -185,8 +185,7 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
         })
       : {
           shellOverride:
-            args.shellOverride ??
-            (ctx.deps.getSettings?.()?.terminalDefaultShell?.trim() || undefined),
+            args.shellOverride ?? (ctx.deps.getSettings?.()?.terminalDefaultShell || undefined),
           terminalWindowsWslDistro: null
         })
   const initialShellOverride = ctx.terminalRuntimeOptions.shellOverride

@@ -28,8 +28,17 @@ import {
 import {
   expectedHostProvider,
   HOST_LAUNCH_CASES,
+  HOST_LEAF_ID,
+  HOST_TAB_ID,
   type HostLaunchCase
 } from './pty-launch-parity-host.test-cases'
+import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { ptySizes } from './pty/delivery/visibility-state'
+import {
+  makePaneSpawnReservationKey,
+  paneSpawnReservationsByOwnerKey
+} from './pty/pane/spawn-reservation'
+import { makePaneKey } from '../../shared/stable-pane-id'
 import { CALLER_LAUNCH_CASES, OPENCODE_MODEL } from './pty-launch-parity-caller.test-cases'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
 import { DESKTOP_RPC_CALLER } from '../runtime/rpc/rpc-caller-identity'
@@ -298,6 +307,63 @@ describe('launch facts outside the tables', () => {
     await expect(launch).rejects.toThrow('spawn boom')
     expect(trackMock.mock.calls.filter(([event]) => event === 'agent_error')).toEqual(c.calls)
   })
+
+  // C5a (one execute) keeps this on both lanes; C5a-2 flips only the host's agent_error.
+  const FAILED_START_AGENT_ERROR: Record<'window' | 'host', unknown[]> = {
+    window: [['agent_error', { agent_kind: 'claude-code', error_class: 'binary_not_found' }]],
+    host: []
+  }
+  it.each(['window', 'host'] as const)(
+    '%s lane: a start the provider fails undoes everything it claimed',
+    async (lane) => {
+      setMainPlatform('darwin')
+      classifyErrorMock.mockReturnValue({ error_class: 'binary_not_found' })
+      const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
+      let hiddenWhileSpawning = false
+      lanes.provider.mockImplementationOnce(async (options: { sessionId?: string }) => {
+        hiddenWhileSpawning = isHiddenRendererPty(String(options.sessionId))
+        throw new Error('spawn boom')
+      })
+      const gateReleased = vi.fn()
+      const acquireGate = lanes.runtime.acquireWorktreeTerminalSpawn.bind(lanes.runtime)
+      vi.spyOn(lanes.runtime, 'acquireWorktreeTerminalSpawn').mockImplementation(async (...a) => {
+        const release = await acquireGate(...a)
+        return () => {
+          gateReleased()
+          release()
+        }
+      })
+      const cancelRegistration = vi.spyOn(lanes.runtime, 'cancelPendingPtyRegistration')
+      const worktreeId = launchWorkspaceId(POSIX_REPO)
+      const launch =
+        lane === 'host'
+          ? runHostCall(lanes, HOST_LAUNCH_CASES[0]!)
+          : lanes.spawnWindow({
+              cols: 80,
+              rows: 24,
+              cwd: POSIX_PATH,
+              worktreeId,
+              tabId: HOST_TAB_ID,
+              leafId: HOST_LEAF_ID,
+              command: 'claude',
+              initiallyHidden: true,
+              telemetry: { agent_kind: 'claude-code', launch_source: 'task_page' }
+            })
+
+      await expect(launch).rejects.toThrow('spawn boom')
+      const sessionId = String(recordOf(lanes.provider.mock.calls.at(-1)?.[0]).sessionId)
+      expect(trackMock.mock.calls).toEqual(FAILED_START_AGENT_ERROR[lane])
+      expect(hiddenWhileSpawning).toBe(true)
+      expect(isHiddenRendererPty(sessionId)).toBe(false)
+      expect(cancelRegistration.mock.calls).toEqual([[sessionId, undefined]])
+      expect(gateReleased).toHaveBeenCalledOnce()
+      expect(ptySizes.has(sessionId)).toBe(false)
+      const paneKey = makePaneKey(HOST_TAB_ID, HOST_LEAF_ID)
+      expect(
+        paneSpawnReservationsByOwnerKey.has(makePaneSpawnReservationKey(worktreeId, null, paneKey)!)
+      ).toBe(false)
+    }
+  )
 
   // C5e (presentation merge): a worker asks the window to reveal its titled tab without activating it.
   it('row 10: an orchestration worker requests a titled, inactive reveal', async () => {
