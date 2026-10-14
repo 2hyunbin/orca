@@ -27,6 +27,11 @@ import type {
   MobileQueuePause
 } from './mobile-structured-queued-message-feed'
 import type { MobileStructuredAgentMutate } from './use-mobile-structured-agent-mutation'
+import type { RpcClient } from '../transport/rpc-client'
+import {
+  useMobileStructuredQueuedEdit,
+  type MobileQueuedMessageInlineEditor
+} from './use-mobile-structured-queued-edit'
 
 /** `onCopied` runs once the card's text is in the composer, before its Delete leaves. */
 export type MobileQueuedMessageEdit = (messageId: string, onCopied?: () => void) => Promise<boolean>
@@ -38,8 +43,9 @@ export type MobileStructuredQueuedMessageControls = {
   send: (messageId: string) => Promise<boolean>
   /** Discard the draft. */
   delete: (messageId: string) => Promise<boolean>
-  /** Copy the card's shown text into the composer, then delete the card. */
-  edit: MobileQueuedMessageEdit
+  /** Edit in the card; an older host falls back to the composer copy. */
+  edit?: MobileQueuedMessageEdit
+  editor?: MobileQueuedMessageInlineEditor
   /** The whole queue's pause, shown above the cards; null when it sends on its own. */
   pause: MobileQueuePause
   /** Lift the queue's pause, so the waiting cards drain. */
@@ -50,6 +56,12 @@ export type MobileStructuredQueuedMessageControls = {
 
 export function useMobileStructuredQueuedMessageControls(args: {
   sessionKey: string
+  sessionId: string | null
+  client: RpcClient | null
+  enabled: boolean
+  editCapable: boolean | null
+  promptOpen: boolean
+  captureComposerTextAppender?: () => ((text: string) => boolean) | undefined
   agentName?: string
   journalItems?: readonly AgentJournalRenderItem[]
   queuedMessages: MobileQueuedMessageFeed
@@ -87,6 +99,13 @@ export function useMobileStructuredQueuedMessageControls(args: {
       }),
     [agentWorking, args.agentName, args.journalItems, queuedMessages, submissions]
   )
+  const { begin: beginInlineEdit, editor } = useMobileStructuredQueuedEdit({
+    ...args,
+    enabled: args.enabled && args.editCapable === true,
+    messages: queuedMessages,
+    cards,
+    captureComposerTextAppender: () => args.captureComposerTextAppender?.() ?? appendComposerText
+  })
   const resolved = useCallback(
     (accepted: boolean): boolean => {
       if (accepted) {
@@ -139,6 +158,9 @@ export function useMobileStructuredQueuedMessageControls(args: {
   )
   const edit = useCallback<MobileQueuedMessageEdit>(
     async (messageId, onCopied) => {
+      if (args.editCapable) {
+        return beginInlineEdit(messageId)
+      }
       const card = cards.find((candidate) => candidate.messageId === messageId)
       // Copy-first: the text is in the composer before any RPC can fail, so no
       // Delete outcome — including a lost answer — can lose it. A failed Delete
@@ -152,7 +174,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
       onCopied?.()
       return deleteQueued(messageId, true)
     },
-    [appendComposerText, cards, deleteQueued]
+    [appendComposerText, args.editCapable, beginInlineEdit, cards, deleteQueued]
   )
   // Through the same mutation seam as Delete: a refusal reaches the send-error banner.
   const resume = useCallback(
@@ -170,5 +192,14 @@ export function useMobileStructuredQueuedMessageControls(args: {
   )
   // The header shows only while Resume would send something, as on desktop.
   const pause = mobileQueueHasResumableCard(cards) ? queuePause : null
-  return { cards, send, delete: deleteDraft, edit, pause, resume, sessionKey }
+  return {
+    cards,
+    send,
+    delete: deleteDraft,
+    edit: args.editCapable === null ? undefined : edit,
+    editor,
+    pause,
+    resume,
+    sessionKey
+  }
 }

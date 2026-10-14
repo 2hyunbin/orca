@@ -19,6 +19,8 @@ import {
 } from './mobile-structured-queued-message-cards'
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
+import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
+import { MobileNativeChatQueuedMessageEditor } from './MobileNativeChatQueuedMessageEditor'
 
 /** The Resume row's in-flight key beside the cards' message ids, which never contain NUL. */
 const RESUME_KEY = '\u0000resume'
@@ -29,8 +31,9 @@ export type MobileNativeChatQueuedMessagesProps = {
    *  (its send failed), or a returned one. */
   onSend?: (messageId: string) => Promise<boolean>
   onDelete?: (messageId: string) => Promise<boolean>
-  /** Copy the card's text into the composer, then delete the card. */
+  /** Opens an editor in the card; older hosts copy its text to the composer. */
   onEdit?: MobileQueuedMessageEdit
+  editor?: MobileQueuedMessageInlineEditor
   /** The whole queue's pause: the box's first row, with Resume. */
   pause?: MobileQueuePause
   onResume?: () => Promise<boolean>
@@ -45,6 +48,7 @@ export function MobileNativeChatQueuedMessages({
   onSend,
   onDelete,
   onEdit,
+  editor,
   pause,
   onResume,
   steerHeld = false
@@ -106,7 +110,11 @@ export function MobileNativeChatQueuedMessages({
           </View>
         ) : null}
         {cards.map((card, index) => {
+          if (editor?.messageId === card.messageId) {
+            return <MobileNativeChatQueuedMessageEditor key={card.messageId} editor={editor} />
+          }
           const busy = busyIds.has(card.messageId)
+          const editBlocked = busy || editor !== undefined || !onEdit
           const returned = card.state === 'returned'
           // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
           // own send failed, or a returned one, is sent again.
@@ -185,14 +193,14 @@ export function MobileNativeChatQueuedMessages({
               {card.command ? null : (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: busy }}
+                  accessibilityState={{ disabled: editBlocked }}
                   accessibilityLabel="More actions"
                   style={({ pressed }) => [
                     styles.iconAction,
                     pressed && styles.pressed,
-                    busy && styles.disabled
+                    editBlocked && styles.disabled
                   ]}
-                  disabled={busy}
+                  disabled={editBlocked}
                   onPress={() => setMenuFor(card.messageId)}
                 >
                   <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />

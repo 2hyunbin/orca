@@ -63,6 +63,7 @@ export function useMobileNativeChatSessionLane({
     sourceIdentity,
     hostSupport,
     appendComposerText,
+    captureComposerTextAppender: () => appendComposerTextRef.current,
     enabled,
     // Holds are connection-scoped; dropping this on transport loss lets the hook
     // reacquire the provider without clearing the cached transcript.

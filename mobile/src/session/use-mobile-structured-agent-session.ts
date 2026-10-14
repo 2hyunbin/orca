@@ -55,6 +55,8 @@ export function useMobileStructuredAgentSession(args: {
   agent: string | null
   /** The active pane's live composer; Edit copies a card's text through it. */
   appendComposerText?: (text: string) => boolean
+  /** Captures the originating draft before a later tab switch retargets the live composer. */
+  captureComposerTextAppender?: () => ((text: string) => boolean) | undefined
   onSendError: MobileNativeChatSendErrorReporter
   /** Called on any accepted queued-card action; retires the route's failure banner. */
   onActionResolved?: () => void
@@ -238,6 +240,12 @@ export function useMobileStructuredAgentSession(args: {
     queuePause,
     submissions: state.submissions,
     agentWorking: isStructuredAgentSessionMainAgentWorking(turnId, state.submissions, state.fence),
+    client,
+    sessionId,
+    editCapable: hostSupport === null ? null : hostSupport.queuedMessageEdit === true,
+    enabled: enabled && connected,
+    promptOpen: commandRefusalCauses.prompt,
+    captureComposerTextAppender: args.captureComposerTextAppender,
     mutate,
     appendComposerText,
     onSendError,
