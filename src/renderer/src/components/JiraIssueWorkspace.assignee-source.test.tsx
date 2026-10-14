@@ -43,7 +43,7 @@ vi.mock('@/store', () => ({
     select({
       settings: null,
       patchJiraIssue: store.patchIssue,
-      jiraStatus: null,
+      jiraStatus: { connected: false, viewer: null },
       jiraStatusContextKey: null,
       jiraConnectionRevisions: {},
       readJiraStatus: store.readStatus

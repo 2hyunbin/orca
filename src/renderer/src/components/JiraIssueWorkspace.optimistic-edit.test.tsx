@@ -41,7 +41,7 @@ vi.mock('@/store', () => ({
   useAppStore: (selector: (state: Partial<AppState>) => unknown) =>
     selector({
       settings: currentSettings,
-      jiraStatus: null,
+      jiraStatus: { connected: false, viewer: null },
       jiraStatusContextKey: null,
       jiraConnectionRevisions: {},
       readJiraStatus: store.readJiraStatus,
