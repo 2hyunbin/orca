@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { NESTED_WORKER_MAX_DEPTH_DEFAULT } from '../../../../shared/nested-worker-depth'
 import {
   mintStructuredWorkerHandle,
   mintStructuredWorkerPaneKey,
@@ -38,7 +37,7 @@ describe('nested worker depth', () => {
     expect(coordinatorDispatchesWorker().depth).toBe(1)
   })
 
-  it('refuses a worker dispatching a sub-worker when the cap is 1', () => {
+  it('refuses a worker dispatching a sub-worker at the default cap', () => {
     coordinatorDispatchesWorker()
     const nested = db.createTask({ runId: 'run_legacy_local', spec: 'nested task' })
     expect(() =>
@@ -69,7 +68,7 @@ describe('nested worker depth', () => {
     ).toThrow(/Complete this task yourself/)
   })
 
-  it('permits sub-workers at the default cap, and records depth 2', () => {
+  it('permits one more generation when the cap is raised, and records depth 2', () => {
     coordinatorDispatchesWorker()
     const nested = db.createTask({ runId: 'run_legacy_local', spec: 'nested task' })
     const sub = db.createDispatchContext({
@@ -77,7 +76,7 @@ describe('nested worker depth', () => {
       assigneeHandle: 'term_sub',
       assigneePaneKey: 'tab_sub:leaf_sub',
       creator: { kind: 'terminal', handle: 'term_worker', paneKey: 'tab_worker:leaf_worker' },
-      maxDepth: NESTED_WORKER_MAX_DEPTH_DEFAULT
+      maxDepth: 2
     })
     expect(sub.depth).toBe(2)
   })

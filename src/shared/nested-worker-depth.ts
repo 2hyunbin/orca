@@ -1,7 +1,11 @@
 import type { GlobalSettings } from './global-settings-types'
 
-/** Allows workers to dispatch sub-workers, who must complete their tasks themselves. */
-export const NESTED_WORKER_MAX_DEPTH_DEFAULT = 2
+/**
+ * How deep dispatched workers may nest. 1 means a coordinator dispatches
+ * workers and those workers may not dispatch further — the behaviour Orca
+ * documented but never actually enforced.
+ */
+export const NESTED_WORKER_MAX_DEPTH_DEFAULT = 1
 
 /** Root coordinators are depth 0; the first generation of workers is depth 1. */
 export const ROOT_DISPATCH_DEPTH = 0
