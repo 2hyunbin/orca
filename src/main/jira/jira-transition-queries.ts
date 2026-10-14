@@ -1,8 +1,9 @@
+import { requireStrictJiraSite } from './jira-read-failure'
 import type { JiraProjectStatusOrder, JiraTransition } from '../../shared/jira-types'
 import { acquire, release } from './request-queue'
-import { apiBasePath, jiraRequest } from './authenticated-request'
+import { apiBasePath, JiraApiError, jiraRequest } from './authenticated-request'
 import { clearToken, getClients, isAuthError } from './client'
-import { mapStatus } from './jira-issue-mapping'
+import { mapCreateField, mapStatus } from './jira-issue-mapping'
 import {
   asFiniteNumber,
   asIdentifier,
@@ -14,22 +15,36 @@ import {
 
 export async function listTransitions(
   key: string,
-  siteId?: string | null
+  siteId?: string | null,
+  strict = false
 ): Promise<JiraTransition[]> {
-  const entry = getClients(siteId)[0]
+  const entries = getClients(siteId)
+  requireStrictJiraSite(entries, siteId, strict)
+  const entry = entries[0]
   if (!entry) {
     return []
   }
   await acquire()
   try {
-    const response = await jiraRequest<{ transitions?: JiraRecord[] }>(
-      entry,
-      `${apiBasePath(entry.site)}/issue/${encodeURIComponent(key)}/transitions`
-    )
+    const issuePath = `${apiBasePath(entry.site)}/issue/${encodeURIComponent(key)}/transitions`
+    let response: { transitions?: JiraRecord[] }
+    try {
+      response = await jiraRequest(entry, `${issuePath}?expand=transitions.fields`)
+    } catch (error) {
+      if (!(error instanceof JiraApiError) || ![400, 403, 404].includes(error.status ?? 0)) {
+        throw error
+      }
+      response = await jiraRequest(entry, issuePath)
+    }
     return (response.transitions ?? []).map((transition) => ({
       id: asString(transition.id),
       name: asString(transition.name),
-      to: mapStatus(transition.to)
+      to: mapStatus(transition.to),
+      fields: transition.fields
+        ? Object.entries(asRecord(transition.fields))
+            .map(([fieldKey, field]) => mapCreateField(field, fieldKey))
+            .filter((field) => field !== null)
+        : undefined
     }))
   } catch (error) {
     if (isAuthError(error)) {
@@ -37,6 +52,9 @@ export async function listTransitions(
       throw error
     }
     console.warn('[jira] listTransitions failed:', error)
+    if (strict) {
+      throw error
+    }
     return []
   } finally {
     release()

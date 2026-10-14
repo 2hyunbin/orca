@@ -20,6 +20,7 @@ export type PullRequestGenerationContext = {
   requestId: number
   repoId: string
   branch: string
+  jiraIssueKey?: string | null
   /** The worktree owner's transport, captured when the request started. */
   runtimeTarget: RuntimeClientTarget
 }
@@ -30,6 +31,7 @@ export type PullRequestGenerationRecord = {
   context: PullRequestGenerationContext
   seed: PullRequestGenerationFields
   seedFieldRevisions: PullRequestFieldRevisions
+  editedFields?: { fields: PullRequestGenerationFields; revisions: PullRequestFieldRevisions }
   requiresPushBeforeCreate: boolean
   status: PullRequestGenerationStatus
   result: PullRequestGenerationFields | null
@@ -147,6 +149,35 @@ export function createRunningPullRequestGenerationRecord(
     hydrated: false,
     autoSubmit
   }
+}
+
+export function recordPullRequestGenerationEdits(
+  record: PullRequestGenerationRecord | null,
+  fields: PullRequestGenerationFields,
+  revisions: PullRequestFieldRevisions
+): PullRequestGenerationRecord | null {
+  if (!record || record.status !== 'running' || !record.autoSubmit) {
+    return null
+  }
+  const edited = record.editedFields ?? {
+    fields: record.seed,
+    revisions: record.seedFieldRevisions
+  }
+  const next = { fields: { ...edited.fields }, revisions: { ...edited.revisions } }
+  let changed = false
+  for (const field of ['base', 'title', 'body', 'draft'] as const) {
+    if (revisions[field] <= next.revisions[field]) {
+      continue
+    }
+    if (field === 'draft') {
+      next.fields.draft = fields.draft
+    } else {
+      next.fields[field] = fields[field]
+    }
+    next.revisions[field] = revisions[field]
+    changed = true
+  }
+  return changed ? { ...record, editedFields: next } : null
 }
 
 export function resolvePullRequestGenerationSuccess({

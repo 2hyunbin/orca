@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws'
 import type { WebContents } from 'electron'
 import type { CdpClientResponseWriter } from './cdp-client-response-writer'
 import type { CdpDebuggerChannel } from './cdp-debugger-channel'
+import type { TextInsertionRoute } from './guest-direct-key-input'
 
 /**
  * Replays the last DOM.focus immediately before Input.insertText so a native
@@ -81,7 +82,7 @@ export class CdpDomFocusReplay {
   }
 
   /**
-   * `route` picks how the text is delivered and runs before the replay, because the
+   * `chooseRoute` picks how the text is delivered and runs before the replay, because the
    * fallback route focuses the guest natively and that would blur the replayed element.
    */
   async insertText(
@@ -90,7 +91,7 @@ export class CdpDomFocusReplay {
     params: Record<string, unknown>,
     effectiveSessionId: string | undefined,
     pendingFocus: Promise<Record<string, unknown> | undefined> | undefined,
-    route: () => Promise<(params: Record<string, unknown>) => Promise<unknown>>
+    chooseRoute: () => Promise<TextInsertionRoute>
   ): Promise<void> {
     const pendingFocusParams = pendingFocus ? await pendingFocus : undefined
     // Why: the client can disconnect while DOM.focus is in flight; don't replay its
@@ -102,13 +103,35 @@ export class CdpDomFocusReplay {
       this.responder.sendError(clientId, 'Browser tab is no longer available', client)
       return
     }
-    let deliver: (params: Record<string, unknown>) => Promise<unknown>
+    let route: TextInsertionRoute
     try {
-      deliver = await route()
+      route = await chooseRoute()
     } catch (err) {
       this.responder.sendError(clientId, err instanceof Error ? err.message : String(err), client)
       return
     }
+    try {
+      await this.replayAndDeliver(
+        client,
+        clientId,
+        params,
+        effectiveSessionId,
+        pendingFocusParams,
+        route
+      )
+    } finally {
+      route.release()
+    }
+  }
+
+  private async replayAndDeliver(
+    client: WebSocket,
+    clientId: number,
+    params: Record<string, unknown>,
+    effectiveSessionId: string | undefined,
+    pendingFocusParams: Record<string, unknown> | undefined,
+    route: TextInsertionRoute
+  ): Promise<void> {
     if (pendingFocusParams) {
       if (this.webContents.isDestroyed()) {
         this.responder.sendError(clientId, 'Browser tab is no longer available', client)
@@ -135,7 +158,7 @@ export class CdpDomFocusReplay {
       return
     }
     try {
-      this.responder.sendResult(clientId, await deliver(params), client)
+      this.responder.sendResult(clientId, await route.deliver(params), client)
     } catch (err) {
       this.responder.sendError(clientId, err instanceof Error ? err.message : String(err), client)
     }

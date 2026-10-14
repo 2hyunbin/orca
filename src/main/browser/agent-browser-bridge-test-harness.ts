@@ -63,6 +63,7 @@ export type MockWebContents = {
   // Why: defaults to an offscreen page; 'webview' opts a test into guest-direct key input.
   getType: Mock<() => string>
   sendInputEvent: Mock<(event: Electron.KeyboardInputEvent) => void>
+  setIgnoreMenuShortcuts: Mock<(ignore: boolean) => void>
   debugger: MockWebContentsDebugger
 }
 
@@ -88,6 +89,7 @@ export function mockWebContents(
     focus: vi.fn(),
     getType: vi.fn(() => 'window'),
     sendInputEvent: vi.fn(),
+    setIgnoreMenuShortcuts: vi.fn(),
     debugger: {
       isAttached: vi.fn(() => true),
       attach: vi.fn(),
