@@ -1,5 +1,5 @@
 import type { AppState } from '@/store'
-import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
+import { isAgentStatusShownOnDot } from '@/lib/pane-agent-evidence'
 import { migrationUnsupportedToAgentStatusEntry } from '@/lib/migration-unsupported-agent-entry'
 import {
   mergeAgentStatusOrchestration,
@@ -133,7 +133,7 @@ function getWorktreeAgentActivitySummaries(
       addAgentStatusPaneId(summary, paneIdentity.tabId, paneIdentity.paneId)
       continue
     }
-    if (!isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
+    if (!isAgentStatusShownOnDot(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
       // Why: staleness ends this row's authority but not the pane's identity — see
       // `stalePaneIdsByTabId`. Dropping both let Orca's self-authored permission title outlive
       // the row it came from and pin the card to a question nobody was asking.

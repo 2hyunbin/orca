@@ -224,6 +224,7 @@ function projectStatus(
     ...(summary.stopping ? { stopping: summary.stopping } : {})
   })
   const current = store.agentStatusByPaneKey?.[paneKey]
+  const structuredHost = summary.hostExecutionOwned ? 'owned' : 'held'
   // Same continuity rule as the host ingest, on the main agent's own clock.
   const mainAgent = continueMainAgentStatus(
     current?.mainAgent,
@@ -270,6 +271,7 @@ function projectStatus(
     current.worktreeId === tab.worktreeId &&
     current.terminalResumeEligible === false &&
     current.structuredHostOwned === summary.hostExecutionOwned &&
+    current.structuredHost === structuredHost &&
     agentProviderSessionsEqual(
       tab.agentSessionAgent,
       current.providerSession,
@@ -303,6 +305,7 @@ function projectStatus(
     {
       ...(summary.providerSession ? { providerSession: summary.providerSession } : {}),
       terminalResumeEligible: false,
+      structuredHost,
       ...(summary.hostExecutionOwned ? { structuredHostOwned: true as const } : {})
     }
   )

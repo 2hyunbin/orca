@@ -8,6 +8,8 @@ import type {
 } from '../../../../shared/agent-session-wire'
 import { buildSubagentChildRows } from '../sidebar/worktree-subagent-child-rows'
 import { resolveAttention } from '../sidebar/smart-attention'
+import { selectWorktreeAgentActivitySummary } from '../sidebar/worktree-agent-activity-summary'
+import { resolveTerminalTabActivityStatus } from '../tab-bar/terminal-tab-activity-status'
 import { isExplicitAgentStatusFresh } from '@/lib/pane-agent-evidence'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
@@ -70,6 +72,7 @@ import {
   useStructuredAgentSessionHostStopping
 } from './StructuredAgentSessionStatusBridge'
 import { resetStructuredAgentSessionStatusFeedsForTests } from '@/runtime/structured-agent-session-status-feed'
+import { useAppStore } from '@/store'
 
 const structuredTab = {
   id: 'structured-tab-1',
@@ -195,6 +198,38 @@ describe('StructuredAgentSessionStatusBridge', () => {
     const entry = statuses()[0]
     expect(entry).toEqual(expect.objectContaining({ state: 'working', structuredHostOwned: true }))
     expect(isExplicitAgentStatusFresh(entry, Date.now(), 30 * 60 * 1000)).toBe(true)
+  })
+
+  it("keeps a chat's settled mark on the card and tab past the freshness window until its next turn", async () => {
+    const old = Date.now() - 30 * 60 * 1000 - 1
+    const paneKey = 'terminal-tab:11111111-1111-4111-8111-111111111111'
+    const hookRow = { paneKey, prompt: '', updatedAt: old, stateStartedAt: old, worktreeId: 'wt-2' }
+    mocks.store?.setState({
+      agentStatusByPaneKey: {
+        [paneKey]: { ...hookRow, state: 'done', stateHistory: [], interrupted: true }
+      }
+    })
+    render(<StructuredAgentSessionStatusBridge />)
+    await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledOnce())
+    // Stopped long ago, and the host no longer runs the agent.
+    const stopped = {
+      status: 'idle',
+      turnOutcome: 'cancellation',
+      hostExecutionOwned: undefined
+    } as const
+    act(() => feed().emit({ type: 'status', session: summary({ ...stopped, updatedAt: old }) }))
+    const state = (): AppState => useAppStore.getState()
+    const tab = (id: string): string =>
+      resolveTerminalTabActivityStatus({ tab: { id, title: '' }, ...state() })
+    expect(tab(structuredTab.id)).toBe('interrupted')
+    expect(selectWorktreeAgentActivitySummary(state(), 'wt-1').hasInterrupted).toBe(true)
+    // A terminal agent's row of the same age still expires.
+    expect(tab('terminal-tab')).not.toBe('interrupted')
+    expect(selectWorktreeAgentActivitySummary(state(), 'wt-2').hasInterrupted).toBe(false)
+
+    act(() => feed().emit({ type: 'status', session: summary({ updatedAt: old + 1 }) }))
+    expect(tab(structuredTab.id)).toBe('working')
+    expect(selectWorktreeAgentActivitySummary(state(), 'wt-1').hasInterrupted).toBe(false)
   })
 
   it('clears host-held evidence when the status stream disconnects', async () => {
