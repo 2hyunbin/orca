@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
+import { JiraIssueRowCopyMenu } from './JiraIssueRowCopyMenu'
 import { JiraLinkedWorkspaceAction } from './JiraLinkedWorkspaceAction'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { JiraIssue, JiraProjectStatusOrder } from '../../../shared/jira-types'
@@ -119,130 +120,155 @@ function JiraIssueRow({
   return (
     // Why: the row contains action buttons, so a native button wrapper would
     // create invalid nested buttons; role + keyboard handling preserves access.
-    <div
-      role="button"
-      tabIndex={0}
-      aria-current={selected ? 'true' : undefined}
-      data-current={selected ? 'true' : undefined}
-      onClick={() => onOpenIssue(issue)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return
-        }
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onOpenIssue(issue)
-        }
-      }}
-      className={cn(
-        'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_104px] @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_104px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_104px]',
-        selected && 'bg-accent'
-      )}
-    >
-      <span className="block truncate font-mono text-[12px] text-muted-foreground @max-3xl:!hidden">
-        {issue.key}
-      </span>
+    <JiraIssueRowCopyMenu issue={issue}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-current={selected ? 'true' : undefined}
+        data-current={selected ? 'true' : undefined}
+        onClick={() => onOpenIssue(issue)}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) {
+            return
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onOpenIssue(issue)
+          }
+        }}
+        className={cn(
+          'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_104px] @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_104px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_104px]',
+          selected && 'bg-accent'
+        )}
+      >
+        <span className="block truncate font-mono text-[12px] text-muted-foreground @max-3xl:!hidden">
+          {issue.key}
+        </span>
 
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground @3xl:hidden">
-            {issue.key}
-          </span>
-          <h3 className="min-w-0 truncate text-[13px] font-medium text-foreground">
-            {issue.title}
-          </h3>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground @3xl:hidden">
+              {issue.key}
+            </span>
+            <h3 className="min-w-0 truncate text-[13px] font-medium text-foreground">
+              {issue.title}
+            </h3>
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 @3xl:!hidden">
+            <span
+              className={cn(
+                'inline-flex min-w-0 items-center rounded-full border px-1.5 py-0.5 text-[11px] font-medium',
+                getStatusTone(issue.status.categoryKey)
+              )}
+            >
+              <span className="truncate">{issue.status.name}</span>
+            </span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">
+              {issue.priority?.name ??
+                translate('auto.components.TaskPage.713179dfdc', 'No priority')}
+            </span>
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+              {issue.assignee?.displayName ??
+                translate('auto.components.TaskPage.42a9160321', 'Unassigned')}
+            </span>
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-1 @max-5xl:!hidden">
+            <span className="max-w-[160px] truncate text-[10px] text-muted-foreground @7xl:!hidden">
+              {contextLabel}
+            </span>
+            {labels.map((label) => (
+              <span
+                key={label}
+                className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              >
+                {label}
+              </span>
+            ))}
+            {issue.labels.length > labels.length ? (
+              <span className="text-[10px] text-muted-foreground">
+                +{issue.labels.length - labels.length}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 @3xl:!hidden">
+
+        <div className="flex min-w-0 @max-3xl:!hidden">
           <span
             className={cn(
-              'inline-flex min-w-0 items-center rounded-full border px-1.5 py-0.5 text-[11px] font-medium',
+              'inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
               getStatusTone(issue.status.categoryKey)
             )}
           >
             <span className="truncate">{issue.status.name}</span>
           </span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            {issue.priority?.name ??
-              translate('auto.components.TaskPage.713179dfdc', 'No priority')}
-          </span>
-          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+        </div>
+
+        <span className="block truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
+          {issue.priority?.name ?? translate('auto.components.TaskPage.713179dfdc', 'No priority')}
+        </span>
+
+        <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground @max-5xl:!hidden">
+          {issue.assignee?.avatarUrl ? (
+            <img
+              src={issue.assignee.avatarUrl}
+              alt={issue.assignee.displayName}
+              className="size-5 shrink-0 rounded-full"
+            />
+          ) : (
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-[10px]">
+              {issue.assignee?.displayName?.slice(0, 1) ?? '-'}
+            </span>
+          )}
+          <span className="truncate">
             {issue.assignee?.displayName ??
               translate('auto.components.TaskPage.42a9160321', 'Unassigned')}
           </span>
         </div>
-        <div className="mt-1 flex min-w-0 items-center gap-1 @max-5xl:!hidden">
-          <span className="max-w-[160px] truncate text-[10px] text-muted-foreground @7xl:!hidden">
-            {contextLabel}
-          </span>
-          {labels.map((label) => (
-            <span
-              key={label}
-              className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {label}
-            </span>
-          ))}
-          {issue.labels.length > labels.length ? (
-            <span className="text-[10px] text-muted-foreground">
-              +{issue.labels.length - labels.length}
-            </span>
-          ) : null}
-        </div>
-      </div>
 
-      <div className="flex min-w-0 @max-3xl:!hidden">
-        <span
-          className={cn(
-            'inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-            getStatusTone(issue.status.categoryKey)
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="block min-w-0 truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
+              {formatUpdatedAt(issue.updatedAt)}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            {new Date(issue.updatedAt).toLocaleString()}
+          </TooltipContent>
+        </Tooltip>
+
+        <div className="flex shrink-0 items-center justify-end gap-1">
+          <JiraIssueRowCopyMenu issue={issue} />
+          {onOpenWorkspace && workspaces.length > 0 ? (
+            <JiraLinkedWorkspaceAction
+              issue={issue}
+              workspaces={workspaces}
+              onOpenWorkspace={onOpenWorkspace}
+              onStartWorkspace={onStartWorkspace}
+            />
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onStartWorkspace(issue)
+                  }}
+                  aria-label={translate(
+                    'auto.components.TaskPage.ff90d0abc7',
+                    'Start workspace from {{value0}}',
+                    { value0: issue.key }
+                  )}
+                >
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                {translate('auto.components.TaskPage.9497f2787c', 'Start workspace')}
+              </TooltipContent>
+            </Tooltip>
           )}
-        >
-          <span className="truncate">{issue.status.name}</span>
-        </span>
-      </div>
-
-      <span className="block truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
-        {issue.priority?.name ?? translate('auto.components.TaskPage.713179dfdc', 'No priority')}
-      </span>
-
-      <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground @max-5xl:!hidden">
-        {issue.assignee?.avatarUrl ? (
-          <img
-            src={issue.assignee.avatarUrl}
-            alt={issue.assignee.displayName}
-            className="size-5 shrink-0 rounded-full"
-          />
-        ) : (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-[10px]">
-            {issue.assignee?.displayName?.slice(0, 1) ?? '-'}
-          </span>
-        )}
-        <span className="truncate">
-          {issue.assignee?.displayName ??
-            translate('auto.components.TaskPage.42a9160321', 'Unassigned')}
-        </span>
-      </div>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="block min-w-0 truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
-            {formatUpdatedAt(issue.updatedAt)}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={6}>
-          {new Date(issue.updatedAt).toLocaleString()}
-        </TooltipContent>
-      </Tooltip>
-
-      <div className="flex shrink-0 items-center justify-end gap-1">
-        {onOpenWorkspace && workspaces.length > 0 ? (
-          <JiraLinkedWorkspaceAction
-            issue={issue}
-            workspaces={workspaces}
-            onOpenWorkspace={onOpenWorkspace}
-            onStartWorkspace={onStartWorkspace}
-          />
-        ) : (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -250,46 +276,24 @@ function JiraIssueRow({
                 size="icon-xs"
                 onClick={(event) => {
                   event.stopPropagation()
-                  onStartWorkspace(issue)
+                  window.api.shell.openUrl(issue.url)
                 }}
                 aria-label={translate(
-                  'auto.components.TaskPage.ff90d0abc7',
-                  'Start workspace from {{value0}}',
+                  'auto.components.TaskPage.4ac8ff2275',
+                  'Open {{value0}} in Jira',
                   { value0: issue.key }
                 )}
               >
-                <ArrowRight className="size-3.5" />
+                <ExternalLink className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={6}>
-              {translate('auto.components.TaskPage.9497f2787c', 'Start workspace')}
+              {translate('auto.components.TaskPage.eee68073b2', 'Open in Jira')}
             </TooltipContent>
           </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={(event) => {
-                event.stopPropagation()
-                window.api.shell.openUrl(issue.url)
-              }}
-              aria-label={translate(
-                'auto.components.TaskPage.4ac8ff2275',
-                'Open {{value0}} in Jira',
-                { value0: issue.key }
-              )}
-            >
-              <ExternalLink className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.components.TaskPage.eee68073b2', 'Open in Jira')}
-          </TooltipContent>
-        </Tooltip>
+        </div>
       </div>
-    </div>
+    </JiraIssueRowCopyMenu>
   )
 }
 
