@@ -103,27 +103,33 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
       rows.some((row) => row.path.endsWith(suffix))
     /** The phone's rows after its own filters, against the server rows the desktop sidebar renders. */
     const expectPhoneMatchesSidebar = async (hideSleeping: boolean): Promise<string[]> => {
-      const rows = await phoneRows()
-      const serverIds = new Set(rows.map((row) => row.worktreeId))
-      const phoneVisible = filterWorktrees(
-        rows.map(toMobileRow),
-        { filterRepoIds: new Set(), hideSleeping, hideDefaultBranch: false },
-        ''
-      )
-        .map((row) => row.worktreeId)
-        .sort()
+      let shown: string[] = []
+      // Why both sides inside the poll: either can still be catching up with the last change.
       await expect
-        .poll(async () => {
-          const rendered = await desktop.page
-            .locator('[data-worktree-id]')
-            .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-worktree-id')))
-          // Why a set: the selected row renders more than one element carrying its id.
-          return [...new Set(rendered)]
-            .filter((id): id is string => id !== null && serverIds.has(id))
-            .sort()
-        })
-        .toEqual(phoneVisible)
-      return rows.filter((row) => phoneVisible.includes(row.worktreeId)).map((row) => row.path)
+        .poll(
+          async () => {
+            const rows = await phoneRows()
+            const serverIds = new Set(rows.map((row) => row.worktreeId))
+            const phone = filterWorktrees(
+              rows.map(toMobileRow),
+              { filterRepoIds: new Set(), hideSleeping, hideDefaultBranch: false },
+              ''
+            )
+            shown = phone.map((row) => row.path)
+            const rendered = await desktop.page
+              .locator('[data-worktree-id]')
+              .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-worktree-id')))
+            const sidebar = [...new Set(rendered)]
+              .filter((id): id is string => id !== null && serverIds.has(id))
+              .sort()
+            return (
+              JSON.stringify(sidebar) === JSON.stringify(phone.map((row) => row.worktreeId).sort())
+            )
+          },
+          { timeout: 30_000 }
+        )
+        .toBe(true)
+      return shown
     }
 
     // Hide other-client workspaces: the server's own row goes, the desktop's and its phone's stay.
