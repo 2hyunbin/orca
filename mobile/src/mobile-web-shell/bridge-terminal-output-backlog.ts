@@ -114,7 +114,8 @@ type Held =
  * first one's id.
  */
 export class BridgeTerminalOutputBacklog {
-  private readonly queue: Held[] = []
+  private readonly queue: (Held | undefined)[] = []
+  private queueHead = 0
   private pending = 0
   private peak = 0
   private merged = 0
@@ -149,7 +150,7 @@ export class BridgeTerminalOutputBacklog {
   }
 
   get held(): boolean {
-    return this.queue.length > 0
+    return this.queueHead < this.queue.length
   }
 
   /**
@@ -187,14 +188,13 @@ export class BridgeTerminalOutputBacklog {
    * whether a single payload that large ends the stream.
    */
   next(allowedBytes: number, windowEmpty: boolean): unknown | null {
-    const head = this.queue[0]
+    const head = this.queue[this.queueHead]
     if (head === undefined) {
       return null
     }
     if (head.bytes > allowedBytes && !windowEmpty) {
       return null
     }
-    this.queue.shift()
     this.take(head.bytes)
     this.frames += 1
     if (head.kind === 'other') {
@@ -208,9 +208,9 @@ export class BridgeTerminalOutputBacklog {
     // merging across it would deliver bytes out of order. Nothing compares stream ids here, because
     // a backlog belongs to one subscription and every `data` payload on it carries that
     // subscription's single stream id; the comparison that used to be here could not fail.
-    while (this.queue.length > 0) {
-      const nextHeld = this.queue[0]
-      if (nextHeld.kind !== 'output') {
+    while (this.held) {
+      const nextHeld = this.queue[this.queueHead]
+      if (nextHeld?.kind !== 'output') {
         break
       }
       const firstUnit = nextHeld.chunk.charCodeAt(0)
@@ -222,7 +222,6 @@ export class BridgeTerminalOutputBacklog {
       if (mergedBytes > allowedBytes) {
         break
       }
-      this.queue.shift()
       this.take(nextHeld.bytes)
       chunks.push(nextHeld.chunk)
       bytes = mergedBytes
@@ -244,6 +243,7 @@ export class BridgeTerminalOutputBacklog {
   dispose(): void {
     this.clearSilence()
     this.queue.length = 0
+    this.queueHead = 0
     this.pending = 0
   }
 
@@ -253,6 +253,15 @@ export class BridgeTerminalOutputBacklog {
   }
 
   private take(bytes: number): void {
+    this.queue[this.queueHead++] = undefined
+    if (this.queueHead === this.queue.length) {
+      this.queue.length = 0
+      this.queueHead = 0
+    } else if (this.queueHead > 128 && this.queueHead * 2 > this.queue.length) {
+      // Compact only after consuming most slots, so repeated drains stay linear.
+      this.queue.splice(0, this.queueHead)
+      this.queueHead = 0
+    }
     this.pending = Math.max(0, this.pending - bytes)
   }
 
@@ -265,7 +274,7 @@ export class BridgeTerminalOutputBacklog {
    * twenty seconds later. A rule that only arms is a rule that only ever kills more.
    */
   private syncSilence(): void {
-    if (this.queue.length === 0) {
+    if (!this.held) {
       this.clearSilence()
       return
     }
