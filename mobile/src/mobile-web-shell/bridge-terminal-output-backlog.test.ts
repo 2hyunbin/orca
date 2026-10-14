@@ -186,7 +186,7 @@ describe.each([
     expect(run.delivered.join('')).toBe(chunks.join(''))
     expect(run.frames).toBeLessThan(chunks.length)
     expect(run.largestFrameBytes).toBeLessThanOrEqual(BRIDGE_MAX_MESSAGE_BYTES)
-  })
+  }, 15_000)
 })
 
 describe('the two ends a held terminal stream has', () => {

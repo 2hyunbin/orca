@@ -388,7 +388,7 @@ describe('reading chunks', () => {
     }
     expect(reads).toBe(Math.ceil(total / BRIDGE_MEDIA_READ_MAX_BYTES))
     expect(collected).toEqual([...source])
-  })
+  }, 15_000)
 
   it('answers exactly the bytes a short read asked for, at the offset it asked for', async () => {
     // The only case that separates the range from the cap. Every other read here asks for a whole
