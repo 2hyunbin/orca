@@ -160,7 +160,9 @@ function resolveBinaryRequestUrl(site: JiraSite, pathOrUrl: string): URL {
       return requestUrl
     }
     if (requestUrl.origin === siteUrl.origin) {
-      return new URL(`${baseUrl}${requestUrl.pathname}${requestUrl.search}`)
+      return baseUrl === site.siteUrl
+        ? requestUrl
+        : new URL(`${baseUrl}${requestUrl.pathname}${requestUrl.search}`)
     }
   }
   // The gateway origin is shared by every tenant, so its full cloud-ID prefix must match.

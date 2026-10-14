@@ -44,6 +44,29 @@ afterEach(async () => {
 })
 
 describe('scoped Jira Cloud tokens over HTTP', () => {
+  it('preserves the installation path in self-hosted attachment URLs', async () => {
+    fixture = await startJiraAuthFixture((_request, response) => {
+      jiraFixtureJson(response, 200, { image: true })
+    })
+    const jira = await loadClient()
+    const attachmentUrl = `${SITE}/jira/secure/attachment/1/shot.png?download=true`
+    await jira.jiraRequestBinary(
+      {
+        site: {
+          id: 'server',
+          siteUrl: `${SITE}/jira`,
+          email: '',
+          displayName: 'Ada',
+          accountId: 'ada',
+          authType: 'server'
+        },
+        authorization: 'Bearer private-token'
+      },
+      attachmentUrl
+    )
+    expect(fixture.requests.map((request) => request.url)).toEqual([attachmentUrl])
+  })
+
   it('resolves the tenant without a credential and connects an email-free Bearer token', async () => {
     fixture = await startJiraAuthFixture((request, response) => {
       if (request.url === `${SITE}/_edge/tenant_info`) {
