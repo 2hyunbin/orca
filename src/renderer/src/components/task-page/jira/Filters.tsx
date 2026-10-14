@@ -16,6 +16,8 @@ export function TaskPageJiraFilters({
   const {
     setTaskResumeState,
     jiraPresets,
+    jiraHasWorkspace,
+    setJiraHasWorkspace,
     jiraLoading,
     jiraSearchInput,
     setJiraSearchInput,
@@ -38,12 +40,13 @@ export function TaskPageJiraFilters({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {jiraPresets.map((preset) => {
-            const active = !jiraSearchInput && activeJiraPreset === preset.id
+            const active = !jiraHasWorkspace && !jiraSearchInput && activeJiraPreset === preset.id
             return (
               <button
                 key={preset.id}
                 type="button"
                 onClick={() => {
+                  setJiraHasWorkspace(false)
                   setJiraSearchInput('')
                   setAppliedJiraSearch('')
                   setActiveJiraPreset(preset.id)
@@ -64,6 +67,19 @@ export function TaskPageJiraFilters({
               </button>
             )
           })}
+          <Button
+            variant={jiraHasWorkspace ? 'secondary' : 'ghost'}
+            size="sm"
+            aria-pressed={jiraHasWorkspace}
+            onClick={() => {
+              setJiraHasWorkspace(true)
+              setJiraSearchInput('')
+              setAppliedJiraSearch('')
+              setTaskResumeState({ jiraQuery: '' })
+            }}
+          >
+            {translate('jira.workspace.mode', 'Has Workspace')}
+          </Button>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Tooltip>
@@ -150,13 +166,19 @@ export function TaskPageJiraFilters({
                 setTaskResumeState({
                   jiraQuery: trimmed
                 })
-                setJiraRefreshNonce((n) => n + 1)
+                if (!jiraHasWorkspace) {
+                  setJiraRefreshNonce((n) => n + 1)
+                }
               }
             }}
-            placeholder={translate(
-              'auto.components.TaskPage.99c2755218',
-              'Search issues or enter JQL, e.g. project = ABC'
-            )}
+            placeholder={
+              jiraHasWorkspace
+                ? translate('jira.workspace.search', 'Search linked issues')
+                : translate(
+                    'auto.components.TaskPage.99c2755218',
+                    'Search issues or enter JQL, e.g. project = ABC'
+                  )
+            }
             className="h-8 rounded-md border-border/50 bg-background pl-8 pr-8 text-xs"
           />
           {jiraSearchInput ? (
@@ -169,7 +191,9 @@ export function TaskPageJiraFilters({
                 setTaskResumeState({
                   jiraQuery: ''
                 })
-                setJiraRefreshNonce((n) => n + 1)
+                if (!jiraHasWorkspace) {
+                  setJiraRefreshNonce((n) => n + 1)
+                }
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
             >
