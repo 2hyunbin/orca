@@ -5,45 +5,47 @@ import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
 import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
 
-let currentState: PtyProcessCeilingState = { state: 'off', reason: 'disabled' }
-let currentScopes: TerminalScopeRuntime | null = null
+type DaemonLog = (event: string, details?: Record<string, unknown>) => void
+
+let active: { scopes: TerminalScopeRuntime; log: DaemonLog } | null = null
 let scopeCounter = 0
 
 /** Daemon start: decide, remember for every spawn, and return what the pid record reports. */
 export function initializeTerminalScopes(
-  launchId: string,
   daemonScope: string | null,
-  log: (event: string, details?: Record<string, unknown>) => void
+  log: DaemonLog
 ): PtyProcessCeilingState {
   const resolved = resolveTerminalScopes({
     env: process.env,
     platform: process.platform,
-    launchId: launchId || `${process.pid}`,
     daemonScope,
     setWindowsLimit: setPtyActiveProcessLimit
   })
-  setTerminalScopesForTest(resolved.ceiling, resolved.linux)
+  active = 'on' in resolved.scopes ? { scopes: resolved.scopes.on, log } : null
   if (process.platform === 'linux') {
     log(
       'terminal-scopes',
-      resolved.linux
-        ? { slice: resolved.linux.slice, properties: resolved.linux.properties }
-        : { off: resolved.offReason }
+      'on' in resolved.scopes
+        ? { slice: resolved.scopes.on.slice, properties: resolved.scopes.on.properties }
+        : resolved.scopes
     )
   }
   return resolved.ceiling
 }
 
 export function setTerminalScopesForTest(
-  state: PtyProcessCeilingState,
-  scopes: TerminalScopeRuntime | null
+  scopes: TerminalScopeRuntime | null,
+  log: DaemonLog = () => {}
 ): void {
-  currentState = state
-  currentScopes = scopes
+  active = scopes ? { scopes, log } : null
 }
 
-export function currentPtyProcessCeiling(): PtyProcessCeilingState {
-  return currentState
+/** Orca's own wrappers, by the exact argv[0] it execs them with; a user's `systemd-run` differs. */
+export function isTerminalScopeWrapper(processName: string): boolean {
+  return (
+    active !== null &&
+    (processName === active.scopes.systemdRun || processName === active.scopes.envBinary)
+  )
 }
 
 const SESSION_KEYS = ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR'] as const
@@ -59,16 +61,16 @@ export function wrapPtySpawnInTerminalScope(
   env: Record<string, string>,
   sliceExists: (path: string) => boolean = existsSync
 ): { file: string; args: string[]; env: Record<string, string> } {
-  const scopes = currentScopes
-  if (!scopes) {
+  if (!active) {
     return { file, args, env }
   }
+  const { scopes, log } = active
   // Why: `systemd-run --slice` would silently recreate a stopped slice unbound and unlimited.
   if (!sliceExists(scopes.sliceCgroupPath)) {
-    setTerminalScopesForTest(
-      currentState.state === 'on' ? { state: 'off', reason: 'slice_lost' } : currentState,
-      null
-    )
+    active = null
+    log('terminal-scopes-slice-lost', {
+      message: 'terminal scope slice lost; later terminals stay in the daemon scope'
+    })
     return { file, args, env }
   }
   scopeCounter += 1

@@ -6,7 +6,7 @@ import {
   type TerminalScopeRuntime
 } from './terminal-scopes'
 import {
-  currentPtyProcessCeiling,
+  isTerminalScopeWrapper,
   setTerminalScopesForTest,
   wrapPtySpawnInTerminalScope
 } from './terminal-scopes-runtime'
@@ -16,14 +16,31 @@ import {
   parsePtyProcessCeilingState
 } from '../../shared/pty-process-ceiling-state'
 import { parseDaemonPidFile } from './daemon-pid-file-parse'
+import type * as DaemonCgroupScope from './daemon-cgroup-scope'
+
+const managerRuntimeDir = vi.hoisted((): { value?: string } => ({}))
+vi.mock('./daemon-cgroup-scope', async (importOriginal) => {
+  const original = await importOriginal<typeof DaemonCgroupScope>()
+  return {
+    ...original,
+    // The user manager's runtime dir, independent of the host running the test.
+    userManagerEnv: (env: NodeJS.ProcessEnv) => {
+      const next = { ...env }
+      delete next.XDG_RUNTIME_DIR
+      return managerRuntimeDir.value ? { ...next, XDG_RUNTIME_DIR: managerRuntimeDir.value } : next
+    }
+  }
+})
 
 const SLICE_CGROUP = '/user.slice/user-1000.slice/user@1000.service/orca_ptys_1f_2e.slice'
+const SCOPE_ON = { on: expect.objectContaining({ slice: 'orca_ptys_1f_2e.slice' }) }
 
 type Call = { program: string; args: string[] }
 
 /** A user manager that may reject OOMPolicy on scopes and enforces `pidsMax` on each one. */
-function fakeManager({ oomPolicy = true, pidsMax = 'max', sliceStarts = true } = {}) {
+function fakeManager({ oomPolicy = true, pidsMax = 'max\n', sliceStarts = true } = {}) {
   const calls: Call[] = []
+  const detached: Call[] = []
   const run = vi.fn((program: string, args: string[]) => {
     calls.push({ program, args })
     if (program === 'busctl') {
@@ -33,11 +50,14 @@ function fakeManager({ oomPolicy = true, pidsMax = 'max', sliceStarts = true } =
       const rejected = !oomPolicy && args.includes('--property=OOMPolicy=continue')
       return rejected
         ? { code: 1, timedOut: false, stdout: '' }
-        : { code: 0, timedOut: false, stdout: `0::${SLICE_CGROUP}/run-r1.scope\n${pidsMax}\n` }
+        : { code: 0, timedOut: false, stdout: `0::${SLICE_CGROUP}/run-r1.scope\n${pidsMax}` }
     }
     return { code: 0, timedOut: false, stdout: '' }
   })
-  return { calls, run }
+  const runDetached = (program: string, args: string[]) => {
+    detached.push({ program, args })
+  }
+  return { calls, detached, run, runDetached }
 }
 
 function linuxInput(
@@ -47,11 +67,11 @@ function linuxInput(
   return {
     env: {},
     platform: 'linux',
-    launchId: '1f-2e',
     daemonScope: 'orca-daemon-1f-2e.scope',
     unifiedCgroup: () => true,
     findExecutable: (name: string) => `/usr/bin/${name}`,
     run: manager.run,
+    runDetached: manager.runDetached,
     ...overrides
   }
 }
@@ -61,38 +81,69 @@ describe('resolveTerminalScopes', () => {
     const manager = fakeManager()
     const resolved = resolveTerminalScopes(linuxInput(manager))
     expect(resolved.ceiling).toEqual({ state: 'off', reason: 'disabled' })
-    expect(resolved.linux).toEqual({
-      slice: 'orca_ptys_1f_2e.slice',
-      sliceCgroupPath: `/sys/fs/cgroup${SLICE_CGROUP}`,
-      systemdRun: '/usr/bin/systemd-run',
-      envBinary: '/usr/bin/env',
-      launchId: '1f_2e',
-      properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s']
+    expect(resolved.scopes).toEqual({
+      on: {
+        slice: 'orca_ptys_1f_2e.slice',
+        sliceCgroupPath: `/sys/fs/cgroup${SLICE_CGROUP}`,
+        systemdRun: '/usr/bin/systemd-run',
+        envBinary: '/usr/bin/env',
+        launchId: '1f_2e',
+        properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s']
+      }
     })
-    expect(manager.calls[0]?.args).toEqual(
-      expect.arrayContaining([
+    expect(manager.calls[0]).toEqual({
+      program: 'busctl',
+      args: [
+        '--user',
+        'call',
+        'org.freedesktop.systemd1',
+        '/org/freedesktop/systemd1',
+        'org.freedesktop.systemd1.Manager',
+        'StartTransientUnit',
+        'ssa(sv)a(sa(sv))',
         'orca_ptys_1f_2e.slice',
+        'fail',
+        '2',
         'BindsTo',
+        'as',
+        '1',
+        'orca-daemon-1f-2e.scope',
         'After',
-        'orca-daemon-1f-2e.scope'
-      ])
-    )
-    expect(manager.calls[1]?.args).toEqual(
-      expect.arrayContaining(['--slice=orca_ptys_1f_2e.slice', '--property=OOMPolicy=continue'])
-    )
-    expect(manager.calls[2]?.args).toEqual([
+        'as',
+        '1',
+        'orca-daemon-1f-2e.scope',
+        '0'
+      ]
+    })
+    expect(manager.calls[1]?.args.slice(0, 7)).toEqual([
       '--user',
-      'set-property',
-      '--runtime',
-      'orca-daemon-1f-2e.scope',
-      'ManagedOOMPreference=avoid'
+      '--scope',
+      '--quiet',
+      '--collect',
+      '--slice=orca_ptys_1f_2e.slice',
+      '--property=OOMPolicy=continue',
+      '--property=TimeoutStopSec=5s'
+    ])
+    // Not waited for: its result changes nothing.
+    expect(manager.calls).toHaveLength(2)
+    expect(manager.detached).toEqual([
+      {
+        program: 'systemctl',
+        args: [
+          '--user',
+          'set-property',
+          '--runtime',
+          'orca-daemon-1f-2e.scope',
+          'ManagedOOMPreference=avoid'
+        ]
+      }
     ])
   })
 
-  it('drops only OOMPolicy where scopes reject it (systemd before 253)', () => {
+  it('drops only OOMPolicy where scopes reject it', () => {
     const manager = fakeManager({ oomPolicy: false })
     const resolved = resolveTerminalScopes(linuxInput(manager))
-    expect(resolved.linux?.properties).toEqual(['TimeoutStopSec=5s'])
+    expect(resolved.scopes).toMatchObject({ on: { properties: ['TimeoutStopSec=5s'] } })
     expect(manager.calls.filter((call) => call.program === '/usr/bin/systemd-run')).toHaveLength(2)
   })
 
@@ -110,23 +161,22 @@ describe('resolveTerminalScopes', () => {
     const resolved = resolveTerminalScopes(linuxInput(manager, overrides))
     expect(resolved).toEqual({
       ceiling: { state: 'off', reason: 'disabled' },
-      linux: null,
-      offReason: reason
+      scopes: { off: reason }
     })
     expect(manager.run).not.toHaveBeenCalled()
   })
 
   it('stays off when the slice cannot start, or removes it when no probe scope starts', () => {
-    expect(resolveTerminalScopes(linuxInput(fakeManager({ sliceStarts: false }))).offReason).toBe(
-      'slice_unavailable'
-    )
+    expect(resolveTerminalScopes(linuxInput(fakeManager({ sliceStarts: false }))).scopes).toEqual({
+      off: 'slice_unavailable'
+    })
     const run = vi.fn((program: string, _args: string[]) => ({
       code: program === 'busctl' || program === 'systemctl' ? 0 : 1,
       timedOut: false,
       stdout: ''
     }))
-    const resolved = resolveTerminalScopes(linuxInput({ calls: [], run }))
-    expect(resolved).toMatchObject({ linux: null, offReason: 'slice_unavailable' })
+    const resolved = resolveTerminalScopes(linuxInput({ ...fakeManager(), run }))
+    expect(resolved.scopes).toEqual({ off: 'slice_unavailable' })
     expect(run.mock.calls.at(-1)?.[1]).toEqual([
       '--user',
       '--no-block',
@@ -137,7 +187,7 @@ describe('resolveTerminalScopes', () => {
 
   it('puts the process ceiling on each terminal scope once the kernel shows it', () => {
     const env = { [PTY_PROCESS_CEILING_ENV]: '2048' }
-    const resolved = resolveTerminalScopes(linuxInput(fakeManager({ pidsMax: '2048' }), { env }))
+    const resolved = resolveTerminalScopes(linuxInput(fakeManager({ pidsMax: '2048\n' }), { env }))
     expect(resolved.ceiling).toEqual({
       state: 'on',
       limit: 2048,
@@ -145,18 +195,28 @@ describe('resolveTerminalScopes', () => {
       unit: 'orca_ptys_1f_2e.slice',
       controlGroup: SLICE_CGROUP
     })
-    expect(resolved.linux?.properties).toEqual([
-      'OOMPolicy=continue',
-      'TimeoutStopSec=5s',
-      'TasksMax=2048'
-    ])
+    expect(resolved.scopes).toMatchObject({
+      on: { properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s', 'TasksMax=2048'] }
+    })
   })
 
-  it('keeps terminal scopes but reports the ceiling off when TasksMax is not enforced', () => {
+  it.each([
+    ['accepted but not enforced', 'max\n'],
+    ['without pids delegation', '']
+  ])(
+    'keeps terminal scopes, reporting only the ceiling off, with TasksMax %s',
+    (_label, pidsMax) => {
+      const env = { [PTY_PROCESS_CEILING_ENV]: '2048' }
+      const resolved = resolveTerminalScopes(linuxInput(fakeManager({ pidsMax }), { env }))
+      expect(resolved.ceiling).toEqual({ state: 'off', reason: 'controller_unavailable' })
+      expect(resolved.scopes).toMatchObject({
+        on: { properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s'] }
+      })
+    }
+  )
+
+  it('reports a ceiling that needs a missing daemon scope as no user manager', () => {
     const env = { [PTY_PROCESS_CEILING_ENV]: '2048' }
-    const resolved = resolveTerminalScopes(linuxInput(fakeManager({ pidsMax: 'max' }), { env }))
-    expect(resolved.ceiling).toEqual({ state: 'off', reason: 'controller_unavailable' })
-    expect(resolved.linux?.properties).toEqual(['OOMPolicy=continue', 'TimeoutStopSec=5s'])
     const missing = resolveTerminalScopes(
       linuxInput(fakeManager(), { env, daemonScope: null })
     ).ceiling
@@ -167,7 +227,8 @@ describe('resolveTerminalScopes', () => {
     const env = { [PTY_PROCESS_CEILING_ENV]: '10' }
     const resolved = resolveTerminalScopes(linuxInput(fakeManager(), { env }))
     expect(resolved.ceiling).toEqual({ state: 'off', reason: 'invalid_limit' })
-    expect(resolved.linux?.properties).not.toContain('TasksMax=10')
+    expect(resolved.scopes).toEqual(SCOPE_ON)
+    expect(JSON.stringify(resolved.scopes)).not.toContain('TasksMax')
     expect(parsePtyProcessCeiling('0')).toEqual({ kind: 'off' })
   })
 
@@ -179,7 +240,6 @@ describe('resolveTerminalScopes', () => {
       resolveTerminalScopes({
         env,
         platform: 'win32',
-        launchId: 'a',
         daemonScope: null,
         setWindowsLimit
       }).ceiling
@@ -203,14 +263,7 @@ describe('wrapPtySpawnInTerminalScope', () => {
     launchId: 'a',
     properties: ['OOMPolicy=continue', 'TimeoutStopSec=5s', 'TasksMax=2048']
   }
-  const ceilingOn = {
-    state: 'on' as const,
-    limit: 2048,
-    mechanism: 'systemd-slice' as const,
-    unit: runtime.slice
-  }
-
-  afterEach(() => setTerminalScopesForTest({ state: 'off', reason: 'disabled' }, null))
+  afterEach(() => setTerminalScopesForTest(null))
 
   it('leaves the spawn untouched while off', () => {
     const env = { TERM: 'xterm' }
@@ -222,7 +275,7 @@ describe('wrapPtySpawnInTerminalScope', () => {
   })
 
   it('execs each terminal into its own scope and gives the shell its own session bus back', () => {
-    setTerminalScopesForTest(ceilingOn, runtime)
+    setTerminalScopesForTest(runtime)
     const spawn = () =>
       wrapPtySpawnInTerminalScope(
         '/bin/bash',
@@ -250,18 +303,37 @@ describe('wrapPtySpawnInTerminalScope', () => {
     expect(wrapped.env.DBUS_SESSION_BUS_ADDRESS).toBeUndefined()
   })
 
-  it('stops wrapping when the slice is gone, reporting a ceiling it had as lost', () => {
-    setTerminalScopesForTest(ceilingOn, runtime)
+  it('restores only the session variables that differ, unsetting ones the shell lacked', () => {
+    setTerminalScopesForTest(runtime)
+    managerRuntimeDir.value = '/run/user/1000'
+    const command = (env: Record<string, string>) => {
+      const args = wrapPtySpawnInTerminalScope('/bin/bash', [], env, () => true).args
+      return args.slice(args.indexOf('--') + 1)
+    }
+    expect(command({ TERM: 'x' })).toEqual(['/usr/bin/env', '-u', 'XDG_RUNTIME_DIR', '/bin/bash'])
+    expect(command({ TERM: 'x', XDG_RUNTIME_DIR: '/run/user/1000' })).toEqual(['/bin/bash'])
+    managerRuntimeDir.value = undefined
+  })
+
+  it('stops wrapping for good once the slice is gone, and logs it once', () => {
+    const log = vi.fn()
+    setTerminalScopesForTest(runtime, log)
     expect(wrapPtySpawnInTerminalScope('/bin/bash', [], { TERM: 'x' }, () => false).file).toBe(
       '/bin/bash'
     )
-    expect(currentPtyProcessCeiling()).toEqual({ state: 'off', reason: 'slice_lost' })
     expect(wrapPtySpawnInTerminalScope('/bin/bash', [], { TERM: 'x' }, () => true).file).toBe(
       '/bin/bash'
     )
-    setTerminalScopesForTest({ state: 'off', reason: 'disabled' }, runtime)
-    wrapPtySpawnInTerminalScope('/bin/bash', [], { TERM: 'x' }, () => false)
-    expect(currentPtyProcessCeiling()).toEqual({ state: 'off', reason: 'disabled' })
+    expect(log).toHaveBeenCalledOnce()
+  })
+
+  it('recognizes only the exact wrapper paths it execs, not a user-typed systemd-run', () => {
+    setTerminalScopesForTest(runtime)
+    expect(isTerminalScopeWrapper('/usr/bin/systemd-run')).toBe(true)
+    expect(isTerminalScopeWrapper('/usr/bin/env')).toBe(true)
+    expect(isTerminalScopeWrapper('systemd-run')).toBe(false)
+    setTerminalScopesForTest(null)
+    expect(isTerminalScopeWrapper('/usr/bin/systemd-run')).toBe(false)
   })
 })
 

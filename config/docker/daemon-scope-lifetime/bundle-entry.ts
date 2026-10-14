@@ -16,7 +16,7 @@ export function startScopeReaper(launchNonce: string, freshScope: boolean) {
 export function startTerminalScopes(launchNonce: string) {
   const daemonScope = ownFreshDaemonScope(true, launchNonce)
   const events: unknown[] = []
-  const ceiling = initializeTerminalScopes(launchNonce, daemonScope, (event, details) =>
+  const ceiling = initializeTerminalScopes(daemonScope, (event, details) =>
     events.push({ event, ...details })
   )
   startDaemonScopeDeathWatch({ daemonScope, log: () => {} })

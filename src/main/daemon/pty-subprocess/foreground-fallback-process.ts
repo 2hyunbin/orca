@@ -1,17 +1,14 @@
 import { win32 as pathWin32 } from 'node:path'
-
-// Why: they run before the shell execs, for up to a few hundred ms when many terminals start.
-const LINUX_TERMINAL_SCOPE_WRAPPERS = new Set(['systemd-run', 'env'])
+import { isTerminalScopeWrapper } from '../terminal-scopes-runtime'
 
 function normalizeForegroundProcessName(processName: string | null | undefined): string | null {
   const trimmed = processName?.trim().replace(/^["']|["']$/g, '') ?? ''
-  if (!trimmed || trimmed === 'xterm-256color') {
+  // Why the wrappers: they own a new Linux terminal until its shell execs, for up to a few
+  // hundred ms when many terminals start; node-pty reports their exact argv[0] there.
+  if (!trimmed || trimmed === 'xterm-256color' || isTerminalScopeWrapper(trimmed)) {
     return null
   }
-  const name = trimmed.split(/[\\/]/).pop() || null
-  return process.platform === 'linux' && name && LINUX_TERMINAL_SCOPE_WRAPPERS.has(name)
-    ? null
-    : name
+  return trimmed.split(/[\\/]/).pop() || null
 }
 
 /**

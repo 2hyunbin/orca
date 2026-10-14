@@ -14,7 +14,7 @@
  */
 import { accessSync, constants, existsSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync, spawnProcess } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import type {
   PtyProcessCeilingOffReason,
@@ -27,9 +27,9 @@ export const PTY_PROCESS_CEILING_ENV = 'ORCA_TERMINAL_PROCESS_CEILING'
 /** Below this a shell, its prompt hooks and one build step already collide. */
 const MIN_CEILING = 64
 const CGROUP_ROOT = '/sys/fs/cgroup'
-/** Prints the probe scope's cgroup and the process limit the kernel enforces on it. */
+/** Prints the probe scope's cgroup and, with pids delegated, the limit the kernel enforces on it. */
 const PROBE_SCRIPT =
-  'read -r line < /proc/self/cgroup; echo "$line"; cat "/sys/fs/cgroup${line#0::}/pids.max"'
+  'read -r line < /proc/self/cgroup; echo "$line"; cat "/sys/fs/cgroup${line#0::}/pids.max" 2>/dev/null || :'
 
 type Runner = (
   program: string,
@@ -40,12 +40,21 @@ type Runner = (
 const defaultRunner: Runner = (program, args, env) =>
   runProcessSync({ program, args, env, timeoutMs: 5_000 })
 
+type DetachedRunner = (program: string, args: string[], env: NodeJS.ProcessEnv) => void
+
+const defaultDetachedRunner: DetachedRunner = (program, args, env) => {
+  const child = spawnProcess({ program, args, env, stdio: 'ignore' })
+  child.on('error', () => {})
+  child.unref()
+}
+
 /** What the Linux wrap needs at spawn time; never reported, only used. */
 export type TerminalScopeRuntime = {
   slice: string
   sliceCgroupPath: string
   systemdRun: string
   envBinary: string
+  /** Sanitized launch nonce, shared by the slice and every scope name. */
   launchId: string
   /** `--property=` values every terminal scope gets; each one was accepted by the probe. */
   properties: string[]
@@ -53,9 +62,8 @@ export type TerminalScopeRuntime = {
 
 export type TerminalScopeResolution = {
   ceiling: PtyProcessCeilingState
-  linux: TerminalScopeRuntime | null
-  /** Why terminals share the daemon's cgroup, for the daemon log. */
-  offReason: PtyProcessCeilingOffReason | null
+  /** Off says why terminals share the daemon's cgroup, for the daemon log. */
+  scopes: { on: TerminalScopeRuntime } | { off: PtyProcessCeilingOffReason }
 }
 
 export function parsePtyProcessCeiling(
@@ -74,10 +82,10 @@ const sanitizeId = (id: string): string => id.replace(/[^A-Za-z0-9]/g, '_')
 
 /** No dashes: systemd reads `a-b.slice` as a child of `a.slice`, and this one must be top-level. */
 export function terminalSliceName(launchId: string): string {
-  return `orca_ptys_${sanitizeId(launchId)}.slice`
+  return `orca_ptys_${launchId}.slice`
 }
 
-export function findExecutableOnPath(name: string, path: string | undefined): string | null {
+function findExecutableOnPath(name: string, path: string | undefined): string | null {
   for (const dir of (path ?? '').split(delimiter).filter(isAbsolute)) {
     try {
       accessSync(join(dir, name), constants.X_OK)
@@ -92,10 +100,10 @@ export function findExecutableOnPath(name: string, path: string | undefined): st
 type ResolveInput = {
   env: NodeJS.ProcessEnv
   platform: NodeJS.Platform
-  launchId: string
-  /** The daemon's own scope, only when the launcher created it for this daemon. */
+  /** From `ownFreshDaemonScope`: the daemon's own scope, only when its launcher created it. */
   daemonScope: string | null
   run?: Runner
+  runDetached?: DetachedRunner
   findExecutable?: (name: string) => string | null
   unifiedCgroup?: () => boolean
   setWindowsLimit?: (limit: number) => boolean
@@ -116,8 +124,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
   })
   const off = (reason: PtyProcessCeilingOffReason): TerminalScopeResolution => ({
     ceiling: ceilingOff(reason),
-    linux: null,
-    offReason: reason
+    scopes: { off: reason }
   })
   if (input.platform === 'win32') {
     return {
@@ -125,8 +132,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
         limit !== null && input.setWindowsLimit?.(limit)
           ? { state: 'on', limit, mechanism: 'windows-job', unit: null }
           : ceilingOff('native_unavailable'),
-      linux: null,
-      offReason: null
+      scopes: { off: 'unsupported_platform' }
     }
   }
   if (input.platform !== 'linux') {
@@ -145,11 +151,14 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
   // Why env is required: without it the shell would inherit the manager's bus address, not its own.
   const envBinary = find('env')
   if (!systemdRun || !envBinary) {
+    // One reason for either wrapper keeps the reported enum closed for older readers.
     return off('systemd_run_missing')
   }
   const run = input.run ?? defaultRunner
+  const runDetached = input.runDetached ?? defaultDetachedRunner
   const managerEnv = userManagerEnv(input.env)
-  const slice = terminalSliceName(input.launchId)
+  const launchId = sanitizeId(input.daemonScope.replace(/^orca-daemon-|\.scope$/g, ''))
+  const slice = terminalSliceName(launchId)
   try {
     const created = run(
       'busctl',
@@ -179,7 +188,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
     if (created.code !== 0 || created.timedOut) {
       return off('slice_unavailable')
     }
-    // Why probe, not parse a version: scopes reject OOMPolicy before systemd 253, and an
+    // Why probe, not parse a version: some systemd releases reject OOMPolicy on scopes, and an
     // unknown property fails the whole start, which would fail every terminal.
     const base = ['TimeoutStopSec=5s', ...(limit !== null ? [`TasksMax=${limit}`] : [])]
     for (const properties of [['OOMPolicy=continue', ...base], base]) {
@@ -206,7 +215,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
       const sliceControlGroup = dirname(cgroupLine.slice('0::'.length))
       // Why best-effort: oomd should pick a terminal before the daemon that holds every
       // terminal's scrollback; older systemd ignores or rejects it, which changes nothing.
-      run(
+      runDetached(
         'systemctl',
         ['--user', 'set-property', '--runtime', input.daemonScope, 'ManagedOOMPreference=avoid'],
         managerEnv
@@ -223,17 +232,18 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
               controlGroup: sliceControlGroup
             }
           : ceilingOff('controller_unavailable'),
-        linux: {
-          slice,
-          sliceCgroupPath: join(CGROUP_ROOT, sliceControlGroup),
-          systemdRun,
-          envBinary,
-          launchId: sanitizeId(input.launchId),
-          properties: enforced
-            ? properties
-            : properties.filter((property) => !property.startsWith('TasksMax='))
-        },
-        offReason: null
+        scopes: {
+          on: {
+            slice,
+            sliceCgroupPath: join(CGROUP_ROOT, sliceControlGroup),
+            systemdRun,
+            envBinary,
+            launchId,
+            properties: enforced
+              ? properties
+              : properties.filter((property) => !property.startsWith('TasksMax='))
+          }
+        }
       }
     }
     run('systemctl', ['--user', '--no-block', 'stop', slice], managerEnv)

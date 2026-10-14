@@ -142,7 +142,7 @@ async function main(): Promise<void> {
   const daemonScope = ownFreshDaemonScope(freshDaemonScope === true, launchNonce)
   const log = (event: string, details?: Record<string, unknown>): void =>
     daemonLog.log(event, details)
-  const processCeiling = initializeTerminalScopes(launchNonce ?? '', daemonScope, log)
+  const processCeiling = initializeTerminalScopes(daemonScope, log)
   startDaemonScopeDeathWatch({ daemonScope, log })
   void warmPwshAvailabilityCache()
 
