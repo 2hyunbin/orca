@@ -156,6 +156,22 @@ for (const section of sections) {
             await expect(headers.last()).toHaveAttribute('aria-expanded', 'false')
           }
           await expect(remoteRow).toHaveCount(0)
+          // Finish the reveal and its persistence before resetting the next scenario.
+          await expect
+            .poll(() =>
+              orcaPage.evaluate(async () => ({
+                pendingRevealWorktree: window.__store!.getState().pendingRevealWorktree,
+                collapsedGroups: [...window.__store!.getState().collapsedGroups].sort(),
+                persistedCollapsedGroups: (await window.api.ui.get()).collapsedGroups?.sort()
+              }))
+            )
+            .toEqual({
+              pendingRevealWorktree: null,
+              collapsedGroups: [`${section.key}:host:${hostId}`],
+              persistedCollapsedGroups: [`${section.key}:host:${hostId}`]
+            })
+          await expect(localRow).toBeVisible()
+          await expect(remoteRow).toHaveCount(0)
         })
       }
     }
