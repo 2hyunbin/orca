@@ -161,12 +161,12 @@ export function useTabGroupCreationCommands({
           return
         }
         if (isWebRuntimeSessionActive(environmentId)) {
+          // Why: the host's refusal text is written for the CLI (--shell flags), not this menu.
           toast.error(
             translate(
               'auto.components.tab.group.useTabGroupCreationCommands.newTerminalFailed',
               "Couldn't open a new terminal."
-            ),
-            { description: outcome.message }
+            )
           )
           return
         }

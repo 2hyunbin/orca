@@ -45,9 +45,7 @@ describe('tab group "+" menu shell launch on a paired host', () => {
     commands.newTerminalWithShell('cmd.exe')
 
     await vi.waitFor(() =>
-      expect(mocks.toastError).toHaveBeenCalledWith("Couldn't open a new terminal.", {
-        description: 'The workspace is not connected to a remote Orca host.'
-      })
+      expect(mocks.toastError).toHaveBeenCalledWith("Couldn't open a new terminal.")
     )
     // A paired workspace never falls back to a local shell the user did not ask for.
     expect(mocks.createTab).not.toHaveBeenCalled()
