@@ -11,7 +11,7 @@ import {
   recordCloudSessionIdentityMutationIfCurrent
 } from './profile-cloud-session-mutation'
 import { runWithFreshOrcaCloudSession } from './profile-cloud-session-refresh'
-import { readOrcaCloudSession, saveOrcaCloudSessionIfCurrent } from './profile-cloud-session-store'
+import { updateStoredOrcaCloudSession } from './profile-cloud-session-store'
 
 export async function refreshCurrentOrcaProfileAuth(
   userDataPath: string
@@ -38,13 +38,21 @@ export async function refreshCurrentOrcaProfileAuth(
     return { status: 'unconfigured', auth: auth() }
   }
   try {
-    const identity = cloudSessionIdentity(active.profile.id, active.profile.cloud)
+    let identity = cloudSessionIdentity(active.profile.id, active.profile.cloud)
     let mutationSnapshot = captureCloudSessionMutation(identity, userDataPath)
     const operation = await runWithFreshOrcaCloudSession(
       configState.config,
       active,
       userDataPath,
-      (session) => refreshOrcaCloudCapabilities(configState.config, session)
+      (session) => {
+        // Why: fence at request time, after any refresh; that refresh may relink the org.
+        const linked = ensureActiveOrcaProfile(userDataPath).profile.cloud
+        if (linked) {
+          identity = cloudSessionIdentity(active.profile.id, linked)
+          mutationSnapshot = captureCloudSessionMutation(identity, userDataPath)
+        }
+        return refreshOrcaCloudCapabilities(configState.config, session)
+      }
     )
     if (operation.status !== 'ok') {
       return { status: 'reconnect-required', auth: auth() }
@@ -70,22 +78,17 @@ export async function refreshCurrentOrcaProfileAuth(
         mutationSnapshot = advanced
       }
     }
-    const session = readOrcaCloudSession(active.profile.id, userDataPath)
-    if (session.status !== 'found') {
-      return { status: 'reconnect-required', auth: auth() }
-    }
-    if (
-      saveOrcaCloudSessionIfCurrent(
-        active.profile.id,
-        userDataPath,
-        {
-          ...session.session,
-          organizations: refresh.organizations ?? session.session.organizations,
-          capabilities: refresh.capabilities
-        },
-        mutationSnapshot
-      ) === null
-    ) {
+    const saved = updateStoredOrcaCloudSession(
+      active.profile.id,
+      userDataPath,
+      mutationSnapshot,
+      (current) => ({
+        ...current,
+        organizations: refresh.organizations ?? current.organizations,
+        capabilities: refresh.capabilities
+      })
+    )
+    if (!saved) {
       return { status: 'reconnect-required', auth: auth() }
     }
     const list = refresh.cloud

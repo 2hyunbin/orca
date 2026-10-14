@@ -10,7 +10,7 @@ import {
 } from './profile-cloud-session-mutation'
 import {
   readOrcaCloudSession,
-  saveOrcaCloudSessionIfCurrent,
+  updateStoredOrcaCloudSession,
   type OrcaCloudSession
 } from './profile-cloud-session-store'
 
@@ -62,25 +62,19 @@ export async function selectCloudOrgWithMutationFence(input: {
     ) {
       throw new Error('orca_cloud_org_selection_identity_mismatch')
     }
-    // Why: a refresh may have rotated the stored tokens meanwhile; writing back the
-    // tokens this started with would store a spent refresh token.
-    const latest = readOrcaCloudSession(input.active.profile.id, input.userDataPath)
-    if (latest.status !== 'found') {
-      throw new Error('stale_cloud_session_mutation')
-    }
-    const nextSession: OrcaCloudSession = {
-      ...latest.session,
-      organizations: selected.organizations ?? latest.session.organizations,
-      capabilities: selected.capabilities
-    }
-    if (
-      saveOrcaCloudSessionIfCurrent(
-        input.active.profile.id,
-        input.userDataPath,
-        nextSession,
-        snapshot
-      ) === null
-    ) {
+    // Why: merge onto the latest stored session; a refresh may have rotated the tokens
+    // meanwhile, and writing back the ones this started with would store a spent token.
+    const saved = updateStoredOrcaCloudSession(
+      input.active.profile.id,
+      input.userDataPath,
+      snapshot,
+      (latest) => ({
+        ...latest,
+        organizations: selected.organizations ?? latest.organizations,
+        capabilities: selected.capabilities
+      })
+    )
+    if (!saved) {
       throw new Error('stale_cloud_session_mutation')
     }
     const list = linkOrcaProfileToCloud(input.active.profile.id, selected.cloud, input.userDataPath)

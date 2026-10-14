@@ -128,7 +128,8 @@ export function getOrcaCloudSessionPath(profileId: string, userDataPath: string)
 export function saveOrcaCloudSession(
   profileId: string,
   userDataPath: string,
-  session: OrcaCloudSession
+  session: OrcaCloudSession,
+  options: { fileHoldsSpentToken?: boolean } = {}
 ): OrcaCloudSessionPersistence {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
   clearedSessionKeys.delete(cacheKey)
@@ -164,11 +165,14 @@ export function saveOrcaCloudSession(
       '[orca-cloud] could not persist the account session; keeping it in memory:',
       describeWriteError(error)
     )
-    // The file still holds the spent token; a restart replaying it would revoke the family.
-    try {
-      rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
-    } catch {
-      // Best effort: the in-memory session wins for the rest of this run either way.
+    if (options.fileHoldsSpentToken) {
+      // A restart replaying the spent token on disk would revoke the family; anywhere
+      // else the file still holds a valid token and must stay.
+      try {
+        rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
+      } catch {
+        // Best effort: the in-memory session wins for the rest of this run either way.
+      }
     }
   }
 
@@ -193,21 +197,37 @@ export function saveOrcaCloudSessionExchange(
   })
 }
 
-export function saveOrcaCloudSessionIfCurrent(
+/**
+ * Re-reads the stored session, applies `update` to it, and saves the result — all in one
+ * main-process turn, so a sign-out, org switch or concurrent rotation captured by `snapshot`
+ * cannot be overwritten with stale fields or a spent refresh token. Returns null when the
+ * fence moved, the session is gone or cleared, or `update` declines.
+ */
+export function updateStoredOrcaCloudSession(
   profileId: string,
   userDataPath: string,
-  session: OrcaCloudSession,
-  snapshot: CloudSessionMutationSnapshot
-): OrcaCloudSessionPersistence | null {
-  // Why: the check and sync save share one main-process turn, so an async
-  // refresh captured before sign-out/org-switch cannot resurrect the session.
+  snapshot: CloudSessionMutationSnapshot,
+  update: (current: OrcaCloudSession) => OrcaCloudSession | null,
+  options: { rotatesRefreshToken?: boolean } = {}
+): OrcaCloudSession | null {
   if (
     clearedSessionKeys.has(sessionCacheKey(profileId, userDataPath)) ||
     !isCloudSessionMutationCurrent(profileId, userDataPath, snapshot)
   ) {
     return null
   }
-  return saveOrcaCloudSession(profileId, userDataPath, session)
+  const current = readOrcaCloudSession(profileId, userDataPath)
+  if (current.status !== 'found') {
+    return null
+  }
+  const next = update(current.session)
+  if (!next) {
+    return null
+  }
+  saveOrcaCloudSession(profileId, userDataPath, next, {
+    fileHoldsSpentToken: options.rotatesRefreshToken === true
+  })
+  return next
 }
 
 export function readOrcaCloudSession(

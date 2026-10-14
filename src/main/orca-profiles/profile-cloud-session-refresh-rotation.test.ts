@@ -10,7 +10,7 @@ import type { ActiveOrcaProfileState } from './profile-index-store'
 import type { OrcaCloudSession } from './profile-cloud-session-store'
 
 const { refreshMock, selectOrgMock, linkMock, writeFailure, removeFailure } = vi.hoisted(() => {
-  const writeFailure: { code: string | null } = { code: null }
+  const writeFailure: { code: string | null; onlyFile?: string } = { code: null }
   const removeFailure: { code: string | null } = { code: null }
   return {
     refreshMock: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('../../shared/secure-file', async (importOriginal) => {
   return {
     ...original,
     writeSecureJsonFile: (path: string, value: unknown) => {
-      if (writeFailure.code) {
+      if (writeFailure.code && (!writeFailure.onlyFile || path.endsWith(writeFailure.onlyFile))) {
         throw Object.assign(new Error(`${writeFailure.code}: write failed`), {
           code: writeFailure.code
         })
@@ -79,7 +79,7 @@ import {
   getOrcaCloudSessionPath,
   readOrcaCloudSession,
   saveOrcaCloudSessionExchange,
-  saveOrcaCloudSessionIfCurrent
+  updateStoredOrcaCloudSession
 } from './profile-cloud-session-store'
 import {
   captureCloudSessionMutation,
@@ -181,6 +181,7 @@ describe('cloud session refresh-token rotation', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-refresh-rotation-'))
     writeFailure.code = null
+    writeFailure.onlyFile = undefined
     removeFailure.code = null
     refreshMock.mockReset()
     selectOrgMock.mockReset()
@@ -227,17 +228,12 @@ describe('cloud session refresh-token rotation', () => {
     expect(readOrcaCloudSession('profile-1', userDataPath).status).toBe('missing')
     // The fence never moved, so a save holding the old fence must still be refused.
     expect(
-      saveOrcaCloudSessionIfCurrent(
-        'profile-1',
-        userDataPath,
-        {
-          accessToken: 'access-0',
-          refreshToken: 'refresh-0',
-          expiresAt: Date.now() + ACCESS_TTL_MS,
-          capabilities: { flags: {}, refreshedAt: 1 }
-        },
-        fenceBeforeRevocation
-      )
+      updateStoredOrcaCloudSession('profile-1', userDataPath, fenceBeforeRevocation, () => ({
+        accessToken: 'access-0',
+        refreshToken: 'refresh-0',
+        expiresAt: Date.now() + ACCESS_TTL_MS,
+        capabilities: { flags: {}, refreshedAt: 1 }
+      }))
     ).toBeNull()
     expect(readOrcaCloudSession('profile-1', userDataPath).status).toBe('missing')
   })
@@ -337,6 +333,36 @@ describe('cloud session refresh-token rotation', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('different active org'))
     const stored = readOrcaCloudSession('profile-1', userDataPath)
     expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+  })
+
+  it('saves the rotated tokens even when relinking to a server-reported org fails', async () => {
+    const server = createRotatingAuthServer(Date.now, { ...cloud, activeOrgId: 'org-2' })
+    signIn()
+    writeFailure.code = 'ENOSPC'
+    writeFailure.onlyFile = 'account-session-mutation.json'
+
+    await runBrokerRenewals(12)
+
+    expect(server.sent).toEqual(['refresh-0'])
+    expect(server.revoked).toBe(false)
+    const stored = readOrcaCloudSession('profile-1', userDataPath)
+    expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+  })
+
+  it('keeps a still-valid session file when a non-rotating save cannot be written', async () => {
+    signIn()
+    selectOrgMock.mockResolvedValue({
+      cloud: { ...cloud, activeOrgId: 'org-2' },
+      organizations: [],
+      capabilities: { flags: { 'relay.use': true }, refreshedAt: Date.now() }
+    })
+    writeFailure.code = 'ENOSPC'
+    writeFailure.onlyFile = 'account-session.json.enc'
+
+    await selectCloudOrgWithMutationFence({ config, active, userDataPath, orgId: 'org-2' })
+
+    // The file still holds refresh-0, which was never spent, so a restart stays signed in.
+    expect(existsSync(getOrcaCloudSessionPath('profile-1', userDataPath))).toBe(true)
   })
 
   it('still discards a rotation that lands after sign-out', async () => {

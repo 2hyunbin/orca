@@ -3,14 +3,21 @@ import type { OrcaCloudAuthConfig } from './profile-cloud-auth-config'
 import type * as ProfileCloudClient from './profile-cloud-client'
 import type { ActiveOrcaProfileState } from './profile-index-store'
 
-const { readMock, saveIfCurrentMock, clearMock, refreshMock, linkMock, liveFenceMock } = vi.hoisted(
+const { readMock, updateStoredMock, clearMock, refreshMock, linkMock, liveFenceMock } = vi.hoisted(
   () => ({
     liveFenceMock: vi.fn((): { epoch: number; identityKey: string } | null => ({
       epoch: 1,
       identityKey: 'identity'
     })),
     readMock: vi.fn(),
-    saveIfCurrentMock: vi.fn((): string | null => 'memory-only'),
+    updateStoredMock: vi.fn(
+      (
+        _profileId: string,
+        _userDataPath: string,
+        _snapshot: unknown,
+        update: (current: unknown) => unknown
+      ) => update(readMock().session)
+    ),
     clearMock: vi.fn(),
     refreshMock: vi.fn(),
     linkMock: vi.fn()
@@ -19,7 +26,7 @@ const { readMock, saveIfCurrentMock, clearMock, refreshMock, linkMock, liveFence
 
 vi.mock('./profile-cloud-session-store', () => ({
   readOrcaCloudSession: readMock,
-  saveOrcaCloudSessionIfCurrent: saveIfCurrentMock,
+  updateStoredOrcaCloudSession: updateStoredMock,
   clearOrcaCloudSession: clearMock
 }))
 
@@ -73,7 +80,6 @@ describe('profile cloud session refresh', () => {
     vi.clearAllMocks()
     vi.restoreAllMocks()
     forgetAmbiguousRefreshAttempt('/data\0profile-1')
-    saveIfCurrentMock.mockReturnValue('memory-only')
     liveFenceMock.mockReturnValue({ epoch: 1, identityKey: 'identity' })
     readMock.mockReturnValue({ status: 'found', session: staleSession, persistence: 'memory-only' })
   })
@@ -122,7 +128,7 @@ describe('profile cloud session refresh', () => {
 
     const [firstResult, secondResult] = await Promise.all([first, second])
     expect(firstResult).toEqual(secondResult)
-    expect(saveIfCurrentMock).toHaveBeenCalledTimes(1)
+    expect(updateStoredMock).toHaveBeenCalledTimes(1)
     expect(linkMock).toHaveBeenCalledTimes(1)
   })
 
@@ -186,7 +192,6 @@ describe('refresh-token replay after an ambiguous attempt', () => {
     vi.clearAllMocks()
     vi.restoreAllMocks()
     forgetAmbiguousRefreshAttempt('/data\0profile-1')
-    saveIfCurrentMock.mockReturnValue('memory-only')
     readMock.mockReturnValue({ status: 'found', session: staleSession, persistence: 'memory-only' })
   })
 
@@ -220,7 +225,7 @@ describe('refresh-token replay after an ambiguous attempt', () => {
       session: rotated
     })
     expect(refreshMock).toHaveBeenCalledTimes(1)
-    expect(saveIfCurrentMock).not.toHaveBeenCalled()
+    expect(updateStoredMock).not.toHaveBeenCalled()
   })
 
   it('retries once after a definitive 5xx, which cannot have rotated the token', async () => {
