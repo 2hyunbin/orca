@@ -55,7 +55,18 @@ describe('orcad migration blob contract', () => {
     ['agent-session-records', 'Session-Mixed-Case', false],
     ['agent-session-records', '../escape', false],
     ['agent-session-records', 'a.b', false],
-    ['agent-session-records', 'x'.repeat(129), false]
+    ['agent-session-records', 'x'.repeat(129), false],
+    // Windows device names: one with any extension is the device too.
+    ['agent-session-records', 'con', false],
+    ['agent-session-records', 'prn', false],
+    ['agent-session-records', 'aux', false],
+    ['agent-session-records', 'nul', false],
+    ['agent-session-records', 'com0', false],
+    ['agent-session-records', 'com9', false],
+    ['agent-session-records', 'lpt1', false],
+    ['agent-session-records', 'console', true],
+    ['agent-session-records', 'com10', true],
+    ['agent-session-records', 'nul-1', true]
   ] as const)('%s key %s valid=%s', (blobKind, key, valid) => {
     const parse = () => parseOrcadMigrationBlobDescriptor(blob({ blobKind, key }))
     if (valid) {

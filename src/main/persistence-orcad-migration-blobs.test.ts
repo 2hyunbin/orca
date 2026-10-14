@@ -73,6 +73,32 @@ describe('orcad migration blobs through the store', () => {
     expect(readFileSync(getOrcadMigrationReceivedBlobPath(blobRoot(), input, blob))).toEqual(bytes)
   })
 
+  it('commits only the blob set the sender names, and checks nothing when it names none', () => {
+    const input = manifest()
+    const store = createStore()
+    store.stageOrcadMigrationCatalog(input)
+    store.stageOrcadMigrationBlobChunk(chunk(input, 0, bytes.length))
+    const missing: OrcadMigrationBlobDescriptor = {
+      blobKind: 'agent-session-records',
+      key: 'session-lost',
+      sha256: 'e'.repeat(64),
+      byteLength: 4
+    }
+
+    expect(() =>
+      store.commitStagedOrcadMigrationCatalog(input, {
+        expectedBlobs: [blob, missing]
+      })
+    ).toThrow('orcad_migration_blob_set_mismatch:agent-session-records:session-lost')
+    expect(() => store.commitStagedOrcadMigrationCatalog(input, { expectedBlobs: [] })).toThrow(
+      `orcad_migration_blob_set_mismatch:shell-history:${blob.key}`
+    )
+    expect(store.getOrcadMigrationCatalogState(input).state).toBe('staged')
+    expect(store.commitStagedOrcadMigrationCatalog(input, { expectedBlobs: [blob] }).state).toBe(
+      'committed'
+    )
+  })
+
   it('removes staged blobs when the catalog is aborted', () => {
     const input = manifest()
     const store = createStore()

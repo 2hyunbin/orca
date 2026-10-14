@@ -3,6 +3,7 @@ import type {
   OrcadMigrationCatalogState,
   OrcadMigrationManifest
 } from '../../shared/orcad-migration-manifest'
+import type { OrcadMigrationBlobDescriptor } from '../../shared/orcad-migration-blob-transfer'
 import type { Store } from '../persistence'
 
 type OrcadMigrationCatalogFlushStore = Partial<Pick<Store, 'flushPendingOrThrowAsync'>>
@@ -28,10 +29,14 @@ export async function commitStagedOrcadMigrationCatalogDurably(args: {
   store: OrcadMigrationCatalogCommitStore
   manifest: OrcadMigrationManifest
   signal?: AbortSignal
+  expectedBlobs?: readonly OrcadMigrationBlobDescriptor[]
   onDurableCommit: () => void
 }): Promise<OrcadMigrationCatalogState> {
   // SAFETY: Returned or mutable Store slots retain their original native missing-method failure.
-  const result = args.store.commitStagedOrcadMigrationCatalog!(args.manifest)
+  const result = args.store.commitStagedOrcadMigrationCatalog!(
+    args.manifest,
+    args.expectedBlobs ? { expectedBlobs: args.expectedBlobs } : {}
+  )
   await flushMigrationState(args.store, args.signal)
   args.onDurableCommit()
   return result

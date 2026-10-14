@@ -153,17 +153,27 @@ export function pruneOrcadMigrationStagingDirectories(
   root: string,
   stagedManifests: readonly OrcadMigrationManifest[]
 ): void {
-  const stagingRoot = join(root, ORCAD_MIGRATION_STAGING_DIRECTORY)
-  const retained = new Set(stagedManifests.map(orcadMigrationStagingKey))
+  pruneOrcadMigrationKeyedDirectories(
+    join(root, ORCAD_MIGRATION_STAGING_DIRECTORY),
+    stagedManifests
+  )
+}
+
+/** Removes every per-migration directory under `parent` whose migration is not retained. */
+export function pruneOrcadMigrationKeyedDirectories(
+  parent: string,
+  retainedMigrations: readonly OrcadMigrationRequestIdentity[]
+): void {
+  const retained = new Set(retainedMigrations.map(orcadMigrationStagingKey))
   let entries: string[]
   try {
-    entries = readdirSync(stagingRoot)
+    entries = readdirSync(parent)
   } catch {
     return
   }
   for (const entry of entries) {
     if (/^[a-f0-9]{32}$/.test(entry) && !retained.has(entry)) {
-      rmSync(join(stagingRoot, entry), { recursive: true, force: true })
+      rmSync(join(parent, entry), { recursive: true, force: true })
     }
   }
 }
@@ -184,7 +194,7 @@ export function requireStagedOrcadMigrationManifest(
   return staged
 }
 
-export function orcadMigrationStagingKey(manifest: OrcadMigrationManifest): string {
+export function orcadMigrationStagingKey(manifest: OrcadMigrationRequestIdentity): string {
   return createHash('sha256')
     .update(`${manifest.migrationId}\0${manifest.manifestSha256}`)
     .digest('hex')

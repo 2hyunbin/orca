@@ -10,6 +10,7 @@ import {
 } from '../../../shared/orcad-migration-manifest'
 import {
   abortOrcadMigrationBlobs,
+  assertOrcadMigrationBlobSetMatches,
   assertOrcadMigrationBlobsReady,
   commitOrcadMigrationBlobs,
   getOrcadMigrationReceivedBlobPath,
@@ -50,6 +51,7 @@ describe('orcad migration blob staging', () => {
     )
     stage(manifest, descriptor, first.length, bytes.subarray(first.length))
 
+    assertOrcadMigrationBlobsReady(manifest, root)
     commitOrcadMigrationBlobs(manifest, root)
     expect(readFileSync(getOrcadMigrationReceivedBlobPath(root, manifest, descriptor))).toEqual(
       bytes
@@ -96,7 +98,7 @@ describe('orcad migration blob staging', () => {
     const manifest = migrationManifest('refuse')
 
     stage(manifest, descriptor, 0, bytes.subarray(0, 4))
-    expect(() => commitOrcadMigrationBlobs(manifest, root)).toThrow(
+    expect(() => assertOrcadMigrationBlobsReady(manifest, root)).toThrow(
       `orcad_migration_blob_incomplete:shell-history:${descriptor.key}`
     )
     stage(manifest, descriptor, 4, Buffer.alloc(bytes.length - 4, 0x78))
@@ -119,6 +121,7 @@ describe('orcad migration blob staging', () => {
       'orcad_migration_blob_destination_conflict:terminal-restore-hints:migration'
     )
     writeFileSync(finalPath, bytes)
+    assertOrcadMigrationBlobsReady(manifest, root)
     commitOrcadMigrationBlobs(manifest, root)
     expect(readFileSync(finalPath)).toEqual(bytes)
   })
@@ -134,10 +137,66 @@ describe('orcad migration blob staging', () => {
     abortOrcadMigrationBlobs(first, root)
     expect(inspectOrcadMigrationBlobUploads(first, root)).toBeUndefined()
     expect(inspectOrcadMigrationBlobUploads(second, root)?.[0]?.receivedBytes).toBe(bytes.length)
-    pruneOrcadMigrationBlobStaging([second], root)
+    pruneOrcadMigrationBlobStaging([second], [], root)
     expect(inspectOrcadMigrationBlobUploads(second, root)?.[0]?.receivedBytes).toBe(bytes.length)
-    pruneOrcadMigrationBlobStaging([], root)
+    pruneOrcadMigrationBlobStaging([], [], root)
     expect(inspectOrcadMigrationBlobUploads(second, root)).toBeUndefined()
+  })
+
+  it('prunes received blobs whose migration is neither staged nor committed', () => {
+    const bytes = Buffer.from('moved')
+    const descriptor = blob('shell-history', `${'e'.repeat(16)}-fish`, bytes)
+    const leaked = migrationManifest('failed-commit')
+    const staged = migrationManifest('still-staged')
+    const committed = migrationManifest('committed')
+    for (const manifest of [leaked, staged, committed]) {
+      stage(manifest, descriptor, 0, bytes)
+      commitOrcadMigrationBlobs(manifest, root)
+    }
+    const receivedPath = (manifest: OrcadMigrationManifest) =>
+      getOrcadMigrationReceivedBlobPath(root, manifest, descriptor)
+
+    pruneOrcadMigrationBlobStaging(
+      [staged],
+      [
+        {
+          migrationId: committed.migrationId,
+          manifestSha256: committed.manifestSha256
+        }
+      ],
+      root
+    )
+    expect(existsSync(receivedPath(leaked))).toBe(false)
+    expect(existsSync(receivedPath(staged))).toBe(true)
+    expect(existsSync(receivedPath(committed))).toBe(true)
+  })
+
+  it('commits only when staged plus received blobs are exactly the expected set', () => {
+    const historyBytes = Buffer.from('history')
+    const recordBytes = Buffer.from('record')
+    const history = blob('shell-history', `${'f'.repeat(16)}-zsh`, historyBytes)
+    const record = blob('agent-session-records', 'session-3', recordBytes)
+    const manifest = migrationManifest('expected-set')
+    stage(manifest, history, 0, historyBytes)
+
+    expect(() => assertOrcadMigrationBlobSetMatches(manifest, root, [history, record])).toThrow(
+      'orcad_migration_blob_set_mismatch:agent-session-records:session-3'
+    )
+    expect(() => assertOrcadMigrationBlobSetMatches(manifest, root, [])).toThrow(
+      `orcad_migration_blob_set_mismatch:shell-history:${history.key}`
+    )
+    expect(() =>
+      assertOrcadMigrationBlobSetMatches(manifest, root, [{ ...history, sha256: 'f'.repeat(64) }])
+    ).toThrow('orcad_migration_blob_set_mismatch')
+    stage(manifest, record, 0, recordBytes)
+    assertOrcadMigrationBlobSetMatches(manifest, root, [history, record])
+
+    // A retry after a commit that moved the blobs still sees the whole set, from received.
+    commitOrcadMigrationBlobs(manifest, root)
+    assertOrcadMigrationBlobSetMatches(manifest, root, [history, record])
+    expect(() => assertOrcadMigrationBlobSetMatches(manifest, root, [history])).toThrow(
+      'orcad_migration_blob_set_mismatch'
+    )
   })
 
   it('drops blobs an earlier commit attempt moved when the catalog is aborted', () => {

@@ -18,7 +18,8 @@ import {
   orcadMigrationBlobKindUnsupportedBlocker,
   parseOrcadMigrationBlobChunkResult,
   type OrcadMigrationBlobChunkRequest,
-  type OrcadMigrationBlobChunkResult
+  type OrcadMigrationBlobChunkResult,
+  type OrcadMigrationBlobDescriptor
 } from '../../shared/orcad-migration-blob-transfer'
 import { parsePairingCode } from '../../shared/pairing'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
@@ -65,12 +66,16 @@ export function stageRemoteOrcadMigrationCatalog(
   return requestCatalogState(pairingCode, 'stage', manifest, options)
 }
 
-export function commitRemoteOrcadMigrationCatalog(
+/** `expectedBlobs` names what was moved so the destination refuses a commit missing any. */
+export async function commitRemoteOrcadMigrationCatalog(
   pairingCode: string,
   manifest: OrcadMigrationManifest,
-  options: CatalogRequestOptions = {}
+  options: CatalogRequestOptions & {
+    expectedBlobs?: readonly OrcadMigrationBlobDescriptor[]
+  } = {}
 ): Promise<OrcadMigrationCatalogState> {
-  return requestCatalogState(pairingCode, 'commit', manifest, options)
+  const result = await request(pairingCode, 'commit', manifest, options, options.expectedBlobs)
+  return parseOrcadMigrationCatalogState(result, manifest)
 }
 
 export function readRemoteOrcadMigrationCatalogState(
@@ -160,7 +165,8 @@ async function request(
   pairingCode: string,
   operation: OrcadCatalogMigrationOperation,
   manifest: OrcadMigrationManifest,
-  options: CatalogRequestOptions
+  options: CatalogRequestOptions,
+  expectedBlobs: readonly OrcadMigrationBlobDescriptor[] = []
 ): Promise<unknown> {
   const pairing = parsePairingCode(pairingCode)
   if (!pairing) {
@@ -174,11 +180,19 @@ async function request(
   const response = await sendSupportedMigrationRequest(
     pairing,
     METHOD_BY_OPERATION[operation],
-    { manifest },
+    // Only with blobs: SSH and blob-free moves keep sending exactly `{ manifest }`.
+    expectedBlobs.length > 0 ? { manifest, expectedBlobs } : { manifest },
     options,
     carriesExtraAgentArgs,
     // Every operation: an older destination would parse a non-SSH source as malformed or as SSH.
-    requiredOrcadMigrationSourceCapability(manifest.source)
+    requiredOrcadMigrationSourceCapability(manifest.source),
+    // A destination without the blob channel would strip the field and commit unchecked.
+    (capabilities) => {
+      const unsupported = findUnsupportedMigrationBlobKind(expectedBlobs, capabilities)
+      if (unsupported) {
+        throw new Error(orcadMigrationBlobKindUnsupportedBlocker(unsupported))
+      }
+    }
   )
   if (!response.ok) {
     throw new Error(`orcad_migration_${operation}_failed:${response.error.message}`)

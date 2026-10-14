@@ -9,7 +9,8 @@ import type {
 } from '../../shared/orcad-migration-scrollback'
 import type {
   OrcadMigrationBlobChunkRequest,
-  OrcadMigrationBlobChunkResult
+  OrcadMigrationBlobChunkResult,
+  OrcadMigrationBlobDescriptor
 } from '../../shared/orcad-migration-blob-transfer'
 import {
   abortStagedOrcadMigrationCatalogDurably,
@@ -44,7 +45,7 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
 
   async commitStagedOrcadMigrationCatalog(
     manifest: OrcadMigrationManifest,
-    options: { signal?: AbortSignal } = {}
+    options: { signal?: AbortSignal; expectedBlobs?: readonly OrcadMigrationBlobDescriptor[] } = {}
   ): Promise<OrcadMigrationCatalogState> {
     return commitStagedOrcadMigrationCatalogDurably({
       store: this.requireMigrationStore(
@@ -53,6 +54,7 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
       ),
       manifest,
       signal: options.signal,
+      expectedBlobs: options.expectedBlobs,
       onDurableCommit: () => {
         this.invalidateResolvedWorktreeCache()
         this.notifyReposChanged()

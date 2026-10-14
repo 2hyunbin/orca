@@ -31,9 +31,11 @@ import {
   orcadMigrationStagedFileSize,
   orcadMigrationStagingDirectory,
   orcadMigrationStagingKey,
+  pruneOrcadMigrationKeyedDirectories,
   pruneOrcadMigrationStagingDirectories,
   removeOrcadMigrationStagingDirectory,
-  requireStagedOrcadMigrationManifest
+  requireStagedOrcadMigrationManifest,
+  type OrcadMigrationRequestIdentity
 } from './orcad-migration-staged-file'
 
 const RECEIVED_DIRECTORY = 'received'
@@ -148,8 +150,46 @@ export function assertOrcadMigrationBlobsReady(
   }
 }
 
+/**
+ * The caller must run `assertOrcadMigrationBlobsReady` first, in the same synchronous turn: that
+ * pass hashes every staged file, and no chunk can land between it and these links.
+ */
+/**
+ * Refuses commit unless the staged and already-received blobs are exactly the set the sender
+ * moved, so a blob lost on the way (or left from another capture) fails instead of vanishing.
+ */
+export function assertOrcadMigrationBlobSetMatches(
+  manifest: OrcadMigrationManifest,
+  root: string,
+  expected: readonly OrcadMigrationBlobDescriptor[]
+): void {
+  assertOrcadMigrationBlobSet(expected)
+  const wanted = new Map(expected.map((entry) => [orcadMigrationBlobIdentity(entry), entry]))
+  const staged = stagedBlobDescriptors(root, manifest)
+  const stagedIds = new Set(staged.map(orcadMigrationBlobIdentity))
+  for (const descriptor of staged) {
+    const match = wanted.get(orcadMigrationBlobIdentity(descriptor))
+    if (!match || !sameOrcadMigrationBlob(match, descriptor)) {
+      throw blobSetMismatch(descriptor)
+    }
+  }
+  for (const identity of receivedBlobIdentities(root, manifest)) {
+    if (!wanted.has(identity)) {
+      throw new Error('orcad_migration_blob_set_mismatch')
+    }
+  }
+  for (const descriptor of expected) {
+    // An earlier commit attempt may already have moved it; the received bytes must still match.
+    if (
+      !stagedIds.has(orcadMigrationBlobIdentity(descriptor)) &&
+      inspectReceivedBlob(root, manifest, descriptor) !== 'matching'
+    ) {
+      throw blobSetMismatch(descriptor)
+    }
+  }
+}
+
 export function commitOrcadMigrationBlobs(manifest: OrcadMigrationManifest, root: string): void {
-  assertOrcadMigrationBlobsReady(manifest, root)
   const directories = new Set<string>()
   for (const descriptor of stagedBlobDescriptors(root, manifest)) {
     const finalPath = getOrcadMigrationReceivedBlobPath(root, manifest, descriptor)
@@ -174,11 +214,30 @@ export function abortOrcadMigrationBlobs(manifest: OrcadMigrationManifest, root:
   rmSync(receivedBlobsDirectory(root, manifest), { recursive: true, force: true })
 }
 
+/** Received blobs stay only for staged or committed migrations; a failed commit's are dropped. */
 export function pruneOrcadMigrationBlobStaging(
   stagedManifests: readonly OrcadMigrationManifest[],
+  committedMigrations: readonly OrcadMigrationRequestIdentity[],
   root: string
 ): void {
   pruneOrcadMigrationStagingDirectories(root, stagedManifests)
+  pruneOrcadMigrationKeyedDirectories(join(root, RECEIVED_DIRECTORY), [
+    ...stagedManifests,
+    ...committedMigrations
+  ])
+}
+
+function blobSetMismatch(descriptor: OrcadMigrationBlobDescriptor): Error {
+  return new Error(`orcad_migration_blob_set_mismatch:${descriptor.blobKind}:${descriptor.key}`)
+}
+
+function receivedBlobIdentities(root: string, manifest: OrcadMigrationManifest): string[] {
+  const received = receivedBlobsDirectory(root, manifest)
+  return ORCAD_MIGRATION_BLOB_KINDS.flatMap((blobKind) =>
+    readDirectory(join(received, blobKind)).map((key) =>
+      orcadMigrationBlobIdentity({ blobKind, key })
+    )
+  )
 }
 
 function stagedBlobDescriptors(

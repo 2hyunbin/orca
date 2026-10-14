@@ -77,7 +77,10 @@ export type OrcadMigrationBlobUploadState = OrcadMigrationBlobDescriptor & {
 export const ORCAD_MIGRATION_DESTINATION_BLOB_KIND_UNSUPPORTED =
   'orcad_migration_destination_blob_kind_unsupported'
 
-const OrcadMigrationBlobDescriptorSchema = z
+// Windows refuses these as file names whatever the extension, so a key must never be one.
+const WINDOWS_RESERVED_FILE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i
+
+export const OrcadMigrationBlobDescriptorSchema = z
   .object({
     blobKind: z.enum(ORCAD_MIGRATION_BLOB_KINDS),
     key: z.string().max(256),
@@ -86,8 +89,11 @@ const OrcadMigrationBlobDescriptorSchema = z
   })
   .superRefine((value, context) => {
     const contract = ORCAD_MIGRATION_BLOB_KIND_CONTRACTS[value.blobKind]
-    if (!contract.key.test(value.key)) {
-      context.addIssue({ code: 'custom', message: 'orcad_migration_blob_key_invalid' })
+    if (!contract.key.test(value.key) || WINDOWS_RESERVED_FILE_NAME.test(value.key)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'orcad_migration_blob_key_invalid'
+      })
     }
     if (value.byteLength > contract.maxBytes) {
       context.addIssue({ code: 'custom', message: 'orcad_migration_blob_too_large' })
@@ -210,6 +216,7 @@ export function parseOrcadMigrationBlobUploadStates(
     throw new Error('orcad_migration_blob_state_invalid')
   }
   const uploads = value.map((entry) => {
+    // Fails closed on an unknown kind by design: only blobs this desktop staged can appear here.
     const record = requiredRecord(entry, 'orcad_migration_blob_state_invalid')
     const descriptor = parseOrcadMigrationBlobDescriptor(record)
     if (

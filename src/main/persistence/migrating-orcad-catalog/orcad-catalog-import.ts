@@ -12,7 +12,8 @@ import type {
 } from '../../../shared/orcad-migration-scrollback'
 import type {
   OrcadMigrationBlobChunkRequest,
-  OrcadMigrationBlobChunkResult
+  OrcadMigrationBlobChunkResult,
+  OrcadMigrationBlobDescriptor
 } from '../../../shared/orcad-migration-blob-transfer'
 import type { RepoLifecycleOperations } from '../loading-store/repo-lifecycle-operations'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
@@ -41,6 +42,7 @@ import {
 } from './orcad-scrollback-snapshot-transfer'
 import {
   abortOrcadMigrationBlobs,
+  assertOrcadMigrationBlobSetMatches,
   assertOrcadMigrationBlobsReady,
   commitOrcadMigrationBlobs,
   inspectOrcadMigrationBlobUploads,
@@ -87,6 +89,7 @@ export class OrcadCatalogImportPersistence {
     )
     pruneOrcadMigrationBlobStaging(
       stagedManifests(context.runtime.state),
+      committedMigrations(context.runtime.state),
       context.runtime.orcadMigrationBlobRoot
     )
     const current = migrationCatalogState(context.runtime, manifest)
@@ -142,9 +145,10 @@ export class OrcadCatalogImportPersistence {
     })
   }
 
+  /** `expectedBlobs` absent (SSH, older senders) keeps the pre-blob-set commit unchanged. */
   commitStagedOrcadMigrationCatalog(
     manifest: OrcadMigrationManifest,
-    options: { now?: () => Date } = {}
+    options: { now?: () => Date; expectedBlobs?: readonly OrcadMigrationBlobDescriptor[] } = {}
   ): OrcadMigrationCatalogState {
     const context = this[orcadCatalogImportContext]
     const current = migrationCatalogState(context.runtime, manifest)
@@ -156,6 +160,13 @@ export class OrcadCatalogImportPersistence {
     }
     const prepared = prepareOrcadMigrationCatalog(manifest, context.runtime.state)
     assertOrcadMigrationSnapshotsReady(manifest, context.runtime.terminalScrollbackSnapshotStorage)
+    if (options.expectedBlobs) {
+      assertOrcadMigrationBlobSetMatches(
+        manifest,
+        context.runtime.orcadMigrationBlobRoot,
+        options.expectedBlobs
+      )
+    }
     assertOrcadMigrationBlobsReady(manifest, context.runtime.orcadMigrationBlobRoot)
     commitOrcadMigrationSnapshots(manifest, context.runtime.terminalScrollbackSnapshotStorage)
     commitOrcadMigrationBlobs(manifest, context.runtime.orcadMigrationBlobRoot)
@@ -241,6 +252,15 @@ function migrationCatalogState(
 
 function stagedManifests(state: StoreRuntimeState['state']): OrcadMigrationManifest[] {
   return (state.orcadMigrationStagedCatalogs ?? []).map((entry) => entry.manifest)
+}
+
+function committedMigrations(
+  state: StoreRuntimeState['state']
+): { migrationId: string; manifestSha256: string }[] {
+  return [
+    ...(state.orcadMigrationImportReceipts ?? []),
+    ...(state.orcadMigrationEvictedReceipts ?? [])
+  ]
 }
 
 /**

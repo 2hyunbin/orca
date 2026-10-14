@@ -140,6 +140,41 @@ describe('orcad migration RPC', () => {
     }
   })
 
+  it('passes a named blob set to commit only when the sender sent one', async () => {
+    const input = manifest()
+    const commit = vi.fn().mockResolvedValue({ state: 'committed' })
+    const caller = context(vi.fn(), {}, { commitStagedOrcadMigrationCatalog: commit })
+    const method = migrationMethod('orcad.migration.commitCatalog')
+    const expectedBlobs = [
+      {
+        blobKind: 'shell-history',
+        key: `${'a'.repeat(16)}-zsh`,
+        sha256: 'b'.repeat(64),
+        byteLength: 1
+      }
+    ]
+
+    await method.handler(method.params?.parse({ manifest: input, expectedBlobs }), caller)
+    expect(commit).toHaveBeenLastCalledWith(input, {
+      signal: undefined,
+      expectedBlobs
+    })
+    await method.handler(method.params?.parse({ manifest: input }), caller)
+    expect(commit).toHaveBeenLastCalledWith(input, { signal: undefined })
+    expect(
+      method.params?.safeParse({
+        manifest: input,
+        expectedBlobs: [
+          {
+            ...expectedBlobs[0],
+            blobKind: 'agent-session-records',
+            key: 'con'
+          }
+        ]
+      }).success
+    ).toBe(false)
+  })
+
   it('stages a blob chunk through its own method and refuses malformed descriptors', async () => {
     const input = manifest()
     const blob = vi.fn().mockReturnValue({ receivedBytes: 1 })

@@ -387,7 +387,10 @@ import {
   NotificationUnsubscribeParams,
   NotificationsSubscribeParams
 } from './notifications-params'
-import { OrcadMigrationCatalogParams } from './orcad-migration-params'
+import {
+  OrcadMigrationCatalogParams,
+  OrcadMigrationCommitCatalogParams
+} from './orcad-migration-params'
 import {
   FederationDispatchParams,
   FederationFleetSnapshotParams,
@@ -1082,7 +1085,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'notifications.unsubscribe': NotificationUnsubscribeParams,
   'orcad.migration.abortCatalog': OrcadMigrationCatalogParams,
   'orcad.migration.catalogState': OrcadMigrationCatalogParams,
-  'orcad.migration.commitCatalog': OrcadMigrationCatalogParams,
+  'orcad.migration.commitCatalog': OrcadMigrationCommitCatalogParams,
   'orcad.migration.stageBlobChunk': OrcadMigrationBlobChunkRequestSchema,
   'orcad.migration.stageCatalog': OrcadMigrationCatalogParams,
   'orcad.migration.stageSnapshotChunk': OrcadMigrationSnapshotChunkRequestSchema,
