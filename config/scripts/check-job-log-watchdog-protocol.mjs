@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict'
 import { BASELINE_REF } from './check-job-log-performance-cases.mjs'
 
-export function assertWatchdogExit(result, platform) {
+export function assertWatchdogExit(result) {
   const signalExit = result.code === null && ['SIGTERM', 'SIGKILL'].includes(result.signal)
-  const windowsExit =
-    platform === 'win32' &&
-    result.signal === null &&
-    Number.isSafeInteger(result.code) &&
-    result.code !== 0
-  assert(result.timedOut && (signalExit || windowsExit), 'Unverified watchdog termination')
+  assert(result.timedOut === true && signalExit, 'Unverified watchdog termination')
 }
 
 export const adverseCaseKey = (descriptor) =>
@@ -25,6 +20,18 @@ export const adverseCaseKey = (descriptor) =>
 export function auditBaselineCensoring(manifest, byId) {
   for (const descriptor of manifest) {
     const record = byId.get(descriptor.id)
+    if (descriptor.mode === 'watchdog' || record.status === 'watchdog_passed') {
+      assert(
+        descriptor.mode === 'watchdog' &&
+          record.status === 'watchdog_passed' &&
+          record.attempted === true
+      )
+      assert(record.settlementMs < 15000)
+      assert.equal(record.identity.baselineRef, BASELINE_REF)
+      assertWatchdogExit(record.watchdogTermination)
+      assert.equal(record.code, record.watchdogTermination.code)
+      assert.equal(record.signal, record.watchdogTermination.signal)
+    }
     if (record.status === 'baseline_timeout') {
       assert(
         descriptor.baselineTimeoutAllowed &&
@@ -35,7 +42,7 @@ export function auditBaselineCensoring(manifest, byId) {
       assert.equal(record.deadlineMs, 10000)
       assert(record.settlementMs < 15000)
       assert.equal(record.identity.baselineRef, BASELINE_REF)
-      assertWatchdogExit(record.watchdogTermination, record.runtime.platform)
+      assertWatchdogExit(record.watchdogTermination)
     }
     if (record.status === 'baseline_censored') {
       const initial = byId.get(record.initialTimeoutId)
@@ -53,7 +60,7 @@ export function auditBaselineCensoring(manifest, byId) {
         adverseCaseKey(initial),
         'Censoring crossed adverse cases'
       )
-      assertWatchdogExit(initial.watchdogTermination, initial.runtime.platform)
+      assertWatchdogExit(initial.watchdogTermination)
       assert.deepEqual(record.identity, { ...initial.identity, id: descriptor.id })
       for (const field of ['inputBytes', 'codeUnits', 'inputHash']) {
         assert.equal(record[field], initial[field])

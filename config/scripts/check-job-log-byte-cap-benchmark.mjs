@@ -215,6 +215,7 @@ export async function runDescriptor(context, descriptor) {
     ? censored.get(adverseCaseKey(descriptor))
     : undefined
   if (initialTimeout && descriptor.sample > 0) {
+    assertWatchdogExit(initialTimeout.watchdogTermination)
     return {
       ...descriptor,
       capturePath: undefined,
@@ -307,19 +308,16 @@ export async function runDescriptor(context, descriptor) {
     (line) => line.type === (descriptor.baselineTimeoutAllowed ? 'entered-strip' : 'entered')
   )
   if (descriptor.mode === 'watchdog') {
-    assert(
-      result.timedOut && entered?.phase === 'watchdog',
-      'Watchdog did not terminate the synchronous child'
-    )
-    assertWatchdogExit(result, ready.runtime.platform)
+    assert.equal(entered?.phase, 'watchdog', 'Watchdog did not enter the synchronous child')
+    assertWatchdogExit(result)
     return {
       ...descriptor,
-      id: descriptor.id,
       status: 'watchdog_passed',
       attempted: true,
       settlementMs,
       signal: result.signal,
       code: result.code,
+      watchdogTermination: { timedOut: true, signal: result.signal, code: result.code },
       identity,
       inputBytes: ready.inputBytes,
       codeUnits: ready.codeUnits,
@@ -328,7 +326,7 @@ export async function runDescriptor(context, descriptor) {
     }
   }
   if (result.timedOut && descriptor.baselineTimeoutAllowed) {
-    assertWatchdogExit(result, ready.runtime.platform)
+    assertWatchdogExit(result)
     assert(
       descriptor.mode === 'direct' &&
         descriptor.arm === 'baseline' &&

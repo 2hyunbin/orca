@@ -8,6 +8,7 @@ import {
   BASELINE_REF,
   createManifest
 } from '../../config/scripts/check-job-log-performance-cases.mjs'
+import { adverseCaseKey } from '../../config/scripts/check-job-log-watchdog-protocol.mjs'
 
 const launcher = vi.hoisted(() => vi.fn())
 vi.mock('@orca/process-host', () => ({ runProcess: launcher }))
@@ -59,6 +60,56 @@ const timeoutResult = () => ({
   stderr: '',
   stdout: protocol([ready(), { type: 'entered-strip', phase: 'warmup' }])
 })
+const watchdogExits = [
+  { label: 'SIGTERM', signal: 'SIGTERM', code: null, accepted: true },
+  { label: 'SIGKILL', signal: 'SIGKILL', code: null, accepted: true },
+  { label: 'numeric one', signal: null, code: 1, accepted: false },
+  { label: 'numeric two', signal: null, code: 2, accepted: false },
+  { label: 'maximum safe integer', signal: null, code: Number.MAX_SAFE_INTEGER, accepted: false },
+  { label: 'unsigned access violation', signal: null, code: 3221225477, accepted: false },
+  { label: 'signed access violation', signal: null, code: -1073741819, accepted: false },
+  { label: 'fractional code', signal: null, code: 1.5, accepted: false },
+  { label: 'zero code', signal: null, code: 0, accepted: false },
+  { label: 'null/null', signal: null, code: null, accepted: false },
+  { label: 'unexpected signal', signal: 'SIGSEGV', code: null, accepted: false },
+  { label: 'unexpected signal/code', signal: 'SIGSEGV', code: 1, accepted: false },
+  { label: 'SIGINT', signal: 'SIGINT', code: null, accepted: false },
+  { label: 'SIGTERM/code', signal: 'SIGTERM', code: 1, accepted: false },
+  { label: 'SIGKILL/code', signal: 'SIGKILL', code: 2, accepted: false }
+] as const
+const adverseSlots = () =>
+  Array.from({ length: 7 }, (_, sample) => ({
+    ...adverse,
+    id: sample ? `slot-${sample}` : adverse.id,
+    samples: 1,
+    sample
+  }))
+const differentials = ['baseline', 'proposed'].map((arm) => ({
+  id: `diff-${arm}`,
+  mode: 'differential',
+  arm
+}))
+const differentialRecords = differentials.map((item) => ({
+  ...item,
+  status: 'completed',
+  cases: 5126,
+  outputHash: 'same'
+}))
+const watchdog = { id: 'watchdog', mode: 'watchdog', arm: 'proposed' }
+const terminationProtocol = (descriptor: typeof adverse | typeof watchdog, platform: string) =>
+  protocol([
+    {
+      ...ready(
+        descriptor.id,
+        context.bundles[descriptor.mode === 'direct' ? 'baseline-negative' : 'proposed'].hash
+      ),
+      runtime: { node: process.version, platform, arch: 'x64', bun: false }
+    },
+    {
+      type: descriptor.mode === 'direct' ? 'entered-strip' : 'entered',
+      phase: descriptor.mode === 'direct' ? 'warmup' : 'watchdog'
+    }
+  ])
 
 describe('performance watchdog failure precedence and completeness', () => {
   it('censors only a verified frozen adverse stripper entered under the watchdog', async () => {
@@ -196,68 +247,166 @@ describe('performance watchdog failure precedence and completeness', () => {
       )
     ).toThrow('Missing verified initial')
   })
-  it.each(['adverse', 'watchdog'])(
-    'validates Windows %s termination independently of this host',
-    async (mode) => {
-      const descriptor =
-        mode === 'adverse'
-          ? adverse
-          : { ...adverse, mode: 'watchdog', arm: 'proposed', baselineTimeoutAllowed: false }
-      const bundleHash = context.bundles[mode === 'adverse' ? 'baseline-negative' : 'proposed'].hash
-      for (const [signal, code, accepted] of [
-        ['SIGTERM', null, true],
-        ['SIGKILL', null, true],
-        [null, 1, true],
-        ['SIGSEGV', null, false],
-        ['SIGSEGV', 1, false],
-        [null, null, false],
-        [null, 0, false],
-        [null, 1.5, false]
-      ] as const) {
+  describe.each(['win32', 'linux', 'darwin'])('%s watchdog evidence', (platform) => {
+    describe.each(['adverse', 'watchdog'])('%s classifier and parent audit', (mode) => {
+      it.each(watchdogExits)(
+        'classifies $label through the actual launcher result',
+        async (exit) => {
+          const descriptor = mode === 'adverse' ? adverse : watchdog
+          launcher.mockResolvedValue({
+            ...timeoutResult(),
+            code: exit.code,
+            signal: exit.signal,
+            stdout: terminationProtocol(descriptor, platform)
+          })
+          if (exit.accepted) {
+            expect((await runDescriptor(context, descriptor)).status).toBe(
+              mode === 'adverse' ? 'baseline_timeout' : 'watchdog_passed'
+            )
+          } else {
+            await expect(runDescriptor(context, descriptor)).rejects.toThrow(
+              'Unverified watchdog termination'
+            )
+            expect(context.censoredBaselines.size).toBe(0)
+          }
+        }
+      )
+      it.each(watchdogExits)('audits independently constructed $label records', (exit) => {
+        const slots = adverseSlots()
+        const input = ready()
+        const initial = {
+          ...slots[0],
+          status: 'baseline_timeout',
+          attempted: true,
+          phase: 'warmup',
+          deadlineMs: 10000,
+          settlementMs: 10001,
+          identity: input.identity,
+          runtime: { ...input.runtime, platform },
+          inputBytes: input.inputBytes,
+          codeUnits: input.codeUnits,
+          inputHash: input.inputHash,
+          watchdogTermination: { timedOut: true, signal: exit.signal, code: exit.code },
+          unavailableSamples: 1,
+          samples: []
+        }
+        const manifest = mode === 'adverse' ? slots : [watchdog]
+        const records =
+          mode === 'adverse'
+            ? slots.map((slot) => ({
+                ...initial,
+                ...slot,
+                identity: { ...initial.identity, id: slot.id },
+                ...(slot.sample
+                  ? {
+                      status: 'baseline_censored',
+                      attempted: false,
+                      initialTimeoutId: initial.id
+                    }
+                  : {})
+              }))
+            : [
+                {
+                  ...watchdog,
+                  status: 'watchdog_passed',
+                  attempted: true,
+                  settlementMs: initial.settlementMs,
+                  identity: { ...input.identity, id: watchdog.id },
+                  runtime: initial.runtime,
+                  code: exit.code,
+                  signal: exit.signal,
+                  watchdogTermination: initial.watchdogTermination
+                }
+              ]
+        const audit = () =>
+          auditResults([...manifest, ...differentials], [...records, ...differentialRecords])
+        if (exit.accepted) {
+          expect(audit().descriptors).toBe(manifest.length + 2)
+        } else {
+          expect(audit).toThrow('Unverified watchdog termination')
+        }
+      })
+    })
+  })
+  it.each(watchdogExits)(
+    'revalidates cached initial $label evidence before censoring',
+    async (exit) => {
+      const input = ready()
+      const initial = {
+        ...adverse,
+        status: 'baseline_timeout',
+        attempted: true,
+        phase: 'warmup',
+        identity: input.identity,
+        runtime: input.runtime,
+        inputBytes: input.inputBytes,
+        codeUnits: input.codeUnits,
+        inputHash: input.inputHash,
+        deadlineMs: 10000,
+        settlementMs: 10001,
+        watchdogTermination: { timedOut: true, signal: exit.signal, code: exit.code }
+      }
+      context.censoredBaselines.set(adverseCaseKey(adverse), initial)
+      const run = runDescriptor(context, { ...adverse, id: 'cached-slot', samples: 1, sample: 1 })
+      if (exit.accepted) {
+        expect(await run).toMatchObject({ status: 'baseline_censored', attempted: false })
+      } else {
+        await expect(run).rejects.toThrow('Unverified watchdog termination')
+      }
+      expect(launcher).not.toHaveBeenCalled()
+    }
+  )
+  it.each(watchdogExits.filter((exit) => !exit.accepted))(
+    'an initial $label failure leaves all seven slots attempted',
+    async (exit) => {
+      for (const slot of adverseSlots()) {
         launcher.mockResolvedValue({
           ...timeoutResult(),
-          signal,
-          code,
-          stdout: protocol([
-            {
-              ...ready(descriptor.id, bundleHash),
-              runtime: { node: process.version, platform: 'win32', arch: 'x64', bun: false }
-            },
-            {
-              type: mode === 'adverse' ? 'entered-strip' : 'entered',
-              phase: mode === 'adverse' ? 'warmup' : 'watchdog'
-            }
-          ])
+          code: exit.code,
+          signal: exit.signal,
+          stdout: terminationProtocol(slot, 'win32')
         })
-        if (accepted) {
-          expect((await runDescriptor(context, descriptor)).status).toBe(
-            mode === 'adverse' ? 'baseline_timeout' : 'watchdog_passed'
-          )
-        } else {
-          await expect(runDescriptor(context, descriptor)).rejects.toThrow(
-            'Unverified watchdog termination'
-          )
-        }
+        await expect(runDescriptor(context, slot)).rejects.toThrow(
+          'Unverified watchdog termination'
+        )
       }
+      expect(launcher).toHaveBeenCalledTimes(7)
+      expect(context.censoredBaselines.size).toBe(0)
     }
   )
-  it.each(['linux', 'darwin'])(
-    'rejects an unverified numeric-only %s watchdog settlement',
-    async (platform) => {
-      launcher.mockResolvedValue({
-        ...timeoutResult(),
-        signal: null,
-        code: 1,
-        stdout: protocol([
-          { ...ready(), runtime: { node: process.version, platform, arch: 'x64', bun: false } },
-          { type: 'entered-strip', phase: 'warmup' }
-        ])
-      })
-      await expect(runDescriptor(context, adverse)).rejects.toThrow(
-        'Unverified watchdog termination'
-      )
+  it.each(['adverse', 'watchdog'])(
+    'rejects every %s exit without a fired watchdog',
+    async (mode) => {
+      const descriptor = mode === 'adverse' ? adverse : watchdog
+      for (const exit of watchdogExits) {
+        launcher.mockResolvedValue({
+          ...timeoutResult(),
+          timedOut: false,
+          code: exit.code,
+          signal: exit.signal,
+          stdout: terminationProtocol(descriptor, 'win32')
+        })
+        await expect(runDescriptor(context, descriptor)).rejects.toThrow()
+      }
+      expect(context.censoredBaselines.size).toBe(0)
     }
   )
+  it('audits the actual self-control record and rejects altered status or exit fields', async () => {
+    launcher.mockResolvedValue({
+      ...timeoutResult(),
+      stdout: terminationProtocol(watchdog, 'win32')
+    })
+    const record = await runDescriptor(context, watchdog)
+    const manifest = [watchdog, ...differentials]
+    expect(auditResults(manifest, [record, ...differentialRecords]).descriptors).toBe(3)
+    for (const altered of [
+      { ...record, status: 'completed' },
+      { ...record, code: 1 },
+      { ...record, signal: 'SIGSEGV' }
+    ]) {
+      expect(() => auditResults(manifest, [altered, ...differentialRecords])).toThrow()
+    }
+  })
   it('alternates seven parent-selected pairs at every direct size', () => {
     const direct = createManifest().filter(
       (item) => item.mode === 'direct' && item.family === 'plain'
