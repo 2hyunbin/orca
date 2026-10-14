@@ -129,7 +129,7 @@ describe('Jira preset filters', () => {
     })
     const { listIssues } = await import('./jira-issue-search')
     await expect(
-      listIssues('all', 20, 'cloud', { statuses: ['Blocked', 'In Progress'] })
+      listIssues('all', 20, 'cloud', true, { statuses: ['Blocked', 'In Progress'] })
     ).resolves.toMatchObject([{ key: 'APP-1' }])
     expect(jiraRequest).toHaveBeenCalledTimes(2)
   })

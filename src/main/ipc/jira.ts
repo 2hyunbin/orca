@@ -170,6 +170,7 @@ export function registerJiraHandlers(): void {
         filter,
         clampLimit(args?.limit),
         normalizeSiteSelection(args?.siteId),
+        false,
         args?.filters ? JiraIssueListFiltersParam.parse(args.filters) : undefined
       )
     }

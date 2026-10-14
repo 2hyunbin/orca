@@ -109,7 +109,13 @@ describe('jira RPC methods', () => {
       undefined,
       undefined
     )
-    expect(runtime.jiraListIssues).toHaveBeenCalledWith('assigned', 20, 'site-1', undefined)
+    expect(runtime.jiraListIssues).toHaveBeenCalledWith(
+      'assigned',
+      20,
+      'site-1',
+      undefined,
+      undefined
+    )
     expect(runtime.jiraGetIssue).toHaveBeenCalledWith('ABC-3', 'site-1', undefined)
     expect(runtime.jiraLookupIssueSummary).toHaveBeenCalledWith(
       'ABC-3',
@@ -281,21 +287,26 @@ describe('jira RPC methods', () => {
   })
 })
 
-it('forwards optional status filters without changing older preset requests', async () => {
+it('forwards strict reads and optional status filters while accepting older requests', async () => {
   const jiraListIssues = vi.fn().mockResolvedValue([])
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the runtime identity and list method are invoked by these requests.
   const runtime = { getRuntimeId: () => 'host-a', jiraListIssues } as unknown as OrcaRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
   expect(
     await dispatcher.dispatch(
-      makeRequest('jira.listIssues', { filter: 'all', filters: { statuses: ['In Progress'] } })
+      makeRequest('jira.listIssues', {
+        filter: 'all',
+        siteId: 'site-1',
+        strict: true,
+        filters: { statuses: ['In Progress'] }
+      })
     )
   ).toMatchObject({ ok: true })
-  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, undefined, {
+  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, 'site-1', true, {
     statuses: ['In Progress']
   })
   await dispatcher.dispatch(makeRequest('jira.listIssues', { filter: 'all' }))
-  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, undefined)
+  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, undefined, undefined, undefined)
 })
 
 describe('Jira title generation RPC', () => {
