@@ -12,11 +12,8 @@
  */
 import process from 'node:process'
 import { describeOrcadSecretProtectionGap } from './orcad-secret-protection-gap'
-import {
-  getAppEnvironment,
-  setAppEnvironment,
-  type AppEnvironment
-} from '../../shared/app-environment'
+import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environment'
+import type { AppEnvironment } from '../../shared/app-environment'
 import { setSecretStore, type SecretStore } from '../../shared/secret-store'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveOrcadPath, resolveUserDataPath } from './orcad-app-paths'
