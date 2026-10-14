@@ -189,3 +189,80 @@ it('retains stored JQL after failed writes and clears only selection for manual 
   )
   expect(setQuery).not.toHaveBeenCalled()
 })
+it('rejects a saved-filter action retained from a previous visit to the same owner', async () => {
+  read.mockResolvedValue(initial)
+  mutate.mockResolvedValue(initial)
+  const setQuery = vi.fn()
+  const { result, rerender } = renderHook(
+    ({ host }) => useTaskPageJiraSavedFilters(model(host), setQuery),
+    { initialProps: { host: 'host-a' } }
+  )
+  await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
+  const oldAction = result.current.applyJiraSavedFilter
+  rerender({ host: 'host-b' })
+  await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
+  rerender({ host: 'host-a' })
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(3))
+  await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
+  await act(async () => oldAction(filter))
+  expect(mutate).not.toHaveBeenCalled()
+})
+it.each(['success', 'failure'] as const)(
+  'keeps a new visit to the owner pending after an old write settles with %s',
+  async (settlement) => {
+    read.mockResolvedValue(initial)
+    let settleOld = () => {}
+    let settleNew = () => {}
+    mutate
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            settleOld = () =>
+              settlement === 'success'
+                ? resolve({ filters: [], activeFilterId: null })
+                : reject(new Error('Old host disconnected'))
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            settleNew = () => resolve(initial)
+          })
+      )
+    const setQuery = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ host }) => useTaskPageJiraSavedFilters(model(host), setQuery),
+      { initialProps: { host: 'host-a' } }
+    )
+    await waitFor(() => expect(result.current.jiraSavedFiltersReady).toBe(true))
+    let oldWrite = Promise.resolve()
+    act(() => {
+      oldWrite = result.current.applyJiraSavedFilter(filter).catch(() => {})
+    })
+    rerender({ host: 'host-b' })
+    await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
+    rerender({ host: 'host-a' })
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(result.current.jiraSavedFiltersLoading).toBe(false))
+    let newWrite = Promise.resolve()
+    act(() => {
+      newWrite = result.current.applyJiraSavedFilter(filter)
+    })
+    expect(result.current.jiraSavedFiltersPending).toBe(true)
+    setQuery.mockClear()
+    await act(async () => {
+      settleOld()
+      await oldWrite
+    })
+    expect(result.current.jiraSavedFilters).toEqual([filter])
+    expect(result.current.jiraSavedFiltersPending).toBe(true)
+    expect(result.current.jiraSavedFiltersError).toBeNull()
+    expect(setQuery).not.toHaveBeenCalled()
+    await act(async () => {
+      settleNew()
+      await newWrite
+    })
+    expect(result.current.jiraSavedFiltersPending).toBe(false)
+    expect(setQuery).toHaveBeenCalledWith(filter.jql)
+  }
+)

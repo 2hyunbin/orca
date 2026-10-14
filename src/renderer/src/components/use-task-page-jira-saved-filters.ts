@@ -39,6 +39,7 @@ export function useTaskPageJiraSavedFilters(
     ownerEpochRef.current += 1
     ownerRef.current = ownerKey
   }
+  const ownerEpoch = ownerEpochRef.current
   const state =
     snapshot.ownerKey === ownerKey ? snapshot.state : normalizeJiraSavedFilterState(undefined)
   const ready = target !== null && snapshot.ownerKey === ownerKey
@@ -91,11 +92,17 @@ export function useTaskPageJiraSavedFilters(
   }, [ownerKey, target, model.taskSource, model.taskResumeApplied, refresh, setQuery])
 
   const mutate = async (mutation: JiraSavedFilterMutation): Promise<void> => {
-    if (!ready || pending || !target || ownerRef.current !== ownerKey) {
+    if (
+      !ready ||
+      pending ||
+      !target ||
+      ownerRef.current !== ownerKey ||
+      ownerEpochRef.current !== ownerEpoch
+    ) {
       return
     }
     const expectedOwner = ownerKey
-    const expectedEpoch = ownerEpochRef.current
+    const expectedEpoch = ownerEpoch
     setPending(true)
     setError(null)
     try {
