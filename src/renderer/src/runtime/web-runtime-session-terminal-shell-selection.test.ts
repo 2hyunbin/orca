@@ -89,7 +89,10 @@ const HOST_TAB_ID = 'host-shell-tab'
 
 type HostRequest = { method: string; params?: Record<string, unknown> }
 
-function stubHost(status: 'advertised' | 'not-advertised' | 'unreachable') {
+function stubHost(
+  status: 'advertised' | 'not-advertised' | 'unreachable',
+  { moveFails = false }: { moveFails?: boolean } = {}
+) {
   const runtimeCall = vi.fn(async (request: HostRequest) => {
     if (request.method === 'status.get') {
       if (status === 'unreachable') {
@@ -131,6 +134,9 @@ function stubHost(status: 'advertised' | 'not-advertised' | 'unreachable') {
       }
     }
     if (request.method === 'session.tabs.move') {
+      if (moveFails) {
+        throw new Error('connection lost')
+      }
       return { id: 'move', ok: true, result: { moved: true } }
     }
     return { id: 'list', ok: true, result: makeSnapshot() }
@@ -190,6 +196,20 @@ describe('creating a terminal with a picked shell on a paired host', () => {
       hostTabId: HOST_TAB_ID,
       leafId: FOCUS_LEAF_ID
     })
+  })
+
+  it('reports a shell terminal the host made as created even when the group move fails', async () => {
+    // Why: a "failed" answer invites a retry, which would start a second terminal on the host.
+    stubHost('advertised', { moveFails: true })
+
+    await expect(
+      createWebRuntimeSessionTerminal({
+        worktreeId: WORKTREE_ID,
+        environmentId: ENVIRONMENT_ID,
+        targetGroupId: 'client-group',
+        shell: 'powershell.exe'
+      })
+    ).resolves.toEqual({ status: 'created' })
   })
 
   it.each(['not-advertised', 'unreachable'] as const)(

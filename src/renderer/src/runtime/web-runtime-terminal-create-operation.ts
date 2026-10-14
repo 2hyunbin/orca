@@ -44,7 +44,11 @@ import {
   readCreatedAgentTerminalIdentity
 } from './web-runtime-terminal-identity'
 import { settleWebRuntimeTerminalPlacement } from './web-runtime-terminal-placement-settlement'
-import * as shellPick from './web-runtime-terminal-shell-selection'
+import {
+  createHostShellTerminal,
+  hostCreatesRequestedShell
+} from './web-runtime-terminal-shell-selection'
+import { createSessionTabsTerminal } from './web-runtime-session-tabs-terminal-create'
 
 export async function createWebRuntimeSessionTerminalResult(
   args: CreateWebRuntimeSessionTerminalArgs
@@ -207,39 +211,37 @@ export async function createWebRuntimeSessionTerminalResult(
       createdLeafId = legacyAlreadyPlacedInGroup
         ? created.terminal.leafId
         : createdTerminalLeafId(created.terminal)
-      if (!legacyAlreadyPlacedInGroup) {
-        await shellPick.moveCreatedHostTerminalToGroup(callEnvironment, args, createdTabId)
+      if (args.targetGroupId && createdTabId && !legacyAlreadyPlacedInGroup) {
+        await callEnvironment({
+          method: 'session.tabs.move',
+          params: {
+            worktree: toRuntimeWorktreeSelector(args.worktreeId),
+            tabId: createdTabId,
+            targetGroupId: args.targetGroupId,
+            kind: 'move-to-group'
+          },
+          timeoutMs: 15_000
+        })
       }
-    } else if (args.shell && (await shellPick.hostCreatesRequestedShell(environmentId))) {
-      const created = await shellPick.createHostShellTerminal(callEnvironment, args, args.shell)
+    } else if (args.shell && (await hostCreatesRequestedShell(environmentId))) {
+      const created = await createHostShellTerminal(callEnvironment, args.worktreeId, args.shell)
       hostCreated = true
       createdTabId = created.tabId
       createdLeafId = created.leafId
+      if (args.targetGroupId && createdTabId) {
+        await callEnvironment({
+          method: 'session.tabs.move',
+          params: {
+            worktree: toRuntimeWorktreeSelector(args.worktreeId),
+            tabId: createdTabId,
+            targetGroupId: args.targetGroupId,
+            kind: 'move-to-group'
+          },
+          timeoutMs: 15_000
+        })
+      }
     } else {
-      const response = await callEnvironment({
-        method: 'session.tabs.createTerminal',
-        params: {
-          worktree: toRuntimeWorktreeSelector(args.worktreeId),
-          afterTabId: args.afterTabId ? toHostSessionTabId(args.afterTabId) : undefined,
-          targetGroupId: args.targetGroupId,
-          command: shellPick.sessionTabsCreateCommand(args),
-          cwd: args.cwd,
-          ...(args.env ? { env: args.env } : {}),
-          ...(args.envToDelete ? { envToDelete: args.envToDelete } : {}),
-          startupCommandDelivery: args.startupCommandDelivery,
-          ...(args.launchConfig ? { launchConfig: args.launchConfig } : {}),
-          ...(args.launchToken ? { launchToken: args.launchToken } : {}),
-          ...(args.viewMode ? { viewMode: args.viewMode } : {}),
-          // Why: old hosts understand activate:false; new hosts use select/navigation for caller-local focus.
-          activate: false,
-          select: args.activate !== false,
-          navigation: 'caller'
-        },
-        timeoutMs: 15_000
-      })
-      const created = unwrapRuntimeRpcResult(
-        response as RuntimeRpcResponse<RuntimeMobileSessionCreateTerminalResult>
-      )
+      const created = await createSessionTabsTerminal(callEnvironment, args)
       hostCreated = true
       createdTabId = created.tab.id
       createdLeafId = created.tab.leafId
