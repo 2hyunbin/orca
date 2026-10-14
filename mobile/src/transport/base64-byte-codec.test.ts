@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { describe, expect, it, vi } from 'vitest'
 import { decodeBase64Bytes, encodeBase64Bytes } from './base64-byte-codec'
 
@@ -43,8 +44,8 @@ describe('base64 byte codec', () => {
       const encoded = encodeBase64Bytes(bytes)
       expect(encoded).toBe(Buffer.from(bytes).toString('base64'))
       const decoded = decodeBase64Bytes(encoded)
-      expect(decoded).toBeInstanceOf(Uint8Array)
-      expect(Buffer.from(decoded).equals(Buffer.from(bytes))).toBe(true)
+      expect(decoded.constructor).toBe(bytes.constructor)
+      expect(Buffer.compare(decoded, bytes)).toBe(0)
     }
   )
 

@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "Avisar cuando una pestaña de Codex comparte un servidor",
         "description": "Muestra un aviso en un Codex que usted mismo inició cuando comparte un servidor con otras pestañas, porque su estado de agente puede ser incorrecto."
-      }
+      },
+      "environmentName": "Nombre de la variable de entorno",
+      "environmentValue": "Valor de {{name}}",
+      "savedEnvironment": "Valor guardado · escribe para reemplazarlo",
+      "newEnvironment": "Valor",
+      "removeEnvironment": "Eliminar",
+      "loadingHost": "Cargando la configuración de agentes…",
+      "updateHost": "Actualiza este servidor para editar su configuración de inicio de agentes.",
+      "readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
+      "saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
+      "hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
+      "save": "Guardar"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "enlace simbólico",
@@ -916,6 +927,7 @@
               "undecryptableUnknown": "No se han podido descifrar las {{value0}} cookies y se han omitido. Cierre el navegador de origen por completo y vuelva a intentar la importación.",
               "unrecognizedWarning": "La importación de cookies finalizó con una advertencia que esta versión de Orca no reconoce. Actualice Orca para ver los detalles, luego revise este perfil antes de confiar en sus cookies.",
               "undecryptableUnrecognizedReason": "Las cookies {{value0}} no se pudieron descifrar y se omitieron por una razón que esta versión de Orca no reconoce. Actualiza Orca para ver los detalles y vuelve a intentar la importación.",
+              "partitionSkippedBreakdown": "Cookies con particiones de sitio ilegibles: {{value0}}. Cookies relacionadas que no se importaron para proteger las sesiones existentes: {{value1}}. Las cookies existentes de estos sitios no se modificaron. Comprueba estos sitios en este perfil antes de volver a iniciar sesión.",
               "partitionSkipped": "No se importaron {{value0}} cookies porque no se pudo leer su partición de sitio. Vuelve a iniciar sesión en esos sitios en Orca.",
               "locationClientHosted": "Lee desde este dispositivo y guárdalo aquí para el espacio de trabajo {{value0}}.",
               "locationRemoteHost": "Lee desde los navegadores en {{value0}} y guárdalo allí.",
@@ -17933,7 +17945,6 @@
         "fastMode": "Modo rápido",
         "speed": "Velocidad",
         "thinking": "Razonamiento",
-        "options": "Opciones",
         "sessionOptions": "Opciones de sesión",
         "chooseInAgentPicker": "Elegir en el selector del agente…",
         "searchModels": "Buscar modelos…",
@@ -17994,7 +18005,12 @@
         "permissionFullAccessCodexDescription": "Nunca pregunta; puede editar cualquier archivo y usar la red",
         "permissionFullAccessSharedDescription": "Nunca pregunta antes de ediciones o comandos",
         "pasteFailed": "Error al pegar.",
-        "commandAttachmentsUnsupported": "Quita los archivos adjuntos antes de usar un comando de la sesión de chat."
+        "commandAttachmentsUnsupported": "Quita los archivos adjuntos antes de usar un comando de la sesión de chat.",
+        "optionValueShort": {
+          "minimal": "Mín.",
+          "medium": "Medio",
+          "xhigh": "Muy alto"
+        }
       },
       "tool": {
         "running": "Ejecutando…",
@@ -19536,16 +19552,5 @@
   },
   "projectField": {
     "updateFailed": "No se pudo actualizar el campo del proyecto"
-  },
-  "settings.agents.environmentName": "Nombre de la variable de entorno",
-  "settings.agents.environmentValue": "Valor de {{name}}",
-  "settings.agents.savedEnvironment": "Valor guardado · escribe para reemplazarlo",
-  "settings.agents.newEnvironment": "Valor",
-  "settings.agents.removeEnvironment": "Eliminar",
-  "settings.agents.loadingHost": "Cargando la configuración de agentes…",
-  "settings.agents.updateHost": "Actualiza este servidor para editar su configuración de inicio de agentes.",
-  "settings.agents.readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
-  "settings.agents.saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
-  "settings.agents.hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
-  "settings.agents.save": "Guardar"
+  }
 }
