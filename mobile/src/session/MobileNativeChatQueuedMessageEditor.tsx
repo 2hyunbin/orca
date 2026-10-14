@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { TEXT_INPUT_FONT_SIZE } from '../platform/text-input-font-size'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
 
 export function MobileNativeChatQueuedMessageEditor({
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
     maxHeight: 160,
     padding: spacing.sm,
     color: colors.textPrimary,
-    fontSize: typography.bodySize,
+    fontSize: TEXT_INPUT_FONT_SIZE,
     backgroundColor: colors.bgBase,
     borderRadius: radii.input,
     borderWidth: StyleSheet.hairlineWidth,
