@@ -19,6 +19,7 @@ import type { PtyPaneStartup } from '../pty-connection-types'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { isPtyExitReplacedByRestart } from '../pty-exit-delivery'
+import { armRestartReplacement } from './restart-replacement-on-show'
 
 // Why live+done arms too: kept from #16308's wake-sweep widening; hibernation itself only writes worktree-sleep notes.
 export function noteArmsHibernatedPaneWake(record: SleepingAgentSessionRecord): boolean {
@@ -219,15 +220,15 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
     // Why: main clears gate state on PTY exit too; this only resets the
     // pane-local marker so a reused pane cannot skip re-marking a new PTY.
     session.releaseHiddenRendererPtyDelivery()
+    const replacedByRestart = isPtyExitReplacedByRestart(ptyId)
     // A synthetic host-loss exit only retires this transport. Keep the mounted
     // leaf↔PTY identity so reconnect/replay can adopt it after the host returns.
-    if (!isUnverifiedExit) {
+    // A restart's process is gone for good, so its replacement binds as a first spawn.
+    if (!isUnverifiedExit || replacedByRestart) {
       session.clearPanePtyFitBinding()
     }
     const isSuppressedExit =
-      session.deps.consumeSuppressedPtyExit(ptyId) ||
-      preserveRendererBinding ||
-      isPtyExitReplacedByRestart(ptyId)
+      session.deps.consumeSuppressedPtyExit(ptyId) || preserveRendererBinding || replacedByRestart
     if (!isSuppressedExit && !isUnverifiedExit) {
       session.clearExitedPanePtyLayoutBinding(ptyId)
     }
@@ -241,7 +242,10 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
     session.deps.setCacheTimerStartedAt(session.cacheKey, null)
     // Why: a dead terminal has no running agent — remove its explicit status
     // entry so the hover UI only shows what is running *now*.
-    useAppStore.getState().removeAgentStatus(session.cacheKey)
+    // A restart keeps it: the replacement's cold-restore resume reads the provider session there.
+    if (!replacedByRestart) {
+      useAppStore.getState().removeAgentStatus(session.cacheKey)
+    }
     useAppStore.getState().clearPaneForegroundAgent(session.cacheKey)
     // The runtime graph is the CLI's source for live terminal bindings, so
     // we must republish when a pane loses its PTY instead of waiting for a
@@ -285,8 +289,13 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
             session.consumeHibernatedAgentWake()
           })
         }
-      } else if (session.pendingHibernatedWakeTarget?.ptyId === ptyId) {
-        session.pendingHibernatedWakeTarget = null
+      } else {
+        if (session.pendingHibernatedWakeTarget?.ptyId === ptyId) {
+          session.pendingHibernatedWakeTarget = null
+        }
+        if (replacedByRestart) {
+          armRestartReplacement(session, ptyId)
+        }
       }
       return
     }
