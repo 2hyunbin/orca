@@ -127,7 +127,7 @@ test('Jira planning columns persist and hiding a sorted field selects a visible 
     host.style.width = '780px'
   })
   await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
-  for (const name of ['Epic / Parent', 'Sprint', 'Points', 'Estimate', 'Remaining']) {
+  for (const name of ['Parent', 'Sprint', 'Points', 'Estimate', 'Remaining']) {
     await orcaPage.getByRole('menuitemcheckbox', { name, exact: true }).click()
   }
   await orcaPage.keyboard.press('Escape')
