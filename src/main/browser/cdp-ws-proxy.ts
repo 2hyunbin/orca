@@ -173,10 +173,9 @@ export class CdpWsProxy {
     }
     const effectiveSessionId = this.sessions.resolveDebuggerSessionId(msg.sessionId)
     this.domFocusReplay.invalidateForMethod(msg.method, effectiveSessionId)
-    if (msg.method === 'Page.bringToFront') {
-      if (!this.webContents.isDestroyed()) {
-        this.webContents.focus()
-      }
+    // Why: an agent raising its page must not take the user's keyboard focus (#20595); the
+    // page needs no native focus to receive input, so these succeed without side effects.
+    if (msg.method === 'Page.bringToFront' || msg.method === 'Target.activateTarget') {
       this.responder.sendResult(clientId, {}, client)
       return
     }

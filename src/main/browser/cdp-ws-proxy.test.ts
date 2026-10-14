@@ -390,6 +390,20 @@ describe('CdpWsProxy', () => {
     client.close()
   })
 
+  it.each(['Page.bringToFront', 'Target.activateTarget'])(
+    'answers %s without focusing or forwarding it',
+    async (method) => {
+      const client = await connect(endpoint)
+
+      const response = await sendAndReceive(client, { id: 9, method, params: {} })
+
+      expect(response.result).toEqual({})
+      expect(mock.webContents.focus).not.toHaveBeenCalled()
+      expect(getSendCommandMethods(mock)).toEqual(['Page.enable'])
+      client.close()
+    }
+  )
+
   it('still focuses the guest for Input.insertText', async () => {
     const client = await connect(endpoint)
 
