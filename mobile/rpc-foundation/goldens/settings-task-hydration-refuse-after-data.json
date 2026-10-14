@@ -4,17 +4,17 @@
   "family": "settings.task-hydration",
   "namedDeltas": [],
   "values": {
+    "00bb6f59b349": {
+      "name": "linearTeams",
+      "ordinal": 58,
+      "value": []
+    },
     "01236e463cd4": {
       "name": "linearStatusPickerItem",
       "ordinal": 32,
       "value": {
         "$rpc": "null"
       }
-    },
-    "01d6f7ebeadc": {
-      "name": "selectedRepoIds",
-      "ordinal": 62,
-      "value": []
     },
     "02402ff3690d": {
       "name": "status.get#2",
@@ -55,10 +55,10 @@
       "ordinal": 79,
       "value": false
     },
-    "06bc4eb869cc": {
-      "name": "settings.get#2",
-      "ordinal": 112,
-      "json": "{\"id\":\"frame-8\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+    "0615469bfcf0": {
+      "name": "preflight.check#1",
+      "ordinal": 51,
+      "json": "{\"id\":\"frame-5\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
     },
     "06bf5f477d81": {
       "name": "mergeMethodTaskItem",
@@ -67,20 +67,10 @@
         "$rpc": "null"
       }
     },
-    "06e636c63a98": {
-      "name": "taskStateHydrated",
-      "ordinal": 64,
-      "value": false
-    },
     "08c3599aa1ff": {
       "name": "showGitHubKindPicker",
       "ordinal": 11,
       "value": false
-    },
-    "09f5676323bc": {
-      "name": "preflight.check#1",
-      "ordinal": 50,
-      "json": "{\"id\":\"frame-4\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
     },
     "0b4cbd4b9549": {
       "name": "showGitHubProjectFieldsPicker",
@@ -92,9 +82,53 @@
       "ordinal": 83,
       "value": false
     },
-    "0cff3cfd4bb2": {
+    "0d9b6b6d7e4e": {
+      "name": "showGitHubProjectPicker",
+      "ordinal": 84,
+      "value": false
+    },
+    "0ea401395d98": {
+      "name": "showLinearTeamPicker",
+      "ordinal": 68,
+      "value": false
+    },
+    "0ebb7f0660a0": {
+      "name": "showLinearTeamPicker",
+      "ordinal": 4,
+      "value": false
+    },
+    "1221fd1c3ae9": {
+      "name": "mergeMethodProjectRow",
+      "ordinal": 37,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "125f4a4aa901": {
+      "name": "trustedOrcaHooks",
+      "ordinal": 118,
+      "value": {}
+    },
+    "12d69a5555de": {
+      "name": "jira.status#1",
+      "ordinal": 48,
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"jira.status\"}"
+    },
+    "16e4f4209bcf": {
+      "name": "projectRowDetail",
+      "ordinal": 29,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "177ab8f3e63e": {
+      "name": "taskStateHydrated",
+      "ordinal": 63,
+      "value": false
+    },
+    "179ed1933972": {
       "name": "preflight.check#1",
-      "ordinal": 45,
+      "ordinal": 46,
       "args": [
         {
           "name": "method",
@@ -116,91 +150,6 @@
       "settlement": {
         "status": "pending",
         "startedAt": 0
-      }
-    },
-    "0d9b6b6d7e4e": {
-      "name": "showGitHubProjectPicker",
-      "ordinal": 84,
-      "value": false
-    },
-    "0ea401395d98": {
-      "name": "showLinearTeamPicker",
-      "ordinal": 68,
-      "value": false
-    },
-    "0ebb7f0660a0": {
-      "name": "showLinearTeamPicker",
-      "ordinal": 4,
-      "value": false
-    },
-    "0fcbf1e4c52c": {
-      "name": "jira.status#1",
-      "ordinal": 47,
-      "args": [
-        {
-          "name": "method",
-          "value": "jira.status"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-6",
-          "ok": true,
-          "result": {
-            "connected": false
-          }
-        }
-      }
-    },
-    "1221fd1c3ae9": {
-      "name": "mergeMethodProjectRow",
-      "ordinal": 37,
-      "value": {
-        "$rpc": "null"
-      }
-    },
-    "125f4a4aa901": {
-      "name": "trustedOrcaHooks",
-      "ordinal": 118,
-      "value": {}
-    },
-    "138e0f5dc0a1": {
-      "name": "jiraConnection",
-      "ordinal": 121,
-      "value": {
-        "connected": false,
-        "credentialError": {
-          "$rpc": "null"
-        },
-        "selection": {
-          "$rpc": "null"
-        },
-        "sites": [],
-        "unavailableReason": {
-          "$rpc": "null"
-        }
-      }
-    },
-    "16e4f4209bcf": {
-      "name": "projectRowDetail",
-      "ordinal": 29,
-      "value": {
-        "$rpc": "null"
       }
     },
     "1825a87a7ca8": {
@@ -225,32 +174,6 @@
       "ordinal": 77,
       "value": false
     },
-    "1f26b7c3f9eb": {
-      "name": "jira.status#1",
-      "ordinal": 47,
-      "args": [
-        {
-          "name": "method",
-          "value": "jira.status"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "pending",
-        "startedAt": 0
-      }
-    },
     "1f75fb0d92bd": {
       "name": "projectRowItem",
       "ordinal": 26,
@@ -258,52 +181,9 @@
         "$rpc": "null"
       }
     },
-    "20336e3be140": {
-      "name": "preflight.check#2",
-      "ordinal": 109,
-      "args": [
-        {
-          "name": "method",
-          "value": "preflight.check"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-10",
-          "ok": true,
-          "result": {
-            "glab": {
-              "installed": false
-            }
-          }
-        }
-      }
-    },
-    "24d52bffb0ec": {
-      "name": "selectedLinearWorkspaceId",
-      "ordinal": 125,
-      "value": {
-        "$rpc": "null"
-      }
-    },
-    "281c23abda8b": {
-      "name": "settings.get#1",
-      "ordinal": 43,
+    "2412a5aabf3b": {
+      "name": "settings.get#2",
+      "ordinal": 108,
       "args": [
         {
           "name": "method",
@@ -327,29 +207,24 @@
         "startedAt": 0,
         "settledAt": 0,
         "value": {
-          "id": "frame-2",
-          "ok": true,
-          "result": {
-            "settings": {
-              "defaultTuiAgent": "codex",
-              "disabledTuiAgents": ["claude"],
-              "hostSettingOverrides": {},
-              "prBotAuthorOverrides": ["bot-user"],
-              "visibleTaskProviders": ["github", "linear"]
-            }
-          }
+          "error": {
+            "code": "refused",
+            "message": "settings refused"
+          },
+          "id": "frame-9",
+          "ok": false
         }
       }
+    },
+    "27909b5e5fc7": {
+      "name": "settings.get#2",
+      "ordinal": 113,
+      "json": "{\"id\":\"frame-9\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
     },
     "294741680522": {
       "name": "error",
       "ordinal": 42,
       "value": ""
-    },
-    "2bc02d816aed": {
-      "name": "ui.get#2",
-      "ordinal": 113,
-      "json": "{\"id\":\"frame-9\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
     },
     "2d12405f60f7": {
       "name": "error",
@@ -374,6 +249,23 @@
       "name": "trustedOrcaHooks",
       "ordinal": 54,
       "value": {}
+    },
+    "2eabb9d54d80": {
+      "name": "linearTeams",
+      "ordinal": 122,
+      "value": []
+    },
+    "2f9b87c56373": {
+      "name": "selectedLinearWorkspaceId",
+      "ordinal": 60,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "301675c67de8": {
+      "name": "linear.status#2",
+      "ordinal": 116,
+      "json": "{\"id\":\"frame-12\",\"deviceToken\":\"recording-device\",\"method\":\"linear.status\"}"
     },
     "301bdbdf1dec": {
       "name": "taskStateHydrated",
@@ -407,83 +299,15 @@
         "$rpc": "null"
       }
     },
-    "3865b7b48777": {
-      "name": "linear.status#2",
-      "ordinal": 110,
-      "args": [
-        {
-          "name": "method",
-          "value": "linear.status"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-11",
-          "ok": true,
-          "result": {
-            "connected": false
-          }
-        }
-      }
-    },
-    "3b07c2f7af57": {
-      "name": "ui.get#1",
-      "ordinal": 49,
-      "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    "3b1e52f4976a": {
+      "name": "selectedRepoIds",
+      "ordinal": 125,
+      "value": []
     },
     "3b5b98031e68": {
       "name": "showGitHubProjectViewPicker",
       "ordinal": 85,
       "value": false
-    },
-    "3b5e5f172050": {
-      "name": "linear.status#1",
-      "ordinal": 46,
-      "args": [
-        {
-          "name": "method",
-          "value": "linear.status"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-5",
-          "ok": true,
-          "result": {
-            "connected": false
-          }
-        }
-      }
     },
     "3d60f87d082e": {
       "name": "tasksSupportState",
@@ -498,15 +322,49 @@
       "ordinal": 9,
       "value": false
     },
-    "44b9e4a614dc": {
-      "name": "selectedRepoIds",
-      "ordinal": 126,
-      "value": []
+    "43b6d419b9a7": {
+      "name": "error",
+      "ordinal": 62,
+      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
     },
     "45e466d86a07": {
       "name": "showLinearWorkspacePicker",
       "ordinal": 3,
       "value": false
+    },
+    "45ee7e34a0c6": {
+      "name": "jira.status#1",
+      "ordinal": 43,
+      "args": [
+        {
+          "name": "method",
+          "value": "jira.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-2",
+          "ok": true,
+          "result": {
+            "connected": false
+          }
+        }
+      }
     },
     "46060331fc3d": {
       "name": "status.get#2",
@@ -539,15 +397,59 @@
       "ordinal": 23,
       "value": false
     },
+    "490566e96aa8": {
+      "name": "ui.get#2",
+      "ordinal": 114,
+      "json": "{\"id\":\"frame-10\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    },
     "499fa4cf7882": {
       "name": "showCreateTask",
       "ordinal": 94,
       "value": false
     },
+    "4e09c5169a5e": {
+      "name": "jira.status#2",
+      "ordinal": 107,
+      "args": [
+        {
+          "name": "method",
+          "value": "jira.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-8",
+          "ok": true,
+          "result": {
+            "connected": false
+          }
+        }
+      }
+    },
     "4e74e443d3fc": {
       "name": "showProviderPicker",
       "ordinal": 74,
       "value": false
+    },
+    "4e99f4f15c83": {
+      "name": "selectedRepoIds",
+      "ordinal": 61,
+      "value": []
     },
     "506d5254f01c": {
       "name": "pendingHostedStateChange",
@@ -561,13 +463,73 @@
       "ordinal": 7,
       "value": false
     },
-    "50e8f8e79bbf": {
+    "52b5f68c6d97": {
+      "name": "detailPayload",
+      "ordinal": 28,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "54392ebcd644": {
+      "name": "showLinearDisplayPicker",
+      "ordinal": 72,
+      "value": false
+    },
+    "56cd9b635a03": {
+      "name": "settings.get#1",
+      "ordinal": 49,
+      "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+    },
+    "57027ce05bad": {
+      "name": "showGitLabFilterPicker",
+      "ordinal": 78,
+      "value": false
+    },
+    "57564581f448": {
       "name": "ui.get#1",
-      "ordinal": 44,
+      "ordinal": 45,
       "args": [
         {
           "name": "method",
           "value": "ui.get"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "pending",
+        "startedAt": 0
+      }
+    },
+    "5cafa95111e1": {
+      "name": "jira.status#2",
+      "ordinal": 112,
+      "json": "{\"id\":\"frame-8\",\"deviceToken\":\"recording-device\",\"method\":\"jira.status\"}"
+    },
+    "6071c3a906b0": {
+      "name": "selectedLinearWorkspaceId",
+      "ordinal": 124,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "60729092583d": {
+      "name": "settings.get#1",
+      "ordinal": 44,
+      "args": [
+        {
+          "name": "method",
+          "value": "settings.get"
         },
         {
           "name": "params",
@@ -590,35 +552,31 @@
           "id": "frame-3",
           "ok": true,
           "result": {
-            "ui": {}
+            "settings": {
+              "defaultTuiAgent": "codex",
+              "disabledTuiAgents": ["claude"],
+              "hostSettingOverrides": {},
+              "prBotAuthorOverrides": ["bot-user"],
+              "visibleTaskProviders": ["github", "linear"]
+            }
           }
         }
       }
     },
-    "52b5f68c6d97": {
-      "name": "detailPayload",
-      "ordinal": 28,
+    "60d7b34d24f9": {
+      "name": "pendingProjectGitHubMerge",
+      "ordinal": 98,
       "value": {
         "$rpc": "null"
       }
     },
-    "54392ebcd644": {
-      "name": "showLinearDisplayPicker",
-      "ordinal": 72,
-      "value": false
-    },
-    "57027ce05bad": {
-      "name": "showGitLabFilterPicker",
-      "ordinal": 78,
-      "value": false
-    },
-    "60c4607ee8cb": {
-      "name": "ui.get#2",
-      "ordinal": 108,
+    "619882ebba08": {
+      "name": "settings.get#1",
+      "ordinal": 44,
       "args": [
         {
           "name": "method",
-          "value": "ui.get"
+          "value": "settings.get"
         },
         {
           "name": "params",
@@ -634,23 +592,8 @@
         }
       ],
       "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-9",
-          "ok": true,
-          "result": {
-            "ui": {}
-          }
-        }
-      }
-    },
-    "60d7b34d24f9": {
-      "name": "pendingProjectGitHubMerge",
-      "ordinal": 98,
-      "value": {
-        "$rpc": "null"
+        "status": "pending",
+        "startedAt": 0
       }
     },
     "677106806629": {
@@ -667,15 +610,32 @@
         "$rpc": "null"
       }
     },
+    "68d557277b06": {
+      "name": "jiraConnection",
+      "ordinal": 128,
+      "value": {
+        "connected": false,
+        "credentialError": {
+          "$rpc": "null"
+        },
+        "selection": {
+          "$rpc": "null"
+        },
+        "sites": [],
+        "unavailableReason": {
+          "$rpc": "null"
+        }
+      }
+    },
     "6e5baa80bdeb": {
       "name": "githubProjectHiddenFieldIdsByView",
       "ordinal": 119,
       "value": {}
     },
-    "6e72b23e9d56": {
-      "name": "linearWorkspaces",
-      "ordinal": 58,
-      "value": []
+    "6e8e6076a1ea": {
+      "name": "linear.status#1",
+      "ordinal": 52,
+      "json": "{\"id\":\"frame-6\",\"deviceToken\":\"recording-device\",\"method\":\"linear.status\"}"
     },
     "6ffbb1794410": {
       "name": "showLinearFilterPicker",
@@ -710,32 +670,6 @@
       "ordinal": 86,
       "value": false
     },
-    "7d496ccb65c6": {
-      "name": "linear.status#1",
-      "ordinal": 46,
-      "args": [
-        {
-          "name": "method",
-          "value": "linear.status"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "pending",
-        "startedAt": 0
-      }
-    },
     "7d8029e889cf": {
       "name": "projectRepoNotInOrca",
       "ordinal": 27,
@@ -751,81 +685,18 @@
         "kind": "supported"
       }
     },
-    "85ed8bfeb710": {
-      "name": "selectedLinearTeamIds",
-      "ordinal": 60,
-      "value": []
-    },
     "8616eb8e398b": {
       "name": "showGitHubProjectSortPicker",
       "ordinal": 22,
       "value": false
     },
-    "89a5d2a4b349": {
-      "name": "showProviderPicker",
-      "ordinal": 10,
-      "value": false
-    },
-    "89a6942b1dd2": {
-      "name": "detailPayload",
-      "ordinal": 92,
-      "value": {
-        "$rpc": "null"
-      }
-    },
-    "8a1c7137714e": {
-      "name": "settings.get#1",
-      "ordinal": 43,
-      "args": [
-        {
-          "name": "method",
-          "value": "settings.get"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "pending",
-        "startedAt": 0
-      }
-    },
-    "8b6f54f81646": {
-      "name": "linearConnected",
-      "ordinal": 56,
-      "value": false
-    },
-    "8c40d08ec970": {
-      "name": "selectedLinearTeamIds",
-      "ordinal": 124,
-      "value": []
-    },
-    "8d124d8922c8": {
-      "name": "showGitHubProjectViewPicker",
-      "ordinal": 21,
-      "value": false
-    },
-    "8fa5ff753d50": {
-      "name": "linear.status#2",
-      "ordinal": 115,
-      "json": "{\"id\":\"frame-11\",\"deviceToken\":\"recording-device\",\"method\":\"linear.status\"}"
-    },
-    "9055388dbe30": {
-      "name": "preflight.check#1",
+    "86ed8e03ac41": {
+      "name": "ui.get#1",
       "ordinal": 45,
       "args": [
         {
           "name": "method",
-          "value": "preflight.check"
+          "value": "ui.get"
         },
         {
           "name": "params",
@@ -848,12 +719,71 @@
           "id": "frame-4",
           "ok": true,
           "result": {
-            "glab": {
-              "installed": false
-            }
+            "ui": {}
           }
         }
       }
+    },
+    "89a5d2a4b349": {
+      "name": "showProviderPicker",
+      "ordinal": 10,
+      "value": false
+    },
+    "89a6942b1dd2": {
+      "name": "detailPayload",
+      "ordinal": 92,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "89f197796b7d": {
+      "name": "linear.status#2",
+      "ordinal": 111,
+      "args": [
+        {
+          "name": "method",
+          "value": "linear.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-12",
+          "ok": true,
+          "result": {
+            "connected": false
+          }
+        }
+      }
+    },
+    "8b6f54f81646": {
+      "name": "linearConnected",
+      "ordinal": 56,
+      "value": false
+    },
+    "8bd690a99eaa": {
+      "name": "error",
+      "ordinal": 126,
+      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
+    },
+    "8d124d8922c8": {
+      "name": "showGitHubProjectViewPicker",
+      "ordinal": 21,
+      "value": false
     },
     "90ca04055722": {
       "name": "showLinearGroupPicker",
@@ -899,10 +829,36 @@
         }
       }
     },
-    "92f796e77624": {
+    "96952d24ad82": {
+      "name": "selectedLinearTeamIds",
+      "ordinal": 59,
+      "value": []
+    },
+    "9704b1bab4cd": {
       "name": "jira.status#1",
-      "ordinal": 52,
-      "json": "{\"id\":\"frame-6\",\"deviceToken\":\"recording-device\",\"method\":\"jira.status\"}"
+      "ordinal": 43,
+      "args": [
+        {
+          "name": "method",
+          "value": "jira.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "pending",
+        "startedAt": 0
+      }
     },
     "9abcad3624d6": {
       "name": "pendingHostedStateChange",
@@ -923,18 +879,13 @@
         "$rpc": "null"
       }
     },
-    "9ced88432b28": {
-      "name": "runtimeTaskSettings",
-      "ordinal": 117,
-      "value": {}
-    },
-    "9f9bf8f3abb0": {
-      "name": "settings.get#2",
-      "ordinal": 107,
+    "9b52e4fef056": {
+      "name": "preflight.check#1",
+      "ordinal": 46,
       "args": [
         {
           "name": "method",
-          "value": "settings.get"
+          "value": "preflight.check"
         },
         {
           "name": "params",
@@ -954,14 +905,25 @@
         "startedAt": 0,
         "settledAt": 0,
         "value": {
-          "error": {
-            "code": "refused",
-            "message": "settings refused"
-          },
-          "id": "frame-8",
-          "ok": false
+          "id": "frame-5",
+          "ok": true,
+          "result": {
+            "glab": {
+              "installed": false
+            }
+          }
         }
       }
+    },
+    "9ced88432b28": {
+      "name": "runtimeTaskSettings",
+      "ordinal": 117,
+      "value": {}
+    },
+    "a23185703450": {
+      "name": "taskStateHydrated",
+      "ordinal": 127,
+      "value": false
     },
     "a75fb9337ea5": {
       "name": "projectRowDetail",
@@ -985,46 +947,15 @@
       "ordinal": 17,
       "value": false
     },
+    "b1331bd37542": {
+      "name": "preflight.check#2",
+      "ordinal": 115,
+      "json": "{\"id\":\"frame-11\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
+    },
     "b1714fb6ea51": {
       "name": "status.get#1",
       "ordinal": 40,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"status.get\"}"
-    },
-    "b3556375d1db": {
-      "name": "taskStateHydrated",
-      "ordinal": 128,
-      "value": false
-    },
-    "b3f3f6a6069b": {
-      "name": "ui.get#1",
-      "ordinal": 44,
-      "args": [
-        {
-          "name": "method",
-          "value": "ui.get"
-        },
-        {
-          "name": "params",
-          "value": {
-            "$rpc": "absent"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "pending",
-        "startedAt": 0
-      }
-    },
-    "b6a3509de996": {
-      "name": "error",
-      "ordinal": 127,
-      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
     },
     "b72ea4ad3cf6": {
       "name": "showGitHubKindPicker",
@@ -1054,20 +985,13 @@
       "ordinal": 8,
       "value": false
     },
-    "bc8fcdfcfcb7": {
-      "name": "selectedLinearWorkspaceId",
-      "ordinal": 61,
-      "value": {
-        "$rpc": "null"
-      }
-    },
-    "bd41f96e4030": {
-      "name": "jira.status#2",
-      "ordinal": 111,
+    "baa980b3a180": {
+      "name": "preflight.check#2",
+      "ordinal": 110,
       "args": [
         {
           "name": "method",
-          "value": "jira.status"
+          "value": "preflight.check"
         },
         {
           "name": "params",
@@ -1087,7 +1011,48 @@
         "startedAt": 0,
         "settledAt": 0,
         "value": {
-          "id": "frame-12",
+          "id": "frame-11",
+          "ok": true,
+          "result": {
+            "glab": {
+              "installed": false
+            }
+          }
+        }
+      }
+    },
+    "bc3e027e3643": {
+      "name": "ui.get#1",
+      "ordinal": 50,
+      "json": "{\"id\":\"frame-4\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    },
+    "bde7860d3963": {
+      "name": "linear.status#1",
+      "ordinal": 47,
+      "args": [
+        {
+          "name": "method",
+          "value": "linear.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-6",
           "ok": true,
           "result": {
             "connected": false
@@ -1095,20 +1060,61 @@
         }
       }
     },
-    "bf40088b2307": {
-      "name": "error",
-      "ordinal": 63,
-      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
-    },
-    "c15da9b5667c": {
-      "name": "settings.get#1",
-      "ordinal": 48,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
-    },
     "c2291bd6c254": {
       "name": "status.get#2",
       "ordinal": 104,
       "json": "{\"id\":\"frame-7\",\"deviceToken\":\"recording-device\",\"method\":\"status.get\"}"
+    },
+    "c2f1814aa161": {
+      "name": "ui.get#2",
+      "ordinal": 109,
+      "args": [
+        {
+          "name": "method",
+          "value": "ui.get"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-10",
+          "ok": true,
+          "result": {
+            "ui": {}
+          }
+        }
+      }
+    },
+    "c3c5549a74cd": {
+      "name": "jiraConnection",
+      "ordinal": 64,
+      "value": {
+        "connected": false,
+        "credentialError": {
+          "$rpc": "null"
+        },
+        "selection": {
+          "$rpc": "null"
+        },
+        "sites": [],
+        "unavailableReason": {
+          "$rpc": "null"
+        }
+      }
     },
     "c4b6b5ed0b10": {
       "name": "showCreateTargetPicker",
@@ -1119,17 +1125,43 @@
       "hydrated": false,
       "settings": {}
     },
+    "c82c2272344f": {
+      "name": "linearWorkspaces",
+      "ordinal": 57,
+      "value": []
+    },
+    "d00ff103cdc6": {
+      "name": "linear.status#1",
+      "ordinal": 47,
+      "args": [
+        {
+          "name": "method",
+          "value": "linear.status"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "pending",
+        "startedAt": 0
+      }
+    },
     "d4db291a4c50": {
       "name": "pendingProjectGitHubMerge",
       "ordinal": 34,
       "value": {
         "$rpc": "null"
       }
-    },
-    "d64b04e46db0": {
-      "name": "linear.status#1",
-      "ordinal": 51,
-      "json": "{\"id\":\"frame-5\",\"deviceToken\":\"recording-device\",\"method\":\"linear.status\"}"
     },
     "d83b362e2ad1": {
       "name": "showGitHubIssueSourcePicker",
@@ -1151,20 +1183,10 @@
         "$rpc": "null"
       }
     },
-    "de4025b26aa2": {
-      "name": "preflight.check#2",
-      "ordinal": 114,
-      "json": "{\"id\":\"frame-10\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
-    },
     "df3aaeb4a6ca": {
       "name": "showCreateTargetPicker",
       "ordinal": 95,
       "value": false
-    },
-    "df5c0be722f6": {
-      "name": "linearWorkspaces",
-      "ordinal": 122,
-      "value": []
     },
     "dfe023965b02": {
       "name": "projectRepoNotInOrca",
@@ -1185,23 +1207,6 @@
         "$rpc": "null"
       }
     },
-    "e583ab0b4d69": {
-      "name": "jiraConnection",
-      "ordinal": 57,
-      "value": {
-        "connected": false,
-        "credentialError": {
-          "$rpc": "null"
-        },
-        "selection": {
-          "$rpc": "null"
-        },
-        "sites": [],
-        "unavailableReason": {
-          "$rpc": "null"
-        }
-      }
-    },
     "e5a4abb9d94f": {
       "name": "showGitHubPagePicker",
       "ordinal": 19,
@@ -1212,6 +1217,11 @@
       "ordinal": 20,
       "value": false
     },
+    "e7ecfbfac0a0": {
+      "name": "linearWorkspaces",
+      "ordinal": 121,
+      "value": []
+    },
     "eb79a9b3682a": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -1220,20 +1230,10 @@
         "$rpc": "undefined"
       }
     },
-    "ee147ac0c45d": {
-      "name": "linearTeams",
-      "ordinal": 59,
-      "value": []
-    },
-    "f0d8575bba76": {
-      "name": "linearTeams",
+    "f1c300d0a9aa": {
+      "name": "selectedLinearTeamIds",
       "ordinal": 123,
       "value": []
-    },
-    "f1b611e3ddec": {
-      "name": "jira.status#2",
-      "ordinal": 116,
-      "json": "{\"id\":\"frame-12\",\"deviceToken\":\"recording-device\",\"method\":\"jira.status\"}"
     },
     "f1d992cfc4c7": {
       "name": "linearStatusPickerItem",
@@ -1288,19 +1288,19 @@
         "observation": {
           "sender": [
             "92d285d3f3f0",
-            "8a1c7137714e",
-            "b3f3f6a6069b",
-            "0cff3cfd4bb2",
-            "7d496ccb65c6",
-            "1f26b7c3f9eb"
+            "9704b1bab4cd",
+            "619882ebba08",
+            "57564581f448",
+            "179ed1933972",
+            "d00ff103cdc6"
           ],
           "payloads": [
             "b1714fb6ea51",
-            "c15da9b5667c",
-            "3b07c2f7af57",
-            "09f5676323bc",
-            "d64b04e46db0",
-            "92f796e77624"
+            "12d69a5555de",
+            "56cd9b635a03",
+            "bc3e027e3643",
+            "0615469bfcf0",
+            "6e8e6076a1ea"
           ],
           "settlements": {
             "mount": "eb79a9b3682a"
@@ -1355,19 +1355,19 @@
         "observation": {
           "sender": [
             "92d285d3f3f0",
-            "281c23abda8b",
-            "50e8f8e79bbf",
-            "9055388dbe30",
-            "3b5e5f172050",
-            "0fcbf1e4c52c"
+            "45ee7e34a0c6",
+            "60729092583d",
+            "86ed8e03ac41",
+            "9b52e4fef056",
+            "bde7860d3963"
           ],
           "payloads": [
             "b1714fb6ea51",
-            "c15da9b5667c",
-            "3b07c2f7af57",
-            "09f5676323bc",
-            "d64b04e46db0",
-            "92f796e77624"
+            "12d69a5555de",
+            "56cd9b635a03",
+            "bc3e027e3643",
+            "0615469bfcf0",
+            "6e8e6076a1ea"
           ],
           "settlements": {
             "mount": "eb79a9b3682a"
@@ -1418,14 +1418,14 @@
             "2db932a72b8a",
             "f54965c37b48",
             "8b6f54f81646",
-            "e583ab0b4d69",
-            "6e72b23e9d56",
-            "ee147ac0c45d",
-            "85ed8bfeb710",
-            "bc8fcdfcfcb7",
-            "01d6f7ebeadc",
-            "bf40088b2307",
-            "06e636c63a98"
+            "c82c2272344f",
+            "00bb6f59b349",
+            "96952d24ad82",
+            "2f9b87c56373",
+            "4e99f4f15c83",
+            "43b6d419b9a7",
+            "177ab8f3e63e",
+            "c3c5549a74cd"
           ]
         }
       },
@@ -1434,19 +1434,19 @@
         "observation": {
           "sender": [
             "92d285d3f3f0",
-            "281c23abda8b",
-            "50e8f8e79bbf",
-            "9055388dbe30",
-            "3b5e5f172050",
-            "0fcbf1e4c52c"
+            "45ee7e34a0c6",
+            "60729092583d",
+            "86ed8e03ac41",
+            "9b52e4fef056",
+            "bde7860d3963"
           ],
           "payloads": [
             "b1714fb6ea51",
-            "c15da9b5667c",
-            "3b07c2f7af57",
-            "09f5676323bc",
-            "d64b04e46db0",
-            "92f796e77624"
+            "12d69a5555de",
+            "56cd9b635a03",
+            "bc3e027e3643",
+            "0615469bfcf0",
+            "6e8e6076a1ea"
           ],
           "settlements": {
             "mount": "eb79a9b3682a"
@@ -1497,14 +1497,14 @@
             "2db932a72b8a",
             "f54965c37b48",
             "8b6f54f81646",
-            "e583ab0b4d69",
-            "6e72b23e9d56",
-            "ee147ac0c45d",
-            "85ed8bfeb710",
-            "bc8fcdfcfcb7",
-            "01d6f7ebeadc",
-            "bf40088b2307",
-            "06e636c63a98"
+            "c82c2272344f",
+            "00bb6f59b349",
+            "96952d24ad82",
+            "2f9b87c56373",
+            "4e99f4f15c83",
+            "43b6d419b9a7",
+            "177ab8f3e63e",
+            "c3c5549a74cd"
           ]
         }
       },
@@ -1513,20 +1513,20 @@
         "observation": {
           "sender": [
             "92d285d3f3f0",
-            "281c23abda8b",
-            "50e8f8e79bbf",
-            "9055388dbe30",
-            "3b5e5f172050",
-            "0fcbf1e4c52c",
+            "45ee7e34a0c6",
+            "60729092583d",
+            "86ed8e03ac41",
+            "9b52e4fef056",
+            "bde7860d3963",
             "46060331fc3d"
           ],
           "payloads": [
             "b1714fb6ea51",
-            "c15da9b5667c",
-            "3b07c2f7af57",
-            "09f5676323bc",
-            "d64b04e46db0",
-            "92f796e77624",
+            "12d69a5555de",
+            "56cd9b635a03",
+            "bc3e027e3643",
+            "0615469bfcf0",
+            "6e8e6076a1ea",
             "c2291bd6c254"
           ],
           "settlements": {
@@ -1579,14 +1579,14 @@
             "2db932a72b8a",
             "f54965c37b48",
             "8b6f54f81646",
-            "e583ab0b4d69",
-            "6e72b23e9d56",
-            "ee147ac0c45d",
-            "85ed8bfeb710",
-            "bc8fcdfcfcb7",
-            "01d6f7ebeadc",
-            "bf40088b2307",
-            "06e636c63a98",
+            "c82c2272344f",
+            "00bb6f59b349",
+            "96952d24ad82",
+            "2f9b87c56373",
+            "4e99f4f15c83",
+            "43b6d419b9a7",
+            "177ab8f3e63e",
+            "c3c5549a74cd",
             "fdf82996a325",
             "da005ebeb118",
             "9acc7d616558",
@@ -1633,31 +1633,31 @@
         "observation": {
           "sender": [
             "92d285d3f3f0",
-            "281c23abda8b",
-            "50e8f8e79bbf",
-            "9055388dbe30",
-            "3b5e5f172050",
-            "0fcbf1e4c52c",
+            "45ee7e34a0c6",
+            "60729092583d",
+            "86ed8e03ac41",
+            "9b52e4fef056",
+            "bde7860d3963",
             "02402ff3690d",
-            "9f9bf8f3abb0",
-            "60c4607ee8cb",
-            "20336e3be140",
-            "3865b7b48777",
-            "bd41f96e4030"
+            "4e09c5169a5e",
+            "2412a5aabf3b",
+            "c2f1814aa161",
+            "baa980b3a180",
+            "89f197796b7d"
           ],
           "payloads": [
             "b1714fb6ea51",
-            "c15da9b5667c",
-            "3b07c2f7af57",
-            "09f5676323bc",
-            "d64b04e46db0",
-            "92f796e77624",
+            "12d69a5555de",
+            "56cd9b635a03",
+            "bc3e027e3643",
+            "0615469bfcf0",
+            "6e8e6076a1ea",
             "c2291bd6c254",
-            "06bc4eb869cc",
-            "2bc02d816aed",
-            "de4025b26aa2",
-            "8fa5ff753d50",
-            "f1b611e3ddec"
+            "5cafa95111e1",
+            "27909b5e5fc7",
+            "490566e96aa8",
+            "b1331bd37542",
+            "301675c67de8"
           ],
           "settlements": {
             "mount": "eb79a9b3682a",
@@ -1709,14 +1709,14 @@
             "2db932a72b8a",
             "f54965c37b48",
             "8b6f54f81646",
-            "e583ab0b4d69",
-            "6e72b23e9d56",
-            "ee147ac0c45d",
-            "85ed8bfeb710",
-            "bc8fcdfcfcb7",
-            "01d6f7ebeadc",
-            "bf40088b2307",
-            "06e636c63a98",
+            "c82c2272344f",
+            "00bb6f59b349",
+            "96952d24ad82",
+            "2f9b87c56373",
+            "4e99f4f15c83",
+            "43b6d419b9a7",
+            "177ab8f3e63e",
+            "c3c5549a74cd",
             "fdf82996a325",
             "da005ebeb118",
             "9acc7d616558",
@@ -1761,14 +1761,14 @@
             "125f4a4aa901",
             "6e5baa80bdeb",
             "f463c5c60e18",
-            "138e0f5dc0a1",
-            "df5c0be722f6",
-            "f0d8575bba76",
-            "8c40d08ec970",
-            "24d52bffb0ec",
-            "44b9e4a614dc",
-            "b6a3509de996",
-            "b3556375d1db"
+            "e7ecfbfac0a0",
+            "2eabb9d54d80",
+            "f1c300d0a9aa",
+            "6071c3a906b0",
+            "3b1e52f4976a",
+            "8bd690a99eaa",
+            "a23185703450",
+            "68d557277b06"
           ]
         }
       }

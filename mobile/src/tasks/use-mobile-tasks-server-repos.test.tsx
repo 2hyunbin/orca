@@ -254,6 +254,32 @@ function ranOn(client: FakeSession, method: string): string[] {
 }
 
 describe('Tasks screen repos on the desktop and its servers', () => {
+  it('hydrates other providers while Jira status is pending and ignores the previous host reply', async () => {
+    const client = desktop()
+    const answer = client.sendRequest.getMockImplementation()
+    if (!answer) {
+      throw new Error('Desktop request fixture is missing')
+    }
+    const jiraStatus = deferred<RpcResponse>()
+    client.sendRequest.mockImplementation((method, params, options) =>
+      method === 'jira.status' ? jiraStatus.promise : answer(method, params, options)
+    )
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    await settle()
+    expect(model().taskStateHydrated).toBe(true)
+    expect(titles(model)).toContain('from the desktop')
+
+    await act(async () => {
+      desktopRef.current = desktop()
+      model().setShowRepoPicker(true)
+    })
+    await settle()
+    const nextConnection = model().jiraConnection
+    jiraStatus.resolve(reply({ connected: true, sites: [] }))
+    await settle()
+    expect(model().jiraConnection).toEqual(nextConnection)
+  })
+
   it("lists a reachable server's repos beside the desktop's, as the desktop's task page does", async () => {
     const client = desktop()
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])

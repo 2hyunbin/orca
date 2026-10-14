@@ -242,17 +242,24 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
       }
       setTasksSupportState({ kind: 'supported', client })
       setError('')
+      // Jira is advisory and must not delay the other providers.
+      void jiraConnectionStatusProbe
+        .request(client)
+        .catch(() => null)
+        .then((reply) => {
+          if (!stale) {
+            setJiraConnection(readJiraConnectionProbeReply(reply))
+          }
+        })
       // Why raw requests in the group and not startRpcOperation: main's Promise.all rejects as soon
       // as one leg rejects, and interpreting at an all-settled barrier would instead wait for the
       // slowest peer and let a later policy surface a different error.
-      const [settingsResponse, uiReply, preflightReply, linearStatusReply, jiraStatusReply] =
-        await Promise.all([
-          settingsRead.request(client),
-          taskUiStateRead.request(client),
-          taskPreflightRead.request(client),
-          taskLinearStatusRead.request(client),
-          jiraConnectionStatusProbe.request(client).catch(() => null)
-        ])
+      const [settingsResponse, uiReply, preflightReply, linearStatusReply] = await Promise.all([
+        settingsRead.request(client),
+        taskUiStateRead.request(client),
+        taskPreflightRead.request(client),
+        taskLinearStatusRead.request(client)
+      ])
       if (stale) {
         return
       }
@@ -293,7 +300,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
           ? [...availableProviders, 'linear' as const]
           : availableProviders
       setLinearConnected(linearIsConnected)
-      setJiraConnection(readJiraConnectionProbeReply(jiraStatusReply))
       if (!linearIsConnected) {
         setLinearWorkspaces([])
         setLinearTeams([])
