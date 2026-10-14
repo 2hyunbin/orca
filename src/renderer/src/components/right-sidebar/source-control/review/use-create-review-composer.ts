@@ -72,6 +72,7 @@ export function useSourceControlCreateReviewComposer({
     setBody: setPrBody,
     draft: prDraft,
     setDraft: setPrDraft,
+    fieldRevisions: prFieldRevisions,
     fieldsAreSeedPlaceholders: prFieldsAreSeedPlaceholders,
     stackedCreationSupported: prStackedCreationSupported,
     repoDefaultBaseRef: prRepoDefaultBaseRef,
@@ -109,8 +110,14 @@ export function useSourceControlCreateReviewComposer({
       generating: activePullRequestGenerationRecord?.status === 'running',
       generateError: activePullRequestGenerationRecord?.error ?? null,
       seedRestoreKey: activePullRequestGenerationSeedRestoreKey,
-      seed: activePullRequestGenerationRecord?.seed ?? null,
-      seedFieldRevisions: activePullRequestGenerationRecord?.seedFieldRevisions ?? null,
+      seed:
+        activePullRequestGenerationRecord?.editedFields?.fields ??
+        activePullRequestGenerationRecord?.seed ??
+        null,
+      seedFieldRevisions:
+        activePullRequestGenerationRecord?.editedFields?.revisions ??
+        activePullRequestGenerationRecord?.seedFieldRevisions ??
+        null,
       onSeedRestored: handlePullRequestGenerationSeedRestored,
       onGenerate: handleGeneratePullRequestFieldsForActive,
       onCancelGenerate: handleCancelGeneratePullRequestFieldsForActive
@@ -205,6 +212,7 @@ export function useSourceControlCreateReviewComposer({
     prBaseSearchPending,
     prBody,
     prDraft,
+    prFieldRevisions,
     prFieldsAreSeedPlaceholders,
     prGenerateDisabled,
     prGenerateDisabledReason,

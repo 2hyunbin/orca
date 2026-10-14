@@ -9,7 +9,7 @@ export type PullRequestGenerationOptions = { autoSubmit?: boolean }
 
 type ResolvableRecord = Pick<
   PullRequestGenerationRecord,
-  'autoSubmit' | 'seed' | 'seedFieldRevisions'
+  'autoSubmit' | 'seed' | 'seedFieldRevisions' | 'editedFields'
 > &
   Pick<Partial<PullRequestGenerationRecord>, 'context'>
 
@@ -39,7 +39,21 @@ export function resolveGeneratedFields(
     jiraIssueKey && record.seedFieldRevisions.title > 0
       ? record.seed.title
       : prefixJiraReviewTitle(result.title, jiraIssueKey)
-  return record.autoSubmit
+  const resolved = record.autoSubmit
     ? { ...result, base: record.seed.base, title, draft }
     : { ...result, title, draft }
+  const edited = record.editedFields
+  if (record.autoSubmit && edited) {
+    for (const field of ['base', 'title', 'body', 'draft'] as const) {
+      if (edited.revisions[field] <= record.seedFieldRevisions[field]) {
+        continue
+      }
+      if (field === 'draft') {
+        resolved.draft = edited.fields.draft
+      } else {
+        resolved[field] = edited.fields[field]
+      }
+    }
+  }
+  return resolved
 }
