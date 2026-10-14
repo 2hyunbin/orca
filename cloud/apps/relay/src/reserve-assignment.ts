@@ -24,9 +24,8 @@ export const RESERVE_STICKY_RECENT_MS = 10 * 60_000
 // A starting director waits this long for every live cell before it answers.
 export const RESERVE_STARTUP_GATE_MS = 30_000
 const SUMMARY_INTERVAL_MS = 60_000
-// A dry-run `full` refusal while the map showed more free room than this share of the
-// ceiling counts in `fullWithRoom`, the step-5 shadow gate's map-versus-cell disagreement.
-export const RESERVE_DRY_RUN_FULL_ROOM_SHARE = 0.01
+// A dry-run `full` while the map showed more free room than this share of the ceiling is `fullWithRoom`.
+export const RESERVE_DRY_RUN_ROOM_BOUND = 0.01
 // A leaver for these reasons was moved off its cell; it is not sent back there.
 const NO_REJOIN_CLOSE_CODES: ReadonlySet<number> = new Set([
   RELAY_CLOSE_CODE.DRAINING,
@@ -346,8 +345,7 @@ export class ReserveAssignment {
     const target = cell && this.input.cells().find((entry) => entry.cellId === cell.cellId)
     if (!target) return null
     // The map's free room at pick time; pick only returns a cell with a ceiling.
-    const ceiling = cell.ceiling ?? 0
-    const freeShare = ceiling > 0 ? Math.max(0, ceiling - this.input.placer.load(cell)) / ceiling : 0
+    const freeShare = cell.ceiling ? this.input.placer.free(cell) / cell.ceiling : 0
     const startedAt = performance.now()
     void this.input.client
       .reserve(target, { ...identity, epoch: 1, ttlMs: CELL_RESERVE_TTL_MS }, true)
@@ -360,7 +358,7 @@ export class ReserveAssignment {
         dryRun.cells[cell.cellId] = perCell
         perCell.outcomes[answer.outcome] = (perCell.outcomes[answer.outcome] ?? 0) + 1
         if (answer.outcome === 'full') {
-          if (freeShare > RESERVE_DRY_RUN_FULL_ROOM_SHARE) perCell.fullWithRoom += 1
+          if (freeShare > RESERVE_DRY_RUN_ROOM_BOUND) perCell.fullWithRoom += 1
           perCell.minFullFreeShare = Math.min(perCell.minFullFreeShare ?? 1, freeShare)
         }
       })

@@ -386,6 +386,7 @@ describe('reserve assignment on a director', () => {
         const plan = await assignment.plan(HOST, { reconnect: false, region: US })
         if (plan.kind === 'database') await plan.placeFresh?.()
       }
+      // Lets the fire-and-forget dry-run reserves settle before the summary flushes.
       await Promise.resolve()
       now.value += 60_000
       await assignment.plan(HOST, { reconnect: false, region: US })

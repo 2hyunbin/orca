@@ -3,7 +3,6 @@ import type { RelayAssignment } from './assignment-store.js'
 import type { RelayConfig } from './config.js'
 import {
   classifyShadowSeat,
-  SHADOW_COMPARE_CELLS_PER_LINE,
   SHADOW_COMPARE_FLUSH_MS,
   SHADOW_COMPARE_SAMPLES_PER_CLASS,
   ShadowDirectoryCompare
@@ -227,7 +226,7 @@ describe('ShadowDirectoryCompare', () => {
         explained: false,
         count: SHADOW_COMPARE_SAMPLES_PER_CLASS + 5,
         windowMs: SHADOW_COMPARE_FLUSH_MS,
-        cells: { 'cell-a': SHADOW_COMPARE_SAMPLES_PER_CLASS + 5 }
+        countByCell: { 'cell-a': SHADOW_COMPARE_SAMPLES_PER_CLASS + 5 }
       },
       {
         event: 'orca_relay_shadow_compare',
@@ -236,30 +235,35 @@ describe('ShadowDirectoryCompare', () => {
         explained: true,
         count: 2,
         windowMs: SHADOW_COMPARE_FLUSH_MS,
-        cells: { 'cell-a': 2 }
+        countByCell: { 'cell-a': 2 }
       }
     ])
   })
 
-  it('splits each line per cell, with no cell for a host neither side has, and bounds the split', () => {
-    const lines: Array<Record<string, unknown> & { cells?: Record<string, number> }> = []
-    const cellIds = Array.from({ length: SHADOW_COMPARE_CELLS_PER_LINE + 2 }, (_, index) => `cell-${index}`)
-    const compare = new ShadowDirectoryCompare(
-      directoryWith(Object.fromEntries(cellIds.map((cellId) => [cellId, []]))),
-      () => 0,
-      (line) => lines.push(JSON.parse(line))
-    )
-    // The database names the cell; the map has no seat there, so each is db-only-unseen.
-    for (const cellId of cellIds) compare.compare('sticky-verify', IDENTITY, assignment(cellId))
-    compare.compare('sticky-verify', IDENTITY, assignment('cell-0'))
-    compare.compare('resolve', IDENTITY, null)
-    compare.flush(0)
-    const [unseen, absent] = lines
-    expect(unseen).toMatchObject({ class: 'db-only-unseen', count: cellIds.length + 1, cellsOverflow: 2 })
-    expect(Object.keys(unseen?.cells ?? {})).toHaveLength(SHADOW_COMPARE_CELLS_PER_LINE)
-    expect(unseen?.cells).toMatchObject({ 'cell-0': 2, 'cell-1': 1 })
-    expect(absent).toEqual(expect.objectContaining({ class: 'agree-absent', count: 1, cells: {} }))
-    expect(absent).not.toHaveProperty('cellsOverflow')
+  it('counts a compare on every cell it involves, and on none for a host neither side has', () => {
+    const lines: Array<Record<string, unknown>> = []
+    const compareOn = (seats: Record<string, ReturnType<typeof seat>[]>) =>
+      new ShadowDirectoryCompare(directoryWith(seats), () => 0, (line) => lines.push(JSON.parse(line)))
+    const unseen = compareOn({ 'cell-a': [], 'cell-b': [] })
+    unseen.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    unseen.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    unseen.compare('sticky-verify', IDENTITY, assignment('cell-b'))
+    unseen.compare('resolve', IDENTITY, null)
+    unseen.flush(0)
+    // The database says cell-a at epoch 3; the map seats the host on cell-b at a newer epoch.
+    const mismatch = compareOn({ 'cell-a': [], 'cell-b': [seat(4)] })
+    mismatch.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    mismatch.flush(0)
+    const mapOnly = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
+    mapOnly.compare('resolve', IDENTITY, null)
+    mapOnly.flush(0)
+    const counts = lines.filter((line) => line.event === 'orca_relay_shadow_compare')
+    expect(counts.map((line) => [line.class, line.explained, line.count, line.countByCell])).toEqual([
+      ['db-only-unseen', true, 3, { 'cell-a': 2, 'cell-b': 1 }],
+      ['agree-absent', true, 1, {}],
+      ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
+      ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
+    ])
   })
 })
 
