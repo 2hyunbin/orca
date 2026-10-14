@@ -174,6 +174,43 @@ describe('a candidate commit that arrives with no composition session', () => {
     })
   }
 
+  // The keypress sends the key's text on every path, so the input that follows must not claim it.
+  for (const finalizerRuns of ['beforeKeypress', 'beforeInput', 'afterInput'] as const) {
+    it(`sends a keypress-carried key once after a commit, finalizer ${finalizerRuns}`, async () => {
+      const rig = openTerminal()
+      try {
+        dispatchComposition(rig, 'compositionstart', '')
+        dispatchComposition(rig, 'compositionupdate', 'ni')
+        dispatchComposition(rig, 'compositionend', '你')
+        dispatchKey(rig, 'keydown', { key: 'Process', code: 'Comma', keyCode: IME_KEYCODE })
+        if (finalizerRuns === 'beforeKeypress') {
+          await nextEventLoop()
+        }
+        dispatchKey(rig, 'keypress', {
+          key: '，',
+          code: 'Comma',
+          keyCode: 0xff0c,
+          charCode: 0xff0c
+        })
+        if (finalizerRuns === 'beforeInput') {
+          await nextEventLoop()
+        }
+        rig.textarea.value = '你，'
+        const input = new InputEvent('input', { bubbles: true })
+        Object.defineProperty(input, 'inputType', { value: 'insertText' })
+        Object.defineProperty(input, 'data', { value: '，' })
+        Object.defineProperty(input, 'composed', { value: true })
+        rig.textarea.dispatchEvent(input)
+        dispatchKey(rig, 'keyup', { key: 'Process', code: 'Comma', keyCode: IME_KEYCODE })
+        await nextEventLoop()
+        await nextEventLoop()
+        expect(rig.emitted.join('')).toBe('你，')
+      } finally {
+        rig.terminal.dispose()
+      }
+    })
+  }
+
   it('sends direct punctuation delivered after the consumed key is released', async () => {
     const rig = openTerminal()
     try {

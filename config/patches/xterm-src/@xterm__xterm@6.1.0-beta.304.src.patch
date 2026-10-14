@@ -88,7 +88,7 @@ index 497afcf535f3eaca00889525a77e15eb633ccd96..96d499b34605f860608382114c3fbdc0
  
  export interface IBrowser {
 diff --git a/src/browser/input/CompositionHelper.ts b/src/browser/input/CompositionHelper.ts
-index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742bff3beb77 100644
+index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..8ce5bad71b26515ecbbb82b76d218d0b16e280a8 100644
 --- a/src/browser/input/CompositionHelper.ts
 +++ b/src/browser/input/CompositionHelper.ts
 @@ -1,10 +1,15 @@
@@ -413,7 +413,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
    }
  
    /**
-@@ -113,10 +313,27 @@ export class CompositionHelper {
+@@ -113,10 +313,33 @@ export class CompositionHelper {
     * @returns Whether the Terminal should continue processing the keydown event.
     */
    public keydown(ev: KeyboardEvent): boolean {
@@ -422,7 +422,13 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
 +      this._canceledKey = undefined;
 +      return false;
 +    }
-+    if (ev.key === 'Escape' && (this._isComposing || this.hasPendingCompositionFinalization)) {
++    // An ended session's commit is accepted; only the Escape that ended it (macOS reports that
++    // keydown after compositionend, still composing) cancels it.
++    if (
++      ev.key === 'Escape' &&
++      (this._isComposing ||
++        (this.hasPendingCompositionFinalization && (ev.isComposing || ev.keyCode === 229)))
++    ) {
 +      this._canceledKey = { code: ev.code, timeStamp: ev.timeStamp };
 +      this._cancelComposition();
 +      return false;
@@ -442,7 +448,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
          return false;
        }
        if (ev.keyCode === 16 || ev.keyCode === 17 || ev.keyCode === 18) {
-@@ -128,6 +345,10 @@ export class CompositionHelper {
+@@ -128,6 +351,10 @@ export class CompositionHelper {
        this._finalizeComposition(false);
      }
  
@@ -453,7 +459,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
      if (ev.keyCode === 229) {
        // If the "composition character" is used but gets to this point it means a non-composition
        // character (eg. numbers and punctuation) was pressed when the IME was active.
-@@ -138,6 +359,76 @@ export class CompositionHelper {
+@@ -138,6 +365,78 @@ export class CompositionHelper {
      return true;
    }
  
@@ -462,6 +468,8 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
 +   * after reconciliation with the final textarea candidate.
 +   */
 +  public keypress(text: string): boolean {
++    // Every path below sends this key's text, so its keydown no longer owes a commit.
++    this._imeKeydownAwaitingCommit = false;
 +    const pending = this._pendingComposition;
 +    if (!pending) {
 +      return false;
@@ -530,7 +538,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
    /**
     * Finalizes the composition, resuming regular input actions. This is called when a composition
     * is ending.
-@@ -146,23 +437,52 @@ export class CompositionHelper {
+@@ -146,23 +445,52 @@ export class CompositionHelper {
     *   compositionend event is triggered, such as enter, so that the composition is sent before
     *   the command is executed.
     */
@@ -594,7 +602,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
  
        // Since composition* events happen before the changes take place in the textarea on most
        // browsers, use a setTimeout with 0ms time to allow the native compositionend event to
-@@ -172,35 +492,313 @@ export class CompositionHelper {
+@@ -172,35 +500,313 @@ export class CompositionHelper {
        // - The last compositionupdate event's data property does not always accurately describe
        //   the character, a counter example being Korean where an ending consonsant can move to
        //   the following character if the following input is a vowel.
@@ -935,7 +943,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
    }
  
    /**
-@@ -222,6 +820,9 @@ export class CompositionHelper {
+@@ -222,6 +828,9 @@ export class CompositionHelper {
  
          const diff = newValue.replace(oldValue, '');
  
@@ -945,7 +953,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
          this._dataAlreadySent = diff;
  
          if (newValue.length > oldValue.length) {
-@@ -236,6 +837,105 @@ export class CompositionHelper {
+@@ -236,6 +845,105 @@ export class CompositionHelper {
      }, 0);
    }
  
@@ -1051,7 +1059,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
    /**
     * Positions the composition view on top of the cursor and the textarea just below it (so the
     * IME helper dialog is positioned correctly).
-@@ -243,10 +943,23 @@ export class CompositionHelper {
+@@ -243,10 +951,23 @@ export class CompositionHelper {
     *   necessary as the IME events across browsers are not consistently triggered.
     */
    public updateCompositionElements(dontRecurse?: boolean): void {
@@ -1076,7 +1084,7 @@ index c9ec396ab66cb966d49aa63bed09cdf9cd6c4246..ff0fb0ac0f90b0a1cf588b5cdf0e742b
      if (this._bufferService.buffer.isCursorInViewport) {
        const cursorX = Math.min(this._bufferService.buffer.x, this._bufferService.cols - 1);
  
-@@ -254,31 +967,156 @@ export class CompositionHelper {
+@@ -254,31 +975,156 @@ export class CompositionHelper {
        const cursorTop = this._bufferService.buffer.y * this._renderService.dimensions.css.cell.height;
        const cursorLeft = cursorX * this._renderService.dimensions.css.cell.width;
  
