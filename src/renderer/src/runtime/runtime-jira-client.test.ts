@@ -13,7 +13,8 @@ import {
   jiraSearchIssues,
   jiraSearchIssuesForTarget,
   jiraStatusForTarget,
-  jiraSearchUsers
+  jiraSearchUsers,
+  jiraListIssues
 } from './runtime-jira-client'
 import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
 import { clearJiraImageCache } from './runtime-jira-image-cache'
@@ -22,6 +23,7 @@ import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-t
 import {
   JIRA_USER_FIELDS_RUNTIME_CAPABILITY,
   JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
+  JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY,
   JIRA_USER_FIELDS_UPDATE_REQUIRED_MESSAGE
 } from '../../../shared/protocol-version'
 
@@ -77,6 +79,29 @@ beforeEach(() => {
 afterEach(() => {
   clearJiraImageCache()
   vi.unstubAllGlobals()
+})
+describe('current sprint runtime compatibility', () => {
+  it('rejects an old host instead of silently dropping a preset filter', async () => {
+    runtimeCall.mockImplementation(async (args) => {
+      if (args.method === 'status.get') {
+        const response = createCompatibleRuntimeStatusResponse()
+        if (!response.ok) {
+          throw new Error('Expected status fixture')
+        }
+        response.result.capabilities = response.result.capabilities?.filter(
+          (capability) => capability !== JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY
+        )
+        return response
+      }
+      return { id: 'rpc-1', ok: true, result: [] }
+    })
+    await expect(
+      jiraListIssues({ kind: 'environment', environmentId: 'sprint-old' }, 'all', 50, 'site-a', {
+        currentSprint: true
+      })
+    ).rejects.toThrow('Update the remote Orca server')
+    expect(runtimeCall.mock.calls.some(([args]) => args.method === 'jira.listIssues')).toBe(false)
+  })
 })
 
 describe('runtime Jira client search bounds', () => {

@@ -2559,7 +2559,8 @@
         "linearModeHasWorktreeTooltip": "Linear tickets linked to an Orca workspace",
         "linearEmptyHasWorktree": "No Linear tickets are linked to an Orca workspace yet. Start work from a Linear issue to see it here.",
         "linearOpenAttachedWorkspace": "Open workspace attached to {{value0}}",
-        "linearWorktreesColumn": "Workspaces"
+        "linearWorktreesColumn": "Workspaces",
+        "jiraBoardEmptyColumn": "No issues"
       },
       "Terminal": {
         "73768427cf": "Close",
@@ -20081,6 +20082,19 @@
       "back": "Back",
       "apply": "Change status",
       "empty": "No status changes available."
+    },
+    "board": {
+      "currentSprint": "Current sprint",
+      "viewMode": "Jira view",
+      "list": "List",
+      "board": "Board",
+      "moveIssue": "Move {{key}}",
+      "moveTitle": "Move {{key}} to {{column}}",
+      "moveDescription": "Jira controls which status changes are available and which fields they require.",
+      "chooseTransition": "Choose a status change:",
+      "cancel": "Cancel",
+      "noTransition": "No status change to {{column}} is available for {{key}}.",
+      "queryTooLong": "The Jira query is too long with Current sprint selected. Shorten the query or turn off Current sprint."
     }
   }
 }

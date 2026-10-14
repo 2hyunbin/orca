@@ -62,10 +62,7 @@ import { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
 import { MOBILE_RELAY_RUNTIME_CAPABILITIES } from './mobile-desktop-relay-contract'
 import { SKILL_RUNTIME_CAPABILITIES } from './skill-install-capability'
 import { ACCOUNT_RUNTIME_CAPABILITIES } from './account-runtime-capabilities'
-import {
-  AGENT_LAUNCH_RUNTIME_CAPABILITIES,
-  AGENT_LAUNCH_RUNTIME_CAPABILITY
-} from './agent-launch-runtime-capability'
+import * as agentLaunchCapabilities from './agent-launch-runtime-capability'
 
 // Why: declares the Orca runtime RPC compatibility contract. Desktop,
 // headless server, CLI, and mobile builds may drift in app version, but
@@ -91,7 +88,6 @@ export const MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION = 2
 export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
 
 export const PROJECT_HOST_SETUP_RUNTIME_CAPABILITY = 'project-host-setup.v1' as const
-export const JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY = 'jira.transition-fields.v1' as const
 export const TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY = 'task-source-context.v1' as const
 export const WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY = 'workspace-run-context.v1' as const
 export const WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY = 'worktree.provisioned-root.v1' as const
@@ -345,15 +341,16 @@ export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
   REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY,
   ...AUTOMATION_RUNTIME_CLIENT_CAPABILITIES,
-  AGENT_LAUNCH_RUNTIME_CAPABILITY
+  agentLaunchCapabilities.AGENT_LAUNCH_RUNTIME_CAPABILITY
 ] as const
 
 export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const
 
 export const RUNTIME_CAPABILITIES = [
-  JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
+  jiraDetailCapabilities.JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
   JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY,
+  jiraDetailCapabilities.JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY,
   ...ORCAD_RUNTIME_CAPABILITIES,
   ...DEVICE_KEY_RUNTIME_CAPABILITIES,
   QODER_OWNED_TERMINAL_CREATE_CAPABILITY,
@@ -448,7 +445,7 @@ export const RUNTIME_CAPABILITIES = [
   WORKSPACE_PORTS_HOST_SCOPED_RUNTIME_CAPABILITY,
   RUNTIME_SOURCE_FENCE_RUNTIME_CAPABILITY,
   SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY,
-  ...AGENT_LAUNCH_RUNTIME_CAPABILITIES
+  ...agentLaunchCapabilities.AGENT_LAUNCH_RUNTIME_CAPABILITIES
 ] as const
 
 export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number] | (string & {})
