@@ -31,6 +31,8 @@ import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 
 export type StructuredAgentSessionCreateOptions = {
+  /** The opening request's lifetime, including preparation before this host was reached. */
+  signal?: AbortSignal
   firstMessage?: { clientMessageId: string; body: AgentJournalMessageItem }
   hostLaunchDirectory?: string
   /** Called after the durable create, before delivery can start the agent. */
@@ -44,6 +46,7 @@ export function createStructuredAgentSession(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionCreateOptions = {}
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
+  options.signal?.throwIfAborted()
   return context.tasks.trackAttach(
     context.serialize(params.envelope.sessionId, async () => {
       try {
@@ -64,6 +67,7 @@ async function foundConversation(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionCreateOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
+  options.signal?.throwIfAborted()
   const { deps } = context
   const { store } = deps
   const sessionId = params.envelope.sessionId
@@ -173,6 +177,7 @@ async function foundConversation(
   let committed = replayed
   try {
     if (!replayed) {
+      options.signal?.throwIfAborted()
       await importAdoptedTranscript(
         params,
         { journal: session.journal, unconfirmedClientMessageIds: [] },
@@ -181,6 +186,7 @@ async function foundConversation(
         { uncommittedCreate: true }
       )
       const first = options.firstMessage
+      options.signal?.throwIfAborted()
       if (first) {
         const sent = await performSend(
           {
@@ -259,7 +265,9 @@ async function foundConversation(
         ...(tabId ? { tabId } : {})
       }
     }
-    context.wakeDelivery?.(sessionId)
+    if (!options.signal?.aborted) {
+      context.wakeDelivery?.(sessionId)
+    }
     return result
   } finally {
     if (!committed && !existing) {

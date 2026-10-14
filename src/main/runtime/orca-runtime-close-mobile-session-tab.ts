@@ -1,9 +1,6 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose } from './orca-runtime-refuse-unattributed-mobile-session-tab-close'
-import type {
-  RuntimeMobileSessionTerminalTab,
-  RuntimeSessionTabCloseReason
-} from '../../shared/runtime-types'
+import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from './runtime-terminal-state-records'
 import {
   adjudicateAbsentMobileSessionTabClose,
@@ -18,17 +15,20 @@ import {
 } from './mobile-session-tab-close-outcome'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
-import { SESSION_TAB_NOT_FOUND_ERROR } from '../../shared/session-tab-close'
 import { rendererPublicationThrottle } from '../window/renderer-publication-throttle'
-import { structuredAgentSessionTabCloseCause } from './structured-agent-session-tab-close-cause'
 import { retireHeadlessMobileSessionEditorTab } from './mobile-session-editor-projection'
+import {
+  closeListedStructuredAgentSessionTab,
+  closeStructuredAgentSessionTabForUser,
+  isUserStructuredAgentSessionTabClose,
+  type StructuredAgentSessionTabCloseOptions
+} from './structured-agent-session-tab-close'
 
 export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
   async closeMobileSessionTab(
     worktreeSelector: string,
     tabId: string,
-    options: {
-      reason?: RuntimeSessionTabCloseReason
+    options: StructuredAgentSessionTabCloseOptions & {
       expectedPublicationEpoch?: string
       expectedTerminalHandle?: string
       clientNavigationId?: string
@@ -41,6 +41,14 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
+    // Why before the hydrate: a chat close needs no terminal process scan, which can wait on SSH.
+    if (isUserStructuredAgentSessionTabClose(tabId, options)) {
+      if (graphEpoch !== null) {
+        this.assertStableReadyGraph(graphEpoch)
+      }
+      await closeStructuredAgentSessionTabForUser(this, worktreeId, tabId, options)
+      return committedMobileSessionTabClose(this.clientSessionTabSelections, worktreeId, [tabId])
+    }
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     const observedPtyIds = await this.refreshMobileSessionPtyRecords()
     if (graphEpoch !== null) {
@@ -291,21 +299,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         await this.notifier.closeSessionTab(tab.id, worktreeId)
       }
     } else if (tab.type === 'agent-session') {
-      if (this.notifier?.closeSessionTab) {
-        try {
-          // Why: a reopened chat's window tab id is not derivable from its session; the window maps ours.
-          await this.notifier.closeSessionTab(tab.id, worktreeId)
-        } catch (error) {
-          // The renderer already having removed the tab is an idempotent close, not a veto.
-          if (!(error instanceof Error && error.message === SESSION_TAB_NOT_FOUND_ERROR)) {
-            throw error
-          }
-        }
-      }
-      await this.closeStructuredAgentSessionTab(
-        tab,
-        structuredAgentSessionTabCloseCause(options.reason)
-      )
+      await closeListedStructuredAgentSessionTab(this, worktreeId, tab, options)
     } else if (!this.notifier?.closeSessionTab) {
       // Why: a headless host listed this editor from its own session, so it retires it there.
       if (!retireHeadlessMobileSessionEditorTab(this, worktreeId, tab, options.force)) {

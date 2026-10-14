@@ -139,8 +139,9 @@ export class AgentSessionRecordStore {
     agentSessionVisibleTabIndex(this.state)
 
   /** The id of the chat tab showing this conversation, if one does. */
-  getSessionTabId = (sessionId: string): string | null =>
-    this.state.sessionTabs?.tabIdFor(sessionId) ?? null
+  getSessionTabId = (sessionId: string) => this.state.sessionTabs?.tabIdFor(sessionId) ?? null
+
+  getSessionIdForTab = (tabId: string) => this.state.sessionTabs?.sessionIdFor(tabId) ?? null
 
   /**
    * Persist the user-visible tab reference separately from the rollback-sensitive profile tabs.

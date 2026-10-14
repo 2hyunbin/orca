@@ -1,9 +1,9 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithCloseMobileSessionTab } from './orca-runtime-close-mobile-session-tab'
 import type {
-  RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionRetiredTerminalSurface,
+  RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
@@ -12,34 +12,40 @@ import { getMobileSessionSnapshotTabIdentityKeys } from './mobile-session-tab-me
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import { applyBrowserSessionTabSelection } from './browser-session-tab-selection-snapshot'
-import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
+import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import { AGENT_SESSION_CLOSE_PENDING_CODE } from '../../shared/session-tab-close'
+import { structuredAgentSessionIdForTabClose } from './structured-agent-session-tab-close'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
-  protected async closeStructuredAgentSessionTab(
-    tab: RuntimeMobileSessionAgentTab,
-    cause: StructuredAgentSessionCloseCause
-  ): Promise<void> {
-    const host = getStructuredAgentSessionHost()
-    if (host) {
-      if (typeof host.setSessionTabVisibility === 'function') {
-        // The restore index is bookkeeping: one that cannot be written (a newer Orca's records, a
-        // failing disk) is reported, and the tab still closes.
-        await host.setSessionTabVisibility(tab.sessionId, false).catch((error: unknown) => {
-          host.deps.logger.warn('recording a closed chat tab failed', {
-            scope: 'tab-visibility-close',
-            sessionId: tab.sessionId,
-            error
-          })
-        })
-      }
+  resolveStructuredAgentSessionTabCloseSessionId(tabId: string): string | null {
+    return structuredAgentSessionIdForTabClose(this, tabId)
+  }
+
+  /** Establish chat ownership without startup's terminal census; an unreadable store is not empty. */
+  async ensureStructuredAgentSessionHostForClose(): Promise<void> {
+    if (getStructuredAgentSessionHost() || !this.hasPersistedStructuredAgentSessionStore()) {
+      return
     }
-    // Retire durable visibility and the runtime snapshot before stopping the provider.
-    this.retireStructuredAgentSessionTabFromSnapshot(tab.sessionId)
-    if (typeof host?.close === 'function') {
-      await host.close(tab.sessionId, cause)
+    try {
+      await this.ensureStructuredAgentSessionHost()
+    } catch (error) {
+      throw new Error(AGENT_SESSION_CLOSE_PENDING_CODE, { cause: error })
     }
+    if (!getStructuredAgentSessionHost()) {
+      throw new Error(AGENT_SESSION_CLOSE_PENDING_CODE)
+    }
+  }
+
+  /** The worktree's stored list without the terminal process scan, which no chat close needs. */
+  async listMobileSessionTabsForChatClose(
+    worktreeSelector: string,
+    clientNavigationId?: string
+  ): Promise<RuntimeMobileSessionTabsResult> {
+    const worktreeId =
+      this.getValidatedExplicitWorktreeIdSelector(worktreeSelector) ??
+      (await this.resolveWorktreeSelector(worktreeSelector)).id
+    return this.getMobileSessionTabsForWorktree(worktreeId, clientNavigationId)
   }
 
   /**

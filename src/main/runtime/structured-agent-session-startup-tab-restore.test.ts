@@ -174,7 +174,7 @@ function startupRuntime(options: { afterInstall?: () => void; profileChats?: str
     ensureStructuredAgentSessionHost(): Promise<unknown>
     refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
     mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-    store: { getWorkspaceSession: () => unknown }
+    store: { getWorkspaceSession: () => unknown; getRepo: () => undefined }
   }
   internal.hasPersistedStructuredAgentSessionStore = () => true
   internal.ensureStructuredAgentSessionHost = async () => {
@@ -194,6 +194,7 @@ function startupRuntime(options: { afterInstall?: () => void; profileChats?: str
   internal.refreshMobileSessionPtyRecords = async () => new Set<string>()
   // A legacy profile's saved chat tabs, which a store with no tab index restores from.
   internal.store = {
+    getRepo: () => undefined,
     getWorkspaceSession: () => ({
       activeRepoId: null,
       activeWorktreeId: 'workspace-1',
@@ -218,6 +219,7 @@ function startupRuntime(options: { afterInstall?: () => void; profileChats?: str
   }
   return {
     runtime,
+    internal,
     log,
     published: () => internal.mobileSessionTabsByWorktree.get('workspace-1')?.tabs ?? []
   }
@@ -332,6 +334,39 @@ describe('restoring the chat tabs open at quit', () => {
       chatRecord(CHAT_A, { codex: true }),
       chatRecord(CHAT_B, { codex: true })
     ]
+
+    it('captures legacy membership during the real cold install before a close changes the index', async () => {
+      await seedProfile(legacyChats())
+      expect(getStructuredAgentSessionHost()).toBeNull()
+      const { runtime, internal, published } = startupRuntime({ profileChats: [CHAT_A, CHAT_B] })
+      let enter!: () => void
+      let release!: () => void
+      const reached = new Promise<void>((resolve) => {
+        enter = resolve
+      })
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      vi.spyOn(internal, 'refreshMobileSessionPtyRecords').mockImplementationOnce(async () => {
+        enter()
+        await held
+        return new Set()
+      })
+      const restoring = runtime.restoreStructuredAgentSessionTabs()
+      await reached
+      try {
+        expect(
+          await runtime.closeMobileSessionTab('id:workspace-1', `agent-session:${CHAT_A}`, {
+            reason: 'user'
+          })
+        ).toMatchObject({ closed: true })
+      } finally {
+        release()
+      }
+      await restoring
+      expect(await tabIndexOnDisk()).toEqual([CHAT_B])
+      expect(published().map((tab) => tab.id)).toEqual([`agent-session:${CHAT_B}`])
+    })
 
     it('records every restored chat in one write', async () => {
       const records = legacyChats()
