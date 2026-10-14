@@ -7,6 +7,7 @@ import {
   type PluginEnvironmentProviderSshOptions
 } from './plugin-environment-provider-ssh-reviews'
 import { PluginEnvironmentProviderSshConnections } from './plugin-environment-provider-ssh-connections'
+import { recoverProviderManagedEndpoint } from './plugin-environment-managed-endpoint'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { PluginEnvironmentProviderReview } from '../../shared/plugins/plugin-environment-provider-api'
 import {
@@ -85,6 +86,7 @@ export class PluginEnvironmentProviderSsh {
   }
 
   async authorize(target: SshTarget) {
+    await recoverProviderManagedEndpoint(this.options.userDataPath, target.id)
     const owner = pluginEnvironmentSshBindingSchema.parse(target.environmentProvider)
     if (owner.binding.executionHostId !== 'local') {
       throw new Error('SSH connection belongs to another execution host')

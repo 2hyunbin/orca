@@ -14,6 +14,12 @@ import { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-p
 import type { PluginService } from './plugin-service'
 import type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plugin-environment-recipe-result'
 import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
+import { findCurrentEnvironmentProviderSshResource } from './plugin-environment-provider-ssh-inventory'
+import { publishEnvironmentProviderSshTarget } from './plugin-environment-provider-ssh-registration'
+import {
+  PluginEnvironmentManagedEndpoint,
+  recoverProviderManagedEndpoint
+} from './plugin-environment-managed-endpoint'
 import {
   assertEnvironmentProviderSshOwner,
   environmentProviderSshTargetId
@@ -43,6 +49,7 @@ export type PluginEnvironmentProviderSshOptions = {
 }
 
 export class PluginEnvironmentProviderSshReviews {
+  private readonly managedEndpoints: PluginEnvironmentManagedEndpoint
   private readonly contexts: PluginEnvironmentProviderContextStore
   private readonly tickets = new Map<string, Ticket>()
   private readonly consuming = new Set<Ticket>()
@@ -55,6 +62,7 @@ export class PluginEnvironmentProviderSshReviews {
     ) => Promise<{ isCurrent(): boolean }>
   ) {
     this.contexts = new PluginEnvironmentProviderContextStore(options.userDataPath)
+    this.managedEndpoints = new PluginEnvironmentManagedEndpoint(options.userDataPath)
   }
   async prepare(
     ownerKey: string,
@@ -63,12 +71,21 @@ export class PluginEnvironmentProviderSshReviews {
     expectedRevision: string,
     signal?: AbortSignal
   ): Promise<EnvironmentProviderSshPreview> {
+    await recoverProviderManagedEndpoint(
+      this.options.userDataPath,
+      environmentProviderSshTargetId({ binding: input, resourceId })
+    )
     const review = pluginEnvironmentProviderReviewSchema.parse(input)
     this.prune()
     if (this.tickets.size >= 32) {
       throw new Error('Too many SSH connection reviews are open')
     }
-    const resource = await this.findCurrentResource(review, resourceId, signal)
+    const resource = await findCurrentEnvironmentProviderSshResource(
+      this.options,
+      review,
+      resourceId,
+      signal
+    )
     if (
       !resource ||
       resource.revision !== expectedRevision ||
@@ -182,71 +199,46 @@ export class PluginEnvironmentProviderSshReviews {
         throw new Error('The saved SSH target changed during connection review')
       }
       if (ticket.preview.endpointUpdate) {
-        if (!saved || !this.options.retireTarget) {
+        const retireTarget = this.options.retireTarget
+        if (!saved || !retireTarget) {
           throw new Error('The host cannot safely retire this saved SSH connection')
         }
-        // Check ownership before retiring contact, then pin the same registration through publication.
         assertEnvironmentProviderSshOwner(saved, ticket.binding, previous)
+        if (this.managedEndpoints.isManaged(saved)) {
+          const updated = await this.managedEndpoints.commit({
+            store,
+            previous: saved,
+            owner: ticket.binding,
+            label: ticket.preview.resource.name,
+            identityFile,
+            migratedFrom: previous,
+            retire: () => retireTarget(structuredClone(saved)),
+            isCurrent: () => !ticket.controller.signal.aborted && current.isCurrent()
+          })
+          this.options.onTargetSaved?.(ticket.review.providerId)
+          return updated
+        }
         if (saved.orcadProvisioning) {
           throw new Error('The saved SSH host is still provisioning its managed server')
         }
-        await this.options.retireTarget(structuredClone(saved))
+        await retireTarget(structuredClone(saved))
       }
       if (ticket.controller.signal.aborted || !current.isCurrent()) {
         throw new Error('Environment connection review changed')
       }
-      const connection = ticket.binding.connection
-      const target = store.upsertEnvironmentProviderTarget(
+      const target = await publishEnvironmentProviderSshTarget(
+        store,
         ticket.binding,
-        {
-          label: ticket.preview.resource.name,
-          host: connection.host,
-          port: connection.port,
-          username: connection.username,
-          ...(connection.configHost ? { configHost: connection.configHost } : {}),
-          ...(identityFile ? { identityFile } : {})
-        },
+        ticket.preview.resource.name,
+        identityFile,
         previous,
         ticket.preview.endpointUpdate ? ticket.previousTarget : undefined
       )
-      await store.getOrcadMigrationSource().flushPendingOrThrowAsync()
       this.options.onTargetSaved?.(ticket.review.providerId)
       return target
     } finally {
       this.consuming.delete(ticket)
     }
-  }
-
-  private async findCurrentResource(
-    review: PluginEnvironmentProviderReview,
-    id: string,
-    signal?: AbortSignal
-  ) {
-    let cursor: string | undefined
-    const seen = new Set<string>()
-    for (let page = 0; page < 16; page += 1) {
-      const result = await this.options.inventory(review, cursor, signal)
-      if (
-        result.kind !== 'executed' ||
-        result.result.kind !== 'completed' ||
-        result.result.response.kind !== 'inventory'
-      ) {
-        throw new Error('The provider did not confirm current machine connection details')
-      }
-      const resource = result.result.response.resources.find((entry) => entry.id === id)
-      if (resource) {
-        return resource
-      }
-      cursor = result.result.response.nextCursor
-      if (!cursor) {
-        return undefined
-      }
-      if (seen.has(cursor)) {
-        throw new Error('The provider repeated an inventory page')
-      }
-      seen.add(cursor)
-    }
-    throw new Error('The provider inventory exceeds the connection review page limit')
   }
 
   revokeOwner(ownerKey: string): void {

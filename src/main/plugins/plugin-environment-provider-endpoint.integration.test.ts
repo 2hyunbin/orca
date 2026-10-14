@@ -5,6 +5,12 @@ import { setSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 import { disposePluginEnvironmentProviderInstallFixtures } from './plugin-environment-provider-install-fixture'
 import { createProviderSshFixture } from './plugin-environment-provider-ssh-fixture'
 import type { SshTarget } from '../../shared/ssh-types'
+import { encodePairingOffer } from '../../shared/pairing'
+import {
+  addManagedOrcadEnvironment,
+  refreshManagedOrcadPairing
+} from '../../shared/runtime-environment-managed-orcad-store'
+import { listEnvironments } from '../../shared/runtime-environment-store'
 
 afterEach(async () => {
   setSshTargetRegistryStore(null)
@@ -25,6 +31,134 @@ async function fixture(retireTarget?: (target: SshTarget) => Promise<void>) {
   const review = await f.ssh.prepare('window-one', f.review, 'devbox', 'r2')
   return { ...f, target, lease, resource, preview: review }
 }
+
+async function managedFixture() {
+  const f = await fixture(async () => {})
+  f.ssh.discard('window-one', f.preview.ticketId)
+  f.persisted.updateSshTarget(f.target.id, {
+    orcadFence: { environmentId: 'managed-devbox' },
+    orcadProvisioning: { requestId: 'managed-devbox', name: 'Devbox' }
+  })
+  const generation = f.target.generation
+  if (!generation) {
+    throw new Error('The fixture has no target generation')
+  }
+  addManagedOrcadEnvironment(f.service.options.userDataPath, {
+    id: 'managed-devbox',
+    name: 'Devbox',
+    pairingCode: encodePairingOffer({
+      v: 2,
+      endpoint: 'ws://127.0.0.1:46768',
+      deviceToken: 'fixture-token',
+      publicKeyB64: Buffer.alloc(32, 1).toString('base64')
+    }),
+    orcadDeployment: {
+      sshTargetId: f.target.id,
+      sshTargetGeneration: generation,
+      localPort: 46768,
+      remotePort: 6768
+    }
+  })
+  const preview = await f.ssh.prepare('window-one', f.review, 'devbox', 'r2')
+  return { ...f, preview }
+}
+
+describe('reviewed managed-provider endpoint publication', () => {
+  it('keeps a completed provisioning intent and moves the managed generation with the reviewed target', async () => {
+    const f = await managedFixture()
+    const before = listEnvironments(f.service.options.userDataPath)[0]
+    const updated = await f.ssh.save('window-one', f.preview.ticketId, undefined, true)
+    expect(updated.host).toBe('replacement.internal')
+    expect(updated.orcadProvisioning?.requestId).toBe('managed-devbox')
+    expect(updated.generation).not.toBe(f.target.generation)
+    expect(listEnvironments(f.service.options.userDataPath)[0]).toEqual({
+      ...before,
+      orcadDeployment: { ...before?.orcadDeployment, sshTargetGeneration: updated.generation }
+    })
+    expect((await f.ssh.authorize(updated)).isCurrent()).toBe(true)
+  })
+
+  it('finishes only the local metadata after interruption between target and managed publication', async () => {
+    const f = await managedFixture()
+    f.persisted.flushPendingOrThrowAsync.mockRejectedValueOnce(
+      new Error('Owned persistence interruption')
+    )
+    await expect(f.ssh.save('window-one', f.preview.ticketId, undefined, true)).rejects.toThrow(
+      'Owned persistence interruption'
+    )
+    const updated = f.store.getTarget(f.target.id)
+    if (!updated) {
+      throw new Error('The approved target disappeared')
+    }
+    expect(updated.host).toBe('replacement.internal')
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(f.target.generation)
+    await f.ssh.prepare('window-one', f.review, 'devbox', 'r2')
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(updated.generation)
+    expect(f.store.getTarget(updated.id)).toEqual(updated)
+  })
+
+  it('refuses recovery after another client changes the interrupted target', async () => {
+    const f = await managedFixture()
+    f.persisted.flushPendingOrThrowAsync.mockRejectedValueOnce(
+      new Error('Owned persistence interruption')
+    )
+    await expect(f.ssh.save('window-one', f.preview.ticketId, undefined, true)).rejects.toThrow(
+      'Owned persistence interruption'
+    )
+    f.persisted.updateSshTarget(f.target.id, { identityFile: '/keys/another-client' })
+    await expect(f.ssh.prepare('window-one', f.review, 'devbox', 'r2')).rejects.toThrow(
+      'changed its SSH registration'
+    )
+    expect(f.store.getTarget(f.target.id)?.identityFile).toBe('/keys/another-client')
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(f.target.generation)
+  })
+
+  it('refuses interrupted recovery after the managed server is re-paired', async () => {
+    const f = await managedFixture()
+    f.persisted.flushPendingOrThrowAsync.mockRejectedValueOnce(
+      new Error('Owned persistence interruption')
+    )
+    await expect(f.ssh.save('window-one', f.preview.ticketId, undefined, true)).rejects.toThrow(
+      'Owned persistence interruption'
+    )
+    refreshManagedOrcadPairing(
+      f.service.options.userDataPath,
+      'managed-devbox',
+      encodePairingOffer({
+        v: 2,
+        endpoint: 'ws://127.0.0.1:46768',
+        deviceToken: 'replacement-fixture-token',
+        publicKeyB64: Buffer.alloc(32, 2).toString('base64')
+      })
+    )
+    await expect(f.ssh.prepare('window-one', f.review, 'devbox', 'r2')).rejects.toThrow(
+      'changed owner or server authority'
+    )
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(f.target.generation)
+  })
+  it('discards an intent that stopped before target publication without replaying the approved change', async () => {
+    const f = await managedFixture()
+    const write = vi.spyOn(f.persisted, 'updateSshTarget').mockReturnValueOnce(null)
+    await expect(f.ssh.save('window-one', f.preview.ticketId, undefined, true)).rejects.toThrow(
+      'disappeared during endpoint publication'
+    )
+    write.mockRestore()
+    const fresh = await f.ssh.prepare('window-one', f.review, 'devbox', 'r2')
+    expect(fresh.endpointUpdate).toBeDefined()
+    expect(f.store.getTarget(f.target.id)?.host).toBe('box.internal')
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(f.target.generation)
+  })
+})
 
 describe('provider endpoint updates require explicit current connection review', () => {
   it('releases declined reviews immediately and confines cancellation to their owner', async () => {
