@@ -62,7 +62,7 @@ export function TaskPageJiraFilters({
               onChange={model.setJiraProjectFilter}
               label={translate('components.jiraProjectPicker.label', 'Jira project')}
               emptyLabel={translate('components.jiraProjectPicker.all', 'All Jira projects')}
-              disabled={jiraProjectsLoading}
+              disabled={jiraProjectsLoading || jiraHasWorkspace}
             />
           </div>
           {jiraPresets.map((preset) => {

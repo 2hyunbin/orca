@@ -27,6 +27,8 @@ import { clearJiraImageCache } from './runtime-jira-image-cache'
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
+import { jiraListProjectsForTarget, jiraStatusForTarget } from './runtime-jira-project-client'
+
 import {
   jiraGetIssueForTarget,
   jiraUpdateIssueForTarget,
@@ -52,6 +54,7 @@ export {
   jiraListAssignableUsersForProject,
   jiraSearchUsers
 } from './runtime-jira-user-fields-client'
+export { jiraStatusForTarget } from './runtime-jira-project-client'
 export type { RuntimeJiraSettings } from './runtime-jira-target'
 
 export type JiraConnectResult = { ok: true; viewer: JiraViewer } | { ok: false; error: string }
@@ -60,16 +63,6 @@ import type { JiraCommentResult } from './runtime-jira-detail-client'
 
 export async function jiraStatus(settings: RuntimeJiraSettings): Promise<JiraConnectionStatus> {
   return jiraStatusForTarget(getJiraRuntimeTarget(settings))
-}
-
-export async function jiraStatusForTarget(
-  target: RuntimeClientTarget
-): Promise<JiraConnectionStatus> {
-  return parseJiraConnectionStatus(
-    target.kind === 'environment'
-      ? await callRuntimeRpc<unknown>(target, 'jira.status', undefined, { timeoutMs: 15_000 })
-      : await window.api.jira.status()
-  )
 }
 
 export async function jiraConnect(
@@ -231,12 +224,7 @@ export async function jiraListProjects(
   settings: RuntimeJiraSettings,
   siteId?: JiraSiteSelection | null
 ): Promise<JiraProject[]> {
-  const target = getJiraRuntimeTarget(settings)
-  return target.kind === 'environment'
-    ? callRuntimeRpc<JiraProject[]>(target, 'jira.listProjects', siteId ? { siteId } : undefined, {
-        timeoutMs: 30_000
-      })
-    : window.api.jira.listProjects(siteId ? { siteId } : undefined)
+  return jiraListProjectsForTarget(getJiraRuntimeTarget(settings), siteId)
 }
 
 export async function jiraListIssueTypes(

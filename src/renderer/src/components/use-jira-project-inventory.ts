@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { JiraProject } from '../../../shared/jira-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { TaskSourceContext } from '../../../shared/task-source-context'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 import {
-  jiraListProjects,
-  jiraStatus,
-  type RuntimeJiraSettings
-} from '@/runtime/runtime-jira-client'
+  jiraListProjectsForTarget,
+  jiraStatusForTarget
+} from '@/runtime/runtime-jira-project-client'
 
-export function useJiraProjectInventory(source: RuntimeJiraSettings, enabled: boolean) {
+type JiraProjectInventorySource = RuntimeClientTarget | TaskSourceContext
+
+export function useJiraProjectInventory(source: JiraProjectInventorySource, enabled: boolean) {
   const [inventory, setInventory] = useState<{
-    source: RuntimeJiraSettings
+    source: JiraProjectInventorySource
     projects: JiraProject[]
     connected: boolean
     error: string | null
@@ -18,11 +22,12 @@ export function useJiraProjectInventory(source: RuntimeJiraSettings, enabled: bo
       return
     }
     let cancelled = false
-    void jiraStatus(source)
+    const target = source.kind === 'task-source' ? taskSourceRuntimeTarget(source) : source
+    void jiraStatusForTarget(target)
       .then(async (status) => ({
         source,
         connected: status.connected,
-        projects: status.connected ? await jiraListProjects(source, 'all') : [],
+        projects: status.connected ? await jiraListProjectsForTarget(target, 'all') : [],
         error: null
       }))
       .then((next) => {
