@@ -23,6 +23,8 @@ export type AppEnvironment = {
   /** Mirrors electron `app.getAppPath()` — the install/bundle root. */
   getAppPath(): string
   getVersion(): string
+  /** App compatibility is separate from a standalone server's artifact identity. */
+  getAppVersion?(): string
   isPackaged(): boolean
   /** A headless host's profile-scoped CLI, when it has no Electron resources directory. */
   getCliLauncherPath?(): string | null
@@ -58,6 +60,7 @@ const SLOT = Symbol.for('orca.host.appEnvironment')
 type Slot = { [SLOT]?: AppEnvironment | null }
 
 function slot(): Slot {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only setAppEnvironment writes this private symbol slot with a checked AppEnvironment.
   return globalThis as unknown as Slot
 }
 

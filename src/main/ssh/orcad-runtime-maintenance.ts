@@ -3,7 +3,7 @@
  * Every step reads the terminal census through the server's tunnel first; an unanswered census
  * is unverifiable, never zero, so an update over live or uncounted terminals defers (D7).
  */
-import { getAppEnvironment } from '../../shared/app-environment'
+import { getHostAppVersion } from '../../shared/host-app-version'
 import { refreshManagedOrcadPairing } from '../../shared/runtime-environment-managed-orcad-store'
 import { assertRuntimeEnvironmentNotReconciling } from '../../shared/runtime-environment-reconciliation-record'
 import {
@@ -120,7 +120,7 @@ export async function runManagedOrcadUpdate(
     census,
     censusRecord: context.activationRecord,
     force: args.force,
-    appVersion: getAppEnvironment().getVersion(),
+    appVersion: getHostAppVersion(),
     ...(args.admitRecord ? { admitRecord: args.admitRecord } : {})
   })
   if (result.outcome === 'installed-not-activated') {

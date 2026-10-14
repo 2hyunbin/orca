@@ -1,5 +1,5 @@
 /** The live collaborators behind each connect's server decision. */
-import { getAppEnvironment } from '../../shared/app-environment'
+import { getHostAppVersion } from '../../shared/host-app-version'
 import {
   getManagedOrcadFenceEnvironmentId,
   managedOrcadServerName
@@ -37,7 +37,7 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
   const registry = getSshTargetRegistryStore()!
   const claims = registry.getOrcadRuntimeClaims()
   const store = registry.getOrcadMigrationSource()
-  const appVersion = getAppEnvironment().getVersion()
+  const appVersion = getHostAppVersion()
   const isRegistered = (environmentId: string): boolean =>
     listEnvironments(userDataPath).some((entry) => entry.id === environmentId)
   return {

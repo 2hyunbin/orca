@@ -3,7 +3,7 @@
  * The target claim is the resume point: an interrupted deploy leaves the target owned by the
  * environment id it was creating, and the next deploy of that target finishes the same one.
  */
-import { getAppEnvironment } from '../../shared/app-environment'
+import { getHostAppVersion } from '../../shared/host-app-version'
 import { randomUUID } from 'node:crypto'
 import { assertRuntimeEnvironmentNotReconciling } from '../../shared/runtime-environment-reconciliation-record'
 import { listEnvironments } from '../../shared/runtime-environment-store'
@@ -117,7 +117,7 @@ export async function createManagedOrcadEnvironment(
       const localOrcadDir = await materializeOrcadArtifact(context.serverTarget, {
         signal: args.signal
       })
-      const appVersion = getAppEnvironment().getVersion()
+      const appVersion = getHostAppVersion()
       const deployResult = await deployOrcad({
         ...slot,
         conn: connection,
