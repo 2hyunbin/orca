@@ -84,6 +84,8 @@ export function MobileNativeChatQueuedMessages({
   if (menuFor !== null && !menuCard) {
     setMenuFor(null)
   }
+  const attentionCaption = !expanded ? cards.find((card) => card.needsAttention)?.caption : null
+  const headerCountStyle = [styles.headerCount, attentionCaption && styles.captionReturned]
   return (
     <View style={styles.list}>
       {/* One box: the header is its first row, and each card a row below it. */}
@@ -97,7 +99,9 @@ export function MobileNativeChatQueuedMessages({
           <Text style={[styles.headerLabel, pause && styles.headerLabelPaused]}>
             {pause ? 'Paused' : 'Queued'}
           </Text>
-          <Text style={styles.headerCount}>{cards.length}</Text>
+          <Text style={headerCountStyle} numberOfLines={1}>
+            {attentionCaption ? `${cards.length} · ${attentionCaption}` : cards.length}
+          </Text>
           {pause ? (
             <>
               {onClearAll ? (

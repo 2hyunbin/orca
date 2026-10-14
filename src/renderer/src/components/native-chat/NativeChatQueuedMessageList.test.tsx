@@ -204,6 +204,13 @@ describe('NativeChatQueuedMessageList', () => {
       expect(screen.getByText('Your message was not sent.')).toBeTruthy()
       expect(screen.queryByText(/account isn't signed in/)).toBeNull()
       expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
+      const header = screen.getByRole('list').previousElementSibling!
+      fireEvent.click(screen.getByRole('button', { name: 'Queued messages' }))
+      expect(header.textContent).toContain('Your message was not sent.')
+      expect(header.textContent).not.toContain("account isn't signed in")
+      fireEvent.click(screen.getByRole('button', { name: 'Queued messages' }))
+      expect(header.textContent).not.toContain('Your message was not sent.')
+      expect(screen.getAllByText('Your message was not sent.')).toHaveLength(1)
     }
   )
   it('renders only an empty live region when the host holds no drafts', () => {
@@ -285,6 +292,13 @@ describe('NativeChatQueuedMessageList', () => {
     ).toBeTruthy()
     expect(screen.getByText("Couldn't send — press Send to retry.")).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Send' })).toHaveLength(1)
+    const header = screen.getByRole('list').previousElementSibling!
+    fireEvent.click(screen.getByRole('button', { name: 'Queued messages' }))
+    expect(header.textContent).toContain(
+      "Couldn't send — press Send to retry once the agent finishes."
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Queued messages' }))
+    expect(header.textContent).not.toContain("Couldn't send")
   })
 
   it('an idle command card waiting its turn reads Send, not Steer', () => {

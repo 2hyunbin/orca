@@ -1,15 +1,19 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Play, Trash2 } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '../../store'
 import { translate } from '@/i18n/i18n'
-import { NativeChatQueuedMessageCard } from './NativeChatQueuedMessageCard'
+import {
+  NativeChatQueuedMessageCard,
+  queuedMessageCardCaption
+} from './NativeChatQueuedMessageCard'
 import type { StructuredAgentSessionQueuedMessagesController } from './use-structured-agent-session-queued-messages'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import { NATIVE_CHAT_ROOT_SELECTOR } from '@/lib/native-chat-paste-request'
 import { focusNativeChatPromptCard } from './use-native-chat-prompt-card-focus'
+import { QUEUED_MESSAGE_PAUSED_SEND_FAILED } from '../../../../shared/agent-session-wire'
 
 /**
  * Host-held drafts stacked between the transcript and the composer — never in
@@ -45,6 +49,15 @@ export function NativeChatQueuedMessageList({
     setExpanded(true)
   }
   const newest = cards.at(-1)
+  const attentionCard = !expanded
+    ? cards.find(
+        (card) =>
+          card.state === 'returned' || card.pausedReason === QUEUED_MESSAGE_PAUSED_SEND_FAILED
+      )
+    : undefined
+  const attentionCaption = attentionCard
+    ? queuedMessageCardCaption(attentionCard, agentName, statedFailures)
+    : null
   const listRef = useRef<HTMLUListElement>(null)
   const newestPosition = newest?.position ?? 0
   const newestIsPersons = newest !== undefined && !newest.from
@@ -93,6 +106,7 @@ export function NativeChatQueuedMessageList({
           <div className="divide-y divide-border rounded-md border border-border bg-card text-card-foreground">
             <NativeChatQueueHeader
               count={cards.length}
+              attentionCaption={attentionCaption}
               pause={pause}
               resuming={controller.resuming}
               clearCapable={controller.clearCapable}
@@ -148,6 +162,7 @@ export function NativeChatQueuedMessageList({
  *  and Resume. Collapsing hides only the cards. */
 function NativeChatQueueHeader({
   count,
+  attentionCaption,
   pause,
   resuming,
   clearCapable,
@@ -159,6 +174,7 @@ function NativeChatQueueHeader({
   onResume
 }: {
   count: number
+  attentionCaption: string | null
   pause: { reason: string } | null
   resuming: boolean
   clearCapable: boolean
@@ -185,7 +201,15 @@ function NativeChatQueueHeader({
           ? translate('components.native-chat.queuedMessages.paused', 'Paused')
           : translate('components.native-chat.queuedMessages.queued', 'Queued')}
       </p>
-      <span className="min-w-0 flex-1 tabular-nums">{count}</span>
+      <span className={cn('tabular-nums', attentionCaption ? 'shrink-0' : 'min-w-0 flex-1')}>
+        {count}
+      </span>
+      {attentionCaption ? (
+        <span className="flex min-w-0 flex-1 items-center gap-1 text-destructive">
+          <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{attentionCaption}</span>
+        </span>
+      ) : null}
       {pause ? (
         <>
           {clearSupported ? (

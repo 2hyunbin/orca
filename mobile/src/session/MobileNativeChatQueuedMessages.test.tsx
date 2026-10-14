@@ -187,12 +187,27 @@ describe('MobileNativeChatQueuedMessages', () => {
     const [returnedRow, waitingRow] = mounted.root.findAllByProps({ testID: 'queued-card-row' })
     expect(nodeTypes(returnedRow!)).toContain('AlertCircle')
     expect(nodeTypes(waitingRow!)).not.toContain('AlertCircle')
+    const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
+    await act(async () => toggle().props.onPress())
+    expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(0)
+    expect(texts(mounted)).toContain(`2 · ${reason}`)
+    const headerCaption = mounted.root
+      .findByProps({ testID: 'queued-header' })
+      .find((node) => String(node.type) === 'Text' && node.props.children === `2 · ${reason}`)
+    expect(flatStyle(headerCaption.props.style).color).toBe('#ef4444')
+    await act(async () => toggle().props.onPress())
+    expect(texts(mounted).filter((text) => text === reason)).toHaveLength(1)
   })
 
   it('reads Steer on a waiting card and plain Send on a returned one or one whose own send failed', async () => {
     const mounted = await mount({
       cards: [
-        card({ messageId: 'failed', paused: true, needsAttention: true }),
+        card({
+          messageId: 'failed',
+          paused: true,
+          needsAttention: true,
+          caption: "Couldn't send — tap Send to retry"
+        }),
         card({ messageId: 'waiting' }),
         card({ messageId: 'returned', state: 'returned', needsAttention: true })
       ],
@@ -211,6 +226,13 @@ describe('MobileNativeChatQueuedMessages', () => {
     const rows = mounted.root.findAllByProps({ testID: 'queued-card-row' })
     expect(nodeTypes(rows[0]!)).toContain('Send')
     expect(nodeTypes(rows[1]!)).toContain('CornerDownRight')
+    const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
+    await act(async () => toggle().props.onPress())
+    expect(texts(mounted)).toContain("3 · Couldn't send — tap Send to retry")
+    await act(async () => toggle().props.onPress())
+    expect(
+      texts(mounted).filter((text) => text === "Couldn't send — tap Send to retry")
+    ).toHaveLength(1)
   })
 
   it('a command card never steers: Send only while the agent is idle, and no menu', async () => {
