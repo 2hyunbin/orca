@@ -188,6 +188,7 @@ describe('adopting a provider conversation on create', () => {
     const handle = { transport: 'acp', agent: 'grok', nativeId: THREAD }
     const sessionAdapter = adapter()
     vi.mocked(sessionAdapter.acquire).mockImplementation(async ({ fence, spawnToken }) => ({
+      acquisitionGeneration: `generation-${fence}`,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
       link: {
         linkId: 'resumed-link',
