@@ -93,9 +93,11 @@ export class SessionHostPartitionOperations {
     const { [hostId]: _removed, ...remaining } = partitions
     runtime.state.workspaceSessionsByHostId = remaining
     invalidateLocalWorktreeMetadataPruneInputs()
-    scheduleSave(this[sessionHostPartitionOperationsContext].scheduling, [
-      'workspaceSessionsByHostId'
-    ])
+    scheduleSave(
+      this[sessionHostPartitionOperationsContext].scheduling,
+      ['workspaceSessionsByHostId'],
+      hostId
+    )
   }
 
   readTerminalScrollbackSnapshot(ref: string): string | null {
@@ -170,7 +172,8 @@ export function removeWorkspaceSessionOwnerInPartition(
   }
   scheduleSave(
     owner[sessionHostPartitionOperationsContext].scheduling,
-    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId']
+    resolved === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId'],
+    resolved
   )
 }
 
@@ -234,9 +237,11 @@ export function setHostWorkspaceSession(
     ...owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId,
     [hostId]: withRequiredWorkspaceSessionMaps(orderTerminalRowsByTabGroups(pruned))
   }
-  scheduleSave(owner[sessionHostPartitionOperationsContext].scheduling, [
-    'workspaceSessionsByHostId'
-  ])
+  scheduleSave(
+    owner[sessionHostPartitionOperationsContext].scheduling,
+    ['workspaceSessionsByHostId'],
+    hostId
+  )
 }
 
 /**
