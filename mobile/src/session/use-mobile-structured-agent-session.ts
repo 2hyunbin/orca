@@ -242,7 +242,7 @@ export function useMobileStructuredAgentSession(args: {
     agentWorking: isStructuredAgentSessionMainAgentWorking(turnId, state.submissions, state.fence),
     client,
     sessionId,
-    editCapable: hostSupport === null ? null : hostSupport.queuedMessageEdit === true,
+    editCapable: hostSupport ? hostSupport.queuedMessageEdit === true : null,
     enabled: enabled && connected,
     promptOpen: commandRefusalCauses.prompt,
     captureComposerTextAppender: args.captureComposerTextAppender,
