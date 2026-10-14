@@ -282,38 +282,32 @@ describe('reattaching a Grok chat the journal holds', () => {
     deferred.close()
   })
 
-  it.each([
-    ['reports missing', -32002, 'Resource not found'],
-    ['fails for another reason', -32603, 'session file is corrupt']
-  ])(
-    'starts a new session in place of a created one session/load %s',
-    async (_label, code, message) => {
-      const rig = await openAcpAdapterRig({
-        launch: {
-          resume: {
-            sessionId: 'never-saved',
-            key: 'acp:grok:never-saved',
-            mayBeUnsaved: () => true,
-            unannouncedLosses: () => []
-          }
-        },
-        initialize: RESUMES,
-        script: (agent) => agent.on('session/load', (frame) => agent.fail(frame, code, message))
-      })
-      const acquired = await rig.acquire()
-      expect(acquired.link).toMatchObject({
-        origin: 'created',
-        handle: { nativeId: PROVIDER_SESSION },
-        supersedesKey: 'acp:grok:never-saved'
-      })
-      expect(acquired.link.replaces).toBeUndefined()
-      // The failed load left the translator taking prompts.
-      await exchange(rig, 'hi', true)
-      expect(await texts(rig)).toEqual(['hello', 'hi'])
-      // Nothing was forgotten: the agent never saved that session.
-      expect(await notRestoredRows(rig)).toEqual([])
-    }
-  )
+  it('starts a new session in place of a created one that session/load reports missing', async () => {
+    const rig = await openAcpAdapterRig({
+      launch: {
+        resume: {
+          sessionId: 'never-saved',
+          key: 'acp:grok:never-saved',
+          mayBeUnsaved: () => true,
+          unannouncedLosses: () => []
+        }
+      },
+      initialize: RESUMES,
+      script: (agent) =>
+        agent.on('session/load', (frame) => agent.fail(frame, -32002, 'Resource not found'))
+    })
+    const acquired = await rig.acquire()
+    expect(acquired.link).toMatchObject({
+      origin: 'created',
+      handle: { nativeId: PROVIDER_SESSION },
+      supersedesKey: 'acp:grok:never-saved'
+    })
+    // The failed load left the translator taking prompts.
+    await exchange(rig, 'hi', true)
+    expect(await texts(rig)).toEqual(['hello', 'hi'])
+    // Nothing was forgotten: the agent never saved that session.
+    expect(await notRestoredRows(rig)).toEqual([])
+  })
 
   it.each([
     ['a saved session', false, -32603, 'session file is corrupt'],

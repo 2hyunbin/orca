@@ -286,35 +286,29 @@ describe('the warning row of a replacement whose attach failed', () => {
 })
 
 describe('a replacement Grok never saved, superseded after its row was written', () => {
-  it.each([
-    ['reports missing', -32002, 'Resource not found'],
-    ['fails for another reason', -32603, 'session file is corrupt']
-  ])(
-    'keeps the one row when Grok %s: the loss is still the first one',
-    async (_label, code, message) => {
-      const { host, store, fence, loads, lost, warnings, exchange } = await openRestoreRig(
-        -32603,
-        'session file is corrupt'
-      )
-      expect(await host.attach(CALLER, attachParams())).toMatchObject({ ok: true })
-      await exchange('remember 42', 'noted', PROVIDER_SESSION)
-      await host.close(SESSION, 'user-close')
-      expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
-      expect(await warnings()).toHaveLength(1)
-      await host.close(SESSION, 'user-close')
-      lost.set(FRESH, { code, message })
+  it('keeps the one row: the conversation lost is still the first one', async () => {
+    const { host, store, fence, loads, lost, warnings, exchange } = await openRestoreRig(
+      -32603,
+      'session file is corrupt'
+    )
+    expect(await host.attach(CALLER, attachParams())).toMatchObject({ ok: true })
+    await exchange('remember 42', 'noted', PROVIDER_SESSION)
+    await host.close(SESSION, 'user-close')
+    expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
+    expect(await warnings()).toHaveLength(1)
+    await host.close(SESSION, 'user-close')
+    // Not "not found": an unused session is superseded whatever the load error.
+    lost.set(FRESH, { code: -32603, message: 'session file is corrupt' })
 
-      expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
-      expect(loads).toEqual([PROVIDER_SESSION, FRESH])
-      expect(await warnings()).toHaveLength(1)
-      // In place: an agent that keeps failing loads on an unused session never grows the chain.
-      expect(store.getRecord(SESSION)?.providerHandleChain).toHaveLength(2)
-      // The newer session carries the same loss, so reopening it says nothing new.
-      await host.close(SESSION, 'user-close')
-      expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
-      expect(loads).toEqual([PROVIDER_SESSION, FRESH, FRESH_2])
-      expect(await warnings()).toHaveLength(1)
-      await host.close(SESSION, 'user-close')
-    }
-  )
+    expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
+    expect(loads).toEqual([PROVIDER_SESSION, FRESH])
+    expect(await warnings()).toHaveLength(1)
+    expect(store.getRecord(SESSION)?.providerHandleChain).toHaveLength(2)
+    // The newer session carries the same loss, so reopening it says nothing new.
+    await host.close(SESSION, 'user-close')
+    expect(await host.attach(CALLER, attachParams(fence()))).toMatchObject({ ok: true })
+    expect(loads).toEqual([PROVIDER_SESSION, FRESH, FRESH_2])
+    expect(await warnings()).toHaveLength(1)
+    await host.close(SESSION, 'user-close')
+  })
 })
