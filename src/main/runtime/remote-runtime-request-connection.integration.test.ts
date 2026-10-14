@@ -44,6 +44,7 @@ describe('remote runtime request connection integration', () => {
           kind: 'git'
         }
       ]
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.list over the real socket only calls the runtime methods defined below.
       const runtime = {
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'fetch-runtime-test',

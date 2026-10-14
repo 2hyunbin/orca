@@ -203,8 +203,19 @@ export async function convertAndRetain(
         'folderWorkspace.list'
       )
     ).result.folderWorkspaces
-    const worktrees = (await runtime.call<{ worktrees: { repoId: string }[] }>('worktree.ps'))
-      .result.worktrees
+    const ps = (
+      await runtime.call<{
+        worktrees: { repoId: string }[]
+        hostScope?: { hostIds: string[]; omittedHostIds: string[] }
+      }>('worktree.ps')
+    ).result
+    const worktrees = ps.worktrees
+    // The old code named the converted host as "not covered", sending a user to a hidden host.
+    expect(ps.hostScope, 'runtime worktree.ps reports its host scope').toBeTruthy()
+    expect(
+      [...ps.hostScope!.hostIds, ...ps.hostScope!.omittedHostIds],
+      'runtime worktree.ps never names the converted host'
+    ).not.toContain(`ssh:${encodeURIComponent(host.targetId)}`)
     expect(
       repos.filter((repo) => sourceRepoIds.has(repo.id)),
       'runtime repo.list'

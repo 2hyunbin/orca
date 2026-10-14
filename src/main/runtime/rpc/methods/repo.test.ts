@@ -101,6 +101,7 @@ describe('repo RPC methods', () => {
   })
 
   it('projects inherited visibility for old clients but preserves inheritance for capable clients', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.list only calls the fixture methods defined below.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       enrichMissingRepoGitRemoteIdentities: vi.fn(),
@@ -654,6 +655,7 @@ describe('repo RPC methods', () => {
       createdAt: 1,
       updatedAt: 1
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the project-group methods only call the fixture methods defined below.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       listVisibleProjectGroups: vi.fn().mockReturnValue([group]),

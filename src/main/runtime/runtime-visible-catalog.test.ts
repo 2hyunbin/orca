@@ -11,11 +11,13 @@ vi.mock('../ssh/orcad-retained-source', () => ({
   visibleFolderWorkspaces: vi.fn(() => [])
 }))
 
-const { runtimeHiddenRepoIds, runtimeVisibleRepos } = await import('./runtime-visible-catalog')
+const { runtimeHiddenHostIds, runtimeHiddenRepoIds, runtimeVisibleRepos } =
+  await import('./runtime-visible-catalog')
 
 const sshTarget = { id: 'target-1', label: 'dev', host: 'dev', port: 22, username: 'dev' }
-const repo = (id: string): Repo => ({
+const repo = (id: string, connectionId?: string): Repo => ({
   id,
+  ...(connectionId ? { connectionId } : {}),
   path: `/src/${id}`,
   displayName: id,
   badgeColor: '#000',
@@ -48,5 +50,27 @@ describe('runtime visible catalog', () => {
   it('lists nothing without a store', () => {
     expect(runtimeVisibleRepos(null)).toEqual([])
     expect(runtimeHiddenRepoIds(null).size).toBe(0)
+  })
+
+  it('names a host known only through hidden rows, but never this machine', () => {
+    visibleRepos.mockImplementation((store) =>
+      store.getRepos().filter((r) => r.id !== 'retained' && r.id !== 'moved-local')
+    )
+    const store = storeWith(
+      [
+        repo('retained', 'target-1'),
+        repo('moved-local'),
+        repo('shared-a', 'target-2'),
+        repo('shared-b', 'target-2')
+      ],
+      true
+    )
+    expect([...runtimeHiddenHostIds(store)]).toEqual(['ssh:target-1'])
+  })
+
+  it('keeps a host that still has a visible row', () => {
+    visibleRepos.mockImplementation((store) => store.getRepos().filter((r) => r.id !== 'a'))
+    const store = storeWith([repo('a', 'target-2'), repo('b', 'target-2')], true)
+    expect(runtimeHiddenHostIds(store).size).toBe(0)
   })
 })

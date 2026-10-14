@@ -49,7 +49,12 @@ import { nativeChatShellEnvironmentPolicy } from '../../shared/native-chat-shell
 import { claudeStructuredAuthPolicyForSettings } from '../claude-accounts/claude-structured-auth-policy'
 import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
 import { structuredAgentConfiguredArgs } from '../native-chat/structured-agent-configured-args'
-import { runtimeHiddenRepoIds, runtimeVisibleRepos } from './runtime-visible-catalog'
+import {
+  runtimeHiddenHostIds,
+  runtimeHiddenRepoIds,
+  runtimeVisibleRepos,
+  withoutHiddenHosts
+} from './runtime-visible-catalog'
 import { claudeCliFlagSupport } from '../claude/claude-cli-flag-support'
 import {
   createNativeChatVisualsWorkspaceVerdicts,
@@ -143,7 +148,11 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
     const sorted = [...summaries.values()].sort(compareWorktreePs)
     // Why: the same cap starvation as worktree.list — a host whose rows all sort last gets no
     // page at all, which is indistinguishable from it having no workspaces (#18104).
-    return buildWorktreeListingPage(sorted, limit, this.listKnownExecutionHostIds())
+    return buildWorktreeListingPage(
+      sorted,
+      limit,
+      withoutHiddenHosts(this.listKnownExecutionHostIds(), runtimeHiddenHostIds(this.store))
+    )
   }
 
   /** The agent's configured env, with the account a desktop that owns this host's accounts chose
