@@ -1,4 +1,5 @@
 export type { LinearProjectCreateInput } from './linear-project-nodes'
+export type { LinearProjectSearchPage } from './linear-project-queries'
 export {
   createProject,
   getProject,

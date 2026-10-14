@@ -31,6 +31,7 @@ export type {
 } from '../../shared/linear/agent-access'
 export type { LinearIssueUpdate } from '../../shared/issue-mutation-types'
 export type { LinearProjectSummary } from '../../shared/linear/project-types'
+export type { LinearProjectSearchPage } from '../linear/projects'
 export type { LinearWorkspaceSelection } from '../../shared/linear/workspace-types'
 export {
   LINEAR_SEARCH_MAX_LIMIT,

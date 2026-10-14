@@ -70,8 +70,8 @@ describe('Linear agent project access helpers', () => {
     await expect(
       tester.resolveLinearCreateProject(' launch ', { id: 'team-1', workspaceId: 'workspace-1' })
     ).resolves.toMatchObject({ id: 'project-1' })
-    expect(readByName).toHaveBeenCalledWith('launch', 'workspace-1')
-    expect(readExactName).toHaveBeenCalledWith('launch', 'workspace-1')
+    expect(readByName).toHaveBeenCalledWith('launch', 'workspace-1', expect.any(Function))
+    expect(readExactName).toHaveBeenCalledWith('launch', 'workspace-1', undefined)
   })
 
   it('resolves Linear projects by URL slug without a paginated exact-name scan', async () => {

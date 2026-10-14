@@ -8,7 +8,10 @@ import {
   listLinearProjects,
   getLinearViewerForWorkspaceOrThrow
 } from './runtime-linear-command-dependencies'
-import type { LinearProjectSummary } from './runtime-linear-command-dependencies'
+import type {
+  LinearProjectSearchPage,
+  LinearProjectSummary
+} from './runtime-linear-command-dependencies'
 import { RuntimeLinearTeamWriteCommands } from './runtime-linear-team-write-commands'
 
 export class RuntimeLinearProjectWriteCommands extends RuntimeLinearTeamWriteCommands {
@@ -27,7 +30,14 @@ export class RuntimeLinearProjectWriteCommands extends RuntimeLinearTeamWriteCom
       await this.assertLinearProjectIncludesTeam(byId, team.id, team.workspaceId, trimmed)
       return byId
     }
-    const searchCandidates = await this.readLinearProjectsForCreate(trimmed, team.workspaceId)
+    let firstPage: LinearProjectSearchPage | undefined
+    const searchCandidates = await this.readLinearProjectsForCreate(
+      trimmed,
+      team.workspaceId,
+      (page) => {
+        firstPage = page
+      }
+    )
     const normalized = trimmed.toLowerCase()
     const idMatch = searchCandidates.find((project) => project.id.toLowerCase() === normalized)
     if (idMatch) {
@@ -41,7 +51,11 @@ export class RuntimeLinearProjectWriteCommands extends RuntimeLinearTeamWriteCom
       await this.assertLinearProjectIncludesTeam(slugMatch, team.id, team.workspaceId, trimmed)
       return slugMatch
     }
-    const nameMatches = await this.readLinearProjectsByExactNameForCreate(trimmed, team.workspaceId)
+    const nameMatches = await this.readLinearProjectsByExactNameForCreate(
+      trimmed,
+      team.workspaceId,
+      firstPage
+    )
     const compatibleNameMatches = await this.filterLinearProjectsForTeam(
       nameMatches,
       team.id,
@@ -90,10 +104,19 @@ export class RuntimeLinearProjectWriteCommands extends RuntimeLinearTeamWriteCom
 
   public async readLinearProjectsForCreate(
     query: string,
-    workspaceId: string
+    workspaceId: string,
+    receiveSearchPage?: (page: LinearProjectSearchPage) => void
   ): Promise<LinearProjectSummary[]> {
     try {
-      return (await listLinearProjects(query, LINEAR_SEARCH_MAX_LIMIT, workspaceId, true)).items
+      return (
+        await listLinearProjects(
+          query,
+          LINEAR_SEARCH_MAX_LIMIT,
+          workspaceId,
+          true,
+          receiveSearchPage
+        )
+      ).items
     } catch (error) {
       throw this.mapLinearReadFailure(error)
     }
@@ -101,10 +124,11 @@ export class RuntimeLinearProjectWriteCommands extends RuntimeLinearTeamWriteCom
 
   public async readLinearProjectsByExactNameForCreate(
     name: string,
-    workspaceId: string
+    workspaceId: string,
+    firstPage?: LinearProjectSearchPage
   ): Promise<LinearProjectSummary[]> {
     try {
-      return await listLinearProjectsByExactName(name, workspaceId, true)
+      return await listLinearProjectsByExactName(name, workspaceId, true, firstPage)
     } catch (error) {
       throw this.mapLinearReadFailure(error)
     }

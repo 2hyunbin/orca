@@ -29,11 +29,20 @@ import {
 } from './linear-project-models'
 import { readCollection } from './linear-project-collection-read'
 
+export type LinearProjectSearchPage = {
+  term: string
+  first: number
+  workspaceId: string
+  apiKey: string
+  connection: ProjectConnectionResponse['searchProjects']
+}
+
 export async function listProjects(
   query: string | undefined,
   limit = 20,
   workspaceId?: LinearWorkspaceSelection | null,
-  force = false
+  force = false,
+  receiveSearchPage?: (page: LinearProjectSearchPage) => void
 ): Promise<LinearCollectionResult<LinearProjectSummary>> {
   const first = clampLimit(limit)
   const trimmed = query?.trim()
@@ -48,6 +57,15 @@ export async function listProjects(
         LinearRawVariables
       >(trimmed ? SEARCH_PROJECTS_QUERY : PROJECTS_QUERY, variables)
       const connection = trimmed ? result.data?.searchProjects : result.data?.projects
+      if (trimmed) {
+        receiveSearchPage?.({
+          term: trimmed,
+          first,
+          workspaceId: entry.workspace.id,
+          apiKey: entry.apiKey,
+          connection
+        })
+      }
       return {
         items: (connection?.nodes ?? []).map((project) => mapProjectForWorkspace(entry, project)),
         hasMore: !!connection?.pageInfo?.hasNextPage
@@ -60,7 +78,8 @@ export async function listProjects(
 export async function listProjectsByExactName(
   name: string,
   workspaceId: LinearConcreteWorkspaceId,
-  force = false
+  force = false,
+  firstPage?: LinearProjectSearchPage
 ): Promise<LinearProjectSummary[]> {
   const projectName = name.trim()
   if (!projectName) {
@@ -81,16 +100,28 @@ export async function listProjectsByExactName(
       try {
         const matches: LinearProjectSummary[] = []
         let after: string | undefined
+        let initialPage =
+          firstPage?.term === projectName &&
+          firstPage.first === LINEAR_PROJECT_API_PAGE_SIZE_MAX &&
+          firstPage.workspaceId === concreteWorkspaceId &&
+          firstPage.workspaceId === entry.workspace.id &&
+          firstPage.apiKey === entry.apiKey
+            ? firstPage
+            : undefined
         while (true) {
-          const result = await entry.client.client.rawRequest<
-            ProjectConnectionResponse,
-            LinearRawVariables
-          >(SEARCH_PROJECTS_QUERY, {
-            term: projectName,
-            first: LINEAR_PROJECT_API_PAGE_SIZE_MAX,
-            ...(after ? { after } : {})
-          })
-          const connection = result.data?.searchProjects
+          const connection = initialPage
+            ? initialPage.connection
+            : (
+                await entry.client.client.rawRequest<ProjectConnectionResponse, LinearRawVariables>(
+                  SEARCH_PROJECTS_QUERY,
+                  {
+                    term: projectName,
+                    first: LINEAR_PROJECT_API_PAGE_SIZE_MAX,
+                    ...(after ? { after } : {})
+                  }
+                )
+              ).data?.searchProjects
+          initialPage = undefined
           for (const project of connection?.nodes ?? []) {
             if (project.name.trim().toLowerCase() === normalized) {
               matches.push(mapProjectForWorkspace(entry, project))
