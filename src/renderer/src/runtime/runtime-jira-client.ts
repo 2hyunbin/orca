@@ -26,7 +26,6 @@ import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rp
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
-import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
 import {
   jiraGetIssueForTarget,
