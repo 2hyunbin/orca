@@ -422,9 +422,9 @@ export async function verifyCapacityTransition(config, overrides = {}) {
   }
   const startedAt = now()
   const deadline = startedAt + config.timeoutMs
-  // A paced drain can refill the runtime until its window ends, so two consecutive quiet samples
-  // must reach that end. This runs after the cell accepted the drain, so the cell's window ends
-  // no later than this one.
+  // A paced drain can refill the runtime until its window ends, so the second of two consecutive
+  // quiet samples must be taken at or after that end. This runs after the cell accepted the drain,
+  // so the cell's window ends no later than this one.
   const paceWindowEndsAt = startedAt + (config.paceWindowMs ?? 0)
   let restartSafeSamples = 0
   let lastObservation = { runtimeAvailable: false }
