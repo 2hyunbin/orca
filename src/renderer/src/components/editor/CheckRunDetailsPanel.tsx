@@ -312,7 +312,7 @@ export function CheckRunDetailsPanel({
             )}
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {(isFailureState(detailsStatusCheck.conclusion)
               ? ['jobs', 'output', 'annotations']
               : ['output', 'annotations', 'jobs']

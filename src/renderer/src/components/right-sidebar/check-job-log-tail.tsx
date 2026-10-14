@@ -175,7 +175,7 @@ export function CheckJobLogTail({
           className={cn(
             'overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 font-mono text-xs scrollbar-sleek',
             expanded
-              ? 'min-h-48 max-h-[min(50vh,32rem)] text-foreground'
+              ? 'min-h-48 max-h-[min(50vh,32rem)] break-all text-foreground'
               : 'max-h-72 text-muted-foreground'
           )}
         >
