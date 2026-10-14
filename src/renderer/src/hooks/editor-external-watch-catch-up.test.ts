@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as EditorAutosaveModule from '@/components/editor/editor-autosave'
-import type * as RuntimeFileClientModule from '@/runtime/runtime-file-client'
+import type * as RuntimeFileClientModule from '@/runtime/runtime-file-metadata-client'
 
 const store = vi.hoisted(() => {
   const openFiles: Record<string, unknown>[] = []
@@ -14,14 +14,15 @@ vi.mock('@/components/editor/editor-autosave', async (importOriginal) => {
   const actual = await importOriginal<typeof EditorAutosaveModule>()
   return { ...actual, notifyEditorExternalFileChange: vi.fn() }
 })
-vi.mock('@/runtime/runtime-file-client', async (importOriginal) => {
+vi.mock('@/runtime/runtime-file-metadata-client', async (importOriginal) => {
   const actual = await importOriginal<typeof RuntimeFileClientModule>()
   return { ...actual, statRuntimePath: vi.fn() }
 })
 
 import { notifyEditorExternalFileChange } from '@/components/editor/editor-autosave'
-import { statRuntimePath } from '@/runtime/runtime-file-client'
+import { statRuntimePath } from '@/runtime/runtime-file-metadata-client'
 import {
+  CATCH_UP_STAT_TIMEOUT_MS,
   captureEditorWatchDiskBaseline,
   collectEditorWatchCatchUpEvents,
   holdEditorAutosaveDuringCatchUp
@@ -79,7 +80,10 @@ describe('editor watch catch-up', () => {
     stubDisk({ '/repo/a.ts': { size: 1, mtime: 1 } })
     const baseline = await captureEditorWatchDiskBaseline(target)
 
-    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual([])
+    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual({
+      events: [],
+      unresolved: new Map()
+    })
   })
 
   it('synthesizes update, delete and create events from size and mtime', async () => {
@@ -103,7 +107,7 @@ describe('editor watch catch-up', () => {
       '/repo/back.ts': { size: 1, mtime: 3 }
     })
 
-    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual([
+    expect((await collectEditorWatchCatchUpEvents(target, baseline)).events).toEqual([
       { kind: 'update', absolutePath: '/repo/grown.ts' },
       { kind: 'update', absolutePath: '/repo/touched.ts' },
       { kind: 'delete', absolutePath: '/repo/gone.ts' },
@@ -133,7 +137,10 @@ describe('editor watch catch-up', () => {
     stubOpenFiles([editTab('new.ts')])
     stubDisk({ '/repo/new.ts': { size: 1, mtime: 1 } })
 
-    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual([])
+    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual({
+      events: [],
+      unresolved: new Map()
+    })
   })
 
   it('does not guess when the host cannot be reached, but reloads after an unreadable baseline', async () => {
@@ -142,9 +149,31 @@ describe('editor watch catch-up', () => {
     const baseline = await captureEditorWatchDiskBaseline(target)
     stubDisk({ '/repo/a.ts': 'offline', '/repo/b.ts': { size: 1, mtime: 1 } })
 
-    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual([
-      { kind: 'update', absolutePath: '/repo/b.ts' }
-    ])
+    expect(await collectEditorWatchCatchUpEvents(target, baseline)).toEqual({
+      events: [{ kind: 'update', absolutePath: '/repo/b.ts' }],
+      // The unanswered file keeps its pre-drop stamp so a later check still compares against it.
+      unresolved: new Map([['/repo/a.ts', '1:1']])
+    })
+  })
+
+  it('gives up on a hung stat after the timeout and leaves the file unresolved', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      stubOpenFiles([editTab('a.ts')])
+      stubDisk({ '/repo/a.ts': { size: 1, mtime: 1 } })
+      const baseline = await captureEditorWatchDiskBaseline(target)
+      vi.mocked(statRuntimePath).mockImplementation(() => new Promise(() => {}))
+
+      const result = collectEditorWatchCatchUpEvents(target, baseline)
+      await vi.advanceTimersByTimeAsync(CATCH_UP_STAT_TIMEOUT_MS)
+
+      await expect(result).resolves.toEqual({
+        events: [],
+        unresolved: new Map([['/repo/a.ts', '1:1']])
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('stats an SSH worktree through its connection, not the local disk', async () => {
@@ -196,6 +225,7 @@ describe('autosave hold during catch-up', () => {
     const release = holdEditorAutosaveDuringCatchUp(target, baseline)
     expect(setPending.mock.calls).toEqual([['/repo/a.ts', true]])
     release()
+    release()
     expect(setPending.mock.calls).toEqual([
       ['/repo/a.ts', true],
       ['/repo/a.ts', false]
@@ -221,7 +251,7 @@ describe('editor watch catch-up through the live event path', () => {
     stubDisk({ [String(file.filePath)]: { size: 1, mtime: 1 } })
     const baseline = await captureEditorWatchDiskBaseline(target)
     stubDisk({ [String(file.filePath)]: after })
-    const events = await collectEditorWatchCatchUpEvents(target, baseline)
+    const { events } = await collectEditorWatchCatchUpEvents(target, baseline)
     const { handleFsChanged, dispose } = buildEditorExternalWatchEventHandler(() => target)
     handleFsChanged({ worktreePath: '/repo', events }, null)
     vi.advanceTimersByTime(200)

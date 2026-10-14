@@ -20,7 +20,12 @@ const subscriptionState = vi.hoisted(() => ({
   contacts: new Map<string, () => void>(),
   unsubscribeContact: vi.fn(),
   captureBaseline: vi.fn(async () => new Map<string, string>()),
-  collectCatchUpEvents: vi.fn(async (): Promise<unknown[]> => []),
+  collectCatchUpEvents: vi.fn(
+    async (): Promise<{ events: unknown[]; unresolved: Map<string, string> }> => ({
+      events: [],
+      unresolved: new Map()
+    })
+  ),
   releaseAutosave: vi.fn(),
   holdAutosave: vi.fn()
 }))
@@ -290,7 +295,10 @@ describe('useEditorExternalWatch subscriptions', () => {
       const baseline = new Map([['/repo/local/a.ts', '1:1']])
       const missed = [{ kind: 'update', absolutePath: '/repo/local/a.ts' }]
       subscriptionState.captureBaseline.mockResolvedValueOnce(baseline)
-      subscriptionState.collectCatchUpEvents.mockResolvedValueOnce(missed)
+      subscriptionState.collectCatchUpEvents.mockResolvedValueOnce({
+        events: missed,
+        unresolved: new Map()
+      })
       await watchLocal('local-1')
       await dropLocal()
       await act(async () => vi.advanceTimersByTimeAsync(2_000))
@@ -303,10 +311,79 @@ describe('useEditorExternalWatch subscriptions', () => {
         null
       )
       expect(subscriptionState.holdAutosave).toHaveBeenCalledWith(localTarget, baseline)
-      expect(subscriptionState.releaseAutosave).toHaveBeenCalledOnce()
+      expect(subscriptionState.releaseAutosave).toHaveBeenCalled()
       expect(subscriptionState.releaseAutosave.mock.invocationCallOrder[0]).toBeGreaterThan(
         subscriptionState.handleFsChanged.mock.invocationCallOrder[0]
       )
+    })
+
+    it('resumes autosave when the catch-up hangs, and still replays a late answer', async () => {
+      const baseline = new Map([['/repo/local/a.ts', '1:1']])
+      const missed = [{ kind: 'update', absolutePath: '/repo/local/a.ts' }]
+      let answer!: (result: { events: unknown[]; unresolved: Map<string, string> }) => void
+      subscriptionState.captureBaseline.mockResolvedValueOnce(baseline)
+      subscriptionState.collectCatchUpEvents.mockReturnValueOnce(
+        new Promise((resolve) => {
+          answer = resolve
+        })
+      )
+      await watchLocal('local-1')
+      await dropLocal()
+      await act(async () => vi.advanceTimersByTimeAsync(2_000))
+      await watchLocal('local-2')
+
+      expect(subscriptionState.releaseAutosave).not.toHaveBeenCalled()
+      await act(async () => vi.advanceTimersByTimeAsync(10_000))
+      expect(subscriptionState.releaseAutosave).toHaveBeenCalled()
+      expect(subscriptionState.handleFsChanged).not.toHaveBeenCalled()
+
+      await act(async () => answer({ events: missed, unresolved: new Map() }))
+      expect(subscriptionState.handleFsChanged).toHaveBeenCalledWith(
+        { worktreePath: '/repo/local', events: missed },
+        null
+      )
+    })
+
+    it('keeps re-checking files the host could not answer for after autosave resumes', async () => {
+      const baseline = new Map([['/repo/local/a.ts', '1:1']])
+      const missed = [{ kind: 'update', absolutePath: '/repo/local/a.ts' }]
+      subscriptionState.captureBaseline.mockResolvedValueOnce(baseline)
+      subscriptionState.collectCatchUpEvents
+        .mockResolvedValueOnce({ events: [], unresolved: baseline })
+        .mockResolvedValueOnce({ events: missed, unresolved: new Map() })
+      await watchLocal('local-1')
+      await dropLocal()
+      await act(async () => vi.advanceTimersByTimeAsync(2_000))
+      await watchLocal('local-2')
+
+      expect(subscriptionState.releaseAutosave).toHaveBeenCalled()
+      expect(subscriptionState.handleFsChanged).not.toHaveBeenCalled()
+      await act(async () => vi.advanceTimersByTimeAsync(5_000))
+      expect(subscriptionState.collectCatchUpEvents).toHaveBeenLastCalledWith(localTarget, baseline)
+      expect(subscriptionState.handleFsChanged).toHaveBeenCalledWith(
+        { worktreePath: '/repo/local', events: missed },
+        null
+      )
+    })
+
+    it('carries an unverified stamp into the next drop instead of re-stamping it', async () => {
+      const original = new Map([['/repo/local/a.ts', '1:1']])
+      subscriptionState.captureBaseline
+        .mockResolvedValueOnce(original)
+        .mockResolvedValueOnce(new Map([['/repo/local/a.ts', '2:2']]))
+      subscriptionState.collectCatchUpEvents.mockResolvedValue({
+        events: [],
+        unresolved: original
+      })
+      await watchLocal('local-1')
+      await dropLocal()
+      await act(async () => vi.advanceTimersByTimeAsync(2_000))
+      await watchLocal('local-2')
+      await dropLocal()
+      await act(async () => vi.advanceTimersByTimeAsync(2_000))
+      await watchLocal('local-3')
+
+      expect(subscriptionState.collectCatchUpEvents).toHaveBeenLastCalledWith(localTarget, original)
     })
   })
 })

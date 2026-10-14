@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useAppStore } from '@/store'
 import { subscribeEditorRuntimeFileWatch } from './editor-runtime-file-watch'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import type { FsChangeEvent, FsChangedPayload } from '../../../shared/filesystem-entry-types'
+import type { FsChangedPayload } from '../../../shared/filesystem-entry-types'
+import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import {
   getEditorExternalWatchTargetKey,
   selectEditorExternalWatchTargets,
@@ -14,8 +15,11 @@ import {
   captureEditorWatchDiskBaseline,
   collectEditorWatchCatchUpEvents,
   holdEditorAutosaveDuringCatchUp,
+  type EditorWatchCatchUpResult,
   type EditorWatchDiskBaseline
 } from './editor-external-watch-catch-up'
+
+type RunningCatchUp = { pending: EditorWatchDiskBaseline }
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
@@ -28,6 +32,11 @@ function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknow
 
 // Why: spans the watcher batch window plus delivery, so a change made before the baseline stat still arrives as a live event.
 const UNWATCH_BASELINE_SETTLE_MS = 2_000
+// Why: a hung remote stat or watch must not pause autosave indefinitely; past this, fail open like an always-on watch whose host went quiet.
+export const CATCH_UP_AUTOSAVE_HOLD_MS = 10_000
+const CATCH_UP_RETRY_MS = 5_000
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Keeps editor filesystem subscriptions alive beyond any individual editor surface. */
 export function useEditorExternalWatch(): void {
@@ -40,6 +49,8 @@ export function useEditorExternalWatch(): void {
   // Draining target key -> drain token, so a superseded drain can't unwatch a re-drained target.
   const drainingRef = useRef(new Map<string, symbol>())
   const baselinesRef = useRef(new Map<string, EditorWatchDiskBaseline>())
+  // Target key -> running catch-up and the baseline entries it still can't verify.
+  const catchUpsRef = useRef(new Map<string, RunningCatchUp>())
   const fsChangedHandlerRef = useRef<
     ((payload: FsChangedPayload, runtimeEnvironmentId?: string | null) => void) | null
   >(null)
@@ -51,6 +62,7 @@ export function useEditorExternalWatch(): void {
     const subscribed = targetsRef.current
     const subscribedKeys = new Set(subscribed.map(getEditorExternalWatchTargetKey))
     const draining = drainingRef.current
+    const catchUps = catchUpsRef.current
 
     // Why: a dropped watch can't replay what it misses, so stamp its open files first and stay subscribed until that stamp settles.
     const drainTarget = async (target: EditorExternalWatchTarget, token: symbol): Promise<void> => {
@@ -58,13 +70,22 @@ export function useEditorExternalWatch(): void {
       const baseline = await captureEditorWatchDiskBaseline(target).catch(
         (): EditorWatchDiskBaseline => new Map()
       )
-      await new Promise((resolve) => setTimeout(resolve, UNWATCH_BASELINE_SETTLE_MS))
+      await sleep(UNWATCH_BASELINE_SETTLE_MS)
       // Re-added or unmounted while draining: the watch never lapsed.
       if (draining.get(key) !== token) {
         return
       }
       draining.delete(key)
-      baselinesRef.current.set(key, baseline)
+      // Why: entries a catch-up never verified keep their older stamp, so the next return still compares against it.
+      const unverified = catchUps.get(key)?.pending
+      catchUps.delete(key)
+      const carried = new Map(baseline)
+      for (const [filePath, stamp] of unverified ?? []) {
+        if (carried.has(filePath)) {
+          carried.set(filePath, stamp)
+        }
+      }
+      baselinesRef.current.set(key, carried)
       targetsRef.current = targetsRef.current.filter(
         (candidate) => getEditorExternalWatchTargetKey(candidate) !== key
       )
@@ -76,25 +97,47 @@ export function useEditorExternalWatch(): void {
       baseline: EditorWatchDiskBaseline,
       watchReady: Promise<unknown>
     ): Promise<void> => {
+      const key = getEditorExternalWatchTargetKey(target)
+      const running: RunningCatchUp = { pending: baseline }
+      catchUps.set(key, running)
       const releaseAutosave = holdEditorAutosaveDuringCatchUp(target, baseline)
+      const holdTimer = setTimeout(releaseAutosave, CATCH_UP_AUTOSAVE_HOLD_MS)
       try {
-        await watchReady.catch(() => undefined)
-        const events = await collectEditorWatchCatchUpEvents(target, baseline).catch(
-          (): FsChangeEvent[] => []
-        )
-        const key = getEditorExternalWatchTargetKey(target)
-        if (
-          events.length > 0 &&
-          targetsRef.current.some((candidate) => getEditorExternalWatchTargetKey(candidate) === key)
-        ) {
-          // Dirty matches are marked changed-on-disk synchronously here, before autosave resumes.
-          fsChangedHandlerRef.current?.(
-            { worktreePath: target.worktreePath, events },
-            target.runtimeEnvironmentId
-          )
+        await withTimeout(watchReady, CATCH_UP_AUTOSAVE_HOLD_MS, undefined)
+        let pending = baseline
+        for (;;) {
+          const { events, unresolved } = await collectEditorWatchCatchUpEvents(
+            target,
+            pending
+          ).catch((): EditorWatchCatchUpResult => ({ events: [], unresolved: pending }))
+          if (catchUps.get(key) !== running) {
+            return
+          }
+          running.pending = unresolved
+          if (events.length > 0) {
+            // Dirty matches are marked changed-on-disk synchronously here, before autosave resumes.
+            fsChangedHandlerRef.current?.(
+              { worktreePath: target.worktreePath, events },
+              target.runtimeEnvironmentId
+            )
+          }
+          releaseAutosave()
+          if (unresolved.size === 0) {
+            return
+          }
+          // Why: autosave is open again, but a change missed while unwatched must still surface once the host answers.
+          await sleep(CATCH_UP_RETRY_MS)
+          if (catchUps.get(key) !== running) {
+            return
+          }
+          pending = unresolved
         }
       } finally {
+        clearTimeout(holdTimer)
         releaseAutosave()
+        if (catchUps.get(key) === running && running.pending.size === 0) {
+          catchUps.delete(key)
+        }
       }
     }
 
@@ -142,6 +185,7 @@ export function useEditorExternalWatch(): void {
   useEffect(() => {
     const remoteWatchUnsubs = remoteWatchUnsubsRef.current
     const draining = drainingRef.current
+    const catchUps = catchUpsRef.current
     const { handleFsChanged, dispose } = buildEditorExternalWatchEventHandler(
       (worktreePath, runtimeEnvironmentId) =>
         targetsRef.current.find(
@@ -159,6 +203,7 @@ export function useEditorExternalWatch(): void {
       dispose()
       fsChangedHandlerRef.current = null
       draining.clear()
+      catchUps.clear()
       for (const target of targetsRef.current) {
         unsubscribeTarget(target, remoteWatchUnsubs)
       }
