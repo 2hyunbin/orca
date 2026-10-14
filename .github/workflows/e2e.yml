@@ -451,6 +451,7 @@ jobs:
           pnpm build:orcad-prebuilds --require-slots linux-x64-glibc
           pnpm build:orcad
           node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc
+          node config/scripts/build-orcad-node.mjs --target linux-x64-glibc --out-dir out/orcad --deployment-template out/orcad-template --deployment-targets linux-x64-glibc
           mv out/orcad-template "$RUNNER_TEMP/orcad-convert-template"
       # The Windows CLI matrix collects here too and skips: it needs a Windows host descriptor.
       - name: Run managed SSH specs on a Docker host

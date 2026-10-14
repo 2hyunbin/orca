@@ -81,7 +81,11 @@ function parseOrcadReadiness(stdout: string): { pairingUrl: string; daemon: stri
 
 type StartedHost = Omit<HeadlessOracleHost, 'cleanups'>
 
-async function startOrcadHost(scratch: string, node: string): Promise<StartedHost> {
+async function startOrcadHost(
+  scratch: string,
+  node: string,
+  grantDesktopControl: boolean
+): Promise<StartedHost> {
   const profile = cliServeProfile(scratch)
   const port = await reserveLoopbackPort()
   const env = { ...profile.env, ORCA_USER_DATA: profile.userDataDir }
@@ -95,7 +99,8 @@ async function startOrcadHost(scratch: string, node: string): Promise<StartedHos
         '127.0.0.1',
         '--port',
         String(port),
-        '--json'
+        '--json',
+        ...(grantDesktopControl ? ['--grant-desktop-control'] : [])
       ],
       env,
       timeoutMs: 120_000,
@@ -162,14 +167,22 @@ function profileParent(): string {
   return parent
 }
 
-export async function startHeadlessOracleHost(kind: HeadlessHostKind): Promise<HeadlessOracleHost> {
+export async function startHeadlessOracleHost(
+  kind: HeadlessHostKind,
+  options: { grantDesktopControl?: boolean } = {}
+): Promise<HeadlessOracleHost> {
+  if (options.grantDesktopControl && kind !== 'orcad') {
+    throw new Error('Explicit desktop control is supported by the Node fixture only')
+  }
   const scratch = mkdtempSync(path.join(profileParent(), 'lo-'))
   try {
     const node = kind === 'orcad' ? orcadNodeExecutable() : null
     if (kind === 'orcad' && !node) {
       throw new Error('out/orcad or its pinned Node is missing (pnpm build:orcad)')
     }
-    const started = node ? await startOrcadHost(scratch, node) : await startElectronHost(scratch)
+    const started = node
+      ? await startOrcadHost(scratch, node, options.grantDesktopControl === true)
+      : await startElectronHost(scratch)
     const cleanups: (() => void)[] = []
     return {
       ...started,

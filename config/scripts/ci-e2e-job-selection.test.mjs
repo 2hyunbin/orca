@@ -314,3 +314,27 @@ it.each([
     expect(selectPrE2eSpecs([source]), source).toContain(spec)
   }
 })
+
+it('runs the Node SSH journey in the lane that packages its deployment resources', () => {
+  const spec = 'tests/e2e/ssh-orcad-node-control-host.spec.ts'
+  expectManagedSshLane(spec)
+  for (const source of [
+    'src/main/orcad/orcad-ssh.ts',
+    'src/main/orcad/orcad-entry.ts',
+    'src/main/orcad/orcad-build-version.ts',
+    'src/shared/host-app-version.ts',
+    'config/scripts/build-orcad-node.mjs',
+    'config/scripts/build-orcad-template.mjs',
+    'config/scripts/orcad-control-host-template.mjs',
+    'tests/e2e/helpers/headless-layout-oracle-hosts.ts'
+  ]) {
+    expect(selectPrE2eSpecs([source])).toContain(spec)
+  }
+  const build = workflow.jobs['orcad-ssh-docker'].steps.find((step) =>
+    step.run?.includes('--deployment-template')
+  )
+  expect(build?.run).toContain('--deployment-targets linux-x64-glibc')
+  expect(build?.run.indexOf('--deployment-template')).toBeLessThan(
+    build?.run.indexOf('mv out/orcad-template')
+  )
+})
