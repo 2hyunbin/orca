@@ -1,3 +1,4 @@
+import { agentHookServer } from '../../../agent-hooks/server'
 import { rejectPaneSpawnReservation, reserveIdlePaneSpawn } from '../pane/spawn-reservation'
 import { ptySizes } from '../delivery/visibility-state'
 import {
@@ -36,6 +37,20 @@ function restoreProvisionalPtySize(ctx: PtyIpcSpawnState): void {
   }
 }
 
+/** Retires a chat-owned resume on the host as soon as it is refused, so the cleanup never waits on
+ *  this spawn finishing or a pane receiving its result. */
+function forgetRefusedResume(ctx: PtyIpcSpawnState): void {
+  if (!ctx.refusedResume || !ctx.stablePaneKey) {
+    return
+  }
+  try {
+    agentHookServer.forgetRefusedPaneResume(ctx.stablePaneKey, ctx.refusedResume)
+  } catch (error) {
+    // Why not thrown: the shell still starts, and the next restore refuses and retries the cleanup.
+    console.warn('[pty] could not forget a resume a native chat owns', error)
+  }
+}
+
 export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArgs) {
   const ctx = createPtyIpcSpawnState(deps, args)
   const replacedPaneKey =
@@ -62,6 +77,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     }
     await preparePtyIpcSpawnPreflight(ctx)
     await assemblePtyIpcSpawnEnv(ctx)
+    forgetRefusedResume(ctx)
     await preparePtyIpcQoderCommand(ctx)
     const earlyReserved = await buildPtyIpcSpawnOptions(ctx).catch((error: unknown) => {
       restoreProvisionalPtySize(ctx)

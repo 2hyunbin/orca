@@ -38,7 +38,7 @@ export function projectIpcPtyConnectResult(
       replay: spawnResult.replay,
       pendingEscapeTailAnsi: spawnResult.pendingEscapeTailAnsi,
       ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
-      ...(spawnResult.agentResumeOwnedByChat ? { agentResumeOwnedByChat: true as const } : {})
+      ...(spawnResult.agentResumeRefused ? { agentResumeRefused: true as const } : {})
     }
   }
   if (
@@ -55,7 +55,7 @@ export function projectIpcPtyConnectResult(
         ? { startupCwdFallback: spawnResult.startupCwdFallback }
         : {}),
       ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
-      ...(spawnResult.agentResumeOwnedByChat ? { agentResumeOwnedByChat: true as const } : {})
+      ...(spawnResult.agentResumeRefused ? { agentResumeRefused: true as const } : {})
     }
   }
   return spawnResult.id

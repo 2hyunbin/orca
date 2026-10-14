@@ -43,7 +43,6 @@ type ReattachResultSession = ReattachPayloadSession &
     | 'registerPaneSerializerFor'
     | 'registerSideEffectFactConsumerForPty'
     | 'reportPanePtyVisibility'
-    | 'retireChatOwnedColdRestore'
     | 'retryUnverifiableParkRevealSnapshot'
     | 'sampleVisiblePaneForegroundAgent'
     | 'warnParkRevealNoHostImage'
@@ -95,16 +94,13 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       session.remotePtyIncarnationId = null
     }
 
-    // Why first: nothing of a chat-owned resume plan may be registered for the plain shell, and a
-    // shell that already exited must still forget it.
-    const startup = connectResult?.agentResumeOwnedByChat
-      ? session.retireChatOwnedColdRestore(coldRestoreStartup)
-      : coldRestoreStartup
     if (connectResult?.exitedBeforeAttach) {
       // Why: the transport already delivered the dead session's final frame + exit; treat as terminal state, not a failed reattach.
       return true
     }
 
+    // Why: main started a plain shell instead, so nothing of the plan may be registered over it.
+    const startup = connectResult?.agentResumeRefused ? null : coldRestoreStartup
     const ptyId =
       connectResult?.id ?? (typeof result === 'string' ? result : session.transport.getPtyId())
     const hasExplicitPtyId = Boolean(connectResult?.id || typeof result === 'string')

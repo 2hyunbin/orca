@@ -8,6 +8,7 @@ import {
   rollbackLegacyWorkerTerminalSurfaceInStore
 } from '../legacy-worker-terminal-recovery-event'
 import { useAppStore } from '../../store'
+import { forgetRefusedPaneResume } from '@/lib/forget-refused-pane-resume'
 import { resolvePaneKey } from './agent-status-routing'
 import type { PendingAgentStatusEvent } from './agent-status-bridge-types'
 
@@ -70,6 +71,10 @@ export function registerAgentStatusListeners(args: {
         return
       }
       if (!('paneKey' in data) || typeof data.paneKey !== 'string') {
+        return
+      }
+      if (data.refusedResume) {
+        forgetRefusedPaneResume(useAppStore.getState(), data.paneKey, data.refusedResume)
         return
       }
       // Why: preserve set→clear FIFO so a queued completion still survives pane teardown.

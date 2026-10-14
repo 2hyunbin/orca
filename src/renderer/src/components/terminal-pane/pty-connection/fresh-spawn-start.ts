@@ -175,10 +175,11 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           }
           return accepted ? resolvedPtyId : null
         }
-        // Why first: nothing of a chat-owned resume plan may be registered for the plain shell.
-        const coldRestore = connectResult?.agentResumeOwnedByChat
-          ? session.retireChatOwnedColdRestore(coldRestoreOverride)
-          : coldRestoreOverride
+        // Why: main started a plain shell instead, so nothing of the plan may stay registered over it.
+        const coldRestore = connectResult?.agentResumeRefused ? null : coldRestoreOverride
+        if (connectResult?.agentResumeRefused) {
+          session.clearRegisteredStartupLaunchConfig()
+        }
         if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
           session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
             ...(coldRestore ? { launchToken: coldRestore.launchToken } : {}),
@@ -203,6 +204,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
             // Why: main dropped the resume argv, so this pane is a NEW session —
             // the plain restored banner would claim the old one came back.
             session.showSessionRestoredBanner('resume-unavailable')
+            options.onAgentResumeUnavailable?.()
           } else if (coldRestore?.hasSleepingRecord) {
             session.showSessionRestoredBanner()
           }

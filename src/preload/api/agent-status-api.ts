@@ -31,9 +31,8 @@ export type AgentStatusApi = {
     }) => void
   ) => () => void
   getMigrationUnsupportedSnapshot: () => Promise<MigrationUnsupportedPtyEntry[]>
-  /** Drop a paneKey from the main-process hook cache and on-disk last-status file. Fire-and-forget.
-   *  `forgetResume`: keep no resumable remnant either, because the conversation belongs elsewhere. */
-  drop: (paneKey: string, options?: { forgetResume: true }) => void
+  /** Drop a paneKey from the main-process hook cache and on-disk last-status file. Fire-and-forget. */
+  drop: (paneKey: string) => void
   /** Evict a previously-cleared status only when its identity still matches the main-process cache. */
   dropPersisted: (identity: AgentStatusCacheIdentity) => void
   /** Same as dropPersisted for many identities in one IPC message and one listener notification. */

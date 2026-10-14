@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/agent-session-resume'
 import { nativeChatOwnsTerminalResume } from '../../../ai-vault/structured-session-ownership'
 import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
+import type { RefusedPaneResume } from '../../../../shared/agent-status-types'
 
 type ResumeSpawnArgs = {
   connectionId?: string | null
@@ -17,16 +18,22 @@ type ResumeSpawnArgs = {
   env?: Record<string, string>
 }
 
+/** Who may resume a pane's saved conversation, judged from this host's native chat records. */
+export type SpawnResumeOwnership =
+  | { verdict: 'owned'; refused: RefusedPaneResume }
+  | { verdict: 'unowned' }
+  | { verdict: 'unverifiable' }
+
 /**
  * Whether a pane's saved resume names a conversation a native chat owns: one that reached the pane
  * through a chat that leaked the pane's identity, or that later moved into a chat. Null when the
  * spawn asks no resume this host's records can own, so it stays synchronous.
  */
-export function nativeChatOwnsSpawnResume(
+export function nativeChatSpawnResumeOwnership(
   runtime: { openAgentSessionRecordStore(): Promise<AgentSessionRecordStore> } | undefined,
   args: ResumeSpawnArgs,
   wslDistro: string | null
-): Promise<boolean> | null {
+): Promise<SpawnResumeOwnership> | null {
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
   const agent = args.launchAgent
   // Why WSL is skipped: native chats run only natively, so a WSL conversation is never a chat's.
@@ -35,11 +42,17 @@ export function nativeChatOwnsSpawnResume(
   }
   return Promise.resolve()
     .then(() => runtime.openAgentSessionRecordStore())
-    .then((store) => nativeChatOwnsTerminalResume(store.listRecords(), agent, providerSession))
-    .catch((error: unknown) => {
-      // Why admit: a chat journal that cannot be opened or read must not stop every terminal agent's restore.
-      console.warn('[pty] native chat ownership unreadable; resuming the terminal session', error)
-      return false
+    .then((store): SpawnResumeOwnership =>
+      nativeChatOwnsTerminalResume(store.listRecords(), agent, providerSession)
+        ? { verdict: 'owned', refused: { agent, providerSession } }
+        : { verdict: 'unowned' }
+    )
+    .catch((error: unknown): SpawnResumeOwnership => {
+      console.warn(
+        '[pty] native chat records unreadable; cannot tell who owns the saved session',
+        error
+      )
+      return { verdict: 'unverifiable' }
     })
 }
 

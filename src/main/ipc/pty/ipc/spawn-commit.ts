@@ -195,12 +195,12 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
       : {}),
     // Why: the pane asked to resume and got a fresh session instead; only the
     // renderer can say so, and a reattach never ran this launch command.
-    ...((ctx.codexResumeLaunch.notifyResumeUnavailable || ctx.agentResumeOwnedByChat) &&
+    ...((ctx.codexResumeLaunch.notifyResumeUnavailable || ctx.agentResumeRefused) &&
     !ctx.result.isReattach
       ? { agentResumeUnavailable: true as const }
       : {}),
-    ...(ctx.agentResumeOwnedByChat && !ctx.result.isReattach
-      ? { agentResumeOwnedByChat: true as const }
+    ...(ctx.agentResumeRefused && !ctx.result.isReattach
+      ? { agentResumeRefused: true as const }
       : {})
   }
   // Why: renderer tab state cannot reliably infer background and reattached PTYs in the daemon inventory.

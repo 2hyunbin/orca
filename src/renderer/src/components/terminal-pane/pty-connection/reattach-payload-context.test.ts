@@ -108,37 +108,4 @@ describe('reattach payload context', () => {
     expect(schedulePendingStartupCommandDelivery).not.toHaveBeenCalled()
     expect(context.reattachPayloadApplied).toBe(true)
   })
-
-  it('says a chat-owned resume is unavailable without rebuilding or re-registering its plan', async () => {
-    const buildColdRestoreAgentResumeStartup = vi.fn()
-    const applyColdRestoreAgentResumeStartup = vi.fn(() => false)
-    const clearSleepingRecordAfterColdRestoreSpawn = vi.fn()
-    const showSessionRestoredBanner = vi.fn()
-    const session = createSession({
-      buildColdRestoreAgentResumeStartup,
-      applyColdRestoreAgentResumeStartup,
-      showSessionRestoredBanner,
-      clearSleepingRecordAfterColdRestoreSpawn,
-      consumeRestoredViewportBlankingMarker: vi.fn(),
-      writeFreshShellViewportBlanking: vi.fn()
-    })
-    const context: ReattachPayloadContext = {
-      ...createContext('', 1),
-      connectResult: {
-        id: 'pty-1',
-        coldRestore: { scrollback: 'restored scrollback', cwd: '/workspace' },
-        agentResumeUnavailable: true,
-        agentResumeOwnedByChat: true
-      },
-      // The result handler already retired the plan.
-      coldRestoreStartup: null
-    }
-
-    await createReattachPayloadHandlers(session, context).applyReattachPayload()
-
-    expect(showSessionRestoredBanner).toHaveBeenCalledWith('resume-unavailable')
-    expect(buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
-    expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledWith(null)
-    expect(clearSleepingRecordAfterColdRestoreSpawn).not.toHaveBeenCalled()
-  })
 })

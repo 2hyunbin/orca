@@ -49,7 +49,7 @@ describe('createIpcPtyTransport against a relay-recycled PTY id', () => {
    *  keeps this record, and only the incarnation can reject it. */
   async function connectWithExitDuringSpawn(
     exit: PtyExitPayload,
-    spawnResponse: { id: string; incarnationId?: string; agentResumeOwnedByChat?: true }
+    spawnResponse: { id: string; incarnationId?: string; agentResumeUnavailable?: true }
   ): Promise<{ result: unknown; paneExit: ReturnType<typeof vi.fn> }> {
     const { createIpcPtyTransport } = await import('./pty-transport')
     const spawn = window.api.pty.spawn as unknown as ReturnType<typeof vi.fn>
@@ -88,16 +88,16 @@ describe('createIpcPtyTransport against a relay-recycled PTY id', () => {
     expect(paneExit).toHaveBeenCalledWith(3)
   })
 
-  it('keeps a refused chat-owned resume on the result when its plain shell exits first', async () => {
+  it('still reports the resume unavailable when the shell that replaced it exits first', async () => {
     const { result } = await connectWithExitDuringSpawn(
       { id: RECYCLED_PTY_ID, code: 1, incarnationId: FRESH_INCARNATION_ID },
-      { id: RECYCLED_PTY_ID, incarnationId: FRESH_INCARNATION_ID, agentResumeOwnedByChat: true }
+      { id: RECYCLED_PTY_ID, incarnationId: FRESH_INCARNATION_ID, agentResumeUnavailable: true }
     )
 
     expect(result).toEqual({
       id: RECYCLED_PTY_ID,
       exitedBeforeAttach: true,
-      agentResumeOwnedByChat: true
+      agentResumeUnavailable: true
     })
   })
 

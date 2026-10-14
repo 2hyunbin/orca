@@ -10,7 +10,10 @@ import { LocalPtyProvider } from '../../../providers/local-pty-provider'
 import { normalizeWindowsTerminalCwd } from '../../../providers/windows-shell-args'
 import { wslUncDirectoryExistsAsync } from '../../../wsl'
 import { getCodexSelectionTargetForPty } from '../host-env/codex-home'
-import { dropAgentLaunch, nativeChatOwnsSpawnResume } from '../host-env/native-chat-owned-resume'
+import {
+  dropAgentLaunch,
+  nativeChatSpawnResumeOwnership
+} from '../host-env/native-chat-owned-resume'
 import {
   isClaudeLaunchCommand,
   recoverFreshSpawnProviderRouting,
@@ -200,13 +203,19 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
       shellOverride: ctx.terminalRuntimeOptions.shellOverride,
       terminalWindowsWslDistro: ctx.terminalRuntimeOptions.terminalWindowsWslDistro
     })?.distro ?? null
-  const chatOwnsResume = ctx.preAdoptedStablePane
+  const ownership = ctx.preAdoptedStablePane
     ? null
-    : nativeChatOwnsSpawnResume(ctx.deps.runtime, args, ctx.expectedWslDistro)
-  if (chatOwnsResume && (await chatOwnsResume)) {
+    : await nativeChatSpawnResumeOwnership(ctx.deps.runtime, args, ctx.expectedWslDistro)
+  // Why only automatic restores refuse an unknown owner: a resume the user asked for must not be
+  // blocked by bookkeeping, and the kept saved session is retried on the next restore.
+  if (
+    ownership?.verdict === 'owned' ||
+    (ownership?.verdict === 'unverifiable' && args.spawnIntent === 'automatic-restore')
+  ) {
+    ctx.refusedResume = ownership.verdict === 'owned' ? ownership.refused : null
     dropAgentLaunch(args)
     ctx.isClaudeLaunch = false
-    ctx.agentResumeOwnedByChat = true
+    ctx.agentResumeRefused = true
   }
   const initialSelectionTarget = getCodexSelectionTargetForPty(
     initialShellOverride,

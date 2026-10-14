@@ -82,9 +82,16 @@ export type AgentStatusCacheIdentity = {
   stateStartedAt: number
 }
 
-/** Wire shape for ordinary pane teardown or a stamped SSH disconnect batch. */
+/** A pane's saved resume the host refused because a native chat owns that conversation. */
+export type RefusedPaneResume = {
+  agent: string
+  providerSession: AgentProviderSessionMetadata
+}
+
+/** Wire shape for ordinary pane teardown or a stamped SSH disconnect batch. `refusedResume`: forget
+ *  that conversation as any pane's resume target too, not only this pane's status. */
 export type AgentStatusClearIpcPayload =
-  | { paneKey: string; statusUnavailable?: true }
+  | { paneKey: string; statusUnavailable?: true; refusedResume?: RefusedPaneResume }
   | {
       transient: true
       connectionId: string

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { makePaneKey } from '../../shared/stable-pane-id'
+import type { AgentStatusClearIpcPayload } from '../../shared/agent-status-types'
 import { AgentHookServer } from './server'
 
 const PANE = makePaneKey('external-live', '11111111-1111-4111-8111-111111111111')
@@ -38,6 +39,29 @@ describe('AgentHookServer AI Vault liveness identity', () => {
       })
     ])
     expect(server.getStatusChangeSnapshot()).toEqual([])
+  })
+
+  it('forgets a resume refused for a native chat, and tells renderers, only for that conversation', () => {
+    const server = new AgentHookServer()
+    const cleared: AgentStatusClearIpcPayload[] = []
+    server.setPaneStatusClearListener((clear) => cleared.push(clear))
+    seedLocalIdentity(server)
+    const other = {
+      agent: 'gemini',
+      providerSession: { key: 'session_id' as const, id: 'other' }
+    }
+    const refused = { agent: 'gemini', providerSession: PROVIDER_SESSION }
+
+    server.forgetRefusedPaneResume(PANE, other)
+    expect(server.getStatusSnapshot()).toHaveLength(1)
+    server.forgetRefusedPaneResume(PANE, refused)
+
+    // No resumable remnant either, unlike a dismissal.
+    expect(server.getStatusSnapshot()).toEqual([])
+    expect(cleared).toEqual([
+      { paneKey: PANE, refusedResume: other },
+      { paneKey: PANE, refusedResume: refused }
+    ])
   })
 
   it('hydrates dismissed provider identity without reviving visible status', async () => {

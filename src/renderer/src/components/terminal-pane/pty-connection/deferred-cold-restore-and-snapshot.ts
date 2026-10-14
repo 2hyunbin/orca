@@ -44,21 +44,6 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       )
     }
   }
-  /** Forgets a resume main refused because a native chat owns it; the pane continues as if it had
-   *  no resume plan, so it returns that (null) plan for the caller to continue with. */
-  session.retireChatOwnedColdRestore = (
-    startup: ColdRestoreAgentResumeStartup | null | undefined
-  ): null => {
-    const state = useAppStore.getState()
-    // Why forgetResume: the chat's record owns the conversation; the host must keep no copy for this pane.
-    state.dropAgentStatus(session.cacheKey, { forgetResume: true })
-    state.clearPaneForegroundAgent(session.cacheKey)
-    const saved = startup?.sleepingRecordEntry ?? session.getSleepingRecordForPane(state)
-    if (saved) {
-      session.clearSleepingRecordProviderDuplicates(state, saved)
-    }
-    return null
-  }
   session.mergeStartupEnvWithPaneIdentity = (
     env: Record<string, string> | undefined
   ): Record<string, string> | undefined =>

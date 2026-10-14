@@ -12,6 +12,8 @@ export type PendingStartupCommand = {
 
 export type FreshSpawnOptions = {
   forceBlankRestoredViewport?: boolean
+  /** Main started the pane without resuming the requested agent session. */
+  onAgentResumeUnavailable?: () => void
 }
 
 export type ColdRestoreAgentResumeStartup = PendingStartupCommand & {

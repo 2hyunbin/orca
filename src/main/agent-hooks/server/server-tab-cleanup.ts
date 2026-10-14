@@ -2,8 +2,26 @@ import { clearPaneCacheState } from '../../../shared/agent-hook-listener/listene
 import { paneCacheKeyMatchesTab } from './server-status-identity'
 import { AgentHookServerCleanup } from './server-cleanup'
 import type { EnrichedAgentHookEventPayload } from './server-types'
+import type { RefusedPaneResume } from '../../../shared/agent-status-types'
+import { agentProviderSessionsEqual } from '../../../shared/agent-session-resume'
 
 export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
+  /** The host refused `paneKey`'s saved resume because a native chat owns that conversation:
+   *  forget the pane's claim on it here, with no resumable remnant, and tell renderers to forget
+   *  theirs. A row for another conversation is left alone. */
+  forgetRefusedPaneResume(paneKey: string, refused: RefusedPaneResume): void {
+    const row = this.state.lastStatusByPaneKey.get(this.resolvePaneKeyAlias(paneKey))
+    if (
+      row &&
+      row.payload.agentType === refused.agent &&
+      agentProviderSessionsEqual(refused.agent, row.providerSession, refused.providerSession)
+    ) {
+      this.dropStatusEntry(row.paneKey, { preserveResumeIdentity: false })
+    }
+    // Why renderers only: main's own subscribers heard the drop; a pane-wide clear would end a row kept above.
+    this.onPaneStatusCleared?.({ paneKey, refusedResume: refused })
+  }
+
   /** Drop every status/cache claim attributable to a closed tab prefix. */
   dropStatusEntriesByTabPrefix(tabId: string): void {
     this.markTabClosedForAgentStatus(tabId)

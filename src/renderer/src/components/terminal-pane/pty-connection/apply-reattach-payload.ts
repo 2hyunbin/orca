@@ -263,8 +263,8 @@ export function createReattachPayloadHandlers(
       session.writeReplayData(
         `${RESET_GRAPHIC_RENDITION}${ctx.connectResult.coldRestore.scrollback}`
       )
-      // Why not rebuilt when chat-owned: the result handler already retired that plan.
-      const preparedStartup = ctx.connectResult.agentResumeOwnedByChat
+      // Why not rebuilt when refused: main started a plain shell instead of that plan.
+      const preparedStartup = ctx.connectResult.agentResumeRefused
         ? null
         : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
       const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup)

@@ -61,13 +61,6 @@ describe('dropAgentStatus → IPC fan-out', () => {
     expect(drop).toHaveBeenCalledTimes(1)
     expect(drop).toHaveBeenCalledWith('tab-missing:0')
   })
-
-  it('asks the host to keep no resumable remnant when told to forget the resume', () => {
-    const { drop } = stubWindowApi()
-    const store = createTestStore()
-    store.getState().dropAgentStatus('tab-1:0', { forgetResume: true })
-    expect(drop).toHaveBeenCalledWith('tab-1:0', { forgetResume: true })
-  })
 })
 
 describe('dropAgentStatusByTabPrefix -> IPC fan-out', () => {

@@ -31,6 +31,7 @@ export const openCodeClearPtyMock: Mock = vi.fn()
 export const buildAgentHookEnvMock: Mock = vi.fn()
 export const clearAgentHookPaneStateMock: Mock = vi.fn()
 export const registerPaneKeyAliasMock: Mock = vi.fn()
+export const forgetRefusedPaneResumeMock: Mock = vi.fn()
 export const piBuildPtyEnvMock: Mock = vi.fn()
 export const piClearPtyMock: Mock = vi.fn()
 export const trackMock: Mock = vi.fn()
@@ -134,6 +135,7 @@ export const agentHookServerModuleMock = () => ({
     buildPtyEnv: buildAgentHookEnvMock,
     clearPaneState: clearAgentHookPaneStateMock,
     registerPaneKeyAlias: registerPaneKeyAliasMock,
+    forgetRefusedPaneResume: forgetRefusedPaneResumeMock,
     clearPaneKeyAliasesForPty: clearPaneKeyAliasesForPtyMock
   }
 })

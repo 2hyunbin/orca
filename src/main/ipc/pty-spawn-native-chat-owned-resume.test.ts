@@ -1,5 +1,5 @@
 import { describe, expect, vi } from 'vitest'
-import { spawnMock } from './pty-ipc-mock-registry'
+import { forgetRefusedPaneResumeMock, spawnMock } from './pty-ipc-mock-registry'
 import { posixOnlyIt } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { POSIX_SHELL_STARTUP_COMMAND_ENV } from '../pty/posix-shell-startup-command'
@@ -64,15 +64,10 @@ describe('registerPtyHandlers', () => {
 
     function chatOwning(providerSessionId: string): AgentSessionRecord {
       const record = agentSessionRecordFixture()
+      const [link] = record.providerHandleChain
       return {
         ...record,
-        location: { ...record.location, workspaceId: 'structured-chat-default' },
-        providerHandleChain: [
-          {
-            ...record.providerHandleChain[0]!,
-            handle: claudeProviderHandle(providerSessionId, null)
-          }
-        ]
+        providerHandleChain: [{ ...link!, handle: claudeProviderHandle(providerSessionId, null) }]
       }
     }
 
@@ -86,15 +81,12 @@ describe('registerPtyHandlers', () => {
       registerPtyHandlers(mainWindow, runtime)
     }
 
-    type SpawnedShell = {
-      ownedByChat: boolean
-      resumeUnavailable: boolean
-      /** Everything the shell is told to run: its startup variable and what is typed in. */
-      input: string
-      env: Record<string, string>
-    }
+    const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 
-    async function spawnClaudeResume(providerSessionId: string): Promise<SpawnedShell> {
+    async function spawnClaudeResume(
+      providerSessionId: string,
+      { spawnIntent = 'automatic-restore', leafId = LEAF_ID } = {}
+    ) {
       const mockProc = createMockProc()
       spawnMock.mockReturnValue(mockProc.proc)
       vi.useFakeTimers()
@@ -103,9 +95,12 @@ describe('registerPtyHandlers', () => {
           cols: 80,
           rows: 24,
           cwd: '/tmp',
+          tabId: 'tab-floating',
+          leafId,
           command: `claude --resume '${providerSessionId}'`,
           launchAgent: 'claude',
-          resumeProviderSession: { key: 'session_id', id: providerSessionId }
+          resumeProviderSession: { key: 'session_id', id: providerSessionId },
+          spawnIntent
         })
         for (let flush = 0; flush < 3; flush += 1) {
           await Promise.resolve()
@@ -115,7 +110,7 @@ describe('registerPtyHandlers', () => {
         const typed = mockProc.proc.write.mock.calls.map((call) => String(call[0]))
         const reported = typeof result === 'object' && result !== null ? result : {}
         return {
-          ownedByChat: 'agentResumeOwnedByChat' in reported,
+          refused: 'agentResumeRefused' in reported,
           resumeUnavailable: 'agentResumeUnavailable' in reported,
           input: [env[POSIX_SHELL_STARTUP_COMMAND_ENV] ?? '', ...typed].join('\n'),
           env
@@ -125,16 +120,20 @@ describe('registerPtyHandlers', () => {
       }
     }
 
-    posixOnlyIt('starts the plain shell and says the old session is unavailable', async () => {
+    posixOnlyIt('starts the plain shell, says so, and the host forgets it', async () => {
       registerWithChats(() => [chatOwning(CHAT_SESSION_ID)])
 
       const spawned = await spawnClaudeResume(CHAT_SESSION_ID)
 
       expect(spawned.resumeUnavailable).toBe(true)
-      expect(spawned.ownedByChat).toBe(true)
+      expect(spawned.refused).toBe(true)
       expect(spawned.input).not.toContain(CHAT_SESSION_ID)
       // A plain shell, not an unattended agent's: Git may prompt for credentials again.
       expect(spawned.env.GIT_TERMINAL_PROMPT).toBeUndefined()
+      expect(forgetRefusedPaneResumeMock).toHaveBeenCalledWith(`tab-floating:${LEAF_ID}`, {
+        agent: 'claude',
+        providerSession: { key: 'session_id', id: CHAT_SESSION_ID }
+      })
     })
 
     posixOnlyIt('resumes a conversation no chat owns', async () => {
@@ -143,21 +142,29 @@ describe('registerPtyHandlers', () => {
       const spawned = await spawnClaudeResume(PANE_SESSION_ID)
 
       expect(spawned.resumeUnavailable).toBe(false)
-      expect(spawned.ownedByChat).toBe(false)
       expect(spawned.input).toContain(`--resume '${PANE_SESSION_ID}'`)
       expect(spawned.env.GIT_TERMINAL_PROMPT).toBe('0')
+      expect(forgetRefusedPaneResumeMock).not.toHaveBeenCalled()
     })
 
-    posixOnlyIt('resumes when the chat journal cannot be read', async () => {
+    posixOnlyIt('with unreadable chat records, refuses only an automatic restore', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {})
       registerWithChats(() => {
         throw new Error('journal unavailable')
       })
 
-      const spawned = await spawnClaudeResume(CHAT_SESSION_ID)
+      const restored = await spawnClaudeResume(CHAT_SESSION_ID)
+      const asked = await spawnClaudeResume(CHAT_SESSION_ID, {
+        spawnIntent: 'user-resume',
+        leafId: '22222222-2222-4222-8222-222222222222'
+      })
 
-      expect(spawned.resumeUnavailable).toBe(false)
-      expect(spawned.input).toContain(`--resume '${CHAT_SESSION_ID}'`)
+      expect(restored.refused).toBe(true)
+      expect(restored.input).not.toContain(CHAT_SESSION_ID)
+      expect(asked.refused).toBe(false)
+      expect(asked.input).toContain(`--resume '${CHAT_SESSION_ID}'`)
+      // Nothing is forgotten: the saved session is tried again on the next restore.
+      expect(forgetRefusedPaneResumeMock).not.toHaveBeenCalled()
     })
   })
 })

@@ -147,8 +147,8 @@ export async function connectIpcPty(
       return {
         id: spawnResult.id,
         exitedBeforeAttach: true,
-        // Why kept: the pane must still forget a refused resume its exited shell replaced.
-        ...(spawnResult.agentResumeOwnedByChat ? { agentResumeOwnedByChat: true as const } : {})
+        // Why kept: a shell that replaced a resume and then exited never resumed the agent.
+        ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {})
       }
     }
     if (context.isDestroyed()) {
