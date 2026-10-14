@@ -3,27 +3,22 @@ import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 export type { SidebarFilterState } from './visible-worktree-kinds'
 export {
-  isAutomationGeneratedWorkspace,
-  isCliCreatedWorkspace,
-  isDetachedHeadWorkspace,
   isSleepingSweepExemptionNarrowingList,
   isSleepingSweepExemptWorkspace
 } from './visible-worktree-kinds'
-export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
-export type { ClearFilterActions } from './sidebar-filter-actions'
-import {
+export {
   isAutomationGeneratedWorkspace,
   isCliCreatedWorkspace,
-  isDetachedHeadWorkspace,
-  isSleepingSweepExemptWorkspace
-} from './visible-worktree-kinds'
+  isDetachedHeadWorkspace
+} from '../../../../shared/worktree/workspace-kinds'
+export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
+export type { ClearFilterActions } from './sidebar-filter-actions'
 import {
   getVisibleWorkspaceHostIdSet,
   worktreeMatchesVisibleHost
 } from './visible-worktree-host-scope'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { buildWorktreeComparator, sortWorktreesSmart } from './smart-sort'
-import { isInactiveWorkspace } from '@/lib/worktree-activity-state'
 export {
   EMPTY_STRUCTURED_CHAT_WORKTREE_IDS,
   getWorktreeIdsWithStructuredChat
@@ -47,8 +42,7 @@ import {
   computeRenderedSidebarWorktreeOrder,
   computeRenderedSidebarWorktrees
 } from './rendered-sidebar-worktree-order'
-import { isWorkspaceFromOtherDevice } from './workspace-creator-visibility'
-import { isDefaultBranchWorkspace } from './default-branch-workspace'
+import { isHiddenBySidebarSwitch } from './sidebar-switch-hidden-workspace'
 import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 
@@ -103,28 +97,6 @@ export function computeVisibleWorktrees(
   // every other valid ancestor can bypass filters so children never orphan.
   const lineageAncestorById = getLineageAncestorIndex(worktreesByRepo)
 
-  if (opts.hideWorkspacesFromOtherDevices) {
-    all = all.filter(
-      (worktree) => !isWorkspaceFromOtherDevice(worktree, opts.pairedDeviceIdsByEnvironment)
-    )
-  }
-
-  if (opts.hideDefaultBranchWorkspace) {
-    all = all.filter((w) => !isDefaultBranchWorkspace(w, opts.repoMap.get(w.repoId)))
-  }
-
-  if (opts.hideAutomationGeneratedWorkspaces) {
-    all = all.filter((w) => !isAutomationGeneratedWorkspace(w))
-  }
-
-  if (opts.hideCliCreatedWorkspaces) {
-    all = all.filter((w) => !isCliCreatedWorkspace(w))
-  }
-
-  if (opts.hideDetachedHeadWorkspaces) {
-    all = all.filter((w) => !isDetachedHeadWorkspace(w))
-  }
-
   const visibleHostIds =
     opts.visibleWorkspaceHostIds ??
     (opts.workspaceHostScope === ALL_EXECUTION_HOSTS_SCOPE ? null : [opts.workspaceHostScope])
@@ -146,22 +118,8 @@ export function computeVisibleWorktrees(
     all = all.filter((w) => selectedRepoIds.has(w.repoId))
   }
 
-  if (!opts.showSleepingWorkspaces) {
-    // Why no !hideDefaultBranchWorkspace term: that filter already ran above, so
-    // an explicit hide still wins over the exemption.
-    all = all.filter(
-      (w) =>
-        isSleepingSweepExemptWorkspace(w, opts.alwaysShowDefaultBranchWorkspace) ||
-        !isInactiveWorkspace(
-          w.id,
-          opts.tabsByWorktree,
-          opts.ptyIdsByTabId,
-          opts.browserTabsByWorktree,
-          opts.worktreeIdsWithLiveAgent,
-          opts.worktreeIdsWithStructuredChat
-        )
-    )
-  }
+  // Why after host and repo: those filters are cheap and shrink the set the sleeping sweep scans.
+  all = all.filter((w) => !isHiddenBySidebarSwitch(w, opts.repoMap.get(w.repoId), opts))
 
   if (opts.forcedVisibleWorktreeIds && opts.forcedVisibleWorktreeIds.length > 0) {
     const includedIds = new Set(all.map((worktree) => worktree.id))
