@@ -1,4 +1,5 @@
 import { createAbortError } from './abort-error'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 
 export type GhCaptureLifetimeHooks = {
   onTerminationPending: (terminated: Promise<void>) => void
@@ -8,31 +9,6 @@ export function assertGhCallActive(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw createAbortError()
   }
-}
-
-export function waitForGhTermination(
-  terminated: Promise<void>,
-  signal: AbortSignal
-): Promise<void> {
-  assertGhCallActive(signal)
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const finish = (error?: Error): void => {
-      if (settled) {
-        return
-      }
-      settled = true
-      signal.removeEventListener('abort', onAbort)
-      if (error) {
-        reject(error)
-      } else {
-        resolve()
-      }
-    }
-    const onAbort = (): void => finish(createAbortError())
-    signal.addEventListener('abort', onAbort, { once: true })
-    void terminated.then(() => finish())
-  })
 }
 
 export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
@@ -75,9 +51,10 @@ export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
       if (!signal) {
         throw new Error('GitHub command termination is unverifiable.')
       }
-      await waitForGhTermination(
+      await waitForPromiseWithSignal(
         Promise.all(pending).then(() => {}),
-        signal
+        signal,
+        createAbortError
       )
       assertGhCallActive(signal)
     },

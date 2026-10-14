@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -10,7 +9,6 @@ import { runProcess } from '@orca/process-host'
 import { nodeExecutable } from '../../../../../config/scripts/check-job-log-byte-cap-benchmark.mjs'
 import { workload } from '../../../../../config/scripts/check-job-log-performance-cases.mjs'
 
-const require = createRequire(import.meta.url)
 export const hash = (value) => createHash('sha256').update(value).digest('hex')
 const fixtureSource = `
 let output = ''; let failed = false; let downloads = 0;
@@ -20,6 +18,9 @@ export async function ghExecFileAsync() {
  downloads++;
  if (failed) throw Object.assign(new Error('fixture failed'), { code: 1, stderr: 'fixture ordinary failure' });
  return { stdout: output, stderr: '' };
+}
+export async function ghExecFileWithScopeAsync() {
+ return { ...await ghExecFileAsync(), rateLimitScope: 'native:github.com' };
 }
 `
 const scriptUrl = (name) => new URL(name, import.meta.url)
@@ -78,16 +79,6 @@ export async function prepareHostMeasurement(root = process.cwd()) {
       sourceHashes[name] = hash(await readFile(path.join(root, name)))
     }
     const program = await realpath(nodeExecutable())
-    const processHostEntry = require.resolve('@orca/process-host')
-    const processHostDirectory = path.dirname(processHostEntry)
-    const processHostModules = {}
-    for (const filename of Object.keys(require.cache)
-      .filter((filename) => filename.startsWith(`${processHostDirectory}${path.sep}`))
-      .sort()) {
-      processHostModules[sourceName(path.dirname(processHostDirectory), filename)] = hash(
-        await readFile(filename)
-      )
-    }
     const identity = {
       sourceHashes,
       bundleSources,
@@ -96,17 +87,10 @@ export async function prepareHostMeasurement(root = process.cwd()) {
       tools: {
         node: {
           executable: path.basename(program),
-          resolvedExecutableHash: hash(program),
-          binaryHash: hash(await readFile(program))
+          resolvedExecutableHash: hash(program)
         },
         esbuild: {
-          version: esbuildVersion,
-          entryHash: hash(await readFile(require.resolve('esbuild')))
-        },
-        processHost: {
-          version: JSON.parse(await readFile(path.join(processHostDirectory, '..', 'package.json')))
-            .version,
-          loadedModuleHashes: processHostModules
+          version: esbuildVersion
         }
       },
       cpuDescriptors

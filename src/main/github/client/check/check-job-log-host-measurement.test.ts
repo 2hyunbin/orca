@@ -43,7 +43,7 @@ describe('standalone host measurement identity', () => {
     for (const [name, digest] of Object.entries(context.identity.sourceHashes)) {
       expect(digest).toBe(hash(await readFile(path.join(context.root, name))))
     }
-    expect(context.identity.tools.node.binaryHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(context.identity.tools.node.resolvedExecutableHash).toBe(hash(context.program))
     expect(context.identity.tools.esbuild.version).toMatch(/^\d+\.\d+\.\d+$/)
   })
 

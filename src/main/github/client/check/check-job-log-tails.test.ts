@@ -257,13 +257,13 @@ describe('completed scoped excerpts through actual capture and runner', () => {
     })
     expect(spawnMock).toHaveBeenCalledTimes(3)
   })
-  it.each(['github.com', 'tenant.ghe.com', 'api.github.com', 'github.com:443'])(
+  it.each(['tenant.ghe.com', 'api.github.com', 'github.com:443'])(
     'unproven %s bypass is 1/1/2',
     async (host) => {
       const repo = { owner: 'acme', repo: 'widgets', host }
       const options = {
         cwd: '/folder',
-        env: host === 'github.com' ? {} : { GH_TOKEN: 'fixture-token' }
+        env: { GH_TOKEN: 'fixture-token' }
       }
       await attachLogFixture([failedLogJob()], { repo, options })
       await attachLogFixture([failedLogJob()], { repo, options })

@@ -11,21 +11,34 @@ export function throwIfSignalAborted(signal?: AbortSignal): void {
   }
 }
 
-export function waitForPromiseWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+export function waitForPromiseWithSignal<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+  createAbortError: (signal: AbortSignal) => Error = abortSignalReason
+): Promise<T> {
   if (!signal) {
     return promise
   }
   if (signal.aborted) {
     // Observe abandoned work so its later rejection stays handled.
     void promise.catch(() => undefined)
-    return Promise.reject(abortSignalReason(signal))
+    return Promise.reject(createAbortError(signal))
   }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => {
+    let settled = false
+    const finish = (complete: () => void): void => {
+      if (settled) {
+        return
+      }
+      settled = true
       signal.removeEventListener('abort', onAbort)
-      reject(abortSignalReason(signal))
+      complete()
     }
+    const onAbort = (): void => finish(() => reject(createAbortError(signal)))
     signal.addEventListener('abort', onAbort, { once: true })
-    void promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+    void promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error))
+    )
   })
 }

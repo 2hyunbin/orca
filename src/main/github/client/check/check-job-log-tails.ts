@@ -5,6 +5,7 @@ import { githubRepoIdentityKey } from '../../../../shared/github/repository-iden
 import type { GhExecOptions } from './../github-exec-scope'
 import { assertCheckLogActive, startCheckJobLogDownload } from './check-job-log-download'
 import { requestSharedCheckJobLog } from './check-job-log-inflight'
+import { resolveCheckJobLogCredentials } from './check-job-log-execution'
 export { PR_CHECK_LOG_MAX_BUFFER } from './check-job-log-download'
 export type CheckJobLogContext = {
   deadlineAt: number
@@ -92,13 +93,24 @@ export async function attachFailedJobLogTails(
     })
     .slice(0, PR_CHECK_LOG_TAIL_JOB_LIMIT)
 
+  if (failedJobs.length === 0) {
+    return
+  }
+  const execution = context.executionScope
+    ? { ghOptions, executionScope: context.executionScope }
+    : await resolveCheckJobLogCredentials(
+        ownerRepo,
+        { ...ghOptions, signal },
+        context.deadlineAt,
+        context.retainUntil
+      )
   for (const job of failedJobs) {
     assertCheckLogActive(signal, context.deadlineAt)
     if (job.id === null) {
       continue
     }
     const jobId = job.id
-    const cacheKey = getCheckJobLogTailCacheKey(job, ownerRepo, context.executionScope)
+    const cacheKey = getCheckJobLogTailCacheKey(job, ownerRepo, execution.executionScope)
     const start = (
       operationSignal: AbortSignal,
       deadlineAt: number
@@ -106,7 +118,7 @@ export async function attachFailedJobLogTails(
       const call = startCheckJobLogDownload(
         ownerRepo,
         jobId,
-        { ...ghOptions, signal: operationSignal },
+        { ...execution.ghOptions, signal: operationSignal },
         deadlineAt,
         context.retainUntil
       )

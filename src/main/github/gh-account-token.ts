@@ -7,6 +7,8 @@
 import { ghExecFileAsync } from '../git/runner'
 import type { GhCaptureLifetimeHooks } from '../git/command-runner/gh-capture-lifetime'
 import { addWslEnvKeys } from '../../shared/wsl-env'
+import { stripAmbientGhTokenEnv } from './gh-ambient-token-env'
+export { stripAmbientGhTokenEnv } from './gh-ambient-token-env'
 import {
   ghTokenEnvVarForHost,
   normalizeGhAccountBinding,
@@ -24,15 +26,6 @@ const TOKEN_RESOLVE_TIMEOUT_MS = 10_000
 const POSITIVE_TTL_MS = 5 * 60_000
 const NEGATIVE_TTL_MS = 30_000
 const CACHE_MAX_ENTRIES = 128
-
-const AMBIENT_GH_ENV_KEYS = [
-  'GH_TOKEN',
-  'GITHUB_TOKEN',
-  'GH_ENTERPRISE_TOKEN',
-  'GITHUB_ENTERPRISE_TOKEN',
-  'GH_HOST',
-  'GH_REPO'
-] as const
 
 type TokenCacheEntry =
   | { kind: 'positive'; token: string; expiresAt: number }
@@ -197,15 +190,6 @@ export async function resolveGhAccountToken(
     }
     throw unavailable
   }
-}
-
-/** Drops ambient GH_TOKEN/GH_HOST/GH_REPO so a bound call cannot inherit the globally active login. */
-export function stripAmbientGhTokenEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const next = { ...env }
-  for (const key of AMBIENT_GH_ENV_KEYS) {
-    delete next[key]
-  }
-  return next
 }
 
 /** Builds the gh child env with the bound token, registering it in WSLENV when the child runs under wsl.exe. */

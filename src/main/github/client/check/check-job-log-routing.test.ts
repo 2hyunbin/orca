@@ -98,17 +98,23 @@ describe('stateless flag attempts retain actual runner routing', () => {
       )
     ).toBe(true)
   })
-  it('cwd-less Windows routes bypass cache and sharing (1/1/2)', async () => {
-    spawnMock.mockImplementation(fakeSpawnDispatch(() => ({ stdout: 'native log' })))
+  it('cwd-less Windows routes resolve credentials before cache reuse and sharing', async () => {
+    spawnMock.mockImplementation(
+      fakeSpawnDispatch((_program, argv) => ({
+        stdout: argv[0] === 'auth' ? 'native-token' : 'native log'
+      }))
+    )
     const options = { env: { GH_TOKEN: 'native-token' } }
     await attachLogFixture([failedLogJob()], { options })
     await attachLogFixture([failedLogJob()], { options })
-    expect(spawnMock).toHaveBeenCalledTimes(2)
+    const downloads = () => spawnMock.mock.calls.filter((call) => call[1][0] === 'api')
+    expect(downloads()).toHaveLength(1)
+    prCheckLogTailCache.clear()
     await Promise.all([
       attachLogFixture([failedLogJob()], { options }),
       attachLogFixture([failedLogJob()], { options })
     ])
-    expect(spawnMock).toHaveBeenCalledTimes(4)
-    expect(prCheckLogTailCache.size).toBe(0)
+    expect(downloads()).toHaveLength(2)
+    expect(prCheckLogTailCache.size).toBe(1)
   })
 })

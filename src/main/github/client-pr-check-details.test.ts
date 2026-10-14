@@ -272,6 +272,7 @@ describe('getPRCheckDetails', () => {
           ]
         })
       })
+      .mockResolvedValueOnce({ stdout: 'fixture-keyring-token' })
       .mockResolvedValueOnce({ stdout: logLines.join('\n') })
 
     const details = await getPRCheckDetails('/repo-root', { checkRunId: 88 })
@@ -293,7 +294,7 @@ describe('getPRCheckDetails', () => {
       logTail: null
     })
     expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
-      4,
+      5,
       ['api', 'repos/acme/widgets/actions/jobs/8801/logs', '--allow-escape-sequences'],
       expect.objectContaining({
         cwd: '/repo-root',
@@ -302,7 +303,7 @@ describe('getPRCheckDetails', () => {
       }),
       expect.objectContaining({ onTerminationPending: expect.any(Function) })
     )
-    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(4)
+    expect(ghExecFileAsyncMock).toHaveBeenCalledTimes(5)
   })
 
   it('isolates failed-job log tails for the same job ID on different GitHub hosts', async () => {
