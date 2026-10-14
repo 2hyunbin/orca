@@ -1,10 +1,19 @@
 import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
-import type { JiraComment, JiraIssue } from '../../../shared/jira-types'
 import { migrateLegacyJiraImages } from './runtime-jira-image-cache'
-import { readRuntimeJiraPayload } from './runtime-jira-payload-stream'
+import type {
+  JiraComment,
+  JiraIssue,
+  JiraIssueUpdate,
+  JiraMutationResult,
+  JiraPriority,
+  JiraTransition
+} from '../../../shared/jira-types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
+import { readRuntimeJiraPayload } from './runtime-jira-payload-stream'
+
+export type JiraCommentResult = { ok: true; id: string } | { ok: false; error: string }
 
 async function readRemoteJiraPayload<TResult>(
   target: { kind: 'environment'; environmentId: string },
@@ -55,6 +64,32 @@ export async function jiraGetIssueForTarget(
     : null
 }
 
+export async function jiraUpdateIssueForTarget(
+  target: RuntimeClientTarget,
+  key: string,
+  updates: JiraIssueUpdate,
+  siteId?: string | null
+): Promise<JiraMutationResult> {
+  const args = { key, updates, siteId: siteId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<JiraMutationResult>(target, 'jira.updateIssue', args, { timeoutMs: 30_000 })
+    : window.api.jira.updateIssue(args)
+}
+
+export async function jiraAddIssueCommentForTarget(
+  target: RuntimeClientTarget,
+  key: string,
+  body: string,
+  siteId?: string | null
+): Promise<JiraCommentResult> {
+  const args = { key, body, siteId: siteId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<JiraCommentResult>(target, 'jira.addIssueComment', args, {
+        timeoutMs: 30_000
+      })
+    : window.api.jira.addIssueComment(args)
+}
+
 export async function jiraIssueCommentsForTarget(
   target: RuntimeClientTarget,
   key: string,
@@ -85,4 +120,29 @@ export async function jiraIssueCommentsForTarget(
     ...comment,
     body: migrateLegacyJiraImages(comment.body, target)
   }))
+}
+
+export async function jiraListPrioritiesForTarget(
+  target: RuntimeClientTarget,
+  siteId?: string | null
+): Promise<JiraPriority[]> {
+  return target.kind === 'environment'
+    ? callRuntimeRpc<JiraPriority[]>(
+        target,
+        'jira.listPriorities',
+        siteId ? { siteId } : undefined,
+        { timeoutMs: 30_000 }
+      )
+    : window.api.jira.listPriorities(siteId ? { siteId } : undefined)
+}
+
+export async function jiraListTransitionsForTarget(
+  target: RuntimeClientTarget,
+  key: string,
+  siteId?: string | null
+): Promise<JiraTransition[]> {
+  const args = { key, siteId: siteId ?? undefined }
+  return target.kind === 'environment'
+    ? callRuntimeRpc<JiraTransition[]>(target, 'jira.listTransitions', args, { timeoutMs: 30_000 })
+    : window.api.jira.listTransitions(args)
 }

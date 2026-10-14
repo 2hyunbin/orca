@@ -1,5 +1,10 @@
 import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import type {
+  JiraIssueSummaryGenerationRequest,
+  JiraIssueSummaryGenerationCancellation,
+  JiraIssueSummaryGenerationResult
+} from '../../shared/jira-issue-summary-generation'
+import type {
   JiraComment,
   JiraConnectionStatus,
   JiraCreateField,
@@ -57,6 +62,10 @@ export type JiraApi = {
   createIssue: (
     args: JiraCreateIssueArgs
   ) => Promise<{ ok: true; id: string; key: string; url: string } | { ok: false; error: string }>
+  generateIssueSummary: (
+    args: JiraIssueSummaryGenerationRequest
+  ) => Promise<JiraIssueSummaryGenerationResult>
+  cancelGenerateIssueSummary: (args: JiraIssueSummaryGenerationCancellation) => Promise<void>
   updateIssue: (args: {
     key: string
     updates: JiraIssueUpdate

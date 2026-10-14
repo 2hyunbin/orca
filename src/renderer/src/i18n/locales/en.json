@@ -468,7 +468,12 @@
     "taskUrl": {
       "loadingHint": "Loading {{value0}}…",
       "createHint": "Create worktree from {{value0}}"
-    }
+    },
+    "tasksHeader": "Tasks",
+    "taskCreate": "Create workspace",
+    "taskSearchLoading": "Searching tasks…",
+    "taskSearchFailed": "Some task sources could not be searched",
+    "taskSearchRetry": "Retry"
   },
   "auto": {
     "App": {
@@ -2669,8 +2674,8 @@
         "repoGroupBadge": "Repo group",
         "pluginCommandFailed": "Could not run the plugin command.",
         "recentChatsTerminalsHeader": "Recent Chats & Terminals",
-        "27f10cca63": "Search chats, terminals, workspaces, settings, and actions...",
-        "2770f02910": "Search chats, terminals, workspaces, settings, and actions",
+        "27f10cca63": "Search chats, terminals, workspaces, tasks, settings, and actions...",
+        "2770f02910": "Search chats, terminals, workspaces, tasks, settings, and actions",
         "lastActiveTime": "Last active {{value0}} ago"
       },
       "github": {
@@ -19235,6 +19240,15 @@
     },
     "agentChildRow": {
       "ended": "Ended"
+    },
+    "jiraIssueTitleField": {
+      "generate": "Generate title from description",
+      "stop": "Stop generating title",
+      "canceled": "Generation canceled.",
+      "webUnavailable": "Jira title generation is unavailable in the web client.",
+      "hostUpdateRequired": "Generating Jira titles requires a newer Orca server. Update the Jira connection’s host and try again.",
+      "generating": "Generating title. Click to stop.",
+      "failed": "Failed to generate a summary from the description."
     },
     "markdown-callout": {
       "note": "Note",
