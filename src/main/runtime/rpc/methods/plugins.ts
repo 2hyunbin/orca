@@ -1,4 +1,5 @@
 import { defineMethod, type RpcContext } from '../core'
+import { setEnvironmentProviderServiceForRpc } from './plugin-environment-provider-service'
 import type { PluginPanelEntry } from '../../../../shared/plugins/plugin-panel-bridge'
 import { listPluginsForClients } from '../../../plugins/plugin-client-list'
 import type { PluginListEntry } from '../../../plugins/plugin-list-projection'
@@ -37,6 +38,7 @@ export function setPluginServiceForRpc(
     applyEnablement: (pluginKey: string, enabled: boolean) => Promise<void>
   }
 ): void {
+  setEnvironmentProviderServiceForRpc(service?.environmentProviders ?? null)
   pluginServiceForRpc = service
   pluginConsentForRpc = writes?.applyConsent ?? null
   pluginEnablementForRpc = writes?.applyEnablement ?? null

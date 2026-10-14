@@ -10,6 +10,7 @@ import type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plug
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 import { PluginEnvironmentProviderIpcController } from './plugin-environment-providers'
+import { environmentProviderControllerForService } from '../plugins/plugin-environment-provider-controller'
 
 class Sender extends EventEmitter {
   constructor(readonly id: number) {
@@ -92,6 +93,30 @@ function harness() {
 }
 
 describe('provider IPC is bound to the trusted requesting renderer', () => {
+  it('shares the host operation budget with paired callers and keeps cancellation transport-owned', async () => {
+    const f = harness()
+    const core = environmentProviderControllerForService(f.service)
+    const peer = { key: 'runtime:paired-socket', signal: new AbortController().signal }
+    const desktop = new Sender(1)
+    const original = request()
+    const pending = [f.controller.execute(desktop, { review, request: original })]
+    await expect(core.execute(peer, { review, request: original })).rejects.toThrow(
+      'already in progress'
+    )
+    for (let index = 1; index < 8; index++) {
+      pending.push(core.execute(peer, { review, request: request() }))
+    }
+    await expect(core.execute(peer, { review, request: request() })).rejects.toThrow('Too many')
+    expect(core.cancel(peer.key, { operationId: original.operationId })).toBe(false)
+    expect(f.controller.cancel(desktop, { operationId: original.operationId })).toBe(true)
+    expect(f.signals[0]?.aborted).toBe(true)
+    expect(f.service.execute).toHaveBeenCalledTimes(8)
+    f.finish()
+    await Promise.all(pending)
+    await core.execute(peer, { review, request: request() })
+    expect(f.service.execute).toHaveBeenCalledTimes(9)
+    expect(desktop.listenerCount('did-start-navigation')).toBe(0)
+  })
   it('keeps saved history behind trusted sender and strict provider/generation parsing', async () => {
     const { service, controller } = harness()
     expect(() => controller.listSaved(new Sender(3))).toThrow('trusted')

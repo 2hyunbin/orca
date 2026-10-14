@@ -41,6 +41,7 @@ import { CLIENT_UI_METHODS } from './client-ui'
 import { CLIENT_EVENT_METHODS } from './client-events'
 import { WORKSPACE_PORT_METHODS } from './workspace-ports'
 import { PLUGIN_METHODS } from './plugins'
+import { PLUGIN_ENVIRONMENT_PROVIDER_METHODS } from './plugin-environment-providers'
 import { SKILL_METHODS } from './skills'
 import { CLIPBOARD_METHODS } from './clipboard'
 import { HOST_CAPABILITY_METHODS } from './host-capabilities'
@@ -115,6 +116,7 @@ export const ALL_RPC_METHODS = [
   ...SPEECH_METHODS,
   ...WORKSPACE_PORT_METHODS,
   ...PLUGIN_METHODS,
+  ...PLUGIN_ENVIRONMENT_PROVIDER_METHODS,
   ...SKILL_METHODS,
   ...CLIPBOARD_METHODS,
   ...HOST_CAPABILITY_METHODS,

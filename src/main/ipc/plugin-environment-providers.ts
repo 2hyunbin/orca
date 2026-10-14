@@ -1,25 +1,24 @@
+import { registerPluginRendererHandler } from './plugin-renderer-ipc'
+import { PluginEnvironmentProviderWindowOwners } from './plugin-environment-provider-window-owners'
+import type { PluginEnvironmentProviderService } from '../plugins/plugin-environment-provider-service'
+import {
+  environmentProviderControllerForService,
+  type PluginEnvironmentProviderOperations
+} from '../plugins/plugin-environment-provider-controller'
+import type { PluginEnvironmentProviderRequestOwner } from '../plugins/plugin-environment-provider-operation-owners'
+import { isTrustedBrowserRenderer } from './browser-renderer-trust'
+import { pluginEnvironmentProviderExecuteSchema } from '../../shared/plugins/plugin-environment-provider-api'
+import { pluginEnvironmentProviderRecoverSchema } from '../../shared/plugins/plugin-environment-provider-recovery-api'
 import {
   pluginEnvironmentProviderMigrationPrepareSchema,
   pluginEnvironmentProviderMigrationCommitSchema
 } from '../../shared/plugins/plugin-environment-provider-migration-api'
-import { pluginEnvironmentProviderHistorySchema } from '../../shared/plugins/plugin-environment-provider-history-api'
-import { pluginEnvironmentProviderSavedHistorySchema } from '../../shared/plugins/plugin-environment-provider-saved-history-api'
-import { pluginEnvironmentProviderRecoverSchema } from '../../shared/plugins/plugin-environment-provider-recovery-api'
-import { registerPluginRendererHandler } from './plugin-renderer-ipc'
-import {
-  pluginEnvironmentProviderCancelSchema,
-  pluginEnvironmentProviderExecuteSchema,
-  pluginEnvironmentProviderReviewSchema
-} from '../../shared/plugins/plugin-environment-provider-api'
-import { PluginEnvironmentProviderWindowOwners } from './plugin-environment-provider-window-owners'
 import {
   pluginEnvironmentProviderSshPrepareSchema,
   pluginEnvironmentProviderSshSaveSchema,
-  pluginEnvironmentProviderSshDiscardSchema
+  pluginEnvironmentProviderSshDiscardSchema,
+  type EnvironmentProviderSshPreview
 } from '../../shared/plugins/plugin-environment-provider-ssh-api'
-import type { PluginEnvironmentProviderService } from '../plugins/plugin-environment-provider-service'
-import { isTrustedBrowserRenderer } from './browser-renderer-trust'
-
 type NavigationDetails = Pick<
   Electron.WebContentsDidStartNavigationEventParams,
   'isMainFrame' | 'isSameDocument'
@@ -35,36 +34,19 @@ export type PluginEnvironmentProviderSender = Pick<
     listener: (() => void) | ((details: NavigationDetails) => void)
   ): void
 }
-type Owner = { controller: AbortController; senderId: number }
-type ProviderOperations = Pick<
-  PluginEnvironmentProviderService,
-  'list' | 'configure' | 'snapshot' | 'execute'
-> & {
-  ssh?: Pick<
-    PluginEnvironmentProviderService['ssh'],
-    'prepare' | 'save' | 'revokeOwner' | 'discard'
-  >
-  recover?: PluginEnvironmentProviderService['recover']
-  prepareMigration?: PluginEnvironmentProviderService['prepareMigration']
-  commitMigration?: PluginEnvironmentProviderService['commitMigration']
-  revokeMigrationOwner?: PluginEnvironmentProviderService['revokeMigrationOwner']
-  previousSnapshot?: PluginEnvironmentProviderService['previousSnapshot']
-  listSaved?: PluginEnvironmentProviderService['listSaved']
-  savedSnapshot?: PluginEnvironmentProviderService['savedSnapshot']
-}
-
 export class PluginEnvironmentProviderIpcController {
-  private readonly operations = new Map<string, Owner>()
-  private readonly windows = new PluginEnvironmentProviderWindowOwners((key) => {
-    this.service.ssh?.revokeOwner(key)
-    this.service.revokeMigrationOwner?.(key)
-  })
+  private readonly controller
+  private readonly windows = new PluginEnvironmentProviderWindowOwners((key) =>
+    this.controller.revokeOwner(key)
+  )
   constructor(
-    private readonly service: ProviderOperations,
+    service: PluginEnvironmentProviderOperations,
     private readonly isTrusted: (
       sender: PluginEnvironmentProviderSender
     ) => boolean = isTrustedBrowserRenderer
-  ) {}
+  ) {
+    this.controller = environmentProviderControllerForService(service)
+  }
 
   private requireTrusted(sender: PluginEnvironmentProviderSender): void {
     if (!this.isTrusted(sender)) {
@@ -73,150 +55,108 @@ export class PluginEnvironmentProviderIpcController {
   }
   list(sender: PluginEnvironmentProviderSender) {
     this.requireTrusted(sender)
-    return this.service.list()
+    return this.controller.list()
   }
   listSaved(sender: PluginEnvironmentProviderSender) {
     this.requireTrusted(sender)
-    if (!this.service.listSaved) {
-      throw new Error('Saved provider history is unavailable')
-    }
-    return this.service.listSaved()
+    return this.controller.listSaved()
   }
   savedSnapshot(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    if (!this.service.savedSnapshot) {
-      throw new Error('Saved provider history is unavailable')
-    }
-    return this.service.savedSnapshot(pluginEnvironmentProviderSavedHistorySchema.parse(input))
+    return this.controller.savedSnapshot(input)
   }
   configure(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    return this.service.configure(pluginEnvironmentProviderReviewSchema.parse(input))
+    return this.controller.configure(input)
   }
   snapshot(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    return this.service.snapshot(pluginEnvironmentProviderReviewSchema.parse(input))
-  }
-  async execute(sender: PluginEnvironmentProviderSender, input: unknown) {
-    this.requireTrusted(sender)
-    const { review, request } = pluginEnvironmentProviderExecuteSchema.parse(input)
-    return this.runOwned(sender, request.operationId, (signal) =>
-      this.service.execute(review, request, signal)
-    )
-  }
-  prepareMigration(sender: PluginEnvironmentProviderSender, input: unknown) {
-    this.requireTrusted(sender)
-    const request = pluginEnvironmentProviderMigrationPrepareSchema.parse(input)
-    const prepare = this.service.prepareMigration?.bind(this.service)
-    if (!prepare) {
-      throw new Error('Provider migration is unavailable')
-    }
-    const ownerKey = this.windows.ownerKey(sender)
-    return this.runOwned(sender, request.queryId, (signal) => prepare(ownerKey, request, signal))
-  }
-  commitMigration(sender: PluginEnvironmentProviderSender, input: unknown) {
-    this.requireTrusted(sender)
-    const request = pluginEnvironmentProviderMigrationCommitSchema.parse(input)
-    const commit = this.service.commitMigration?.bind(this.service)
-    if (!commit) {
-      throw new Error('Provider migration is unavailable')
-    }
-    return commit(this.windows.ownerKey(sender), request)
+    return this.controller.snapshot(input)
   }
   previousSnapshot(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    const request = pluginEnvironmentProviderHistorySchema.parse(input)
-    if (!this.service.previousSnapshot) {
-      throw new Error('Provider history is unavailable')
-    }
-    return this.service.previousSnapshot(request)
+    return this.controller.previousSnapshot(input)
+  }
+  async execute(sender: PluginEnvironmentProviderSender, input: unknown) {
+    this.requireTrusted(sender)
+    const request = pluginEnvironmentProviderExecuteSchema.parse(input)
+    return this.runOwned(sender, (owner) => this.controller.execute(owner, request))
   }
   recover(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
     const request = pluginEnvironmentProviderRecoverSchema.parse(input)
-    const recover = this.service.recover?.bind(this.service)
-    if (!recover) {
-      throw new Error('Provider receipt inspection is unavailable')
-    }
-    return this.runOwned(sender, request.queryId, (signal) => recover(request, signal))
+    return this.runOwned(sender, (owner) => this.controller.recover(owner, request))
   }
-  prepareSsh(sender: PluginEnvironmentProviderSender, input: unknown) {
+  prepareMigration(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    const { operationId, review, resourceId, expectedRevision } =
-      pluginEnvironmentProviderSshPrepareSchema.parse(input)
-    const ssh = this.service.ssh
-    if (!ssh) {
-      throw new Error('Provider SSH management is unavailable')
-    }
-    const ownerKey = this.windows.ownerKey(sender)
-    return this.runOwned(sender, operationId, async (signal) => {
-      const preview = await ssh.prepare(ownerKey, review, resourceId, expectedRevision, signal)
-      if (signal.aborted) {
-        ssh.revokeOwner(ownerKey)
-        throw new Error('The SSH connection review was cancelled')
-      }
-      return preview
-    })
+    const request = pluginEnvironmentProviderMigrationPrepareSchema.parse(input)
+    return this.runOwned(sender, (owner) => this.controller.prepareMigration(owner, request), true)
+  }
+  prepareSsh(
+    sender: PluginEnvironmentProviderSender,
+    input: unknown
+  ): Promise<EnvironmentProviderSshPreview> {
+    this.requireTrusted(sender)
+    const request = pluginEnvironmentProviderSshPrepareSchema.parse(input)
+    return this.runOwned(sender, (owner) => this.controller.prepareSsh(owner, request), true)
+  }
+  commitMigration(sender: PluginEnvironmentProviderSender, input: unknown) {
+    this.requireTrusted(sender)
+    const request = pluginEnvironmentProviderMigrationCommitSchema.parse(input)
+    return this.controller.commitMigration(
+      { key: this.windows.ownerKey(sender), signal: new AbortController().signal },
+      request
+    )
   }
   saveSsh(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    const { ticketId, identityFile, approveEndpointUpdate } =
-      pluginEnvironmentProviderSshSaveSchema.parse(input)
-    const ssh = this.service.ssh
-    if (!ssh) {
-      throw new Error('Provider SSH management is unavailable')
-    }
-    return ssh.save(this.windows.ownerKey(sender), ticketId, identityFile, approveEndpointUpdate)
+    const request = pluginEnvironmentProviderSshSaveSchema.parse(input)
+    return this.controller.saveSsh(
+      { key: this.windows.ownerKey(sender), signal: new AbortController().signal },
+      request
+    )
   }
-  discardSsh(sender: PluginEnvironmentProviderSender, input: unknown): boolean {
+  discardSsh(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    const { ticketId } = pluginEnvironmentProviderSshDiscardSchema.parse(input)
-    return this.service.ssh?.discard(this.windows.ownerKey(sender), ticketId) ?? false
+    const request = pluginEnvironmentProviderSshDiscardSchema.parse(input)
+    return this.controller.discardSsh(
+      { key: this.windows.ownerKey(sender), signal: new AbortController().signal },
+      request
+    )
+  }
+  cancel(sender: PluginEnvironmentProviderSender, input: unknown): boolean {
+    this.requireTrusted(sender)
+    return this.controller.cancel(`window:${sender.id}`, input)
   }
   private async runOwned<T>(
     sender: PluginEnvironmentProviderSender,
-    operationId: string,
-    run: (signal: AbortSignal) => Promise<T>
+    run: (owner: PluginEnvironmentProviderRequestOwner) => Promise<T>,
+    review = false
   ): Promise<T> {
-    if (this.operations.has(operationId)) {
-      throw new Error('This environment operation is already in progress')
+    if (sender.isDestroyed()) {
+      throw new Error('The app window is no longer available')
     }
-    if (this.operations.size >= 8) {
-      throw new Error('Too many environment operations are running on this host')
-    }
-    const owner = { controller: new AbortController(), senderId: sender.id }
-    this.operations.set(operationId, owner)
-    const onGone = (): void => {
-      owner.controller.abort()
-    }
+    const controller = new AbortController()
+    const onGone = (): void => controller.abort()
     const onNavigate = (details: NavigationDetails): void => {
       if (details.isMainFrame && !details.isSameDocument) {
-        owner.controller.abort()
+        controller.abort()
       }
     }
     sender.once('destroyed', onGone)
     sender.once('render-process-gone', onGone)
     sender.on('did-start-navigation', onNavigate)
     try {
-      return await run(owner.controller.signal)
+      return await run({
+        key: `window:${sender.id}`,
+        signal: controller.signal,
+        ...(review ? { reviewKey: this.windows.ownerKey(sender) } : {})
+      })
     } finally {
       sender.removeListener('destroyed', onGone)
       sender.removeListener('render-process-gone', onGone)
       sender.removeListener('did-start-navigation', onNavigate)
-      if (this.operations.get(operationId) === owner) {
-        this.operations.delete(operationId)
-      }
     }
-  }
-  cancel(sender: PluginEnvironmentProviderSender, input: unknown): boolean {
-    this.requireTrusted(sender)
-    const { operationId } = pluginEnvironmentProviderCancelSchema.parse(input)
-    const owner = this.operations.get(operationId)
-    if (!owner || owner.senderId !== sender.id) {
-      return false
-    }
-    owner.controller.abort()
-    return true
   }
 }
 

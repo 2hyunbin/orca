@@ -30,6 +30,22 @@ import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration-scr
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
 import {
+  pluginEnvironmentProviderRuntimeCancelSchema,
+  pluginEnvironmentProviderRuntimeCommitMigrationSchema,
+  pluginEnvironmentProviderRuntimeConfigureSchema,
+  pluginEnvironmentProviderRuntimeDiscardSshSchema,
+  pluginEnvironmentProviderRuntimeExecuteSchema,
+  pluginEnvironmentProviderRuntimeListSavedSchema,
+  pluginEnvironmentProviderRuntimeListSchema,
+  pluginEnvironmentProviderRuntimePrepareMigrationSchema,
+  pluginEnvironmentProviderRuntimePrepareSshSchema,
+  pluginEnvironmentProviderRuntimePreviousSnapshotSchema,
+  pluginEnvironmentProviderRuntimeRecoverSchema,
+  pluginEnvironmentProviderRuntimeSaveSshSchema,
+  pluginEnvironmentProviderRuntimeSavedSnapshotSchema,
+  pluginEnvironmentProviderRuntimeSnapshotSchema
+} from '../plugins/plugin-environment-provider-runtime-api'
+import {
   pluginViewerRuntimeLeaseSchema,
   pluginViewerRuntimeOpenSchema,
   pluginViewerRuntimeReadSchema,
@@ -1133,6 +1149,20 @@ export const RPC_PARAMS_BY_METHOD = {
   'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,
   'plugins.consent': pluginConsentRequestSchema,
+  'plugins.environments.cancel': pluginEnvironmentProviderRuntimeCancelSchema,
+  'plugins.environments.commitMigration': pluginEnvironmentProviderRuntimeCommitMigrationSchema,
+  'plugins.environments.configure': pluginEnvironmentProviderRuntimeConfigureSchema,
+  'plugins.environments.discardSsh': pluginEnvironmentProviderRuntimeDiscardSshSchema,
+  'plugins.environments.execute': pluginEnvironmentProviderRuntimeExecuteSchema,
+  'plugins.environments.list': pluginEnvironmentProviderRuntimeListSchema,
+  'plugins.environments.listSaved': pluginEnvironmentProviderRuntimeListSavedSchema,
+  'plugins.environments.prepareMigration': pluginEnvironmentProviderRuntimePrepareMigrationSchema,
+  'plugins.environments.prepareSsh': pluginEnvironmentProviderRuntimePrepareSshSchema,
+  'plugins.environments.previousSnapshot': pluginEnvironmentProviderRuntimePreviousSnapshotSchema,
+  'plugins.environments.recover': pluginEnvironmentProviderRuntimeRecoverSchema,
+  'plugins.environments.saveSsh': pluginEnvironmentProviderRuntimeSaveSshSchema,
+  'plugins.environments.savedSnapshot': pluginEnvironmentProviderRuntimeSavedSnapshotSchema,
+  'plugins.environments.snapshot': pluginEnvironmentProviderRuntimeSnapshotSchema,
   'plugins.invokeCommand': PluginInvokeCommandParams,
   'plugins.list': null,
   'plugins.panelAction': PluginsPanelActionParams,

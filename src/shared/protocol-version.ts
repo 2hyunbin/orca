@@ -1,9 +1,16 @@
+import {
+  SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY,
+  AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
+  WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
+  WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY,
+  WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
+  REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY
+} from './native-runtime-client-capabilities'
+export * from './native-runtime-client-capabilities'
+import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from './plugins/plugin-environment-provider-runtime-capability'
 import { WORKSPACE_ATTACHMENT_RUNTIME_CAPABILITIES } from './workspace-attachment-capabilities'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from './ssh-target-management'
-import {
-  AUTOMATION_RUNTIME_CAPABILITIES,
-  AUTOMATION_RUNTIME_CLIENT_CAPABILITIES
-} from './automation-runtime-capabilities'
+import { AUTOMATION_RUNTIME_CAPABILITIES } from './automation-runtime-capabilities'
 export {
   AUTOMATION_LIST_HOST_SCOPE_RUNTIME_CAPABILITY,
   AUTOMATION_LIST_HOST_SCOPE_UPDATE_REQUIRED_MESSAGE,
@@ -57,10 +64,7 @@ import { AGENT_SESSION_STOP_RUNTIME_CAPABILITIES } from './agent-session-stop-ca
 import { AGENT_SESSION_CREATE_RUNTIME_CAPABILITIES } from './agent-session-create-capabilities'
 import { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
 import { SKILL_RUNTIME_CAPABILITIES } from './skill-install-capability'
-import {
-  AGENT_LAUNCH_RUNTIME_CAPABILITIES,
-  AGENT_LAUNCH_RUNTIME_CAPABILITY
-} from './agent-launch-runtime-capability'
+import { AGENT_LAUNCH_RUNTIME_CAPABILITIES } from './agent-launch-runtime-capability'
 
 // Why: declares the Orca runtime RPC compatibility contract. Desktop,
 // headless server, CLI, and mobile builds may drift in app version, but
@@ -91,11 +95,7 @@ export const WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY = 'workspace-run-context.v
 export const WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY = 'worktree.provisioned-root.v1' as const
 export const WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY =
   'worktree.linked-work-item-context.v1' as const
-export const WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY =
-  'worktree.github-pr-suppression.v1' as const
 // Legacy clients cannot safely derive a branch name from a qualified ref selector.
-export const REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY =
-  'repo.search-qualified-refs.v1' as const
 export const REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY = 'remote-runtime.shared-control.v1' as const
 export const FOLDER_WORKSPACE_PATH_STATUS_RUNTIME_CAPABILITY =
   'folder-workspace.path-status.v1' as const
@@ -182,7 +182,6 @@ export const TERMINAL_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY =
 // shell must refuse rather than create the wrong one.
 export const TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY =
   'terminal.create-shell-selection.v1' as const
-export const SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY = 'session-tabs.close-intent.v1' as const
 export const SESSION_TABS_AUTHORITATIVE_INVENTORY_RUNTIME_CAPABILITY =
   'session-tabs.authoritative-inventory.v1' as const
 // Why: this proves both headed and runtime-owned host paths place after a complete split parent.
@@ -194,8 +193,6 @@ export const SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY =
 // repeating the host's whole bounded list on every title tick.
 export const SESSION_TABS_RETIREMENT_PROOF_DELTA_RUNTIME_CAPABILITY =
   'session-tabs.retirement-proof-delta.v1' as const
-export const AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY =
-  'agent-session.session-boundary.v1' as const
 export { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
 export * from './agent-session-stop-capabilities'
 export const AGENT_SESSION_HOST_AUTHORITY_RUNTIME_CAPABILITY =
@@ -313,10 +310,6 @@ export const GITLAB_READY_FOR_REVIEW_RUNTIME_CAPABILITY =
   'gitlab.updateMR.readyForReview.v1' as const
 export const GITLAB_READY_FOR_REVIEW_UPDATE_REQUIRED_MESSAGE =
   'Marking a merge request ready requires a newer Orca server. Update the server and try again.'
-export const WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY =
-  'worktree.visibility-defaults.v1' as const
-export const WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY =
-  'worktree.visibility-source-defaults.v1' as const
 // Why: Git's checkout delete outlives worktree.rm's older client timeouts. A client with this waits
 // for the reply and shows `removing` rows as Deleting; one without it is answered on acceptance and
 // would re-show that row as a normal workspace, so the host leaves such rows out of its listings.
@@ -342,23 +335,11 @@ export const RUNTIME_SOURCE_FENCE_RUNTIME_CAPABILITY = 'runtime-source-fence.v1'
 // Hosts without this capability have no notifications.registerPush RPC.
 export const NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY = 'notifications.remote-push.v1' as const
 
-// Generic native clients include the CLI and must not claim Electron-only page
-// placement support.
-export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
-  SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY,
-  AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY,
-  WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
-  REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY,
-  ...AUTOMATION_RUNTIME_CLIENT_CAPABILITIES,
-  AGENT_LAUNCH_RUNTIME_CAPABILITY
-] as const
-
 export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const
 
 export const RUNTIME_CAPABILITIES = [
+  PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY,
   PLUGIN_VIEWER_RUNTIME_DOCUMENT_CAPABILITY,
   PLUGIN_VIEWER_RUNTIME_SELECTION_CAPABILITY,
   ...ORCAD_RUNTIME_CAPABILITIES,

@@ -1,3 +1,5 @@
+import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-environment-provider-runtime-capability'
+import { environmentProviderRpcAvailable } from './rpc/methods/plugin-environment-provider-service'
 import { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
 import type { RuntimeDegradation, RuntimeStatus } from '../../shared/runtime-types'
 import {
@@ -69,6 +71,7 @@ function supportsDurableTerminalPromptDelivery(): boolean {
 
 export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
   private asRuntimeStatusHost(): RuntimeStatusHost {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The final runtime's mixin chain supplies the authoritative-window and terminal-sleep methods.
     return this as unknown as RuntimeStatusHost
   }
 
@@ -92,6 +95,8 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
       process.platform === 'win32' && isWindowsProcessStartTimeAvailable()
     const capabilities: RuntimeCapability[] = RUNTIME_CAPABILITIES.filter(
       (capability) =>
+        (capability !== PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY ||
+          environmentProviderRpcAvailable()) &&
         (capability !== 'browser.screencast.v1' || canBrowse) &&
         (capability !== BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY || canHostClientPages) &&
         (capability !== BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY ||
