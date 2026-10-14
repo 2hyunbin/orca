@@ -6,6 +6,7 @@ import { buildRuntimeAgentTeamsLaunchPlan } from './terminal/launch/agent-teams-
 import { createPtySpawnCommitReporter } from './orca-runtime-report-pty-spawn-commit'
 import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
 import { agentLaunchTokenFor } from '../agent-launch/agent-launch-token'
+import { takeMigratedPaneRestoreCwd } from './migrated-pane-restore-cwd'
 
 export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   async createTerminal(
@@ -32,8 +33,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector, created)
       const launchOpts = await this.resolveAgentTerminalCreateOptions(workspace, opts)
       const reportPtySpawnCommitted = createPtySpawnCommitReporter(launchOpts.onPtySpawnCommitted)
-      const cwd =
-        this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
+      let cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
       const session = this.getWorkspaceSessionForWorktree(workspace.id)
       // The window's latest published active group is where its reveal places the tab.
       const groupId =
@@ -54,6 +54,9 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
+      // A pane moved from another host reopens where it last was, once.
+      cwd =
+        (await takeMigratedPaneRestoreCwd(this.store, workspace, paneKey, launchOpts.cwd)) ?? cwd
       const claimedStablePaneCreate = this.ptyController.claimStablePaneCreate?.({
         worktreeId: workspace.id,
         connectionId: workspace.connectionId,

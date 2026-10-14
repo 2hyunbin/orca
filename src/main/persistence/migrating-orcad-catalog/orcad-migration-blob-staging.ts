@@ -41,10 +41,12 @@ import {
 const RECEIVED_DIRECTORY = 'received'
 const STAGED_BLOB_NAME = /^([^.]+)\.([a-f0-9]{64})\.([1-9][0-9]*)\.part$/
 
+type OrcadMigrationBlobName = Pick<OrcadMigrationBlobDescriptor, 'blobKind' | 'key'>
+
 type ReceivedBlobPathResolver = (
   root: string,
-  manifest: OrcadMigrationManifest,
-  descriptor: OrcadMigrationBlobDescriptor
+  manifest: OrcadMigrationRequestIdentity,
+  descriptor: OrcadMigrationBlobName
 ) => string
 
 const receivedDirectoryPath: ReceivedBlobPathResolver = (root, manifest, descriptor) =>
@@ -59,8 +61,8 @@ const RECEIVED_BLOB_DESTINATIONS: Record<OrcadMigrationBlobKind, ReceivedBlobPat
 
 export function getOrcadMigrationReceivedBlobPath(
   root: string,
-  manifest: OrcadMigrationManifest,
-  descriptor: OrcadMigrationBlobDescriptor
+  manifest: OrcadMigrationRequestIdentity,
+  descriptor: OrcadMigrationBlobName
 ): string {
   return RECEIVED_BLOB_DESTINATIONS[descriptor.blobKind](root, manifest, descriptor)
 }
@@ -151,9 +153,19 @@ export function assertOrcadMigrationBlobsReady(
 }
 
 /**
- * The caller must run `assertOrcadMigrationBlobsReady` first, in the same synchronous turn: that
- * pass hashes every staged file, and no chunk can land between it and these links.
+ * Each still-staged blob's verified file; one an earlier attempt already moved was checked then.
+ * Only meaningful after `assertOrcadMigrationBlobsReady` in the same synchronous turn.
  */
+export function stagedOrcadMigrationBlobFiles(
+  manifest: OrcadMigrationManifest,
+  root: string
+): { descriptor: OrcadMigrationBlobDescriptor; path: string }[] {
+  return stagedBlobDescriptors(root, manifest).map((descriptor) => ({
+    descriptor,
+    path: stagedBlobPath(root, manifest, descriptor)
+  }))
+}
+
 /**
  * Refuses commit unless the staged and already-received blobs are exactly the set the sender
  * moved, so a blob lost on the way (or left from another capture) fails instead of vanishing.
@@ -189,6 +201,10 @@ export function assertOrcadMigrationBlobSetMatches(
   }
 }
 
+/**
+ * The caller must run `assertOrcadMigrationBlobsReady` first, in the same synchronous turn: that
+ * pass hashes every staged file, and no chunk can land between it and these links.
+ */
 export function commitOrcadMigrationBlobs(manifest: OrcadMigrationManifest, root: string): void {
   const directories = new Set<string>()
   for (const descriptor of stagedBlobDescriptors(root, manifest)) {
@@ -288,7 +304,7 @@ function inspectReceivedBlob(
   )
 }
 
-function receivedBlobsDirectory(root: string, manifest: OrcadMigrationManifest): string {
+function receivedBlobsDirectory(root: string, manifest: OrcadMigrationRequestIdentity): string {
   return join(root, RECEIVED_DIRECTORY, orcadMigrationStagingKey(manifest))
 }
 

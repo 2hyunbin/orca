@@ -10,7 +10,7 @@ type OrcadMigrationCatalogFlushStore = Partial<Pick<Store, 'flushPendingOrThrowA
 type OrcadMigrationCatalogStageStore = OrcadMigrationCatalogFlushStore &
   Partial<Pick<Store, 'stageOrcadMigrationCatalog'>>
 type OrcadMigrationCatalogCommitStore = OrcadMigrationCatalogFlushStore &
-  Partial<Pick<Store, 'commitStagedOrcadMigrationCatalog'>>
+  Partial<Pick<Store, 'commitStagedOrcadMigrationCatalog' | 'installOrcadMigrationReceivedBlobs'>>
 type OrcadMigrationCatalogAbortStore = OrcadMigrationCatalogFlushStore &
   Partial<Pick<Store, 'abortStagedOrcadMigrationCatalog'>>
 
@@ -39,7 +39,21 @@ export async function commitStagedOrcadMigrationCatalogDurably(args: {
   )
   await flushMigrationState(args.store, args.signal)
   args.onDurableCommit()
+  installReceivedBlobs(args.store, args.manifest)
   return result
+}
+
+/** After the durable commit, and on every retry of it, so a crash mid-install is finished later. */
+function installReceivedBlobs(
+  store: OrcadMigrationCatalogCommitStore,
+  manifest: OrcadMigrationManifest
+): void {
+  try {
+    store.installOrcadMigrationReceivedBlobs?.(manifest)
+  } catch (error) {
+    // The catalog is committed; a blob kept by a failed install is retried with the next commit.
+    console.error('[orcad-migration] installing received blobs failed:', error)
+  }
 }
 
 export async function abortStagedOrcadMigrationCatalogDurably(args: {

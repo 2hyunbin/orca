@@ -256,8 +256,10 @@ export function parseOrcadMigrationBlobChunkResult(
   }
 }
 
-/** Kinds this build's destination installs after commit; 6b/6c add theirs with their installers. */
-export const ORCAD_MIGRATION_INSTALLABLE_BLOB_KINDS: readonly OrcadMigrationBlobKind[] = []
+/** Kinds this build's destination installs after commit; each is added with its installer. */
+export const ORCAD_MIGRATION_INSTALLABLE_BLOB_KINDS: readonly OrcadMigrationBlobKind[] = [
+  'terminal-restore-hints'
+]
 
 export function advertisedOrcadMigrationBlobCapabilities(): string[] {
   return [

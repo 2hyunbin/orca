@@ -49,6 +49,7 @@ import {
   pruneOrcadMigrationBlobStaging,
   stageOrcadMigrationBlobChunk
 } from './orcad-migration-blob-staging'
+import { assertOrcadMigrationBlobContentsValid } from './orcad-migration-blob-installers'
 
 type OrcadCatalogImportRuntime = Pick<
   StoreRuntimeState,
@@ -168,6 +169,7 @@ export class OrcadCatalogImportPersistence {
       )
     }
     assertOrcadMigrationBlobsReady(manifest, context.runtime.orcadMigrationBlobRoot)
+    assertOrcadMigrationBlobContentsValid(manifest, context.runtime.orcadMigrationBlobRoot)
     commitOrcadMigrationSnapshots(manifest, context.runtime.terminalScrollbackSnapshotStorage)
     commitOrcadMigrationBlobs(manifest, context.runtime.orcadMigrationBlobRoot)
     const receipt = commitPreparedCatalog(context, manifest, prepared, options.now)

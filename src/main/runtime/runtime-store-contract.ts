@@ -61,6 +61,8 @@ export type RuntimeStore = {
   stageOrcadMigrationBlobChunk?: Store['stageOrcadMigrationBlobChunk']
   abortStagedOrcadMigrationCatalog?: Store['abortStagedOrcadMigrationCatalog']
   getOrcadMigrationCatalogState?: Store['getOrcadMigrationCatalogState']
+  installOrcadMigrationReceivedBlobs?: Store['installOrcadMigrationReceivedBlobs']
+  takeOrcadMigrationTerminalRestoreHint?: Store['takeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']
   admitTerminalPane?: Store['admitTerminalPane']
   withdrawTerminalPane?: Store['withdrawTerminalPane']

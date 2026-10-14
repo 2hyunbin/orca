@@ -121,9 +121,10 @@ describe('orcad migration blob contract', () => {
     )
   })
 
-  it('advertises only the channel until a kind has an installer', () => {
+  it('advertises the channel and only the kinds that have an installer', () => {
     expect(advertisedOrcadMigrationBlobCapabilities()).toEqual([
-      ORCAD_MIGRATION_BLOB_CHANNEL_RUNTIME_CAPABILITY
+      ORCAD_MIGRATION_BLOB_CHANNEL_RUNTIME_CAPABILITY,
+      'orcad.migration-blob.terminal-restore-hints.v1'
     ])
   })
 
