@@ -1,5 +1,5 @@
 import type { SectionRepo } from '../worktree/workspace-list-types'
-import { sectionRepoColor } from '../worktree/use-workspace-sections'
+import { sectionRepoColor } from '../worktree/workspace-filter-repos'
 import { readMobileRepoIcon, type MobileHostRepoIcon } from './host-screen-reply-schema'
 
 /** The colour and icon a repo's header and rows draw. */

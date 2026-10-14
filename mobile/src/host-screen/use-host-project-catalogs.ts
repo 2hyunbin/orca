@@ -5,6 +5,7 @@ import {
   type HostProjectCatalog
 } from '../../../src/shared/all-host-project-catalog'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { structuralValuesEqual } from '../../../src/shared/structural-value-equality'
 import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
 import { reachableServerClients } from '../transport/execution-host-scoped-rpc-client'
 import type { RpcClient } from '../transport/rpc-client'
@@ -18,8 +19,7 @@ const PROJECT_CATALOG_REFRESH_MS = 60_000
 
 type CatalogsByHost = ReadonlyMap<ExecutionHostId, HostProjectCatalog>
 
-// Why: a remount must not regroup rows under fallback keys until the next answer; the keys are
-// what collapsed state is stored under.
+// Why: a remount must not regroup rows under fallback keys; collapsed state is stored by key.
 const lastCatalogsByDesktop = new Map<string, CatalogsByHost>()
 const NO_CATALOGS: CatalogsByHost = new Map()
 
@@ -73,7 +73,7 @@ export function useHostProjectCatalogs(args: {
       }
       setHeld((previous) => {
         const base = previous.hostId === hostId ? previous.catalogs : cachedCatalogs(hostId)
-        if (JSON.stringify(base.get(catalog.hostId)) === JSON.stringify(catalog)) {
+        if (structuralValuesEqual(base.get(catalog.hostId), catalog)) {
           return previous.hostId === hostId ? previous : { hostId, catalogs: base }
         }
         return { hostId, catalogs: new Map(base).set(catalog.hostId, catalog) }

@@ -1,15 +1,9 @@
 // Labels and order of the desktop sidebar's project sections, shared so the paired phone matches.
-import {
-  addItemToProjectSection,
-  ensureProjectSectionForRepo,
-  type ProjectGroupingIndex,
-  type ProjectSectionEntry,
-  type ProjectSectionRepo
-} from './project-section-grouping'
+import type { ProjectSectionEntry, ProjectSectionRepo } from './project-section-grouping'
 import { getRepoDisplayLabelKey, getRepoDisplayLabelsByPath } from './repo-display-labels'
 import type { ProjectOrderBy } from './ui-chrome-types'
 
-type ActivityItem = { lastActivityAt?: number }
+export type ActivityItem = { lastActivityAt?: number }
 
 // Why: disambiguate a section's *own* label, not its anchor checkout's repo
 // name. Substituting repo.displayName made a project header read the project
@@ -191,33 +185,17 @@ export function orderProjectSections<
   return sortProjectEntries(Array.from(sections.entries()), projectOrderBy, repoOrder)
 }
 
-/**
- * The labelled, ordered project sections for rows and for empty-project placeholders: the steps
- * the desktop sidebar's buildRows takes under Group by Project, for a client with no pending,
- * imported or inbox rows to file.
- */
-export function buildProjectSections<
-  Item extends ActivityItem,
-  R extends ProjectSectionRepo
->(args: {
-  items: readonly Item[]
-  repoIdOf: (item: Item) => string
-  placeholderRepoIds: Iterable<string>
-  repoMap: ReadonlyMap<string, R>
-  projectIndex: ProjectGroupingIndex | null
-  repoOrder: ReadonlyMap<string, number> | undefined
-  projectOrderBy: ProjectOrderBy
-}): [string, ProjectSectionEntry<Item, R>][] {
-  const sections = new Map<string, ProjectSectionEntry<Item, R>>()
-  for (const item of args.items) {
-    addItemToProjectSection(sections, item, args.repoIdOf(item), args.repoMap, args.projectIndex)
-  }
-  for (const repoId of args.placeholderRepoIds) {
-    ensureProjectSectionForRepo(sections, repoId, args.repoMap, args.projectIndex, {
-      requireRepo: true
-    })
-  }
-  return withRepoSectionDisplayLabels(
-    orderProjectSections(sections, args.repoMap, args.repoOrder, args.projectOrderBy)
-  )
+/** Each repo id's rank in catalog order; the first occurrence wins across hosts. */
+export function getLogicalRepoOrderRankById(
+  orderedRepoIds: readonly string[]
+): Map<string, number> {
+  const rankById = new Map<string, number>()
+  orderedRepoIds.forEach((repoId, index) => {
+    // Why: paired hosts can contribute the same logical project ID; its merged
+    // header must anchor to the first occurrence instead of whichever host loaded last.
+    if (!rankById.has(repoId)) {
+      rankById.set(repoId, index)
+    }
+  })
+  return rankById
 }

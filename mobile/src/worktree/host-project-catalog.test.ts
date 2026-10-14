@@ -67,7 +67,7 @@ function sectionKeys(rows: Worktree[], catalog: ReturnType<typeof foldHostProjec
     '',
     'repo',
     new Set(),
-    { repos: catalog.repos, grouping: catalog.grouping, projectOrderBy: 'manual' }
+    { ...catalog, repoOrder: undefined, projectOrderBy: 'manual' }
   ).map((section) => ({ key: section.key, title: section.title }))
 }
 
@@ -111,6 +111,16 @@ describe('fetchHostProjectCatalog', () => {
     expect(
       catalog?.projection.setups.map((setup) => [setup.hostId, setup.runtimeOwnerEnvironmentId])
     ).toEqual([['runtime:m4air', 'm4air']])
+  })
+
+  it('answers null on a transient project-list failure instead of regrouping on a guess', async () => {
+    const { client } = hostAnswering({
+      'repo.list': { result: { repos: localRepos } },
+      'project.list': { error: 'timeout' },
+      'projectHostSetup.list': { error: 'method_not_found' }
+    })
+
+    await expect(fetchHostProjectCatalog(client, 'local')).resolves.toBeNull()
   })
 
   it('answers null when the repos do not answer, so the caller keeps its last catalog', async () => {

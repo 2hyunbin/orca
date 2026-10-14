@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFilterRepos } from './use-workspace-sections'
+import { buildFilterRepos } from './workspace-filter-repos'
 import { filterWorktrees, type Worktree } from './workspace-list-sections'
 
 function row(worktreeId: string, repoId: string, hostId: Worktree['hostId']): Worktree {

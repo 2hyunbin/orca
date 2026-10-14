@@ -6,11 +6,11 @@ import {
   type ProjectHostSetupProjection
 } from './project-host-setup-projection'
 
-export type NormalizedProjectHostSetupProjection = ProjectHostSetupProjection & {
+type NormalizedProjectHostSetupProjection = ProjectHostSetupProjection & {
   changed: boolean
 }
 
-export function normalizeHydratedProjectHostSetupProjection(
+function normalizeHydratedProjectHostSetupProjection(
   repos: readonly Repo[],
   projects: readonly Project[],
   setups: readonly ProjectHostSetup[],
@@ -52,7 +52,7 @@ export function normalizeHydratedProjectHostSetupProjection(
 }
 
 /** `overlay` rows replace `base` rows of the same id; new ids append in overlay order. */
-export function mergeProjectionRowsById<T extends { id: string }>(
+function mergeProjectionRowsById<T extends { id: string }>(
   base: readonly T[],
   overlay: readonly T[]
 ): T[] {
@@ -71,7 +71,7 @@ export function mergeProjectionRowsById<T extends { id: string }>(
 }
 
 /** Whether some repo has no host setup naming it, by setup repo id or setup id. */
-export function hasReposWithoutProjectHostSetup(
+function hasReposWithoutProjectHostSetup(
   repos: readonly Pick<Repo, 'id'>[],
   setups: readonly ProjectHostSetup[]
 ): boolean {
@@ -90,7 +90,7 @@ export function hasReposWithoutProjectHostSetup(
 }
 
 /** The repo-derived rows overlaid with the hydrated ones, so a repo without a setup still groups. */
-export function mergeDerivedProjectHostSetupProjection(
+function mergeDerivedProjectHostSetupProjection(
   derived: ProjectHostSetupProjection,
   normalized: ProjectHostSetupProjection
 ): ProjectHostSetupProjection {
@@ -103,14 +103,14 @@ export function mergeDerivedProjectHostSetupProjection(
 /**
  * The projects and setups a catalog groups by: the hydrated rows, normalized onto the repos'
  * identities, and backed by the repo-derived rows when any repo has no setup. The renderer's
- * selector memoizes these same steps.
+ * selector is a memo over this.
  */
 export function resolveProjectHostSetupProjection(
   repos: readonly Repo[],
   projects: readonly Project[],
-  setups: readonly ProjectHostSetup[]
+  setups: readonly ProjectHostSetup[],
+  derived: ProjectHostSetupProjection = projectHostSetupProjectionFromRepos(repos)
 ): ProjectHostSetupProjection {
-  const derived = projectHostSetupProjectionFromRepos(repos)
   const normalized = normalizeHydratedProjectHostSetupProjection(repos, projects, setups, derived)
   // Why: older runtimes/profiles may hydrate empty or partial project/setup arrays
   // beside legacy repos. Keep repo-backed compatibility rows visible in that case.

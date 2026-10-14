@@ -15,7 +15,7 @@ import { getHostDisplayLabelOverrides } from '../../../../../../shared/host-sett
 import { buildRows } from '../grouping/build-rows'
 import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type { PinnedWorktreeDisplayPolicy, Row, WorktreeGroupBy } from '../grouping/row-types'
-import { getLogicalRepoOrderRankById } from '../../project-header-drop'
+import { getLogicalRepoOrderRankById } from '../../../../../../shared/project-section-order'
 import { getEmptyProjectPlaceholderRepoIds } from '../../empty-project-placeholder-repos'
 import { deferHostSectionCollapse, scopeHostSectionCollapse } from '../../host-section-collapse'
 import { addHostSectionRows } from '../../host-section-rows'

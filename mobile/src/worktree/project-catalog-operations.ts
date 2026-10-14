@@ -5,22 +5,38 @@ import { salvagingArray } from '../../../src/shared/zod-salvage'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 
-// The three catalogs the desktop sidebar groups Project sections by, read from one host. Each is
-// a host's own record type; the checks cover the members grouping reads, and the shared
-// normalizers the client runs next cover the rest. A row missing one drops, not the whole list.
+// The three catalogs the desktop sidebar groups Project sections by, read from one host.
 
-function hasStrings(row: unknown, keys: readonly string[]): boolean {
-  return (
-    typeof row === 'object' &&
-    row !== null &&
-    keys.every((key) => typeof Reflect.get(row, key) === 'string')
-  )
-}
+const optionalHostId = z.string().nullable().optional()
 
-const repoRowSchema = z.custom<Repo>((row) => hasStrings(row, ['id', 'displayName', 'path']))
-const projectRowSchema = z.custom<Project>((row) => hasStrings(row, ['id', 'displayName']))
-const setupRowSchema = z.custom<ProjectHostSetup>((row) =>
-  hasStrings(row, ['id', 'projectId', 'hostId', 'repoId', 'path'])
+// Every member grouping, labelling and ordering read; the rest of each record passes through.
+const repoGroupingMembers = z.looseObject({
+  id: z.string(),
+  displayName: z.string(),
+  path: z.string(),
+  addedAt: z.number().optional(),
+  connectionId: optionalHostId,
+  executionHostId: optionalHostId
+})
+const projectGroupingMembers = z.looseObject({ id: z.string(), displayName: z.string() })
+const setupGroupingMembers = z.looseObject({
+  id: z.string(),
+  projectId: z.string(),
+  hostId: z.string(),
+  repoId: z.string(),
+  path: z.string(),
+  setupMethod: z.string().optional(),
+  kind: z.string().optional(),
+  connectionId: optionalHostId,
+  executionHostId: optionalHostId
+})
+
+// SAFETY: each row is the host's own record of that type; the members above are checked, and the
+// shared normalizers the fetch runs next (adoption, projection) repair the ones they own.
+const repoRowSchema = z.custom<Repo>((row) => repoGroupingMembers.safeParse(row).success)
+const projectRowSchema = z.custom<Project>((row) => projectGroupingMembers.safeParse(row).success)
+const setupRowSchema = z.custom<ProjectHostSetup>(
+  (row) => setupGroupingMembers.safeParse(row).success
 )
 
 /** The host's repos, as the desktop renderer reads them for its all-host catalog. */

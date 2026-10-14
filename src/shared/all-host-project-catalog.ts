@@ -1,5 +1,4 @@
-// The all-host project catalog a client groups by, folded from each host's own answer in the order
-// the desktop renderer loads them: its own host first, then each server.
+// Each host's catalog folded in the desktop renderer's load order: its own host, then servers.
 import { getRepoExecutionHostId, type ExecutionHostId } from './execution-host'
 import type { ProjectCatalogRows } from './project-compatibility-merge'
 import { mergeFetchedHostProjectCatalog } from './project-compatibility-host-merge'

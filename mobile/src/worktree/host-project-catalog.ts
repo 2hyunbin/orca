@@ -13,6 +13,7 @@ import type { RuntimeClientTarget } from '../../../src/shared/runtime-client-tar
 import type { RpcResponse } from '../transport/types'
 import type { RpcAcceptedResult } from '../transport/rpc-accepted-result'
 import type { RpcOperationSender } from '../transport/rpc-operation-sender'
+import { isMobileMethodUnavailableError } from '../transport/mobile-method-unavailable'
 import {
   projectCatalogProjectListRead,
   projectCatalogRepoListRead,
@@ -29,21 +30,32 @@ function endpointTarget(hostId: ExecutionHostId): RuntimeClientTarget {
     : { kind: 'local' }
 }
 
-async function acceptedOrNull<Value>(
+type ListRead<Value> =
+  | { kind: 'answered'; value: Value }
+  | { kind: 'unavailable' }
+  | { kind: 'failed' }
+
+async function readList<Value>(
   send: () => Promise<RpcResponse>,
   interpret: (reply: RpcResponse) => RpcAcceptedResult<Value>
-): Promise<Value | null> {
+): Promise<ListRead<Value>> {
   try {
-    const verdict = interpret(await send())
-    return verdict.accepted ? verdict.value : null
+    const reply = await send()
+    if (!reply.ok) {
+      return isMobileMethodUnavailableError(reply.error.code, reply.error.message)
+        ? { kind: 'unavailable' }
+        : { kind: 'failed' }
+    }
+    const verdict = interpret(reply)
+    return verdict.accepted ? { kind: 'answered', value: verdict.value } : { kind: 'failed' }
   } catch {
-    return null
+    return { kind: 'failed' }
   }
 }
 
 /**
  * One host's catalog: the desktop's own through `client`, or a server's through a client scoped to
- * it. Null when its repos did not answer, so the caller keeps what it had, as the desktop does.
+ * it. Null when it did not answer this round, so the caller keeps that host's last catalog.
  */
 export async function fetchHostProjectCatalog(
   client: RpcOperationSender,
@@ -51,31 +63,38 @@ export async function fetchHostProjectCatalog(
 ): Promise<HostProjectCatalog | null> {
   const target = endpointTarget(hostId)
   const [repos, projects, setups] = await Promise.all([
-    acceptedOrNull(
+    readList(
       () => projectCatalogRepoListRead.request(client),
       projectCatalogRepoListRead.interpret
     ),
-    acceptedOrNull(
+    readList(
       () => projectCatalogProjectListRead.request(client),
       projectCatalogProjectListRead.interpret
     ),
-    acceptedOrNull(
+    readList(
       () => projectCatalogSetupListRead.request(client),
       projectCatalogSetupListRead.interpret
     )
   ])
-  if (!repos) {
+  if (repos.kind !== 'answered') {
     return null
   }
-  const adoptedRepos = repos.map((repo) => adoptEndpointRepo(target, repo))
-  return {
-    hostId,
-    repos: adoptedRepos,
-    // Why: a desktop or server that predates either list (forbidden or method_not_found) gets the
-    // repo-derived projection, exactly the desktop renderer's fallback for such a host.
-    projection:
-      projects && setups
-        ? adoptEndpointProjectCatalog(target, projects, setups)
-        : projectHostSetupProjectionFromRepos(adoptedRepos)
+  const adoptedRepos = repos.value.map((repo) => adoptEndpointRepo(target, repo))
+  if (projects.kind === 'answered' && setups.kind === 'answered') {
+    return {
+      hostId,
+      repos: adoptedRepos,
+      projection: adoptEndpointProjectCatalog(target, projects.value, setups.value)
+    }
   }
+  // Why: only a host that predates the lists gets the repo-derived projection (the desktop
+  // renderer's fallback); a transient failure must not regroup the list on a guess.
+  if (projects.kind !== 'failed' && setups.kind !== 'failed') {
+    return {
+      hostId,
+      repos: adoptedRepos,
+      projection: projectHostSetupProjectionFromRepos(adoptedRepos)
+    }
+  }
+  return null
 }

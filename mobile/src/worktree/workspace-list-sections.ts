@@ -16,9 +16,10 @@ import { sortWorktrees } from './workspace-list-ordering'
 import { getWorktreeRowIdentity } from './worktree-host-row-identity'
 import {
   buildProjectGroupingIndex,
+  buildProjectSections,
   type ProjectGroupingModel
 } from '../../../src/shared/project-section-grouping'
-import { buildProjectSections } from '../../../src/shared/project-section-order'
+import { withRepoSectionDisplayLabels } from '../../../src/shared/project-section-order'
 import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
 
 export type { FilterState, Section, SectionRepo, Worktree } from './workspace-list-types'
@@ -29,12 +30,15 @@ export type ProjectSectionCatalog = {
   repos: readonly SectionRepo[]
   /** Null until the desktop's catalog answers; rows then group by repo, as the desktop's would. */
   grouping: ProjectGroupingModel | null
+  /** Manual header rank; undefined keeps first-row order. */
+  repoOrder: ReadonlyMap<string, number> | undefined
   projectOrderBy: ProjectOrderBy
 }
 
 export const NO_PROJECT_SECTION_CATALOG: ProjectSectionCatalog = {
   repos: [],
   grouping: null,
+  repoOrder: undefined,
   projectOrderBy: 'manual'
 }
 
@@ -224,17 +228,18 @@ export function buildSections(
           (!query || repo.displayName.toLowerCase().includes(query))
       )
       .map((repo) => repo.id)
-    // Why: the desktop sidebar's own grouping, so keys, labels and order match it. Manual
-    // order is the desktop's private repo order, so headers keep first-row order here.
-    const projectSections = buildProjectSections({
-      items: canonicalGroupWorktrees,
-      repoIdOf: (w) => w.repoId,
-      placeholderRepoIds,
-      repoMap: buildSectionRepoMap(projectCatalog.repos, worktrees),
-      projectIndex: buildProjectGroupingIndex(projectCatalog.grouping ?? undefined),
-      repoOrder: undefined,
-      projectOrderBy: projectCatalog.projectOrderBy
-    })
+    // Why: the desktop sidebar's own grouping, so keys, labels and order match it.
+    const projectSections = withRepoSectionDisplayLabels(
+      buildProjectSections({
+        items: canonicalGroupWorktrees,
+        repoIdOf: (w) => w.repoId,
+        repoMap: buildSectionRepoMap(projectCatalog.repos, worktrees),
+        projectIndex: buildProjectGroupingIndex(projectCatalog.grouping ?? undefined),
+        placeholderRepoIds,
+        repoOrder: projectCatalog.repoOrder,
+        projectOrderBy: projectCatalog.projectOrderBy
+      })
+    )
     for (const [key, section] of projectSections) {
       sections.push(
         makeSection(key, section.label, orderMainWorktreeFirst(section.items), collapsedGroups, {

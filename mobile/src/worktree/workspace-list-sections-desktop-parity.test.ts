@@ -5,6 +5,7 @@ import {
   PROJECT_SECTION_PARITY_ROWS,
   parityPhoneCatalog
 } from '../../../src/shared/project-section-parity.test-fixture'
+import { buildProjectSectionCatalog } from './project-section-catalog'
 import { buildSections, type Worktree } from './workspace-list-sections'
 
 // The desktop half lives in src/renderer/src/components/sidebar/
@@ -45,12 +46,12 @@ describe('Project grouping on the phone', () => {
         '',
         'repo',
         new Set(),
-        { repos: catalog.repos, grouping: catalog.grouping, projectOrderBy }
+        buildProjectSectionCatalog(catalog, null, projectOrderBy)
       )
 
       expect(rows).toHaveLength(PROJECT_SECTION_PARITY_ROWS.length)
       expect(sections.map((section) => ({ key: section.key, label: section.title }))).toEqual(
-        PROJECT_SECTION_PARITY_HEADERS
+        PROJECT_SECTION_PARITY_HEADERS[projectOrderBy]
       )
     }
   )

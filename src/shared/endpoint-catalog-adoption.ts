@@ -1,5 +1,4 @@
-// The host stamp a repo or host-setup row takes when it crosses from an endpoint into a client's
-// all-host catalog. Shared so the paired phone files a server's rows under the host the desktop does.
+// The host stamp rows take entering a client's all-host catalog; shared so the phone matches the desktop.
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
@@ -7,7 +6,6 @@ import {
 } from './execution-host'
 import {
   normalizeProjectHostSetupRow,
-  normalizeProjectHostSetupRows,
   normalizeProjectRows
 } from './project-catalog-row-normalization'
 import type { ProjectHostSetupProjection } from './project-host-setup-projection'
@@ -54,12 +52,6 @@ export function adoptEndpointProjectCatalog(
   projects: readonly Project[],
   setups: readonly ProjectHostSetup[]
 ): ProjectHostSetupProjection {
-  if (target.kind === 'local') {
-    return {
-      projects: normalizeProjectRows([...projects]),
-      setups: normalizeProjectHostSetupRows([...setups])
-    }
-  }
   return {
     // Why projects too: the same wire response carries them, and a remote host on another
     // Orca version can publish a row whose declared field types do not hold.

@@ -1,6 +1,4 @@
-// One set of host answers both the desktop sidebar's and the phone's Project grouping tests run
-// on: Jinwoo's shape, several checkouts of stablyai/orca locally and the same project on two
-// servers. Each side must render exactly PROJECT_SECTION_PARITY_HEADERS from it.
+// Host answers both the desktop sidebar's and the phone's Project grouping tests run on.
 import { foldHostProjectCatalogs, type AllHostProjectCatalog } from './all-host-project-catalog'
 import { adoptEndpointProjectCatalog, adoptEndpointRepo } from './endpoint-catalog-adoption'
 import type { ExecutionHostId } from './execution-host'
@@ -31,27 +29,59 @@ function hostRepo(id: string, path: string, displayName = 'orca'): Repo {
 export type ParityHostAnswer = {
   target: RuntimeClientTarget
   hostId: ExecutionHostId
+  /** In the host's own repo.list order. */
   repos: Repo[]
-  /** False for a host that predates project.list, so both sides derive from repos. */
-  answersProjectLists: boolean
+  /** The host's project.list/projectHostSetup.list rows; null for a host that predates them. */
+  lists: ProjectHostSetupProjection | null
 }
 
+const localRepos = [
+  hostRepo('local-stably', '/Users/jinwoo/stably/orca'),
+  hostRepo('local-assets', '/Users/jinwoo/design-assets', 'design-assets'),
+  hostRepo('local-workspace', '/Users/jinwoo/orca/workspaces/orca/orca')
+]
+const windowsRepo = hostRepo('win-orca', 'C:/Users/jinwo/orca/orca')
+
+// Jinwoo's shape: several local checkouts of stablyai/orca, plus the project on two servers.
 export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
   {
     target: { kind: 'local' },
     hostId: 'local',
-    repos: [
-      hostRepo('local-stably', '/Users/jinwoo/stably/orca'),
-      hostRepo('local-workspace', '/Users/jinwoo/orca/workspaces/orca/orca'),
-      hostRepo('local-assets', '/Users/jinwoo/design-assets', 'design-assets')
-    ],
-    answersProjectLists: true
+    repos: localRepos,
+    lists: projectHostSetupProjectionFromRepos(localRepos)
   },
   {
     target: { kind: 'environment', environmentId: 'windows2' },
     hostId: 'runtime:windows2',
-    repos: [hostRepo('win-orca', 'C:/Users/jinwo/orca/orca')],
-    answersProjectLists: true
+    repos: [windowsRepo],
+    // A server's own catalog rows: its project name and an imported setup on its local host.
+    lists: {
+      projects: [
+        {
+          id: 'github:stablyai/orca',
+          displayName: 'Orca',
+          badgeColor: '#737373',
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' },
+          sourceRepoIds: [windowsRepo.id],
+          createdAt: 5,
+          updatedAt: 5
+        }
+      ],
+      setups: [
+        {
+          id: 'win-setup',
+          projectId: 'github:stablyai/orca',
+          hostId: 'local',
+          repoId: windowsRepo.id,
+          path: windowsRepo.path,
+          displayName: 'orca',
+          setupState: 'ready',
+          setupMethod: 'imported-existing-folder',
+          createdAt: 5,
+          updatedAt: 5
+        }
+      ]
+    }
   },
   {
     target: { kind: 'environment', environmentId: 'm4air' },
@@ -60,48 +90,55 @@ export const PROJECT_SECTION_PARITY_HOSTS: readonly ParityHostAnswer[] = [
       hostRepo('m4-orca', '/Users/m4air/orca/orca'),
       hostRepo('m4-orca-two', '/Users/m4air/orca-two/orca')
     ],
-    answersProjectLists: false
+    lists: null
   }
 ]
 
-/** What a host answers for project.list and projectHostSetup.list: its own projection. */
-export function parityHostProjectLists(host: ParityHostAnswer): ProjectHostSetupProjection {
-  return projectHostSetupProjectionFromRepos(host.repos)
-}
-
-/** Workspace rows, newest activity first, so first-row order and Recent order agree. */
+/** Workspace rows; activity order differs from catalog order, so Recent and Manual disagree. */
 export const PROJECT_SECTION_PARITY_ROWS: readonly {
   id: string
   repoId: string
   lastActivityAt: number
 }[] = [
-  { id: 'wt-stably', repoId: 'local-stably', lastActivityAt: 60 },
+  { id: 'wt-m4-two', repoId: 'm4-orca-two', lastActivityAt: 90 },
+  { id: 'wt-win', repoId: 'win-orca', lastActivityAt: 70 },
   { id: 'wt-workspace', repoId: 'local-workspace', lastActivityAt: 50 },
-  { id: 'wt-win', repoId: 'win-orca', lastActivityAt: 40 },
-  { id: 'wt-m4', repoId: 'm4-orca', lastActivityAt: 30 },
-  { id: 'wt-m4-two', repoId: 'm4-orca-two', lastActivityAt: 20 }
+  { id: 'wt-stably', repoId: 'local-stably', lastActivityAt: 30 },
+  { id: 'wt-m4', repoId: 'm4-orca', lastActivityAt: 10 }
 ]
 
-export const PROJECT_SECTION_PARITY_HEADERS: readonly { key: string; label: string }[] = [
-  { key: 'project:github:stablyai/orca::setup:local-stably', label: 'jinwoo/stably/orca' },
-  { key: 'project:github:stablyai/orca::setup:local-workspace', label: 'workspaces/orca/orca' },
-  { key: 'project:github:stablyai/orca', label: 'jinwo/orca/orca' },
-  { key: 'project:github:stablyai/orca::setup:m4-orca', label: 'm4air/orca/orca' },
-  { key: 'project:github:stablyai/orca::setup:m4-orca-two', label: 'm4air/orca-two/orca' },
-  { key: 'project:repo:local-assets', label: 'design-assets' }
-]
+const STABLY = {
+  key: 'project:github:stablyai/orca::setup:local-stably',
+  label: 'jinwoo/stably/orca'
+}
+const WORKSPACE = {
+  key: 'project:github:stablyai/orca::setup:local-workspace',
+  label: 'workspaces/orca/orca'
+}
+// Why 'orca', not the server's 'Orca': the later host's derived project name wins the merge.
+const WINDOWS = { key: 'project:github:stablyai/orca', label: 'jinwo/orca/orca' }
+const M4 = { key: 'project:github:stablyai/orca::setup:m4-orca', label: 'm4air/orca/orca' }
+const M4_TWO = {
+  key: 'project:github:stablyai/orca::setup:m4-orca-two',
+  label: 'm4air/orca-two/orca'
+}
+const ASSETS = { key: 'project:repo:local-assets', label: 'design-assets' }
+
+export const PROJECT_SECTION_PARITY_HEADERS = {
+  recent: [M4_TWO, WINDOWS, WORKSPACE, STABLY, M4, ASSETS],
+  manual: [STABLY, ASSETS, WORKSPACE, WINDOWS, M4, M4_TWO]
+} as const
 
 /** The phone's path: each host's answers adopted as the phone fetches them, then folded. */
 export function parityPhoneCatalog(): AllHostProjectCatalog {
   return foldHostProjectCatalogs(
     PROJECT_SECTION_PARITY_HOSTS.map((host) => {
       const repos = host.repos.map((repo) => adoptEndpointRepo(host.target, repo))
-      const lists = parityHostProjectLists(host)
       return {
         hostId: host.hostId,
         repos,
-        projection: host.answersProjectLists
-          ? adoptEndpointProjectCatalog(host.target, lists.projects, lists.setups)
+        projection: host.lists
+          ? adoptEndpointProjectCatalog(host.target, host.lists.projects, host.lists.setups)
           : projectHostSetupProjectionFromRepos(repos)
       }
     })

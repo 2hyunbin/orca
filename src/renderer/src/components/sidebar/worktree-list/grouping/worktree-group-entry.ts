@@ -9,7 +9,3 @@ export type WorktreeGroupEntry = ProjectSectionEntry<Worktree> & {
    *  the owning group because FolderWorkspaceRow requires a non-optional one. */
   folderWorkspaces?: RenderableFolderWorkspace[]
 }
-
-export function addRepoIdToGroup(group: WorktreeGroupEntry, repoId: string): void {
-  group.repoIds.add(repoId)
-}

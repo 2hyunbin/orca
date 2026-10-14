@@ -1,50 +1,114 @@
-import { describe, expect, it } from 'vitest'
-import { adoptEndpointProjectCatalog } from '../../../../shared/endpoint-catalog-adoption'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
 import type { ProjectCatalogRows } from '../../../../shared/project-compatibility-merge'
-import { projectHostSetupProjectionFromRepos } from '../../../../shared/project-host-setup-projection'
-import { buildProjectGroupingIndex } from '../../../../shared/project-section-grouping'
-import { buildProjectSections } from '../../../../shared/project-section-order'
+import {
+  buildProjectGroupingIndex,
+  buildProjectSections
+} from '../../../../shared/project-section-grouping'
+import {
+  getLogicalRepoOrderRankById,
+  withRepoSectionDisplayLabels
+} from '../../../../shared/project-section-order'
 import {
   PROJECT_SECTION_PARITY_HEADERS,
   PROJECT_SECTION_PARITY_HOSTS,
   PROJECT_SECTION_PARITY_ROWS,
-  parityHostProjectLists,
   parityPhoneCatalog
 } from '../../../../shared/project-section-parity.test-fixture'
 import type { Repo } from '../../../../shared/repo-types'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { ProjectOrderBy } from '../../../../shared/ui-chrome-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { adoptFromEndpoint } from '../../store/adopt-from-endpoint'
+import {
+  fetchRepoCatalogForTarget,
+  filterSetupsForPrunedRepoRows,
+  mergeFetchedRepoCatalog,
+  reconcileSupersededSshRepos
+} from '../../store/repos/repo-catalog-merge'
 import { getProjectHostSetupProjectionFromState } from '../../store/project-host-setup-selector'
 import { buildRows } from './worktree-list/grouping/build-rows'
 import { worktree as worktreeFixture } from './worktree-list-groups-test-fixtures'
 
 // Why: the phone's Project sections must be the desktop sidebar's by construction. The desktop
-// side here runs the renderer's own fold, selector and buildRows; the phone side runs the shared
-// fold and section builder its buildSections calls (mobile/src/worktree/
-// workspace-list-sections-desktop-parity.test.ts pins buildSections to the same headers).
+// half answers the renderer's own catalog fetch and runs its merge, selector, repo order and
+// buildRows; mobile/src/worktree/workspace-list-sections-desktop-parity.test.ts pins the phone's
+// buildSections to the same headers.
 
-function desktopHeaders(projectOrderBy: ProjectOrderBy): { key: string; label: string }[] {
-  // The renderer's all-host load: each host's catalog folded in, then its projection selector.
-  let repos: Repo[] = []
-  let catalog: ProjectCatalogRows = { projects: [], projectHostSetups: [] }
-  for (const host of PROJECT_SECTION_PARITY_HOSTS) {
-    const adopted = host.repos.map((repo) =>
-      adoptFromEndpoint(host.target, { kind: 'repo', row: repo })
-    )
-    repos = [...repos, ...adopted]
-    const lists = parityHostProjectLists(host)
-    catalog = mergeFetchedHostProjectCatalog({
-      previous: catalog,
-      fetched: host.answersProjectLists
-        ? adoptEndpointProjectCatalog(host.target, lists.projects, lists.setups)
-        : projectHostSetupProjectionFromRepos(adopted),
-      repos,
-      hostId: host.hostId
-    })
+const { rpc, assertCapability } = vi.hoisted(() => ({ rpc: vi.fn(), assertCapability: vi.fn() }))
+vi.mock('../../runtime/runtime-rpc-client', () => ({
+  callRuntimeRpc: rpc,
+  assertRuntimeEnvironmentCapability: assertCapability
+}))
+
+function hostFor(target: RuntimeClientTarget) {
+  const host = PROJECT_SECTION_PARITY_HOSTS.find((entry) =>
+    target.kind === 'local'
+      ? entry.target.kind === 'local'
+      : entry.target.kind === 'environment' && entry.target.environmentId === target.environmentId
+  )
+  if (!host) {
+    throw new Error('unknown parity host')
   }
-  const projection = getProjectHostSetupProjectionFromState({ repos, ...catalog })
+  return host
+}
+
+function answerHosts(): void {
+  const local = hostFor({ kind: 'local' })
+  vi.stubGlobal('window', {
+    api: {
+      repos: { list: async () => local.repos },
+      projects: {
+        list: async () => local.lists?.projects ?? [],
+        listHostSetups: async () => local.lists?.setups ?? []
+      }
+    }
+  })
+  rpc.mockImplementation(async (target: RuntimeClientTarget, method: string) => {
+    const host = hostFor(target)
+    if (method === 'repo.list') {
+      return { repos: host.repos }
+    }
+    if (!host.lists) {
+      throw new Error('method_not_found')
+    }
+    return method === 'project.list'
+      ? { projects: host.lists.projects }
+      : { setups: host.lists.setups }
+  })
+}
+
+async function desktopCatalog(): Promise<{ repos: readonly Repo[]; rows: ProjectCatalogRows }> {
+  answerHosts()
+  // The all-host load's applyCatalog, host by host: local first, then each server.
+  let repos: readonly Repo[] = []
+  let rows: ProjectCatalogRows = { projects: [], projectHostSetups: [] }
+  for (const host of PROJECT_SECTION_PARITY_HOSTS) {
+    const catalog = await fetchRepoCatalogForTarget(host.target)
+    const result = mergeFetchedRepoCatalog(catalog, repos)
+    const reconciled = reconcileSupersededSshRepos(result.repos, { pendingSshRepoReadoptions: [] })
+    const finalized = applyManualRepoOrder(reconciled.repos, [])
+    rows = mergeFetchedHostProjectCatalog({
+      previous: {
+        projects: rows.projects,
+        projectHostSetups: filterSetupsForPrunedRepoRows(
+          rows.projectHostSetups,
+          result.repos,
+          finalized
+        )
+      },
+      fetched: catalog.projectHostSetupCompatibility,
+      repos: finalized,
+      hostId: result.hostId
+    })
+    repos = finalized
+  }
+  return { repos, rows }
+}
+
+async function desktopHeaders(projectOrderBy: ProjectOrderBy) {
+  const { repos, rows } = await desktopCatalog()
+  const projection = getProjectHostSetupProjectionFromState({ repos, ...rows })
   const worktrees: Worktree[] = PROJECT_SECTION_PARITY_ROWS.map((row) => ({
     ...worktreeFixture,
     id: row.id,
@@ -58,7 +122,8 @@ function desktopHeaders(projectOrderBy: ProjectOrderBy): { key: string; label: s
     new Map(repos.map((repo) => [repo.id, repo])),
     null,
     new Set(),
-    undefined,
+    // As use-section-rows ranks it: the order of state.repos.
+    getLogicalRepoOrderRankById(repos.map((repo) => repo.id)),
     undefined,
     projectOrderBy,
     {},
@@ -74,30 +139,37 @@ function desktopHeaders(projectOrderBy: ProjectOrderBy): { key: string; label: s
   ).flatMap((row) => (row.type === 'header' ? [{ key: row.key, label: row.label }] : []))
 }
 
-function phoneHeaders(projectOrderBy: ProjectOrderBy): { key: string; label: string }[] {
+function phoneHeaders(projectOrderBy: ProjectOrderBy) {
   const catalog = parityPhoneCatalog()
   const withRows = new Set(PROJECT_SECTION_PARITY_ROWS.map((row) => row.repoId))
-  return buildProjectSections({
-    items: PROJECT_SECTION_PARITY_ROWS,
-    repoIdOf: (row) => row.repoId,
-    placeholderRepoIds: catalog.repos
-      .filter((repo) => !withRows.has(repo.id))
-      .map((repo) => repo.id),
-    repoMap: new Map(catalog.repos.map((repo) => [repo.id, repo])),
-    projectIndex: buildProjectGroupingIndex(catalog.grouping),
-    repoOrder: undefined,
-    projectOrderBy
-  }).map(([key, section]) => ({ key, label: section.label }))
+  return withRepoSectionDisplayLabels(
+    buildProjectSections({
+      items: PROJECT_SECTION_PARITY_ROWS,
+      repoIdOf: (row) => row.repoId,
+      repoMap: new Map(catalog.repos.map((repo) => [repo.id, repo])),
+      projectIndex: buildProjectGroupingIndex(catalog.grouping),
+      placeholderRepoIds: catalog.repos
+        .filter((repo) => !withRows.has(repo.id))
+        .map((repo) => repo.id),
+      repoOrder: getLogicalRepoOrderRankById(catalog.repos.map((repo) => repo.id)),
+      projectOrderBy
+    })
+  ).map(([key, section]) => ({ key, label: section.label }))
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.resetAllMocks()
+})
 
 describe('the phone groups by Project exactly as the paired desktop sidebar', () => {
   it.each(['recent', 'manual'] as const)(
     'gives checkouts of one project on local and servers the same %s headers',
-    (projectOrderBy) => {
-      // Manual: the phone never learns the desktop's repo order, so this pins the shared rule with
-      // none supplied (first-row order, which the fixture's rows make equal to Recent).
-      expect(desktopHeaders(projectOrderBy)).toEqual(PROJECT_SECTION_PARITY_HEADERS)
-      expect(phoneHeaders(projectOrderBy)).toEqual(PROJECT_SECTION_PARITY_HEADERS)
+    async (projectOrderBy) => {
+      expect(await desktopHeaders(projectOrderBy)).toEqual(
+        PROJECT_SECTION_PARITY_HEADERS[projectOrderBy]
+      )
+      expect(phoneHeaders(projectOrderBy)).toEqual(PROJECT_SECTION_PARITY_HEADERS[projectOrderBy])
     }
   )
 })

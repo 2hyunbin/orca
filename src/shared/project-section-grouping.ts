@@ -1,6 +1,7 @@
-// Project sections as the desktop sidebar draws them under "Group by Project". The paired phone
-// calls the same functions so its sections are the desktop's by construction.
+// The desktop sidebar's Project sections; the paired phone calls these same functions.
 import type { ExecutionHostId } from './execution-host'
+import { orderProjectSections, type ActivityItem } from './project-section-order'
+import type { ProjectOrderBy } from './ui-chrome-types'
 import { toSshExecutionHostId } from './execution-host'
 import type { Project, ProjectHostSetup } from './project-types'
 import type { Repo } from './repo-types'
@@ -177,7 +178,7 @@ export function getProjectHeaderRevealTarget(
 }
 
 /** Files `item` under its repo's project section, opening the section on first sight. */
-export function addItemToProjectSection<Item, R extends ProjectSectionRepo>(
+function addItemToProjectSection<Item, R extends ProjectSectionRepo>(
   sections: Map<string, ProjectSectionEntry<Item, R>>,
   item: Item,
   repoId: string,
@@ -198,7 +199,7 @@ export function addItemToProjectSection<Item, R extends ProjectSectionRepo>(
  * Opens the project section for a repo that has no rows to file, or joins the repo to the open one.
  * `requireRepo` skips repo ids missing from the catalog, which would otherwise read "Unknown".
  */
-export function ensureProjectSectionForRepo<Item, R extends ProjectSectionRepo>(
+function ensureProjectSectionForRepo<Item, R extends ProjectSectionRepo>(
   sections: Map<string, ProjectSectionEntry<Item, R>>,
   repoId: string,
   repoMap: ReadonlyMap<string, R>,
@@ -220,4 +221,46 @@ export function ensureProjectSectionForRepo<Item, R extends ProjectSectionRepo>(
     repo: grouping.repo ?? options.fallbackRepo,
     repoIds: new Set([repoId])
   })
+}
+
+/**
+ * Project sections in header order, unlabelled (see withRepoSectionDisplayLabels): rows first, then
+ * empty-project placeholders, notice rows' repos (opened with the notice's own repo if the catalog
+ * lacks it), and repos with a workspace being created.
+ */
+export function buildProjectSections<
+  Item extends ActivityItem,
+  R extends ProjectSectionRepo
+>(args: {
+  items: readonly Item[]
+  repoIdOf: (item: Item) => string
+  repoMap: ReadonlyMap<string, R>
+  projectIndex: ProjectGroupingIndex | null
+  placeholderRepoIds: Iterable<string>
+  noticeRepos?: Iterable<readonly [string, R | undefined]>
+  pendingRepoIds?: Iterable<string>
+  repoOrder: ReadonlyMap<string, number> | undefined
+  projectOrderBy: ProjectOrderBy
+}): [string, ProjectSectionEntry<Item, R>][] {
+  const { repoMap, projectIndex } = args
+  const sections = new Map<string, ProjectSectionEntry<Item, R>>()
+  for (const item of args.items) {
+    addItemToProjectSection(sections, item, args.repoIdOf(item), repoMap, projectIndex)
+  }
+  // Why: repos can arrive before worktree scans, but stale IDs passed by
+  // older snapshots must not render an "Unknown" project header.
+  for (const repoId of args.placeholderRepoIds) {
+    ensureProjectSectionForRepo(sections, repoId, repoMap, projectIndex, { requireRepo: true })
+  }
+  // Why: the default policy removes pinned worktrees from natural groups,
+  // but actionable notice rows still need a project section to render in.
+  for (const [repoId, fallbackRepo] of args.noticeRepos ?? []) {
+    ensureProjectSectionForRepo(sections, repoId, repoMap, projectIndex, { fallbackRepo })
+  }
+  // Why: creating the first worktree in a repo leaves it with no group yet;
+  // ensure one so the in-progress row nests under its repo instead of being dropped.
+  for (const repoId of args.pendingRepoIds ?? []) {
+    ensureProjectSectionForRepo(sections, repoId, repoMap, projectIndex)
+  }
+  return orderProjectSections(sections, repoMap, args.repoOrder, args.projectOrderBy)
 }

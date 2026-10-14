@@ -14,11 +14,9 @@ import {
 } from './folder-workspace-lanes'
 import { PR_GROUP_META, PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
 import type { PRGroupKey } from './group-keys'
-import { addRepoIdToGroup } from './worktree-group-entry'
 import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
 import {
-  addItemToProjectSection,
-  ensureProjectSectionForRepo,
+  buildProjectSections,
   type ProjectGroupingIndex
 } from '../../../../../../shared/project-section-grouping'
 import { orderProjectSections } from '../../../../../../shared/project-section-order'
@@ -79,12 +77,30 @@ export function buildOrderedGroups(args: {
     folderWorkspaces = []
   } = args
 
+  if (groupBy === 'repo') {
+    // Why shared: the paired phone builds its Project sections with this same function.
+    return buildProjectSections({
+      items: naturalWorktrees,
+      repoIdOf: (worktree) => worktree.repoId,
+      repoMap,
+      projectIndex,
+      placeholderRepoIds,
+      noticeRepos: [
+        ...[...importedWorktreesByRepo].map(
+          ([repoId, candidate]) => [repoId, candidate.repo] as const
+        ),
+        ...[...newExternalWorktreesInboxByRepo].map(
+          ([repoId, candidate]) => [repoId, candidate.repo] as const
+        )
+      ],
+      pendingRepoIds: pendingByRepo.keys(),
+      repoOrder,
+      projectOrderBy
+    })
+  }
+
   const grouped = new Map<string, WorktreeGroupEntry>()
   for (const w of naturalWorktrees) {
-    if (groupBy === 'repo') {
-      addItemToProjectSection(grouped, w, w.repoId, repoMap, projectIndex)
-      continue
-    }
     let key: string
     let label: string
     if (groupBy === 'workspace-status') {
@@ -102,58 +118,30 @@ export function buildOrderedGroups(args: {
     }
     const group = grouped.get(key)!
     group.items.push(w)
-    addRepoIdToGroup(group, w.repoId)
+    group.repoIds.add(w.repoId)
   }
   // Why: folder workspaces are not worktrees, so they never appear in the loop
   // above. Bucketing them here — and creating the lane when no worktree opened
   // one — is what lets a folder workspace be the sole occupant of a lane (#15362).
-  if (groupBy !== 'repo') {
-    for (const pair of folderWorkspaces) {
-      const key = getFolderWorkspaceLaneKey(pair, groupBy, workspaceStatuses)
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          label: getLaneLabelForKey(key, groupBy, workspaceStatuses),
-          items: [],
-          repo: undefined,
-          repoIds: new Set()
-        })
-      }
-      const group = grouped.get(key)!
-      group.folderWorkspaces ??= []
-      group.folderWorkspaces.push(pair)
-    }
-    for (const group of grouped.values()) {
-      group.folderWorkspaces?.sort((left, right) =>
-        compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
-      )
-    }
-  }
-  if (groupBy === 'repo') {
-    // Why: repos can arrive before worktree scans, but stale IDs passed by
-    // older snapshots must not render an "Unknown" project header.
-    for (const repoId of placeholderRepoIds) {
-      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, { requireRepo: true })
-    }
-    for (const [repoId, candidate] of importedWorktreesByRepo) {
-      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, {
-        fallbackRepo: candidate.repo
+  for (const pair of folderWorkspaces) {
+    const key = getFolderWorkspaceLaneKey(pair, groupBy, workspaceStatuses)
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        label: getLaneLabelForKey(key, groupBy, workspaceStatuses),
+        items: [],
+        repo: undefined,
+        repoIds: new Set()
       })
     }
-    // Why: the default policy removes pinned worktrees from natural groups,
-    // but actionable inbox rows still need a project section to render in.
-    for (const [repoId, candidate] of newExternalWorktreesInboxByRepo) {
-      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, {
-        fallbackRepo: candidate.repo
-      })
-    }
-    // Why: creating the first worktree in a repo leaves it with no group yet;
-    // ensure one so the in-progress row nests under its repo instead of being
-    // dropped.
-    for (const repoId of pendingByRepo.keys()) {
-      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex)
-    }
+    const group = grouped.get(key)!
+    group.folderWorkspaces ??= []
+    group.folderWorkspaces.push(pair)
   }
-
+  for (const group of grouped.values()) {
+    group.folderWorkspaces?.sort((left, right) =>
+      compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
+    )
+  }
   const orderedGroups: OrderedGroupEntry[] = []
   if (groupBy === 'pr-status') {
     for (const prGroup of PR_GROUP_ORDER) {
