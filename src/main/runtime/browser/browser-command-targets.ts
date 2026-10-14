@@ -21,6 +21,7 @@ export class RuntimeBrowserCommandTargets {
       | 'resolveWorktreeSelector'
       | 'getAuthoritativeWindow'
       | 'retireRuntimeOwnedBrowserSessionTab'
+      | 'serveBrowserTabs'
     >
   ) {}
 
