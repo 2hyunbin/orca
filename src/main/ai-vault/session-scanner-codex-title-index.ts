@@ -1,6 +1,6 @@
 import { basename, dirname, join } from 'node:path'
-import { InFlightPromiseDedupe, stableInFlightKey } from '../../shared/in-flight-promise-dedupe'
 import { createInterface } from 'node:readline'
+import { InFlightPromiseDedupe, stableInFlightKey } from '../../shared/in-flight-promise-dedupe'
 import { openTranscriptReadStream, wslGatedStat } from '../native-chat/wsl-transcript-fs-access'
 import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
 import { extractString, normalizeTitleText, parseJsonObject } from './session-scanner-values'
