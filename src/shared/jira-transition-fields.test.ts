@@ -99,6 +99,40 @@ describe('jira-transition-fields', () => {
     ).toEqual({ kind: 'unsupported', fields: [custom] })
   })
 
+  it('rejects custom fields with resolution or comment schema hints', () => {
+    const customResolution = {
+      key: 'customfield_10050',
+      name: 'Close reason',
+      required: true,
+      schema: { type: 'resolution' },
+      allowedValues: [{ id: '1', name: 'Fixed' }]
+    }
+    const customComment = {
+      key: 'customfield_10051',
+      name: 'Notes',
+      required: true,
+      schema: { system: 'comment' }
+    }
+    expect(classifyTransitionRequirements(transition([customResolution, customComment]))).toEqual({
+      kind: 'unsupported',
+      fields: [customResolution, customComment]
+    })
+  })
+
+  it('refuses ambiguous duplicate required fields instead of ignoring a requirement', () => {
+    const first = {
+      key: 'resolution',
+      name: 'Resolution',
+      required: true,
+      allowedValues: [{ id: '1', name: 'Fixed' }]
+    }
+    const second = { ...first, allowedValues: [{ id: '2', name: 'Duplicate' }] }
+    expect(classifyTransitionRequirements(transition([first, second]))).toEqual({
+      kind: 'unsupported',
+      fields: [first, second]
+    })
+  })
+
   it('falls back to Jira when required resolution choices are missing', () => {
     const resolution = { key: 'resolution', name: 'Resolution', required: true }
     expect(classifyTransitionRequirements(transition([resolution]))).toEqual({
@@ -112,16 +146,22 @@ describe('jira-transition-fields', () => {
       key: 'resolution',
       name: 'Resolution',
       required: true,
-      allowedValues: [{ id: '10000', name: 'Done' }, { name: 'Duplicate' }]
+      allowedValues: [
+        { id: '10000', name: 'Done' },
+        { name: 'Duplicate' },
+        { id: '  ', value: 'Fixed' }
+      ]
     }
     expect(buildResolutionFieldValue(field, '10000')).toEqual({ id: '10000' })
     expect(buildResolutionFieldValue(field, 'Duplicate')).toEqual({ name: 'Duplicate' })
     expect(buildResolutionFieldValue(field, '  ')).toBeNull()
     expect(buildResolutionFieldValue(field, 'unknown')).toBeNull()
+    expect(buildResolutionFieldValue(field, 'Fixed')).toEqual({ value: 'Fixed' })
     expect(transitionAllowedValueLabel({ id: '1', name: 'Done' })).toBe('Done')
-    // Why: draft seed and <option value> must share this id??value??name precedence.
     expect(transitionAllowedValueKey({ id: '1', name: 'Done', value: 'done' })).toBe('1')
     expect(transitionAllowedValueKey({ name: 'Duplicate', value: 'dup' })).toBe('dup')
     expect(transitionAllowedValueKey({ name: 'OnlyName' })).toBe('OnlyName')
+    expect(transitionAllowedValueKey({ id: '', value: 'dup' })).toBe('dup')
+    expect(transitionAllowedValueKey({ id: '  ', name: 'Duplicate' })).toBe('Duplicate')
   })
 })

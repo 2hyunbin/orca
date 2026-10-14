@@ -47,12 +47,23 @@ export function JiraIssueTransitionControl({
 
   async function apply(transition: JiraTransition, updates: JiraIssueUpdate): Promise<void> {
     setSubmitError(null)
-    const result = await onTransition(updates, transition)
-    if (result.ok) {
-      setOpen(false)
-      reset()
-    } else {
-      setSubmitError(result.error)
+    try {
+      const result = await onTransition(updates, transition)
+      if (result.ok) {
+        setOpen(false)
+        reset()
+      } else {
+        setSubmitError(result.error)
+      }
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : translate(
+              'auto.components.JiraIssueWorkspace.ea21952aa3',
+              'Failed to update Jira issue.'
+            )
+      )
     }
   }
 

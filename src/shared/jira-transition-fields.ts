@@ -13,11 +13,11 @@ export type JiraTransitionRequirement =
     }
 
 function isResolutionField(field: JiraCreateField): boolean {
-  return field.key === 'resolution' || field.schema?.type === 'resolution'
+  return field.key === 'resolution' && !field.schema?.custom
 }
 
 function isCommentField(field: JiraCreateField): boolean {
-  return field.key === 'comment' || field.schema?.system === 'comment'
+  return field.key === 'comment' && !field.schema?.custom
 }
 
 export function requiredTransitionFields(transition: JiraTransition): JiraCreateField[] {
@@ -37,6 +37,10 @@ export function classifyTransitionRequirements(
   const unsupported: JiraCreateField[] = []
 
   for (const field of required) {
+    if (required.filter((other) => other.key === field.key).length > 1) {
+      unsupported.push(field)
+      continue
+    }
     if (
       isResolutionField(field) &&
       field.allowedValues?.some((value) => transitionAllowedValueKey(value))
@@ -64,7 +68,7 @@ export function transitionAllowedValueLabel(value: JiraCreateFieldAllowedValue):
 
 /** Stable select value / draft key — keep in sync with option `value` and draft seed. */
 export function transitionAllowedValueKey(value: JiraCreateFieldAllowedValue): string {
-  return value.id ?? value.value ?? value.name ?? ''
+  return value.id?.trim() || value.value?.trim() || value.name?.trim() || ''
 }
 
 export function buildResolutionFieldValue(
@@ -76,14 +80,14 @@ export function buildResolutionFieldValue(
     return null
   }
   const match = field.allowedValues?.find((value) => transitionAllowedValueKey(value) === trimmed)
-  if (match?.id) {
-    return { id: match.id }
+  if (match?.id?.trim()) {
+    return { id: match.id.trim() }
   }
-  if (match?.name) {
-    return { name: match.name }
+  if (match?.name?.trim()) {
+    return { name: match.name.trim() }
   }
-  if (match?.value) {
-    return { value: match.value }
+  if (match?.value?.trim()) {
+    return { value: match.value.trim() }
   }
   return null
 }

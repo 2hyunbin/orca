@@ -116,6 +116,12 @@ describe('Jira transition control', () => {
     expect(screen.getByRole('button', { name: 'Open in Jira' })).toBeTruthy()
   })
 
+  it('keeps a rejected mutation visible and offers Jira fallback', async () => {
+    await choose([close], vi.fn().mockRejectedValue(new Error('Disconnected from Jira host.')))
+    expect((await screen.findByRole('alert')).textContent).toContain('Disconnected from Jira host.')
+    expect(screen.getByRole('button', { name: 'Open in Jira' })).toBeTruthy()
+  })
+
   it('makes transition load failures retryable instead of disabling the status pill', async () => {
     const retry = vi.fn()
     render(
