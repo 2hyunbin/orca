@@ -162,9 +162,13 @@ function resolveBinaryRequestUrl(site: JiraSite, pathOrUrl: string): URL {
       return requestUrl
     }
     if (requestUrl.origin === siteUrl.origin) {
-      return baseUrl === site.siteUrl
-        ? requestUrl
-        : new URL(`${baseUrl}${requestUrl.pathname}${requestUrl.search}`)
+      if (baseUrl === site.siteUrl) {
+        return requestUrl
+      }
+      if (requestUrl.pathname.startsWith('/rest/')) {
+        return new URL(`${baseUrl}${requestUrl.pathname}${requestUrl.search}`)
+      }
+      throw new JiraApiError('Scoped Jira attachments require a REST content URL.', null)
     }
   }
   // The gateway origin is shared by every tenant, so its full cloud-ID prefix must match.

@@ -215,11 +215,15 @@ describe('scoped Jira Cloud tokens over HTTP', () => {
     ])
     for (const url of [
       'https://evil.example/attachment.png',
+      `${SITE}/secure/attachment/1/shot.png`,
+      `${SITE}/rest-other/attachment/1/shot.png`,
       'https://api.atlassian.com/ex/jira/other-cloud/rest/api/3/attachment/content/1',
       `${GATEWAY}-other/rest/api/3/attachment/content/1`,
       `${GATEWAY}/../other-cloud/rest/api/3/attachment/content/1`
     ]) {
-      await expect(jira.jiraRequestBinary(client, url)).rejects.toThrow('configured site')
+      await expect(jira.jiraRequestBinary(client, url)).rejects.toThrow(
+        /configured site|REST content URL/
+      )
     }
     expect(fixture.requests).toHaveLength(4)
   })

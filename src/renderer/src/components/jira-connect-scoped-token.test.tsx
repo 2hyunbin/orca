@@ -3,16 +3,19 @@ import { fireEvent, render, screen, cleanup, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JiraConnectionStatus } from '../../../shared/jira-types'
 import { JiraConnectDialog } from './jira-connect-dialog'
+import { getEnvironmentRuntimeContextKey } from '@/lib/provider-runtime-context'
 
 type FixtureState = {
   settings: { activeRuntimeEnvironmentId: string | null }
   jiraStatus: JiraConnectionStatus
+  jiraStatusContextKey: string | null
 }
 
 const mocks = vi.hoisted(() => {
   const state: FixtureState = {
     settings: { activeRuntimeEnvironmentId: null },
-    jiraStatus: { connected: false, viewer: null }
+    jiraStatus: { connected: false, viewer: null },
+    jiraStatusContextKey: null
   }
   return {
     connectJira: vi.fn(),
@@ -29,6 +32,7 @@ beforeEach(() => {
   mocks.connectJira.mockReset().mockResolvedValue({ ok: true })
   mocks.state.settings.activeRuntimeEnvironmentId = null
   mocks.state.jiraStatus = { connected: false, viewer: null }
+  mocks.state.jiraStatusContextKey = null
 })
 afterEach(cleanup)
 
@@ -40,9 +44,24 @@ function fillSiteAndToken(): void {
 }
 
 describe('Jira scoped-token connection UI', () => {
+  it('requires email until the selected runtime confirms its own scoped-token capability', () => {
+    mocks.state.settings.activeRuntimeEnvironmentId = 'new-runtime'
+    mocks.state.jiraStatus.supportsScopedTokens = true
+    mocks.state.jiraStatusContextKey = getEnvironmentRuntimeContextKey('old-runtime')
+    const view = render(<JiraConnectDialog open onOpenChange={vi.fn()} />)
+    fillSiteAndToken()
+    expect(screen.getByLabelText('Atlassian email')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect' })).toHaveProperty('disabled', true)
+    mocks.state.jiraStatusContextKey = getEnvironmentRuntimeContextKey('new-runtime')
+    view.rerender(<JiraConnectDialog open onOpenChange={vi.fn()} />)
+    expect(screen.getByLabelText('Atlassian email (optional for scoped tokens)')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connect' })).toHaveProperty('disabled', false)
+  })
+
   it('submits an email-free Cloud token to an upgraded host', async () => {
     mocks.state.settings.activeRuntimeEnvironmentId = 'remote-1'
     mocks.state.jiraStatus.supportsScopedTokens = true
+    mocks.state.jiraStatusContextKey = getEnvironmentRuntimeContextKey('remote-1')
     render(<JiraConnectDialog open onOpenChange={vi.fn()} />)
     fillSiteAndToken()
     expect(screen.getByLabelText('Atlassian email (optional for scoped tokens)')).toBeTruthy()

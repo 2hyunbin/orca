@@ -15,7 +15,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
-import { hasRemoteProviderRuntime } from '@/lib/provider-runtime-context'
+import {
+  getProviderRuntimeContextKey,
+  isEnvironmentRuntimeContextKey
+} from '@/lib/provider-runtime-context'
 import { preventOutsideDismissWhenDirty } from '@/lib/outside-dismiss-guard'
 import { translate } from '@/i18n/i18n'
 import { JiraConnectCredentialGuide } from './jira-connect-credential-guide'
@@ -47,8 +50,12 @@ export function JiraConnectDialog({
   const connectJira = useAppStore((s) => s.connectJira)
   const settings = useAppStore((s) => s.settings)
   const hostSupportsScopedTokens = useAppStore((s) => s.jiraStatus?.supportsScopedTokens === true)
-  const remoteRuntime = hasRemoteProviderRuntime(settings)
-  const supportsScopedTokens = !remoteRuntime || hostSupportsScopedTokens
+  const jiraStatusContextKey = useAppStore((s) => s.jiraStatusContextKey)
+  const providerRuntimeContextKey = getProviderRuntimeContextKey(settings)
+  const remoteRuntime = isEnvironmentRuntimeContextKey(providerRuntimeContextKey)
+  const supportsScopedTokens =
+    !remoteRuntime ||
+    (jiraStatusContextKey === providerRuntimeContextKey && hostSupportsScopedTokens)
   const mountedRef = useMountedRef()
   const siteUrlId = useId()
   const emailId = useId()
