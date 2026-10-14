@@ -1,4 +1,5 @@
 import type { SshConnection } from './ssh-connection'
+import type { SystemSshBuildArgsOptions } from './system-ssh-args'
 import {
   startSystemSshPortForwardProcess,
   systemSshForwardError
@@ -9,6 +10,12 @@ import type {
   SshPortForwardProvider,
   StartedPortForward
 } from './ssh-port-forward-provider'
+
+/** The build options a system-SSH forward spawns with; orphan recovery matches that argv. */
+export function systemSshForwardBuildArgsOptions(conn: SshConnection): SystemSshBuildArgsOptions {
+  // The managed tunnel reads the channel answer from stderr (lastChannelOpenFailure).
+  return { ...conn.getSystemSshBuildArgsOptions(), logChannelFailures: true }
+}
 
 export class SystemSshPortForwardProvider implements SshPortForwardProvider {
   canHandle(conn: SshConnection): boolean {
@@ -22,8 +29,7 @@ export class SystemSshPortForwardProvider implements SshPortForwardProvider {
       options.localPort,
       options.remoteHost,
       options.remotePort,
-      // The managed tunnel reads the channel answer from stderr (lastChannelOpenFailure).
-      { ...conn.getSystemSshBuildArgsOptions(), logChannelFailures: true }
+      systemSshForwardBuildArgsOptions(conn)
     )
 
     await forward.waitForStartup()
