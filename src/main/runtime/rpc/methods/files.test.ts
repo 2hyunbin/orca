@@ -683,11 +683,11 @@ describe('file RPC methods', () => {
   })
 
   it('forwards host cleanup confirmation for a committed runtime upload', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This method's dispatcher path only uses the two mocked runtime members.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
-      commitFileExplorerUpload: vi.fn().mockResolvedValue({ ok: true })
+      commitFileExplorerUpload: vi.fn().mockResolvedValue({ ok: true, tempRemoved: true })
     } as unknown as OrcaRuntimeService
-    vi.mocked(runtime.commitFileExplorerUpload).mockResolvedValue({ ok: true, tempRemoved: true })
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
 
     const response = await dispatcher.dispatch(

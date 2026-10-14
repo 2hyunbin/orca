@@ -12,7 +12,9 @@ import {
 
 installRuntimeFileClientEnvironment()
 
-const okResponse = (id: string, result: object = { ok: true }): unknown => ({
+type UploadCommitTestResult = { ok: true; tempRemoved?: boolean | string }
+
+const okResponse = (id: string, result: UploadCommitTestResult = { ok: true }): unknown => ({
   id,
   ok: true,
   result,
