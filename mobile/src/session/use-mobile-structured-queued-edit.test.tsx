@@ -255,9 +255,15 @@ describe('mobile in-place queued Edit', () => {
     }
   )
 
-  it('suppresses a late refusal notice after unmount', async () => {
+  it('retires a removed card during Save and ignores its late refusal while editing another card', async () => {
     const message = queuedDraft({ messageId: 'lost-reply-card' })
+    const nextMessage = queuedDraft({ messageId: 'next-card', position: 2 })
     await mount(message)
+    act(() => listener?.(batchEvent([message, nextMessage])))
+    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual([
+      message.messageId,
+      nextMessage.messageId
+    ])
     let answer: ((response: RpcResponse) => void) | undefined
     sendRequest.mockImplementation((method) =>
       method === 'agentSession.queuedMessageUpdate'
@@ -266,12 +272,18 @@ describe('mobile in-place queued Edit', () => {
           })
         : Promise.resolve(ok({ status: 'held' }))
     )
-    act(() => hook!.queued.editor!.change('landed despite disconnect'))
+    act(() => hook!.queued.editor!.change('submitted edit'))
     let save: Promise<boolean> | undefined
     act(() => {
       save = hook!.queued.editor!.save()
     })
-    await act(async () => renderer?.unmount())
+    expect(hook!.queued.editor?.saving).toBe(true)
+    act(() => listener?.(batchEvent([nextMessage])))
+    expect(hook!.queued.editor).toBeUndefined()
+    await act(async () => {
+      expect(await hook!.queued.edit!(nextMessage.messageId)).toBe(true)
+    })
+    act(() => hook!.queued.editor!.change('next edit'))
     await act(async () => {
       answer?.(
         ok({
@@ -279,10 +291,16 @@ describe('mobile in-place queued Edit', () => {
           refusal: { code: 'agent_session_operation_invalid', message: 'Could not edit.' }
         })
       )
-      await save
+      expect(await save).toBe(false)
+    })
+    expect(hook!.queued.editor).toMatchObject({
+      messageId: nextMessage.messageId,
+      text: 'next edit',
+      saving: false
     })
     expect(append).not.toHaveBeenCalled()
     expect(error).not.toHaveBeenCalled()
+    expect(resolved).not.toHaveBeenCalled()
   })
 
   it('keeps a refused Save in the editor and closes only when the published card is gone', async () => {

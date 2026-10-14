@@ -166,7 +166,6 @@ export function useMobileStructuredQueuedEdit(args: {
     if (
       !edit ||
       edit.scope !== sessionKey ||
-      edit.saving ||
       args.messages === null ||
       (args.messages.some((message) => message.messageId === edit.messageId) &&
         args.cards.some((card) => card.messageId === edit.messageId))
