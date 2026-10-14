@@ -20,6 +20,7 @@ describe('dropInheritedLaunchIdentityEnv', () => {
       ORCA_AGENT_SESSION_ID: 'parent-chat',
       ORCA_STRUCTURED_SESSION: '1',
       ORCA_AGENT_SESSION_SPAWN_TOKEN: 'parent-spawn',
+      ORCA_CHAT_SCRATCH_DIR: '/parent/scratch',
       ORCA_CHAT_VISUALS_DIR: '/parent/visuals',
       ORCA_RUNTIME_SOURCE_ID: 'parent-source',
       ORCA_RUNTIME_SOURCE_INCARNATION: 'parent-runtime'

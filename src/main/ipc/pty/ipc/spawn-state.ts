@@ -16,6 +16,7 @@ import type { PaneSpawnReservation } from '../pane/spawn-reservation'
 import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { localProvider } from '../provider/registry'
 import type { AdoptStablePaneResult, PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
+import type { PaneAgentLaunch } from './spawn-agent-launch-end'
 
 export type PtyIpcSpawnState = {
   deps: PtySpawnIpcDeps
@@ -44,6 +45,10 @@ export type PtyIpcSpawnState = {
   releaseWorktreeSpawn: (() => void) | undefined
   provider: IPtyProvider
   preAdoptedStablePane: AdoptStablePaneResult | null
+  /** The agent launch this pane's spawn admitted, until the spawn ends it. */
+  paneAgentLaunch: PaneAgentLaunch | null
+  /** The new process exited before it registered; the pane drains it. */
+  exitedBeforeRegistration: boolean
   isClaudeLaunch: boolean
   claudeAuth: ClaudeRuntimeAuthPreparation | null
   terminalRuntimeOptions: {
@@ -124,6 +129,8 @@ export function createPtyIpcSpawnState(
     releaseWorktreeSpawn: undefined,
     provider: localProvider,
     preAdoptedStablePane: null,
+    paneAgentLaunch: null,
+    exitedBeforeRegistration: false,
     isClaudeLaunch: false,
     claudeAuth: null,
     terminalRuntimeOptions: {},

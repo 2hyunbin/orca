@@ -343,6 +343,8 @@ export type GlobalSettings = NativeChatGlobalSettings & {
    *  - 'blank': blank terminal (no agent launched)
    *  - TuiAgent: a specific agent id */
   defaultTuiAgent: TuiAgent | 'blank' | null
+  /** @deprecated Retained for older peers; setup-only is now a per-create choice. */
+  newWorkspaceSetupOnly?: boolean
   /** Agents hidden from picker/auto-launch; detection stays a raw PATH snapshot. */
   disabledTuiAgents: TuiAgent[]
   /** Master switch for the experimental plugin system. Off by default: no
@@ -501,6 +503,8 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   experimentalNewWorktreeCardStyle?: boolean
   /** Experimental: per-workspace on-demand environment recipes and setup surface. */
   experimentalEphemeralVms?: boolean
+  /** Experimental (Windows): add WSL distros as hosts, each running its own Orca server. */
+  experimentalWslHosts?: boolean
   /** Compact worktree cards: hide the metadata row when title and branch say the same thing. */
   compactWorktreeCards: boolean
   /** Legacy persisted key from the Experimental rollout; new writes use compactWorktreeCards. */

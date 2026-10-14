@@ -5,11 +5,14 @@ import {
   ORCA_AGENT_SESSION_CALLER_ENV_KEYS,
   ORCA_PANE_IDENTITY_ENV_KEYS
 } from '../ipc/pty/host-env/spawn-env-keys'
-import { NATIVE_CHAT_VISUALS_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
+import {
+  LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV,
+  NATIVE_CHAT_SCRATCH_DIR_ENV
+} from '../native-chat/native-chat-visuals-delivery'
 
 /**
  * What an Orca spawn names its child by: a terminal pane's identity, workspace hints and hook route,
- * a chat session's caller identity, and a chat's visuals folder. Orca never sets these on itself, so
+ * a chat session's caller identity, and a chat's scratch folder. Orca never sets these on itself, so
  * a host that holds one at startup was launched from inside that pane or chat (`pnpm dev`, `orca
  * serve` or the app run from an Orca terminal), and every child it spawns would claim to be it.
  */
@@ -18,7 +21,8 @@ const INHERITED_LAUNCH_IDENTITY_ENV_KEYS = [
   ...AGENT_HOOK_RUNTIME_ENV_KEYS,
   ...ORCA_AGENT_SESSION_CALLER_ENV_KEYS,
   ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV,
-  NATIVE_CHAT_VISUALS_DIR_ENV
+  NATIVE_CHAT_SCRATCH_DIR_ENV,
+  LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV
 ] as const
 
 /** Drops the launching pane's or chat's identity from a host's own environment, once at startup,
