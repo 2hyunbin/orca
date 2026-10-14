@@ -106,7 +106,14 @@ describe('PTY-owned Kitty file reads', () => {
       '\\\\wsl.localhost\\Ubuntu\\tmp\\image'
     )
     expect(resolveKittyFilePath('/mnt/c/tmp/image', 'Ubuntu')).toBe('C:\\tmp\\image')
-    for (const path of ['C:\\image', '//server/image', 'relative', '/tmp\\image']) {
+    for (const path of [
+      'C:\\image',
+      '//server/image',
+      'relative',
+      '/tmp\\image',
+      '/mnt/c/tmp/image:stream',
+      '/mnt/c/tmp/NUL'
+    ]) {
       expect(() => resolveKittyFilePath(path, 'Ubuntu')).toThrow()
     }
   })

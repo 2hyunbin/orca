@@ -92,7 +92,8 @@ export function resolveKittyFilePath(path: string, wslDistro: string | null): st
     if (process.platform !== 'win32' || !/^\/(?!\/)/.test(path) || path.includes('\\')) {
       throw new Error('Kitty image path must belong to this terminal WSL distro')
     }
-    return toWindowsWslPath(path, wslDistro)
+    const mapped = toWindowsWslPath(path, wslDistro)
+    return parseWslUncPath(mapped) ? mapped : resolveKittyFilePath(mapped, null)
   }
   if (
     !(process.platform === 'win32' ? win32.isAbsolute(path) : isAbsolute(path)) ||
