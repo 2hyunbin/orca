@@ -111,7 +111,7 @@ type ClientView = {
   header: boolean
   /** A new message first asks whether to clear the cards ("Send message?"). */
   dialog: boolean
-  /** Each card's Send-now reads Steer. */
+  /** Whether each card offers Steer into a running turn. */
   steers: boolean[]
   /** Why each card waits, which picks its caption: 'turn' is a plain waiting card. */
   holds: string[]
@@ -172,7 +172,7 @@ async function watchClient(): Promise<ClientView[]> {
         }),
         header,
         dialog: queueHeld,
-        steers: cards.map((card) => queuedMessageCardSteers(card)),
+        steers: cards.map((card) => queuedMessageCardSteers(card, working)),
         holds: cards.map((card) => card.hold),
         cards: cards.length,
         nextQueuedMessageId
@@ -271,7 +271,7 @@ describe('after a restart, nothing sends by itself', () => {
       button: 'send',
       cards: 2,
       holds: ['turn', 'turn'],
-      steers: [true, true]
+      steers: [false, false]
     })
     expect(await rig.drafts()).toEqual([
       { messageId: first, state: 'waiting' },
@@ -323,7 +323,7 @@ describe('after a restart, nothing sends by itself', () => {
     expect(views.filter((view) => view.header || view.dialog)).toEqual([])
   })
 
-  it('Steer on a card sends it now, and the rest follow it in order', async () => {
+  it('Send on an idle card sends it now, and the rest follow it in order', async () => {
     const { first, second } = await restartedIdleWithCards()
     expect(await rig.sendNow(second)).toMatchObject({
       ok: true,
@@ -471,10 +471,10 @@ describe("a message sent over a held queue (the confirmation's Send message)", (
     const waiting = views.slice(sentAt, acceptedAt)
     expect(waiting.some((view) => view.stopLive && view.cards === 2)).toBe(true)
     expect(views.slice(sentAt).filter((view) => view.header)).toEqual([])
-    expect(views.flatMap((view) => view.steers)).not.toContain(false)
+    expect(views.filter((view) => view.working).flatMap((view) => view.steers)).not.toContain(false)
   })
 
-  it('Steer on a held card: the paused row goes from the press until its turn is accepted, then the rest follow', async () => {
+  it('Send on an idle held card: the paused row goes from the press until its turn is accepted, then the rest follow', async () => {
     const { first, second, views } = await heldIdleQueue()
     const pressedAt = views.length
     expect(await rig.sendNow(second)).toMatchObject({ ok: true })
