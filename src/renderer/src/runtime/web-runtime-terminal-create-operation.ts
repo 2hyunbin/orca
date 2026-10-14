@@ -46,7 +46,7 @@ import {
 import { settleWebRuntimeTerminalPlacement } from './web-runtime-terminal-placement-settlement'
 import {
   createHostShellTerminal,
-  hostCreatesRequestedShell
+  hostHonoursWorktreeShell
 } from './web-runtime-terminal-shell-selection'
 import { createSessionTabsTerminal } from './web-runtime-session-tabs-terminal-create'
 
@@ -223,7 +223,7 @@ export async function createWebRuntimeSessionTerminalResult(
           timeoutMs: 15_000
         })
       }
-    } else if (args.shell && (await hostCreatesRequestedShell(environmentId))) {
+    } else if (args.shell && hostHonoursWorktreeShell(environmentId, args.worktreeId, args.shell)) {
       const created = await createHostShellTerminal(callEnvironment, args.worktreeId, args.shell)
       hostCreated = true
       createdTabId = created.tabId

@@ -94,6 +94,11 @@ export function isSupportedWindowsShellOverride(shell: string): boolean {
   return canonicalizeWindowsShellOverride(shell) !== undefined
 }
 
+/** Each accepted shell once, in its canonical spelling. */
+export function listCanonicalWindowsShellOverrides(): string[] {
+  return [...new Set(WINDOWS_SHELL_OVERRIDE_CANONICAL_NAMES.values())]
+}
+
 /** Sorted for a stable error message; callers list these when refusing a value. */
 export function listSupportedWindowsShellOverrides(): string[] {
   return [...WINDOWS_SHELL_OVERRIDE_CANONICAL_NAMES.keys()].sort()

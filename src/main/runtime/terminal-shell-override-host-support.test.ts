@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { terminalShellOverrideRefusal } from './terminal-shell-override-host-support'
+import {
+  listHonouredWindowsShellOverrides,
+  terminalShellOverrideRefusal
+} from './terminal-shell-override-host-support'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 
 const NO_PROJECT_RUNTIME = undefined
@@ -200,5 +203,48 @@ describe('terminalShellOverrideRefusal', () => {
         })
       ).toBeNull()
     })
+  })
+})
+
+describe('listHonouredWindowsShellOverrides', () => {
+  const WINDOWS_SHELLS = ['powershell.exe', 'pwsh.exe', 'cmd.exe', 'bash.exe', 'git-bash']
+
+  it('lists every shell for a Windows-host workspace, and only WSL for a WSL one', () => {
+    const base = {
+      connectionId: null,
+      platform: 'win32' as const,
+      workspacePath: WINDOWS_WORKSPACE
+    }
+    expect(
+      listHonouredWindowsShellOverrides({ ...base, projectRuntime: NO_PROJECT_RUNTIME })
+    ).toEqual(expect.arrayContaining([...WINDOWS_SHELLS, 'wsl.exe']))
+    expect(
+      listHonouredWindowsShellOverrides({
+        ...base,
+        projectRuntime: resolvedRuntime('windows-host')
+      })
+    ).toEqual(expect.arrayContaining(WINDOWS_SHELLS))
+    expect(
+      listHonouredWindowsShellOverrides({ ...base, projectRuntime: resolvedRuntime('wsl') })
+    ).toEqual(['wsl.exe'])
+  })
+
+  it('lists only WSL for a \\\\wsl$ folder and nothing over SSH', () => {
+    expect(
+      listHonouredWindowsShellOverrides({
+        connectionId: null,
+        platform: 'win32',
+        projectRuntime: NO_PROJECT_RUNTIME,
+        workspacePath: WSL_WORKSPACE
+      })
+    ).toEqual(['wsl.exe'])
+    expect(
+      listHonouredWindowsShellOverrides({
+        connectionId: 'ssh-1',
+        platform: 'win32',
+        projectRuntime: NO_PROJECT_RUNTIME,
+        workspacePath: WINDOWS_WORKSPACE
+      })
+    ).toEqual([])
   })
 })

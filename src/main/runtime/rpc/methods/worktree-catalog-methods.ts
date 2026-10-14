@@ -49,10 +49,12 @@ export const WORKTREE_CATALOG_METHODS = [
     handler: async (params, context) => {
       const pendingAtScan = snapshotPendingWorktreeRemovals()
       return projectWorktreeListRemovals(
-        await context.runtime.listManagedWorktrees(
-          params.repo,
-          params.limit,
-          supportsWorktreeVisibilitySourceDefaults(context)
+        context.runtime.withWindowsTerminalShells(
+          await context.runtime.listManagedWorktrees(
+            params.repo,
+            params.limit,
+            supportsWorktreeVisibilitySourceDefaults(context)
+          )
         ),
         context,
         pendingAtScan
@@ -72,10 +74,12 @@ export const WORKTREE_CATALOG_METHODS = [
     handler: async (params, context) => {
       const pendingAtScan = snapshotPendingWorktreeRemovals()
       return projectWorktreeListRemovals(
-        await context.runtime.listDetectedManagedWorktrees(
-          params.repo,
-          undefined,
-          supportsWorktreeVisibilitySourceDefaults(context)
+        context.runtime.withWindowsTerminalShells(
+          await context.runtime.listDetectedManagedWorktrees(
+            params.repo,
+            undefined,
+            supportsWorktreeVisibilitySourceDefaults(context)
+          )
         ),
         context,
         pendingAtScan

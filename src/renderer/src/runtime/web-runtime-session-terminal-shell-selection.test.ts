@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as TrackingDecisions from './web-session-tabs-sync/tracking-decisions'
 import { createWebRuntimeSessionTerminal } from './web-runtime-terminal-creation'
 import { peekWebSessionFocusIntent } from './web-session-focus-intent'
-import { TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import {
   ENVIRONMENT_ID,
   FOCUS_LEAF_ID,
+  RUNTIME_EXECUTION_HOST_ID,
   WORKTREE_ID,
   makeSnapshot,
   resetTerminalCreateEnvironment,
@@ -89,28 +89,27 @@ const HOST_TAB_ID = 'host-shell-tab'
 
 type HostRequest = { method: string; params?: Record<string, unknown> }
 
-function stubHost(
-  status: 'advertised' | 'not-advertised' | 'unreachable',
-  { moveFails = false }: { moveFails?: boolean } = {}
-) {
-  const runtimeCall = vi.fn(async (request: HostRequest) => {
-    if (request.method === 'status.get') {
-      if (status === 'unreachable') {
-        throw new Error('connection lost')
-      }
-      return {
-        id: 'status',
-        ok: true,
-        result: {
-          runtimeId: 'runtime-1',
-          graphStatus: 'ready',
-          runtimeProtocolVersion: 3,
-          minCompatibleRuntimeClientVersion: 2,
-          capabilities:
-            status === 'advertised' ? [TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY] : []
+/** The paired host's workspace row, as worktree.detectedList delivered it. */
+function seedHostWorktree(windowsTerminalShells: string[] | undefined): void {
+  const state = mocks.getState()
+  mocks.getState.mockReturnValue({
+    ...state,
+    worktreesByRepo: {
+      'host-repo': [
+        {
+          id: WORKTREE_ID,
+          repoId: 'host-repo',
+          hostId: RUNTIME_EXECUTION_HOST_ID,
+          path: '/worktree',
+          ...(windowsTerminalShells ? { windowsTerminalShells } : {})
         }
-      }
+      ]
     }
+  })
+}
+
+function stubHost({ moveFails = false }: { moveFails?: boolean } = {}) {
+  const runtimeCall = vi.fn(async (request: HostRequest) => {
     if (request.method === 'terminal.create') {
       return {
         id: 'create',
@@ -160,8 +159,9 @@ describe('creating a terminal with a picked shell on a paired host', () => {
     resetTerminalCreateEnvironment()
   })
 
-  it('asks a host that selects shells to run the picked shell itself', async () => {
-    const runtimeCall = stubHost('advertised')
+  it('asks the host to run a shell it listed for the workspace', async () => {
+    seedHostWorktree(['powershell.exe', 'cmd.exe', 'git-bash'])
+    const runtimeCall = stubHost()
 
     await expect(
       createWebRuntimeSessionTerminal({
@@ -174,9 +174,7 @@ describe('creating a terminal with a picked shell on a paired host', () => {
     ).resolves.toEqual({ status: 'created' })
 
     expect(requestsFor(runtimeCall, 'terminal.create')).toEqual([
-      expect.objectContaining({
-        params: expect.objectContaining({ shell: 'powershell.exe' })
-      })
+      expect.objectContaining({ params: expect.objectContaining({ shell: 'powershell.exe' }) })
     ])
     const createParams = requestsFor(runtimeCall, 'terminal.create')[0]?.params
     expect(createParams).not.toHaveProperty('command')
@@ -200,7 +198,8 @@ describe('creating a terminal with a picked shell on a paired host', () => {
 
   it('reports a shell terminal the host made as created even when the group move fails', async () => {
     // Why: a "failed" answer invites a retry, which would start a second terminal on the host.
-    stubHost('advertised', { moveFails: true })
+    seedHostWorktree(['powershell.exe'])
+    stubHost({ moveFails: true })
 
     await expect(
       createWebRuntimeSessionTerminal({
@@ -212,32 +211,34 @@ describe('creating a terminal with a picked shell on a paired host', () => {
     ).resolves.toEqual({ status: 'created' })
   })
 
-  it.each(['not-advertised', 'unreachable'] as const)(
-    'keeps typing the shell into the default shell of a host whose support is %s',
-    async (status) => {
-      const runtimeCall = stubHost(status)
+  it.each([
+    { name: 'sends no shell list (an older host)', shells: undefined },
+    { name: 'did not list the shell', shells: ['wsl.exe'] }
+  ])('types the shell into the default shell of a host that $name', async ({ shells }) => {
+    seedHostWorktree(shells)
+    const runtimeCall = stubHost()
 
-      await expect(
-        createWebRuntimeSessionTerminal({
-          worktreeId: WORKTREE_ID,
-          environmentId: ENVIRONMENT_ID,
-          targetGroupId: 'client-group',
-          shell: 'cmd.exe',
-          activate: true
-        })
-      ).resolves.toEqual({ status: 'created' })
+    await expect(
+      createWebRuntimeSessionTerminal({
+        worktreeId: WORKTREE_ID,
+        environmentId: ENVIRONMENT_ID,
+        targetGroupId: 'client-group',
+        shell: 'cmd.exe',
+        activate: true
+      })
+    ).resolves.toEqual({ status: 'created' })
 
-      expect(requestsFor(runtimeCall, 'terminal.create')).toEqual([])
-      expect(requestsFor(runtimeCall, 'session.tabs.createTerminal')).toEqual([
-        expect.objectContaining({
-          params: expect.objectContaining({ command: 'cmd.exe', targetGroupId: 'client-group' })
-        })
-      ])
-    }
-  )
+    expect(requestsFor(runtimeCall, 'terminal.create')).toEqual([])
+    expect(requestsFor(runtimeCall, 'session.tabs.createTerminal')).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ command: 'cmd.exe', targetGroupId: 'client-group' })
+      })
+    ])
+  })
 
-  it('does not probe the host for a terminal without a picked shell', async () => {
-    const runtimeCall = stubHost('advertised')
+  it('keeps a terminal without a picked shell on the session-tab create', async () => {
+    seedHostWorktree(['powershell.exe'])
+    const runtimeCall = stubHost()
 
     await createWebRuntimeSessionTerminal({
       worktreeId: WORKTREE_ID,
@@ -245,7 +246,7 @@ describe('creating a terminal with a picked shell on a paired host', () => {
       command: 'npm test'
     })
 
-    expect(requestsFor(runtimeCall, 'status.get')).toEqual([])
+    expect(requestsFor(runtimeCall, 'terminal.create')).toEqual([])
     expect(requestsFor(runtimeCall, 'session.tabs.createTerminal')).toEqual([
       expect.objectContaining({ params: expect.objectContaining({ command: 'npm test' }) })
     ])

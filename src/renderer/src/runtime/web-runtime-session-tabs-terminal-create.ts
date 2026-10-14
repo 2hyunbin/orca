@@ -17,10 +17,7 @@ export async function createSessionTabsTerminal(
       worktree: toRuntimeWorktreeSelector(args.worktreeId),
       afterTabId: args.afterTabId ? toHostSessionTabId(args.afterTabId) : undefined,
       targetGroupId: args.targetGroupId,
-      // Compat: a host before #20825 runs only its default shell, so a picked shell reaches it as
-      // a command typed into that shell. Delete once every supported host advertises
-      // terminal.create-shell-selection.v1.
-      command: args.shell ?? args.command,
+      command: compatShellAsTypedCommand(args),
       cwd: args.cwd,
       ...(args.env ? { env: args.env } : {}),
       ...(args.envToDelete ? { envToDelete: args.envToDelete } : {}),
@@ -39,4 +36,13 @@ export async function createSessionTabsTerminal(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: session.tabs.createTerminal answers with RuntimeMobileSessionCreateTerminalResult; the envelope type is erased by the generic environment call.
     response as RuntimeRpcResponse<RuntimeMobileSessionCreateTerminalResult>
   )
+}
+
+/**
+ * Compat: a host that sends no `windowsTerminalShells` list was never asked which shells it
+ * honours, so a picked shell reaches it as before: typed into its default shell. Delete once every
+ * supported host sends the list.
+ */
+function compatShellAsTypedCommand(args: CreateWebRuntimeSessionTerminalArgs): string | undefined {
+  return args.shell ?? args.command
 }

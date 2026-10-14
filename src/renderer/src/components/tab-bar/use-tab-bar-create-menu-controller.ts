@@ -14,7 +14,7 @@ import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
 import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
 import {
-  buildWindowsShellMenuEntries,
+  useWindowsShellMenuEntries,
   type WindowsShellMenuEntry
 } from './tab-bar-windows-shell-options'
 import type {
@@ -143,23 +143,14 @@ export function useTabBarCreateMenuController({
   const queueFocusAfterNewTabMenuClose = (focus: () => void): void => {
     pendingNewTabMenuFocusRef.current = focus
   }
-  const windowsShellEntries = useMemo(() => {
-    return buildWindowsShellMenuEntries({
-      showWindowsShellMenu,
-      hasShellLauncher: Boolean(onNewTerminalWithShell),
-      projectRuntimeShellMenuMode,
-      defaultWindowsShell,
-      gitBashAvailable: windowsTerminalCapabilities.gitBashAvailable,
-      wslAvailable: windowsTerminalCapabilities.wslAvailable
-    })
-  }, [
-    defaultWindowsShell,
-    onNewTerminalWithShell,
-    projectRuntimeShellMenuMode,
+  const windowsShellEntries = useWindowsShellMenuEntries({
+    worktreeId,
     showWindowsShellMenu,
-    windowsTerminalCapabilities.gitBashAvailable,
-    windowsTerminalCapabilities.wslAvailable
-  ])
+    hasShellLauncher: Boolean(onNewTerminalWithShell),
+    projectRuntimeShellMenuMode,
+    defaultWindowsShell,
+    windowsTerminalCapabilities
+  })
   const createMenuOptions = useMemo(
     () =>
       buildTabCreateMenuOptions({

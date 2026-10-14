@@ -1,6 +1,10 @@
 import type { BuiltInWindowsTerminalShell } from '../../../../shared/windows-terminal-shell'
 import { WINDOWS_GIT_BASH_SHELL } from '../../../../shared/windows-terminal-shell'
+import { useMemo } from 'react'
 import { translate } from '@/i18n/i18n'
+import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
+import { useAppStore } from '@/store'
+import { selectKnownWorktreeById } from '@/store/selectors'
 import type { getProjectRuntimeShellMenuMode } from './use-tab-bar-runtime-model'
 
 export type WindowsShellMenuEntry = {
@@ -14,7 +18,8 @@ export function buildWindowsShellMenuEntries({
   projectRuntimeShellMenuMode,
   defaultWindowsShell,
   gitBashAvailable,
-  wslAvailable
+  wslAvailable,
+  hostHonouredShells
 }: {
   showWindowsShellMenu: boolean
   hasShellLauncher: boolean
@@ -22,6 +27,8 @@ export function buildWindowsShellMenuEntries({
   defaultWindowsShell: string
   gitBashAvailable: boolean
   wslAvailable: boolean
+  /** The workspace host's own list; absent from hosts that predate it. */
+  hostHonouredShells?: readonly string[]
 }): WindowsShellMenuEntry[] | undefined {
   if (!showWindowsShellMenu || !hasShellLauncher) {
     return undefined
@@ -53,12 +60,55 @@ export function buildWindowsShellMenuEntries({
       shell: 'wsl.exe'
     })
   }
-  if (allShells.length === 0) {
+  const offeredShells = hostHonouredShells
+    ? allShells.filter((entry) => hostHonouredShells.includes(entry.shell))
+    : allShells
+  if (offeredShells.length === 0) {
     return undefined
   }
   const defaultEntry =
-    allShells.find((shell) => shell.shell === defaultWindowsShell) ?? allShells[0]
-  return [defaultEntry, ...allShells.filter((shell) => shell.shell !== defaultEntry.shell)].map(
+    offeredShells.find((shell) => shell.shell === defaultWindowsShell) ?? offeredShells[0]
+  return [defaultEntry, ...offeredShells.filter((shell) => shell.shell !== defaultEntry.shell)].map(
     (entry) => ({ label: entry.label, shell: entry.shell })
+  )
+}
+
+export function useWindowsShellMenuEntries({
+  worktreeId,
+  windowsTerminalCapabilities,
+  ...args
+}: Omit<
+  Parameters<typeof buildWindowsShellMenuEntries>[0],
+  'gitBashAvailable' | 'wslAvailable' | 'hostHonouredShells'
+> & {
+  worktreeId: string
+  windowsTerminalCapabilities: WindowsTerminalCapabilities
+}): WindowsShellMenuEntry[] | undefined {
+  const hostHonouredShells = useAppStore(
+    (s) => selectKnownWorktreeById(s, worktreeId)?.windowsTerminalShells
+  )
+  const { showWindowsShellMenu, hasShellLauncher, projectRuntimeShellMenuMode } = args
+  const { defaultWindowsShell } = args
+  const { gitBashAvailable, wslAvailable } = windowsTerminalCapabilities
+  return useMemo(
+    () =>
+      buildWindowsShellMenuEntries({
+        showWindowsShellMenu,
+        hasShellLauncher,
+        projectRuntimeShellMenuMode,
+        defaultWindowsShell,
+        gitBashAvailable,
+        wslAvailable,
+        hostHonouredShells
+      }),
+    [
+      defaultWindowsShell,
+      gitBashAvailable,
+      hasShellLauncher,
+      hostHonouredShells,
+      projectRuntimeShellMenuMode,
+      showWindowsShellMenu,
+      wslAvailable
+    ]
   )
 }

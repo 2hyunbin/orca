@@ -1,6 +1,7 @@
 import { isWslShellName } from '../../shared/local-windows-terminal-runtime'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import { parseWslUncPath } from '../../shared/wsl-paths'
+import { listCanonicalWindowsShellOverrides } from '../../shared/windows-terminal-shell'
 
 /**
  * Whether the host about to spawn a terminal can honour a requested Windows shell.
@@ -35,6 +36,16 @@ export function terminalShellOverrideRefusal(args: {
   return (
     projectRuntimeShellConflict(args.shellOverride, args.projectRuntime) ??
     wslUncPathShellConflict(args.shellOverride, args.cwd, args.workspacePath)
+  )
+}
+
+/** The shells a workspace's terminal at its root would accept: the refusal rules, asked per shell. */
+export function listHonouredWindowsShellOverrides(
+  args: Omit<Parameters<typeof terminalShellOverrideRefusal>[0], 'shellOverride' | 'cwd'>
+): string[] {
+  return listCanonicalWindowsShellOverrides().filter(
+    (shellOverride) =>
+      terminalShellOverrideRefusal({ ...args, shellOverride, cwd: args.workspacePath }) === null
   )
 }
 

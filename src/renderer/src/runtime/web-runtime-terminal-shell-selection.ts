@@ -1,7 +1,7 @@
-import { TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
-import { isRuntimeCompatBlockError } from './runtime-protocol-compat'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import { useAppStore } from '../store'
+import { selectKnownWorktreeById } from '../store/selectors'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
-import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import type { captureRuntimeEnvironmentCall } from './web-runtime-session-environment'
 import {
@@ -9,20 +9,21 @@ import {
   readCreatedAgentTerminalIdentity
 } from './web-runtime-terminal-identity'
 
-/** Whether the host's terminal.create runs the requested shell itself instead of its default. */
-export async function hostCreatesRequestedShell(environmentId: string): Promise<boolean> {
-  try {
-    return await runtimeEnvironmentSupportsCapability(
-      environmentId,
-      TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY
-    )
-  } catch (error) {
-    if (isRuntimeCompatBlockError(error)) {
-      throw error
-    }
-    // Why: a failed probe created nothing, so the old-host typed-command create is still safe.
-    return false
-  }
+/**
+ * Whether the workspace's host listed this shell as one its terminal.create honours. A host that
+ * sends no list (older than this field) gets the typed-command compat create instead.
+ */
+export function hostHonoursWorktreeShell(
+  environmentId: string,
+  worktreeId: string,
+  shell: string
+): boolean {
+  const worktree = selectKnownWorktreeById(
+    useAppStore.getState(),
+    worktreeId,
+    toRuntimeExecutionHostId(environmentId)
+  )
+  return worktree?.windowsTerminalShells?.includes(shell) === true
 }
 
 /** Only terminal.create takes a shell; session.tabs.createTerminal has no such field. */

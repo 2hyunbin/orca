@@ -101,6 +101,8 @@ export type Worktree = {
   hostId?: ExecutionHostId
   /** Renderer projection of the paired runtime that transports operations to `hostId`. */
   runtimeOwnerEnvironmentId?: string
+  /** Windows shells `terminal.create` honours here; a Windows host sends it, others omit it. */
+  windowsTerminalShells?: string[]
   /** Authenticated client that created this workspace. Missing means unknown legacy origin. */
   creatorProvenance?: WorkspaceCreatorProvenance
   /** Host-specific setup used to create/run this workspace. */

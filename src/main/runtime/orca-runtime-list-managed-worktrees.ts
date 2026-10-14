@@ -30,6 +30,8 @@ import {
 } from '../ports/workspace-port-execution-host'
 import { resolveWorktreeHostRouting } from './worktree-launch-host-repo'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import { listHonouredWindowsShellOverrides } from './terminal-shell-override-host-support'
+import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 
 export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce {
   listManagedWorktrees(
@@ -38,6 +40,27 @@ export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreS
     sourceDefaultsSupported = true
   ): Promise<RuntimeWorktreeListResult> {
     return this.managedWorktreeQueries.list(repoSelector, limit, sourceDefaultsSupported)
+  }
+
+  /** Stamps each workspace's honoured Windows shells, so a paired client offers only those. */
+  withWindowsTerminalShells<T extends { worktrees: Worktree[] }>(result: T): T {
+    const store = this.store
+    if (process.platform !== 'win32' || !store) {
+      return result
+    }
+    return {
+      ...result,
+      worktrees: result.worktrees.map((worktree) => ({
+        ...worktree,
+        // Same inputs terminal.create judges a shell with; the WSL lookup is cache-only.
+        windowsTerminalShells: listHonouredWindowsShellOverrides({
+          connectionId: store.getRepo(worktree.repoId)?.connectionId ?? null,
+          platform: process.platform,
+          projectRuntime: resolveLocalProjectRuntimeForWorktreeId(store, worktree.id),
+          workspacePath: worktree.path
+        })
+      }))
+    }
   }
 
   listRetiredWorktreeNames(repoSelector: string) {
