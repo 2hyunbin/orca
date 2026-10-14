@@ -87,15 +87,12 @@ export async function addIssueCommentForAgent(
     if (!result.success) {
       throw new LinearWriteFailure('failed', 'Failed to create comment')
     }
-    const comment = await confirmLinearWrite(
-      'Comment was created but could not be retrieved',
-      async () => result.comment
-    )
-    if (!comment?.id) {
+    const commentId = result.commentId
+    if (!commentId) {
       throw new LinearWriteFailure('unconfirmed', 'Comment was created but could not be retrieved')
     }
     const record = await confirmLinearWrite('Comment was created but could not be retrieved', () =>
-      readCommentWriteRecord(client, comment.id)
+      readCommentWriteRecord(client, commentId)
     )
     if (!record) {
       throw new LinearWriteFailure('unconfirmed', 'Comment was created but could not be retrieved')
@@ -125,11 +122,8 @@ export async function createIssueAttachment(
     if (!result.success) {
       throw new LinearWriteFailure('failed', 'Failed to create attachment')
     }
-    const attachment = await confirmLinearWrite(
-      'Attachment was created but could not be retrieved',
-      async () => result.attachment
-    )
-    if (!attachment?.id) {
+    const attachmentId = result.attachmentId
+    if (!attachmentId) {
       throw new LinearWriteFailure(
         'unconfirmed',
         'Attachment was created but could not be retrieved'
@@ -137,7 +131,7 @@ export async function createIssueAttachment(
     }
     const record = await confirmLinearWrite(
       'Attachment was created but could not be retrieved',
-      () => readAttachmentWriteRecord(client, attachment.id)
+      () => readAttachmentWriteRecord(client, attachmentId)
     )
     if (!record) {
       throw new LinearWriteFailure(
