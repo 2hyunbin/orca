@@ -13,6 +13,7 @@ import type {
   StructuredPointerSessionFacts
 } from './structured-mailbox-pointer-delivery'
 import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import {
   structuredSessionGateFacts,
   type StructuredSessionGateFacts
@@ -20,7 +21,7 @@ import {
 import { sendAgentTurn, type AgentTurnDelivery } from './send-agent-turn'
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 
-/** Names the dispatch a nudge belongs to on the operation row it writes. */
+/** Names the dispatch a send belongs to on the operation row it writes. */
 export function structuredPointerCallerKey(dispatchId: string): string {
   return `trusted-local:orchestration:${dispatchId}`
 }
@@ -51,7 +52,7 @@ export async function readStructuredSessionGateFacts(
   return snapshot ? structuredSessionGateFacts(snapshot.items) : null
 }
 
-/** What each recorded send settled as. */
+/** What each recorded send settled as, and the orchestration message it carried. */
 async function readPointerSessionFacts(
   sessionId: string
 ): Promise<StructuredPointerSessionFacts | null> {
@@ -61,10 +62,22 @@ async function readPointerSessionFacts(
   }
   const boundary =
     getStructuredAgentSessionHost()?.deps.store.getRecord(sessionId)?.providerContextBoundary
+  const mailByItemId = new Map<string, string>()
+  for (const item of snapshot.items) {
+    const orchestration = item.body.kind === 'message' ? item.body.from?.orchestration : undefined
+    if (orchestration?.message === 'mail') {
+      mailByItemId.set(item.itemId, orchestration.messageId)
+    }
+  }
   return {
-    submissions: boundary
-      ? snapshot.submissions.filter((submission) => submission.fence > boundary.afterFence)
-      : snapshot.submissions
+    submissions: snapshot.submissions
+      .filter((submission) => !boundary || submission.fence > boundary.afterFence)
+      .map(({ clientMessageId, dispatchState, submittedAt }) => ({
+        clientMessageId,
+        dispatchState,
+        submittedAt,
+        mailMessageId: mailByItemId.get(agentJournalSubmissionKey(clientMessageId))
+      }))
   }
 }
 
@@ -86,7 +99,7 @@ async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapsh
 }
 
 /**
- * How a nudge reaches a busy chat. An agent that takes a message mid-turn gets it at once, as a
+ * How mail reaches a busy chat. An agent that takes a message mid-turn gets it at once, as a
  * terminal agent gets its typed nudge; one that would cancel its turn for it queues it as a card.
  * Depends on the agent alone: delivery is part of the send's fingerprint, so a retry under the same
  * operation id must ask for the same delivery.
@@ -127,6 +140,7 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
         callerKey: input.dispatchId
           ? structuredPointerCallerKey(input.dispatchId)
           : structuredSessionPointerCallerKey(input.sessionId),
+        onAnswered: input.onAnswered,
         turn: {
           body: input.body,
           delivery: pointerDelivery(host, input.sessionId),

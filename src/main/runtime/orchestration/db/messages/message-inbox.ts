@@ -91,7 +91,12 @@ export function getUndeliveredUnreadMessages(
   this: OrchestrationDb,
   toHandle: string,
   types?: MessageType[],
-  options?: { excludeTypes?: readonly string[]; limit?: number }
+  options?: {
+    excludeTypes?: readonly string[]
+    limit?: number
+    /** Leave out what an unacknowledged `check` batch already handed this mailbox's reader. */
+    excludeOutstandingDelivery?: boolean
+  }
 ): MessageRow[] {
   const conditions = [
     'to_handle = ?',
@@ -108,6 +113,13 @@ export function getUndeliveredUnreadMessages(
   if (options?.excludeTypes?.length) {
     conditions.push(`type NOT IN (${options.excludeTypes.map(() => '?').join(',')})`)
     params.push(...options.excludeTypes)
+  }
+  if (options?.excludeOutstandingDelivery) {
+    conditions.push(
+      `id NOT IN (SELECT ids.value FROM outstanding_deliveries d, json_each(d.message_ids) ids
+                  WHERE d.mailbox_handle = ?)`
+    )
+    params.push(toHandle)
   }
   const limitSql = options?.limit === undefined ? '' : ' LIMIT ?'
   if (options?.limit !== undefined) {

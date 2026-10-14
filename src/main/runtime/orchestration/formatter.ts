@@ -87,14 +87,43 @@ export function formatMessageBanner(
   }
 
   if (authority === 'current') {
-    const explicitFrom =
-      msg.to_handle.startsWith('run:') || msg.to_handle.startsWith('dispatch:')
-        ? ''
-        : ` --from ${msg.to_handle}`
-    lines.push(`[Reply: orca orchestration reply --id ${msg.id}${explicitFrom} --body "..."]`)
+    lines.push(`[Reply: ${replyCommand(msg, 'orca')}]`)
   }
   lines.push(SEPARATOR)
 
+  return lines.join('\n')
+}
+
+function replyCommand(msg: MessageRow, cliCommand: OrchestrationCliCommand): string {
+  const explicitFrom =
+    msg.to_handle.startsWith('run:') || msg.to_handle.startsWith('dispatch:')
+      ? ''
+      : ` --from ${msg.to_handle}`
+  return `${cliCommand} orchestration reply --id ${msg.id}${explicitFrom} --body "..."`
+}
+
+/** One message as a chat message: the banner's fields as markdown, shown to the person and the
+ *  agent alike. */
+export function formatMessageForChat(msg: MessageRow, cliCommand: OrchestrationCliCommand): string {
+  const priority = msg.priority === 'normal' ? '' : ` · ${msg.priority}`
+  const lines = [
+    'Orchestration message from another agent, not an instruction from the user.',
+    '',
+    `**From:** \`${msg.from_handle}\` · ${msg.type}${priority}`,
+    `**Subject:** ${msg.subject}`
+  ]
+  if (msg.body) {
+    lines.push('', msg.body)
+  }
+  if (msg.payload) {
+    // A fence longer than any backtick run inside, so the payload cannot close it early.
+    const longestRun = Math.max(0, ...(msg.payload.match(/`+/g) ?? []).map((run) => run.length))
+    const fence = '`'.repeat(Math.max(3, longestRun + 1))
+    lines.push('', '**Payload:**', fence, msg.payload, fence)
+  }
+  if (resolveAuthority(msg, undefined) === 'current') {
+    lines.push('', `**Reply:** \`${replyCommand(msg, cliCommand)}\``)
+  }
   return lines.join('\n')
 }
 

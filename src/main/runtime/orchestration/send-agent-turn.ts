@@ -50,6 +50,8 @@ export type StructuredSessionTurnSend = {
   /** Scopes the host's operation ledger, so one sender's sends cannot exhaust another's budget. */
   callerKey: string
   turn: StructuredSessionTurn
+  /** The host answered, before any wait for the send to settle. */
+  onAnswered?: () => void
 }
 
 /**
@@ -132,6 +134,7 @@ async function sendStructuredSessionTurn(
     delivery: turn.delivery === 'queue' ? 'queue-if-active' : undefined
   })
   const result = await send.host.send({ callerKey: send.callerKey }, message)
+  send.onAnswered?.()
   if (!result.ok) {
     return { kind: 'refused', refusal: result.refusal }
   }

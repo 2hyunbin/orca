@@ -22,11 +22,11 @@ import {
   runtime,
   sendUserMessage,
   settleTurn,
-  turnText
+  turnText,
+  MAIL
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
 const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
-const POINTER = /orchestration message/
 
 async function idleEdges(sessionId: string): Promise<void> {
   runtime.onStructuredSessionStatusForMail({ sessionId, status: null })
@@ -34,7 +34,7 @@ async function idleEdges(sessionId: string): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 400))
 }
 
-/** Coordinator mail to the peer chat's Dispatch, its pointer lost with the provider. */
+/** Coordinator mail to the peer chat's Dispatch, its send lost with the provider. */
 async function heldDispatchMail(): Promise<string> {
   await openChat(COORDINATOR)
   const chat = await openChat(PEER_CHAT)
@@ -47,7 +47,7 @@ async function heldDispatchMail(): Promise<string> {
   const mailbox = `dispatch:${idOf(dispatch)}`
   await call('orchestration.send', { to: mailbox, subject: 'more' }, { sessionId: COORDINATOR })
   await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-  expect(turnText(chat.turns[0]!)).toMatch(POINTER)
+  expect(turnText(chat.turns[0]!)).toMatch(MAIL)
   chat.handlers.onExit?.(new Error('provider died before the echo'))
   await idleEdges(PEER_CHAT)
   expect(chat.turns).toHaveLength(1)
@@ -67,7 +67,7 @@ async function nextTurn(sessionId: string): Promise<{ turns: { text: string }[] 
   return revived
 }
 
-describe("a chat worker's held Dispatch mail is pointed again", () => {
+describe("a chat worker's held Dispatch mail is sent again", () => {
   // Also covered by the restored-mail repoint a restart schedules; this pins the end result.
   it('after a restart', async () => {
     await heldDispatchMail()
@@ -76,7 +76,7 @@ describe("a chat worker's held Dispatch mail is pointed again", () => {
     const revived = await nextTurn(PEER_CHAT)
 
     await vi.waitFor(() => expect(revived.turns).toHaveLength(2), WAIT)
-    expect(turnText(revived.turns[1]!)).toMatch(POINTER)
+    expect(turnText(revived.turns[1]!)).toMatch(MAIL)
   })
 
   it('in the same chat after /clear', async () => {
@@ -87,6 +87,6 @@ describe("a chat worker's held Dispatch mail is pointed again", () => {
     const revived = await nextTurn(cleared)
 
     await vi.waitFor(() => expect(revived.turns).toHaveLength(2), WAIT)
-    expect(turnText(revived.turns[1]!)).toMatch(POINTER)
+    expect(turnText(revived.turns[1]!)).toMatch(MAIL)
   })
 })

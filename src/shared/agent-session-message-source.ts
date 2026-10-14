@@ -21,13 +21,22 @@ export type AgentMessageSender = Readonly<{
 /** One orchestration message a notice points at: its record, and its sender's `senders` address. */
 export type OrchestrationMailMessage = Readonly<{ messageId: string; runId: string; from: string }>
 
-/** "You have N orchestration messages": the pointer a terminal agent is typed, for a mailbox's
- *  unread mail, which the agent reads with `check`. */
+/** "You have N orchestration messages": the pointer a terminal agent is typed. Chats got it before
+ *  they got each message whole; still read from older hosts and stored chats. */
 export type OrchestrationMailNotice = Readonly<{
   message: 'mail-notice'
   mailbox: string
   dispatchId: string | null
   messages: readonly OrchestrationMailMessage[]
+}>
+
+/** One orchestration message, sent to a chat whole as its own message. */
+export type OrchestrationMail = Readonly<{
+  message: 'mail'
+  mailbox: string
+  dispatchId: string | null
+  messageId: string
+  runId: string
 }>
 
 /** A Dispatch's task, sent as the assignee's turn: the records it joins back to while they exist. */
@@ -39,7 +48,10 @@ export type OrchestrationTaskMessage = Readonly<{
 }>
 
 /** What Orca delivers for other agents, one shape per message kind. */
-export type OrchestrationAgentMessage = OrchestrationMailNotice | OrchestrationTaskMessage
+export type OrchestrationAgentMessage =
+  | OrchestrationMailNotice
+  | OrchestrationMail
+  | OrchestrationTaskMessage
 
 export type AgentMessageSource = Readonly<{
   kind: 'agent'
@@ -74,6 +86,14 @@ const mailNoticeSchema = z.object({
   messages: z.array(z.object({ messageId: z.string(), runId: z.string(), from: z.string() }))
 })
 
+const mailSchema = z.object({
+  message: z.literal('mail'),
+  mailbox: z.string(),
+  dispatchId: z.string().nullable(),
+  messageId: z.string(),
+  runId: z.string()
+})
+
 const taskSchema = z.object({
   message: z.literal('task'),
   runId: z.string(),
@@ -97,7 +117,7 @@ const sourceSchema = z.object({
   senders: salvagedField('senders', salvagingArray(senderSchema), () => []),
   orchestration: salvagedOptional(
     'orchestration',
-    z.discriminatedUnion('message', [mailNoticeSchema, taskSchema])
+    z.discriminatedUnion('message', [mailNoticeSchema, mailSchema, taskSchema])
   ).transform((orchestration) => orchestration ?? null)
 })
 

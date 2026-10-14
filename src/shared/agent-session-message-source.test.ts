@@ -38,12 +38,12 @@ describe("a message's sender, read through its one reader", () => {
     expect(readAgentMessageSource(structuredClone(FROM))).toEqual(FROM)
   })
 
-  it("reads a Dispatch's task back whole", () => {
-    const task: AgentMessageSource = {
-      ...FROM,
-      orchestration: { message: 'task', runId: 'r1', taskId: 't1', dispatchId: 'ctx_1' }
-    }
-    expect(readAgentMessageSource(structuredClone(task))).toEqual(task)
+  it.each([
+    { message: 'task', runId: 'r1', taskId: 't1', dispatchId: 'ctx_1' },
+    { message: 'mail', mailbox: 'run:r1', dispatchId: null, messageId: 'm1', runId: 'r1' }
+  ] as const)("reads a Dispatch's task and a whole mail message back whole", (orchestration) => {
+    const source: AgentMessageSource = { ...FROM, orchestration }
+    expect(readAgentMessageSource(structuredClone(source))).toEqual(source)
   })
 
   it('keeps an agent an agent when its orchestration kind is newer than this build', () => {
