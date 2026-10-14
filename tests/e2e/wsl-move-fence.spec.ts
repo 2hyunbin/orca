@@ -156,7 +156,7 @@ test('a WSL move journal fences the moving project, then hides it once the host 
       ).toContain('moving to its WSL host')
       expect(
         await edit(page, { worktreeId: repoWorktreeId }, { isUnread: true, lastActivityAt: 1 })
-      ).not.toContain('moving to its WSL host')
+      ).toBe('ignored')
       expect(await edit(page, { folderWorkspaceId: stayingId }, { name: 'Still mine' })).toBe(
         'saved'
       )

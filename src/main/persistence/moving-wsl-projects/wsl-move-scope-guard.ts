@@ -210,9 +210,12 @@ export function assertWslMoveHostSetupWritable(
   if (!isWslMoveSourceHost(setup.hostId)) {
     return
   }
+  // The setup's own repo stays frozen once the host owns it; shared project repos only mid-move.
+  if (setup.repoId) {
+    assertWslMoveProjectWritable(store, { repoId: setup.repoId })
+  }
   const project = store?.getProjects?.().find((entry) => entry.id === setup.projectId)
-  const repoIds = [...(setup.repoId ? [setup.repoId] : []), ...(project?.sourceRepoIds ?? [])]
-  assertWslMoveReposWritable(store, repoIds)
+  assertWslMoveReposWritable(store, project?.sourceRepoIds ?? [])
 }
 
 /** By id, for update and delete; an unknown id is left to the store's own not-found. */

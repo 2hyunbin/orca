@@ -105,6 +105,20 @@ describe('project host setups under a WSL move', () => {
     ).resolves.toMatchObject({ setup: { displayName: 'renamed' } })
   })
 
+  it("keeps a setup's own repo frozen once the WSL host owns it", async () => {
+    store.addRepo(repo('repo-1'))
+    writeWslMoveCutover(testState.dir, cutover('move-1', 'destination-committed'))
+    registerProjectHostSetupHandlers(new BrowserWindow(), store)
+    const owned = setupFor('repo-1')
+
+    await expect(
+      invoke('projectHostSetups:update', { setupId: owned.id, updates: { displayName: 'x' } })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
+    await expect(invoke('projectHostSetups:delete', { setupId: owned.id })).rejects.toBeInstanceOf(
+      WslMoveProjectFencedError
+    )
+  })
+
   it('refuses a runtime setup delete for a moving repo', () => {
     store.addRepo(repo('repo-1'))
     writeWslMoveCutover(testState.dir, cutover('move-1', 'source-fenced'))
