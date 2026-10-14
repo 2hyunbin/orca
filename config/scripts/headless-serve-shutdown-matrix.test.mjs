@@ -56,13 +56,15 @@ describe('packaged shutdown matrix', () => {
     expect(startup).toHaveLength(1)
     expect(extraction).toHaveLength(1)
     expect(commands().indexOf(startup[0])).toBeLessThan(commands().indexOf(extraction[0]))
-    expect(signalRuns()).toHaveLength(6)
+    expect(signalRuns()).toHaveLength(12)
     const names = new Set()
     for (const [index, args] of signalRuns().entries()) {
-      const entrypoint = ['app', 'launcher', 'appimage'][Math.floor(index / 2)]
+      const entrypoint = ['app', 'launcher', 'appimage'][Math.floor(index / 2) % 3]
+      const runtime = index < 6 ? 'electron' : 'orcad'
       expect(args).toContain(`ORCA_TEST_ENTRYPOINT=${entrypoint}`)
+      expect(args).toContain(`ORCA_SERVE_RUNTIME=${runtime}`)
       expect(args).toContain(
-        `ORCA_SIGNAL_TARGET=${entrypoint === 'appimage' ? 'serving-electron' : 'app'}`
+        `ORCA_SIGNAL_TARGET=${entrypoint === 'appimage' ? (runtime === 'orcad' ? 'serving-process' : 'serving-electron') : 'app'}`
       )
       expect(args).toContain(
         `ORCA_INT_DELIVERY=${entrypoint === 'appimage' ? 'pid' : 'foreground-process-group'}`
@@ -73,12 +75,12 @@ describe('packaged shutdown matrix', () => {
       expect(args).toContain('--rm')
       names.add(args[args.indexOf('--name') + 1])
     }
-    expect(names.size).toBe(6)
+    expect(names.size).toBe(12)
     const evidence = console.log.mock.calls
       .map(([line]) => line)
       .filter((line) => line.startsWith('{'))
       .map(JSON.parse)
-    expect(evidence).toHaveLength(3)
+    expect(evidence).toHaveLength(6)
     expect(
       evidence.every(
         (entry) =>
@@ -100,9 +102,9 @@ describe('packaged shutdown matrix', () => {
       args.at(-1) === 'INT' ? { ...succeeded, status: 7 } : succeeded
     )
     await expect(run('--all-entrypoints')).rejects.toThrow(
-      'app:INT:7, launcher:INT:7, appimage:INT:7'
+      'electron:app:INT:7, electron:launcher:INT:7, electron:appimage:INT:7, orcad:app:INT:7, orcad:launcher:INT:7, orcad:appimage:INT:7'
     )
-    expect(signalRuns()).toHaveLength(6)
+    expect(signalRuns()).toHaveLength(12)
     expect(commands().at(-2).slice(0, 2)).toEqual(['volume', 'rm'])
   })
 
@@ -145,8 +147,8 @@ describe('packaged shutdown matrix', () => {
       expect(builds[0]).toContain('sha256:restored-fixture')
       expect(builds[0]).toContain('--platform')
       expect(builds[0]).toContain('linux/amd64')
-      expect(signalRuns()).toHaveLength(6)
-      expect(commands().filter((args) => args[0] === 'run')).toHaveLength(8)
+      expect(signalRuns()).toHaveLength(12)
+      expect(commands().filter((args) => args[0] === 'run')).toHaveLength(14)
     } finally {
       vi.unstubAllEnvs()
     }

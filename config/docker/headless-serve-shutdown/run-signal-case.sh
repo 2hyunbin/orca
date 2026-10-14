@@ -6,6 +6,8 @@ app_root=${ORCA_TEST_APP_ROOT:-/artifacts/root}
 signal_target_kind=${ORCA_SIGNAL_TARGET:-app}
 entrypoint_kind=${ORCA_TEST_ENTRYPOINT:-app}
 int_delivery=${ORCA_INT_DELIVERY:-foreground-process-group}
+serve_runtime=${ORCA_SERVE_RUNTIME:-electron}
+export ORCA_SERVE_RUNTIME="$serve_runtime"
 # Packaged Electron startup can approach 90s on a cold CI runner; leave room
 # for the readiness line to reach the log before the observer deadline.
 startup_timeout_seconds=${ORCA_STARTUP_TIMEOUT_SECONDS:-180}
@@ -153,14 +155,32 @@ for pid in "${tree_pids[@]}"; do
 done
 tree_snapshot=$(ps -o pid=,ppid=,pgid=,lstart=,stat=,args= -p "$tree_pid_csv" 2>/dev/null || true)
 xvfb_pids=$(awk '/[X]vfb :99 / {print $1}' <<<"$tree_snapshot" | paste -sd, -)
-if [[ -z "$xvfb_pids" ]]; then
-  echo "$tree_snapshot" >&2
-  echo "FAIL: no run-owned Xvfb :99 process found after readiness" >&2
+server_pid=$(head -n1 <<<"$listener_before_pids")
+if [[ -z "$server_pid" || -z "${tree_start_ticks[$server_pid]+present}" ]]; then
+  echo "FAIL: ready listener is outside the entrypoint process tree" >&2
   exit 1
 fi
+server_executable=$(readlink "/proc/$server_pid/exe")
+case "$serve_runtime" in
+  electron)
+    if [[ -z "$xvfb_pids" || "${server_executable##*/}" != orca-ide ]]; then
+      echo "$tree_snapshot" >&2
+      echo "FAIL: Electron serve needs its owned Xvfb and packaged executable" >&2
+      exit 1
+    fi
+    ;;
+  orcad)
+    if [[ -n "$xvfb_pids" || "$server_executable" != "$ORCA_USER_DATA_PATH/orcad-artifacts/"*/bin/node ]]; then
+      echo "$tree_snapshot" >&2
+      echo "FAIL: Node serve needs the profile's pinned Node and no Xvfb" >&2
+      exit 1
+    fi
+    ;;
+  *) echo "unsupported serve runtime: $serve_runtime" >&2; exit 64 ;;
+esac
 
 signal_target_pid=$app_pid
-if [[ "$signal_target_kind" == serving-electron ]]; then
+if [[ "$signal_target_kind" == serving-electron || "$signal_target_kind" == serving-process ]]; then
   # The ready socket identifies the serving Electron even when AppImage's
   # extraction wrapper rewrites the command line before it reaches Chromium.
   signal_target_pid=$(head -n1 <<<"$listener_before_pids")
@@ -235,6 +255,8 @@ fi
 
 jq -nc \
   --arg signal "$signal_name" \
+  --arg serveRuntime "$serve_runtime" \
+  --arg serverExecutable "$server_executable" \
   --arg signalDelivery "$signal_delivery" \
   --arg entrypointKind "$entrypoint_kind" \
   --arg signalTargetKind "$signal_target_kind" \
@@ -253,7 +275,7 @@ jq -nc \
   --arg survivors "${survivors[*]:-}" \
   --arg residue "$owned_residue" \
   --arg corePattern "$(cat /proc/sys/kernel/core_pattern)" \
-  '{signal:$signal,signalDelivery:$signalDelivery,entrypointKind:$entrypointKind,signalTargetKind:$signalTargetKind,appPid:$appPid,signalTargetPid:$signalTargetPid,boundEndpoint:$endpoint,listenerBefore:$listenerBefore,listenerBeforePids:$listenerBeforePids,listenerAfter:$listenerAfter,xvfbPids:$xvfbPids,treeBefore:$treeBefore,waitStatus:$waitStatus,fatalEvidence:$fatalEvidence,canaryAlive:$canaryAlive,registeredCliVerified:$registeredCliVerified,survivingTreePids:$survivors,ownedResidue:$residue,corePattern:$corePattern}'
+  '{serveRuntime:$serveRuntime,serverExecutable:$serverExecutable,signal:$signal,signalDelivery:$signalDelivery,entrypointKind:$entrypointKind,signalTargetKind:$signalTargetKind,appPid:$appPid,signalTargetPid:$signalTargetPid,boundEndpoint:$endpoint,listenerBefore:$listenerBefore,listenerBeforePids:$listenerBeforePids,listenerAfter:$listenerAfter,xvfbPids:$xvfbPids,treeBefore:$treeBefore,waitStatus:$waitStatus,fatalEvidence:$fatalEvidence,canaryAlive:$canaryAlive,registeredCliVerified:$registeredCliVerified,survivingTreePids:$survivors,ownedResidue:$residue,corePattern:$corePattern}'
 
 if ((wait_status != 0)) || [[ -n "$listener_after" ]] || [[ "$fatal_evidence" != false ]] \
   || [[ "$canary_alive" != true ]] || ((${#survivors[@]})) || [[ -n "$owned_residue" ]]; then

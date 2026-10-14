@@ -4,6 +4,7 @@ const electronApp = vi.hoisted(() => ({
   isPackaged: false,
   on: vi.fn(),
   getPath: vi.fn(() => '/tmp/orca-user-data'),
+  getAppPath: vi.fn(() => '/tmp/orca-app'),
   getVersion: vi.fn(() => '0.0.0-test'),
   isReady: vi.fn(() => true),
   focus: vi.fn()

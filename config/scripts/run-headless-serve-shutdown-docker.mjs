@@ -8,29 +8,47 @@ const args = process.argv.slice(2)
 const appImageArg = valueAfter('--appimage')
 const platform = valueAfter('--platform') ?? 'linux/amd64'
 const signalTarget = valueAfter('--signal-target') ?? 'app'
+const serveRuntime = valueAfter('--serve-runtime') ?? 'electron'
 const entrypoint = valueAfter('--entrypoint') ?? 'app'
 const intDelivery = valueAfter('--int-delivery') ?? 'foreground-process-group'
 const launcherExecOverlay = args.includes('--launcher-exec-overlay')
 const allEntrypoints = args.includes('--all-entrypoints')
 if (
   allEntrypoints &&
-  ['--entrypoint', '--signal-target', '--int-delivery', '--launcher-exec-overlay'].some((flag) =>
-    args.includes(flag)
-  )
+  [
+    '--entrypoint',
+    '--signal-target',
+    '--int-delivery',
+    '--launcher-exec-overlay',
+    '--serve-runtime'
+  ].some((flag) => args.includes(flag))
 ) {
   fail('--all-entrypoints cannot be combined with individual case options')
 }
+const entrypointCases = [
+  { entrypoint: 'app', signalTarget: 'app', intDelivery: 'foreground-process-group' },
+  { entrypoint: 'launcher', signalTarget: 'app', intDelivery: 'foreground-process-group' },
+  { entrypoint: 'appimage', signalTarget: 'serving-electron', intDelivery: 'pid' }
+]
 const cases = allEntrypoints
-  ? [
-      { entrypoint: 'app', signalTarget: 'app', intDelivery: 'foreground-process-group' },
-      { entrypoint: 'launcher', signalTarget: 'app', intDelivery: 'foreground-process-group' },
-      { entrypoint: 'appimage', signalTarget: 'serving-electron', intDelivery: 'pid' }
-    ]
-  : [{ entrypoint, signalTarget, intDelivery }]
+  ? ['electron', 'orcad'].flatMap((serveRuntime) =>
+      entrypointCases.map((entry) => ({
+        ...entry,
+        serveRuntime,
+        signalTarget:
+          entry.signalTarget === 'serving-electron' && serveRuntime === 'orcad'
+            ? 'serving-process'
+            : entry.signalTarget
+      }))
+    )
+  : [{ entrypoint, signalTarget, intDelivery, serveRuntime }]
 if (!appImageArg) {
   fail('Usage: run-headless-serve-shutdown-docker.mjs --appimage /path/to/orca.AppImage')
 }
-if (!['app', 'serving-electron'].includes(signalTarget)) {
+if (!['electron', 'orcad'].includes(serveRuntime)) {
+  fail(`Unsupported --serve-runtime: ${serveRuntime}`)
+}
+if (!['app', 'serving-electron', 'serving-process'].includes(signalTarget)) {
   fail(`Unsupported --signal-target: ${signalTarget}`)
 }
 if (!['app', 'appimage', 'launcher'].includes(entrypoint)) {
@@ -118,7 +136,7 @@ try {
   ])
 
   const failedSignals = []
-  for (const { entrypoint, signalTarget, intDelivery } of cases) {
+  for (const { entrypoint, signalTarget, intDelivery, serveRuntime } of cases) {
     console.log(
       JSON.stringify({
         type: 'appimage_under_test',
@@ -126,6 +144,7 @@ try {
         sha256,
         platform,
         signalTarget,
+        serveRuntime,
         entrypoint,
         intDelivery,
         launcherExecOverlay
@@ -142,9 +161,11 @@ try {
           '--shm-size',
           '256m',
           '--name',
-          `orca-headless-serve-shutdown-${entrypoint}-${signal.toLowerCase()}-${suffix}`,
+          `orca-headless-serve-shutdown-${serveRuntime}-${entrypoint}-${signal.toLowerCase()}-${suffix}`,
           '-e',
           `ORCA_SIGNAL_TARGET=${signalTarget}`,
+          '-e',
+          `ORCA_SERVE_RUNTIME=${serveRuntime}`,
           '-e',
           `ORCA_TEST_ENTRYPOINT=${entrypoint}`,
           '-e',
@@ -161,7 +182,7 @@ try {
       process.stdout.write(result.stdout)
       process.stderr.write(result.stderr)
       if (result.status !== 0) {
-        failedSignals.push(`${entrypoint}:${signal}:${result.status}`)
+        failedSignals.push(`${serveRuntime}:${entrypoint}:${signal}:${result.status}`)
       }
     }
   }
