@@ -69,7 +69,7 @@ describe('queued message cards', () => {
     expect(projectQueuedMessageCards([draft('a', 1)], [], IDLE)[0]?.hold).toBe('turn')
   })
 
-  it('a returned card carries its stored reason and blocks the label of drafts behind it', () => {
+  it('a returned card carries its stored reason; drafts behind it carry no caption of their own', () => {
     const cards = projectQueuedMessageCards(
       [
         draft('failed', 1, {
@@ -88,7 +88,7 @@ describe('queued message cards', () => {
       returnedReason: 'agent_session_write_failed',
       returnedRejection: { kind: 'writeFailed' }
     })
-    expect(cards[1]?.hold).toBe('behind-returned')
+    expect(cards[1]?.hold).toBe('turn')
   })
 
   it('a paused draft says so, carrying the host marker for the caption to localize', () => {
@@ -151,7 +151,7 @@ describe('queued message cards', () => {
       'queue-paused',
       'paused',
       'returned',
-      'behind-returned'
+      'queue-paused'
     ])
   })
 
@@ -171,8 +171,7 @@ describe('queued message cards', () => {
     expect(queuedMessagesQueuePause(project([draft('held', 1)]), stopped)).toEqual(stopped)
     const unsendable = [
       draft('returned', 1, { state: 'returned', returnedReason: null }),
-      draft('behind', 2),
-      draft('failed', 3, { paused: true, pausedReason: 'send_failed' })
+      draft('failed', 2, { paused: true, pausedReason: 'send_failed' })
     ]
     expect(queuedMessagesQueuePause(project(unsendable), stopped)).toBeNull()
     // No published pause (an idle chat after a restart): plain cards, no header.

@@ -504,13 +504,12 @@ describe('NativeChatQueuedMessageList', () => {
     expect(container.textContent).toBe('')
   })
 
-  it('no header row over cards Resume would not send: returned, held on their own, or behind', () => {
+  it('no header row over cards Resume would not send: returned or held on their own', () => {
     const stopped = { reason: 'stopped' } as const
     const { container } = renderHeldQueue(
       [
         waitingDraft('refused', 1, { state: 'returned', returnedReason: null }),
-        waitingDraft('behind', 2),
-        waitingDraft('failed', 3, { paused: true, pausedReason: 'send_failed' })
+        waitingDraft('failed', 2, { paused: true, pausedReason: 'send_failed' })
       ],
       stopped
     )
@@ -654,7 +653,7 @@ describe('NativeChatQueuedMessageList', () => {
   })
 
   it('every card still waiting on the queue reads Steer; one held on its own or returned, Send', () => {
-    for (const hold of ['turn', 'behind-returned', 'queue-paused'] as const) {
+    for (const hold of ['turn', 'queue-paused'] as const) {
       expect(queuedMessageCardSendNow(card({ messageId: hold, hold }))).toEqual({
         steers: true,
         label: 'Steer',
@@ -707,13 +706,6 @@ describe('NativeChatQueuedMessageList', () => {
       expect(row.querySelectorAll('p')[1]?.textContent).toBe('Paused')
     }
     expect(screen.getAllByRole('listitem')[0]?.textContent).not.toContain('some_newer_marker')
-  })
-
-  it('a draft behind a returned card says a message ahead needs attention', () => {
-    renderList(controller([card({ messageId: 'behind', hold: 'behind-returned' })]))
-    expect(screen.getByRole('listitem').textContent).toContain(
-      'Waiting — a message ahead needs attention'
-    )
   })
 
   it('a clipped card opens to its whole text, line breaks kept, and folds back', () => {

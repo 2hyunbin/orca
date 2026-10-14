@@ -16,13 +16,12 @@ import { handedOffQueuedMessageIds } from '../../../../shared/structured-agent-s
 
 /** Why a card is not on its way right now; decides the caption under the text. */
 export type QueuedMessageCardHold =
-  /** Plainly queued, also behind an open question: the question already says the agent waits. */
+  /** Plainly queued, also behind an open question or a returned card, which already says why. */
   | 'turn'
   /** The whole queue is paused: the header row says why and offers Resume, so the card makes
    *  no promise about when it sends — not even after an answer, which does not drain it. */
   | 'queue-paused'
   | 'paused'
-  | 'behind-returned'
   | 'returned'
   /** On its way to the host, which holds no card for it yet: it reads as sending, and nothing
    *  can act on it until the host's card replaces it under the same id. */
@@ -69,19 +68,15 @@ export function projectQueuedMessageCards(
   const ordered = [...(queuedMessages ?? [])]
     .sort((left, right) => left.position - right.position)
     .filter((message) => message.state === 'returned' || !handedOff.has(message.messageId))
-  let behindReturned = false
   return ordered.map((message) => {
     const hold: QueuedMessageCardHold =
       message.state === 'returned'
         ? 'returned'
         : message.paused
           ? 'paused'
-          : behindReturned
-            ? 'behind-returned'
-            : session.queuePaused
-              ? 'queue-paused'
-              : 'turn'
-    behindReturned = behindReturned || message.state === 'returned'
+          : session.queuePaused
+            ? 'queue-paused'
+            : 'turn'
     const from = readAgentMessageSource(message.body.from)
     return {
       messageId: message.messageId,
@@ -117,7 +112,8 @@ export function commandCardWaiting(
 }
 
 /** The pause the header row names, while it holds a card. A pause over cards Resume would not
- *  send (returned, held on their own, or behind a returned one) offers nothing to press. */
+ *  send (returned or held on their own) offers nothing to press. The host publishes no pause
+ *  while a returned card comes first, so a card behind one is never under it. */
 export function queuedMessagesQueuePause(
   cards: readonly QueuedMessageCard[],
   queuePause: AgentSessionQueuePause | null

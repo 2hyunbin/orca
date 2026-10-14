@@ -155,12 +155,10 @@ describe('MobileNativeChatQueuedMessages', () => {
 
   it('captions a hold under the text on one muted line', async () => {
     const mounted = await mount({
-      cards: [card({ messageId: 'b', caption: 'Waiting — a message ahead needs attention' })]
+      cards: [card({ messageId: 'b', caption: 'Paused' })]
     })
     const caption = mounted.root.find(
-      (node) =>
-        String(node.type) === 'Text' &&
-        node.props.children === 'Waiting — a message ahead needs attention'
+      (node) => String(node.type) === 'Text' && node.props.children === 'Paused'
     )
     expect(caption.props.numberOfLines).toBe(1)
     expect(flatStyle(caption.props.style).color).not.toBe('#ef4444')

@@ -128,7 +128,6 @@ export function mobileQueuedMessageCards(
         : []
     )
   )
-  let behindReturned = false
   const cards: MobileQueuedMessageCard[] = []
   for (const draft of queuedMessages) {
     if (draft.state !== 'returned' && handedOff.has(draft.messageId)) {
@@ -143,9 +142,7 @@ export function mobileQueuedMessageCards(
               draft.pausedReason,
               draft.body.command !== undefined && facts.agentWorking === true
             )
-          : behindReturned
-            ? 'Waiting — a message ahead needs attention'
-            : null
+          : null
     cards.push({
       messageId: draft.messageId,
       text: queuedMessageBodyText(draft.body),
@@ -163,9 +160,6 @@ export function mobileQueuedMessageCards(
           }
         : {})
     })
-    if (draft.state === 'returned') {
-      behindReturned = true
-    }
   }
   return cards
 }

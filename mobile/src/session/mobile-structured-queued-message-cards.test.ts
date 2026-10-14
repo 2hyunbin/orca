@@ -186,7 +186,7 @@ describe('mobileQueuedMessageCards', () => {
     expect(card?.caption).toBe('Paused')
   })
 
-  it("shows a returned card with the provider's own words and holds drafts behind it", () => {
+  it("shows a returned card with the provider's own words, stated once, not under drafts behind it", () => {
     const refused = agentSessionFailureFact('providerRejected', {
       detail: { text: 'Steering is unavailable', audience: 'person' }
     })
@@ -197,7 +197,7 @@ describe('mobileQueuedMessageCards', () => {
     expect(cards[0]?.caption).toContain('Steering is unavailable')
     expect(cards[0]?.state).toBe('returned')
     expect(cards[0]?.needsAttention).toBe(true)
-    expect(cards[1]?.caption).toBe('Waiting — a message ahead needs attention')
+    expect(cards[1]?.caption).toBeNull()
     expect(cards[1]?.needsAttention).toBe(false)
   })
 
@@ -214,7 +214,6 @@ describe('mobileQueuedMessageCards', () => {
       ]
     )
     expect(cards.map((card) => card.messageId)).toEqual(['returned', 'waiting'])
-    expect(cards[1]?.caption).toBe('Waiting — a message ahead needs attention')
   })
 
   it('shows a draft a Stop requeued beside its rejected hand-off', () => {
