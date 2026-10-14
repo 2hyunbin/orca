@@ -1,3 +1,4 @@
+import type { Page } from '@stablyai/playwright-test'
 import type { JiraIssue } from '../../src/shared/jira-types'
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
@@ -13,18 +14,21 @@ const ISSUE: JiraIssue = {
   issueType: { id: 'task', name: 'Task' },
   status: { id: 'open', name: 'To Do', categoryKey: 'new', categoryName: 'To Do' },
   labels: [],
+  parent: { key: 'DEMO-10', title: 'Epic planning' },
+  sprint: 'Sprint 12',
+  storyPoints: 5,
+  originalEstimateSeconds: 7200,
+  remainingEstimateSeconds: 1800,
   priority: { id: 'high', name: 'High' },
   assignee: { accountId: 'layout-user', displayName: 'Demo User' },
   createdAt: '2026-10-01T00:00:00Z',
   updatedAt: '2026-10-13T00:00:00Z'
 }
 
-test('Jira titles and sort headings adapt to panel width inside a wide window', async ({
-  orcaPage
-}) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.setViewportSize({ width: 1500, height: 900 })
-  await orcaPage.evaluate((issue) => {
+async function openFixtureJiraList(page: Page): Promise<void> {
+  await waitForSessionReady(page)
+  await page.setViewportSize({ width: 1500, height: 900 })
+  await page.evaluate((issue) => {
     const store = window.__store
     if (!store) {
       throw new Error('Store unavailable')
@@ -59,6 +63,12 @@ test('Jira titles and sort headings adapt to panel width inside a wide window', 
     })
     store.getState().openTaskPage({ taskSource: 'jira' })
   }, ISSUE)
+}
+
+test('Jira titles and sort headings adapt to panel width inside a wide window', async ({
+  orcaPage
+}) => {
+  await openFixtureJiraList(orcaPage)
 
   const title = orcaPage.getByRole('heading', { name: ISSUE_TITLE })
   await expect(title).toBeVisible()
@@ -84,7 +94,7 @@ test('Jira titles and sort headings adapt to panel width inside a wide window', 
       const grids = await title.evaluate((element) => {
         const row = element.closest('[role="button"]')
         const host = row?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement
-        const header = host?.children[1]
+        const header = host?.querySelector('button[aria-pressed]')?.parentElement
         if (!row || !header) {
           throw new Error('Jira header or row unavailable')
         }
@@ -99,4 +109,65 @@ test('Jira titles and sort headings adapt to panel width inside a wide window', 
       )
     }
   }
+})
+
+test('Jira planning columns persist and hiding a sorted field selects a visible fallback', async ({
+  orcaPage
+}) => {
+  await openFixtureJiraList(orcaPage)
+  const title = orcaPage.getByRole('heading', { name: ISSUE_TITLE })
+  await expect(title).toBeVisible()
+  await title.evaluate((element) => {
+    const host =
+      element.closest('[role="button"]')?.parentElement?.parentElement?.parentElement?.parentElement
+        ?.parentElement
+    if (!(host instanceof HTMLElement)) {
+      throw new Error('Jira list host unavailable')
+    }
+    host.style.width = '780px'
+  })
+  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  for (const name of ['Epic / Parent', 'Sprint', 'Points', 'Estimate', 'Remaining']) {
+    await orcaPage.getByRole('menuitemcheckbox', { name, exact: true }).click()
+  }
+  await orcaPage.keyboard.press('Escape')
+  await expect(orcaPage.getByText('Epic planning', { exact: true })).toBeVisible()
+  await expect(orcaPage.getByText('Sprint 12', { exact: true })).toBeVisible()
+  await expect(orcaPage.getByText('2h', { exact: true })).toBeVisible()
+  await expect(orcaPage.getByText('30m', { exact: true })).toBeVisible()
+  const layout = await title.evaluate((element) => {
+    const row = element.closest('[role="button"]')
+    const scroll = row?.parentElement?.parentElement?.parentElement?.parentElement
+    if (!(scroll instanceof HTMLElement)) {
+      throw new Error('Scroll container unavailable')
+    }
+    return {
+      title: element.getBoundingClientRect().width,
+      content: scroll.scrollWidth,
+      viewport: scroll.clientWidth
+    }
+  })
+  expect(layout.title).toBeGreaterThanOrEqual(180)
+  expect(layout.content).toBeGreaterThan(layout.viewport)
+  await orcaPage.getByRole('button', { name: 'Points', exact: true }).click()
+  await expect(orcaPage.getByRole('button', { name: 'Points, ascending' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await orcaPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true }).click()
+  await orcaPage.keyboard.press('Escape')
+  await expect(orcaPage.getByRole('button', { name: 'Updated, descending' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  await orcaPage.reload()
+  await openFixtureJiraList(orcaPage)
+  await orcaPage.getByRole('button', { name: 'Columns', exact: true }).click()
+  await expect(
+    orcaPage.getByRole('menuitemcheckbox', { name: 'Sprint', exact: true })
+  ).toHaveAttribute('aria-checked', 'true')
+  await expect(
+    orcaPage.getByRole('menuitemcheckbox', { name: 'Points', exact: true })
+  ).toHaveAttribute('aria-checked', 'false')
 })

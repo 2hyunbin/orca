@@ -4,7 +4,8 @@ import { buildJiraPresetJql } from '../../shared/jira-preset-jql'
 import { acquire, release } from './request-queue'
 import { apiBasePath, jiraRequest, type JiraClientForSite } from './authenticated-request'
 import { clearToken, getClients, isAuthError } from './client'
-import { ISSUE_LIST_FIELDS, mapJiraIssue } from './jira-issue-mapping'
+import { ISSUE_LIST_FIELDS, mapJiraIssue, type JiraAgileFieldIds } from './jira-issue-mapping'
+import { agileFieldIdList, getAgileFieldIds } from './jira-agile-fields'
 import type { JiraSearchResponse } from './jira-record-pages'
 import { readProjectsForClient } from './jira-project-queries'
 import {
@@ -31,14 +32,15 @@ async function readIssuesForClient(
   entry: JiraClientForSite,
   query: JiraIssueQuery,
   limit: number,
+  agileFields: JiraAgileFieldIds,
   signal: AbortSignal
 ): Promise<JiraIssue[]> {
   if ('jql' in query) {
-    return searchIssuesForClient(entry, query.jql, limit, signal)
+    return searchIssuesForClient(entry, query.jql, limit, agileFields, signal)
   }
   const jql = buildJiraPresetJql(query.filter)
   if (query.filter !== 'all' || entry.site.authType === 'server') {
-    return searchIssuesForClient(entry, jql, limit, signal)
+    return searchIssuesForClient(entry, jql, limit, agileFields, signal)
   }
   const projects = await readProjectsForClient(entry, signal, true)
   const projectIds = [...new Set(projects.map((project) => project.id || project.key))]
@@ -54,6 +56,7 @@ async function readIssuesForClient(
         entry,
         `project in (${ids.join(', ')}) AND ${jql}`,
         limit,
+        agileFields,
         signal,
         true
       ))
@@ -66,6 +69,7 @@ async function searchIssuesForClient(
   entry: JiraClientForSite,
   jql: string,
   limit: number,
+  agileFields: JiraAgileFieldIds,
   signal?: AbortSignal,
   collectPages = false
 ): Promise<JiraIssue[]> {
@@ -83,7 +87,7 @@ async function searchIssuesForClient(
       body: JSON.stringify({
         jql,
         maxResults: limit - issues.length,
-        fields: ISSUE_LIST_FIELDS,
+        fields: [...ISSUE_LIST_FIELDS, ...agileFieldIdList(agileFields)],
         ...(nextPageToken ? { nextPageToken } : {})
       }),
       signal
@@ -91,7 +95,11 @@ async function searchIssuesForClient(
     if (collectPages && !Array.isArray(result.issues)) {
       throw new Error('Jira returned an invalid issue page.')
     }
-    issues.push(...(result.issues ?? []).map((issue) => mapJiraIssue(entry.site, issue)))
+    issues.push(
+      ...(result.issues ?? []).map((issue) =>
+        mapJiraIssue(entry.site, issue, undefined, agileFields)
+      )
+    )
     if (!collectPages || issues.length >= limit || result.isLast === true) {
       return issues.slice(0, limit)
     }
@@ -147,10 +155,12 @@ async function runIssueSearch(
   const results = await withJiraDeadline(signal, ISSUE_SEARCH_TIMEOUT_MS, (requestSignal) =>
     Promise.all(
       entries.map(async (entry, index) => {
+        // Discovery owns a slot, so finish it before acquiring the search slot.
+        const agileFields = await getAgileFieldIds(entry, requestSignal)
         // Why: queueing on an abandoned search would keep occupying the shared Jira pool.
         await acquire(requestSignal)
         try {
-          return await readIssuesForClient(entry, query, safeLimit, requestSignal)
+          return await readIssuesForClient(entry, query, safeLimit, agileFields, requestSignal)
         } catch (error) {
           if (requestSignal.aborted) {
             // Abandoned by the caller: not a site failure, so don't clear tokens or mask a real one.

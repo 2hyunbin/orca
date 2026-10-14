@@ -1,3 +1,4 @@
+import { defaultJiraListColumnIds, visibleJiraListColumns } from './jira-list-columns'
 // @vitest-environment happy-dom
 
 import '@testing-library/jest-dom/vitest'
@@ -18,7 +19,12 @@ function renderControls(
 ): ReturnType<typeof render> {
   return render(
     <TooltipProvider>
-      <TaskPageJiraSortControls direction={direction} onSort={onSort} orderBy={orderBy} />
+      <TaskPageJiraSortControls
+        columns={visibleJiraListColumns(defaultJiraListColumnIds())}
+        direction={direction}
+        onSort={onSort}
+        orderBy={orderBy}
+      />
     </TooltipProvider>
   )
 }
