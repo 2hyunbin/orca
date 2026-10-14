@@ -46,9 +46,9 @@ export function JiraConnectDialog({
 }: JiraConnectDialogProps): React.JSX.Element {
   const connectJira = useAppStore((s) => s.connectJira)
   const settings = useAppStore((s) => s.settings)
-  const supportsScopedTokens = useAppStore(
-    (s) => !hasRemoteProviderRuntime(s.settings) || s.jiraStatus?.supportsScopedTokens === true
-  )
+  const hostSupportsScopedTokens = useAppStore((s) => s.jiraStatus?.supportsScopedTokens === true)
+  const remoteRuntime = hasRemoteProviderRuntime(settings)
+  const supportsScopedTokens = !remoteRuntime || hostSupportsScopedTokens
   const mountedRef = useMountedRef()
   const siteUrlId = useId()
   const emailId = useId()
@@ -91,7 +91,7 @@ export function JiraConnectDialog({
     (!requiresIdentity || Boolean(email.trim())) &&
     Boolean(apiToken.trim()) &&
     connectState !== 'connecting'
-  const credentialStorageCopy = hasRemoteProviderRuntime(settings)
+  const credentialStorageCopy = remoteRuntime
     ? 'Your token is sent to the selected remote runtime and stored there with runtime-supported encryption.'
     : 'Your token is stored locally and encrypted when local runtime storage supports it.'
 
