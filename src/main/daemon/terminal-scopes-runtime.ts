@@ -1,37 +1,45 @@
-/** The daemon's chosen terminal process ceiling, applied to every PTY spawn it makes. */
+/** The daemon's terminal scopes and process ceiling, applied to every PTY spawn it makes. */
 import { existsSync } from 'node:fs'
-import { runProcessSync } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
 import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
-import { resolvePtyProcessCeiling, type LinuxCeilingRuntime } from './terminal-scopes'
+import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
 
 let currentState: PtyProcessCeilingState = { state: 'off', reason: 'disabled' }
-let currentLinux: LinuxCeilingRuntime | null = null
+let currentScopes: TerminalScopeRuntime | null = null
 let scopeCounter = 0
 
 /** Daemon start: decide, remember for every spawn, and return what the pid record reports. */
-export function initializePtyProcessCeiling(launchId: string): PtyProcessCeilingState {
-  const resolved = resolvePtyProcessCeiling({
+export function initializeTerminalScopes(
+  launchId: string,
+  daemonScope: string | null,
+  log: (event: string, details?: Record<string, unknown>) => void
+): PtyProcessCeilingState {
+  const resolved = resolveTerminalScopes({
     env: process.env,
     platform: process.platform,
     launchId: launchId || `${process.pid}`,
+    daemonScope,
     setWindowsLimit: setPtyActiveProcessLimit
   })
-  setPtyProcessCeilingForTest(resolved.state, resolved.linux)
-  if (resolved.linux) {
-    // Why on exit: every daemon exit path ends here, and its terminals are gone by then.
-    process.once('exit', releasePtyProcessCeiling)
+  setTerminalScopesForTest(resolved.ceiling, resolved.linux)
+  if (process.platform === 'linux') {
+    log(
+      'terminal-scopes',
+      resolved.linux
+        ? { slice: resolved.linux.slice, properties: resolved.linux.properties }
+        : { off: resolved.offReason }
+    )
   }
-  return resolved.state
+  return resolved.ceiling
 }
 
-export function setPtyProcessCeilingForTest(
+export function setTerminalScopesForTest(
   state: PtyProcessCeilingState,
-  linux: LinuxCeilingRuntime | null
+  scopes: TerminalScopeRuntime | null
 ): void {
   currentState = state
-  currentLinux = linux
+  currentScopes = scopes
 }
 
 export function currentPtyProcessCeiling(): PtyProcessCeilingState {
@@ -41,24 +49,26 @@ export function currentPtyProcessCeiling(): PtyProcessCeilingState {
 const SESSION_KEYS = ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR'] as const
 
 /**
- * Linux with the ceiling on: exec through `systemd-run --scope`, which keeps the pid and exit
- * status, into a scope under the ceiling slice. `systemd-run` talks to the user manager the daemon
+ * Linux with terminal scopes: exec through `systemd-run --scope`, which keeps the pid and exit
+ * status, into this terminal's own scope. `systemd-run` talks to the user manager the daemon
  * verified; `env` then gives the shell its own session variables back. Off, it is the identity.
  */
-export function wrapPtySpawnForCeiling(
+export function wrapPtySpawnInTerminalScope(
   file: string,
   args: string[],
   env: Record<string, string>,
-  pidsMaxExists: (path: string) => boolean = existsSync
+  sliceExists: (path: string) => boolean = existsSync
 ): { file: string; args: string[]; env: Record<string, string> } {
-  const runtime = currentLinux
-  if (!runtime) {
+  const scopes = currentScopes
+  if (!scopes) {
     return { file, args, env }
   }
-  // Why: a restarted user manager drops the transient slice, and `systemd-run --slice` would
-  // silently create a plain one with no limit.
-  if (!pidsMaxExists(runtime.pidsMaxPath)) {
-    setPtyProcessCeilingForTest({ state: 'off', reason: 'slice_lost' }, null)
+  // Why: `systemd-run --slice` would silently recreate a stopped slice unbound and unlimited.
+  if (!sliceExists(scopes.sliceCgroupPath)) {
+    setTerminalScopesForTest(
+      currentState.state === 'on' ? { state: 'off', reason: 'slice_lost' } : currentState,
+      null
+    )
     return { file, args, env }
   }
   scopeCounter += 1
@@ -79,41 +89,21 @@ export function wrapPtySpawnForCeiling(
       }
     }
   }
-  const restore = runtime.envBinary && unsets.length + sets.length > 0
   return {
-    file: runtime.systemdRun,
+    file: scopes.systemdRun,
     args: [
       '--user',
       '--scope',
       '--quiet',
       '--collect',
-      `--slice=${runtime.slice}`,
-      `--unit=orca_pty_${runtime.launchId}_${scopeCounter}.scope`,
+      `--slice=${scopes.slice}`,
+      `--unit=orca_pty_${scopes.launchId}_${scopeCounter}.scope`,
+      ...scopes.properties.map((property) => `--property=${property}`),
       '--',
-      ...(restore && runtime.envBinary ? [runtime.envBinary, ...unsets, ...sets] : []),
+      ...(unsets.length + sets.length > 0 ? [scopes.envBinary, ...unsets, ...sets] : []),
       file,
       ...args
     ],
     env: managerEnv
-  }
-}
-
-/** Daemon exit: its terminals are gone, so the slice goes too. A SIGKILL is the death watch's job. */
-export function releasePtyProcessCeiling(): void {
-  const runtime = currentLinux
-  currentLinux = null
-  if (!runtime) {
-    return
-  }
-  try {
-    runProcessSync({
-      program: 'systemctl',
-      args: ['--user', '--no-block', 'stop', runtime.slice],
-      env: userManagerEnv(process.env),
-      stdio: 'ignore',
-      timeoutMs: 2_000
-    })
-  } catch {
-    // The slice is transient and holds nothing once every terminal has exited.
   }
 }
