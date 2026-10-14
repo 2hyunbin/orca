@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import {
   fingerprintPluginConsent,
   fingerprintPluginReview,
-  hasInstructionalPluginContributions
+  requiresPluginContentApproval
 } from '../../shared/plugins/plugin-consent-fingerprint'
 import type {
   PluginInstallSource,
@@ -30,7 +30,7 @@ export async function discoverPluginConsent(input: {
   let contentHash = input.installedContentHash
   let source: PluginInstallSource | undefined
   const strict = input.manifest.manifestVersion === 2
-  if (input.isDev && (strict || hasInstructionalPluginContributions(input.manifest))) {
+  if (input.isDev && (strict || requiresPluginContentApproval(input.manifest))) {
     const tree = await hashPluginTree(input.rootDir)
     if (!tree.ok) {
       throw new Error(tree.error)
@@ -51,7 +51,7 @@ export async function discoverPluginConsent(input: {
       throw new Error('v2 plugin has no verified install source')
     }
   }
-  const consentContentHash = hasInstructionalPluginContributions(input.manifest)
+  const consentContentHash = requiresPluginContentApproval(input.manifest)
     ? (contentHash ?? null)
     : null
   const consentFingerprint = fingerprintPluginConsent(

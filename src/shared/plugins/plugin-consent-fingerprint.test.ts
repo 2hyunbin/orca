@@ -17,6 +17,30 @@ const workspaceRead: PluginCapability = { kind: 'workspace:read' }
 const storage: PluginCapability = { kind: 'storage' }
 
 describe('fingerprintPluginConsent', () => {
+  it.each(['sandboxed-ui', 'trusted-worker'])(
+    'binds v2 %s approval to exact executable content',
+    (execution) => {
+      const subject = { manifestVersion: 2, execution, main: undefined, capabilities: [] }
+      const previous = fingerprintPluginConsent(subject, 'a'.repeat(64))
+      const candidate = fingerprintPluginConsent(subject, 'b'.repeat(64))
+      const lists = { pluginConsents: { 'orca-samples.demo': previous }, disabledPlugins: [] }
+      expect(getPluginActivationState('orca-samples.demo', candidate, lists)).toBe('pending')
+      expect(needsReconsent('orca-samples.demo', candidate, lists)).toBe(true)
+      expect(fingerprintPluginConsent(subject)).not.toBe(candidate)
+    }
+  )
+
+  it('keeps data content updates and legacy executable consent stable', () => {
+    for (const subject of [
+      { manifestVersion: 2, execution: 'data', capabilities: [] },
+      { manifestVersion: 1, main: 'worker.js', capabilities: [] }
+    ]) {
+      expect(fingerprintPluginConsent(subject, 'a'.repeat(64))).toBe(
+        fingerprintPluginConsent(subject, 'b'.repeat(64))
+      )
+    }
+  })
+
   it('drops malformed persisted consent identities and oversized fingerprints', () => {
     expect(
       normalizePluginConsents({

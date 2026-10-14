@@ -23,6 +23,17 @@ export function hasInstructionalPluginContributions(manifest: PluginConsentSubje
   )
 }
 
+export function requiresPluginContentApproval(manifest: PluginConsentSubject): boolean {
+  return hasInstructionalPluginContributions(manifest) || hasV2ExecutableProfile(manifest)
+}
+
+function hasV2ExecutableProfile(manifest: PluginConsentSubject): boolean {
+  return (
+    manifest.manifestVersion === 2 &&
+    (manifest.execution === 'sandboxed-ui' || manifest.execution === 'trusted-worker')
+  )
+}
+
 // Why: data approvals must not authorize later executable entries.
 export function canonicalizePluginConsent(
   manifest: PluginConsentSubject,
@@ -35,6 +46,9 @@ export function canonicalizePluginConsent(
     ? '\0opened-document-viewer:readonly:host-ui'
     : ''
   const workerIdentity = manifest.main === undefined ? '' : '\0trusted-node-worker'
+  const executableIdentity = hasV2ExecutableProfile(manifest)
+    ? `\0executable-content:${contentIdentity ?? 'unresolved'}`
+    : ''
   // Instructional bytes execute later under user or agent authority, so
   // approval is bound to their immutable install/dev-tree identity.
   const instructionalIdentity = hasInstructionalPluginContributions(manifest)
@@ -45,7 +59,7 @@ export function canonicalizePluginConsent(
     manifest.manifestVersion === 2
       ? `\0source-v2:${source ? canonicalizePluginConsentSource(source) : 'unresolved'}`
       : ''
-  return `${capabilities}${profileIdentity}${panelIdentity}${viewerIdentity}${workerIdentity}${instructionalIdentity}${sourceIdentity}`
+  return `${capabilities}${profileIdentity}${panelIdentity}${viewerIdentity}${workerIdentity}${executableIdentity}${instructionalIdentity}${sourceIdentity}`
 }
 
 export function fingerprintPluginConsent(

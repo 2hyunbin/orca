@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { discoverPlugins, isInvalidDiscoveredPlugin } from './plugin-discovery'
 import { PLUGIN_CURRENT_POINTER_MAX_BYTES } from './plugin-current-pointer'
+import { getPluginActivationState } from '../../shared/plugins/plugin-consent-state'
 
 const roots: string[] = []
 
@@ -18,6 +19,56 @@ async function tempPluginsDir(): Promise<string> {
 }
 
 describe('installed plugin discovery identity', () => {
+  it.each(['sandboxed-ui', 'trusted-worker'] as const)(
+    'withdraws a mutable v2 %s approval when code changes within the same profile',
+    async (execution) => {
+      const pluginsDir = await tempPluginsDir()
+      const devRoot = await tempPluginsDir()
+      const entry = execution === 'trusted-worker' ? 'worker.js' : 'panel.html'
+      await writeFile(
+        join(devRoot, 'orca-plugin.json'),
+        JSON.stringify({
+          manifestVersion: 2,
+          execution,
+          id: 'code',
+          publisher: 'orca-samples',
+          name: 'Code',
+          version: '1.0.0',
+          engines: { orca: '>=1.0.0' },
+          pluginApi: 1,
+          ...(execution === 'trusted-worker' ? { main: entry } : {}),
+          contributes:
+            execution === 'sandboxed-ui'
+              ? { panels: [{ id: 'panel', title: 'Panel', entry }] }
+              : {},
+          capabilities: []
+        })
+      )
+      await writeFile(join(devRoot, entry), 'throw new Error("inert first release")')
+      const discover = () =>
+        discoverPlugins({ pluginsDir, devPluginPaths: [devRoot], hostVersion: '1.4.0' })
+      const [previous] = await discover()
+      await writeFile(join(devRoot, entry), 'throw new Error("inert changed release")')
+      const [candidate] = await discover()
+      if (
+        !previous ||
+        !candidate ||
+        isInvalidDiscoveredPlugin(previous) ||
+        isInvalidDiscoveredPlugin(candidate)
+      ) {
+        throw new Error('Executable fixture did not pass discovery')
+      }
+      expect(candidate.consentContentHash).not.toBe(previous.consentContentHash)
+      expect(candidate.consentFingerprint).not.toBe(previous.consentFingerprint)
+      expect(
+        getPluginActivationState(candidate.pluginKey, candidate.consentFingerprint, {
+          pluginConsents: { [previous.pluginKey]: previous.consentFingerprint },
+          disabledPlugins: []
+        })
+      ).toBe('pending')
+    }
+  )
+
   it('keeps the install directory identity when a manifest is invalid or mismatched', async () => {
     const pluginsDir = await tempPluginsDir()
     const installedKey = 'orca-samples.expected'
