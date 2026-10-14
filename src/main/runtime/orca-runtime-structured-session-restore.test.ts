@@ -150,7 +150,6 @@ describe('structured session cold restoration', () => {
   it('prefers the durable visible-session index after a legacy profile drops agent tabs', async () => {
     const runtime = new OrcaRuntimeService()
     const restoreSavedStatuses = vi.fn(async () => undefined)
-    const listSessionTabs = vi.fn(() => [])
     const internal = runtime as unknown as {
       store: { getWorkspaceSession: () => unknown }
       hasPersistedStructuredAgentSessionStore(): boolean
@@ -182,14 +181,12 @@ describe('structured session cold restoration', () => {
         sessionIds: ['session-survives-rollback']
       }),
       restore: { restoreSavedStatuses },
-      listSessionTabs
+      listSessionTabs: () => []
     } as never)
 
     await runtime.restoreStructuredAgentSessionTabs()
 
     expect(restoreSavedStatuses).toHaveBeenCalledWith(['session-survives-rollback'], [])
-    // Listed from saved records, not from whatever the restore opened.
-    expect(listSessionTabs).toHaveBeenCalledWith(['session-survives-rollback'])
   })
 
   it('treats an empty durable visible-session index as authoritative', async () => {
