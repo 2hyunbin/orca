@@ -83,8 +83,9 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
           setItems([])
           return
         }
-        // Jira, like Linear, is not repo-scoped, so it returns before the repo
-        // list is needed at all.
+        // Jira and Linear need repositories for workspace creation, not issue reads.
+        const repoListRequest = repoListEnsureLoaded()
+        void repoListRequest.catch(() => {})
         if (provider === 'jira') {
           if (!jiraConnection.connected) {
             setItems([])
@@ -100,10 +101,6 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
           }
           return
         }
-        // Why: Linear issues do not need the repo list, only the composer does, so
-        // start the fetch either way but never make Linear wait on it.
-        const repoListRequest = repoListEnsureLoaded()
-        void repoListRequest.catch(() => {})
         const currentRepos = provider === 'linear' ? [] : await repoListRequest
         if (!isCurrent()) {
           return
