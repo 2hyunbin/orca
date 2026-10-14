@@ -120,6 +120,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/native-chat/agent-session-wire/structured-agent-session-main-agent-working-agreement.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-newer-content-host.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-option-settlement.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-send-options.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-owed-work-release.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-pre-spawn-first-answer.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-processless-reservation.test.ts',
