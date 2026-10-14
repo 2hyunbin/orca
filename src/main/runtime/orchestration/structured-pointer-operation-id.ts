@@ -87,6 +87,9 @@ export function decideStructuredMailAttempt(input: {
   const { mintedByThisProcess } = input
   const index = input.submissionIndex ?? indexStructuredMailSubmissions(input.submissions)
   const recorded = index.byMessageId.get(input.messageId)
+  if (recorded?.dispatchState === 'accepted') {
+    return 'stamp'
+  }
   const last =
     mintedByThisProcess ??
     (recorded && { operationId: recorded.clientMessageId, mintedAtMs: recorded.submittedAt })

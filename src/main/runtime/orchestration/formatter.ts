@@ -117,7 +117,10 @@ export function formatMessageForChat(msg: MessageRow, cliCommand: OrchestrationC
   }
   if (msg.payload) {
     // A fence longer than any backtick run inside, so the payload cannot close it early.
-    const longestRun = Math.max(0, ...(msg.payload.match(/`+/g) ?? []).map((run) => run.length))
+    let longestRun = 0
+    for (const [run] of msg.payload.matchAll(/`+/g)) {
+      longestRun = Math.max(longestRun, run.length)
+    }
     const fence = '`'.repeat(Math.max(3, longestRun + 1))
     lines.push('', '**Payload:**', fence, msg.payload, fence)
   }

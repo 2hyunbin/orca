@@ -132,3 +132,49 @@ it('recovers a durable queued receipt after host replacement without another ful
     vi.useRealTimers()
   }
 })
+
+it('repairs a failed queued receipt after its accepted handoff without sending another report', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(HOST_TEST_NOW)
+  const db = new OrchestrationDb(':memory:')
+  const rig = await createQueuedMessageTestRig()
+  try {
+    setStructuredAgentSessionHost(rig.host)
+    const working = await rig.workingSend()
+    const capabilities = rig.host.deps.agents.capabilities.bind(rig.host.deps.agents)
+    vi.spyOn(rig.host.deps.agents, 'capabilities').mockImplementation((provider) => {
+      const declared = capabilities(provider)
+      return declared ? { ...declared, steering: 'queue' } : null
+    })
+    const message = db.insertMessage({ from: 'term_worker', to: MAILBOX, subject: 'one report' })
+    const mark = vi.spyOn(db, 'markAsReadAndDelivered').mockImplementationOnce(() => {
+      throw new Error('interrupted receipt')
+    })
+    const transport = createStructuredMailboxPointerHost()
+    const send = vi.spyOn(transport, 'send')
+    const delivery = lane(db, transport)
+    delivery.deliverForHandle(MAILBOX)
+    await vi.waitFor(() => expect(mark).toHaveBeenCalledOnce(), WAIT)
+    expect(db.getMessageById(message.id)?.read).toBe(0)
+    const [card] = await rig.drafts()
+    expect(card).toBeDefined()
+    vi.setSystemTime(HOST_TEST_NOW + 1_000)
+    vi.spyOn(rig.host.deps, 'now').mockImplementation(() => Date.now())
+    await rig.settleAccepted(working, 'working')
+    await vi.waitFor(async () => expect(await rig.handoff(card.messageId)).toBeDefined(), WAIT)
+    const handedOffId = await rig.handoffId(card.messageId)
+    expect(handedOffId).not.toBe(card.messageId)
+    await rig.settleAccepted(handedOffId, 'report')
+    expect((await rig.submission(handedOffId))?.dispatchState).toBe('accepted')
+    expect(await rig.drafts()).toEqual([])
+    delivery.onJournalActivity(HOST_TEST_SESSION)
+    await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1), WAIT)
+    expect(send).toHaveBeenCalledOnce()
+  } finally {
+    setStructuredAgentSessionHost(null)
+    await rig.dispose()
+    db.close()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  }
+})

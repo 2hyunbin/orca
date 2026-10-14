@@ -232,7 +232,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     if (first.length === 0) {
       return
     }
-    const throughSequence = db.getAllMessagesForHandle(mailboxHandle, 1)[0]?.sequence
+    const throughSequence = db.getInbox(1)[0]?.sequence
     if (throughSequence === undefined) {
       return
     }
