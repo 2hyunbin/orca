@@ -1,7 +1,11 @@
 import { vi } from 'vitest'
 import { createStore } from 'zustand/vanilla'
 import type { OpenFile } from '@/store/slices/editor'
-import type { PRCheckDetail, PRCheckRunDetails } from '../../../../shared/github/check-types'
+import type {
+  PRCheckDetail,
+  PRCheckJob,
+  PRCheckRunDetails
+} from '../../../../shared/github/check-types'
 import { createCheckDetailsReadingOwner } from './check-details-reading-owner'
 import {
   checkJobIdentities,
@@ -17,7 +21,8 @@ export const readingCheck: PRCheckDetail = {
   checkRunId: 42
 }
 export function readingDetails(
-  text: string | null = 'prefix\nError: synthetic diagnostic\n at test.ts:1:2'
+  text: string | null = 'prefix\nError: synthetic diagnostic\n at test.ts:1:2',
+  logState?: PRCheckJob['logState']
 ): PRCheckRunDetails {
   return {
     ...readingCheck,
@@ -38,6 +43,7 @@ export function readingDetails(
         startedAt: null,
         completedAt: null,
         logTail: text,
+        ...(logState ? { logState } : {}),
         steps: []
       }
     ]

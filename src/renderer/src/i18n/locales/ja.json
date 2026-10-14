@@ -14,6 +14,10 @@
   "githubChecks": {
     "retrying": "再試行中…",
     "logsNotYetAvailable": "ログ出力はまだ利用できません。",
+    "logsLoadErrorDetails": "ログを読み込めませんでした。更新して再試行してください。",
+    "logsLoadErrorSidebar": "ログを読み込めませんでした。「詳細を表示」を開き、更新して再試行してください。",
+    "logsEmpty": "ログ出力は返されませんでした。",
+    "logsNotRequested": "ログ抜粋はリクエストされていません。チェックごとに失敗したジョブの抜粋を最大5件読み込みます。",
     "noLogExcerpt": "利用できるログの抜粋はありません。",
     "refreshingDetails": "チェックの詳細を更新中…"
   },

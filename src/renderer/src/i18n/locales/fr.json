@@ -118,6 +118,10 @@
   "githubChecks": {
     "retrying": "Nouvelle tentative…",
     "logsNotYetAvailable": "La sortie du journal n’est pas encore disponible.",
+    "logsLoadErrorDetails": "Impossible de charger les journaux. Utilisez Actualiser pour réessayer.",
+    "logsLoadErrorSidebar": "Impossible de charger les journaux. Ouvrez Voir tous les détails, puis utilisez Actualiser pour réessayer.",
+    "logsEmpty": "Aucune sortie de journal n’a été renvoyée.",
+    "logsNotRequested": "L’extrait du journal n’a pas été demandé. Au maximum cinq extraits de tâches en échec sont chargés par vérification.",
     "noLogExcerpt": "Aucun extrait de journal n’est disponible.",
     "refreshingDetails": "Actualisation des détails de la vérification…"
   },

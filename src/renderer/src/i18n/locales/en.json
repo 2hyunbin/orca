@@ -182,6 +182,10 @@
   "githubChecks": {
     "retrying": "Retrying…",
     "logsNotYetAvailable": "Log output is not available yet.",
+    "logsLoadErrorDetails": "Couldn't load logs. Use Refresh to retry.",
+    "logsLoadErrorSidebar": "Couldn't load logs. Open View full details, then use Refresh to retry.",
+    "logsEmpty": "No log output was returned.",
+    "logsNotRequested": "Log excerpt wasn't requested. At most five failed-job excerpts are loaded per check.",
     "noLogExcerpt": "No log excerpt is available.",
     "refreshingDetails": "Refreshing check details…"
   },

@@ -104,17 +104,25 @@ function CopyButton({
 
 export function CheckJobLogTail({
   job,
+  surface,
   jobIdentity = '',
   expanded = false,
   positionOwner
 }: {
-  job: Pick<PRCheckJob, 'logTail' | 'status' | 'conclusion'>
+  job: Pick<PRCheckJob, 'logTail' | 'logState' | 'status' | 'conclusion'>
+  surface: 'sidebar' | 'details'
   jobIdentity?: string
   expanded?: boolean
   positionOwner?: CheckDetailsReadingOwner
 }): React.JSX.Element | null {
   const logTail = job.logTail ?? ''
-  const logPreRef = useCheckLogReadingPosition(logTail, expanded, jobIdentity, positionOwner)
+  const logPreRef = useCheckLogReadingPosition(
+    job.logTail,
+    expanded,
+    jobIdentity,
+    positionOwner,
+    job.logState
+  )
   useEffect(() => {
     if (!expanded && logPreRef.current && logTail) {
       logPreRef.current.scrollTop = getLogExcerptScrollTop(logPreRef.current, logTail)
@@ -125,7 +133,7 @@ export function CheckJobLogTail({
     job.status === 'in_progress' ||
     job.status === 'running' ||
     job.status === 'pending'
-  if (!logTail && !running && resolveStepOutcome(job) !== 'failure') {
+  if (!logTail && !job.logState && !running && resolveStepOutcome(job) !== 'failure') {
     return null
   }
 
@@ -148,6 +156,19 @@ export function CheckJobLogTail({
           />
         )}
       </div>
+      {job.logState === 'error' && (
+        <p className="mb-1.5 text-xs text-destructive">
+          {surface === 'details'
+            ? translate(
+                'githubChecks.logsLoadErrorDetails',
+                "Couldn't load logs. Use Refresh to retry."
+              )
+            : translate(
+                'githubChecks.logsLoadErrorSidebar',
+                "Couldn't load logs. Open View full details, then use Refresh to retry."
+              )}
+        </p>
+      )}
       {logTail ? (
         <pre
           ref={logPreRef}
@@ -160,13 +181,20 @@ export function CheckJobLogTail({
         >
           {logTail}
         </pre>
-      ) : (
+      ) : job.logState !== 'error' ? (
         <p className="text-xs text-muted-foreground">
-          {running
-            ? translate('githubChecks.logsNotYetAvailable', 'Log output is not available yet.')
-            : translate('githubChecks.noLogExcerpt', 'No log excerpt is available.')}
+          {job.logState === 'empty'
+            ? translate('githubChecks.logsEmpty', 'No log output was returned.')
+            : running && job.logState !== 'available'
+              ? translate('githubChecks.logsNotYetAvailable', 'Log output is not available yet.')
+              : job.logState === 'not_requested'
+                ? translate(
+                    'githubChecks.logsNotRequested',
+                    "Log excerpt wasn't requested. At most five failed-job excerpts are loaded per check."
+                  )
+                : translate('githubChecks.noLogExcerpt', 'No log excerpt is available.')}
         </p>
-      )}
+      ) : null}
     </div>
   )
 }

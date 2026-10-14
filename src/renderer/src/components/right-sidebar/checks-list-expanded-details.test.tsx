@@ -116,37 +116,43 @@ function renderChecksList(
 }
 
 describe('ChecksList expanded check details', () => {
-  it('opens an existing partial legacy payload without another details request', async () => {
-    const partial = { ...checkDetails, jobs: [{ ...checkDetails.jobs[0], logTail: null }] }
-    const onLoadCheckDetails = vi.fn(async () => partial)
-    renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
-    await act(async () => {
-      await Promise.resolve()
-    })
-    const button = [...container.querySelectorAll('button')].find((candidate) =>
-      candidate.textContent?.includes('View full details')
-    )
-    if (!button) {
-      throw new Error('Missing full-details action')
-    }
-    act(() => {
-      button.click()
-    })
-    expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
-    expect(openCheckRunDetails).toHaveBeenCalledWith(
-      'folder-workspace',
-      'repo:42',
-      failingCheck,
-      expect.objectContaining({
-        details: partial,
-        loading: false,
-        error: null,
-        requestId: expect.any(Number)
+  it.each([undefined, 'error'] as const)(
+    'opens cached partial outcome %s without another details request',
+    async (logState) => {
+      const partial = {
+        ...checkDetails,
+        jobs: [{ ...checkDetails.jobs[0], logTail: null, ...(logState ? { logState } : {}) }]
+      }
+      const onLoadCheckDetails = vi.fn(async () => partial)
+      renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
+      await act(async () => {
+        await Promise.resolve()
       })
-    )
-    renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
-    expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
-  })
+      const button = [...container.querySelectorAll('button')].find((candidate) =>
+        candidate.textContent?.includes('View full details')
+      )
+      if (!button) {
+        throw new Error('Missing full-details action')
+      }
+      act(() => {
+        button.click()
+      })
+      expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
+      expect(openCheckRunDetails).toHaveBeenCalledWith(
+        'folder-workspace',
+        'repo:42',
+        failingCheck,
+        expect.objectContaining({
+          details: partial,
+          loading: false,
+          error: null,
+          requestId: expect.any(Number)
+        })
+      )
+      renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
+      expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
+    }
+  )
   it('shows a failed read as an error instead of "No checks configured"', () => {
     renderChecksList({ checks: [], checksError: 'Could not load from Build box: 401' })
 

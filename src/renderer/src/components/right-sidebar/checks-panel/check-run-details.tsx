@@ -253,7 +253,7 @@ export function CheckRunDetails({
                               ))}
                           </div>
                         )}
-                        <CheckJobLogTail job={job} jobIdentity={identity} />
+                        <CheckJobLogTail job={job} surface="sidebar" jobIdentity={identity} />
                       </div>
                     ))}
                   </div>
