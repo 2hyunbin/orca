@@ -75,6 +75,31 @@ async function spawnIn(page: Page, worktreeId: string, cwd: string): Promise<str
   )
 }
 
+/** An edit's outcome as the renderer sees it: 'saved', 'ignored' (dropped quietly) or the refusal. */
+async function edit(
+  page: Page,
+  target: { worktreeId: string } | { folderWorkspaceId: string },
+  updates: Record<string, unknown>
+): Promise<string> {
+  return page.evaluate(
+    async ({ target, updates }) => {
+      try {
+        const result =
+          'worktreeId' in target
+            ? await window.api.worktrees.updateMeta({ worktreeId: target.worktreeId, updates })
+            : await window.api.folderWorkspaces.update({
+                folderWorkspaceId: target.folderWorkspaceId,
+                updates
+              })
+        return result ? 'saved' : 'ignored'
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    },
+    { target, updates }
+  )
+}
+
 async function listed(page: Page) {
   return page.evaluate(async () => ({
     folders: (await window.api.folderWorkspaces.list()).map((workspace) => workspace.id),
@@ -122,6 +147,19 @@ test('a WSL move journal fences the moving project, then hides it once the host 
       )
       expect(await spawnIn(page, repoWorktreeId, repoPath)).toContain('moving to its WSL host')
       expect(await spawnIn(page, `folder:${stayingId}`, folders[1].folderPath)).toBe('spawned')
+      // A user's edit is refused; background bookkeeping is dropped quietly, never an error.
+      expect(
+        await edit(page, { worktreeId: repoWorktreeId }, { displayName: 'Renamed' })
+      ).toContain('moving to its WSL host')
+      expect(
+        await edit(page, { folderWorkspaceId: movingId }, { name: 'Renamed notes' })
+      ).toContain('moving to its WSL host')
+      expect(
+        await edit(page, { worktreeId: repoWorktreeId }, { isUnread: true, lastActivityAt: 1 })
+      ).not.toContain('moving to its WSL host')
+      expect(await edit(page, { folderWorkspaceId: stayingId }, { name: 'Still mine' })).toBe(
+        'saved'
+      )
     }
 
     writeWslMoveCutover(session.userDataDir, record('source-fenced'))
