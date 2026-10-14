@@ -111,7 +111,8 @@ function catalog(
   hosts: MobileDesktopRelayHosts,
   labels = new Map(),
   desktop: {
-    hidesOtherClientWorkspaces?: boolean
+    hidesWorkspacesFromOtherDevices?: boolean
+    relayedPhoneDeviceIds?: string[]
     sessions?: Record<string, Partial<WorkspaceSessionState>>
   } = {}
 ) {
@@ -119,7 +120,8 @@ function catalog(
     catalog: new MobileRelayHostCatalog({
       hosts,
       hostLabelOverrides: () => labels,
-      hidesOtherClientWorkspaces: () => desktop.hidesOtherClientWorkspaces ?? false,
+      hidesWorkspacesFromOtherDevices: () => desktop.hidesWorkspacesFromOtherDevices ?? false,
+      delegatedPhoneDeviceIds: () => new Set(desktop.relayedPhoneDeviceIds),
       getWorkspaceSession: (hostId) => {
         const session = desktop.sessions?.[hostId]
         return session ? { ...getDefaultWorkspaceSession(), ...session } : null
@@ -460,10 +462,27 @@ describe("mobile relay host catalog: the desktop sidebar's own view of server ro
   }
 
   it('marks rows someone else created while the desktop hides them', async () => {
-    const rows = await serverRows({ hidesOtherClientWorkspaces: true })
+    const rows = await serverRows({ hidesWorkspacesFromOtherDevices: true })
     expect(marked(rows, 'desktopOtherClient')).toEqual(['other', 'other-phone', 'server'])
     // Marked, never dropped: deep links and lineage still resolve every row.
     expect(rows.worktrees).toHaveLength(creators.length)
+  })
+
+  it("keeps a row this desktop's relayed phone created on a server too old to say so", async () => {
+    const { hosts, call } = fakeHosts([
+      { id: 'env', name: 'Box', snapshot: snapshot('env', 'live'), pairedDeviceId: 'desktop' }
+    ])
+    call.mockResolvedValue(
+      psReply([
+        { worktreeId: 'legacy-mine', creatorProvenance: { kind: 'paired-device', deviceId: 'p1' } },
+        { worktreeId: 'legacy-other', creatorProvenance: { kind: 'paired-device', deviceId: 'p2' } }
+      ])
+    )
+    const rows = await catalog(hosts, new Map(), {
+      hidesWorkspacesFromOtherDevices: true,
+      relayedPhoneDeviceIds: ['p1']
+    }).catalog.worktrees('runtime:env')
+    expect(marked(rows, 'desktopOtherClient')).toEqual(['legacy-other'])
   })
 
   it('marks nothing while the desktop shows other-client workspaces', async () => {
@@ -476,7 +495,7 @@ describe("mobile relay host catalog: the desktop sidebar's own view of server ro
     ])
     call.mockResolvedValue(psReply(creators))
     const rows = await catalog(hosts, new Map(), {
-      hidesOtherClientWorkspaces: true
+      hidesWorkspacesFromOtherDevices: true
     }).catalog.worktrees('runtime:env')
     expect(marked(rows, 'desktopOtherClient')).toEqual([])
   })

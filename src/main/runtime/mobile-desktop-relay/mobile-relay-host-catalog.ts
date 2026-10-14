@@ -18,11 +18,12 @@ import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import type { RuntimeStatus } from '../../../shared/runtime-types'
 import {
   getPairedDeviceIdsByEnvironment,
-  isWorkspaceCreatedBySomeoneElse
+  isWorkspaceOwnedBySomeoneElse
 } from '../../../shared/workspace-creator-visibility'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getWorkspaceSessionTabActivityIds } from '../../../shared/workspace-session-tab-activity'
 import { runtimeWorktreeIdentityKey } from '../runtime-worktree-path-identity'
+import { normalizeWorkspaceCreatorProvenance } from '../../../shared/workspace-creator-provenance'
 import type {
   MobileDesktopRelayHostListing,
   MobileDesktopRelayHosts
@@ -61,7 +62,9 @@ export class MobileRelayHostCatalog {
       hosts: MobileDesktopRelayHosts
       hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
       /** The desktop's own "Hide other-client workspaces" setting. */
-      hidesOtherClientWorkspaces: () => boolean
+      hidesWorkspacesFromOtherDevices: () => boolean
+      /** This desktop's phones' device ids on a server, as its relay last synced them. */
+      delegatedPhoneDeviceIds: (environmentId: string) => ReadonlySet<string>
       /** The desktop's saved session for a host, as its sidebar last wrote it. */
       getWorkspaceSession: (hostId: ExecutionHostId) => WorkspaceSessionState | null
     }
@@ -97,7 +100,7 @@ export class MobileRelayHostCatalog {
     if (!cached || !current || cached.fence !== fenceOf(current)) {
       return { worktrees: null }
     }
-    const desktopDeviceIds = this.options.hidesOtherClientWorkspaces()
+    const desktopDeviceIds = this.options.hidesWorkspacesFromOtherDevices()
       ? getPairedDeviceIdsByEnvironment([current], statusByEnvironmentId)
       : null
     const sessionActivity = new Set(
@@ -112,7 +115,10 @@ export class MobileRelayHostCatalog {
       worktrees: cached.worktrees
         .filter((row) => row.removing !== true)
         .map((row) =>
-          stampDesktopSidebarView(row, host.environmentId, desktopDeviceIds, sessionActivity)
+          stampDesktopSidebarView(row, host.environmentId, sessionActivity, {
+            desktopDeviceIds,
+            relayedPhoneDeviceIds: this.options.delegatedPhoneDeviceIds(host.environmentId)
+          })
         )
     }
   }
@@ -225,20 +231,25 @@ function relayVerdict(
   return health === 'available' ? 'ready' : 'unavailable'
 }
 
-/**
- * What the desktop's own sidebar decides about a server row and the server cannot: whether "Hide
- * other-client workspaces" hides it, and whether the desktop's saved browser or chat tabs keep it
- * awake. Marked rather than dropped, so a notification deep link still resolves the row.
- */
+/** What the desktop's own sidebar decides and the server cannot; marked rather than dropped, so deep links still resolve. */
 function stampDesktopSidebarView(
   row: MobileRelayServerWorktreeRow,
   environmentId: string,
-  desktopDeviceIds: ReadonlyMap<string, string> | null,
-  sessionActivity: ReadonlySet<string>
+  sessionActivity: ReadonlySet<string>,
+  owners: {
+    desktopDeviceIds: ReadonlyMap<string, string> | null
+    relayedPhoneDeviceIds: ReadonlySet<string>
+  }
 ): MobileRelayServerWorktreeRow {
+  const { desktopDeviceIds, relayedPhoneDeviceIds } = owners
+  const creator = normalizeWorkspaceCreatorProvenance(row.creatorProvenance)
+  // Why: a server older than onBehalfOf records only the relayed phone's own device id.
+  const relayedPhoneCreated =
+    creator?.kind === 'paired-device' && relayedPhoneDeviceIds.has(creator.deviceId)
   const otherClient =
     desktopDeviceIds !== null &&
-    isWorkspaceCreatedBySomeoneElse(
+    !relayedPhoneCreated &&
+    isWorkspaceOwnedBySomeoneElse(
       { creatorProvenance: row.creatorProvenance, runtimeOwnerEnvironmentId: environmentId },
       desktopDeviceIds
     )

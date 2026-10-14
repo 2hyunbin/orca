@@ -6,7 +6,7 @@ import { getRenderableFolderWorkspaces } from '@/components/sidebar/worktree-lis
 import { worktreeMatchesVisibleHost } from '@/components/sidebar/visible-worktree-host-scope'
 import {
   filterFolderWorkspacesFromOtherDevices,
-  isWorkspaceCreatedBySomeoneElse
+  isWorkspaceOwnedBySomeoneElse
 } from '../../../shared/workspace-creator-visibility'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
@@ -46,7 +46,7 @@ export function getUnreadBadgeCount(sources: UnreadBadgeCountSources): number {
         worktree.isUnread &&
         !worktree.isArchived &&
         (!sources.hiddenOtherDevicePairings ||
-          !isWorkspaceCreatedBySomeoneElse(worktree, sources.hiddenOtherDevicePairings)) &&
+          !isWorkspaceOwnedBySomeoneElse(worktree, sources.hiddenOtherDevicePairings)) &&
         worktreeMatchesVisibleHost(worktree, visibleHostIds, sources.repoMap, defaultHostId)
       ) {
         unreadWorktrees.add(worktree.id)

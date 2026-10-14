@@ -19,7 +19,7 @@ import { isDefaultBranchWorkspace } from '../../default-branch-workspace'
 import { getFolderWorkspaceExecutionHostIdForRows } from './host-filtering'
 import {
   getPairedDeviceIdsByEnvironment,
-  isWorkspaceCreatedBySomeoneElse
+  isWorkspaceOwnedBySomeoneElse
 } from '../../../../../../shared/workspace-creator-visibility'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
 import { getWorktreeIdsWithLiveAgent, isInactiveWorkspace } from '@/lib/worktree-activity-state'
@@ -113,7 +113,7 @@ export function useSidebarWorktreeFilters() {
         state.runtimeEnvironments,
         state.runtimeStatusByEnvironmentId
       )
-      if (isWorkspaceCreatedBySomeoneElse(worktree, pairedDeviceIds)) {
+      if (isWorkspaceOwnedBySomeoneElse(worktree, pairedDeviceIds)) {
         state.setHideWorkspacesFromOtherDevices(false)
       }
     }

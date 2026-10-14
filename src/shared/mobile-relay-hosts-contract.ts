@@ -30,8 +30,5 @@ export type MobileRelayServerWorktreeRow = Record<string, unknown> & {
   desktopSidebarActivity?: true
 }
 
-/**
- * The server's own `worktree.ps` rows as the desktop last fetched them, refreshed when the server
- * answers; rows are rewritten only by their host id and the desktop's own sidebar marks above.
- */
+/** The server's own `worktree.ps` rows as the desktop last fetched them, refreshed when the server answers. */
 export type MobileRelayHostWorktreesResult = { worktrees: MobileRelayServerWorktreeRow[] | null }

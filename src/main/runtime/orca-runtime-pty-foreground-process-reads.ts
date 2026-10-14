@@ -187,6 +187,7 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
     return this.store?.getUI?.().hideWorkspacesFromOtherDevices === true
   }
 
+  // Why null rather than runtime_unavailable: a missing session only means no activity to add.
   getWorkspaceSessionForHost(hostId: ExecutionHostId): WorkspaceSessionState | null {
     return this.store?.getWorkspaceSession?.(hostId) ?? null
   }

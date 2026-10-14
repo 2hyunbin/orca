@@ -1,7 +1,7 @@
 import type { RuntimeWorktreePsResult } from '../../../shared/runtime-worktree-contracts'
 import {
   EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
-  isWorkspaceCreatedBySomeoneElse
+  isWorkspaceOwnedBySomeoneElse
 } from '../../../shared/workspace-creator-visibility'
 import type { RpcContext } from './core'
 
@@ -25,7 +25,7 @@ export function markWorktreePsOtherClientRows<T extends RuntimeWorktreePsResult>
   }
   let marked = false
   const worktrees = result.worktrees.map((row) => {
-    if (!isWorkspaceCreatedBySomeoneElse(row, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)) {
+    if (!isWorkspaceOwnedBySomeoneElse(row, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)) {
       return row
     }
     marked = true

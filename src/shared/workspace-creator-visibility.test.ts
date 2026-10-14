@@ -4,7 +4,7 @@ import type { WorkspaceOwnerProvenance } from './worktree/types'
 import { normalizeWorkspaceCreatorProvenance } from './workspace-creator-provenance'
 import {
   filterFolderWorkspacesFromOtherDevices,
-  isWorkspaceCreatedBySomeoneElse
+  isWorkspaceOwnedBySomeoneElse
 } from './workspace-creator-visibility'
 
 function makeFolderWorkspace(
@@ -52,7 +52,7 @@ describe('filterFolderWorkspacesFromOtherDevices', () => {
   })
 })
 
-describe('isWorkspaceCreatedBySomeoneElse', () => {
+describe('isWorkspaceOwnedBySomeoneElse', () => {
   const desktopOnServer = new Map([['server', 'desktop']])
   const phone = (onBehalfOf?: WorkspaceOwnerProvenance) => ({
     kind: 'paired-device' as const,
@@ -61,7 +61,7 @@ describe('isWorkspaceCreatedBySomeoneElse', () => {
   })
 
   function hidden(creatorProvenance: unknown, runtimeOwnerEnvironmentId?: string): boolean {
-    return isWorkspaceCreatedBySomeoneElse(
+    return isWorkspaceOwnedBySomeoneElse(
       { creatorProvenance, runtimeOwnerEnvironmentId },
       desktopOnServer
     )

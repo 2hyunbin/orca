@@ -3,7 +3,6 @@ import type { Repo } from '../../shared/repo-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { parsePaneKey } from '../../shared/stable-pane-id'
-import { getWorkspaceSessionTabActivityIds } from '../../shared/workspace-session-tab-activity'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { RuntimeWorktreePsSummaryLookup } from './runtime-worktree-summary-paths'
@@ -213,7 +212,10 @@ export function applyRuntimeWorktreePsSessionActivity(args: {
         summary.hasHostSidebarActivity = true
       }
     }
-    for (const worktreeId of getWorkspaceSessionTabActivityIds(session)) {
+    for (const [worktreeId, tabs] of Object.entries(session.browserTabsByWorktree ?? {})) {
+      if (tabs.length === 0) {
+        continue
+      }
       const summary = args.getSummary(worktreeId)
       if (summary) {
         summary.hasHostSidebarActivity = true

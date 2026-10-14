@@ -31,9 +31,8 @@ export function normalizeWorkspaceCreatorProvenance(
 
 /** Whose workspace it is: a phone's rows belong to whoever it acts for, other rows to their creator. */
 export function workspaceOwnerOf(creator: WorkspaceCreatorProvenance): WorkspaceOwnerProvenance {
-  return creator.kind === 'paired-device' && creator.onBehalfOf
-    ? creator.onBehalfOf
-    : creator.kind === 'host'
-      ? creator
-      : { kind: 'paired-device', deviceId: creator.deviceId }
+  if (creator.kind === 'host') {
+    return creator
+  }
+  return creator.onBehalfOf ?? { kind: 'paired-device', deviceId: creator.deviceId }
 }

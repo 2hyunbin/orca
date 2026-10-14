@@ -5,7 +5,8 @@ import { normalizeWorkspaceSessionKeyToWorkspaceId } from './workspace-scope'
 /**
  * Workspaces a saved session holds open browser or native-chat tabs for: the two signals of the
  * desktop sidebar's activity rule (worktree-activity-state.ts) that live in the client's session
- * rather than on the execution host. Live terminals and agents are the host's to report.
+ * rather than on the execution host. Live terminals and agents are the host's to report. Reads
+ * the saved session's keys; the renderer's live-state twin is getWorktreeIdsWithStructuredChat.
  */
 export function getWorkspaceSessionTabActivityIds(
   session: Pick<WorkspaceSessionState, 'browserTabsByWorktree' | 'unifiedTabs'> | null | undefined

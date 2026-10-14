@@ -33,7 +33,7 @@ export function getPairedDeviceIdsByEnvironment(
  * including one created on the server itself. No creator, or a server whose pairing this client
  * cannot name, stays visible.
  */
-export function isWorkspaceCreatedBySomeoneElse(
+export function isWorkspaceOwnedBySomeoneElse(
   worktree: { creatorProvenance?: unknown; runtimeOwnerEnvironmentId?: string },
   pairedDeviceIdsByEnvironment: ReadonlyMap<string, string>
 ): boolean {
@@ -57,7 +57,7 @@ export function isFolderWorkspaceFromOtherDevice(
   workspace: FolderWorkspace,
   pairedDeviceIdsByEnvironment: ReadonlyMap<string, string>
 ): boolean {
-  return isWorkspaceCreatedBySomeoneElse(
+  return isWorkspaceOwnedBySomeoneElse(
     folderWorkspaceToWorktree(workspace),
     pairedDeviceIdsByEnvironment
   )

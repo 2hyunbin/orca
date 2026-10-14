@@ -17,6 +17,14 @@ export class DelegatedPhoneGrantCache {
     private readonly listPhones: () => DelegatedMobileDeviceSyncParams['phones']
   ) {}
 
+  /** Device ids the server last granted this desktop's phones; empty until a sync answered. */
+  deviceIds(environmentId: string): ReadonlySet<string> {
+    const result = this.entries.get(environmentId)?.result
+    return new Set(
+      result?.kind === 'ready' ? [...result.grants.values()].map((grant) => grant.deviceId) : []
+    )
+  }
+
   environmentIds(): string[] {
     return [...this.entries.keys()]
   }

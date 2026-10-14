@@ -87,6 +87,10 @@ export class MobileDesktopRelay {
     this.grants.clear()
   }
 
+  delegatedPhoneDeviceIds(environmentId: string): ReadonlySet<string> {
+    return this.grants.deviceIds(environmentId)
+  }
+
   /** The request to run on this desktop instead, when it renders the page the call targets. */
   localRequestFor(request: RpcRequest, environmentId: string): RpcRequest | null {
     return localHostedBrowserPageRequest(
