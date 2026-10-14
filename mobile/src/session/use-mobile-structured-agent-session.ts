@@ -110,7 +110,8 @@ export function useMobileStructuredAgentSession(args: {
     enabled,
     fence: state.fence,
     mutate,
-    optionStamp
+    optionStamp,
+    takesSendOptions: hostSupport?.sendOptions === true
   })
   const { conversationCommands, invokeStructuredOption, optionSnapshot, setStructuredOption } =
     options
@@ -200,7 +201,8 @@ export function useMobileStructuredAgentSession(args: {
     hold: sends.hold,
     commandPending: commandPendingRef,
     controller: sendController,
-    onSendError
+    onSendError,
+    carriesOptions: hostSupport?.sendOptions === true
   })
   const turnIndicator = useMemo(
     () => ({
@@ -220,22 +222,10 @@ export function useMobileStructuredAgentSession(args: {
   )
   const status = state.status === 'idle' ? 'idle' : state.status
   // The host's answer where it gives one: a prompt an agent that ended raised takes no answer.
-  const approvalPrompt = useMemo(
-    () =>
-      actionableStructuredApproval({
-        items: state.items,
-        actionablePromptIds: state.actionablePromptIds
-      }),
-    [state.items, state.actionablePromptIds]
-  )
-  const questionPrompt = useMemo(
-    () =>
-      actionableStructuredQuestion({
-        items: state.items,
-        actionablePromptIds: state.actionablePromptIds
-      }),
-    [state.items, state.actionablePromptIds]
-  )
+  const [approvalPrompt, questionPrompt] = useMemo(() => {
+    const prompts = { items: state.items, actionablePromptIds: state.actionablePromptIds }
+    return [actionableStructuredApproval(prompts), actionableStructuredQuestion(prompts)] as const
+  }, [state.items, state.actionablePromptIds])
   // What a refused command's line on the phone stands on.
   const commandRefusalCauses = useMemo(
     () => ({

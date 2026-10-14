@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react'
+import { useStructuredAgentSessionSendOptions } from './use-structured-agent-session-send-options'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
 import { useStructuredAgentSessionCommandWrite } from './use-structured-agent-session-command-write'
 import { structuredAgentSessionNewSendsQueue } from './structured-agent-session-queue-request'
@@ -104,6 +105,7 @@ export function useStructuredAgentSession(args: {
     optionSnapshot,
     optionSurface,
     setStructuredOption,
+    sendSource,
     unavailable,
     threadGoal: threadGoalSupport,
     contextUsage: contextUsageSupport,
@@ -125,6 +127,7 @@ export function useStructuredAgentSession(args: {
     mutate,
     ...(launch ? { launch } : {})
   })
+  const sendOptions = useStructuredAgentSessionSendOptions(sessionId, launch, sendSource)
   // Only a capable host may see `delivery`; a card any host publishes shows, with its actions.
   const queueCapability = useStructuredAgentSessionHostQueuesMessagesState(target)
   const queuedMessageIds = useMemo(
@@ -138,10 +141,7 @@ export function useStructuredAgentSession(args: {
     hostStopping,
     mutate
   })
-  const prompts = pendingStructuredSessionPrompts(
-    transportState.journalItems,
-    transportState.actionablePromptIds
-  )
+  const prompts = pendingStructuredSessionPrompts(transportState)
   const promptsUnanswerableHere = pendingPromptsAllUnanswerableHere(prompts)
   // A send after a command the queue will run goes behind it, even with follow-ups off.
   // A host's queue waits on any pending prompt, and nothing here can settle one this build cannot
@@ -162,7 +162,8 @@ export function useStructuredAgentSession(args: {
     queue,
     historyLoaded: transportEnabled && state.status === 'ready',
     isWorking: transportState.isWorking,
-    stopping: stopControl.stopping
+    stopping: stopControl.stopping,
+    sendOptions
   })
 
   const threadGoal = useStructuredAgentSessionThreadGoal({

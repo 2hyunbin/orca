@@ -153,6 +153,8 @@ export async function performSend(
     origin?: 'client' | 'host'
     /** Who it is from; the submission keeps the kind only. */
     source?: AgentSessionMessageSource
+    /** The model and effort it runs on, applied at its handover. */
+    options?: Readonly<Record<string, string>>
   }
 ): Promise<TurnOutcome<AgentSessionSendResult>> {
   const existing = ctx.journal
