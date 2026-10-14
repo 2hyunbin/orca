@@ -21,8 +21,15 @@ export function buildProjectSectionCatalog(
   if (!served) {
     return { ...NO_PROJECT_SECTION_CATALOG, repos: shown(desktopRepos) }
   }
+  // Why: the desktop withholds uploaded image icons from the snapshot; its repo.list still carries them.
+  const iconKey = (repo: SectionRepo) => `${getRepoExecutionHostId(repo)}|${repo.id}`
+  const iconByKey = new Map(desktopRepos.map((repo) => [iconKey(repo), repo.repoIcon]))
+  const repos = served.repos.map((repo) => {
+    const icon = repo.repoIcon ? undefined : iconByKey.get(iconKey(repo))
+    return icon ? { ...repo, repoIcon: icon } : repo
+  })
   return {
-    repos: shown(served.repos),
+    repos: shown(repos),
     grouping: { projects: served.projects, projectHostSetups: served.setups },
     // Why: served repos come in the sidebar's header order, cross-host manual order included.
     repoOrder: getLogicalRepoOrderRankById(served.repos.map((repo) => repo.id)),
