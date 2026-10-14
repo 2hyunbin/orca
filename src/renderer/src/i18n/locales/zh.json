@@ -6881,9 +6881,7 @@
           "remoteDetectionFailed": "无法检测已安装的智能体。请检查主机连接后重试。",
           "retryDetection": "Retry",
           "storedDefaultUndetected": "已保存为默认值，但目前未检测到",
-          "noAgentsDetected": "未检测到智能体。如果安装了探测器，探测器可能会超时。",
-          "setupOnly": "无",
-          "setupOnlyHint": "在新标签页模式下运行设置，不额外打开空白终端。分屏模式保留 shell 窗格；跳过设置或缺少设置时会打开空白终端。"
+          "noAgentsDetected": "未检测到智能体。如果安装了探测器，探测器可能会超时。"
         },
         "AppIconSelector": {
           "d5a112dc9b": "下一个图标",
@@ -17024,8 +17022,7 @@
           "579c768bde": "没有智能体符合您的搜索。",
           "48c6a5a9b4": "搜索智能体...",
           "9c6b59fe58": "设置为默认值",
-          "1b0d6965fa": "当前默认值",
-          "setupOnly": "无"
+          "1b0d6965fa": "当前默认值"
         },
         "AgentSettingsDialog": {
           "50cdb57c03": "管理 AI 智能体、设置默认值并自定义命令。",

@@ -6896,9 +6896,7 @@
           "remoteDetectionFailed": "Couldn’t detect installed agents. Check the host connection and try again.",
           "retryDetection": "Retry",
           "storedDefaultUndetected": "Guardado como predeterminado, pero no detectado en este momento",
-          "noAgentsDetected": "No se detectaron agentes. Si hay uno instalado, es posible que la sonda haya agotado su tiempo de espera.",
-          "setupOnly": "Ninguno",
-          "setupOnlyHint": "Ejecuta la configuración sin un terminal en blanco adicional en el modo de pestaña nueva. El modo dividido mantiene un panel de shell; si se omite la configuración o falta, se abre un terminal en blanco."
+          "noAgentsDetected": "No se detectaron agentes. Si hay uno instalado, es posible que la sonda haya agotado su tiempo de espera."
         },
         "AppIconSelector": {
           "d5a112dc9b": "Icono siguiente",
@@ -17024,8 +17022,7 @@
           "579c768bde": "Ningún agente coincide con su búsqueda.",
           "48c6a5a9b4": "Agentes de búsqueda...",
           "9c6b59fe58": "Establecer como predeterminado",
-          "1b0d6965fa": "Valor predeterminado actual",
-          "setupOnly": "Ninguno"
+          "1b0d6965fa": "Valor predeterminado actual"
         },
         "AgentSettingsDialog": {
           "50cdb57c03": "Administre agents de IA, establezca un valor predeterminado y personalice comandos.",
