@@ -21,8 +21,7 @@ export async function prepareAcpStructuredLaunch(
       .catch(preSpawnFailure)
   let launch = await resolveLaunch()
   closedBeforeSpawn()
-  // A missed lookup returns the bare name; a Command setting resolves to a path or refuses, so it
-  // never installs.
+  // A missed lookup returns the bare name; a selected Command setting resolves or refuses.
   const { managedRuntime } = spec
   if (managedRuntime && deps.dataDirectory && launch.command === spec.command) {
     await managedRuntime.materialize(deps.dataDirectory, acquire.signal).catch(preSpawnFailure)

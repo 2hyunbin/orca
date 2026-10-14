@@ -71,6 +71,8 @@ export type AcpLaunchSpec = {
   /** The Orca agent id, which names the agent's records, its catalog label and its settings. */
   agent: TuiAgent
   command: string
+  /** The terminal agent's Command setting may name a different program than this chat server. */
+  ignoreAgentCommandSetting?: true
   /** Built per launch: `fullAccess` is the Agent Permissions setting's bypass posture;
    *  `pluginDir` is a plugin folder `visualsSkill` asked the agent to load. */
   args(input: { fullAccess: boolean; pluginDir: string | null }): string[]
@@ -103,6 +105,7 @@ export type AcpLaunchSpec = {
   managedRuntime?: {
     folder(dataDirectory: string): string
     materialize(dataDirectory: string, signal?: AbortSignal): Promise<void>
+    availableOnHost?: () => boolean
   }
   /** The session config option through which the agent enforces a chat's permission mode itself,
    *  and its value per mode; Orca then answers none of its permission requests for the person. */
@@ -268,6 +271,7 @@ const ANTIGRAVITY_SESSION_HISTORY: StructuredAgentSessionHistory = {
 const ANTIGRAVITY_LAUNCH_SPEC: AcpLaunchSpec = {
   agent: 'antigravity',
   command: ANTIGRAVITY_ACP_RUNTIME.command,
+  ignoreAgentCommandSetting: true,
   // The registry's Linux launch: without `--uid=` the server, started as root, drops to nobody.
   args: () => (process.platform === 'linux' ? ['--uid='] : []),
   env: ANTIGRAVITY_ACP_ENV,

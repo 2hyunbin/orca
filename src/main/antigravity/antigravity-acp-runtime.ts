@@ -62,6 +62,7 @@ function pinnedFolder(): PinnedRuntimeFolder | null {
 
 export const ANTIGRAVITY_ACP_RUNTIME = {
   command: COMMAND,
+  availableOnHost: () => pinnedFolder() !== null,
   folder: (dataDirectory: string) => join(dataDirectory, 'agent-runtimes', 'antigravity', VERSION),
   materialize: async (dataDirectory: string, signal?: AbortSignal) => {
     const pinned = pinnedFolder()

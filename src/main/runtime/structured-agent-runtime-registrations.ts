@@ -5,7 +5,6 @@ import { codexStructuredLaunchPart } from '../codex/codex-structured-launch-reso
 import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-resolution'
 import { supportsCodexStructuredLocation } from '../codex/codex-structured-location-support'
 import { supportsClaudeStructuredLocation } from '../claude/claude-structured-location-support'
-import { supportsSupervisedProviderChildLocation } from '../provider-process/supervised-provider-child-location'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import {
@@ -49,6 +48,7 @@ import {
   resolveAcpLaunchCommand
 } from '../acp/acp-structured-launch-resolution'
 import { AcpStructuredSessionAdapter } from '../acp/acp-structured-session-adapter'
+import { supportsAcpStructuredLocation } from '../acp/acp-structured-location-support'
 import { removeOtherRuntimeVersions } from '../node-runtime/pinned-runtime-materializer'
 import { PI_RPC_RUNTIME_REGISTRATION } from '../pi/rpc-runtime-registration'
 import type { AgentModelCatalogDiscovery } from '../native-chat/agent-model-catalog/agent-model-catalog-discovery'
@@ -212,7 +212,7 @@ function createClaudeAdapter(
 function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistration {
   return {
     definition: acpStructuredAgentDefinition(spec),
-    supportsLocation: (location) => supportsSupervisedProviderChildLocation(location),
+    supportsLocation: (location) => supportsAcpStructuredLocation(spec, location),
     ...(spec.supportsVersion
       ? {
           launchCheck: {

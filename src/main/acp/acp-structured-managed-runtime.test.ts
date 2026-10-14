@@ -10,7 +10,7 @@ import { GROK, openAcpAdapterRig } from './acp-structured-adapter.test-support'
 
 afterEach(() => closeProviderTimelineRigs())
 
-it('installs the managed runtime only when no copy is found, and never for a Command setting', async () => {
+it('installs the managed runtime when no copy or applicable Command setting is found', async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-acp-managed-'))
   const homePath = join(dataDirectory, 'home')
   const command = `orca-managed-${basename(dataDirectory)}`
@@ -21,8 +21,8 @@ it('installs the managed runtime only when no copy is found, and never for a Com
   })
   const spec = { ...GROK, command, managedRuntime: { folder, materialize } }
   const signal = new AbortController().signal
-  const spawn = async (commandSettings: StructuredAgentCommandSettings) => {
-    const resolve = createAcpStructuredLaunchResolver(spec, {
+  const spawn = async (commandSettings: StructuredAgentCommandSettings, launchSpec = spec) => {
+    const resolve = createAcpStructuredLaunchResolver(launchSpec, {
       store: {
         getRecord: () => ({
           ...agentSessionRecordFixture(),
@@ -37,7 +37,10 @@ it('installs the managed runtime only when no copy is found, and never for a Com
       resolveCommandSettings: () => commandSettings,
       dataDirectory
     })
-    const rig = await openAcpAdapterRig({ spec, deps: { resolveLaunch: resolve, dataDirectory } })
+    const rig = await openAcpAdapterRig({
+      spec: launchSpec,
+      deps: { resolveLaunch: resolve, dataDirectory }
+    })
     await rig.acquire({ signal })
     return rig.child().launch.command
   }
@@ -45,12 +48,24 @@ it('installs the managed runtime only when no copy is found, and never for a Com
   await writeFile(custom, '', { mode: 0o755 })
   expect(await spawn({ agentCmdOverrides: { grok: custom } })).toBe(custom)
   expect(materialize).not.toHaveBeenCalled()
+  expect(
+    await spawn(
+      { agentCmdOverrides: { grok: custom } },
+      { ...spec, ignoreAgentCommandSetting: true }
+    )
+  ).toBe(join(folder(), command))
+  expect(materialize).toHaveBeenCalledExactlyOnceWith(dataDirectory, signal)
   expect(await spawn({})).toBe(join(folder(), command))
   expect(materialize).toHaveBeenCalledExactlyOnceWith(dataDirectory, signal)
   const localBin = join(homePath, '.local', 'bin')
   await mkdir(localBin, { recursive: true })
   await writeFile(join(localBin, command), '', { mode: 0o755 })
-  expect(await spawn({})).toBe(join(localBin, command))
+  expect(
+    await spawn(
+      { agentCmdOverrides: { grok: custom } },
+      { ...spec, ignoreAgentCommandSetting: true }
+    )
+  ).toBe(join(localBin, command))
   expect(materialize).toHaveBeenCalledTimes(1)
   await rm(dataDirectory, { recursive: true, force: true })
 })
