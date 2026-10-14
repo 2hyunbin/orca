@@ -22,15 +22,12 @@ type AutomationExtraAgentArgsFieldProps = {
 export function AutomationExtraAgentArgsField({
   draft,
   onDraftChange
-}: AutomationExtraAgentArgsFieldProps): React.JSX.Element | null {
-  const inputId = useId()
-  const messageId = useId()
-  if (draft.agentId === null) {
-    return null
-  }
+}: AutomationExtraAgentArgsFieldProps): React.JSX.Element {
   const supported = supportsExtraAgentArgs(draft.agentId)
   const error = getDraftExtraAgentArgsError(draft)
   const needsFreshSession = supported && draftExtraAgentArgsNeedFreshSession(draft)
+  const inputId = useId()
+  const messageId = useId()
   return (
     <div>
       <div className={AUTOMATION_EDITOR_SECTION_LABEL_CLASS}>

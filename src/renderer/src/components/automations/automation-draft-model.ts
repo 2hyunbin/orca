@@ -59,7 +59,7 @@ export function getAgentLabel(agentId: string): string {
 export function getDraftExtraAgentArgsError(
   draft: Pick<AutomationDraft, 'agentId' | 'extraAgentArgs'>
 ): string | null {
-  if (draft.agentId === null || !hasExtraAgentArgs(draft.extraAgentArgs)) {
+  if (!hasExtraAgentArgs(draft.extraAgentArgs)) {
     return null
   }
   const parsed = parseExtraAgentArgs({

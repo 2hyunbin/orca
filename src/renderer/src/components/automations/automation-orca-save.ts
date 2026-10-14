@@ -59,9 +59,6 @@ export async function saveOrcaAutomation(
     createDestination
   } = destination
   const { dialogRepos, editHostResolution, automationDialogTarget } = destinationForm
-  if (draft.agentId === null) {
-    return
-  }
 
   // Re-check the destination at the start of the transaction. This keeps all
   // side effects (hook probes and trust prompts) behind the destination fence.
