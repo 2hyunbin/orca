@@ -192,8 +192,10 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
     }
     return wsl.remove(request.environmentId)
   })
-  ipcMain.handle('wslHosts:connect', (_event, request: { environmentId: string }) =>
-    wsl.connect(request.environmentId)
+  ipcMain.handle(
+    'wslHosts:connect',
+    (_event, request: { environmentId: string; force?: boolean }) =>
+      wsl.connect(request.environmentId, { force: request.force === true })
   )
   ipcMain.handle('wslHosts:getCapability', (): WslHostCapability => ({
     serverFiles: wsl.hasServerFiles()
