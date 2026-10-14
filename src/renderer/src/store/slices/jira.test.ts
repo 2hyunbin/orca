@@ -530,6 +530,10 @@ describe('createJiraSlice runtime context', () => {
         [`${remoteScope}::site-1::ALP-1`]: {
           data: { ...issue('ALP-1'), title: 'Remote title' },
           fetchedAt: Date.now()
+        },
+        [`${localScope}::site-2::ALP-1`]: {
+          data: { ...issue('ALP-1'), siteId: 'site-2', title: 'Other site title' },
+          fetchedAt: Date.now()
         }
       },
       jiraSearchCache: {
@@ -540,6 +544,13 @@ describe('createJiraSlice runtime context', () => {
         [`${remoteScope}::site-1::list::assigned::30`]: {
           data: [{ ...issue('ALP-1'), title: 'Remote title' }],
           fetchedAt: Date.now()
+        },
+        [`${localScope}::all::list::assigned::30`]: {
+          data: [
+            { ...issue('ALP-1'), siteId: 'site-2', title: 'Other site title' },
+            { ...issue('ALP-1'), title: 'Local title' }
+          ],
+          fetchedAt: Date.now()
         }
       }
     })
@@ -548,7 +559,8 @@ describe('createJiraSlice runtime context', () => {
       'ALP-1',
       { title: 'Patched local title' },
       {
-        sourceContext: localSource
+        sourceContext: localSource,
+        siteId: 'site-1'
       }
     )
 
@@ -566,6 +578,14 @@ describe('createJiraSlice runtime context', () => {
       store.getState().jiraSearchCache[`${remoteScope}::site-1::list::assigned::30`]?.data?.[0]
         ?.title
     ).toBe('Remote title')
+    expect(store.getState().jiraIssueCache[`${localScope}::site-2::ALP-1`]?.data?.title).toBe(
+      'Other site title'
+    )
+    expect(
+      store
+        .getState()
+        .jiraSearchCache[`${localScope}::all::list::assigned::30`]?.data?.map((item) => item.title)
+    ).toEqual(['Other site title', 'Patched local title'])
   })
 
   it('returns a failed Jira connect result when the active runtime changes before completion', async () => {

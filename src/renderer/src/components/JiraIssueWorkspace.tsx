@@ -198,7 +198,7 @@ export default function JiraIssueWorkspace({
       try {
         const latest = await jiraGetIssue(providerSettings, target.key, target.siteId)
         if (latest) {
-          patchJiraIssue(latest.key, latest, { sourceContext })
+          patchJiraIssue(latest.key, latest, { sourceContext, siteId: target.siteId })
           if (requestId === requestIdRef.current) {
             setFullIssue(latest)
           }
@@ -243,7 +243,7 @@ export default function JiraIssueWorkspace({
       try {
         if (optimistic) {
           setFullIssue({ ...displayed, ...optimistic })
-          patchJiraIssue(displayed.key, optimistic, { sourceContext })
+          patchJiraIssue(displayed.key, optimistic, { sourceContext, siteId: displayed.siteId })
         }
         const result = await jiraUpdateIssue(providerSettings, displayed.key, updates, siteId)
         if (!result.ok) {
@@ -255,7 +255,7 @@ export default function JiraIssueWorkspace({
         }
       } catch (error) {
         const rollback = jiraIssueRollbackPatch(previous, optimistic ?? {})
-        patchJiraIssue(previous.key, rollback, { sourceContext })
+        patchJiraIssue(previous.key, rollback, { sourceContext, siteId: previous.siteId })
         if (requestId === requestIdRef.current) {
           setFullIssue((current) => ({ ...(current ?? previous), ...rollback }))
           if ('title' in rollback) {
