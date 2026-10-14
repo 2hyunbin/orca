@@ -109,7 +109,7 @@ import { formatShortTimeAgo } from '@/lib/short-time-ago'
         makeStatusThreads([
           { paneKey: PANE_KEY, state: 'working', at: 5_000 },
           { paneKey: PANE_KEY_2, state: 'done', at: 1_000, outcome: 'unconfirmed' },
-          { paneKey: PANE_KEY_3, state: 'done', at: 3_000, outcome: 'interruption' }
+          { paneKey: PANE_KEY_3, state: 'done', at: 3_000, outcome: 'failure' }
         ]),
         'status'
       )
@@ -282,13 +282,11 @@ import { formatShortTimeAgo } from '@/lib/short-time-ago'
       { newer: 'cancellation', older: 'interruption' },
       { newer: 'interruption', older: 'cancellation' }
     ] as const)(
-      "never mixes a user's Stop with a crash, whichever is newest ($newer newest)",
+      "groups a user's Stop with a turn Orca cut short, whichever is newest ($newer newest)",
       ({ newer, older }) => {
         const groups = statusGroups(newer, older)
 
-        // A crash sits with failures; the Stop alone heads Interrupted, below it.
         expect(groups.map((group) => [group.key, group.state, group.label])).toEqual([
-          ['failed', 'failed', 'Failed'],
           ['interrupted', 'interrupted', 'Interrupted']
         ])
       }

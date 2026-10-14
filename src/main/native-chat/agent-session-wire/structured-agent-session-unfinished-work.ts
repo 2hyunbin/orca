@@ -14,6 +14,7 @@ export type DeadGenerationJournal = UnopenedSendJournal & {
   appendLifecycleBatch: AgentSessionJournal['appendLifecycleBatch']
   pendingSubmissions?: AgentSessionJournal['pendingSubmissions']
   itemFence: AgentSessionJournal['itemFence']
+  stopMarks: Pick<AgentSessionJournal['stopMarks'], 'personStopDecides'>
 }
 
 export type StructuredAgentSessionUnfinishedWork = {

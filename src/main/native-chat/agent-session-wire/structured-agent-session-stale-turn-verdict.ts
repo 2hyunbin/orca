@@ -18,7 +18,8 @@ import {
 } from '../../../shared/agent-session-journal-types'
 import {
   agentJournalTurnBody,
-  readAgentJournalTurn
+  readAgentJournalTurn,
+  readAgentJournalTurnOutcome
 } from '../../../shared/agent-session-turn-record'
 import type { AgentSessionDeathEvidence } from '../../../shared/agent-session-record'
 import type { AgentSessionReplacedRuntime } from '../../runtime/agent-session-replaced-runtime'
@@ -173,6 +174,30 @@ export function watchedExitRevisions(
         : []
     })
   ]
+}
+
+/** A provider exit nobody asked for makes the turn it cut that provider's failure, unless the turn
+ *  already has a verdict or a person's Stop decides its end (`turnEndAfterStop`, which skips a
+ *  turn written with a verdict, so the Stop is weighed here). */
+export function providerExitFailureRevision(
+  item: AgentJournalRenderItem | undefined,
+  journal: { stopMarks: Pick<AgentSessionJournal['stopMarks'], 'personStopDecides'> }
+): JournalLifecycleMutationInput | null {
+  const turn = readAgentJournalTurn(item?.body)
+  if (
+    !item ||
+    turn?.state !== 'interrupted' ||
+    readAgentJournalTurnOutcome(turn) !== null ||
+    journal.stopMarks.personStopDecides(turn.turnId, turn.completedAt)
+  ) {
+    return null
+  }
+  return {
+    kind: 'item',
+    itemId: item.itemId,
+    body: agentJournalTurnBody({ ...turn, outcome: 'failure' }),
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE
+  }
 }
 
 /** The calls those settles closed with no proof, revised by the same proof: each only when it names

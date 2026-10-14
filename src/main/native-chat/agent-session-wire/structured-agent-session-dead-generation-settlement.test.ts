@@ -279,9 +279,15 @@ describe('dead structured-session generation settlement', () => {
     const settledSnapshot = journal.snapshot()
     const closedJournal: Pick<
       AgentSessionJournal,
-      'snapshot' | 'submissions' | 'rejectQueuedSubmissions' | 'appendLifecycleBatch' | 'itemFence'
+      | 'snapshot'
+      | 'submissions'
+      | 'rejectQueuedSubmissions'
+      | 'appendLifecycleBatch'
+      | 'itemFence'
+      | 'stopMarks'
     > = {
       itemFence: () => undefined,
+      stopMarks: journal.stopMarks,
       snapshot: () => ({
         ...settledSnapshot,
         items: [settledItem]

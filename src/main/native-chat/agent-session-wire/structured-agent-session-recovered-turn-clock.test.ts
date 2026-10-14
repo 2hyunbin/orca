@@ -127,7 +127,8 @@ async function sessionWithRunningTurn() {
 
 function settleDeadGeneration(
   journal: AgentSessionJournal,
-  verdict: StructuredAgentSessionTurnVerdict
+  verdict: StructuredAgentSessionTurnVerdict,
+  exit?: { providerFailed: true }
 ): ReturnType<typeof settleStructuredAgentSessionDeadGeneration> {
   return settleStructuredAgentSessionDeadGeneration({
     journal,
@@ -135,7 +136,8 @@ function settleDeadGeneration(
     fence: 2,
     settlementId: 'settle-1',
     verdict,
-    pendingSubmissionReason: 'provider_exited_before_acknowledgement'
+    pendingSubmissionReason: 'provider_exited_before_acknowledgement',
+    ...exit
   })
 }
 
@@ -146,14 +148,13 @@ describe('a turn recovery settled after its host went away', () => {
       'an exit observed before the restart',
       { state: 'interrupted', completedAt: EXIT_OBSERVED },
       'interruption',
-      // A turn the user did not stop is a fault, marked as a failure is.
-      'failed'
+      'interrupted'
     ]
   ] satisfies [
     string,
     StructuredAgentSessionTurnVerdict,
     'unconfirmed' | 'interruption',
-    'unconfirmed' | 'failed'
+    'unconfirmed' | 'interrupted'
   ][])(
     'is done as of the recovery with the end the host observed, never a success: %s',
     async (_label, verdict, outcome, mark) => {
@@ -184,8 +185,6 @@ describe('a turn recovery settled after its host went away', () => {
     }
   )
 
-  // The tab's mark reads a turn nobody stopped as failed; the chat's turn bar reads it like a
-  // finished turn, since the chat's notice row says why it stopped.
   it.each([
     [
       'a restart',
@@ -209,7 +208,7 @@ describe('a turn recovery settled after its host went away', () => {
         )
     ]
   ] as const)(
-    'reads Worked for N, marked failed, for a turn cut off by %s',
+    'reads Interrupted after N, marked interrupted, for a turn cut off by %s',
     async (_label, cut) => {
       const session = await sessionWithRunningTurn()
       session.recoverAt(RECOVERED)
@@ -217,12 +216,12 @@ describe('a turn recovery settled after its host went away', () => {
       session.publish()
 
       const [row] = session.server.getStatusSnapshot()
-      expect(row && agentVerdictDisplayMark(row)).toBe('failed')
+      expect(row && agentVerdictDisplayMark(row)).toBe('interrupted')
       const [settled] = [
         ...selectStructuredAgentSettledTurns(session.journal.snapshot().items).values()
       ]
       expect(settled && formatNativeChatTurnStatusLabel({ elapsedSeconds: 0, ...settled })).toBe(
-        'Worked for 1s'
+        'Interrupted after 1s'
       )
     }
   )
@@ -285,5 +284,29 @@ describe('a turn recovery settled after its host went away', () => {
         completion: expect.objectContaining({ outcome: 'success' })
       })
     ])
+  })
+})
+
+// A provider that exits on its own while Orca runs fails its turn; Orca losing it (above) does not.
+describe('a turn whose provider exited on its own', () => {
+  it.each([
+    ['fails, announced as any failure', false, 'failed', ['failure']],
+    ["stays a person's earlier Stop", true, 'interrupted', ['cancellation']]
+  ] as const)('%s', async (_label, stopFirst, mark, announced) => {
+    const session = await sessionWithRunningTurn()
+    session.recoverAt(EXIT_OBSERVED)
+    if (stopFirst) {
+      await session.journal.appendStopEvent({ reason: 'user-stop', turnId: 'turn-1' }, 1)
+    }
+    const verdict = { state: 'interrupted', completedAt: EXIT_OBSERVED } as const
+    await settleDeadGeneration(session.journal, verdict, { providerFailed: true })
+    session.publish()
+
+    const [row] = session.server.getStatusSnapshot()
+    expect(row && agentVerdictDisplayMark(row)).toBe(mark)
+    const outcomes = session.completionEvents.map(
+      (event) => event.type === 'completion' && event.completion.outcome
+    )
+    expect(outcomes).toEqual(announced)
   })
 })

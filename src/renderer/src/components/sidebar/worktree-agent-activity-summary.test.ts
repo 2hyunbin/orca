@@ -204,9 +204,8 @@ describe('selectWorktreeAgentActivitySummary', () => {
   it.each([
     ['success', { hasLiveDone: true }],
     ['failure', { hasFailed: true, hasLiveDone: false }],
-    // A user's Stop reads interrupted; a turn anything else cut short is a fault, like a failure.
     ['cancellation', { hasInterrupted: true, hasLiveDone: false }],
-    ['interruption', { hasFailed: true, hasInterrupted: false, hasLiveDone: false }],
+    ['interruption', { hasFailed: false, hasInterrupted: true, hasLiveDone: false }],
     ['unconfirmed', { hasUnconfirmed: true, hasLiveDone: false }]
   ] as const)('flags a %s outcome apart from the others', (outcome, flags) => {
     vi.spyOn(Date, 'now').mockReturnValue(2_000)

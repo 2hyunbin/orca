@@ -75,25 +75,6 @@ describe('MobileNativeChatTurnStatus', () => {
     expect(onToggleExpanded).toHaveBeenCalledOnce()
   })
 
-  // The crash's notice row explains the cut; the turn bar reads like any finished turn.
-  it('heads a turn a crash cut off as worked, and a turn the user stopped as interrupted', () => {
-    const crashed = render({
-      startedAt: Date.now(),
-      workedSeconds: 12,
-      verdict: 'interruption',
-      onToggleExpanded: vi.fn()
-    })
-    expect(labels(crashed.root)).toEqual(['Worked for 12s'])
-    act(() => crashed.unmount())
-    const stopped = render({
-      startedAt: Date.now(),
-      workedSeconds: 12,
-      verdict: 'cancellation',
-      onToggleExpanded: vi.fn()
-    })
-    expect(labels(stopped.root)).toEqual(['Interrupted after 12s'])
-  })
-
   it('stays a plain row when the settled turn has nothing to disclose', () => {
     const tree = render({ startedAt: Date.now(), workedSeconds: 5 })
     expect(tree.root.findAllByType('Pressable' as never)).toHaveLength(0)

@@ -51,11 +51,11 @@ describe('agentMainAgentVerdict', () => {
         verdict === 'cancellation' || verdict === 'superseded'
       )
       expect(agentVerdictDisplayMark(row), label).toBe(
-        verdict === 'failure' || verdict === 'interruption'
+        verdict === 'failure'
           ? 'failed'
           : row.state !== 'done'
             ? null
-            : verdict === 'cancellation' || verdict === 'superseded'
+            : verdict === 'cancellation' || verdict === 'superseded' || verdict === 'interruption'
               ? 'interrupted'
               : verdict === 'unconfirmed'
                 ? 'unconfirmed'
@@ -64,7 +64,7 @@ describe('agentMainAgentVerdict', () => {
     }
   })
 
-  it.each(['failure', 'interruption'] as const)(
+  it.each(['failure'] as const)(
     'reads a main agent whose turn ended in %s while its subagent still works as failed',
     (outcome) => {
       const row = { state: 'working' as const, mainAgent: { state: 'done' as const, outcome } }
@@ -97,14 +97,14 @@ describe('agentMainAgentVerdict', () => {
     expect(agentMainAgentVerdict({ state: 'done', interrupted: true })).toBe('cancellation')
   })
 
-  it("marks a done row by its verdict: a user's Stop reads interrupted, any other cut failed", () => {
+  it('marks a done row by its verdict: any cut reads interrupted, only a failure failed', () => {
     for (const [outcome, mark] of [
       ['success', null],
       ['failure', 'failed'],
       ['cancellation', 'interrupted'],
       // A newer request replaced it: not news, and no one to name.
       ['superseded', 'interrupted'],
-      ['interruption', 'failed'],
+      ['interruption', 'interrupted'],
       ['unconfirmed', 'unconfirmed']
     ] as const) {
       const row = { state: 'done' as const, mainAgent: { state: 'done' as const, outcome } }
@@ -112,19 +112,6 @@ describe('agentMainAgentVerdict', () => {
     }
     // An old host's legacy flag is a user's Stop too.
     expect(agentVerdictDisplayMark({ state: 'done', interrupted: true })).toBe('interrupted')
-  })
-
-  it('reads a crash-cut turn as failed and an unproven end as unconfirmed, neither a stop', () => {
-    for (const [outcome, mark] of [
-      ['interruption', 'failed'],
-      ['unconfirmed', 'unconfirmed']
-    ] as const) {
-      const row = { state: 'done' as const, mainAgent: { state: 'done' as const, outcome } }
-      expect(agentVerdictDisplayMark(row)).toBe(mark)
-      expect(agentTurnEndedUncleanly(row)).toBe(true)
-      // Nobody asked for it, so attention ranks it as news, like a completion or a failure.
-      expect(agentTurnEndedOnPurpose(row)).toBe(false)
-    }
   })
 
   it('reads an arm from a newer host as no verdict, so the row reads done as it did', () => {

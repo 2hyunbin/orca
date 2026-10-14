@@ -228,7 +228,6 @@ describe('a turn a crash cut short mid-tool', () => {
     expect(completedStructuredAgentTurnSeconds(timing)).toBe(27)
   })
 
-  // The turn bar reads like a finished turn, so this row is the one place the chat says why.
   it('explains the cut once, with one notice row and a turn bar that does not repeat it', async () => {
     openHost({ probeOwner: async () => ({ outcome: 'pid-absent' }) })
 
@@ -253,7 +252,7 @@ describe('a turn a crash cut short mid-tool', () => {
         workedSeconds: completedStructuredAgentTurnSeconds(timing),
         verdict: timing?.verdict
       })
-    ).toEqual({ key: 'workedFor', duration: '27s' })
+    ).toEqual({ key: 'interruptedAfter', duration: '27s' })
   })
 
   it('ends at the pre-crash renewal when the child outlived Orca and recovery stopped it', async () => {
@@ -333,7 +332,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     unsubscribe()
   })
 
-  it('reports the open to the status feed as an interruption, which the chat folds as worked', async () => {
+  it('reports the open to the status feed as an interruption, which the chat reads as interrupted', async () => {
     const published: AgentSessionStatusSummary[] = []
     openHost({
       probeOwner: async () => ({ outcome: 'pid-absent' }),
@@ -344,7 +343,6 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
       published
         .filter((summary) => summary.sessionId === SESSION && summary.turnOutcome)
         .map((summary) => summary.turnOutcome)
-    // The sidebar's red Failed until seen; the turn folds as "Worked for 27s" beside its notice row.
     expect(outcomes()).toEqual(['interruption'])
 
     await host.reconcileRestartLeases()
@@ -360,7 +358,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
         workedSeconds: completedStructuredAgentTurnSeconds(timing),
         verdict: timing?.verdict
       })
-    ).toEqual({ key: 'workedFor', duration: '27s' })
+    ).toEqual({ key: 'interruptedAfter', duration: '27s' })
   })
 
   it('explains the turn it cut, so the cut reads once and offers Continue', async () => {

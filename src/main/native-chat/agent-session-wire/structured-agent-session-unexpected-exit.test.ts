@@ -20,6 +20,7 @@ const exitOutcome = (agent: string): string =>
 
 const SESSION = 'session-1'
 const GENERATION = 'generation-1'
+const noStop = { personStopDecides: () => false }
 
 function lifecycleItem(
   turnId: string,
@@ -173,6 +174,7 @@ describe('provider-exit settlement', () => {
         itemBody: () => null,
         itemFence: () => undefined,
         snapshot: () => ({ items }),
+        stopMarks: noStop,
         appendLifecycleBatch
       }
     } as unknown as StructuredAgentSessionHostSession
@@ -247,6 +249,7 @@ describe('provider-exit settlement', () => {
             kind: 'turn',
             turnId: 'turn-2',
             state: 'interrupted',
+            outcome: 'failure',
             startedAt: 30,
             completedAt: 1_234
           },
@@ -289,6 +292,7 @@ describe('provider-exit settlement', () => {
           itemBody: () => null,
           itemFence: () => undefined,
           snapshot: () => ({ items }),
+          stopMarks: noStop,
           appendLifecycleBatch
         }
       }
@@ -332,6 +336,9 @@ describe('provider-exit settlement', () => {
               failure: { kind: 'providerExited' },
               tone: 'error'
             }
+          }),
+          expect.objectContaining({
+            body: expect.objectContaining({ state: 'interrupted', outcome: 'failure' })
           })
         ])
       }
@@ -346,6 +353,7 @@ describe('provider-exit settlement', () => {
         itemBody: () => null,
         itemFence: () => undefined,
         snapshot: () => ({ items: [] }),
+        stopMarks: noStop,
         appendLifecycleBatch: vi.fn(async () => ({ epoch: 'epoch-1', sequence: 1 })),
         submissions: () => [{ clientMessageId: 'client-1', dispatchState: 'pending' }]
       }
@@ -405,6 +413,7 @@ describe('provider-exit settlement', () => {
         snapshot: () => ({
           items: [lifecycleItem('turn-failing', 1, { state: 'running', startedAt: 1 })]
         }),
+        stopMarks: noStop,
         appendLifecycleBatch: vi.fn(async () => {
           throw new Error('journal still unavailable')
         })

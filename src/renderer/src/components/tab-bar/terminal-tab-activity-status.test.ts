@@ -155,9 +155,8 @@ describe('resolveTerminalTabActivityStatus', () => {
   it.each([
     ['success', 'done'],
     ['failure', 'failed'],
-    // A user's Stop reads interrupted; a turn anything else cut short is a fault, like a failure.
     ['cancellation', 'interrupted'],
-    ['interruption', 'failed'],
+    ['interruption', 'interrupted'],
     ['unconfirmed', 'unconfirmed']
   ] as const)('reports a %s done as %s, matching the worktree card', (outcome, status) => {
     const ended = entry(FIRST_LEAF_ID, 'done', {

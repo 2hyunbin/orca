@@ -28,6 +28,7 @@ function startedSession(): StructuredAgentSessionChildExitSession & {
       itemFence: () => undefined,
       // Nothing ran: the start failed before any response or acknowledged prompt.
       snapshot: () => ({ items: [] }),
+      stopMarks: { personStopDecides: () => false },
       appendLifecycleBatch: vi.fn(async () => ({ epoch: 'epoch-1', sequence: 1 }))
     }
   }

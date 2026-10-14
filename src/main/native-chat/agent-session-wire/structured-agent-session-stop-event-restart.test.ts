@@ -178,8 +178,7 @@ describe('a restart between a Stop and its turn end', () => {
     expect(errorRows).toEqual([])
   })
 
-  // The notice row is the one explanation; the turn bar reads like a finished turn.
-  it('reads Worked for N, marked failed, when nobody stopped it', async () => {
+  it('reads Interrupted after N, marked interrupted, when nobody stopped it', async () => {
     await runningTurn(CODEX_TURN)
 
     await restartAndSettle()
@@ -187,8 +186,8 @@ describe('a restart between a Stop and its turn end', () => {
     const { turn, label, mark, errorRows } = settled()
     expect(turn).toMatchObject({ state: 'interrupted' })
     expect(turn).not.toHaveProperty('outcome')
-    expect(label).toMatch(/^Worked for /)
-    expect(mark).toBe('failed')
+    expect(label).toMatch(/^Interrupted after /)
+    expect(mark).toBe('interrupted')
     expect(errorRows).toEqual([
       expect.stringContaining('stopped while this response was in progress')
     ])
@@ -209,7 +208,7 @@ describe('a restart between a Stop and its turn end', () => {
   // Codex refuses a Stop naming a turn that is no longer its active one ("expected active turn id
   // X but found Y"), as a turn not running, so the child stays. The Stop names X, so Y's end is
   // never the person's, by its turn id alone.
-  it('reads Failed for the turn running when the provider refused a Stop naming the one before it', async () => {
+  it("never makes the running turn the person's when the provider refused a Stop naming the one before it", async () => {
     await runningTurn(CODEX_TURN)
     rig.cancelTurn.mockResolvedValueOnce({
       cancelled: false,
@@ -253,7 +252,7 @@ describe('a restart between a Stop and its turn end', () => {
     const { turn, mark } = settled(NEXT_TURN)
     expect(turn).toMatchObject({ state: 'interrupted' })
     expect(turn).not.toHaveProperty('outcome')
-    expect(mark).toBe('failed')
+    expect(mark).toBe('interrupted')
   })
 
   // Claude's Stop ends its child whatever the interrupt answered.

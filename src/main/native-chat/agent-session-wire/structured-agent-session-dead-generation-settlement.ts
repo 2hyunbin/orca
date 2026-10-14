@@ -37,6 +37,7 @@ import {
   provenUnverifiedToolCallRevisions,
   runningTurnLifecycleRevisions,
   lastProvenTurnLiveAt,
+  providerExitFailureRevision,
   turnVerdictFromDeathEvidence,
   turnVerdictFromReplacedRuntime,
   watchedExitRevisions,
@@ -89,6 +90,8 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
   exit?: StructuredAgentSessionWatchedExit
   /** A person's Stop ended a starting child before what it was handed could run: each is rejected so. */
   unrunRejection?: SubmissionRejectionFact
+  /** The provider exited on its own: the turn its exit row reports on is the provider's failure. */
+  providerFailed?: boolean
 }): Promise<StructuredAgentSessionDeadGenerationSettlement> {
   try {
     const hasUnfinishedWork = hasUnfinishedStructuredAgentSessionWork(input.journal, input.exit)
@@ -121,6 +124,7 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
     const items = input.journal.snapshot().items
     const proven = watchedExitRevisions(items, input.exit, input.journal)
     const mutations: JournalLifecycleMutationInput[] = []
+    let exitedTurnItemId: string | undefined
     if (showUnexpectedExitOutcome && input.exitedDuringStartup && startupFailure) {
       const startKey = input.exitedDuringStartup.generation ?? input.settlementId
       // A start a message waited on is the delivery loop's to record, before or after this exit,
@@ -133,6 +137,8 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
         mutations.push(structuredAgentSessionStartFailureRow(startKey, startupFailure))
       }
     } else if (showUnexpectedExitOutcome) {
+      const turnScope = exitedRootTurnScope(withRevisions(items, proven), input.verdict)
+      exitedTurnItemId = turnScope.kind === 'turn' ? turnScope.turnItemId : undefined
       // The turn the exit ended, and an error so no fold ever hides why it stopped.
       mutations.push({
         kind: 'item',
@@ -148,7 +154,7 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
           ),
           tone: 'error'
         },
-        turnScope: exitedRootTurnScope(withRevisions(items, proven), input.verdict)
+        turnScope
       })
     }
     const bodies = new Map(items.map((item) => [item.itemId, item.body]))
@@ -166,7 +172,19 @@ export async function settleStructuredAgentSessionDeadGeneration(input: {
         })
       }
     }
-    mutations.push(...runningTurnLifecycleRevisions(items, input.verdict), ...proven)
+    const turnEnds = [...runningTurnLifecycleRevisions(items, input.verdict), ...proven]
+    const failed =
+      input.providerFailed && exitedTurnItemId !== undefined
+        ? providerExitFailureRevision(
+            withRevisions(items, turnEnds).find((item) => item.itemId === exitedTurnItemId),
+            input.journal
+          )
+        : null
+    const failedId = failed && journalLifecycleMutationItemId(failed)
+    mutations.push(
+      ...turnEnds.filter((end) => journalLifecycleMutationItemId(end) !== failedId),
+      ...(failed ? [failed] : [])
+    )
     await input.journal.appendLifecycleBatch({
       settlementId: `dead-generation:${input.settlementId}`,
       fence: input.fence,
