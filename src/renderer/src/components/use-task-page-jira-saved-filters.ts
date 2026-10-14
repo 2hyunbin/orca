@@ -1,7 +1,6 @@
 import { createNonSecureContextUuid } from '../../../shared/non-secure-context-uuid'
-import { useEffect, useRef, useState } from 'react'
-import { defaultScopeSource } from '@/lib/default-creation-host'
-import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import {
   mutateJiraSavedFilters,
   readJiraSavedFilterState
@@ -14,13 +13,17 @@ import {
 import type { TaskPageLinearViewStateModel } from './use-task-page-linear-view-state'
 import { translate } from '@/i18n/i18n'
 
+type JiraSavedFilterModel = Pick<
+  TaskPageLinearViewStateModel,
+  'jiraTaskSourceContext' | 'accountBackedTaskSourceHostId' | 'taskResumeApplied' | 'taskSource'
+>
+
 export function useTaskPageJiraSavedFilters(
-  model: TaskPageLinearViewStateModel,
+  model: JiraSavedFilterModel,
   setQuery: (jql: string) => void
 ) {
-  const source = model.jiraTaskSourceContext ?? defaultScopeSource(model.settings)
-  const target = getJiraRuntimeTarget(source)
-  const ownerKey = target.kind === 'environment' ? target.environmentId : 'local'
+  const ownerKey = model.jiraTaskSourceContext?.hostId ?? model.accountBackedTaskSourceHostId
+  const target = useMemo(() => ipcOrRuntimeTargetForHostId(ownerKey), [ownerKey])
   const [snapshot, setSnapshot] = useState({
     ownerKey: '',
     state: normalizeJiraSavedFilterState(undefined)
@@ -36,11 +39,9 @@ export function useTaskPageJiraSavedFilters(
     ownerEpochRef.current += 1
     ownerRef.current = ownerKey
   }
-  const sourceRef = useRef(source)
-  sourceRef.current = source
   const state =
     snapshot.ownerKey === ownerKey ? snapshot.state : normalizeJiraSavedFilterState(undefined)
-  const ready = snapshot.ownerKey === ownerKey
+  const ready = target !== null && snapshot.ownerKey === ownerKey
   useEffect(() => {
     if (!model.taskResumeApplied || model.taskSource !== 'jira') {
       return
@@ -52,7 +53,11 @@ export function useTaskPageJiraSavedFilters(
     setLoading(true)
     setPending(false)
     setError(null)
-    void readJiraSavedFilterState(sourceRef.current)
+    if (!target) {
+      setLoading(false)
+      return
+    }
+    void readJiraSavedFilterState(target)
       .then((next) => {
         if (cancelled) {
           return
@@ -83,10 +88,10 @@ export function useTaskPageJiraSavedFilters(
     return () => {
       cancelled = true
     }
-  }, [ownerKey, model.taskSource, model.taskResumeApplied, refresh, setQuery])
+  }, [ownerKey, target, model.taskSource, model.taskResumeApplied, refresh, setQuery])
 
   const mutate = async (mutation: JiraSavedFilterMutation): Promise<void> => {
-    if (!ready || pending) {
+    if (!ready || pending || !target || ownerRef.current !== ownerKey) {
       return
     }
     const expectedOwner = ownerKey
@@ -94,7 +99,7 @@ export function useTaskPageJiraSavedFilters(
     setPending(true)
     setError(null)
     try {
-      const next = await mutateJiraSavedFilters(sourceRef.current, mutation)
+      const next = await mutateJiraSavedFilters(target, mutation)
       if (ownerRef.current !== expectedOwner || ownerEpochRef.current !== expectedEpoch) {
         return
       }
