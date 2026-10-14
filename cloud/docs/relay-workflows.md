@@ -109,7 +109,7 @@ identity bootstrap apply. The providers require their exact workflows on
 `refs/heads/main` with the `production` environment. Missing values fail
 closed; no dedicated operations identity falls back to the shared deploy identity.
 
-The shared production identity is restricted to seven named direct Relay callers plus the exact
+The shared production identity is restricted to nine named direct Relay callers plus the exact
 regional-rehome and same-cap reusable wrapper/job pairs on `main` in the `production` environment.
 Its Artifact Registry and Cloud Run mutation permissions are scoped to the Orca repository, Relay
 director, and Relay fence broker; it cannot mutate the API or auth services.
@@ -800,6 +800,32 @@ It ends with the single command that finishes from where it stopped. That comman
 `--publish-run` and `--pause-run`, and the driver re-verifies both against the runs' logs and live
 state. Each run writes a timestamped log under `~/.orca/relay-director-deploy/`
 (`--log-directory` overrides it).
+
+## Reserve watch
+
+`Operate Relay Production Reserve Watch` watches one cell already switched to reserve mode and, on
+the first step 5 stop rule it trips, flips it back to db through the flag tool's own write
+(`operate-relay-cell-flags.mjs`: CAS, read-back, re-registration wait, Postgres record). It is
+manual only and inert until dispatched; `dry-run` logs the flag tool's plan instead of writing.
+`write` takes the flag workflow's confirmation, `WRITE_RELAY_CELL_FLAGS <cell-id>`.
+
+It samples once a minute for up to 300 minutes, re-authenticating every 55-minute segment because
+an ID token lasts an hour, and logs one JSON line per sample. It trips on:
+
+| Rule | Signal | Exact or proxy |
+|---|---|---|
+| Dead-man tripped | runtime-status `admitModeEffective=db` under a reserve switch file | Exact |
+| Overrun | runtime-status `enforcedConnectionUnits` over `connectionCapacity.hardCap` | Exact (the ledger counts seats, bookings, in-flight and phone units, so it is slightly stricter than seats + bookings) |
+| 503s | Director `request_count` 503s above max(1.5x background, background + 20) for 3 complete minutes; background is the 10 minutes before the watch, or an input | Proxy: fleet-wide, since no signal attributes a 503 to a cell |
+| Duplicate past grace | The ledger reconcile's `orca_relay_reserve_ledger_seat_behind_row` for the cell, reported again more than 90 s (60 s demotion close + 30 s map lag) after it was first seen, keyed by epoch and row epoch | Proxy: the line names no host, and no reachable signal lists one host's seats across cells |
+| Host drop | runtime-status `controls` fell more than 5% (and at least 10 hosts) within 5 minutes with no `draining` sample | Exact |
+| Ledger drift | Queued plus dropped rows in each director's newest `orca_relay_reserve_ledger_summary`, over the cell's controls, above 0.5% for 2 minutes | Proxy: the summaries are fleet-wide, so exact only while this is the only reserve cell |
+
+Any rule it cannot read in a sample makes that sample unverifiable; `unverifiable-limit` such
+samples in a row is a trip of its own. A cell whose switch file no longer says reserve ends the
+watch without a write. The watch holds a per-cell group; only the flip back takes the flag
+workflow's `relay-production-cell-flags` group, so a watch never queues manual flag writes behind
+it for hours, and its write never races one.
 
 ## Mobile push gateway
 

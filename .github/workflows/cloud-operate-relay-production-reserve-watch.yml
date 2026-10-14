@@ -1,0 +1,333 @@
+name: Operate Relay Production Reserve Watch
+
+# Watches one cell already switched to reserve mode and flips it back to db on the first stop
+# rule it trips (step 5 design §9). Manual only. dry-run evaluates and logs, writes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: dry-run logs what a trip would write; write flips the cell back on a trip
+        required: true
+        default: dry-run
+        type: choice
+        options: [dry-run, write]
+      cell-id:
+        description: Exact cell id already in reserve mode, e.g. production-gce-c26
+        required: true
+        type: string
+      duration-minutes:
+        description: How long to watch, 5 to 300
+        required: true
+        default: '120'
+        type: string
+      background-503-per-minute:
+        description: >-
+          Director 503s per minute before the flip. Empty measures the median of the 10 minutes
+          before the watch starts
+        required: false
+        default: ''
+        type: string
+      unverifiable-limit:
+        description: Consecutive samples with any unreadable signal that count as a trip
+        required: true
+        default: '3'
+        type: string
+      confirmation:
+        description: Required for write, exactly "WRITE_RELAY_CELL_FLAGS <cell-id>"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# One watch per cell. The flag workflow's group is taken only by the flip back below, so a watch
+# never holds manual flag writes (or a manual flip back) behind it for hours.
+concurrency:
+  group: relay-production-reserve-watch-${{ inputs.cell-id }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Explicit bash runs with pipefail, so the script's exit code survives the tee.
+    shell: bash
+    working-directory: cloud
+
+env:
+  MODE: ${{ inputs.mode }}
+  CELL_ID: ${{ inputs.cell-id }}
+  CONFIRMATION: ${{ inputs.confirmation }}
+  GCP_PROJECT_ID: onorca-cloud
+
+jobs:
+  watch:
+    if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    # Six 55-minute segments cover the longest watch; under the 360-minute job limit.
+    timeout-minutes: 350
+    environment: production
+    outputs:
+      state: ${{ steps.outcome.outputs.state }}
+      verdict: ${{ steps.outcome.outputs.verdict }}
+    env:
+      DURATION_MINUTES: ${{ inputs.duration-minutes }}
+      BACKGROUND_503_PER_MINUTE: ${{ inputs.background-503-per-minute }}
+      UNVERIFIABLE_LIMIT: ${{ inputs.unverifiable-limit }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - id: google-auth-1
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          skip_install: true
+
+      - id: watch-1
+        name: Watch segment 1 of 6
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-1.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: google-auth-2
+        if: ${{ steps.watch-1.outputs.state == 'watching' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - id: watch-2
+        name: Watch segment 2 of 6
+        if: ${{ steps.watch-1.outputs.state == 'watching' }}
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-2.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: google-auth-3
+        if: ${{ steps.watch-2.outputs.state == 'watching' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - id: watch-3
+        name: Watch segment 3 of 6
+        if: ${{ steps.watch-2.outputs.state == 'watching' }}
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-3.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: google-auth-4
+        if: ${{ steps.watch-3.outputs.state == 'watching' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - id: watch-4
+        name: Watch segment 4 of 6
+        if: ${{ steps.watch-3.outputs.state == 'watching' }}
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-4.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: google-auth-5
+        if: ${{ steps.watch-4.outputs.state == 'watching' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - id: watch-5
+        name: Watch segment 5 of 6
+        if: ${{ steps.watch-4.outputs.state == 'watching' }}
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-5.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: google-auth-6
+        if: ${{ steps.watch-5.outputs.state == 'watching' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - id: watch-6
+        name: Watch segment 6 of 6
+        if: ${{ steps.watch-5.outputs.state == 'watching' }}
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth-6.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          node dev/scripts/watch-relay-reserve-cell.mjs watch \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --director-service orca-cloud-relay --confirmation "${CONFIRMATION}" \
+            --duration-minutes "${DURATION_MINUTES}" --segment-minutes 55 \
+            --background-503-per-minute "${BACKGROUND_503_PER_MINUTE}" \
+            --unverifiable-limit "${UNVERIFIABLE_LIMIT}" \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}" \
+            | tee -a "${RUNNER_TEMP}/relay-reserve-watch.jsonl"
+
+      - id: outcome
+        name: Record the watch outcome
+        if: ${{ always() }}
+        run: |
+          node dev/scripts/watch-relay-reserve-cell.mjs outcome \
+            --state-file "${RUNNER_TEMP}/relay-reserve-watch.json" --github-output "${GITHUB_OUTPUT}"
+
+      - name: Audit summary
+        if: ${{ always() }}
+        env:
+          WATCH_STATE: ${{ steps.outcome.outputs.state }}
+          WATCH_VERDICT: ${{ steps.outcome.outputs.verdict }}
+        run: |
+          {
+            echo "### Relay reserve watch: ${MODE} ${CELL_ID}"
+            echo "Triggered by: ${GITHUB_TRIGGERING_ACTOR}, run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}"
+            echo "Outcome: ${WATCH_STATE}: ${WATCH_VERDICT}"
+            echo '```json'
+            tail -n 20 "${RUNNER_TEMP}/relay-reserve-watch.jsonl" 2>/dev/null || echo '(no output)'
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  flip-back:
+    needs: watch
+    if: ${{ always() && vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && needs.watch.outputs.state == 'tripped' }}
+    runs-on: ubuntu-latest
+    # A flip back waits for the cell to lease every control: 8-50 minutes, scaled to its controls.
+    timeout-minutes: 60
+    environment: production
+    # The flag workflow's group: this write queues behind a manual one, never races it.
+    concurrency:
+      group: relay-production-cell-flags
+      cancel-in-progress: false
+    env:
+      VERDICT: ${{ needs.watch.outputs.verdict }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - id: google-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PRODUCTION_GCP_RELAY_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: https://relay.onorca.dev/v1/admin/drain
+          id_token_include_email: true
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          skip_install: true
+
+      - name: Flip the cell back to db, or preview it
+        env:
+          ORCA_RELAY_ADMIN_ID_TOKEN: ${{ steps.google-auth.outputs.id_token }}
+        run: |
+          [[ "${CELL_ID}" =~ ^production-gce-c[0-9]{1,3}$ ]]
+          ORCA_RELAY_CONTROL_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          echo "::add-mask::${ORCA_RELAY_CONTROL_ACCESS_TOKEN}"
+          export ORCA_RELAY_CONTROL_ACCESS_TOKEN
+          node dev/scripts/watch-relay-reserve-cell.mjs flip-back \
+            --mode "${MODE}" --cell-id "${CELL_ID}" \
+            --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
+            --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
+            --confirmation "${CONFIRMATION}" --verdict "${VERDICT}" \
+            | tee "${RUNNER_TEMP}/relay-reserve-flip-back.jsonl"
+
+      - name: Audit summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "### Relay reserve watch flip back: ${MODE} ${CELL_ID}"
+            echo "Triggered by: ${GITHUB_TRIGGERING_ACTOR}, run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}"
+            echo "Verdict: ${VERDICT}"
+            echo '```json'
+            cat "${RUNNER_TEMP}/relay-reserve-flip-back.jsonl" 2>/dev/null || echo '(no output)'
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

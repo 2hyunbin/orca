@@ -244,7 +244,7 @@ function objectUrl(request, suffix = '') {
 }
 
 // One transient 5xx or network failure is retried once, as every relay admin step does.
-async function readRuntime(fetchImpl, request, idToken, wait) {
+export async function readRuntime(fetchImpl, request, idToken, wait) {
   const response = await fetchAdminOnceMore(
     fetchImpl,
     `${request.cellOrigin}/v1/admin/runtime-status`,
@@ -262,7 +262,7 @@ async function readRuntime(fetchImpl, request, idToken, wait) {
   return await response.json()
 }
 
-async function readCurrentObject(fetchImpl, request, accessToken) {
+export async function readCurrentObject(fetchImpl, request, accessToken) {
   const headers = { authorization: `Bearer ${accessToken}` }
   const metadata = await fetchImpl(objectUrl(request), { headers })
   if (metadata.status === 404) {

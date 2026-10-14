@@ -122,7 +122,7 @@ async function retryingRead(reader, read) {
   return { failed: true, error: String(lastError?.message ?? lastError) }
 }
 
-async function readLogEntries(reader, { filter, projection, limit = ENTRY_LIMIT }) {
+export async function readLogEntries(reader, { filter, projection, limit = ENTRY_LIMIT }) {
   const args = [
     'logging', 'read', filter,
     '--project', reader.projectId,
@@ -154,7 +154,7 @@ async function readTimestampsOverWindow(reader, { filter, window }) {
 
 // Cloud Run's own request counter, aligned per minute server-side: a brownout's tens of thousands
 // of 503s are counted, where a log read of them stops at its entry limit (10-01 c29).
-async function readDirector503PerMinute(reader, { config, span }) {
+export async function readDirector503PerMinute(reader, { config, span }) {
   const url = new URL(`https://monitoring.googleapis.com/v3/projects/${config.projectId}/timeSeries`)
   url.searchParams.set('filter', [
     'metric.type="run.googleapis.com/request_count"',

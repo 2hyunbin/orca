@@ -20,6 +20,7 @@ locals {
     "deploy-relay-production.yml",
     "operate-relay-asia-admission.yml",
     "operate-relay-production-cell-flags.yml",
+    "operate-relay-production-reserve-watch.yml",
     "publish-relay-production.yml"
 
   ]
