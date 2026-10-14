@@ -231,14 +231,44 @@ describe('classifyShadowSeat', () => {
       })
     })
 
-    it('is unexplained when this director has no sighting of the epoch', () => {
+    it('is its own unexplained class when this director has no sighting of the host', () => {
       const directory = directoryWith({
         'cell-a': [seat(3, 'active', HOST, firstSeen)],
         'cell-b': [seat(2, 'active', HOST, 1)]
       })
       expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), firstSeen + 1_700)).toEqual({
+        class: 'superseded-unknown-age',
+        explained: false
+      })
+    })
+
+    it('stays a plain duplicate with no sighting when the current seat joined long ago', () => {
+      const now = firstSeen + SHADOW_COMPARE_SUPERSEDED_CLOSE_MS + 1
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), now)).toEqual({
         class: 'duplicate-seat',
         explained: false
+      })
+    })
+
+    it('records the first sighting, so a later epoch bump is explained', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      let now = firstSeen
+      const compare = new ShadowDirectoryCompare(directory, () => now, () => {})
+      expect(compare.compare('sticky-verify', IDENTITY, at('cell-b', 2))).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+      now = firstSeen + 1_700
+      expect(compare.compare('sticky-verify', IDENTITY, at('cell-a', 3))).toEqual({
+        class: 'duplicate-seat',
+        explained: true
       })
     })
 
@@ -329,7 +359,8 @@ describe('ShadowDirectoryCompare', () => {
     const compare = new ShadowDirectoryCompare(
       directoryWith({ 'cell-a': [seat(3)] }),
       () => now,
-      (line) => lines.push(JSON.parse(line))
+      (line) => lines.push(JSON.parse(line)),
+      () => 42_000
     )
     for (let index = 0; index < SHADOW_COMPARE_SAMPLES_PER_CLASS + 5; index += 1) {
       compare.compare('resolve', IDENTITY, null)
@@ -347,7 +378,8 @@ describe('ShadowDirectoryCompare', () => {
         explained: false,
         count: SHADOW_COMPARE_SAMPLES_PER_CLASS + 5,
         windowMs: SHADOW_COMPARE_FLUSH_MS,
-        countByCell: { 'cell-a': SHADOW_COMPARE_SAMPLES_PER_CLASS + 5 }
+        countByCell: { 'cell-a': SHADOW_COMPARE_SAMPLES_PER_CLASS + 5 },
+        uptimeMs: 42_000
       },
       {
         event: 'orca_relay_shadow_compare',
@@ -356,7 +388,8 @@ describe('ShadowDirectoryCompare', () => {
         explained: true,
         count: 2,
         windowMs: SHADOW_COMPARE_FLUSH_MS,
-        countByCell: { 'cell-a': 2 }
+        countByCell: { 'cell-a': 2 },
+        uptimeMs: 42_000
       }
     ])
   })
@@ -383,8 +416,8 @@ describe('ShadowDirectoryCompare', () => {
     const draining = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2, 'drain-only')] })
     draining.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     draining.flush(0)
-    // A superseded older seat: the first-ever sighting is unexplained and counts on both cells;
-    // seen before, it is explained and counts only on the database's cell.
+    // A superseded older seat: the first-ever sighting has no age, so it is its own unexplained
+    // class on both cells; seen before, it is explained and counts only on the database's cell.
     const superseded = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
     superseded.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     superseded.compare('sticky-verify', IDENTITY, assignment('cell-a'))
@@ -399,10 +432,12 @@ describe('ShadowDirectoryCompare', () => {
       ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', true, 1, { 'cell-a': 1 }],
-      ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
+      ['superseded-unknown-age', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', true, 1, { 'cell-a': 1 }],
       ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
     ])
+    // Defaults to this process's uptime, so the gate can date a window against a restart.
+    expect(counts.every((line) => typeof line.uptimeMs === 'number')).toBe(true)
   })
 })
 

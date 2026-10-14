@@ -21,6 +21,8 @@ export type ShadowCompareClass =
   | 'cell-mismatch'
   | 'epoch-mismatch'
   | 'duplicate-seat'
+  // A superseded-shaped duplicate with no prior sighting (e.g. first since a restart), so no age.
+  | 'superseded-unknown-age'
   | 'map-only'
   // The map seats the host on a cell the database does not call live, so resolve answered null.
   | 'map-only-cell-unlive'
@@ -85,17 +87,21 @@ export function classifyShadowSeat(
     }
     // A newer DB seat supersedes older-epoch seats until their silence close;
     // a level epoch is a real tie.
-    const supersededAt = movedSince(directory, identity, answer, now)
     const current = seats.find(
       (seat) => seat.cellId === answer.cellId && seat.epoch === answer.assignmentEpoch
     )
-    const superseded =
+    const supersededShape =
       current !== undefined &&
       seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
-      supersededAt !== undefined &&
-      now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS &&
       // A long-ago lower-epoch sighting dates the move to now; the join bounds the seat itself.
       now - current.joinedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+    if (!supersededShape) return { class: 'duplicate-seat', explained: false }
+    const known = directory.databaseEpochOf(identity.userId, identity.relayHostId)
+    // The gate discounts this only in the instance's first 100 s (`uptimeMs` on the count line).
+    if (!known) return { class: 'superseded-unknown-age', explained: false }
+    const supersededAt = movedSince(known, answer, now)
+    const superseded =
+      supersededAt !== undefined && now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]
@@ -126,16 +132,14 @@ export function classifyShadowSeat(
   return { class: 'agree', explained: true }
 }
 
-// When the move to the answer's epoch happened, from sightings recorded before this compare.
-// None (first sighting since a restart or eviction, or a regressed epoch) means unknown, not new.
+// When the move to the answer's epoch happened, from the sighting recorded before this compare.
+// A regressed epoch means unknown, not new.
 function movedSince(
-  directory: ShadowSeatDirectory,
-  identity: { userId: string; relayHostId: string },
+  known: { epoch: number; firstSeenAt: number },
   answer: { assignmentEpoch: number },
   now: number
 ): number | undefined {
-  const known = directory.databaseEpochOf(identity.userId, identity.relayHostId)
-  if (!known || known.epoch > answer.assignmentEpoch) return undefined
+  if (known.epoch > answer.assignmentEpoch) return undefined
   // A lower recorded epoch: the move is this sighting.
   return known.epoch < answer.assignmentEpoch ? now : known.firstSeenAt
 }
@@ -154,7 +158,9 @@ function comparedCells(
   const cells = new Set([answer.cellId])
   if (
     !verdict.explained &&
-    (verdict.class === 'cell-mismatch' || verdict.class === 'duplicate-seat')
+    (verdict.class === 'cell-mismatch' ||
+      verdict.class === 'duplicate-seat' ||
+      verdict.class === 'superseded-unknown-age')
   ) {
     for (const seat of seats) cells.add(seat.cellId)
   }
@@ -169,7 +175,8 @@ export class ShadowDirectoryCompare {
   constructor(
     private readonly directory: ShadowSeatDirectory,
     private readonly now: () => number = Date.now,
-    private readonly log: (line: string) => void = (line) => console.warn(line)
+    private readonly log: (line: string) => void = (line) => console.warn(line),
+    private readonly uptimeMs: () => number = () => Math.round(process.uptime() * 1_000)
   ) {
     this.windowStartedAt = now()
   }
@@ -206,6 +213,7 @@ export class ShadowDirectoryCompare {
   // One line per route and class per window; the log metric sums `count`. `countByCell`
   // counts each compare once on every cell it involves (see comparedCells).
   flush(now: number = this.now()): void {
+    const uptimeMs = this.uptimeMs()
     for (const [key, { count, countByCell }] of this.counts) {
       const [route, verdictClass, explained] = key.split('\u0000')
       this.log(
@@ -216,7 +224,8 @@ export class ShadowDirectoryCompare {
           explained: explained === 'true',
           count,
           windowMs: now - this.windowStartedAt,
-          countByCell
+          countByCell,
+          uptimeMs
         })
       )
     }
