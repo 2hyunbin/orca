@@ -3,6 +3,7 @@ import type { RelayAssignment } from './assignment-store.js'
 import type { RelayConfig } from './config.js'
 import {
   classifyShadowSeat,
+  SHADOW_COMPARE_CELLS_PER_LINE,
   SHADOW_COMPARE_FLUSH_MS,
   SHADOW_COMPARE_SAMPLES_PER_CLASS,
   ShadowDirectoryCompare
@@ -225,7 +226,8 @@ describe('ShadowDirectoryCompare', () => {
         class: 'map-only',
         explained: false,
         count: SHADOW_COMPARE_SAMPLES_PER_CLASS + 5,
-        windowMs: SHADOW_COMPARE_FLUSH_MS
+        windowMs: SHADOW_COMPARE_FLUSH_MS,
+        cells: { 'cell-a': SHADOW_COMPARE_SAMPLES_PER_CLASS + 5 }
       },
       {
         event: 'orca_relay_shadow_compare',
@@ -233,9 +235,31 @@ describe('ShadowDirectoryCompare', () => {
         class: 'agree',
         explained: true,
         count: 2,
-        windowMs: SHADOW_COMPARE_FLUSH_MS
+        windowMs: SHADOW_COMPARE_FLUSH_MS,
+        cells: { 'cell-a': 2 }
       }
     ])
+  })
+
+  it('splits each line per cell, with no cell for a host neither side has, and bounds the split', () => {
+    const lines: Array<Record<string, unknown> & { cells?: Record<string, number> }> = []
+    const cellIds = Array.from({ length: SHADOW_COMPARE_CELLS_PER_LINE + 2 }, (_, index) => `cell-${index}`)
+    const compare = new ShadowDirectoryCompare(
+      directoryWith(Object.fromEntries(cellIds.map((cellId) => [cellId, []]))),
+      () => 0,
+      (line) => lines.push(JSON.parse(line))
+    )
+    // The database names the cell; the map has no seat there, so each is db-only-unseen.
+    for (const cellId of cellIds) compare.compare('sticky-verify', IDENTITY, assignment(cellId))
+    compare.compare('sticky-verify', IDENTITY, assignment('cell-0'))
+    compare.compare('resolve', IDENTITY, null)
+    compare.flush(0)
+    const [unseen, absent] = lines
+    expect(unseen).toMatchObject({ class: 'db-only-unseen', count: cellIds.length + 1, cellsOverflow: 2 })
+    expect(Object.keys(unseen?.cells ?? {})).toHaveLength(SHADOW_COMPARE_CELLS_PER_LINE)
+    expect(unseen?.cells).toMatchObject({ 'cell-0': 2, 'cell-1': 1 })
+    expect(absent).toEqual(expect.objectContaining({ class: 'agree-absent', count: 1, cells: {} }))
+    expect(absent).not.toHaveProperty('cellsOverflow')
   })
 })
 

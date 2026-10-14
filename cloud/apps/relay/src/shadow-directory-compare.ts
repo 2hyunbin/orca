@@ -36,6 +36,10 @@ export const SHADOW_COMPARE_FLUSH_MS = 60_000
 export const SHADOW_COMPARE_LAG_BOUND_MS = 10_000
 // Per class per flush window, so a systemic fault cannot flood the log.
 export const SHADOW_COMPARE_SAMPLES_PER_CLASS = 10
+// Above the fleet's ~35 cells; further cells count in `cellsOverflow`, so a line stays bounded.
+export const SHADOW_COMPARE_CELLS_PER_LINE = 64
+
+type ShadowCompareCount = { count: number; cells: Map<string, number>; cellsOverflow: number }
 
 export function classifyShadowSeat(
   directory: ShadowSeatDirectory,
@@ -100,7 +104,7 @@ export function classifyShadowSeat(
 }
 
 export class ShadowDirectoryCompare {
-  private counts = new Map<string, number>()
+  private counts = new Map<string, ShadowCompareCount>()
   private samples = new Map<ShadowCompareClass, number>()
   private windowStartedAt: number
 
@@ -129,15 +133,28 @@ export class ShadowDirectoryCompare {
     }
     const verdict = classifyShadowSeat(this.directory, identity, answer, now)
     const key = `${route}\u0000${verdict.class}\u0000${verdict.explained}`
-    this.counts.set(key, (this.counts.get(key) ?? 0) + 1)
+    const entry = this.counts.get(key) ?? { count: 0, cells: new Map(), cellsOverflow: 0 }
+    this.counts.set(key, entry)
+    entry.count += 1
+    // The database's cell is the one the answer concerns; with no row, the map's seat cell.
+    const cellId =
+      answer?.cellId ?? this.directory.seatsOf(identity.userId, identity.relayHostId)[0]?.cellId
+    if (cellId !== undefined) {
+      if (entry.cells.has(cellId) || entry.cells.size < SHADOW_COMPARE_CELLS_PER_LINE) {
+        entry.cells.set(cellId, (entry.cells.get(cellId) ?? 0) + 1)
+      } else {
+        entry.cellsOverflow += 1
+      }
+    }
     if (!verdict.explained) this.sample(route, identity, answer, verdict, now)
     if (now - this.windowStartedAt >= SHADOW_COMPARE_FLUSH_MS) this.flush(now)
     return verdict
   }
 
-  // One line per route and class per window; the log metric sums `count`.
+  // One line per route and class per window; the log metric sums `count`. `cells` splits it
+  // per cell; a compare with no cell in either answer (agree-absent) is in `count` only.
   flush(now: number = this.now()): void {
-    for (const [key, count] of this.counts) {
+    for (const [key, { count, cells, cellsOverflow }] of this.counts) {
       const [route, verdictClass, explained] = key.split('\u0000')
       this.log(
         JSON.stringify({
@@ -146,7 +163,9 @@ export class ShadowDirectoryCompare {
           class: verdictClass,
           explained: explained === 'true',
           count,
-          windowMs: now - this.windowStartedAt
+          windowMs: now - this.windowStartedAt,
+          cells: Object.fromEntries(cells),
+          ...(cellsOverflow > 0 ? { cellsOverflow } : {})
         })
       )
     }
