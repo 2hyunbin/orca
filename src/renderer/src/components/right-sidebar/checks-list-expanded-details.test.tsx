@@ -116,6 +116,37 @@ function renderChecksList(
 }
 
 describe('ChecksList expanded check details', () => {
+  it('opens an existing partial legacy payload without another details request', async () => {
+    const partial = { ...checkDetails, jobs: [{ ...checkDetails.jobs[0], logTail: null }] }
+    const onLoadCheckDetails = vi.fn(async () => partial)
+    renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    const button = [...container.querySelectorAll('button')].find((candidate) =>
+      candidate.textContent?.includes('View full details')
+    )
+    if (!button) {
+      throw new Error('Missing full-details action')
+    }
+    act(() => {
+      button.click()
+    })
+    expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
+    expect(openCheckRunDetails).toHaveBeenCalledWith(
+      'folder-workspace',
+      'repo:42',
+      failingCheck,
+      expect.objectContaining({
+        details: partial,
+        loading: false,
+        error: null,
+        requestId: expect.any(Number)
+      })
+    )
+    renderChecksList({ worktreeId: 'folder-workspace', onLoadCheckDetails })
+    expect(onLoadCheckDetails).toHaveBeenCalledTimes(1)
+  })
   it('shows a failed read as an error instead of "No checks configured"', () => {
     renderChecksList({ checks: [], checksError: 'Could not load from Build box: 401' })
 
@@ -135,7 +166,7 @@ describe('ChecksList expanded check details', () => {
     expect(stickyBar).not.toBeNull()
     expect(stickyBar?.className).toContain('bg-card/95')
     expect(stickyBar?.textContent).toContain('verify')
-    expect(stickyBar?.textContent).toContain('View full logs')
+    expect(stickyBar?.textContent).toContain('View full details')
     expect(container.innerHTML).toContain('lucide-panel-right')
     expect(container.innerHTML).toContain('data-variant="outline"')
   })
@@ -161,7 +192,7 @@ describe('ChecksList expanded check details', () => {
     })
 
     const button = [...container.querySelectorAll('button')].find((candidate) =>
-      candidate.textContent?.includes('View full logs')
+      candidate.textContent?.includes('View full details')
     )
     expect(button).toBeDefined()
 
@@ -190,7 +221,7 @@ describe('ChecksList expanded check details', () => {
     })
 
     const button = [...container.querySelectorAll('button')].find((candidate) =>
-      candidate.textContent?.includes('View full logs')
+      candidate.textContent?.includes('View full details')
     )
     expect(button).toBeDefined()
 
@@ -425,7 +456,7 @@ describe('ChecksList expanded check details', () => {
     expect(onLoadCheckDetails).toHaveBeenCalledWith(gitLabCheck)
     expect(container.textContent).toContain('ERROR: Job failed: exit code 1')
     expect(container.textContent).not.toContain('No inline details are available')
-    expect(container.querySelector('.sticky.top-0')?.textContent).toContain('View full logs')
+    expect(container.querySelector('.sticky.top-0')?.textContent).toContain('View full details')
   })
 
   // GitLab trace fetches fail for reasons GitHub's never do (auth, 404, self-hosted
