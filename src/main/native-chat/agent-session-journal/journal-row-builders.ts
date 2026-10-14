@@ -90,6 +90,7 @@ export function journalSubmissionRowBuilder(
     handoverRecorded?: true
     queuedMessageId?: string
     origin?: 'client' | 'host'
+    options?: Readonly<Record<string, string>>
   },
   /** Present when the append hands off a queued draft: the row names that draft, stamped here
    *  from the consume itself so no hand-off path can leave the link off. */
@@ -283,6 +284,7 @@ export function buildJournalSubmissionRow(input: {
   queuedMessageId?: string
   origin?: 'client' | 'host'
   source?: Pick<AgentSessionMessageSource, 'kind'>
+  options?: Readonly<Record<string, string>>
 }): JournalSubmissionRow {
   return {
     kind: 'submission',
@@ -295,6 +297,7 @@ export function buildJournalSubmissionRow(input: {
     ...(input.queuedMessageId !== undefined ? { queuedMessageId: input.queuedMessageId } : {}),
     ...(input.origin !== undefined ? { origin: input.origin } : {}),
     // The kind only; who the senders are is on the message body.
-    ...(input.source !== undefined ? { source: { kind: input.source.kind } } : {})
+    ...(input.source !== undefined ? { source: { kind: input.source.kind } } : {}),
+    ...(input.options ? { options: input.options } : {})
   }
 }
