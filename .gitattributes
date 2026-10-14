@@ -51,6 +51,8 @@
 # Generated runtime English subset: compared byte-for-byte by
 # verify:localization-runtime-catalog, so a CRLF checkout would fail the gate.
 /src/renderer/src/i18n/en-runtime-required.json linguist-generated=true text eol=lf
+# Bundled security translations are also verified byte-for-byte by the snapshot generator.
+/src/renderer/src/i18n/locales/es-plugin-security.json linguist-generated=true text eol=lf
 # Generated method->params catalog: compared byte-for-byte by
 # verify:rpc-params-catalog, so a CRLF checkout would fail the gate.
 /src/shared/rpc-contract/rpc-params-catalog.generated.ts linguist-generated=true text eol=lf
