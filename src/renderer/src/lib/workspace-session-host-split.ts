@@ -149,7 +149,12 @@ function assignKeyedByResolvedWorktree(
 export function splitWorkspaceSessionByHost(
   state: WorkspaceSessionState,
   hostIdByWorktreeId: HostIdByWorktreeId,
-  options: { worktreeIdByTabId?: Map<string, string> } = {}
+  options: {
+    worktreeIdByTabId?: Map<string, string>
+    /** Partitions that receive every routed field present in `state`, empty when no row routes
+     *  there, so a field's last row leaving a host still overwrites that host's saved copy. */
+    partitionHostIds?: readonly ExecutionHostId[]
+  } = {}
 ): HostSessionSlices {
   // Template carries only the global fields; per-field assigners add the rest.
   // Why: copy only own-keys so a partial patch (where most globals are absent)
@@ -191,7 +196,13 @@ export function splitWorkspaceSessionByHost(
     // Why: a present-but-empty container ({} / []) must survive the round trip.
     // Seed it on 'local' so merge reproduces the field instead of dropping it.
     if (ownership !== 'global' && ownership !== 'hostPrivate') {
-      localSlice[field] ??= Array.isArray(value) ? [] : {}
+      const empty = (): unknown => (Array.isArray(value) ? [] : {})
+      localSlice[field] ??= empty()
+      // Why: main merges a patch shallowly per field, so a host left out keeps its stale rows.
+      for (const hostId of options.partitionHostIds ?? []) {
+        const slice: WorkspaceSessionRecord = ensureSlice(slices, hostId, templates)
+        slice[field] ??= empty()
+      }
     }
     switch (ownership) {
       case 'global':

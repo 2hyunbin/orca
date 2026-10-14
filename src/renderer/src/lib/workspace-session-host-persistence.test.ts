@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import type {
+  WorkspaceSessionPatch,
+  WorkspaceSessionState
+} from '../../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   buildHostIdByWorktreeId,
@@ -260,7 +264,7 @@ describe('fetchWorkspaceSessionFromHosts', () => {
       }
     ).written
 
-    expect(patch).toHaveBeenCalledTimes(1)
+    expect(patch).toHaveBeenCalledTimes(2)
     expect(patch.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         tabsByWorktree: expect.objectContaining({
@@ -269,6 +273,8 @@ describe('fetchWorkspaceSessionFromHosts', () => {
       })
     )
     expect(patch.mock.calls[0][1]).toBeUndefined()
+    // The stale partition the row was read from loses its copy instead of keeping it.
+    expect(patch).toHaveBeenCalledWith({ tabsByWorktree: {} }, 'runtime:stale-env')
   })
 
   it('routes placeholder-owned runtime worktree patches back to the runtime host', async () => {
@@ -597,10 +603,55 @@ describe('patchWorkspaceSessionByHost tab-keyed routing', () => {
       { ...catalog, tabsByWorktree: { [remoteWorktreeId]: [remoteTab] } }
     ).written
 
-    expect(patch).toHaveBeenCalledTimes(1)
+    expect(patch).toHaveBeenCalledTimes(2)
     expect(patch).toHaveBeenCalledWith(
       expect.objectContaining({ terminalLayoutsByTabId: { 'remote-tab': parkedLayout } })
     )
+    expect(patch).toHaveBeenCalledWith(
+      { tabsByWorktree: {}, terminalLayoutsByTabId: {} },
+      'runtime:env-1'
+    )
+  })
+
+  it("clears a host's saved rows when the field's last row on that host closes", async () => {
+    // Closing a remote workspace's last browser deletes its key, so nothing routes to the host.
+    // Main merges a patch shallowly per field: a host left out kept the closed browser on disk,
+    // and a crash-relaunch restored it.
+    const partitions: Record<string, WorkspaceSessionState> = {
+      local: { ...getDefaultWorkspaceSession() },
+      'runtime:env-1': {
+        ...getDefaultWorkspaceSession(),
+        browserTabsByWorktree: {
+          [remoteWorktreeId]: [
+            {
+              id: 'b2',
+              worktreeId: remoteWorktreeId,
+              url: 'about:blank',
+              title: 'b2',
+              loading: false,
+              faviconUrl: null,
+              canGoBack: false,
+              canGoForward: false,
+              loadError: null,
+              createdAt: 1
+            }
+          ]
+        }
+      }
+    }
+    const patch = vi.fn(async (slice: WorkspaceSessionPatch, hostId?: ExecutionHostId) => {
+      const key = hostId ?? 'local'
+      partitions[key] = { ...partitions[key], ...slice }
+    })
+
+    await patchWorkspaceSessionByHost(
+      { get: vi.fn(), patch },
+      { browserTabsByWorktree: {} },
+      catalog
+    ).written
+
+    expect(partitions['runtime:env-1'].browserTabsByWorktree).toEqual({})
+    expect(partitions.local.browserTabsByWorktree).toEqual({})
   })
 })
 

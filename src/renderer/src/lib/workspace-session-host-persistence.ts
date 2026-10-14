@@ -204,6 +204,31 @@ export function buildHostIdByWorktreeId(state: HostPersistenceState): HostIdByWo
   return buildHostSessionRouting(state).hostIdByWorktreeId
 }
 
+/** Every non-local partition this client can route rows to: repo hosts, folder-workspace hosts,
+ *  and hosts a restored row was read from before their catalog answered. */
+function knownPartitionHostIds(state: HostPersistenceState): ExecutionHostId[] {
+  const hostIds = new Set<ExecutionHostId>()
+  const add = (hostId: string | null | undefined): void => {
+    const partition = workspaceSessionPartitionHostId(hostId)
+    if (partition !== LOCAL_EXECUTION_HOST_ID) {
+      hostIds.add(partition)
+    }
+  }
+  for (const repo of state.repos) {
+    add(getRepoExecutionHostId(repo))
+  }
+  for (const entry of [...(state.projectGroups ?? []), ...(state.folderWorkspaces ?? [])]) {
+    add(entry.executionHostId)
+  }
+  for (const hostId of [
+    ...Object.values(state.restoredRuntimeHostIdByWorkspaceSessionKey ?? {}),
+    ...Object.values(state.contestedPrimaryHostBySessionKey ?? {})
+  ]) {
+    add(hostId)
+  }
+  return [...hostIds]
+}
+
 /** Partition a session for writing: route each entry to its owner host, then restore the parked
  *  rows of every host that lost a contested id so this write cannot erase them. */
 function splitWorkspaceSessionForWrite(
@@ -218,7 +243,10 @@ function splitWorkspaceSessionForWrite(
   // worktree — the runtime partition never received the capture (#21295).
   const worktreeIdByTabId = extendWorktreeIdByTabId(buildWorktreeIdByTabId(payload), state)
   const slices = splitWorkspaceSessionByHost(payload, routing.hostIdByWorktreeId, {
-    worktreeIdByTabId
+    worktreeIdByTabId,
+    // Why: closing a host's last row drops its key from the payload; without its own (empty)
+    // field that host's partition would keep the row and restore it after a crash.
+    partitionHostIds: knownPartitionHostIds(state)
   })
   attachHostSessionShadow(slices, state.contestedHostWorkspaceSessions, routing.claims, mode)
   return slices
