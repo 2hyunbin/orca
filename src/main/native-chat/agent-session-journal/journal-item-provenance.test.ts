@@ -22,7 +22,6 @@ import {
   openTestJournalHostDatabase
 } from './journal-host-database-test-support'
 import { stampJournalEntryProvenance } from './journal-item-provenance'
-import { subagentGroupJournalBody } from './journal-subagent-group-body'
 import type { AgentSessionJournal } from './journal-store'
 
 const IDENTITY: AgentSessionJournalIdentity = {
@@ -133,9 +132,17 @@ describe('execution provenance', () => {
   })
 
   it('reads a roster entry an older build never stamped as its row’s provenance', () => {
-    const roster = subagentGroupJournalBody('group', [
-      { id: 'a', label: 'A', state: 'working', startedAt: 1 }
-    ])
+    const roster: AgentJournalItemBody = {
+      kind: 'message',
+      role: 'assistant',
+      blocks: [
+        {
+          type: 'subagent-group',
+          groupId: 'group',
+          agents: [{ id: 'a', label: 'A', state: 'working', startedAt: 1 }]
+        }
+      ]
+    }
     const stamped = stampJournalEntryProvenance(roster, { body: roster, ownerFence: 2 }, 3)
     const groups = stamped.kind === 'message' ? stamped.blocks.filter(isSubagentGroupBlock) : []
     expect(groups[0]?.agents[0]?.ownerFence).toBe(2)
