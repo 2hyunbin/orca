@@ -5,6 +5,7 @@ import { vi } from 'vitest'
 import type * as ChildProcess from 'node:child_process'
 import { PluginContentVerifier } from '../plugin-content-integrity'
 import { PluginService } from '../plugin-service'
+import * as contentLifecycle from '../plugin-service-content-lifecycle'
 import { registerPluginHandlers } from '../../ipc/plugins'
 import { installPluginFromLocalPath, installBundledPlugin } from '../plugin-install'
 import { installStagedPluginTree } from '../plugin-install-staging'
@@ -12,6 +13,7 @@ import { getUserPluginsDir } from '../plugin-discovery'
 import { PluginWorkerController } from '../plugin-worker-controller'
 import { UninstallWorkerPort } from '../plugin-uninstall-worker-fixture'
 import type { PluginManifest } from '../../../shared/plugins/plugin-manifest'
+import { setTrustedBrowserRendererWebContentsId } from '../../ipc/browser-renderer-trust'
 
 const ports = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
@@ -34,6 +36,7 @@ const services: PluginService[] = []
 export const uninstallWorkerPorts: UninstallWorkerPort[] = []
 
 export function prepareUninstallFixture(): void {
+  setTrustedBrowserRendererWebContentsId(42)
   ports.handlers.clear()
   ports.fork.mockReset()
   ports.fork.mockImplementation(() => {
@@ -44,6 +47,7 @@ export function prepareUninstallFixture(): void {
 }
 
 export async function resetUninstallFixtures(): Promise<void> {
+  setTrustedBrowserRendererWebContentsId(null)
   for (const service of services.splice(0)) {
     await service.dispose()
   }
@@ -149,7 +153,20 @@ export async function removeThroughPluginIpc(pluginKey: string): Promise<unknown
   if (!handler) {
     throw new Error('Missing removal handler')
   }
-  return handler({ sender: { id: 42 } }, { pluginKey })
+  const mainFrame = {}
+  return handler(
+    {
+      senderFrame: mainFrame,
+      sender: {
+        id: 42,
+        mainFrame,
+        isDestroyed: () => false,
+        getType: () => 'window',
+        getURL: () => 'file:///fixture/index.html'
+      }
+    },
+    { pluginKey }
+  )
 }
 
 export function latestUninstallWorker(): UninstallWorkerPort {
@@ -193,28 +210,13 @@ export function uninstallWorkerController(service: PluginService): PluginWorkerC
   return inspected.workerController
 }
 
-function hasRefreshPort(target: unknown): target is {
-  performRefresh: (...args: unknown[]) => unknown
-} {
-  return (
-    typeof target === 'object' &&
-    target !== null &&
-    'performRefresh' in target &&
-    typeof target.performRefresh === 'function'
-  )
-}
-
-export function holdNextUninstallRefresh(service: PluginService) {
-  const inspected: object = service
-  if (!hasRefreshPort(inspected)) {
-    throw new Error('Missing refresh port')
-  }
-  const method = inspected.performRefresh.bind(service)
+export function holdNextUninstallRefresh(_service: PluginService) {
+  const method = contentLifecycle.refreshPluginServiceContent
   const entered = uninstallGate()
   const release = uninstallGate()
   const refresh = vi
-    .spyOn(inspected, 'performRefresh')
-    .mockImplementationOnce(async (...args: unknown[]) => {
+    .spyOn(contentLifecycle, 'refreshPluginServiceContent')
+    .mockImplementationOnce(async (...args) => {
       entered.resolve()
       await release.promise
       return method(...args)

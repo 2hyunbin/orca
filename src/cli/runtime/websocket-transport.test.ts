@@ -1,3 +1,4 @@
+import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-environment-provider-runtime-capability'
 import { SKILL_INSTALL_RESULT_V2_CAPABILITY } from '../../shared/skill-install-capability'
 import { createServer, type Server } from 'node:http'
 import { mkdtempSync } from 'node:fs'
@@ -75,6 +76,7 @@ describe('CLI remote WebSocket transport', () => {
     expect(runtime.authFrames).toContainEqual(
       expect.objectContaining({
         clientCapabilities: [
+          PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY,

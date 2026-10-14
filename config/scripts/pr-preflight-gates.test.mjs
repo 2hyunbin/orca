@@ -231,6 +231,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Verify the generated RPC params catalog', staticPhase],
     ['Verify the generated ACP protocol schema', staticPhase],
     ['Verify bundled skill guides', staticPhase],
+    ['Verify bundled language data', staticPhase],
     ['Verify skill freshness manifest', staticPhase],
     ['Verify localization coverage', staticPhase],
     ['Guard against project-owned .d.ts in preload/shared', staticPhase],

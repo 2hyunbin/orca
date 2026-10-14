@@ -1,3 +1,4 @@
+import { quitTeardownStartGate } from '../quit-teardown-start-gate'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -58,6 +59,7 @@ vi.mock('./orcad-app-paths', () => ({
 }))
 vi.mock('./orcad-browser-provider', () => ({ resolveOrcadBrowserProvider: state.browserProvider }))
 vi.mock('./orcad-instance-lock', () => ({
+  ORCAD_LOCK_FILE_NAME: 'orcad.lock',
   acquireOrcadInstanceLock: () => ({
     path: join(state.root, 'orcad.lock'),
     record: { pid: process.pid, startedAtMs: null, nonce: 'headless-instance' },
@@ -93,6 +95,8 @@ vi.mock('./orcad-profile-state-startup', () => ({
     return {
       store: {
         getSettings: () => profile.settings,
+        getSshTargets: () => [],
+        syncOrcadMigrationScrollbackRetention() {},
         onSettingsChanged: state.onSettingsChanged,
         flushFinalOrThrowAsync: async () => {},
         freezeWritesAsync: async () => {}
@@ -146,6 +150,7 @@ vi.mock('../runtime/orca-runtime', () => ({
 }))
 vi.mock('../runtime/runtime-rpc', () => ({
   OrcaRuntimeRpcServer: class {
+    setManagedWorkspaceHosts() {}
     async start() {
       state.rpcStarted = true
     }
@@ -179,6 +184,7 @@ vi.mock('../runtime/push/push-gateway-client', () => ({
 }))
 
 beforeEach(() => {
+  quitTeardownStartGate.resetForTests()
   state.onSettingsChanged.mockReturnValue(state.removeSettingsListener)
 })
 
@@ -237,10 +243,10 @@ it('starts push after RPC identity is available and stops dispatch on shutdown',
   acquireProfileStateMaintenance(state.root).release()
   expect(state.controller.getListenerCount()).toBe(0)
   expect(state.rpcStarted).toBe(false)
-  expect(state.onSettingsChanged).toHaveBeenCalledOnce()
-  expect(state.removeSettingsListener).toHaveBeenCalledOnce()
+  expect(state.onSettingsChanged).toHaveBeenCalledTimes(2)
+  expect(state.removeSettingsListener).toHaveBeenCalledTimes(2)
   await host.stop()
-  expect(state.removeSettingsListener).toHaveBeenCalledOnce()
+  expect(state.removeSettingsListener).toHaveBeenCalledTimes(2)
   expect(await state.controller.registerPushDevice({} as never)).toMatchObject({
     registered: false
   })
