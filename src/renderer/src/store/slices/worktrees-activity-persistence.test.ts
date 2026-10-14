@@ -203,7 +203,7 @@ describe('worktree remote runtime mutations', () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-unread', isUnread: true })
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
-    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] } as Partial<AppState>)
+    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] })
 
     clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
     clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
@@ -223,7 +223,7 @@ describe('worktree remote runtime mutations', () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-read' })
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
-    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] } as Partial<AppState>)
+    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] })
 
     markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
     expect(store.getState().folderWorkspaces[0]).toEqual(
@@ -243,7 +243,7 @@ describe('worktree remote runtime mutations', () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-racing-unread' })
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
-    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] } as Partial<AppState>)
+    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] })
 
     markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
     clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
@@ -268,7 +268,7 @@ describe('worktree remote runtime mutations', () => {
   it('reports a rejected folder workspace update to the caller', async () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-rejected' })
-    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] } as Partial<AppState>)
+    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] })
     const updateFolderWorkspace = vi.fn().mockResolvedValue(false)
     store.setState({ updateFolderWorkspace } as Partial<AppState>)
 
@@ -283,7 +283,7 @@ describe('worktree remote runtime mutations', () => {
   it('reports a thrown folder workspace update instead of rejecting', async () => {
     const store = createTestStore()
     const folderWorkspace = makeFolderWorkspace({ id: 'folder-throwing' })
-    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] } as Partial<AppState>)
+    store.setState({ folderWorkspaces: [folderWorkspace], projectGroups: [] })
     const updateFolderWorkspace = vi.fn().mockRejectedValue(new Error('Runtime is offline'))
     store.setState({ updateFolderWorkspace } as Partial<AppState>)
 
