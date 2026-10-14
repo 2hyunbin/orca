@@ -44,6 +44,7 @@ import {
   readCreatedAgentTerminalIdentity
 } from './web-runtime-terminal-identity'
 import { settleWebRuntimeTerminalPlacement } from './web-runtime-terminal-placement-settlement'
+import * as shellPick from './web-runtime-terminal-shell-selection'
 
 export async function createWebRuntimeSessionTerminalResult(
   args: CreateWebRuntimeSessionTerminalArgs
@@ -206,18 +207,14 @@ export async function createWebRuntimeSessionTerminalResult(
       createdLeafId = legacyAlreadyPlacedInGroup
         ? created.terminal.leafId
         : createdTerminalLeafId(created.terminal)
-      if (args.targetGroupId && createdTabId && !legacyAlreadyPlacedInGroup) {
-        await callEnvironment({
-          method: 'session.tabs.move',
-          params: {
-            worktree: toRuntimeWorktreeSelector(args.worktreeId),
-            tabId: createdTabId,
-            targetGroupId: args.targetGroupId,
-            kind: 'move-to-group'
-          },
-          timeoutMs: 15_000
-        })
+      if (!legacyAlreadyPlacedInGroup) {
+        await shellPick.moveCreatedHostTerminalToGroup(callEnvironment, args, createdTabId)
       }
+    } else if (args.shell && (await shellPick.hostCreatesRequestedShell(environmentId))) {
+      const created = await shellPick.createHostShellTerminal(callEnvironment, args, args.shell)
+      hostCreated = true
+      createdTabId = created.tabId
+      createdLeafId = created.leafId
     } else {
       const response = await callEnvironment({
         method: 'session.tabs.createTerminal',
@@ -225,7 +222,7 @@ export async function createWebRuntimeSessionTerminalResult(
           worktree: toRuntimeWorktreeSelector(args.worktreeId),
           afterTabId: args.afterTabId ? toHostSessionTabId(args.afterTabId) : undefined,
           targetGroupId: args.targetGroupId,
-          command: args.command,
+          command: shellPick.sessionTabsCreateCommand(args),
           cwd: args.cwd,
           ...(args.env ? { env: args.env } : {}),
           ...(args.envToDelete ? { envToDelete: args.envToDelete } : {}),
