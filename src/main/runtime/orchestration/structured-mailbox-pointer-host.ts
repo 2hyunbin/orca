@@ -17,7 +17,8 @@ import {
   structuredSessionGateFacts,
   type StructuredSessionGateFacts
 } from './structured-session-pointer-delivery'
-import { sendAgentTurn } from './send-agent-turn'
+import { sendAgentTurn, type AgentTurnDelivery } from './send-agent-turn'
+import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 
 /** Names the dispatch a nudge belongs to on the operation row it writes. */
 export function structuredPointerCallerKey(dispatchId: string): string {
@@ -84,6 +85,19 @@ async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapsh
   }
 }
 
+/**
+ * How a nudge reaches a busy chat. An agent that takes a message mid-turn gets it at once, as a
+ * terminal agent gets its typed nudge; one that would cancel its turn for it queues it as a card.
+ * Depends on the agent alone: delivery is part of the send's fingerprint, so a retry under the same
+ * operation id must ask for the same delivery.
+ */
+function pointerDelivery(host: StructuredAgentSessionHost, sessionId: string): AgentTurnDelivery {
+  const provider = host.deps.store.getRecord(sessionId)?.provider
+  return provider && host.deps.agents.capabilities(provider)?.steering === 'inject'
+    ? 'now'
+    : 'queue'
+}
+
 export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHost {
   return {
     readSessionFacts(sessionId) {
@@ -115,8 +129,7 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
           : structuredSessionPointerCallerKey(input.sessionId),
         turn: {
           body: input.body,
-          // As a person's message is: a busy chat queues it as a card, sent when the turn ends.
-          delivery: 'queue',
+          delivery: pointerDelivery(host, input.sessionId),
           operationId: input.operationId,
           expectedRuntimeFence: input.expectedRuntimeFence
         }

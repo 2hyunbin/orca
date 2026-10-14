@@ -18,6 +18,20 @@ const {
   structuredSessionPointerCallerKey
 } = await import('./structured-mailbox-pointer-host')
 
+/** A host whose session runs an agent declaring `steering`. */
+function chatHost(
+  host: Record<string, unknown>,
+  steering: 'inject' | 'queue' = 'inject'
+): Record<string, unknown> {
+  return {
+    ...host,
+    deps: {
+      store: { getRecord: () => ({ provider: 'agent' }) },
+      agents: { capabilities: () => ({ steering }) }
+    }
+  }
+}
+
 function runningTurn(): AgentJournalRenderItem {
   return {
     itemId: 'lifecycle-1',
@@ -174,7 +188,7 @@ describe('structured mailbox pointer host', () => {
         value: { submission: { dispatchState } }
       })
     )
-    hostRef.current = { send, waitForSendSettlement: async () => undefined }
+    hostRef.current = chatHost({ send, waitForSendSettlement: async () => undefined })
     await expect(
       createStructuredMailboxPointerHost().send({
         sessionId: 's1',
@@ -189,34 +203,59 @@ describe('structured mailbox pointer host', () => {
     expect(send.mock.calls[0]![1]!.retryUnknown).toBeUndefined()
   })
 
-  it('asks a busy chat to queue the pointer as a card, with who it is from', async () => {
-    const send = vi.fn(
-      async (_caller: unknown, _payload: { delivery?: string; body?: unknown }) => ({
-        ok: true,
-        value: {
-          clientMessageId: 'op1',
-          queued: { messageId: 'op1', position: 0, state: 'waiting' }
-        }
-      })
-    )
-    hostRef.current = { send }
-    await expect(
-      createStructuredMailboxPointerHost().send({
+  it.each([
+    // Taken mid-turn by the agent: steered in, as a terminal agent gets its typed nudge.
+    ['inject', undefined],
+    // An agent that would cancel its turn for it: a card.
+    ['queue', 'queue-if-active']
+  ] as const)(
+    'sends the pointer to a %s-steering agent with delivery %s, with who it is from',
+    async (steering, delivery) => {
+      const send = vi.fn(
+        async (_caller: unknown, _payload: { delivery?: string; body?: unknown }) => ({
+          ok: true,
+          value: { clientMessageId: 'op1', submission: { dispatchState: 'accepted' } }
+        })
+      )
+      hostRef.current = chatHost({ send }, steering)
+      await createStructuredMailboxPointerHost().send({
         sessionId: 's1',
         dispatchId: 'd1',
         operationId: 'op1',
         expectedRuntimeFence: 1,
         body: { kind: 'message', role: 'user', blocks: [], from: NOTICE_SOURCE }
       })
+      expect(send.mock.calls[0]![1]).toMatchObject({ body: { from: NOTICE_SOURCE } })
+      expect(send.mock.calls[0]![1]!.delivery).toBe(delivery)
+    }
+  )
+
+  it('reports a pointer the chat queued as queued', async () => {
+    hostRef.current = chatHost(
+      {
+        send: async () => ({
+          ok: true,
+          value: {
+            clientMessageId: 'op1',
+            queued: { messageId: 'op1', position: 0, state: 'waiting' }
+          }
+        })
+      },
+      'queue'
+    )
+    await expect(
+      createStructuredMailboxPointerHost().send({
+        sessionId: 's1',
+        dispatchId: 'd1',
+        operationId: 'op1',
+        expectedRuntimeFence: 1,
+        body: { kind: 'message', role: 'user', blocks: [] }
+      })
     ).resolves.toEqual({ kind: 'queued' })
-    expect(send.mock.calls[0]![1]).toMatchObject({
-      delivery: 'queue-if-active',
-      body: { from: NOTICE_SOURCE }
-    })
   })
 
   it('consumes mail once an accepted nudge is delivered while the worker starts (W10)', async () => {
-    hostRef.current = {
+    hostRef.current = chatHost({
       send: async () => ({
         ok: true,
         value: { clientMessageId: 'op1', submission: { dispatchState: 'pending' } }
@@ -224,7 +263,7 @@ describe('structured mailbox pointer host', () => {
       waitForSendSettlement: async () => ({
         value: { clientMessageId: 'op1', submission: { dispatchState: 'accepted' } }
       })
-    }
+    })
     await expect(
       createStructuredMailboxPointerHost().send({
         sessionId: 's1',
@@ -245,7 +284,7 @@ describe('structured mailbox pointer host', () => {
       ok: true,
       value: { submission: { dispatchState: 'accepted' } }
     }))
-    hostRef.current = { send }
+    hostRef.current = chatHost({ send })
     await expect(
       createStructuredMailboxPointerHost().send({
         sessionId: 's1',
@@ -266,7 +305,9 @@ describe('structured mailbox pointer host', () => {
       ['agent_session_ownership_unknown', { kind: 'unattached' }],
       ['agent_session_conflict', { kind: 'sent', state: 'rejected' }]
     ] as const) {
-      hostRef.current = { send: async () => ({ ok: false, refusal: { code, message: 'no' } }) }
+      hostRef.current = chatHost({
+        send: async () => ({ ok: false, refusal: { code, message: 'no' } })
+      })
       await expect(
         createStructuredMailboxPointerHost().send({
           sessionId: 's1',
