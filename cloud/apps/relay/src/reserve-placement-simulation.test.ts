@@ -43,7 +43,7 @@ function expectInvariants(report: SimulationReport): void {
 
 describe('step 5 deterministic simulation', () => {
   it.each(SEEDS)(
-    'holds invariants 1-9 across mixed versions, lagging polls, restarts and database stalls (seed %i)',
+    'holds invariants 1-8 (9 in its own tests) across mixed versions, lagging polls, restarts and database stalls (seed %i)',
     async (seed) => {
       const report = await runReservePlacementSimulation({
         seed,
@@ -206,13 +206,15 @@ describe('step 5 deterministic simulation', () => {
     faults
   })
 
-  // Only invariant 4 is asserted: a seat half-open within a lagging map's poll is outranked by a
-  // booking whose director never saw it, which invariant 3's supersede bound does not cover.
-  it.each(SEEDS)('every director names the same winner of a level divergence (invariant 4, seed %i)', async (seed) => {
-    const report = await runReservePlacementSimulation(levelSeats(seed, {}))
-    expect(report.levelDemotions).toBeGreaterThan(0)
-    expect(report.violations.filter((violation) => violation.invariant === 4)).toEqual([])
-  }, 120_000)
+  it.each(SEEDS)(
+    'holds invariants 1-8 when directors contest level divergences (seed %i)',
+    async (seed) => {
+      const report = await runReservePlacementSimulation(levelSeats(seed, {}))
+      expect(report.contestedDivergences).toBeGreaterThan(0)
+      expectInvariants(report)
+    },
+    120_000
+  )
 
   // Each fault breaks one rule; the matching invariant must fire, or its check measures nothing.
   const mixed = (faults: SimulationConfig['faults']): SimulationConfig => ({
