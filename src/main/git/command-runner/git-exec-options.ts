@@ -23,6 +23,10 @@ export type GitExecOptions = {
   wslDistro?: string
   preferWslDirectGit?: boolean
   useConfiguredSshCommandForNetwork?: boolean
+  /** Stop a bounded transport when either captured stream exceeds maxBuffer. */
+  killOnOutputLimit?: boolean
+  /** Discard stderr and omit both output streams from failures. */
+  privateOutput?: boolean
   terminationBarrier?: boolean
   captureWslLoginShellOutput?: boolean
   /** Scheduler priority for this child; status is the safe default. */

@@ -91,14 +91,17 @@ async function gitExecFileAsyncUnlocked(
           stdin: options.stdin,
           env: policy.env,
           signal: options.signal,
-          terminationBarrier: options.terminationBarrier,
+          killOnOutputLimit: options.killOnOutputLimit,
+          privateOutput: options.privateOutput,
+          terminationBarrier:
+            options.terminationBarrier || options.killOnOutputLimit || options.privateOutput,
           admissionTier: options.admissionTier,
           onChildTerminated: reportTerminated,
           ...(timeoutMs === undefined
             ? {}
             : { createTimeoutError: () => new GitCommandTimeoutError(timeoutMs) })
         }
-        const captured = options.terminationBarrier
+        const captured = captureOptions.terminationBarrier
           ? execFileCaptureToTermination(
               command.binary,
               command.args,

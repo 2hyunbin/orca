@@ -92,6 +92,39 @@ export function registerGitPluginTreeBinaryCompatibilityCases(
     }
   })
 
+  it('traces received pack bytes with the supported download guard settings', async () => {
+    const destination = 'compat-plugin-transfer-trace'
+    try {
+      const result = await runGit(
+        [
+          '-c',
+          'fetch.unpackLimit=0',
+          '-c',
+          'fetch.uriprotocols=',
+          'clone',
+          '--quiet',
+          '--no-checkout',
+          '--no-local',
+          '--depth',
+          '1',
+          '--',
+          '.',
+          destination
+        ],
+        {
+          GIT_TRACE_PACKET: '1',
+          GIT_TRACE_PACKFILE: '1',
+          GIT_TRACE_CURL: '1',
+          GIT_TRACE_CURL_NO_DATA: undefined
+        }
+      )
+      expect(result.stderr).toContain(`PACK${String.fromCharCode(0, 0, 0, 2)}`)
+      expect((await runGit(['-C', destination, 'ls-files'])).stdout).toBe('')
+    } finally {
+      await removeDirectories([destination])
+    }
+  })
+
   it('downloads without checkout and reads exact bounded tree/blob metadata on baseline Git', async () => {
     const destination = 'compat-plugin-raw-download'
     const config = [

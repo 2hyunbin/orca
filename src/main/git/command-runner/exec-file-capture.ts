@@ -12,6 +12,8 @@ import type { GitAdmissionTier } from './git-exec-options'
 type ExecFileCaptureOptions = Omit<ExecFileOptions, 'timeout'> & {
   timeout?: number
   stdin?: string
+  killOnOutputLimit?: boolean
+  privateOutput?: boolean
   terminationBarrier?: boolean
   onChildTerminated?: () => void
   admissionTier?: GitAdmissionTier
@@ -40,6 +42,8 @@ export async function execFileCaptureToTermination(
     env: options.env,
     timeoutMs: options.timeout ?? GIT_TERMINATION_BARRIER_FALLBACK_TIMEOUT_MS,
     maxOutputBytes: options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER,
+    killOnOutputLimit: options.killOnOutputLimit,
+    discardStderr: options.privateOutput,
     signal: options.signal,
     terminationBarrier: termination ?? true,
     onChildTerminated: options.onChildTerminated,
@@ -70,17 +74,20 @@ export async function execFileCaptureToTermination(
               // as JSON or JSONL, where a clipped answer reads as a shorter valid
               // one. execFile's own maxBuffer overrun errored for the same reason.
               `${command} produced more than ${options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER} bytes of output.`
-            : cleanStderr.trim() || `${command} exited with ${result.code}.`
+            : options.privateOutput
+              ? `${command} exited with ${result.code}.`
+              : cleanStderr.trim() || `${command} exited with ${result.code}.`
       )
   if (options.signal?.aborted) {
     error.name = 'AbortError'
   }
   throw Object.assign(error, {
     code: result.code,
+    outputTruncated: result.outputTruncated === true,
     killed: result.timedOut || result.signal !== null || options.signal?.aborted === true,
     signal: result.signal,
-    stdout,
-    stderr
+    stdout: options.privateOutput ? emptyExecFileOutput(options) : stdout,
+    stderr: options.privateOutput ? emptyExecFileOutput(options) : stderr
   })
 }
 

@@ -11,20 +11,44 @@ import { withLocalGitCapabilityCacheForExecution } from '../git/git-capability-s
 import { initializePluginSha256Repository } from './plugin-git-object-format'
 
 const PLUGIN_GIT_TIMEOUT_MS = 120_000
+// Covers protocol, pack and HTTP-body traces; the collector retains none of their contents.
+export const PLUGIN_GIT_TRANSFER_TRACE_MAX_BYTES = 256 * 1024 * 1024
 
 /** Runs system Git with argv-only invocation so credential helpers and SSH
  * remotes work without exposing an executable remote-helper surface. */
 export async function runPluginGit(
   args: string[],
   cwd: string,
-  environment?: Record<string, string>
+  environment?: NodeJS.ProcessEnv,
+  boundedDownload = false
 ): Promise<string> {
-  const { stdout } = await gitExecFileAsync(args, {
-    cwd,
-    timeout: PLUGIN_GIT_TIMEOUT_MS,
-    ...(environment ? { env: { ...process.env, ...environment } } : {})
-  })
-  return stdout.trim()
+  try {
+    const { stdout } = await gitExecFileAsync(args, {
+      cwd,
+      timeout: PLUGIN_GIT_TIMEOUT_MS,
+      ...(boundedDownload
+        ? {
+            maxBuffer: PLUGIN_GIT_TRANSFER_TRACE_MAX_BYTES,
+            killOnOutputLimit: true,
+            privateOutput: true,
+            terminationBarrier: true
+          }
+        : {}),
+      ...(environment ? { env: { ...process.env, ...environment } } : {})
+    })
+    return stdout.trim()
+  } catch (error) {
+    if (
+      boundedDownload &&
+      error instanceof Error &&
+      'outputTruncated' in error &&
+      error.outputTruncated === true
+    ) {
+      error.message =
+        'Plugin repository exceeded its download budget. Ask its maintainer for a smaller release.'
+    }
+    throw error
+  }
 }
 
 /** Materializes exact blobs without invoking checkout filters or hooks. */
@@ -55,10 +79,31 @@ export async function checkoutPluginGitSource(input: {
     '-c',
     'gc.auto=0',
     '-c',
-    'maintenance.auto=false'
+    'maintenance.auto=false',
+    '-c',
+    'fetch.unpackLimit=0',
+    '-c',
+    'fetch.uriprotocols='
   ]
-  const run = (args: string[], cwd: string) =>
-    runPluginGit([...config, ...args], cwd, { GIT_DEFAULT_HASH: 'sha1' })
+  const run = (args: string[], cwd: string) => {
+    const download = args[0] === 'clone' || args[0] === 'fetch'
+    return runPluginGit(
+      [...config, ...args],
+      cwd,
+      {
+        GIT_DEFAULT_HASH: 'sha1',
+        ...(download
+          ? {
+              GIT_TRACE_PACKET: '1',
+              GIT_TRACE_PACKFILE: '1',
+              GIT_TRACE_CURL: '1',
+              GIT_TRACE_CURL_NO_DATA: undefined
+            }
+          : {})
+      },
+      download
+    )
+  }
   try {
     await mkdir(hooks)
     const exactCommit = PLUGIN_COMMIT_PATTERN.test(ref)
@@ -80,6 +125,7 @@ export async function checkoutPluginGitSource(input: {
         'clone',
         '--quiet',
         '--no-checkout',
+        '--no-local',
         '--no-recurse-submodules',
         '--template=',
         '--depth',
