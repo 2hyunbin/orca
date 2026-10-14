@@ -142,8 +142,8 @@ function setCachedImage(args: {
 }
 
 /**
- * Singleflight loader: concurrent cold misses for the same attachment share one
- * download. Failed loads are not cached so a later retry can succeed.
+ * Singleflight loader: concurrent cold misses share one download within their
+ * cancellation domain. Failed loads are not cached so a later retry can succeed.
  */
 async function loadImageWithCache(args: {
   siteId: string
@@ -156,7 +156,8 @@ async function loadImageWithCache(args: {
     return cached
   }
 
-  const key = cacheKey(args.siteId, args.attachmentId)
+  // Legacy waiters must not inherit a cancellable reader's download.
+  const key = `${cacheKey(args.siteId, args.attachmentId)}::${args.signal ? 'cancellable' : 'legacy'}`
   const existing = inFlight.get(key)
   if (existing && !existing.signal?.aborted) {
     return existing.promise
