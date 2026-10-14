@@ -82,14 +82,15 @@ export function classifyShadowSeat(
     if (seats.some((seat) => seat.state === 'drain-only')) {
       return { class: 'duplicate-seat', explained: true }
     }
-    // The host reconnected on the database's newer seat; only the row breaks a level epoch.
+    // A newer DB seat supersedes older-epoch seats until their silence close;
+    // a level epoch is a real tie.
     const current = seats.find(
       (seat) => seat.cellId === answer.cellId && seat.epoch === answer.assignmentEpoch
     )
     const superseded =
       current !== undefined &&
       seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
-      now - current.joinedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+      now - movedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]
