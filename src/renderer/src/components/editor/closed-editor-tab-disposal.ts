@@ -118,6 +118,8 @@ export function disposeClosedEditorTabCaches(
         break
       case 'check-details':
       case 'chat-visual':
+      case 'file-opening':
+      case 'plugin-viewer':
         break
     }
   }

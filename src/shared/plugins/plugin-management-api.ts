@@ -9,7 +9,7 @@ import { isAllowedPluginGitUrl } from './plugin-install-lockfile'
 import { normalizeUiLanguage } from '../ui-language'
 import type { GlobalSettings } from '../global-settings-types'
 import type { PluginLanguagePackRegistration } from './plugin-language-pack-artifact'
-import type { PluginsApi } from '../../preload/api/plugin-host-api'
+import type { PluginsApi } from './plugin-desktop-api'
 
 export const PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY = 'plugins.management.v1' as const
 export const pluginManagementInstallSchema = z.discriminatedUnion('kind', [
