@@ -1,5 +1,6 @@
 import type { LinearIssueUpdate } from '../../../shared/issue-mutation-types'
 import type { LinearComment, LinearIssue } from '../../../shared/linear/issue-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import {
   getLinearRuntimeTarget,
@@ -52,11 +53,11 @@ export type LinearIssueStatus = Pick<
 >
 
 export async function linearGetIssueStatus(
-  settings: RuntimeLinearSettings,
+  target: RuntimeClientTarget,
   id: string,
   workspaceId?: string | null
 ): Promise<LinearIssueStatus | null> {
-  return readLinearIssue(settings, id, workspaceId, true)
+  return readLinearIssue(target, id, workspaceId, true)
 }
 
 export async function linearGetIssue(
@@ -64,16 +65,15 @@ export async function linearGetIssue(
   id: string,
   workspaceId?: string | null
 ): Promise<LinearIssue | null> {
-  return readLinearIssue(settings, id, workspaceId)
+  return readLinearIssue(getLinearRuntimeTarget(settings), id, workspaceId)
 }
 
 async function readLinearIssue(
-  settings: RuntimeLinearSettings,
+  target: RuntimeClientTarget,
   id: string,
   workspaceId?: string | null,
   statusOnly = false
 ): Promise<LinearIssue | null> {
-  const target = getLinearRuntimeTarget(settings)
   return target.kind === 'environment'
     ? callRuntimeRpc<LinearIssue | null>(
         target,

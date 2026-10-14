@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, expectTypeOf, it, vi } from 'vitest'
 import type { LinearIssue } from '../../../shared/linear/issue-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { linearGetIssue, linearGetIssueStatus } from './runtime-linear-issue-mutations'
 
 const mocks = vi.hoisted(() => ({ call: vi.fn(), local: vi.fn() }))
@@ -40,4 +41,20 @@ it('preserves local full reads and accepts full details returned by an older hos
   expectTypeOf<
     Awaited<ReturnType<typeof linearGetIssueStatus>>
   >().not.toMatchTypeOf<LinearIssue | null>()
+})
+
+it('keeps default-scope routing on full reads and requires an explicit owner for status reads', async () => {
+  await linearGetIssue(
+    { kind: 'default-scope', settings: { activeRuntimeEnvironmentId: 'focused-runtime' } },
+    'ENG-1',
+    'workspace-1'
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    { kind: 'environment', environmentId: 'focused-runtime' },
+    'linear.getIssue',
+    { id: 'ENG-1', workspaceId: 'workspace-1' },
+    { timeoutMs: 30_000 }
+  )
+  expect(mocks.local).not.toHaveBeenCalled()
+  expectTypeOf<Parameters<typeof linearGetIssueStatus>[0]>().toEqualTypeOf<RuntimeClientTarget>()
 })

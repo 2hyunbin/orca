@@ -4,7 +4,8 @@ import {
   type LinearIssueStatus
 } from '@/runtime/runtime-linear-issue-mutations'
 import { linearTeamStates } from '@/runtime/runtime-linear-project-client'
-import type { LinearMutationResult, RuntimeLinearSettings } from '@/runtime/runtime-linear-client'
+import type { LinearMutationResult } from '@/runtime/runtime-linear-client'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { LinearWorkflowState } from '../../../../shared/linear/workspace-types'
 import type {
   WorkspaceStatus,
@@ -41,8 +42,8 @@ export type SyncWorkspaceBoardTaskStatusesArgs = {
     string,
     Pick<Worktree, 'linkedLinearIssue' | 'linkedLinearIssueWorkspaceId'>
   >
-  settings?: RuntimeLinearSettings
-  getSettingsForWorktree?: (worktreeId: string) => RuntimeLinearSettings
+  settings?: RuntimeClientTarget
+  getSettingsForWorktree?: (worktreeId: string) => RuntimeClientTarget
   getLatestWorkspaceStatus: (worktreeId: string) => WorkspaceStatus | null | undefined
   deps?: Partial<WorkspaceBoardTaskStatusSyncDependencies>
 }
