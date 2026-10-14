@@ -203,7 +203,41 @@
       "optionLayoutAlt": "ABC or U.S. — Option sends Alt/Esc sequences",
       "optionLayoutCompose": "layout uses Option to compose characters like @, €, [, ]",
       "optionLayoutUnknown": "unknown layout — Option composes characters (safe default)",
-      "optionShortcutHint": "Choose Both for Option shortcuts, Off for accents and symbols, or Left/Right to use one Option key for each."
+      "optionShortcutHint": "Choose Both for Option shortcuts, Off for accents and symbols, or Left/Right to use one Option key for each.",
+      "windows": {
+        "checkingAdministrator": "Checking…",
+        "unknownAdministrator": "Unable to determine",
+        "administratorStatus": "Administrator",
+        "standardStatus": "Standard user",
+        "keywordAdmin": "admin",
+        "keywordAdministrator": "administrator",
+        "keywordElevated": "elevated",
+        "keywordPermissions": "permissions",
+        "keywordRestart": "restart",
+        "keywordUac": "uac",
+        "returnStandardHelp": "Standard mode guide",
+        "runAdministratorHelp": "Administrator guide",
+        "restartAdministrator": "Restart as administrator",
+        "administratorLabel": "Administrator mode",
+        "administratorScope": "Permissions for the Orca app. Existing terminals may differ.",
+        "confirmAdministratorRestart": "Restart as administrator?",
+        "administratorRestartConsequences": "Save your work first. After approval, terminals and agents on the current local terminal host close. Restored tabs open new administrator shells.",
+        "administratorDialogScope": "This changes permissions for the whole app. SSH and WSL keep their own permissions.",
+        "administratorPromptCancellation": "Canceling Windows’ prompt reopens Orca with its retained terminals. SSH and WSL permissions stay controlled on their hosts.",
+        "closeLocalSessions": "Save your work, close all local terminal sessions, then exit Orca.",
+        "launchStandard": "Open Orca normally from the Windows Start menu.",
+        "launchAdministrator": "In the Windows Start menu, right-click Orca and choose Run as administrator. Approve the Windows prompt using your usual account.",
+        "retainedTerminalPermissions": "If new terminals still use the previous permissions, open Manage Sessions and choose Restart daemon. This closes local terminals and their running commands.",
+        "administratorRestartFailed": "Orca could not restart. Try again or use the manual instructions.",
+        "manualAdministratorHelp": "Manual instructions",
+        "administratorDocumentation": "Read the guide",
+        "cancelAdministratorRestart": "Cancel",
+        "closeAdministratorHelp": "Close",
+        "restartingAdministrator": "Restarting…",
+        "openManageSessions": "Open Manage Sessions",
+        "administratorSearchDescription": "See Orca’s Windows permissions or restart with administrator approval.",
+        "administratorApproval": "Windows will ask for approval. Use your usual account."
+      }
     },
     "appearance": {
       "language": {
@@ -319,7 +353,18 @@
       "codexSharedServerWarning": {
         "title": "Warn when a Codex tab shares a server",
         "description": "Shows a notice on a Codex you started yourself when it shares a server with other tabs, because its agent status may be wrong."
-      }
+      },
+      "environmentName": "Environment variable name",
+      "environmentValue": "Value for {{name}}",
+      "savedEnvironment": "Saved value · enter to replace",
+      "newEnvironment": "Value",
+      "removeEnvironment": "Remove",
+      "loadingHost": "Loading agent settings…",
+      "updateHost": "Update this server to edit its agent launch settings.",
+      "readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
+      "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
+      "hostDefaults": "Defaults for new agents on the selected host.",
+      "save": "Save"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -1099,6 +1144,7 @@
               "undecryptableUnknown": "{{value0}} cookies could not be decrypted and were skipped. Close the source browser completely and try the import again.",
               "unrecognizedWarning": "The cookie import finished with a warning this version of Orca does not recognize. Update Orca to see the details, then check this profile before relying on its cookies.",
               "undecryptableUnrecognizedReason": "{{value0}} cookies could not be decrypted and were skipped for a reason this version of Orca does not recognize. Update Orca to see the details, then try the import again.",
+              "partitionSkippedBreakdown": "Cookies with unreadable site partitions: {{value0}}. Related cookies left unimported to protect existing sessions: {{value1}}. Existing cookies for these sites were left unchanged. Check these sites in this profile before signing in again.",
               "partitionSkipped": "{{value0}} cookies were not imported because their site-partition could not be read. Sign in to those sites again in Orca.",
               "locationClientHosted": "Read from this device and stored here for the {{value0}} workspace.",
               "locationRemoteHost": "Read from browsers on {{value0}} and stored there.",
@@ -7081,7 +7127,9 @@
           "codexSessionSourceInfo": "About importing Codex history",
           "codexSessionSourceTooltip": "Orca runs Codex in an isolated home. Point this at your existing Codex home to import that session history. Empty uses ~/.codex.",
           "storedDefaultUndetected": "Saved as your default, but not detected right now",
-          "noAgentsDetected": "No agents detected. If one is installed, the probe may have timed out."
+          "noAgentsDetected": "No agents detected. If one is installed, the probe may have timed out.",
+          "setupOnlyHint": "Runs setup without an extra blank terminal in new-tab mode. Split mode keeps a shell pane; skipped or missing setup opens a blank terminal.",
+          "setupOnly": "None"
         },
         "AppIconSelector": {
           "d5a112dc9b": "Next icon",
@@ -12757,6 +12805,7 @@
           "add": "Add WSL distro",
           "connect": "Connect",
           "remove": "Remove",
+          "forceUpdate": "Force update",
           "turnOn": "Turn on in Experimental"
         }
       },
@@ -16611,7 +16660,9 @@
                     "09a7c1df70": "Edit annotation {{value0}}",
                     "c16f932cb3": "Save",
                     "024467ceac": "Cancel",
-                    "449d2c2629": "Annotation intent"
+                    "449d2c2629": "Annotation intent",
+                    "38d320108c": "Collapse annotations",
+                    "9f209891a7": "Expand annotations"
                   }
                 }
               }
@@ -17207,7 +17258,8 @@
           "579c768bde": "No agents match your search.",
           "48c6a5a9b4": "Search agents...",
           "9c6b59fe58": "Set as default",
-          "1b0d6965fa": "Current default"
+          "1b0d6965fa": "Current default",
+          "setupOnly": "None"
         },
         "AgentSettingsDialog": {
           "50cdb57c03": "Manage AI agents, set a default, and customize commands.",
@@ -18167,8 +18219,12 @@
         "compactionFailedQuoted": "Compaction failed: {{detail}}.",
         "compactionUnconfirmed": "Compaction completion is unconfirmed.",
         "cancelUnconfirmed": "Cancellation was not confirmed.",
+        "backgroundTaskNotStopped": "The background task wasn't stopped.",
+        "backgroundTasksNotStopped": "The background tasks weren't stopped.",
         "stopRefused": "{{agent}} didn't stop.",
         "stopRefusedQuoted": "{{agent}} didn't stop: {{detail}}.",
+        "couldNotStop": "Couldn't stop {{agent}}.",
+        "couldNotStopTheAgent": "Couldn't stop the agent.",
         "noTurnToStop": "{{agent}} had no turn running to stop.",
         "answerUnconfirmed": "Your answer was recorded but the agent did not confirm it.",
         "hostFault": "Orca ran into a problem, so this didn't go through.",
@@ -18211,6 +18267,7 @@
         "outcomeUnknown": "Orca couldn't confirm what happened. Check the chat.",
         "sendOutcomeLost": "Orca couldn't confirm your message reached the agent. Check the chat, then send it again if needed.",
         "questionChanged": "This question was already answered or has changed.",
+        "cancelNotSaved": "Couldn't cancel this question or approval.",
         "historyUnreadable": "Orca couldn't read this chat's saved history.",
         "historyUnusable": "Unable to load this chat.",
         "historyUnavailable": "Orca couldn't open this chat's history right now.",
@@ -18364,7 +18421,6 @@
         "fastMode": "Fast mode",
         "speed": "Speed",
         "thinking": "Thinking",
-        "options": "Options",
         "sessionOptions": "Session options",
         "chooseInAgentPicker": "Choose in agent picker…",
         "searchModels": "Search models…",
@@ -18412,7 +18468,12 @@
         "permissionFullAccessCodexDescription": "Never asks; can edit any file and use the network",
         "permissionFullAccessSharedDescription": "Never asks before edits or commands",
         "pasteFailed": "Paste failed.",
-        "commandAttachmentsUnsupported": "Remove attachments before using a chat-session command."
+        "commandAttachmentsUnsupported": "Remove attachments before using a chat-session command.",
+        "optionValueShort": {
+          "minimal": "Min",
+          "medium": "Med",
+          "xhigh": "XHigh"
+        }
       },
       "tool": {
         "exitCode": "exit {{value0}}",
@@ -19784,7 +19845,6 @@
   "projectField": {
     "updateFailed": "Failed to update project field"
   },
-  "settings.appearance.chat.title": "Chat",
   "mediaPreview": {
     "unavailable": "Unable to play this media file. The file may be unavailable or use an unsupported codec.",
     "openFailed": "Could not open this file in the default app.",
@@ -19865,17 +19925,6 @@
       "updateRuntimeSafely": "Update the remote runtime to safely change workspace links"
     }
   },
-  "settings.agents.environmentName": "Environment variable name",
-  "settings.agents.environmentValue": "Value for {{name}}",
-  "settings.agents.savedEnvironment": "Saved value · enter to replace",
-  "settings.agents.newEnvironment": "Value",
-  "settings.agents.removeEnvironment": "Remove",
-  "settings.agents.loadingHost": "Loading agent settings…",
-  "settings.agents.updateHost": "Update this server to edit its agent launch settings.",
-  "settings.agents.readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
-  "settings.agents.saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
-  "settings.agents.hostDefaults": "Defaults for new agents on the selected host.",
-  "settings.agents.save": "Save",
   "tabHoverCard": {
     "browser": "Browser",
     "editor": "Editor",
