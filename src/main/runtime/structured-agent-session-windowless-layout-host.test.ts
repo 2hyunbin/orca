@@ -27,6 +27,7 @@ const CHAT_B = 'chat-b-0002'
 const CHAT_GONE = 'chat-gone-0003'
 const CHAT_SSH = 'chat-ssh-0004'
 const CHAT_REMOTE = 'chat-remote-0005'
+const CHAT_CLAUDE = 'chat-claude-0006'
 const EMPTY_SESSION: WorkspaceSessionState = {
   activeRepoId: null,
   activeWorktreeId: WT,
@@ -162,6 +163,29 @@ describe('a windowless chat tab against the chat host', () => {
     })
     const { runtime, state } = await runtimeWithSavedChats([CHAT_GONE, CHAT_B])
     expect(savedChatIds(state)).toEqual([CHAT_GONE, CHAT_B])
+    restoringRuntime(runtime)
+
+    await runtime.restoreStructuredAgentSessionTabs()
+
+    expect(savedChatIds(state)).toEqual([CHAT_B])
+  })
+
+  it("removes a closed Claude chat's saved tab at startup", async () => {
+    await seedTestAgentSessionRecordStore(root, {
+      records: [released(CHAT_B)],
+      sessionTabs: shown(CHAT_B)
+    })
+    const { runtime, state } = await runtimeWithSavedChats([CHAT_B])
+    state.session = withChatTabChanges('local', state.session, WT, [
+      {
+        open: {
+          sessionId: CHAT_CLAUDE,
+          agent: 'claude',
+          tabId: structuredAgentSessionTabId(CHAT_CLAUDE)
+        }
+      }
+    ])!
+    expect(savedChatIds(state)).toEqual([CHAT_B, CHAT_CLAUDE])
     restoringRuntime(runtime)
 
     await runtime.restoreStructuredAgentSessionTabs()
