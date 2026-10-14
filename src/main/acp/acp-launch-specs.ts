@@ -89,7 +89,8 @@ export type AcpLaunchSpec = {
   /** Where the agent installs its own binary, searched after PATH. */
   installDirectories(input: { env: Readonly<Record<string, string>>; homePath: string }): string[]
   /** A pinned copy Orca installs under its own data folder, searched last. A chat start installs it
-   *  when no other copy is found; a spec with one names no `supportsVersion`. */
+   *  when no other copy is found; a spec with one names no `supportsVersion`. `folder`'s parent holds
+   *  only its versions: host start removes the others. */
   managedRuntime?: {
     folder(dataDirectory: string): string
     materialize(dataDirectory: string, signal?: AbortSignal): Promise<void>

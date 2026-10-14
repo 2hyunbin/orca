@@ -1,7 +1,7 @@
 /** Download, hash-verify and cache pinned runtimes, driven only by their pinned assets. */
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, link, mkdir, rename, rm } from 'node:fs/promises'
+import { chmod, link, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
 import { downloadVerifiedArchive, extractRuntimeArchive } from './runtime-archive-download'
@@ -41,6 +41,8 @@ export type PinnedRuntimeFolder = PinnedRuntimeArchive & {
   /** Archive-relative path and sha256 of every executable the folder must hold. */
   members: readonly { path: string; sha256: string }[]
 }
+
+const OWN_STAGING_PREFIX = `.download-${process.pid}-`
 
 function archiveName(archive: PinnedRuntimeArchive): string {
   return basename(new URL(archive.url).pathname)
@@ -135,7 +137,7 @@ export async function materializeVerifiedRuntimeFolder(
   options.signal?.throwIfAborted()
   const parent = dirname(folder)
   await mkdir(parent, { recursive: true })
-  const temporaryDir = join(parent, `.download-${process.pid}-${randomUUID()}`)
+  const temporaryDir = join(parent, `${OWN_STAGING_PREFIX}${randomUUID()}`)
   await mkdir(temporaryDir, { recursive: true })
   const paths = runtime.members.map((member) => member.path)
   const verifyMembers = async (root: string): Promise<void> => {
@@ -162,6 +164,17 @@ export async function materializeVerifiedRuntimeFolder(
   } finally {
     await rm(temporaryDir, { recursive: true, force: true })
   }
+}
+
+/** Removes the other versions beside `folder` and earlier processes' staging: one host owns the data
+ *  root, so nothing runs from them; this process's staging may be a publish in flight. */
+export async function removeOtherRuntimeVersions(folder: string): Promise<void> {
+  const parent = dirname(folder)
+  const entries = await readdir(parent).catch((error: NodeJS.ErrnoException) =>
+    error.code === 'ENOENT' ? [] : Promise.reject(error)
+  )
+  const stale = entries.filter((e) => e !== basename(folder) && !e.startsWith(OWN_STAGING_PREFIX))
+  await Promise.all(stale.map((entry) => rm(join(parent, entry), { recursive: true, force: true })))
 }
 
 async function downloadAndExtract(

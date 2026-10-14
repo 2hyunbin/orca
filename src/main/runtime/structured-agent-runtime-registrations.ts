@@ -49,6 +49,7 @@ import {
   resolveAcpLaunchCommand
 } from '../acp/acp-structured-launch-resolution'
 import { AcpStructuredSessionAdapter } from '../acp/acp-structured-session-adapter'
+import { removeOtherRuntimeVersions } from '../node-runtime/pinned-runtime-materializer'
 import { PI_RPC_RUNTIME_REGISTRATION } from '../pi/rpc-runtime-registration'
 import type { AgentModelCatalogDiscovery } from '../native-chat/agent-model-catalog/agent-model-catalog-discovery'
 import {
@@ -230,6 +231,17 @@ function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistratio
       const readJournal = (sessionId: string) =>
         replayJournal(context.journalDatabase.db, sessionId)
       const definition = acpStructuredAgentDefinition(spec)
+      if (spec.managedRuntime) {
+        // Once per host start, never awaited: leftovers must not hold up a launch.
+        void removeOtherRuntimeVersions(spec.managedRuntime.folder(deps.stateDirectory)).catch(
+          (error: unknown) =>
+            deps.logger.warn('ACP old managed runtime versions could not be removed', {
+              scope: 'acp-managed-runtime-reclaim',
+              agent: spec.agent,
+              error
+            })
+        )
+      }
       const sources = structuredAgentLaunchSources(context)
       const part = acpStructuredLaunchPart(spec, {
         readJournal,
