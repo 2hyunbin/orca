@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect } from 'react'
 import { useAppStore } from '../../store'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
   applyTerminalPaneAttentionToManager,
   subscribeTerminalPaneAttention
@@ -40,7 +39,6 @@ export function useTerminalPaneTitleEffects(controller: TerminalPaneCloseControl
     paneTitles,
     paneTitlesRef,
     paneTransportsRef,
-    readTerminalPaneOnInput,
     renamingPaneId,
     renameInputRef,
     renameUserRequestedBlurCommitRef,
@@ -53,26 +51,6 @@ export function useTerminalPaneTitleEffects(controller: TerminalPaneCloseControl
     tabId,
     worktreeId
   } = controller
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) {
-      return
-    }
-    const onPointerDown = (event: PointerEvent): void => {
-      const paneElement =
-        event.target instanceof Element ? event.target.closest('.pane[data-leaf-id]') : null
-      const leafId = paneElement?.getAttribute('data-leaf-id')
-      readTerminalPaneOnInput({
-        worktreeId,
-        tabId,
-        paneKey: leafId ? makePaneKey(tabId, leafId) : null
-      })
-    }
-    container.addEventListener('pointerdown', onPointerDown, { capture: true })
-    return () => container.removeEventListener('pointerdown', onPointerDown, { capture: true })
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-  }, [tabId, worktreeId, readTerminalPaneOnInput])
 
   const applyTerminalPaneAttention = useCallback(() => {
     const manager = managerRef.current

@@ -8,7 +8,6 @@ import {
   replaceLeaf
 } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { ownsGlobalSelection } from '../../global-selection-owner'
-import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 
 export function createTabsGroupActions(
   set: TabsSliceSet,
@@ -52,8 +51,6 @@ export function createTabsGroupActions(
               ...state.activeGroupIdByWorktree,
               [worktreeId]: groupId
             }
-        // Why: focusing a group surfaces its active terminal tab, so dismiss the tab-level bell.
-        // Why (activeWorktree guard below): only when the group is in the active worktree, else the unseen tab's bell is swallowed.
         if (state.activeWorktreeId !== worktreeId) {
           if (groupAlreadyFocused) {
             return state
@@ -62,20 +59,6 @@ export function createTabsGroupActions(
             activeGroupIdByWorktree: nextActiveGroupIdByWorktree
           }
         }
-        const groups = state.groupsByWorktree[worktreeId] ?? []
-        const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
-        const visibleTerminalEntityIds = new Set(
-          groups
-            .map((group) =>
-              group.activeTabId ? unifiedTabs.find((tab) => tab.id === group.activeTabId) : null
-            )
-            .filter((tab): tab is (typeof unifiedTabs)[number] => tab?.contentType === 'terminal')
-            .map((tab) => tab.entityId)
-        )
-        const nextUnreadTerminalTabs = omitRecordKeys(
-          state.unreadTerminalTabs,
-          visibleTerminalEntityIds
-        )
         const activeSurfacePatch = buildActiveSurfacePatch(
           {
             ...state,
@@ -86,17 +69,12 @@ export function createTabsGroupActions(
         )
         if (
           groupAlreadyFocused &&
-          nextUnreadTerminalTabs === state.unreadTerminalTabs &&
           activeSurfacePatchMatchesState(state, worktreeId, activeSurfacePatch)
         ) {
           return state
         }
         return {
           ...(groupAlreadyFocused ? {} : { activeGroupIdByWorktree: nextActiveGroupIdByWorktree }),
-          // Why: only write unreadTerminalTabs when it changed — preserving the reference keeps selectors/subscribers from firing spuriously.
-          ...(nextUnreadTerminalTabs !== state.unreadTerminalTabs
-            ? { unreadTerminalTabs: nextUnreadTerminalTabs }
-            : {}),
           ...activeSurfacePatch
         }
       }),

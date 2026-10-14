@@ -19,11 +19,6 @@ function makeSurface(overrides: Partial<AgentAttentionSurface> = {}): AgentAtten
     isWorkspaceViewed: () => false,
     isWorkspaceActive: () => false,
     resolveViewedSubjectKey: () => null,
-    collectWorkspaceAttentionRemainder: () => ({
-      hasSurfaces: true,
-      unreadSubjectKeys: [],
-      unreadGroupIds: []
-    }),
     ...overrides
   }
 }

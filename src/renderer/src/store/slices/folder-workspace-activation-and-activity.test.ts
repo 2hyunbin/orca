@@ -123,13 +123,18 @@ afterEach(() => {
 })
 
 describe('folder workspace generic activation and activity', () => {
-  it('publishes folder-scoped active state and clears unread immediately', async () => {
+  it('publishes folder-scoped active state and reads the flag once on screen', async () => {
     const folderWorkspace = makeFolderWorkspace({ isUnread: true })
     const workspaceKey = folderWorkspaceKey(folderWorkspace.id)
     folderWorkspacesUpdate.mockImplementation(respondWithUpdates(folderWorkspace))
     const store = seedLocalFolderStore(folderWorkspace)
 
     store.getState().setActiveWorktree(workspaceKey)
+    expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(true)
+    // The on-screen scan's arrival read.
+    store.getState().readOnScreenAttention([{ worktreeId: workspaceKey, tabId: 'none' }], {
+      settleFlags: true
+    })
     await Promise.resolve()
 
     expect(store.getState()).toMatchObject({

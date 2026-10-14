@@ -29,7 +29,7 @@ import {
 const TERMINAL_PANE_LISTENER_BUDGET = 15
 /** What the same mount cost before the stable-action and unified-tab folds: one listener per
  *  bound action (each new stable action raises this by one, never the budget) plus the folded reads. */
-const PRE_FOLD_LISTENERS_PER_PANE = 46
+const PRE_FOLD_LISTENERS_PER_PANE = 45
 
 const originalState = useAppStore.getState()
 
@@ -161,11 +161,6 @@ describe('TerminalPane store subscription budget', () => {
 
     act(() => {
       useAppStore.getState().markTerminalBell({
-        worktreeId: 'repo-1::/repo/worktrees/budget',
-        tabId: 'tab-1',
-        paneKey: 'tab-1:1'
-      })
-      useAppStore.getState().readTerminalPaneOnInput({
         worktreeId: 'repo-1::/repo/worktrees/budget',
         tabId: 'tab-1',
         paneKey: 'tab-1:1'

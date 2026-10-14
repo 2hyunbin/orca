@@ -172,12 +172,13 @@ it('does not acknowledge the regular workspace for a colliding floating tab', ()
     unreadAgentCompletionPanes: { [FLOATING_PANE_KEY]: true }
   })
   openFloatingPanel()
-  const read = vi.spyOn(useAppStore.getState(), 'readViewedAgentAttention')
+  const read = vi.spyOn(useAppStore.getState(), 'readOnScreenAttention')
   try {
     renderHook(() => useAutoAckViewedAgent())
-    expect(read).not.toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceIdToClear: 'regular' })
-    )
+    expect(read).toHaveBeenCalled()
+    expect(
+      read.mock.calls.flatMap(([targets]) => targets.map((target) => target.worktreeId))
+    ).not.toContain('regular')
   } finally {
     cleanup()
     vi.restoreAllMocks()

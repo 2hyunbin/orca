@@ -106,7 +106,6 @@ export type PtyConnectionDeps = {
   clearRuntimePaneTitle: (tabId: string, paneId: number) => void
   updateTabPtyId: (tabId: string, ptyId: string, replacedPtyId?: string) => void
   markTerminalBell: WorkspaceAttentionSlice['markTerminalBell']
-  readTerminalPaneOnInput: WorkspaceAttentionSlice['readTerminalPaneOnInput']
   onShowSessionRestoredBanner: (paneId: number, reason?: SessionRestoredBannerReason) => void
   // Why: the renderer dispatches two notification sources — BEL from the PTY
   // byte stream and agent-task-complete on the working→idle title transition.

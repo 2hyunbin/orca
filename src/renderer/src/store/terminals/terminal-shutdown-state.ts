@@ -14,6 +14,7 @@ import {
 import type { TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { copyOnWriteRecord } from '../copy-on-write-record'
 import { removeTabsAttention } from '../slices/workspace-attention/subject-attention-transitions'
+import { settleRemovedAttention } from '../slices/workspace-attention/attention-removal-follow-up'
 
 export function commitTerminalShutdownState({
   exitGuardPtyIds,
@@ -38,6 +39,7 @@ export function commitTerminalShutdownState({
   tabs: readonly TerminalTab[]
   worktreeId: string
 }): void {
+  const attentionBefore = get()
   set((state) => {
     const tabsByWorktree = keepIdentifiers
       ? state.tabsByWorktree
@@ -132,6 +134,7 @@ export function commitTerminalShutdownState({
       lastTerminalInputAtByPaneKey: lastTerminalInputAtByPaneKey.read()
     }
   })
+  settleRemovedAttention(set, get, attentionBefore)
 
   if (keepIdentifiers) {
     set((state) => {

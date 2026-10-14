@@ -21,6 +21,7 @@ import { omitRecordKeys } from '../slices/worktrees/teardown/record-key-omission
 import { deleteNativeChatComposerDraftsForTab } from '@/components/native-chat/native-chat-composer-draft-store'
 import { dropNativeChatPendingAttachmentsForTab } from '@/components/native-chat/native-chat-pending-attachment-cache'
 import { noteAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
+import { settleRemovedAttention } from '../slices/workspace-attention/attention-removal-follow-up'
 
 export function createTerminalTabCloseActions(
   set: TerminalStoreSet,
@@ -48,6 +49,7 @@ export function createTerminalTabCloseActions(
           tabId
         })
       }
+      const attentionBefore = get()
       set((s) => {
         // Why hoisted: omitRecordKeys takes an iterable, and this closes over one
         // array instead of allocating a fresh [tabId] at each of the call sites below.
@@ -238,6 +240,7 @@ export function createTerminalTabCloseActions(
             : {})
         }
       })
+      settleRemovedAttention(set, get, attentionBefore)
       if (intentReason && closingWorktreeId && opts?.remoteCloseOwnedByHost !== true) {
         commitTerminalSurfaceClose(closingWorktreeId, { kind: 'tab', tabId }, intentReason)
       }

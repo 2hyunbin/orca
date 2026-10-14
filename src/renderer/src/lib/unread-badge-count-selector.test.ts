@@ -95,26 +95,30 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     expect(dockCount(store)).toBe(1)
 
     store.getState().setActiveWorktree(BELL_WORKTREE)
+    // The on-screen scan reads the visited tab.
+    store.getState().readOnScreenAttention([{ worktreeId: BELL_WORKTREE, tabId }], {
+      settleFlags: true
+    })
     store.getState().setActiveWorktree(OTHER_WORKTREE)
 
     expect(sidebarUnreadCount(store)).toBe(0)
     expect(dockCount(store)).toBe(0)
   })
 
-  it('clears with the workspace dot when the user types in a sibling tab', () => {
+  it('keeps the workspace dot while a sibling tab still waits (STA-9273)', () => {
     const store = createStoreOnOtherWorktree()
     const typedTabId = addTerminalTab(store, BELL_WORKTREE)
     const bellTabId = addTerminalTab(store, BELL_WORKTREE)
     store.getState().setActiveWorktree(BELL_WORKTREE)
     raiseAttention(store, BELL_WORKTREE, bellTabId)
 
-    store
-      .getState()
-      .readTerminalPaneOnInput({ worktreeId: BELL_WORKTREE, tabId: typedTabId, paneKey: null })
+    store.getState().readOnScreenAttention([{ worktreeId: BELL_WORKTREE, tabId: typedTabId }], {
+      settleFlags: true
+    })
 
     expect(store.getState().unreadTerminalTabs[bellTabId]).toBe('terminal-bell')
-    expect(sidebarUnreadCount(store)).toBe(0)
-    expect(dockCount(store)).toBe(0)
+    expect(sidebarUnreadCount(store)).toBe(1)
+    expect(dockCount(store)).toBe(1)
   })
 
   it('counts a flagged workspace once when the marked tab is a chat tab', () => {

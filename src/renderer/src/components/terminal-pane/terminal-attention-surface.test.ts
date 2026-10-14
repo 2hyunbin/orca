@@ -126,29 +126,6 @@ describe('createTerminalAttentionSurface', () => {
     expect(surfaceFor(store).resolveViewedSubjectKey(TAB)).toBeNull()
   })
 
-  it('counts only this workspace tabs when collecting outstanding attention', () => {
-    const store = seedLiveTab()
-    const foreignPane = makePaneKey('tab-elsewhere', OTHER_LEAF)
-    store.setState({
-      unreadAgentCompletionPanes: { [PANE]: 'agent-completion', [foreignPane]: 'agent-completion' },
-      unreadTerminalTabs: { [TAB]: 'terminal-bell', 'tab-elsewhere': 'terminal-bell' }
-    })
-    expect(surfaceFor(store).collectWorkspaceAttentionRemainder(WORKSPACE)).toEqual({
-      hasSurfaces: true,
-      unreadSubjectKeys: [PANE],
-      unreadGroupIds: [TAB]
-    })
-  })
-
-  it('reports a workspace with no tabs as owning no surfaces', () => {
-    const store = createTestStore()
-    expect(surfaceFor(store).collectWorkspaceAttentionRemainder(WORKSPACE)).toEqual({
-      hasSurfaces: false,
-      unreadSubjectKeys: [],
-      unreadGroupIds: []
-    })
-  })
-
   it('treats only the active leaf of the active tab as viewed', () => {
     const store = seedLiveTab()
     store.setState({ activeWorktreeId: WORKSPACE, activeTabId: TAB })

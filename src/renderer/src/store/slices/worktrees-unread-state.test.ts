@@ -152,8 +152,9 @@ describe('worktree unread (show-until-interact)', () => {
 
     for (const [label, run] of [
       [
-        'readTerminalPaneOnInput',
-        (s: AppState) => s.readTerminalPaneOnInput({ worktreeId, tabId: 'no-tab', paneKey: null })
+        'readOnScreenAttention',
+        (s: AppState) =>
+          s.readOnScreenAttention([{ worktreeId, tabId: 'no-tab' }], { settleFlags: true })
       ],
       ['bumpWorktreeActivity', (s: AppState) => s.bumpWorktreeActivity(worktreeId)]
     ] as const) {
@@ -255,7 +256,7 @@ describe('worktree unread (show-until-interact)', () => {
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledTimes(2)
   })
 
-  it('clears unread state when activating a hidden detected worktree', () => {
+  it('reads a hidden detected worktree once it is activated and on screen', () => {
     const store = createTestStore()
     const hidden = makeWorktree({
       id: 'repo1::/path/hidden',
@@ -271,6 +272,11 @@ describe('worktree unread (show-until-interact)', () => {
     } as Partial<AppState>)
 
     store.getState().setActiveWorktree(hidden.id)
+    expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
+    // The on-screen scan's arrival read.
+    store.getState().readOnScreenAttention([{ worktreeId: hidden.id, tabId: 'none' }], {
+      settleFlags: true
+    })
 
     expect(store.getState().activeWorktreeId).toBe(hidden.id)
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(false)

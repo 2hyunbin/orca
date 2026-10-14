@@ -20,7 +20,8 @@ import {
   type PaneTarget
 } from './workspace-unread-characterization-driver'
 
-// Pins what removing a tab or pane does to unread today: markers go, the workspace flag stays.
+// Pins what removing a tab or pane does to unread: its markers go, and a workspace whose removed
+// marker was its last live one is read.
 
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }
@@ -74,7 +75,7 @@ function seedLitWorkspace(): {
 }
 
 describe('closing tabs', () => {
-  it('closing the only unread terminal tab removes its markers and keeps the dot', () => {
+  it('closing the only unread terminal tab removes its markers and the dot (STA-9043)', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     ringBell(store, pane)
@@ -84,11 +85,12 @@ describe('closing tabs', () => {
     store.getState().closeTab(pane.tabId)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
         "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":false}",
       ]
     `)
   })
@@ -123,7 +125,7 @@ describe('closing tabs', () => {
     `)
   })
 
-  it('closing a structured chat tab leaves its markers behind', () => {
+  it('closing a structured chat tab removes its markers', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const chat = store.getState().createUnifiedTab(WS_A, 'agent-session', {
       id: 'chat-1',
@@ -141,15 +143,15 @@ describe('closing tabs', () => {
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
-        "tabs chat-1=agent-completion",
-        "panes chat-1:84097828-fc31-48c8-a292-10df48901a85=agent-completion",
-        "completions chat-1:84097828-fc31-48c8-a292-10df48901a85=agent-completion",
+        "tabs -",
+        "panes -",
+        "completions -",
         "dock=0 floatingDot=false",
       ]
     `)
   })
 
-  it('closing a folder tab drops the folder from the Dock but keeps its flag', () => {
+  it('closing the only unread folder tab clears the folder flag', () => {
     const { store, persists } = createAttentionStore()
     store.setState({
       projectGroups: [
@@ -184,28 +186,30 @@ describe('closing tabs', () => {
     store.getState().closeTab(pane.tabId)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:0 b@local:read:0 folder-1@local:UNREAD:1000 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 folder-1@local:read:1000 sortEpoch=1",
         "tabs -",
         "panes -",
         "completions -",
         "dock=0 floatingDot=false",
+        "persist folder folder-1 {"isUnread":false}",
       ]
     `)
   })
 })
 
 describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
-  it('sleeping the workspace removes every marker of its tabs and keeps the flag', async () => {
+  it('sleeping the workspace removes every marker of its tabs and its flag', async () => {
     const { store, persists } = seedLitWorkspace()
 
     await store.getState().shutdownWorktreeTerminals(WS_A, { keepIdentifiers: true })
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
         "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":false}",
       ]
     `)
   })
@@ -297,7 +301,7 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('reconciling a dropped terminal removes its tab marker on activation', () => {
+  it('reconciling a dropped terminal on activation leaves no live marker, so the flag reads', () => {
     const { store, persists, first } = seedLitWorkspace()
     store.setState({
       tabsByWorktree: {
@@ -312,33 +316,34 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
-        "tabs tab-a2=terminal-bell",
-        "panes tab-a1:L1=terminal-bell tab-a2:L2=terminal-bell",
-        "completions tab-a1:L1=agent-completion tab-a2:L2=agent-completion",
+        "tabs -",
+        "panes tab-a1:L1=terminal-bell",
+        "completions tab-a1:L1=agent-completion",
         "dock=0 floatingDot=false",
         "persist worktree a {"isUnread":false}",
       ]
     `)
   })
 
-  it('purging the workspace removes every marker of its tabs', () => {
+  it('purging the workspace removes every marker of its tabs and its flag', () => {
     const { store, persists } = seedLitWorkspace()
 
     store.getState().purgeWorktreeTerminalState([WS_A])
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
         "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":false}",
       ]
     `)
   })
 })
 
 describe('engagement, read state and tab focus on other surfaces', () => {
-  it('focusing a group in the active workspace clears its visible terminal tab marker', () => {
+  it('focusing a group reads nothing beyond the active tab already on screen', () => {
     const { store, persists } = seedLitWorkspace()
     store.getState().setActiveWorktree(WS_A)
     observe(store, persists)
@@ -347,11 +352,11 @@ describe('engagement, read state and tab focus on other surfaces', () => {
     store.getState().focusGroup(WS_A, groupId!)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
-        "panes tab-a1:L1=terminal-bell tab-a2:L2=terminal-bell",
-        "completions tab-a1:L1=agent-completion tab-a2:L2=agent-completion",
-        "dock=0 floatingDot=false",
+        "panes tab-a1:L1=terminal-bell",
+        "completions tab-a1:L1=agent-completion",
+        "dock=1 floatingDot=false",
       ]
     `)
   })

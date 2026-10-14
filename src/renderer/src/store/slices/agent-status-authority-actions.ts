@@ -21,6 +21,7 @@ import {
   movePaneAttention,
   removePanesAttention
 } from './workspace-attention/subject-attention-transitions'
+import { settleRemovedAttention } from './workspace-attention/attention-removal-follow-up'
 
 export function createAgentStatusAuthorityActions(
   runtime: AgentStatusRuntime
@@ -54,6 +55,7 @@ export function createAgentStatusAuthorityActions(
         rendererAgentStatusObservations.forget(key)
       }
       let hadLive = false
+      const attentionBefore = get()
       set((s) => {
         const retiredLivePaneKeys = retiredPaneKeys.filter((key) => key in s.agentStatusByPaneKey)
         hadLive = retiredLivePaneKeys.length > 0
@@ -122,6 +124,7 @@ export function createAgentStatusAuthorityActions(
           sortEpoch: hadLive ? s.sortEpoch + 1 : s.sortEpoch
         }
       })
+      settleRemovedAttention(set, get, attentionBefore)
       if (hadLive) {
         freshness.scheduleDeferred()
       }

@@ -8,7 +8,6 @@
  */
 import type { useAppStore } from '@/store'
 import type {
-  AgentAttentionRemainder,
   AgentAttentionSubject,
   AgentAttentionSurface,
   AgentAttentionSurfaceAdmission,
@@ -78,30 +77,6 @@ function isViewedStructuredTab(
   )
 }
 
-function collectStructuredAttentionRemainder(
-  state: StoreSnapshot,
-  workspaceId: string
-): AgentAttentionRemainder {
-  const tabs = structuredTabsIn(state, workspaceId)
-  if (tabs.length === 0) {
-    return { hasSurfaces: false, unreadSubjectKeys: [], unreadGroupIds: [] }
-  }
-  const unreadSubjectKeys: string[] = []
-  const unreadGroupIds: string[] = []
-  // Why read per live tab instead of scanning the marker maps: a marker left behind by a closed
-  // tab or a superseded session would otherwise hold workspace unread lit with nothing to clear it.
-  for (const tab of tabs) {
-    const subjectKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
-    if (state.unreadAgentCompletionPanes[subjectKey]) {
-      unreadSubjectKeys.push(subjectKey)
-    }
-    if (state.unreadTerminalTabs[tab.id]) {
-      unreadGroupIds.push(tab.id)
-    }
-  }
-  return { hasSurfaces: true, unreadSubjectKeys, unreadGroupIds }
-}
-
 /** Binds the neutral surface contract to one store snapshot. */
 export function createStructuredAttentionSurface(state: StoreSnapshot): AgentAttentionSurface {
   return {
@@ -127,8 +102,6 @@ export function createStructuredAttentionSurface(state: StoreSnapshot): AgentAtt
       return tab && isStructuredTab(tab)
         ? structuredAgentSessionPaneKey(tab.id, tab.entityId)
         : null
-    },
-    collectWorkspaceAttentionRemainder: (workspaceId) =>
-      collectStructuredAttentionRemainder(state, workspaceId)
+    }
   }
 }

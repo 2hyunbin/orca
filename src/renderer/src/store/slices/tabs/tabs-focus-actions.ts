@@ -1,5 +1,4 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 import {
   findTabAndWorktree,
   findTabByEntityInGroup,
@@ -57,13 +56,6 @@ export function createTabsFocusActions(
           return state
         }
         const { tab, worktreeId } = found
-        // Why: activating a terminal tab dismisses its tab-level bell — the user has moved their eyes here.
-        // Why (activeWorktree guard below): only when the tab is in the active worktree, else the unseen signal is lost (mirrors focusGroup).
-        const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
-        const nextUnreadTerminalTabs =
-          state.activeWorktreeId === worktreeId && terminalEntityId
-            ? omitRecordKeys(state.unreadTerminalTabs, [terminalEntityId])
-            : state.unreadTerminalTabs
         return {
           unifiedTabsByWorktree: {
             ...state.unifiedTabsByWorktree,
@@ -96,11 +88,7 @@ export function createTabsFocusActions(
           activeGroupIdByWorktree: {
             ...state.activeGroupIdByWorktree,
             [worktreeId]: tab.groupId
-          },
-          // Why: skip writing unreadTerminalTabs when the reference is unchanged, avoiding a no-op alloc that re-runs full-state selectors.
-          ...(nextUnreadTerminalTabs !== state.unreadTerminalTabs
-            ? { unreadTerminalTabs: nextUnreadTerminalTabs }
-            : {})
+          }
         }
       })
     }

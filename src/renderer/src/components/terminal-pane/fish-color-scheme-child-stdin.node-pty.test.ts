@@ -188,7 +188,6 @@ function createDeps(): Record<string, unknown> {
     clearRuntimePaneTitle: vi.fn(),
     updateTabPtyId: vi.fn(),
     markTerminalBell: vi.fn(),
-    readTerminalPaneOnInput: vi.fn(),
     dispatchNotification: vi.fn(),
     onShowSessionRestoredBanner: vi.fn(),
     setCacheTimerStartedAt: vi.fn(),

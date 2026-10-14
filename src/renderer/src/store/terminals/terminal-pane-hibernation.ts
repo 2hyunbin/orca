@@ -15,6 +15,7 @@ import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './termin
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
 import { resolveTerminalStopRuntimeEnvironmentId } from './terminal-workspace-routing'
 import { removePanesAttention } from '../slices/workspace-attention/subject-attention-transitions'
+import { settleRemovedAttention } from '../slices/workspace-attention/attention-removal-follow-up'
 
 export function createTerminalPaneHibernationActions(
   set: TerminalStoreSet,
@@ -170,6 +171,7 @@ export function createTerminalPaneHibernationActions(
           snapshot.commit?.()
         }
       }
+      const attentionBefore = get()
       set((s) => {
         const existingPtyIds = s.ptyIdsByTabId[opts.tabId] ?? []
         const shutdownPtyIdSet = new Set(rendererShutdownPtyIds)
@@ -232,6 +234,7 @@ export function createTerminalPaneHibernationActions(
           lastTerminalInputAtByPaneKey: nextLastTerminalInputAtByPaneKey
         }
       })
+      settleRemovedAttention(set, get, attentionBefore)
       get().dropHibernatedAgentStatusPane(worktreeId, opts.paneKey, {
         retainedCompletionEvidence
       })

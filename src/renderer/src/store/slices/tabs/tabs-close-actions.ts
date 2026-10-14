@@ -20,7 +20,11 @@ import {
   structuredAgentSessionFocusOwner,
   structuredAgentSessionTargetForTab
 } from '@/runtime/structured-agent-session-owner'
-import { removeTabMarkers } from '../workspace-attention/subject-attention-transitions'
+import {
+  removeTabMarkers,
+  removeTabsAttention
+} from '../workspace-attention/subject-attention-transitions'
+import { settleRemovedAttention } from '../workspace-attention/attention-removal-follow-up'
 
 export function createTabsCloseActions(
   set: TabsSliceSet,
@@ -90,6 +94,7 @@ export function createTabsCloseActions(
       )
       const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
 
+      const attentionBefore = get()
       set((current) => {
         const nextTabs = (current.unifiedTabsByWorktree[worktreeId] ?? []).filter(
           (item) => item.id !== tabId
@@ -100,6 +105,9 @@ export function createTabsCloseActions(
               ...record
             }))
           : current.unreadTerminalTabs
+        // Why: a structured chat tab owns its markers directly; nothing else retires them.
+        const structuredAttention =
+          tab.contentType === 'agent-session' ? removeTabsAttention(current, [tabId]) : null
         let nextGroups = (current.groupsByWorktree[worktreeId] ?? []).map((candidate) =>
           candidate.id === group?.id
             ? {
@@ -145,6 +153,7 @@ export function createTabsCloseActions(
           ...(nextUnreadTerminalTabs !== current.unreadTerminalTabs
             ? { unreadTerminalTabs: nextUnreadTerminalTabs }
             : {}),
+          ...structuredAttention,
           // Why: closing the last tab can leave the worktree selected but render-empty, so write the landing-state fallback directly.
           ...(shouldDeactivateWorktree
             ? {
@@ -194,6 +203,7 @@ export function createTabsCloseActions(
             : {})
         }
       })
+      settleRemovedAttention(set, get, attentionBefore)
 
       if (opts?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('terminal-tabs')

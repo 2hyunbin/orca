@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import { getDefaultSettings } from '../../../../../shared/constants'
 import type { AppState } from '../../types'
 import { persistWorktreeMeta } from '../worktrees/metadata/worktree-meta-persist'
@@ -9,6 +9,7 @@ import {
   resetFloatingWorkspaceUnreadSelectorCacheForTest,
   selectFloatingWorkspaceHasUnread
 } from '@/store/selectors'
+import { startViewedAttentionScan } from '@/hooks/viewed-attention-scan'
 
 // Store setup and observables for the unread characterization suites; the events live in the driver.
 
@@ -28,14 +29,70 @@ export type PersistCall = {
   executionHostId?: string
 }
 
-export function installAttentionMockApi(): void {
-  Object.assign(createTabsSliceMockApi(), {
-    notifications: { dismiss: vi.fn().mockResolvedValue(undefined) },
-    agentStatus: {}
+/** Returns the notifications dismiss mock the read paths call. */
+export function installAttentionMockApi(): Mock<
+  (ids: string[], paneKeys?: string[]) => Promise<void>
+> {
+  const dismiss = vi.fn<(ids: string[], paneKeys?: string[]) => Promise<void>>()
+  dismiss.mockResolvedValue(undefined)
+  Object.assign(createTabsSliceMockApi(), { notifications: { dismiss }, agentStatus: {} })
+  return dismiss
+}
+
+/** The window the production on-screen scan runs in, driven by the test. */
+export type AttentionScreen = {
+  setWindowOnScreen: (onScreen: boolean) => void
+  /** Window-level trusted input (pointerdown, keydown outside xterm). */
+  input: () => void
+  /** A keystroke into xterm, which never reaches the window listeners. */
+  terminalInput: () => void
+}
+
+const screens = new WeakMap<AttentionStore, AttentionScreen>()
+
+export function screenOf(store: AttentionStore): AttentionScreen {
+  const screen = screens.get(store)
+  if (!screen) {
+    throw new Error('store has no attention screen')
+  }
+  return screen
+}
+
+/** Runs the hook's scan against `store`; browsers' gate (no native idle query) keeps it synchronous. */
+function installAttentionScreen(store: AttentionStore, onScreen: boolean): void {
+  let windowOnScreen = onScreen
+  let rescan = (): void => {}
+  let input = (): void => {}
+  let terminalInput = (): void => {}
+  startViewedAttentionScan(store, {
+    isWindowOnScreen: () => windowOnScreen,
+    readDesktopAway: null,
+    subscribeStructuredViews: () => () => {},
+    subscribePresenceSignals: (onRescan, onInput) => {
+      rescan = onRescan
+      input = onInput
+      return () => {}
+    },
+    subscribeTerminalInput: (onInput) => {
+      terminalInput = onInput
+      return () => {}
+    }
+  })
+  screens.set(store, {
+    setWindowOnScreen: (next) => {
+      windowOnScreen = next
+      rescan()
+    },
+    input: () => input(),
+    terminalInput: () => terminalInput()
   })
 }
 
-export function createAttentionStore(options?: { experimental?: boolean }): {
+export function createAttentionStore(options?: {
+  experimental?: boolean
+  /** Orca's window starts visible and focused unless false. */
+  windowOnScreen?: boolean
+}): {
   store: AttentionStore
   persists: () => PersistCall[]
 } {
@@ -67,6 +124,7 @@ export function createAttentionStore(options?: { experimental?: boolean }): {
     },
     updateFolderWorkspace
   })
+  installAttentionScreen(store, options?.windowOnScreen !== false)
   return {
     store,
     persists: () => {

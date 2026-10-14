@@ -72,7 +72,7 @@ describe('setActiveWorktree', () => {
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
   })
 
-  it('clears unread on selection without manufacturing smart-sort activity', () => {
+  it('reads the flag of a selected workspace on screen without manufacturing smart-sort activity', () => {
     const store = createTestStore()
     const worktreeId = 'repo1::/path/wt1'
     const lastActivityAt = 123456
@@ -93,6 +93,9 @@ describe('setActiveWorktree', () => {
     })
 
     store.getState().setActiveWorktree(worktreeId)
+    expect(store.getState().worktreesByRepo.repo1[0].isUnread).toBe(true)
+    // The on-screen scan's arrival read.
+    store.getState().readOnScreenAttention([{ worktreeId, tabId: 'none' }], { settleFlags: true })
 
     const worktree = store.getState().worktreesByRepo.repo1[0]
     expect(worktree.isUnread).toBe(false)

@@ -17,16 +17,18 @@ import {
 } from '../../stale-runtime-host-rows'
 import { buildWorktreePurgeState } from './worktree-purge-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
+import { settleRemovedAttention } from '../../workspace-attention/attention-removal-follow-up'
 
 export function createPurgeStaleRuntimeHostState(
   set: WorktreeSliceSet,
-  _get: WorktreeSliceGet
+  get: WorktreeSliceGet
 ): WorktreeSlice['purgeStaleRuntimeHostState'] {
   return (removedEnvironmentIds) => {
     const removed = new Set(removedEnvironmentIds)
     if (removed.size === 0) {
       return
     }
+    const attentionBefore = get()
     set((s) => {
       const repoIdsWithRemovedOwners = new Set<string>()
       const survivingRepoIds = new Set<string>()
@@ -292,5 +294,6 @@ export function createPurgeStaleRuntimeHostState(
           : {})
       }
     })
+    settleRemovedAttention(set, get, attentionBefore)
   }
 }

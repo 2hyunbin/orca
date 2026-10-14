@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { resolveAutoAckTabTargets } from '@/hooks/agent-auto-ack-targets'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { createTabsSliceMockApi } from './tabs-slice-test-harness'
 import { createTestStore, makeOpenFile } from './store-test-helpers'
@@ -52,15 +53,14 @@ describe('TabsSlice', () => {
       expect(store.getState().unifiedTabsByWorktree[WT][0].isPreview).toBe(false)
     })
 
-    // Why (regression): activateTab gets a *unified* tabId but the bell is keyed by entityId, so it must resolve entityId or the bell won't clear on click.
-    it('clears unreadTerminalTabs for a terminal tab when its unified tab activates', () => {
+    // Why (regression): activateTab gets a *unified* tabId but the bell is keyed by entityId, so the on-screen read must name the entityId.
+    it('puts the terminal tab on screen by entityId and leaves its marker to the on-screen read', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
       const t2 = store.getState().createUnifiedTab(WT, 'terminal')
       // t2 is active after creation; move focus to t1 so we can mark t2 unread.
       store.getState().activateTab(t1.id)
 
-      // Mark WT active: activateTab's unread-clear is guarded on activeWorktreeId so hidden-worktree activations don't swallow the signal.
-      store.setState({ activeWorktreeId: WT })
+      store.setState({ activeWorktreeId: WT, activeView: 'terminal' })
 
       // entityId is the terminal tabId that markTerminalBell / TabBar read from.
       const t2TerminalId = t2.entityId
@@ -74,11 +74,14 @@ describe('TabsSlice', () => {
 
       store.getState().activateTab(t2.id)
 
-      expect(store.getState().unreadTerminalTabs[t2TerminalId]).toBeUndefined()
+      expect(store.getState().unreadTerminalTabs[t2TerminalId]).toBe(true)
+      expect(resolveAutoAckTabTargets(store.getState())).toEqual([
+        { tabId: t2TerminalId, worktreeId: WT, surfaceKind: 'terminal' }
+      ])
     })
   })
 
-  // Ghostty "show until interact": BEL always marks unread (even focused/visible tabs); only user interaction via readTerminalPaneOnInput dismisses it.
+  // Ghostty "show until interact": BEL always marks unread (even focused/visible tabs); the on-screen read dismisses it.
   describe('lastFocusedAt', () => {
     it('stamps a newly created tab that activates', () => {
       const before = Date.now()
@@ -286,15 +289,15 @@ describe('TabsSlice', () => {
     })
   })
 
-  // Called on real user interaction (xterm onData keystroke or pointerdown) — the dismissal half of show-until-interact.
-  describe('readTerminalPaneOnInput tab marker', () => {
+  // The on-screen scan's read of a visible tab.
+  describe('readOnScreenAttention tab marker', () => {
     it('removes the tab from unreadTerminalTabs', () => {
       const tabId = 'bell-tab-1'
       store.setState({
         unreadTerminalTabs: { [tabId]: true as const, 'other-tab': true as const }
       })
 
-      store.getState().readTerminalPaneOnInput({ worktreeId: WT, tabId: tabId, paneKey: null })
+      store.getState().readOnScreenAttention([{ worktreeId: WT, tabId }], { settleFlags: false })
 
       expect(store.getState().unreadTerminalTabs).toEqual({ 'other-tab': true })
     })
@@ -305,7 +308,7 @@ describe('TabsSlice', () => {
 
       store
         .getState()
-        .readTerminalPaneOnInput({ worktreeId: WT, tabId: 'bell-tab-1', paneKey: null })
+        .readOnScreenAttention([{ worktreeId: WT, tabId: 'bell-tab-1' }], { settleFlags: false })
 
       // Same reference => no-op. Downstream selectors must not re-render.
       expect(store.getState().unreadTerminalTabs).toBe(initial)
@@ -356,8 +359,8 @@ describe('TabsSlice', () => {
       expect(store.getState().activeTabTypeByWorktree).toBe(before.activeTabTypeByWorktree)
     })
 
-    // Why: focusGroup fires on every pointerdown in the group chrome, so clearing the tab-level bell here is safe — the user is now viewing it.
-    it("clears the tab-level bell on the focused group's active tab", () => {
+    // Why: focusGroup fires on every pointerdown in the group chrome; it moves what is on screen and the scan reads it.
+    it("puts the focused group's active tab on screen", () => {
       const tabA = store.getState().createUnifiedTab(WT, 'terminal')
       const groupAId = store.getState().groupsByWorktree[WT][0].id
       const groupBId = store.getState().createEmptySplitGroup(WT, groupAId, 'right')
@@ -368,20 +371,21 @@ describe('TabsSlice', () => {
       // Focus Group B first so the active group is not A.
       store.getState().focusGroup(WT, groupBId)
 
-      // Mark WT active: focusGroup's unread-clear is guarded on activeWorktreeId to avoid swallowing bells in hidden worktrees.
       store.setState({
         unreadTerminalTabs: { [tabA.entityId]: true as const },
-        activeWorktreeId: WT
+        activeWorktreeId: WT,
+        activeView: 'terminal'
       })
 
       // Clicking Group A's chrome re-focuses it without calling activateTab (active tab unchanged).
       store.getState().focusGroup(WT, groupAId)
 
-      // Tab-level bell cleared — the user is now viewing this tab.
-      expect(store.getState().unreadTerminalTabs[tabA.entityId]).toBeUndefined()
+      expect(resolveAutoAckTabTargets(store.getState())).toEqual([
+        { tabId: tabA.entityId, worktreeId: WT, surfaceKind: 'terminal' }
+      ])
     })
 
-    it('clears unread on every visible terminal tab across split groups', () => {
+    it('puts only the focused group on screen, so a split sibling keeps its marker', () => {
       const tabA = store.getState().createUnifiedTab(WT, 'terminal')
       const groupAId = store.getState().groupsByWorktree[WT][0].id
       const groupBId = store.getState().createEmptySplitGroup(WT, groupAId, 'right')
@@ -395,14 +399,16 @@ describe('TabsSlice', () => {
           [tabA.entityId]: true as const,
           [tabB.entityId]: true as const
         },
-        activeWorktreeId: WT
+        activeWorktreeId: WT,
+        activeView: 'terminal'
       })
 
-      // Why: both groups' active tabs are visible in a split, so neither keeps a stale unread bell once focused.
       store.getState().focusGroup(WT, groupAId)
 
-      expect(store.getState().unreadTerminalTabs[tabA.entityId]).toBeUndefined()
-      expect(store.getState().unreadTerminalTabs[tabB.entityId]).toBeUndefined()
+      expect(resolveAutoAckTabTargets(store.getState())).toEqual([
+        { tabId: tabA.entityId, worktreeId: WT, surfaceKind: 'terminal' }
+      ])
+      expect(store.getState().unreadTerminalTabs[tabB.entityId]).toBe(true)
     })
   })
 })

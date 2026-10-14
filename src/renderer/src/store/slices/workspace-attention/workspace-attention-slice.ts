@@ -2,7 +2,10 @@ import type { StateCreator } from 'zustand'
 import type { AgentAttentionUnreadReason } from '@/attention/agent-attention-contract'
 import type { AppState } from '../../types'
 import type { WorkspaceAttentionSlice } from './workspace-attention-contract'
-import { clearWorkspaceUnreadFlag, markWorkspaceUnreadFlag } from './workspace-unread-flag'
+import { collectRemovedAttention, dismissReadNotifications } from './attention-removal-follow-up'
+import { removeTabsAttention } from './subject-attention-transitions'
+import { markWorkspaceUnreadFlag, settleWorkspaceUnreadFlag } from './workspace-unread-flag'
+import { workspaceMarkerTabIds } from './workspace-live-markers'
 
 export const createWorkspaceAttentionSlice: StateCreator<
   AppState,
@@ -25,7 +28,7 @@ export const createWorkspaceAttentionSlice: StateCreator<
     if (!ownsTab) {
       return
     }
-    // Why: terminal attention persists until real interaction.
+    // Why: a marker stays until its tab is read on screen, Marked as read, or closed.
     set((s) =>
       s.unreadTerminalTabs[tabId]
         ? s
@@ -46,26 +49,14 @@ export const createWorkspaceAttentionSlice: StateCreator<
         : { unreadAgentCompletionPanes: { ...s.unreadAgentCompletionPanes, [paneKey]: reason } }
     )
   }
-  const clearTabUnread = (tabId: string): void => {
+  const removeMarkers = (tabIds: Iterable<string>): void => {
     set((s) => {
-      if (!s.unreadTerminalTabs[tabId]) {
-        return s
-      }
-      const copy = { ...s.unreadTerminalTabs }
-      delete copy[tabId]
-      return { unreadTerminalTabs: copy }
-    })
-  }
-  const clearPaneUnread = (paneKey: string): void => {
-    set((s) => {
-      if (!s.unreadTerminalPanes[paneKey] && !s.unreadAgentCompletionPanes[paneKey]) {
-        return s
-      }
-      const unreadTerminalPanes = { ...s.unreadTerminalPanes }
-      const unreadAgentCompletionPanes = { ...s.unreadAgentCompletionPanes }
-      delete unreadTerminalPanes[paneKey]
-      delete unreadAgentCompletionPanes[paneKey]
-      return { unreadTerminalPanes, unreadAgentCompletionPanes }
+      const next = removeTabsAttention(s, tabIds)
+      return next.unreadTerminalTabs === s.unreadTerminalTabs &&
+        next.unreadTerminalPanes === s.unreadTerminalPanes &&
+        next.unreadAgentCompletionPanes === s.unreadAgentCompletionPanes
+        ? s
+        : next
     })
   }
   const paneAttentionEnabled = (): boolean => get().settings?.experimentalTerminalAttention === true
@@ -75,7 +66,8 @@ export const createWorkspaceAttentionSlice: StateCreator<
     unreadTerminalPanes: {},
     unreadAgentCompletionPanes: {},
     markTerminalBell: ({ worktreeId, tabId, paneKey }) => {
-      // Why: a bell is authoritative PTY output, so it marks even the pane the user is watching.
+      // Why: a bell is authoritative PTY output, so it marks even the pane the user is watching;
+      // the on-screen read then reads it.
       markWorkspaceUnreadFlag(set, get, worktreeId)
       markTabUnread(tabId, 'terminal-bell')
       if (paneAttentionEnabled()) {
@@ -95,24 +87,40 @@ export const createWorkspaceAttentionSlice: StateCreator<
         markPaneUnread(subjectKey, reason)
       }
     },
-    readTerminalPaneOnInput: ({ worktreeId, tabId, paneKey }) => {
-      clearTabUnread(tabId)
-      if (paneKey !== null) {
-        clearPaneUnread(paneKey)
+    readOnScreenAttention: (targets, { settleFlags }) => {
+      const before = get()
+      removeMarkers(targets.map((target) => target.tabId))
+      const removed = collectRemovedAttention(before, get())
+      // Why the targets' own workspaces: a tab id two workspaces share must settle the one on screen.
+      // `settleFlags` also reads a flag with no marker behind it (Mark as unread, restart, another
+      // client) when its workspace comes on screen, not on every later scan of the same screen.
+      if (removed || settleFlags) {
+        const { activeWorktreeId, activeWorkspaceExecutionHostId } = get()
+        for (const { worktreeId } of targets) {
+          if (worktreeId !== null) {
+            settleWorkspaceUnreadFlag(
+              set,
+              get,
+              worktreeId,
+              worktreeId === activeWorktreeId ? activeWorkspaceExecutionHostId : null
+            )
+          }
+        }
       }
-      clearWorkspaceUnreadFlag(set, get, worktreeId)
-    },
-    readViewedAgentAttention: ({ workspaceIdToClear, groupId, subjectKeys }) => {
-      if (workspaceIdToClear !== null) {
-        clearWorkspaceUnreadFlag(set, get, workspaceIdToClear)
-      }
-      clearTabUnread(groupId)
-      for (const subjectKey of subjectKeys) {
-        clearPaneUnread(subjectKey)
+      if (removed) {
+        dismissReadNotifications(removed.paneKeys)
       }
     },
     setWorkspaceUnreadByUser: (worktreeId, isUnread, executionHostId) => {
-      // Why: a manual toggle is host-scoped, unlike engagement which reads every row with the id.
+      if (!isUnread) {
+        const before = get()
+        removeMarkers(workspaceMarkerTabIds(before, worktreeId))
+        const removed = collectRemovedAttention(before, get())
+        if (removed) {
+          dismissReadNotifications(removed.paneKeys)
+        }
+      }
+      // Why: a manual toggle is host-scoped, unlike reads, which settle every row with the id.
       void get().updateWorktreeMeta(worktreeId, { isUnread }, { executionHostId })
     }
   }

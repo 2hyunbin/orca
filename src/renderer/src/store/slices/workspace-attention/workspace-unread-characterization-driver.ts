@@ -3,7 +3,11 @@ import { applyAgentAttention, resolveAgentAttention } from '@/attention/agent-at
 import { createTerminalAttentionSurface } from '@/components/terminal-pane/terminal-attention-surface'
 import { acknowledgeViewedAutoAckTarget } from '@/hooks/agent-auto-ack-surfaces'
 import { isWorkspaceUnread } from './workspace-unread-selector'
-import type { AttentionStore, PaneTarget } from './workspace-unread-characterization-fixture'
+import {
+  screenOf,
+  type AttentionStore,
+  type PaneTarget
+} from './workspace-unread-characterization-fixture'
 
 // Why a driver: each user/system event is replayed here exactly as its production call site
 // issues it, so the scenario expectations in the characterization suites never change when a
@@ -50,17 +54,22 @@ export function completeAgentTurn(
   })
 }
 
-/** terminal-keydown-fit.ts: a keydown that produces real terminal input. */
-export function typeInPane(store: AttentionStore, target: PaneTarget): void {
-  store.getState().readTerminalPaneOnInput(target)
+/** terminal-keydown-fit.ts: a keydown that produces real terminal input; only a presence signal. */
+export function typeInPane(store: AttentionStore, _target: PaneTarget): void {
+  screenOf(store).terminalInput()
 }
 
-/** use-terminal-pane-title-effects.ts: pointerdown in a tab; `paneKey` null when no leaf was hit. */
+/** A pointerdown anywhere in the window: the scan's trusted-input presence signal. */
 export function pointerDownInTab(
   store: AttentionStore,
-  target: { worktreeId: string; tabId: string; paneKey: string | null }
+  _target: { worktreeId: string; tabId: string; paneKey: string | null }
 ): void {
-  store.getState().readTerminalPaneOnInput(target)
+  screenOf(store).input()
+}
+
+/** Orca's window gains or loses visibility+focus. */
+export function setWindowOnScreen(store: AttentionStore, onScreen: boolean): void {
+  screenOf(store).setWindowOnScreen(onScreen)
 }
 
 /** Sidebar quick action and context menu "Mark as read/unread". */
@@ -71,7 +80,7 @@ export function toggleUnreadByUser(
   store.getState().setWorkspaceUnreadByUser(row.id, !isWorkspaceUnread(row), row.hostId ?? 'local')
 }
 
-/** useAutoAckViewedAgent: the viewed terminal tab's agent is acknowledged. */
+/** useAutoAckViewedAgent: the viewed terminal tab's agent is acknowledged (markers are the scan's). */
 export function autoAckViewedTab(store: AttentionStore, target: PaneTarget): void {
   acknowledgeViewedAutoAckTarget(store.getState(), {
     tabId: target.tabId,

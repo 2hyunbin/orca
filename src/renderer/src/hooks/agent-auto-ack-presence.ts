@@ -51,3 +51,19 @@ export function subscribeAutoAckPresenceSignals(
     }
   }
 }
+
+const terminalInputListeners = new Set<() => void>()
+
+/** A keystroke that will reach a terminal; xterm stops it before the window listeners above. */
+export function signalTerminalInputPresence(): void {
+  for (const listener of terminalInputListeners) {
+    listener()
+  }
+}
+
+export function subscribeTerminalInputPresence(onInput: () => void): () => void {
+  terminalInputListeners.add(onInput)
+  return () => {
+    terminalInputListeners.delete(onInput)
+  }
+}

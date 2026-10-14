@@ -16,10 +16,6 @@ import {
   worktreeWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
 import { findKnownWorktreeById } from '../listing/detected-worktree-meta'
-import {
-  persistWorkspaceReadOnActivation,
-  readWorkspaceFlagOnActivation
-} from '../../workspace-attention/workspace-unread-flag'
 import { resolveActivatedWorktreeSurface } from './active-worktree-surface'
 import { clearWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import {
@@ -50,7 +46,6 @@ export function createSetActiveWorktree(
     if (get().activeWorktreeId !== worktreeId) {
       moveFocusToRendererBeforeFocusedWebviewHidden()
     }
-    let shouldClearUnread = false
     let shouldPrepareTerminalTabs = false
     let shouldTagTerminalTabs = false
     set((current) => {
@@ -78,8 +73,6 @@ export function createSetActiveWorktree(
       }
 
       const worktree = findKnownWorktreeById(s, worktreeId, executionHostId)
-      const unreadRead = readWorkspaceFlagOnActivation(s, worktreeId, executionHostId, worktree)
-      shouldClearUnread = unreadRead !== null
       const {
         restoredRightSidebarExplorerView,
         activeFileId,
@@ -113,9 +106,6 @@ export function createSetActiveWorktree(
       const nextEverActivated = isFirstActivation
         ? new Set([...s.everActivatedWorktreeIds, worktreeId!])
         : s.everActivatedWorktreeIds
-      const nextWorktrees = unreadRead?.worktreesByRepo ?? s.worktreesByRepo
-      const nextDetectedWorktrees = unreadRead?.detectedWorktreesByRepo ?? s.detectedWorktreesByRepo
-      const nextFolderWorkspaces = unreadRead?.folderWorkspaces ?? s.folderWorkspaces
       const nextActiveRepoId =
         workspaceScope?.type === 'folder'
           ? null
@@ -158,9 +148,6 @@ export function createSetActiveWorktree(
         s.activeTabId !== activeTabId ||
         nextActiveTabTypeByWorktree !== s.activeTabTypeByWorktree ||
         nextEverActivated !== s.everActivatedWorktreeIds ||
-        nextWorktrees !== s.worktreesByRepo ||
-        nextDetectedWorktrees !== s.detectedWorktreesByRepo ||
-        nextFolderWorkspaces !== s.folderWorkspaces ||
         nextActiveRepoId !== s.activeRepoId ||
         allDead ||
         reconciliationChanged ||
@@ -187,13 +174,6 @@ export function createSetActiveWorktree(
         rightSidebarExplorerView: restoredRightSidebarExplorerView,
         activeTabId,
         everActivatedWorktreeIds: nextEverActivated,
-        ...(nextWorktrees !== s.worktreesByRepo ? { worktreesByRepo: nextWorktrees } : {}),
-        ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo
-          ? { detectedWorktreesByRepo: nextDetectedWorktrees }
-          : {}),
-        ...(nextFolderWorkspaces !== s.folderWorkspaces
-          ? { folderWorkspaces: nextFolderWorkspaces }
-          : {}),
         ...tabsByWorktreeUpdate
       }
     })
@@ -260,14 +240,6 @@ export function createSetActiveWorktree(
     // Why: activation is explicit enough to revalidate PR state now; the coordinator still coalesces and rate-guards.
     if (worktreeId && workspaceScope?.type !== 'folder') {
       get().refreshGitHubForWorktreeIfStale(worktreeId)
-    }
-
-    if (!worktreeId || !get().getKnownWorktreeById(worktreeId, executionHostId)) {
-      return true
-    }
-
-    if (shouldClearUnread) {
-      persistWorkspaceReadOnActivation(get, worktreeId, executionHostId)
     }
     return true
   }
