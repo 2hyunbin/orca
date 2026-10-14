@@ -39,8 +39,9 @@ function toPosix(value: string): string {
   return value.replace(/\\/g, '/')
 }
 
+/** `C:trees` is drive-relative, i.e. on Windows; left as it is. */
 function isRelative(value: string): boolean {
-  return !/^(?:[A-Za-z]:)?[\\/]/.test(value)
+  return !/^(?:[A-Za-z]:|[\\/])/.test(value)
 }
 
 function decodeSegment(segment: string): string {

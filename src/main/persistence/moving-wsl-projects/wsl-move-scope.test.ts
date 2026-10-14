@@ -72,6 +72,42 @@ describe('collectWslMoveScope', () => {
     expect(scope).toEqual({ repoIds: [], folderWorkspaceIds: [], refused: [] })
   })
 
+  it('refuses a Windows repo that keeps a path in the distro, and a drive-relative base', () => {
+    const scope = collectWslMoveScope(
+      {
+        repos: [
+          repo('win-with-wsl-base', 'C:\\src\\app', { worktreeBasePath: unc('/home/dev/trees') }),
+          repo('drive-relative', unc('/home/dev/a'), { worktreeBasePath: 'C:trees' })
+        ],
+        folderWorkspaces: [],
+        projectGroups: []
+      },
+      'Ubuntu'
+    )
+    expect(scope.refused).toEqual([
+      { kind: 'repo', id: 'win-with-wsl-base', reason: 'mixed-locations' },
+      { kind: 'repo', id: 'drive-relative', reason: 'mixed-locations' }
+    ])
+  })
+
+  it('judges each folder workspace by its own row when two hosts share an id', () => {
+    const scope = collectWslMoveScope(
+      {
+        repos: [],
+        folderWorkspaces: [
+          folder('shared-id', unc('/srv/local')),
+          folder('shared-id', unc('/srv/remote'), { executionHostId: 'ssh:target' })
+        ],
+        projectGroups: []
+      },
+      'Ubuntu'
+    )
+    expect(scope.folderWorkspaceIds).toEqual(['shared-id'])
+    expect(scope.refused).toEqual([
+      { kind: 'folder-workspace', id: 'shared-id', reason: 'not-local' }
+    ])
+  })
+
   it('refuses, with the reason, what touches the distro but breaks the rule', () => {
     const scope = collectWslMoveScope(
       {
@@ -122,6 +158,7 @@ describe('createUncToLinuxPathRewriter', () => {
     ['../worktrees', 'maybe-absolute', '../worktrees'],
     ['..\\worktrees', 'maybe-absolute', '../worktrees'],
     ['C:\\trees', 'maybe-absolute', 'C:\\trees'],
+    ['C:trees\\x', 'maybe-absolute', 'C:trees\\x'],
     ['file://wsl.localhost/My%20Ubuntu/a.html', 'url', 'file://wsl.localhost/My%20Ubuntu/a.html'],
     ['src\\main\\a.ts', 'relative', 'src/main/a.ts'],
     ['file://wsl.localhost/Ubuntu/home/a.html', 'url', 'file:///home/a.html'],

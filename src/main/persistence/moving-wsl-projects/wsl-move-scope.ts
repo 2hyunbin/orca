@@ -36,10 +36,12 @@ type WslMoveScopeState = {
 export function collectWslMoveScope(state: WslMoveScopeState, distro: string): WslMoveScope {
   const scope: WslMoveScope = { repoIds: [], folderWorkspaceIds: [], refused: [] }
   for (const repo of state.repos) {
-    if (wslUncPathToLinux(repo.path, distro) === null) {
+    const paths = repoPaths(repo)
+    // A repo outside the distro that keeps any path inside it is refused, not skipped.
+    if (!paths.some((path) => wslUncPathToLinux(path, distro) !== null)) {
       continue
     }
-    const reason = refusalFor(repoPaths(repo), distro, getRepoExecutionHostId(repo) !== 'local')
+    const reason = refusalFor(paths, distro, getRepoExecutionHostId(repo) !== 'local')
     if (reason) {
       scope.refused.push({ kind: 'repo', id: repo.id, reason })
     } else {
@@ -48,14 +50,16 @@ export function collectWslMoveScope(state: WslMoveScopeState, distro: string): W
   }
   const hostState = {
     repos: [...state.repos],
-    folderWorkspaces: [...state.folderWorkspaces],
     projectGroups: [...state.projectGroups]
   }
   for (const workspace of state.folderWorkspaces) {
     if (wslUncPathToLinux(workspace.folderPath, distro) === null) {
       continue
     }
-    const remote = resolveFolderWorkspaceHost(hostState, workspace.id).kind !== 'local'
+    // This row alone: another host may hold a folder workspace with the same id.
+    const remote =
+      resolveFolderWorkspaceHost({ ...hostState, folderWorkspaces: [workspace] }, workspace.id)
+        .kind !== 'local'
     const reason = refusalFor([workspace.folderPath], distro, remote)
     if (reason) {
       scope.refused.push({ kind: 'folder-workspace', id: workspace.id, reason })
@@ -82,8 +86,9 @@ function repoPaths(repo: Repo): string[] {
   ]
 }
 
+/** `C:trees` is drive-relative, i.e. on Windows, not beside the repo. */
 function isRelative(path: string): boolean {
-  return !/^(?:[A-Za-z]:)?[\\/]/.test(path)
+  return !/^(?:[A-Za-z]:|[\\/])/.test(path)
 }
 
 /** `repoUnc` joined with a relative base, kept in UNC form so the distro check still applies. */
