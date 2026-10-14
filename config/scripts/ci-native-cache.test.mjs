@@ -187,7 +187,7 @@ describe('CI native cache ownership', () => {
     const cliWait = steps.find((step) => step.wait === 'e2e-cli')
     const electron = steps.find((step) => step.id === 'electron-native-runtime')
     const upload = steps.find((step) => step.name === 'Upload E2E build output')
-    const nativeWait = steps.find((step) => step.wait === electron.id)
+    const uploadWait = steps.find((step) => step.wait === upload.id)
     expect(install.with).toMatchObject({
       'native-runtime': 'node',
       'persist-native-cache': 'false',
@@ -199,17 +199,19 @@ describe('CI native cache ownership', () => {
       key: '${{ steps.deps.outputs.native-cache-key }}',
       path: '${{ steps.deps.outputs.native-cache-path }}'
     })
-    const ordered = [install, save, build, cliWait, electron, upload, nativeWait]
+    const ordered = [install, save, build, cliWait, upload, electron, uploadWait]
     expect(ordered.map((step) => steps.indexOf(step))).toEqual(
       ordered.map((step) => steps.indexOf(step)).sort((left, right) => left - right)
     )
-    expect(electron.background).toBe(true)
+    expect(upload.background).toBe(true)
+    expect(upload.if).toBeUndefined()
+    expect(electron.background).toBeUndefined()
     expect(electron.uses).toBe('./.github/actions/prepare-native-runtime')
     expect(electron.with).toEqual({
       'native-runtime': 'electron',
       'node-version': '${{ steps.deps.outputs.node-version }}'
     })
-    expect(nativeWait).toEqual({ wait: electron.id })
+    expect(uploadWait).toEqual({ wait: upload.id })
     for (const name of ['e2e', 'changed-e2e', 'orcad-serve-mode-switch', 'orcad-ssh-docker']) {
       expect(e2e.jobs[name].needs, name).toEqual(['build'])
       expect(
