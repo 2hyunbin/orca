@@ -18,6 +18,8 @@ import {
   writeRuntimeEnvironmentSidecarEntry
 } from './runtime-environment-sidecar'
 import { resolveEnvironmentFromStore } from './runtime-environment-store'
+import { runtimeEnvironmentSshAccessBinding } from './runtime-environment-authority-binding'
+import { assertRuntimeEnvironmentNotReconciling } from './runtime-environment-reconciliation-record'
 
 /** Registers a server Orca deployed over SSH, paired through its own loopback tunnel. */
 export function addManagedOrcadEnvironment(
@@ -190,4 +192,47 @@ export function recordManagedOrcadMigration(
     orcadMigratedAt: latest
   })
   return resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId)
+}
+
+/** Rebind only the reviewed server's deployment generation; its pairing and history stay intact. */
+export function rebindManagedOrcadSshGeneration(
+  userDataPath: string,
+  expected: KnownRuntimeEnvironment,
+  nextGeneration: number
+): KnownRuntimeEnvironment {
+  const previous = expected.orcadDeployment
+  if (
+    !previous ||
+    !Number.isSafeInteger(nextGeneration) ||
+    nextGeneration <= previous.sshTargetGeneration
+  ) {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      'A newer managed SSH generation is required.'
+    )
+  }
+  const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), expected.id)
+  assertRuntimeEnvironmentNotReconciling(current)
+  if (
+    JSON.stringify(runtimeEnvironmentSshAccessBinding(current)) !==
+      JSON.stringify(runtimeEnvironmentSshAccessBinding(expected)) ||
+    JSON.stringify(current.orcadDeployment) !== JSON.stringify(previous)
+  ) {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      'The managed SSH server changed during endpoint review.'
+    )
+  }
+  const store = readPersistedEnvironmentStore(userDataPath)
+  const persisted = resolveEnvironmentFromStore(store, expected.id)
+  const entry = readCurrentRuntimeEnvironmentSidecarEntry(userDataPath, persisted)
+  if (!entry?.orcadDeployment) {
+    throw new RuntimeEnvironmentStoreError('invalid_argument', 'This server is not managed.')
+  }
+  const { binding: _binding, ...state } = entry
+  writeRuntimeEnvironmentSidecarEntry(userDataPath, store.environments, persisted, {
+    ...state,
+    orcadDeployment: { ...previous, sshTargetGeneration: nextGeneration }
+  })
+  return resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), expected.id)
 }

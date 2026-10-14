@@ -13,6 +13,7 @@ import {
 import {
   addManagedOrcadEnvironment,
   recordManagedOrcadMigration,
+  rebindManagedOrcadSshGeneration,
   refreshManagedOrcadPairing,
   removeManagedOrcadEnvironment
 } from './runtime-environment-managed-orcad-store'
@@ -116,6 +117,51 @@ describe('managed orcad environment store', () => {
     expect(readFileSync(getRuntimeEnvironmentSidecarPath(userDataPath), 'utf8')).not.toContain(
       'environment-1'
     )
+  })
+
+  it('rebinds a reviewed generation without changing pairing, server identity or migration history', () => {
+    const initial = add()
+    recordManagedOrcadMigration(userDataPath, initial.id, '2026-10-14T00:00:00Z')
+    const rebound = rebindManagedOrcadSshGeneration(userDataPath, initial, 5)
+    expect(rebound).toEqual({
+      ...initial,
+      orcadMigratedAt: '2026-10-14T00:00:00Z',
+      orcadDeployment: { ...deployment, sshTargetGeneration: 5 }
+    })
+    expect(readFileSync(getEnvironmentStorePath(userDataPath), 'utf8')).not.toContain(
+      'orcadDeployment'
+    )
+  })
+
+  it('refuses a stale server review after pairing changes without replacing its deployment link', () => {
+    const initial = add()
+    const rotated = encodePairingOffer({
+      v: 2,
+      endpoint: 'ws://127.0.0.1:46768',
+      deviceToken: 'rotated-token',
+      publicKeyB64: Buffer.alloc(32, 1).toString('base64')
+    })
+    const changed = refreshManagedOrcadPairing(userDataPath, initial.id, rotated, 200)
+    const before = readFileSync(getRuntimeEnvironmentSidecarPath(userDataPath), 'utf8')
+    expect(() => rebindManagedOrcadSshGeneration(userDataPath, initial, 5)).toThrow(
+      'changed during endpoint review'
+    )
+    expect(listEnvironments(userDataPath)[0]).toEqual(changed)
+    expect(readFileSync(getRuntimeEnvironmentSidecarPath(userDataPath), 'utf8')).toBe(before)
+  })
+
+  it('refuses stale generation reviews and invalid generation replacements', () => {
+    const initial = add()
+    rebindManagedOrcadSshGeneration(userDataPath, initial, 5)
+    expect(() => rebindManagedOrcadSshGeneration(userDataPath, initial, 6)).toThrow(
+      'changed during endpoint review'
+    )
+    for (const next of [0, 4, 4.5, Number.POSITIVE_INFINITY]) {
+      expect(() => rebindManagedOrcadSshGeneration(userDataPath, initial, next)).toThrow(
+        'newer managed SSH generation'
+      )
+    }
+    expect(listEnvironments(userDataPath)[0]?.orcadDeployment?.sshTargetGeneration).toBe(5)
   })
 
   it('leaves an unchanged pairing alone and re-binds the link when the offer rotates', () => {
