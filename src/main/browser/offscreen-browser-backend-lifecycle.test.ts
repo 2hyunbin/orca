@@ -55,8 +55,7 @@ class MockBrowserWindow {
 vi.mock('electron', () => ({ BrowserWindow: mocks.BrowserWindow }))
 vi.mock('./browser-session-registry', () => ({
   browserSessionRegistry: {
-    getDefaultProfile: vi.fn(() => ({ id: 'default', partition: 'persist:orca-browser' })),
-    getProfile: vi.fn((id: string) => ({ id, partition: `persist:orca-browser-${id}` }))
+    getDefaultProfile: vi.fn(() => ({ id: 'default', partition: 'persist:orca-browser' }))
   }
 }))
 
@@ -138,43 +137,25 @@ describe('OffscreenBrowserBackend lifecycle', () => {
     vi.useRealTimers()
   })
 
-  it('reports a page when it opens, then each committed navigation separately', async () => {
-    const onPageOpened = vi.fn()
+  it('reports each committed navigation, so a saved tab can follow its page', async () => {
     const onPageNavigated = vi.fn()
     const browserManager = {
       registerOffscreenGuest: vi.fn(registerOffscreenGuestLikeBrowserManager),
       unregisterGuest: vi.fn()
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: createTab reads only these two BrowserManager members.
-    const backend = new OffscreenBrowserBackend(browserManager as never, {
-      onPageOpened,
-      onPageNavigated
-    })
+    const backend = new OffscreenBrowserBackend(browserManager as never, { onPageNavigated })
 
     await backend.createTab({
       browserPageId: 'page-1',
       url: 'https://example.com/a',
-      worktreeId: 'wt',
-      profileId: 'work',
-      groupId: 'group-2'
+      worktreeId: 'wt'
     })
     const webContents = mocks.windows[0].webContents
     webContents.url = 'https://example.com/b'
     webContents.title = 'B'
     webContents.emit('did-stop-loading')
 
-    expect(onPageOpened.mock.calls).toEqual([
-      [
-        {
-          worktreeId: 'wt',
-          pageId: 'page-1',
-          url: 'https://example.com/a',
-          title: '',
-          profileId: 'work',
-          groupId: 'group-2'
-        }
-      ]
-    ])
     expect(onPageNavigated.mock.calls).toEqual([
       [{ worktreeId: 'wt', pageId: 'page-1', url: 'https://example.com/b', title: 'B' }]
     ])

@@ -158,7 +158,7 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
 
   // Why: background-mount the worktree via a hidden visibility lease so the webview guest can register without stealing the user's visible pane.
   private async ensureBrowserWorktreeActive(worktreeId: string | undefined): Promise<void> {
-    if (await this.host.startSavedBrowserPage?.(worktreeId, undefined)) {
+    if (await this.host.serveBrowserTabs?.start(worktreeId, undefined)) {
       return
     }
     const win = this.host.getAuthoritativeWindow()
@@ -171,7 +171,7 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
     worktreeId: string | undefined,
     browserPageId: string
   ): Promise<void> {
-    if (await this.host.startSavedBrowserPage?.(worktreeId, browserPageId)) {
+    if (await this.host.serveBrowserTabs?.start(worktreeId, browserPageId)) {
       return
     }
     const win = this.host.getAuthoritativeWindow()

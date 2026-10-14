@@ -7,7 +7,7 @@ import type { BrowserBackend, BrowserBackendCreateTab } from './browser-backend'
 import type { BrowserManager } from './browser-manager'
 import type { AgentBrowserBridge } from './agent-browser-bridge'
 import { browserSessionRegistry } from './browser-session-registry'
-import type { ServeBrowserPage, ServeBrowserPageState } from '../runtime/serve-browser-tab-layout'
+import type { ServeBrowserPageState } from '../runtime/serve-browser-tab-layout'
 
 // Why: headless orca serve has no renderer window to host a <webview>, so each
 // browser page is backed by a main-process offscreen BrowserWindow. The window
@@ -32,8 +32,6 @@ export class OffscreenBrowserBackend implements BrowserBackend {
     private readonly browserManager: BrowserManager,
     private readonly options: {
       getAgentBrowserBridge?: () => Pick<AgentBrowserBridge, 'onPageClosed'> | null
-      /** A page was created. */
-      onPageOpened?: (page: ServeBrowserPage) => void
       /** A page's committed address or title changed, so its saved tab can follow. */
       onPageNavigated?: (page: ServeBrowserPageState) => void
     } = {}
@@ -109,18 +107,10 @@ export class OffscreenBrowserBackend implements BrowserBackend {
     })
 
     const { worktreeId } = params
-    const { onPageOpened, onPageNavigated } = this.options
-    if (worktreeId) {
-      onPageOpened?.({
-        worktreeId,
-        pageId: browserPageId,
-        url: params.url || 'about:blank',
-        title: '',
-        ...(params.profileId ? { profileId: params.profileId } : {}),
-        ...(params.groupId ? { groupId: params.groupId } : {})
-      })
+    const { onPageNavigated } = this.options
+    if (worktreeId && onPageNavigated) {
       const report = (): void =>
-        onPageNavigated?.({
+        onPageNavigated({
           worktreeId,
           pageId: browserPageId,
           url: win.webContents.getURL(),

@@ -37,14 +37,18 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
   protected buildHeadlessMobileSessionBrowserTabs(
     worktreeId: string
   ): RuntimeMobileSessionBrowserTab[] {
+    // Saved tabs whose page starts on first use are listed as running ones are.
     const serverTabs =
       this.offscreenBrowserBackend && this.agentBrowserBridge?.tabList
-        ? this.agentBrowserBridge.tabList(worktreeId).tabs
+        ? [
+            ...this.agentBrowserBridge.tabList(worktreeId).tabs,
+            ...this.serveBrowserTabs.listUnstarted(worktreeId)
+          ]
         : []
     const publishedServerTabs = serverTabs.map((tab) => {
       const persistedProps = this.getPersistedUnifiedSessionTabProps(
         worktreeId,
-        this.serveBrowserTabs.savedTabId(worktreeId, tab.browserPageId) ?? tab.browserPageId
+        this.serveBrowserTabs.unifiedTabId(worktreeId, tab.browserPageId)
       )
       return {
         type: 'browser' as const,
@@ -82,24 +86,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         canGoForward: page.canGoForward,
         isActive: page.active
       }))
-    const publishedSavedTabs = this.serveBrowserTabs.listRestorable(worktreeId).map((page) => {
-      const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.tabId)
-      return {
-        type: 'browser' as const,
-        id: page.pageId,
-        title: page.title || page.url || 'Browser',
-        browserWorkspaceId: page.pageId,
-        browserPageId: page.pageId,
-        url: page.url || 'about:blank',
-        loading: false,
-        canGoBack: false,
-        canGoForward: false,
-        ...(persistedProps ? { color: persistedProps.color } : {}),
-        ...(persistedProps ? { isPinned: persistedProps.isPinned === true } : {}),
-        isActive: false
-      }
-    })
-    return [...publishedServerTabs, ...publishedClientTabs, ...publishedSavedTabs]
+    return [...publishedServerTabs, ...publishedClientTabs]
   }
 
   protected getPersistedUnifiedSessionTabProps(

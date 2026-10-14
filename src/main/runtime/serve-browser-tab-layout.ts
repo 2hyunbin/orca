@@ -19,9 +19,6 @@ export type ServeBrowserPageState = {
   title: string
 }
 
-/** A page as the backend that runs it reports it; profile and group matter only when it opens. */
-export type ServeBrowserPage = ServeBrowserPageState & { profileId?: string; groupId?: string }
-
 /** The saved browser tab showing this page, and the page; a host's own tab is named by its page. */
 export function findSavedBrowserPage(
   session: WorkspaceSessionState,
@@ -41,7 +38,7 @@ export function findSavedBrowserPage(
 export function withOpenedServeBrowserTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
-  page: ServeBrowserPage
+  page: ServeBrowserPageState & { profileId?: string; groupId?: string }
 ): WorkspaceSessionState | null {
   if (findSavedBrowserPage(session, page.worktreeId, page.pageId)) {
     return null

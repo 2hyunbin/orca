@@ -43,7 +43,7 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
 
     const unifiedTabs = session.unifiedTabs?.[worktreeId]
     // A browser row is named by its page; a window keys the tab's props by the saved tab.
-    const unifiedId = this.serveBrowserTabs.savedTabId(worktreeId, tabId) ?? tabId
+    const unifiedId = this.serveBrowserTabs.unifiedTabId(worktreeId, tabId)
     if (unifiedTabs?.some((tab) => tab.id === unifiedId || tab.entityId === unifiedId)) {
       changed = true
       nextSession.unifiedTabs = {

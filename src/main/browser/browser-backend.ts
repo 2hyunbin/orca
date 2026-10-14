@@ -11,8 +11,6 @@ export type BrowserBackendCreateTab = {
   worktreeId?: string
   profileId?: string
   browserPageId?: string
-  /** The tab group a new page's saved tab opens in; a restored page keeps its own. */
-  groupId?: string
 }
 
 export type BrowserBackend = {

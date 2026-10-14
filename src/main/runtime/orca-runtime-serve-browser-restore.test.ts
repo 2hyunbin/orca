@@ -42,6 +42,7 @@ function restartedServe(session: WorkspaceSessionState = savedServeTabs()) {
       getRegisteredTabs: vi.fn(() => registered()),
       snapshot: vi.fn(async () => ({ snapshot: '' })),
       getActivePageId: vi.fn(() => livePages[0] ?? null),
+      setActiveTab: vi.fn(),
       tabSwitch: vi.fn(async (_index: unknown, _worktreeId: unknown, browserPageId: string) => ({
         switched: livePages.indexOf(browserPageId),
         browserPageId
@@ -164,18 +165,22 @@ describe('a saved browser tab on a host with no window', () => {
     expect(listed.tabs.some((tab) => tab.id === 'page-1')).toBe(false)
   })
 
+  it('is saved, as the active tab, when a client creates it', async () => {
+    const { runtime, getSession } = restartedServe(makeWorkspaceSessionWithHeadlessTerminal())
+
+    await runtime.browserTabCreate({
+      worktree: `id:${TEST_WORKTREE_ID}`,
+      url: 'https://example.com/new',
+      page: 'page-new'
+    })
+
+    const saved = getSession().browserTabsByWorktree?.[TEST_WORKTREE_ID] ?? []
+    expect(saved.map((tab) => [tab.id, tab.url])).toEqual([['page-new', 'https://example.com/new']])
+    expect(getSession().activeBrowserTabIdByWorktree?.[TEST_WORKTREE_ID]).toBe('page-new')
+  })
+
   it('keeps its saved title when its page is restored', async () => {
     const { runtime, createTab, getSession } = restartedServe()
-    // The backend reports every page it creates, a restored one included.
-    createTab.mockImplementation(async ({ browserPageId }: { browserPageId?: string }) => {
-      runtime.serveBrowserPageOpened({
-        worktreeId: TEST_WORKTREE_ID,
-        pageId: browserPageId!,
-        url: 'https://example.com/',
-        title: ''
-      })
-      return { browserPageId: browserPageId! }
-    })
 
     await runtime['serveBrowserTabs'].start(TEST_WORKTREE_ID, 'page-1')
 
@@ -186,7 +191,6 @@ describe('a saved browser tab on a host with no window', () => {
       ['page-2', 'Example']
     ])
   })
-
   it('stays closed when its page reports a navigation after the close', async () => {
     const { runtime, getSession } = restartedServe()
     await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)

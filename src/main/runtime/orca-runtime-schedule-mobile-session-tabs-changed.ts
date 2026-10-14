@@ -185,16 +185,8 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
         profileId: page.browserProfileId
       })
     }
-    for (const page of this.serveBrowserTabs.listRestorable(worktreeId)) {
-      byPageId.set(page.pageId, {
-        browserPageId: page.pageId,
-        index: byPageId.size,
-        url: page.url,
-        title: page.title,
-        active: false,
-        worktreeId,
-        ...(page.profileId ? { profileId: page.profileId } : {})
-      })
+    for (const tab of this.serveBrowserTabs.listUnstarted(worktreeId)) {
+      byPageId.set(tab.browserPageId, tab)
     }
     return byPageId
   }

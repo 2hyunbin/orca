@@ -19,6 +19,7 @@ import type { BrowserWindow } from 'electron'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
 import type { RpcBinarySender } from './rpc/rpc-binary-sender'
+import type { ServeBrowserTabs } from './serve-browser-tabs'
 
 export type BrowserCommandTargetParams = {
   worktree?: string
@@ -190,9 +191,6 @@ export type RuntimeBrowserCommandHost = {
   notifyHeadlessBrowserSessionTabsChanged?(worktreeId: string): void
   /** True when a runtime-owned session row for that page existed and was retired. */
   retireRuntimeOwnedBrowserSessionTab?(worktreeId: string, browserPageId: string): boolean | void
-  /** With no window, starts a saved tab's page where a window would mount it; false when none. */
-  startSavedBrowserPage?(
-    worktreeId: string | undefined,
-    browserPageId: string | undefined
-  ): Promise<boolean>
+  /** Saved browser tabs on a host with no window; their writes and starts do nothing with one. */
+  serveBrowserTabs?: Pick<ServeBrowserTabs, 'opened' | 'start'>
 }

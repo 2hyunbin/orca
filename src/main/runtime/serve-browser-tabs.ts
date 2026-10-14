@@ -4,17 +4,17 @@
 
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { ExecutionHostId } from '../../shared/execution-host'
+import type { BrowserTabInfo } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   findSavedBrowserPage,
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
   withServeBrowserPageState,
-  type ServeBrowserPage,
   type ServeBrowserPageState
 } from './serve-browser-tab-layout'
 
-export type RestorableBrowserPage = {
+type RestorableBrowserPage = {
   /** The saved tab; a host's own tab is named by its page, a window's by its own id. */
   tabId: string
   pageId: string
@@ -25,14 +25,11 @@ export type RestorableBrowserPage = {
 }
 
 export class ServeBrowserTabs {
-  private readonly restoring = new Map<string, Promise<void>>()
-
   constructor(
     private readonly deps: {
       /** The page backend while no window hosts the browser tabs, else null. */
       backend: () => BrowserBackend | null
-      /** Live pages in a worktree, or in every worktree when none is named. */
-      livePageIds: (worktreeId: string | undefined) => ReadonlySet<string>
+      livePageIds: (worktreeId: string) => ReadonlySet<string>
       /** Every workspace that holds a saved browser tab, whatever else it holds. */
       savedWorktreeIds: () => Iterable<string>
       session: (worktreeId: string) => WorkspaceSessionState | null
@@ -41,8 +38,7 @@ export class ServeBrowserTabs {
     }
   ) {}
 
-  /** A created page gets a saved tab; a restored page already has one. */
-  opened(page: ServeBrowserPage): void {
+  opened(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void {
     this.write(page.worktreeId, (hostId, session) =>
       withOpenedServeBrowserTab(hostId, session, page)
     )
@@ -60,14 +56,27 @@ export class ServeBrowserTabs {
     )
   }
 
-  /** The saved tab showing a page, which a window keys pin and colour by. */
-  savedTabId(worktreeId: string, pageId: string): string | null {
+  /** The unified tab showing a page, which a window keys pin and colour by: the saved one, else the page's. */
+  unifiedTabId(worktreeId: string, pageId: string): string {
     const session = this.deps.session(worktreeId)
-    return session ? (findSavedBrowserPage(session, worktreeId, pageId)?.tabId ?? null) : null
+    return (session && findSavedBrowserPage(session, worktreeId, pageId)?.tabId) ?? pageId
+  }
+
+  /** Saved tabs whose page has not started, listed as running tabs are. */
+  listUnstarted(worktreeId: string): BrowserTabInfo[] {
+    return this.listRestorable(worktreeId).map((page, index) => ({
+      browserPageId: page.pageId,
+      index,
+      url: page.url,
+      title: page.title,
+      active: false,
+      worktreeId,
+      ...(page.profileId ? { profileId: page.profileId } : {})
+    }))
   }
 
   /** Saved tabs whose page has not started; every worktree's when none is named. */
-  listRestorable(worktreeId: string | undefined): RestorableBrowserPage[] {
+  private listRestorable(worktreeId: string | undefined): RestorableBrowserPage[] {
     if (!this.deps.backend()) {
       return []
     }
@@ -83,11 +92,6 @@ export class ServeBrowserTabs {
    * active tab. False when there is none, so the caller reports no tab as a window does.
    */
   async start(worktreeId: string | undefined, pageId: string | undefined): Promise<boolean> {
-    const pending = pageId ? this.restoring.get(pageId) : undefined
-    if (pending) {
-      await pending
-      return true
-    }
     const found = pageId
       ? this.listRestorable(worktreeId).find((page) => page.pageId === pageId)
       : worktreeId
@@ -131,23 +135,18 @@ export class ServeBrowserTabs {
     })
   }
 
-  /** Starts the page once however many callers ask. */
+  // The backend registers the page before it returns, so a second caller finds it running.
   private async restore(page: RestorableBrowserPage): Promise<boolean> {
     const backend = this.deps.backend()
     if (!backend) {
       return false
     }
-    const started = backend
-      .createTab({
-        browserPageId: page.pageId,
-        url: page.url,
-        worktreeId: page.worktreeId,
-        ...(page.profileId ? { profileId: page.profileId } : {})
-      })
-      .then(() => undefined)
-      .finally(() => this.restoring.delete(page.pageId))
-    this.restoring.set(page.pageId, started)
-    await started
+    await backend.createTab({
+      browserPageId: page.pageId,
+      url: page.url,
+      worktreeId: page.worktreeId,
+      ...(page.profileId ? { profileId: page.profileId } : {})
+    })
     return true
   }
 

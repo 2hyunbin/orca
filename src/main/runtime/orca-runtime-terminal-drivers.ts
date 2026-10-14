@@ -16,7 +16,7 @@ import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
 import { RuntimeWorktreeBaseReconciliation } from './runtime-worktree-base-reconciliation'
 import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
 import { ServeBrowserTabs } from './serve-browser-tabs'
-import type { ServeBrowserPage, ServeBrowserPageState } from './serve-browser-tab-layout'
+import type { ServeBrowserPageState } from './serve-browser-tab-layout'
 
 export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
   // Why: per-PTY driver state. The "driver" is whoever currently owns the
@@ -52,10 +52,6 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)
   })
 
-  serveBrowserPageOpened(page: ServeBrowserPage): void {
-    this.serveBrowserTabs.opened(page)
-  }
-
   serveBrowserPageNavigated(page: ServeBrowserPageState): void {
     this.serveBrowserTabs.navigated(page)
   }
@@ -77,8 +73,7 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
         this.notifyMobileSessionTabsChanged(worktreeId),
       retireRuntimeOwnedBrowserSessionTab: (worktreeId, browserPageId) =>
         this.retireRuntimeOwnedBrowserSessionTab(worktreeId, browserPageId),
-      startSavedBrowserPage: (worktreeId, browserPageId) =>
-        this.serveBrowserTabs.start(worktreeId, browserPageId)
+      serveBrowserTabs: this.serveBrowserTabs
     },
     screencast: {
       registerSubscriptionCleanup: (subscriptionId, cleanup, connectionId) =>
