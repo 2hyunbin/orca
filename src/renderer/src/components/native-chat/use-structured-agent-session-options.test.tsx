@@ -514,9 +514,7 @@ describe('useStructuredAgentSessionOptions', () => {
           }
         }
       })
-      const { mutate, calls } = mutateWith(async () => null)
-      calls.mockResolvedValueOnce({ key: 'effort', value: 'low' })
-      calls.mockResolvedValueOnce({ key: 'model', value: 'sonnet' })
+      const { mutate } = mutateWith(async (_description, _method, fields) => fields)
       const { result, unmount } = renderOptions(
         { ...REOPENED, agent: 'claude', providerStarting: true },
         mutate
