@@ -12,24 +12,27 @@ import { RuntimeClientError } from './runtime-client'
 
 export function resolveJiraTarget(
   context: HandlerContext,
-  input: string
+  input: string,
+  options?: { siteFlag?: string }
 ): Promise<{ site: JiraSite; siteId: string; key: string }>
 export function resolveJiraTarget(
   context: HandlerContext
 ): Promise<{ site: JiraSite; siteId: string }>
 export async function resolveJiraTarget(
   context: HandlerContext,
-  input?: string
+  input?: string,
+  options: { siteFlag?: string } = {}
 ): Promise<{ site: JiraSite; siteId: string; key?: string }> {
   const parsed = input === undefined ? null : parseJiraIssueUrl(input)
   if (input !== undefined && !parsed && !JIRA_ISSUE_KEY_PATTERN.test(input.trim())) {
     throw new RuntimeClientError('invalid_argument', 'Expected a Jira issue key or browse URL.')
   }
-  const explicit = getOptionalStringFlag(context.flags, 'site')?.trim()
+  const siteFlag = options.siteFlag ?? 'site'
+  const explicit = getOptionalStringFlag(context.flags, siteFlag)?.trim()
   if (explicit === 'all') {
     throw new RuntimeClientError(
       'invalid_argument',
-      'Choose one Jira site ID; --site all is unsupported.'
+      `Choose one Jira site ID; --${siteFlag} all is unsupported.`
     )
   }
   const runtime = await context.client.call<RuntimeStatus>('status.get')
@@ -53,7 +56,7 @@ export async function resolveJiraTarget(
       'invalid_argument',
       candidates.length === 0
         ? 'No matching connected Jira site. Check orca jira connection and Orca Jira settings.'
-        : 'Multiple Jira sites match. Select one with --site using orca jira connection.'
+        : `Multiple Jira sites match. Select one with --${siteFlag} using orca jira connection.`
     )
   }
   const site = candidates[0]
