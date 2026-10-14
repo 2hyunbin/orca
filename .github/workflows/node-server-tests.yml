@@ -38,7 +38,7 @@ on:
         description: Upload each lane's release slot and merge them into the orcad-template artifact
         type: boolean
         default: false
-  # Refresh qualified Windows caches and platform coverage once a day.
+  # Requalify fresh builds daily; publish missing immutable Windows cache keys.
   schedule:
     - cron: '30 11 * * *'
 
