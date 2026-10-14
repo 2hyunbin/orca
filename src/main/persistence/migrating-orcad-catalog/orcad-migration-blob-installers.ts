@@ -21,9 +21,6 @@ import {
   orcadMigrationStagingKey,
   type OrcadMigrationRequestIdentity
 } from './orcad-migration-staged-file'
-import { resolvePtyShellPath } from '../../daemon/shell-ready'
-import { resolveShellKind } from '../../terminal-history'
-import type { OrcadMigrationShellHistoryShell } from './orcad-migration-shell-history-format'
 import {
   assertOrcadMigrationShellHistoryValid,
   installOrcadMigrationShellHistory
@@ -81,6 +78,8 @@ export type OrcadMigrationBlobInstall = {
   terminalRestoreHints: OrcadTerminalRestoreHintStore
   /** This host's `getHistoryRoot()`, where its panes' HISTFILEs live. */
   shellHistoryRoot: string
+  /** The shell binary a new pane on this host would actually run. */
+  paneShellPath: () => string
   /** The worktree that owns the pane on this host, or null when the pane is not here. */
   paneWorktreeId: (paneKey: string) => string | null
   now: number
@@ -111,19 +110,9 @@ function installShellHistory(install: OrcadMigrationBlobInstall): void {
     migration: install.migration,
     root: install.root,
     historyRoot: install.shellHistoryRoot,
-    loginShell: resolveHostLoginShellHistoryShell,
+    paneShellPath: install.paneShellPath,
     now: install.now
   })
-}
-
-/**
- * A login-shell history from the WSL bridge (see the header's `loginShell`) lands under the file a
- * new pane on this host reads: `zsh_history` or `bash_history` for those shells, `bash_history`
- * for any other. The shell is resolved as a new pane's spawn resolves it.
- */
-function resolveHostLoginShellHistoryShell(): OrcadMigrationShellHistoryShell | null {
-  const kind = resolveShellKind(resolvePtyShellPath({}))
-  return kind === 'zsh' || kind === 'bash' ? kind : null
 }
 
 function installTerminalRestoreHints(install: OrcadMigrationBlobInstall): void {

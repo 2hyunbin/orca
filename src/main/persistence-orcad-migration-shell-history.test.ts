@@ -36,6 +36,11 @@ vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 
 let desktopHistory: string
 
+// A lone WSL bash history follows the host pane's shell; these cases pin it to bash.
+function bashHostStore(): ReturnType<typeof createStore> {
+  return createStore({ paneShellPath: () => '/bin/bash' })
+}
+
 function encodedHistories(
   files: { worktreeId: string; file: string; content: string }[]
 ): Promise<EncodedBlob[]> {
@@ -46,20 +51,17 @@ describe('orcad migration shell history through the store', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-shell-history-'))
     desktopHistory = mkdtempSync(join(tmpdir(), 'orca-desktop-history-'))
-    // A lone WSL bash history follows the host's login shell; pin it for these cases.
-    vi.stubEnv('SHELL', '/bin/bash')
   })
 
   afterEach(() => {
     rmSync(testState.dir, { recursive: true, force: true })
     rmSync(desktopHistory, { recursive: true, force: true })
     rmSync(getHistoryRoot(), { recursive: true, force: true })
-    vi.unstubAllEnvs()
   })
 
   it('installs each history and its meta.json where a new pane in that worktree reads it', async () => {
     const input = manifest()
-    const store = createStore()
+    const store = bashHostStore()
     const blobs = await encodedHistories([
       { worktreeId: DORMANT_WORKTREE_ID, file: 'zsh_history', content: ZSH },
       { worktreeId: DORMANT_WORKTREE_ID, file: 'bash_history', content: BASH },
@@ -96,7 +98,7 @@ describe('orcad migration shell history through the store', () => {
 
   it('refuses before commit a history whose worktree the catalog does not move', async () => {
     const input = manifest()
-    const store = createStore()
+    const store = bashHostStore()
     stage(
       store,
       input,
@@ -132,7 +134,7 @@ describe('orcad migration shell history through the store', () => {
     ]
     for (const [blob, reason] of cases) {
       const input = manifest({ migrationId: `migration-${blob.descriptor.key}` })
-      const store = createStore()
+      const store = bashHostStore()
       stage(store, input, [blob])
       expect(() => store.commitStagedOrcadMigrationCatalog(input)).toThrow(
         `orcad_migration_blob_content_invalid:shell-history:${reason}`
@@ -142,7 +144,7 @@ describe('orcad migration shell history through the store', () => {
 
   it('keeps existing host history after the moved lines, and is idempotent on a retry', async () => {
     const input = manifest()
-    const store = createStore()
+    const store = bashHostStore()
     const blobs = await encodedHistories([
       { worktreeId: DORMANT_WORKTREE_ID, file: 'zsh_history', content: ': 1:0;moved' }
     ])
@@ -163,14 +165,14 @@ describe('orcad migration shell history through the store', () => {
     // A crash after the install but before the received blob was deleted leaves it in place.
     const [blob] = blobs
     writeFileSync(receivedPath(input, blob.descriptor.key), blob.bytes)
-    expect(await commitDurably(createStore(), input)).toBe('committed')
+    expect(await commitDurably(bashHostStore(), input)).toBe('committed')
     expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBe(merged)
     expect(existsSync(receivedPath(input, blob.descriptor.key))).toBe(false)
   })
 
   it('retries a failed install on the next store load and on a catalog-state query', async () => {
     const input = manifest()
-    const store = createStore()
+    const store = bashHostStore()
     const blobs = await encodedHistories([
       { worktreeId: DORMANT_WORKTREE_ID, file: 'zsh_history', content: ZSH },
       { worktreeId: FOLDER_KEY, file: 'bash_history', content: BASH }
@@ -191,7 +193,7 @@ describe('orcad migration shell history through the store', () => {
     const pendingKey = `${hashWorktreeId(DORMANT_WORKTREE_ID)}-zsh`
     expect(existsSync(receivedPath(input, pendingKey))).toBe(true)
 
-    createStore()
+    bashHostStore()
     expect(existsSync(receivedPath(input, pendingKey))).toBe(true)
     error.mockRestore()
 
@@ -203,7 +205,7 @@ describe('orcad migration shell history through the store', () => {
 
   it('retries a pending install when the store loads', async () => {
     const input = manifest()
-    const store = createStore()
+    const store = bashHostStore()
     const blobs = await encodedHistories([
       { worktreeId: DORMANT_WORKTREE_ID, file: 'bash_history', content: BASH }
     ])
@@ -212,7 +214,7 @@ describe('orcad migration shell history through the store', () => {
     await store.flushPendingOrThrowAsync()
     expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
 
-    createStore()
+    bashHostStore()
     expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBe(BASH)
     expect(existsSync(receivedPath(input, blobs[0].descriptor.key))).toBe(false)
   })

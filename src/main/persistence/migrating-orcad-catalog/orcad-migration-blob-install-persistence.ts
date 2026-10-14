@@ -9,7 +9,7 @@ import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-fil
 
 type OrcadMigrationBlobInstallRuntime = Pick<
   StoreRuntimeState,
-  'state' | 'orcadMigrationBlobRoot' | 'orcadTerminalRestoreHints'
+  'state' | 'orcadMigrationBlobRoot' | 'orcadTerminalRestoreHints' | 'paneShellPath'
 >
 
 type ClockOptions = { now?: () => Date }
@@ -96,6 +96,7 @@ function installCommitted(
     root: runtime.orcadMigrationBlobRoot,
     terminalRestoreHints: runtime.orcadTerminalRestoreHints,
     shellHistoryRoot: getHistoryRoot(),
+    paneShellPath: runtime.paneShellPath,
     paneWorktreeId: (paneKey) => findPaneWorktreeId(runtime.state, paneKey),
     now: clock(options)
   })

@@ -15,7 +15,9 @@ import {
   syncDirectoryDurablySync,
   writeFileDurableSync
 } from '../../durable-file-write'
-import { readHistoryMeta } from '../../terminal-history'
+import { resolvePtyShellPath } from '../../daemon/shell-ready'
+import { resolveUnixShellPath } from '../../providers/local-pty-utils'
+import { readHistoryMeta, resolveShellKind } from '../../terminal-history'
 import {
   getOrcadMigrationReceivedBlobPath,
   listOrcadMigrationReceivedBlobNames
@@ -55,8 +57,8 @@ export type OrcadShellHistoryInstall = {
   root: string
   /** This host's `getHistoryRoot()`. */
   historyRoot: string
-  /** The shell a new pane on this host runs, when it is one whose history moves. */
-  loginShell: () => OrcadMigrationShellHistoryShell | null
+  /** The shell binary a new pane on this host would actually run; see `resolveNewPaneShellPath`. */
+  paneShellPath: () => string
   now: number
 }
 
@@ -106,7 +108,9 @@ function installOne(install: OrcadShellHistoryInstall, key: string): void {
     moved = {
       worktreeId: header.worktreeId,
       worktreeHash,
-      fileName: shellHistoryFileName(header.loginShell ? (install.loginShell() ?? shell) : shell),
+      fileName: shellHistoryFileName(
+        header.loginShell ? (paneHistoryShell(install.paneShellPath) ?? shell) : shell
+      ),
       history: bytes.subarray(header.byteLength)
     }
   } catch (error) {
@@ -152,6 +156,28 @@ function writeMeta(directory: string, worktreeId: string, now: number): void {
     createdAt: existing?.createdAt ?? new Date(now).toISOString()
   }
   writeFileDurableSync(durableWriteTempPath(path), path, JSON.stringify(meta), 0o600)
+}
+
+/**
+ * A login-shell history from the WSL bridge (see the header's `loginShell`) lands under the file a
+ * new pane on this host reads: `zsh_history` or `bash_history` when that pane runs zsh or bash,
+ * `bash_history` for any other shell.
+ */
+function paneHistoryShell(paneShellPath: () => string): OrcadMigrationShellHistoryShell | null {
+  const kind = resolveShellKind(paneShellPath())
+  return kind === 'zsh' || kind === 'bash' ? kind : null
+}
+
+/**
+ * The shell a new pane spawns, resolved as the spawn does: the configured shell, then the first
+ * executable fallback when it is missing. With no executable shell at all, no pane runs here.
+ */
+export function resolveNewPaneShellPath(): string {
+  try {
+    return resolveUnixShellPath(resolvePtyShellPath({}))
+  } catch {
+    return ''
+  }
 }
 
 function readExisting(path: string): Buffer | null {
