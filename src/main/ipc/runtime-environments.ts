@@ -33,6 +33,8 @@ import { registerRuntimeEnvironmentBrowserClientHostHandler } from './runtime-en
 import { advanceRuntimeEnvironmentCapabilityIncarnation } from './runtime-environment-capability-evidence'
 import { retireMobileDesktopRelayEnvironment } from './runtime-environment-mobile-relay-hosts'
 import { watchRuntimeEnvironmentPreference } from './runtime-environment-preference'
+import { registerManagedWorkspaceConnectionHandler } from './runtime-environment-managed-workspace'
+import { readPersistedEnvironmentStore } from '../../shared/runtime-environment-store-file'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
 const getUserDataPath = (): string => app.getPath('userData')
@@ -69,6 +71,19 @@ function closeSubscriptionsForEnvironment(environmentId: string): void {
 }
 /** Returns once the environment's client-hosted browser pages have been released. */
 export function invalidateRuntimeEnvironmentTransport(environmentId: string): Promise<void> {
+  const dependents = readPersistedEnvironmentStore(getUserDataPath()).environments.filter(
+    (environment) =>
+      environment.kind === 'managed-gateway' &&
+      environment.managedGateway?.controllerEnvironmentId === environmentId &&
+      environment.id !== environmentId
+  )
+  return Promise.all([
+    ...dependents.map((environment) => invalidateRuntimeEnvironmentTransportOne(environment.id)),
+    invalidateRuntimeEnvironmentTransportOne(environmentId)
+  ]).then(() => undefined)
+}
+
+function invalidateRuntimeEnvironmentTransportOne(environmentId: string): Promise<void> {
   // Why: a same-id re-pair must retire every transport that still authenticates as the old peer.
   advanceRuntimeEnvironmentCapabilityIncarnation(environmentId)
   advanceRuntimeEnvironmentTransportGeneration(environmentId)
@@ -132,6 +147,7 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
   })
   registerRuntimeEnvironmentRecoveryHandler()
   registerRuntimeEnvironmentPassiveHandlers(getUserDataPath)
+  registerManagedWorkspaceConnectionHandler(getUserDataPath)
   for (const environment of listEnvironments(getUserDataPath())) {
     if (!isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
       getRuntimeEnvironmentStatusOwner(getUserDataPath(), environment.id).activate()

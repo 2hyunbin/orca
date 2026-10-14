@@ -79,6 +79,11 @@ export type RuntimeApi = {
     ) => () => void
   }
   runtimeEnvironments: {
+    openManagedWorkspace?: (args: {
+      controllerEnvironmentId?: string
+      sshTargetId: string
+      targetGeneration: number
+    }) => Promise<{ environment: PublicKnownRuntimeEnvironment; runtimeStatus: RuntimeStatus }>
     getStatusSnapshots: () => Promise<RuntimeHostStatusSnapshot[]>
     onStatusChanged: (callback: (snapshot: RuntimeHostStatusSnapshot) => void) => () => void
     list: () => Promise<PublicKnownRuntimeEnvironment[]>

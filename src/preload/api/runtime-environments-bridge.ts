@@ -17,6 +17,12 @@ import type { PreloadApi } from '../api-types'
 import { managedOrcadApi } from './managed-orcad-api'
 
 export const runtimeEnvironmentsApi = {
+  openManagedWorkspace: (args: {
+    controllerEnvironmentId?: string
+    sshTargetId: string
+    targetGeneration: number
+  }): Promise<{ environment: PublicKnownRuntimeEnvironment; runtimeStatus: RuntimeStatus }> =>
+    ipcRenderer.invoke('runtimeEnvironments:openManagedWorkspace', args),
   getStatusSnapshots: (): Promise<RuntimeHostStatusSnapshot[]> =>
     ipcRenderer.invoke('runtimeEnvironments:getStatusSnapshots'),
   onStatusChanged: (callback: (snapshot: RuntimeHostStatusSnapshot) => void): (() => void) => {

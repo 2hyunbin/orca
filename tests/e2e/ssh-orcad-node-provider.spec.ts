@@ -22,6 +22,7 @@ import { createRestartSession } from './helpers/orca-restart'
 import { capturePluginEvidence, getPluginEvidenceDirectory } from './helpers/plugin-evidence'
 import { qualifyProviderEndpointMigration } from './helpers/plugin-provider-endpoint-migration'
 import { qualifyProviderEndpointRestart } from './helpers/plugin-provider-endpoint-restart'
+import { qualifyProviderManagedWorkspace } from './helpers/plugin-provider-managed-workspace'
 
 async function dismissUsageNotice(page: Page): Promise<void> {
   const dismiss = page.getByRole('button', { name: 'Got it', exact: true })
@@ -228,6 +229,7 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
       expect.arrayContaining([expect.objectContaining({ id: saved.id })])
     )
     await capturePluginEvidence(page, testInfo, 'node-provider-ssh-connected-native', app)
+    await qualifyProviderManagedWorkspace({ page, app, testInfo, target })
     await machine.getByRole('button', { name: 'Sleep', exact: true }).click()
     const sleep = page.getByRole('dialog', { name: 'Sleep environment', exact: true })
     await sleep.getByRole('button', { name: 'Sleep environment', exact: true }).click()

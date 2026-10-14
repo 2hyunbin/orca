@@ -1,4 +1,5 @@
 export const RUNTIME_ENVIRONMENT_HANDLER_CHANNELS = [
+  'runtimeEnvironments:openManagedWorkspace',
   'runtimeEnvironments:list',
   'runtimeEnvironments:addFromPairingCode',
   'runtimeEnvironments:verifyAndAddFromPairingCode',

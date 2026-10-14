@@ -5,6 +5,7 @@ import {
   getSettingsFocusedExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
+  toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
@@ -66,21 +67,33 @@ export function useAddRepoHostSelection({
     useState<ExecutionHostId>(LOCAL_EXECUTION_HOST_ID)
   const [hostSelectorOpen, setHostSelectorOpen] = useState(false)
   const previousOpenRef = useRef(false)
+  const requestedEnvironmentId = useAppStore((state) =>
+    typeof state.modalData.managedWorkspaceEnvironmentId === 'string'
+      ? state.modalData.managedWorkspaceEnvironmentId
+      : undefined
+  )
   const pairedWebRuntimeHost = isWebClient
     ? selectableHostOptions.find((host) => host.kind === 'runtime' && canSelectAddRepoHost(host))
     : undefined
 
   // Why through the index: a connect saves the SSH id, which may now stand under its server's row.
-  const resolvedHost = indexExecutionHostsById(hostOptions).get(selectedAddProjectHostId)
+  const intendedHostId =
+    isOpen && !previousOpenRef.current && requestedEnvironmentId
+      ? toRuntimeExecutionHostId(requestedEnvironmentId)
+      : selectedAddProjectHostId
+  const resolvedHost = indexExecutionHostsById(hostOptions).get(intendedHostId)
   const requestedHost =
     resolvedHost && selectableHostOptions.includes(resolvedHost) ? resolvedHost : undefined
   const requestedHostSelectable = requestedHost ? canSelectAddRepoHost(requestedHost) : false
   // Why: right after a connect the SSH host is still coming up on its server (or not yet merged
   // into its row); that blocks the actions rather than silently turning into this computer.
   const requestedHostPending =
-    requestedHost !== undefined &&
-    !requestedHostSelectable &&
-    (requestedHost.kind === 'ssh' || (requestedHost.aliasHostIds?.length ?? 0) > 0)
+    (requestedEnvironmentId !== undefined &&
+      intendedHostId === toRuntimeExecutionHostId(requestedEnvironmentId) &&
+      !requestedHostSelectable) ||
+    (requestedHost !== undefined &&
+      !requestedHostSelectable &&
+      (requestedHost.kind === 'ssh' || (requestedHost.aliasHostIds?.length ?? 0) > 0))
   const selectedHost = requestedHostSelectable
     ? requestedHost
     : requestedHostPending
@@ -100,10 +113,11 @@ export function useAddRepoHostSelection({
       const focusedHost = indexExecutionHostsById(hostOptions).get(
         getSettingsFocusedExecutionHostId(settings)
       )
-      const nextHostId =
-        focusedHost &&
-        selectableHostOptions.includes(focusedHost) &&
-        canSelectAddRepoHost(focusedHost)
+      const nextHostId = requestedEnvironmentId
+        ? toRuntimeExecutionHostId(requestedEnvironmentId)
+        : focusedHost &&
+            selectableHostOptions.includes(focusedHost) &&
+            canSelectAddRepoHost(focusedHost)
           ? focusedHost.id
           : (pairedWebRuntimeHost?.id ?? (isWebClient ? null : LOCAL_EXECUTION_HOST_ID))
       if (nextHostId) {
@@ -114,7 +128,15 @@ export function useAddRepoHostSelection({
       setHostSelectorOpen(false)
     }
     previousOpenRef.current = isOpen
-  }, [hostOptions, isOpen, isWebClient, pairedWebRuntimeHost?.id, selectableHostOptions, settings])
+  }, [
+    hostOptions,
+    isOpen,
+    isWebClient,
+    pairedWebRuntimeHost?.id,
+    selectableHostOptions,
+    settings,
+    requestedEnvironmentId
+  ])
 
   const handleSelectAddProjectHost = useCallback(
     async (hostId: ExecutionHostId): Promise<void> => {

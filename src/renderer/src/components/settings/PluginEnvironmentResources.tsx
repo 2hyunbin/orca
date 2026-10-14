@@ -12,7 +12,10 @@ export function PluginEnvironmentResources({
   blockedResourceIds,
   ready,
   onAction,
-  onConnect
+  onConnect,
+  onOpenWorkspace,
+  openingWorkspaceId,
+  workspaceResourceIds
 }: {
   resources: EnvironmentRecipeResource[]
   actions: EnvironmentRecipeAction[]
@@ -20,6 +23,9 @@ export function PluginEnvironmentResources({
   blockedResourceIds?: string[]
   ready: boolean
   onConnect?(resource: EnvironmentRecipeResource): void
+  onOpenWorkspace?(resource: EnvironmentRecipeResource): void
+  openingWorkspaceId?: string | null
+  workspaceResourceIds?: string[]
   onAction(action: EnvironmentRecipeAction, resource: EnvironmentRecipeResource): void
 }): React.JSX.Element {
   return (
@@ -42,16 +48,42 @@ export function PluginEnvironmentResources({
           </div>
           {ready && resource.state !== 'deleted' ? (
             <div className="flex flex-wrap gap-2">
+              {onOpenWorkspace &&
+              workspaceResourceIds?.includes(resource.id) &&
+              resource.state === 'running' ? (
+                <Button
+                  size="xs"
+                  className="w-40"
+                  disabled={blocked || Boolean(openingWorkspaceId)}
+                  onClick={() => onOpenWorkspace(resource)}
+                >
+                  {openingWorkspaceId === resource.id
+                    ? translate(
+                        'auto.components.settings.PluginEnvironmentResources.openingWorkspace',
+                        'Opening workspace…'
+                      )
+                    : translate(
+                        'auto.components.settings.PluginEnvironmentResources.openWorkspace',
+                        'Open workspace'
+                      )}
+                </Button>
+              ) : null}
               {onConnect && resource.state === 'running' && resource.connection ? (
                 <Button
                   size="xs"
+                  variant={workspaceResourceIds?.includes(resource.id) ? 'outline' : 'default'}
                   disabled={blocked || Boolean(blockedResourceIds?.includes(resource.id))}
                   onClick={() => onConnect(resource)}
                 >
-                  {translate(
-                    'auto.components.settings.PluginEnvironmentResources.connect',
-                    'Connect'
-                  )}
+                  {workspaceResourceIds?.includes(resource.id)
+                    ? translate(
+                        'auto.components.settings.PluginEnvironmentResources.reconnect',
+                        'Reconnect'
+                      )
+                    : translate(
+                        'auto.components.settings.PluginEnvironmentResources.connect',
+                        'Connect'
+                      )}
                 </Button>
               ) : null}
               {actions.includes('sleep') && resource.state === 'running' ? (

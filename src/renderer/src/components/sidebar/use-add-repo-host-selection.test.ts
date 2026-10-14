@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   refIndex: 0,
   hostOptions: [] as SidebarHostOption[],
   storeState: {
+    modalData: ((): { managedWorkspaceEnvironmentId?: string } => ({}))(),
     settings: { activeRuntimeEnvironmentId: null as string | null },
     setActiveRuntimeEnvironmentPreference: vi.fn(),
     setSshConnectionState: vi.fn(),
@@ -103,6 +104,7 @@ describe('useAddRepoHostSelection', () => {
       }
     ]
     mocks.storeState.settings = { activeRuntimeEnvironmentId: null }
+    mocks.storeState.modalData = {}
     mocks.storeState.setActiveRuntimeEnvironmentPreference.mockResolvedValue(true)
     mocks.storeState.sshConnectionStates = new Map()
     mocks.storeState.runtimeEnvironments = []
@@ -142,6 +144,26 @@ describe('useAddRepoHostSelection', () => {
     expect(mocks.storeState.setActiveRuntimeEnvironmentPreference).not.toHaveBeenCalled()
     expect(mocks.stateSetters[0]).toHaveBeenCalledWith('runtime:env-1')
     expect(setStep).toHaveBeenCalledWith('add')
+  })
+
+  it('uses the requested managed workspace on the first render without changing the default host', async () => {
+    mocks.stateValues = ['local', false]
+    mocks.storeState.modalData = { managedWorkspaceEnvironmentId: 'env-1' }
+    const { useAddRepoHostSelection } = await import('./use-add-repo-host-selection')
+    const result = useAddRepoHostSelection({ isOpen: true, setStep: vi.fn() })
+
+    expect(result.selectedHostId).toBe('runtime:env-1')
+    expect(mocks.storeState.setActiveRuntimeEnvironmentPreference).not.toHaveBeenCalled()
+  })
+
+  it('blocks project creation while the explicitly requested workspace is absent', async () => {
+    mocks.stateValues = ['local', false]
+    mocks.storeState.modalData = { managedWorkspaceEnvironmentId: 'not-yet-listed' }
+    const { useAddRepoHostSelection } = await import('./use-add-repo-host-selection')
+    const result = useAddRepoHostSelection({ isOpen: true, setStep: vi.fn() })
+
+    expect(result.selectedHostId).toBeNull()
+    expect(result.selectedParsedHost).toBeNull()
   })
 
   it('uses the paired runtime as the only local filesystem authority in web clients', async () => {

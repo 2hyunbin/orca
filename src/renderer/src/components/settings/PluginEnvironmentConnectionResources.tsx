@@ -20,6 +20,7 @@ import {
 import { compactIpcErrorMessage } from '@/lib/ipc-error'
 import { PluginEnvironmentResources } from './PluginEnvironmentResources'
 import { PluginEnvironmentConnectionDialog } from './PluginEnvironmentConnectionDialog'
+import { useManagedWorkspaceOpen, type ReviewedWorkspaceTarget } from './use-managed-workspace-open'
 
 export function PluginEnvironmentConnectionResources({
   provider,
@@ -40,6 +41,16 @@ export function PluginEnvironmentConnectionResources({
   const pending = useRef<string | null>(null)
   const reviewTicket = useRef<string | null>(null)
   const mounted = useMountedRef()
+  const workspace = useManagedWorkspaceOpen(onConnecting)
+  const [workspaceTargets, setWorkspaceTargets] = useState<
+    Record<
+      string,
+      ReviewedWorkspaceTarget & {
+        contextId: string
+        revision: EnvironmentRecipeResource['revision']
+      }
+    >
+  >({})
   useEffect(
     () => () => {
       onConnecting?.(false)
@@ -144,6 +155,18 @@ export function PluginEnvironmentConnectionResources({
         throw new Error('SSH connection was not confirmed')
       }
       if (mounted.current) {
+        const savedGeneration = target.generation
+        if (savedGeneration !== undefined) {
+          setWorkspaceTargets((previous) => ({
+            ...previous,
+            [preview.resource.id]: {
+              id: target.id,
+              generation: savedGeneration,
+              contextId: preview.contextId,
+              revision: preview.resource.revision
+            }
+          }))
+        }
         toast.success(
           translate(
             'auto.components.settings.PluginEnvironmentConnectionResources.connected',
@@ -220,14 +243,33 @@ export function PluginEnvironmentConnectionResources({
           </div>
         ) : null}
       </div>
-      {error ? (
+      {error || workspace.error ? (
         <p role="alert" className="text-sm text-destructive">
-          {error}
+          {error ?? workspace.error}
         </p>
       ) : null}
       <PluginEnvironmentResources
         {...resources}
-        blocked={resources.blocked || connectingName !== null}
+        blocked={resources.blocked || connectingName !== null || workspace.openingId !== null}
+        workspaceResourceIds={resources.resources
+          .filter(
+            (resource) =>
+              provider.configuration.status === 'ready' &&
+              workspaceTargets[resource.id]?.contextId === provider.configuration.contextId &&
+              workspaceTargets[resource.id]?.revision === resource.revision
+          )
+          .map((resource) => resource.id)}
+        openingWorkspaceId={workspace.openingId}
+        onOpenWorkspace={
+          window.api.runtimeEnvironments.openManagedWorkspace
+            ? (resource) => {
+                const target = workspaceTargets[resource.id]
+                if (target) {
+                  void workspace.open(resource.id, target)
+                }
+              }
+            : undefined
+        }
         onConnect={supported ? (resource) => void prepare(resource) : undefined}
       />
       {preview ? (
