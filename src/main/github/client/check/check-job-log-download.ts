@@ -75,7 +75,7 @@ async function fetchCheckJobLog(
   const attempt = async (flagged: boolean): Promise<string> => {
     assertCheckLogActive(options.signal, deadlineAt)
     const lifetime = createGhLogicalLifetime(hooks)
-    const result = ghExecFileAsync(
+    const { stdout } = await ghExecFileAsync(
       flagged ? [...argv, ESCAPE_FLAG] : argv,
       {
         ...options,
@@ -83,25 +83,12 @@ async function fetchCheckJobLog(
         timeout: deadlineAt - Date.now()
       },
       lifetime.hooks
-    ).then(
-      (value) => {
-        lifetime.seal()
-        return value
-      },
-      (error: unknown) => {
-        lifetime.seal()
-        throw error
-      }
-    )
-    try {
-      const { stdout } = await result
+    ).finally(async () => {
+      lifetime.seal()
       await waitForCheckDetailsResolution(lifetime.terminated, options.signal)
-      assertCheckLogActive(options.signal, deadlineAt)
-      return stdout
-    } catch (error) {
-      await waitForCheckDetailsResolution(lifetime.terminated, options.signal)
-      throw error
-    }
+    })
+    assertCheckLogActive(options.signal, deadlineAt)
+    return stdout
   }
   try {
     return await attempt(true)

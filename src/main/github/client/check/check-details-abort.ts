@@ -4,7 +4,7 @@ export function createCheckDetailsAbortError(): Error {
   return error
 }
 
-export function rethrowCheckDetailsAbort(signal: AbortSignal | undefined, _error: unknown): void {
+export function assertCheckDetailsActive(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw createCheckDetailsAbortError()
   }

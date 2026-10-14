@@ -180,9 +180,6 @@ export async function ghExecFileWithScopeAsync(
   }
   for (let attempt = 0; attempt <= GH_RETRY_DELAYS_MS.length; attempt++) {
     const lifetime = lifetimeHooks ? createGhLogicalLifetime(lifetimeHooks) : null
-    if (lifetime) {
-      lifetimeHooks?.onTerminationPending(lifetime.terminated)
-    }
     try {
       if (lifetime) {
         assertGhCallActive(options.signal)

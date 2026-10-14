@@ -44,10 +44,8 @@ export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
 } {
   const pending = new Set<Promise<void>>()
   let sealed = false
-  let complete = (): void => {}
-  const terminated = new Promise<void>((resolve) => {
-    complete = resolve
-  })
+  const { promise: terminated, resolve: complete } = Promise.withResolvers<void>()
+  forward?.onTerminationPending(terminated)
   const finish = (): void => {
     if (sealed && pending.size === 0) {
       complete()
@@ -56,7 +54,6 @@ export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
   const hooks: GhCaptureLifetimeHooks = {
     onTerminationPending: (child) => {
       pending.add(child)
-      forward?.onTerminationPending(child)
       void child.then(() => {
         pending.delete(child)
         finish()
@@ -85,18 +82,9 @@ export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
       assertGhCallActive(signal)
     },
     capture: () => {
-      let reported = false
-      let report = (): void => {}
-      const child = new Promise<void>((resolve) => {
-        report = resolve
-      })
+      const { promise: child, resolve: report } = Promise.withResolvers<void>()
       hooks.onTerminationPending(child)
-      return () => {
-        if (!reported) {
-          reported = true
-          report()
-        }
-      }
+      return report
     }
   }
 }

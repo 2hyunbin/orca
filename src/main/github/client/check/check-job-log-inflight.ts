@@ -3,22 +3,13 @@ import { assertCheckLogActive } from './check-job-log-download'
 
 type Subscriber = { settle: (value?: string, error?: Error) => void; active: () => boolean }
 type Entry = {
-  token: symbol
-  terminated: Promise<void>
+  retired: Promise<void>
   retiring: boolean
-  resultSettled: boolean
-  closed: boolean
   subscribers?: Map<symbol, Subscriber>
   controller?: AbortController
   timer?: ReturnType<typeof setTimeout>
 }
 const inflight = new Map<string, Entry>()
-
-function removeClosed(key: string, entry: Entry): void {
-  if (entry.closed && entry.resultSettled && inflight.get(key)?.token === entry.token) {
-    inflight.delete(key)
-  }
-}
 
 function retire(entry: Entry, error?: Error): void {
   if (entry.retiring) {
@@ -93,16 +84,10 @@ type SharedRequest = {
 
 function startEntry(request: SharedRequest): Promise<string> {
   const controller = new AbortController()
-  let finish = (): void => {}
-  const terminated = new Promise<void>((resolve) => {
-    finish = resolve
-  })
+  const { promise: retired, resolve: finishRetirement } = Promise.withResolvers<void>()
   const entry: Entry = {
-    token: Symbol('check-log-operation'),
-    terminated,
+    retired,
     retiring: false,
-    resultSettled: false,
-    closed: false,
     subscribers: new Map(),
     controller
   }
@@ -114,7 +99,7 @@ function startEntry(request: SharedRequest): Promise<string> {
   )
   // First reader and lifetime are registered before the runner can start a child.
   const operation = request.start(controller.signal, request.deadlineAt)
-  void operation.result.then(
+  const delivered = operation.result.then(
     (value) => {
       if (!entry.retiring && !controller.signal.aborted && Date.now() < request.deadlineAt) {
         const subscribers = entry.subscribers
@@ -128,30 +113,19 @@ function startEntry(request: SharedRequest): Promise<string> {
       } else {
         retire(entry, new Error('Could not load job logs.'))
       }
-      entry.resultSettled = true
-      removeClosed(request.key, entry)
     },
     () => {
       retire(entry, new Error('Could not load job logs.'))
-      entry.resultSettled = true
-      removeClosed(request.key, entry)
     }
   )
-  watchTermination(request.key, entry, operation.terminated, finish)
-  return result
-}
-
-function watchTermination(
-  key: string,
-  entry: Entry,
-  terminated: Promise<void>,
-  finish: () => void
-): void {
-  void terminated.then(() => {
-    entry.closed = true
-    finish()
-    removeClosed(key, entry)
+  // Replacements wait for both delivery and physical termination, in either order.
+  void Promise.all([delivered, operation.terminated]).then(() => {
+    if (inflight.get(request.key) === entry) {
+      inflight.delete(request.key)
+    }
+    finishRetirement()
   })
+  return result
 }
 
 async function waitForRetirement(
@@ -167,7 +141,7 @@ async function waitForRetirement(
     onAbort()
   }
   try {
-    await waitForCheckDetailsResolution(entry.terminated, controller.signal)
+    await waitForCheckDetailsResolution(entry.retired, controller.signal)
   } finally {
     clearTimeout(timer)
     signal.removeEventListener('abort', onAbort)

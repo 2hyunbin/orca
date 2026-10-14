@@ -14,7 +14,7 @@ import {
 } from './check-detail-field-mapping'
 import {
   createCheckDetailsAbortError,
-  rethrowCheckDetailsAbort,
+  assertCheckDetailsActive,
   waitForCheckDetailsResolution
 } from './check-details-abort'
 import { attachFailedJobLogTails } from './check-job-log-tails'
@@ -64,18 +64,17 @@ export async function getPRCheckDetails(
     await acquire(controller.signal)
     admission = createCheckDetailsAdmissionLifetime(release)
     const retainUntil = admission.retainUntil
-    let previous: Promise<void> = Promise.resolve()
-    const waitPrevious = (): Promise<void> =>
-      waitForCheckDetailsResolution(previous, controller.signal)
     const fetchMetadata = async (argv: string[]): Promise<{ stdout: string; stderr: string }> => {
-      await waitPrevious()
       const call = runCheckDetailsCall(
         (hooks) => ghExecFileAsync(argv, ghOptions, hooks),
         controller.signal,
         retainUntil
       )
-      previous = call.terminated
-      return call.result
+      try {
+        return await call.result
+      } finally {
+        await waitForCheckDetailsResolution(call.terminated, controller.signal)
+      }
     }
     let checkRun: Record<string, unknown> | null = null
     let annotations: PRCheckRunDetails['annotations'] = []
@@ -95,11 +94,10 @@ export async function getPRCheckDetails(
           `repos/${ownerRepo.owner}/${ownerRepo.repo}/check-runs/${args.checkRunId}/annotations?per_page=20`
         ])
         annotations = mapCheckAnnotations(JSON.parse(annotationsResult.stdout))
-      } catch (err) {
-        rethrowCheckDetailsAbort(controller.signal, err)
+      } catch {
+        assertCheckDetailsActive(controller.signal)
         console.warn('getPRCheckDetails', 'annotations_failed')
       }
-      await waitPrevious()
     }
 
     const workflowRunId = args.workflowRunId ?? getWorkflowRunIdFromCheckRun(checkRun)
@@ -111,17 +109,15 @@ export async function getPRCheckDetails(
           `repos/${ownerRepo.owner}/${ownerRepo.repo}/actions/runs/${workflowRunId}/jobs?per_page=100`
         ])
         jobs = mapWorkflowJobs(JSON.parse(stdout), args.checkName)
-        await waitPrevious()
         await attachFailedJobLogTails(jobs, ownerRepo, ghOptions, {
           deadlineAt,
           executionScope: snapshot.executionScope,
           retainUntil
         })
-      } catch (err) {
-        rethrowCheckDetailsAbort(controller.signal, err)
+      } catch {
+        assertCheckDetailsActive(controller.signal)
         console.warn('getPRCheckDetails', 'workflow_jobs_failed')
       }
-      await waitPrevious()
     }
 
     const output =

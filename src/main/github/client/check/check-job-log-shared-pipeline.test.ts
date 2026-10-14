@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as excerpt from '../../../../shared/check-job-log-excerpt'
 import * as extraction from '../../../../shared/check-job-log-tail-slice'
 import { TERMINAL_CONTROL_CHARACTER_PATTERN } from '../../../../shared/ansi-escape-sequences'
-import failureFixture from '../../../../shared/__fixtures__/check-job-log-failure-output.json'
+import { createCheckLogFixture } from '../../../../../config/scripts/check-job-log-test-fixture.mjs'
 import {
   completeFakeSpawn,
   createFakeSpawnedChild
@@ -15,6 +15,9 @@ import parserFixture from './__fixtures__/gh-api-unknown-escape-flag.json'
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }))
 vi.mock('node:child_process', async (original) => ({ ...(await original()), spawn: spawnMock }))
 const children: ChildProcess[] = []
+const failureFixture = createCheckLogFixture()
+const escapeRefusalStderr =
+  'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway\n'
 let raw = ''
 let stderr = ''
 let code = 0
@@ -69,8 +72,8 @@ describe('actual shared text pipeline through host capture, cache and jobs', () 
     vi.restoreAllMocks()
   })
 
-  it('captures the real flagged fixture, retains diagnostic/stack and sanitizes once for two readers and warm cache', async () => {
-    stderr = failureFixture.escapeRefusalStderr
+  it('retains diagnostic/stack and sanitizes once for two readers and warm cache', async () => {
+    stderr = escapeRefusalStderr
     const first = [failedLogJob()]
     const second = [failedLogJob()]
     await Promise.all([attachLogFixture(first), attachLogFixture(second)])
@@ -99,7 +102,7 @@ describe('actual shared text pipeline through host capture, cache and jobs', () 
     expect(excerpt.sanitizeCheckJobLogExcerpt).toHaveBeenCalledOnce()
   })
 
-  it('uses the saved old-parser fallback with real fixture output and only one final sanitation', async () => {
+  it('uses the saved old-parser fallback with fixture output and only one final sanitation', async () => {
     spawnMock.mockImplementationOnce(() => {
       const child = createFakeSpawnedChild()
       children.push(child)
@@ -121,7 +124,7 @@ describe('actual shared text pipeline through host capture, cache and jobs', () 
   it('treats the actual escape refusal as an ordinary failed capture, then retries unchanged identity', async () => {
     code = 1
     raw = ''
-    stderr = failureFixture.escapeRefusalStderr
+    stderr = escapeRefusalStderr
     const jobs = [
       failedLogJob(77, {
         steps: [
@@ -217,7 +220,7 @@ describe('actual shared text pipeline through host capture, cache and jobs', () 
         completeFakeSpawn(
           child,
           id === '2'
-            ? { code: 1, stderr: failureFixture.escapeRefusalStderr }
+            ? { code: 1, stderr: escapeRefusalStderr }
             : { stdout: id === '3' ? '\x1b[31m\x00\x1b[0m' : raw }
         )
       })

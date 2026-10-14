@@ -46,6 +46,30 @@ describe('tracked gh capture lifetime', () => {
     vi.restoreAllMocks()
   })
 
+  it('retains a nested call before it captures a child and until both close and seal', async () => {
+    const owner = createGhLogicalLifetime()
+    const nested = createGhLogicalLifetime(owner.hooks)
+    const terminated = vi.fn()
+    void owner.terminated.then(terminated)
+    owner.seal()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminated).not.toHaveBeenCalled()
+
+    const close = nested.capture()
+    close()
+    close()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminated).not.toHaveBeenCalled()
+
+    const closeNext = nested.capture()
+    nested.seal()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminated).not.toHaveBeenCalled()
+    closeNext()
+    await owner.terminated
+    expect(terminated).toHaveBeenCalledOnce()
+  })
+
   it.each([false, true])(
     'keeps grace settlement separate from termination (abort: %s)',
     async (abort) => {

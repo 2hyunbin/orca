@@ -3,7 +3,6 @@ import { sliceCheckLogTail } from '../../../../shared/check-job-log-tail-slice'
 import type { GitHubApiRepository } from '../../github-api-repository'
 import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
 import type { GhExecOptions } from './../github-exec-scope'
-import { rethrowCheckDetailsAbort, waitForCheckDetailsResolution } from './check-details-abort'
 import { assertCheckLogActive, startCheckJobLogDownload } from './check-job-log-download'
 import { requestSharedCheckJobLog } from './check-job-log-inflight'
 export { PR_CHECK_LOG_MAX_BUFFER } from './check-job-log-download'
@@ -100,7 +99,6 @@ export async function attachFailedJobLogTails(
     }
     const jobId = job.id
     const cacheKey = getCheckJobLogTailCacheKey(job, ownerRepo, context.executionScope)
-    let terminated = Promise.resolve()
     const start = (
       operationSignal: AbortSignal,
       deadlineAt: number
@@ -112,7 +110,6 @@ export async function attachFailedJobLogTails(
         deadlineAt,
         context.retainUntil
       )
-      terminated = call.terminated
       return {
         result: call.result.then((stdout) => {
           assertCheckLogActive(operationSignal, deadlineAt)
@@ -137,14 +134,11 @@ export async function attachFailedJobLogTails(
         : await start(signal, context.deadlineAt).result
       assertCheckLogActive(signal, context.deadlineAt)
       Object.assign(job, excerpt(value))
-    } catch (err) {
-      rethrowCheckDetailsAbort(ghOptions.signal, err)
+    } catch {
       assertCheckLogActive(signal, context.deadlineAt)
       console.warn('getPRCheckDetails', 'job_log_failed')
       job.logTail = null
       job.logState = 'error'
     }
-    await waitForCheckDetailsResolution(terminated, signal)
-    assertCheckLogActive(signal, context.deadlineAt)
   }
 }
