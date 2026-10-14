@@ -4,7 +4,11 @@ import {
   type ProjectHostSetupProjection
 } from '../../../shared/project-host-setup-projection'
 import type { AppState } from './types'
-import { normalizeHydratedProjectHostSetupProjection } from './project-host-setup-selector-normalization'
+import {
+  hasReposWithoutProjectHostSetup,
+  mergeDerivedProjectHostSetupProjection,
+  normalizeHydratedProjectHostSetupProjection
+} from '../../../shared/project-host-setup-hydration'
 
 const projectHostSetupProjectionCache = new WeakMap<AppState['repos'], ProjectHostSetupProjection>()
 const providedProjectHostSetupProjectionCache = new WeakMap<
@@ -83,21 +87,6 @@ function getCachedProvidedProjectHostSetupProjection(
   return projection
 }
 
-function mergeById<T extends { id: string }>(base: readonly T[], overlay: readonly T[]): T[] {
-  const merged = [...base]
-  const indexById = new Map(merged.map((entry, index) => [entry.id, index]))
-  for (const entry of overlay) {
-    const index = indexById.get(entry.id)
-    if (index === undefined) {
-      indexById.set(entry.id, merged.length)
-      merged.push(entry)
-    } else {
-      merged[index] = entry
-    }
-  }
-  return merged
-}
-
 function mergeProjectHostSetupProjection(
   repos: AppState['repos'],
   projects: Project[],
@@ -113,10 +102,7 @@ function mergeProjectHostSetupProjection(
   const normalized = normalizeHydratedProjectHostSetupProjection(repos, projects, setups, derived)
   // Why: older runtimes/profiles may hydrate empty or partial project/setup arrays
   // beside legacy repos. Keep repo-backed compatibility rows visible in that case.
-  const projection = {
-    projects: mergeById(derived.projects, normalized.projects),
-    setups: mergeById(derived.setups, normalized.setups)
-  }
+  const projection = mergeDerivedProjectHostSetupProjection(derived, normalized)
   const nextCachedByProjects =
     cachedByProjects ??
     new WeakMap<Project[], WeakMap<ProjectHostSetup[], ProjectHostSetupProjection>>()
@@ -145,10 +131,7 @@ function getCachedNormalizedProjectHostSetupProjection(
   if (cachedProjection) {
     return cachedProjection
   }
-  const projection = {
-    projects: mergeById(derived.projects, normalized.projects),
-    setups: mergeById(derived.setups, normalized.setups)
-  }
+  const projection = mergeDerivedProjectHostSetupProjection(derived, normalized)
   const nextCachedByProjects =
     cachedByProjects ??
     new WeakMap<Project[], WeakMap<ProjectHostSetup[], ProjectHostSetupProjection>>()
@@ -179,19 +162,8 @@ export function getProjectHostSetupProjectionFromState(
       return cachedProjection
     }
 
-    const repoIds = new Set(state.repos.map((repo) => repo.id))
-    const coveredRepoIds = new Set<string>()
-    for (const setup of projectHostSetups) {
-      const repoId = typeof setup.repoId === 'string' ? setup.repoId : ''
-      if (repoIds.has(repoId)) {
-        coveredRepoIds.add(repoId)
-      }
-      if (repoIds.has(setup.id)) {
-        coveredRepoIds.add(setup.id)
-      }
-    }
     let projection: ProjectHostSetupProjection
-    if (state.repos.length > 0 && coveredRepoIds.size < repoIds.size) {
+    if (hasReposWithoutProjectHostSetup(state.repos, projectHostSetups)) {
       projection = mergeProjectHostSetupProjection(
         state.repos,
         projects as Project[],

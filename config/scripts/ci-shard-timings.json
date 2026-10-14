@@ -9592,7 +9592,7 @@
       "src/renderer/src/lib/renderer-agent-status-observation-ingress.test.ts": 115,
       "src/renderer/src/lib/renderer-app-platform.test.ts": 156,
       "src/renderer/src/lib/renderer-memory-profile.test.ts": 75,
-      "src/renderer/src/lib/repo-display-labels.test.ts": 60,
+      "src/shared/repo-display-labels.test.ts": 60,
       "src/renderer/src/lib/repo-runtime-owner.test.ts": 90,
       "src/renderer/src/lib/repo-search.test.ts": 67,
       "src/renderer/src/lib/repo-slug-cache.test.ts": 56,

@@ -14,19 +14,20 @@ import {
 } from './folder-workspace-lanes'
 import { PR_GROUP_META, PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
 import type { PRGroupKey } from './group-keys'
-import { addRepoIdToGroup, getProjectGroupingForRepo } from './project-grouping'
-import type {
-  OrderedGroupEntry,
-  ProjectGroupingIndex,
-  WorktreeGroupEntry
-} from './project-grouping'
+import { addRepoIdToGroup } from './worktree-group-entry'
+import type { OrderedGroupEntry, WorktreeGroupEntry } from './worktree-group-entry'
+import {
+  addItemToProjectSection,
+  ensureProjectSectionForRepo,
+  type ProjectGroupingIndex
+} from '../../../../../../shared/project-section-grouping'
+import { orderProjectSections } from '../../../../../../shared/project-section-order'
 import type {
   ImportedWorktreesCardCandidate,
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   WorktreeGroupBy
 } from './row-types'
-import { getManualOrderAnchorRepo, sortProjectEntries } from './section-order'
 
 /** Lane label for a lane a folder workspace opened before any worktree did. */
 function getLaneLabelForKey(
@@ -80,15 +81,13 @@ export function buildOrderedGroups(args: {
 
   const grouped = new Map<string, WorktreeGroupEntry>()
   for (const w of naturalWorktrees) {
+    if (groupBy === 'repo') {
+      addItemToProjectSection(grouped, w, w.repoId, repoMap, projectIndex)
+      continue
+    }
     let key: string
     let label: string
-    let repo: Repo | undefined
-    if (groupBy === 'repo') {
-      const grouping = getProjectGroupingForRepo(w.repoId, repoMap, projectIndex)
-      key = grouping.key
-      label = grouping.label
-      repo = grouping.repo
-    } else if (groupBy === 'workspace-status') {
+    if (groupBy === 'workspace-status') {
       const workspaceStatus = getWorkspaceStatus(w, workspaceStatuses)
       key = getWorkspaceStatusGroupKey(workspaceStatus)
       label =
@@ -99,7 +98,7 @@ export function buildOrderedGroups(args: {
       label = PR_GROUP_META[prGroup].label
     }
     if (!grouped.has(key)) {
-      grouped.set(key, { label, items: [], repo, repoIds: new Set() })
+      grouped.set(key, { label, items: [], repo: undefined, repoIds: new Set() })
     }
     const group = grouped.get(key)!
     group.items.push(w)
@@ -130,77 +129,28 @@ export function buildOrderedGroups(args: {
     }
   }
   if (groupBy === 'repo') {
+    // Why: repos can arrive before worktree scans, but stale IDs passed by
+    // older snapshots must not render an "Unknown" project header.
     for (const repoId of placeholderRepoIds) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
-      if (!grouping.repo) {
-        continue
-      }
-      const key = grouping.key
-      if (!grouped.has(key)) {
-        // Why: repos can arrive before worktree scans, but stale IDs passed by
-        // older snapshots must not render an "Unknown" project header.
-        grouped.set(key, {
-          label: grouping.label,
-          items: [],
-          repo: grouping.repo,
-          repoIds: new Set([repoId])
-        })
-      } else {
-        addRepoIdToGroup(grouped.get(key)!, repoId)
-      }
+      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, { requireRepo: true })
     }
-  }
-  if (groupBy === 'repo') {
     for (const [repoId, candidate] of importedWorktreesByRepo) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
-      const key = grouping.key
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          label: grouping.label,
-          items: [],
-          repo: grouping.repo ?? candidate.repo,
-          repoIds: new Set([repoId])
-        })
-      } else if (grouped.has(key)) {
-        addRepoIdToGroup(grouped.get(key)!, repoId)
-      }
+      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, {
+        fallbackRepo: candidate.repo
+      })
     }
-  }
-  if (groupBy === 'repo') {
+    // Why: the default policy removes pinned worktrees from natural groups,
+    // but actionable inbox rows still need a project section to render in.
     for (const [repoId, candidate] of newExternalWorktreesInboxByRepo) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
-      const key = grouping.key
-      if (!grouped.has(key)) {
-        // Why: the default policy removes pinned worktrees from natural groups,
-        // but actionable inbox rows still need a project section to render in.
-        grouped.set(key, {
-          label: grouping.label,
-          items: [],
-          repo: grouping.repo ?? candidate.repo,
-          repoIds: new Set([repoId])
-        })
-      } else if (grouped.has(key)) {
-        addRepoIdToGroup(grouped.get(key)!, repoId)
-      }
+      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex, {
+        fallbackRepo: candidate.repo
+      })
     }
-  }
-  if (groupBy === 'repo') {
+    // Why: creating the first worktree in a repo leaves it with no group yet;
+    // ensure one so the in-progress row nests under its repo instead of being
+    // dropped.
     for (const repoId of pendingByRepo.keys()) {
-      const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
-      const key = grouping.key
-      if (!grouped.has(key)) {
-        // Why: creating the first worktree in a repo leaves it with no group yet;
-        // ensure one so the in-progress row nests under its repo instead of being
-        // dropped.
-        grouped.set(key, {
-          label: grouping.label,
-          items: [],
-          repo: grouping.repo,
-          repoIds: new Set([repoId])
-        })
-      } else {
-        addRepoIdToGroup(grouped.get(key)!, repoId)
-      }
+      ensureProjectSectionForRepo(grouped, repoId, repoMap, projectIndex)
     }
   }
 
@@ -224,16 +174,7 @@ export function buildOrderedGroups(args: {
       }
     }
   } else {
-    for (const group of grouped.values()) {
-      // Why: logical project headers can contain multiple host setup repos.
-      // Use the repo that anchors manual order so drag and actions target the
-      // same persisted order source the row sorter reads.
-      group.repo = getManualOrderAnchorRepo(group, repoMap, repoOrder)
-    }
-    // Why: project header order is its own user choice (projectOrderBy),
-    // decoupled from workspace sortBy. Manual uses the canonical repoOrder so
-    // header drag has a stable source of truth; Recent follows activity.
-    const entries = sortProjectEntries(Array.from(grouped.entries()), projectOrderBy, repoOrder)
+    const entries = orderProjectSections(grouped, repoMap, repoOrder, projectOrderBy)
     // Why: large imported repo sets can have one group per repo; spreading
     // those entries into push can exceed V8's argument limit.
     for (const entry of entries) {

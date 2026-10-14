@@ -1,21 +1,24 @@
-import type { Project, ProjectHostSetup } from '../../../../shared/project-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { reconcileCatalogRows } from '../slices/repo-identity-reconcile'
+import type { Project, ProjectHostSetup } from './project-types'
+import type { Repo } from './repo-types'
+import { reconcileCatalogRows } from './catalog-row-reconcile'
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId
-} from '../../../../shared/execution-host'
-import type { RepoSlice } from '../repos/repo-state'
+} from './execution-host'
 import {
+  type ProjectCatalogRows,
   getProjectHostSetupOwnerKey,
   getReposById,
   getSourceRepoIdsOutsideHost,
   mergePreviousProjectMetadata,
   mergeProjectCompatibilityProjects,
+  mergeProjectHostSetupCompatibility,
   mergeProjectHostSetupsByOwner,
+  projectCompatibilityFromRepos,
   projectWithCurrentSourceRepoIds
-} from './project-compatibility-core'
+} from './project-compatibility-merge'
+import type { ProjectHostSetupProjection } from './project-host-setup-projection'
 
 export function getProjectHostIds(
   project: Project,
@@ -130,11 +133,11 @@ export function mergeFetchedProjectCompatibilityForHost({
   repos,
   hostId
 }: {
-  previous: Pick<RepoSlice, 'projects' | 'projectHostSetups'>
-  fetched: Pick<RepoSlice, 'projects' | 'projectHostSetups'>
+  previous: ProjectCatalogRows
+  fetched: ProjectCatalogRows
   repos: readonly Repo[]
   hostId: string
-}): Pick<RepoSlice, 'projects' | 'projectHostSetups'> {
+}): ProjectCatalogRows {
   const setupBelongsToFetchedCatalog = (setup: ProjectHostSetup): boolean => {
     if (hostId !== LOCAL_EXECUTION_HOST_ID) {
       return setup.hostId === hostId
@@ -223,4 +226,24 @@ export function mergeFetchedProjectCompatibilityForHost({
       getProjectHostSetupOwnerKey
     )
   }
+}
+
+/** One host's fetched catalog folded into the all-host project rows, as each host refresh does. */
+export function mergeFetchedHostProjectCatalog({
+  previous,
+  fetched,
+  repos,
+  hostId
+}: {
+  previous: ProjectCatalogRows
+  fetched: ProjectHostSetupProjection
+  repos: readonly Repo[]
+  hostId: string
+}): ProjectCatalogRows {
+  return mergeFetchedProjectCompatibilityForHost({
+    previous,
+    fetched: mergeProjectHostSetupCompatibility(projectCompatibilityFromRepos(repos), fetched),
+    repos,
+    hostId
+  })
 }

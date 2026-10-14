@@ -1,35 +1,39 @@
-import type { Project, ProjectHostSetup } from '../../../../../../shared/project-types'
-import type { Repo } from '../../../../../../shared/repo-types'
-import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { RenderableFolderWorkspace } from './folder-workspace-lanes'
-import { toSshExecutionHostId } from '../../../../../../shared/execution-host'
-import { parseWslUncPath } from '../../../../../../shared/wsl-paths'
-import {
-  isWindowsAbsolutePathLike,
-  normalizeRuntimePathForComparison
-} from '../../../../../../shared/cross-platform-path'
-
-export type OrderedGroupEntry = [string, WorktreeGroupEntry]
+// Project sections as the desktop sidebar draws them under "Group by Project". The paired phone
+// calls the same functions so its sections are the desktop's by construction.
+import type { ExecutionHostId } from './execution-host'
+import { toSshExecutionHostId } from './execution-host'
+import type { Project, ProjectHostSetup } from './project-types'
+import type { Repo } from './repo-types'
+import { parseWslUncPath } from './wsl-paths'
+import { isWindowsAbsolutePathLike, normalizeRuntimePathForComparison } from './cross-platform-path'
 
 export type ProjectGroupingModel = {
   projects: readonly Project[]
   projectHostSetups: readonly ProjectHostSetup[]
 }
 
-export type WorktreeGroupEntry = {
-  label: string
-  items: Worktree[]
-  repo?: Repo
-  repoIds: Set<string>
-  /** Folder workspaces bucketed into this lane under non-repo grouping. Carries
-   *  the owning group because FolderWorkspaceRow requires a non-optional one. */
-  folderWorkspaces?: RenderableFolderWorkspace[]
-}
-
 export type ProjectGroupingIndex = {
   projectById: Map<string, Project>
   setupByRepoId: Map<string, ProjectHostSetup>
   surfaceKeysRequiringSetupGroups: Set<string>
+}
+
+/** The repo fields section grouping, labelling and ordering read. */
+export type ProjectSectionRepo = {
+  id: string
+  displayName: string
+  path: string
+  addedAt?: number
+  connectionId?: string | null
+  executionHostId?: ExecutionHostId | null
+}
+
+/** One project section: its rows, the repo that anchors its header, and every repo it holds. */
+export type ProjectSectionEntry<Item, R extends ProjectSectionRepo = Repo> = {
+  label: string
+  items: Item[]
+  repo?: R
+  repoIds: Set<string>
 }
 
 const projectGroupingIndexCache = new WeakMap<ProjectGroupingModel, ProjectGroupingIndex | null>()
@@ -123,18 +127,18 @@ export function isCheckoutScopedProjectSetup(
   )
 }
 
-export type ProjectHeaderRevealTarget = {
+export type ProjectHeaderRevealTarget<R extends Pick<ProjectSectionRepo, 'displayName'> = Repo> = {
   key: string
   label: string
-  repo?: Repo
+  repo?: R
   projectId?: string
 }
 
-export function getProjectGroupingForRepo(
+export function getProjectGroupingForRepo<R extends Pick<ProjectSectionRepo, 'displayName'>>(
   repoId: string,
-  repoMap: Map<string, Repo>,
+  repoMap: ReadonlyMap<string, R>,
   projectIndex: ProjectGroupingIndex | null
-): ProjectHeaderRevealTarget {
+): ProjectHeaderRevealTarget<R> {
   const repo = repoMap.get(repoId)
   const setup = projectIndex?.setupByRepoId.get(repoId)
   const project = setup ? projectIndex?.projectById.get(setup.projectId) : undefined
@@ -172,6 +176,48 @@ export function getProjectHeaderRevealTarget(
   return getProjectGroupingForRepo(repoId, repoMap, buildProjectGroupingIndex(projectGrouping))
 }
 
-export function addRepoIdToGroup(group: WorktreeGroupEntry, repoId: string): void {
-  group.repoIds.add(repoId)
+/** Files `item` under its repo's project section, opening the section on first sight. */
+export function addItemToProjectSection<Item, R extends ProjectSectionRepo>(
+  sections: Map<string, ProjectSectionEntry<Item, R>>,
+  item: Item,
+  repoId: string,
+  repoMap: ReadonlyMap<string, R>,
+  projectIndex: ProjectGroupingIndex | null
+): void {
+  const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+  let section = sections.get(grouping.key)
+  if (!section) {
+    section = { label: grouping.label, items: [], repo: grouping.repo, repoIds: new Set() }
+    sections.set(grouping.key, section)
+  }
+  section.items.push(item)
+  section.repoIds.add(repoId)
+}
+
+/**
+ * Opens the project section for a repo that has no rows to file, or joins the repo to the open one.
+ * `requireRepo` skips repo ids missing from the catalog, which would otherwise read "Unknown".
+ */
+export function ensureProjectSectionForRepo<Item, R extends ProjectSectionRepo>(
+  sections: Map<string, ProjectSectionEntry<Item, R>>,
+  repoId: string,
+  repoMap: ReadonlyMap<string, R>,
+  projectIndex: ProjectGroupingIndex | null,
+  options: { requireRepo?: boolean; fallbackRepo?: R } = {}
+): void {
+  const grouping = getProjectGroupingForRepo(repoId, repoMap, projectIndex)
+  if (options.requireRepo && !grouping.repo) {
+    return
+  }
+  const section = sections.get(grouping.key)
+  if (section) {
+    section.repoIds.add(repoId)
+    return
+  }
+  sections.set(grouping.key, {
+    label: grouping.label,
+    items: [],
+    repo: grouping.repo ?? options.fallbackRepo,
+    repoIds: new Set([repoId])
+  })
 }

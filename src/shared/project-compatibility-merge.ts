@@ -1,17 +1,20 @@
-import type { Project, ProjectHostSetup } from '../../../../shared/project-types'
-import type { Repo } from '../../../../shared/repo-types'
+import type { Project, ProjectHostSetup, ProjectUpdateArgs } from './project-types'
+import type { Repo } from './repo-types'
 import {
   mergeCatalogCreatedAt,
   mergeCatalogUpdatedAt,
   projectHostSetupProjectionFromRepos
-} from '../../../../shared/project-host-setup-projection'
-import type { ProjectHostSetupProjection } from '../../../../shared/project-host-setup-projection'
-import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
-import type { ProjectUpdate, RepoSlice } from '../repos/repo-state'
+} from './project-host-setup-projection'
+import type { ProjectHostSetupProjection } from './project-host-setup-projection'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from './execution-host'
 
-export function projectCompatibilityFromRepos(
-  repos: readonly Repo[]
-): Pick<RepoSlice, 'projects' | 'projectHostSetups'> {
+/** A catalog's project rows and the host setups that place them. */
+export type ProjectCatalogRows = {
+  projects: readonly Project[]
+  projectHostSetups: readonly ProjectHostSetup[]
+}
+
+export function projectCompatibilityFromRepos(repos: readonly Repo[]): ProjectCatalogRows {
   const projection = projectHostSetupProjectionFromRepos(repos)
   return {
     projects: projection.projects,
@@ -63,7 +66,7 @@ export function mergeProjectCompatibilityProjects(
 export function mergeUpdatedProjectCompatibilityProject(
   base: Project,
   updated: Project,
-  updates: ProjectUpdate
+  updates: ProjectUpdateArgs['updates']
 ): Project {
   const project = mergeProjectCompatibilityProject(base, updated)
   if ('localWindowsRuntimePreference' in updates) {
@@ -189,9 +192,9 @@ export function mergePreviousProjectMetadata(
 }
 
 export function mergeProjectHostSetupCompatibility(
-  derived: Pick<RepoSlice, 'projects' | 'projectHostSetups'>,
+  derived: ProjectCatalogRows,
   fetched: ProjectHostSetupProjection
-): Pick<RepoSlice, 'projects' | 'projectHostSetups'> {
+): ProjectCatalogRows {
   const fetchedRepoSetupKeys = new Set(fetched.setups.map(getRepoDerivedSetupKey))
   const derivedSetups = derived.projectHostSetups.filter(
     (setup) => !fetchedRepoSetupKeys.has(getRepoDerivedSetupKey(setup))

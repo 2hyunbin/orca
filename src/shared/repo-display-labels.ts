@@ -1,4 +1,4 @@
-import { getRepoExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from './execution-host'
 
 type RepoDisplayLabelItem = {
   path: string
