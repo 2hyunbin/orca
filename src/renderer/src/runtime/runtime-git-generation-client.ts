@@ -1,3 +1,4 @@
+import { translate } from '@/i18n/i18n'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { antigravityGenerationCompatibilityError } from './antigravity-generation-compatibility'
 import {
@@ -20,7 +21,11 @@ export async function generateRuntimeCommitMessage(
   isCanceled?: () => boolean
 ): Promise<RuntimeGenerateCommitMessageResult> {
   if (isCanceled?.()) {
-    return { success: false, error: 'Generation canceled.', canceled: true }
+    return {
+      success: false,
+      error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+      canceled: true
+    }
   }
   const target = context.target
   if (target.kind === 'local' || !context.worktreeId) {
@@ -45,7 +50,11 @@ export async function generateRuntimeCommitMessage(
     overrides
   )
   if (isCanceled?.()) {
-    return { success: false, error: 'Generation canceled.', canceled: true }
+    return {
+      success: false,
+      error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+      canceled: true
+    }
   }
   if (compatibilityError) {
     return { success: false, error: compatibilityError }
@@ -66,7 +75,11 @@ export async function generateRuntimeCommitMessage(
     { timeoutMs: 75_000, ...(isCanceled ? { isCanceled } : {}) }
   ).catch((error) => {
     if (isCanceled?.()) {
-      return { success: false, error: 'Generation canceled.', canceled: true }
+      return {
+        success: false,
+        error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+        canceled: true
+      }
     }
     throw error
   })
@@ -128,7 +141,11 @@ export async function generateRuntimePullRequestFields(
   isCanceled?: () => boolean
 ): Promise<RuntimeGeneratePullRequestFieldsResult> {
   if (isCanceled?.()) {
-    return { success: false, error: 'Generation canceled.', canceled: true }
+    return {
+      success: false,
+      error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+      canceled: true
+    }
   }
   const target = context.target
   if (target.kind === 'local' || !context.worktreeId) {
@@ -154,7 +171,11 @@ export async function generateRuntimePullRequestFields(
     overrides
   )
   if (isCanceled?.()) {
-    return { success: false, error: 'Generation canceled.', canceled: true }
+    return {
+      success: false,
+      error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+      canceled: true
+    }
   }
   if (compatibilityError) {
     return { success: false, error: compatibilityError }
@@ -176,7 +197,11 @@ export async function generateRuntimePullRequestFields(
     { timeoutMs: 75_000, ...(isCanceled ? { isCanceled } : {}) }
   ).catch((error) => {
     if (isCanceled?.()) {
-      return { success: false, error: 'Generation canceled.', canceled: true }
+      return {
+        success: false,
+        error: translate('components.jiraIssueTitleField.canceled', 'Generation canceled.'),
+        canceled: true
+      }
     }
     throw error
   })
