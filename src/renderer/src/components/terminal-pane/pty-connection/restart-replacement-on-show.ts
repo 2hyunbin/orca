@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 /**
@@ -13,7 +14,7 @@ export function armRestartReplacement(session: ConnectPanePtySession, ptyId: str
   }
 }
 
-/** Spawns the armed replacement; a no-op unless the pane still has no process of its own. */
+/** Spawns the armed replacement, unless the pane closed or another flow already rebound it. */
 export function consumeRestartReplacement(session: ConnectPanePtySession): void {
   const ptyId: string | null = session.restartReplacementPtyId ?? null
   if (!ptyId) {
@@ -21,10 +22,15 @@ export function consumeRestartReplacement(session: ConnectPanePtySession): void 
   }
   session.restartReplacementPtyId = null
   const currentPtyId = session.transport.getPtyId()
+  const storedPtyId =
+    useAppStore.getState().terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[
+      session.pane.leafId
+    ]
   if (
     session.disposed ||
     session.deps.paneTransportsRef.current.get(session.pane.id) !== session.transport ||
-    (currentPtyId !== null && currentPtyId !== ptyId)
+    (currentPtyId !== null && currentPtyId !== ptyId) ||
+    (storedPtyId !== undefined && storedPtyId !== ptyId)
   ) {
     return
   }

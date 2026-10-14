@@ -242,10 +242,7 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
     session.deps.setCacheTimerStartedAt(session.cacheKey, null)
     // Why: a dead terminal has no running agent — remove its explicit status
     // entry so the hover UI only shows what is running *now*.
-    // A restart keeps it: the replacement's cold-restore resume reads the provider session there.
-    if (!replacedByRestart) {
-      useAppStore.getState().removeAgentStatus(session.cacheKey)
-    }
+    useAppStore.getState().removeAgentStatus(session.cacheKey)
     useAppStore.getState().clearPaneForegroundAgent(session.cacheKey)
     // The runtime graph is the CLI's source for live terminal bindings, so
     // we must republish when a pane loses its PTY instead of waiting for a

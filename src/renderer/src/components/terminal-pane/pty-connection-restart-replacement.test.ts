@@ -141,7 +141,8 @@ describe('connectPanePty', () => {
   afterEach(async () => {
     await restoreTerminalTestGlobals()
   })
-  async function connectWithLiveAgent(opts: { visible: boolean; sleepingRecord?: boolean }) {
+  /** A pane running an agent, with the live recovery record the app keeps for every agent turn. */
+  async function connectWithAgent(opts: { visible: boolean; hibernated?: boolean }) {
     const { connectPanePty } = await import('./pty-connection')
     const { deliverPtyExitToHandlers } = await import('./pty-exit-delivery')
     const transport = createMockTransport('pty-pane-2')
@@ -149,29 +150,20 @@ describe('connectPanePty', () => {
     const deps = createDeps({ isVisibleRef: { current: opts.visible } })
     const pane = createPane(2)
     const paneKey = `tab-1:${leafIdForPane(2)}`
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    mockStoreState.removeAgentStatus.mockImplementation((key: string) => {
+      delete mockStoreState.agentStatusByPaneKey[key]
+    })
+    mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] = {
       paneKey,
-      state: 'working',
+      tabId: 'tab-1',
+      worktreeId: 'wt-1',
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'sess-1' },
       prompt: 'fix it',
-      agentType: 'claude',
-      providerSession: { key: 'session_id', id: 'sess-live' },
+      state: opts.hibernated ? 'done' : 'working',
+      capturedAt: 1,
       updatedAt: 1,
-      stateStartedAt: 1,
-      stateHistory: []
-    }
-    if (opts.sleepingRecord) {
-      mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] = {
-        paneKey,
-        tabId: 'tab-1',
-        worktreeId: 'wt-1',
-        agent: 'claude',
-        providerSession: { key: 'session_id', id: 'sess-hibernated' },
-        prompt: 'fix it',
-        state: 'done',
-        capturedAt: 1,
-        updatedAt: 1,
-        origin: 'worktree-sleep'
-      }
+      origin: opts.hibernated ? 'worktree-sleep' : 'live'
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
     const args = [pane, createManager(1), deps] as unknown as Parameters<typeof connectPanePty>
@@ -193,21 +185,20 @@ describe('connectPanePty', () => {
     }
     const connects = (): number => transport.connect.mock.calls.length
     const lastCommand = (): string | undefined => transport.connect.mock.calls.at(-1)?.[0]?.command
-    return { binding, exit, connects, lastCommand, paneKey }
+    return { binding, exit, connects, lastCommand }
   }
 
   it('resumes a restart-replaced hidden pane once, when it is next shown', async () => {
-    const pane = await connectWithLiveAgent({ visible: false })
+    const pane = await connectWithAgent({ visible: false })
     const before = pane.connects()
 
     await pane.exit(true)
     expect(pane.connects()).toBe(before)
-    expect(mockStoreState.removeAgentStatus).not.toHaveBeenCalledWith(pane.paneKey)
 
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
     expect(pane.connects()).toBe(before + 1)
-    expect(pane.lastCommand()).toContain('sess-live')
+    expect(pane.lastCommand()).toContain('sess-1')
 
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
@@ -215,17 +206,17 @@ describe('connectPanePty', () => {
   })
 
   it('resumes a restart-replaced pane at once when it is visible', async () => {
-    const pane = await connectWithLiveAgent({ visible: true })
+    const pane = await connectWithAgent({ visible: true })
     const before = pane.connects()
 
     await pane.exit(true)
 
     expect(pane.connects()).toBe(before + 1)
-    expect(pane.lastCommand()).toContain('sess-live')
+    expect(pane.lastCommand()).toContain('sess-1')
   })
 
   it('spawns nothing for a restart-replaced pane closed before it is shown', async () => {
-    const pane = await connectWithLiveAgent({ visible: false })
+    const pane = await connectWithAgent({ visible: false })
     await pane.exit(true)
     const before = pane.connects()
 
@@ -236,14 +227,33 @@ describe('connectPanePty', () => {
     expect(pane.connects()).toBe(before)
   })
 
+  it('spawns nothing when another flow rebound the pane before it is shown', async () => {
+    const pane = await connectWithAgent({ visible: false })
+    await pane.exit(true)
+    const before = pane.connects()
+    mockStoreState.terminalLayoutsByTabId = {
+      ...mockStoreState.terminalLayoutsByTabId,
+      'tab-1': {
+        root: { type: 'leaf', leafId: leafIdForPane(2) },
+        activeLeafId: leafIdForPane(2),
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [leafIdForPane(2)]: 'pty-replacement' }
+      }
+    }
+
+    pane.binding.noteVisibilityResume()
+    await flushAsyncTicks()
+
+    expect(pane.connects()).toBe(before)
+  })
+
   it('lets the hibernation wake own a restart-replaced pane that was put to sleep', async () => {
-    const pane = await connectWithLiveAgent({ visible: false, sleepingRecord: true })
+    const pane = await connectWithAgent({ visible: false, hibernated: true })
     const before = pane.connects()
     await pane.exit(true)
 
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
-
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
 
@@ -251,8 +261,8 @@ describe('connectPanePty', () => {
     expect(pane.connects()).toBe(before + 1)
   })
 
-  it('leaves a pane lost to any other -1 exit without a process or its agent row', async () => {
-    const pane = await connectWithLiveAgent({ visible: false })
+  it('leaves a pane lost to any other -1 exit without a process', async () => {
+    const pane = await connectWithAgent({ visible: false })
     const before = pane.connects()
     await pane.exit(false)
 
@@ -260,6 +270,5 @@ describe('connectPanePty', () => {
     await flushAsyncTicks()
 
     expect(pane.connects()).toBe(before)
-    expect(mockStoreState.removeAgentStatus).toHaveBeenCalledWith(pane.paneKey)
   })
 })
