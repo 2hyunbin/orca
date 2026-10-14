@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { resolveProviderChildEnv } from '../provider-process/provider-process-launch'
 import { sealStructuredSessionChild } from '../runtime/structured-session-child-env'
-import { buildPiRpcLaunch, piRpcSessionlessEnvironment, withoutPiCallerEnv } from './rpc-launch'
+import {
+  buildPiRpcLaunch,
+  PI_RPC_SESSION_ENV_TO_DELETE,
+  piRpcSessionlessEnvironment,
+  withoutPiCallerEnv
+} from './rpc-launch'
 
 const options = { command: 'host-resolved-pi', cwd: '/host/folder', fullAccess: true }
 describe('Pi RPC launch', () => {
@@ -106,7 +111,7 @@ describe('Pi RPC launch', () => {
           sessionId: 'this-session',
           spawnToken: 'this-token',
           env: withoutPiCallerEnv(inherited),
-          inheritedEnvToDelete: []
+          inheritedEnvToDelete: PI_RPC_SESSION_ENV_TO_DELETE
         })
       }),
       inherited
