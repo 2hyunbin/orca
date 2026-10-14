@@ -1,6 +1,6 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,6 +20,7 @@ import { GITHUB_PULL_REQUEST_METHODS } from './rpc/methods/github-pull-request-m
 import { clearGhAccountTokenCacheForTests } from '../github/gh-account-token'
 import { clearGhCapabilityStateForTests } from '../github/gh-capability-state'
 import { prCheckLogTailCache } from '../github/client/check/check-job-log-tails'
+import { withPairedCheckDetailsCleanup } from './github-check-details-paired-cleanup.test-fixture'
 
 const { spawnMock, resolverMock, detailsDelegate, captures, terminationMock } = vi.hoisted(() => {
   const signals: AbortSignal[] = []
@@ -78,10 +79,11 @@ describe('paired check details over real encrypted loopback transport', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it.each(['failure', 'disconnect'])(
-    'executes only on the handling host after %s',
+  it.each(['failure', 'disconnect', 'drain-failure', 'stop-failure', 'stop-stall'])(
+    'executes only on the handling host and cleans up after %s',
     { timeout: 15_000 },
     async (mode) => {
+      const disconnect = mode === 'disconnect' || mode === 'drain-failure'
       const directory = mkdtempSync(join(tmpdir(), 'orca-paired-check-details-'))
       hostFolder = join(directory, 'handling-host-folder')
       const repo: Repo = {
@@ -147,7 +149,7 @@ describe('paired check details over real encrypted loopback transport', () => {
                 ? { stdout: '--user' }
                 : argv[0] === 'auth'
                   ? { stdout: 'fixture-bound-token' }
-                  : mode === 'failure'
+                  : !disconnect
                     ? { code: 1, stderr: 'fixture-ordinary-failure' }
                     : {
                         stdout: JSON.stringify({
@@ -176,69 +178,116 @@ describe('paired check details over real encrypted loopback transport', () => {
         methods: GITHUB_PULL_REQUEST_METHODS
       })
       let connection: RemoteRuntimeRequestConnection | undefined
-      try {
-        await server.start()
-        const offer = server.createPairingOffer({ name: 'check-details', scope: 'runtime' })
-        if (!offer.available) {
-          throw new Error('Pairing unavailable')
-        }
-        const pairing = parsePairingCode(offer.pairingUrl)
-        if (!pairing) {
-          throw new Error('Invalid fixture pairing')
-        }
-        connection = new RemoteRuntimeRequestConnection(pairedRuntimeConnectionFromOffer(pairing))
-        const caller = new AbortController()
-        const pending = connection.request(
-          'github.prCheckDetails',
-          {
-            repo: 'id:folder',
-            checkRunId: mode === 'failure' ? 9 : undefined,
-            workflowRunId: mode === 'disconnect' ? 8 : undefined,
-            prRepo: { owner: 'base', repo: 'widgets', host: 'github.enterprise.test' }
+      const cleanupFailure = new Error('Forced paired cleanup failure')
+      let childClosureAttempted = false
+      let serverStopped = false
+      let finishStall: () => void = () => {}
+      const stalled = new Promise<void>((resolve) => {
+        finishStall = resolve
+      })
+      const pendingCleanup = withPairedCheckDetailsCleanup(
+        {
+          closeClient: () => connection?.close(),
+          drain: () =>
+            vi.waitFor(
+              () => {
+                if (mode === 'drain-failure') {
+                  throw cleanupFailure
+                }
+                expect(server.readClientActivity().openConnections).toBe(0)
+              },
+              { timeout: mode === 'drain-failure' ? 25 : 1_000 }
+            ),
+          closeChildren: () => {
+            childClosureAttempted = true
+            for (const child of children) {
+              child.emit('close', 0, null)
+            }
           },
-          5_000,
-          caller.signal
-        )
-        if (mode === 'failure') {
-          await expect(pending).resolves.toMatchObject({
-            ok: false,
-            error: { message: 'Could not load check details.' }
-          })
+          stopServer: async () => {
+            await server.stop()
+            serverStopped = true
+            if (mode === 'stop-failure') {
+              throw cleanupFailure
+            }
+            if (mode === 'stop-stall') {
+              await stalled
+            }
+          },
+          removeDirectory: () => rmSync(directory, { recursive: true, force: true })
+        },
+        async () => {
+          await server.start()
+          const offer = server.createPairingOffer({ name: 'check-details', scope: 'runtime' })
+          if (!offer.available) {
+            throw new Error('Pairing unavailable')
+          }
+          const pairing = parsePairingCode(offer.pairingUrl)
+          if (!pairing) {
+            throw new Error('Invalid fixture pairing')
+          }
+          connection = new RemoteRuntimeRequestConnection(pairedRuntimeConnectionFromOffer(pairing))
+          const caller = new AbortController()
+          const pending = connection.request(
+            'github.prCheckDetails',
+            {
+              repo: 'id:folder',
+              checkRunId: !disconnect ? 9 : undefined,
+              workflowRunId: disconnect ? 8 : undefined,
+              prRepo: { owner: 'base', repo: 'widgets', host: 'github.enterprise.test' }
+            },
+            5_000,
+            caller.signal
+          )
+          if (!disconnect) {
+            await expect(pending).resolves.toMatchObject({
+              ok: false,
+              error: { message: 'Could not load check details.' }
+            })
+          } else {
+            const rejection = expect(pending).rejects.toThrow()
+            await vi.waitFor(() => expect(logChild).toBeDefined())
+            connection.close()
+            await rejection
+            await vi.waitFor(() => expect(delegate.mock.calls[0][2]?.aborted).toBe(true))
+            expect(captures.signals.some((signal) => signal.aborted)).toBe(true)
+            expect(logChild).toBeDefined()
+            logChild?.emit('close', null, 'SIGKILL')
+          }
+          await vi.waitFor(() => expect(hostSettled).toBe(true))
+          expect(delegate).toHaveBeenCalledOnce()
+          expect(detailsDelegate).toHaveBeenCalledOnce()
+          expect(detailsDelegate.mock.calls[0][4]).toBe(delegate.mock.calls[0][2])
+          expect(resolveRepo).toHaveBeenCalledOnce()
+          expect(captures.host).toBe(disconnect ? 4 : 3)
+          expect(captures.client).toBe(0)
+          expect(captures.signals).toHaveLength(disconnect ? 2 : 1)
+          const apiCalls = spawnMock.mock.calls.filter((call) => call[1][0] === 'api')
+          expect(apiCalls).toHaveLength(disconnect ? 2 : 1)
+          for (const call of apiCalls) {
+            expect(call[1]).toContain('github.enterprise.test')
+            expect(call[2].cwd).toBe(hostFolder)
+            expect(call[2].env.GH_ENTERPRISE_TOKEN).toBe('fixture-bound-token')
+          }
+          expect(prCheckLogTailCache.size).toBe(0)
+        },
+        mode === 'stop-stall' ? 100 : 2_000
+      )
+      try {
+        if (mode === 'drain-failure' || mode === 'stop-failure') {
+          await expect(pendingCleanup).rejects.toBe(cleanupFailure)
+        } else if (mode === 'stop-stall') {
+          await expect(pendingCleanup).rejects.toThrow('Paired check server stop timed out')
         } else {
-          const rejection = expect(pending).rejects.toThrow()
-          await vi.waitFor(() => expect(logChild).toBeDefined())
-          connection.close()
-          await rejection
-          await vi.waitFor(() => expect(delegate.mock.calls[0][2]?.aborted).toBe(true))
-          expect(captures.signals.some((signal) => signal.aborted)).toBe(true)
-          expect(logChild).toBeDefined()
-          logChild?.emit('close', null, 'SIGKILL')
+          await pendingCleanup
         }
-        await vi.waitFor(() => expect(hostSettled).toBe(true))
-        expect(delegate).toHaveBeenCalledOnce()
-        expect(detailsDelegate).toHaveBeenCalledOnce()
-        expect(detailsDelegate.mock.calls[0][4]).toBe(delegate.mock.calls[0][2])
-        expect(resolveRepo).toHaveBeenCalledOnce()
-        expect(captures.host).toBe(mode === 'failure' ? 3 : 4)
-        expect(captures.client).toBe(0)
-        expect(captures.signals).toHaveLength(mode === 'failure' ? 1 : 2)
-        const apiCalls = spawnMock.mock.calls.filter((call) => call[1][0] === 'api')
-        expect(apiCalls).toHaveLength(mode === 'failure' ? 1 : 2)
-        for (const call of apiCalls) {
-          expect(call[1]).toContain('github.enterprise.test')
-          expect(call[2].cwd).toBe(hostFolder)
-          expect(call[2].env.GH_ENTERPRISE_TOKEN).toBe('fixture-bound-token')
-        }
-        expect(prCheckLogTailCache.size).toBe(0)
       } finally {
-        connection?.close()
-        await vi.waitFor(() => expect(server.readClientActivity().openConnections).toBe(0))
-        for (const child of children) {
-          child.emit('close', 0, null)
-        }
-        await server.stop()
-        rmSync(directory, { recursive: true, force: true })
+        finishStall()
       }
+      expect(childClosureAttempted).toBe(true)
+      expect(serverStopped).toBe(true)
+      expect(server.readClientActivity().openConnections).toBe(0)
+      expect(existsSync(directory)).toBe(false)
     }
   )
 })
