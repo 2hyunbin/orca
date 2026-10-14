@@ -290,9 +290,9 @@
     "linearIssue": {
       "createLabel": "Linear 課題 {{value0}}: {{value1}} からワークツリーを作成",
       "pendingLabel": "Linear 課題 {{value0}} からワークツリーを作成",
-      "loadingLabel": "リニア問題 {{value0}} を読み込み中",
+      "loadingLabel": "Linear Issue {{value0}} を読み込み中",
       "createHint": "Linear Issue からワークツリーを作成",
-      "loadingHint": "リニア Issue を読み込み中…"
+      "loadingHint": "Linear Issue を読み込み中…"
     },
     "renderCapOverflow": "{{value0}} 詳細",
     "seeMore": "もっと見る",
@@ -505,7 +505,7 @@
             "worktree": {
               "meta": {
                 "persist": {
-                  "877e3638d8": "リモートランタイムを更新して、このワークスペースのリンクされた問題を変更します",
+                  "877e3638d8": "このワークスペースにリンクされた Issue を変更するには、リモートランタイムを更新してください",
                   "4367540861": "リモートランタイムを更新して Linear Issue をリンクする",
                   "github": {
                     "pr": {
@@ -1313,7 +1313,7 @@
         "e31651a224": "失敗したチェックを再実行する",
         "1b56e28faa": "再実行",
         "f4b1292569": "これらのチェックでデフォルトの AI Agent を開始します",
-        "9a1004fc76": "リフレッシュチェック",
+        "9a1004fc76": "チェックを更新",
         "03e542fcfe": "失敗したチェックのため AI Agent を開始できませんでした: {{value0}}",
         "28986b3747": "失敗したチェックに対して AI Agent を開始しました。",
         "1690fd7f4a": "修正が必要なチェックはありません。",
@@ -1831,7 +1831,7 @@
         "68605516dd": "失敗したチェックを再実行する",
         "522d9353e1": "再実行",
         "0fa8b8faec": "これらのチェックでデフォルトの AI Agent を開始します",
-        "5d0f42766d": "リフレッシュチェック",
+        "5d0f42766d": "チェックを更新",
         "98583589c6": "失敗したチェックのため AI Agent を開始できませんでした: {{value0}}",
         "51c65c0265": "修正が必要なチェックはありません。",
         "788a782bb0": "チェックの再実行に失敗しました",
@@ -2501,7 +2501,7 @@
           "GhAuthErrorHelp": {
             "7e800068d8": "リロード",
             "baa006f9af": "ドキュメント",
-            "3fefeebde4": "コピー・リフレッシュ・コマンド",
+            "3fefeebde4": "更新コマンドをコピー",
             "9c2da6353b": "ログインコマンドのコピー",
             "b436c586d1": "コマンドをコピー",
             "8a7f6bf5dc": "コピーに失敗しました",
@@ -3846,7 +3846,7 @@
             "codexSignInError": "Codex のサインインに失敗しました。もう一度お試しください。",
             "cursorUsageMenu": "Cursor の使用状況",
             "hiddenUsageProviders": "ほかに: {{value0}}",
-            "zcodeUsageMenu": "Zコードの使用法"
+            "zcodeUsageMenu": "ZCode の使用量"
           },
           "StatusBarUsageEmptyCta": {
             "828c764a79": "アカウントを接続する",
@@ -4214,17 +4214,17 @@
           "268cf0af51": "キャッシュ読み取り",
           "2b8a2f14aa": "出力トークン",
           "ea71fae8fc": "入力トークン",
-          "7dde9331fd": "このスコープに対するローカル Claude の使用法はまだ見つかりません。",
+          "7dde9331fd": "このスコープのローカル Claude の使用量はまだ見つかりません。",
           "424cd50412": "Claude の使用状況分析を有効にする",
           "8d18bbb771": "更新",
-          "c5b9b344d0": "リフレッシュ Claude の使用法",
+          "c5b9b344d0": "Claude の使用量を更新",
           "505be9aac4": "範囲",
           "f61cffb9c8": "スコープ",
           "dd29209b21": "フィルター",
           "e9bf9fce0e": "Claude の使用オプション",
           "6afacbee37": "Claude の使用状況追跡",
           "0cb1a36d7d": "ローカルの Claude 使用ログを読み取り、トークン、モデル、セッションの統計を表示します。",
-          "5ce4842c2c": "すべてのローカル Claude の使用法",
+          "5ce4842c2c": "ローカル Claude のすべての使用量",
           "4f8368c272": "Orca ワークツリーのみ",
           "cfe2282ffa": "不明",
           "7765a4c3e1": "該当なし",
@@ -4266,17 +4266,17 @@
           "a9ac0f423a": "キャッシュされた入力",
           "5d8eba87bd": "出力トークン",
           "e365eaa6fd": "入力トークン",
-          "4c865393b4": "このスコープに対するローカル Codex の使用法はまだ見つかりません。",
+          "4c865393b4": "このスコープのローカル Codex の使用量はまだ見つかりません。",
           "f7c1affbd5": "Codex の使用状況分析を有効にする",
           "3022cda443": "更新",
-          "ec4d270e2c": "Codex の使用法を更新する",
+          "ec4d270e2c": "Codex の使用量を更新",
           "89162e019b": "範囲",
           "6d68e8399a": "スコープ",
           "1af1a39b2f": "フィルター",
           "70b5b8581f": "Codex の使用オプション",
           "408210470c": "Codex 使用状況の追跡",
           "13badcd8f2": "ローカルの Codex 使用ログを読み取り、トークン、モデル、セッションの統計を表示します。",
-          "4fe8820098": "すべてのローカル Codex の使用法",
+          "4fe8820098": "ローカル Codex のすべての使用量",
           "201766b754": "Orca ワークツリーのみ",
           "bf6cf2d4dd": "不明",
           "ae255c3dba": "該当なし",
@@ -4311,17 +4311,17 @@
           "603504ee3b": "キャッシュされた入力",
           "7aa4d8ce35": "出力トークン",
           "d637a892ed": "入力トークン",
-          "bb6363e08c": "このスコープではローカル OpenCode の使用法がまだ見つかりません。",
+          "bb6363e08c": "このスコープのローカル OpenCode の使用量はまだ見つかりません。",
           "f04131b3be": "OpenCode の使用状況分析を有効にする",
           "603cd138dc": "更新",
-          "bed558df0b": "OpenCode の使用法を更新する",
+          "bed558df0b": "OpenCode の使用量を更新",
           "b5ed5c9fd0": "範囲",
           "40d283c837": "スコープ",
           "01583b30aa": "フィルター",
           "230d6de108": "OpenCode の使用オプション",
           "bea80ceae0": "OpenCode の使用状況の追跡",
           "b8b3522436": "ローカルの OpenCode 使用ログを読み取り、トークン、モデル、セッションの統計を表示します。",
-          "144a6050e9": "すべてのローカル OpenCode の使用法",
+          "144a6050e9": "ローカル OpenCode のすべての使用量",
           "e04c58327c": "Orca ワークツリーのみ",
           "362231082f": "不明",
           "8095a63426": "該当なし",
@@ -4381,7 +4381,7 @@
           "6c00c46815": "プロバイダーがローカル Agent ログをスキャンし、結合されたトークン台帳を構築できるようにします。",
           "49405ccc8d": "トークンの追跡を開始する",
           "ca6bc5fded": "更新",
-          "e06d1baf5c": "リフレッシュの使用法の概要",
+          "e06d1baf5c": "使用量の概要を更新",
           "c760c481c5": "使用方法の概要",
           "55c910f4f1": "- 一部のモデルの価格は利用できません",
           "enableMuse": "Muse を有効にする",
@@ -4414,7 +4414,7 @@
             "ef8bbf7739": "PRs",
             "ce8533f02e": "Agent",
             "0bba8ca244": "統計",
-            "0e2a0b6431": "使用法",
+            "0e2a0b6431": "使用量",
             "372debfac0": "統計",
             "26bb901fcd": "Orca の統計に加え、Claude、Codex、OpenCode、Muse のトークン分析と Grok サブスクリプション使用状況。",
             "cb2430ae6a": "統計と使用状況",
@@ -5317,7 +5317,7 @@
         },
         "OrcaYamlTrustDialog": {
           "f3e2b868fb": "フックを実行する",
-          "43b7bec4cd": "走らないで",
+          "43b7bec4cd": "実行しない",
           "c494b3ccb1": "で",
           "79afc6772b": "orca.yaml",
           "531689199b": "常に信頼する",
@@ -6415,20 +6415,20 @@
           "25852bfc59": "Linear",
           "5b440069e6": "GitHub",
           "161b2d053a": "リンクされた Issue を開く",
-          "d4785f9954": "問題のリンクはフォルダーワークスペースの作成時に設定され、ここではまだ変更できません。",
-          "964d9bc00a": "Linear 問題キーまたは Linear.app 問題 URL ではありません。",
-          "0a7a2c6efd": "GitHub Issue 番号や問題 URL ではありません。",
-          "72486800ff": "{{first}} と {{second}} のリンクを保存すると、ワークスペースが 1 つの問題を追跡します。",
-          "2c245ac134": "リンク解除の保存 {{link}} — ワークスペースが 1 つの問題を追跡します。",
-          "d8c8a30d1f": "その問題を開けませんでした。識別子とリニア接続を確認してください。",
-          "269198eeda": "その問題を開けませんでした。番号と GitHub 接続を確認してください。",
-          "f047887705": "GitHub またはリニア URL を貼り付けるか、数値を入力します。リンクを削除するには空白のままにします。",
+          "d4785f9954": "Issue のリンクはフォルダーワークスペースの作成時に設定され、ここではまだ変更できません。",
+          "964d9bc00a": "Linear の Issue キーまたは linear.app の Issue URL ではありません。",
+          "0a7a2c6efd": "GitHub の Issue 番号または Issue URL ではありません。",
+          "72486800ff": "保存すると {{first}} と {{second}} のリンクが解除されます。ワークスペースで追跡できる Issue は 1 つです。",
+          "2c245ac134": "保存すると {{link}} のリンクが解除されます。ワークスペースで追跡できる Issue は 1 つです。",
+          "d8c8a30d1f": "その Issue を開けませんでした。識別子と Linear の接続を確認してください。",
+          "269198eeda": "その Issue を開けませんでした。番号と GitHub の接続を確認してください。",
+          "f047887705": "GitHub または Linear の URL を貼り付けるか、番号を入力します。リンクを削除するには空白のままにします。",
           "ad78f9bee2": "Issue",
-          "662ae142f8": "Issue 番号、GitHub またはリニア URL",
-          "929c98d05a": "発行プロバイダー"
+          "662ae142f8": "Issue 番号、または GitHub か Linear の URL",
+          "929c98d05a": "Issue プロバイダー"
         },
         "worktreeIssueDisplacement": {
-          "3f61c0a8d2": "リニア {{value}}",
+          "3f61c0a8d2": "Linear {{value}}",
           "9c4b7e1f60": "GitHub #{{value}}"
         },
         "WorktreeCardSshHostControl": {
@@ -7914,7 +7914,7 @@
           "2aacdb0517": "ハンドオフ、ワークツリーのハンドオーバー、および子 Agent の作業全体にわたってコーディング Agent を調整します。",
           "191ac34567": "Agent オーケストレーション",
           "nestedWorkerDepthTitle": "ネストされたワーカーの深さ",
-          "nestedWorkerDepthDescription": "派遣労働者が何世代にもわたって自らの労働者を生み出す可能性がある。 1 は Agent ツリーをフラットに保ちます。コーディネーターがワーカーを派遣し、それらのワーカーは派遣しません。"
+          "nestedWorkerDepthDescription": "起動されたワーカーが、さらに自分のワーカーを起動できる世代数です。1 にすると Agent ツリーはフラットになります。コーディネーターがワーカーを起動し、そのワーカーはワーカーを起動しません。"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "Agent がコンテキストを引き継ぎ、Orca を通じて作業を調整できるようにします。",
@@ -9362,7 +9362,7 @@
             "57fb424c56": "リモートホスト",
             "35565867cb": "ムーンショット",
             "de586def95": "サブスクリプション",
-            "00a028f25f": "使用法",
+            "00a028f25f": "使用量",
             "40e5c3c285": "kimi",
             "c927a155d5": "ステータスバーに Kimi サブスクリプションの使用状況を表示します。",
             "3a6c028ea8": "Kimi 使用量",
@@ -9451,7 +9451,7 @@
               },
               "title": "Cursor の使用状況"
             },
-            "zcodeUsageTitle": "Zコードの使用法",
+            "zcodeUsageTitle": "ZCode の使用量",
             "zcodeUsageDescription": "ZCode コーディングプランのクォータの使用状況をステータスバーに表示します。",
             "zcode": "zコード",
             "zai": "ザイ",
@@ -9778,7 +9778,7 @@
               "chat": "チャット",
               "claude": "claude",
               "codex": "codex",
-              "openclaude": "オープンクロード",
+              "openclaude": "openclaude",
               "omp": "ああ",
               "terminal": "ターミナル",
               "agent": "Agent",
@@ -9995,7 +9995,7 @@
             "867dddea41": "固定された",
             "5250cf0e48": "ピン",
             "afa37a34e1": "近い",
-            "running_terminal": "走っている",
+            "running_terminal": "実行中",
             "terminal": "ターミナル",
             "agent": "Agent",
             "command": "コマンド",
@@ -10369,7 +10369,7 @@
             "27a27b2f63": "身を引く",
             "4d4bb76bf4": "オプトインする",
             "b021b9cb81": "匿名",
-            "79c319948b": "使用法",
+            "79c319948b": "使用量",
             "77d3180def": "テレメトリー",
             "b707cc3981": "匿名の機能使用イベントを送信して、Orca の改善にご協力ください。",
             "57b283461a": "匿名の使用状況データを共有する",
@@ -10387,7 +10387,7 @@
               "b86c727100": "npm",
               "b949a7c0a0": "pnpm",
               "0b78c4a165": "起動",
-              "2d8aff42be": "走る",
+              "2d8aff42be": "実行",
               "1c5bdcd0f2": "repos",
               "89d2a9ad9f": "repo",
               "f58b92a48f": "プロジェクト",
@@ -10866,7 +10866,7 @@
             "tui": "トゥイ",
             "a0c44061ee": "確認",
             "close_terminal": "近い",
-            "running": "走っている",
+            "running": "実行中",
             "command": "コマンド",
             "agent": "Agent",
             "process": "プロセス",
@@ -11113,7 +11113,7 @@
                 "977e360b71": "APIトークンを使用して Jira Cloudサイトに接続するか、パーソナルアクセストークンまたはユーザー名とパスワードを使用してセルフホスト Jira に接続します。認証情報はローカルに保存され、ローカルランタイムストレージがサポートする場合は暗号化されます。",
                 "statusConnected": "接続済み",
                 "statusNotConnected": "接続されていません",
-                "linearTokenName": "リニア API トークン",
+                "linearTokenName": "Linear API トークン",
                 "connectedSiteSingular": "{{count}} 件のサイトに接続済み",
                 "connectedSitePlural": "{{count}} 件のサイトに接続済み",
                 "connectedWorkspaceSingular": "{{count}} 件のワークスペースに接続済み",
@@ -11495,7 +11495,7 @@
                 "tickets": "チケット",
                 "issues": "Issue",
                 "skill": "スキル",
-                "orcaLinear": "シャチリニア"
+                "orcaLinear": "orca-linear"
               }
             }
           }
@@ -12190,7 +12190,7 @@
           "keywordAutomations": "自動化",
           "keywordSchedule": "スケジュール",
           "keywordAgent": "Agent",
-          "keywordRuns": "走る"
+          "keywordRuns": "実行"
         },
         "shareSkills": {
           "title": "スキルを共有する",
@@ -12372,7 +12372,7 @@
           "usingCliHelp": "Orca は、このコンピュータ上の ZCode CLI の認証情報ストアから選択したコーディングプランを読み取ります。代わりにここでプランをリンクするには、以下に API キーを保存してください。",
           "notConfigured": "GLM コーディングプランがリンクされていません",
           "notConfiguredHelp": "以下のプラン API キーを保存するか、このコンピュータ上の ZCode CLI を使用してサインインします。",
-          "refreshUsage": "リフレッシュの使用法",
+          "refreshUsage": "使用量を更新",
           "siteTitle": "企画サイト",
           "siteDescription": "コーディングプランが属するコンソールを選択します。国際サイトの場合は Z.AI、本土サイトの場合は Zhipu BigModel です。",
           "keyTitle": "APIキー",
@@ -12945,7 +12945,7 @@
             "6b122529d4": "コミットメッセージの生成",
             "e48caaf0dd": "競合の解決のために AI Agent を開始しました。",
             "901140f47d": "Agent を開始する前に、プロンプトを確認してください。",
-            "19652ddd76": "AI で対立を解決する",
+            "19652ddd76": "AI で競合を解決する",
             "c9ad22888e": "このリポジトリのブランチ比較ターゲットを選択します。",
             "574d2f4413": "ノートをクリア",
             "05bb8f4a48": "キャンセル",
@@ -14387,7 +14387,7 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "この Jira Issue をリンクできませんでした。該当するサイトを選択するか Jira に再接続してから、もう一度お試しください。",
             "emoji": "絵文字",
-            "loadingLinearIssue": "リニア Issue を読み込み中…"
+            "loadingLinearIssue": "Linear Issue を読み込み中…"
           },
           "ProjectCombobox": {
             "empty": "検索条件に一致するプロジェクトはありません。",
@@ -15354,7 +15354,7 @@
           "6e459867ad": "セッションローカルの継続状態。 Git は、このファイルがマージされていないと報告しなくなりました。",
           "9c2901ef8a": "次の競合",
           "41d9af2e7a": "前の競合",
-          "55d61a0ccd": "対立 ・",
+          "55d61a0ccd": "競合 ·",
           "da539359b6": "この競合に対して編集できる作業ツリーファイルはありません。"
         },
         "ConflictReviewFileTree": {
@@ -16206,7 +16206,7 @@
                 "deleteWorktree": "ワークツリーを削除する",
                 "deleteCurrentWorktree": "現在のワークツリーを削除する",
                 "removeWorktree": "ワークツリーを削除する",
-                "trashWorktree": "ゴミ箱ワークツリー",
+                "trashWorktree": "ワークツリーをゴミ箱へ移動",
                 "addQuickCommand": "クイックコマンドを追加",
                 "newQuickCommand": "新規クイックコマンド",
                 "splitChatRight": "チャットを右に分割",
@@ -16589,7 +16589,7 @@
           "e5ad263ae5": "30分",
           "529dc6c0b7": "猶予なし",
           "3d70c185c8": "Orca または実行ホストがスケジュールされた時刻に利用できなかった場合、Orca はこのウィンドウ内で利用可能になったときに、欠落したオカレンスを 1 つ実行します。失敗した古い実行はスキップされます。",
-          "3df53d554a": "逃走猶予ヘルプ",
+          "3df53d554a": "実行漏れの猶予時間のヘルプ",
           "fc089e5fde": "グレース"
         },
         "AutomationPrecheckFields": {
@@ -16645,7 +16645,7 @@
           "2695883141": "削除",
           "c3a28c9793": "実行を表示するオートメーションを選択します。",
           "295698292f": "再実行",
-          "0e110a3469": "走る",
+          "0e110a3469": "実行履歴",
           "bb1b2cd31e": "概要",
           "97ff587ee3": "このソースに接続すると、リモートプロファイル内の Hermes オートメーションを確認できます。",
           "aaa007846f": "ソースが利用できない",
@@ -16711,7 +16711,7 @@
           "dd0bc7a1ba": "実行ごとの新規",
           "7b2e285552": "このクライアントでは SSH 接続は利用できません。",
           "d441032f7e": "一時停止",
-          "5918020edc": "走る",
+          "5918020edc": "回",
           "a21f6c33ad": "オートメーションのソースを更新しました。",
           "53f06f0ad5": "ソースを再試行",
           "pendingAutomationMissing": "自動化は利用できなくなりました。",
@@ -16766,8 +16766,8 @@
           "5524365227": "OpenClaw",
           "766abf833c": "Hermes",
           "bf5f67b590": "Hermes",
-          "e66091daf4": "走る",
-          "8e9165af08": "走る",
+          "e66091daf4": "回",
+          "8e9165af08": "回",
           "2b0adbce21": "一時停止中",
           "b3feba84c7": "アクティブ",
           "92405f1431": "利用不可",
@@ -16784,11 +16784,11 @@
           "be551397ca": "状態",
           "a813df9808": "プレビュー",
           "d4b34feb66": "実行時間",
-          "2d4388a908": "走る",
+          "2d4388a908": "実行履歴",
           "9c080765ff": "Hermes のランはまだ見つかりません。",
           "8ea934cacf": "実行を読み込み中…",
-          "d5527d8fe7": "走る",
-          "872d032d05": "走る"
+          "d5527d8fe7": "回",
+          "872d032d05": "回"
         },
         "HermesCronOutputView": {
           "e27c716b43": "プロンプト",
@@ -17334,7 +17334,7 @@
                 "issue": {
                   "dialog": {
                     "dialogTitle": "新規 Linear Issue",
-                    "dialogDescription": "選択したチームのリニア Issue を作成します。"
+                    "dialogDescription": "選択したチームの Linear Issue を作成します。"
                   }
                 }
               }
@@ -17396,9 +17396,9 @@
                   },
                   "session": {
                     "resume": {
-                      "savedLinearProjectMissing": "保存されたリニアプロジェクトが見つかりませんでした。",
-                      "savedLinearProjectRestoreFailed": "保存されたリニアプロジェクトの復元に失敗しました。",
-                      "savedLinearViewMissing": "保存されたリニアビューが見つかりませんでした。",
+                      "savedLinearProjectMissing": "保存された Linear プロジェクトが見つかりませんでした。",
+                      "savedLinearProjectRestoreFailed": "保存された Linear プロジェクトの復元に失敗しました。",
+                      "savedLinearViewMissing": "保存された Linear ビューが見つかりませんでした。",
                       "savedLinearViewRestoreFailed": "保存された Linear ビューを復元できませんでした。"
                     }
                   }
@@ -17410,7 +17410,7 @@
             "linear": {
               "connect": {
                 "empty": {
-                  "3e00e8ebd4": "リニア荷重"
+                  "3e00e8ebd4": "Linear を読み込み中"
                 }
               }
             }
@@ -19024,7 +19024,7 @@
             "gutter": "側溝",
             "indent": "インデント",
             "margin": "マージン",
-            "leading": "先頭に立って",
+            "leading": "先頭",
             "whitespace": "空白",
             "spaces": "スペース"
           }
@@ -19619,7 +19619,7 @@
       "changed": "ネイティブアカウントが変更されました。AGYを起動する前に、保存したアカウントを再度選択してください。",
       "save": "現在のアカウントを保存",
       "refresh": "アカウントを更新する",
-      "usage": "リフレッシュの使用法",
+      "usage": "使用量を更新",
       "working": "アカウントの更新",
       "usageReading": "セッション： {{session}} ·毎週： {{weekly}}",
       "saved": "保存されたGoogleアカウント",
@@ -19703,7 +19703,7 @@
       "confirmStopTitle": "共有サーバーを停止しますか?",
       "confirmStopDescription": "これにより、Orca 外部のものも含め、それを共有している開いている Codex セッションがすべて閉じられます。",
       "cancel": "キャンセル",
-      "runs": "走る"
+      "runs": "実行コマンド"
     },
     "paneMove": {
       "failed": "ペインを新規タブに移動できませんでした。"
