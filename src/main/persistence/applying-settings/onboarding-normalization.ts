@@ -91,7 +91,7 @@ function sameNotificationSettingValue(raw: unknown, normalized: unknown): boolea
 /**
  * Whether normalization had to repair the persisted notification block. Callers use this to mark the
  * load dirty; an in-memory-only repair is redone on every launch until some other write lands.
- * A missing block or field is not a repair — nothing on disk was overridden.
+ * A missing block is not a repair — nothing on disk was overridden.
  */
 export function persistedNotificationSettingsRepaired(
   value: unknown,
@@ -104,13 +104,8 @@ export function persistedNotificationSettingsRepaired(
     return true
   }
   const raw = value as Record<string, unknown>
-  const defaults: Record<string, unknown> = getDefaultNotificationSettings()
-  // Why the absent-default case: a field newer than the file defaults in memory, and rewriting
-  // every profile on upgrade gains nothing.
-  return Object.entries(normalized).some(([key, normalizedValue]) =>
-    raw[key] === undefined
-      ? !sameNotificationSettingValue(defaults[key], normalizedValue)
-      : !sameNotificationSettingValue(raw[key], normalizedValue)
+  return Object.entries(normalized).some(
+    ([key, normalizedValue]) => !sameNotificationSettingValue(raw[key], normalizedValue)
   )
 }
 

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../shared/constants'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { getDefaultNotificationSettings } from '../../../shared/notification-settings-defaults'
 import { resolveAgentAttention } from '@/attention/agent-attention-policy'
 import { createTerminalAttentionSurface } from '@/components/terminal-pane/terminal-attention-surface'
@@ -97,6 +99,39 @@ describe('isWorkspaceNotificationMutedBySidebarFilters', () => {
       }
     })
     expect(muted(CLI_ID)).toBe(false)
+  })
+
+  it('keeps notifying for an id whose twin on another host the switches show', () => {
+    store.setState({
+      worktreesByRepo: {
+        repo1: [cliRow, plainRow],
+        'repo1@other-host': [{ ...cliRow, cliProvenance: undefined }]
+      }
+    })
+    expect(muted(CLI_ID)).toBe(false)
+  })
+
+  it('mutes another client’s folder workspace under Hide other-client workspaces only', () => {
+    const folder: FolderWorkspace = {
+      id: 'f1',
+      projectGroupId: 'g1',
+      name: 'notes',
+      folderPath: '/notes',
+      creatorProvenance: { kind: 'paired-device', deviceId: 'phone' },
+      linkedTask: null,
+      comment: '',
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 0,
+      lastActivityAt: 0,
+      createdAt: 0,
+      updatedAt: 0
+    }
+    store.setState({ folderWorkspaces: [folder] })
+    expect(muted(folderWorkspaceKey('f1'))).toBe(false)
+    store.setState({ hideWorkspacesFromOtherDevices: true })
+    expect(muted(folderWorkspaceKey('f1'))).toBe(true)
   })
 
   it('ignores the project filter, which is not a Filters switch', () => {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
-import { getDefaultNotificationSettings } from '../../shared/notification-settings-defaults'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -44,7 +43,6 @@ function listed(overrides: Partial<Worktree> = {}): Worktree {
 
 function deps(options: {
   ui?: Partial<PersistedState['ui']> | null
-  notifyHiddenWorkspaces?: boolean
   resolved?: Worktree[] | null
   meta?: Partial<WorktreeMeta>
   folders?: FolderWorkspace[]
@@ -60,10 +58,6 @@ function deps(options: {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only parentWorktreeId.
       getAllWorktreeLineage: () => (options.lineage ?? {}) as Record<string, WorktreeLineage>,
       getFolderWorkspaces: () => options.folders ?? []
-    },
-    notificationSettings: {
-      ...getDefaultNotificationSettings(),
-      notifyHiddenWorkspaces: options.notifyHiddenWorkspaces ?? false
     },
     resolvedWorktrees: options.resolved === undefined ? [listed()] : options.resolved
   }
@@ -97,7 +91,7 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
     }
     expect(
       isStructuredAttentionWorkspaceHidden(
-        deps({ ui: { hideAutomationGeneratedWorkspaces: true }, meta: automation }),
+        deps({ ui: { hideAutomationGeneratedWorkspaces: true }, meta: automation, resolved: null }),
         SCOPE
       )
     ).toBe(true)
@@ -118,14 +112,8 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
     ).toBe(true)
   })
 
-  it('notifies when the setting is on, no switch matches, or the switch is off', () => {
+  it('is not hidden when no switch matches or the switch is off', () => {
     const on = { hideCliCreatedWorkspaces: true }
-    expect(
-      isStructuredAttentionWorkspaceHidden(
-        deps({ ui: on, meta: CLI_META, notifyHiddenWorkspaces: true }),
-        SCOPE
-      )
-    ).toBe(false)
     expect(isStructuredAttentionWorkspaceHidden(deps({ ui: on }), SCOPE)).toBe(false)
     expect(isStructuredAttentionWorkspaceHidden(deps({ ui: {}, meta: CLI_META }), SCOPE)).toBe(
       false
@@ -159,7 +147,7 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
     const hide = { hideWorkspacesFromOtherDevices: true }
     expect(
       isStructuredAttentionWorkspaceHidden(
-        deps({ ui: hide, meta: { creatorProvenance: fromPhone } }),
+        deps({ ui: hide, resolved: [listed({ creatorProvenance: fromPhone })] }),
         SCOPE
       )
     ).toBe(true)

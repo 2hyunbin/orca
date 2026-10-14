@@ -292,7 +292,6 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
           isStructuredAttentionWorkspaceHidden(
             {
               store: this.requireStore(),
-              notificationSettings: this.requireStore().getSettings().notifications,
               resolvedWorktrees: this.resolvedWorktrees.peek()?.worktrees ?? null
             },
             scope

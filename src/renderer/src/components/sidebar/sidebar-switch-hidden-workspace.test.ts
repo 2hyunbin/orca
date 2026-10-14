@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { makeWorktree } from '../../store/slices/worktrees-slice-test-fixtures'
 import {
-  isFolderWorkspaceHiddenBySidebarSwitch,
   isHiddenBySidebarSwitch,
   type SidebarSwitchInputs
 } from './sidebar-switch-hidden-workspace'
@@ -101,39 +99,5 @@ describe('isHiddenBySidebarSwitch', () => {
         inputs({ showSleepingWorkspaces: false, hideDefaultBranchWorkspace: true, ...live })
       )
     ).toBe(true)
-  })
-})
-
-describe('isFolderWorkspaceHiddenBySidebarSwitch', () => {
-  const folder: FolderWorkspace = {
-    id: 'f1',
-    projectGroupId: 'g1',
-    name: 'f1',
-    folderPath: '/f1',
-    creatorProvenance: { kind: 'paired-device', deviceId: 'phone' },
-    linkedTask: null,
-    comment: '',
-    isArchived: false,
-    isUnread: false,
-    isPinned: false,
-    sortOrder: 0,
-    lastActivityAt: 0,
-    createdAt: 0,
-    updatedAt: 0
-  }
-
-  it('answers only the other-client switch', () => {
-    expect(
-      isFolderWorkspaceHiddenBySidebarSwitch(folder, {
-        hideWorkspacesFromOtherDevices: true,
-        pairedDeviceIdsByEnvironment: new Map()
-      })
-    ).toBe(true)
-    expect(
-      isFolderWorkspaceHiddenBySidebarSwitch(folder, {
-        hideWorkspacesFromOtherDevices: false,
-        pairedDeviceIdsByEnvironment: new Map()
-      })
-    ).toBe(false)
   })
 })

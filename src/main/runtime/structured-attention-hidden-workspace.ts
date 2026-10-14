@@ -1,5 +1,5 @@
-// Whether this host's own phone push for a structured-chat edge must stay quiet because the
-// desktop's sidebar Filters hide the workspace and "Notify About Hidden Workspaces" is off.
+// Whether the desktop's sidebar Filters switches hide a workspace, for this host's own phone push
+// of structured-chat attention (the caller applies "Notify About Hidden Workspaces").
 //
 // WHY NOT "HIDE SLEEPING": main sees the persisted switches and its in-memory workspace records,
 // not the renderer's live tabs, so sleeping is left to the renderer; a local chat that raises
@@ -9,7 +9,6 @@
 // FAILS OPEN: no persisted UI, no record of the workspace, or a workspace with a lineage child (the
 // sidebar shows a hidden parent above a visible child) all notify.
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
-import type { NotificationSettings } from '../../shared/notification-settings-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { Worktree } from '../../shared/worktree/types'
 import {
@@ -24,7 +23,6 @@ export type HiddenWorkspaceAttentionDeps = {
     RuntimeStore,
     'getUI' | 'getRepo' | 'getWorktreeMeta' | 'getAllWorktreeLineage' | 'getFolderWorkspaces'
   >
-  notificationSettings: NotificationSettings
   /** Last resolved Git listing, possibly stale; branch and HEAD come only from here. */
   resolvedWorktrees: readonly Worktree[] | null
 }
@@ -33,9 +31,6 @@ export function isStructuredAttentionWorkspaceHidden(
   deps: HiddenWorkspaceAttentionDeps,
   scope: AgentSessionExecutionLocation
 ): boolean {
-  if (deps.notificationSettings.notifyHiddenWorkspaces !== false) {
-    return false
-  }
   const ui = deps.store.getUI?.()
   if (!ui) {
     return false
@@ -46,9 +41,6 @@ export function isStructuredAttentionWorkspaceHidden(
     hideAutomationGeneratedWorkspaces: ui.hideAutomationGeneratedWorkspaces === true,
     hideCliCreatedWorkspaces: ui.hideCliCreatedWorkspaces === true,
     hideDetachedHeadWorkspaces: ui.hideDetachedHeadWorkspaces === true
-  }
-  if (!hideOtherClients && !Object.values(switches).some(Boolean)) {
-    return false
   }
   const workspaceId = scope.workspaceId
   if (scope.workspaceKind === 'folder') {
@@ -74,13 +66,12 @@ export function isStructuredAttentionWorkspaceHidden(
     return true
   }
   // Without a Git listing, no branch or HEAD is known, so only the provenance switches can apply.
-  const kind = {
-    isMainWorktree: listed?.isMainWorktree ?? false,
-    branch: listed?.branch ?? '',
-    head: listed?.head ?? '',
-    ephemeralVmCheckoutMode: listed?.ephemeralVmCheckoutMode,
-    automationProvenance: listed?.automationProvenance ?? meta?.automationProvenance,
-    cliProvenance: listed?.cliProvenance ?? meta?.cliProvenance
+  const kind = listed ?? {
+    isMainWorktree: false,
+    branch: '',
+    head: '',
+    automationProvenance: meta?.automationProvenance,
+    cliProvenance: meta?.cliProvenance
   }
   return isHiddenByWorkspaceKindSwitch(
     kind,
