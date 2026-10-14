@@ -117,6 +117,7 @@ export function disposeClosedEditorTabCaches(
       case 'conflict-review':
         break
       case 'check-details':
+        scrollTopOwners.push(closedFile.id)
         break
     }
   }

@@ -116,7 +116,10 @@
     }
   },
   "githubChecks": {
-    "retrying": "Nouvelle tentative…"
+    "retrying": "Nouvelle tentative…",
+    "logsNotYetAvailable": "La sortie du journal n’est pas encore disponible.",
+    "noLogExcerpt": "Aucun extrait de journal n’est disponible.",
+    "refreshingDetails": "Actualisation des détails de la vérification…"
   },
   "settings": {
     "chat": {
@@ -13344,7 +13347,6 @@
                 "fd46a70f1a": "Démarré",
                 "a54ae21c6f": "Statut :",
                 "e4e3af15ee": "Voir tous les détails",
-                "b8c4e2a1f7": "Voir tous les logs",
                 "a2fb3f4408": "Affichage des 100 premiers jobs",
                 "df137989b3": "Affichage des 20 premières annotations",
                 "1f2b980522": "Chargement des détails de la vérification…",
