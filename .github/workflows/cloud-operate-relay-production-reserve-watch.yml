@@ -238,8 +238,8 @@ jobs:
     timeout-minutes: 60
     environment: production
     # Only the run's per-cell group above, which a running run never yields (cancel-in-progress off).
-    # Every step runs on always() too: a cancel during the lease wait would otherwise skip the write.
-    # A force-cancel still stops it; nothing in a workflow can prevent that.
+    # Every step runs on always() too, so a cancel cannot skip the switch-file write. A cancel during the
+    # lease wait can still kill the process before Postgres records db: the file says db, Postgres reserve.
     env:
       VERDICT: ${{ needs.watch.outputs.verdict || format('the watch ended {0} without a verdict', needs.watch.result) }}
     steps:

@@ -130,7 +130,8 @@ const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: []
 
 // The `minutes` whole minutes that end at the minute boundary `endedAt`: the 503 counts, and the
 // newest minute any response code has a point for. The director always serves something, so that
-// front is how far the 503 series is published; no front at all is no evidence.
+// front is how far the 503 series is published; no front at all is no evidence. A code publishing
+// late only delays a trip: a later read sees its points.
 export async function readDirector503Minutes(reader, { projectId, directorService, endedAt, minutes }) {
   const span = { startedAt: new Date(endedAt - minutes * MINUTE_MS), endedAt: new Date(endedAt) }
   let read

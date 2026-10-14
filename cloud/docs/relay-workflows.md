@@ -829,14 +829,17 @@ samples in a row is a trip of its own. The 503 read takes every response code in
 newest minute any code has a point for is how far the series is published: a 503 minute at or
 before it with no point had no 503s, so a quiet fleet reads zero. Minutes past it are left out, not
 counted; fewer than 3 published minutes in the read, no request series at all, or an unparseable
-timestamp is unverifiable. Until the minutes before `flipped-at` are published (3 minutes past
+timestamp is unverifiable. This assumes the codes publish together; one code lagging the others
+delays a trip by its lag but cannot hide one, because a later read sees its points. Until the minutes before `flipped-at` are published (3 minutes past
 it) the 503 rule is pending, which does not add to the streak. The duplicate rule keys a seat by
 director instance, so a director restart (a new instance id) starts its first-seen clock over. A
 cell whose switch file no longer says reserve ends the watch without a write.
 
 In `write` mode a watch that fails, times out or is cancelled before a verdict flips the cell back
 as a trip would; the flip-back job and each of its steps run on `always()`, so a cancel during the
-lease wait does not skip the write. A force-cancel can still stop it. The workflow's only group is
+lease wait does not skip the switch-file write. That cancel can still kill the process before
+Postgres records db, leaving the file at db and Postgres at reserve; a force-cancel can stop it
+outright. The workflow's only group is
 its own per-cell one, which a running run never yields. It stays out of the flag workflow's group
 because GitHub keeps one pending run per group and a newer one cancels it, so a flip back queued
 there could be dropped by any later flag dispatch, and a watch held there would block manual writes
