@@ -1176,8 +1176,8 @@ const pacedRestartConfig = {
   timeoutMs: 1_200_000
 }
 
-function fakeClock() {
-  let now = 0
+function fakeClock(start = 0) {
+  let now = start
   return {
     now: () => now,
     wait: async (milliseconds) => {
@@ -1230,7 +1230,8 @@ test('passes after one pace window of an empty runtime and reports stranded leas
     },
     token: 'masked-token',
     progress: (line) => lines.push(line),
-    ...fakeClock()
+    // A late start catches a window measured from zero instead of from the verifier's start.
+    ...fakeClock(1_000_000)
   })
   // One sample at each end of a full five-minute pace window.
   assert.equal(runtimeReads, 61)
@@ -1253,7 +1254,7 @@ test('passes after one pace window of an empty runtime and reports stranded leas
   )
 })
 
-test('the pace window resets on any non-zero runtime sample', async () => {
+test('a non-zero runtime sample restarts the quiet count', async () => {
   const quiet = harness(strandedCell)
   const busy = harness({ ...strandedCell, controls: 1 })
   let runtimeReads = 0
@@ -1267,7 +1268,7 @@ test('the pace window resets on any non-zero runtime sample', async () => {
     progress: (line) => lines.push(line),
     ...fakeClock()
   })
-  // The reset costs no time beyond the window, which the quiet after it still reaches.
+  // A mid-window reset adds no time; the quiet after it still reaches the window's end.
   assert.equal(runtimeReads, 61)
   assert.deepEqual(lines.slice(28, 31).map((line) => line.restartSafeSamples), [29, 0, 1])
   await assert.rejects(
@@ -1293,24 +1294,9 @@ test('a runtime that empties as the pace window ends passes after two quiet samp
     progress: (line) => lines.push(line),
     ...fakeClock()
   })
-  // Busy through 295 s; quiet samples at 300 s and 305 s, the second past the window's end.
+  // Busy through 295 s; quiet at 300 s and 305 s, the first eligible pair.
   assert.equal(runtimeReads, 62)
   assert.deepEqual(lines.slice(59).map((line) => line.restartSafeSamples), [0, 1])
-})
-
-test('a control just before the pace window ends restarts the quiet', async () => {
-  let runtimeReads = 0
-  await verifyCapacityTransition(pacedRestartConfig, {
-    fetch: async (url, options) => {
-      if (new URL(url).pathname === '/v1/admin/runtime-status') runtimeReads += 1
-      return await harness({ ...strandedCell, controls: runtimeReads === 60 ? 1 : 0 })(url, options)
-    },
-    token: 'masked-token',
-    progress: () => {},
-    ...fakeClock()
-  })
-  // 59 quiet samples, the 295 s control, then two quiet samples ending past the window.
-  assert.equal(runtimeReads, 62)
 })
 
 test('restart-safe fails on live runtime work or an open migration regardless of leases', async (t) => {
@@ -1336,7 +1322,7 @@ test('restart-safe fails on live runtime work or an open migration regardless of
   }
 })
 
-test('unauthenticated redials do not reset the pace window', async () => {
+test('unauthenticated redials do not restart the quiet count', async () => {
   let runtimeReads = 0
   const lines = []
   const result = await verifyCapacityTransition(pacedRestartConfig, {

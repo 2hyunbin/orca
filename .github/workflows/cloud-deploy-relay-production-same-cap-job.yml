@@ -54,8 +54,7 @@ jobs:
       # /v1/assign at hosts / window and is re-placed through the director's drain-return
       # lane. The wave validator admits only its closed set, and anything below the 300000
       # default only on US general cells: Asia drains are bound by their targets' accept
-      # rate. The transition wait below is the 15-min migration lease plus this window, plus
-      # its excess over 300000, since restart-safe waits a window of quiet after the drain. A
+      # rate. The transition wait below is the 15-min migration lease plus this window. A
       # cell on an older image drains at once, or refuses a window above 300000.
       DRAIN_PACE_WINDOW_MS: ${{ inputs.drain-pace-window-ms }}
     steps:
@@ -564,7 +563,7 @@ jobs:
             --heartbeat either --admission migration-only --draining required \
             --activity restart-safe --expected-image-digests "${PREDECESSOR_IMAGE_DIGEST}" \
             --pace-window-ms "${DRAIN_PACE_WINDOW_MS}" \
-            --timeout-ms "$((900000 + DRAIN_PACE_WINDOW_MS + (DRAIN_PACE_WINDOW_MS > 300000 ? DRAIN_PACE_WINDOW_MS - 300000 : 0)))"
+            --timeout-ms "$((900000 + DRAIN_PACE_WINDOW_MS))"
           echo "drain-settled-at=$(date -u +%FT%TZ)" >> "${GITHUB_OUTPUT}"
 
       - id: capacity-auth

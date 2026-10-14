@@ -422,12 +422,14 @@ export async function verifyCapacityTransition(config, overrides = {}) {
   }
   const startedAt = now()
   const deadline = startedAt + config.timeoutMs
-  // A paced drain can refill the runtime until its window ends, so the quiet must reach past
-  // that end. This runs after the cell accepted the drain, so its window ends no later than here.
+  // A paced drain can refill the runtime until its window ends, so two consecutive quiet samples
+  // must reach that end. This runs after the cell accepted the drain, so the cell's window ends
+  // no later than this one.
   const paceWindowEndsAt = startedAt + (config.paceWindowMs ?? 0)
   let restartSafeSamples = 0
   let lastObservation = { runtimeAvailable: false }
   for (;;) {
+    // Before the read, so a sample taken inside the window cannot pass.
     const sampledAt = now()
     const runtime = await cellRuntime(fetchImpl, config, token)
     lastObservation = { runtimeAvailable: runtime !== null }
@@ -470,7 +472,7 @@ export async function verifyCapacityTransition(config, overrides = {}) {
       if (
         matches &&
         (config.activity !== 'restart-safe' ||
-          (restartSafeSamples + 1 >= 2 && sampledAt >= paceWindowEndsAt))
+          (restartSafeSamples >= 1 && sampledAt >= paceWindowEndsAt))
       ) {
         return {
           cellId: status.cellId,
