@@ -86,6 +86,8 @@ export async function createWebRuntimeSessionTerminalResult(
   let hostCreated = false
   let createdTabId: string | undefined
   let createdLeafId: string | undefined
+  // Why: terminal.* creates take no group, so the requested one is reached by a move.
+  let needsGroupMove = false
   try {
     const agent = args.launchAgent ?? args.agent
     const agentArgsOverride =
@@ -211,40 +213,30 @@ export async function createWebRuntimeSessionTerminalResult(
       createdLeafId = legacyAlreadyPlacedInGroup
         ? created.terminal.leafId
         : createdTerminalLeafId(created.terminal)
-      if (args.targetGroupId && createdTabId && !legacyAlreadyPlacedInGroup) {
-        await callEnvironment({
-          method: 'session.tabs.move',
-          params: {
-            worktree: toRuntimeWorktreeSelector(args.worktreeId),
-            tabId: createdTabId,
-            targetGroupId: args.targetGroupId,
-            kind: 'move-to-group'
-          },
-          timeoutMs: 15_000
-        })
-      }
+      needsGroupMove = !legacyAlreadyPlacedInGroup
     } else if (args.shell && hostHonoursWorktreeShell(environmentId, args.worktreeId, args.shell)) {
       const created = await createHostShellTerminal(callEnvironment, args.worktreeId, args.shell)
       hostCreated = true
       createdTabId = created.tabId
       createdLeafId = created.leafId
-      if (args.targetGroupId && createdTabId) {
-        await callEnvironment({
-          method: 'session.tabs.move',
-          params: {
-            worktree: toRuntimeWorktreeSelector(args.worktreeId),
-            tabId: createdTabId,
-            targetGroupId: args.targetGroupId,
-            kind: 'move-to-group'
-          },
-          timeoutMs: 15_000
-        })
-      }
+      needsGroupMove = true
     } else {
       const created = await createSessionTabsTerminal(callEnvironment, args)
       hostCreated = true
       createdTabId = created.tab.id
       createdLeafId = created.tab.leafId
+    }
+    if (needsGroupMove && args.targetGroupId && createdTabId) {
+      await callEnvironment({
+        method: 'session.tabs.move',
+        params: {
+          worktree: toRuntimeWorktreeSelector(args.worktreeId),
+          tabId: createdTabId,
+          targetGroupId: args.targetGroupId,
+          kind: 'move-to-group'
+        },
+        timeoutMs: 15_000
+      })
     }
     if (args.targetGroupId && createdTabId) {
       // Why: the host drops client-minted group ids, so this client's own record is what
