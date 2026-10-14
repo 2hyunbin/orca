@@ -123,7 +123,8 @@ function createHost(settings: Record<string, unknown>): {
 function provisionWithSetup(
   host: WorktreeTerminalProvisioningHost,
   withSetup = true,
-  setupOnly?: boolean
+  setupOnly?: boolean,
+  defaultTabs?: typeof DEFAULT_TABS
 ) {
   return provisionWorktreeTerminals(host, {
     worktreeSelector: 'id:wt-1',
@@ -132,6 +133,7 @@ function provisionWithSetup(
     ...(withSetup ? { setup } : {}),
     hasStartupTerminal: false,
     ...(setupOnly !== undefined ? { setupOnly } : {}),
+    ...(defaultTabs ? { defaultTabs } : {}),
     setupCommandPlatform: 'posix'
   })
 }
@@ -144,6 +146,31 @@ describe('provisionWorktreeTerminals with a cleared creation choice', () => {
     await provisionWithSetup(host, true, true)
     expect(titles()).toEqual(['Setup'])
   })
+
+  it('skips configured template commands when Setup is the only tab', async () => {
+    const { host, titles } = createHost({ defaultTuiAgent: 'blank' })
+    await provisionWithSetup(host, true, true, DEFAULT_TABS)
+    expect(titles()).toEqual(['Setup'])
+    expect(host.setTabTitle).not.toHaveBeenCalled()
+    expect(host.setTabColor).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { withSetup: true, setupOnly: false, mode: 'new-tab', titles: ['Dev', 'Tests', 'Setup'] },
+    { withSetup: false, setupOnly: true, mode: 'new-tab', titles: ['Dev', 'Tests'] },
+    { withSetup: true, setupOnly: true, mode: 'split-vertical', titles: ['Dev', 'Tests'] }
+  ])(
+    'keeps templates for blank, skipped, and split setup: $mode/$withSetup/$setupOnly',
+    async (test) => {
+      const { host, titles } = createHost({ setupScriptLaunchMode: test.mode })
+      await provisionWithSetup(host, test.withSetup, test.setupOnly, DEFAULT_TABS)
+      expect(titles()).toEqual(test.titles)
+      expect(host.createTerminal).toHaveBeenCalledWith('id:wt-1', {
+        title: 'Dev',
+        command: 'pnpm dev'
+      })
+    }
+  )
 
   it('honours a one-off blank choice over the host None default', async () => {
     const { host, titles } = createHost(none)
