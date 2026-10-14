@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  ExternalAutomationAction,
-  ExternalAutomationJob
-} from '../../../../shared/automations-types'
+import type { ExternalAutomationAction } from '../../../../shared/automations-types'
 import type { ScopedExternalManagerMutationFields } from '../../../../shared/external-automation-scope'
 import type { AutomationHostCatalogEntry } from './automation-host-catalog-types'
 import {
@@ -10,7 +7,6 @@ import {
   desktopExternalAutomationOwner,
   externalAutomationScopes,
   listScopedExternalAutomationManagers,
-  listScopedExternalAutomationRuns,
   runScopedExternalAutomationAction,
   updateScopedExternalAutomation,
   type ExternalAutomationScope,
@@ -55,17 +51,7 @@ export type ScopedExternalAutomationsView = {
     jobId: string,
     action: ExternalAutomationAction
   ) => Promise<void>
-  fetchRuns: (
-    scope: ExternalAutomationScope,
-    job: ExternalAutomationJob,
-    page: number,
-    pageSize: number
-  ) => Promise<{ runs: readonly ExternalAutomationRunRow[]; totalCount: number }>
 }
-
-type ExternalAutomationRunRow = Awaited<
-  ReturnType<typeof listScopedExternalAutomationRuns>
->['runs'][number]
 
 const EMPTY_VIEW = {
   managers: [] as readonly ScopedExternalAutomationManager[],
@@ -138,11 +124,6 @@ export function useScopedExternalAutomations({
     ),
     runExternalAction: useCallback(
       async (scope, jobId, action) => await runScopedExternalAutomationAction(scope, jobId, action),
-      []
-    ),
-    fetchRuns: useCallback(
-      async (scope, job, page, pageSize) =>
-        await listScopedExternalAutomationRuns(scope, job, page, pageSize),
       []
     )
   }

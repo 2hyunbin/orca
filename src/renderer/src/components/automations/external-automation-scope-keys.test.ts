@@ -5,7 +5,6 @@ import {
   externalAutomationDialogKey,
   externalAutomationJobKey,
   externalAutomationManagerKey,
-  externalAutomationRunKey,
   externalAutomationScopeKey,
   type ExternalAutomationScopeRef
 } from './external-automation-scope-keys'
@@ -49,11 +48,10 @@ describe('external automation scope keys', () => {
       externalAutomationScopeKey(local),
       externalAutomationManagerKey(local, 'x'),
       externalAutomationJobKey(local, 'x'),
-      externalAutomationRunKey(local, 'x', 'x'),
       externalAutomationActionKey(local, 'x', 'run'),
       externalAutomationDialogKey(local, 'x')
     ])
-    expect(kinds.size).toBe(6)
+    expect(kinds.size).toBe(5)
   })
 
   it('distinguishes a create dialog from a job literally named new', () => {
@@ -64,7 +62,7 @@ describe('external automation scope keys', () => {
 
   it('escapes components so a hostile ID cannot forge another key', () => {
     const forged = externalAutomationJobKey(local, 'job|extra')
-    expect(forged).not.toBe(externalAutomationRunKey(local, 'job', 'extra'))
+    expect(forged).not.toBe(externalAutomationActionKey(local, 'job', 'run'))
     expect(forged.split('|')).toHaveLength(4)
   })
 

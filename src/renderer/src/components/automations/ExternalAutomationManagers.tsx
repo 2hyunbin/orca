@@ -7,8 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type {
   ExternalAutomationAction,
   ExternalAutomationJob,
-  ExternalAutomationManager,
-  ExternalAutomationRun
+  ExternalAutomationManager
 } from '../../../../shared/automations-types'
 import type {
   ExternalAutomationScope,
@@ -24,10 +23,6 @@ import {
   getExternalProviderLabel,
   getExternalTargetKindLabel
 } from './external-automation-display'
-import {
-  ExternalAutomationRunTable,
-  type FetchExternalAutomationRuns
-} from './ExternalAutomationRunTable'
 import { getExternalAutomationScheduleDisplay } from './external-automation-schedule-display'
 import { getExternalAutomationActionDisabledMessage } from './external-automation-source-availability'
 import { translate } from '@/i18n/i18n'
@@ -42,12 +37,6 @@ type ExternalAutomationManagersProps = {
     job: ExternalAutomationJob,
     action: ExternalAutomationAction,
     scope: ExternalAutomationScope
-  ) => void
-  onFetchRuns?: FetchExternalAutomationRuns
-  onOpenRun?: (
-    manager: ExternalAutomationManager,
-    job: ExternalAutomationJob,
-    run: ExternalAutomationRun
   ) => void
   onEdit?: (
     manager: ExternalAutomationManager,
@@ -95,8 +84,6 @@ export function ExternalAutomationManagers({
   now,
   runningActionKey,
   onAction,
-  onFetchRuns,
-  onOpenRun,
   onEdit
 }: ExternalAutomationManagersProps): React.JSX.Element {
   const automationCount = managers.reduce((sum, { manager }) => sum + manager.jobs.length, 0)
@@ -234,24 +221,6 @@ export function ExternalAutomationManagers({
                         {formatExternalDate(job.nextRunAt, now)} ·{' '}
                         {getExternalProviderLabel(manager)} / {manager.targetLabel}
                       </div>
-                      {manager.provider === 'hermes' ? (
-                        <div className="mt-1 truncate text-xs text-muted-foreground">
-                          {job.runCount}{' '}
-                          {job.runCount === 1
-                            ? translate(
-                                'auto.components.automations.ExternalAutomationManagers.8e9165af08',
-                                'run'
-                              )
-                            : translate(
-                                'auto.components.automations.ExternalAutomationManagers.e66091daf4',
-                                'runs'
-                              )}{' '}
-                          {translate(
-                            'auto.components.automations.ExternalAutomationManagers.844f1acb72',
-                            'found'
-                          )}
-                        </div>
-                      ) : null}
                       {job.promptPreview || job.lastError ? (
                         <div className="mt-1 truncate text-xs text-muted-foreground">
                           {job.lastError ?? job.promptPreview}
@@ -318,18 +287,6 @@ export function ExternalAutomationManagers({
                         )}
                       </ExternalActionButton>
                     </div>
-                    {manager.provider === 'hermes' ? (
-                      <div className="col-span-3">
-                        <ExternalAutomationRunTable
-                          scope={scope}
-                          manager={manager}
-                          job={job}
-                          now={now}
-                          onFetchRuns={onFetchRuns}
-                          onOpenRun={(run) => onOpenRun?.(manager, job, run)}
-                        />
-                      </div>
-                    ) : null}
                   </div>
                 )
               })}

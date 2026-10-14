@@ -66,8 +66,6 @@ export function AutomationsPageSurface({
     externalActionKey,
     activePaneTab,
     setActivePaneTab,
-    selectedExternalRunPage,
-    setSelectedExternalRunPage,
     setSelectedAutomationRunPageId,
     setSelectedAutomationRuns,
     setRunHistoryReloadToken,
@@ -263,7 +261,6 @@ export function AutomationsPageSurface({
         <AutomationsDetailPane
           selected={selected}
           selectedExternal={selectedExternal}
-          selectedExternalRunPage={selectedExternalRunPage}
           selectedRuns={setup.selectedRuns}
           selectedRunsNotice={setup.selectedRunsNotice}
           selectedHostEntry={destination.rowRecoveryHost(selectedRow?.key ?? null)}
@@ -295,11 +292,8 @@ export function AutomationsPageSurface({
           hostLabelById={presentation.hostLabelById}
           selectedRunNowAvailability={presentation.selectedRunNowAvailability}
           worktreeMap={selectedRunWorktreeMap}
-          fetchExternalAutomationRuns={externalActions.fetchExternalAutomationRuns}
           onActivePaneTabChange={setActivePaneTab}
-          onClearExternalRunPage={() => setSelectedExternalRunPage(null)}
           requestExternalAction={externalActions.requestExternalAction}
-          openExternalRunPage={externalActions.openExternalRunPage}
           openEditExternalDialog={editorActions.openEditExternalDialog}
           runNow={() => runSelectedRowAction(runActions.runNow)}
           openEditDialog={() => runSelectedRowAction(editorActions.openEditDialog)}
@@ -311,7 +305,6 @@ export function AutomationsPageSurface({
           onBackToList={() => {
             setIsDetailOpen(false)
             setSelectedAutomationRunPageId(null)
-            setSelectedExternalRunPage(null)
             setActivePaneTab('overview')
           }}
         />

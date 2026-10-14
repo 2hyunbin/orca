@@ -1,5 +1,5 @@
 /**
- * Keys for external manager rows, jobs, runs, dialogs, and in-flight actions.
+ * Keys for external manager rows, jobs, dialogs, and in-flight actions.
  *
  * A provider's manager ID is unique only inside one host, so a key built from it
  * alone collides the moment two hosts run the same provider — the selected row,
@@ -43,14 +43,6 @@ export function externalAutomationManagerKey(
 
 export function externalAutomationJobKey(scope: ExternalAutomationScopeRef, jobId: string): string {
   return key('job', scope, jobId)
-}
-
-export function externalAutomationRunKey(
-  scope: ExternalAutomationScopeRef,
-  jobId: string,
-  runId: string
-): string {
-  return key('run', scope, jobId, runId)
 }
 
 export function externalAutomationActionKey(

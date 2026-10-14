@@ -205,51 +205,6 @@ describe('AutomationsPage list rendering', () => {
     )
     expect(owners).toEqual([entry.scope.owner, runtimeScope.owner])
   })
-
-  it('reads runs from the host the table names, not the one holding the manager ID', async () => {
-    api.automations.list.mockResolvedValue([])
-    api.automations.listExternalManagerForOwner.mockImplementation(
-      async ({ provider }: { provider: string }) =>
-        provider === 'hermes'
-          ? { manager: makeExternalManager({ id: 'hermes:local' }), error: null, updatedAt: 1 }
-          : { manager: null, error: null, updatedAt: 1 }
-    )
-    api.automations.listExternalRunsForOwner.mockResolvedValue({ runs: [], total: 0 })
-
-    const { container } = await renderPage()
-    const entry = listedExternalEntries()[0]
-    if (!entry) {
-      throw new Error('no external entry to read runs for')
-    }
-    const runtimeScope = {
-      ...entry.scope,
-      owner: {
-        authority: { kind: 'runtime' as const, environmentId: 'env-7', pairingRevision: 1 },
-        selector: { kind: 'self' as const }
-      }
-    }
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="external-row"]')?.click()
-    })
-
-    await act(async () => {
-      await mocks.detailPane?.fetchExternalAutomationRuns({
-        scope: runtimeScope,
-        manager: entry.manager,
-        job: entry.job,
-        page: 0,
-        pageSize: 8
-      })
-    })
-
-    // Run output is read, not written, but a wrong host still shows one machine's
-    // logs under another's automation — and the desktop is the only host listed,
-    // so an ID-keyed lookup would answer with it every time.
-    expect(api.automations.listExternalRunsForOwner).toHaveBeenCalledWith(
-      expect.objectContaining({ owner: runtimeScope.owner, jobId: entry.job.id })
-    )
-  })
 })
 
 describe('AutomationsPage host filter', () => {
