@@ -26,6 +26,8 @@ export type ProcessSpec = {
   input?: string
   /** Cap on captured stdout/stderr; output past it is discarded. */
   maxOutputBytes?: number
+  /** Count stderr toward its output cap without retaining its contents. */
+  discardStderr?: boolean
   /** Capture stdout as bytes without decoding; stdout stays empty in this mode. */
   captureStdoutAsBytes?: boolean
   /** Stop a parser command as soon as captured output exceeds its cap. */

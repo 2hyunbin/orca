@@ -55,3 +55,27 @@ describe('process byte capture', () => {
     expect(result.stdoutBytes).toEqual(Buffer.from([0, 255, 254, 128]))
   })
 })
+
+it('discards private stderr while preserving stdout in async and sync execution', async () => {
+  const spec = {
+    program: process.execPath,
+    args: ['-e', 'process.stderr.write("private transfer data");process.stdout.write("safe")'],
+    discardStderr: true
+  }
+  for (const result of [await runProcess(spec), runProcessSync(spec)]) {
+    expect(result).toMatchObject({ code: 0, stdout: 'safe', stderr: '', outputTruncated: false })
+  }
+})
+
+it('still retires an output flood when stderr is discarded', async () => {
+  const result = await runProcess({
+    program: process.execPath,
+    args: ['-e', 'setInterval(()=>process.stderr.write(Buffer.alloc(4096,65)),1)'],
+    discardStderr: true,
+    maxOutputBytes: 100,
+    killOnOutputLimit: true,
+    terminationBarrier: true,
+    timeoutMs: 5000
+  })
+  expect(result).toMatchObject({ stderr: '', outputTruncated: true, timedOut: false })
+})

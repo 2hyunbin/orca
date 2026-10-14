@@ -10,7 +10,7 @@ import { GrowingByteBuffer } from './growing-byte-buffer'
  */
 export function createOutputSink(
   maxBytes: number,
-  outputCapture: 'head' | 'tail' = 'head'
+  outputCapture: 'head' | 'tail' | 'discard' = 'head'
 ): {
   write: (chunk: Buffer | string) => void
   buffer: () => Buffer
@@ -38,7 +38,7 @@ export function createOutputSink(
         tail.appendRetainedSuffix(chunk, maxBytes)
         return
       }
-      if (remaining <= 0) {
+      if (outputCapture === 'discard' || remaining <= 0) {
         return
       }
       chunks.push(chunk.length > remaining ? chunk.subarray(0, remaining) : chunk)
