@@ -1,3 +1,4 @@
+import type { AiVaultAgent } from '../../shared/ai-vault-types'
 import {
   registerTranscriptConsumer,
   type TranscriptConsumer,
@@ -9,6 +10,23 @@ import {
 import { fileIdentity } from './session-search-file-cursor'
 import type { SessionSearchFileWrite } from './session-search-index-writer'
 import type { SessionSearchStore } from './session-search-store'
+
+// External messages and metadata can change without moving the candidate file's stat.
+const SELF_CONTAINED_TRANSCRIPT_AGENTS: ReadonlySet<AiVaultAgent> = new Set([
+  'claude',
+  'qoder',
+  'codebuddy',
+  'gemini',
+  'copilot',
+  'hermes',
+  'openclaw',
+  'pi',
+  'omp',
+  'prime-agent',
+  'droid',
+  'muse',
+  'jcode'
+])
 
 /**
  * The search index as a consumer of the transcript reader.
@@ -29,6 +47,14 @@ export class SessionSearchIndexConsumer implements TranscriptConsumer {
 
   beginRead(start: TranscriptReadStart): TranscriptReadConsumer | null {
     const { candidate } = start
+    if (
+      start.mode === 'replace' &&
+      SELF_CONTAINED_TRANSCRIPT_AGENTS.has(candidate.agent) &&
+      (candidate.file.sidecar === undefined || candidate.file.sidecar === 'none') &&
+      this.store.coversTranscript(candidate)
+    ) {
+      return null
+    }
     if (start.mode === 'append') {
       const cursor = this.store.indexedFile(candidate.file.path, fileIdentity(candidate.file))
       if (!cursor || cursor.byteOffset !== start.previousByteOffset) {

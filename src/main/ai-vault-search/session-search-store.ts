@@ -171,6 +171,36 @@ export class SessionSearchStore {
     }
   }
 
+  /** A cold list read must not rewrite a complete, unchanged search entry. */
+  coversTranscript(candidate: SessionFileCandidate): boolean {
+    const file = candidate.file
+    if (this.closed || typeof file.sizeBytes !== 'number') {
+      return false
+    }
+    try {
+      return (
+        this.db
+          .prepare(
+            `SELECT 1 FROM files WHERE path = ? AND state = 'current'
+           AND mtime_ms = ? AND size_bytes = ? AND byte_offset = size_bytes
+           AND (? IS NULL OR dev IS NULL OR ino IS NULL
+                OR (CAST(dev AS REAL) = ? AND CAST(ino AS REAL) = ?))`
+          )
+          .get(
+            file.path,
+            file.mtimeMs,
+            file.sizeBytes,
+            file.dev ?? null,
+            file.dev ?? null,
+            file.ino ?? null
+          ) !== undefined
+      )
+    } catch (error) {
+      this.onError(error)
+      return false
+    }
+  }
+
   /** Null when this read cannot extend the index, or when the store refuses writes. */
   beginWrite(
     candidate: SessionFileCandidate,
