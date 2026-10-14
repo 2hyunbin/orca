@@ -113,6 +113,8 @@ export class SshChannelMultiplexer {
 
   // Track the oldest unacked outgoing message timestamp
   private unackedTimestamps = new Map<number, number>()
+  private highestTrackedSeq = 0
+  private timestampsInSequenceOrder = true
 
   // Why: liveness probes (#7773) resolve on the first frame of any kind —
   // a keepalive ack proves the relay round-trip without a full RPC.
@@ -459,6 +461,8 @@ export class SshChannelMultiplexer {
       for (const seq of this.unackedTimestamps.keys()) {
         if (seq <= acknowledgedSeq) {
           this.unackedTimestamps.delete(seq)
+        } else if (this.timestampsInSequenceOrder) {
+          break
         }
       }
       this.highestAckedBySelf = acknowledgedSeq
@@ -633,6 +637,9 @@ export class SshChannelMultiplexer {
   private trackOutgoingTimestamp(seq: number, liveness: boolean): void {
     const limit = liveness ? MAX_UNACKED_TIMESTAMPS : MAX_ORDINARY_UNACKED_TIMESTAMPS
     if (this.unackedTimestamps.size < limit) {
+      // Synchronous transport reentry can insert a later send before a keepalive.
+      this.timestampsInSequenceOrder &&= seq >= this.highestTrackedSeq
+      this.highestTrackedSeq = Math.max(this.highestTrackedSeq, seq)
       this.unackedTimestamps.set(seq, Date.now())
     }
   }
