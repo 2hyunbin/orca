@@ -13,7 +13,7 @@ import { agentSessionJournalProviderHandle } from '../../../shared/agent-session
 import { journalRowSchemaVersion } from '../../../shared/agent-session-journal-types'
 import { agentJournalLinkageFields } from '../../../shared/agent-session-journal-producer'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import { journalItemOwnerFence, journalObservedBody } from './journal-item-provenance'
+import { journalItemOwnerFence } from './journal-item-provenance'
 import type { JournalReducerState } from './journal-reducer'
 import type {
   JournalDispatchRow,
@@ -190,15 +190,7 @@ export function journalLifecycleBatchRowBuilder(
       const revision = nextJournalItemRevision(current, itemId, runningRevisions)
       return journalLifecycleMutationRow(
         mutation.kind === 'item'
-          ? {
-              ...mutation,
-              body: journalObservedBody(
-                current,
-                resolved,
-                turnEndAfterStop(current, resolved, mutation.body),
-                mutation.ownerFence
-              )
-            }
+          ? { ...mutation, body: turnEndAfterStop(current, resolved, mutation.body) }
           : mutation,
         itemId,
         revision,
@@ -258,12 +250,7 @@ export function buildJournalItemRow(
   // A tombstoned row keeps its revision in `tombstones`, and the reducer drops
   // any item at or below it — so a re-add has to outrank the tombstone too.
   const revision = nextJournalItemRevision(input.state, itemId, input.revisions)
-  const body = journalObservedBody(
-    input.state,
-    resolved,
-    turnEndAfterStop(input.state, resolved, input.body),
-    input.ownerFence
-  )
+  const body = turnEndAfterStop(input.state, resolved, input.body)
   return {
     kind: 'item',
     itemId,
