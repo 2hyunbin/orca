@@ -5,7 +5,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from './orca-runtime'
 import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
-import { findStructuredAgentSessionTab } from '../../shared/structured-agent-session-projection'
+import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -95,11 +95,15 @@ describe('a chat tab on a host with no window', () => {
       agent: 'codex',
       activate: true
     })
-    // A window opens on the saved layout; opening the same chat there looks its tab up by this.
-    const saved = state.session.unifiedTabs?.[WT] ?? []
 
-    expect(saved).toHaveLength(1)
-    expect(findStructuredAgentSessionTab(saved, 'chat-1')).toBe(saved[0])
+    // A window opening the same chat reuses the tab with this id, content type and entity.
+    expect(state.session.unifiedTabs?.[WT]).toEqual([
+      expect.objectContaining({
+        id: structuredAgentSessionTabId('chat-1'),
+        contentType: 'agent-session',
+        entityId: 'chat-1'
+      })
+    ])
   })
 
   it('leaves the layout when the index hides the chat, on any close path', async () => {

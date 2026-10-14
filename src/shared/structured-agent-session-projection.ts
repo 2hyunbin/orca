@@ -214,16 +214,6 @@ export function structuredAgentSessionTabId(sessionId: string): string {
   return `structured-agent-session-${sessionId}`
 }
 
-/** The chat's existing tab, which opening the chat again reuses instead of adding a second. */
-export function findStructuredAgentSessionTab<
-  T extends { id: string; contentType: string; entityId: string }
->(tabs: readonly T[], sessionId: string): T | undefined {
-  const tabId = structuredAgentSessionTabId(sessionId)
-  return tabs.find(
-    (tab) => tab.id === tabId && tab.contentType === 'agent-session' && tab.entityId === sessionId
-  )
-}
-
 function isPendingStructuredAgentSessionPrompt(item: AgentJournalRenderItem): boolean {
   return (
     (item.body.kind === 'approval' || item.body.kind === 'question') &&
