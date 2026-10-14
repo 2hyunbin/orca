@@ -33,6 +33,54 @@ describe('synthetic diagnostic excerpts (real scrubbed fixture pending upstream)
     expect(anchor ? text.slice(anchor.start, anchor.end) : null).toBe(expected)
   })
 
+  it.each(['##[error]', '::error::'])('excludes whole headers and totals behind %s', (prefix) => {
+    for (const heading of [
+      'FAILED',
+      '2 tests failed',
+      'stderr',
+      'test stderr',
+      'stderr | suite > case'
+    ]) {
+      const generic = `${prefix}${heading}`
+      const diagnostic = 'Error: substantive diagnostic'
+      const stack = ' at actual.ts:1:2'
+      const text = `${generic}\n${diagnostic}\n${stack}`
+      const anchor = findInitialCheckLogDiagnostic(text)
+      expect(anchor && text.slice(anchor.start, anchor.end)).toBe(diagnostic)
+      expect(anchor && text.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(stack)
+      expect(findInitialCheckLogDiagnostic(`${generic}\n${stack}`)).toBeNull()
+
+      const fallback = `${diagnostic}\n${stack}\n${separator}\n${generic}`
+      const earlier = findInitialCheckLogDiagnostic(fallback)
+      expect(earlier && fallback.slice(earlier.start, earlier.end)).toBe(diagnostic)
+      expect(earlier && fallback.slice(earlier.nearbyStackStart, earlier.nearbyStackEnd)).toBe(
+        stack
+      )
+    }
+  })
+
+  it.each(['##[error]', '::error::'])('keeps substantive diagnostics behind %s', (prefix) => {
+    for (const body of [
+      '2 tests failed because configuration is missing',
+      'stderr: missing module while running 2 tests that failed',
+      'stderr | suite > case TypeError: expected a function',
+      'Error: 2 tests failed after the worker exited with exit code 1'
+    ]) {
+      const diagnostic = `${prefix}${body}`
+      const stack = ' at actual.ts:1:2'
+      const text = `${diagnostic}\n${stack}`
+      const anchor = findInitialCheckLogDiagnostic(text)
+      expect(anchor && text.slice(anchor.start, anchor.end)).toBe(diagnostic)
+      expect(anchor && text.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(stack)
+    }
+  })
+
+  it('keeps a named diagnostic printed in stderr eligible', () => {
+    const text = 'stderr | suite > case TypeError: expected a function\n at actual.ts:1:2'
+    const anchor = findInitialCheckLogDiagnostic(text)
+    expect(anchor && text.slice(anchor.start, anchor.end)).toBe('TypeError: expected a function')
+  })
+
   it('searches at most twelve retained lines without crossing the omission boundary', () => {
     const text = `TypeError: diagnostic\n${'context\n'.repeat(10)} at view.tsx:18:8\n${separator}\nnormal output`
     const anchor = findInitialCheckLogDiagnostic(text)

@@ -209,7 +209,7 @@ export function CheckRunJobs({
   )
 
   return (
-    <section className="rounded-md border border-border bg-background">
+    <section className="min-w-0 rounded-md border border-border bg-background">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="text-sm font-medium">
           {hasFailedJobs

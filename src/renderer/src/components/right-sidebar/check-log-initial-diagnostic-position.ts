@@ -11,6 +11,8 @@ const diagnosticPattern =
   /##\[error\]|::error(?:\s+[^:]*)?::|\b(?:[A-Z][\w.]*Error|Error|error|panic):\s*\S|\berror\s+[A-Z]+\d+:\s*\S|\b(?:ENOENT|EACCES)\b[: ,]+\S/
 const genericExitPattern =
   /^(?:(?:error|[\w.]*Error):\s*)?(?:(?:process|command)\s+(?:completed|failed|exited)\s+(?:with\s+)?(?:exit\s+)?code\s+\d+|job failed:\s*exit code\s+\d+|exit code\s+\d+)[.!]?\s*$/i
+const genericHeadingPattern =
+  /^(?:FAILED|\d+\s+tests?\s+failed|(?:test\s+)?stderr(?:\s*\|.*)?)[.!]?\s*$/i
 const framePattern = /^\s*at\s+\S|\S+\.[\w]+:\d+:\d+\b/
 
 export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticAnchor | null {
@@ -31,7 +33,7 @@ export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticA
   for (const [from, to] of segments) {
     for (let index = from; index < to; index += 1) {
       const line = lines[index]
-      if (/^\s*(?:at\s|stderr\b|test stderr\b)/i.test(line.text)) {
+      if (/^\s*at\s/i.test(line.text)) {
         continue
       }
       const match = diagnosticPattern.exec(line.text)
@@ -40,7 +42,11 @@ export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticA
       }
       const candidate = line.text.slice(match.index)
       const body = candidate.replace(/^(?:##\[error\]|::error(?:\s+[^:]*)?::)\s*/, '').trim()
-      if (!body || genericExitPattern.test(body)) {
+      if (
+        !body ||
+        genericExitPattern.test(body) ||
+        (genericHeadingPattern.test(body) && !diagnosticPattern.test(body))
+      ) {
         continue
       }
       const anchor: CheckLogDiagnosticAnchor = { start: line.start + match.index, end: line.end }
