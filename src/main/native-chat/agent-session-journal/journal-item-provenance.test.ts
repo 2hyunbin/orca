@@ -120,12 +120,7 @@ describe('execution provenance', () => {
   })
 
   it("a rewind's retained row carries the old fold's provenance; an older record's is never current", () => {
-    const row = {
-      itemId: TURN_ID,
-      body: RUNNING,
-      observedAt: 1,
-      ownerFence: 2
-    }
+    const row = { itemId: TURN_ID, body: RUNNING, observedAt: 1, ownerFence: 2 }
     expect(retainedRowReplacement(row).ownerFence).toBe(2)
     const { ownerFence: _stated, ...older } = row
     expect(retainedRowReplacement(older).ownerFence).toBe(0)
