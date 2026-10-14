@@ -6,6 +6,7 @@ import {
   onJiraImageCacheInvalidated
 } from '@/runtime/runtime-jira-image-cache'
 import { jiraImageProtocolUrl } from '@/runtime/runtime-jira-image-client'
+import { translate } from '@/i18n/i18n'
 import { ExpandableMarkdownImage } from './sidebar/MarkdownImageLightbox'
 
 type JiraAttachmentImageProps = {
@@ -69,7 +70,11 @@ function ResolvedJiraAttachmentImage({
     }
   }, [localProtocol, reference, target])
   if (!src || failed) {
-    return <span>{alt || 'Image'}</span>
+    return (
+      <span>
+        {alt || translate('auto.components.sidebar.MarkdownImageLightbox.image', 'Image')}
+      </span>
+    )
   }
   return (
     <ExpandableMarkdownImage
