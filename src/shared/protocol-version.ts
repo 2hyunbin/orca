@@ -63,32 +63,7 @@ import { MOBILE_RELAY_RUNTIME_CAPABILITIES } from './mobile-desktop-relay-contra
 import { SKILL_RUNTIME_CAPABILITIES } from './skill-install-capability'
 import { ACCOUNT_RUNTIME_CAPABILITIES } from './account-runtime-capabilities'
 import * as agentLaunchCapabilities from './agent-launch-runtime-capability'
-import * as runtimeCapabilityConstants from './runtime-capability-constants'
-
-// Why: declares the Orca runtime RPC compatibility contract. Desktop,
-// headless server, CLI, and mobile builds may drift in app version, but
-// they must agree on this protocol range before runtime RPCs are allowed.
-//
-// Bump RUNTIME_PROTOCOL_VERSION when:
-//   - You remove an RPC method or required parameter that clients use.
-//   - You change the meaning (units, nullability) of an existing field
-//     clients read.
-//   - You change encrypted framing, terminal stream framing, or auth.
-// Do NOT bump for:
-//   - Adding new RPC methods.
-//   - Adding new optional fields on existing methods.
-//   - Adding new ignorable event types.
-//
-// Bump MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION when a runtime server must
-// refuse older clients. Bump MIN_COMPATIBLE_RUNTIME_SERVER_VERSION when
-// this client build requires a newer server. Exact app-version equality is
-// never required; these numbers define the supported compatibility window.
-
-export const RUNTIME_PROTOCOL_VERSION = 3
-export const MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION = 2
-export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
-
-const {
+import {
   AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY,
   AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
@@ -151,7 +126,30 @@ const {
   WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY,
   WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
   WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY
-} = runtimeCapabilityConstants
+} from './runtime-capability-constants'
+
+// Why: declares the Orca runtime RPC compatibility contract. Desktop,
+// headless server, CLI, and mobile builds may drift in app version, but
+// they must agree on this protocol range before runtime RPCs are allowed.
+//
+// Bump RUNTIME_PROTOCOL_VERSION when:
+//   - You remove an RPC method or required parameter that clients use.
+//   - You change the meaning (units, nullability) of an existing field
+//     clients read.
+//   - You change encrypted framing, terminal stream framing, or auth.
+// Do NOT bump for:
+//   - Adding new RPC methods.
+//   - Adding new optional fields on existing methods.
+//   - Adding new ignorable event types.
+//
+// Bump MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION when a runtime server must
+// refuse older clients. Bump MIN_COMPATIBLE_RUNTIME_SERVER_VERSION when
+// this client build requires a newer server. Exact app-version equality is
+// never required; these numbers define the supported compatibility window.
+
+export const RUNTIME_PROTOCOL_VERSION = 3
+export const MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION = 2
+export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
 
 export * from './runtime-capability-constants'
 export { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
