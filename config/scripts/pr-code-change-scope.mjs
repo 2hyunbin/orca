@@ -267,6 +267,8 @@ const MANAGED_HOOK_PREFIXES = [
 
 const NATIVE_RUNTIME_PREFIXES = [
   'config/scripts/ensure-native-runtime',
+  'config/scripts/initialize-windows-native-toolchain',
+  'config/scripts/capture-windows-native-environment',
   'config/scripts/rebuild-native-deps',
   'config/scripts/node-pty-job-ownership',
   'config/scripts/windows-pe-machine',
@@ -288,6 +290,8 @@ const NATIVE_CACHE_FILES = new Set([
   '.npmrc',
   '.pnpmfile.cjs',
   'config/scripts/ensure-native-runtime.mjs',
+  'config/scripts/initialize-windows-native-toolchain.mjs',
+  'config/scripts/capture-windows-native-environment.cmd',
   'config/scripts/rebuild-native-deps.mjs',
   'config/scripts/node-pty-job-ownership.cjs',
   'config/scripts/windows-pe-machine.cjs',
