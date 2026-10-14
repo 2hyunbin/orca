@@ -26,6 +26,14 @@ const CHAT_A = 'chat-a-0001'
 const CHAT_B = 'chat-b-0002'
 const CHAT_GONE = 'chat-gone-0003'
 const CHAT_SSH = 'chat-ssh-0004'
+const CHAT_REMOTE = 'chat-remote-0005'
+const EMPTY_SESSION: WorkspaceSessionState = {
+  activeRepoId: null,
+  activeWorktreeId: WT,
+  activeTabId: null,
+  tabsByWorktree: {},
+  terminalLayoutsByTabId: {}
+}
 let root: string
 
 beforeEach(async () => {
@@ -50,7 +58,11 @@ function released(sessionId: string) {
 }
 
 /** A runtime with no window whose layout saves a tab for each chat. */
-async function runtimeWithSavedChats(sessionIds: string[]) {
+/** `partitions` are saved layouts besides the local one, by partition id. */
+async function runtimeWithSavedChats(
+  sessionIds: string[],
+  partitions = new Map<string, WorkspaceSessionState>()
+) {
   const state: { session: WorkspaceSessionState } = {
     session: {
       activeRepoId: null,
@@ -63,10 +75,15 @@ async function runtimeWithSavedChats(sessionIds: string[]) {
   const store = {
     getRepos: () => [],
     getSettings: () => ({}),
-    getWorkspaceSession: () => state.session,
-    getWorkspaceSessionHostIds: () => ['local' as const],
-    setWorkspaceSession: (next: WorkspaceSessionState) => {
-      state.session = next
+    getWorkspaceSession: (hostId = 'local') =>
+      hostId === 'local' ? state.session : (partitions.get(hostId) ?? null),
+    getWorkspaceSessionHostIds: () => ['local', ...partitions.keys()],
+    setWorkspaceSession: (next: WorkspaceSessionState, hostId = 'local') => {
+      if (hostId === 'local') {
+        state.session = next
+      } else {
+        partitions.set(hostId, next)
+      }
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
@@ -182,6 +199,31 @@ describe('a windowless chat tab against the chat host', () => {
     await runtime.restoreStructuredAgentSessionTabs()
 
     expect(savedChatIds(state)).toEqual([CHAT_B, CHAT_SSH])
+  })
+
+  it("leaves a remote server's mirrored chat tab alone at startup", async () => {
+    await seedTestAgentSessionRecordStore(root, {
+      records: [released(CHAT_B)],
+      sessionTabs: shown(CHAT_B)
+    })
+    // A desktop mirrors a remote server's chat into that server's partition with no host stamp.
+    const mirrored = withOpenedAgentSessionTab('local', EMPTY_SESSION, WT, {
+      sessionId: CHAT_REMOTE,
+      agent: 'codex',
+      tabId: structuredAgentSessionTabId(CHAT_REMOTE)
+    })!
+    const unifiedTabs = {
+      [WT]: (mirrored.unifiedTabs?.[WT] ?? []).map(({ executionHostId: _host, ...tab }) => tab)
+    }
+    const partitions = new Map([['runtime:env-y', { ...mirrored, unifiedTabs }]])
+    const { runtime } = await runtimeWithSavedChats([CHAT_B], partitions)
+    restoringRuntime(runtime)
+
+    await runtime.restoreStructuredAgentSessionTabs()
+
+    expect(partitions.get('runtime:env-y')?.unifiedTabs?.[WT]?.map((tab) => tab.entityId)).toEqual([
+      CHAT_REMOTE
+    ])
   })
 
   it('prunes nothing at startup when the store has no tab index', async () => {
