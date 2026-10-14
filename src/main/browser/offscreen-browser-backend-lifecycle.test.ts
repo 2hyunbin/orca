@@ -138,14 +138,18 @@ describe('OffscreenBrowserBackend lifecycle', () => {
     vi.useRealTimers()
   })
 
-  it('reports a page when it opens and after each committed navigation, so its saved tab follows', async () => {
-    const onPageChanged = vi.fn()
+  it('reports a page when it opens, then each committed navigation separately', async () => {
+    const onPageOpened = vi.fn()
+    const onPageNavigated = vi.fn()
     const browserManager = {
       registerOffscreenGuest: vi.fn(registerOffscreenGuestLikeBrowserManager),
       unregisterGuest: vi.fn()
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: createTab reads only these two BrowserManager members.
-    const backend = new OffscreenBrowserBackend(browserManager as never, { onPageChanged })
+    const backend = new OffscreenBrowserBackend(browserManager as never, {
+      onPageOpened,
+      onPageNavigated
+    })
 
     await backend.createTab({
       browserPageId: 'page-1',
@@ -159,16 +163,20 @@ describe('OffscreenBrowserBackend lifecycle', () => {
     webContents.title = 'B'
     webContents.emit('did-stop-loading')
 
-    expect(onPageChanged.mock.calls.map(([page]) => page)).toEqual([
-      {
-        worktreeId: 'wt',
-        pageId: 'page-1',
-        url: 'https://example.com/a',
-        title: '',
-        profileId: 'work',
-        groupId: 'group-2'
-      },
-      { worktreeId: 'wt', pageId: 'page-1', url: 'https://example.com/b', title: 'B' }
+    expect(onPageOpened.mock.calls).toEqual([
+      [
+        {
+          worktreeId: 'wt',
+          pageId: 'page-1',
+          url: 'https://example.com/a',
+          title: '',
+          profileId: 'work',
+          groupId: 'group-2'
+        }
+      ]
+    ])
+    expect(onPageNavigated.mock.calls).toEqual([
+      [{ worktreeId: 'wt', pageId: 'page-1', url: 'https://example.com/b', title: 'B' }]
     ])
   })
 

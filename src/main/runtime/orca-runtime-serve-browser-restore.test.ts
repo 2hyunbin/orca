@@ -164,6 +164,49 @@ describe('a saved browser tab on a host with no window', () => {
     expect(listed.tabs.some((tab) => tab.id === 'page-1')).toBe(false)
   })
 
+  it('keeps its saved title when its page is restored', async () => {
+    const { runtime, createTab, getSession } = restartedServe()
+    // The backend reports every page it creates, a restored one included.
+    createTab.mockImplementation(async ({ browserPageId }: { browserPageId?: string }) => {
+      runtime.serveBrowserPageOpened({
+        worktreeId: TEST_WORKTREE_ID,
+        pageId: browserPageId!,
+        url: 'https://example.com/',
+        title: ''
+      })
+      return { browserPageId: browserPageId! }
+    })
+
+    await runtime['serveBrowserTabs'].start(TEST_WORKTREE_ID, 'page-1')
+
+    expect(createTab).toHaveBeenCalledTimes(1)
+    const saved = getSession().browserTabsByWorktree?.[TEST_WORKTREE_ID] ?? []
+    expect(saved.map((tab) => [tab.id, tab.title])).toEqual([
+      ['page-1', 'Example'],
+      ['page-2', 'Example']
+    ])
+  })
+
+  it('stays closed when its page reports a navigation after the close', async () => {
+    const { runtime, getSession } = restartedServe()
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'page-1')
+    runtime.serveBrowserPageNavigated({
+      worktreeId: TEST_WORKTREE_ID,
+      pageId: 'page-1',
+      url: 'https://example.com/late',
+      title: 'Late'
+    })
+
+    const saved = getSession().browserTabsByWorktree?.[TEST_WORKTREE_ID] ?? []
+    expect(saved.map((tab) => tab.id)).toEqual(['page-2'])
+    // What a restart reads back.
+    const restarted = restartedServe(getSession())
+    const listed = await restarted.runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(listed.tabs.some((tab) => tab.id === 'page-1')).toBe(false)
+  })
+
   it('starts its page for a command that names only the page', async () => {
     const { runtime, createTab } = restartedServe()
 

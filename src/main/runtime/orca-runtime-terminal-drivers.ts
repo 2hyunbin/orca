@@ -16,7 +16,7 @@ import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
 import { RuntimeWorktreeBaseReconciliation } from './runtime-worktree-base-reconciliation'
 import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
 import { ServeBrowserTabs } from './serve-browser-tabs'
-import type { ServeBrowserPage } from './serve-browser-tab-layout'
+import type { ServeBrowserPage, ServeBrowserPageState } from './serve-browser-tab-layout'
 
 export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
   // Why: per-PTY driver state. The "driver" is whoever currently owns the
@@ -52,9 +52,12 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)
   })
 
-  /** A page the backend that runs it opened or moved. */
-  saveServeBrowserPage(page: ServeBrowserPage): void {
-    this.serveBrowserTabs.pageChanged(page)
+  serveBrowserPageOpened(page: ServeBrowserPage): void {
+    this.serveBrowserTabs.opened(page)
+  }
+
+  serveBrowserPageNavigated(page: ServeBrowserPageState): void {
+    this.serveBrowserTabs.navigated(page)
   }
 
   protected readonly edgeCommands = new RuntimeEdgeCommandController({

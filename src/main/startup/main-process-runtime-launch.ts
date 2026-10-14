@@ -158,7 +158,8 @@ async function launchServeMode(
     runtime.setOffscreenBrowserBackend(
       new OffscreenBrowserBackend(browserManager, {
         getAgentBrowserBridge: () => state.agentBrowserBridge,
-        onPageChanged: (page) => runtime.saveServeBrowserPage(page)
+        onPageOpened: (page) => runtime.serveBrowserPageOpened(page),
+        onPageNavigated: (page) => runtime.serveBrowserPageNavigated(page)
       })
     )
   }

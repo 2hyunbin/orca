@@ -10,7 +10,8 @@ import {
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
   withServeBrowserPageState,
-  type ServeBrowserPage
+  type ServeBrowserPage,
+  type ServeBrowserPageState
 } from './serve-browser-tab-layout'
 
 export type RestorableBrowserPage = {
@@ -40,13 +41,19 @@ export class ServeBrowserTabs {
     }
   ) {}
 
-  /** A page the backend opened or moved: a new page gets a tab, a saved one its new address. */
-  pageChanged(page: ServeBrowserPage): void {
-    this.write(
-      page.worktreeId,
-      (hostId, session) =>
-        withOpenedServeBrowserTab(hostId, session, page) ?? withServeBrowserPageState(session, page)
+  /** A created page gets a saved tab; a page this host is restoring already has one. */
+  opened(page: ServeBrowserPage): void {
+    if (this.restoring.has(page.pageId)) {
+      return
+    }
+    this.write(page.worktreeId, (hostId, session) =>
+      withOpenedServeBrowserTab(hostId, session, page)
     )
+  }
+
+  /** A saved tab follows its page; a page whose tab was closed is not saved again. */
+  navigated(page: ServeBrowserPageState): void {
+    this.write(page.worktreeId, (_hostId, session) => withServeBrowserPageState(session, page))
   }
 
   /** A closed page's tab, true when one was saved; a page destroyed with the process is not a close. */
@@ -133,17 +140,18 @@ export class ServeBrowserTabs {
     if (!backend) {
       return false
     }
-    const started = backend
-      .createTab({
+    // Marked before the create, whose open report can arrive before it returns.
+    const started = Promise.resolve().then(() =>
+      backend.createTab({
         browserPageId: page.pageId,
         url: page.url,
         worktreeId: page.worktreeId,
         ...(page.profileId ? { profileId: page.profileId } : {})
       })
-      .then(() => undefined)
-      .finally(() => this.restoring.delete(page.pageId))
-    this.restoring.set(page.pageId, started)
-    await started
+    )
+    const settled = started.then(() => undefined).finally(() => this.restoring.delete(page.pageId))
+    this.restoring.set(page.pageId, settled)
+    await settled
     return true
   }
 
