@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../../shared/constants'
 import { createTestStore, makeWorktree, seedStore } from '../../store/slices/store-test-helpers'
 import { createStoreSessionMockApi } from '../../store/slices/store-session-test-harness'
 import { buildMobileSessionTabSnapshots } from '@/runtime/sync-runtime-graph/mobile-session-snapshots'
@@ -478,6 +479,35 @@ describe('runtime file positioning', () => {
       frames.shift()?.(0)
     }
   }
+
+  it.each([undefined, { line: 17 }])(
+    'preserves a visible floating editor when another file opens in the background (position %s)',
+    (position) => {
+      const { openFile, store } = setup('editor')
+      store.setState({
+        settings: { ...getDefaultSettings('/tmp'), floatingTerminalEnabled: true },
+        floatingWorkspacePanelOpen: true,
+        floatingWorkspacePath: '/tmp/floating'
+      })
+      openFile({
+        worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+        filePath: '/tmp/floating/first.ts',
+        relativePath: 'first.ts',
+        navigation: 'all'
+      })
+      const before = activeEditorEntityId(store, FLOATING_TERMINAL_WORKTREE_ID)
+      openFile({
+        worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+        filePath: '/tmp/floating/second.ts',
+        relativePath: 'second.ts',
+        navigation: 'caller',
+        position
+      })
+      flushFrames()
+      expect(activeEditorEntityId(store, FLOATING_TERMINAL_WORKTREE_ID)).toBe(before)
+      expect(store.getState().pendingEditorReveal).toBeNull()
+    }
+  )
 
   it('reveals a focused file after mounting, including its column', () => {
     const { openFile, store } = setup('terminal')

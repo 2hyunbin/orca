@@ -6,6 +6,8 @@ import { runSleepWorktree } from '@/components/sidebar/sleep-worktree-flow'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { persistWorkspaceSessionByHost } from '@/lib/workspace-session-host-persistence'
 import { revealWorkspaceSurface } from '@/lib/workspace-surface-reveal'
+import { selectFloatingWorkspacePanelVisible } from '@/store/floating-workspace-panel-selector'
+import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 import { useAppStore } from '../../store'
 import type { AppState } from '../../store/types'
 import type { EditorTabSelection } from '../../store/slices/editor/types/open-file'
@@ -24,7 +26,10 @@ function openRuntimeEditorTab(
 ): void {
   const store = useAppStore.getState()
   if (navigation !== undefined && !navigationTargetsHost(navigation)) {
-    open(store, worktreeId === store.activeWorktreeId ? 'none' : 'background')
+    const isViewed =
+      worktreeId === store.activeWorktreeId ||
+      (isFloatingWorkspaceId(worktreeId) && selectFloatingWorkspacePanelVisible(store))
+    open(store, isViewed ? 'none' : 'background')
     return
   }
   revealWorkspaceSurface(store, worktreeId)
