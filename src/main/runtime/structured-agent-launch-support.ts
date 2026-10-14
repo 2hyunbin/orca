@@ -52,13 +52,7 @@ export async function structuredAgentSupportsLaunch(
     // was last read counts and a found one never waits.
     launch = await resolveAgainAfterRefreshOnMissingProgram(
       async () =>
-        check.resolveLaunch(
-          {
-            ...(await resolveHostAgentBaseEnvironment(settings)),
-            ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
-          },
-          settings
-        ),
+        check.resolveLaunch(await resolveHostStructuredAgentLaunchEnvironment(agent, settings), settings),
       refreshHostAgentBaseEnvironmentAfterMiss,
       { env: ({ env }) => env, cwd }
     )
@@ -70,6 +64,17 @@ export async function structuredAgentSupportsLaunch(
     throw error
   }
   return check.supportsVersion({ ...launch, cwd: await cwd() })
+}
+
+/** The environment a new local chat launch starts from, before its account binding. */
+export async function resolveHostStructuredAgentLaunchEnvironment(
+  agent: string,
+  settings: LaunchEnvironmentSettings
+): Promise<Record<string, string>> {
+  return {
+    ...(await resolveHostAgentBaseEnvironment(settings)),
+    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
+  }
 }
 
 /** `agentSession.createSupport` on this host: every refusal it can know before spawning. The

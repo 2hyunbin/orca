@@ -17852,6 +17852,23 @@
         "resuming": "Reanudando automáticamente tras el reinicio.",
         "resumed": "Reanudados automáticamente tras el reinicio.",
         "changeInSettings": "Cambiar en Ajustes"
+      },
+      "TaskPageJiraSavedFilters": {
+        "6c381858a1": "Saved filters",
+        "d14121662d": "No saved filters yet.",
+        "af0dd8c528": "Edit {{value0}}",
+        "bae9bd87bf": "You can save up to {{value0}} filters.",
+        "85506127a5": "Save current filter",
+        "7aef259c28": "Edit Jira filter",
+        "4f0e55d2e5": "Save Jira filter",
+        "466c1b12ce": "Give this JQL query a name for quick access.",
+        "e4c2f52972": "Name",
+        "0ab71bb840": "A saved filter with this name already exists.",
+        "42ce360813": "JQL",
+        "7b21c59a26": "Delete filter",
+        "a62f9db53d": "Cancel",
+        "c77189bc0c": "Update filter",
+        "19af906d12": "Save filter"
       }
     },
     "i18n": {
@@ -19908,5 +19925,55 @@
     "browser": "Navegador",
     "editor": "Editor",
     "terminal": "Terminal"
+  },
+  "updates": {
+    "installBlock": {
+      "instancesLabel": "Instancias que usan Orca",
+      "browserLabel": "Navegador en segundo plano",
+      "serverLabel": "Servidor en segundo plano",
+      "windowLabel": "Otra ventana de Orca",
+      "instanceLabel": "Otra instancia de Orca",
+      "processId": "PID {{pid}}",
+      "preparingTitle": "Preparando tu actualización",
+      "preparingSummary": "Comprobando las instancias de Orca en ejecución antes de reiniciar.",
+      "later": "Más tarde",
+      "retainedDownload": "Orca sigue abierto. No necesitas descargar la actualización de nuevo.",
+      "retryInstallation": "Reintentar instalación",
+      "waitingLabel": "Actualización en espera",
+      "busyTitle": "Otra instancia de Orca se está actualizando",
+      "busySummary": "Otra instancia de Orca ya está instalando una actualización.",
+      "busyGuidance": "Espera un momento y vuelve a intentarlo. Tu actualización descargada está lista.",
+      "unresponsiveTitle": "Esperando a los servidores en segundo plano",
+      "unresponsiveSummary": "Orca no pudo terminar de pausar sus servidores en segundo plano para la actualización.",
+      "unresponsiveGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "readyTitle": "Tu actualización está lista",
+      "serverSummary": "Un servidor de Orca en segundo plano sigue usando esta aplicación.",
+      "instanceSummary": "Otra instancia de Orca sigue usando esta aplicación.",
+      "serverGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "mixedGuidance": "Cierra las demás ventanas de Orca y detén el servidor desde el terminal o el servicio que lo inició. Los dispositivos conectados se desconectarán. Después, vuelve a intentarlo.",
+      "instanceGuidance": "Cierra las demás instancias de Orca y vuelve a intentarlo. Tu actualización descargada se mantendrá lista.",
+      "waitingAriaLabel": "Actualización en espera de otras instancias de Orca. Haz clic para expandir.",
+      "preparingLabel": "Preparando actualización",
+      "preparingAriaLabel": "Preparando actualización. Haz clic para expandir."
+    }
+  },
+  "jira": {
+    "savedFilters": {
+      "retry": "Reintentar",
+      "find": "Buscar un filtro guardado",
+      "noMatch": "No hay filtros coincidentes.",
+      "loadFailed": "No se pudieron cargar los filtros guardados de Jira.",
+      "saveFailed": "No se pudieron guardar los filtros de Jira."
+    },
+    "statusFilters": {
+      "loadFailed": "No se pudieron cargar los filtros de estado de Jira.",
+      "saveFailed": "No se pudieron guardar los filtros de estado de Jira.",
+      "manualQuery": "Los filtros de estado se aplican a las vistas predefinidas. Borra la búsqueda para usarlos.",
+      "label": "Filtrar incidencias de Jira por estado",
+      "clear": "Borrar estados",
+      "jql": "JQL del filtro de estado",
+      "editJql": "Editar como JQL",
+      "catalogHint": "Los estados provienen de las incidencias cargadas. Borra los estados para descubrir otros en esta vista."
+    }
   }
 }
