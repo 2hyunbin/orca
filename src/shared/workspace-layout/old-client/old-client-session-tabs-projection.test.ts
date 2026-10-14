@@ -285,7 +285,7 @@ describe('projectSessionTabs', () => {
       const facts = fields.live
         ? { ...noFacts, terminalRows: { [tabId!]: { title: fields.live } } }
         : noFacts
-      return { model, tabId: tabId!, facts }
+      return { model, tabId: tabId!, leafId: leafId!, facts }
     }
     const titleOf = (
       { model, facts }: ReturnType<typeof soleTab>,
@@ -298,8 +298,12 @@ describe('projectSessionTabs', () => {
       expect(titleOf(soleTab({ title: 'deploy', paneTitle: 'logs', live: 'zsh' }))).toBe('deploy')
     })
 
-    it('a pane title beats the live title when there is no custom title', () => {
-      expect(titleOf(soleTab({ paneTitle: 'logs', live: 'zsh' }))).toBe('logs')
+    // Clients drop a sole pane's title that equals its row's title.
+    it("a sole pane's row names its tab; its pane title stays in the layout", () => {
+      const tab = soleTab({ paneTitle: 'logs', live: 'zsh' })
+      expect(
+        projectSessionTabs(WS, tab.model.workspaces[WS]!, views(), tab.facts, false).tabs[0]
+      ).toMatchObject({ title: 'zsh', parentLayout: { titlesByLeafId: { [tab.leafId]: 'logs' } } })
     })
 
     it('reads generated titles only with the setting on', () => {
@@ -356,18 +360,42 @@ describe('projectSessionTabs', () => {
     })
   })
 
-  it('names the first group but no tab active when the view selects nothing, and keeps one group without a tree', () => {
+  it('shows the first group and its first tab when the view selects nothing, and keeps one group without a tree', () => {
     const ctx = testContext()
     const { model } = build(ctx, [{ type: 'createTerminalTab', workspace: WS }])
     const projected = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts, false)
     expect(projected).toMatchObject({
       activeGroupId: model.workspaces[WS]!.groups[0]!.id,
-      activeTabId: null,
-      activeTabType: null
+      activeTabId: projected.tabs[0]!.id,
+      activeTabType: 'terminal'
     })
     expect(projected.tabGroups).toHaveLength(1)
     expect(projected).not.toHaveProperty('tabGroupLayout')
-    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: false })
+    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: true })
+  })
+
+  it("shows a group's remembered tab, else its most recent, when the group records none", () => {
+    const ctx = testContext()
+    const { model } = build(ctx, [
+      { type: 'createTerminalTab', workspace: WS },
+      { type: 'createTerminalTab', workspace: WS },
+      { type: 'createTerminalTab', workspace: WS }
+    ])
+    const ws = model.workspaces[WS]!
+    const [first, second, third] = ws.groups[0]!.tabOrder
+    const group = ws.groups[0]!.id
+    const shown = (view: SessionTabsView) => projectSessionTabs(WS, ws, view, noFacts, false)
+    const rowOf = (tabId: string) =>
+      shown(views()).tabs.find((row) => row.parentTabId === tabId)?.id
+
+    // A session from before tab groups remembers the workspace's tab.
+    expect(shown(views({ activeTabIdByWorktree: { [WS]: second! } })).activeTabId).toBe(
+      rowOf(second!)
+    )
+    expect(
+      shown(views({ groups: { [WS]: { [group]: { recentTabIds: [third!, first!] } } } }))
+        .activeTabId
+    ).toBe(rowOf(first!))
   })
 
   it('names the first group active when the saved one is gone, as a window restores it', () => {

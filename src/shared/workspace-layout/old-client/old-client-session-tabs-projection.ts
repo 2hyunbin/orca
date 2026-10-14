@@ -18,9 +18,9 @@ import type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsSnapshot
 } from '../../runtime-session-contracts'
-import type { TabGroupLayoutNode } from '../../tab-types'
 import type { TerminalLayoutSnapshot } from '../../terminal-tab-types'
 import { pruneGroupLayout } from '../../workspace-session-terminal-tab-close'
+import { groupsInLayoutOrder, resolveActiveGroupId } from './old-client-session-tab-groups'
 import {
   agentSessionRowId,
   publishedTabOrderId,
@@ -42,7 +42,7 @@ import type {
 /** One view's selection: the desktop's record today, a phone's own record once views exist. */
 export type SessionTabsView = Pick<
   DesktopLayoutView,
-  'activeGroupIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
+  'activeGroupIdByWorktree' | 'activeTabIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
 >
 
 export type SessionTabsFacts = Pick<
@@ -76,13 +76,29 @@ export function projectSessionTabs(
 ): ProjectedSessionTabs {
   const activeGroupId = resolveActiveGroupId(workspace, view.activeGroupIdByWorktree?.[key])
   const groupViews = view.groups[key] ?? {}
+  const remembered = view.activeTabIdByWorktree?.[key]
+  // As a window shows a group: its recorded tab, else (a session from before tab groups) the
+  // workspace's remembered tab, else its most recent, else its first.
+  const groupActiveTabId = (group: WorkspaceLayout['groups'][number]): string | null => {
+    const inGroup = (id: string | null | undefined): id is string =>
+      Boolean(id && group.tabOrder.includes(id))
+    const recorded = groupViews[group.id]
+    return (
+      [recorded?.activeTabId, remembered, recorded?.recentTabIds?.findLast(inGroup)].find(
+        inGroup
+      ) ??
+      group.tabOrder[0] ??
+      null
+    )
+  }
+  const activeGroup = workspace.groups.find((group) => group.id === activeGroupId)
   const scope: Scope = {
     key,
     workspace,
     view,
     facts,
     generatedTitlesEnabled,
-    activeTabId: activeGroupId ? (groupViews[activeGroupId]?.activeTabId ?? null) : null
+    activeTabId: activeGroup ? groupActiveTabId(activeGroup) : null
   }
   const byId = new Map(workspace.tabs.map((tab) => [tab.id, tab]))
   const tabs: RuntimeMobileSessionSnapshotTab[] = []
@@ -102,7 +118,8 @@ export function projectSessionTabs(
     }
     const shown = new Set(tabOrder)
     const groupView = groupViews[group.id]
-    const activeTab = groupView?.activeTabId ? byId.get(groupView.activeTabId) : undefined
+    const groupActiveId = groupActiveTabId(group)
+    const activeTab = groupActiveId ? byId.get(groupActiveId) : undefined
     const activeId = activeTab ? publishedTabOrderId(activeTab) : null
     tabGroups.push({
       id: group.id,
@@ -129,32 +146,6 @@ export function projectSessionTabs(
     ...(tabGroupLayout ? { tabGroupLayout } : {}),
     tabs
   }
-}
-
-/** As a window restores it: the saved group while the workspace has it, else the first group. */
-function resolveActiveGroupId(
-  workspace: WorkspaceLayout,
-  saved: string | undefined
-): string | null {
-  if (saved && workspace.groups.some((group) => group.id === saved)) {
-    return saved
-  }
-  return groupsInLayoutOrder(workspace)[0]?.id ?? null
-}
-
-function groupsInLayoutOrder(workspace: WorkspaceLayout): WorkspaceLayout['groups'] {
-  const ids: string[] = []
-  const visit = (node: TabGroupLayoutNode | undefined): void => {
-    if (node?.type === 'leaf') {
-      ids.push(node.groupId)
-    } else if (node) {
-      visit(node.first)
-      visit(node.second)
-    }
-  }
-  visit(workspace.groupLayout)
-  const placed = ids.flatMap((id) => workspace.groups.filter((group) => group.id === id))
-  return [...placed, ...workspace.groups.filter((group) => !placed.includes(group))]
 }
 
 function projectTab(tab: LayoutTab, scope: Scope): RuntimeMobileSessionSnapshotTab[] {
@@ -213,12 +204,13 @@ function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessio
   return leafIds.map((leafId) => {
     const leaf = leaves[leafId]
     const paneTitle = leaf?.title?.trim() || undefined
-    // Today's order: a custom title beats the pane's own title (#19582); other panes show theirs.
+    // A sole pane's row names its tab: clients drop a pane title equal to its row's title, so a
+    // row named by its pane title would hide that title. Other panes show theirs.
     const title = tabWide
       ? resolveTerminalTabTitle(
-          { ...tab, title: paneTitle ?? liveTitle },
+          { ...tab, title: liveTitle },
           scope.generatedTitlesEnabled,
-          paneTitle ?? liveTitle
+          liveTitle
         )
       : (paneTitle ?? 'Terminal')
     return {
