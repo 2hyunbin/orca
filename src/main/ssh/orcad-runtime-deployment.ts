@@ -176,7 +176,7 @@ export async function createManagedOrcadEnvironment(
 type DeployedOrcad = OrcadRunningAdoption & { created?: true }
 
 async function deployOwnOrcad(
-  context: OrcadRemoteContext<SshTarget>,
+  context: OrcadRemoteContext,
   slot: ReturnType<typeof managedOrcadSlot>,
   localOrcadDir: string,
   args: { force?: boolean; signal?: AbortSignal }
