@@ -107,6 +107,32 @@ describe('disconnected terminal model archive', () => {
     }
   })
 
+  it('releases one missed-exit model as later normal exits turn over the archive', async () => {
+    const runtime = createRuntime()
+    ingest(runtime, 'one-missed-exit')
+    await runtime.settleModels()
+    await runtime.refreshInventory()
+    expect(runtime.hasModel('one-missed-exit')).toBe(true)
+
+    for (let index = 0; index < DISCONNECTED_PTY_RECORD_MAX; index += 1) {
+      const ptyId = `normal-exit-${index}`
+      runtime.registerPty(ptyId, WORKSPACE)
+      runtime.onPtyData(ptyId, 'shell prompt\r\n', 14)
+    }
+    await runtime.settleModels()
+    for (let index = 0; index < DISCONNECTED_PTY_RECORD_MAX; index += 1) {
+      runtime.onPtyExit(`normal-exit-${index}`, 0)
+    }
+    await Promise.resolve()
+
+    expect(runtime.hasModel('one-missed-exit')).toBe(false)
+    expect(runtime.counts()).toEqual({
+      records: DISCONNECTED_PTY_RECORD_MAX,
+      models: 0,
+      hydration: 0
+    })
+  })
+
   it('keeps live and leaf-bound models while evicting the oldest disconnected archive', async () => {
     const runtime = createRuntime(['still-live'])
     ingest(runtime, 'still-live')
