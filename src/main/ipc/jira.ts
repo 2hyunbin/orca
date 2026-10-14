@@ -132,13 +132,9 @@ export function registerJiraHandlers(): void {
     return selectSite(siteId)
   })
 
-  ipcMain.handle('jira:status', async () => {
-    return getStatus()
-  })
+  ipcMain.handle('jira:status', async () => getStatus())
 
-  ipcMain.handle('jira:readStatus', async () => {
-    return getStatus()
-  })
+  ipcMain.handle('jira:readStatus', async () => getStatus())
 
   ipcMain.handle('jira:testConnection', async (_event, args?: { siteId?: string }) => {
     return testConnection(normalizeSiteId(args?.siteId))

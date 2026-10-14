@@ -1,11 +1,41 @@
 import { prefixJiraReviewTitle } from '../../../../shared/jira-review-title'
 import type {
+  PullRequestFieldRevisions,
   PullRequestGenerationFields,
   PullRequestGenerationRecord
 } from './pull-request-generation'
 
 // Why: an auto-submitted run (Create PR) is sent without the user reviewing it in the form.
 export type PullRequestGenerationOptions = { autoSubmit?: boolean }
+
+export function recordPullRequestGenerationEdits(
+  record: PullRequestGenerationRecord | null,
+  fields: PullRequestGenerationFields,
+  revisions: PullRequestFieldRevisions
+): PullRequestGenerationRecord | null {
+  if (!record || record.status !== 'running' || !record.autoSubmit) {
+    return null
+  }
+  const edited = record.editedFields ?? {
+    fields: record.seed,
+    revisions: record.seedFieldRevisions
+  }
+  const next = { fields: { ...edited.fields }, revisions: { ...edited.revisions } }
+  let changed = false
+  for (const field of ['base', 'title', 'body', 'draft'] as const) {
+    if (revisions[field] <= next.revisions[field]) {
+      continue
+    }
+    if (field === 'draft') {
+      next.fields.draft = fields.draft
+    } else {
+      next.fields[field] = fields[field]
+    }
+    next.revisions[field] = revisions[field]
+    changed = true
+  }
+  return changed ? { ...record, editedFields: next } : null
+}
 
 type ResolvableRecord = Pick<
   PullRequestGenerationRecord,

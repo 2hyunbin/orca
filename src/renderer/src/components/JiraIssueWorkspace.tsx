@@ -112,47 +112,38 @@ export default function JiraIssueWorkspace({
     setPendingField(null)
     setCommentSubmitting(false)
     setCommentDraft('')
-    if (!issue) {
-      setFullIssue(null)
-      setIssueLoading(false)
-      setComments([])
-      setCommentsLoading(false)
-      setCommentsError(null)
-      setTransitions([])
-      setTransitionsError(null)
-      setTransitionsLoading(false)
-      setPriorities([])
-      setUsers([])
-      optimisticCommentsRef.current = []
-      return
-    }
-
-    const requestId = requestIdRef.current
-    optimisticCommentsRef.current = []
-    editedFieldsRef.current = new Set()
     setFullIssue(issue)
-    setTitleDraft(issue.title)
-    setLabelsDraft(issue.labels.join(', '))
+    setIssueLoading(Boolean(issue))
     setComments([])
     setCommentsError(null)
     setTransitions([])
     setTransitionsError(null)
-    setIssueLoading(true)
+    optimisticCommentsRef.current = []
+    if (!issue) {
+      setCommentsLoading(false)
+      setTransitionsLoading(false)
+      setPriorities([])
+      setUsers([])
+      return
+    }
+
+    const requestId = requestIdRef.current
+    editedFieldsRef.current = new Set()
+    setTitleDraft(issue.title)
+    setLabelsDraft(issue.labels.join(', '))
 
     void jiraGetIssueForTarget(owner, issue.key, issue.siteId)
       .then((result) => {
-        if (requestId !== requestIdRef.current) {
+        if (requestId !== requestIdRef.current || !result) {
           return
         }
-        if (result) {
-          const edited = new Set(editedFieldsRef.current)
-          setFullIssue((current) => mergeJiraIssueHydration(result, current, edited))
-          if (!edited.has('title')) {
-            setTitleDraft(result.title)
-          }
-          if (!edited.has('labels')) {
-            setLabelsDraft(result.labels.join(', '))
-          }
+        const edited = new Set(editedFieldsRef.current)
+        setFullIssue((current) => mergeJiraIssueHydration(result, current, edited))
+        if (!edited.has('title')) {
+          setTitleDraft(result.title)
+        }
+        if (!edited.has('labels')) {
+          setLabelsDraft(result.labels.join(', '))
         }
       })
       .catch(() => {})
@@ -280,27 +271,21 @@ export default function JiraIssueWorkspace({
   )
 
   const handleSaveTitle = useCallback(() => {
-    if (!displayed) {
-      return
-    }
     const title = titleDraft.trim()
-    if (!title || title === displayed.title) {
+    if (displayed && title && title !== displayed.title) {
+      void mutateIssue('title', { title }, { title })
+    } else if (displayed) {
       setTitleDraft(displayed.title)
-      return
     }
-    void mutateIssue('title', { title }, { title })
   }, [displayed, mutateIssue, titleDraft])
 
   const handleSaveLabels = useCallback(() => {
-    if (!displayed) {
-      return
-    }
     const labels = labelsDraft
       .split(',')
       .map((label) => label.trim())
       .filter(Boolean)
     void mutateIssue('labels', { labels }, { labels })
-  }, [displayed, labelsDraft, mutateIssue])
+  }, [labelsDraft, mutateIssue])
 
   const handleSubmitComment = useCallback(async (): Promise<void> => {
     if (!displayed || commentSubmitting) {

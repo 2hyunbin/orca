@@ -1,6 +1,8 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createFakeRpcClient } from '../mobile-web-shell/bridge-host-test-fakes'
+import type { RpcClient } from '../transport/rpc-client'
 import type { MobileJiraConnection } from './jira-mobile-connection'
 import { useMobileJiraConnectionState } from './use-mobile-jira-connection-state'
 
@@ -13,9 +15,9 @@ afterEach(() => {
   })
 })
 
-function mountConnection(client: object) {
+function mountConnection(client: RpcClient) {
   let value: ReturnType<typeof useMobileJiraConnectionState> | undefined
-  function Probe(props: { client: object; state: string }) {
+  function Probe(props: { client: RpcClient; state: string }) {
     value = useMobileJiraConnectionState(props.client, props.state)
     return null
   }
@@ -31,7 +33,7 @@ function mountConnection(client: object) {
       }
       return value
     },
-    update(nextClient: object, state = 'connected') {
+    update(nextClient: RpcClient, state = 'connected') {
       act(() => {
         renderer?.update(createElement(Probe, { client: nextClient, state }))
       })
@@ -49,17 +51,17 @@ const connected: MobileJiraConnection = {
 
 describe('mobile Jira connection session ownership', () => {
   it('discards the previous connection on a host switch before another status arrives', () => {
-    const fixture = mountConnection({})
+    const fixture = mountConnection(createFakeRpcClient())
     act(() => fixture.current()[1](connected))
-    fixture.update({})
+    fixture.update(createFakeRpcClient())
     expect(fixture.current()[0]).toMatchObject({ connected: false, selection: null })
   })
 
   it('retires old setters even after switching back to the same client', () => {
-    const client = {}
+    const client = createFakeRpcClient()
     const fixture = mountConnection(client)
     const oldSet = fixture.current()[1]
-    fixture.update({})
+    fixture.update(createFakeRpcClient())
     fixture.update(client)
     act(() => fixture.current()[1](connected))
     act(() => oldSet({ ...connected, connected: false }))
@@ -67,7 +69,7 @@ describe('mobile Jira connection session ownership', () => {
   })
 
   it('requires fresh status after disconnecting and reconnecting the same client', () => {
-    const client = {}
+    const client = createFakeRpcClient()
     const fixture = mountConnection(client)
     const oldSet = fixture.current()[1]
     act(() => oldSet(connected))

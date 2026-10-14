@@ -136,6 +136,16 @@ function saveTitle(from: string, to: string): void {
   fireEvent.keyDown(input, { key: 'Enter' })
 }
 
+function saveLabels(from: string, to: string): void {
+  const labels = screen.getByDisplayValue(from)
+  fireEvent.change(labels, { target: { value: to } })
+  const save = labels.parentElement?.querySelector('button')
+  if (!(save instanceof HTMLButtonElement)) {
+    throw new Error('Missing labels save button')
+  }
+  fireEvent.click(save)
+}
+
 let serverTitle = 'Old title'
 
 beforeEach(() => {
@@ -722,13 +732,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     await flushPromises()
     await act(async () => selectIssue(jiraIssue('First edit')))
     await flushPromises()
-    const labels = screen.getByDisplayValue('backend')
-    fireEvent.change(labels, { target: { value: 'new' } })
-    const save = labels.parentElement?.querySelector('button')
-    if (!(save instanceof HTMLButtonElement)) {
-      throw new Error('Missing labels save button')
-    }
-    fireEvent.click(save)
+    saveLabels('backend', 'new')
     await flushPromises()
     await act(async () => oldSave.resolve({ ok: false, error: 'Title rejected' }))
     await flushPromises()
@@ -802,13 +806,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     await flushPromises()
     await act(async () => selectIssue(jiraIssue('First edit')))
     await flushPromises()
-    const labels = screen.getByDisplayValue('backend')
-    fireEvent.change(labels, { target: { value: 'new' } })
-    const save = labels.parentElement?.querySelector('button')
-    if (!(save instanceof HTMLButtonElement)) {
-      throw new Error('Missing labels save button')
-    }
-    fireEvent.click(save)
+    saveLabels('backend', 'new')
     await flushPromises()
     await act(async () => oldRefresh.resolve(jiraIssue('First edit')))
     await flushPromises()
