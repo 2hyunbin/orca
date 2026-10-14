@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useSyncExternalStore } from 'react'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { DropdownMenuItem, DropdownMenuShortcut } from '@/components/ui/dropdown-menu'
@@ -18,6 +18,11 @@ import {
 import { translate } from '@/i18n/i18n'
 import { newAgentPromptOutcome } from '@/lib/new-agent-prompt-outcome'
 import { activeAgentNotesSendFailureMessage } from '@/lib/active-agent-note-send-result'
+import {
+  hostStructuredAgentsVersion,
+  subscribeHostStructuredAgents
+} from '@/runtime/host-structured-agents'
+import { withManagedRuntimeChatAgents } from '@/lib/managed-runtime-chat-agents'
 
 export type QuickLaunchAgentMenuItemsProps = {
   worktreeId: string
@@ -220,8 +225,17 @@ function QuickLaunchAgentMenuItemsInner({
     ]
   )
 
-  const enabledDetectedIds = detectedIds ? filterEnabledTuiAgents(detectedIds, disabledAgents) : []
-  const agents = detectedIds ? orderAgents(defaultAgent, enabledDetectedIds) : []
+  // Re-renders when a host lists its agents, which can add a chat the host provides.
+  useSyncExternalStore(
+    subscribeHostStructuredAgents,
+    hostStructuredAgentsVersion,
+    hostStructuredAgentsVersion
+  )
+  const offeredIds = detectedIds
+    ? withManagedRuntimeChatAgents(useAppStore.getState(), worktreeId, detectedIds)
+    : null
+  const enabledDetectedIds = offeredIds ? filterEnabledTuiAgents(offeredIds, disabledAgents) : []
+  const agents = offeredIds ? orderAgents(defaultAgent, enabledDetectedIds) : []
 
   return (
     <>
@@ -240,7 +254,7 @@ function QuickLaunchAgentMenuItemsInner({
                   'auto.components.tab.bar.QuickLaunchButton.hostUnreachable',
                   'Can’t reach this workspace’s host to list its agents'
                 )
-              : detectedIds && detectedIds.length > 0
+              : offeredIds && offeredIds.length > 0
                 ? translate(
                     'auto.components.tab.bar.QuickLaunchButton.8dea9b5cdf',
                     'No enabled agents'
