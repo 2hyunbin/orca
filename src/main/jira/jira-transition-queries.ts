@@ -1,3 +1,4 @@
+import { requireStrictJiraSite } from './jira-read-failure'
 import type { JiraProjectStatusOrder, JiraTransition } from '../../shared/jira-types'
 import { acquire, release } from './request-queue'
 import { apiBasePath, JiraApiError, jiraRequest } from './authenticated-request'
@@ -14,9 +15,12 @@ import {
 
 export async function listTransitions(
   key: string,
-  siteId?: string | null
+  siteId?: string | null,
+  strict = false
 ): Promise<JiraTransition[]> {
-  const entry = getClients(siteId)[0]
+  const entries = getClients(siteId)
+  requireStrictJiraSite(entries, siteId, strict)
+  const entry = entries[0]
   if (!entry) {
     return []
   }
@@ -47,7 +51,11 @@ export async function listTransitions(
       clearToken(entry.site.id)
       throw error
     }
-    throw error
+    console.warn('[jira] listTransitions failed:', error)
+    if (strict) {
+      throw error
+    }
+    return []
   } finally {
     release()
   }

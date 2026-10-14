@@ -297,12 +297,15 @@ export function registerJiraHandlers(): void {
 
   registerJiraUserSearchHandlers()
 
-  ipcMain.handle('jira:listTransitions', async (_event, args: { key: string; siteId?: string }) => {
-    if (typeof args?.key !== 'string' || !args.key.trim()) {
-      return []
+  ipcMain.handle(
+    'jira:listTransitions',
+    async (_event, args: { key: string; siteId?: string; strict?: boolean }) => {
+      if (typeof args?.key !== 'string' || !args.key.trim()) {
+        return []
+      }
+      return listTransitions(args.key.trim(), normalizeSiteId(args.siteId), args.strict === true)
     }
-    return listTransitions(args.key.trim(), normalizeSiteId(args.siteId))
-  })
+  )
 
   ipcMain.handle(
     'jira:getProjectStatusOrder',

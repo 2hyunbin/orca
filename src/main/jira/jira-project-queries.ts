@@ -4,10 +4,14 @@ import { apiBasePath, jiraRequest } from './authenticated-request'
 import { clearToken, getClients, isAuthError } from './client'
 import { mapProject } from './jira-issue-mapping'
 import { fetchPagedRecords, type JiraRecord } from './jira-record-pages'
-import { shouldSurfaceSiteFailure } from './jira-read-failure'
+import { requireStrictJiraSite, shouldSurfaceSiteFailure } from './jira-read-failure'
 
-export async function listProjects(siteId?: JiraSiteSelection | null): Promise<JiraProject[]> {
+export async function listProjects(
+  siteId?: JiraSiteSelection | null,
+  strict = false
+): Promise<JiraProject[]> {
   const entries = getClients(siteId)
+  requireStrictJiraSite(entries, siteId, strict)
   if (entries.length === 0) {
     return []
   }
@@ -36,6 +40,9 @@ export async function listProjects(siteId?: JiraSiteSelection | null): Promise<J
           }
         } else {
           console.warn('[jira] listProjects failed:', error)
+        }
+        if (strict) {
+          throw error
         }
         return []
       } finally {

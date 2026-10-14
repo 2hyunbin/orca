@@ -82,7 +82,11 @@ export type JiraApi = {
     siteId?: string
   }) => Promise<JiraUser[]>
   searchUsers: (args?: { query?: string; siteId?: string }) => Promise<JiraUser[]>
-  listTransitions: (args: { key: string; siteId?: string }) => Promise<JiraTransition[]>
+  listTransitions: (args: {
+    key: string
+    siteId?: string
+    strict?: boolean
+  }) => Promise<JiraTransition[]>
   getProjectStatusOrder: (args: {
     projectKey: string
     siteId?: string

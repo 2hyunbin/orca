@@ -82,20 +82,21 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: SearchIssues,
     handler: async (params, { runtime, signal }) =>
-      runtime.jiraSearchIssues(params.jql, params.limit, params.siteId, signal)
+      runtime.jiraSearchIssues(params.jql, params.limit, params.siteId, signal, params.strict)
   }),
   defineMethod({
     name: 'jira.listIssues',
     permission: 'workspace',
     params: ListIssues,
     handler: async (params, { runtime }) =>
-      runtime.jiraListIssues(params?.filter, params?.limit, params?.siteId)
+      runtime.jiraListIssues(params?.filter, params?.limit, params?.siteId, params?.strict)
   }),
   defineMethod({
     name: 'jira.getIssue',
     permission: 'workspace',
     params: IssueKey,
-    handler: async (params, { runtime }) => runtime.jiraGetIssue(params.key.trim(), params.siteId)
+    handler: async (params, { runtime }) =>
+      runtime.jiraGetIssue(params.key.trim(), params.siteId, params.strict)
   }),
   defineMethod({
     name: 'jira.lookupIssueSummary',
@@ -113,7 +114,10 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }, emit) => {
-      emitJiraPayload(await runtime.jiraGetIssue(params.key.trim(), params.siteId), emit)
+      emitJiraPayload(
+        await runtime.jiraGetIssue(params.key.trim(), params.siteId, params.strict),
+        emit
+      )
     }
   }),
   defineMethod({
@@ -150,28 +154,31 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }) =>
-      runtime.jiraIssueComments(params.key.trim(), params.siteId)
+      runtime.jiraIssueComments(params.key.trim(), params.siteId, params.strict)
   }),
   defineStreamingMethod({
     name: 'jira.issueCommentsStream',
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }, emit) => {
-      emitJiraPayload(await runtime.jiraIssueComments(params.key.trim(), params.siteId), emit)
+      emitJiraPayload(
+        await runtime.jiraIssueComments(params.key.trim(), params.siteId, params.strict),
+        emit
+      )
     }
   }),
   defineMethod({
     name: 'jira.listProjects',
     permission: 'workspace',
     params: SiteSelection,
-    handler: async (params, { runtime }) => runtime.jiraListProjects(params?.siteId)
+    handler: async (params, { runtime }) => runtime.jiraListProjects(params?.siteId, params?.strict)
   }),
   defineMethod({
     name: 'jira.listIssueTypes',
     permission: 'workspace',
     params: ProjectIssueTypes,
     handler: async (params, { runtime }) =>
-      runtime.jiraListIssueTypes(params.projectIdOrKey.trim(), params.siteId)
+      runtime.jiraListIssueTypes(params.projectIdOrKey.trim(), params.siteId, params.strict)
   }),
   defineMethod({
     name: 'jira.listCreateFields',
@@ -181,21 +188,23 @@ export const JIRA_METHODS = [
       runtime.jiraListCreateFields(
         params.projectIdOrKey.trim(),
         params.issueTypeId.trim(),
-        params.siteId
+        params.siteId,
+        params.strict
       )
   }),
   defineMethod({
     name: 'jira.listPriorities',
     permission: 'workspace',
     params: SiteSelection,
-    handler: async (params, { runtime }) => runtime.jiraListPriorities(params?.siteId)
+    handler: async (params, { runtime }) =>
+      runtime.jiraListPriorities(params?.siteId, params?.strict)
   }),
   defineMethod({
     name: 'jira.listAssignableUsers',
     permission: 'workspace',
     params: AssignableUsers,
     handler: async (params, { runtime }) =>
-      runtime.jiraListAssignableUsers(params.key.trim(), params.query, params.siteId)
+      runtime.jiraListAssignableUsers(params.key.trim(), params.query, params.siteId, params.strict)
   }),
   defineMethod({
     name: 'jira.searchUsers',
@@ -208,7 +217,7 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }) =>
-      runtime.jiraListTransitions(params.key.trim(), params.siteId)
+      runtime.jiraListTransitions(params.key.trim(), params.siteId, params.strict)
   }),
   defineMethod({
     name: 'jira.getProjectStatusOrder',

@@ -101,7 +101,16 @@ describe('required Jira transition fields', () => {
   it('surfaces operational list failures and releases the queue', async () => {
     jiraRequest.mockRejectedValue(new JiraApiError('Service unavailable', 503))
     const { listTransitions } = await import('./jira-transition-queries')
-    await expect(listTransitions('APP-1')).rejects.toThrow('Service unavailable')
+    await expect(listTransitions('APP-1', 'site-1', true)).rejects.toThrow('Service unavailable')
+    expect(jiraRequest).toHaveBeenCalledTimes(1)
+    expect(release).toHaveBeenCalledOnce()
+    expect(clearToken).not.toHaveBeenCalled()
+  })
+
+  it('preserves the legacy empty list on operational failures without strict reads', async () => {
+    jiraRequest.mockRejectedValue(new JiraApiError('Service unavailable', 503))
+    const { listTransitions } = await import('./jira-transition-queries')
+    expect(await listTransitions('APP-1', 'site-1')).toEqual([])
     expect(jiraRequest).toHaveBeenCalledTimes(1)
     expect(release).toHaveBeenCalledOnce()
     expect(clearToken).not.toHaveBeenCalled()
