@@ -22,7 +22,7 @@ import {
   isCurrentConnectAttempt
 } from './ssh-connect-attempt-registry'
 import { connectionManager } from './ssh-ipc-context'
-import { abandonDecisionTransport } from './ssh-session-teardown'
+import { abandonDecisionTransport } from '../ssh/ssh-target-transport'
 import { awaitTargetLifecycle } from './ssh-target-lifecycle-queue'
 import { startLegacyRelayBridge } from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
 

@@ -17,7 +17,7 @@ vi.mock('../ssh/ssh-target-registry', () => ({
 vi.mock('../ssh/orcad-managed-tunnel', () => ({ closeOrcadManagedTunnel: mocks.close }))
 vi.mock('../ssh/ssh-host-server-status', () => ({ clearSshHostServerStatus: mocks.clear }))
 vi.mock('./ssh-connect-attempt-registry', () => ({ invalidateConnectAttempt: mocks.invalidate }))
-vi.mock('./ssh-session-teardown', () => ({ teardownSshTargetTransport: mocks.teardown }))
+vi.mock('../ssh/ssh-target-transport', () => ({ teardownSshTargetTransport: mocks.teardown }))
 import {
   retireEnvironmentProviderConnections,
   retireEnvironmentProviderSshTarget,

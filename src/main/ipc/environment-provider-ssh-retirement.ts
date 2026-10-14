@@ -6,7 +6,7 @@ import { closeOrcadManagedTunnel } from '../ssh/orcad-managed-tunnel'
 import { clearSshHostServerStatus } from '../ssh/ssh-host-server-status'
 import { invalidateConnectAttempt } from './ssh-connect-attempt-registry'
 import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
-import { teardownSshTargetTransport } from './ssh-session-teardown'
+import { teardownSshTargetTransport } from '../ssh/ssh-target-transport'
 
 function stillOwns(expected: SshTarget): boolean {
   const current = getSshTargetRegistryStore()?.getTarget(expected.id)

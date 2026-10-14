@@ -33,7 +33,7 @@ vi.mock('../ssh/orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: mocks.
 vi.mock('../orcad/orcad-artifact-materializer', () => ({ hasOrcadTemplate: () => true }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: mocks.broadcast }))
 vi.mock('./ssh-ipc-context', () => ({ getCurrentMainWindow: () => null }))
-vi.mock('./ssh-session-teardown', () => ({ disconnectRegisteredSshTarget: vi.fn() }))
+vi.mock('../ssh/ssh-target-transport', () => ({ disconnectRegisteredSshTarget: vi.fn() }))
 
 const { hostServerOnConnectDeps } = await import('./ssh-host-server-on-connect-wiring')
 const { connectInFlight } = await import('./ssh-connect-attempt-registry')
