@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import { settleAgentLaunchPaneStart } from './agent-launch-pane-start'
 
 /**
  * The store double `launchAgentInNewTab` reads, shared by the caller-behaviour suite.
@@ -78,14 +79,25 @@ export function createLaunchFunnelStore(): {
   return store
 }
 
-/** A tab made with its own id joins the workspace, as the real store's does; launches read it back. */
+type CreatedTabOptions = {
+  id?: string
+  initialLeafId?: string
+  pendingStartup?: { agentLaunch?: unknown }
+}
+
+/** A tab made with its own id joins the workspace, as the real store's does; launches read it back.
+ *  A launch tab's pane spawn answers that its agent started, as a mounted pane's would. */
 function createTabInto(store: { tabsByWorktree: Record<string, { id: string }[]> }) {
-  return (worktreeId: string, _groupId?: string, _x?: unknown, opts?: { id?: string }) => {
+  return (worktreeId: string, _groupId?: string, _x?: unknown, opts?: CreatedTabOptions) => {
     if (!opts?.id) {
       return { id: 'tab-1' }
     }
     const tab = { id: opts.id }
     store.tabsByWorktree[worktreeId] = [...(store.tabsByWorktree[worktreeId] ?? []), tab]
+    const { initialLeafId } = opts
+    if (opts.pendingStartup?.agentLaunch && initialLeafId) {
+      queueMicrotask(() => settleAgentLaunchPaneStart(tab.id, initialLeafId, `${tab.id}-pty`))
+    }
     return tab
   }
 }
@@ -127,9 +139,9 @@ export function createdTabGroupId(store: LaunchFunnelStore): string | undefined 
   return store.createTab.mock.calls[0]?.[1]
 }
 
-/** The `agent.launch` request a launch sent its host, or undefined when the window planned it. */
-export function hostLaunchRequest(
-  callRuntimeRpc: ReturnType<typeof vi.fn>
-): Record<string, unknown> | undefined {
-  return callRuntimeRpc.mock.calls.find(([, method]) => method === 'agent.launch')?.[2]
+/** The launch an AI button's tab queued for its pane's spawn, or undefined when the window planned it. */
+export function hostLaunchRequest(store: LaunchFunnelStore): Record<string, unknown> | undefined {
+  const options: { pendingStartup?: { agentLaunch?: { launch?: Record<string, unknown> } } } =
+    store.createTab.mock.calls[0]?.[3] ?? {}
+  return options.pendingStartup?.agentLaunch?.launch
 }
