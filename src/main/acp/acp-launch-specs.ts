@@ -14,6 +14,7 @@ import type { AcpStoredUserMessagesReader } from './acp-recovery-history'
 import { isStableCliVersionFrom, isStableCliVersionOnLine } from '../agent-cli-version-probe'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
+import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
 import type { InitializeResponse } from './generated/acp-protocol.generated'
 import { readGrokModelCatalog } from './acp-dialects/grok-model-catalog'
 import {
@@ -97,9 +98,12 @@ export type AcpLaunchSpec = {
     folder(dataDirectory: string): string
     materialize(dataDirectory: string, signal?: AbortSignal): Promise<void>
   }
-  /** The session config option through which the agent enforces the Agent Permissions posture
-   *  itself, and its values; Orca then answers none of its permission requests for the person. */
-  permissionModeConfig?: { configId: string; ask: string; full: string }
+  /** The session config option through which the agent enforces a chat's permission mode itself,
+   *  and its value per mode; Orca then answers none of its permission requests for the person. */
+  permissionModeConfig?: {
+    configId: string
+    values: { ask: string } & Partial<Record<AgentChatPermissionMode, string>>
+  }
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
