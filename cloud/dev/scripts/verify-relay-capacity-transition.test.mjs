@@ -856,8 +856,7 @@ test('restart timeout reports one of two safe settling samples', async () => {
       { fetch: base, token: 'masked-token' }
     ),
     (error) => {
-      assert.match(error.message, /"restartSafeSamples":1/)
-      assert.match(error.message, /"requiredRestartSafeSamples":2/)
+      assert.match(error.message, /"restartSafeSamples":1,"paceWindowRemainingMs":0/)
       return true
     }
   )
@@ -1246,9 +1245,12 @@ test('passes after one pace window of an empty runtime and reports stranded leas
   assert.equal(lines.length, 60)
   assert.ok(lines.every((line) =>
     line.event === 'relay_capacity_transition_restart_progress' &&
-    line.requiredRestartSafeSamples === 61 &&
     line.stranded.restartBlockingActivityLeases === 4))
   assert.deepEqual(lines.slice(0, 2).map((line) => line.restartSafeSamples), [1, 2])
+  assert.deepEqual(
+    lines.slice(0, 2).map((line) => line.paceWindowRemainingMs),
+    [300_000, 295_000]
+  )
 })
 
 test('the pace window resets on any non-zero runtime sample', async () => {
@@ -1265,15 +1267,50 @@ test('the pace window resets on any non-zero runtime sample', async () => {
     progress: (line) => lines.push(line),
     ...fakeClock()
   })
-  assert.equal(runtimeReads, 91)
+  // The reset costs no time beyond the window, which the quiet after it still reaches.
+  assert.equal(runtimeReads, 61)
   assert.deepEqual(lines.slice(28, 31).map((line) => line.restartSafeSamples), [29, 0, 1])
   await assert.rejects(
     verifyCapacityTransition(
       { ...pacedRestartConfig, timeoutMs: 295_000 },
       { fetch: quiet, token: 'masked-token', progress: () => {}, ...fakeClock() }
     ),
-    /"restartSafeSamples":60,"requiredRestartSafeSamples":61/
+    /"restartSafeSamples":60,"paceWindowRemainingMs":5000/
   )
+})
+
+// c27 on 2026-10-13: the 20-minute paced drain emptied the runtime as its window closed, and the
+// old gate then waited a second full window of quiet samples before the restart.
+test('a runtime that empties as the pace window ends passes after two quiet samples', async () => {
+  let runtimeReads = 0
+  const lines = []
+  await verifyCapacityTransition(pacedRestartConfig, {
+    fetch: async (url, options) => {
+      if (new URL(url).pathname === '/v1/admin/runtime-status') runtimeReads += 1
+      return await harness({ ...strandedCell, controls: runtimeReads <= 60 ? 1 : 0 })(url, options)
+    },
+    token: 'masked-token',
+    progress: (line) => lines.push(line),
+    ...fakeClock()
+  })
+  // Busy through 295 s; quiet samples at 300 s and 305 s, the second past the window's end.
+  assert.equal(runtimeReads, 62)
+  assert.deepEqual(lines.slice(59).map((line) => line.restartSafeSamples), [0, 1])
+})
+
+test('a control just before the pace window ends restarts the quiet', async () => {
+  let runtimeReads = 0
+  await verifyCapacityTransition(pacedRestartConfig, {
+    fetch: async (url, options) => {
+      if (new URL(url).pathname === '/v1/admin/runtime-status') runtimeReads += 1
+      return await harness({ ...strandedCell, controls: runtimeReads === 60 ? 1 : 0 })(url, options)
+    },
+    token: 'masked-token',
+    progress: () => {},
+    ...fakeClock()
+  })
+  // 59 quiet samples, the 295 s control, then two quiet samples ending past the window.
+  assert.equal(runtimeReads, 62)
 })
 
 test('restart-safe fails on live runtime work or an open migration regardless of leases', async (t) => {
@@ -1439,7 +1476,7 @@ test('restart progress prints every counter the gate reads', async () => {
   assert.deepEqual(lines[0], {
     event: 'relay_capacity_transition_restart_progress',
     restartSafeSamples: 0,
-    requiredRestartSafeSamples: 61,
+    paceWindowRemainingMs: 300_000,
     totalConnections: 7,
     preAuthConnections: 1,
     runtimeAvailable: true,

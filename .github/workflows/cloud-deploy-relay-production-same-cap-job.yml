@@ -555,7 +555,7 @@ jobs:
           # What the cell accepted, which is 0 when an older image fell back to an unpaced drain.
           echo "drain-applied-pace-window-ms=$(jq -er '.paceWindowMs' <<< "${DRAIN_RESULT}")" \
             >> "${GITHUB_OUTPUT}"
-          # Restart-safe means an empty runtime for a whole pace window after the drain; leases
+          # Restart-safe means an empty runtime that lasts past the drain's pace window; leases
           # held by unplaceable hosts are reported, not waited on (c28, 2026-10-01).
           node dev/scripts/verify-relay-capacity-transition.mjs \
             --director-origin "${DIRECTOR_ORIGIN}" --cell-origin "${CELL_ORIGIN}" \

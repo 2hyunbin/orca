@@ -461,7 +461,8 @@ margin covers. Each cell is isolated, drained until restart-safe, replaced
 from a targeted saved plan, and restored only after a new incarnation reports the exact digest, cap,
 heartbeat, and rehome protocol. Restart-safe means the cell runtime itself carries nothing live (no
 controls, in-flight connections, reserved connection units, splices, or queued bytes) and no
-migration is open, for a whole drain pace window, which every live restart-safe call must pass.
+migration is open, on consecutive samples that reach past the end of the drain pace window,
+which every live restart-safe call must pass.
 Pre-auth and total connections are printed but do not reset the window: they include
 unauthenticated redials that lose nothing on a restart. Director activity leases left by hosts that already went or cannot
 be placed do not hold the restart; every `relay_capacity_transition_restart_progress` sample and
