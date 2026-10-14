@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 // The card stack above the composer: an accessible, labeled live list whose
-// rows expose Steer/Send, Delete, and the Edit / Turn-off-queueing menu, with
+// rows expose Steer/Send, Delete, and the Edit menu, with
 // captions derived client-side per state.
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -86,7 +86,7 @@ function controller(
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     edit: vi.fn(async () => {}),
-    steerNewest: vi.fn(() => false),
+    steerFirst: vi.fn(() => false),
     queueResume: undefined,
     queueHold: undefined
   }
@@ -290,11 +290,9 @@ describe('NativeChatQueuedMessageList', () => {
     expect(screen.queryByRole('button', { name: 'Steer' })).toBeNull()
   })
 
-  it('a command card offers no Edit: its text is not a draft', async () => {
+  it('a command card offers no Edit: its text is not a draft', () => {
     renderList(controller([card({ messageId: 'compact-1', text: '/compact', command: true })]))
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }))
-    expect(await screen.findByRole('menuitem', { name: 'Turn off queueing' })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: 'Edit message' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
   })
 
   it("a paused command card's ways out are Delete and the queue's Resume", () => {
@@ -479,7 +477,7 @@ describe('NativeChatQueuedMessageList', () => {
     // The open question below already says the agent waits; the text is the card's only line.
     expect(row.querySelectorAll('p')).toHaveLength(1)
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeTruthy()
-    expect(within(row).getByRole('button', { name: 'More actions' })).toBeTruthy()
+    expect(within(row).queryByRole('button', { name: 'More actions' })).toBeNull()
     fireEvent.click(within(row).getByRole('button', { name: 'Steer' }))
     expect(mutate).toHaveBeenCalledWith(
       'agentSession.queuedMessageSend',
@@ -752,15 +750,12 @@ describe('NativeChatQueuedMessageList', () => {
     expect(screen.queryByRole('button', { name: 'Show full message' })).toBeNull()
   })
 
-  it('the menu offers Edit message and Turn off queueing', async () => {
+  it('the menu offers Edit message', async () => {
     const owner = controller([card({ messageId: 'draft-1' })])
     renderList(owner)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit message' }))
     expect(owner.edit).toHaveBeenCalledWith('draft-1')
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Turn off queueing' }))
-    expect(mocks.updateSettings).toHaveBeenCalledWith({ nativeChatQueueFollowUps: false })
   })
 
   // A kept message shows as a card even where the host does not queue sends; there the setting
@@ -769,7 +764,7 @@ describe('NativeChatQueuedMessageList', () => {
     { queueCapable: true, offered: true },
     { queueCapable: false, offered: false }
   ])(
-    'offers Turn off queueing and the send chord only when the host queues sends ($queueCapable)',
+    'offers the send chord only when the host queues sends ($queueCapable)',
     async ({ queueCapable, offered }) => {
       const owner = controller([card({ messageId: 'kept', hold: 'paused' })], null, queueCapable)
       renderList(owner)
@@ -778,7 +773,6 @@ describe('NativeChatQueuedMessageList', () => {
       expect(hint[0]!.parentElement!.children).toHaveLength(offered ? 2 : 1)
       fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }))
       expect(await screen.findByRole('menuitem', { name: 'Edit message' })).toBeTruthy()
-      expect(screen.queryByRole('menuitem', { name: 'Turn off queueing' }) !== null).toBe(offered)
       // Send, Delete and Edit work either way.
       fireEvent.click(screen.getByRole('menuitem', { name: 'Edit message' }))
       expect(owner.edit).toHaveBeenCalledWith('kept')

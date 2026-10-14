@@ -4,7 +4,8 @@ import type { StructuredAgentSessionAttachment } from '../../../../shared/struct
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   structuredAgentSessionQueueRequest,
-  type StructuredAgentSessionQueueDelivery
+  type StructuredAgentSessionQueueDelivery,
+  type StructuredAgentSessionSendIntent
 } from './structured-agent-session-queue-request'
 import {
   sendStructuredAgentSessionMessage,
@@ -88,12 +89,13 @@ export function useStructuredAgentSessionSends(args: {
   const send = useCallback(
     (
       text: string,
-      attachments: readonly StructuredAgentSessionAttachment[] = []
+      attachments: readonly StructuredAgentSessionAttachment[] = [],
+      intent?: StructuredAgentSessionSendIntent
     ): boolean | 'queued' => {
       if (!text.trim() && attachments.length === 0) {
         return false
       }
-      const delivery = structuredAgentSessionQueueRequest(queue, attachments)
+      const delivery = structuredAgentSessionQueueRequest(queue, attachments, intent)
       const options = sendOptions?.()
       const sent = sendStructuredAgentSessionMessage({
         sessionId,

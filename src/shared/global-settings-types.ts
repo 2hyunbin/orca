@@ -222,8 +222,8 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   /** Opt-in: resume working structured chats automatically on the next launch. Off still offers
    *  the list, so the user sees exactly what would run before anything spends tokens. */
   nativeChatResumeWorkOnRestart?: boolean
-  /** Chat-wide: hold a mid-turn send as an editable queued draft that goes when the turn ends
-   *  (capable hosts only). Absent = on; off keeps mid-turn sends immediate. */
+  /** What Enter does while the agent works: absent/true queues, false steers.
+   *  Cmd/Ctrl+Enter does the opposite on capable hosts. */
   nativeChatQueueFollowUps?: boolean
   /** Teach newly started native chats to create inline visuals; absent means on. */
   nativeChatInlineVisuals?: boolean

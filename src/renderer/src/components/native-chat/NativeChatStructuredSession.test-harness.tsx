@@ -175,7 +175,7 @@ export function createStructuredSessionMocks() {
     queuedSteer: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
     queuedRemove: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
     queuedEdit: vi.fn<(messageId: string) => Promise<void>>(async () => {}),
-    queuedSteerNewest: vi.fn<() => boolean>(() => false),
+    queuedSteerFirst: vi.fn<() => boolean>(() => false),
     queuedResumable: false,
     queueSendsNext: false,
     unavailable: nullable<AgentSessionUnavailable>(),
@@ -255,7 +255,7 @@ export function createStructuredSessionMocks() {
               steer: mocks.queuedSteer,
               remove: mocks.queuedRemove,
               edit: mocks.queuedEdit,
-              steerNewest: mocks.queuedSteerNewest,
+              steerFirst: mocks.queuedSteerFirst,
               queueResume: mocks.queuedResumable
                 ? { resume: mocks.queuedResume, resuming: false }
                 : undefined
@@ -412,8 +412,8 @@ export function createStructuredSessionMocks() {
     Object.assign(mocks, { queuedResumable: false, queueSendsNext: false, unavailable: null })
     mocks.queuedResume.mockReset()
     mocks.revealLatest.mockReset()
-    mocks.queuedSteerNewest.mockReset()
-    mocks.queuedSteerNewest.mockReturnValue(false)
+    mocks.queuedSteerFirst.mockReset()
+    mocks.queuedSteerFirst.mockReturnValue(false)
   }
 
   return { mocks, moduleFactories, resetStructuredSessionMocks }

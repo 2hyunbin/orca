@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useAppStore } from '../../store'
 import { translate } from '@/i18n/i18n'
 import { NativeChatQueuedMessageCard } from './NativeChatQueuedMessageCard'
 import type { StructuredAgentSessionQueuedMessagesController } from './use-structured-agent-session-queued-messages'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import { NATIVE_CHAT_ROOT_SELECTOR } from '@/lib/native-chat-paste-request'
 import { focusNativeChatPromptCard } from './use-native-chat-prompt-card-focus'
+import { firstSteerableQueuedMessageCard } from './structured-agent-session-queued-cards'
 
 /**
  * Host-held drafts stacked between the transcript and the composer — never in
@@ -32,11 +32,11 @@ export function NativeChatQueuedMessageList({
   /** Where focus goes once Steer, Delete or a closing edit takes the focused card away. */
   focusComposer?: () => void
 }): React.JSX.Element {
-  const updateSettings = useAppStore((store) => store.updateSettings)
   const regionRef = useRef<HTMLDivElement>(null)
   const queueRef = useRef<HTMLDivElement>(null)
   const { cards, pause } = controller
   const newest = cards.at(-1)
+  const firstSteerable = firstSteerableQueuedMessageCard(cards)
   const listRef = useRef<HTMLUListElement>(null)
   const newestPosition = newest?.position ?? 0
   const newestIsPersons = newest !== undefined && !newest.from
@@ -51,10 +51,6 @@ export function NativeChatQueuedMessageList({
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
   }, [newestPosition, newestIsPersons])
-  // Only a host that queues sends has queueing to turn off; a kept card shows without it.
-  const turnOffQueueing = controller.queueCapable
-    ? () => void updateSettings({ nativeChatQueueFollowUps: false })
-    : undefined
   // Only when focus was on the queue (a card, or Resume) — never pull it from wherever the user
   // moved on to. A question or approval holding the composer's slot takes it instead.
   const refocusAfter = (action: Promise<unknown>): void => {
@@ -106,7 +102,9 @@ export function NativeChatQueuedMessageList({
                   chatWorktreeId={chatWorktreeId}
                   agentName={agentName}
                   statedFailures={statedFailures}
-                  showsSteerShortcut={controller.queueCapable && card === newest}
+                  showsSteerShortcut={
+                    controller.queueCapable && !steerHeld && card === firstSteerable
+                  }
                   steerHeld={steerHeld}
                   onSteer={() => refocusAfter(controller.steer(card.messageId))}
                   onDelete={() => refocusAfter(controller.remove(card.messageId))}
@@ -117,7 +115,6 @@ export function NativeChatQueuedMessageList({
                     controller.editor?.messageId === card.messageId ? controller.editor : undefined
                   }
                   editDisabled={controller.editor !== undefined}
-                  onTurnOffQueueing={turnOffQueueing}
                 />
               ))}
             </ul>

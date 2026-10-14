@@ -55,8 +55,8 @@ export function useStructuredNativeChatSubmitReveal(
       resume: revealing(queuedMessages.resume),
       // The composer's Resume is the same press.
       queueResume: queueResume && { ...queueResume, resume: revealing(queueResume.resume) },
-      steerNewest: () => {
-        const steered = queuedMessages.steerNewest()
+      steerFirst: () => {
+        const steered = queuedMessages.steerFirst()
         if (steered) {
           revealLatest()
         }

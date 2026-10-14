@@ -18828,7 +18828,6 @@
         "editMessage": "Edit message",
         "showFullMessage": "Show full message",
         "showLess": "Show less",
-        "turnOffQueueing": "Turn off queueing",
         "listLabel": "Queued messages",
         "alreadySent": "This message was already sent.",
         "withdrawnHold": "Stopped before it was sent",
@@ -19217,12 +19216,11 @@
         }
       },
       "nativeChat": {
-        "queueFollowUpsTitle": "Queue follow-ups",
+        "queueFollowUpsTitle": "Follow-up behavior",
         "inlineVisualsTitle": "Inline visuals",
         "inlineVisualsCopy": "Let the agent show charts, diagrams and mockups inside its replies. Applies to newly started chats.",
         "inlineVisualsToggleLabel": "Toggle inline visuals",
-        "queueFollowUpsCopy": "Messages you send while the agent is working wait as cards you can steer, edit, or delete. Messages with images send right away.",
-        "queueFollowUpsToggleLabel": "Toggle queue follow-ups",
+        "queueFollowUpsCopy": "Choose what Enter does while the agent works. {{shortcut}}+Enter does the opposite for one message.",
         "behaviorTitle": "Behavior",
         "resumeSearchUpdate": "update",
         "resumeSearchRelaunch": "relaunch",
@@ -19230,7 +19228,9 @@
         "queueSearchSteer": "steer",
         "shellEnvSearchVariables": "environment variables",
         "shellEnvSearchPath": "PATH",
-        "shellEnvSearchProxy": "proxy"
+        "shellEnvSearchProxy": "proxy",
+        "followUpQueue": "Queue",
+        "followUpSteer": "Steer"
       }
     },
     "agentChildRow": {

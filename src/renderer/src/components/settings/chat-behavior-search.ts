@@ -2,6 +2,7 @@ import { translate } from '@/i18n/i18n'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import type { SettingsSearchEntry } from './settings-search'
 import { NATIVE_CHAT_RESUME_SETTING_SECTION_ID } from './native-chat-resume-setting-target'
+import { isMacPlatform } from '../native-chat/native-chat-shortcut'
 
 export const getChatBehaviorTitle = (): string =>
   translate('components.settings.nativeChat.behaviorTitle', 'Behavior')
@@ -24,10 +25,11 @@ export const getChatBehaviorEntriesByKey = createLocalizedCatalog(() => ({
   },
   queueFollowUps: {
     targetSectionId: 'chat-queue-follow-ups',
-    title: translate('components.settings.nativeChat.queueFollowUpsTitle', 'Queue follow-ups'),
+    title: translate('components.settings.nativeChat.queueFollowUpsTitle', 'Follow-up behavior'),
     description: translate(
       'components.settings.nativeChat.queueFollowUpsCopy',
-      'Messages you send while the agent is working wait as cards you can steer, edit, or delete. Messages with images send right away.'
+      'Choose what Enter does while the agent works. {{shortcut}}+Enter does the opposite for one message.',
+      { shortcut: isMacPlatform() ? '⌘' : 'Ctrl' }
     ),
     keywords: [
       translate('components.settings.nativeChat.queueSearchQueue', 'queue'),

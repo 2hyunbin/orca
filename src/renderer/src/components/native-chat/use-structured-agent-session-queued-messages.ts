@@ -1,5 +1,5 @@
 // Host-held drafts as this pane acts on them: the card list, Send-now (Steer),
-// Delete, in-place Edit, the Cmd/Ctrl+Enter steer chord, Resume of a held queue, and
+// Delete, in-place Edit, the Cmd/Ctrl+Shift+Enter steer chord, Resume of a held queue, and
 // clearing it before a new message.
 // Everything durable lives on the host; an open editor holds only its own typing.
 
@@ -21,7 +21,7 @@ import {
 } from './use-structured-agent-session-queued-edit'
 import type { StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
 import {
-  newestSteerableQueuedMessageCard,
+  firstSteerableQueuedMessageCard,
   projectQueuedMessageCards,
   pendingQueueSendsOnTheirWay,
   queuedMessagesQueuePause,
@@ -53,8 +53,8 @@ export type StructuredAgentSessionQueuedMessagesController = {
   editor: QueuedMessageInlineEditor | undefined
   /** Opens the card's inline editor. */
   edit: (messageId: string) => Promise<void>
-  /** Cmd/Ctrl+Enter: Send-now the newest card. False when there is none to steer. */
-  steerNewest: () => boolean
+  /** Cmd/Ctrl+Shift+Enter sends the first waiting card, if it is available. */
+  steerFirst: () => boolean
   /** Present while the header row shows and the queue could send now: the composer offers
    *  Resume. A failure is a toast, and Resume stays the retry. */
   queueResume: StructuredAgentSessionQueueResume | undefined
@@ -183,17 +183,17 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     promptOpen: hasPendingPrompt
   })
 
-  const steerNewest = useCallback((): boolean => {
+  const steerFirst = useCallback((): boolean => {
     if (!enabled) {
       return false
     }
-    const newest = newestSteerableQueuedMessageCard(cardsRef.current)
-    if (!newest) {
+    const first = firstSteerableQueuedMessageCard(cardsRef.current)
+    if (!first || editing.editor?.messageId === first.messageId) {
       return false
     }
-    void steer(newest.messageId)
+    void steer(first.messageId)
     return true
-  }, [enabled, steer])
+  }, [editing.editor, enabled, steer])
 
   const resumingRef = useRef(false)
   const [resuming, setResuming] = useState(false)
@@ -249,7 +249,7 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     edit: editing.begin,
     editCapable: editing.capable,
     editor: editing.editor,
-    steerNewest,
+    steerFirst,
     queueResume,
     queueHold
   }

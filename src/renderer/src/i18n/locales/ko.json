@@ -18611,7 +18611,6 @@
         "editMessage": "메시지 편집",
         "showFullMessage": "전체 메시지 보기",
         "showLess": "접기",
-        "turnOffQueueing": "대기열 사용 안 함",
         "withdrawnHold": "전송 전에 중지됨",
         "pausedSendFailed": "보낼 수 없습니다. 보내기를 눌러 다시 시도하세요.",
         "paused": "일시 중지됨",
@@ -19027,9 +19026,8 @@
         }
       },
       "nativeChat": {
-        "queueFollowUpsTitle": "후속 메시지 대기열에 추가",
-        "queueFollowUpsCopy": "Agent가 작업하는 동안 보낸 메시지는 지금 보내기, 편집, 삭제할 수 있는 카드로 대기합니다. 이미지가 포함된 메시지는 바로 전송됩니다.",
-        "queueFollowUpsToggleLabel": "후속 메시지 대기열 전환",
+        "queueFollowUpsTitle": "후속 메시지 동작",
+        "queueFollowUpsCopy": "Agent가 작업하는 동안 Enter 키의 동작을 선택합니다. {{shortcut}}+Enter는 메시지 하나에 반대 동작을 적용합니다.",
         "inlineVisualsTitle": "인라인 시각 자료",
         "inlineVisualsCopy": "에이전트가 답변 안에 차트, 다이어그램, 목업을 표시하도록 합니다. 새로 시작한 채팅에 적용됩니다.",
         "inlineVisualsToggleLabel": "인라인 시각 자료 전환",
@@ -19040,7 +19038,9 @@
         "queueSearchSteer": "지금 보내기",
         "shellEnvSearchVariables": "환경 변수",
         "shellEnvSearchPath": "PATH",
-        "shellEnvSearchProxy": "프록시"
+        "shellEnvSearchProxy": "프록시",
+        "followUpQueue": "대기열에 추가",
+        "followUpSteer": "지금 보내기"
       }
     },
     "agentChildRow": {

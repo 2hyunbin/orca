@@ -396,7 +396,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         onDictationToggle={dictation.toggleDictation}
         onDictationHoldStart={dictation.startHoldDictation}
         onDictationHoldEnd={dictation.stopHoldDictation}
-        onSend={send}
+        onSend={() => send()}
         onStop={interrupt}
         {...queue}
         sessionOptionsSurface={sessionOptionsSurface}

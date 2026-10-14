@@ -139,7 +139,7 @@ describe("the chat pane while a person's Stop ends the turn", () => {
     expect(mocks.composerProps?.afterStop).toBeUndefined()
     // The pane wraps steering so it also brings the latest into view; it still steers through the queue.
     mocks.composerProps?.steerQueued?.()
-    expect(mocks.queuedSteerNewest).toHaveBeenCalledOnce()
+    expect(mocks.queuedSteerFirst).toHaveBeenCalledOnce()
     mocks.composerProps?.onStop?.()
     expect(mocks.stop).toHaveBeenCalledOnce()
   })

@@ -406,7 +406,7 @@ it('reveals a structured prompt answer at the press, before the host accepts it'
           steer: async () => {},
           remove: async () => {},
           edit: async () => {},
-          steerNewest: () => false,
+          steerFirst: () => false,
           queueResume: undefined,
           queueHold: undefined
         }

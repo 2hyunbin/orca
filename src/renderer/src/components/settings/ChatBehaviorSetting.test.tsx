@@ -184,14 +184,16 @@ describe('ChatBehaviorSetting shell environment', () => {
 })
 
 describe('ChatBehaviorSetting queue follow-ups', () => {
-  const QUEUE_TOGGLE = '[aria-label="Toggle queue follow-ups"]'
+  const QUEUE_TOGGLE = '[aria-label="Follow-up behavior"]'
 
-  it('shows the switch, with copy naming the image exception, when the host queues messages', () => {
+  it('shows Queue and Steer choices and keeps boolean storage on a capable host', async () => {
     setLocalRuntimeCapabilitiesForTests([AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY])
     const updateSettings = vi.fn()
-    const { container } = renderSetting({}, updateSettings)
-    expect(container.textContent).toContain('Messages with images send right away.')
-    fireEvent.click(container.querySelector(QUEUE_TOGGLE)!)
+    const { container, findByRole } = renderSetting({}, updateSettings)
+    expect(container.textContent).toContain('Ctrl+Enter does the opposite for one message.')
+    expect(container.querySelector(QUEUE_TOGGLE)?.textContent).toContain('Queue')
+    fireEvent.keyDown(container.querySelector(QUEUE_TOGGLE)!, { key: 'ArrowDown' })
+    fireEvent.click(await findByRole('option', { name: 'Steer' }))
     expect(updateSettings).toHaveBeenCalledWith({ nativeChatQueueFollowUps: false })
   })
 

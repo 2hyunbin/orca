@@ -131,12 +131,14 @@ export function queuedMessageCardSteers(card: QueuedMessageCard): boolean {
   return card.hold !== 'paused' && card.hold !== 'returned' && !card.command
 }
 
-/** The card Cmd/Ctrl+Enter steers: the newest one, unless it is a command, which never steers. */
-export function newestSteerableQueuedMessageCard(
+/** The first waiting card owns the shortcut; an unavailable head never sends a later card. */
+export function firstSteerableQueuedMessageCard(
   cards: readonly QueuedMessageCard[]
 ): QueuedMessageCard | null {
-  const newest = cards.at(-1)
-  return newest && !newest.command && newest.hold !== 'sending' ? newest : null
+  const first = cards[0]
+  return first && first.state === 'waiting' && !first.command && first.hold !== 'sending'
+    ? first
+    : null
 }
 
 /** A queue send still on its way, as the card it is about to become. */

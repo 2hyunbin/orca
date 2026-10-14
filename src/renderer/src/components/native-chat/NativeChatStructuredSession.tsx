@@ -383,7 +383,7 @@ export function NativeChatStructuredSession(
               targetPtyId={null}
               agent={props.agent}
               {...stopControls.composer}
-              steerQueued={stopControls.stopping ? undefined : submits.queuedMessages.steerNewest}
+              steerQueued={stopControls.stopping ? undefined : submits.queuedMessages.steerFirst}
               structuredTransport={structuredTransport}
               launchSeed={{ ...launchDraftSignal, ownsTabWideLaunchDraft: true }}
               notices={notices}

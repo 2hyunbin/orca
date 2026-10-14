@@ -40,7 +40,7 @@ export function nativeChatStructuredStopControls(
       isWorking: controller.canStop || controller.queueSendsNext,
       isStopping: stopInFlight,
       onStop: controller.canStop ? () => void (stopInFlight || controller.stop()) : undefined,
-      steerQueued: stopping ? undefined : controller.queuedMessages.steerNewest,
+      steerQueued: stopping ? undefined : controller.queuedMessages.steerFirst,
       afterStop: stopping ? (controller.sendsQueue ? 'queue' : 'send') : undefined
     }
   }

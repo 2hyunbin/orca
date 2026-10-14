@@ -8,6 +8,7 @@ import {
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
 import { isMacPlatform } from './native-chat-shortcut'
 import type { NativeChatMentionFiles } from './use-native-chat-mention-files'
+import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
 import {
   isNativeChatRecallActive,
   nativeChatSentPrompts,
@@ -29,9 +30,8 @@ export type UseNativeChatComposerKeyDownArgs = {
   dispatchPickerCommand: (item: Extract<NativeChatPickerItem, { kind: 'command' }>) => void
   dismissPicker: (triggerKey: string) => void
   interrupt: () => void
-  send: () => void
-  /** Cmd/Ctrl+Enter from an empty composer: send the newest queued draft now; false falls
-   *  through to send. */
+  send: (intent?: StructuredAgentSessionSendIntent) => void
+  /** Cmd/Ctrl+Shift+Enter acts on the first waiting card independently of the draft. */
   steerQueued?: (() => boolean) | undefined
   setActiveSuggestion: Dispatch<SetStateAction<number>>
   setDraft: Dispatch<SetStateAction<string>>
@@ -123,18 +123,27 @@ export function useNativeChatComposerKeyDown({
         interrupt()
         return
       }
-      if (event.key === 'Enter' && !event.shiftKey) {
+      if (event.key === 'Enter') {
         // Platform primary modifier only (AGENTS.md): ⌘ on Mac, Ctrl elsewhere.
-        const steerChord = isMacPlatform() ? event.metaKey : event.ctrlKey
-        // Only from an empty composer: the chord never sends a card past what the user just wrote.
-        const composerEmpty = draft.trim() === '' && !hasAttachments
-        if (steerChord && composerEmpty && steerQueued?.()) {
+        const modified = isMacPlatform() ? event.metaKey : event.ctrlKey
+        if (modified && event.shiftKey) {
           event.preventDefault()
+          if (!event.repeat) {
+            steerQueued?.()
+          }
           return
         }
-        event.preventDefault()
-        send()
-        return
+        if (!event.shiftKey) {
+          event.preventDefault()
+          if (!event.repeat && (draft.trim() !== '' || hasAttachments)) {
+            if (modified) {
+              send('alternate')
+            } else {
+              send()
+            }
+          }
+          return
+        }
       }
       const arrow = event.key === 'ArrowUp' || event.key === 'ArrowDown'
       // A modified arrow selects or jumps; attachments make the composer non-empty.

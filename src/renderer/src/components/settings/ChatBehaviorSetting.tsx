@@ -7,7 +7,8 @@ import { Card, CardContent } from '../ui/card'
 import { ChatPermissionSetting } from './ChatPermissionSetting'
 import { NativeChatShellEnvironmentSetting } from './NativeChatShellEnvironmentSetting'
 import { SearchableSetting } from './SearchableSetting'
-import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
+import { SettingsRow, SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormControls'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { getChatBehaviorEntriesByKey, getChatBehaviorTitle } from './chat-behavior-search'
 import { getChatPermissionSearchEntry } from './chat-permission-search'
 import { matchesSettingsSearch } from './settings-search'
@@ -79,16 +80,30 @@ export function ChatBehaviorSetting({
                 forceVisible={forceVisible}
                 className="max-w-none"
               >
-                <SettingsSwitchRow
+                <SettingsRow
                   label={entries.queueFollowUps.title}
                   description={entries.queueFollowUps.description}
-                  checked={queueFollowUpsEnabled}
-                  ariaLabel={translate(
-                    'components.settings.nativeChat.queueFollowUpsToggleLabel',
-                    'Toggle queue follow-ups'
-                  )}
-                  onChange={() =>
-                    updateSettings({ nativeChatQueueFollowUps: !queueFollowUpsEnabled })
+                  control={
+                    <Select
+                      value={queueFollowUpsEnabled ? 'queue' : 'steer'}
+                      onValueChange={(value) => {
+                        if (value === 'queue' || value === 'steer') {
+                          updateSettings({ nativeChatQueueFollowUps: value === 'queue' })
+                        }
+                      }}
+                    >
+                      <SelectTrigger aria-label={entries.queueFollowUps.title}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="queue">
+                          {translate('components.settings.nativeChat.followUpQueue', 'Queue')}
+                        </SelectItem>
+                        <SelectItem value="steer">
+                          {translate('components.settings.nativeChat.followUpSteer', 'Steer')}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   }
                 />
               </SearchableSetting>

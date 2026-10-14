@@ -20,6 +20,7 @@ import {
 } from './native-chat-composer-draft-store'
 import { nativeChatComposerDraftLeftAfterSend } from './native-chat-composer-draft-comparison'
 import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
+import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
 
 export type UseNativeChatStructuredComposerSendArgs = {
   agent: AgentType
@@ -49,7 +50,8 @@ export function isNativeChatStructuredHostCommand(
 export type NativeChatStructuredComposerSend = (
   text: string,
   attachments?: readonly NativeChatComposerImageAttachment[],
-  sentFrom?: NativeChatComposerDraft
+  sentFrom?: NativeChatComposerDraft,
+  intent?: StructuredAgentSessionSendIntent
 ) => Promise<void>
 
 /** Send through the structured journal transport, clearing the composer only
@@ -65,7 +67,7 @@ export function useNativeChatStructuredComposerSend({
   setCaret
 }: UseNativeChatStructuredComposerSendArgs): NativeChatStructuredComposerSend {
   return useCallback<NativeChatStructuredComposerSend>(
-    async (text, attachments = imageAttachments, sentFrom): Promise<void> => {
+    async (text, attachments = imageAttachments, sentFrom, intent): Promise<void> => {
       // A picked command is held like Send: it would carry attachments still uploading, pathless.
       if (!structuredTransport || attachments.some((attachment) => attachment.pending)) {
         return
@@ -91,7 +93,7 @@ export function useNativeChatStructuredComposerSend({
         structuredTransport.onSubmitted?.()
       }
       const submitted = sentFrom ?? readNativeChatComposerDraft(draftScopeKey)
-      await dispatchNativeChatStructuredComposerText(structuredTransport, text, attachments)
+      await dispatchNativeChatStructuredComposerText(structuredTransport, text, attachments, intent)
         .then(({ accepted, error, refusedWhile, revealsTranscript }) => {
           structuredTransport.onError(error, refusedWhile ? { refusedWhile } : undefined)
           if (!accepted) {

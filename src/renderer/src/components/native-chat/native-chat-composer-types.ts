@@ -17,6 +17,7 @@ import type { NativeChatComposerImageAttachment } from './NativeChatComposerFiel
 import type { NativeChatAfterStopSend } from './native-chat-composer-target'
 import type { NativeChatLocalCommandAnswer } from './use-native-chat-local-command-answer'
 import type { NativeChatRecallSource } from './native-chat-sent-prompt-history'
+import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
 
 export type NativeChatComposerErrorDetail = {
   /** Error text Orca did not write, shown apart and copyable. */
@@ -44,7 +45,8 @@ export type NativeChatStructuredComposerTransport = {
   conversationCommands?: readonly AgentSessionConversationCommand[]
   send: (
     text: string,
-    attachments: readonly NativeChatComposerImageAttachment[]
+    attachments: readonly NativeChatComposerImageAttachment[],
+    intent?: StructuredAgentSessionSendIntent
   ) => boolean | 'queued'
   /** A send is out: Send stays disabled, and a send returns false, until it settles. */
   sendOut?: boolean
@@ -129,8 +131,7 @@ export type NativeChatComposerProps = {
   launchSeed?: NativeChatLaunchSeed
   /** Structured journal transport; absent keeps the existing PTY path unchanged. */
   structuredTransport?: NativeChatStructuredComposerTransport
-  /** Cmd/Ctrl+Enter from an empty composer: send the newest queued draft now.
-   *  False = nothing queued, and the chord falls through to a plain send. */
+  /** Cmd/Ctrl+Shift+Enter sends the first waiting card, leaving the draft untouched. */
   steerQueued?: () => boolean
   /** The chat's own notices, shown in the composer's notice card above its input. */
   notices?: readonly NativeChatComposerNotice[]

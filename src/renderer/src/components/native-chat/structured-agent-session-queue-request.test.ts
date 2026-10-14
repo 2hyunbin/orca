@@ -24,4 +24,17 @@ it('asks the host to queue only a text send, to a host that queues, with queuein
     expect(structuredAgentSessionNewSendsQueue(queue)).toBe(false)
   }
   expect(structuredAgentSessionNewSendsQueue({ capability: 'supported', enabled: true })).toBe(true)
+  for (const forced of ['queue', 'steer'] as const) {
+    const queue = { capability: 'supported' as const, enabled: true, forced }
+    expect(structuredAgentSessionQueueRequest(queue, [], 'alternate')).toBe(
+      forced === 'queue' ? 'queue-if-active' : undefined
+    )
+  }
+  expect(
+    structuredAgentSessionQueueRequest(
+      { capability: 'unsupported', enabled: false },
+      [],
+      'alternate'
+    )
+  ).toBeUndefined()
 })

@@ -836,7 +836,7 @@ describe('NativeChatStructuredSession', () => {
     // The composer's sends reveal through its transport.
     onSubmitted()
     expect(mocks.revealLatest).toHaveBeenCalledOnce()
-    mocks.queuedSteerNewest.mockReturnValue(true)
+    mocks.queuedSteerFirst.mockReturnValue(true)
     expect(steerQueued()).toBe(true)
     expect(mocks.revealLatest).toHaveBeenCalledTimes(2)
   })

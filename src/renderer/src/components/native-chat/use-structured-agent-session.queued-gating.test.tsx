@@ -229,7 +229,8 @@ describe('against a capable host', () => {
     render()
     expect(mocks.sendArgs.at(-1)?.queue).toEqual({
       capability: 'supported',
-      enabled: false
+      enabled: true,
+      forced: 'steer'
     })
     mocks.sendArgs.length = 0
     items = [newer, approval({ kind: 'plan', text: 'do it' })]
@@ -665,7 +666,8 @@ describe('a /compact against a host that holds commands in line', () => {
     render(false)
     expect(mocks.sendArgs.at(-1)?.queue).toEqual({
       capability: 'supported',
-      enabled: true
+      enabled: false,
+      forced: 'queue'
     })
   })
 
@@ -784,10 +786,10 @@ describe('against a host without the capability', () => {
     )
   })
 
-  it('steering the newest card is inert', () => {
+  it('steering the first card is inert', () => {
     queuedMessages = [draft('draft-1')]
     const { result } = render()
-    expect(result.current.queuedMessages.steerNewest()).toBe(false)
+    expect(result.current.queuedMessages.steerFirst()).toBe(false)
     expect(
       mocks.call.mock.calls.filter(([, method]) =>
         String(method).startsWith('agentSession.queuedMessage')

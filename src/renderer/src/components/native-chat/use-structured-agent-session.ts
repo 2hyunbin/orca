@@ -2,7 +2,10 @@ import { useMemo, useRef } from 'react'
 import { useStructuredAgentSessionSendOptions } from './use-structured-agent-session-send-options'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
 import { useStructuredAgentSessionCommandWrite } from './use-structured-agent-session-command-write'
-import { structuredAgentSessionNewSendsQueue } from './structured-agent-session-queue-request'
+import {
+  structuredAgentSessionNewSendsQueue,
+  type StructuredAgentSessionQueueDelivery
+} from './structured-agent-session-queue-request'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionCancelResult } from '../../../../shared/agent-session-wire'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -146,10 +149,10 @@ export function useStructuredAgentSession(args: {
   // A host's queue waits on any pending prompt, and nothing here can settle one this build cannot
   // answer: the send must start a turn, after which the card's cancel works.
   const commandWaiting = commandCardWaiting(transportState.queuedMessages)
-  const queueEnabled = (queueFollowUps || commandWaiting) && !promptsUnanswerableHere
-  const queue = useMemo(
-    () => ({ capability: queueCapability, enabled: queueEnabled }),
-    [queueCapability, queueEnabled]
+  const forced = promptsUnanswerableHere ? 'steer' : commandWaiting ? 'queue' : undefined
+  const queue = useMemo<StructuredAgentSessionQueueDelivery>(
+    () => ({ capability: queueCapability, enabled: queueFollowUps, forced }),
+    [queueCapability, queueFollowUps, forced]
   )
   const sends = useStructuredAgentSessionSends({
     sessionId,

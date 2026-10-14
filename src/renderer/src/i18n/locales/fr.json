@@ -18680,7 +18680,6 @@
         "editMessage": "Modifier le message",
         "showFullMessage": "Afficher le message complet",
         "showLess": "Afficher moins",
-        "turnOffQueueing": "Désactiver la file d'attente",
         "withdrawnHold": "Arrêté avant l'envoi",
         "pausedSendFailed": "Envoi impossible. Appuyez sur Envoyer pour réessayer.",
         "paused": "En pause",
@@ -19131,9 +19130,8 @@
         }
       },
       "nativeChat": {
-        "queueFollowUpsTitle": "Mettre les messages en file d’attente",
-        "queueFollowUpsCopy": "Les messages envoyés pendant que l'agent travaille attendent sous forme de cartes que vous pouvez envoyer maintenant, modifier ou supprimer. Les messages avec des images sont envoyés immédiatement.",
-        "queueFollowUpsToggleLabel": "Activer ou désactiver la file d'attente",
+        "queueFollowUpsTitle": "Comportement des messages suivants",
+        "queueFollowUpsCopy": "Choisissez ce que fait Entrée pendant que l’agent travaille. {{shortcut}}+Entrée fait l’inverse pour un message.",
         "inlineVisualsTitle": "Visuels intégrés",
         "inlineVisualsCopy": "Laissez l'agent afficher des graphiques, des diagrammes et des maquettes dans ses réponses. S'applique aux nouveaux chats.",
         "inlineVisualsToggleLabel": "Activer/désactiver les visuels intégrés",
@@ -19144,7 +19142,9 @@
         "queueSearchSteer": "orienter",
         "shellEnvSearchVariables": "variables d'environnement",
         "shellEnvSearchPath": "PATH",
-        "shellEnvSearchProxy": "proxy"
+        "shellEnvSearchProxy": "proxy",
+        "followUpQueue": "Mettre en attente",
+        "followUpSteer": "Envoyer maintenant"
       }
     },
     "agentChildRow": {
