@@ -24,6 +24,25 @@ export function rewriteRelayedPhoneRequest(
   return JSON.stringify(requestId === undefined ? forwarded : { ...forwarded, id: requestId })
 }
 
+const LAUNCH_METHODS_READING_CHAT_DEFAULT = new Set(['agent.launch', 'agent.launchReplay'])
+
+// Why: a server picks a launch's surface from its own chat setting, but a relayed phone's user is
+// this desktop's, so the desktop's default rides along. Older servers strip the field.
+export function withRelayedLaunchChatDefault(
+  frame: string,
+  method: string,
+  nativeChatDefault: boolean
+): string {
+  if (!LAUNCH_METHODS_READING_CHAT_DEFAULT.has(method)) {
+    return frame
+  }
+  const parsed: unknown = JSON.parse(frame)
+  if (!isRecord(parsed) || !isRecord(parsed.params)) {
+    return frame
+  }
+  return JSON.stringify({ ...parsed, params: { ...parsed.params, nativeChatDefault } })
+}
+
 /**
  * The host's replies on one relayed socket, passed through except for stream ids. Why renumber:
  * every host allocates terminal stream ids from 1, and the phone routes binary frames by id
