@@ -3,6 +3,8 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { launchAiVaultSessionInNewTab } from '@/lib/launch-ai-vault-session'
 import type { AiVaultResumeStartup } from '@/lib/ai-vault-resume-command'
+import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
+import { describeAiVaultResumeFailure } from '@/lib/ai-vault-resume-refusal'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
@@ -96,23 +98,18 @@ export async function launchAiVaultSessionInTerminal({
     })
     .catch((error: unknown) => {
       if (!operation?.signal.aborted) {
-        notifyAiVaultSessionPreparationFailure(error, describeFailure)
+        notifyAiVaultSessionPreparationFailure(error, session.agent, describeFailure)
       }
     })
 }
 
 export function notifyAiVaultSessionPreparationFailure(
   error: unknown,
+  agent: AiVaultAgent,
   describeFailure: (message: string) => string = (message) => message
 ): void {
-  toast.error(
-    error instanceof Error
-      ? describeFailure(error.message)
-      : translate(
-          'auto.components.right.sidebar.AiVaultPanel.prepareSessionResumeFailed',
-          'Could not prepare this session for resume.'
-        )
-  )
+  const described = error instanceof Error ? new Error(describeFailure(error.message)) : error
+  toast.error(describeAiVaultResumeFailure(described, agent))
 }
 
 export function resolveAiVaultSessionLaunchTargetOrNotify(

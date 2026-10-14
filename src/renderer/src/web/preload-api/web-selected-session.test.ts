@@ -155,3 +155,39 @@ it.each(['different-id', 'same-id-before-dispatch', 'same-id-before-answer'])(
     )
   }
 )
+
+it('lookup owner cancels queued preparation and its initiating revision refuses a replacement pairing', async () => {
+  const session = await import('./web-runtime-session')
+  const { prepareWebAiVaultSessionResume, cancelWebSelectedSession } =
+    await import('./web-selected-session')
+  const context = {
+    requestToken: args.requestToken,
+    expectedEnvironmentPairingRevision:
+      session.requireActiveEnvironment().pairingRevision ??
+      session.requireActiveEnvironment().createdAt
+  }
+  const request = {
+    agent: 'codex',
+    sessionId: 'provider-1',
+    filePath: '/saved/rollout.jsonl',
+    codexHome: '/saved/home',
+    executionHostId: args.executionHostId,
+    fork: true,
+    requestContext: context
+  } as const
+  const held = deferred<void>()
+  const blocking = session.runtimeCallQueuePool.enqueue('env-a', 'hold', () => held.promise)
+  const pending = prepareWebAiVaultSessionResume(request)
+  const rejection = expect(pending).rejects.toThrow()
+  await cancelWebSelectedSession(context)
+  await rejection
+  held.resolve()
+  await blocking
+  expect(call).not.toHaveBeenCalled()
+  session.webRuntimeState.activeEnvironment = {
+    ...session.requireActiveEnvironment(),
+    pairingRevision: context.expectedEnvironmentPairingRevision + 1
+  }
+  await expect(prepareWebAiVaultSessionResume(request)).rejects.toThrow()
+  expect(call).not.toHaveBeenCalled()
+})

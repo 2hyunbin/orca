@@ -5,6 +5,10 @@ import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { useAppStore } from '@/store'
+import {
+  adoptsCliConversations,
+  CLI_CONVERSATION_ADOPTING_AGENTS
+} from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { parseRoutableExecutionHostId } from '../../../../shared/execution-host'
 import {
   captureWebSessionIntentOwner,
@@ -47,7 +51,7 @@ function subjectKey(subject: TabSessionSelectedSource): string {
   return [
     subject.executionHostId,
     subject.kind,
-    subject.agent,
+    subject.kind === 'cli' ? CLI_CONVERSATION_ADOPTING_AGENTS[subject.agent] : subject.agent,
     subject.kind === 'chat' ? subject.sessionId : subject.providerSessionId
   ].join('\0')
 }
@@ -82,7 +86,9 @@ function sourceIdentityIsCurrent(
   }
   const current = useAppStore.getState().agentStatusByPaneKey[subject.paneKey]
   return (
-    current?.agentType === subject.agent &&
+    adoptsCliConversations(current?.agentType) &&
+    CLI_CONVERSATION_ADOPTING_AGENTS[current.agentType] ===
+      CLI_CONVERSATION_ADOPTING_AGENTS[subject.agent] &&
     current.providerSession?.id === subject.providerSessionId
   )
 }
@@ -241,6 +247,10 @@ export async function runTabSessionSurfaceSwitch(args: {
     await waitForPromiseWithSignal(
       args.launch(row, move.worktreeId, {
         signal: owner.controller.signal,
+        requestContext: {
+          requestToken,
+          expectedEnvironmentPairingRevision: intentOwner?.pairingRevision
+        },
         isSourceOpen: () =>
           !owner.controller.signal.aborted &&
           bindingIsCurrent() &&

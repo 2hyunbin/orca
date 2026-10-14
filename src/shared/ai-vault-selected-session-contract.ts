@@ -1,4 +1,8 @@
 import { hasUnsafeProviderSessionIdChars } from './agent-session-resume'
+import {
+  adoptsCliConversations,
+  type CliConversationRowAgent
+} from './structured-agent-cli-conversation-adoption'
 import { z } from 'zod'
 import { AI_VAULT_AGENTS } from './ai-vault-types'
 import {
@@ -16,7 +20,7 @@ export const SelectedSessionSourceSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('chat'), sessionId: id, workspaceId: id }),
   z.strictObject({
     kind: z.literal('cli'),
-    agent: z.enum(['claude', 'codex']),
+    agent: z.custom<CliConversationRowAgent>(adoptsCliConversations),
     providerSessionId: id,
     paneKey: id,
     workspaceId: id

@@ -1,3 +1,4 @@
+import type { CliConversationRowAgent } from './structured-agent-cli-conversation-adoption'
 import type { AgentSessionAccountHome } from './agent-session-account-home'
 import type { AiVaultSession, AiVaultListArgs } from './ai-vault-types'
 import type { ExecutionHostId } from './execution-host'
@@ -16,7 +17,7 @@ export type AiVaultSelectedSessionSource =
   | { kind: 'chat'; sessionId: string; workspaceId: string }
   | (SelectedCliSessionSource & {
       kind: 'cli'
-      agent: 'claude' | 'codex'
+      agent: CliConversationRowAgent
       providerSessionId: string
     })
 

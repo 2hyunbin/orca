@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { translate } from '@/i18n/i18n'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { useAppStore } from '@/store'
-import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
+import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { resumeAiVaultSessionInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { resolveTabSessionSelectedSource } from '../tab-bar/tab-session-selected-source'
 import {
@@ -61,7 +61,7 @@ export function TerminalPaneResumeInChatButton({
       sourceTab: { id: tabId, worktreeId },
       intent: 'open-or-resume-chat',
       launch: async (row, targetWorktreeId, operation) => {
-        if (isAgentSessionHandleProvider(row.agent)) {
+        if (adoptsCliConversations(row.agent)) {
           await resumeAiVaultSessionInNewChat(
             row,
             row.agent,

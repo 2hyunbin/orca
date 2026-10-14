@@ -1,21 +1,33 @@
+import { readSelectedSessionInBackground } from '../ai-vault/selected-session-reader-client'
+import { isLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { findSelectedTranscriptPath } from '../native-chat/selected-transcript-path'
 import { join } from 'node:path'
 import { configuredAdditionalCodexHomePaths } from '../ai-vault/cached-session-list'
 import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
 import {
+  directoryTranscriptImport,
   resumeInvocationAfterMarker,
   type StructuredAgentCliConversations,
-  type StructuredAgentSessionHistory,
-  type StructuredAgentTranscriptImport
+  type StructuredAgentSessionHistory
 } from '../native-chat/structured-agent-cli-conversations'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { resolveOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 
-const CODEX_TRANSCRIPT_IMPORT: StructuredAgentTranscriptImport = {
+const CODEX_TRANSCRIPT_IMPORT = directoryTranscriptImport({
+  transcriptRoot: ({ accountHomePath }) => join(accountHomePath, 'sessions'),
+  readSelectedSession: ({ transcriptPath, accountHome, signal }) =>
+    readSelectedSessionInBackground(
+      {
+        agent: 'codex',
+        filePath: transcriptPath,
+        codexHome: isLegacyAgentSessionAccountHome(accountHome) ? accountHome.path : null
+      },
+      signal
+    ),
   accountHomeCandidates: ({ settings, selectedAccountHomePath }) => [
     selectedAccountHomePath,
     ...(settings.codexManagedAccounts ?? []).map((account) => account.managedHomePath),
     ...configuredAdditionalCodexHomePaths(),
-    getOrcaManagedCodexHomePath(),
+    resolveOrcaManagedCodexHomePath(),
     getSystemCodexHomePath()
   ],
   findTranscript: ({ providerSessionId, accountHomePath, selected }) =>
@@ -24,7 +36,7 @@ const CODEX_TRANSCRIPT_IMPORT: StructuredAgentTranscriptImport = {
       : resolveSessionFilePath('codex', providerSessionId, {
           codexSessionsDirs: [join(accountHomePath, 'sessions')]
         })
-}
+})
 
 const CODEX_SESSION_HISTORY: StructuredAgentSessionHistory = {
   rowAgents: ['codex'],

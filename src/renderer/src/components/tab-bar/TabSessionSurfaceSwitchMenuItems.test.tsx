@@ -22,6 +22,7 @@ import type {
 const mocks = vi.hoisted(() => ({
   openTabs: ['tab-1'],
   nativeSource: false,
+  sourceAgent: 'claude',
   subscribers: new Set<() => void>(),
   resolve: vi.fn(),
   cancel: vi.fn(async () => {}),
@@ -71,7 +72,7 @@ function state() {
         }
       : {},
     agentStatusByPaneKey: {
-      'tab-1:leaf-1': { agentType: 'claude', providerSession: { id: 'provider-1' } }
+      'tab-1:leaf-1': { agentType: mocks.sourceAgent, providerSession: { id: 'provider-1' } }
     }
   }
 }
@@ -112,6 +113,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.openTabs = ['tab-1']
   mocks.nativeSource = false
+  mocks.sourceAgent = 'claude'
   mocks.resolve.mockResolvedValue({ status: 'ready', session: ROW })
   Object.assign(window, {
     api: { aiVault: { resolveSession: mocks.resolve, cancelResolveSession: mocks.cancel } }
@@ -360,3 +362,32 @@ it.each([false, true])(
     replaceRuntimeEnvironmentRevisions([])
   }
 )
+
+it('OpenCode row aliases share the same pending conversation owner', async () => {
+  mocks.sourceAgent = 'opencode'
+  let finish: (result: AiVaultResolveSessionResult) => void = () => {}
+  mocks.resolve.mockReturnValue(
+    new Promise<AiVaultResolveSessionResult>((resolve) => {
+      finish = resolve
+    })
+  )
+  const run = (agent: 'opencode' | 'opencode2') =>
+    runTabSessionSurfaceSwitch({
+      subject: {
+        ...SUBJECT,
+        kind: 'cli',
+        agent,
+        providerSessionId: 'provider-1',
+        paneKey: 'tab-1:leaf-1'
+      },
+      sourceTab: { id: 'tab-1', worktreeId: 'wt-1' },
+      launch: mocks.launch
+    })
+  const pending = run('opencode')
+  mocks.sourceAgent = 'opencode2'
+  await run('opencode2')
+  expect(mocks.resolve).toHaveBeenCalledOnce()
+  finish({ status: 'ready', session: { ...ROW, agent: 'opencode2' } })
+  await pending
+  expect(mocks.launch).toHaveBeenCalledOnce()
+})

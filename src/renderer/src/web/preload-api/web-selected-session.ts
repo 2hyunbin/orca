@@ -1,4 +1,8 @@
 import type {
+  AiVaultPrepareSessionResumeArgs,
+  AiVaultPrepareSessionResumeResult
+} from '../../../../shared/ai-vault-resume-preparation'
+import type {
   AiVaultResolveSessionArgs,
   AiVaultResolveSessionResult
 } from '../../../../shared/ai-vault-selected-session'
@@ -21,7 +25,7 @@ export async function resolveWebSelectedSession(
 ): Promise<AiVaultResolveSessionResult> {
   const environment = requireActiveEnvironment()
   const hostId = toRuntimeExecutionHostId(environment.id)
-  if (args.executionHostId !== hostId) {
+  if (args.executionHostId !== hostId || args.source.kind !== 'chat') {
     throw new Error('The conversation host is unavailable.')
   }
   const controller = new AbortController()
@@ -78,4 +82,30 @@ export async function resolveWebSelectedSession(
 export function cancelWebSelectedSession(args: { requestToken: string }): Promise<void> {
   requests.get(args.requestToken)?.abort()
   return Promise.resolve()
+}
+
+export async function prepareWebAiVaultSessionResume(
+  args: AiVaultPrepareSessionResumeArgs
+): Promise<AiVaultPrepareSessionResumeResult> {
+  const { requestContext, ...request } = args
+  if (!requestContext) {
+    return callRuntimeResult('aiVault.prepareSessionResume', request)
+  }
+  const environment = requireActiveEnvironment()
+  if (args.executionHostId !== toRuntimeExecutionHostId(environment.id)) {
+    throw new Error('The conversation host is unavailable.')
+  }
+  const controller = new AbortController()
+  requests.set(requestContext.requestToken, controller)
+  try {
+    return await callRuntimeResult('aiVault.prepareSessionResume', request, undefined, {
+      environmentId: environment.id,
+      expectedEnvironmentPairingRevision: requestContext.expectedEnvironmentPairingRevision,
+      signal: controller.signal
+    })
+  } finally {
+    if (requests.get(requestContext.requestToken) === controller) {
+      requests.delete(requestContext.requestToken)
+    }
+  }
 }

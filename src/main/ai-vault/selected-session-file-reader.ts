@@ -1,14 +1,14 @@
+import { parseSelectedGrokChatHistory } from './session-scanner-grok-parser'
 import { stat } from 'node:fs/promises'
 import { parseAgentSessionFile } from './session-scanner-agent-parser'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 import { SELECTED_TRANSCRIPT_MAX_BYTES } from '../../shared/ai-vault-selected-session'
 import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 
-export type SelectedSessionFileRequest = {
-  agent: 'claude' | 'codex'
-  filePath: string
-  codexHome: string | null
-}
+export type SelectedSessionFileRequest = { filePath: string; codexHome: string | null } & (
+  | { agent: 'claude' | 'codex' | 'omp' }
+  | { agent: 'grok'; providerSessionId: string; accountHomePath: string }
+)
 
 export async function readSelectedSessionFile(
   request: SelectedSessionFileRequest,
@@ -24,6 +24,20 @@ export async function readSelectedSessionFile(
   }
   if (info.size === 0) {
     return null
+  }
+  const file = {
+    path: request.filePath,
+    mtimeMs: info.mtimeMs,
+    modifiedAt: info.mtime.toISOString(),
+    sizeBytes: info.size
+  }
+  if (request.agent === 'grok') {
+    return parseSelectedGrokChatHistory(
+      file,
+      request.providerSessionId,
+      request.accountHomePath,
+      signal
+    )
   }
   const session = await parseAgentSessionFile(
     {

@@ -1,3 +1,4 @@
+import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../shared/structured-agent-cli-conversation-adoption'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type {
   AiVaultSelectedSessionSource,
@@ -20,12 +21,7 @@ import {
   resolveSelectedCliTranscript,
   selectedCliSourceStatus
 } from '../native-chat/selected-cli-transcript'
-import { readSelectedSessionInBackground } from './selected-session-reader-client'
-import {
-  findStructuredAiVaultOwnership,
-  projectStructuredAiVaultSessions,
-  OPENS_EVERY_STRUCTURED_CHAT
-} from './structured-session-ownership'
+import { findStructuredAiVaultOwnership } from './structured-session-ownership'
 import { withSelectedSessionDeadline } from './selected-session-deadline'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { StructuredAgentTranscriptImportSettings } from '../native-chat/structured-agent-cli-conversations'
@@ -37,6 +33,7 @@ export type SelectedSessionRuntime = Pick<
   | 'getAgentProviderSessionRows'
   | 'resolveStructuredAgentAccountHome'
   | 'resolveStructuredAgentSessionLocalWorkspacePath'
+  | 'resolveStructuredAgentTranscriptImportContext'
 >
 
 export function resolveSelectedSessionOnHost(
@@ -57,7 +54,7 @@ export function resolveSelectedSessionOnHost(
     try {
       return source.kind === 'chat'
         ? await resolveChat(source, settings, workspacePath, owned)
-        : await resolveCli(source, runtime, settings, workspacePath, owned)
+        : await resolveCli(source, runtime, settings, owned)
     } catch (error) {
       if (
         isAgentSessionRefusalError(error) &&
@@ -122,9 +119,10 @@ async function resolveChat(
     const resolved = await resolveSelectedAccountTranscript({
       agent,
       providerSessionId: sessionId,
-      selectedAccountHomePath: record.accountHome.path,
+      selectedAccountHome: record.accountHome,
+      launchEnv: {},
       settings,
-      cwd,
+      workspaceCwd: cwd,
       signal
     })
     filePath = resolved.transcriptPath
@@ -154,43 +152,50 @@ async function resolveCli(
   source: Extract<AiVaultSelectedSessionSource, { kind: 'cli' }>,
   runtime: SelectedSessionRuntime,
   settings: StructuredAgentTranscriptImportSettings,
-  cwd: string,
   signal: AbortSignal
 ): Promise<AiVaultResolveSessionResult> {
   const owned = selectedCliOwnedSession(source, runtime)
   if (owned) {
     return owned
   }
-  const selected = await runtime.resolveStructuredAgentAccountHome(source.agent)
+  const agent = CLI_CONVERSATION_ADOPTING_AGENTS[source.agent]
+  const context = await runtime.resolveStructuredAgentTranscriptImportContext(
+    agent,
+    source.workspaceId
+  )
+  const beforeAccount = selectedCliOwnedSession(source, runtime)
+  if (beforeAccount) {
+    return beforeAccount
+  }
+  const selected = await runtime.resolveStructuredAgentAccountHome(agent, context.launchEnv)
   const afterAccount = selectedCliOwnedSession(source, runtime)
   if (afterAccount) {
     return afterAccount
   }
-  if (!isLegacyAgentSessionAccountHome(selected)) {
-    throw new Error('Conversation account is unavailable.')
-  }
   const resolved = await resolveSelectedCliTranscript({
-    agent: source.agent,
+    agent,
     providerSessionId: source.providerSessionId,
     source,
     rows: runtime.getAgentProviderSessionRows(),
-    selectedAccountHomePath: selected.path,
+    selectedAccountHome: selected,
     settings,
-    cwd,
+    ...context,
     signal
   })
   const beforeRead = selectedCliOwnedSession(source, runtime)
   if (beforeRead) {
     return beforeRead
   }
-  const row = await readSelectedSessionInBackground(
-    {
-      agent: source.agent,
-      filePath: resolved.transcriptPath,
-      codexHome: source.agent === 'codex' ? resolved.accountHomePath : null
-    },
+  const importer = structuredAgentRuntimeRegistration(agent)?.transcriptImport
+  if (!importer) {
+    throw new Error('Conversation import is unavailable.')
+  }
+  const row = await importer.readSelectedSession({
+    ...resolved,
+    providerSessionId: source.providerSessionId,
+    workspaceCwd: context.workspaceCwd,
     signal
-  )
+  })
   const afterRead = selectedCliOwnedSession(source, runtime)
   if (afterRead) {
     return afterRead
@@ -198,22 +203,12 @@ async function resolveCli(
   if (!row) {
     return { status: 'missing' }
   }
-  const projected = projectStructuredAiVaultSessions(
-    {
-      sessions: [{ ...row, sessionId: source.providerSessionId }],
-      issues: [],
-      scannedAt: new Date().toISOString()
-    },
-    OPENS_EVERY_STRUCTURED_CHAT
-  ).sessions[0]
-  if (!projected) {
-    throw new Error('Conversation ownership is unavailable to this client.')
-  }
   return {
     status: 'ready',
     session: {
-      ...projected,
-      accountHome: { variable: selected.variable, path: resolved.accountHomePath },
+      ...row,
+      sessionId: source.providerSessionId,
+      accountHome: resolved.accountHome,
       selectedSource: { paneKey: source.paneKey, workspaceId: source.workspaceId }
     }
   }
@@ -224,12 +219,15 @@ function selectedCliOwnedSession(
   runtime: SelectedSessionRuntime
 ): AiVaultResolveSessionResult | null {
   selectedCliSourceStatus({
-    agent: source.agent,
+    agent: CLI_CONVERSATION_ADOPTING_AGENTS[source.agent],
     providerSessionId: source.providerSessionId,
     source,
     rows: runtime.getAgentProviderSessionRows()
   })
-  const owner = findStructuredAiVaultOwnership(source.agent, source.providerSessionId)
+  const owner = findStructuredAiVaultOwnership(
+    CLI_CONVERSATION_ADOPTING_AGENTS[source.agent],
+    source.providerSessionId
+  )
   if (!owner) {
     return null
   }

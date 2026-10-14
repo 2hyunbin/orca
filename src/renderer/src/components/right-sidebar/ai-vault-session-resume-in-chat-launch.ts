@@ -4,7 +4,10 @@ import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-se
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import type { AgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
+import {
+  CLI_CONVERSATION_ADOPTING_AGENTS,
+  type CliConversationRowAgent
+} from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 import { prepareAiVaultSessionForResume } from '@/lib/ai-vault-session-resume-preparation'
 import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
@@ -22,7 +25,7 @@ export function activateAiVaultResumeWorkspace(workspaceId: string): boolean {
  *  would hide the refusal the user needs to see. */
 export async function resumeAiVaultSessionInNewChat(
   session: AiVaultSessionLaunchContext,
-  agent: AgentSessionHandleProvider,
+  rowAgent: CliConversationRowAgent,
   worktreeId: string,
   requestId: AgentLaunchRequestId,
   operation?: AiVaultSurfaceSwitchOperation
@@ -30,14 +33,16 @@ export async function resumeAiVaultSessionInNewChat(
   try {
     // Codex rows can live under a shared legacy home; the same preparation the terminal resume
     // runs re-pins them, and its result is what names the conversation the host will look for.
-    const preparedSession = await prepareAiVaultSessionForResume(session)
+    const preparedSession = await (operation
+      ? prepareAiVaultSessionForResume(session, operation)
+      : prepareAiVaultSessionForResume(session))
     if (operation && !operation.isSourceOpen()) {
       return
     }
     const plan = adoptAgentSessionLaunchVerdict({
       route: 'structured-native-chat',
       requestId,
-      agent,
+      agent: CLI_CONVERSATION_ADOPTING_AGENTS[rowAgent],
       worktreeId,
       resumeFrom: {
         providerSessionId: preparedSession.sessionId,

@@ -1,3 +1,8 @@
+import { decodeGrokTranscriptLine } from '../native-chat/transcript-line-decoders'
+import { selectedTranscriptLines } from './selected-transcript-lines'
+import { admitTranscriptPath } from '../native-chat/transcript-path-admission'
+import { readNodeReadableTextWithinLimit } from '../../shared/node-readable-text'
+import { SELECTED_TRANSCRIPT_MAX_BYTES } from '../../shared/ai-vault-selected-session'
 import { openTranscriptReadStream, wslGatedReadFile } from '../native-chat/wsl-transcript-fs-access'
 import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
 import { dirname, join } from 'node:path'
@@ -42,10 +47,22 @@ export async function parseGrokSessionFile(
   if (!record) {
     return null
   }
-  const info = asRecord(record.info)
-  const sessionId = extractString(info?.id) ?? sessionIdFromFileName(dirname(file.path))
+  const sessionId = grokRecordedSessionId(record) ?? sessionIdFromFileName(dirname(file.path))
   const accumulator = createAccumulator({ agent: 'grok', file, sessionId, messages })
-  accumulator.cwd = extractString(info?.cwd)
+  applyGrokSessionMetadata(accumulator, record)
+  await consumeGrokChatHistory(accumulator, dirname(file.path))
+  return finalizeSession(accumulator, platform)
+}
+
+function grokRecordedSessionId(record: Record<string, unknown>): string | null {
+  return extractString(asRecord(record.info)?.id)
+}
+
+function applyGrokSessionMetadata(
+  accumulator: SessionAccumulator,
+  record: Record<string, unknown>
+): void {
+  accumulator.cwd = extractString(asRecord(record.info)?.cwd)
   accumulator.title =
     normalizeTitleText(extractString(record.generated_title) ?? '') ??
     normalizeTitleText(extractString(record.session_summary) ?? '')
@@ -56,8 +73,59 @@ export async function parseGrokSessionFile(
   updateTimeline(accumulator, extractString(record.created_at))
   updateTimeline(accumulator, extractString(record.updated_at))
   updateTimeline(accumulator, extractString(record.last_active_at))
-  await consumeGrokChatHistory(accumulator, dirname(file.path))
-  return finalizeSession(accumulator, platform)
+}
+
+export async function parseSelectedGrokChatHistory(
+  file: FileWithMtime,
+  providerSessionId: string,
+  accountHomePath: string,
+  signal?: AbortSignal
+): Promise<AiVaultSession | null> {
+  const accumulator = createAccumulator({ agent: 'grok', file, sessionId: providerSessionId })
+  for await (const line of selectedTranscriptLines(file.path, { signal })) {
+    const message = decodeGrokTranscriptLine(line, String(accumulator.messageCount))
+    if (message?.role !== 'user' && message?.role !== 'assistant') {
+      continue
+    }
+    accumulator.messageCount++
+    const text = message.blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+    addPreviewMessage(accumulator, { role: message.role, text, timestamp: message.timestamp })
+  }
+  if (!accumulator.messageCount) {
+    return null
+  }
+  const admitted = await admitTranscriptPath(
+    join(accountHomePath, 'sessions'),
+    join(dirname(file.path), 'summary.json')
+  )
+  signal?.throwIfAborted()
+  if (!admitted) {
+    throw new Error('The conversation metadata is outside its account.')
+  }
+  const stream = openTranscriptReadStream(admitted.path, { encoding: 'utf-8' }, 'exact', signal)
+  let record: Record<string, unknown> | null
+  try {
+    record = asRecord(
+      JSON.parse(await readNodeReadableTextWithinLimit(stream, SELECTED_TRANSCRIPT_MAX_BYTES))
+    )
+  } finally {
+    stream.destroy()
+  }
+  signal?.throwIfAborted()
+  if (!record) {
+    throw new Error('Conversation metadata could not be read.')
+  }
+  const recordedId = grokRecordedSessionId(record)
+  if (recordedId && recordedId !== providerSessionId) {
+    throw new Error('Conversation metadata names a different session.')
+  }
+  const messageCount = accumulator.messageCount
+  applyGrokSessionMetadata(accumulator, record)
+  accumulator.messageCount = messageCount
+  return finalizeSession(accumulator, process.platform)
 }
 
 async function consumeGrokChatHistory(

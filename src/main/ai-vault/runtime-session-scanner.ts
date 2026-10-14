@@ -18,6 +18,7 @@ import type {
 } from '../../shared/ai-vault-session-title'
 import { parseAiVaultListResult } from './session-list-result-validation'
 import { parseAiVaultSessionTitlesResult } from './session-title-result-validation'
+import { isGatedOffWslHost } from '../wsl/wsl-host-gate'
 
 export type RuntimeAiVaultHostInfo = {
   environmentId: string
@@ -38,10 +39,12 @@ const aiVaultPrepareSessionResumeResultSchema = z.object({
 export function getSavedRuntimeAiVaultHostInfos(
   userDataPath: string
 ): readonly RuntimeAiVaultHostInfo[] {
-  return listEnvironments(userDataPath).map((environment) => ({
-    environmentId: environment.id,
-    executionHostId: toRuntimeExecutionHostId(environment.id)
-  }))
+  return listEnvironments(userDataPath)
+    .filter((environment) => !isGatedOffWslHost(environment))
+    .map((environment) => ({
+      environmentId: environment.id,
+      executionHostId: toRuntimeExecutionHostId(environment.id)
+    }))
 }
 
 export async function scanRuntimeAiVaultSessions(
@@ -137,15 +140,29 @@ export async function resolveRuntimeAiVaultSessionTitles(
 export async function prepareRuntimeAiVaultSessionResume(
   userDataPath: string,
   environmentId: string,
-  args: AiVaultPrepareSessionResumeArgs
+  args: AiVaultPrepareSessionResumeArgs,
+  options?: { signal?: AbortSignal; expectedEnvironmentPairingRevision?: number }
 ): Promise<AiVaultPrepareSessionResumeResult> {
+  const { requestContext, ...request } = args
   const response = await callRuntimeEnvironment(
     userDataPath,
     environmentId,
     'aiVault.prepareSessionResume',
-    args
+    request,
+    undefined,
+    options?.expectedEnvironmentPairingRevision ??
+      requestContext?.expectedEnvironmentPairingRevision,
+    undefined,
+    options
   )
   if (response.ok !== true) {
+    if (
+      response.error.code === 'method_not_found' &&
+      response.error.message === 'Unknown method: aiVault.prepareSessionResume'
+    ) {
+      // Why: Electron drops custom error fields; this exact message preserves the host's verdict.
+      throw new Error('aiVault.prepareSessionResume: method_not_found')
+    }
     throw new Error(response.error.message)
   }
   const parsed = aiVaultPrepareSessionResumeResultSchema.safeParse(response.result)

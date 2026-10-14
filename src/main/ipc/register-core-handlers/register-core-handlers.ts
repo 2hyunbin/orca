@@ -23,7 +23,11 @@ import { registerStatsHandlers } from '../stats'
 import { registerMemoryHandlers } from '../memory'
 import { registerRateLimitHandlers } from '../rate-limits'
 import { registerRuntimeHandlers } from '../runtime'
-import { registerRuntimeEnvironmentHandlers } from '../runtime-environments'
+import {
+  invalidateRuntimeEnvironmentTransport,
+  registerRuntimeEnvironmentHandlers
+} from '../runtime-environments'
+import { registerWslHostHandlers } from '../wsl-host-handlers'
 import { registerEphemeralVmHandlers } from '../ephemeral-vm'
 import { registerAiVaultHandlers } from '../ai-vault'
 import { registerAiVaultSearchHandlers } from '../ai-vault-search'
@@ -242,6 +246,11 @@ export function registerCoreHandlers(
   registerFilesystemWatcherHandlers()
   registerRuntimeHandlers(runtime)
   registerRuntimeEnvironmentHandlers(store)
+  registerWslHostHandlers({
+    store,
+    getUserDataPath: () => app.getPath('userData'),
+    invalidateTransport: invalidateRuntimeEnvironmentTransport
+  })
   registerEphemeralVmHandlers(store, pluginService)
   // Session history and terminal resume are not chats; a refused host leaves nothing to check.
   const ensureStructuredSessionOwnership = () =>
@@ -251,8 +260,12 @@ export function registerCoreHandlers(
       callRuntimeSessionSearch(app.getPath('userData'), environmentId, method, params),
     ensureStructuredSessionOwnership
   })
-  registerAiVaultSelectedSessionHandlers(runtime, app.getPath('userData'))
+  const selectedRequestCancellations = registerAiVaultSelectedSessionHandlers(
+    runtime,
+    app.getPath('userData')
+  )
   registerAiVaultHandlers({
+    selectedRequestCancellations,
     ensureStructuredSessionOwnership,
     getAdditionalCodexHomePaths: lifecycleOptions.getAdditionalAiVaultCodexHomePaths,
     prepareSessionResume: lifecycleOptions.prepareAiVaultSessionResume,
@@ -262,8 +275,8 @@ export function registerCoreHandlers(
       scanRuntimeAiVaultSessions(app.getPath('userData'), environmentId, args, options),
     resolveRuntimeAiVaultSessionTitles: async (environmentId, args) =>
       resolveRuntimeAiVaultSessionTitles(app.getPath('userData'), environmentId, args),
-    prepareRuntimeSessionResume: async (environmentId, args) =>
-      prepareRuntimeAiVaultSessionResume(app.getPath('userData'), environmentId, args)
+    prepareRuntimeSessionResume: async (environmentId, args, options) =>
+      prepareRuntimeAiVaultSessionResume(app.getPath('userData'), environmentId, args, options)
   })
   registerNativeChatHandlers()
   registerClipboardHandlers(store)

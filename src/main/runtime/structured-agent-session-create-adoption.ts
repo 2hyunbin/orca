@@ -4,6 +4,11 @@ import type { SelectedCliSessionSource } from '../../shared/ai-vault-selected-se
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { resolveSelectedCliTranscript } from '../native-chat/selected-cli-transcript'
 import { withSelectedSessionDeadline } from '../ai-vault/selected-session-deadline'
+import {
+  adoptsCliConversations,
+  CLI_CONVERSATION_ADOPTING_AGENTS
+} from '../../shared/structured-agent-cli-conversation-adoption'
+import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import { agentSessionExecutionLocationsEqual } from '../../shared/agent-session-record'
@@ -70,11 +75,13 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
   transcriptImport: StructuredAgentTranscriptImport
   providerSessionId: string
   selfSessionId: string
-  selectedAccountHomePath: string
   selectedSource?: SelectedCliSessionSource
   sourceRows?: readonly AgentStatusIpcPayload[]
   sourceCwd?: string | null
   prepareSessionResume?: AiVaultSessionResumePreparation
+  selectedAccountHome: AgentSessionAccountHome
+  launchEnv: NodeJS.ProcessEnv
+  workspaceCwd: string
 }) {
   const conflict = input.host
     ? findConflictingStructuredAdoption({
@@ -90,7 +97,11 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
   const source = input.selectedSource
   if (source) {
     const agent = input.agent
-    if ((agent !== 'claude' && agent !== 'codex') || !input.sourceCwd) {
+    if (
+      !adoptsCliConversations(agent) ||
+      CLI_CONVERSATION_ADOPTING_AGENTS[agent] !== agent ||
+      !input.sourceCwd
+    ) {
       throw new Error('The source conversation is unavailable on this host.')
     }
     return withSelectedSessionDeadline(async (signal) => {
@@ -99,8 +110,9 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
         providerSessionId: input.providerSessionId,
         source,
         rows: input.sourceRows ?? [],
-        cwd: input.sourceCwd ?? '',
-        selectedAccountHomePath: input.selectedAccountHomePath,
+        workspaceCwd: input.sourceCwd ?? '',
+        launchEnv: input.launchEnv,
+        selectedAccountHome: input.selectedAccountHome,
         settings: input.settings,
         signal
       })
@@ -117,6 +129,8 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
   return resolveStructuredAgentSessionAdoption({
     providerSessionId: input.providerSessionId,
     candidateAccountHomes: input.transcriptImport.accountHomeCandidates(input),
-    resolveTranscript: input.transcriptImport.findTranscript
+    resolveTranscript: input.transcriptImport.findTranscript,
+    launchEnv: input.launchEnv,
+    workspaceCwd: input.workspaceCwd
   })
 }

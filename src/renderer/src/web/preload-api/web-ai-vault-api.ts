@@ -1,13 +1,13 @@
-import { resolveWebSelectedSession, cancelWebSelectedSession } from './web-selected-session'
+import {
+  resolveWebSelectedSession,
+  cancelWebSelectedSession,
+  prepareWebAiVaultSessionResume
+} from './web-selected-session'
 import {
   createSessionSearchClient,
   unavailableSessionSearchStatus
 } from '../../../../shared/ai-vault-search-client'
 import type { PreloadApi } from '../../../../preload/api-types'
-import type {
-  AiVaultPrepareSessionResumeArgs,
-  AiVaultPrepareSessionResumeResult
-} from '../../../../shared/ai-vault-resume-preparation'
 import type { AiVaultDeleteSessionArgs } from '../../../../shared/ai-vault-session-deletion'
 import type {
   AiVaultSessionTitlesArgs,
@@ -85,8 +85,7 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
     // settles on its own timeout. The renderer's refreshId guard already drops
     // the late result; this only means web pays for a scan nobody reads.
     cancelListSessions: () => Promise.resolve(),
-    prepareSessionResume: (args: AiVaultPrepareSessionResumeArgs) =>
-      callRuntimeResult<AiVaultPrepareSessionResumeResult>('aiVault.prepareSessionResume', args),
+    prepareSessionResume: prepareWebAiVaultSessionResume,
     // Why: no server-side RPC for subagent transcript listing yet, so report an empty (not erroring) result.
     listSubagentSessions: () => Promise.resolve({ sessions: [], issues: [] }),
     // Why: full first-prompt re-parse is local-FS only; web/runtime falls back to preview text.

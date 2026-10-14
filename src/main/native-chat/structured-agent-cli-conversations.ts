@@ -1,7 +1,15 @@
+import { isWslUncPath } from '../../shared/wsl-paths'
+import type { AiVaultSessionLaunchContext } from '../../shared/ai-vault-selected-session'
+import { findSelectedTranscriptFile } from './selected-transcript-path'
+import { admitTranscriptPath } from './transcript-path-admission'
 import type { SelectedTranscriptLookup } from './selected-transcript-path'
 // How a structured agent's chats meet the conversations its own CLI records: adopting one into a new
 // chat, and owning the Session History rows a chat's conversation shows as.
 
+import {
+  isLegacyAgentSessionAccountHome,
+  type AgentSessionAccountHome
+} from '../../shared/agent-session-account-home'
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import type { AiVaultAgent } from '../../shared/ai-vault-types'
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
@@ -17,13 +25,96 @@ export type StructuredAgentTranscriptImport = {
   /** Recognised account homes, most-preferred first; the first that holds the transcript wins. */
   accountHomeCandidates: (input: {
     settings: StructuredAgentTranscriptImportSettings
+    selectedAccountHome: AgentSessionAccountHome
+  }) => AgentSessionAccountHome[]
+  admitTranscriptPath?: (input: {
+    accountHome: AgentSessionAccountHome
+    transcriptPath: string
+    launchEnv: NodeJS.ProcessEnv
+    workspaceCwd: string
+  }) => Promise<string | null>
+  readSelectedSession: (input: {
+    providerSessionId: string
+    transcriptPath: string
+    accountHome: AgentSessionAccountHome
+    workspaceCwd: string
+    signal: AbortSignal
+  }) => Promise<AiVaultSessionLaunchContext | null>
+  /** Where the transcript is (its file, or OpenCode's database); null when the home lacks it. */
+  findTranscript: (input: {
+    providerSessionId: string
+    accountHome: AgentSessionAccountHome
+    /** The execution host's effective agent environment before account binding. */
+    launchEnv: NodeJS.ProcessEnv
+    workspaceCwd: string
+    selected?: SelectedTranscriptLookup
+  }) => Promise<string | null>
+}
+
+/** The import of an agent whose account is one directory, named by the chat's own variable. */
+export function directoryTranscriptImport(directories: {
+  transcriptRoot: (input: {
+    accountHomePath: string
+    launchEnv: NodeJS.ProcessEnv
+  }) => string | null
+  readSelectedSession: StructuredAgentTranscriptImport['readSelectedSession']
+  accountHomeCandidates: (input: {
+    settings: StructuredAgentTranscriptImportSettings
     selectedAccountHomePath: string
   }) => string[]
   findTranscript: (input: {
     providerSessionId: string
     accountHomePath: string
+    launchEnv: NodeJS.ProcessEnv
+    workspaceCwd: string
     selected?: SelectedTranscriptLookup
   }) => Promise<string | null>
+}): StructuredAgentTranscriptImport {
+  return {
+    readSelectedSession: directories.readSelectedSession,
+    admitTranscriptPath: async ({ accountHome, transcriptPath, launchEnv }) => {
+      if (!isLegacyAgentSessionAccountHome(accountHome)) {
+        return null
+      }
+      const root = directories.transcriptRoot({ accountHomePath: accountHome.path, launchEnv })
+      return root ? ((await admitTranscriptPath(root, transcriptPath))?.path ?? null) : null
+    },
+    accountHomeCandidates: ({ settings, selectedAccountHome }) =>
+      isLegacyAgentSessionAccountHome(selectedAccountHome)
+        ? directories
+            .accountHomeCandidates({ settings, selectedAccountHomePath: selectedAccountHome.path })
+            .map((path) => path.trim())
+            .filter((path) => path.length > 0)
+            .map((path) => ({ variable: selectedAccountHome.variable, path }))
+        : [],
+    findTranscript: async ({
+      providerSessionId,
+      accountHome,
+      launchEnv,
+      workspaceCwd,
+      selected
+    }) => {
+      if (!isLegacyAgentSessionAccountHome(accountHome)) {
+        return null
+      }
+      const root =
+        selected && directories.transcriptRoot({ accountHomePath: accountHome.path, launchEnv })
+      if (root && isWslUncPath(root)) {
+        throw new Error('This conversation cannot be resumed on this host.')
+      }
+      const exact = root && selected ? await findSelectedTranscriptFile(root, selected) : null
+      return (
+        exact ??
+        directories.findTranscript({
+          providerSessionId,
+          accountHomePath: accountHome.path,
+          launchEnv,
+          workspaceCwd,
+          selected
+        })
+      )
+    }
+  }
 }
 
 /** A terminal resume's target: null when it may pick any conversation (`--continue`, a bare flag). */

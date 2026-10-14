@@ -19,7 +19,8 @@ import type { AiVaultAgent, AiVaultSession } from '../../../../shared/ai-vault-t
 import {
   dropDeletedSshResumeCwd,
   prepareAiVaultSessionForFork,
-  prepareAiVaultSessionForResume
+  prepareAiVaultSessionForResume,
+  prepareAiVaultSessionForTerminalResume
 } from '@/lib/ai-vault-session-resume-preparation'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { translate } from '@/i18n/i18n'
@@ -28,7 +29,8 @@ import type { AiVaultSessionResumeTargetState } from './ai-vault-session-resume'
 import { prepareAiVaultSessionContinuation } from './ai-vault-session-continuation'
 import type { AgentSessionContinuationRequest } from '@/lib/agent-session-continuation'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
-import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
+import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
+import { describeAiVaultResumeFailure } from '@/lib/ai-vault-resume-refusal'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { resumeAiVaultSessionInNewChat } from './ai-vault-session-resume-in-chat-launch'
 import { resolveAiVaultTargetWorkspacePath } from './ai-vault-session-launch-target'
@@ -84,7 +86,7 @@ export function useAiVaultSessionLaunchActions({
           )
         )
       } catch (error) {
-        notifyAiVaultSessionPreparationFailure(error)
+        notifyAiVaultSessionPreparationFailure(error, session.agent)
       }
     },
     [buildResumeCommand]
@@ -116,10 +118,14 @@ export function useAiVaultSessionLaunchActions({
         void activateAiVaultStructuredSession(session)
         return
       }
-      void launchInTerminal(session, targetWorktreeId, (worktreeId) =>
-        prepareAiVaultSessionForResume(session)
-          .then(dropDeletedSshResumeCwd)
-          .then((preparedSession) => buildResumeStartup(preparedSession, worktreeId))
+      void launchInTerminal(
+        session,
+        targetWorktreeId,
+        (worktreeId) =>
+          prepareAiVaultSessionForTerminalResume(session)
+            .then(dropDeletedSshResumeCwd)
+            .then((preparedSession) => buildResumeStartup(preparedSession, worktreeId)),
+        (message) => describeAiVaultResumeFailure(new Error(message), session.agent)
       )
     },
     [buildResumeStartup, launchInTerminal]
@@ -136,7 +142,11 @@ export function useAiVaultSessionLaunchActions({
         const startup = buildAiVaultForkStartupForWorktree({
           state: useAppStore.getState(),
           worktreeId,
-          session: await prepareAiVaultSessionForFork(session).then(dropDeletedSshResumeCwd),
+          session: await (
+            operation
+              ? prepareAiVaultSessionForFork(session, operation)
+              : prepareAiVaultSessionForFork(session)
+          ).then(dropDeletedSshResumeCwd),
           commandOverride: agentCmdOverrides?.[session.agent]
         })
         if (!startup) {
@@ -166,7 +176,7 @@ export function useAiVaultSessionLaunchActions({
       targetWorktreeId?: string,
       operation?: AiVaultSurfaceSwitchOperation
     ): Promise<void> => {
-      if (!isAgentSessionHandleProvider(session.agent)) {
+      if (!adoptsCliConversations(session.agent)) {
         return
       }
       const worktreeId = targetWorktreeId ?? activeWorktreeId ?? activeWorktree?.id ?? null

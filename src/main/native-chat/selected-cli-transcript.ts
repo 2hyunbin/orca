@@ -1,5 +1,9 @@
-import { join } from 'node:path'
-import { admitTranscriptPath } from './transcript-path-admission'
+import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import {
+  adoptsCliConversations,
+  CLI_CONVERSATION_ADOPTING_AGENTS,
+  type CliConversationAdoptingAgent
+} from '../../shared/structured-agent-cli-conversation-adoption'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import type { SelectedCliSessionSource } from '../../shared/ai-vault-selected-session'
 import type { StructuredAgentTranscriptImportSettings } from './structured-agent-cli-conversations'
@@ -9,7 +13,7 @@ import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 import { isWslUncPath } from '../../shared/wsl-paths'
 
 export function selectedCliSourceStatus(input: {
-  agent: 'claude' | 'codex'
+  agent: CliConversationAdoptingAgent
   providerSessionId: string
   source: SelectedCliSessionSource
   rows: readonly AgentStatusIpcPayload[]
@@ -18,7 +22,8 @@ export function selectedCliSourceStatus(input: {
     (candidate) =>
       candidate.paneKey === input.source.paneKey &&
       candidate.worktreeId === input.source.workspaceId &&
-      candidate.agentType === input.agent &&
+      adoptsCliConversations(candidate.agentType) &&
+      CLI_CONVERSATION_ADOPTING_AGENTS[candidate.agentType] === input.agent &&
       candidate.providerSession?.id === input.providerSessionId &&
       !candidate.connectionId &&
       !candidate.structuredHost
@@ -32,64 +37,66 @@ export function selectedCliSourceStatus(input: {
   return row
 }
 
-export async function resolveSelectedCliTranscript(input: {
-  agent: 'claude' | 'codex'
+type SelectedAccountTranscriptInput = {
+  agent: CliConversationAdoptingAgent
   providerSessionId: string
-  source: SelectedCliSessionSource
-  rows: readonly AgentStatusIpcPayload[]
-  selectedAccountHomePath: string
+  selectedAccountHome: AgentSessionAccountHome
   settings: StructuredAgentTranscriptImportSettings
-  cwd: string
-  signal?: AbortSignal
-}) {
-  throwIfSignalAborted(input.signal)
-  const row = selectedCliSourceStatus(input)
-  const transcriptPath = row.providerSession?.transcriptPath
-  return resolveSelectedAccountTranscript({ ...input, transcriptPath })
-}
-
-export async function resolveSelectedAccountTranscript(input: {
-  agent: 'claude' | 'codex'
-  providerSessionId: string
-  selectedAccountHomePath: string
-  settings: StructuredAgentTranscriptImportSettings
-  cwd: string
+  launchEnv: NodeJS.ProcessEnv
+  workspaceCwd: string
   transcriptPath?: string
   signal?: AbortSignal
-}) {
+}
+
+export async function resolveSelectedCliTranscript(
+  input: SelectedAccountTranscriptInput & {
+    source: SelectedCliSessionSource
+    rows: readonly AgentStatusIpcPayload[]
+  }
+) {
+  throwIfSignalAborted(input.signal)
+  const row = selectedCliSourceStatus(input)
+  return resolveSelectedAccountTranscript({
+    ...input,
+    transcriptPath: row.providerSession?.transcriptPath
+  })
+}
+
+export async function resolveSelectedAccountTranscript(input: SelectedAccountTranscriptInput) {
   const importer = structuredAgentRuntimeRegistration(input.agent)?.transcriptImport
   if (!importer) {
     throw new Error('Conversation import is unavailable.')
   }
-  let homes = [...new Set(importer.accountHomeCandidates(input))]
-  if (input.transcriptPath) {
+  let homes = importer.accountHomeCandidates(input)
+  if (input.transcriptPath && importer.admitTranscriptPath) {
     const attested = input.transcriptPath
     const admitted = await Promise.all(
-      homes.map(async (home) => ({
-        home,
-        path: await admitTranscriptPath(
-          join(home, input.agent === 'claude' ? 'projects' : 'sessions'),
-          attested
-        )
+      homes.map(async (accountHome) => ({
+        accountHome,
+        path: await importer.admitTranscriptPath?.({
+          ...input,
+          accountHome,
+          transcriptPath: attested
+        })
       }))
     )
     throwIfSignalAborted(input.signal)
     homes = admitted
-      .filter((candidate) => candidate.path !== null)
-      .map((candidate) => candidate.home)
+      .filter((candidate) => candidate.path != null)
+      .map((candidate) => candidate.accountHome)
     if (!homes.length) {
       throw new Error('The conversation account is not available on this host.')
     }
   }
   return resolveStructuredAgentSessionAdoption({
-    providerSessionId: input.providerSessionId,
+    ...input,
     candidateAccountHomes: homes,
     resolveTranscript: (args) => {
       throwIfSignalAborted(input.signal)
       return importer.findTranscript({
         ...args,
         selected: {
-          cwd: input.cwd,
+          cwd: input.workspaceCwd,
           transcriptPath: input.transcriptPath,
           signal: input.signal
         }

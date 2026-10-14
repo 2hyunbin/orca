@@ -1,3 +1,4 @@
+import type { AiVaultResolveSessionArgs } from './ai-vault-selected-session'
 import type { AiVaultSession } from './ai-vault-types'
 
 export type AiVaultPrepareSessionResumeArgs = Pick<
@@ -8,6 +9,11 @@ export type AiVaultPrepareSessionResumeArgs = Pick<
     /** A fork only reads the conversation, so a native chat that owns it does not refuse it.
      *  Older hosts drop the field and refuse as for a resume. */
     fork?: boolean
+    /** Local adapter context; omitted from the host RPC payload. */
+    requestContext?: Pick<
+      AiVaultResolveSessionArgs,
+      'requestToken' | 'expectedEnvironmentPairingRevision'
+    >
   }
 
 export type AiVaultPrepareSessionResumeResult = {

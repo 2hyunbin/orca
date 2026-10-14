@@ -16,7 +16,10 @@ import {
 } from '../../shared/ai-vault-selected-session-contract'
 import { LOCAL_EXECUTION_HOST_ID, parseRoutableExecutionHostId } from '../../shared/execution-host'
 import { resolveEnvironment } from '../../shared/runtime-environment-store'
-import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
+import {
+  createSenderScopedRequestCancellations,
+  type SenderScopedRequestCancellations
+} from './sender-scoped-request-cancellation'
 import {
   callRuntimeEnvironment,
   getRuntimeEnvironmentStatus
@@ -96,7 +99,7 @@ export async function resolveSelectedSessionByHost(
 export function registerAiVaultSelectedSessionHandlers(
   runtime: OrcaRuntimeService,
   userDataPath: string
-): void {
+): SenderScopedRequestCancellations {
   const cancellations = createSenderScopedRequestCancellations()
   ipcMain.handle('aiVault:resolveSession', async (event, args: AiVaultResolveSessionArgs) => {
     const token =
@@ -125,4 +128,5 @@ export function registerAiVaultSelectedSessionHandlers(
       cancellations.cancel(event, args.requestToken)
     }
   })
+  return cancellations
 }

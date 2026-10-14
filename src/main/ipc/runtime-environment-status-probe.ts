@@ -64,7 +64,8 @@ export async function getRuntimeEnvironmentStatus(
   return attachRemoteControlDiagnostics(
     withTailscaleHintForResponse(
       response,
-      getPreferredPairedRuntimeConnection(environment).endpoint
+      getPreferredPairedRuntimeConnection(environment).endpoint,
+      environment
     ),
     environment.id
   )

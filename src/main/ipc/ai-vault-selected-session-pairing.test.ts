@@ -134,3 +134,51 @@ it.each([true, false])(
     expect(mocks.send).toHaveBeenCalledTimes(2)
   }
 )
+
+it('the selected preparation stage uses the original pairing, cancellation and clean host payload', async () => {
+  const { prepareRuntimeAiVaultSessionResume } = await import('../ai-vault/runtime-session-scanner')
+  const request = {
+    agent: 'codex',
+    sessionId: 'provider-1',
+    filePath: '/saved/rollout.jsonl',
+    codexHome: '/saved/home',
+    executionHostId: 'runtime:server-1',
+    fork: true,
+    requestContext: { requestToken: 'pairing', expectedEnvironmentPairingRevision: 1 }
+  } as const
+  const held = deferred<void>()
+  const blocker = queue.enqueue('server-1', 'repo.list', () => held.promise)
+  const controller = new AbortController()
+  const pending = prepareRuntimeAiVaultSessionResume('/profile', 'server-1', request, {
+    signal: controller.signal
+  })
+  const rejection = expect(pending).rejects.toThrow()
+  controller.abort()
+  await rejection
+  expect(mocks.send).not.toHaveBeenCalled()
+  environment = { ...environment, pairingRevision: 2 }
+  held.resolve()
+  await blocker
+  await expect(prepareRuntimeAiVaultSessionResume('/profile', 'server-1', request)).rejects.toThrow(
+    'pairing changed'
+  )
+  expect(mocks.send).not.toHaveBeenCalled()
+  environment = { ...environment, pairingRevision: 1 }
+  mocks.send.mockResolvedValue({
+    id: 'prepare',
+    ok: true,
+    result: { useRealCodexHome: false },
+    _meta: { runtimeId: 'runtime-1' }
+  })
+  await expect(
+    prepareRuntimeAiVaultSessionResume('/profile', 'server-1', request)
+  ).resolves.toEqual({ useRealCodexHome: false })
+  expect(mocks.send.mock.calls[0]?.[2]).toEqual({
+    agent: 'codex',
+    sessionId: 'provider-1',
+    filePath: '/saved/rollout.jsonl',
+    codexHome: '/saved/home',
+    executionHostId: 'runtime:server-1',
+    fork: true
+  })
+})

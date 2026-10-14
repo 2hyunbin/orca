@@ -63,7 +63,11 @@ const runtime: SelectedSessionRuntime = {
   ensureStructuredAgentSessionHost: async () => {},
   getAgentProviderSessionRows: () => rows,
   resolveStructuredAgentAccountHome: async () => ({ variable: 'CLAUDE_CONFIG_DIR', path: root }),
-  resolveStructuredAgentSessionLocalWorkspacePath: async () => '/repo'
+  resolveStructuredAgentSessionLocalWorkspacePath: async () => '/repo',
+  resolveStructuredAgentTranscriptImportContext: async () => ({
+    workspaceCwd: '/repo',
+    launchEnv: {}
+  })
 }
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'selected-conversation-'))
@@ -168,12 +172,14 @@ it('selected CLI and admission share exact attested path/account, retaining save
       transcriptImport: importer,
       providerSessionId: 'provider-1',
       selfSessionId: 'new-chat',
-      selectedAccountHomePath: root,
+      selectedAccountHome: { variable: 'CLAUDE_CONFIG_DIR', path: root },
+      launchEnv: {},
+      workspaceCwd: '/repo',
       selectedSource: source,
       sourceRows: rows,
       sourceCwd: '/repo'
     })
-  ).toEqual({ accountHomePath: root, transcriptPath: file })
+  ).toEqual({ accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: root }, transcriptPath: file })
   await writeFile(file, 'invalid saved history')
   await expect(resolveSelectedSessionOnHost(source, runtime, {})).rejects.toThrow(
     'could not be read'
@@ -213,12 +219,16 @@ it('attested account wins over another account alias until existing host prepara
   const resolved = await resolveSelectedAccountTranscript({
     agent: 'codex',
     providerSessionId: 'provider-1',
-    selectedAccountHomePath: selectedHome,
+    selectedAccountHome: { variable: 'CODEX_HOME', path: selectedHome },
+    launchEnv: {},
     transcriptPath: sourcePath,
-    cwd: '/repo',
+    workspaceCwd: '/repo',
     settings: { codexManagedAccounts: [{ managedHomePath: sourceHome }] }
   })
-  expect(resolved).toEqual({ accountHomePath: sourceHome, transcriptPath: sourcePath })
+  expect(resolved).toEqual({
+    accountHome: { variable: 'CODEX_HOME', path: sourceHome },
+    transcriptPath: sourcePath
+  })
   const prepare = vi.fn(async () => ({
     useRealCodexHome: false,
     substituteCodexHome: selectedHome
@@ -230,7 +240,10 @@ it('attested account wins over another account alias until existing host prepara
       prepare,
       new AbortController().signal
     )
-  ).toEqual({ accountHomePath: selectedHome, transcriptPath: targetPath })
+  ).toEqual({
+    accountHome: { variable: 'CODEX_HOME', path: selectedHome },
+    transcriptPath: targetPath
+  })
   expect(prepare).toHaveBeenCalledOnce()
 })
 
@@ -299,12 +312,17 @@ it('finds and admits a small relocated transcript beyond the former directory qu
       transcriptImport: importer,
       providerSessionId: 'provider-1',
       selfSessionId: 'new-chat',
-      selectedAccountHomePath: root,
+      selectedAccountHome: { variable: 'CLAUDE_CONFIG_DIR', path: root },
+      launchEnv: {},
+      workspaceCwd: '/repo',
       selectedSource: source,
       sourceRows: rows,
       sourceCwd: '/repo'
     })
-  ).resolves.toEqual({ accountHomePath: root, transcriptPath: file })
+  ).resolves.toEqual({
+    accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: root },
+    transcriptPath: file
+  })
   expect(mocks.list).not.toHaveBeenCalled()
 })
 
@@ -366,7 +384,9 @@ it('lookup and create reject escaped host paths while retaining an admitted acco
       transcriptImport: importer,
       providerSessionId: source.providerSessionId,
       selfSessionId: 'new-chat',
-      selectedAccountHomePath: home,
+      selectedAccountHome: { variable: 'CLAUDE_CONFIG_DIR', path: home },
+      launchEnv: {},
+      workspaceCwd: '/repo',
       selectedSource: source,
       sourceRows: rows,
       sourceCwd: '/repo'
@@ -382,5 +402,8 @@ it('lookup and create reject escaped host paths while retaining an admitted acco
     status: 'ready',
     session: { filePath: canonical, cwd: '/repo', messageCount: 1 }
   })
-  await expect(admit(valid)).resolves.toEqual({ accountHomePath: home, transcriptPath: canonical })
+  await expect(admit(valid)).resolves.toEqual({
+    accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: home },
+    transcriptPath: canonical
+  })
 })

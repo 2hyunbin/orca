@@ -1,3 +1,4 @@
+import { isLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { join } from 'node:path'
 import { stat } from 'node:fs/promises'
 import type { StructuredAgentSessionAdoption } from './structured-agent-session-history-adoption'
@@ -19,9 +20,10 @@ export async function prepareSelectedCodexAdoption(
 ): Promise<StructuredAgentSessionAdoption> {
   if (
     !prepare ||
+    !isLegacyAgentSessionAccountHome(source.accountHome) ||
     !(
-      isLegacySharedCodexHome(source.accountHomePath) ||
-      isPerAccountManagedCodexHome(source.accountHomePath)
+      isLegacySharedCodexHome(source.accountHome.path) ||
+      isPerAccountManagedCodexHome(source.accountHome.path)
     )
   ) {
     return source
@@ -30,16 +32,16 @@ export async function prepareSelectedCodexAdoption(
     agent: 'codex',
     sessionId: providerSessionId,
     filePath: source.transcriptPath,
-    codexHome: source.accountHomePath,
+    codexHome: source.accountHome.path,
     executionHostId: LOCAL_EXECUTION_HOST_ID
   })
   signal.throwIfAborted()
   const home = result.useRealCodexHome ? getSystemCodexHomePath() : result.substituteCodexHome
-  if (!home || home === source.accountHomePath) {
+  if (!home || home === source.accountHome.path) {
     return source
   }
   const admitted = await admitTranscriptPath(
-    join(source.accountHomePath, 'sessions'),
+    join(source.accountHome.path, 'sessions'),
     source.transcriptPath
   )
   if (!admitted?.relativePath) {
@@ -50,5 +52,5 @@ export async function prepareSelectedCodexAdoption(
     throw new Error('The prepared conversation history is unavailable.')
   }
   signal.throwIfAborted()
-  return { accountHomePath: home, transcriptPath }
+  return { accountHome: { variable: source.accountHome.variable, path: home }, transcriptPath }
 }

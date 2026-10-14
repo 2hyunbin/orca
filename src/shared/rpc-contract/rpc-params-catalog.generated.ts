@@ -21,6 +21,7 @@ import {
 import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata-protocol'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
+import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import {
   PairingGetEndpointsParamsSchema,
   PairingProvisionRelayParamsSchema
@@ -625,6 +626,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.selectCodex': SelectAccountParams,
   'accounts.selectCodexForTarget': SelectCodexAccountForTargetParams,
   'accounts.selectData': SelectDataAccountParams,
+  'accounts.setHostLaunchEnv': HostAccountLaunchEnvParams,
   'accounts.subscribe': null,
   'accounts.unsubscribe': AccountsUnsubscribeParams,
   'agent.launch': AgentLaunch,

@@ -40,16 +40,9 @@ export async function findSelectedTranscriptPath(
   selected: SelectedTranscriptLookup
 ): Promise<string | null> {
   const root = join(accountHome, agent === 'claude' ? 'projects' : 'sessions')
-  const path = selected.transcriptPath
-  if (path) {
-    const admitted = await admitTranscriptPath(root, path)
-    throwIfSignalAborted(selected.signal)
-    if (!admitted) {
-      throw new Error('The conversation path is outside its account.')
-    }
-    if (await fileExists(admitted.path, selected.signal)) {
-      return admitted.path
-    }
+  const exact = await findSelectedTranscriptFile(root, selected)
+  if (exact) {
+    return exact
   }
   if (agent === 'claude') {
     for (const bucket of encodeClaudeProjectPaths(selected.cwd)) {
@@ -68,4 +61,19 @@ export async function findSelectedTranscriptPath(
     },
     selected.signal
   )
+}
+
+export async function findSelectedTranscriptFile(
+  root: string,
+  selected: SelectedTranscriptLookup
+): Promise<string | null> {
+  if (!selected.transcriptPath) {
+    return null
+  }
+  const admitted = await admitTranscriptPath(root, selected.transcriptPath)
+  throwIfSignalAborted(selected.signal)
+  if (!admitted) {
+    throw new Error('The conversation path is outside its account.')
+  }
+  return (await fileExists(admitted.path, selected.signal)) ? admitted.path : null
 }

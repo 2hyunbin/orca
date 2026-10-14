@@ -1,3 +1,4 @@
+import { noteAiVaultScanProgress } from './ai-vault-scan-progress'
 import type { Dirent } from 'node:fs'
 import { opendir } from 'node:fs/promises'
 import { extname, join } from 'node:path'
@@ -73,11 +74,15 @@ export async function forEachSessionFile(
 async function* sessionDirectoryEntries(dirPath: string, options: SessionFileWalkOptions) {
   try {
     if (options.firstMatch && !options.readDirectory && !isWslUncPath(dirPath)) {
-      yield* await opendir(dirPath)
+      const directory = await opendir(dirPath)
+      noteAiVaultScanProgress(options.signal)
+      yield* directory
     } else {
-      yield* options.readDirectory
+      const entries = options.readDirectory
         ? await options.readDirectory(dirPath)
         : await wslGatedReaddir(dirPath, 'scan', options.signal)
+      noteAiVaultScanProgress(options.signal)
+      yield* entries
     }
   } catch (error) {
     options.signal?.throwIfAborted()
