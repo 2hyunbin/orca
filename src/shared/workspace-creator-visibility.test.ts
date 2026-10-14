@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from './folder-workspace-types'
-import type { WorkspaceOwnerProvenance } from './worktree/types'
-import { normalizeWorkspaceCreatorProvenance } from './workspace-creator-provenance'
 import {
   filterFolderWorkspacesFromOtherDevices,
   isWorkspaceOwnedBySomeoneElse
@@ -54,11 +52,13 @@ describe('filterFolderWorkspacesFromOtherDevices', () => {
 
 describe('isWorkspaceOwnedBySomeoneElse', () => {
   const desktopOnServer = new Map([['server', 'desktop']])
-  const phone = (onBehalfOf?: WorkspaceOwnerProvenance) => ({
-    kind: 'paired-device' as const,
-    deviceId: 'phone',
-    ...(onBehalfOf ? { onBehalfOf } : {})
-  })
+  // What resolveRpcWorkspaceCreatorProvenance records for each creator.
+  const created = {
+    byThisHostOrItsPhone: { kind: 'host' },
+    byPairedDesktopOrItsRelayedPhone: { kind: 'paired-device', deviceId: 'desktop' },
+    byAnotherClientOrItsPhone: { kind: 'paired-device', deviceId: 'laptop' },
+    byLegacyPhone: { kind: 'paired-device', deviceId: 'phone' }
+  } as const
 
   function hidden(creatorProvenance: unknown, runtimeOwnerEnvironmentId?: string): boolean {
     return isWorkspaceOwnedBySomeoneElse(
@@ -67,54 +67,27 @@ describe('isWorkspaceOwnedBySomeoneElse', () => {
     )
   }
 
-  it("keeps this desktop's own rows and its phones' rows", () => {
-    expect(hidden({ kind: 'host' })).toBe(false)
-    expect(hidden(phone({ kind: 'host' }))).toBe(false)
+  it("keeps a local row this desktop or its phone created, and hides other clients'", () => {
+    expect(hidden(created.byThisHostOrItsPhone)).toBe(false)
+    expect(hidden(created.byAnotherClientOrItsPhone)).toBe(true)
   })
 
-  it('hides a local row another paired client or its phone created', () => {
-    expect(hidden({ kind: 'paired-device', deviceId: 'laptop' })).toBe(true)
-    expect(hidden(phone({ kind: 'paired-device', deviceId: 'laptop' }))).toBe(true)
-  })
-
-  it('keeps a legacy local phone row hidden: an older host never said whom the phone acted for', () => {
-    expect(hidden(phone())).toBe(true)
+  it('keeps a legacy local phone row hidden: an older host recorded the phone, not its owner', () => {
+    expect(hidden(created.byLegacyPhone)).toBe(true)
   })
 
   it('keeps a server row this desktop or its relayed phone created', () => {
-    expect(hidden({ kind: 'paired-device', deviceId: 'desktop' }, 'server')).toBe(false)
-    expect(hidden(phone({ kind: 'paired-device', deviceId: 'desktop' }), 'server')).toBe(false)
+    expect(hidden(created.byPairedDesktopOrItsRelayedPhone, 'server')).toBe(false)
   })
 
   it('hides a server row another client, its phone, or the server itself created', () => {
-    expect(hidden({ kind: 'paired-device', deviceId: 'laptop' }, 'server')).toBe(true)
-    expect(hidden(phone({ kind: 'paired-device', deviceId: 'laptop' }), 'server')).toBe(true)
-    expect(hidden(phone({ kind: 'host' }), 'server')).toBe(true)
-    expect(hidden({ kind: 'host' }, 'server')).toBe(true)
+    expect(hidden(created.byAnotherClientOrItsPhone, 'server')).toBe(true)
+    expect(hidden(created.byThisHostOrItsPhone, 'server')).toBe(true)
   })
 
   it('keeps rows with no creator, or on a server whose pairing is unknown', () => {
     expect(hidden(undefined)).toBe(false)
     expect(hidden(undefined, 'server')).toBe(false)
-    expect(hidden({ kind: 'paired-device', deviceId: 'laptop' }, 'unpaired')).toBe(false)
-  })
-})
-
-describe('normalizeWorkspaceCreatorProvenance', () => {
-  it('keeps whom a phone acted for and drops a malformed one', () => {
-    expect(
-      normalizeWorkspaceCreatorProvenance({
-        kind: 'paired-device',
-        deviceId: 'phone',
-        onBehalfOf: { kind: 'host', extra: 1 }
-      })
-    ).toEqual({ kind: 'paired-device', deviceId: 'phone', onBehalfOf: { kind: 'host' } })
-    expect(
-      normalizeWorkspaceCreatorProvenance({
-        kind: 'paired-device',
-        deviceId: 'phone',
-        onBehalfOf: { kind: 'paired-device', deviceId: ' ' }
-      })
-    ).toEqual({ kind: 'paired-device', deviceId: 'phone' })
+    expect(hidden(created.byAnotherClientOrItsPhone, 'unpaired')).toBe(false)
   })
 })

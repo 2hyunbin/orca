@@ -45,7 +45,6 @@ function row(
 
 const rows = [
   row('desktop', { kind: 'host' }),
-  row('my-phone', { kind: 'paired-device', deviceId: 'phone', onBehalfOf: { kind: 'host' } }),
   row('laptop', { kind: 'paired-device', deviceId: 'laptop' }),
   row('unknown')
 ]
