@@ -40,22 +40,8 @@ export class RuntimeBrowserCommandsWithListLogicalBrowserTabs extends RuntimeBro
         profileLabel: profile.label
       }
     })
-    // Saved tabs a host with no window starts on first use, listed as the phone lists them. One
-    // is active only while no page runs, as a pageless command then starts it.
-    const running = serverTabs.length + clientTabs.length > 0
-    const savedTabs = (this.host.listServeBrowserTabs?.(worktreeId) ?? []).map((tab) => {
-      const profile =
-        browserSessionRegistry.getProfile(tab.profileId ?? 'default') ??
-        browserSessionRegistry.getDefaultProfile()
-      return {
-        ...tab,
-        active: !running && tab.active,
-        profileId: profile.id,
-        profileLabel: profile.label
-      }
-    })
-    const tabs = [...serverTabs, ...clientTabs, ...savedTabs]
-    if (running && !tabs.some((tab) => tab.active)) {
+    const tabs = [...serverTabs, ...clientTabs]
+    if (tabs.length > 0 && !tabs.some((tab) => tab.active)) {
       tabs[0] = { ...tabs[0]!, active: true }
     }
     return tabs.map((tab, index) => ({ ...tab, index }))

@@ -9,10 +9,20 @@ const mocks = vi.hoisted(() => ({
 
 class MockWebContents extends EventEmitter {
   readonly id: number
+  url = ''
+  title = ''
 
   constructor(id: number) {
     super()
     this.id = id
+  }
+
+  getURL(): string {
+    return this.url
+  }
+
+  getTitle(): string {
+    return this.title
   }
 
   loadURL(): Promise<void> {
@@ -45,7 +55,8 @@ class MockBrowserWindow {
 vi.mock('electron', () => ({ BrowserWindow: mocks.BrowserWindow }))
 vi.mock('./browser-session-registry', () => ({
   browserSessionRegistry: {
-    getDefaultProfile: vi.fn(() => ({ id: 'default', partition: 'persist:orca-browser' }))
+    getDefaultProfile: vi.fn(() => ({ id: 'default', partition: 'persist:orca-browser' })),
+    getProfile: vi.fn((id: string) => ({ id, partition: `persist:orca-browser-${id}` }))
   }
 }))
 
@@ -125,6 +136,40 @@ describe('OffscreenBrowserBackend lifecycle', () => {
     expect(webContents.listenerCount('did-fail-load')).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
     vi.useRealTimers()
+  })
+
+  it('reports a page when it opens and after each committed navigation, so its saved tab follows', async () => {
+    const onPageChanged = vi.fn()
+    const browserManager = {
+      registerOffscreenGuest: vi.fn(registerOffscreenGuestLikeBrowserManager),
+      unregisterGuest: vi.fn()
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: createTab reads only these two BrowserManager members.
+    const backend = new OffscreenBrowserBackend(browserManager as never, { onPageChanged })
+
+    await backend.createTab({
+      browserPageId: 'page-1',
+      url: 'https://example.com/a',
+      worktreeId: 'wt',
+      profileId: 'work',
+      groupId: 'group-2'
+    })
+    const webContents = mocks.windows[0].webContents
+    webContents.url = 'https://example.com/b'
+    webContents.title = 'B'
+    webContents.emit('did-stop-loading')
+
+    expect(onPageChanged.mock.calls.map(([page]) => page)).toEqual([
+      {
+        worktreeId: 'wt',
+        pageId: 'page-1',
+        url: 'https://example.com/a',
+        title: '',
+        profileId: 'work',
+        groupId: 'group-2'
+      },
+      { worktreeId: 'wt', pageId: 'page-1', url: 'https://example.com/b', title: 'B' }
+    ])
   })
 
   // Why the unregister assertion and not just the destroy: a refused id is one the document half

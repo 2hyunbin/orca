@@ -110,21 +110,14 @@ export class RuntimeBrowserCommandsWithBrowserTabList extends RuntimeBrowserComm
         : params.worktree
           ? (await this.host.resolveBrowserWorkspace(params.worktree)).id
           : undefined
-    if (!this.host.getAvailableAuthoritativeWindow()) {
-      await this.host.restoreServeBrowserPage?.(worktreeId, selected.browserPageId)
-    }
     const result = await bridge.tabSwitch(undefined, worktreeId, selected.browserPageId)
-    const switchedWorktreeId =
-      worktreeId ?? browserManager.getWorktreeIdForTab(result.browserPageId) ?? undefined
-    if (!this.host.getAvailableAuthoritativeWindow() && switchedWorktreeId) {
-      this.host.selectServeBrowserTab?.(switchedWorktreeId, result.browserPageId)
-    }
     this.host.getRuntimeBrowserPageRegistry().deactivateGlobal()
     if (worktreeId) {
       this.host.getRuntimeBrowserPageRegistry().deactivateWorkspace(worktreeId)
     }
     // Why: scope focus to the tab's owning worktree; the renderer never yanks the user across worktrees on this signal (see focusBrowserTabInWorktree).
-    const focusWorktreeId = switchedWorktreeId
+    const focusWorktreeId =
+      worktreeId ?? browserManager.getWorktreeIdForTab(result.browserPageId) ?? undefined
     publishSwitchedBrowserSessionTab(this.host, {
       placementKind: 'bridge',
       browserPageId: result.browserPageId,

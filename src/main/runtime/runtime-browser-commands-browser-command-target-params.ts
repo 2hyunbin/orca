@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split declarations.
-import type { BrowserScreencastResult, BrowserTabInfo } from '../../shared/runtime-types'
+import type { BrowserScreencastResult } from '../../shared/runtime-types'
 import type {
   BrowserScreencastFrameBudget,
   BrowserScreencastSession,
@@ -19,7 +19,6 @@ import type { BrowserWindow } from 'electron'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
 import type { RpcBinarySender } from './rpc/rpc-binary-sender'
-import type { ServeBrowserPageState } from './serve-browser-tab-layout'
 
 export type BrowserCommandTargetParams = {
   worktree?: string
@@ -191,16 +190,9 @@ export type RuntimeBrowserCommandHost = {
   notifyHeadlessBrowserSessionTabsChanged?(worktreeId: string): void
   /** True when a runtime-owned session row for that page existed and was retired. */
   retireRuntimeOwnedBrowserSessionTab?(worktreeId: string, browserPageId: string): boolean | void
-  /** Saves a page a host with no window just opened, so a restart lists its tab. */
-  saveServeBrowserTab?(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void
-  /** Starts the page of a saved tab a host with no window has not started; false when none. */
-  restoreServeBrowserPage?(worktreeId: string | undefined, browserPageId: string): Promise<boolean>
-  /** Saved tabs a host with no window has not started; every worktree's when none is named. */
-  listServeBrowserTabs?(worktreeId: string | undefined): BrowserTabInfo[]
-  /** Starts the saved active tab when no page runs, as a window mounts it; false when none. */
-  restoreActiveServeBrowserPage?(worktreeId: string | undefined): Promise<boolean>
-  /** Records a switched-to page's saved tab as the one its worktree shows. */
-  selectServeBrowserTab?(worktreeId: string, browserPageId: string): void
-  /** The worktree of a saved tab whose page has not started, or null. */
-  findServeBrowserTabWorktree?(worktreeId: string | undefined, browserPageId: string): string | null
+  /** With no window, starts a saved tab's page where a window would mount it; false when none. */
+  startSavedBrowserPage?(
+    worktreeId: string | undefined,
+    browserPageId: string | undefined
+  ): Promise<boolean>
 }

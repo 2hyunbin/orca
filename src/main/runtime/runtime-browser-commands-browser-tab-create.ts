@@ -122,18 +122,9 @@ export class RuntimeBrowserCommandsWithBrowserTabCreate extends RuntimeBrowserCo
         url,
         worktreeId,
         profileId: params.profileId,
-        ...(params.page ? { browserPageId: params.page } : {})
+        ...(params.page ? { browserPageId: params.page } : {}),
+        ...(params.targetGroupId ? { groupId: params.targetGroupId } : {})
       })
-      if (worktreeId) {
-        this.host.saveServeBrowserTab?.({
-          worktreeId,
-          pageId: created.browserPageId,
-          url,
-          title: '',
-          ...(params.profileId ? { profileId: params.profileId } : {}),
-          ...(params.targetGroupId ? { groupId: params.targetGroupId } : {})
-        })
-      }
       publishCreatedBrowserSessionTab(this.host, {
         placementKind: 'offscreen',
         browserPageId: created.browserPageId,

@@ -72,7 +72,6 @@ test('a serve browser tab survives a restart and starts when opened', async () =
     await expect
       .poll(async () => browserRows(phone, worktree), { timeout: 30_000 })
       .toEqual([{ id: pageId, url: `${page.url}/next`, title: 'next' }])
-    expect((await listedTabs(cli, worktree)).map((tab) => tab.browserPageId)).toEqual([pageId])
     expect(page.loads.get('/next')).toBe(loadsBeforeOpen)
 
     // Driving it by page id, as an old client's stream does, starts it at that address.

@@ -1,17 +1,16 @@
 // Browser tabs on a host with no window: saved as a window saves its own, and restored as a window
-// restores them, lazily. A saved tab is listed at once; its page starts when something first uses
-// it (a tap, a command, a stream), so a restart opens no pages by itself.
+// restores them, lazily. A saved tab is listed to clients at once; its page starts when something
+// first uses it (a tap, a command), so a restart opens no pages by itself.
 
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   findSavedBrowserPage,
-  withActiveServeBrowserTab,
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
   withServeBrowserPageState,
-  type ServeBrowserPageState
+  type ServeBrowserPage
 } from './serve-browser-tab-layout'
 
 export type RestorableBrowserPage = {
@@ -21,8 +20,7 @@ export type RestorableBrowserPage = {
   url: string
   title: string
   profileId: string | null
-  /** The tab the layout shows for its worktree, as a window mounts it; none outside the scope. */
-  active: boolean
+  worktreeId: string
 }
 
 export class ServeBrowserTabs {
@@ -42,51 +40,20 @@ export class ServeBrowserTabs {
     }
   ) {}
 
-  opened(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void {
-    this.write(page.worktreeId, (hostId, session) =>
-      withOpenedServeBrowserTab(hostId, session, page)
+  /** A page the backend opened or moved: a new page gets a tab, a saved one its new address. */
+  pageChanged(page: ServeBrowserPage): void {
+    this.write(
+      page.worktreeId,
+      (hostId, session) =>
+        withOpenedServeBrowserTab(hostId, session, page) ?? withServeBrowserPageState(session, page)
     )
   }
 
-  navigated(page: ServeBrowserPageState): void {
-    this.write(page.worktreeId, (_hostId, session) => withServeBrowserPageState(session, page))
-  }
-
-  /** A closed page's tab; a page destroyed with the process is not a close. */
-  closed(worktreeId: string, pageId: string): void {
-    this.write(worktreeId, (hostId, session) =>
+  /** A closed page's tab, true when one was saved; a page destroyed with the process is not a close. */
+  closed(worktreeId: string, pageId: string): boolean {
+    return this.write(worktreeId, (hostId, session) =>
       withClosedServeBrowserTab(hostId, session, worktreeId, pageId)
     )
-  }
-
-  /** Saved tabs whose page has not started, each by the page it shows; every worktree's if none. */
-  listRestorable(
-    worktreeId: string | undefined
-  ): (RestorableBrowserPage & { worktreeId: string })[] {
-    if (!this.deps.backend()) {
-      return []
-    }
-    const worktreeIds = worktreeId ? [worktreeId] : [...new Set(this.deps.savedWorktreeIds())]
-    const scope = this.scope(worktreeId)
-    return worktreeIds.flatMap((id) =>
-      this.listRestorableIn(id).map((page) => ({
-        ...page,
-        active: page.active && id === scope,
-        worktreeId: id
-      }))
-    )
-  }
-
-  /**
-   * The worktree a command that names none acts in: the one the saved session shows, as a window
-   * opens on it, else the first that saves a browser tab.
-   */
-  private scope(worktreeId: string | undefined): string | undefined {
-    if (worktreeId) {
-      return worktreeId
-    }
-    const saved = [...new Set(this.deps.savedWorktreeIds())]
-    return saved.find((id) => this.deps.session(id)?.activeWorktreeId === id) ?? saved[0]
   }
 
   /** The saved tab showing a page, which a window keys pin and colour by. */
@@ -95,87 +62,87 @@ export class ServeBrowserTabs {
     return session ? (findSavedBrowserPage(session, worktreeId, pageId)?.tabId ?? null) : null
   }
 
-  private listRestorableIn(worktreeId: string): RestorableBrowserPage[] {
-    const session = this.deps.session(worktreeId)
-    if (!session) {
+  /** Saved tabs whose page has not started; every worktree's when none is named. */
+  listRestorable(worktreeId: string | undefined): RestorableBrowserPage[] {
+    if (!this.deps.backend()) {
       return []
     }
-    const live = this.deps.livePageIds(worktreeId)
-    const tabs = (session.browserTabsByWorktree?.[worktreeId] ?? []).flatMap((tab) => {
-      const pageId = tab.activePageId ?? tab.pageIds?.[0]
-      const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
-      // A document page is one desktop's; a remote page belongs to the host that ran it.
-      return page && !page.docLocation && !page.remoteBrowserPageId ? [{ tab, page }] : []
+    const worktreeIds = worktreeId ? [worktreeId] : new Set(this.deps.savedWorktreeIds())
+    return [...worktreeIds].flatMap((id) => {
+      const live = this.deps.livePageIds(id)
+      return this.startableIn(id).filter((page) => !live.has(page.pageId))
     })
-    // A window's rule over the tabs this host can show: the recorded one, else the first.
-    const recorded = session.activeBrowserTabIdByWorktree?.[worktreeId]
-    const activeTabId = tabs.some(({ tab }) => tab.id === recorded) ? recorded : tabs[0]?.tab.id
-    return tabs
-      .filter(({ page }) => !live.has(page.id))
-      .map(({ tab, page }) => ({
-        tabId: tab.id,
-        pageId: page.id,
-        url: page.url,
-        title: page.title,
-        profileId: tab.sessionProfileId ?? null,
-        active: tab.id === activeTabId
-      }))
-  }
-
-  /** A switched-to page's tab is the one its worktree shows, as a window records it. */
-  selected(worktreeId: string, pageId: string): void {
-    const tabId = this.savedTabId(worktreeId, pageId)
-    if (tabId) {
-      this.write(worktreeId, (_hostId, session) =>
-        withActiveServeBrowserTab(session, worktreeId, tabId)
-      )
-    }
   }
 
   /**
-   * A command that names no page acts on the active page; with none running, that is the tab the
-   * layout shows, as a window mounts it. False when nothing runs and nothing is saved.
+   * Starts a saved tab's page where a window would mount it: the named page, else the worktree's
+   * active tab. False when there is none, so the caller reports no tab as a window does.
    */
-  async restoreActive(worktreeId: string | undefined): Promise<boolean> {
-    if (this.deps.livePageIds(worktreeId).size > 0) {
-      return false
-    }
-    const active = this.listRestorable(worktreeId).find((page) => page.active)
-    return active ? this.restore(active.worktreeId, active.pageId) : false
-  }
-
-  /** The worktree of a saved tab whose page has not started, or null when none shows it. */
-  restorableWorktreeOf(worktreeId: string | undefined, pageId: string): string | null {
-    return (
-      this.listRestorable(worktreeId).find((page) => page.pageId === pageId)?.worktreeId ?? null
-    )
-  }
-
-  /**
-   * Starts a saved tab's page, once however many callers ask; false when none is saved. A caller
-   * that names only the page is answered from whichever workspace saved it.
-   */
-  async restore(worktreeId: string | undefined, pageId: string): Promise<boolean> {
-    const pending = this.restoring.get(pageId)
+  async start(worktreeId: string | undefined, pageId: string | undefined): Promise<boolean> {
+    const pending = pageId ? this.restoring.get(pageId) : undefined
     if (pending) {
       await pending
       return true
     }
+    const found = pageId
+      ? this.listRestorable(worktreeId).find((page) => page.pageId === pageId)
+      : worktreeId
+        ? this.activeIn(worktreeId)
+        : undefined
+    return found ? this.restore(found) : false
+  }
+
+  /** The tab a window shows for a worktree with no page running: the recorded one, else the first. */
+  private activeIn(worktreeId: string): RestorableBrowserPage | undefined {
+    if (this.deps.livePageIds(worktreeId).size > 0) {
+      return undefined
+    }
+    const tabs = this.startableIn(worktreeId)
+    const recorded = this.deps.session(worktreeId)?.activeBrowserTabIdByWorktree?.[worktreeId]
+    return tabs.find((page) => page.tabId === recorded) ?? tabs[0]
+  }
+
+  private startableIn(worktreeId: string): RestorableBrowserPage[] {
+    const session = this.deps.session(worktreeId)
+    if (!session) {
+      return []
+    }
+    return (session.browserTabsByWorktree?.[worktreeId] ?? []).flatMap((tab) => {
+      const pageId = tab.activePageId ?? tab.pageIds?.[0]
+      const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
+      // A document page is one desktop's; a remote page belongs to the host that ran it.
+      if (!page || page.docLocation || page.remoteBrowserPageId) {
+        return []
+      }
+      return [
+        {
+          tabId: tab.id,
+          pageId: page.id,
+          url: page.url,
+          title: page.title,
+          profileId: tab.sessionProfileId ?? null,
+          worktreeId
+        }
+      ]
+    })
+  }
+
+  /** Starts the page once however many callers ask. */
+  private async restore(page: RestorableBrowserPage): Promise<boolean> {
     const backend = this.deps.backend()
-    const found = this.listRestorable(worktreeId).find((entry) => entry.pageId === pageId)
-    if (!backend || !found) {
+    if (!backend) {
       return false
     }
     const started = backend
       .createTab({
-        browserPageId: pageId,
-        url: found.url,
-        worktreeId: found.worktreeId,
-        ...(found.profileId ? { profileId: found.profileId } : {})
+        browserPageId: page.pageId,
+        url: page.url,
+        worktreeId: page.worktreeId,
+        ...(page.profileId ? { profileId: page.profileId } : {})
       })
       .then(() => undefined)
-      .finally(() => this.restoring.delete(pageId))
-    this.restoring.set(pageId, started)
+      .finally(() => this.restoring.delete(page.pageId))
+    this.restoring.set(page.pageId, started)
     await started
     return true
   }
@@ -186,17 +153,19 @@ export class ServeBrowserTabs {
       hostId: ExecutionHostId,
       session: WorkspaceSessionState
     ) => WorkspaceSessionState | null
-  ): void {
+  ): boolean {
     const session = this.deps.backend() ? this.deps.session(worktreeId) : null
     const next = session ? change(this.deps.hostId(worktreeId), session) : null
     if (!next) {
-      return
+      return false
     }
     // Called from page events and closes; a refused write (writes frozen) must not throw there.
     try {
       this.deps.save(worktreeId, next)
+      return true
     } catch (error) {
       console.warn('[serve-browser-tabs] could not save a browser tab:', error)
+      return false
     }
   }
 }

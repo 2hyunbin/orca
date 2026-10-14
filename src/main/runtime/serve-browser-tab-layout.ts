@@ -19,6 +19,9 @@ export type ServeBrowserPageState = {
   title: string
 }
 
+/** A page as the backend that runs it reports it; profile and group matter only when it opens. */
+export type ServeBrowserPage = ServeBrowserPageState & { profileId?: string; groupId?: string }
+
 /** The saved browser tab showing this page, and the page; a host's own tab is named by its page. */
 export function findSavedBrowserPage(
   session: WorkspaceSessionState,
@@ -38,7 +41,7 @@ export function findSavedBrowserPage(
 export function withOpenedServeBrowserTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
-  page: ServeBrowserPageState & { profileId?: string | null; groupId?: string }
+  page: ServeBrowserPage
 ): WorkspaceSessionState | null {
   if (findSavedBrowserPage(session, page.worktreeId, page.pageId)) {
     return null
@@ -81,21 +84,12 @@ export function withOpenedServeBrowserTab(
     }
   })
   // A window shows the browser tab it just opened; a host's tab is named by its page.
-  return withActiveServeBrowserTab(saved, page.worktreeId, page.pageId) ?? saved
-}
-
-/** The partition showing a saved tab as its worktree's browser tab; null when it already is. */
-export function withActiveServeBrowserTab(
-  session: WorkspaceSessionState,
-  worktreeId: string,
-  tabId: string
-): WorkspaceSessionState | null {
-  if (session.activeBrowserTabIdByWorktree?.[worktreeId] === tabId) {
-    return null
-  }
   return {
-    ...session,
-    activeBrowserTabIdByWorktree: { ...session.activeBrowserTabIdByWorktree, [worktreeId]: tabId }
+    ...saved,
+    activeBrowserTabIdByWorktree: {
+      ...saved.activeBrowserTabIdByWorktree,
+      [page.worktreeId]: page.pageId
+    }
   }
 }
 

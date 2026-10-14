@@ -16,7 +16,7 @@ import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
 import { RuntimeWorktreeBaseReconciliation } from './runtime-worktree-base-reconciliation'
 import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
 import { ServeBrowserTabs } from './serve-browser-tabs'
-import type { ServeBrowserPageState } from './serve-browser-tab-layout'
+import type { ServeBrowserPage } from './serve-browser-tab-layout'
 
 export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
   // Why: per-PTY driver state. The "driver" is whoever currently owns the
@@ -52,9 +52,9 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)
   })
 
-  /** A page's new address or title, from the backend that runs it. */
-  saveServeBrowserPageState(page: ServeBrowserPageState): void {
-    this.serveBrowserTabs.navigated(page)
+  /** A page the backend that runs it opened or moved. */
+  saveServeBrowserPage(page: ServeBrowserPage): void {
+    this.serveBrowserTabs.pageChanged(page)
   }
 
   protected readonly edgeCommands = new RuntimeEdgeCommandController({
@@ -74,25 +74,8 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
         this.notifyMobileSessionTabsChanged(worktreeId),
       retireRuntimeOwnedBrowserSessionTab: (worktreeId, browserPageId) =>
         this.retireRuntimeOwnedBrowserSessionTab(worktreeId, browserPageId),
-      saveServeBrowserTab: (page) => this.serveBrowserTabs.opened(page),
-      restoreServeBrowserPage: (worktreeId, browserPageId) =>
-        this.serveBrowserTabs.restore(worktreeId, browserPageId),
-      listServeBrowserTabs: (worktreeId) =>
-        this.serveBrowserTabs.listRestorable(worktreeId).map((page, index) => ({
-          browserPageId: page.pageId,
-          index,
-          url: page.url,
-          title: page.title,
-          active: page.active,
-          worktreeId: page.worktreeId,
-          profileId: page.profileId
-        })),
-      restoreActiveServeBrowserPage: (worktreeId) =>
-        this.serveBrowserTabs.restoreActive(worktreeId),
-      selectServeBrowserTab: (worktreeId, browserPageId) =>
-        this.serveBrowserTabs.selected(worktreeId, browserPageId),
-      findServeBrowserTabWorktree: (worktreeId, browserPageId) =>
-        this.serveBrowserTabs.restorableWorktreeOf(worktreeId, browserPageId)
+      startSavedBrowserPage: (worktreeId, browserPageId) =>
+        this.serveBrowserTabs.start(worktreeId, browserPageId)
     },
     screencast: {
       registerSubscriptionCleanup: (subscriptionId, cleanup, connectionId) =>

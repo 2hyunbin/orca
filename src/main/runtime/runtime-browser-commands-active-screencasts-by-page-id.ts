@@ -74,10 +74,6 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
 
   // Why: the CLI sends selectors (e.g. "path:/...") but the bridge keys tabs by "repoId::path"; resolve to that store-compatible id.
   private async resolveBrowserWorktreeId(selector?: string): Promise<string | undefined> {
-    // With no window there is no view to mount; a command that acts on a page starts it itself.
-    if (!this.host.getAvailableAuthoritativeWindow() && this.host.restoreActiveServeBrowserPage) {
-      return selector ? (await this.host.resolveWorktreeSelector(selector)).id : undefined
-    }
     if (!selector) {
       // Why: after restart, webviews mount only when the pane is visible; activate the view so persisted tabs become operable via registerGuest.
       const bridge = this.host.getAgentBrowserBridge()
@@ -110,11 +106,9 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
     const browserPageId =
       typeof params.page === 'string' && params.page.length > 0 ? params.page : undefined
     if (!browserPageId) {
-      const worktreeId = await this.resolveBrowserWorktreeId(params.worktree)
-      if (!this.host.getAvailableAuthoritativeWindow()) {
-        await this.host.restoreActiveServeBrowserPage?.(worktreeId)
+      return {
+        worktreeId: await this.resolveBrowserWorktreeId(params.worktree)
       }
-      return { worktreeId }
     }
 
     const worktreeId = params.worktree
@@ -164,6 +158,9 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
 
   // Why: background-mount the worktree via a hidden visibility lease so the webview guest can register without stealing the user's visible pane.
   private async ensureBrowserWorktreeActive(worktreeId: string | undefined): Promise<void> {
+    if (await this.host.startSavedBrowserPage?.(worktreeId, undefined)) {
+      return
+    }
     const win = this.host.getAuthoritativeWindow()
     win.webContents.send('browser:activateView', worktreeId ? { worktreeId } : {})
     // Why: the pane is operable only after the webview mounts and calls registerGuest; wait on that IPC rather than a flaky fixed sleep.
@@ -174,11 +171,7 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
     worktreeId: string | undefined,
     browserPageId: string
   ): Promise<void> {
-    // With no window, the host starts a saved tab's page itself, as a window does on first use.
-    if (
-      !this.host.getAvailableAuthoritativeWindow() &&
-      (await this.host.restoreServeBrowserPage?.(worktreeId, browserPageId))
-    ) {
+    if (await this.host.startSavedBrowserPage?.(worktreeId, browserPageId)) {
       return
     }
     const win = this.host.getAuthoritativeWindow()
