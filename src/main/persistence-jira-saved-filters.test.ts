@@ -22,9 +22,13 @@ it('persists multiple saved filters and the active selection across a profile re
     activeFilterId: 'bugs'
   }
   const store = createStore()
-  store.updateUI({ jiraSavedFilterState: state })
+  store.updateUI({
+    jiraSavedFilterState: state,
+    jiraQuickFilterState: { statuses: ['In Progress', 'Blocked'] }
+  })
   store.flush()
   await closeTestStores()
   const reloaded = createStore()
   expect(normalizeJiraSavedFilterState(reloaded.getUI().jiraSavedFilterState)).toEqual(state)
+  expect(reloaded.getUI().jiraQuickFilterState).toEqual({ statuses: ['In Progress', 'Blocked'] })
 })

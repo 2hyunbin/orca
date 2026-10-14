@@ -19933,6 +19933,16 @@
       "noMatch": "일치하는 필터가 없습니다.",
       "loadFailed": "저장된 Jira 필터를 불러올 수 없습니다.",
       "saveFailed": "Jira 필터를 저장할 수 없습니다."
+    },
+    "statusFilters": {
+      "loadFailed": "Jira 상태 필터를 불러올 수 없습니다.",
+      "saveFailed": "Jira 상태 필터를 저장할 수 없습니다.",
+      "manualQuery": "상태 필터는 사전 설정 보기에 적용됩니다. 사용하려면 검색을 지우세요.",
+      "label": "상태별로 Jira 이슈 필터링",
+      "clear": "상태 지우기",
+      "jql": "상태 필터 JQL",
+      "editJql": "JQL로 편집",
+      "catalogHint": "상태는 불러온 이슈에서 가져옵니다. 이 보기에서 다른 상태를 찾으려면 선택을 지우세요."
     }
   }
 }

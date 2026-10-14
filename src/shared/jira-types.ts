@@ -153,6 +153,8 @@ export type JiraIssueUpdate = {
 
 export type JiraIssueFilter = 'assigned' | 'reported' | 'all' | 'done'
 
+export type JiraIssueListFilters = { statuses?: string[] }
+
 export type JiraConnectArgs = {
   siteUrl: string
   // Empty for Bearer authentication: self-hosted PAT or scoped Cloud token.

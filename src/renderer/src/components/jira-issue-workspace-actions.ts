@@ -2,16 +2,26 @@ import { Clipboard, ExternalLink, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { JiraIssue } from '../../../shared/jira-types'
+import { applyJiraIssueKeyCasing } from '../../../shared/workspace-name'
+import type { WorkspaceSeedNameOptions } from '../../../shared/workspace-name'
+import { getJiraIssueKeyCasingSeedOptions } from '@/lib/jira-issue-key-casing'
 import { buildJiraIssuePrompt } from './jira-prompt-templates'
 import type { JiraIssueWorkspaceAction } from './jira-issue-workspace-content'
 
-function buildJiraBranchName(issue: JiraIssue): string {
+export function buildJiraBranchName(
+  issue: Pick<JiraIssue, 'key' | 'title'>,
+  options: WorkspaceSeedNameOptions = {}
+): string {
   const slug = issue.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 52)
-  return `${issue.key.toLowerCase()}${slug ? `-${slug}` : ''}`
+  return applyJiraIssueKeyCasing(
+    `${issue.key.toLowerCase()}${slug ? `-${slug}` : ''}`,
+    issue.key,
+    options.jiraIssueKeyCasing
+  )
 }
 
 export async function copyJiraTextToClipboard(text: string, label: string): Promise<boolean> {
@@ -56,7 +66,11 @@ export function getJiraIssueWorkspaceActions(issue: JiraIssue): JiraIssueWorkspa
         'Copy suggested branch name'
       ),
       icon: GitBranch,
-      action: () => void copyJiraTextToClipboard(buildJiraBranchName(issue), 'Branch name')
+      action: () =>
+        void copyJiraTextToClipboard(
+          buildJiraBranchName(issue, getJiraIssueKeyCasingSeedOptions()),
+          'Branch name'
+        )
     },
     {
       label: translate('auto.components.JiraIssueWorkspace.0cc62bd690', 'Copy prompt'),

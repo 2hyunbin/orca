@@ -1,3 +1,5 @@
+import { useTaskPageJiraQuickFilters } from './use-task-page-jira-quick-filters'
+import type { JiraStatusCatalogItem } from './task-page-jira-status-catalog'
 import { useTaskPageJiraSavedFilters } from './use-task-page-jira-saved-filters'
 import type { TaskPageLinearViewStateModel } from './use-task-page-linear-view-state'
 import { useState, useMemo, useEffect, useCallback } from 'react'
@@ -58,6 +60,11 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     setAppliedJiraSearch(jql)
   }, [])
   const savedFilters = useTaskPageJiraSavedFilters(model, setSavedFilterQuery)
+  const quickFilters = useTaskPageJiraQuickFilters(model)
+  const [jiraStatusCatalog, setJiraStatusCatalog] = useState<{
+    scopeKey: string
+    items: JiraStatusCatalogItem[]
+  } | null>(null)
   const [activeJiraPreset, setActiveJiraPreset] = useState<JiraPresetId>('assigned')
   const [jiraRefreshNonce, setJiraRefreshNonce] = useState(0)
   const [jiraProjectStatusOrder, setJiraProjectStatusOrder] = useState<{
@@ -157,6 +164,9 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     jiraHasWorkspace,
     setJiraHasWorkspace,
     ...savedFilters,
+    ...quickFilters,
+    jiraStatusCatalog,
+    setJiraStatusCatalog,
     jiraIssues,
     setJiraIssues,
     jiraLoading,

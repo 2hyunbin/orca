@@ -83,3 +83,27 @@ it('routes mobile saved-filter persistence to the execution host', () => {
   expect(MOBILE_RPC_METHOD_ROUTES.get('ui.getJiraSavedFilters')).toBe('execution-host')
   expect(MOBILE_RPC_METHOD_ROUTES.get('ui.mutateJiraSavedFilters')).toBe('execution-host')
 })
+
+it('persists quick filters on the execution host without rewriting saved JQL or resume fields', async () => {
+  const { dispatch, read, updateUIState } = setup()
+  await dispatch('ui.mutateJiraSavedFilters', { kind: 'save', filter })
+  expect(
+    await dispatch('ui.setJiraQuickFilters', { statuses: ['In Progress', 'Blocked'] })
+  ).toMatchObject({
+    ok: true,
+    result: { statuses: ['In Progress', 'Blocked'] }
+  })
+  expect(await dispatch('ui.getJiraQuickFilters')).toMatchObject({
+    ok: true,
+    result: { statuses: ['In Progress', 'Blocked'] }
+  })
+  expect(read().jiraSavedFilterState?.filters).toEqual([filter])
+  expect(read().taskResumeState).toEqual({ jiraQuery: 'project = OLD' })
+  expect(updateUIState.mock.calls.every(([update]) => !('taskResumeState' in update))).toBe(true)
+  expect(await dispatch('ui.setJiraQuickFilters', { statuses: ['x'.repeat(129)] })).toMatchObject({
+    ok: false,
+    error: { code: 'invalid_argument' }
+  })
+  expect(MOBILE_RPC_METHOD_ROUTES.get('ui.getJiraQuickFilters')).toBe('execution-host')
+  expect(MOBILE_RPC_METHOD_ROUTES.get('ui.setJiraQuickFilters')).toBe('execution-host')
+})

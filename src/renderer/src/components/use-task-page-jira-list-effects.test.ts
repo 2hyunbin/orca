@@ -40,6 +40,9 @@ function createModel(): TaskPageLinearCollectionEffectsModel {
     jiraActiveSavedFilterId: null,
     jiraSavedFilters: [],
     jiraSavedFiltersLoading: false,
+    selectedJiraStatuses: [],
+    jiraQuickFiltersLoading: false,
+    setJiraStatusCatalog: vi.fn(),
     setJiraProjectStatusOrder: vi.fn(),
     displayedJiraIssues: []
   }
@@ -138,6 +141,40 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
       sourceContext: null,
       force: false
     })
+  })
+
+  it('uses the preset list path for status filters and restores it after clearing', async () => {
+    const model = createModel()
+    model.selectedJiraStatuses = ['In Progress', 'Blocked']
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(listJiraIssues).toHaveBeenCalledTimes(1))
+    expect(listJiraIssues).toHaveBeenLastCalledWith('assigned', 50, {
+      sourceContext: null,
+      force: false,
+      filters: { statuses: ['In Progress', 'Blocked'] }
+    })
+    expect(searchJiraIssues).not.toHaveBeenCalled()
+    await act(async () => {
+      model.selectedJiraStatuses = []
+      rerender()
+    })
+    expect(listJiraIssues).toHaveBeenLastCalledWith('assigned', 50, {
+      sourceContext: null,
+      force: false
+    })
+  })
+
+  it('keeps manual JQL independent of a persisted status selection', async () => {
+    const model = createModel()
+    model.selectedJiraStatuses = ['Blocked']
+    model.appliedJiraSearch = 'project = APP ORDER BY created ASC'
+    renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    expect(searchJiraIssues).toHaveBeenCalledWith('project = APP ORDER BY created ASC', 50, {
+      sourceContext: null,
+      force: false
+    })
+    expect(listJiraIssues).not.toHaveBeenCalled()
   })
 
   it('passes force through the text-search wrapper on refresh', async () => {

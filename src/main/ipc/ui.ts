@@ -1,3 +1,5 @@
+import { normalizeJiraQuickFilterState } from '../../shared/jira-quick-filters'
+import { JiraQuickFilterStateParam } from '../../shared/rpc-contract/jira-quick-filter-params'
 import {
   normalizeJiraSavedFilterState,
   mutateJiraSavedFilterState
@@ -64,6 +66,14 @@ export function registerUIHandlers(
     }
   })
 
+  ipcMain.handle('ui:getJiraQuickFilters', () =>
+    normalizeJiraQuickFilterState(store.getUI().jiraQuickFilterState)
+  )
+  ipcMain.handle('ui:setJiraQuickFilters', (_event, input: unknown) => {
+    const state = normalizeJiraQuickFilterState(JiraQuickFilterStateParam.parse(input))
+    store.updateUI({ jiraQuickFilterState: state })
+    return state
+  })
   ipcMain.handle('ui:getJiraSavedFilters', () =>
     normalizeJiraSavedFilterState(store.getUI().jiraSavedFilterState)
   )

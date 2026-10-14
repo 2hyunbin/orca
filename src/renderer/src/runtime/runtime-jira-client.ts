@@ -1,3 +1,7 @@
+import {
+  JIRA_STATUS_FILTER_RUNTIME_CAPABILITY,
+  JIRA_STATUS_FILTER_UPDATE_REQUIRED
+} from '../../../shared/jira-quick-filters'
 import type {
   JiraAuthType,
   JiraComment,
@@ -5,6 +9,7 @@ import type {
   JiraCreateField,
   JiraIssue,
   JiraIssueFilter,
+  JiraIssueListFilters,
   JiraIssueType,
   JiraIssueUpdate,
   JiraMutationResult,
@@ -17,7 +22,7 @@ import type {
 } from '../../../shared/jira-types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { searchLocalJiraIssues } from './local-jira-search-cancellation'
-import { callRuntimeRpc } from './runtime-rpc-client'
+import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rpc-client'
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
@@ -150,13 +155,32 @@ export async function jiraListIssues(
   settings: RuntimeJiraSettings,
   filter?: JiraIssueFilter,
   limit?: number,
-  siteId?: JiraSiteSelection | null
+  siteId?: JiraSiteSelection | null,
+  filters?: JiraIssueListFilters
 ): Promise<JiraIssue[]> {
-  const target = getJiraRuntimeTarget(settings)
-  const args = { filter, limit, siteId: siteId ?? undefined }
-  return target.kind === 'environment'
-    ? callRuntimeRpc<JiraIssue[]>(target, 'jira.listIssues', args, { timeoutMs: 30_000 })
-    : window.api.jira.listIssues(args)
+  return jiraListIssuesForTarget(getJiraRuntimeTarget(settings), filter, limit, siteId, filters)
+}
+
+export async function jiraListIssuesForTarget(
+  target: RuntimeClientTarget,
+  filter?: JiraIssueFilter,
+  limit?: number,
+  siteId?: JiraSiteSelection | null,
+  filters?: JiraIssueListFilters
+): Promise<JiraIssue[]> {
+  const args = { filter, limit, siteId: siteId ?? undefined, ...(filters ? { filters } : {}) }
+  if (target.kind === 'environment') {
+    if (filters?.statuses?.length) {
+      await assertRuntimeEnvironmentCapability(
+        target.environmentId,
+        JIRA_STATUS_FILTER_RUNTIME_CAPABILITY,
+        JIRA_STATUS_FILTER_UPDATE_REQUIRED,
+        15_000
+      )
+    }
+    return callRuntimeRpc<JiraIssue[]>(target, 'jira.listIssues', args, { timeoutMs: 30_000 })
+  }
+  return window.api.jira.listIssues(args)
 }
 
 export async function jiraGetIssue(

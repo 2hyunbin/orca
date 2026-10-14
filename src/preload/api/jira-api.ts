@@ -10,6 +10,7 @@ import type {
   JiraCreateIssueArgs,
   JiraIssue,
   JiraIssueFilter,
+  JiraIssueListFilters,
   JiraIssueType,
   JiraIssueUpdate,
   JiraPriority,
@@ -46,6 +47,7 @@ export type JiraApi = {
     filter?: JiraIssueFilter
     limit?: number
     siteId?: JiraSiteSelection
+    filters?: JiraIssueListFilters
   }) => Promise<JiraIssue[]>
   getIssue: (args: { key: string; siteId?: string }) => Promise<JiraIssue | null>
   lookupIssueSummary: (args: {

@@ -10,6 +10,7 @@ import type { AssertNoMissingKeys, AssertNoMissingValues } from './ui-state-sche
 // forgotten, which is what the parity assertion below enforces.
 type MainOwnedUIState =
   | 'jiraSavedFilterState'
+  | 'jiraQuickFilterState'
   | '_explorerDisplayRootMigrated'
   | 'trayMinimizeNoticeShown'
   | 'dashboardPopoutBounds'
