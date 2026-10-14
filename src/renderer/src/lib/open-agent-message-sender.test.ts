@@ -65,31 +65,29 @@ const dispatch = { address: 'dispatch:d1', terminalHandle: 'dispatch:d1', orcaSe
  *  someone else. */
 function sourceFor(
   party: typeof chat | typeof terminal | typeof dispatch,
-  kind: 'mail' | 'mail-notice' = 'mail'
+  carriesMailContent = true
 ): AgentMessageSource {
   return {
     kind: 'agent',
     senders: [{ party, name: 'Sender' }],
-    orchestration:
-      kind === 'mail'
-        ? { message: 'mail', mailbox: 'run:r1', dispatchId: null, messageId: 'm1', runId: 'r1' }
-        : {
-            message: 'mail-notice',
-            mailbox: 'run:r1',
-            dispatchId: null,
-            messages: [
-              { messageId: 'm1', runId: 'r1', from: party.address },
-              { messageId: 'm2', runId: 'r1', from: 'term_other' }
-            ]
-          }
+    orchestration: {
+      message: 'mail-notice',
+      mailbox: 'run:r1',
+      dispatchId: null,
+      messages: [
+        { messageId: 'm1', runId: 'r1', from: party.address },
+        ...(!carriesMailContent ? [{ messageId: 'm2', runId: 'r1', from: 'term_other' }] : [])
+      ],
+      ...(carriesMailContent ? { carriesMailContent: true } : {})
+    }
   }
 }
 
 function open(
   party: typeof chat | typeof terminal | typeof dispatch,
-  kind?: 'mail' | 'mail-notice'
+  carriesMailContent?: boolean
 ) {
-  const source = sourceFor(party, kind)
+  const source = sourceFor(party, carriesMailContent)
   return openAgentMessageSender(source, source.senders[0]!, 'wt-chat')
 }
 
@@ -118,12 +116,12 @@ beforeEach(() => {
 })
 
 describe("opening a message's sender", () => {
-  it.each(['mail', 'mail-notice'] as const)(
+  it.each([true, false])(
     "asks the chat's host where a terminal is, with the %s it sent, and focuses what it finds",
-    async (kind) => {
+    async (carriesMailContent) => {
       mocks.callRuntimeRpc.mockResolvedValue({ location: { kind: 'terminal', handle: 'term_now' } })
       mocks.focusRenderer.mockReturnValue(true)
-      await open(terminal, kind)
+      await open(terminal, carriesMailContent)
       // The stored handle may be from an earlier run; only the host knows its live one.
       expect(mocks.callRuntimeRpc).toHaveBeenCalledWith(HOST, 'orchestration.partyLocation', {
         address: 'term_a',

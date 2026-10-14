@@ -483,10 +483,18 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     )
     expect(sent).toEqual([
       expect.objectContaining({
-        orchestration: expect.objectContaining({ message: 'mail', mailbox: `run:${runId}` })
+        orchestration: expect.objectContaining({
+          message: 'mail-notice',
+          carriesMailContent: true,
+          mailbox: `run:${runId}`
+        })
       }),
       expect.objectContaining({
-        orchestration: expect.objectContaining({ message: 'mail', mailbox: `run:${runId}` })
+        orchestration: expect.objectContaining({
+          message: 'mail-notice',
+          carriesMailContent: true,
+          mailbox: `run:${runId}`
+        })
       })
     ])
 

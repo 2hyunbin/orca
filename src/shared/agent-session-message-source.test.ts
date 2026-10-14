@@ -40,7 +40,13 @@ describe("a message's sender, read through its one reader", () => {
 
   it.each([
     { message: 'task', runId: 'r1', taskId: 't1', dispatchId: 'ctx_1' },
-    { message: 'mail', mailbox: 'run:r1', dispatchId: null, messageId: 'm1', runId: 'r1' }
+    {
+      message: 'mail-notice',
+      mailbox: 'run:r1',
+      dispatchId: null,
+      messages: [{ messageId: 'm1', runId: 'r1', from: 'term_a' }],
+      carriesMailContent: true
+    }
   ] as const)("reads a Dispatch's task and a whole mail message back whole", (orchestration) => {
     const source: AgentMessageSource = { ...FROM, orchestration }
     expect(readAgentMessageSource(structuredClone(source))).toEqual(source)

@@ -126,9 +126,6 @@ async function openSender(
 function mailFromSender(source: AgentMessageSource, address: string): string[] {
   const orchestration = source.orchestration
   switch (orchestration?.message) {
-    case 'mail':
-      // One message, from the one sender it names.
-      return [orchestration.messageId]
     case 'mail-notice':
       return orchestration.messages
         .filter((message) => message.from === address)

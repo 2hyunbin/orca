@@ -261,11 +261,11 @@ describe('structured mail delivery', () => {
         }
       ],
       orchestration: {
-        message: 'mail',
+        message: 'mail-notice',
         mailbox: 'dispatch:d1',
         dispatchId: 'd1',
-        messageId: 'm1',
-        runId: 'run_1'
+        messages: [{ messageId: 'm1', runId: 'run_1', from: 'term_coord' }],
+        carriesMailContent: true
       }
     })
     // The chat's queue holds it now, as it holds the person's: it is not sent again.
@@ -280,8 +280,12 @@ describe('structured mail delivery', () => {
     await flush()
     expect(markAsRead).toHaveBeenCalledWith(['beat'])
     expect(send.mock.calls.map(([input]) => input.body.from?.orchestration)).toEqual([
-      expect.objectContaining({ messageId: 'm1' }),
-      expect.objectContaining({ messageId: 'm2' })
+      expect.objectContaining({
+        messages: [{ messageId: 'm1', runId: 'run_1', from: 'term_coord' }]
+      }),
+      expect.objectContaining({
+        messages: [{ messageId: 'm2', runId: 'run_1', from: 'term_coord' }]
+      })
     ])
   })
 

@@ -12,7 +12,10 @@ import type {
   StructuredMailboxPointerHost,
   StructuredPointerSessionFacts
 } from './structured-mailbox-pointer-delivery'
-import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalMessageItem,
+  AgentJournalSnapshot
+} from '../../../shared/agent-session-journal-types'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import {
   structuredSessionGateFacts,
@@ -56,6 +59,13 @@ export async function readStructuredSessionGateFacts(
 async function readPointerSessionFacts(
   sessionId: string
 ): Promise<StructuredPointerSessionFacts | null> {
+  // Read the queue first: a card can become a submission between these reads.
+  const queued = await getStructuredAgentSessionHost()
+    ?.history({ sessionId, direction: 'tail', limit: 1 })
+    .catch(() => null)
+  if (!queued) {
+    return null
+  }
   const snapshot = await readSessionJournal(sessionId)
   if (!snapshot) {
     return null
@@ -64,21 +74,44 @@ async function readPointerSessionFacts(
     getStructuredAgentSessionHost()?.deps.store.getRecord(sessionId)?.providerContextBoundary
   const mailByItemId = new Map<string, string>()
   for (const item of snapshot.items) {
-    const orchestration = item.body.kind === 'message' ? item.body.from?.orchestration : undefined
-    if (orchestration?.message === 'mail') {
-      mailByItemId.set(item.itemId, orchestration.messageId)
+    const messageId = item.body.kind === 'message' ? mailContentMessageId(item.body) : undefined
+    if (messageId) {
+      mailByItemId.set(item.itemId, messageId)
     }
   }
   return {
-    submissions: snapshot.submissions
-      .filter((submission) => !boundary || submission.fence > boundary.afterFence)
-      .map(({ clientMessageId, dispatchState, submittedAt }) => ({
-        clientMessageId,
-        dispatchState,
-        submittedAt,
-        mailMessageId: mailByItemId.get(agentJournalSubmissionKey(clientMessageId))
-      }))
+    submissions: [
+      ...snapshot.submissions
+        .filter((submission) => !boundary || submission.fence > boundary.afterFence)
+        .map(({ clientMessageId, dispatchState, submittedAt }) => ({
+          clientMessageId,
+          dispatchState,
+          submittedAt,
+          mailMessageId: mailByItemId.get(agentJournalSubmissionKey(clientMessageId))
+        })),
+      ...(queued?.page.queuedMessages ?? []).flatMap(({ messageId, body }) => {
+        const mailMessageId = mailContentMessageId(body)
+        return mailMessageId
+          ? [
+              {
+                clientMessageId: messageId,
+                dispatchState: 'accepted' as const,
+                // Queue acceptance is a receipt, not a later provider turn.
+                submittedAt: 0,
+                mailMessageId
+              }
+            ]
+          : []
+      })
+    ]
   }
+}
+
+function mailContentMessageId(body: AgentJournalMessageItem): string | undefined {
+  const source = body.from?.orchestration
+  return source?.message === 'mail-notice' && source.carriesMailContent
+    ? source.messages[0]?.messageId
+    : undefined
 }
 
 async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapshot | null> {

@@ -6,10 +6,14 @@ import type {
 import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 
-const hostRef: { current: unknown } = { current: null }
+const hostRef: { current: Record<string, unknown> | null } = { current: null }
 
 vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
+  getStructuredAgentSessionHost: () =>
+    hostRef.current && {
+      history: async () => ({ page: { queuedMessages: [] } }),
+      ...hostRef.current
+    }
 }))
 
 const {
@@ -104,11 +108,11 @@ describe('structured mailbox pointer host', () => {
       kind: 'agent',
       senders: [],
       orchestration: {
-        message: 'mail',
+        message: 'mail-notice',
         mailbox: 'run:r1',
         dispatchId: null,
-        messageId: 'm1',
-        runId: 'r1'
+        messages: [{ messageId: 'm1', runId: 'r1', from: 'term_a' }],
+        carriesMailContent: true
       }
     }
     const item = { itemId: agentJournalSubmissionKey('op1'), body: { kind: 'message', from } }
@@ -119,6 +123,19 @@ describe('structured mailbox pointer host', () => {
     expect(await createStructuredMailboxPointerHost().readSessionFacts('s1')).toEqual({
       submissions: [{ ...submissions[0], mailMessageId: 'm1' }, submissions[1]]
     })
+    // An upgraded host must not acknowledge mail just because an old pointer was accepted.
+    item.body.from = {
+      ...from,
+      orchestration: {
+        message: 'mail-notice',
+        mailbox: 'run:r1',
+        dispatchId: null,
+        messages: [{ messageId: 'm1', runId: 'r1', from: 'term_a' }]
+      }
+    }
+    expect(
+      (await createStructuredMailboxPointerHost().readSessionFacts('s1'))?.submissions
+    ).toEqual(submissions)
   })
 
   it('scopes settlements to the record fence when the journal marker disagrees', async () => {

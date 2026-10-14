@@ -1,4 +1,4 @@
-import type { MessageType, MessageRow } from '../../types'
+import type { MessageType, MessageRow, UndeliveredUnreadMessageOptions } from '../../types'
 import { exposeMessageTimestamps, exposeMessageListTimestamps } from '../utc-timestamp'
 import { addLifecycleRejectionMarker } from '../lifecycle-rejection-marker'
 import type { OrchestrationDb } from '../orchestration-db'
@@ -91,12 +91,7 @@ export function getUndeliveredUnreadMessages(
   this: OrchestrationDb,
   toHandle: string,
   types?: MessageType[],
-  options?: {
-    excludeTypes?: readonly string[]
-    limit?: number
-    /** Leave out what an unacknowledged `check` batch already handed this mailbox's reader. */
-    excludeOutstandingDelivery?: boolean
-  }
+  options?: UndeliveredUnreadMessageOptions
 ): MessageRow[] {
   const conditions = [
     'to_handle = ?',
@@ -120,6 +115,10 @@ export function getUndeliveredUnreadMessages(
                   WHERE d.mailbox_handle = ?)`
     )
     params.push(toHandle)
+  }
+  if (options?.excludeMessageIds?.length) {
+    conditions.push('id NOT IN (SELECT value FROM json_each(?))')
+    params.push(JSON.stringify(options.excludeMessageIds))
   }
   const limitSql = options?.limit === undefined ? '' : ' LIMIT ?'
   if (options?.limit !== undefined) {

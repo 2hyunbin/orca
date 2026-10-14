@@ -14,24 +14,22 @@
  */
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { MessageRow, OrchestrationDb } from './db'
+import { ORCHESTRATION_DELIVERY_BATCH_LIMIT, type MessageRow, type OrchestrationDb } from './db'
 import type { OrchestrationCliCommand } from './cli-command'
+import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import {
-  selectOrchestrationPointerBatch,
-  type OrchestrationMessageWaiter
-} from './mailbox-pointer-eligibility'
-import {
-  resolveStructuredMailOperation,
-  type StructuredMailOperation,
-  type StructuredMailSubmission
+  readStructuredMailboxBatch,
+  markStructuredMailReceived
+} from './structured-mailbox-pointer-batch'
+import type {
+  StructuredMailOperation,
+  StructuredMailSubmission
 } from './structured-pointer-operation-id'
-import { structuredMailBody } from './structured-mail-source'
+import { sendStructuredMailboxMessage } from './structured-mailbox-message-delivery'
 import type { SenderNameResolver } from './agent-message-sender'
-import {
-  retainReasonForDispatch,
-  structuredDispatchDelivered,
-  type StructuredDispatchState,
-  type StructuredPointerRetainReason
+import type {
+  StructuredDispatchState,
+  StructuredPointerRetainReason
 } from './structured-session-pointer-delivery'
 
 export type StructuredPointerTarget = {
@@ -57,7 +55,7 @@ export type StructuredPointerSendOutcome =
   | { kind: 'unattached' }
 
 export type StructuredPointerSessionFacts = {
-  /** Current-context sends, oldest first: what the lane's own sends settled as. */
+  /** Current-context sends and accepted queue receipts for the lane's mail. */
   submissions: readonly StructuredMailSubmission[]
 }
 
@@ -116,7 +114,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
    */
   private readonly parkedUntilJournalEdge = new Map<string, ParkedPointerDelivery>()
   /** Messages whose send is still waiting on its outcome, by `mintedOperations` key. */
-  private readonly sendsInFlight = new Set<string>()
+  private readonly sendsInFlight = new Map<string, { contextKey: string; messageId: string }>()
   /** Mail that arrived while its mailbox's pass ran; the pass runs once more for it. */
   private readonly redeliver = new Map<string, ReadonlySet<string>>()
   /**
@@ -187,30 +185,30 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       this.redeliver.set(mailboxHandle, new Set([...pending, ...(reservedTypes ?? [])]))
       return
     }
-    // What an unacknowledged `check` batch holds, its reader already has; sending it too would
-    // show it twice, and the rest of the mailbox must not wait for that batch's ack.
-    const unread = selectOrchestrationPointerBatch({
-      db,
-      mailboxHandle,
-      waiters: this.deps.getMessageWaiters(mailboxHandle),
-      reservedTypes,
-      excludeOutstandingDelivery: true
-    })
-    if (unread.length === 0) {
-      return
-    }
     this.inFlight.add(mailboxHandle)
     let contextKey: string | undefined
     try {
-      const session = await this.deps.host.readSessionFacts(target.sessionId)
-      const contextClearOperationId = this.deps.host.currentContextClearOperationId(
-        target.sessionId
-      )
-      contextKey = JSON.stringify([target.sessionId, contextClearOperationId])
+      const batch = await readStructuredMailboxBatch({
+        db,
+        mailboxHandle,
+        target,
+        reservedTypes,
+        host: this.deps.host,
+        waiters: this.deps.getMessageWaiters(mailboxHandle),
+        pendingSends: this.sendsInFlight.values()
+      })
+      const { session, contextClearOperationId, unread } = batch
+      contextKey = batch.contextKey
       if (attemptedContexts.has(contextKey)) {
         return
       }
       attemptedContexts.add(contextKey)
+      if (batch.hasPending) {
+        this.retain(mailboxHandle, target.sessionId, 'turn-unsettled', reservedTypes)
+      }
+      if (unread.length === 0) {
+        return
+      }
       await this.attempt(
         db,
         mailboxHandle,
@@ -280,6 +278,11 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     contextClearOperationId: string | undefined
   ): Promise<void> {
     const sessionId = target.sessionId
+    const progressed = () => {
+      if (unread.length === ORCHESTRATION_DELIVERY_BATCH_LIMIT) {
+        this.deliverForHandle(mailboxHandle, reservedTypes)
+      }
+    }
     const fence = session ? this.deps.host.currentFence(sessionId) : null
     if (!session || fence === null) {
       this.retain(mailboxHandle, sessionId, 'session-not-attached', reservedTypes)
@@ -290,7 +293,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     for (const message of unread) {
       if (message.type === 'heartbeat') {
         // Already reconciled when sent; sending each beat would interrupt the chat every time.
-        markReceived(db, message.id)
+        markStructuredMailReceived(db, message.id)
+        progressed()
         continue
       }
       const key = JSON.stringify([sessionId, contextClearOperationId ?? null, message.id])
@@ -303,77 +307,36 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       })
       const retain = (reason: StructuredPointerRetainReason) =>
         this.retain(mailboxHandle, sessionId, reason, reservedTypes)
-      this.sendsInFlight.add(key)
-      const outcome = this.sendMessage(db, mailboxHandle, target, message, {
-        key,
-        session,
-        fence,
-        retain,
-        answered
-      }).finally(() => this.sendsInFlight.delete(key))
+      this.sendsInFlight.set(key, {
+        contextKey: JSON.stringify([sessionId, contextClearOperationId]),
+        messageId: message.id
+      })
+      const outcome = sendStructuredMailboxMessage(
+        db,
+        mailboxHandle,
+        target,
+        message,
+        {
+          key,
+          session,
+          fence,
+          retain,
+          answered,
+          progressed
+        },
+        {
+          host: this.deps.host,
+          senderName: this.deps.senderName,
+          getCliCommand: this.deps.getCliCommand,
+          mintedOperations: this.mintedOperations
+        }
+      ).finally(() => this.sendsInFlight.delete(key))
       // What settles after this pass is its own: nothing awaits it once issued.
       outcome.catch(() => undefined)
       if (!(await Promise.race([issued, outcome]))) {
         return
       }
     }
-  }
-
-  /** Sends one message, or replays its send; false when the session cannot take any. */
-  private async sendMessage(
-    db: OrchestrationDb,
-    mailboxHandle: string,
-    target: StructuredPointerTarget,
-    message: MessageRow,
-    attempt: {
-      key: string
-      session: StructuredPointerSessionFacts
-      fence: number
-      retain: (reason: StructuredPointerRetainReason) => void
-      answered: () => void
-    }
-  ): Promise<boolean> {
-    const resolved = resolveStructuredMailOperation({
-      messageId: message.id,
-      submissions: attempt.session.submissions,
-      mintedByThisProcess: this.mintedOperations.get(attempt.key)
-    })
-    if (resolved.kind === 'park') {
-      attempt.retain('turn-unsettled')
-      return true
-    }
-    if (resolved.kind === 'send') {
-      this.mintedOperations.set(attempt.key, resolved.operation)
-      const outcome = await this.deps.host.send({
-        sessionId: target.sessionId,
-        dispatchId: target.dispatchId,
-        operationId: resolved.operation.operationId,
-        expectedRuntimeFence: attempt.fence,
-        body: structuredMailBody({
-          db,
-          mailboxHandle,
-          dispatchId: target.dispatchId,
-          message,
-          senderName: this.deps.senderName,
-          cliCommand: this.deps.getCliCommand()
-        }),
-        onAnswered: attempt.answered
-      })
-      if (outcome.kind === 'unattached') {
-        attempt.retain('session-not-attached')
-        return false
-      }
-      // A queued message is the chat's queue's to send, as a person's queued message is.
-      if (outcome.kind === 'sent' && !structuredDispatchDelivered(outcome.state)) {
-        // Resending under its id replays this verdict and starts nothing.
-        attempt.retain(retainReasonForDispatch(outcome.state))
-        return true
-      }
-    }
-    // Sent, queued, or a send this lane gave up waiting on that ran after all.
-    markReceived(db, message.id)
-    this.mintedOperations.delete(attempt.key)
-    return true
   }
 
   /**
@@ -394,10 +357,4 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     this.deps.onRetain?.({ mailboxHandle, sessionId, reason })
     this.parkedUntilJournalEdge.set(mailboxHandle, { sessionId, reservedTypes })
   }
-}
-
-/** The chat has it, so `check` must not hand it out again. */
-function markReceived(db: OrchestrationDb, messageId: string): void {
-  db.markAsRead([messageId])
-  db.markAsDelivered([messageId])
 }

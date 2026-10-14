@@ -14,6 +14,14 @@ export const MESSAGE_TYPES = [
 
 export type MessageType = (typeof MESSAGE_TYPES)[number]
 
+export type UndeliveredUnreadMessageOptions = {
+  excludeTypes?: readonly string[]
+  limit?: number
+  /** Leave out what an unacknowledged `check` batch already handed this mailbox's reader. */
+  excludeOutstandingDelivery?: boolean
+  excludeMessageIds?: readonly string[]
+}
+
 export type MessagePriority = 'normal' | 'high' | 'urgent'
 
 export type MessageDeliveryContract = 'legacy_direct' | 'current_delivery' | 'audit_only'

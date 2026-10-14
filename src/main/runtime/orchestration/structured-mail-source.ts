@@ -50,11 +50,11 @@ export function structuredMailSource(input: {
       )
     ],
     orchestration: {
-      message: 'mail',
+      message: 'mail-notice',
       mailbox: input.mailboxHandle,
       dispatchId: input.dispatchId,
-      messageId: message.id,
-      runId: message.run_id
+      messages: [{ messageId: message.id, runId: message.run_id, from: message.from_handle }],
+      carriesMailContent: true
     }
   }
 }
