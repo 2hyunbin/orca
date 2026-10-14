@@ -47,6 +47,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
   const normalizedContent = normalizeMarkdownReferenceLinks(content)
   const matchDetails = createDetailsMatcher(normalizedContent)
   const lastCommentClose = normalizedContent.lastIndexOf('-->')
+  let lastDocLinkClose: number | undefined
   const { transport } = codec
   let index = 0
   let activeFence: '`' | '~' | null = null
@@ -184,6 +185,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
     if (
       normalizedContent[index] === '[' &&
       normalizedContent[index + 1] === '[' &&
+      index + 2 <= (lastDocLinkClose ??= normalizedContent.lastIndexOf(']]')) &&
       !isEscaped(normalizedContent, index)
     ) {
       const closingIndex = normalizedContent.indexOf(']]', index + 2)
