@@ -614,6 +614,10 @@ describe('ShadowSeatDirectory.onOutranked', () => {
     reversed.map.apply('cell-b', full('cell-b', 4, 2_000), 100)
     reversed.map.apply('cell-a', full('cell-a', 3, 10), 101)
     expect(reversed.outranked).toEqual([halfOpen])
+    const justPastSkew = directory()
+    justPastSkew.map.apply('cell-a', full('cell-a', 3, 10), 100)
+    justPastSkew.map.apply('cell-b', full('cell-b', 4, 11 + SHADOW_SEAT_OUTRANK_SKEW_MS), 101)
+    expect(justPastSkew.outranked).toEqual([halfOpen])
   })
 
   it('leaves a database-cell seat, a drain-only seat, a later lower epoch, and a join within the skew', () => {

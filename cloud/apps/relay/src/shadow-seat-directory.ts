@@ -18,6 +18,13 @@ export const SHADOW_SEAT_RECENTLY_LEFT_TTL_MS = 24 * 60 * 60 * 1_000
 export const SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS = 100_000
 // Cells stamp joinedAt by their own clocks: a later join must clear this to outrank across cells.
 export const SHADOW_SEAT_OUTRANK_SKEW_MS = 1_000
+
+export function seatOutranks(
+  newer: { epoch: number; joinedAt: number },
+  seat: { epoch: number; joinedAt: number }
+): boolean {
+  return newer.epoch > seat.epoch && newer.joinedAt > seat.joinedAt + SHADOW_SEAT_OUTRANK_SKEW_MS
+}
 const RECENTLY_LEFT_PER_HOST = 4
 // Google identity tokens live an hour; one per poll would be 26 metadata reads a second.
 const IDENTITY_TOKEN_REUSE_MS = 10 * 60_000
@@ -594,9 +601,7 @@ export class ShadowSeatDirectory {
       const seats = [...(this.hosts.get(key)?.values() ?? [])]
       for (const seat of seats) {
         if (seat.state !== 'active' || this.admitModeOf(seat.cellId) !== 'reserve') continue
-        const by = seats.find(
-          (other) => other.epoch > seat.epoch && other.joinedAt > seat.joinedAt + SHADOW_SEAT_OUTRANK_SKEW_MS
-        )
+        const by = seats.find((other) => seatOutranks(other, seat))
         if (!by) continue
         const { cellId, epoch, joinedAt } = seat
         report({ ...parseHostKey(key), cellId, epoch, joinedAt, byCellId: by.cellId })
