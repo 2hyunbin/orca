@@ -18,4 +18,13 @@ A fresh packaged Darwin Node host starts with its pinned Node 24.21.0, a live wr
 
 The standalone entry reports the installed slot’s bounded, validated `.version` marker, even when its supervisor carries an older `ORCA_VERSION`. Unpackaged entries retain the explicit environment version or `0.0.0-orcad` fallback. SSH compatibility and plugin engine checks use the compiled Orca app version separately from that artifact identity. The entry resolves its real slot before resource lookup, including symlinked launchers.
 
-The standalone slot does not yet include an outgoing deployment-template matrix. That packaging seam needs qualification before claiming fresh-host connection support. The existing operator template override remains available. Successful live Node-to-SSH deployment, active endpoint migration, legacy relay compatibility and the original crash/client/platform/packaged release gates remain required. The owned read-only Docker probe still times out; no daemon or container was changed. Controlled collaborators are not corporate fleet or successful live deployment proof.
+A control-host package can carry the existing verified deployment matrix without recursively enlarging ordinary deployed server slots:
+
+```sh
+node config/scripts/build-orcad-template.mjs
+node config/scripts/build-orcad-node.mjs --target darwin-arm64 --out-dir out/control-host/orcad --deployment-template out/orcad-template
+```
+
+Use the actual control host target for `--target`. Release builds require every normal template target by default; they need the existing merged native prebuild matrix. `--deployment-targets linux-arm64-glibc` explicitly narrows a CI-only package and refuses a missing `--deployment-template`. Ordinary one-target builds remain available without a matrix. The builder refuses incomplete, corrupt, overlapping and different-build templates. It copies declared files into `resources/orcad-template`, rechecks staged bytes, and publishes atomically. Common server files must match the host build. The installed artifact marker still identifies executable server bytes; template contents carry their existing independent digest manifest. The existing operator template override remains available.
+
+The exact partial local package passes real Darwin-arm64-to-Linux-arm64 deployment onto an empty owned SSH container. The Node control host establishes a managed connection and reads the remote terminal census over encrypted RPC. Remote health identifies the expected installed artifact, pinned Node 24.21.0, writable SQLite authority and a live daemon with a healthy PTY spawn self-test. The control host exits cleanly; its owned daemon and container are cleaned up. This is one live platform path, not all-platform or corporate-fleet qualification. Active endpoint migration, legacy relay compatibility and the original crash/client/platform/packaged release gates remain required. Controlled collaborators remain separately identified.

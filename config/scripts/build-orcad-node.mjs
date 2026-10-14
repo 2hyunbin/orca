@@ -14,6 +14,11 @@ import { findSlotProblems, readManifest } from './orcad-prebuild-slot-contents.m
 import { ensurePinnedNodeExecutable } from './pinned-node-downloads.mjs'
 import { runProcessSync } from '@orca/process-host'
 import { currentTarget } from './server-build-target.mjs'
+import { requestedTemplateTargets } from './build-orcad-template.mjs'
+import {
+  stageControlHostTemplate,
+  verifyControlHostTemplate
+} from './orcad-control-host-template.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 
@@ -77,6 +82,20 @@ async function main() {
     throw new Error(`Unsupported server target: ${target}`)
   }
   const outputDir = resolve(argument('--out-dir') ?? join(root, 'out', 'orcad'))
+  const templateArgument = argument('--deployment-template')
+  if (process.argv.includes('--deployment-template') && !templateArgument) {
+    throw new Error('--deployment-template requires the verified orcad-template directory')
+  }
+  if (process.argv.includes('--deployment-targets') && !templateArgument) {
+    throw new Error('--deployment-targets requires --deployment-template')
+  }
+  const templateDir = templateArgument ? resolve(templateArgument) : null
+  const templateTargets = requestedTemplateTargets(
+    process.argv.map((value) => (value === '--deployment-targets' ? '--targets' : value))
+  )
+  if (templateDir) {
+    verifyControlHostTemplate(outputDir, templateDir, templateTargets)
+  }
   const isCurrent = target === currentTarget()
   ensurePrebuildSlot(target, isCurrent)
   const runtimePath = isCurrent ? await placeRuntime(outputDir, target) : null
@@ -96,6 +115,9 @@ async function main() {
   })
   if (result.code !== 0) {
     process.exit(result.code ?? 1)
+  }
+  if (templateDir) {
+    stageControlHostTemplate(outputDir, templateDir, templateTargets)
   }
   if (runtimePath && !existsSync(runtimePath)) {
     throw new Error(`build-orcad removed the runtime at ${runtimePath}`)
