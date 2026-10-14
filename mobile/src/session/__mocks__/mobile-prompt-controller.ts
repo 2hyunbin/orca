@@ -51,6 +51,7 @@ vi.mock('lucide-react-native', () =>
     [
       'ArrowDown',
       'ArrowUp',
+      'ListPlus',
       'ChevronDown',
       'ChevronUp',
       'ChevronsDownUp',
