@@ -126,7 +126,7 @@ describe('useUnreadDockBadge', () => {
       useAppStore
         .getState()
         .readOnScreenAttention(
-          { workspaceIds: [worktree.id], targets: [] },
+          { workspaceIds: [worktree.id], targets: [{ worktreeId: worktree.id, tabId: tab.id }] },
           { screenArrived: true }
         )
     )
