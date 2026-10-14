@@ -20,9 +20,15 @@ export async function qualifyProviderWorkspaceReopen(input: {
   await machine.getByRole('button', { name: 'Open workspace', exact: true }).click()
   const project = input.page.getByRole('dialog')
   await expect(project).toBeVisible({ timeout: 30_000 })
-  await project.getByRole('button', { name: 'Close', exact: true }).click()
-  await input.page.getByRole('button', { name: 'Back to app', exact: true }).click()
-  await input.page.getByText('Provider folder workspace', { exact: true }).click()
+  await expect(project.getByRole('region', { name: 'Saved workspaces', exact: true })).toBeVisible()
+  await capturePluginEvidence(
+    input.page,
+    input.testInfo,
+    'node-provider-saved-workspace-picker-native',
+    input.app
+  )
+  await project.getByRole('button', { name: 'Open Provider folder workspace', exact: true }).click()
+  await expect(project).toBeHidden()
   await input.page.getByRole('button', { name: /^Explorer\b/u }).click()
   await input.page
     .locator('[data-file-explorer-row]')

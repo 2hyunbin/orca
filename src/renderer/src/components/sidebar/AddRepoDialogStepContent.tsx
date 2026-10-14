@@ -40,6 +40,7 @@ type AddRepoDialogStepContentProps = {
   createParent: string
   createError: string | null
   isCreating: boolean
+  savedWorkspaces?: ReactNode
   hostSelector?: ReactNode
   actionsDisabled?: boolean
   manualCreateParentEntry?: boolean
@@ -102,6 +103,7 @@ export function AddRepoDialogStepContent({
   createParent,
   createError,
   isCreating,
+  savedWorkspaces,
   hostSelector,
   actionsDisabled = false,
   manualCreateParentEntry = isRuntimeEnvironmentActive,
@@ -150,6 +152,7 @@ export function AddRepoDialogStepContent({
         addProjectBusyLabel={addProjectBusyLabel}
         nestedScanInProgress={nestedScanInProgress}
         nestedScanId={nestedScanId}
+        savedWorkspaces={savedWorkspaces}
         hostSelector={hostSelector}
         actionsDisabled={actionsDisabled}
         browseHostKind={browseHostKind}

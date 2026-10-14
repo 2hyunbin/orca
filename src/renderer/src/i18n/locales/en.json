@@ -20274,6 +20274,11 @@
       "browse": "Browse file viewers",
       "chooseInstalled": "Choose a viewer to open this file.",
       "noneInstalled": "No installed viewer matches this file."
+    },
+    "managedWorkspace": {
+      "savedWorkspaces": "Saved workspaces",
+      "openSaved": "Open {{name}}",
+      "openTitle": "Open a workspace"
     }
   }
 }

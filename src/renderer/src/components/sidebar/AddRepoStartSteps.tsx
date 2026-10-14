@@ -65,6 +65,7 @@ type AddRepoLocalStartStepProps = {
   addProjectBusyLabel: string | null
   nestedScanInProgress: boolean
   nestedScanId: string | null
+  savedWorkspaces?: ReactNode
   hostSelector?: ReactNode
   actionsDisabled?: boolean
   browseHostKind?: 'local' | 'runtime'
@@ -82,6 +83,7 @@ export function AddRepoLocalStartStep({
   addProjectBusyLabel,
   nestedScanInProgress,
   nestedScanId,
+  savedWorkspaces,
   hostSelector,
   actionsDisabled = false,
   browseHostKind = 'local',
@@ -148,7 +150,9 @@ export function AddRepoLocalStartStep({
     <>
       <DialogHeader>
         <DialogTitle>
-          {translate('auto.components.sidebar.AddRepoStartSteps.d13757911c', 'Add a project')}
+          {savedWorkspaces
+            ? translate('plugins.managedWorkspace.openTitle', 'Open a workspace')
+            : translate('auto.components.sidebar.AddRepoStartSteps.d13757911c', 'Add a project')}
         </DialogTitle>
         {repoCount === 0 ? (
           <DialogDescription>
@@ -167,6 +171,7 @@ export function AddRepoLocalStartStep({
         onKeyDown={handleArrowNavigation}
       >
         {hostSelector}
+        {savedWorkspaces}
         <AddRepoPrimaryStartAction
           icon={primaryAction.icon}
           title={primaryAction.title}

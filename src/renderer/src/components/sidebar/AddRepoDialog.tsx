@@ -1,3 +1,4 @@
+import { ManagedWorkspacePicker } from './ManagedWorkspacePicker'
 import React, { useCallback, useState } from 'react'
 import { useAppStore } from '@/store'
 import { useRemoteRepo } from './AddRepoSteps'
@@ -30,6 +31,11 @@ export default React.memo(function AddRepoDialog({
   // channel belongs to the store-modal instance.
   const droppedLocalPath = useAppStore((s) =>
     !hosted && typeof s.modalData.droppedLocalPath === 'string' ? s.modalData.droppedLocalPath : ''
+  )
+  const managedWorkspaceEnvironmentId = useAppStore((s) =>
+    !hosted && typeof s.modalData.managedWorkspaceEnvironmentId === 'string'
+      ? s.modalData.managedWorkspaceEnvironmentId
+      : null
   )
   const addRepoPath = useAppStore((s) => s.addRepoPath)
   const scanNestedRepos = useAppStore((s) => s.scanNestedRepos)
@@ -312,6 +318,15 @@ export default React.memo(function AddRepoDialog({
         createError={createError}
         isCreating={isCreating}
         hostSelector={<AddRepoHostSelectorSlot hostSelection={hostSelection} />}
+        savedWorkspaces={
+          managedWorkspaceEnvironmentId &&
+          managedWorkspaceEnvironmentId === selectedRuntimeEnvironmentId ? (
+            <ManagedWorkspacePicker
+              environmentId={managedWorkspaceEnvironmentId}
+              onOpen={closeModal}
+            />
+          ) : undefined
+        }
         actionsDisabled={!hostSelection.selectedHostId}
         browseHostKind={selectedHostKind === 'local' ? 'local' : 'runtime'}
         createDefaultParent={createDefaultParent}
