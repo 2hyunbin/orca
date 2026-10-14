@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
 vi.mock('@/runtime/runtime-environment-ssh-state', () => ({
   resyncRuntimeEnvironmentSshTargets: vi.fn(async () => undefined)
 }))
+const notifications = vi.hoisted(() => ({ success: vi.fn() }))
+vi.mock('sonner', () => ({ toast: notifications }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => state } }))
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
@@ -97,6 +99,7 @@ function fixture(
     isRemote: true,
     environmentId: 'company-control'
   }
+  const connecting = vi.fn()
   const resources = (
     <PluginEnvironmentConnectionResources
       provider={environmentProviderUiFixture()}
@@ -105,6 +108,7 @@ function fixture(
       blocked={false}
       ready
       onAction={vi.fn()}
+      onConnecting={connecting}
       onReviewing={vi.fn()}
     />
   )
@@ -118,7 +122,7 @@ function fixture(
       resources
     )
   )
-  return { ...view, prepare, save, discard, cancel, connect, remoteConnect, target }
+  return { ...view, prepare, save, discard, cancel, connect, remoteConnect, target, connecting }
 }
 
 it('binds explicit endpoint approval to the private ticket and uses normal SSH connection management', async () => {
@@ -224,4 +228,40 @@ it('keeps remote connection failures separate from an identically named desktop 
   expect(desktopRead).not.toHaveBeenCalled()
   expect(f.connect).not.toHaveBeenCalled()
   desktopRead.mockRestore()
+})
+
+it('shows progress while the host connects and confirms only its completed reply', async () => {
+  const f = fixture(async () => preview, true)
+  const held = Promise.withResolvers<Awaited<ReturnType<typeof f.remoteConnect>>>()
+  f.remoteConnect.mockImplementation(() => held.promise)
+  await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Update & connect' }))
+  expect((await screen.findByRole('status')).textContent).toContain(
+    'Connecting to Devbox on Company control host'
+  )
+  expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(true)
+  expect(f.connecting).toHaveBeenLastCalledWith(true)
+  expect(notifications.success).not.toHaveBeenCalled()
+  await act(async () =>
+    held.resolve({ targetId: f.target.id, status: 'connected', reconnectAttempt: 0, error: null })
+  )
+  expect(screen.queryByRole('status')).toBeNull()
+  expect(f.connecting).toHaveBeenLastCalledWith(false)
+  expect(notifications.success).toHaveBeenCalledExactlyOnceWith(
+    'Connected to Devbox on Company control host'
+  )
+})
+it('withdraws busy presentation and never reports a late connection after leaving the view', async () => {
+  const f = fixture(async () => preview, true)
+  const held = Promise.withResolvers<Awaited<ReturnType<typeof f.remoteConnect>>>()
+  f.remoteConnect.mockImplementation(() => held.promise)
+  await userEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Update & connect' }))
+  await screen.findByRole('status')
+  f.unmount()
+  expect(f.connecting).toHaveBeenLastCalledWith(false)
+  await act(async () =>
+    held.resolve({ targetId: f.target.id, status: 'connected', reconnectAttempt: 0, error: null })
+  )
+  expect(notifications.success).not.toHaveBeenCalled()
 })

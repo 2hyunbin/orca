@@ -1,3 +1,4 @@
+import { runProcessSync } from '@orca/process-host'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -141,8 +142,39 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
       .getByRole('textbox', { name: 'Identity file (optional)', exact: true })
       .fill(target.identityFile)
     await capturePluginEvidence(page, testInfo, 'node-provider-ssh-review-native', app)
-    await review.getByRole('button', { name: 'Save & connect', exact: true }).click()
-    await expect(review).toBeHidden()
+    const paused = runProcessSync({
+      program: 'docker',
+      args: ['pause', target.containerName],
+      timeoutMs: 15_000
+    })
+    if (paused.code !== 0) {
+      throw new Error('Could not pause the owned SSH fixture')
+    }
+    let unpauseFailed = false
+    try {
+      await review.getByRole('button', { name: 'Save & connect', exact: true }).click()
+      await expect(review).toBeHidden()
+      await expect(
+        provider
+          .getByRole('status')
+          .filter({ hasText: 'Connecting to Existing development machine' })
+      ).toContainText('Connecting to Existing development machine on Company Node host')
+      await expect(machine.getByRole('button', { name: 'Sleep', exact: true })).toBeDisabled()
+      await expect(
+        provider.getByRole('button', { name: 'Refresh inventory', exact: true })
+      ).toBeDisabled()
+      await capturePluginEvidence(page, testInfo, 'node-provider-connecting-native', app)
+    } finally {
+      const resumed = runProcessSync({
+        program: 'docker',
+        args: ['unpause', target.containerName],
+        timeoutMs: 15_000
+      })
+      unpauseFailed = resumed.code !== 0
+    }
+    if (unpauseFailed) {
+      throw new Error('Could not resume the owned SSH fixture')
+    }
     const targets = unwrapRuntimeRpcResult(
       await hostClient.request<{ targets: SshEditableTarget[] }>(
         'ssh.listEditableTargets',
@@ -171,6 +203,12 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
     await expect
       .poll(async () => (await state())?.managedServer?.kind, { timeout: 90_000 })
       .toBe('managed')
+    await expect(
+      page.getByText('Connected to Existing development machine on Company Node host', {
+        exact: true
+      })
+    ).toBeVisible()
+    await capturePluginEvidence(page, testInfo, 'node-provider-connection-confirmed-native', app)
     const connected = await state()
     const managed = connected.managedServer
     if (managed?.kind !== 'managed') {

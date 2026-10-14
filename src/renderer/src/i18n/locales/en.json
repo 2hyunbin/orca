@@ -12924,7 +12924,9 @@
         "PluginEnvironmentConnectionResources": {
           "reviewError": "Could not confirm this machine’s current connection details. Refresh inventory and check the provider before connecting.",
           "connectionError": "Could not connect. Check its credentials and host-key trust in SSH Hosts.",
-          "savedConnectionError": "The SSH host is saved. {{reason}}"
+          "savedConnectionError": "The SSH host is saved. {{reason}}",
+          "connected": "Connected to {{machine}} on {{host}}",
+          "connecting": "Connecting to {{machine}} on {{host}}…"
         },
         "PluginEnvironmentResources": {
           "connect": "Connect"

@@ -1,3 +1,5 @@
+import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { getEnvironmentSshStateGeneration } from '@/store/slices/runtime-environment-ssh'
 import { resyncRuntimeEnvironmentSshTargets } from '@/runtime/runtime-environment-ssh-state'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
@@ -22,19 +24,25 @@ import { PluginEnvironmentConnectionDialog } from './PluginEnvironmentConnection
 export function PluginEnvironmentConnectionResources({
   provider,
   onReviewing,
+  onConnecting,
   ...resources
 }: Omit<ComponentProps<typeof PluginEnvironmentResources>, 'onConnect'> & {
   provider: PluginEnvironmentProviderEntry
   onReviewing(operationId: string | null): void
+  onConnecting?(busy: boolean): void
 }): React.JSX.Element {
-  const { api: providerApi, isRemote, environmentId } = usePluginEnvironmentHost()
+  const { api: providerApi, isRemote, environmentId, hostLabel } = usePluginEnvironmentHost()
   const [preview, setPreview] = useState<EnvironmentProviderSshPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [connectingVisible, setConnectingVisible] = useState(false)
+  const [connectingName, setConnectingName] = useState<string | null>(null)
+  const saving = useRef(false)
   const pending = useRef<string | null>(null)
   const reviewTicket = useRef<string | null>(null)
   const mounted = useMountedRef()
   useEffect(
     () => () => {
+      onConnecting?.(false)
       if (pending.current) {
         void providerApi.cancelEnvironmentProvider?.({ operationId: pending.current })
       }
@@ -44,11 +52,11 @@ export function PluginEnvironmentConnectionResources({
           .catch(() => {})
       }
     },
-    [providerApi]
+    [providerApi, onConnecting]
   )
   const prepare = async (resource: EnvironmentRecipeResource): Promise<void> => {
     const api = providerApi.prepareEnvironmentProviderSsh
-    if (pending.current || !api || provider.configuration.status !== 'ready') {
+    if (pending.current || saving.current || !api || provider.configuration.status !== 'ready') {
       return
     }
     const operationId = createBrowserUuid()
@@ -86,7 +94,7 @@ export function PluginEnvironmentConnectionResources({
       }
     }
   }
-  const save = async (identityFile?: string): Promise<void> => {
+  const performSave = async (identityFile?: string): Promise<void> => {
     const api = providerApi.saveEnvironmentProviderSsh
     if (!preview || !api) {
       throw new Error('Provider SSH support is unavailable')
@@ -104,7 +112,13 @@ export function PluginEnvironmentConnectionResources({
       return
     }
     reviewTicket.current = null
+    setConnectingName(preview.resource.name)
     setPreview(null)
+    const feedbackTimer = setTimeout(() => {
+      if (mounted.current) {
+        setConnectingVisible(true)
+      }
+    }, 200)
     try {
       let state: SshConnectionState | null
       if (isRemote) {
@@ -128,6 +142,15 @@ export function PluginEnvironmentConnectionResources({
       }
       if (!state || state.status !== 'connected') {
         throw new Error('SSH connection was not confirmed')
+      }
+      if (mounted.current) {
+        toast.success(
+          translate(
+            'auto.components.settings.PluginEnvironmentConnectionResources.connected',
+            'Connected to {{machine}} on {{host}}',
+            { machine: preview.resource.name, host: hostLabel }
+          )
+        )
       }
     } catch (cause) {
       if (mounted.current) {
@@ -155,6 +178,25 @@ export function PluginEnvironmentConnectionResources({
           )
         )
       }
+    } finally {
+      clearTimeout(feedbackTimer)
+    }
+  }
+  const save = async (identityFile?: string): Promise<void> => {
+    if (saving.current) {
+      return
+    }
+    saving.current = true
+    onConnecting?.(true)
+    try {
+      await performSave(identityFile)
+    } finally {
+      saving.current = false
+      if (mounted.current) {
+        setConnectingName(null)
+        setConnectingVisible(false)
+        onConnecting?.(false)
+      }
     }
   }
   const supported = Boolean(
@@ -164,6 +206,20 @@ export function PluginEnvironmentConnectionResources({
   )
   return (
     <>
+      <div className="min-h-6">
+        {connectingName && connectingVisible ? (
+          <div className="flex items-center gap-2" role="status">
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">
+              {translate(
+                'auto.components.settings.PluginEnvironmentConnectionResources.connecting',
+                'Connecting to {{machine}} on {{host}}…',
+                { machine: connectingName, host: hostLabel }
+              )}
+            </p>
+          </div>
+        ) : null}
+      </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -171,6 +227,7 @@ export function PluginEnvironmentConnectionResources({
       ) : null}
       <PluginEnvironmentResources
         {...resources}
+        blocked={resources.blocked || connectingName !== null}
         onConnect={supported ? (resource) => void prepare(resource) : undefined}
       />
       {preview ? (

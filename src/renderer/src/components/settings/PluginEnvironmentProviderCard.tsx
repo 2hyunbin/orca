@@ -1,3 +1,4 @@
+import { reviewedAccount } from './plugin-environment-reviewed-account'
 import { usePluginEnvironmentHost } from './plugin-environment-host-context'
 import { PluginEnvironmentMigrationDialog } from './PluginEnvironmentMigrationDialog'
 import { PluginEnvironmentPreviousHistory } from './PluginEnvironmentPreviousHistory'
@@ -10,10 +11,7 @@ import {
 } from '../../../../shared/plugins/plugin-environment-recipe-journal'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
-import type {
-  PluginEnvironmentProviderEntry,
-  PluginEnvironmentProviderReview
-} from '../../../../shared/plugins/plugin-environment-provider-api'
+import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
 import type {
   EnvironmentRecipeAction,
   EnvironmentRecipeResource
@@ -28,15 +26,6 @@ import {
   type PluginEnvironmentActionIntent
 } from './PluginEnvironmentActionDialog'
 
-function reviewedAccount(
-  provider: PluginEnvironmentProviderEntry
-): PluginEnvironmentProviderReview | null {
-  const { configuration } = provider
-  return configuration.status === 'ready' || configuration.status === 'migration-required'
-    ? { ...provider.review, contextId: configuration.contextId }
-    : null
-}
-
 export function PluginEnvironmentProviderCard({
   provider,
   onSetUp
@@ -48,6 +37,7 @@ export function PluginEnvironmentProviderCard({
   const { snapshot, loading, readError, load } = usePluginEnvironmentInventory(provider)
   const review = reviewedAccount(provider)
   const [error, setError] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const operation = useRef<string | null>(null)
   const [migrating, setMigrating] = useState(false)
@@ -143,6 +133,7 @@ export function PluginEnvironmentProviderCard({
   )
   const blocked = Boolean(
     running ||
+    connecting ||
     pending ||
     snapshot?.operations.some(
       (item) => isEnvironmentRecipeOperationUnresolved(item) && item.action !== 'list'
@@ -207,7 +198,7 @@ export function PluginEnvironmentProviderCard({
             <Button
               variant="outline"
               size="sm"
-              disabled={Boolean(running || (pending && pending.action !== 'list'))}
+              disabled={Boolean(connecting || running || (pending && pending.action !== 'list'))}
               onClick={() => void run({ provider, action: 'list' }).catch(() => {})}
             >
               <RefreshCw />
@@ -284,7 +275,7 @@ export function PluginEnvironmentProviderCard({
             </Button>
           </div>
         ) : null}
-        {blocked && !running && !pending ? (
+        {blocked && !running && !pending && !connecting ? (
           <p role="alert" className="text-sm text-muted-foreground">
             {translate(
               'auto.components.settings.PluginEnvironmentProviderCard.unresolved',
@@ -323,6 +314,7 @@ export function PluginEnvironmentProviderCard({
             ) : null}
             <PluginEnvironmentConnectionResources
               provider={provider}
+              onConnecting={setConnecting}
               onReviewing={(operationId) => {
                 operation.current = operationId
                 setRunning(operationId)
@@ -346,7 +338,7 @@ export function PluginEnvironmentProviderCard({
         <PluginEnvironmentOperationHistory
           provider={provider}
           operations={snapshot.operations}
-          busy={Boolean(running)}
+          busy={Boolean(running || connecting)}
           onInspected={() => {
             setError(null)
             void load()
@@ -359,7 +351,7 @@ export function PluginEnvironmentProviderCard({
         <Button
           variant="ghost"
           size="sm"
-          disabled={Boolean(running)}
+          disabled={Boolean(running || connecting)}
           onClick={() => setMigrating(true)}
         >
           {translate(
