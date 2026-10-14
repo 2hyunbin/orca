@@ -31,6 +31,7 @@ import { resolveDispatchAssigneeParty } from '../../../../orchestration/orchestr
 import { CHAT_WORKER_AUTHORITY, chatAssigneeOf, chatWorkerMode } from '../chat-assignee-admission'
 import { recordCreatedWorkerTerminalCustody } from './created-worker-terminal-custody'
 import { tearDownFailedWorkerStart } from './failed-worker-start-teardown'
+import { releaseRetriedWorkerTerminal } from './retried-worker-terminal-release'
 import { requireWorkerAuthority, type WorkerEffect } from './worker-topology'
 import { prepareLocalWorkerStart } from './worker-start-validation'
 import { deliverAndSettleWorkerStartReadiness } from './worker-start-readiness-settlement'
@@ -54,13 +55,11 @@ export async function startLocalWorker(args: {
   /** Settings-driven; the executing host still gets to refuse below. */
   mode: WorkerStartModeReceipt
 }): Promise<unknown> {
-  const { runtime, db, run, coordinator, callerSession, existingTask } = args
-  const { orchestrationMutation } = args
+  const { runtime, db, run, coordinator, callerSession, existingTask, orchestrationMutation } = args
   // `--terminal` names a party: a chat by its `/clear` root address, as its Dispatch does.
   const terminal = args.params.terminal && resolveDispatchAssigneeParty(args.params.terminal, db)
   const params = terminal ? { ...args.params, terminal: terminal.address } : args.params
   const chat = terminal ? chatAssigneeOf(terminal) : null
-  const coordinatorPane = coordinator?.paneKey ?? null
   const requestedWorktree = params.worktree ?? 'current'
   const createsWorktree = requestedWorktree === 'new-child' || requestedWorktree === 'new-top-level'
   const launchParams = await resolveWorkerConfiguredAgentParams(runtime, params, async () => {
@@ -161,7 +160,7 @@ export async function startLocalWorker(args: {
     taskRunId: run.id,
     // A handle-less session creates root Tasks: Task lineage is recorded by terminal only.
     taskCreatedByTerminalHandle: coordinator?.terminalHandle ?? undefined,
-    taskCreatedByPaneKey: coordinatorPane ?? undefined,
+    taskCreatedByPaneKey: coordinator?.paneKey ?? undefined,
     taskCreatedByProcessIncarnation: coordinator?.terminalHandle
       ? (runtime.getTerminalProcessIncarnation(coordinator.terminalHandle) ?? undefined)
       : undefined,
@@ -171,6 +170,7 @@ export async function startLocalWorker(args: {
     runtimeEpoch: runtime.getRuntimeId(),
     mutationReceipt: orchestrationMutation
   })
+  releaseRetriedWorkerTerminal(runtime, db, params)
   const effects: WorkerEffect[] = []
   const task = started.task
   if (resolvedWorktree) {
