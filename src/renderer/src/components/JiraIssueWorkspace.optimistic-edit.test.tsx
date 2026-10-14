@@ -30,6 +30,7 @@ const runtimeMocks = vi.hoisted(() => ({
 }))
 
 const store = vi.hoisted(() => ({
+  readJiraStatus: vi.fn<AppState['readJiraStatus']>(),
   patchJiraIssue:
     vi.fn<(key: string, patch: Partial<JiraIssue>, options?: JiraPatchOptions) => void>()
 }))
@@ -37,16 +38,21 @@ let currentSettings: GlobalSettings | null = null
 
 vi.mock('@/runtime/runtime-jira-client', () => runtimeMocks)
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: Pick<AppState, 'settings' | 'patchJiraIssue'>) => unknown) =>
+  useAppStore: (selector: (state: Partial<AppState>) => unknown) =>
     selector({
       settings: currentSettings,
+      jiraStatus: { connected: false, viewer: null },
+      jiraStatusContextKey: null,
+      jiraConnectionRevisions: {},
+      readJiraStatus: store.readJiraStatus,
       patchJiraIssue: (key: string, patch: Partial<JiraIssue>, options?: JiraPatchOptions) =>
         store.patchJiraIssue(key, patch, options)
     })
 }))
 vi.mock('@/i18n/i18n', async (importOriginal) => ({
   ...(await importOriginal<typeof I18n>()),
-  translate: (_key: string, fallback: string) => fallback
+  translate: (_key: string, fallback: string, options?: Parameters<typeof I18n.translate>[2]) =>
+    fallback.replace(/\{\{(\w+)\}\}/g, (match, key: string) => String(options?.[key] ?? match))
 }))
 vi.mock('@/components/sidebar/CommentMarkdown', () => ({
   default: ({ content }: { content: string }) => <div>{content}</div>
@@ -141,6 +147,7 @@ beforeEach(() => {
   currentSettings = null
   serverTitle = 'Old title'
   store.patchJiraIssue.mockReset()
+  store.readJiraStatus.mockReset().mockResolvedValue({ connected: false, viewer: null })
   for (const mock of Object.values(runtimeMocks)) {
     mock.mockReset()
   }
@@ -276,33 +283,21 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Old title')).toBeDefined())
   })
 
-  it.each(['priority', 'assignee'] as const)(
-    'keeps a cleared %s cleared when an older detail load arrives',
-    async (field) => {
-      const initialLoad = deferred<JiraIssue>()
-      const initial = jiraIssue('Old title', {
-        priority: { id: '1', name: 'High' },
-        assignee: { accountId: 'jane', displayName: 'Jane' }
-      })
-      runtimeMocks.jiraGetIssueForTarget.mockReturnValue(initialLoad.promise)
-      runtimeMocks.jiraUpdateIssueForTarget.mockReturnValue(deferred<{ ok: true }>().promise)
-      render(<StoreBackedWorkspace initial={initial} />)
-      await flushPromises()
-      fireEvent.click(screen.getByRole('button', { name: field === 'priority' ? 'High' : 'Jane' }))
-      fireEvent.click(
-        await screen.findByRole('button', {
-          name: field === 'priority' ? 'No priority' : 'Unassigned'
-        })
-      )
-      await act(async () => initialLoad.resolve(initial))
-      await flushPromises()
-      expect(
-        screen.queryByRole('button', { name: field === 'priority' ? 'High' : 'Jane' })
-      ).toBeNull()
-      expect(runtimeMocks.jiraGetIssueForTarget).toHaveBeenCalledTimes(1)
-      expect(runtimeMocks.jiraIssueCommentsForTarget).toHaveBeenCalledTimes(1)
-    }
-  )
+  it('keeps a cleared priority cleared when an older detail load arrives', async () => {
+    const initialLoad = deferred<JiraIssue>()
+    const initial = jiraIssue('Old title', { priority: { id: '1', name: 'High' } })
+    runtimeMocks.jiraGetIssueForTarget.mockReturnValue(initialLoad.promise)
+    runtimeMocks.jiraUpdateIssueForTarget.mockReturnValue(deferred<{ ok: true }>().promise)
+    render(<StoreBackedWorkspace initial={initial} />)
+    await flushPromises()
+    fireEvent.click(screen.getByRole('button', { name: 'High' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'No priority' }))
+    await act(async () => initialLoad.resolve(initial))
+    await flushPromises()
+    expect(screen.queryByRole('button', { name: 'High' })).toBeNull()
+    expect(runtimeMocks.jiraGetIssueForTarget).toHaveBeenCalledTimes(1)
+    expect(runtimeMocks.jiraIssueCommentsForTarget).toHaveBeenCalledTimes(1)
+  })
 
   it('keeps fields hydrated during a failed title save', async () => {
     const initialLoad = deferred<JiraIssue>()
@@ -356,10 +351,13 @@ describe('JiraIssueWorkspace optimistic edits', () => {
       .mockResolvedValueOnce([{ id: '11', name: 'Start progress', to: inProgress }])
       .mockResolvedValue([{ id: '21', name: 'Finish', to: done }])
     runtimeMocks.jiraUpdateIssueForTarget.mockResolvedValue({ ok: true })
+    runtimeMocks.jiraGetIssueForTarget
+      .mockResolvedValueOnce(jiraIssue('Old title'))
+      .mockResolvedValue(jiraIssue('Old title', { status: inProgress }))
     render(<StoreBackedWorkspace initial={jiraIssue('Old title')} />)
     await flushPromises()
 
-    fireEvent.click(screen.getByRole('button', { name: 'To Do' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change status: To Do' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Start progress' }))
     await flushPromises()
 
@@ -369,7 +367,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
       { transitionId: '11' },
       'site-1'
     )
-    // The menu stays open after picking a transition, so it must now list the new ones.
+    fireEvent.click(screen.getByRole('button', { name: 'Change status: In Progress' }))
     expect(screen.queryByRole('button', { name: 'Start progress' })).toBeNull()
     expect(await screen.findByRole('button', { name: 'Finish' })).toBeDefined()
   })
@@ -759,7 +757,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
       .mockResolvedValue(jiraIssue('Old title', { status: inProgress }))
     render(<StoreBackedWorkspace initial={jiraIssue('Old title')} />)
     await flushPromises()
-    fireEvent.click(screen.getByRole('button', { name: 'To Do' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change status: To Do' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Start progress' }))
     await act(async () => selectIssue(otherIssue))
     await flushPromises()
@@ -771,7 +769,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     await act(async () => reopenedTransitions.resolve([start]))
     await flushPromises()
     if (!screen.queryByRole('button', { name: 'Finish' })) {
-      fireEvent.click(screen.getByRole('button', { name: 'In Progress' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Change status: In Progress' }))
     }
     expect(await screen.findByRole('button', { name: 'Finish' })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Start progress' })).toBeNull()
@@ -840,14 +838,14 @@ describe('JiraIssueWorkspace optimistic edits', () => {
       .mockResolvedValue(jiraIssue('Old title', { status: inProgress }))
     render(<StoreBackedWorkspace initial={jiraIssue('Old title')} />)
     await flushPromises()
-    fireEvent.click(screen.getByRole('button', { name: 'To Do' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change status: To Do' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Start progress' }))
     await act(async () => selectIssue(otherIssue))
     await flushPromises()
     await act(async () => selectIssue(jiraIssue('Old title')))
     await flushPromises()
     if (!screen.queryByRole('button', { name: 'Finish' })) {
-      fireEvent.click(screen.getByRole('button', { name: 'In Progress' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Change status: In Progress' }))
     }
     fireEvent.click(await screen.findByRole('button', { name: 'Finish' }))
     await act(async () => oldSave.resolve({ ok: true }))

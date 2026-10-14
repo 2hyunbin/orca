@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   jiraCreateIssue,
+  jiraUpdateIssue,
   jiraGetIssue,
   jiraIssueComments,
   jiraListAssignableUsers,
@@ -20,6 +21,7 @@ import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
 import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import {
   JIRA_USER_FIELDS_RUNTIME_CAPABILITY,
+  JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
   JIRA_USER_FIELDS_UPDATE_REQUIRED_MESSAGE
 } from '../../../shared/protocol-version'
 
@@ -489,38 +491,36 @@ describe('runtime Jira client search bounds', () => {
   })
 })
 
-it('uses short image references and ordinary detail RPCs when the host advertises support', async () => {
-  const image = '![shot](orca-jira-image://attachment/12345678-1234-1234-1234-123456789012)'
-  runtimeCall.mockImplementation(async (args: { method: string }) =>
-    args.method === 'status.get'
-      ? createCompatibleRuntimeStatusResponse()
-      : {
-          id: 'image',
-          ok: true,
-          result:
-            args.method === 'jira.getIssue'
-              ? { key: 'ORCA-1', description: image }
-              : [{ id: 'comment', body: image }],
-          _meta: { runtimeId: 'remote-runtime' }
+describe('required transition fields on mixed remote versions', () => {
+  it('refuses new transition fields before old hosts can silently strip them', async () => {
+    runtimeCall.mockImplementation(async (args: { method: string }) => {
+      if (args.method === 'status.get') {
+        const response = createCompatibleRuntimeStatusResponse()
+        if (!response.ok) {
+          throw new Error('Expected status fixture')
         }
-  )
-  await expect(
-    jiraGetIssue({ kind: 'environment', environmentId: 'env-1' }, 'ORCA-1', 'site-1')
-  ).resolves.toMatchObject({ description: image })
-  await expect(
-    jiraIssueComments({ kind: 'environment', environmentId: 'env-1' }, 'ORCA-1', 'site-1')
-  ).resolves.toMatchObject([{ body: image }])
-  expect(runtimeCall).toHaveBeenCalledWith(
-    expect.objectContaining({
-      method: 'jira.getIssue',
-      params: { key: 'ORCA-1', siteId: 'site-1', mediaFormat: 'reference' }
+        response.result.capabilities = response.result.capabilities?.filter(
+          (capability) => capability !== JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY
+        )
+        return response
+      }
+      return { id: 'rpc-1', ok: true, result: { ok: true } }
     })
-  )
-  expect(runtimeCall).toHaveBeenCalledWith(
-    expect.objectContaining({
-      method: 'jira.issueComments',
-      params: { key: 'ORCA-1', siteId: 'site-1', mediaFormat: 'reference' }
+    const settings = {
+      kind: 'task-source' as const,
+      provider: 'jira' as const,
+      projectId: 'project-1',
+      hostId: 'runtime:env-1' as const
+    }
+    await expect(
+      jiraUpdateIssue(settings, 'APP-1', {
+        transitionId: '31',
+        transitionFields: { resolution: { id: '1' } }
+      })
+    ).rejects.toThrow('Update the remote Orca server')
+    expect(runtimeCall.mock.calls.some(([args]) => args.method === 'jira.updateIssue')).toBe(false)
+    await expect(jiraUpdateIssue(settings, 'APP-1', { transitionId: '11' })).resolves.toEqual({
+      ok: true
     })
-  )
-  expect(runtimeSubscribe).not.toHaveBeenCalled()
+  })
 })

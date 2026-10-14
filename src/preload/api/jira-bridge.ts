@@ -98,7 +98,7 @@ export const jiraApi = {
   searchUsers: (args?: { query?: string; siteId?: string }) =>
     ipcRenderer.invoke('jira:searchUsers', args),
 
-  listTransitions: (args: { key: string; siteId?: string }) =>
+  listTransitions: (args: { key: string; siteId?: string; strict?: boolean }) =>
     ipcRenderer.invoke('jira:listTransitions', args),
   getProjectStatusOrder: (args: {
     projectKey: string

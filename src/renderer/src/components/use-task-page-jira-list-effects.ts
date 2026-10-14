@@ -1,3 +1,4 @@
+import { buildJiraStatusCatalog } from './task-page-jira-status-catalog'
 import type { TaskPageLinearCollectionEffectsModel } from './use-task-page-linear-collection-effects'
 import { useEffect, useRef } from 'react'
 import {
@@ -40,6 +41,12 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setAppliedJiraSearch,
     activeJiraPreset,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
+    selectedJiraStatuses,
+    jiraQuickFiltersLoading,
+    setJiraStatusCatalog,
     setJiraProjectStatusOrder,
     displayedJiraIssues
   } = model
@@ -73,7 +80,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     if (taskSource !== 'jira') {
       return
     }
-    if (!jiraConnected) {
+    if (!jiraConnected || jiraSavedFiltersLoading || jiraQuickFiltersLoading) {
       return
     }
     const force = previousJiraRefreshNonceRef.current !== jiraRefreshNonce
@@ -84,18 +91,24 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setJiraJqlRejection(null)
     setJiraErrorDetailsOpen(false)
     const trimmed = jiraRemoteSearch.trim()
+    const savedFilter = jiraSavedFilters.find((filter) => filter.id === jiraActiveSavedFilterId)
+    const exactSavedJql = savedFilter?.jql === trimmed
     const request = jiraHasWorkspace
       ? readLinkedJiraIssues(linkedJiraIssueRefs, searchJiraIssues, jiraTaskSourceContext, force)
       : trimmed.length > 0
-        ? searchTaskPageJiraIssues(trimmed, (jql) =>
-            searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
-              sourceContext: jiraTaskSourceContext,
-              force
-            })
+        ? searchTaskPageJiraIssues(
+            trimmed,
+            (jql) =>
+              searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
+                sourceContext: jiraTaskSourceContext,
+                force
+              }),
+            exactSavedJql ? 'jql' : 'input'
           ).then((result) => ({ ...result, error: null }))
         : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
             sourceContext: jiraTaskSourceContext,
-            force
+            force,
+            ...(selectedJiraStatuses.length ? { filters: { statuses: selectedJiraStatuses } } : {})
           }).then((issues) => ({ issues, jqlRejection: null, error: null }))
     void request
       .then((result) => {
@@ -104,6 +117,12 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
           return
         }
         setJiraError(result.error)
+        if (!jiraHasWorkspace && !trimmed && selectedJiraStatuses.length === 0) {
+          setJiraStatusCatalog({
+            scopeKey: `${jiraTaskSourceScopeKey}::${selectedJiraSiteId}::${activeJiraPreset}`,
+            items: buildJiraStatusCatalog(issues)
+          })
+        }
         setJiraIssues(issues)
         setJiraJqlRejection(jqlRejection)
         setJiraLoading(false)
@@ -150,6 +169,11 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     jiraHasWorkspace,
     linkedJiraIssueRefsSignature,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
+    selectedJiraStatuses,
+    jiraQuickFiltersLoading,
     taskResumeApplied,
     jiraTaskSourceContext,
     jiraTaskSourceScopeKey

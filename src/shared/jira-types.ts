@@ -70,6 +70,7 @@ export type JiraCreateField = {
     type?: string
     items?: string
     custom?: string
+    system?: string
   }
   allowedValues?: JiraCreateFieldAllowedValue[]
 }
@@ -103,6 +104,7 @@ export type JiraTransition = {
   id: string
   name: string
   to: JiraStatus
+  fields?: JiraCreateField[]
 }
 
 export type JiraIssue = {
@@ -120,6 +122,12 @@ export type JiraIssue = {
   assignee?: JiraUser
   reporter?: JiraUser
   priority?: JiraPriority
+  /** Parent issue (epic for stories, parent story for subtasks). */
+  parent?: { key: string; title: string; issueTypeName?: string }
+  sprint?: string
+  storyPoints?: number
+  originalEstimateSeconds?: number
+  remainingEstimateSeconds?: number
   updatedAt: string
   createdAt: string
 }
@@ -139,9 +147,13 @@ export type JiraIssueUpdate = {
   assigneeAccountId?: string | null
   priorityId?: string | null
   transitionId?: string
+  transitionFields?: Record<string, unknown>
+  transitionComment?: string
 }
 
 export type JiraIssueFilter = 'assigned' | 'reported' | 'all' | 'done'
+
+export type JiraIssueListFilters = { statuses?: string[] }
 
 export type JiraConnectArgs = {
   siteUrl: string

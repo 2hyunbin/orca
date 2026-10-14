@@ -4,7 +4,13 @@ import { JiraSummaryLookupError } from '../../shared/jira-summary-lookup'
 import { acquire, release } from './request-queue'
 import { apiBasePath, jiraRequest, type JiraClientForSite } from './authenticated-request'
 import { clearToken, getClients, isAuthError } from './client'
-import { ISSUE_DETAIL_FIELDS, ISSUE_SUMMARY_FIELDS, mapJiraIssue } from './jira-issue-mapping'
+import { agileFieldIdList, getAgileFieldIds } from './jira-agile-fields'
+import {
+  ISSUE_DETAIL_FIELDS,
+  ISSUE_SUMMARY_FIELDS,
+  mapJiraIssue,
+  type JiraAgileFieldIds
+} from './jira-issue-mapping'
 import {
   collectIssueMediaRequest,
   flushMediaResolutionWarn,
@@ -34,11 +40,13 @@ export async function getIssue(
     let mediaRequest: MediaRequest | undefined
     let issue: JiraRecord | undefined
     let held = false
+    let agileFields: JiraAgileFieldIds = {}
     try {
+      agileFields = await getAgileFieldIds(entry)
       await acquire()
       held = true
       const params = new URLSearchParams({
-        fields: ISSUE_DETAIL_FIELDS.join(','),
+        fields: [...ISSUE_DETAIL_FIELDS, ...agileFieldIdList(agileFields)].join(','),
         expand: 'renderedFields'
       })
       issue = await jiraRequest<JiraRecord>(
@@ -74,14 +82,14 @@ export async function getIssue(
       const prepared = mediaRequest
         ? await prepareMediaResolver(entry, mediaRequest, mediaFormat)
         : undefined
-      const mapped = mapJiraIssue(entry.site, issue, prepared?.options)
+      const mapped = mapJiraIssue(entry.site, issue, prepared?.options, agileFields)
       if (prepared) {
         flushMediaResolutionWarn(entry, prepared)
       }
       return mapped
     } catch (error) {
       console.warn('[jira] getIssue media load failed:', error)
-      return mapJiraIssue(entry.site, issue)
+      return mapJiraIssue(entry.site, issue, undefined, agileFields)
     }
   }
   return null

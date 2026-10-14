@@ -1,6 +1,6 @@
-import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
 // @vitest-environment happy-dom
 
+import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   jiraAddIssueCommentForTarget,
@@ -75,7 +75,11 @@ describe('captured Jira detail owners', () => {
       siteId: 'site-1',
       body: 'Comment'
     })
-    expect(localMethods.listTransitions).toHaveBeenCalledWith({ key: 'ENG-1', siteId: 'site-1' })
+    expect(localMethods.listTransitions).toHaveBeenCalledWith({
+      key: 'ENG-1',
+      siteId: 'site-1',
+      strict: true
+    })
     expect(localMethods.listPriorities).toHaveBeenCalledWith({ siteId: 'site-1' })
     expect(localMethods.listAssignableUsers).toHaveBeenCalledWith({
       key: 'ENG-1',
@@ -110,6 +114,13 @@ describe('captured Jira detail owners', () => {
         expect.objectContaining({ method: `jira.${method}`, selector: 'env-1', timeoutMs: 30_000 })
       )
     }
+    expect(runtimeCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'jira.listTransitions',
+        selector: 'env-1',
+        params: { key: 'ENG-1', siteId: 'site-1', strict: true }
+      })
+    )
     expect(
       runtimeCall.mock.calls.filter(([args]) => args.method === 'jira.listAssignableUsers')
     ).toHaveLength(1)

@@ -11,6 +11,7 @@ import type {
   JiraCreateIssueArgs,
   JiraIssue,
   JiraIssueFilter,
+  JiraIssueListFilters,
   JiraIssueType,
   JiraIssueUpdate,
   JiraPriority,
@@ -47,6 +48,7 @@ export type JiraApi = {
     filter?: JiraIssueFilter
     limit?: number
     siteId?: JiraSiteSelection
+    filters?: JiraIssueListFilters
   }) => Promise<JiraIssue[]>
   getIssue: (args: {
     key: string
@@ -100,7 +102,11 @@ export type JiraApi = {
     siteId?: string
   }) => Promise<JiraUser[]>
   searchUsers: (args?: { query?: string; siteId?: string }) => Promise<JiraUser[]>
-  listTransitions: (args: { key: string; siteId?: string }) => Promise<JiraTransition[]>
+  listTransitions: (args: {
+    key: string
+    siteId?: string
+    strict?: boolean
+  }) => Promise<JiraTransition[]>
   getProjectStatusOrder: (args: {
     projectKey: string
     siteId?: string
