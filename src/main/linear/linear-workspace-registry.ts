@@ -17,14 +17,17 @@ import {
 } from './linear-workspace-record'
 import { credentialFileHasContent } from '../integration-credential-file'
 import type { LinearWorkspace } from '../../shared/linear/workspace-types'
+import { createIntegrationStateFileCache } from '../integration-state-file-cache'
 
 let cachedTokens = new Map<string, string>()
 const MAX_LINEAR_WORKSPACE_CREDENTIAL_ENTRIES = 128
 // Why: decrypt failures are recorded per workspace so getStatus can explain
 // failing reads without re-touching the keychain on every status poll.
 const credentialErrors = new Map<string, string>()
-let cachedWorkspaceFile: LinearWorkspaceFile | null = null
-let workspaceFileLoadedFromDisk = false
+const workspaceFileCache = createIntegrationStateFileCache({
+  filePath: getWorkspaceFilePath,
+  readFromDisk: readWorkspaceFileFromDisk
+})
 
 export function getCachedToken(workspaceId: string): string | undefined {
   const token = cachedTokens.get(workspaceId)
@@ -83,8 +86,7 @@ export function getCredentialError(workspaceId: string): string | undefined {
 }
 
 export function resetWorkspaceFileCacheToEmpty(): void {
-  cachedWorkspaceFile = emptyWorkspaceFile()
-  workspaceFileLoadedFromDisk = true
+  workspaceFileCache.invalidate()
 }
 
 function readWorkspaceFileFromDisk(): LinearWorkspaceFile {
@@ -125,11 +127,7 @@ function readWorkspaceFileFromDisk(): LinearWorkspaceFile {
 }
 
 export function getWorkspaceFile(): LinearWorkspaceFile {
-  if (!workspaceFileLoadedFromDisk || !cachedWorkspaceFile) {
-    cachedWorkspaceFile = readWorkspaceFileFromDisk()
-    workspaceFileLoadedFromDisk = true
-  }
-  return cachedWorkspaceFile
+  return workspaceFileCache.get()
 }
 
 export function writeWorkspaceFile(file: LinearWorkspaceFile): void {
@@ -153,17 +151,17 @@ export function writeWorkspaceFile(file: LinearWorkspaceFile): void {
         ? file.selectedWorkspaceId
         : activeWorkspaceId
 
-  cachedWorkspaceFile = {
+  const next: LinearWorkspaceFile = {
     version: 1,
     activeWorkspaceId,
     selectedWorkspaceId,
     workspaces: persistedWorkspaces
   }
-  workspaceFileLoadedFromDisk = true
-  writeFileSync(getWorkspaceFilePath(), JSON.stringify(cachedWorkspaceFile, null, 2), {
+  writeFileSync(getWorkspaceFilePath(), JSON.stringify(next, null, 2), {
     encoding: 'utf-8',
     mode: 0o600
   })
+  workspaceFileCache.invalidate()
 }
 
 export function getLegacyWorkspace(): LinearWorkspace | null {
