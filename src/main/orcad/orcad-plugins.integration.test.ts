@@ -1,5 +1,7 @@
 import { PluginEnvironmentRecipeJournalFile } from '../plugins/plugin-environment-recipe-journal-file'
 import { randomUUID } from 'node:crypto'
+import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { PluginEnvironmentProviderRuntimeClient } from '../../shared/plugins/plugin-environment-provider-runtime-client'
 import { NODE_RUNTIME_PIN } from '../../shared/node-runtime-pin'
 import { environmentRecipeRequestSchema } from '../../shared/environment-recipe-protocol'
 import { readFile } from 'node:fs/promises'
@@ -61,19 +63,13 @@ describe('Node control-host plugin composition uses its profile and authenticate
     const f = await fixture()
     const host = await pairedRuntimeRpcFixture(cleanups, new OrcaRuntimeService(f.store), f.root)
     const connection = host.connect([PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY])
-    const request = async (name: string, input?: unknown) => {
-      const response = await connection.request(
-        `plugins.environments.${name}`,
-        {
-          runtimeId: host.runtime.getRuntimeId(),
-          ...(input === undefined ? {} : { input })
-        },
-        15000
-      )
-      return unwrapRuntimeRpcResult(response)
-    }
+    const providerClient = new PluginEnvironmentProviderRuntimeClient(
+      pairedRuntimeConnectionFromOffer(host.pairing),
+      host.runtime.getRuntimeId()
+    )
+    cleanups.push(() => providerClient.close())
     expect(environmentProviderRpcAvailable()).toBe(true)
-    expect(await request('list')).toEqual([])
+    expect(await providerClient.call('list', {})).toEqual([])
     const plugin = f.service.findValidPlugin('company.platform')
     if (!plugin?.reviewRevision) {
       throw new Error('Provider not discovered on the Node host')
@@ -93,7 +89,7 @@ describe('Node control-host plugin composition uses its profile and authenticate
     expect(f.store.getSettings().pluginConsents).toMatchObject({
       'company.platform': plugin.consentFingerprint
     })
-    expect(await request('configure', f.review)).toMatchObject([
+    expect(await providerClient.call('configure', { input: f.review })).toMatchObject([
       { configuration: { status: 'ready' } }
     ])
     await expect(readFile(join(f.cwd, 'started'))).rejects.toThrow()
@@ -110,7 +106,9 @@ describe('Node control-host plugin composition uses its profile and authenticate
           ? { resourceId: 'sandbox', expectedRevision: revision }
           : {})
       })
-      expect(await request('execute', { review: f.review, request: operation })).toMatchObject({
+      expect(
+        await providerClient.call('execute', { input: { review: f.review, request: operation } })
+      ).toMatchObject({
         kind: 'executed',
         result: { kind: 'completed' }
       })
@@ -118,7 +116,7 @@ describe('Node control-host plugin composition uses its profile and authenticate
         (resource) => resource.id === 'sandbox'
       )?.revision
     }
-    expect(await request('snapshot', f.review)).toMatchObject({
+    expect(await providerClient.call('snapshot', { input: f.review })).toMatchObject({
       resources: [
         { id: 'devbox', state: 'running' },
         { id: 'sandbox', state: 'deleted' }
@@ -167,7 +165,7 @@ describe('Node control-host plugin composition uses its profile and authenticate
     legacyCapabilities.mockRestore()
     f.store.updateSettings({ pluginSystemEnabled: false }, { notifyListeners: true })
     await f.service.whenReady()
-    expect(await request('list')).toEqual([])
+    expect(await providerClient.call('list', {})).toEqual([])
     await f.lifetime.stop()
     expect(environmentProviderRpcAvailable()).toBe(false)
     expect(
@@ -175,7 +173,85 @@ describe('Node control-host plugin composition uses its profile and authenticate
     ).toMatchObject({
       capabilities: expect.not.arrayContaining([PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY])
     })
-    await expect(request('list')).rejects.toThrow()
+    await expect(providerClient.call('list', {})).rejects.toThrow()
+  })
+  it('keeps migration confirmation on the reviewing socket and refuses sibling or disconnected reviews', async () => {
+    const f = await fixture({ recovery: true })
+    const host = await pairedRuntimeRpcFixture(cleanups, new OrcaRuntimeService(f.store), f.root)
+    const approval = host.connect([PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY])
+    const plugin = f.service.findValidPlugin('company.platform')
+    if (!plugin?.reviewRevision) {
+      throw new Error('Provider not discovered')
+    }
+    unwrapRuntimeRpcResult(
+      await approval.request(
+        'plugins.consent',
+        {
+          pluginKey: plugin.pluginKey,
+          reviewedFingerprint: plugin.consentFingerprint,
+          reviewedRevision: plugin.reviewRevision,
+          decision: 'approve'
+        },
+        5000
+      )
+    )
+    const pairing = pairedRuntimeConnectionFromOffer(host.pairing)
+    const reviewer = new PluginEnvironmentProviderRuntimeClient(
+      pairing,
+      host.runtime.getRuntimeId()
+    )
+    const sibling = new PluginEnvironmentProviderRuntimeClient(pairing, host.runtime.getRuntimeId())
+    cleanups.push(
+      () => reviewer.close(),
+      () => sibling.close()
+    )
+    await reviewer.call('configure', { input: f.review })
+    await reviewer.call('execute', {
+      input: {
+        review: f.review,
+        request: environmentRecipeRequestSchema.parse({
+          protocolVersion: 2,
+          providerId: f.review.providerId,
+          contextId: f.review.contextId,
+          operationId: randomUUID(),
+          action: 'list'
+        })
+      }
+    })
+    await f.selectBackendAccount('other-account')
+    const nextReview = { ...f.review, contextId: 'other-account' }
+    const preview = await reviewer.call('prepareMigration', {
+      input: {
+        review: nextReview,
+        queryId: randomUUID()
+      }
+    })
+    expect(preview.currentResources).toMatchObject([{ name: 'Other account devbox' }])
+    await expect(
+      sibling.call('commitMigration', { input: { ticketId: preview.ticketId } })
+    ).rejects.toThrow('unavailable')
+    await expect(
+      reviewer.call('commitMigration', { input: { ticketId: preview.ticketId } })
+    ).resolves.toMatchObject([{ configuration: { status: 'ready', contextId: 'other-account' } }])
+    await f.selectBackendAccount(f.review.contextId)
+    const abandoned = await reviewer.call('prepareMigration', {
+      input: {
+        review: f.review,
+        queryId: randomUUID()
+      }
+    })
+    reviewer.close()
+    const replacement = new PluginEnvironmentProviderRuntimeClient(
+      pairing,
+      host.runtime.getRuntimeId()
+    )
+    cleanups.push(() => replacement.close())
+    await expect(
+      replacement.call('commitMigration', { input: { ticketId: abandoned.ticketId } })
+    ).rejects.toThrow('unavailable')
+    expect(await f.service.environmentProviders.snapshot(nextReview)).toMatchObject({
+      binding: { contextId: 'other-account' }
+    })
   })
   it('keeps a disconnected applied mutation fenced and isolates another socket before authoritative receipt recovery', async () => {
     const f = await fixture({ recovery: true, loseCreateResponse: true })
@@ -206,7 +282,12 @@ describe('Node control-host plugin composition uses its profile and authenticate
         5000
       )
     )
-    await rpc(original, 'configure', f.review)
+    const mutationClient = new PluginEnvironmentProviderRuntimeClient(
+      pairedRuntimeConnectionFromOffer(host.pairing),
+      host.runtime.getRuntimeId()
+    )
+    cleanups.push(() => mutationClient.close())
+    await mutationClient.call('configure', { input: f.review })
     const operation = environmentRecipeRequestSchema.parse({
       protocolVersion: 2,
       providerId: f.review.providerId,
@@ -215,10 +296,12 @@ describe('Node control-host plugin composition uses its profile and authenticate
       action: 'create',
       parameters: {}
     })
-    const pending = rpc(original, 'execute', { review: f.review, request: operation }).then(
-      (result) => ({ kind: 'completed', result }),
-      (error: unknown) => ({ kind: 'unavailable', error })
-    )
+    const pending = mutationClient
+      .call('execute', { input: { review: f.review, request: operation } })
+      .then(
+        (result) => ({ kind: 'completed', result }),
+        (error: unknown) => ({ kind: 'unavailable', error })
+      )
     await expect
       .poll(
         async () => {
@@ -234,8 +317,9 @@ describe('Node control-host plugin composition uses its profile and authenticate
       )
       .toBe('completed')
     expect(await rpc(sibling, 'cancel', { operationId: operation.operationId })).toBe(false)
-    original.close()
+    mutationClient.close()
     expect(await pending).toMatchObject({ kind: 'unavailable' })
+    await expect(mutationClient.call('list', {})).rejects.toThrow()
     await expect
       .poll(
         async () => (await f.service.environmentProviders.snapshot(f.review)).operations[0]?.status,

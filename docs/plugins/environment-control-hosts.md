@@ -16,6 +16,12 @@ Socket closure aborts only that socket's active operations and retires its uncon
 
 Node shutdown withdraws RPC service availability, removes settings/safety listeners, revokes provider authority and awaits service disposal before profile persistence is released. Safety-list shutdown aborts network fetching, rejects queued/late refreshes and waits for its writer; a late result cannot publish new authority after shutdown. Contributor credentials are read only from the chosen host's launch environment.
 
+## Client review connection
+
+`PluginEnvironmentProviderRuntimeClient` keeps one authenticated connection open for the review. Its preflight checks the exact server instance, protocol compatibility and provider capability before any domain call. Each request reuses the strict instance-bound input schema; each response must name the same instance. Concurrent reads share admission. Closing the client, transport loss or a failed admitted call retires the client, drops late answers and requires a fresh review; no mutation or ticket is automatically replayed on another socket.
+
+The client exposes only the fourteen provider methods. Ordinary reads have a fifteen-second response deadline; execution and receipt inspection allow the declared command maximum plus retirement margin. Migration allows the existing sixteen-page bound. Caller cancellation uses the owned operation ID; closing the entire review closes its socket and lets the execution host retire that owner's pending work. This client is a transport foundation for the renderer bridge, not a claim that the selected-host settings surface is connected yet.
+
 ## Current qualification and remaining client work
 
 Actual installed-adapter handler checks cover all six lifecycle actions, distinct sockets of one device, source/account admission and receipt recovery. Real encrypted pairing/RPC checks use the Node composition with its own profile store and the default verified Node 24.21.0 runtime: source consent and account configuration execute no code, six explicit operations preserve a long-lived machine beside an ephemeral sandbox, old instance/client and mobile requests refuse, and a disconnected applied creation is recovered without another mutation. The desktop provider IPC, ordinary RPC result handling and existing viewer transport regressions retain coverage.
