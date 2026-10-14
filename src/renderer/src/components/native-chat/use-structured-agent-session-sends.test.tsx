@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ call: vi.fn() }))
@@ -71,3 +71,45 @@ it('takes no second send while the first is out', () => {
   expect(first).toBe('queued')
   expect(second).toBe(false)
 })
+
+it.each([true, false])(
+  'uses ordinary delivery for both keys during Stopping with Queue enabled %s',
+  async (enabled) => {
+    mocks.call.mockImplementation(() => new Promise(() => {}))
+    for (const stopping of [false, true]) {
+      for (const intent of [undefined, 'alternate'] as const) {
+        mocks.call.mockClear()
+        const { result, unmount } = renderHook(() =>
+          useStructuredAgentSessionSends({
+            sessionId: `session-${enabled}-${stopping}-${intent ?? 'default'}`,
+            target: { kind: 'local' },
+            fence: 1,
+            submissions: [],
+            queuedMessageIds: [],
+            queue: { capability: 'supported', enabled },
+            historyLoaded: false,
+            isWorking: true,
+            stopping
+          })
+        )
+        act(() => {
+          result.current.send('follow up', [], intent)
+        })
+        await waitFor(() =>
+          expect(mocks.call.mock.calls.some(([, method]) => method === 'agentSession.send')).toBe(
+            true
+          )
+        )
+        const params = mocks.call.mock.calls.find(
+          ([, method]) => method === 'agentSession.send'
+        )?.[2]
+        if (stopping ? enabled : enabled !== (intent === 'alternate')) {
+          expect(params).toHaveProperty('delivery', 'queue-if-active')
+        } else {
+          expect(params).not.toHaveProperty('delivery')
+        }
+        unmount()
+      }
+    }
+  }
+)

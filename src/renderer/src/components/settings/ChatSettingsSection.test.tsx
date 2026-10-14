@@ -224,7 +224,7 @@ describe('Chat settings page', () => {
         expect(getSettingsScrollTarget(queueResult?.targetSectionId ?? '', container)).toBe(
           container.querySelector('#chat-queue-follow-ups')
         )
-        expect(screen.getByRole('switch', { name: 'Toggle queue follow-ups' })).toBeTruthy()
+        expect(screen.getByRole('combobox', { name: 'Follow-up behavior' })).toBeTruthy()
       }
     }
   )

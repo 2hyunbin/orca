@@ -152,7 +152,7 @@ it('says a signed-out Codex above the composer and still sends', () => {
     admitted = send('hello', [])
   })
   expect(admitted).toBe(true)
-  expect(mocks.send).toHaveBeenCalledWith('hello', [])
+  expect(mocks.send).toHaveBeenCalledWith('hello', [], undefined)
 })
 
 it('leaves an auth turn row as the explanation when the catalog also says signed out', () => {
