@@ -211,6 +211,29 @@ describe('a saved browser tab on a host with no window', () => {
     expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-1' }))
   })
 
+  it('starts the first tab this host can show when the active one is a desktop document page', async () => {
+    const saved = savedServeTabs()
+    const docLocation = {
+      kind: 'workspace-doc' as const,
+      worktreeId: TEST_WORKTREE_ID,
+      filePath: 'a.md'
+    }
+    const { runtime, createTab } = restartedServe({
+      ...saved,
+      browserPagesByWorkspace: Object.fromEntries(
+        Object.entries(saved.browserPagesByWorkspace ?? {}).map(([tabId, pages]) => [
+          tabId,
+          pages.map((page) => (page.id === 'page-2' ? { ...page, docLocation } : page))
+        ])
+      )
+    })
+
+    const current = await runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(current.tab.browserPageId).toBe('page-1')
+    await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-1' }))
+  })
+
   it('reports no browser tab only when the worktree saves none', async () => {
     const { runtime, createTab } = restartedServe(makeWorkspaceSessionWithHeadlessTerminal())
 
@@ -242,6 +265,19 @@ describe('a saved browser tab on a host with no window', () => {
     expect(current.tab.browserPageId).toBe('page-3')
     await runtime.browserSnapshot({})
     expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-3' }))
+  })
+
+  it('acts in the first worktree that saves a browser tab when the shown one saves none', async () => {
+    const saved = savedServeTabs()
+    const { runtime, createTab } = restartedServe({
+      ...saved,
+      activeWorktreeId: 'repo-1::/tmp/no-browser-tabs'
+    })
+
+    const current = await runtime.browserTabCurrent({})
+    expect(current.tab.browserPageId).toBe('page-2')
+    await runtime.browserSnapshot({})
+    expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-2' }))
   })
 
   it('saves a re-created page whose id the layout still records as active', () => {

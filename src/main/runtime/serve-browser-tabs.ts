@@ -101,28 +101,25 @@ export class ServeBrowserTabs {
       return []
     }
     const live = this.deps.livePageIds(worktreeId)
-    const tabs = session.browserTabsByWorktree?.[worktreeId] ?? []
-    // A window's rule: the recorded tab while it is still saved, else the first saved tab.
-    const recorded = session.activeBrowserTabIdByWorktree?.[worktreeId]
-    const activeTabId = tabs.some((tab) => tab.id === recorded) ? recorded : tabs[0]?.id
-    return tabs.flatMap((tab) => {
+    const tabs = (session.browserTabsByWorktree?.[worktreeId] ?? []).flatMap((tab) => {
       const pageId = tab.activePageId ?? tab.pageIds?.[0]
       const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
       // A document page is one desktop's; a remote page belongs to the host that ran it.
-      if (!page || live.has(page.id) || page.docLocation || page.remoteBrowserPageId) {
-        return []
-      }
-      return [
-        {
-          tabId: tab.id,
-          pageId: page.id,
-          url: page.url,
-          title: page.title,
-          profileId: tab.sessionProfileId ?? null,
-          active: tab.id === activeTabId
-        }
-      ]
+      return page && !page.docLocation && !page.remoteBrowserPageId ? [{ tab, page }] : []
     })
+    // A window's rule over the tabs this host can show: the recorded one, else the first.
+    const recorded = session.activeBrowserTabIdByWorktree?.[worktreeId]
+    const activeTabId = tabs.some(({ tab }) => tab.id === recorded) ? recorded : tabs[0]?.tab.id
+    return tabs
+      .filter(({ page }) => !live.has(page.id))
+      .map(({ tab, page }) => ({
+        tabId: tab.id,
+        pageId: page.id,
+        url: page.url,
+        title: page.title,
+        profileId: tab.sessionProfileId ?? null,
+        active: tab.id === activeTabId
+      }))
   }
 
   /** A switched-to page's tab is the one its worktree shows, as a window records it. */
