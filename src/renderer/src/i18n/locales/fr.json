@@ -252,7 +252,18 @@
       "codexSharedServerWarning": {
         "title": "Avertir lorsqu'un onglet Codex partage un serveur",
         "description": "Affiche un avis sur un Codex que vous avez démarré vous-même lorsqu'il partage un serveur avec d'autres onglets, car son statut d'agent peut être erroné."
-      }
+      },
+      "environmentName": "Nom de la variable d’environnement",
+      "environmentValue": "Valeur de {{name}}",
+      "savedEnvironment": "Valeur enregistrée · saisir pour remplacer",
+      "newEnvironment": "Valeur",
+      "removeEnvironment": "Supprimer",
+      "loadingHost": "Chargement des paramètres des agents…",
+      "updateHost": "Mettez ce serveur à jour pour modifier ses paramètres de lancement des agents.",
+      "readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
+      "saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
+      "hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
+      "save": "Enregistrer"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "lien symbolique",
@@ -1017,6 +1028,7 @@
               "undecryptableUnknown": "{{value0}} cookies n'ont pas pu être déchiffrés et ont été ignorés. Fermez complètement le navigateur source, puis réessayez l'importation.",
               "unrecognizedWarning": "L'importation des cookies s'est terminée avec un avertissement que cette version d'Orca ne reconnaît pas. Mettez Orca à jour pour voir les détails, puis vérifiez ce profil avant de vous fier à ses cookies.",
               "undecryptableUnrecognizedReason": "{{value0}} cookies n'ont pas pu être déchiffrés et ont été ignorés pour une raison que cette version d'Orca ne reconnaît pas. Mettez Orca à jour pour voir les détails, puis réessayez l'importation.",
+              "partitionSkippedBreakdown": "Cookies dont la partition de site est illisible : {{value0}}. Cookies associés non importés pour protéger les sessions existantes : {{value1}}. Les cookies existants de ces sites n’ont pas été modifiés. Vérifiez ces sites dans ce profil avant de vous reconnecter.",
               "partitionSkipped": "{{value0}} cookies n'ont pas été importés car leur partition de site n'a pas pu être lue. Connectez-vous à nouveau à ces sites dans Orca.",
               "locationClientHosted": "Lire à partir de cet appareil et stocké ici pour l'espace de travail {{value0}}.",
               "locationRemoteHost": "Lire à partir des navigateurs sur {{value0}} et y être stockée.",
@@ -18047,7 +18059,6 @@
         "fastMode": "Mode rapide",
         "speed": "Vitesse",
         "thinking": "Réflexion",
-        "options": "Options",
         "sessionOptions": "Options de session",
         "chooseInAgentPicker": "Choisir dans le sélecteur d'agents…",
         "searchModels": "Rechercher des modèles…",
@@ -18096,7 +18107,12 @@
         "permissionFullAccessCodexDescription": "Ne demande jamais ; peut modifier n’importe quel fichier et utiliser le réseau",
         "permissionFullAccessSharedDescription": "Ne demande jamais avant les modifications ou les commandes",
         "pasteFailed": "Échec du collage.",
-        "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat."
+        "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat.",
+        "optionValueShort": {
+          "minimal": "Min.",
+          "medium": "Moy.",
+          "xhigh": "Extra"
+        }
       },
       "tool": {
         "running": "En cours…",
@@ -19537,16 +19553,5 @@
   },
   "projectField": {
     "updateFailed": "Échec de la mise à jour du champ du projet"
-  },
-  "settings.agents.environmentName": "Nom de la variable d’environnement",
-  "settings.agents.environmentValue": "Valeur de {{name}}",
-  "settings.agents.savedEnvironment": "Valeur enregistrée · saisir pour remplacer",
-  "settings.agents.newEnvironment": "Valeur",
-  "settings.agents.removeEnvironment": "Supprimer",
-  "settings.agents.loadingHost": "Chargement des paramètres des agents…",
-  "settings.agents.updateHost": "Mettez ce serveur à jour pour modifier ses paramètres de lancement des agents.",
-  "settings.agents.readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
-  "settings.agents.saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
-  "settings.agents.hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
-  "settings.agents.save": "Enregistrer"
+  }
 }
