@@ -141,7 +141,7 @@ export class RuntimeFileMutations {
     expectedSshConnectionGeneration?: number,
     expectedSshTargetId?: string,
     expectedExecutionHostId?: string
-  ): Promise<{ ok: true }> {
+  ): Promise<{ ok: true; tempRemoved: true }> {
     const [tempTarget, finalTarget] = await resolveFileExplorerPaths(this.host, worktreeSelector, [
       tempRelativePath,
       finalRelativePath
@@ -160,7 +160,7 @@ export class RuntimeFileMutations {
     await mkdir(dirname(finalPath), { recursive: true })
     await copyFile(tempPath, finalPath, constants.COPYFILE_EXCL)
     await rm(tempPath, { force: true })
-    return { ok: true }
+    return { ok: true, tempRemoved: true }
   }
 
   async renameFileExplorerPath(

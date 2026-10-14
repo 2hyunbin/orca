@@ -682,11 +682,12 @@ describe('file RPC methods', () => {
     expect(runtime.writeFileExplorerFileBase64Chunk).not.toHaveBeenCalled()
   })
 
-  it('commits staged runtime uploads without clobbering the final destination', async () => {
+  it('forwards host cleanup confirmation for a committed runtime upload', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       commitFileExplorerUpload: vi.fn().mockResolvedValue({ ok: true })
     } as unknown as OrcaRuntimeService
+    vi.mocked(runtime.commitFileExplorerUpload).mockResolvedValue({ ok: true, tempRemoved: true })
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -702,7 +703,7 @@ describe('file RPC methods', () => {
       'assets/.logo.png.orca-upload-a',
       'assets/logo.png'
     )
-    expect(response).toMatchObject({ ok: true, result: { ok: true } })
+    expect(response).toMatchObject({ ok: true, result: { ok: true, tempRemoved: true } })
   })
 
   it('renames file explorer paths for a selected worktree', async () => {
