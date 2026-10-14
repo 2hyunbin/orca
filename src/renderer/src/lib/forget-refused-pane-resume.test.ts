@@ -4,6 +4,7 @@ import { createTestStore, makeTab } from '@/store/slices/store-test-helpers'
 import { forgetRefusedPaneResume } from './forget-refused-pane-resume'
 
 const PANE = 'tab-floating:11111111-1111-4111-8111-111111111111'
+const SIBLING = 'tab-floating:22222222-2222-4222-8222-222222222222'
 const CHAT = { key: 'session_id' as const, id: 'chat-session' }
 const TITLE = { agent: 'claude' as const, sessionId: CHAT.id, title: 'the chat prompt' }
 
@@ -27,7 +28,9 @@ describe('forgetRefusedPaneResume', () => {
     store.setState({
       sleepingAgentSessionsByPaneKey: {
         [PANE]: saved(PANE, CHAT.id),
-        'tab-floating:alias': saved('tab-floating:alias', CHAT.id),
+        'tab-floating:1': saved('tab-floating:1', CHAT.id),
+        // A split sibling is another pane, refused at its own restore.
+        [SIBLING]: saved(SIBLING, CHAT.id),
         // Another pane's copy is refused and forgotten at that pane's own restore.
         'tab-other:leaf': saved('tab-other:leaf', CHAT.id)
       },
@@ -41,7 +44,7 @@ describe('forgetRefusedPaneResume', () => {
     forgetRefusedPaneResume(store.getState(), PANE, { agent: 'claude', providerSession: CHAT })
 
     const state = store.getState()
-    expect(Object.keys(state.sleepingAgentSessionsByPaneKey)).toEqual(['tab-other:leaf'])
+    expect(Object.keys(state.sleepingAgentSessionsByPaneKey)).toEqual([SIBLING, 'tab-other:leaf'])
     expect(state.agentLaunchConfigByPaneKey[PANE]).toBeUndefined()
     expect(state.tabsByWorktree.wt![0]!.aiVaultTitle).toBeNull()
     expect(state.tabsByWorktree.chat![0]!.aiVaultTitle).toEqual(TITLE)

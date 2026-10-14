@@ -4,7 +4,7 @@ import {
   agentProviderSessionsEqual,
   type AgentProviderSessionMetadata
 } from '../../../shared/agent-session-resume'
-import { parsePaneKey } from '../../../shared/stable-pane-id'
+import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 
 /** Whether a saved claim names the refused conversation. Only local claims can: the host judged
  *  its own chats, and a remote host's same id is a different conversation. */
@@ -46,9 +46,12 @@ export function forgetRefusedPaneResume(
     return
   }
   const tabId = parsePaneKey(paneKey)?.tabId ?? paneKey.split(':')[0]
-  // Why the tab's other keys: legacy aliases of this pane can hold duplicates of its record.
+  // Why legacy numeric keys of this tab: they are this pane's older names, which its restore reads;
+  // a split sibling's current key is another pane.
   const saved = Object.entries(state.sleepingAgentSessionsByPaneKey).flatMap(([key, record]) =>
-    (key === paneKey || key.startsWith(`${tabId}:`)) && names(record) ? [key] : []
+    (key === paneKey || parseLegacyNumericPaneKey(key)?.tabId === tabId) && names(record)
+      ? [key]
+      : []
   )
   if (saved.length > 0) {
     state.clearSleepingAgentSessionsByPaneKey(saved)
