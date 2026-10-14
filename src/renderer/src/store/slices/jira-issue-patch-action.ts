@@ -1,6 +1,6 @@
 import type { JiraSlice, JiraSliceSet } from './jira-slice-contract'
 import type { JiraIssue } from '../../../../shared/jira-types'
-import { getJiraReadScope, isCurrentJiraRuntimeContext } from './jira-read-coordination'
+import { getJiraReadIdentity } from './jira-read-coordination'
 
 export function createJiraIssuePatchAction(set: JiraSliceSet): Pick<JiraSlice, 'patchJiraIssue'> {
   return {
@@ -9,11 +9,11 @@ export function createJiraIssuePatchAction(set: JiraSliceSet): Pick<JiraSlice, '
       const matchesIssue = (issue: JiraIssue | null | undefined): boolean =>
         issue?.key === issueKey && (siteId == null || issue.siteId === siteId)
       set((state) => {
-        const scope = getJiraReadScope(state.settings, options?.sourceContext)
+        const scope = getJiraReadIdentity(state.settings, options?.sourceContext)
         if (
           !scope.explicitSource &&
           options?.contextKey &&
-          !isCurrentJiraRuntimeContext(options.contextKey, state.settings)
+          options.contextKey !== scope.contextKey
         ) {
           return state
         }

@@ -11,11 +11,11 @@ import {
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { useAppStore } from '@/store'
 import {
-  jiraAddIssueComment,
-  jiraGetIssue,
-  jiraListAssignableUsers,
-  jiraListPriorities,
-  jiraUpdateIssue
+  jiraAddIssueCommentForTarget,
+  jiraGetIssueForTarget,
+  jiraListAssignableUsersForTarget,
+  jiraListPrioritiesForTarget,
+  jiraUpdateIssueForTarget
 } from '@/runtime/runtime-jira-client'
 import type { JiraComment, JiraIssue, JiraPriority, JiraUser } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
@@ -23,8 +23,9 @@ import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
-import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
-import { defaultScopeSource } from '@/lib/default-creation-host'
+import { getJiraReadIdentity } from '@/store/slices/jira-read-coordination'
+import { defaultScopeHost } from '@/lib/default-creation-host'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 import {
   editedJiraIssueFields,
   mergeJiraIssueHydration,
@@ -49,11 +50,11 @@ export default function JiraIssueWorkspace({
   sourceContext
 }: JiraIssueWorkspaceProps): React.JSX.Element {
   const settings = useAppStore((s) => s.settings)
-  const providerSettings = useMemo(
-    () => sourceContext ?? defaultScopeSource(settings),
+  const owner = useMemo(
+    () => (sourceContext ? taskSourceRuntimeTarget(sourceContext) : defaultScopeHost(settings)),
     [settings, sourceContext]
   )
-  const mutationContextKey = getJiraReadScope(settings, sourceContext).contextKey
+  const mutationContextKey = getJiraReadIdentity(settings, sourceContext).contextKey
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
@@ -74,9 +75,9 @@ export default function JiraIssueWorkspace({
     setCommentsError,
     optimisticCommentsRef,
     loadComments
-  } = useJiraIssueComments(providerSettings, requestIdRef)
+  } = useJiraIssueComments(owner, requestIdRef)
   const { transitions, setTransitions, loadTransitions } = useJiraIssueTransitions(
-    providerSettings,
+    owner,
     requestIdRef
   )
 
@@ -120,7 +121,7 @@ export default function JiraIssueWorkspace({
     setCommentsError(null)
     setIssueLoading(true)
 
-    void jiraGetIssue(providerSettings, issue.key, issue.siteId)
+    void jiraGetIssueForTarget(owner, issue.key, issue.siteId)
       .then((result) => {
         if (requestId !== requestIdRef.current) {
           return
@@ -144,8 +145,8 @@ export default function JiraIssueWorkspace({
       })
 
     void Promise.all([
-      jiraListPriorities(providerSettings, issue.siteId),
-      jiraListAssignableUsers(providerSettings, issue.key, undefined, issue.siteId)
+      jiraListPrioritiesForTarget(owner, issue.siteId),
+      jiraListAssignableUsersForTarget(owner, issue.key, undefined, issue.siteId)
     ])
       .then(([nextPriorities, nextUsers]) => {
         if (requestId !== requestIdRef.current) {
@@ -162,7 +163,7 @@ export default function JiraIssueWorkspace({
     issue,
     loadComments,
     loadTransitions,
-    providerSettings,
+    owner,
     requestKey,
     setComments,
     setCommentsError,
@@ -185,7 +186,7 @@ export default function JiraIssueWorkspace({
   const mutateIssue = useCallback(
     async (
       field: string,
-      updates: Parameters<typeof jiraUpdateIssue>[2],
+      updates: Parameters<typeof jiraUpdateIssueForTarget>[2],
       optimistic?: Partial<JiraIssue>
     ): Promise<void> => {
       if (!displayed || pendingField || !requestKey) {
@@ -202,8 +203,8 @@ export default function JiraIssueWorkspace({
           scope: requestKey,
           previous,
           optimistic: optimistic ?? {},
-          update: () => jiraUpdateIssue(providerSettings, previous.key, updates, siteId),
-          refresh: () => jiraGetIssue(providerSettings, previous.key, previous.siteId),
+          update: () => jiraUpdateIssueForTarget(owner, previous.key, updates, siteId),
+          refresh: () => jiraGetIssueForTarget(owner, previous.key, previous.siteId),
           patchIssue: (patch) =>
             patchJiraIssue(previous.key, patch, {
               sourceContext,
@@ -231,7 +232,7 @@ export default function JiraIssueWorkspace({
       patchJiraIssue,
       pendingField,
       mutationContextKey,
-      providerSettings,
+      owner,
       requestKey,
       siteId,
       sourceContext
@@ -281,8 +282,8 @@ export default function JiraIssueWorkspace({
     setCommentSubmitting(true)
     const requestId = requestIdRef.current
     try {
-      const result = await jiraAddIssueComment(
-        providerSettings,
+      const result = await jiraAddIssueCommentForTarget(
+        owner,
         displayed.key,
         bodyState.body,
         displayed.siteId
@@ -313,14 +314,7 @@ export default function JiraIssueWorkspace({
         setCommentSubmitting(false)
       }
     }
-  }, [
-    commentDraft,
-    commentSubmitting,
-    displayed,
-    providerSettings,
-    optimisticCommentsRef,
-    setComments
-  ])
+  }, [commentDraft, commentSubmitting, displayed, owner, optimisticCommentsRef, setComments])
 
   const actionItems = useMemo(
     () => (displayed ? getJiraIssueWorkspaceActions(displayed) : []),

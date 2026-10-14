@@ -9,7 +9,7 @@ import {
   bumpProviderRuntimeSessionGeneration,
   getProviderRuntimeContextKey
 } from '@/lib/provider-runtime-context'
-import { getJiraReadScope } from './jira-read-coordination'
+import { getJiraReadIdentity } from './jira-read-coordination'
 import {
   enqueueJiraIssueMutation,
   jiraIssueRequestScope,
@@ -146,7 +146,7 @@ describe('Jira default-source issue patches', () => {
 
   it('still settles explicit-source saves after the default execution host changes', () => {
     const store = createTestStore()
-    const contextKey = getJiraReadScope(store.getState().settings, source).contextKey
+    const contextKey = getJiraReadIdentity(store.getState().settings, source).contextKey
     const cacheKey = `${getTaskSourceCacheScope(source)}::site-1::ENG-1`
     store.setState({
       settings: { ...getDefaultSettings(''), activeRuntimeEnvironmentId: 'remote-1' },

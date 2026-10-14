@@ -1,7 +1,7 @@
 import type { JiraIssue, JiraMutationResult } from '../../../shared/jira-types'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
-import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
+import { getJiraReadIdentity } from '@/store/slices/jira-read-coordination'
 import {
   editedJiraIssueFields,
   jiraIssueRollbackPatch,
@@ -30,7 +30,7 @@ export function jiraIssueRequestScope(
   if (!issue) {
     return null
   }
-  const scope = getJiraReadScope(settings, sourceContext)
+  const scope = getJiraReadIdentity(settings, sourceContext)
   return JSON.stringify([
     scope.cachePrefix ?? scope.contextKey,
     issue.siteId ?? 'selected',

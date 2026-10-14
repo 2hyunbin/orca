@@ -45,13 +45,14 @@ vi.mock('@/runtime/runtime-jira-client', () => {
     return new Promise((resolve, reject) => queue.push({ key, resolve, reject }))
   }
   return {
-    jiraGetIssue: (_settings: unknown, key: string) => request(boundary.issues, key),
-    jiraIssueComments: (_settings: unknown, key: string) => request(boundary.comments, key),
-    jiraListTransitions: async () => [],
-    jiraListPriorities: async () => [],
-    jiraListAssignableUsers: async () => [],
-    jiraUpdateIssue: async () => ({ ok: true }),
-    jiraAddIssueComment: async () => ({ ok: true, id: 'added' })
+    jiraGetIssueForTarget: (_settings: unknown, key: string) => request(boundary.issues, key),
+    jiraIssueCommentsForTarget: (_settings: unknown, key: string) =>
+      request(boundary.comments, key),
+    jiraListTransitionsForTarget: async () => [],
+    jiraListPrioritiesForTarget: async () => [],
+    jiraListAssignableUsersForTarget: async () => [],
+    jiraUpdateIssueForTarget: async () => ({ ok: true }),
+    jiraAddIssueCommentForTarget: async () => ({ ok: true, id: 'added' })
   }
 })
 vi.mock('@/components/ui/sheet', () => {

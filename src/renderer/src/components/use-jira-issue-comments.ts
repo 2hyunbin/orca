@@ -1,11 +1,9 @@
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { useCallback, useRef, useState, type RefObject } from 'react'
-import { jiraIssueComments } from '@/runtime/runtime-jira-client'
+import { jiraIssueCommentsForTarget } from '@/runtime/runtime-jira-client'
 import type { JiraComment, JiraIssue } from '../../../shared/jira-types'
 
-export function useJiraIssueComments(
-  providerSettings: Parameters<typeof jiraIssueComments>[0],
-  requestIdRef: RefObject<number>
-) {
+export function useJiraIssueComments(owner: RuntimeClientTarget, requestIdRef: RefObject<number>) {
   const [comments, setComments] = useState<JiraComment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsError, setCommentsError] = useState<string | null>(null)
@@ -15,7 +13,7 @@ export function useJiraIssueComments(
       setCommentsLoading(true)
       setCommentsError(null)
       try {
-        let fetched = await jiraIssueComments(providerSettings, targetIssue.key, targetIssue.siteId)
+        let fetched = await jiraIssueCommentsForTarget(owner, targetIssue.key, targetIssue.siteId)
         if (requestId !== requestIdRef.current) {
           return
         }
@@ -35,7 +33,7 @@ export function useJiraIssueComments(
         }
       }
     },
-    [providerSettings, requestIdRef]
+    [owner, requestIdRef]
   )
   return {
     comments,

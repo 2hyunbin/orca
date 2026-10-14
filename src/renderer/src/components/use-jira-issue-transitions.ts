@@ -1,9 +1,10 @@
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { useCallback, useRef, useState, type RefObject } from 'react'
-import { jiraListTransitions } from '@/runtime/runtime-jira-client'
+import { jiraListTransitionsForTarget } from '@/runtime/runtime-jira-client'
 import type { JiraIssue, JiraTransition } from '../../../shared/jira-types'
 
 export function useJiraIssueTransitions(
-  providerSettings: Parameters<typeof jiraListTransitions>[0],
+  owner: RuntimeClientTarget,
   requestIdRef: RefObject<number>
 ) {
   const [transitions, setTransitions] = useState<JiraTransition[]>([])
@@ -15,7 +16,7 @@ export function useJiraIssueTransitions(
       }
       const readId = ++readIdRef.current
       try {
-        const next = await jiraListTransitions(providerSettings, target.key, target.siteId)
+        const next = await jiraListTransitionsForTarget(owner, target.key, target.siteId)
         if (requestId === requestIdRef.current && readId === readIdRef.current) {
           setTransitions(next)
         }
@@ -23,7 +24,7 @@ export function useJiraIssueTransitions(
         // Keep the current list if the reload fails.
       }
     },
-    [providerSettings, requestIdRef]
+    [owner, requestIdRef]
   )
   return { transitions, setTransitions, loadTransitions }
 }
