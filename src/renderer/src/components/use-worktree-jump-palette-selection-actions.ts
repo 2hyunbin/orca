@@ -1,5 +1,4 @@
-import { findCmdJTaskWorkspace, openCmdJTask } from './cmd-j/task-search-activation'
-import type { CmdJTaskSearchResult } from './cmd-j/task-search-results'
+import { useWorktreeJumpPaletteTaskSelection } from './use-worktree-jump-palette-task-selection'
 import type { WorktreeJumpPaletteTaskSearch } from './use-worktree-jump-palette-task-search'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
@@ -252,31 +251,15 @@ export function useWorktreeJumpPaletteSelectionActions({
       revealSidebarRow
     ]
   )
-  const handleSelectTask = useCallback(
-    (result: CmdJTaskSearchResult, createWorkspace = false) => {
-      if (!visible || !taskItems.some((item) => item.id === result.id)) {
-        return
-      }
-      const existing = !createWorkspace && findCmdJTaskWorkspace(result, workspaces)
-      if (existing) {
-        handleSelectWorktree(existing)
-        return
-      }
-      skipRestoreFocusRef.current = true
-      setSelectedItemId('')
-      openCmdJTask(result, createWorkspace)
-      recordFeatureInteraction('cmd-j')
-    },
-    [
-      visible,
-      taskItems,
-      workspaces,
-      handleSelectWorktree,
-      recordFeatureInteraction,
-      skipRestoreFocusRef,
-      setSelectedItemId
-    ]
-  )
+  const handleSelectTask = useWorktreeJumpPaletteTaskSelection({
+    visible,
+    taskItems,
+    workspaces,
+    handleSelectWorktree,
+    recordFeatureInteraction,
+    skipRestoreFocusRef,
+    setSelectedItemId
+  })
   const handleSelectItem = useCallback(
     (item: PaletteItem) => {
       if (item.type === 'worktree') {
