@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, type ComponentProps, type ReactNode } from 'react'
+import { act, StrictMode, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JiraComment, JiraIssue } from '../../../shared/jira-types'
@@ -189,6 +189,38 @@ afterEach(async () => {
 })
 
 describe('Jira issue workspace request lifetime', () => {
+  it('finishes detail and comments hydration after StrictMode effect replay', async () => {
+    const mountedRoot = root
+    if (!mountedRoot) {
+      throw new Error('Missing React root')
+    }
+    await act(async () =>
+      mountedRoot.render(
+        <StrictMode>
+          <JiraIssueWorkspace
+            issue={issue()}
+            sourceContext={sourceContext}
+            onUse={() => {}}
+            onClose={() => {}}
+          />
+        </StrictMode>
+      )
+    )
+    await act(async () => {
+      for (const pending of boundary.issues.splice(0)) {
+        pending.resolve(issue('JIR-1', 'Loaded in StrictMode'))
+      }
+      for (const pending of boundary.comments.splice(0)) {
+        pending.resolve([comment('loaded')])
+      }
+    })
+
+    expect(text('title')).toBe('Loaded in StrictMode')
+    expect(text('comments')).toBe('loaded')
+    expect(text('issue-loading')).toBe('false')
+    expect(text('comments-loading')).toBe('false')
+  })
+
   it('discards late detail and comments after closing the mounted workspace', async () => {
     await render(issue())
     await render(null)
