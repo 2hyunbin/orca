@@ -79,6 +79,26 @@ export function resolveAutoAckTabTargets(state: AutoAckTargetState): AutoAckTabT
   return targets
 }
 
+/** The workspaces on screen: an open floating panel, and the active workspace in its own view. */
+export function onScreenWorkspaceIds(state: AutoAckTargetState): string[] {
+  const workspaceIds = selectFloatingWorkspacePanelVisible(state)
+    ? [FLOATING_TERMINAL_WORKTREE_ID]
+    : []
+  if (state.activeView === 'terminal' && state.activeWorktreeId) {
+    workspaceIds.push(state.activeWorktreeId)
+  }
+  return workspaceIds
+}
+
+/** A workspace on screen in a visible, focused window with the user confirmed present. */
+export function isWorkspaceOnScreen(state: AutoAckTargetState, workspaceId: string): boolean {
+  return (
+    isOrcaWindowForegroundFocused() &&
+    isPresenceConfirmed() &&
+    onScreenWorkspaceIds(state).includes(workspaceId)
+  )
+}
+
 /**
  * Whether a tab of either kind is on screen in a visible, focused window with the user confirmed
  * present — the scan's own gate, so marking skips exactly what the scan would read right away.

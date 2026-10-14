@@ -19,8 +19,7 @@ import {
   isCurrentKnownPaneKey,
   isCurrentLivePaneKey
 } from './terminal-notification-state'
-import { isOrcaWindowForegroundFocused } from './terminal-notification-pane-visibility'
-import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
+import { isTabOnScreen, isWorkspaceOnScreen } from '@/hooks/agent-auto-ack-targets'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
 
@@ -65,9 +64,8 @@ export function createTerminalAttentionSurface(state: StoreSnapshot): AgentAtten
     admitSurface: (subject, liveness) => admitTerminalPane(state, subject, liveness),
     isSurfaceViewed: (subject) =>
       isViewedTerminalPane(state, subject.workspaceId, subject.surfaceKey),
-    // Why: activeWorktreeId is in-app selection only. A backgrounded Orca still needs unread.
-    isWorkspaceViewed: (workspaceId) =>
-      state.activeWorktreeId === workspaceId && isOrcaWindowForegroundFocused(),
+    // Why: in-app selection alone is not viewing — a backgrounded Orca, Settings or an away user still need unread.
+    isWorkspaceViewed: (workspaceId) => isWorkspaceOnScreen(state, workspaceId),
     isWorkspaceActive: (workspaceId) => state.activeWorktreeId === workspaceId,
     resolveViewedSubjectKey: (groupId) => resolveViewedPaneKey(state, groupId)
   }

@@ -1,4 +1,8 @@
-import { resolveAutoAckTabTargets, type AutoAckTabTarget } from './agent-auto-ack-targets'
+import {
+  onScreenWorkspaceIds,
+  resolveAutoAckTabTargets,
+  type AutoAckTabTarget
+} from './agent-auto-ack-targets'
 import {
   captureAgentSubjectReads,
   sameStructuredReadTarget,
@@ -13,7 +17,6 @@ import {
 } from './agent-auto-ack-presence'
 import type { AppState } from '@/store/types'
 import { selectFloatingWorkspacePanelVisible } from '@/store/floating-workspace-panel-selector'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import {
   acknowledgeViewedAutoAckTarget,
   readAgentAttentionTurnRecords,
@@ -45,15 +48,6 @@ export type OnScreenAttentionEnvironment = {
   subscribeStructuredViews: (onView: (view: StructuredSubjectRead) => void) => () => void
   /** `onRescan`: visibility/focus changed. `onInput`: trusted input proves presence. */
   subscribePresenceSignals: (onRescan: () => void, onInput: () => void) => () => void
-}
-
-/** The workspaces on screen: an open floating panel, and the active workspace in its own view. */
-function onScreenWorkspaceIds(s: AppState): string[] {
-  const workspaceIds = selectFloatingWorkspacePanelVisible(s) ? [FLOATING_TERMINAL_WORKTREE_ID] : []
-  if (s.activeView === 'terminal' && s.activeWorktreeId) {
-    workspaceIds.push(s.activeWorktreeId)
-  }
-  return workspaceIds
 }
 
 function hasMarkersOnScreen(s: AppState, targets: readonly AutoAckTabTarget[]): boolean {

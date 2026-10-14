@@ -15,8 +15,7 @@ import type {
 } from '@/attention/agent-attention-contract'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
-import { isOrcaWindowForegroundFocused } from '../terminal-pane/terminal-notification-pane-visibility'
-import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
+import { isTabOnScreen, isWorkspaceOnScreen } from '@/hooks/agent-auto-ack-targets'
 import { isStructuredTab, type StructuredTab } from './structured-agent-session-tabs'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
@@ -88,9 +87,8 @@ export function createStructuredAttentionSurface(state: StoreSnapshot): AgentAtt
       const tab = findSubjectTab(state, subject.workspaceId, subject.surfaceKey)
       return tab !== null && isViewedStructuredTab(state, subject.workspaceId, tab)
     },
-    // Why: activeWorktreeId is in-app selection only. A backgrounded Orca still needs unread.
-    isWorkspaceViewed: (workspaceId) =>
-      state.activeWorktreeId === workspaceId && isOrcaWindowForegroundFocused(),
+    // Why: in-app selection alone is not viewing — a backgrounded Orca, Settings or an away user still need unread.
+    isWorkspaceViewed: (workspaceId) => isWorkspaceOnScreen(state, workspaceId),
     isWorkspaceActive: (workspaceId) => state.activeWorktreeId === workspaceId,
     resolveViewedSubjectKey: (groupId) => {
       const tab = Object.values(state.unifiedTabsByWorktree)

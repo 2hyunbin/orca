@@ -1,7 +1,8 @@
-import { MOBILE_NOTIFICATION_AWAY_SECONDS } from '../../../shared/desktop-away-threshold'
+import { DESKTOP_AWAY_SECONDS } from '../../../shared/desktop-away-threshold'
 
-// The one record of user presence: the on-screen scan's gate and the marking guard both read it,
-// so a subject on screen is skipped by marking only when the scan would read it right away.
+// The one record of user presence, from trusted renderer input only: the on-screen scan's gate
+// and the marking guard both read it. Main's "not away" only answers the scan that asked — it
+// means idle under the threshold, so stamping it as now could stretch presence to twice that.
 let presenceGated = true
 let presentAt = Number.NEGATIVE_INFINITY
 
@@ -11,14 +12,14 @@ export function setPresenceGated(gated: boolean): void {
   presentAt = Number.NEGATIVE_INFINITY
 }
 
-/** Trusted input, or main reporting the desktop active. */
+/** Trusted renderer input. */
 export function notePresence(): void {
   presentAt = Date.now()
 }
 
-/** Present within main's away threshold; unknown or away until proven. */
+/** Trusted input within the desktop away threshold, or no idle query to ask (browsers). */
 export function isPresenceConfirmed(): boolean {
-  return !presenceGated || Date.now() - presentAt < MOBILE_NOTIFICATION_AWAY_SECONDS * 1000
+  return !presenceGated || Date.now() - presentAt < DESKTOP_AWAY_SECONDS * 1000
 }
 
 export function createAutoAckPresenceCheck(
@@ -36,12 +37,7 @@ export function createAutoAckPresenceCheck(
       void readAway()
         .then((away) => {
           // Unknown presence must not clear unread attention.
-          if (away !== false) {
-            presentAt = Number.NEGATIVE_INFINITY
-            return
-          }
-          notePresence()
-          if (!disposed) {
+          if (!disposed && away === false) {
             onPresent()
           }
         })
@@ -69,6 +65,7 @@ export function subscribeAutoAckPresenceSignals(
   window.addEventListener('focus', onRescan)
   window.addEventListener('pointerdown', input)
   window.addEventListener('pointermove', input)
+  window.addEventListener('wheel', input, { passive: true })
   // Why capture: xterm stops the keydowns it handles before they bubble to the window.
   window.addEventListener('keydown', input, { capture: true })
   return () => {
@@ -76,6 +73,7 @@ export function subscribeAutoAckPresenceSignals(
     window.removeEventListener('focus', onRescan)
     window.removeEventListener('pointerdown', input)
     window.removeEventListener('pointermove', input)
+    window.removeEventListener('wheel', input)
     window.removeEventListener('keydown', input, { capture: true })
   }
 }

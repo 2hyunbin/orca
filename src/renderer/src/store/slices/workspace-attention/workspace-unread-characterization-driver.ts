@@ -80,7 +80,7 @@ export function toggleUnreadByUser(
   store.getState().setWorkspaceUnreadByUser(row.id, !isWorkspaceUnread(row), row.hostId ?? 'local')
 }
 
-/** useAutoAckViewedAgent: the viewed terminal tab's agent is acknowledged (markers are the scan's). */
+/** on-screen-attention-scan: the viewed terminal tab's agent is acknowledged (markers are the scan's). */
 export function autoAckViewedTab(store: AttentionStore, target: PaneTarget): void {
   acknowledgeViewedAutoAckTarget(store.getState(), {
     tabId: target.tabId,

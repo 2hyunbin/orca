@@ -63,8 +63,8 @@ export function screenOf(store: AttentionStore): AttentionScreen {
 export function installAttentionScreen(
   store: AttentionStore,
   onScreen: boolean,
-  /** The desktop idle answer; undefined runs ungated, like a browser. */
-  desktopAway?: boolean
+  /** Main's desktop idle answer; undefined runs ungated, like a browser. */
+  desktopAway?: boolean | (() => boolean)
 ): void {
   let windowOnScreen = onScreen
   vi.stubGlobal('document', {
@@ -76,7 +76,10 @@ export function installAttentionScreen(
   let rescan = (): void => {}
   let input = (): void => {}
   startOnScreenAttentionScan(store, {
-    readDesktopAway: desktopAway === undefined ? null : async () => desktopAway,
+    readDesktopAway:
+      desktopAway === undefined
+        ? null
+        : async () => (typeof desktopAway === 'function' ? desktopAway() : desktopAway),
     subscribeStructuredViews: () => () => {},
     subscribePresenceSignals: (onRescan, onInput) => {
       rescan = onRescan
@@ -97,7 +100,7 @@ export function createAttentionStore(options?: {
   experimental?: boolean
   /** Orca's window starts visible and focused unless false. */
   windowOnScreen?: boolean
-  desktopAway?: boolean
+  desktopAway?: boolean | (() => boolean)
 }): {
   store: AttentionStore
   persists: () => PersistCall[]
@@ -212,7 +215,7 @@ export function observe(store: AttentionStore, persists: () => PersistCall[]): s
     )
   const folders = s.folderWorkspaces.map(
     (f) =>
-      `${f.id}@${f.connectionId ?? 'local'}:${f.isUnread ? 'UNREAD' : 'read'}:${f.lastActivityAt}`
+      `${f.id}@${f.executionHostId ?? f.connectionId ?? 'local'}:${f.isUnread ? 'UNREAD' : 'read'}:${f.lastActivityAt}`
   )
   return [
     `rows ${[...rows, ...folders].join(' ')} sortEpoch=${s.sortEpoch}`,

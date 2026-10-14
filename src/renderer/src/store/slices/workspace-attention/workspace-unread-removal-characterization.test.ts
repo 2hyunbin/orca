@@ -179,7 +179,7 @@ describe('closing tabs', () => {
         "panes -",
         "completions -",
         "dock=1 floatingDot=false",
-        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000}",
+        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000} host=local",
       ]
     `)
 

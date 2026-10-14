@@ -617,7 +617,7 @@ describe('manual, inbound and restart', () => {
         "panes -",
         "completions tab-f1:L1=agent-completion",
         "dock=0 floatingDot=false",
-        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000}",
+        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000} host=local",
       ]
     `)
 

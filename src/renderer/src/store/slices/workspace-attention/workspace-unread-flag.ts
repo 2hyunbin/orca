@@ -2,11 +2,11 @@ import { parseWorkspaceKey } from '../../../../../shared/workspace-scope'
 import { applyWorktreeUpdates } from '../worktree-helpers'
 import {
   applyDetectedWorktreeUpdates,
-  findKnownWorktreeById,
-  folderWorkspaceMatchesHost
+  findKnownWorktreeById
 } from '../worktrees/listing/detected-worktree-meta'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
-import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
+import type { FolderWorkspace } from '../../../../../shared/folder-workspace-types'
+import { getFolderWorkspaceHostId } from '../../folder-workspaces/folder-workspace-catalog'
 import type { AppState } from '../../types'
 import { persistPassiveWorktreeMetaForOwner } from '../worktrees/listing/worktree-owner-settings'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
@@ -23,31 +23,28 @@ export function markWorkspaceUnreadFlag(
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId
-    let shouldPersist = false
-    set((s) => {
-      const folderWorkspace = s.folderWorkspaces.find(
-        (workspace) => workspace.id === folderWorkspaceId
-      )
-      if (!folderWorkspace || folderWorkspace.isUnread) {
-        return s
-      }
-      shouldPersist = true
-      return {
-        folderWorkspaces: s.folderWorkspaces.map((workspace) =>
-          workspace.id === folderWorkspaceId
-            ? { ...workspace, isUnread: true, lastActivityAt: now }
-            : workspace
-        ),
-        sortEpoch: s.sortEpoch + 1
-      }
-    })
-    if (!shouldPersist) {
+    const state = get()
+    const host = onScreenHostId(state, worktreeId)
+    const marked = state.folderWorkspaces.find(
+      (workspace) =>
+        workspace.id === folderWorkspaceId &&
+        (!host || getFolderWorkspaceHostId(workspace, state.projectGroups) === host)
+    )
+    if (!marked || marked.isUnread) {
       return
     }
-    void get().updateFolderWorkspace(folderWorkspaceId, {
-      isUnread: true,
-      lastActivityAt: now
-    })
+    set((s) => ({
+      folderWorkspaces: s.folderWorkspaces.map((workspace) =>
+        workspace === marked ? { ...workspace, isUnread: true, lastActivityAt: now } : workspace
+      ),
+      sortEpoch: s.sortEpoch + 1
+    }))
+    // Why the row's own host: the row flipped here is the owner updateFolderWorkspace writes.
+    void get().updateFolderWorkspace(
+      folderWorkspaceId,
+      { isUnread: true, lastActivityAt: now },
+      { executionHostId: getFolderWorkspaceHostId(marked, state.projectGroups) }
+    )
     return
   }
   let shouldPersist = false
@@ -101,11 +98,14 @@ export function clearWorkspaceUnreadFlag(
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId
-    const cleared = get().folderWorkspaces.filter(
+    const { folderWorkspaces, projectGroups } = get()
+    const hostOf = (workspace: FolderWorkspace): ExecutionHostId =>
+      getFolderWorkspaceHostId(workspace, projectGroups)
+    const cleared = folderWorkspaces.filter(
       (workspace) =>
         workspace.id === folderWorkspaceId &&
         workspace.isUnread &&
-        (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
+        (!executionHostId || hostOf(workspace) === executionHostId)
     )
     if (cleared.length === 0) {
       return
@@ -120,7 +120,7 @@ export function clearWorkspaceUnreadFlag(
       void get().updateFolderWorkspace(
         folderWorkspaceId,
         { isUnread: false },
-        { executionHostId: getRepoExecutionHostId(workspace) }
+        { executionHostId: hostOf(workspace) }
       )
     }
     return
@@ -192,18 +192,18 @@ export function onScreenHostId(
 
 /** The flag {@link clearWorkspaceUnreadFlag} would clear. */
 export function isWorkspaceFlagSet(
-  state: Parameters<typeof findKnownWorktreeById>[0],
+  state: Parameters<typeof findKnownWorktreeById>[0] & Pick<AppState, 'projectGroups'>,
   worktreeId: string,
   executionHostId?: ExecutionHostId | null
 ): boolean {
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
-    return Boolean(
-      state.folderWorkspaces.find(
-        (workspace) =>
-          workspace.id === workspaceScope.folderWorkspaceId &&
-          (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
-      )?.isUnread
+    return state.folderWorkspaces.some(
+      (workspace) =>
+        workspace.id === workspaceScope.folderWorkspaceId &&
+        Boolean(workspace.isUnread) &&
+        (!executionHostId ||
+          getFolderWorkspaceHostId(workspace, state.projectGroups) === executionHostId)
     )
   }
   return Boolean(findKnownWorktreeById(state, worktreeId)?.isUnread)

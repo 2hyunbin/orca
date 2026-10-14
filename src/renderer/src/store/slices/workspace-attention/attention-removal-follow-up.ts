@@ -122,7 +122,8 @@ export function dismissReadNotifications(paneKeys: ReadonlySet<string>): void {
 export function settleAttentionRemovedBy(
   set: WorkspaceAttentionSet,
   get: WorkspaceAttentionGet,
-  remove: () => void
+  remove: () => void,
+  options?: { settleFlags?: boolean }
 ): void {
   const before = get()
   remove()
@@ -130,8 +131,10 @@ export function settleAttentionRemovedBy(
   if (!removed) {
     return
   }
-  for (const workspaceId of removed.workspaceIds) {
-    settleWorkspaceUnreadFlag(set, get, workspaceId)
+  if (options?.settleFlags !== false) {
+    for (const workspaceId of removed.workspaceIds) {
+      settleWorkspaceUnreadFlag(set, get, workspaceId)
+    }
   }
   dismissReadNotifications(removed.paneKeys)
 }
