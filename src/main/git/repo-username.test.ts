@@ -74,6 +74,14 @@ describe('resolveLocalGitUsername', () => {
     currentBranch = ''
 
     gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'config' && args[1] === '--list') {
+        return {
+          stdout: Object.entries(gitConfig)
+            .map(([key, value]) => `${key}\n${value}\0`)
+            .join(''),
+          stderr: ''
+        }
+      }
       if (args[0] === 'config' && args[1] === '--get') {
         const value = gitConfig[args[2]]
         if (value !== undefined) {
@@ -146,12 +154,65 @@ describe('resolveLocalGitUsername', () => {
       authoritative: true
     })
     expect(gitExecFileAsyncMock.mock.calls.map(([args]) => args)).toEqual([
-      ['config', '--get', 'github.user'],
-      ['config', '--get', 'user.username'],
-      ['remote'],
-      ['config', '--get', 'user.name']
+      ['config', '--list', '-z'],
+      ['remote']
     ])
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('shares one config read across branch remote and author-name fallbacks', async () => {
+    originRemoteUrl = 'https://gitlab.com/stablyai/orca.git'
+    currentBranch = 'main'
+    gitConfig['branch.main.remote'] = 'origin'
+    gitConfig['user.name'] = 'gitlab-user'
+    const original = gitExecFileAsyncMock.getMockImplementation()!
+    gitExecFileAsyncMock.mockImplementation(async (...args) => {
+      if (args[0][0] === 'for-each-ref') {
+        return { stdout: 'refs/heads/main\0\n', stderr: '' }
+      }
+      return original(...args)
+    })
+
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('gitlab-user')
+
+    expect(gitExecFileAsyncMock.mock.calls.filter(([args]) => args[0] === 'config')).toEqual([
+      [['config', '--list', '-z'], { cwd: '/repo', timeout: 5000 }]
+    ])
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(5)
+    expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('reads a fresh config snapshot for another resolution or repo', async () => {
+    gitConfig['user.username'] = 'first-user'
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('first-user')
+    gitConfig['user.username'] = 'second-user'
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('second-user')
+    await expect(resolveLocalGitUsername('/other-repo')).resolves.toBe('second-user')
+
+    expect(gitExecFileAsyncMock.mock.calls.map(([args, options]) => [args, options.cwd])).toEqual([
+      [['config', '--list', '-z'], '/repo'],
+      [['config', '--list', '-z'], '/repo'],
+      [['config', '--list', '-z'], '/other-repo']
+    ])
+  })
+
+  it('keeps individual config reads when a snapshot is unavailable', async () => {
+    gitConfig['user.username'] = 'configured-user'
+    const original = gitExecFileAsyncMock.getMockImplementation()!
+    gitExecFileAsyncMock.mockImplementation(async (...args) => {
+      if (args[0][0] === 'config' && args[0][1] === '--list') {
+        throw makeExecError('snapshot unavailable')
+      }
+      return original(...args)
+    })
+
+    await expect(resolveLocalGitUsername('/repo')).resolves.toBe('configured-user')
+
+    expect(gitExecFileAsyncMock.mock.calls.map(([args]) => args)).toEqual([
+      ['config', '--list', '-z'],
+      ['config', '--get', 'github.user'],
+      ['config', '--get', 'user.username']
+    ])
   })
 
   it('keeps remote fallback probes when remote enumeration fails', async () => {
