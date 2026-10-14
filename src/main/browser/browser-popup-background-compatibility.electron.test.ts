@@ -23,9 +23,15 @@ enablePopupFixtureNativeControls()
 setPopupFixtureEvidenceName('background-electron-evidence.json')
 
 describe('hidden Chromium background OpenURL compatibility', () => {
-  it.each(['local', 'route'] as const)(
-    'matches native modifier GET and POST controls across initiating contexts: %s',
-    async (name) => {
+  it.each(
+    (['local', 'route'] as const).flatMap((name) =>
+      (['same-origin', 'cross-site', 'no-referrer', 'subframe', 'opaque'] as const).map(
+        (context) => ({ name, context })
+      )
+    )
+  )(
+    'matches native modifier GET and POST controls across initiating contexts: $name/$context',
+    async ({ name, context }) => {
       const page = guest(name)
       const targetOrigin = origin.replace('127.0.0.1', 'localhost')
       await page
@@ -46,57 +52,49 @@ describe('hidden Chromium background OpenURL compatibility', () => {
         .find((child) => child.url() === `${targetOrigin}/seed`)
       expect(await seed?.evaluate('document.cookie')).toContain('strict_cookie=synthetic')
       await closeChildren(page)
-      for (const context of [
-        'same-origin',
-        'cross-site',
-        'no-referrer',
-        'subframe',
-        'opaque'
+      for (const [kind, input] of [
+        ['link', 'middle'],
+        ['link', 'modifier'],
+        ['post', 'modifier'],
+        ['empty', 'modifier'],
+        ['multipart', 'modifier']
       ] as const) {
-        for (const [kind, input] of [
-          ['link', 'middle'],
-          ['link', 'modifier'],
-          ['post', 'modifier'],
-          ['empty', 'modifier'],
-          ['multipart', 'modifier']
-        ] as const) {
-          const probe = { context, kind, input }
-          const control = await observeBackgroundPopupProbe(name, probe, true)
-          const production = await observeBackgroundPopupProbe(name, probe, false)
-          if (!control) {
-            throw new Error('Missing native control receipt')
+        const probe = { context, kind, input }
+        const control = await observeBackgroundPopupProbe(name, probe, true)
+        const production = await observeBackgroundPopupProbe(name, probe, false)
+        if (!control) {
+          throw new Error('Missing native control receipt')
+        }
+        expect(control).toMatchObject({
+          method: kind === 'link' ? 'GET' : 'POST',
+          origin:
+            kind === 'link'
+              ? ''
+              : context === 'opaque' || context === 'no-referrer'
+                ? 'null'
+                : origin,
+          fetchSite: context === 'same-origin' ? 'same-origin' : 'cross-site',
+          fetchMode: 'navigate',
+          fetchDest: 'document',
+          fetchUser: '?1',
+          cookie: context === 'same-origin' ? `synthetic_session=${name}` : '',
+          proxied: name === 'route',
+          body:
+            kind === 'empty' || kind === 'link'
+              ? ''
+              : kind === 'post'
+                ? 'code=synthetic%2Bvalue'
+                : expect.stringContaining('synthetic+value')
+        })
+        if (name === 'local' && kind === 'link') {
+          expect(production).toBeNull()
+        } else {
+          if (!production) {
+            throw new Error('Missing production receipt')
           }
-          expect(control).toMatchObject({
-            method: kind === 'link' ? 'GET' : 'POST',
-            origin:
-              kind === 'link'
-                ? ''
-                : context === 'opaque' || context === 'no-referrer'
-                  ? 'null'
-                  : origin,
-            fetchSite: context === 'same-origin' ? 'same-origin' : 'cross-site',
-            fetchMode: 'navigate',
-            fetchDest: 'document',
-            fetchUser: '?1',
-            cookie: context === 'same-origin' ? `synthetic_session=${name}` : '',
-            proxied: name === 'route',
-            body:
-              kind === 'empty' || kind === 'link'
-                ? ''
-                : kind === 'post'
-                  ? 'code=synthetic%2Bvalue'
-                  : expect.stringContaining('synthetic+value')
-          })
-          if (name === 'local' && kind === 'link') {
-            expect(production).toBeNull()
-          } else {
-            if (!production) {
-              throw new Error('Missing production receipt')
-            }
-            expect(comparableBackgroundReceipt(production)).toEqual(
-              comparableBackgroundReceipt(control)
-            )
-          }
+          expect(comparableBackgroundReceipt(production)).toEqual(
+            comparableBackgroundReceipt(control)
+          )
         }
       }
       expect(status().native.presentationCalls).toEqual([])
@@ -116,6 +114,7 @@ describe('hidden Chromium background OpenURL compatibility', () => {
       }
       await prepareBackgroundPopupProbe(page, probe, `${origin}/must-not-execute-background`)
       await page.evaluate((failure) => console.log(`orca-popup-fixture:fail-${failure}`), failure)
+      await refreshBackgroundPopupStatus()
       const before = status().native.windows.length
       const receiptCount = receipts.length
       await clickBackgroundPopupProbe(page, probe)

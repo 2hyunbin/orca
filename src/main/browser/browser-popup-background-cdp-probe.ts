@@ -34,7 +34,7 @@ export async function prepareBackgroundPopupProbe(
   destination: string
 ): Promise<void> {
   await page.evaluate(
-    ({ probe, destination }) => {
+    async ({ probe, destination }) => {
       document.querySelector('#background-probe')?.remove()
       document.querySelector('#background-gesture')?.remove()
       document
@@ -77,7 +77,11 @@ export async function prepareBackgroundPopupProbe(
           )
         }
         frame.srcdoc = container.innerHTML
+        const loaded = new Promise<void>((resolve) => {
+          frame.addEventListener('load', () => resolve(), { once: true })
+        })
         document.body.append(frame)
+        await loaded
       } else {
         document.body.append(container)
       }
@@ -118,10 +122,12 @@ export async function observeBackgroundPopupProbe(
   const path = `/background-${name}-${probe.context}-${probe.kind}-${probe.input}-${control ? 'control' : 'production'}`
   const destination = `${targetOrigin}${path}`
   await prepareBackgroundPopupProbe(page, probe, destination)
+  await refreshBackgroundPopupStatus()
   const before = receipts.length
   const requestsBefore = status().native.requests.length
   const tabsBefore = status().tabOpens.length
   await clickBackgroundPopupProbe(page, probe)
+  await refreshBackgroundPopupStatus()
   await expect.poll(() => status().native.requests.length).toBeGreaterThan(requestsBefore)
   expect(status().native.requests.at(-1)).toEqual({
     disposition: 'background-tab',

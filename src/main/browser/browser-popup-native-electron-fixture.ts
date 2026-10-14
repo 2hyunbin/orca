@@ -103,6 +103,7 @@ export class BrowserPopupNativeFixture {
           features: details.features,
           post: Boolean(details.postBody)
         })
+        this.input.writeStatus()
         return handler(details)
       })
   }
@@ -130,7 +131,8 @@ export class BrowserPopupNativeFixture {
         closed: window.isDestroyed(),
         title: window.isDestroyed() ? '' : window.getTitle(),
         fullscreen: !window.isDestroyed() && window.isFullScreen(),
-        focused: !window.isDestroyed() && window.isFocused()
+        focused: !window.isDestroyed() && window.isFocused(),
+        contentSize: window.isDestroyed() ? [] : window.getContentSize()
       }))
     }
   }

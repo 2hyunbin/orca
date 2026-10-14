@@ -1,10 +1,12 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Page } from 'playwright'
 import { describe, expect, it } from 'vitest'
 import {
   artifactDir,
   browser,
   closeChildren,
+  expectedSecurity,
   guest,
   origin,
   receipts,
@@ -12,8 +14,45 @@ import {
   status,
   setPopupFixtureEvidenceName
 } from './browser-popup-compatibility-cdp-fixture'
+import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
 
 setPopupFixtureEvidenceName('native-electron-evidence.json')
+
+// A featureless window.open in a modifier-click reaches Electron as a native disposition.
+async function installScriptedPopupProbe(page: Page, path: string): Promise<void> {
+  await page.evaluate((path) => {
+    delete document.body.dataset.message
+    document.querySelector('#scripted-native')?.remove()
+    const button = document.createElement('button')
+    button.id = 'scripted-native'
+    button.textContent = 'Scripted popup'
+    button.setAttribute(
+      'onclick',
+      `(window.handles ??= []).push(window.open(${JSON.stringify(path)}))`
+    )
+    document.body.append(button)
+  }, path)
+}
+
+async function childPage(url: string): Promise<Page> {
+  const find = (): Page | undefined =>
+    browser
+      ?.contexts()
+      .flatMap((context) => context.pages())
+      .find((candidate) => candidate.url() === url)
+  await expect.poll(() => Boolean(find())).toBe(true)
+  const child = find()
+  if (!child) {
+    throw new Error(`Missing popup child ${url}`)
+  }
+  return child
+}
+
+async function refreshStatus(): Promise<void> {
+  const before = status().revision
+  await guest('route').evaluate('console.log("orca-popup-fixture:snapshot")')
+  await expect.poll(() => status().revision).toBeGreaterThan(before)
+}
 
 describe('hidden Chromium native popup request compatibility', () => {
   it.each(['local', 'route'])(
@@ -248,7 +287,7 @@ describe('hidden Chromium native popup request compatibility', () => {
         for (const shift of [false, true]) {
           const before = receipts.length
           await page.evaluate(
-            ({ targetOrigin, opaque, shift }) => {
+            async ({ targetOrigin, opaque, shift }) => {
               document.querySelector('#frame-probe')?.remove()
               const frame = document.createElement('iframe')
               frame.id = 'frame-probe'
@@ -259,7 +298,11 @@ describe('hidden Chromium native popup request compatibility', () => {
                 )
               }
               frame.srcdoc = `<form method="post" action="${targetOrigin}/frame-post" target="${shift ? '_self' : '_blank'}"><input name="frame" value="synthetic"><button id="frame-post">POST</button></form>`
+              const loaded = new Promise<void>((resolve) => {
+                frame.addEventListener('load', () => resolve(), { once: true })
+              })
               document.body.append(frame)
+              await loaded
               if (!document.querySelector('#frame-gesture')) {
                 const button = document.createElement('button')
                 button.id = 'frame-gesture'
@@ -406,4 +449,121 @@ describe('hidden Chromium native popup request compatibility', () => {
     await closeChildren(page)
     await page.locator('#link').evaluate((link) => link.setAttribute('href', '/docs'))
   })
+
+  it('prepares modifier-clicked local script window.open children before their first request', async () => {
+    const page = guest('local')
+    const oauthPath = `/authorize-scripted?client_id=synthetic&redirect_uri=${origin}/callback&response_type=code`
+    for (const [modifier, path, disposition] of [
+      ['Shift', '/scripted-native', 'new-window'],
+      // A Cmd/Ctrl-opened OAuth child keeps its opener instead of becoming an Orca tab.
+      ['ControlOrMeta', oauthPath, 'background-tab']
+    ] as const) {
+      const before = receipts.length
+      const hosted = status().childRequests.length
+      const tabs = status().tabOpens.length
+      await installScriptedPopupProbe(page, path)
+      await page.locator('#scripted-native').click({ modifiers: [modifier] })
+      await expect
+        .poll(() => receipts.slice(before).find((receipt) => path.startsWith(receipt.path)))
+        .toMatchObject({ method: 'GET', cookie: 'synthetic_session=local', proxied: false })
+      await expect
+        .poll(() => page.locator('body').getAttribute('data-message'))
+        .toBe('callback:synthetic_session=local')
+      await refreshStatus()
+      expect(status().native.requests.at(-1)).toEqual({
+        disposition,
+        frameName: '',
+        features: '',
+        post: false
+      })
+      expect(status().childRequests.slice(hosted)).toEqual([
+        expect.objectContaining({
+          adopted: false,
+          native: true,
+          sessionMatches: true,
+          security: expectedSecurity
+        })
+      ])
+      expect(status().tabOpens.length).toBe(tabs)
+      // The page sends a hostile <title>; only a prepared child keeps the origin.
+      expect(status().native.windows.at(-1)).toMatchObject({ closed: false, title: origin })
+      await closeChildren(page)
+    }
+    expect(status().windowsHidden).toBe(true)
+  })
+
+  it('prepares, caps and fences modifier-clicked route script window.open children', async () => {
+    const page = guest('route')
+    const children: Page[] = []
+    for (const [index, modifier] of (
+      ['Shift', 'ControlOrMeta', 'Shift', 'ControlOrMeta'] as const
+    ).entries()) {
+      const path = `/scripted-route-${index}`
+      const before = receipts.length
+      await installScriptedPopupProbe(page, path)
+      await page.locator('#scripted-native').click({ modifiers: [modifier] })
+      await expect
+        .poll(() => receipts.slice(before).find((receipt) => receipt.path === path))
+        .toMatchObject({ method: 'GET', cookie: 'synthetic_session=route', proxied: true })
+      children.push(await childPage(`${origin}${path}`))
+      await refreshStatus()
+      expect(status().native.requests.at(-1)).toEqual({
+        disposition: modifier === 'Shift' ? 'new-window' : 'background-tab',
+        frameName: '',
+        features: '',
+        post: false
+      })
+      expect(status().native.creation.at(-1)).toMatchObject({
+        firstNavigationPolicy: 'disable_non_proxied_udp',
+        firstNavigationOwner: expect.any(Number)
+      })
+    }
+    // Four live native children fill the route popup cap.
+    await page.locator('#blank').click()
+    expect(await page.locator('body').getAttribute('data-handle')).toBe('false')
+    expect(status().native.windows.slice(-4)).toEqual(
+      Array.from({ length: 4 }, () => expect.objectContaining({ closed: false, title: origin }))
+    )
+    await page.evaluate('console.log("orca-popup-fixture:fence")')
+    await expect.poll(() => status().routeGranted).toBe(false)
+    for (const child of children) {
+      await expect.poll(() => child.isClosed()).toBe(true)
+    }
+    await page.evaluate('console.log("orca-popup-fixture:grant")')
+    await expect.poll(() => status().routeGranted).toBe(true)
+    expect(status().windowsHidden).toBe(true)
+  })
+
+  it.each(['link', 'script'])(
+    'keeps native popups at the origin-safe minimum size: %s',
+    async (kind) => {
+      const page = guest('local')
+      const path = `/native-size-${kind}`
+      if (kind === 'link') {
+        await page.locator('#shift').evaluate((link, path) => link.setAttribute('href', path), path)
+        await page.locator('#shift').click({ modifiers: ['Shift'] })
+      } else {
+        await installScriptedPopupProbe(page, path)
+        await page.locator('#scripted-native').click({ modifiers: ['Shift'] })
+      }
+      const child = await childPage(`${origin}${path}`)
+      // Control: the hidden native child does honor page resizes above the floor.
+      await child.evaluate('window.resizeTo(640, 480)')
+      await expect
+        .poll(async () => {
+          await refreshStatus()
+          return status().native.windows.at(-1)?.contentSize[0]
+        })
+        .toBe(640)
+      await child.evaluate('window.resizeTo(100, 100)')
+      await expect
+        .poll(async () => {
+          await refreshStatus()
+          return status().native.windows.at(-1)?.contentSize
+        })
+        .toEqual([MIN_POPUP_CONTENT_WIDTH, MIN_POPUP_CONTENT_HEIGHT])
+      await closeChildren(page)
+      await page.locator('#shift').evaluate((link) => link.setAttribute('href', '/shift'))
+    }
+  )
 })

@@ -100,7 +100,7 @@ export function createBrowserRouteGuestPopupController(input: {
     gestures.add(gesture)
     try {
       // Descendants inherit the same envelope; nothing about being a popup relaxes it.
-      contents.setWindowOpenHandler(buildWindowOpenHandler(gesture))
+      contents.setWindowOpenHandler(buildWindowOpenHandler(contents, gesture))
       contents.on('will-navigate', onPopupNavigate)
       contents.on('will-redirect', onPopupNavigate)
       // Ownership before first load: a download can start on the popup's very first navigation, and
@@ -168,6 +168,7 @@ export function createBrowserRouteGuestPopupController(input: {
   }
 
   function buildWindowOpenHandler(
+    source: WebContents,
     gesture: BrowserGuestInputGesture
   ): (details?: PopupRequest) => Electron.WindowOpenHandlerResponse {
     return (details) => {
@@ -197,7 +198,8 @@ export function createBrowserRouteGuestPopupController(input: {
       }
       if (isNativeBrowserPopupRequest(details ?? {})) {
         return allowNativeBrowserPopup({
-          opener: input.opener,
+          // Electron reports a script-opened child to the contents whose handler answered.
+          opener: source,
           targetUrl: details?.url ?? normalized,
           options,
           background: details?.disposition === 'background-tab',
@@ -233,7 +235,7 @@ export function createBrowserRouteGuestPopupController(input: {
   }
 
   return {
-    windowOpenHandler: buildWindowOpenHandler(openerGesture),
+    windowOpenHandler: buildWindowOpenHandler(input.opener, openerGesture),
     closeAll,
     dispose: () => {
       disposed = true

@@ -80,6 +80,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -112,6 +113,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -191,6 +193,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -256,6 +259,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -331,6 +335,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -389,6 +394,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -680,6 +686,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -728,6 +735,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
@@ -752,6 +760,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock,
       getURL: vi.fn(() => 'https://example.com'),

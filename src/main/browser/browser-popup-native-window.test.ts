@@ -67,8 +67,7 @@ describe('native popup admission', () => {
 
   it('leaves request continuation to Electron and expires an unused admission before the next turn', async () => {
     vi.stubEnv('ORCA_BACKGROUND_LAUNCH', '1')
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Admission only reads this stub's session and destruction state.
-    const opener = { session: {}, isDestroyed: () => false } as unknown as Electron.WebContents
+    const opener = nativeWindow().browserWindow.webContents
     const onCreated = vi.fn()
     const response = allowNativeBrowserPopup({
       opener,
@@ -81,12 +80,83 @@ describe('native popup admission', () => {
       show: false,
       fullscreenable: false,
       title: 'https://example.com',
+      useContentSize: true,
+      minWidth: 360,
+      minHeight: 200,
       webPreferences: { session: opener.session }
     })
     expect(events.has('browser-window-created')).toBe(true)
     await Promise.resolve()
     expect(events.has('browser-window-created')).toBe(false)
     expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('admits the script-opened child its opener reports in a later task', async () => {
+    const opener = nativeWindow()
+    const linked = nativeWindow()
+    const scripted = nativeWindow()
+    linked.contents.session = opener.contents.session
+    scripted.contents.session = opener.contents.session
+    const onScripted = vi.fn(() => {
+      prepareNativeBrowserPopup(scripted.browserWindow, 'https://example.com/scripted', () => true)
+      return scripted.browserWindow.webContents
+    })
+    const admit = (onCreated: () => Electron.WebContents) =>
+      allowNativeBrowserPopup({
+        opener: opener.browserWindow.webContents,
+        targetUrl: 'https://example.com/scripted',
+        options: {},
+        onCreated
+      })
+    const superseded = vi.fn(() => scripted.browserWindow.webContents)
+    admit(superseded)
+    await Promise.resolve()
+    admit(onScripted)
+    await Promise.resolve()
+    // An OpenURL child admitted during its own turn must not consume the pending script admission.
+    const onLinked = vi.fn(() => linked.browserWindow.webContents)
+    allowNativeBrowserPopup({
+      opener: opener.browserWindow.webContents,
+      targetUrl: 'https://example.com/linked',
+      options: {},
+      onCreated: onLinked
+    })
+    events.get('browser-window-created')?.({}, linked.browserWindow)
+    await Promise.resolve()
+    opener.contents.emit('did-create-window', linked.browserWindow)
+    expect(onLinked).toHaveBeenCalledOnce()
+    expect(onScripted).not.toHaveBeenCalled()
+    opener.contents.emit('did-create-window', scripted.browserWindow)
+    expect(onScripted).toHaveBeenCalledWith(
+      expect.objectContaining({ nativeWindow: scripted.browserWindow })
+    )
+    expect(superseded).not.toHaveBeenCalled()
+    const preventDefault = vi.fn()
+    scripted.window.emit('page-title-updated', { preventDefault }, 'Spoofed title')
+    expect(preventDefault).toHaveBeenCalledOnce()
+  })
+
+  it('discards a native child its opener reports without a pending admission', async () => {
+    const opener = nativeWindow()
+    const first = nativeWindow()
+    const unadmitted = nativeWindow()
+    first.contents.session = opener.contents.session
+    unadmitted.contents.session = opener.contents.session
+    const onCreated = vi.fn(() => first.browserWindow.webContents)
+    allowNativeBrowserPopup({
+      opener: opener.browserWindow.webContents,
+      targetUrl: 'https://example.com/scripted',
+      options: {},
+      onCreated
+    })
+    await Promise.resolve()
+    opener.contents.emit('did-create-window', first.browserWindow)
+    opener.contents.emit('did-create-window', unadmitted.browserWindow)
+    expect(onCreated).toHaveBeenCalledOnce()
+    expect(unadmitted.contents.close).toHaveBeenCalledOnce()
+    await Promise.resolve()
+    expect(unadmitted.window.destroy).toHaveBeenCalledOnce()
+    expect(first.window.destroy).not.toHaveBeenCalled()
   })
 
   it.each([

@@ -4,6 +4,7 @@ import {
   discardBrowserPopupContents,
   prepareNativeBrowserPopup
 } from './browser-popup-native-window'
+import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
 
 // Why: Electron passes the pre-created popup WebContents through the
 // createWindow options (present at runtime, absent from the published d.ts).
@@ -26,8 +27,6 @@ export const POPUP_ORIGIN_BAR_HEIGHT = 34
 
 const DEFAULT_POPUP_CONTENT_WIDTH = 800
 const DEFAULT_POPUP_CONTENT_HEIGHT = 600
-const MIN_POPUP_CONTENT_WIDTH = 360
-const MIN_POPUP_CONTENT_HEIGHT = 200
 
 // Why: http on loopback is a secure context (local OAuth callback servers are
 // common); only flag plain http to a real remote host.

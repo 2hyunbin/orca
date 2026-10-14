@@ -6,10 +6,13 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, type Browser, type Page } from 'playwright'
-import { afterAll, beforeAll, expect } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest'
 import { build as buildVite } from 'vite'
 import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
 import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
+
+// Hidden renderer startup and CDP events can exceed the default one-second poll on CI.
+vi.setConfig({ expect: { poll: { timeout: 10_000 } } })
 
 export type PopupFixtureReceipt = {
   path: string
@@ -62,7 +65,13 @@ export function status(): {
       firstNavigationOwner: number | null
       firstNavigationTitle: string
     }[]
-    windows: { closed: boolean; title: string; fullscreen: boolean; focused: boolean }[]
+    windows: {
+      closed: boolean
+      title: string
+      fullscreen: boolean
+      focused: boolean
+      contentSize: number[]
+    }[]
   }
 } {
   return JSON.parse(readFileSync(statusPath, 'utf8'))
@@ -236,6 +245,17 @@ beforeAll(async () => {
     pages.set(name, page)
   }
 }, 60_000)
+
+afterEach(async () => {
+  const route = pages.get('route')
+  if (route && !route.isClosed()) {
+    await route.evaluate('console.log("orca-popup-fixture:restore-authority")')
+  }
+  const local = pages.get('local')
+  if (local && !local.isClosed()) {
+    await closeChildren(local)
+  }
+})
 
 afterAll(async () => {
   if (artifactDir && existsSync(statusPath)) {

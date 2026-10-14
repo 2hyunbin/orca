@@ -2,9 +2,18 @@ import { app, type BrowserWindow, type WebContents } from 'electron'
 import { isBackgroundLaunch } from '../window/foreground-activation-policy'
 import { safeOrigin } from './browser-manager-types'
 import type { PopupChildWindowOptions, PopupOriginBarWindow } from './popup-origin-bar-window'
-import { markNativeBrowserPopupWindow } from './native-browser-popup-windows'
+import {
+  isNativeBrowserPopupWindow,
+  markNativeBrowserPopupWindow
+} from './native-browser-popup-windows'
+import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
 
 const rejectedNativePopups = new WeakSet<BrowserWindow>()
+// Why: like Electron, an opener's latest script admission answers the next child it shows.
+const pendingScriptedNativePopups = new WeakMap<
+  WebContents,
+  ((window: BrowserWindow) => void) | null
+>()
 
 /** Chromium's OpenURL path has no adoptable contents or public navigation callback. */
 export function isNativeBrowserPopupRequest(input: {
@@ -19,7 +28,10 @@ export function isNativeBrowserPopupRequest(input: {
   )
 }
 
-/** Electron constructs this window synchronously before resuming its native navigation. */
+/**
+ * OpenURL constructs this window synchronously, before resuming its native navigation; a script
+ * window.open constructs it in a later task, when the renderer shows the child it created.
+ */
 export function allowNativeBrowserPopup(input: {
   opener: WebContents
   targetUrl: string
@@ -29,7 +41,7 @@ export function allowNativeBrowserPopup(input: {
   onCreated: (options: PopupChildWindowOptions) => WebContents
 }): Electron.WindowOpenHandlerResponse {
   const mayPresent = !isBackgroundLaunch() && input.options.show !== false
-  const onCreated = (_event: Electron.Event, window: BrowserWindow): void => {
+  const admit = (window: BrowserWindow): void => {
     markNativeBrowserPopupWindow(window)
     try {
       if (input.opener.isDestroyed() || window.webContents.session !== input.opener.session) {
@@ -60,10 +72,20 @@ export function allowNativeBrowserPopup(input: {
       rejectNativeBrowserPopup(window)
     }
   }
+  let admitted = false
+  const onCreated = (_event: Electron.Event, window: BrowserWindow): void => {
+    admitted = true
+    admit(window)
+  }
   // Prepend prevents another browser-window-created listener from navigating the child first.
   app.prependOnceListener('browser-window-created', onCreated)
   // A canceled native creation must not grant the next unrelated window this admission.
-  queueMicrotask(() => app.off('browser-window-created', onCreated))
+  queueMicrotask(() => {
+    app.off('browser-window-created', onCreated)
+    if (!admitted) {
+      awaitScriptedNativePopup(input.opener, admit)
+    }
+  })
   return {
     action: 'allow',
     overrideBrowserWindowOptions: {
@@ -71,9 +93,40 @@ export function allowNativeBrowserPopup(input: {
       title: safeOrigin(input.targetUrl),
       fullscreenable: false,
       show: mayPresent && !input.background,
+      // Content-sized like origin-bar popups, so resizeTo cannot hide the origin title.
+      useContentSize: true,
+      minWidth: MIN_POPUP_CONTENT_WIDTH,
+      minHeight: MIN_POPUP_CONTENT_HEIGHT,
       webPreferences: { ...input.options.webPreferences, session: input.opener.session }
     }
   }
+}
+
+// Electron emits did-create-window on the opener synchronously after constructing the child, before
+// the child's first request; unadmitted native children there are discarded rather than left bare.
+function awaitScriptedNativePopup(
+  opener: WebContents,
+  admit: (window: BrowserWindow) => void
+): void {
+  if (opener.isDestroyed()) {
+    return
+  }
+  if (!pendingScriptedNativePopups.has(opener)) {
+    opener.prependListener('did-create-window', (window) => {
+      if (isNativeBrowserPopupWindow(window)) {
+        return
+      }
+      const pending = pendingScriptedNativePopups.get(opener)
+      pendingScriptedNativePopups.set(opener, null)
+      if (pending) {
+        pending(window)
+      } else {
+        markNativeBrowserPopupWindow(window)
+        rejectNativeBrowserPopup(window)
+      }
+    })
+  }
+  pendingScriptedNativePopups.set(opener, admit)
 }
 
 /** Ends popup contents Chromium created before their pending first request can leave. */
