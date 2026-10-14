@@ -53,16 +53,14 @@ export function classifyShadowSeat(
   answer: ShadowCompareDatabaseAnswer,
   now: number
 ): ShadowCompareVerdict {
-  // Pure: only ShadowDirectoryCompare records sightings.
-  const firstSeen = answer
-    ? directory.databaseEpochFirstSeen(
+  // Pure: only ShadowDirectoryCompare records sightings. An epoch never seen is new.
+  const movedAt = answer
+    ? (directory.databaseEpochFirstSeen(
         identity.userId,
         identity.relayHostId,
         answer.assignmentEpoch
-      )
-    : undefined
-  // An epoch never seen is new.
-  const movedAt = firstSeen ?? now
+      ) ?? now)
+    : now
   if (!directory.isComplete()) return { class: 'map-incomplete', explained: true }
   const seats = directory.seatsOf(identity.userId, identity.relayHostId)
   if (!answer) {
@@ -86,15 +84,15 @@ export function classifyShadowSeat(
     }
     // A newer DB seat supersedes older-epoch seats until their silence close;
     // a level epoch is a real tie.
+    const supersededAt = movedSince(directory, identity, answer, now)
     const current = seats.find(
       (seat) => seat.cellId === answer.cellId && seat.epoch === answer.assignmentEpoch
     )
     const superseded =
       current !== undefined &&
       seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
-      // No sighting means the move's age is unknown, not new.
-      firstSeen !== undefined &&
-      now - firstSeen <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+      supersededAt !== undefined &&
+      now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]
@@ -123,6 +121,20 @@ export function classifyShadowSeat(
     return { class: 'epoch-mismatch', explained: mapBehind }
   }
   return { class: 'agree', explained: true }
+}
+
+// When the move to the answer's epoch happened, from sightings recorded before this compare.
+// None (first sighting since a restart or eviction, or a regressed epoch) means unknown, not new.
+function movedSince(
+  directory: ShadowSeatDirectory,
+  identity: { userId: string; relayHostId: string },
+  answer: { assignmentEpoch: number },
+  now: number
+): number | undefined {
+  const known = directory.databaseEpochOf(identity.userId, identity.relayHostId)
+  if (!known || known.epoch > answer.assignmentEpoch) return undefined
+  // A lower recorded epoch: the move is this sighting.
+  return known.epoch < answer.assignmentEpoch ? now : known.firstSeenAt
 }
 
 // The database's cell, or with no row every seat's cell; an unexplained cell-mismatch or
@@ -165,6 +177,8 @@ export class ShadowDirectoryCompare {
     answer: ShadowCompareDatabaseAnswer
   ): ShadowCompareVerdict {
     const now = this.now()
+    // Classify first, so it can tell a first-ever sighting from one seen before.
+    const verdict = classifyShadowSeat(this.directory, identity, answer, now)
     // Every answer, so a move's age counts from its first sighting on either route.
     if (answer) {
       this.directory.observeDatabaseEpoch(
@@ -174,7 +188,6 @@ export class ShadowDirectoryCompare {
         now
       )
     }
-    const verdict = classifyShadowSeat(this.directory, identity, answer, now)
     const key = `${route}\u0000${verdict.class}\u0000${verdict.explained}`
     const entry = this.counts.get(key) ?? { count: 0, countByCell: Object.create(null) }
     this.counts.set(key, entry)

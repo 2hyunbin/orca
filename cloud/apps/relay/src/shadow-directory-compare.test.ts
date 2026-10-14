@@ -242,6 +242,30 @@ describe('classifyShadowSeat', () => {
       })
     })
 
+    it('is explained when the director last saw the host at a lower epoch', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      directory.observeDatabaseEpoch('user-a', HOST, 2, 1)
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), firstSeen + 1_700)).toEqual({
+        class: 'duplicate-seat',
+        explained: true
+      })
+    })
+
+    it('is unexplained when the database names a newer epoch than the seat on its cell', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      directory.observeDatabaseEpoch('user-a', HOST, 4, firstSeen)
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 4), firstSeen + 1_700)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+
     it('is unexplained when the database names the lower epoch, or matches no seat', () => {
       for (const answer of [at('cell-b', 2), at('cell-a', 4), at('cell-b', 3)]) {
         expect(classifyShadowSeat(superseded(), IDENTITY, answer, firstSeen + 1_700)).toEqual({
@@ -334,8 +358,10 @@ describe('ShadowDirectoryCompare', () => {
     const draining = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2, 'drain-only')] })
     draining.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     draining.flush(0)
-    // A just-superseded older seat is explained, so it too counts only on the database's cell.
+    // A superseded older seat: the first-ever sighting is unexplained and counts on both cells;
+    // seen before, it is explained and counts only on the database's cell.
     const superseded = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
+    superseded.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     superseded.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     superseded.flush(0)
     const mapOnly = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
@@ -348,6 +374,7 @@ describe('ShadowDirectoryCompare', () => {
       ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', true, 1, { 'cell-a': 1 }],
+      ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', true, 1, { 'cell-a': 1 }],
       ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
     ])
