@@ -119,6 +119,7 @@ export default function JiraIssueWorkspace({
     setLabelsDraft(issue.labels.join(', '))
     setComments([])
     setCommentsError(null)
+    setTransitions([])
     setIssueLoading(true)
 
     void jiraGetIssueForTarget(owner, issue.key, issue.siteId)

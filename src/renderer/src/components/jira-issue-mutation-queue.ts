@@ -101,6 +101,7 @@ export function enqueueJiraIssueMutation({
   const request = (async (): Promise<void> => {
     await predecessor?.catch(() => undefined)
     let saved = false
+    let refreshed = false
     try {
       const result = await update()
       if (!result.ok) {
@@ -118,6 +119,7 @@ export function enqueueJiraIssueMutation({
               .filter((field) => !(field in optimistic))
           )
           write.confirmed = mergeJiraIssueHydration(latest, write.confirmed, newerFields)
+          refreshed = true
         }
       } catch {
         // A failed refresh does not undo a successful save.
@@ -125,7 +127,9 @@ export function enqueueJiraIssueMutation({
     } finally {
       write.pending.splice(write.pending.indexOf(mutation), 1)
       let patch: Partial<JiraIssue> = saved
-        ? write.confirmed
+        ? refreshed
+          ? write.confirmed
+          : optimistic
         : jiraIssueRollbackPatch(write.confirmed, optimistic)
       for (const newer of write.pending) {
         if (saved) {
