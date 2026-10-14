@@ -12,7 +12,7 @@ import {
 
 // A seeded discrete-event model of step 5 that drives the real CellReserveBook and
 // ReservePlacer. Everything else (sockets, the database, desktops) is modelled. The checks
-// are the design's invariants 1-8; a violation is recorded, never thrown, so one run reports
+// are the design's invariants 1-9; a violation is recorded, never thrown, so one run reports
 // every class it hit.
 
 export function seededRandom(seed: number): () => number {
@@ -127,6 +127,8 @@ export type SimulationFaults = {
   noRawFeedMode?: boolean
   unguardedLedger?: boolean
   noEpochFloor?: boolean
+  // On a level divergence each director keeps the seat its own cell order prefers, not the row's.
+  localTieBreak?: boolean
 }
 
 // relay_cell_admit_effective: each cell writes its raw mode every 15 s (cell-admit-effective-writer.ts),
@@ -423,6 +425,8 @@ export type SimulationReport = {
   supersedes: number
   directorRestarts: number
   rowAheadDemotions: number
+  // Demotions whose winner is level with the loser (same epoch, another cell): the tie-break's cases.
+  levelDemotions: number
   // Row-ahead demotions per demoted host: a repair that converges needs one.
   rowAheadDemotionsPerHost: { max: number; p99: number }
   deadManTrips: number
@@ -503,8 +507,12 @@ export async function runReservePlacementSimulation(
   const random = seededRandom(config.seed)
   const clock = new Clock()
   const violations: SimulationViolation[] = []
+  // Capped per invariant, so a flood of one class cannot hide another.
+  const violationCounts = new Map<number, number>()
   const violate = (invariant: number, detail: string): void => {
-    if (violations.length < 50) violations.push({ invariant, at: clock.now, detail })
+    const count = violationCounts.get(invariant) ?? 0
+    violationCounts.set(invariant, count + 1)
+    if (count < 50) violations.push({ invariant, at: clock.now, detail })
   }
   const faults = config.faults ?? {}
   const database = new SimDatabase(violate, faults)
@@ -550,6 +558,7 @@ export async function runReservePlacementSimulation(
     supersedes: 0,
     directorRestarts: 0,
     rowAheadDemotions: 0,
+    levelDemotions: 0,
     rowAheadDemotionsPerHost: { max: 0, p99: 0 },
     deadManTrips: 0,
     reserveCallsOnTrippedCells: 0,
@@ -734,12 +743,38 @@ export async function runReservePlacementSimulation(
       const seat = view.seats.get(host)
       if (!seat || seat.demoted || seatCellId === cellId || seat.epoch >= epoch) continue
       if (!view.placement.reserve) continue
-      const loser = cellById.get(seatCellId)!
       report.supersedes += 1
-      clock.schedule(config.rttMs(loser.region), () =>
-        loser.demote(host, seat.epoch, seat.joinedAt, () => onSeatClosed(host, seatCellId, seat.epoch))
-      )
+      demoteFor(director, host, seatCellId, seat, { cellId, epoch })
     }
+  }
+
+  // Invariant 4: each demotion names its winner (the newer booking, or the row). Every director
+  // names the same one per divergence, so no two seats of a host are each demoted for the other.
+  const namedWinners = new Map<string, string>()
+  const demotedFor = new Map<string, string>()
+  function demoteFor(
+    director: SimDirector,
+    host: string,
+    cellId: string,
+    seat: { epoch: number; joinedAt: number },
+    winner: { cellId: string; epoch: number }
+  ): void {
+    const loser = `${cellId}@${seat.epoch}`
+    const won = `${winner.cellId}@${winner.epoch}`
+    const divergence = `${host}\u0000${[loser, won].sort().join('\u0000')}`
+    const named = namedWinners.get(divergence)
+    if (named === undefined) namedWinners.set(divergence, won)
+    else if (named !== won) violate(4, `${director.id} names ${won} over ${loser} for ${host}; ${named} was named before`)
+    if (winner.epoch === seat.epoch) report.levelDemotions += 1
+    const cell = cellById.get(cellId)!
+    clock.schedule(config.rttMs(cell.region), () => {
+      const live = cell.seats.get(host)
+      const already = live?.demoted ?? true
+      cell.demote(host, seat.epoch, seat.joinedAt, () => onSeatClosed(host, cellId, seat.epoch))
+      if (already || !live!.demoted) return
+      demotedFor.set(`${host}\u0000${loser}`, won)
+      if (demotedFor.get(`${host}\u0000${won}`) === loser) violate(4, `${host}: ${loser} and ${won} each demoted for the other`)
+    })
   }
 
   function onSeatClosed(hostId: string, cellId: string, epoch: number): void {
@@ -780,6 +815,17 @@ export async function runReservePlacementSimulation(
           if (behindRow.has(key)) violate(8, `${host}@${seat.epoch} on ${cellId} still behind row @${row.epoch}`)
           behindRow.set(key, clock.now)
           if (faults.noRowAheadDemote) continue
+          if (faults.localTieBreak && row.epoch === seat.epoch) {
+            // Even directors keep the lower cell id, odd ones the higher.
+            const keepsThisSeat = (cellId < row.cellId) === (director.index % 2 === 0)
+            const rowSeat = director.views.get(row.cellId)?.seats.get(host)
+            if (keepsThisSeat) {
+              if (rowSeat && rowSeat.epoch === row.epoch && !rowSeat.demoted) {
+                demoteFor(director, host, row.cellId, rowSeat, { cellId, epoch: seat.epoch })
+              }
+              continue
+            }
+          }
           report.rowAheadDemotions += 1
           director.rowFloors.set(host, Math.max(row.epoch, director.rowFloors.get(host) ?? 0))
           rowAheadDemotionsByHost.set(host, (rowAheadDemotionsByHost.get(host) ?? 0) + 1)
@@ -790,10 +836,7 @@ export async function runReservePlacementSimulation(
           demotedBehindRow.set(sameRow, behindThisRow)
           if (behindThisRow > 2) violate(8, `${host} demoted ${behindThisRow} times behind its row ${row.cellId}@${row.epoch}`)
           reassignAbove.set(host, { ...row })
-          const cell = cellById.get(cellId)!
-          clock.schedule(config.rttMs(cell.region), () =>
-            cell.demote(host, seat.epoch, seat.joinedAt, () => onSeatClosed(host, cellId, seat.epoch))
-          )
+          demoteFor(director, host, cellId, seat, row)
           continue
         }
         database.upsert(host, cellId, seat.epoch)
