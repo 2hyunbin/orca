@@ -52,6 +52,7 @@ function transportWith(children: FakeChild[]) {
   const specs: PipedProcessSpec[] = []
   const transport = createWslOrcadHostTransport({
     target: { kind: 'wsl', id: 'env-1', distro: 'Ubuntu-24.04', label: 'My Ubuntu' },
+    commandLoops: false,
     spawn: (spec) => {
       specs.push(spec)
       const next = children.shift()
@@ -171,5 +172,10 @@ describe('createWslOrcadHostTransport', () => {
     expect(isWslOrcadHostTarget(target)).toBe(true)
     expect(transport.usesSystemSshTransport()).toBe(false)
     expect(transport.getConnectGeneration()).toBe(transport.getConnectGeneration())
+  })
+
+  // Regression: `nohup … &` dies with its `wsl.exe --exec` on a distro without systemd.
+  it('asks orcad launches to start in their own session', () => {
+    expect(transportWith([]).transport.orcadLaunchDetach).toBe('setsid')
   })
 })
