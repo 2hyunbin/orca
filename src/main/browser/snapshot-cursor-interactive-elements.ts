@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { SnapshotEntry } from './snapshot-ax-tree-walk'
 import type { CdpCommandSender } from './snapshot-engine'
 
@@ -11,6 +12,8 @@ export async function findCursorInteractiveElements(
 ): Promise<SnapshotEntry[]> {
   const existingNodeIds = new Set(existingEntries.map((e) => e.backendDOMNodeId))
   const results: SnapshotEntry[] = []
+  let objectGroup: string | undefined
+  let queryCompleted = false
 
   try {
     // Single evaluate call that finds interactive elements and returns their info
@@ -57,12 +60,18 @@ export async function findCursorInteractiveElements(
       returnByValue: true
     })) as { result: { value: string } }
 
+    queryCompleted = true
     const elements = JSON.parse(result.value) as { text: string; tag: string }[]
+    if (elements.length > 0) {
+      objectGroup = `orca-cursor-snapshot-${randomUUID()}`
+    }
 
     for (let i = 0; i < elements.length; i++) {
       try {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Chromium Runtime.evaluate returns a RemoteObject; only its optional objectId is read.
         const { result: objResult } = (await sendCommand('Runtime.evaluate', {
-          expression: `window.__orcaCursorInteractive[${i}]`
+          expression: `window.__orcaCursorInteractive[${i}]`,
+          objectGroup
         })) as { result: { objectId?: string } }
 
         if (!objResult.objectId) {
@@ -88,14 +97,27 @@ export async function findCursorInteractiveElements(
         continue
       }
     }
-
-    // Clean up
-    await sendCommand('Runtime.evaluate', {
-      expression: 'delete window.__orcaCursorInteractive',
-      returnByValue: true
-    })
   } catch {
     // DOM query failed — not critical, just return empty
+  } finally {
+    if (queryCompleted) {
+      const cleanupRequests = [
+        Promise.resolve().then(() =>
+          sendCommand('Runtime.evaluate', {
+            expression: 'delete window.__orcaCursorInteractive',
+            returnByValue: true
+          })
+        )
+      ]
+      if (objectGroup) {
+        // Debugger handles retain detached DOM even after the temporary page array is deleted.
+        cleanupRequests.push(
+          Promise.resolve().then(() => sendCommand('Runtime.releaseObjectGroup', { objectGroup }))
+        )
+      }
+      // Independent cleanup shares one timeout budget if the debugger stalls.
+      await Promise.allSettled(cleanupRequests)
+    }
   }
 
   return results
