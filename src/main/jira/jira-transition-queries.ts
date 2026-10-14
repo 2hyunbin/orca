@@ -1,8 +1,8 @@
 import type { JiraProjectStatusOrder, JiraTransition } from '../../shared/jira-types'
 import { acquire, release } from './request-queue'
-import { apiBasePath, jiraRequest } from './authenticated-request'
+import { apiBasePath, JiraApiError, jiraRequest } from './authenticated-request'
 import { clearToken, getClients, isAuthError } from './client'
-import { mapStatus } from './jira-issue-mapping'
+import { mapCreateField, mapStatus } from './jira-issue-mapping'
 import {
   asFiniteNumber,
   asIdentifier,
@@ -22,22 +22,32 @@ export async function listTransitions(
   }
   await acquire()
   try {
-    const response = await jiraRequest<{ transitions?: JiraRecord[] }>(
-      entry,
-      `${apiBasePath(entry.site)}/issue/${encodeURIComponent(key)}/transitions`
-    )
+    const issuePath = `${apiBasePath(entry.site)}/issue/${encodeURIComponent(key)}/transitions`
+    let response: { transitions?: JiraRecord[] }
+    try {
+      response = await jiraRequest(entry, `${issuePath}?expand=transitions.fields`)
+    } catch (error) {
+      if (!(error instanceof JiraApiError) || ![400, 403, 404].includes(error.status ?? 0)) {
+        throw error
+      }
+      response = await jiraRequest(entry, issuePath)
+    }
     return (response.transitions ?? []).map((transition) => ({
       id: asString(transition.id),
       name: asString(transition.name),
-      to: mapStatus(transition.to)
+      to: mapStatus(transition.to),
+      fields: transition.fields
+        ? Object.entries(asRecord(transition.fields))
+            .map(([fieldKey, field]) => mapCreateField(field, fieldKey))
+            .filter((field) => field !== null)
+        : undefined
     }))
   } catch (error) {
     if (isAuthError(error)) {
       clearToken(entry.site.id)
       throw error
     }
-    console.warn('[jira] listTransitions failed:', error)
-    return []
+    throw error
   } finally {
     release()
   }

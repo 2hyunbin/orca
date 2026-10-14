@@ -23,6 +23,7 @@ import type {
   JiraComment,
   JiraIssue,
   JiraPriority,
+  JiraMutationResult,
   JiraTransition,
   JiraUser
 } from '../../../shared/jira-types'
@@ -55,6 +56,8 @@ export default function JiraIssueWorkspace({
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsError, setCommentsError] = useState<string | null>(null)
   const [transitions, setTransitions] = useState<JiraTransition[]>([])
+  const [transitionsLoading, setTransitionsLoading] = useState(false)
+  const [transitionsError, setTransitionsError] = useState<string | null>(null)
   const [priorities, setPriorities] = useState<JiraPriority[]>([])
   const [users, setUsers] = useState<JiraUser[]>([])
   const [pendingField, setPendingField] = useState<string | null>(null)
@@ -96,6 +99,35 @@ export default function JiraIssueWorkspace({
     [providerSettings]
   )
 
+  const loadTransitions = useCallback(
+    async (targetIssue: JiraIssue, requestId: number): Promise<void> => {
+      setTransitionsLoading(true)
+      setTransitionsError(null)
+      setTransitions([])
+      try {
+        const result = await jiraListTransitions(
+          providerSettings,
+          targetIssue.key,
+          targetIssue.siteId
+        )
+        if (requestId === requestIdRef.current) {
+          setTransitions(result)
+        }
+      } catch (error) {
+        if (requestId === requestIdRef.current) {
+          setTransitionsError(
+            error instanceof Error ? error.message : 'Failed to load status changes.'
+          )
+        }
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setTransitionsLoading(false)
+        }
+      }
+    },
+    [providerSettings]
+  )
+
   // oxlint-disable-next-line react-doctor/no-derived-state-effect -- Why: seeds editable issue drafts while IPC hydration runs and invalidates obsolete requests.
   useEffect(() => {
     requestIdRef.current += 1
@@ -106,6 +138,8 @@ export default function JiraIssueWorkspace({
       setCommentsLoading(false)
       setCommentsError(null)
       setTransitions([])
+      setTransitionsError(null)
+      setTransitionsLoading(false)
       setPriorities([])
       setUsers([])
       setCommentDraft('')
@@ -141,22 +175,21 @@ export default function JiraIssueWorkspace({
       })
 
     void Promise.all([
-      jiraListTransitions(providerSettings, issue.key, issue.siteId),
       jiraListPriorities(providerSettings, issue.siteId),
       jiraListAssignableUsers(providerSettings, issue.key, undefined, issue.siteId)
     ])
-      .then(([nextTransitions, nextPriorities, nextUsers]) => {
+      .then(([nextPriorities, nextUsers]) => {
         if (requestId !== requestIdRef.current) {
           return
         }
-        setTransitions(nextTransitions)
         setPriorities(nextPriorities)
         setUsers(nextUsers)
       })
       .catch(() => {})
 
+    void loadTransitions(issue, requestId)
     void loadComments(issue, requestId)
-  }, [issue, loadComments, providerSettings])
+  }, [issue, loadComments, loadTransitions, providerSettings])
 
   const refreshIssue = useCallback(async (): Promise<void> => {
     if (!displayed) {
@@ -178,9 +211,9 @@ export default function JiraIssueWorkspace({
       field: string,
       updates: Parameters<typeof jiraUpdateIssue>[2],
       optimistic?: Partial<JiraIssue>
-    ): Promise<void> => {
+    ): Promise<JiraMutationResult> => {
       if (!displayed || pendingField) {
-        return
+        return { ok: false, error: 'Another issue change is in progress.' }
       }
       setPendingField(field)
       const previous = displayed
@@ -194,22 +227,32 @@ export default function JiraIssueWorkspace({
           throw new Error(result.error)
         }
         await refreshIssue()
+        if (field === 'transition') {
+          await loadTransitions(displayed, requestIdRef.current)
+        }
+        return { ok: true }
       } catch (error) {
         setFullIssue(previous)
         patchJiraIssue(previous.key, previous, { sourceContext })
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : translate(
-                'auto.components.JiraIssueWorkspace.ea21952aa3',
-                'Failed to update Jira issue.'
-              )
-        )
+        const message = error instanceof Error ? error.message : 'Failed to update Jira issue.'
+        if (field !== 'transition') {
+          toast.error(message)
+        }
+        return { ok: false, error: message }
       } finally {
         setPendingField(null)
       }
     },
-    [displayed, patchJiraIssue, pendingField, refreshIssue, providerSettings, siteId, sourceContext]
+    [
+      displayed,
+      patchJiraIssue,
+      pendingField,
+      refreshIssue,
+      loadTransitions,
+      providerSettings,
+      siteId,
+      sourceContext
+    ]
   )
 
   const handleSaveTitle = useCallback(() => {
@@ -325,6 +368,9 @@ export default function JiraIssueWorkspace({
               displayed={displayed}
               pendingField={pendingField}
               transitions={transitions}
+              transitionsLoading={transitionsLoading}
+              transitionsError={transitionsError}
+              reloadTransitions={() => void loadTransitions(displayed, requestIdRef.current)}
               priorities={priorities}
               users={users}
               mutateIssue={mutateIssue}
