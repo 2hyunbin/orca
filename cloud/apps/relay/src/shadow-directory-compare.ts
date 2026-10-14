@@ -21,8 +21,7 @@ export type ShadowCompareClass =
   | 'cell-mismatch'
   | 'epoch-mismatch'
   | 'duplicate-seat'
-  // A superseded-shaped duplicate with no prior sighting, in the instance's first 100 s. Later,
-  // no sighting (compares served by another instance, or evicted) is a plain duplicate-seat.
+  // A superseded-shaped duplicate with no prior sighting, in the instance's first 100 s.
   | 'superseded-unknown-age'
   | 'map-only'
   // The map seats the host on a cell the database does not call live, so resolve answered null.
@@ -101,6 +100,8 @@ export function classifyShadowSeat(
     if (!supersededShape) return { class: 'duplicate-seat', explained: false }
     const known = directory.databaseEpochOf(identity.userId, identity.relayHostId)
     if (!known) {
+      // Later, no sighting means another instance served the earlier compares, or the map evicted
+      // the host, so a harmless supersede still reads as an unexplained duplicate-seat.
       const starting = now - startedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
       return { class: starting ? 'superseded-unknown-age' : 'duplicate-seat', explained: false }
     }
