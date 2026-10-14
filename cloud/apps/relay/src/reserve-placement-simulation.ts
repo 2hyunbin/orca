@@ -800,12 +800,17 @@ export async function runReservePlacementSimulation(
     const won = `${wonSeat.cellId}@${wonSeat.epoch}`
     const divergence = `${host}\u0000${[loser, won].sort().join('\u0000')}`
     const named = namedWinners.get(divergence)
-    if (named === undefined) namedWinners.set(divergence, { won, by: director.id })
-    else if (named.won !== won) {
-      violate(4, `${director.id} names ${won} over ${loser} for ${host}; ${named.by} named ${named.won}`)
-    } else if (named.by !== director.id && loserSeat.epoch === wonSeat.epoch && !contested.has(divergence)) {
+    if (named === undefined) {
+      namedWinners.set(divergence, { won, by: director.id })
+      return
+    }
+    // A second director judged it, agreeing or not: the tie-break was exercised.
+    if (named.by !== director.id && loserSeat.epoch === wonSeat.epoch && !contested.has(divergence)) {
       contested.add(divergence)
       report.contestedDivergences += 1
+    }
+    if (named.won !== won) {
+      violate(4, `${director.id} names ${won} over ${loser} for ${host}; ${named.by} named ${named.won}`)
     }
   }
   function demoteFor(
@@ -818,13 +823,17 @@ export async function runReservePlacementSimulation(
     const loser = `${cellId}@${seat.epoch}`
     const won = `${winner.cellId}@${winner.epoch}`
     judge(director, host, { cellId, epoch: seat.epoch }, winner)
-    if (winner.epoch === seat.epoch) report.levelDemotions += 1
     const cell = cellById.get(cellId)!
     clock.schedule(config.rttMs(cell.region), () => {
       const live = cell.seats.get(host)
       const wasLive = live !== undefined && !live.demoted
       cell.demote(host, seat.epoch, seat.joinedAt, () => onSeatClosed(host, cellId, seat.epoch))
       if (!wasLive || !live.demoted) return
+      // Only a live seat demoted for a live level winner is a same-epoch duplicate resolved.
+      const winnerSeat = cellById.get(winner.cellId)?.seats.get(host)
+      if (winner.epoch === seat.epoch && winnerSeat?.epoch === winner.epoch && !winnerSeat.demoted) {
+        report.levelDemotions += 1
+      }
       demotedFor.set(`${host}\u0000${loser}`, won)
       if (demotedFor.get(`${host}\u0000${won}`) === loser) violate(4, `${host}: ${loser} and ${won} each demoted for the other`)
     })
@@ -1303,12 +1312,12 @@ export async function runReservePlacementSimulation(
     for (const [host, seats] of seatsByHost) {
       if (seats.length < 2) continue
       const newest = Math.max(...seats.map((entry) => entry.seat.epoch))
-      // A booking with no record (a sticky reserve) counts as having held every seat.
+      // By the newest seats' placement records, whatever their join says: no record, no supersede.
       const bookings = seats
-        .filter((entry) => entry.seat.epoch === newest && entry.seat.reservedBy !== undefined)
-        .map((entry) => heldAtBooking.get(`${host}\u0000${entry.cell.cellId}\u0000${newest}`))
+        .filter((entry) => entry.seat.epoch === newest)
+        .flatMap((entry) => heldAtBooking.get(`${host}\u0000${entry.cell.cellId}\u0000${newest}`) ?? [])
       const supersededBy = (cellId: string, joinedAt: number): boolean =>
-        bookings.some((held) => held === undefined || held.has(`${cellId}\u0000${joinedAt}`))
+        bookings.some((held) => held.has(`${cellId}\u0000${joinedAt}`))
       for (const { cell, seat } of seats) {
         if (cell.mode !== 'reserve' || seat.epoch === newest) continue
         // A leased seat goes by its renewal, as today.
