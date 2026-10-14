@@ -5,6 +5,8 @@
 // prompt answer's replay answers from the resolution its receipt keeps; the journal projects the
 // others' current answer.
 
+import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
+import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {

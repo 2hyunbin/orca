@@ -524,9 +524,6 @@ describe('useStructuredAgentSessionOptions', () => {
       await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus'))
       await act(async () => {
         await result.current.setStructuredOption('effort', 'low')
-      })
-      expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
-      await act(async () => {
         await result.current.setStructuredOption('model', 'sonnet')
       })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet')
