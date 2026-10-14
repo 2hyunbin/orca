@@ -53,7 +53,8 @@ export function classifyShadowSeat(
   answer: ShadowCompareDatabaseAnswer,
   now: number
 ): ShadowCompareVerdict {
-  // Pure: only ShadowDirectoryCompare records sightings. An epoch never seen is new.
+  // Pure: only ShadowDirectoryCompare records sightings. An epoch never seen is new; unlike the
+  // superseded rule, a wrong guess here only explains a mismatch for one lag bound.
   const movedAt = answer
     ? (directory.databaseEpochFirstSeen(
         identity.userId,
@@ -92,7 +93,9 @@ export function classifyShadowSeat(
       current !== undefined &&
       seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
       supersededAt !== undefined &&
-      now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+      now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS &&
+      // A long-ago lower-epoch sighting dates the move to now; the join bounds the seat itself.
+      now - current.joinedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]

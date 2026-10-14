@@ -254,6 +254,31 @@ describe('classifyShadowSeat', () => {
       })
     })
 
+    it('is unexplained after a lower-epoch sighting when the current seat joined long ago', () => {
+      const now = firstSeen + SHADOW_COMPARE_SUPERSEDED_CLOSE_MS + 1
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      directory.observeDatabaseEpoch('user-a', HOST, 2, 1)
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), now)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+
+    it('is unexplained when the database answer regresses below the recorded epoch', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      directory.observeDatabaseEpoch('user-a', HOST, 4, firstSeen)
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), firstSeen + 1_700)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+
     it('is unexplained when the database names a newer epoch than the seat on its cell', () => {
       const directory = directoryWith({
         'cell-a': [seat(3, 'active', HOST, firstSeen)],
