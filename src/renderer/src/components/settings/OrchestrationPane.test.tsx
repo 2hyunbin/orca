@@ -237,7 +237,7 @@ describe('OrchestrationPane', () => {
       input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
     })
     expect(mocks.updateSettings).not.toHaveBeenCalled()
-    expect(input.value).toBe('1')
+    expect(input.value).toBe('2')
   })
 
   it('keeps host-only nested depth out of paired web clients', () => {

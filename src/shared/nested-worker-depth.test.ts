@@ -6,10 +6,10 @@ import {
 } from './nested-worker-depth'
 
 describe('resolveNestedWorkerMaxDepth', () => {
-  it('defaults to 1 when unset', () => {
-    expect(resolveNestedWorkerMaxDepth(undefined)).toBe(1)
-    expect(resolveNestedWorkerMaxDepth(null)).toBe(1)
-    expect(resolveNestedWorkerMaxDepth({})).toBe(1)
+  it('defaults to 2 when unset', () => {
+    expect(resolveNestedWorkerMaxDepth(undefined)).toBe(2)
+    expect(resolveNestedWorkerMaxDepth(null)).toBe(2)
+    expect(resolveNestedWorkerMaxDepth({})).toBe(2)
   })
 
   it('accepts whole numbers at or above 1', () => {
