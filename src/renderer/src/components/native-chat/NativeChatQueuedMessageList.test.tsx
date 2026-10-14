@@ -74,6 +74,7 @@ function controller(
   remove: ReturnType<typeof vi.fn>
   edit: ReturnType<typeof vi.fn>
   resume: ReturnType<typeof vi.fn>
+  clear: ReturnType<typeof vi.fn>
 } {
   return {
     cards,
@@ -83,12 +84,11 @@ function controller(
     pause,
     resume: vi.fn(async () => false),
     resuming: false,
+    clear: vi.fn(async () => true),
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     edit: vi.fn(async () => {}),
-    steerNewest: vi.fn(() => false),
-    queueResume: undefined,
-    queueHold: undefined
+    steerNewest: vi.fn(() => false)
   }
 }
 
@@ -266,7 +266,7 @@ describe('NativeChatQueuedMessageList', () => {
   it('a send on its way reads Sending and offers nothing until the host holds it', () => {
     renderList(controller([card({ messageId: 'sending-1', text: 'on its way', hold: 'sending' })]))
     expect(screen.getByText('Sending…')).toBeTruthy()
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(within(screen.getByRole('listitem')).queryAllByRole('button')).toHaveLength(0)
   })
 
   it("a send-failed command card's caption names Send only when Send is there", () => {
@@ -446,12 +446,10 @@ describe('NativeChatQueuedMessageList', () => {
     )
   })
 
-  it.each([
-    ['stopped', 'Queue paused because you interrupted'],
-    ['some-newer-reason', 'Queue paused']
-  ])(
+  it.each(['stopped', 'some-newer-reason'])(
     "a queue the host holds ('%s') shows one header row above the cards, with Resume; the held card still reads Steer",
-    (reason, text) => {
+    (reason) => {
+      const text = 'Paused'
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a newer host may publish a reason this client's type does not list.
       const pause = { reason } as AgentSessionQueuePause
       const { container, mutate } = renderHeldQueue([waitingDraft('held', 1)], pause)
@@ -488,23 +486,25 @@ describe('NativeChatQueuedMessageList', () => {
     )
   })
 
-  it('a paused queue holds every card, in order, under one header', () => {
+  it('a paused queue holds every card, in order, under one header with Clear all and Resume', () => {
     renderHeldQueue([waitingDraft('a', 1), waitingDraft('b', 2)], { reason: 'stopped' })
-    expect(screen.getByText('Queue paused because you interrupted')).toBeTruthy()
+    const header = screen.getByRole('list').previousElementSibling!
+    expect(header.textContent).toBe('Paused2Clear allResume')
     expect(screen.getAllByRole('button', { name: 'Steer' })).toHaveLength(2)
   })
 
-  it('no header row when the queue drains on its own (or after a restart), or with no cards', () => {
+  it('a queue that drains on its own (or after a restart) reads Queued, with no Resume; no cards, nothing', () => {
     renderHeldQueue([waitingDraft('waiting', 1)], null)
-    expect(screen.queryByText(/Queue paused/)).toBeNull()
+    expect(screen.getByRole('list').previousElementSibling?.textContent).toBe('Queued1')
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
     cleanup()
     const { container } = renderHeldQueue([], { reason: 'stopped' })
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
     expect(container.textContent).toBe('')
   })
 
-  it('no header row over cards Resume would not send: returned, held on their own, or behind', () => {
+  it('reads Queued over cards Resume would not send: returned, held on their own, or behind', () => {
     const stopped = { reason: 'stopped' } as const
     const { container } = renderHeldQueue(
       [
@@ -515,10 +515,10 @@ describe('NativeChatQueuedMessageList', () => {
       stopped
     )
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
-    expect(container.textContent).not.toContain('Queue paused')
+    expect(container.textContent).toContain('Queued3')
   })
 
-  it('Resume shows it is pending, keeps the full text for a truncated line, and hands focus back', async () => {
+  it('Resume shows it is pending and hands focus back', async () => {
     const focusComposer = vi.fn()
     const owner = {
       ...controller([card({ messageId: 'waiting', hold: 'queue-paused' })], { reason: 'stopped' }),
@@ -535,7 +535,6 @@ describe('NativeChatQueuedMessageList', () => {
     )
     const resume = screen.getByRole('button', { name: 'Resume' })
     expect(resume).toHaveProperty('disabled', true)
-    expect(screen.getByTitle('Queue paused because you interrupted')).toBeTruthy()
     cleanup()
     const idle = controller([card({ messageId: 'waiting', hold: 'queue-paused' })], {
       reason: 'stopped'
@@ -582,7 +581,7 @@ describe('NativeChatQueuedMessageList', () => {
     expect(container.querySelectorAll('.lucide-list-end')).toHaveLength(1)
   })
 
-  it('one bordered box holds the pause row and every card, rows divided, cards unbordered', () => {
+  it('one bordered box holds the header and every card, rows divided, cards unbordered', () => {
     renderList(
       controller(
         [
@@ -598,9 +597,9 @@ describe('NativeChatQueuedMessageList', () => {
     expect(box.className.split(' ')).toEqual(
       expect.arrayContaining(['rounded-md', 'border', 'border-border', 'bg-card', 'divide-y'])
     )
-    // The pause row is the box's first row, outside the list; the list is its second.
+    // The header is the box's first row, outside the list; the list is its second.
     expect(box.children).toHaveLength(2)
-    expect(box.firstElementChild?.textContent).toContain('Queue paused because you interrupted')
+    expect(box.firstElementChild?.textContent).toContain('Paused3')
     expect(box.lastElementChild).toBe(list)
     expect(list.className.split(' ')).toContain('divide-y')
     const rows = within(list).getAllByRole('listitem')
@@ -613,20 +612,38 @@ describe('NativeChatQueuedMessageList', () => {
     expect(rows[2]?.textContent).toContain("Couldn't send — press Send to retry.")
   })
 
-  it('without a pause the box holds only the list, one card or many', () => {
-    for (const count of [1, 4]) {
-      const view = renderList(
-        controller(
-          Array.from({ length: count }, (_, index) =>
-            card({ messageId: `draft-${index}`, position: index })
-          )
-        )
+  it('Clear all deletes every card; the chevron folds only the cards, and an emptied queue opens again', () => {
+    const focusComposer = vi.fn()
+    const paused = controller([card({ messageId: 'held', hold: 'queue-paused' })], {
+      reason: 'stopped'
+    })
+    const view = render(
+      <TooltipProvider delayDuration={0}>
+        <NativeChatQueuedMessageList
+          chatWorktreeId={null}
+          controller={paused}
+          focusComposer={focusComposer}
+        />
+      </TooltipProvider>
+    )
+    const rerender = (owner: StructuredAgentSessionQueuedMessagesController) =>
+      view.rerender(
+        <TooltipProvider delayDuration={0}>
+          <NativeChatQueuedMessageList chatWorktreeId={null} controller={owner} />
+        </TooltipProvider>
       )
-      const list = screen.getByRole('list')
-      expect(list.parentElement?.children).toHaveLength(1)
-      expect(within(list).getAllByRole('listitem')).toHaveLength(count)
-      view.unmount()
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(paused.clear).toHaveBeenCalledOnce()
+    const toggle = screen.getByRole('button', { name: 'Queued messages' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('list', { hidden: true }).hidden).toBe(true)
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeTruthy()
+    rerender(controller([]))
+    rerender(controller([card({ messageId: 'next' })]))
+    expect(screen.getByRole('list').hidden).toBe(false)
   })
 
   it('the Steer tooltip spaces its hint from the shortcut chips', async () => {

@@ -1,7 +1,6 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentSessionQueuePause } from '../../../src/shared/agent-session-wire'
 import type { ActionSheetAction } from '../components/ActionSheetModal'
 import { MobileNativeChatQueuedMessages } from './MobileNativeChatQueuedMessages'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
@@ -16,10 +15,11 @@ vi.mock('react-native', () => ({
 
 vi.mock('lucide-react-native', () => ({
   AlertCircle: 'AlertCircle',
+  ChevronDown: 'ChevronDown',
+  ChevronRight: 'ChevronRight',
   CornerDownRight: 'CornerDownRight',
   ListEnd: 'ListEnd',
   MoreHorizontal: 'MoreHorizontal',
-  Pause: 'Pause',
   Pencil: 'Pencil',
   Play: 'Play',
   Send: 'Send',
@@ -84,7 +84,7 @@ describe('MobileNativeChatQueuedMessages', () => {
     const mounted = await mount({ cards: [card({ messageId: 'w', text: 'next' })] })
     const rows = mounted.root.findAllByProps({ testID: 'queued-card-row' })
     expect(rows).toHaveLength(1)
-    expect(texts(mounted)).toEqual(['next', 'Steer'])
+    expect(texts(mounted)).toEqual(['Queued', 1, 'next', 'Steer'])
     // At most two lines: the row has no hover title to read the rest from.
     expect(
       mounted.root.find(
@@ -144,11 +144,15 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(texts(mounted)).not.toContain('Show more')
   })
 
-  it('divides rows with hairlines inside one box, the first row undivided', async () => {
+  it('divides rows with hairlines inside one box, the header undivided', async () => {
     const mounted = await mount({ cards: [card({ messageId: 'a' }), card({ messageId: 'b' })] })
-    const rows = mounted.root.findAllByProps({ testID: 'queued-card-row' })
+    const rows = [
+      mounted.root.findByProps({ testID: 'queued-header' }),
+      ...mounted.root.findAllByProps({ testID: 'queued-card-row' })
+    ]
     expect(rows.map((row) => Boolean(flatStyle(row.props.style).borderTopWidth))).toEqual([
       false,
+      true,
       true
     ])
   })
@@ -373,34 +377,48 @@ describe('MobileNativeChatQueuedMessages', () => {
       return mount({ cards: [waiting], onSend: vi.fn(async () => true), ...props })
     }
 
-    it('heads the box with why the queue is paused, for each reason', async () => {
-      const rows: readonly [AgentSessionQueuePause['reason'], string][] = [
-        ['stopped', 'Queue paused because you interrupted']
-      ]
-      for (const [reason, label] of rows) {
-        const mounted = await mountPaused({ pause: { reason } })
-        expect(texts(mounted)).toContain(label)
-      }
-    })
-
-    it("puts the pause row first in the cards' box, divided from the first card", async () => {
-      const mounted = await mountPaused({ pause: { reason: 'stopped' } })
-      const pauseRow = mounted.root.findByProps({ testID: 'queued-pause-row' })
-      const rowIds = pauseRow.parent!.children.flatMap((child) =>
+    it('heads the box with Paused, the count, Clear all and Resume; unpaused, Queued and the count', async () => {
+      const header = (mounted: ReactTestRenderer) =>
+        mounted.root.findByProps({ testID: 'queued-header' })
+      const paused = await mountPaused({ pause: { reason: 'stopped' } })
+      expect(texts(paused).slice(0, 4)).toEqual(['Paused', 1, 'Clear all', 'Resume'])
+      expect(nodeTypes(header(paused))).toEqual(expect.arrayContaining(['Trash2', 'Play']))
+      const rowIds = header(paused).parent!.children.flatMap((child) =>
         typeof child === 'string' ? [] : [child.props.testID]
       )
-      expect(rowIds).toEqual(['queued-pause-row', 'queued-card-row'])
-      expect(nodeTypes(pauseRow)).toEqual(expect.arrayContaining(['Pause', 'Play']))
-      const [cardRow] = mounted.root.findAllByProps({ testID: 'queued-card-row' })
+      expect(rowIds).toEqual(['queued-header', 'queued-card-row'])
+      const [cardRow] = paused.root.findAllByProps({ testID: 'queued-card-row' })
       expect(flatStyle(cardRow!.props.style).borderTopWidth).toBe(1)
-    })
-
-    it('shows no pause row without a pause or without cards', async () => {
-      expect(texts(await mountPaused({ pause: null }))).not.toContain(
-        'Queue paused because you interrupted'
-      )
+      const unpaused = await mountPaused({ pause: null })
+      expect(texts(unpaused).slice(0, 2)).toEqual(['Queued', 1])
+      expect(texts(unpaused)).not.toContain('Resume')
       const empty = await mountPaused({ cards: [], pause: { reason: 'stopped' } })
       expect(empty.toJSON()).toBeNull()
+    })
+
+    it('Clear all deletes every card, one at a time, and stops at the first that fails', async () => {
+      const onDelete = vi.fn(async (messageId: string) => messageId !== 'b')
+      const mounted = await mountPaused({
+        cards: [waiting, card({ messageId: 'b' }), card({ messageId: 'c' })],
+        pause: { reason: 'stopped' },
+        onDelete
+      })
+      await act(async () =>
+        mounted.root
+          .findByProps({ accessibilityLabel: 'Delete every queued message' })
+          .props.onPress()
+      )
+      expect(onDelete.mock.calls).toEqual([['waiting-1'], ['b']])
+    })
+
+    it('the chevron folds only the cards; the header and its actions stay', async () => {
+      const mounted = await mountPaused({ pause: { reason: 'stopped' } })
+      const toggle = () => mounted.root.findByProps({ accessibilityLabel: 'Queued messages' })
+      expect(toggle().props.accessibilityState).toEqual({ expanded: true })
+      await act(async () => toggle().props.onPress())
+      expect(toggle().props.accessibilityState).toEqual({ expanded: false })
+      expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(0)
+      expect(texts(mounted)).toEqual(['Paused', 1, 'Clear all', 'Resume'])
     })
 
     function resumeButton(mounted: ReactTestRenderer) {
@@ -433,9 +451,9 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(onResume).toHaveBeenCalledTimes(2)
     })
 
-    it('keeps every target inside its row, and announces the pause row', async () => {
+    it('keeps every target inside its row, and announces the header', async () => {
       const mounted = await mountPaused({ pause: { reason: 'stopped' } })
-      const row = mounted.root.findByProps({ testID: 'queued-pause-row' })
+      const row = mounted.root.findByProps({ testID: 'queued-header' })
       expect(row.props.accessibilityLiveRegion).toBe('polite')
       // Android drops touches outside the parent: nothing may pull a row or a button past its edge.
       const styled = mounted.root.findAll(
@@ -466,7 +484,7 @@ describe('MobileNativeChatQueuedMessages', () => {
     })
   })
 
-  it('gives every action, Resume included, at least a 44pt touch target in a 44pt row', async () => {
+  it("gives every action, the header's included, at least a 44pt touch target in a 44pt row", async () => {
     const mounted = await mount({
       cards: [card({ messageId: 'waiting-1' })],
       pause: { reason: 'stopped' },
@@ -482,7 +500,9 @@ describe('MobileNativeChatQueuedMessages', () => {
         node.props.testID !== 'queued-card-text'
     )
     expect(buttons.map((button) => button.props.accessibilityLabel)).toEqual([
+      'Delete every queued message',
       'Resume sending the queued messages',
+      'Queued messages',
       'Submit without interrupting the model',
       'Delete this queued message',
       'More actions'
@@ -493,7 +513,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(style.minWidth).toBeGreaterThanOrEqual(44)
     }
     for (const row of [
-      mounted.root.findByProps({ testID: 'queued-pause-row' }),
+      mounted.root.findByProps({ testID: 'queued-header' }),
       ...mounted.root.findAllByProps({ testID: 'queued-card-row' })
     ]) {
       expect(flatStyle(row.props.style).minHeight).toBeGreaterThanOrEqual(44)

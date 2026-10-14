@@ -57,12 +57,11 @@ function controller(
     pause,
     resume: vi.fn(async () => false),
     resuming: false,
+    clear: vi.fn(async () => true),
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     edit: vi.fn(async () => {}),
-    steerNewest: vi.fn(() => false),
-    queueResume: undefined,
-    queueHold: undefined
+    steerNewest: vi.fn(() => false)
   }
 }
 

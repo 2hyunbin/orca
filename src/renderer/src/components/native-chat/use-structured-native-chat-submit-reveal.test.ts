@@ -12,6 +12,7 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
       cards: [],
       pause: null,
       resuming: false,
+      clear: vi.fn(async () => true),
       resume: vi.fn(async () => {
         order.push('resume')
         return true
@@ -21,9 +22,7 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
       edit: vi.fn(async () => {}),
       editCapable: false,
       editor: undefined,
-      steerNewest: vi.fn(() => false),
-      queueResume: undefined,
-      queueHold: undefined
+      steerNewest: vi.fn(() => false)
     }
   }
   const retryLaunch = (): number => order.push('launch')
