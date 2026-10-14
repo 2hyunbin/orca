@@ -1,6 +1,14 @@
-export function rethrowCheckDetailsAbort(signal: AbortSignal | undefined, error: unknown): void {
+import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
+
+export function createCheckDetailsAbortError(): Error {
+  const error = new Error('Check details request was cancelled.')
+  error.name = 'AbortError'
+  return error
+}
+
+export function assertCheckDetailsActive(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    throw error
+    throw createCheckDetailsAbortError()
   }
 }
 
@@ -8,19 +16,5 @@ export function waitForCheckDetailsResolution<T>(
   operation: Promise<T>,
   signal: AbortSignal
 ): Promise<T> {
-  if (signal.aborted) {
-    return Promise.reject(signal.reason)
-  }
-  return new Promise((resolve, reject) => {
-    const finish = (settle: () => void): void => {
-      signal.removeEventListener('abort', onAbort)
-      settle()
-    }
-    const onAbort = (): void => finish(() => reject(signal.reason))
-    signal.addEventListener('abort', onAbort, { once: true })
-    void operation.then(
-      (value) => finish(() => resolve(value)),
-      (error) => finish(() => reject(error))
-    )
-  })
+  return waitForPromiseWithSignal(operation, signal, createCheckDetailsAbortError)
 }

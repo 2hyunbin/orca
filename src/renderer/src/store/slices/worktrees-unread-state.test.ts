@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { installAttentionScreen } from './workspace-attention/workspace-unread-characterization-fixture'
 import type { AppState } from '../types'
 import { makeDetectedResult } from './worktrees-detected-listing-fixtures'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
@@ -167,8 +168,12 @@ describe('worktree unread (show-until-interact)', () => {
 
     for (const [label, run] of [
       [
-        'readTerminalPaneOnInput',
-        (s: AppState) => s.readTerminalPaneOnInput({ worktreeId, tabId: 'no-tab', paneKey: null })
+        'readOnScreenAttention',
+        (s: AppState) =>
+          s.readOnScreenAttention(
+            { workspaceIds: [worktreeId], targets: [{ worktreeId: worktreeId, tabId: 'no-tab' }] },
+            { screenArrived: true }
+          )
       ],
       ['bumpWorktreeActivity', (s: AppState) => s.bumpWorktreeActivity(worktreeId)]
     ] as const) {
@@ -224,7 +229,9 @@ describe('worktree unread (show-until-interact)', () => {
       activeWorktreeId: wt.id
     } as Partial<AppState>)
 
-    store.getState().readTerminalPaneOnInput({ worktreeId: wt.id, tabId: '', paneKey: null })
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [wt.id], targets: [] }, { screenArrived: true })
 
     const after = store.getState().worktreesByRepo.repo1[0]
     expect(after.isUnread).toBe(false)
@@ -242,7 +249,9 @@ describe('worktree unread (show-until-interact)', () => {
     const initial = { repo1: [wt] }
     store.setState({ worktreesByRepo: initial } as Partial<AppState>)
 
-    store.getState().readTerminalPaneOnInput({ worktreeId: wt.id, tabId: '', paneKey: null })
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [wt.id], targets: [] }, { screenArrived: true })
 
     expect(store.getState().worktreesByRepo).toBe(initial)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
@@ -270,12 +279,14 @@ describe('worktree unread (show-until-interact)', () => {
     })
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
 
-    store.getState().readTerminalPaneOnInput({ worktreeId: hidden.id, tabId: '', paneKey: null })
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [hidden.id], targets: [] }, { screenArrived: true })
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(false)
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledTimes(2)
   })
 
-  it('clears unread state when activating a hidden detected worktree', () => {
+  it('reads a hidden detected worktree once it is activated and on screen', () => {
     const store = createTestStore()
     const hidden = makeWorktree({
       id: 'repo1::/path/hidden',
@@ -290,7 +301,13 @@ describe('worktree unread (show-until-interact)', () => {
       detectedWorktreesByRepo: { repo1: detected }
     } as Partial<AppState>)
 
+    installAttentionScreen(store, true)
+    store.setState({ activeView: 'settings' })
     store.getState().setActiveWorktree(hidden.id)
+    // Settings is not the workspace's own view, so nothing is on screen yet.
+    expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
+
+    store.setState({ activeView: 'terminal' })
 
     expect(store.getState().activeWorktreeId).toBe(hidden.id)
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(false)

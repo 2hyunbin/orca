@@ -367,7 +367,10 @@ const LINUX_PACKAGE_TESTS = [
   'src/main/browser/browser-route-webrtc-egress.electron.test.ts',
   'src/main/browser/browser-route-h3-egress.electron.test.ts',
   'src/main/browser/browser-route-dns-prefetch.electron.test.ts',
-  'src/main/persistence/profile-state/profile-state-writer-stall.electron.test.ts'
+  'src/main/persistence/profile-state/profile-state-writer-stall.electron.test.ts',
+  'src/main/browser/browser-popup-compatibility.electron.test.ts',
+  'src/main/browser/browser-popup-native-compatibility.electron.test.ts',
+  'src/main/browser/browser-popup-background-compatibility.electron.test.ts'
 ]
 
 const WINDOWS_PACKAGE_TESTS = [

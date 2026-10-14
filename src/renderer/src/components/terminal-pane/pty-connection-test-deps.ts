@@ -33,7 +33,6 @@ export type PaneConnectionDeps = {
   clearRuntimePaneTitle: Mock
   updateTabPtyId: Mock<(tabId: string, ptyId: string, replacedPtyId?: string) => void>
   markTerminalBell: Mock
-  readTerminalPaneOnInput: Mock
   dispatchNotification: Mock
   onShowSessionRestoredBanner: Mock
   setCacheTimerStartedAt: Mock
@@ -81,7 +80,6 @@ export function buildPaneConnectionDeps(
       getState().ptyIdsByTabId = { ...getState().ptyIdsByTabId, [tabId]: next }
     }),
     markTerminalBell: vi.fn(),
-    readTerminalPaneOnInput: vi.fn(),
     dispatchNotification: vi.fn(),
     onShowSessionRestoredBanner: vi.fn(),
     setCacheTimerStartedAt: vi.fn(),

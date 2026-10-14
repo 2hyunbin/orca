@@ -350,6 +350,17 @@ describe('reserve assignment on a director', () => {
     expect(demoted).toEqual([{ cellId: 'c1', epoch: 5, joinedAt: 1_000 }])
   })
 
+  // The booking map had not seen the c1 seat (half-open, joined within a poll lag): the feed
+  // demotes it once both joins are in the map, instead of the 75 s silence close.
+  it('tells an old reserve seat the booking missed to go once a newer join shows in the feed', () => {
+    const { assignment, directory, demoted, now } = setup()
+    directory.onOutranked = (seat) => assignment.supersedeOutranked(seat)
+    directory.apply('c2', feed('c2', { full: [seated(6, 3_000)] }), now.value, now.value)
+    expect(demoted).toEqual([])
+    directory.apply('c1', feed('c1', { full: [seated(5, 1_000)] }), now.value, now.value)
+    expect(demoted).toEqual([{ cellId: 'c1', epoch: 5, joinedAt: 1_000 }])
+  })
+
   it('answers a reconnect only at the newest epoch, newest join first', async () => {
     const { assignment, reserved } = setup({
       feeds: [feed('c1', { full: [seated(6, 1_000)] }), feed('c2', { full: [seated(5, 3_000)] })]

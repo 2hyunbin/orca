@@ -1,0 +1,67 @@
+import { createAbortError } from './abort-error'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+
+export type GhCaptureLifetimeHooks = {
+  onTerminationPending: (terminated: Promise<void>) => void
+}
+
+export function assertGhCallActive(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError()
+  }
+}
+
+export function createGhLogicalLifetime(forward?: GhCaptureLifetimeHooks): {
+  hooks: GhCaptureLifetimeHooks
+  terminated: Promise<void>
+  seal: () => void
+  waitPending: (signal?: AbortSignal) => Promise<void>
+  capture: () => () => void
+} {
+  const pending = new Set<Promise<void>>()
+  let sealed = false
+  const { promise: terminated, resolve: complete } = Promise.withResolvers<void>()
+  forward?.onTerminationPending(terminated)
+  const finish = (): void => {
+    if (sealed && pending.size === 0) {
+      complete()
+    }
+  }
+  const hooks: GhCaptureLifetimeHooks = {
+    onTerminationPending: (child) => {
+      pending.add(child)
+      void child.then(() => {
+        pending.delete(child)
+        finish()
+      })
+    }
+  }
+  return {
+    hooks,
+    terminated,
+    seal: () => {
+      sealed = true
+      finish()
+    },
+    waitPending: async (signal) => {
+      assertGhCallActive(signal)
+      if (pending.size === 0) {
+        return
+      }
+      if (!signal) {
+        throw new Error('GitHub command termination is unverifiable.')
+      }
+      await waitForPromiseWithSignal(
+        Promise.all(pending).then(() => {}),
+        signal,
+        createAbortError
+      )
+      assertGhCallActive(signal)
+    },
+    capture: () => {
+      const { promise: child, resolve: report } = Promise.withResolvers<void>()
+      hooks.onTerminationPending(child)
+      return report
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { ProjectHostSetup, ProjectHostSetupUpdateArgs } from '../../../shared/project-types'
 import type { Repo } from '../../../shared/repo-types'
 import type { GhAccountBinding } from '../../../shared/github/account-binding'
@@ -27,6 +28,17 @@ import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteSchedulingOperations } from './write-scheduling'
 import { scheduleSave } from './write-scheduling'
 import { pruneDeregisteredRepoUiResidue } from './repo-lifecycle-ui-residue'
+import { isWslMoveProjectSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
+
+// A paused WSL move keeps its local rows for a downgrade.
+function removeLocalRepoSession(
+  session: WorkspaceSessionState,
+  repoId: string
+): WorkspaceSessionState {
+  return isWslMoveProjectSessionFrozen({ repoId })
+    ? session
+    : removeRepoFromWorkspaceSession(session, repoId)
+}
 type RepoLifecycleOperationsRuntime = Pick<
   StoreRuntimeState,
   | 'gitUsernameCache'
@@ -83,11 +95,10 @@ export class RepoLifecycleOperations {
     syncProjectHostSetupCompatibilityState(this)
     pruneWorktreeStateForRepo(this, id, idStillPresent ? hostId : null)
     if (!idStillPresent) {
-      this[repoLifecycleOperationsContext].runtime.state.workspaceSession =
-        removeRepoFromWorkspaceSession(
-          this[repoLifecycleOperationsContext].runtime.state.workspaceSession,
-          id
-        )
+      this[repoLifecycleOperationsContext].runtime.state.workspaceSession = removeLocalRepoSession(
+        this[repoLifecycleOperationsContext].runtime.state.workspaceSession,
+        id
+      )
       this[repoLifecycleOperationsContext].runtime.state.workspaceSessionsByHostId =
         removeRepoFromHostWorkspaceSessions(
           this[repoLifecycleOperationsContext].runtime.state.workspaceSessionsByHostId,
@@ -121,7 +132,7 @@ export class RepoLifecycleOperations {
     for (const repoId of orphanRepoIds) {
       retireLocalWorktreeScanGeneration(repoId)
       pruneWorktreeStateForRepo(this, repoId, null)
-      state.workspaceSession = removeRepoFromWorkspaceSession(state.workspaceSession, repoId)
+      state.workspaceSession = removeLocalRepoSession(state.workspaceSession, repoId)
       state.workspaceSessionsByHostId = removeRepoFromHostWorkspaceSessions(
         state.workspaceSessionsByHostId,
         repoId

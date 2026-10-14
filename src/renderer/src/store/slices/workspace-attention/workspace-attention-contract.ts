@@ -7,6 +7,14 @@ import type { AppState } from '../../types'
 export type WorkspaceAttentionSet = Parameters<StateCreator<AppState>>[0]
 export type WorkspaceAttentionGet = Parameters<StateCreator<AppState>>[1]
 
+export type OnScreenAttentionTarget = { worktreeId: string | null; tabId: string }
+
+/** What a visible, focused window shows: its workspaces (main and floating) and their tabs. */
+export type OnScreenAttention = {
+  workspaceIds: readonly string[]
+  targets: readonly OnScreenAttentionTarget[]
+}
+
 export type TerminalPaneAttentionTarget = {
   worktreeId: string
   tabId: string
@@ -25,19 +33,14 @@ export type WorkspaceAttentionSlice = {
   markTerminalBell: (target: TerminalPaneAttentionTarget) => void
   /** An admitted, unviewed agent completion or prompt (terminal or structured chat). */
   markAgentAttentionUnread: (write: AgentAttentionUnreadWrite) => void
-  /** Real input in a pane: a producing keydown, or a pointerdown (`paneKey` null when no leaf was hit). */
-  readTerminalPaneOnInput: (target: {
-    worktreeId: string
-    tabId: string
-    paneKey: string | null
-  }) => void
-  /** Auto-ack of the agent on screen; `workspaceIdToClear` is null while a hidden sibling is still unread. */
-  readViewedAgentAttention: (args: {
-    workspaceIdToClear: string | null
-    groupId: string
-    subjectKeys: Iterable<string>
-  }) => void
-  /** Sidebar "Mark as read" / "Mark as unread" on one host's row. */
+  /**
+   * The tabs on screen in a visible, focused window with the user present are read — every
+   * marker of each. `screenArrived` is true when the set of on-screen tabs (or the on-screen
+   * workspace, host or window focus) changed since the last read; a tab switch counts. Then each
+   * on-screen workspace's flag is settled even when nothing was removed.
+   */
+  readOnScreenAttention: (screen: OnScreenAttention, options: { screenArrived: boolean }) => void
+  /** Sidebar "Mark as read" (also removes every marker in the workspace) / "Mark as unread". */
   setWorkspaceUnreadByUser: (
     worktreeId: string,
     isUnread: boolean,

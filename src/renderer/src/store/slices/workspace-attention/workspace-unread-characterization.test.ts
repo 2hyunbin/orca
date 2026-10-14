@@ -21,8 +21,9 @@ import {
   typeInPane
 } from './workspace-unread-characterization-driver'
 
-// Pins today's unread transitions (workspace flag, tab/pane/completion markers, persistence,
-// activity bumps, Dock count, floating dot) so a refactor of who writes them can prove it is inert.
+// Pins the unread transitions (workspace flag, tab/pane/completion markers, persistence,
+// activity bumps, Dock count, floating dot). The production on-screen scan runs against each store
+// with Orca's window visible and focused unless a test says otherwise.
 
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }
@@ -45,7 +46,7 @@ afterEach(() => {
 })
 
 describe('bells', () => {
-  it('bell in a hidden tab, activate, type in another tab, bell again', () => {
+  it('a hidden waiting tab keeps the dot after switching in and while typing in another tab (STA-9273)', () => {
     const { store, persists } = createAttentionStore()
     const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
     const second = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
@@ -67,23 +68,22 @@ describe('bells', () => {
     store.getState().setActiveWorktree(WS_A)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
         "panes -",
         "completions -",
-        "dock=0 floatingDot=false",
-        "persist worktree a {"isUnread":false}",
+        "dock=1 floatingDot=false",
       ]
     `)
 
     typeInPane(store, second)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
         "panes -",
         "completions -",
-        "dock=0 floatingDot=false",
+        "dock=1 floatingDot=false",
       ]
     `)
 
@@ -91,17 +91,16 @@ describe('bells', () => {
     ringBell(store, first)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:3000 b@local:read:0 sortEpoch=2",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
         "panes -",
         "completions -",
         "dock=1 floatingDot=false",
-        "persist worktree a {"isUnread":true,"lastActivityAt":3000}",
       ]
     `)
   })
 
-  it('bell in the visible pane of the active workspace still lights everything', () => {
+  it('a bell in the pane on screen in a focused window leaves no marker and no flag write', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
@@ -110,31 +109,29 @@ describe('bells', () => {
     ringBell(store, pane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
-        "tabs tab-a1=terminal-bell",
-        "panes tab-a1:L1=terminal-bell",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
+        "tabs -",
+        "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
-        "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
+        "dock=0 floatingDot=false",
       ]
     `)
 
     pointerDownInTab(store, { ...pane, paneKey: null })
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
-        "panes tab-a1:L1=terminal-bell",
+        "panes -",
         "completions -",
         "dock=0 floatingDot=false",
-        "persist worktree a {"isUnread":false}",
       ]
     `)
 
     typeInPane(store, pane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
@@ -160,7 +157,7 @@ describe('bells', () => {
     `)
   })
 
-  it('tab activation in the active workspace clears only the tab marker', () => {
+  it('activating a tab in the active workspace reads every marker of it and settles the flag', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
     const second = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
@@ -171,11 +168,12 @@ describe('bells', () => {
     store.getState().setActiveTab(first.tabId)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
-        "panes tab-a1:L1=terminal-bell",
+        "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":false}",
       ]
     `)
 
@@ -183,11 +181,13 @@ describe('bells', () => {
     store.getState().activateTab(`unified-${second.tabId}`)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=2",
         "tabs -",
-        "panes tab-a1:L1=terminal-bell tab-a2:L2=terminal-bell",
+        "panes -",
         "completions -",
-        "dock=1 floatingDot=false",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
+        "persist worktree a {"isUnread":false}",
       ]
     `)
   })
@@ -244,6 +244,20 @@ describe('bells', () => {
     `)
 
     typeInPane(store, pane)
+    expect(observe(store, persists)).toMatchInlineSnapshot(`
+      [
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
+        "tabs tab-float=terminal-bell",
+        "panes -",
+        "completions -",
+        "dock=0 floatingDot=true",
+      ]
+    `)
+
+    store.setState({
+      settings: { ...store.getState().settings!, floatingTerminalEnabled: true },
+      floatingWorkspacePanelOpen: true
+    })
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
@@ -347,7 +361,7 @@ describe('agent completions', () => {
     `)
   })
 
-  it('auto-ack clears the workspace only once no sibling marker remains', () => {
+  it('the workspace clears only once no sibling marker remains', () => {
     const { store, persists } = createAttentionStore()
     const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
     const second = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
@@ -359,11 +373,13 @@ describe('agent completions', () => {
     completeAgentTurn(store, second)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=2",
         "tabs -",
         "panes -",
-        "completions tab-a1:L1=agent-completion tab-a2:L2=agent-completion",
+        "completions tab-a2:L2=agent-completion",
         "dock=1 floatingDot=false",
+        "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
+        "persist worktree a {"isUnread":false}",
         "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
       ]
     `)
@@ -371,7 +387,7 @@ describe('agent completions', () => {
     autoAckViewedTab(store, first)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=2",
         "tabs -",
         "panes -",
         "completions tab-a2:L2=agent-completion",
@@ -383,7 +399,7 @@ describe('agent completions', () => {
     autoAckViewedTab(store, second)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=2",
         "tabs -",
         "panes -",
         "completions -",
@@ -493,11 +509,10 @@ describe('manual, inbound and restart', () => {
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=2",
-        "tabs -",
-        "panes -",
+        "tabs tab-a1=terminal-bell",
+        "panes tab-a1:L1=terminal-bell",
         "completions -",
         "dock=1 floatingDot=false",
-        "persist worktree a {"isUnread":false}",
       ]
     `)
   })
@@ -552,7 +567,7 @@ describe('manual, inbound and restart', () => {
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:0 folder-1@local:read:0 sortEpoch=0",
-        "tabs tab-f1=terminal-bell",
+        "tabs -",
         "panes -",
         "completions -",
         "dock=1 floatingDot=false",
@@ -564,13 +579,11 @@ describe('manual, inbound and restart', () => {
     typeInPane(store, folderPane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:0 folder-1@local:read:2000 sortEpoch=1",
+        "rows a@local:UNREAD:0 folder-1@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
         "dock=1 floatingDot=false",
-        "persist folder folder-1 {"isUnread":true,"lastActivityAt":2000}",
-        "persist folder folder-1 {"isUnread":false}",
       ]
     `)
   })
@@ -606,7 +619,7 @@ describe('manual, inbound and restart', () => {
         "panes -",
         "completions tab-f1:L1=agent-completion",
         "dock=0 floatingDot=false",
-        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000}",
+        "persist folder folder-1 {"isUnread":true,"lastActivityAt":1000} host=local",
       ]
     `)
 

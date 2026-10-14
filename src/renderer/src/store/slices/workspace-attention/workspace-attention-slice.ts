@@ -2,7 +2,19 @@ import type { StateCreator } from 'zustand'
 import type { AgentAttentionUnreadReason } from '@/attention/agent-attention-contract'
 import type { AppState } from '../../types'
 import type { WorkspaceAttentionSlice } from './workspace-attention-contract'
-import { clearWorkspaceUnreadFlag, markWorkspaceUnreadFlag } from './workspace-unread-flag'
+import {
+  collectRemovedAttention,
+  dismissReadNotifications,
+  sameMarkers
+} from './attention-removal-follow-up'
+import { removeTabsAttention } from './subject-attention-transitions'
+import {
+  markWorkspaceUnreadFlag,
+  onScreenHostId,
+  settleWorkspaceUnreadFlag
+} from './workspace-unread-flag'
+import { workspaceMarkerTabIds } from './workspace-live-markers'
+import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
 
 export const createWorkspaceAttentionSlice: StateCreator<
   AppState,
@@ -25,7 +37,7 @@ export const createWorkspaceAttentionSlice: StateCreator<
     if (!ownsTab) {
       return
     }
-    // Why: terminal attention persists until real interaction.
+    // Why: a marker stays until its tab is read on screen, Marked as read, or closed.
     set((s) =>
       s.unreadTerminalTabs[tabId]
         ? s
@@ -46,27 +58,18 @@ export const createWorkspaceAttentionSlice: StateCreator<
         : { unreadAgentCompletionPanes: { ...s.unreadAgentCompletionPanes, [paneKey]: reason } }
     )
   }
-  const clearTabUnread = (tabId: string): void => {
+  /** Removes every marker of the tabs and dismisses their panes' notifications; true if any. */
+  const removeAndDismiss = (tabIds: Iterable<string>): boolean => {
+    const before = get()
     set((s) => {
-      if (!s.unreadTerminalTabs[tabId]) {
-        return s
-      }
-      const copy = { ...s.unreadTerminalTabs }
-      delete copy[tabId]
-      return { unreadTerminalTabs: copy }
+      const next = removeTabsAttention(s, tabIds)
+      return sameMarkers(s, next) ? s : next
     })
-  }
-  const clearPaneUnread = (paneKey: string): void => {
-    set((s) => {
-      if (!s.unreadTerminalPanes[paneKey] && !s.unreadAgentCompletionPanes[paneKey]) {
-        return s
-      }
-      const unreadTerminalPanes = { ...s.unreadTerminalPanes }
-      const unreadAgentCompletionPanes = { ...s.unreadAgentCompletionPanes }
-      delete unreadTerminalPanes[paneKey]
-      delete unreadAgentCompletionPanes[paneKey]
-      return { unreadTerminalPanes, unreadAgentCompletionPanes }
-    })
+    const removed = collectRemovedAttention(before, get())
+    if (removed) {
+      dismissReadNotifications(removed.paneKeys)
+    }
+    return removed !== null
   }
   const paneAttentionEnabled = (): boolean => get().settings?.experimentalTerminalAttention === true
 
@@ -75,7 +78,11 @@ export const createWorkspaceAttentionSlice: StateCreator<
     unreadTerminalPanes: {},
     unreadAgentCompletionPanes: {},
     markTerminalBell: ({ worktreeId, tabId, paneKey }) => {
-      // Why: a bell is authoritative PTY output, so it marks even the pane the user is watching.
+      // Why: a bell on the tab on screen is already read; marking it would persist the flag
+      // true then false, and a remote owner turns each persist into an RPC.
+      if (isTabOnScreen(get(), worktreeId, tabId, 'terminal')) {
+        return
+      }
       markWorkspaceUnreadFlag(set, get, worktreeId)
       markTabUnread(tabId, 'terminal-bell')
       if (paneAttentionEnabled()) {
@@ -95,24 +102,22 @@ export const createWorkspaceAttentionSlice: StateCreator<
         markPaneUnread(subjectKey, reason)
       }
     },
-    readTerminalPaneOnInput: ({ worktreeId, tabId, paneKey }) => {
-      clearTabUnread(tabId)
-      if (paneKey !== null) {
-        clearPaneUnread(paneKey)
-      }
-      clearWorkspaceUnreadFlag(set, get, worktreeId)
-    },
-    readViewedAgentAttention: ({ workspaceIdToClear, groupId, subjectKeys }) => {
-      if (workspaceIdToClear !== null) {
-        clearWorkspaceUnreadFlag(set, get, workspaceIdToClear)
-      }
-      clearTabUnread(groupId)
-      for (const subjectKey of subjectKeys) {
-        clearPaneUnread(subjectKey)
+    readOnScreenAttention: ({ workspaceIds, targets }, { screenArrived }) => {
+      const removed = removeAndDismiss(targets.map((target) => target.tabId))
+      // Why on arrival even with nothing removed: a flag with no marker behind it (Mark as unread,
+      // restart, another client) is read when the screen moves to it, not on every later scan.
+      if (removed || screenArrived) {
+        for (const workspaceId of workspaceIds) {
+          settleWorkspaceUnreadFlag(set, get, workspaceId, onScreenHostId(get(), workspaceId))
+        }
       }
     },
     setWorkspaceUnreadByUser: (worktreeId, isUnread, executionHostId) => {
-      // Why: a manual toggle is host-scoped, unlike engagement which reads every row with the id.
+      if (!isUnread) {
+        removeAndDismiss(workspaceMarkerTabIds(get(), worktreeId))
+      }
+      // Why: the toggle writes only the clicked host's row; the markers it removes are
+      // workspace-wide because tabs, and so markers, are keyed by workspace id, not host.
       void get().updateWorktreeMeta(worktreeId, { isUnread }, { executionHostId })
     }
   }

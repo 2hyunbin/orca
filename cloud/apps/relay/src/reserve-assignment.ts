@@ -13,7 +13,7 @@ import {
   type PlacementCell,
   type ReservePlacer
 } from './reserve-placement.js'
-import type { SeatFeedCell, ShadowSeat, ShadowSeatDirectory } from './shadow-seat-directory.js'
+import type { OutrankedSeat, SeatFeedCell, ShadowSeat, ShadowSeatDirectory } from './shadow-seat-directory.js'
 
 // Step 5 on a director: answer a desktop from the in-memory map for cells that report
 // admitMode=reserve, and fall back to today's database path for everything else. The cell
@@ -377,10 +377,10 @@ export class ReserveAssignment {
     return undefined
   }
 
-  // Fire-and-forget; the cell checks the seat's epoch and join itself.
-  demoteSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): void {
+  // Fire-and-forget; the cell checks the seat's epoch and join itself. False: no such cell listed.
+  demoteSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): boolean {
     const cell = this.input.cells().find((entry) => entry.cellId === seat.cellId)
-    if (!cell) return
+    if (!cell) return false
     void this.input.client.demote(cell, {
       v: 1,
       userId: seat.userId,
@@ -388,6 +388,7 @@ export class ReserveAssignment {
       epoch: seat.epoch,
       joinedAt: seat.joinedAt
     })
+    return true
   }
 
   // Supersede at placement: the old seats this director's map holds on reserve cells are told
@@ -396,25 +397,32 @@ export class ReserveAssignment {
     for (const seat of seats) {
       if (seat.cellId === cellId || seat.epoch >= epoch) continue
       if (this.input.directory.admitModeOf(seat.cellId) !== 'reserve') continue
-      const cell = this.input.cells().find((entry) => entry.cellId === seat.cellId)
-      if (!cell) continue
-      this.summary.supersedes += 1
-      void this.input.client.demote(cell, {
-        v: 1,
-        userId: identity.userId,
-        relayHostId: identity.relayHostId,
-        epoch: seat.epoch,
-        joinedAt: seat.joinedAt
-      })
-      this.input.log?.(
-        JSON.stringify({
-          event: 'orca_relay_reserve_supersede',
-          relayHostIdDigest: relayHostLogDigest(identity.relayHostId),
-          fromCellId: seat.cellId,
-          toCellId: cellId
-        })
-      )
+      this.demoteSuperseded({ ...identity, ...seat }, cellId, 'placement')
     }
+  }
+
+  // The feed's half of supersede: a seat the booking map did not hold, found once both joins
+  // are in this map. Without it that seat holds its cell until the 75 s silence close.
+  supersedeOutranked(seat: OutrankedSeat): void {
+    this.demoteSuperseded(seat, seat.byCellId, 'feed')
+  }
+
+  private demoteSuperseded(
+    seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number },
+    toCellId: string,
+    via: 'placement' | 'feed'
+  ): void {
+    if (!this.demoteSeat(seat)) return
+    this.summary.supersedes += 1
+    this.input.log?.(
+      JSON.stringify({
+        event: 'orca_relay_reserve_supersede',
+        relayHostIdDigest: relayHostLogDigest(seat.relayHostId),
+        fromCellId: seat.cellId,
+        toCellId,
+        via
+      })
+    )
   }
 
   private flushSummary(): void {
