@@ -40,12 +40,11 @@ export function removeTransientCursorShowSequences(data: string): string {
       CURSOR_HIDE_SEQUENCE,
       showIndex + CURSOR_SHOW_SEQUENCE.length
     )
-    const nextPositionEnd = findCursorPositionSequenceEnd(
-      data,
-      showIndex + CURSOR_SHOW_SEQUENCE.length,
-      nextHideIndex === -1 ? data.length : nextHideIndex
-    )
     if (nextHideIndex === -1) {
+      const nextPositionEnd = findCursorPositionSequenceEnd(
+        data,
+        showIndex + CURSOR_SHOW_SEQUENCE.length
+      )
       if (nextPositionEnd === -1) {
         const synchronizedEndIndex = data.indexOf(
           SYNCHRONIZED_OUTPUT_END_SEQUENCE,
