@@ -19935,7 +19935,6 @@
       "serverGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
       "mixedGuidance": "Cierra las demás ventanas de Orca y detén el servidor desde el terminal o el servicio que lo inició. Los dispositivos conectados se desconectarán. Después, vuelve a intentarlo.",
       "instanceGuidance": "Cierra las demás instancias de Orca y vuelve a intentarlo. Tu actualización descargada se mantendrá lista.",
-      "waitingTooltip": "La actualización está descargada. Cierra las demás instancias de Orca y vuelve a intentarlo.",
       "waitingAriaLabel": "Actualización en espera de otras instancias de Orca. Haz clic para expandir.",
       "preparingLabel": "Preparando actualización",
       "preparingAriaLabel": "Preparando actualización. Haz clic para expandir."

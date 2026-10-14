@@ -1,13 +1,9 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
-import { BROWSER_SIDECAR_OWNER_ENV } from '../../src/shared/browser-sidecar-lifetime'
 import { getRuntimeMetadataPath } from '../../src/shared/runtime-bootstrap'
 import { expect, test } from './helpers/orca-app'
-import { resolveElectronExecutable } from './helpers/daemon-generation-runtime-fixture'
-import { getOrcaElectronLaunchArgs } from './helpers/electron-launch-args'
-import { isolatedServeProfile } from './helpers/orca-serve-cli-host'
+import { launchOwnedBrowserForE2E } from './helpers/orca-restart'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
 
 test.use({ seedTestRepo: false })
@@ -17,26 +13,7 @@ for (const early of [false, true]) {
     const profile = mkdtempSync(
       join(process.platform === 'win32' ? tmpdir() : '/tmp', 'orca-owner-')
     )
-    const isolation = isolatedServeProfile(profile, {
-      NODE_ENV: 'development',
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_E2E_HEADLESS: '1'
-    })
-    const child = spawnProcess({
-      program: resolveElectronExecutable(process.cwd()),
-      args: [
-        ...getOrcaElectronLaunchArgs(join(process.cwd(), 'out', 'main', 'index.js'), false),
-        '--serve',
-        '--serve-port',
-        '0',
-        '--serve-json',
-        '--serve-no-pairing',
-        `--user-data-dir=${profile}`
-      ],
-      env: { ...isolation.env, [BROWSER_SIDECAR_OWNER_ENV]: '1' },
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      serialization: 'json'
-    })
+    const child = launchOwnedBrowserForE2E(profile)
     let stderr = ''
     child.stderr?.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-16_384)

@@ -119,9 +119,43 @@ for (const theme of ['dark', 'light'] as const) {
         contentType: 'image/png'
       })
     }
+    for (const [reason, guidance] of [
+      ['busy', 'Wait a moment, then retry. Your downloaded update is ready.'],
+      [
+        'unresponsive',
+        'Stop it from the terminal or service that started it, then retry. Connected devices will disconnect.'
+      ]
+    ] as const) {
+      await orcaPage.evaluate((reason) => {
+        window.__store!.setState({
+          updateStatus: {
+            state: 'error',
+            version: '1.4.200',
+            retryAction: 'install',
+            message: 'Diagnostic',
+            installBlock: { reason, instances: [{ pid: 80932, kind: 'server' }] }
+          },
+          updateCardCollapsed: true
+        })
+      }, reason)
+      await orcaPage
+        .getByRole('button', { name: 'Update waiting for other Orca instances. Click to expand.' })
+        .hover()
+      const tooltip = orcaPage.getByRole('tooltip', { name: guidance, exact: true })
+      await expect(tooltip).toHaveText(guidance)
+      const tooltipProof = testInfo.outputPath(`tooltip-${reason}-${theme}.png`)
+      await tooltip.screenshot({ path: tooltipProof, animations: 'disabled' })
+      await testInfo.attach(`tooltip-${reason}-${theme}`, {
+        path: tooltipProof,
+        contentType: 'image/png'
+      })
+      await orcaPage.mouse.move(0, 0)
+      await expect(tooltip).toBeHidden()
+    }
     await orcaPage.evaluate(async (message) => {
       await window.__store!.getState().updateSettingsOrThrow({ uiLanguage: 'es' })
       window.__store!.setState({
+        updateCardCollapsed: false,
         updateStatus: {
           state: 'error',
           version: '1.4.200',

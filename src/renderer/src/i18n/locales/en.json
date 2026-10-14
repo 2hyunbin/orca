@@ -19962,7 +19962,6 @@
       "serverGuidance": "Stop the server from the terminal or service that started it, then retry. Connected devices will disconnect.",
       "mixedGuidance": "Close any other Orca windows and stop the server from the terminal or service that started it. Connected devices will disconnect. Then retry.",
       "instanceGuidance": "Quit other Orca instances, then retry. Your downloaded update will be kept ready.",
-      "waitingTooltip": "The update is downloaded. Close other Orca instances, then retry.",
       "waitingAriaLabel": "Update waiting for other Orca instances. Click to expand.",
       "preparingLabel": "Preparing update",
       "preparingAriaLabel": "Preparing update. Click to expand."

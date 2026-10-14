@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, Clock3, Download, Loader2 } from 'lucide-rea
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '../../store'
 import { translate } from '@/i18n/i18n'
+import { getUpdateInstallBlockGuidance } from '../maintenance/update-card/update-install-block-guidance'
 
 // Why: always rendered (not gated by `statusBarItems`). When the update card
 // is collapsed, this segment is the only way back to it — hiding it would
@@ -47,10 +48,7 @@ export function UpdateStatusSegment({
       return {
         icon: <Clock3 className="size-3 text-muted-foreground" />,
         label: translate('updates.installBlock.waitingLabel', 'Update waiting'),
-        tooltip: translate(
-          'updates.installBlock.waitingTooltip',
-          'The update is downloaded. Close other Orca instances, then retry.'
-        ),
+        tooltip: getUpdateInstallBlockGuidance(status.installBlock).explainer,
         ariaLabel: translate(
           'updates.installBlock.waitingAriaLabel',
           'Update waiting for other Orca instances. Click to expand.'
