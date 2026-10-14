@@ -172,6 +172,17 @@ export type BookedJoin = {
   reservedBy: string
 }
 
+// A seat still taking phones on a reserve cell, behind a later join of the same host at a newer
+// epoch elsewhere: the booking that placed past it held no seat to supersede.
+export type OutrankedSeat = {
+  cellId: string
+  userId: string
+  relayHostId: string
+  epoch: number
+  joinedAt: number
+  byCellId: string
+}
+
 type CellCursor = SeatFeedCellState & { seats: Map<string, ShadowSeat> }
 
 export type HeartbeatSnapshot = { readAt: number; expiresAt: ReadonlyMap<string, number> }
@@ -193,6 +204,8 @@ export class ShadowSeatDirectory {
   // Per host, the newest booking any cell reported (step 5 epoch mint). Age-ordered.
   private readonly bookings = new Map<string, { cellId: string; epoch: number; at: number }>()
   onBookedJoin?: (join: BookedJoin) => void
+  onOutranked?: (seat: OutrankedSeat) => void
+  private readonly joinedSinceApply = new Set<string>()
 
   // Cells no longer listed are forgotten with their seats; new ones start pending.
   // `required` defaults to every listed cell.
@@ -225,6 +238,14 @@ export class ShadowSeatDirectory {
 
   // `polledAt` is when the request left; the reply holds every change before it.
   apply(cellId: string, response: SeatFeedResponse, now: number, polledAt = now): void {
+    try {
+      this.applyResponse(cellId, response, now, polledAt)
+    } finally {
+      this.reportOutranked()
+    }
+  }
+
+  private applyResponse(cellId: string, response: SeatFeedResponse, now: number, polledAt: number): void {
     const cursor = this.cells.get(cellId)
     if (!cursor) return
     if (response.cellId !== cellId) {
@@ -558,6 +579,37 @@ export class ShadowSeatDirectory {
       this.hosts.set(key, seats)
     }
     seats.set(cursor.cellId, seat)
+    if (this.onOutranked && seats.size > 1) this.joinedSinceApply.add(key)
+  }
+
+  // After the whole response, so a cell's first snapshot is judged by the mode it carries. Either
+  // feed may arrive first, so every seat of the host is checked. A lower epoch that joined later
+  // (answered from a stale map) is left to the ledger reconcile.
+  private reportOutranked(): void {
+    for (const key of this.joinedSinceApply) {
+      const seats = this.hosts.get(key)
+      if (seats && seats.size > 1) this.reportOutrankedOf(key, seats)
+    }
+    this.joinedSinceApply.clear()
+  }
+
+  private reportOutrankedOf(key: string, seats: Map<string, ShadowSeat>): void {
+    const separator = key.indexOf('\u0000')
+    for (const seat of seats.values()) {
+      if (seat.state !== 'active' || this.admitModeOf(seat.cellId) !== 'reserve') continue
+      const by = [...seats.values()].find(
+        (other) => other.epoch > seat.epoch && other.joinedAt > seat.joinedAt
+      )
+      if (!by) continue
+      this.onOutranked!({
+        cellId: seat.cellId,
+        userId: key.slice(0, separator),
+        relayHostId: key.slice(separator + 1),
+        epoch: seat.epoch,
+        joinedAt: seat.joinedAt,
+        byCellId: by.cellId
+      })
+    }
   }
 
   private unseat(cursor: CellCursor, key: string): void {

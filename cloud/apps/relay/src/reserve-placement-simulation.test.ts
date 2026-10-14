@@ -294,6 +294,8 @@ describe('step 5 deterministic simulation', () => {
     [1, nearFull({ bookPastCap: true })],
     [2, drain({ intakeBurst: 200, directorShare: 0.05 })],
     [3, drainedWithoutSupersede()],
+    // Half-open seats the booking map had not seen hold their cell until the silence close.
+    [3, levelSeats(11, { skipFeedSupersede: true })],
     [4, levelSeats(11, { localTieBreak: true })],
     [5, mixed({ unguardedLedger: true })],
     // A director restart mid-queue loses its booked joins' rows until its boot reconcile.

@@ -577,3 +577,55 @@ describe('ShadowSeatDirectory.placementModeOf', () => {
     expect(directory.placementModeOf('cell-a')).toBe('reserve')
   })
 })
+
+describe('ShadowSeatDirectory.onOutranked', () => {
+  const reserve = { generation: 3, flags: { admitMode: 'reserve' } }
+  const db = { generation: 3, flags: { admitMode: 'db' } }
+  const full = (cellId: string, epoch: number, joinedAt: number, flags = reserve, state = 'active') =>
+    feed({
+      cellId,
+      seq: 1,
+      flagsApplied: flags,
+      full: [{ userId: 'user-a', relayHostId: 'host-1', epoch, generation: 1, state, joinedAt }]
+    })
+  const directory = () => {
+    const map = new ShadowSeatDirectory()
+    map.setCells(['cell-a', 'cell-b'])
+    const outranked: unknown[] = []
+    map.onOutranked = (seat) => outranked.push(seat)
+    return { map, outranked }
+  }
+  const halfOpen = {
+    cellId: 'cell-a',
+    userId: 'user-a',
+    relayHostId: 'host-1',
+    epoch: 3,
+    joinedAt: 10,
+    byCellId: 'cell-b'
+  }
+
+  it('reports a reserve seat a later, newer join elsewhere outranks, in either feed order', () => {
+    const first = directory()
+    first.map.apply('cell-a', full('cell-a', 3, 10), 100)
+    first.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    expect(first.outranked).toEqual([halfOpen])
+    const reversed = directory()
+    reversed.map.apply('cell-b', full('cell-b', 4, 20), 100)
+    reversed.map.apply('cell-a', full('cell-a', 3, 10), 101)
+    expect(reversed.outranked).toEqual([halfOpen])
+  })
+
+  it('leaves a seat on a database cell, a drain-only seat, and a lower epoch that joined later', () => {
+    const onDatabaseCell = directory()
+    onDatabaseCell.map.apply('cell-a', full('cell-a', 3, 10, db), 100)
+    onDatabaseCell.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    const drainOnly = directory()
+    drainOnly.map.apply('cell-a', full('cell-a', 3, 10, reserve, 'drain-only'), 100)
+    drainOnly.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    // Answered the old seat from a stale map after the newer join: the row decides that one.
+    const staleSticky = directory()
+    staleSticky.map.apply('cell-a', full('cell-a', 3, 30), 100)
+    staleSticky.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    expect([onDatabaseCell, drainOnly, staleSticky].map(({ outranked }) => outranked)).toEqual([[], [], []])
+  })
+})
