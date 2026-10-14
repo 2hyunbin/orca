@@ -152,6 +152,9 @@ export class PluginEnvironmentManagedEndpoint {
     }
     if (digest(environment.orcadDeployment) === digest(intent.previousDeployment)) {
       await store.getOrcadMigrationSource().flushPendingOrThrowAsync()
+      if (digest(store.getTarget(targetId)) !== intent.nextTargetDigest) {
+        throw new Error('The interrupted endpoint registration changed during recovery')
+      }
       rebindManagedOrcadSshGeneration(this.userDataPath, environment, intent.nextGeneration)
     } else if (digest(environment.orcadDeployment) !== digest(nextDeployment)) {
       throw new Error('The interrupted endpoint transition changed its managed deployment')

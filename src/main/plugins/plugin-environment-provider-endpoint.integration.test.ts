@@ -101,6 +101,32 @@ describe('reviewed managed-provider endpoint publication', () => {
     expect(f.store.getTarget(updated.id)).toEqual(updated)
   })
 
+  it('pins the interrupted target through the asynchronous recovery flush', async () => {
+    const f = await managedFixture()
+    f.persisted.flushPendingOrThrowAsync.mockRejectedValueOnce(
+      new Error('Owned persistence interruption')
+    )
+    await expect(f.ssh.save('window-one', f.preview.ticketId, undefined, true)).rejects.toThrow(
+      'Owned persistence interruption'
+    )
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    f.persisted.flushPendingOrThrowAsync.mockImplementationOnce(async () => {
+      entered.resolve()
+      await release.promise
+    })
+    const recovering = f.ssh.prepare('window-one', f.review, 'devbox', 'r2')
+    const rejected = expect(recovering).rejects.toThrow('changed during recovery')
+    await entered.promise
+    f.persisted.updateSshTarget(f.target.id, { identityFile: '/keys/competing-client' })
+    release.resolve()
+    await rejected
+    expect(f.store.getTarget(f.target.id)?.identityFile).toBe('/keys/competing-client')
+    expect(
+      listEnvironments(f.service.options.userDataPath)[0]?.orcadDeployment?.sshTargetGeneration
+    ).toBe(f.target.generation)
+  })
+
   it('refuses recovery after another client changes the interrupted target', async () => {
     const f = await managedFixture()
     f.persisted.flushPendingOrThrowAsync.mockRejectedValueOnce(
