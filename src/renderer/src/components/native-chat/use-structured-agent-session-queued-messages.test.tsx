@@ -88,7 +88,7 @@ afterEach(() => {
 })
 
 describe('queued message actions', () => {
-  it('deletes shown host cards with bounded concurrency while Resume and Steer stay available', async () => {
+  it('joins repeated Clear presses until settlement while Resume and Steer stay available', async () => {
     const ids = Array.from({ length: 10 }, (_, index) => `draft-${index + 1}`)
     const release = Promise.withResolvers<void>()
     const harness = createHarness({
@@ -99,6 +99,7 @@ describe('queued message actions', () => {
     let pending: Promise<boolean> = Promise.resolve(false)
     await act(async () => {
       pending = harness.result.current.clear()
+      expect(harness.result.current.clear()).toBe(pending)
       await Promise.resolve()
     })
     expect(harness.writeCalls).toEqual(
@@ -118,6 +119,12 @@ describe('queued message actions', () => {
     release.resolve()
     await act(async () => expect(await pending).toBe(true))
     expect(harness.writeCalls).toHaveLength(ids.length)
+    await act(async () => {
+      const nextClear = harness.result.current.clear()
+      expect(nextClear).not.toBe(pending)
+      expect(await nextClear).toBe(true)
+    })
+    expect(harness.writeCalls).toHaveLength(ids.length * 2)
   })
 
   it('keeps Clear all unavailable while a local send has no host card', async () => {

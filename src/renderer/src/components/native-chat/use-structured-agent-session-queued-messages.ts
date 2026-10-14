@@ -208,7 +208,8 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
   const clearCapable = !cards.some((card) => card.hold === 'sending')
-  const clear = useCallback(async (): Promise<boolean> => {
+  const clearingRef = useRef<Promise<boolean> | null>(null)
+  const clearCards = useCallback(async (): Promise<boolean> => {
     if (!clearCapable) {
       return false
     }
@@ -249,6 +250,15 @@ export function useStructuredAgentSessionQueuedMessages(args: {
       results.every((result) => result.status === 'fulfilled' && result.value.kind === 'done')
     )
   }, [args.editTransport, clearCapable])
+  const clear = useCallback((): Promise<boolean> => {
+    const pending =
+      clearingRef.current ??
+      clearCards().finally(() => {
+        clearingRef.current = null
+      })
+    clearingRef.current = pending
+    return pending
+  }, [clearCards])
 
   return {
     cards,
