@@ -12,8 +12,8 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { useAppStore } from '@/store'
 import {
   jiraAddIssueComment,
-  jiraGetIssue,
-  jiraIssueComments,
+  jiraGetIssueForTarget,
+  jiraIssueCommentsForTarget,
   jiraListAssignableUsers,
   jiraListPriorities,
   jiraListTransitions,
@@ -31,8 +31,8 @@ import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
-import { defaultScopeSource } from '@/lib/default-creation-host'
-import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
+import { defaultScopeHost } from '@/lib/default-creation-host'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 
 type JiraIssueWorkspaceProps = {
   issue: JiraIssue | null
@@ -48,7 +48,10 @@ export default function JiraIssueWorkspace({
   sourceContext
 }: JiraIssueWorkspaceProps): React.JSX.Element {
   const settings = useAppStore((s) => s.settings)
-  const providerSettings = sourceContext ?? defaultScopeSource(settings)
+  const owner = useMemo(
+    () => (sourceContext ? taskSourceRuntimeTarget(sourceContext) : defaultScopeHost(settings)),
+    [settings, sourceContext]
+  )
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
@@ -74,7 +77,7 @@ export default function JiraIssueWorkspace({
       setCommentsLoading(true)
       setCommentsError(null)
       try {
-        let fetched = await jiraIssueComments(providerSettings, targetIssue.key, targetIssue.siteId)
+        let fetched = await jiraIssueCommentsForTarget(owner, targetIssue.key, targetIssue.siteId)
         if (requestId !== requestIdRef.current) {
           return
         }
@@ -94,7 +97,7 @@ export default function JiraIssueWorkspace({
         }
       }
     },
-    [providerSettings]
+    [owner]
   )
 
   // oxlint-disable-next-line react-doctor/no-derived-state-effect -- Why: seeds editable issue drafts while IPC hydration runs and invalidates obsolete requests.
@@ -123,7 +126,7 @@ export default function JiraIssueWorkspace({
     setCommentsError(null)
     setIssueLoading(true)
 
-    void jiraGetIssue(providerSettings, issue.key, issue.siteId)
+    void jiraGetIssueForTarget(owner, issue.key, issue.siteId)
       .then((result) => {
         if (requestId !== requestIdRef.current) {
           return
@@ -142,9 +145,9 @@ export default function JiraIssueWorkspace({
       })
 
     void Promise.all([
-      jiraListTransitions(providerSettings, issue.key, issue.siteId),
-      jiraListPriorities(providerSettings, issue.siteId),
-      jiraListAssignableUsers(providerSettings, issue.key, undefined, issue.siteId)
+      jiraListTransitions(owner, issue.key, issue.siteId),
+      jiraListPriorities(owner, issue.siteId),
+      jiraListAssignableUsers(owner, issue.key, undefined, issue.siteId)
     ])
       .then(([nextTransitions, nextPriorities, nextUsers]) => {
         if (requestId !== requestIdRef.current) {
@@ -157,14 +160,14 @@ export default function JiraIssueWorkspace({
       .catch(() => {})
 
     void loadComments(issue, requestId)
-  }, [issue, loadComments, providerSettings])
+  }, [issue, loadComments, owner])
 
   const refreshIssue = useCallback(async (): Promise<void> => {
     if (!displayed) {
       return
     }
     try {
-      const latest = await jiraGetIssue(providerSettings, displayed.key, displayed.siteId)
+      const latest = await jiraGetIssueForTarget(owner, displayed.key, displayed.siteId)
       if (latest) {
         setFullIssue(latest)
         patchJiraIssue(latest.key, latest, { sourceContext })
@@ -172,7 +175,7 @@ export default function JiraIssueWorkspace({
     } catch {
       // Keep the visible issue snapshot if refresh fails.
     }
-  }, [displayed, patchJiraIssue, providerSettings, sourceContext])
+  }, [displayed, patchJiraIssue, owner, sourceContext])
 
   const mutateIssue = useCallback(
     async (
@@ -190,7 +193,7 @@ export default function JiraIssueWorkspace({
           setFullIssue({ ...displayed, ...optimistic })
           patchJiraIssue(displayed.key, optimistic, { sourceContext })
         }
-        const result = await jiraUpdateIssue(providerSettings, displayed.key, updates, siteId)
+        const result = await jiraUpdateIssue(owner, displayed.key, updates, siteId)
         if (!result.ok) {
           throw new Error(result.error)
         }
@@ -210,7 +213,7 @@ export default function JiraIssueWorkspace({
         setPendingField(null)
       }
     },
-    [displayed, patchJiraIssue, pendingField, refreshIssue, providerSettings, siteId, sourceContext]
+    [displayed, patchJiraIssue, pendingField, refreshIssue, owner, siteId, sourceContext]
   )
 
   const handleSaveTitle = useCallback(() => {
@@ -256,7 +259,7 @@ export default function JiraIssueWorkspace({
     setCommentSubmitting(true)
     try {
       const result = await jiraAddIssueComment(
-        providerSettings,
+        owner,
         displayed.key,
         bodyState.body,
         displayed.siteId
@@ -282,7 +285,7 @@ export default function JiraIssueWorkspace({
     } finally {
       setCommentSubmitting(false)
     }
-  }, [commentDraft, commentSubmitting, displayed, providerSettings])
+  }, [commentDraft, commentSubmitting, displayed, owner])
   const canSubmitComment = hasBoundedCommentBodyText(commentDraft)
 
   const actionItems = useMemo(
@@ -333,7 +336,7 @@ export default function JiraIssueWorkspace({
 
             <JiraIssueWorkspaceContent
               displayed={displayed}
-              imageTarget={getJiraRuntimeTarget(providerSettings)}
+              imageTarget={owner}
               titleDraft={titleDraft}
               setTitleDraft={setTitleDraft}
               labelsDraft={labelsDraft}

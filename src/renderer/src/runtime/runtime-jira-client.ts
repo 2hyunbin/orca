@@ -1,5 +1,6 @@
 import type {
   JiraAuthType,
+  JiraComment,
   JiraConnectionStatus,
   JiraCreateField,
   JiraIssue,
@@ -22,7 +23,8 @@ import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-t
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
 
 export { jiraLookupIssueSummary, jiraReadStatus } from './runtime-jira-summary-client'
-export { jiraGetIssue, jiraIssueComments } from './runtime-jira-detail-client'
+import { jiraGetIssueForTarget, jiraIssueCommentsForTarget } from './runtime-jira-detail-client'
+export { jiraGetIssueForTarget, jiraIssueCommentsForTarget } from './runtime-jira-detail-client'
 export {
   jiraCreateIssue,
   jiraListAssignableUsers,
@@ -33,6 +35,22 @@ export type { RuntimeJiraSettings } from './runtime-jira-target'
 
 export type JiraConnectResult = { ok: true; viewer: JiraViewer } | { ok: false; error: string }
 export type JiraCommentResult = { ok: true; id: string } | { ok: false; error: string }
+
+export async function jiraGetIssue(
+  settings: RuntimeJiraSettings,
+  key: string,
+  siteId?: string | null
+): Promise<JiraIssue | null> {
+  return jiraGetIssueForTarget(getJiraRuntimeTarget(settings), key, siteId)
+}
+
+export async function jiraIssueComments(
+  settings: RuntimeJiraSettings,
+  key: string,
+  siteId?: string | null
+): Promise<JiraComment[]> {
+  return jiraIssueCommentsForTarget(getJiraRuntimeTarget(settings), key, siteId)
+}
 
 export async function jiraStatus(settings: RuntimeJiraSettings): Promise<JiraConnectionStatus> {
   const target = getJiraRuntimeTarget(settings)

@@ -2,7 +2,7 @@ import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
 import type { JiraComment, JiraIssue } from '../../../shared/jira-types'
 import { migrateLegacyJiraImages } from './runtime-jira-image-cache'
 import { readRuntimeJiraPayload } from './runtime-jira-payload-stream'
-import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 
@@ -24,12 +24,11 @@ async function readRemoteJiraPayload<TResult>(
   }
 }
 
-export async function jiraGetIssue(
-  settings: RuntimeJiraSettings,
+export async function jiraGetIssueForTarget(
+  target: RuntimeClientTarget,
   key: string,
   siteId?: string | null
 ): Promise<JiraIssue | null> {
-  const target = getJiraRuntimeTarget(settings)
   const references =
     target.kind === 'local' ||
     (await runtimeEnvironmentSupportsCapability(target.environmentId, JIRA_IMAGE_CAPABILITY))
@@ -56,12 +55,11 @@ export async function jiraGetIssue(
     : null
 }
 
-export async function jiraIssueComments(
-  settings: RuntimeJiraSettings,
+export async function jiraIssueCommentsForTarget(
+  target: RuntimeClientTarget,
   key: string,
   siteId?: string | null
 ): Promise<JiraComment[]> {
-  const target = getJiraRuntimeTarget(settings)
   const references =
     target.kind === 'local' ||
     (await runtimeEnvironmentSupportsCapability(target.environmentId, JIRA_IMAGE_CAPABILITY))

@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JiraComment, JiraIssue } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { AppState } from '../store/types'
 import type {
   JiraIssueCommentComposer,
@@ -13,6 +14,7 @@ import type {
 import JiraIssueWorkspace from './JiraIssueWorkspace'
 
 type PendingRead<T> = {
+  target: RuntimeClientTarget
   key: string
   resolve: (value: T) => void
   reject: (error: Error) => void
@@ -27,26 +29,38 @@ const boundary = vi.hoisted(
     issues: PendingRead<JiraIssue | null>[]
     comments: PendingRead<JiraComment[]>[]
     composer: ComposerProps | null
-  } => ({ issues: [], comments: [], composer: null })
+    settings: JiraStoreBoundary['settings']
+  } => ({
+    issues: [],
+    comments: [],
+    composer: null,
+    settings: { activeRuntimeEnvironmentId: 'environment-1' }
+  })
 )
 
 vi.mock('@/store', () => {
-  const state: JiraStoreBoundary = {
-    settings: { activeRuntimeEnvironmentId: 'environment-1' },
-    patchJiraIssue: () => {}
-  }
   return {
-    useAppStore: (select: (state: JiraStoreBoundary) => unknown) => select(state)
+    useAppStore: (select: (state: JiraStoreBoundary) => unknown) =>
+      select({
+        settings: boundary.settings,
+        patchJiraIssue: () => {}
+      })
   }
 })
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('@/runtime/runtime-jira-client', () => {
-  function request<T>(queue: PendingRead<T>[], key: string): Promise<T> {
-    return new Promise((resolve, reject) => queue.push({ key, resolve, reject }))
+  function request<T>(
+    queue: PendingRead<T>[],
+    target: RuntimeClientTarget,
+    key: string
+  ): Promise<T> {
+    return new Promise((resolve, reject) => queue.push({ target, key, resolve, reject }))
   }
   return {
-    jiraGetIssue: (_settings: unknown, key: string) => request(boundary.issues, key),
-    jiraIssueComments: (_settings: unknown, key: string) => request(boundary.comments, key),
+    jiraGetIssueForTarget: (target: RuntimeClientTarget, key: string) =>
+      request(boundary.issues, target, key),
+    jiraIssueCommentsForTarget: (target: RuntimeClientTarget, key: string) =>
+      request(boundary.comments, target, key),
     jiraListTransitions: async () => [],
     jiraListPriorities: async () => [],
     jiraListAssignableUsers: async () => [],
@@ -77,6 +91,7 @@ vi.mock('./jira-issue-workspace-content', () => ({
     <div data-testid="detail">
       <span data-testid="title">{props.displayed.title}</span>
       <span data-testid="description">{props.displayed.description}</span>
+      <span data-testid="image-owner">{JSON.stringify(props.imageTarget)}</span>
       <span data-testid="comments">{props.comments.map((comment) => comment.id).join(',')}</span>
       <span data-testid="comments-loading">{String(props.commentsLoading)}</span>
       <span data-testid="comments-error">{props.commentsError}</span>
@@ -125,7 +140,10 @@ function comment(id: string): JiraComment {
   return { id, body: id, createdAt: '2026-10-02' }
 }
 
-async function render(selected: JiraIssue | null): Promise<void> {
+async function render(
+  selected: JiraIssue | null,
+  context: TaskSourceContext | null = sourceContext
+): Promise<void> {
   if (!root) {
     throw new Error('Missing React root')
   }
@@ -134,7 +152,7 @@ async function render(selected: JiraIssue | null): Promise<void> {
     mountedRoot.render(
       <JiraIssueWorkspace
         issue={selected}
-        sourceContext={sourceContext}
+        sourceContext={context}
         onUse={() => {}}
         onClose={() => {}}
       />
@@ -163,6 +181,7 @@ async function retryComments(): Promise<void> {
 }
 
 beforeEach(() => {
+  boundary.settings = { activeRuntimeEnvironmentId: 'environment-1' }
   boundary.issues.length = 0
   boundary.comments.length = 0
   container = document.createElement('div')
@@ -188,6 +207,70 @@ afterEach(async () => {
 })
 
 describe('Jira issue workspace request lifetime', () => {
+  it('keeps explicit issue, comment and image ownership when the default host changes', async () => {
+    const selected = issue()
+    await render(selected)
+    expect(boundary.issues.at(-1)?.target).toEqual({
+      kind: 'environment',
+      environmentId: 'environment-1'
+    })
+    expect(boundary.comments.at(-1)?.target).toEqual({
+      kind: 'environment',
+      environmentId: 'environment-1'
+    })
+    boundary.settings = { activeRuntimeEnvironmentId: 'environment-2' }
+    await render(selected)
+    expect(boundary.issues.at(-1)?.target).toEqual({
+      kind: 'environment',
+      environmentId: 'environment-1'
+    })
+    expect(boundary.comments.at(-1)?.target).toEqual({
+      kind: 'environment',
+      environmentId: 'environment-1'
+    })
+    expect(text('image-owner')).toBe(
+      JSON.stringify({ kind: 'environment', environmentId: 'environment-1' })
+    )
+  })
+
+  it('fences late details and comments when the same issue switches owners', async () => {
+    const selected = issue()
+    await render(selected)
+    const oldIssue = take(boundary.issues)
+    const oldComments = take(boundary.comments)
+    await render(selected, { ...sourceContext, hostId: 'runtime:environment-2' })
+    const nextIssue = take(boundary.issues)
+    const nextComments = take(boundary.comments)
+    expect(nextIssue.target).toEqual({ kind: 'environment', environmentId: 'environment-2' })
+    expect(nextComments.target).toEqual(nextIssue.target)
+    expect(text('image-owner')).toBe(JSON.stringify(nextIssue.target))
+    await act(async () => {
+      oldIssue.resolve(issue('JIR-1', 'Old owner'))
+      oldComments.resolve([comment('old')])
+    })
+    expect(text('title')).toBe('JIR-1')
+    expect(text('comments')).toBe('')
+    await act(async () => {
+      nextIssue.resolve(issue('JIR-1', 'New owner'))
+      nextComments.resolve([comment('new')])
+    })
+    expect(text('title')).toBe('New owner')
+    expect(text('comments')).toBe('new')
+  })
+
+  it('captures the row-less account owner once for details, comments and images', async () => {
+    await render(issue(), null)
+    const detail = take(boundary.issues)
+    const comments = take(boundary.comments)
+    expect(detail.target).toEqual({ kind: 'environment', environmentId: 'environment-1' })
+    expect(comments.target).toBe(detail.target)
+    expect(text('image-owner')).toBe(JSON.stringify(detail.target))
+    await act(async () => {
+      detail.resolve(null)
+      comments.resolve([])
+    })
+  })
+
   it('discards late detail and comments after closing the mounted workspace', async () => {
     await render(issue())
     await render(null)
