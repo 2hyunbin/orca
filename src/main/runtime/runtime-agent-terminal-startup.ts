@@ -1,5 +1,4 @@
 import type { SessionOptionValue } from '../../shared/native-chat-session-options'
-import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import {
@@ -76,24 +75,19 @@ export async function resolveAgentTerminalCreateOptions(
   const launchAgent = plannedAgent ?? opts.launchAgent
   // Before any early return: a host that cannot apply the requested shell must refuse rather than
   // spawn another one. Judged against the runtime this PTY's shell will come from.
-  const refuseShell = (projectRuntime: ProjectExecutionRuntimeResolution | undefined) =>
-    terminalShellOverrideRefusal({
-      shellOverride: opts.shellOverride,
-      connectionId: workspace.connectionId,
-      platform: process.platform,
-      projectRuntime,
-      cwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
-      workspacePath: workspace.path
-    })
-  const judgedStore = opts.shellOverride ? store : undefined
-  // TEMPORARY parity: main's project-only runtime still refuses an agent, then the agent's own.
-  const shellRefusal =
-    refuseShell(resolveLocalProjectRuntimeForWorktreeId(judgedStore, workspace.id)) ??
-    (judgedStore && (plannedAgent || opts.launchRuntime)
-      ? refuseShell(
-          agentLaunchProjectRuntime(judgedStore, workspace, plannedAgent ?? opts.launchAgent)
-        )
-      : null)
+  const shellRefusal = terminalShellOverrideRefusal({
+    shellOverride: opts.shellOverride,
+    connectionId: workspace.connectionId,
+    platform: process.platform,
+    projectRuntime:
+      opts.shellOverride && store
+        ? plannedAgent || opts.launchRuntime
+          ? agentLaunchProjectRuntime(store, workspace, plannedAgent ?? opts.launchAgent)
+          : resolveLocalProjectRuntimeForWorktreeId(store, workspace.id)
+        : undefined,
+    cwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
+    workspacePath: workspace.path
+  })
   if (shellRefusal) {
     throw shellRefusal
   }

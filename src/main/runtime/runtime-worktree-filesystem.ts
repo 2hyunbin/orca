@@ -3,7 +3,6 @@ import { stat } from 'node:fs/promises'
 import { FOLDER_WORKSPACE_INSTANCE_SEPARATOR } from '../../shared/worktree/id'
 import type { Repo } from '../../shared/repo-types'
 import type { Worktree } from '../../shared/worktree/types'
-import { gitExecFileAsync } from '../git/runner'
 import { isENOENT } from '../ipc/filesystem-auth'
 import {
   getLocalWorktreePathAccess,
@@ -19,7 +18,6 @@ import {
   mergeRuntimeFolderWorkspace
 } from './runtime-folder-workspace'
 import type { RuntimeStore } from './runtime-store-contract'
-import { gitStatusErrorMeansNotRepository } from './runtime-worktree-selection'
 
 /** Callers hold a local removal route; an `ssh:` or `runtime:` host is refused before this. */
 export async function isLocalRuntimeWorktreePathMissing(
@@ -31,21 +29,6 @@ export async function isLocalRuntimeWorktreePathMissing(
     toLocalWorktreeRuntimePath(worktreePath, localWorktreeGitOptions),
     access.statPath
   )
-}
-
-export async function isLocalRuntimeGitRepository(
-  runtimeWorktreePath: string,
-  localWorktreeGitOptions: { wslDistro?: string } = {}
-): Promise<boolean> {
-  try {
-    await gitExecFileAsync(['status', '--short'], {
-      cwd: runtimeWorktreePath,
-      ...localWorktreeGitOptions
-    })
-    return true
-  } catch (error) {
-    return !gitStatusErrorMeansNotRepository(error)
-  }
 }
 
 function getRuntimeFolderWorkspaceInstanceIdentity(repo: Repo, worktreeId: string): string {
