@@ -24,6 +24,17 @@ const MANAGED_SSH_HARNESS =
 
 export const PR_E2E_SOURCE_ROUTES = [
   {
+    id: 'plugins.publication-recovery',
+    specs: ['tests/e2e/plugin-publication-interruption.spec.ts'],
+    matches: (file) =>
+      file === 'tests/e2e/helpers/plugin-publication-interruption.ts' ||
+      (isProductSource(file) &&
+        (file === 'src/shared/plugins/plugin-consent-fingerprint.ts' ||
+          /^src\/main\/plugins\/plugin-(?:discovery-consent|install-publication|install-provenance|install-lockfile-store|atomic-file-write)\.ts$/.test(
+            file
+          )))
+  },
+  {
     id: 'ssh.node-control-host',
     specs: [
       'tests/e2e/ssh-orcad-node-control-host.spec.ts',

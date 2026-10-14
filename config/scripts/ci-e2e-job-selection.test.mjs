@@ -72,6 +72,19 @@ it('runs independent provider clients in the server-building job', () => {
   }
 })
 
+it('runs actual publication interruption and approval recovery in the desktop job', () => {
+  const spec = 'tests/e2e/plugin-publication-interruption.spec.ts'
+  expect(classify([spec])).toEqual({ e2e_run_changed: true, e2e_needs_build: true })
+  for (const source of [
+    'src/shared/plugins/plugin-consent-fingerprint.ts',
+    'src/main/plugins/plugin-discovery-consent.ts',
+    'src/main/plugins/plugin-install-publication.ts',
+    'tests/e2e/helpers/plugin-publication-interruption.ts'
+  ]) {
+    expect(selectPrE2eSpecs([source]), source).toContain(spec)
+  }
+})
+
 it('runs real browser file-drop ownership in the template-building Docker job', () => {
   const spec = 'tests/e2e/ssh-orcad-browser-drop-owner.spec.ts'
   expectManagedSshLane(spec)
