@@ -82,6 +82,17 @@ it('still replaces a different file with identical size and timestamp', () => {
   expect(sessionRow()).not.toEqual(before)
 })
 
+it('rereads a row indexed without a file identity once the stat supplies one', () => {
+  replayTranscriptRead({ messages })
+  const before = sessionRow()
+  const identified = syntheticCandidate({ dev: 1, ino: 10 })
+  replayTranscriptRead({ candidate: identified, messages })
+  expect(sessionRow()).not.toEqual(before)
+  const repaired = sessionRow()
+  replayTranscriptRead({ candidate: identified, messages })
+  expect(sessionRow()).toEqual(repaired)
+})
+
 it.each(['due', 'failed'] as const)('repairs an unchanged transcript marked %s', (state) => {
   replayTranscriptRead({ messages })
   const before = sessionRow()
