@@ -5,6 +5,7 @@ import type { PRCheckDetail, PRCheckRunDetails } from '../../../../shared/github
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { withGitHubCheckDetailsTimeout } from '@/runtime/github-check-details-timeout'
 import { createRuntimeRpcAbortError } from '@/runtime/abortable-runtime-environment-call'
+import { normalizeCheckRunDetailsLogTails } from '@/lib/check-run-details-log-normalization'
 import { translate } from '@/i18n/i18n'
 import {
   GITHUB_CHECK_DETAILS_TIMEOUT_MESSAGE,
@@ -224,34 +225,36 @@ export const createCheckActions = (
         options?.sourceContext
       )
       const requestTarget = requestContext.target
-      return requestTarget.kind === 'environment'
-        ? await withGitHubCheckDetailsTimeout((signal) =>
-            callRuntimeRpc<PRCheckRunDetails | null>(
-              { kind: 'environment', environmentId: requestTarget.environmentId },
-              'github.prCheckDetails',
-              {
-                repo: requestTarget.runtimeRepoId,
+      const rawDetails =
+        requestTarget.kind === 'environment'
+          ? await withGitHubCheckDetailsTimeout((signal) =>
+              callRuntimeRpc<PRCheckRunDetails | null>(
+                { kind: 'environment', environmentId: requestTarget.environmentId },
+                'github.prCheckDetails',
+                {
+                  repo: requestTarget.runtimeRepoId,
+                  checkRunId: args.checkRunId,
+                  workflowRunId: args.workflowRunId,
+                  checkName: args.checkName,
+                  url: args.url,
+                  prRepo: args.prRepo ?? null
+                },
+                { timeoutMs: 30_000, signal }
+              )
+            )
+          : await withGitHubCheckDetailsTimeout(() =>
+              window.api.gh.prCheckDetails({
+                repoPath,
+                repoId,
                 checkRunId: args.checkRunId,
                 workflowRunId: args.workflowRunId,
                 checkName: args.checkName,
                 url: args.url,
-                prRepo: args.prRepo ?? null
-              },
-              { timeoutMs: 30_000, signal }
+                prRepo: args.prRepo ?? null,
+                sourceContext: options?.sourceContext
+              })
             )
-          )
-        : await withGitHubCheckDetailsTimeout(() =>
-            window.api.gh.prCheckDetails({
-              repoPath,
-              repoId,
-              checkRunId: args.checkRunId,
-              workflowRunId: args.workflowRunId,
-              checkName: args.checkName,
-              url: args.url,
-              prRepo: args.prRepo ?? null,
-              sourceContext: options?.sourceContext
-            })
-          )
+      return normalizeCheckRunDetailsLogTails(rawDetails)
     } catch (error) {
       const timeoutMessage = translate(
         'auto.runtime.githubCheckDetailsTimeout.timedOut',
