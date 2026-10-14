@@ -6,10 +6,8 @@ import type { OpenFile } from '@/store/slices/editor'
 import type { FileContent } from './editor-panel-content-types'
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), resolveOwner: vi.fn(), getState: vi.fn() }))
-vi.mock('@/runtime/runtime-file-client', () => ({
-  getRuntimeFileReadScope: vi.fn(() => null),
-  readRuntimeFileContent: mocks.read,
-  subscribeRuntimeFileChanges: vi.fn()
+vi.mock('@/runtime/runtime-file-read-client', () => ({
+  readRuntimeFileContent: mocks.read
 }))
 vi.mock('@/runtime/runtime-git-client', () => ({
   getRuntimeGitBranchDiff: vi.fn(),
@@ -39,6 +37,7 @@ const input: OpenFile = {
   filePath: '/repo/file.binary',
   relativePath: 'file.binary',
   worktreeId: 'wt-1',
+  runtimeEnvironmentId: null,
   language: 'plaintext',
   mode: 'file-opening',
   isDirty: false,
@@ -115,6 +114,7 @@ describe('viewer files never enter the text reader', () => {
       expect(mocks.resolveOwner).not.toHaveBeenCalled()
       expect(contents).toEqual({})
       await act(async () => root.render(<ContentProbe file={{ ...file, mode: 'edit' }} />))
+      expect(contents[input.id]?.loadError).toBeUndefined()
       expect(mocks.read).toHaveBeenCalledOnce()
       expect(contents[input.id]?.content).toBe('explicit core content')
     }
