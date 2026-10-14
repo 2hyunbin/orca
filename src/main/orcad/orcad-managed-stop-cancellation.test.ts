@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -19,10 +20,10 @@ import { runOrcadManagedStopCancelCommand } from './orcad-managed-stop-command'
 import { installOrcadStopRequestListeners } from './orcad-stop-request-listener'
 
 const roots: string[] = []
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks()
   for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true })
+    await rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 })
   }
 })
 
