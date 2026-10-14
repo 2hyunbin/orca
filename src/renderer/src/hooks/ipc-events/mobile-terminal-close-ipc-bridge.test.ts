@@ -642,6 +642,79 @@ describe('runtime file positioning', () => {
     expect(store.getState().pendingEditorReveal).toMatchObject({ line: 19 })
   })
 
+  it.each(['caller', 'all'] as const)(
+    'cancels a queued position when the same file later opens without one (%s)',
+    (navigation) => {
+      const { openFile, store } = setup('terminal')
+      openFile({
+        worktreeId: VIEWED,
+        ...VIEWED_APP_TS,
+        navigation: 'caller',
+        position: { line: 17 }
+      })
+      openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation })
+      const tab = store
+        .getState()
+        .unifiedTabsByWorktree[VIEWED]?.find(
+          (candidate) => candidate.entityId === VIEWED_APP_TS.filePath
+        )
+      store.getState().activateTab(tab?.id ?? '')
+      flushFrames()
+      expect(store.getState().pendingEditorReveal).toBeNull()
+    }
+  )
+
+  it('cancels a positioned open before publication when a plain open follows', () => {
+    const { openFile, store } = setup('terminal')
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'all', position: { line: 17 } })
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller' })
+    flushFrames()
+    expect(store.getState().pendingEditorReveal).toBeNull()
+  })
+
+  it('invalidates a published position when a plain open follows', () => {
+    const { openFile, store } = setup('terminal')
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'all', position: { line: 17 } })
+    flushFrames()
+    const reveal = store.getState().pendingEditorReveal
+    expect(reveal?.canApply?.()).toBe(true)
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller' })
+    expect(reveal?.canApply?.()).toBe(false)
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'all', position: { line: 23 } })
+    flushFrames()
+    expect(store.getState().pendingEditorReveal).toMatchObject({ line: 23 })
+    expect(store.getState().pendingEditorReveal?.canApply?.()).toBe(true)
+  })
+
+  it('keeps another owner’s queued position when a same-path plain open follows', () => {
+    const { openFile, store } = setup('terminal')
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller', position: { line: 3 } })
+    openFile({
+      worktreeId: BACKGROUND,
+      ...VIEWED_APP_TS,
+      runtimeEnvironmentId: 'remote-1',
+      navigation: 'caller',
+      position: { line: 19 }
+    })
+    openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller' })
+    store.getState().setActiveWorktree(BACKGROUND)
+    flushFrames()
+    const remote = store
+      .getState()
+      .openFiles.find((file) => file.runtimeEnvironmentId === 'remote-1')
+    expect(store.getState().pendingEditorReveal).toMatchObject({ fileId: remote?.id, line: 19 })
+    store.getState().setPendingEditorReveal(null)
+    store.getState().setActiveWorktree(VIEWED)
+    const tab = store
+      .getState()
+      .unifiedTabsByWorktree[VIEWED]?.find(
+        (candidate) => candidate.entityId === VIEWED_APP_TS.filePath
+      )
+    store.getState().activateTab(tab?.id ?? '')
+    flushFrames()
+    expect(store.getState().pendingEditorReveal).toBeNull()
+  })
+
   it('discards positioning when its file closes', () => {
     const { openFile, store } = setup('terminal')
     openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller', position: { line: 3 } })

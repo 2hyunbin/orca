@@ -72,6 +72,24 @@ test('CLI file positioning preserves background navigation and reveals the reque
         )
     )
     expect(await cursor()).toMatchObject({ line: 1, column: 1 })
+    await open([])
+    await orcaPage.evaluate((id) => {
+      const state = window.__store?.getState()
+      const tab = state?.getActiveTab(id)
+      if (!state || !tab) {
+        throw new Error('No active editor tab')
+      }
+      state.createTab(id)
+      state.activateTab(tab.id)
+    }, worktreeId)
+    await orcaPage.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+    )
+    expect(await orcaPage.evaluate(() => window.__store?.getState().pendingEditorReveal)).toBeNull()
+    expect(await cursor()).toMatchObject({ line: 1, column: 1 })
     await open(['--line', '300', '--column', '7', '--focus'])
     await expect
       .poll(async () => {

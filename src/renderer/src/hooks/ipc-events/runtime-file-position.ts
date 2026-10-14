@@ -28,7 +28,7 @@ function selectedEditorTab(state: AppState, worktreeId = state.activeWorktreeId)
 
 export function createRuntimeFilePositionQueue(
   unsubs: (() => void)[]
-): (fileId: string, position: RuntimeFileOpenPosition, focus: boolean) => void {
+): (fileId: string, position: RuntimeFileOpenPosition | undefined, focus: boolean) => void {
   let alive = true
   type Request = {
     position: RuntimeFileOpenPosition
@@ -158,6 +158,10 @@ export function createRuntimeFilePositionQueue(
   )
 
   return (fileId, position, focus) => {
+    if (!position) {
+      pending.delete(fileId)
+      return
+    }
     const request = {
       position,
       waitingForFloatingFocus:

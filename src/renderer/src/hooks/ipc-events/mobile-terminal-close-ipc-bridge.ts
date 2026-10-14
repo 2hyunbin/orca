@@ -59,9 +59,7 @@ export function registerMobileAndTerminalCloseIpcBridge(
             },
             { selection }
           )
-          if (position) {
-            positionFile(fileId, position, selection === 'focus')
-          }
+          positionFile(fileId, position, selection === 'focus')
         })
       }
     )
