@@ -727,6 +727,23 @@ test('a later segment judges flipped-at against the watch start, so a long watch
   }
 })
 
+test('a corrupt state file fails the segment, never refuses or restarts it, and the outcome reads failed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    const stateFile = join(directory, 'state.json')
+    const output = join(directory, 'out')
+    const values = watchValues({ 'state-file': stateFile })
+    for (const corrupt of ['null', '[]', '7', JSON.stringify({ state: 'watching', cellId: 'c7' })]) {
+      await writeFile(stateFile, corrupt)
+      await assert.rejects(parseWatchSegment(values, START), /state file/)
+      assert.equal(await readFile(stateFile, 'utf8'), corrupt)
+      assert.equal((await recordOutcome(stateFile, output)).state, 'failed')
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 test('a slow runtime-status reply is retried before the flip back calls for break glass', async () => {
   const { fetchImpl: answering, uploads } = fakeFlipBack()
   let runtimeCalls = 0

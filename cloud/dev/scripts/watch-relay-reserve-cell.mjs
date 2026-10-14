@@ -228,9 +228,18 @@ function createReader(dependencies, projectId) {
   }
 }
 
-async function loadState(path) {
+// Only a missing file is a fresh watch. Anything else that is not a state fails the segment, which
+// the outcome step reads as failed and flips back: a corrupt file must not restart or refuse the watch.
+export async function loadState(path) {
   const text = await readFile(path, 'utf8').catch((error) => (error?.code === 'ENOENT' ? null : Promise.reject(error)))
-  return text === null ? null : JSON.parse(text)
+  if (text === null) return null
+  const state = JSON.parse(text)
+  const isObject = state !== null && typeof state === 'object' && !Array.isArray(state)
+  if (!isObject || typeof state.state !== 'string') throw new Error(`state file ${path} holds no watch state`)
+  if (state.state === 'watching' && (typeof state.cellId !== 'string' || !Number.isFinite(state.startedAt))) {
+    throw new Error(`state file ${path} has no cell or start`)
+  }
+  return state
 }
 
 // A segment's config. Later segments check flipped-at against the watch's start; bad inputs before
