@@ -16869,7 +16869,6 @@
           "295698292f": "Rerun",
           "0e110a3469": "Runs",
           "bb1b2cd31e": "Overview",
-          "97ff587ee3": "Connect this source to check for Hermes automations in the remote profile.",
           "aaa007846f": "source unavailable",
           "25060635c6": "Add new",
           "d207ab4c25": "Start from a template",
@@ -16921,7 +16920,6 @@
           "8705757e27": "job",
           "376631ef2b": "Resume",
           "b457436d6a": "Pause",
-          "0ae52dd760": "hermes",
           "e059042585": "Read-only",
           "aecdc3681f": "Manageable",
           "8500baacb4": "external source",
@@ -16984,7 +16982,6 @@
           "20fd7a3a15": "next",
           "c6695e6fbd": "External automations",
           "5524365227": "OpenClaw",
-          "bf5f67b590": "hermes",
           "2b0adbce21": "Paused",
           "b3feba84c7": "Active",
           "92405f1431": "Unavailable",
@@ -16993,9 +16990,6 @@
           "330b3c32e8": "available",
           "e2532150ed": "automations",
           "701515f010": "automation"
-        },
-        "HermesCronOutputView": {
-          "88d48157fc": "default"
         },
         "WorkspaceCombobox": {
           "ee5b280eba": "No workspaces found.",

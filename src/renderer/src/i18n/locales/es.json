@@ -16637,7 +16637,6 @@
           "295698292f": "Repetición",
           "0e110a3469": "Corre",
           "bb1b2cd31e": "Descripción general",
-          "97ff587ee3": "Conecte esta fuente para comprobar si hay automatizaciones Hermes en el perfil remoto.",
           "aaa007846f": "fuente no disponible",
           "25060635c6": "Agregar nuevo",
           "d207ab4c25": "Empezar desde una plantilla",
@@ -16689,7 +16688,6 @@
           "8705757e27": "trabajo",
           "376631ef2b": "Reanudar",
           "b457436d6a": "Pausa",
-          "0ae52dd760": "Hermes",
           "e059042585": "Sólo lectura",
           "aecdc3681f": "Manejable",
           "8500baacb4": "fuente externa",
@@ -16749,7 +16747,6 @@
           "20fd7a3a15": "próximo",
           "c6695e6fbd": "Automatizaciones externas",
           "5524365227": "OpenClaw",
-          "bf5f67b590": "Hermes",
           "2b0adbce21": "En pausa",
           "b3feba84c7": "Activo",
           "92405f1431": "Indisponible",
@@ -16758,9 +16755,6 @@
           "330b3c32e8": "disponible",
           "e2532150ed": "automatizaciones",
           "701515f010": "automatización"
-        },
-        "HermesCronOutputView": {
-          "88d48157fc": "por defecto"
         },
         "WorkspaceCombobox": {
           "ee5b280eba": "No se encontraron espacios de trabajo.",
