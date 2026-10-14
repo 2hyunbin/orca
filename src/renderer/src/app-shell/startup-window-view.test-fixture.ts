@@ -67,40 +67,43 @@ export async function bootWindowFromPartitions(
   const randomUUID = vi
     .spyOn(globalThis.crypto, 'randomUUID')
     .mockImplementation(() => `00000000-0000-4000-8000-${String(++minted).padStart(12, '0')}`)
-  store.setState({ repos: firstPaintRepos(partitions) })
-  const read = async (hostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID) =>
-    structuredClone(
-      partitions.find((partition) => partition.hostId === hostId)?.session ??
-        getDefaultWorkspaceSession()
+  try {
+    store.setState({ repos: firstPaintRepos(partitions) })
+    const read = async (hostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID) =>
+      structuredClone(
+        partitions.find((partition) => partition.hostId === hostId)?.session ??
+          getDefaultWorkspaceSession()
+      )
+    const hostIdsOfKind = (kind: 'ssh' | 'runtime') =>
+      partitions
+        .map((partition) => partition.hostId)
+        .filter((hostId) => parseExecutionHostId(hostId)?.kind === kind)
+    const sessionRead = await fetchWorkspaceSessionWithRuntimeHostOwners(
+      { get: read, listHostIds: async () => hostIdsOfKind('ssh') },
+      store.getState().repos,
+      hostIdsOfKind('runtime')
     )
-  const hostIdsOfKind = (kind: 'ssh' | 'runtime') =>
-    partitions
-      .map((partition) => partition.hostId)
-      .filter((hostId) => parseExecutionHostId(hostId)?.kind === kind)
-  const sessionRead = await fetchWorkspaceSessionWithRuntimeHostOwners(
-    { get: read, listHostIds: async () => hostIdsOfKind('ssh') },
-    store.getState().repos,
-    hostIdsOfKind('runtime')
-  )
-  const actions = store.getState()
-  const options = {
-    additionalValidWorkspaceKeys: collectFolderWorkspaceKeysFromSession(sessionRead.session)
+    const actions = store.getState()
+    const options = {
+      additionalValidWorkspaceKeys: collectFolderWorkspaceKeysFromSession(sessionRead.session)
+    }
+    actions.hydrateWorkspaceSession(sessionRead.session, {
+      ...options,
+      runtimeHostIdByWorkspaceSessionKey: sessionRead.runtimeHostIdByWorkspaceSessionKey,
+      contestedHostWorkspaceSessions: sessionRead.contestedHostWorkspaceSessions,
+      contestedPrimaryHostBySessionKey: sessionRead.contestedPrimaryHostBySessionKey
+    })
+    actions.hydrateTabsSession(sessionRead.session, options)
+    actions.hydrateEditorSession(sessionRead.session, options)
+    actions.hydrateBrowserSession(sessionRead.session, options)
+    reconcileHydratedWorkspaceTabModels(
+      sessionRead.session,
+      store.getState().reconcileWorktreeTabModels
+    )
+    return store.getState()
+  } finally {
+    randomUUID.mockRestore()
   }
-  actions.hydrateWorkspaceSession(sessionRead.session, {
-    ...options,
-    runtimeHostIdByWorkspaceSessionKey: sessionRead.runtimeHostIdByWorkspaceSessionKey,
-    contestedHostWorkspaceSessions: sessionRead.contestedHostWorkspaceSessions,
-    contestedPrimaryHostBySessionKey: sessionRead.contestedPrimaryHostBySessionKey
-  })
-  actions.hydrateTabsSession(sessionRead.session, options)
-  actions.hydrateEditorSession(sessionRead.session, options)
-  actions.hydrateBrowserSession(sessionRead.session, options)
-  reconcileHydratedWorkspaceTabModels(
-    sessionRead.session,
-    store.getState().reconcileWorktreeTabModels
-  )
-  randomUUID.mockRestore()
-  return store.getState()
 }
 
 type PaneView = { pane: string | null } | { split: string; first: PaneView; second: PaneView }
