@@ -11,6 +11,7 @@ import {
 } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionStatusEvent } from '../../../shared/agent-session-wire'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../shared/agent-session-orca-stop'
 import { describeNativeChatTurnStatus } from '../../../shared/native-chat-turn-status'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
 import { selectStructuredAgentSettledTurns } from '../../../shared/structured-agent-session-turn-timing'
@@ -125,17 +126,15 @@ async function settledTurn() {
   const turn = items.map((item) => readAgentJournalTurn(item.body)).find(Boolean)
   const [settled] = [...selectStructuredAgentSettledTurns(items).values()]
   const label = settled && describeNativeChatTurnStatus({ elapsedSeconds: 0, ...settled }).key
-  // Every error row a reader's transcript shows, the cut turn's derived notice included.
-  const notices = withNativeChatCutTurnNotices(items, { agentName: 'Codex' }).flatMap((item) =>
-    item.body.kind === 'status' && item.body.tone === 'error' ? [item.body.text] : []
+  // Every status row a reader's transcript shows, the cut turn's derived notice included.
+  const notices = withNativeChatCutTurnNotices(items).flatMap((item) =>
+    item.body.kind === 'status' ? [item.body.text] : []
   )
   return { turn, settled, label, notices }
 }
 
 /** A turn nobody stopped reads like a finished one, with exactly one row saying it stopped. */
-const ONE_NOTICE = [
-  'Codex stopped while this response was in progress. You can continue in this conversation.'
-]
+const ONE_NOTICE = [AGENT_SESSION_ORCA_STOP_TEXT]
 
 function lastSummary(statuses: AgentSessionStatusEvent[]) {
   const last = statuses.at(-1)

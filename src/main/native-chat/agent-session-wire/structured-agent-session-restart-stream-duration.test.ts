@@ -121,7 +121,7 @@ async function expectSettledStream(): Promise<void> {
   const [timing] = selectStructuredAgentTurnTimings(snapshot.items).values()
   expect(completedStructuredAgentTurnSeconds(timing)).toBe(5)
   expect(
-    withNativeChatCutTurnNotices(snapshot.items, { agentName: 'Codex' }).filter(
+    withNativeChatCutTurnNotices(snapshot.items).filter(
       (item) => item.body.kind === 'status' && item.body.text !== 'host notice'
     )
   ).toHaveLength(1)

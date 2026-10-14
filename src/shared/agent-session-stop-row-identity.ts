@@ -10,3 +10,5 @@ export const PROVIDER_EXIT_ROW_PREFIX = 'provider-exit:'
 export const STALE_SESSION_ROW_PREFIX = 'stale-session:'
 /** The note the restart continuation leaves about its outcome. */
 export const RESTART_CONTINUATION_ROW_PREFIX = 'restart-continuation:'
+/** The notice a client derives for a cut turn no row explains; never stored, so no host knows it. */
+export const CUT_TURN_NOTICE_ROW_PREFIX = 'cut-turn-notice:'

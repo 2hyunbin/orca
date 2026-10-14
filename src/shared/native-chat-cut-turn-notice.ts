@@ -4,27 +4,21 @@
 // future stop cause all read the same. A row the host already wrote about the stop stays the
 // explanation, so nothing is said twice. Shared by desktop and mobile, whose transcripts must agree.
 
-import { agentSessionFailureFact, readAgentSessionFailureFact } from './agent-session-failure'
-import {
-  agentSessionFailureWords,
-  type AgentSessionFailureWordsContext
-} from './agent-session-failure-words'
+import { readAgentSessionFailureFact } from './agent-session-failure'
+import { agentSessionOrcaStopRowBody } from './agent-session-orca-stop'
 import { agentJournalItemKey, parseAgentJournalItemKey } from './agent-session-journal-item-key'
 import { isRootAgentJournalItem } from './agent-session-journal-producer'
 import type { AgentJournalRenderItem } from './agent-session-journal-types'
 import { readAgentJournalTurn, readAgentJournalTurnOutcome } from './agent-session-turn-record'
 import { agentTurnVerdict } from './agent-turn-outcome'
 import {
+  CUT_TURN_NOTICE_ROW_PREFIX,
   PROVIDER_EXIT_ROW_PREFIX,
   RESTART_CONTINUATION_ROW_PREFIX,
   STALE_SESSION_ROW_PREFIX
 } from './agent-session-stop-row-identity'
 import { isStructuredAgentSessionStartFailureRow } from './structured-agent-session-start-failure-row-key'
 import { hostStatesTurnScopes } from './native-chat-turn-membership'
-
-const CUT_TURN_NOTICE_ROW = 'cut-turn-notice:'
-
-type CutTurnNoticeContext = Pick<AgentSessionFailureWordsContext, 'agentName'>
 
 function rootTurnVerdict(
   item: AgentJournalRenderItem
@@ -139,42 +133,26 @@ function lastRowOfTurn(
 
 const noticeCache = new WeakMap<
   AgentJournalRenderItem,
-  {
-    after: AgentJournalRenderItem
-    statesScopes: boolean
-    agentName: string | undefined
-    notice: AgentJournalRenderItem
-  }
+  { after: AgentJournalRenderItem; statesScopes: boolean; notice: AgentJournalRenderItem }
 >()
 
 function cutTurnNotice(
   turnItem: AgentJournalRenderItem,
   after: AgentJournalRenderItem,
-  statesScopes: boolean,
-  context: CutTurnNoticeContext
+  statesScopes: boolean
 ): AgentJournalRenderItem {
   const cached = noticeCache.get(turnItem)
-  if (
-    cached?.after === after &&
-    cached.statesScopes === statesScopes &&
-    cached.agentName === context.agentName
-  ) {
+  if (cached?.after === after && cached.statesScopes === statesScopes) {
     return cached.notice
   }
   const notice: AgentJournalRenderItem = {
     itemId: agentJournalItemKey({
       provider: 'orca',
-      clientMessageId: `${CUT_TURN_NOTICE_ROW}${turnItem.itemId}`
+      clientMessageId: `${CUT_TURN_NOTICE_ROW_PREFIX}${turnItem.itemId}`
     }),
     revision: 0,
-    body: {
-      kind: 'status',
-      ...agentSessionFailureWords(agentSessionFailureFact('providerExited'), {
-        ...context,
-        surface: 'row'
-      }),
-      tone: 'error'
-    },
+    // No cause: nothing recorded why the turn was cut.
+    body: agentSessionOrcaStopRowBody(undefined),
     // Just after the turn's last row and before anything the journal wrote next.
     sequence: after.sequence,
     sequenceIndex: (after.sequenceIndex ?? 0) + 0.5,
@@ -182,18 +160,17 @@ function cutTurnNotice(
     // A scope on a journal that states none would change how every other row is placed.
     ...(statesScopes ? { turnScope: { kind: 'turn' as const, turnItemId: turnItem.itemId } } : {})
   }
-  noticeCache.set(turnItem, { after, statesScopes, agentName: context.agentName, notice })
+  noticeCache.set(turnItem, { after, statesScopes, notice })
   return notice
 }
 
 /**
  * The journal as the transcript reads it: each root turn cut short with nobody asking, and no row
- * saying so, gets one notice in the words of the provider-exit row, right after the turn's last row.
- * Returns `items` itself when no turn needs one.
+ * saying so, gets one notice that it was interrupted, right after the turn's last row. Returns
+ * `items` itself when no turn needs one.
  */
 export function withNativeChatCutTurnNotices(
-  items: readonly AgentJournalRenderItem[],
-  context: CutTurnNoticeContext = {}
+  items: readonly AgentJournalRenderItem[]
 ): readonly AgentJournalRenderItem[] {
   const explained = explainedCutTurns(items)
   const statesScopes = hostStatesTurnScopes(items)
@@ -201,7 +178,7 @@ export function withNativeChatCutTurnNotices(
   items.forEach((item, index) => {
     if (isCutRootTurn(item) && !explained.has(item.itemId)) {
       const last = lastRowOfTurn(items, index, statesScopes)
-      const notice = cutTurnNotice(item, items[last]!, statesScopes, context)
+      const notice = cutTurnNotice(item, items[last]!, statesScopes)
       noticesAfter.set(last, [...(noticesAfter.get(last) ?? []), notice])
     }
   })

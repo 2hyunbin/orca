@@ -283,7 +283,7 @@ describe('a turn no message opened', () => {
     ])
   })
 
-  // Stored red for clients that predate it, but Orca stopped, not the agent: no failure, never folded.
+  // An older host stores it red, but Orca stopped, not the agent: no failure, never folded.
   it("keeps the row about Orca's stop on screen beside the reply it cut, which stays the answer", () => {
     const orcaStop: NativeChatMessage = {
       ...failure('orca-stop'),
@@ -306,7 +306,7 @@ describe('a turn no message opened', () => {
       ['a1', false],
       ['orca-stop', false]
     ])
-    // The same, once a reader re-presented it neutral.
+    // The same, as this build's host stores it, neutral.
     const neutral: NativeChatMessage = {
       ...orcaStop,
       blocks: orcaStop.blocks.map((block) =>

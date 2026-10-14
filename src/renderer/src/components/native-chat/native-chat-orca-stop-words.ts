@@ -1,4 +1,4 @@
-// The words for a reply Orca's own stop cut off, by cause and machine. One function, so the chat's
+// The words for a reply cut off with nobody asking, by cause and machine. One module, so the chat's
 // row wording can change in one place.
 
 import { translate } from '@/i18n/i18n'
@@ -42,15 +42,10 @@ function stoppedSentence(
   return cause === 'quit' && remoteHost ? remoteQuit(machine) : STOPPED[cause](machine)
 }
 
-/** The row's sentence. Where the host can continue a cut, Continue is the way on, so the row does
- *  not say it again; decided by the host, not the button, so the words never change on screen. */
-export function nativeChatOrcaStopRowText(
-  cause: AgentSessionOrcaStopCause,
-  machine: string,
-  options: { continueAvailable: boolean; remoteHost: boolean }
-): string {
-  const stopped = stoppedSentence(cause, machine, options.remoteHost)
-  return options.continueAvailable
+/** Where the host can continue a cut, Continue is the way on, so the row does not say it again;
+ *  decided by the host, not the button, so the words never change on screen. */
+function withContinueHint(stopped: string, continueAvailable: boolean): string {
+  return continueAvailable
     ? stopped
     : joinSentences([
         stopped,
@@ -59,4 +54,27 @@ export function nativeChatOrcaStopRowText(
           'You can continue in this conversation.'
         )
       ])
+}
+
+/** The row's sentence, naming why Orca stopped and on which machine. */
+export function nativeChatOrcaStopRowText(
+  cause: AgentSessionOrcaStopCause,
+  machine: string,
+  options: { continueAvailable: boolean; remoteHost: boolean }
+): string {
+  return withContinueHint(
+    stoppedSentence(cause, machine, options.remoteHost),
+    options.continueAvailable
+  )
+}
+
+/** The row's sentence when no cause is known. */
+export function nativeChatInterruptedRowText(continueAvailable: boolean): string {
+  return withContinueHint(
+    translate(
+      'components.native-chat.notices.orcaStopInterrupted',
+      'This response was interrupted.'
+    ),
+    continueAvailable
+  )
 }

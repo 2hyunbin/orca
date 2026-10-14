@@ -197,8 +197,6 @@ export async function settleStaleStructuredAgentSessionState(input: {
   deathEvidence: AgentSessionDeathEvidence | null
   /** The runtimes this one replaced for this chat: every owner they held lost its pipes with them. */
   replaced?: AgentSessionReplacedRuntime
-  /** Who the exit row names. */
-  failureTextContext?: AgentSessionFailureWordsContext
 }): Promise<number> {
   const { journal, replaced } = input
   const items = journal.snapshot().items

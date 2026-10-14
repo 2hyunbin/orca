@@ -4,6 +4,7 @@
 // that runs for half a minute leaves one journal row at its start. The lease renewal the host
 // wrote every ten seconds is what saw the child working after that row.
 
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../shared/agent-session-orca-stop'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -236,15 +237,11 @@ describe('a turn a crash cut short mid-tool', () => {
 
     const { items } = await host.journalSnapshot(SESSION)
     // As a reader's transcript shows it: the stored row is the explanation, so none is derived.
-    const statusRows = withNativeChatCutTurnNotices(items, { agentName: 'Claude' }).flatMap(
-      (item) => (item.body.kind === 'status' ? [item.body] : [])
+    const statusRows = withNativeChatCutTurnNotices(items).flatMap((item) =>
+      item.body.kind === 'status' ? [item.body] : []
     )
     expect(statusRows).toEqual([
-      expect.objectContaining({
-        text: 'Claude stopped while this response was in progress. You can continue in this conversation.',
-        failure: expect.objectContaining({ kind: 'providerExited' }),
-        tone: 'error'
-      })
+      expect.objectContaining({ text: AGENT_SESSION_ORCA_STOP_TEXT, tone: 'notice' })
     ])
     const [timing] = selectStructuredAgentTurnTimings(items).values()
     expect(
@@ -392,7 +389,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
       { kind: 'turn', turnItemId }
     ])
     expect(latestNativeChatOrcaStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
-    const readerRows = withNativeChatCutTurnNotices(items, { agentName: 'Claude' }).filter(
+    const readerRows = withNativeChatCutTurnNotices(items).filter(
       (item) => item.body.kind === 'status'
     )
     expect(readerRows).toHaveLength(1)

@@ -66,8 +66,8 @@ export type NativeChatTextBlock = {
   }
   /** On a status line that reports a failure: what failed, typed. */
   failure?: AgentSessionFailureFact
-  /** On the line about a reply Orca's own stop cut off: why, and the turn it cut. */
-  orcaStop?: AgentSessionOrcaStop & { turnItemId?: string }
+  /** On a host's line about a reply cut with nobody asking: why, when Orca's stop, and the turn. */
+  orcaStop?: Partial<AgentSessionOrcaStop> & { turnItemId?: string }
 }
 
 /** A tool invocation by the agent. `input` is the (already-serialized) tool

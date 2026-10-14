@@ -72,6 +72,8 @@ vi.mock('./use-structured-agent-session-sends', () => ({
 }))
 
 import { useStructuredAgentSession } from './use-structured-agent-session'
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../../shared/agent-session-orca-stop'
+import { latestNativeChatOrcaStopCut } from '../../../../shared/native-chat-orca-stop-cut'
 
 describe('useStructuredAgentSession transcript', () => {
   // A root left mounted can commit after happy-dom is torn down ("window is not defined").
@@ -89,29 +91,11 @@ describe('useStructuredAgentSession transcript', () => {
 
     expect(result.current.messages.at(-1)).toMatchObject({
       role: 'system',
-      blocks: [
-        {
-          text: 'Codex stopped while this response was in progress. You can continue in this conversation.',
-          tone: 'error'
-        }
-      ]
+      blocks: [{ text: AGENT_SESSION_ORCA_STOP_TEXT, tone: 'notice', presentation: 'orca-stop' }]
     })
     // The list places rows by the same items, so the notice joins the cut turn.
     expect(result.current.journalItems.at(-1)).toMatchObject({ turnScope: SCOPE })
-  })
-
-  it('names any other agent by its own label, never as Claude', () => {
-    const { result } = renderHook(() =>
-      useStructuredAgentSession({
-        sessionId: 'session-1',
-        agent: 'gemini',
-        target: { kind: 'local' },
-        isVisible: true
-      })
-    )
-
-    expect(result.current.messages.at(-1)).toMatchObject({
-      blocks: [{ text: expect.stringMatching(/^Gemini stopped while/) }]
-    })
+    // No host wrote it, so no host could continue from it.
+    expect(latestNativeChatOrcaStopCut(result.current.journalItems, [])).toBeNull()
   })
 })

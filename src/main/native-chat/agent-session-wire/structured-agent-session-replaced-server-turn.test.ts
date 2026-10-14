@@ -131,9 +131,7 @@ function repliesOf(items: readonly AgentJournalRenderItem[]): string[] {
 }
 
 function stopNotices(items: readonly AgentJournalRenderItem[]): AgentJournalRenderItem[] {
-  return withNativeChatCutTurnNotices(items, { agentName: 'Codex' }).filter(
-    (item) => item.body.kind === 'status'
-  )
+  return withNativeChatCutTurnNotices(items).filter((item) => item.body.kind === 'status')
 }
 
 async function expectCutTurnSettledOnce(): Promise<void> {

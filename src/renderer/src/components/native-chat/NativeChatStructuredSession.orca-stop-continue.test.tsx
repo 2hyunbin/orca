@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { useImperativeHandle } from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, expect, it, vi } from 'vitest'
 import type * as HostCapabilityModule from '@/runtime/structured-agent-session-host-capability'
+import type * as NativeChatMessageListModule from './NativeChatMessageList'
 
 const { mocks, moduleFactories, resetStructuredSessionMocks } = await vi.hoisted(async () =>
   (await import('./NativeChatStructuredSession.test-harness')).createStructuredSessionMocks()
@@ -36,28 +36,25 @@ vi.mock('@/runtime/structured-agent-session-host-capability', async (importOrigi
         : original.useStructuredAgentSessionHostCapabilityState(...args)
   }
 })
-// The transcript's real rows, projected from the journal; only the list's windowing is left out.
-vi.mock('./NativeChatMessageList', async () => {
-  const { MessageRow } = await import('./NativeChatMessageRow')
-  const { projectStructuredItemsToNativeChat } =
-    await import('../../../../shared/structured-agent-session-projection')
+// The real list, collapsed, over the journal the controller hands it.
+vi.mock('./NativeChatMessageList', async (importOriginal) => {
+  const { NativeChatMessageList } = await importOriginal<typeof NativeChatMessageListModule>()
+  const { projectStructuredAgentSessionMessages } =
+    await import('../../../../shared/structured-agent-session-message-projection')
+  const { selectStructuredAgentSettledTurns } =
+    await import('../../../../shared/structured-agent-session-turn-timing')
   return {
-    NativeChatMessageList: (props: {
-      ref?: React.Ref<unknown>
-      journalItems?: Parameters<typeof projectStructuredItemsToNativeChat>[0]
-    }) => {
-      useImperativeHandle(props.ref, () => ({ revealLatest: () => {}, revealFindMatch: () => {} }))
+    NativeChatMessageList: (props: React.ComponentProps<typeof NativeChatMessageList>) => {
+      const items = props.journalItems ?? []
       return (
-        <div data-testid="transcript">
-          {projectStructuredItemsToNativeChat(props.journalItems ?? []).map((message) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              expandSignal={false}
-              onScrollMessageToTop={() => {}}
-            />
-          ))}
-        </div>
+        <NativeChatMessageList
+          {...props}
+          session={{
+            ...props.session,
+            messages: projectStructuredAgentSessionMessages(items, [], [])
+          }}
+          settledTurns={selectStructuredAgentSettledTurns(items)}
+        />
       )
     }
   }
@@ -66,41 +63,59 @@ vi.mock('./NativeChatMessageList', async () => {
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NativeChatStructuredSession } from './NativeChatStructuredSession'
 import { agentJournalItemKey } from '../../../../shared/agent-session-journal-item-key'
-import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalItemBody,
+  AgentJournalStatusItem
+} from '../../../../shared/agent-session-journal-types'
+import { agentSessionOrcaStopRowBody } from '../../../../shared/agent-session-orca-stop'
+import { withNativeChatCutTurnNotices } from '../../../../shared/native-chat-cut-turn-notice'
+import { installNativeChatMessageListTestViewport } from './native-chat-message-list-test-viewport'
 
-const TURN = agentJournalItemKey({ provider: 'codex', threadId: 't', turnId: 'cut', ordinal: 1 })
+let sequence = 0
+const item = (itemId: string, body: AgentJournalItemBody, turnItemId?: string) => ({
+  itemId,
+  revision: 1,
+  sequence: ++sequence,
+  observedAt: sequence,
+  turnScope: turnItemId ? { kind: 'turn' as const, turnItemId } : { kind: 'thread' as const },
+  body
+})
+const work = { type: 'tool-call', name: 'shell', input: {}, state: 'completed' } as const
 
-const cutChat: AgentJournalRenderItem[] = [
-  {
-    itemId: TURN,
-    revision: 2,
-    sequence: 1,
-    observedAt: 1,
-    body: { kind: 'turn', turnId: 'cut', state: 'interrupted', startedAt: 1, completedAt: 5 }
-  },
-  {
-    itemId: agentJournalItemKey({ provider: 'orca', clientMessageId: 'stale-session:s:death-1-5' }),
-    revision: 1,
-    sequence: 2,
-    observedAt: 6,
-    turnScope: { kind: 'turn', turnItemId: TURN },
-    body: {
-      kind: 'status',
-      text: 'Codex stopped while this response was in progress. You can continue in this conversation.',
-      tone: 'error',
-      presentation: 'orca-stop',
-      orcaStop: { cause: 'crash' }
-    }
-  }
-]
+/** A turn cut short after some work, and the row a host wrote about it. */
+function cutTurn(id: string, row: [clientMessageId: string, body: AgentJournalStatusItem]) {
+  const turn = agentJournalItemKey({ provider: 'codex', threadId: 't', turnId: id, ordinal: 1 })
+  return [
+    item(`user-${id}`, { kind: 'message', role: 'user', blocks: [{ type: 'text', text: id }] }),
+    item(turn, { kind: 'turn', turnId: id, state: 'interrupted', startedAt: 1, completedAt: 5 }),
+    item(`work-${id}`, { kind: 'message', role: 'assistant', blocks: [work] }, turn),
+    item(agentJournalItemKey({ provider: 'orca', clientMessageId: row[0] }), row[1], turn)
+  ]
+}
 
+const AGENT_CRASH =
+  'Codex stopped while this response was in progress. You can continue in this conversation.'
+const agentExit: AgentJournalStatusItem = { kind: 'status', text: AGENT_CRASH, tone: 'error' }
+
+const cutChat = withNativeChatCutTurnNotices([
+  // An older host's reopen row, red and blaming the agent.
+  ...cutTurn('old', ['stale-session:s:death-0-1', agentExit]),
+  ...cutTurn('quit', ['stale-session:s:shutdown-1-g1', agentSessionOrcaStopRowBody('crash')]),
+  // The agent's own exit while Orca ran.
+  ...cutTurn('exit', ['provider-exit:s:2:g2', agentExit]),
+  // A reopen found the agent gone and nothing says why.
+  ...cutTurn('gone', ['stale-session:s:death-3-9', agentSessionOrcaStopRowBody(undefined)])
+])
+
+const restoreViewport = installNativeChatMessageListTestViewport()
+afterAll(restoreViewport)
 afterEach(() => {
   cleanup()
   resetStructuredSessionMocks()
 })
 
-it('offers one Continue, in the card that says Orca stopped, and the card does not say it again', () => {
-  mocks.journalItems = cutChat
+it('keeps each collapsed cut explained once, and offers one Continue, in the neutral card', () => {
+  mocks.journalItems = [...cutChat]
   render(
     <TooltipProvider>
       <NativeChatStructuredSession
@@ -115,12 +130,22 @@ it('offers one Continue, in the card that says Orca stopped, and the card does n
     </TooltipProvider>
   )
 
+  const collapsed = { name: 'Toggle turn details', expanded: false }
+  expect(screen.getAllByRole('button', collapsed)).toHaveLength(4)
+  // A known cause keeps its wording.
+  screen.getByText(/^Orca on the remote server stopped unexpectedly while this response/)
+  // The agent's own exit stays red.
+  expect(screen.getByText(AGENT_CRASH).parentElement?.parentElement).toHaveClass('text-destructive')
   // Throws on a second Continue anywhere in the pane, such as the old row above the composer.
   const button = screen.getByRole('button', { name: 'Continue' })
-  const sentence = screen.getByText(
-    'Orca on the remote server stopped unexpectedly while this response was in progress.'
-  )
+  // The older host's row reads neutral too, with no Continue, which that host would refuse.
+  expect(
+    screen.getAllByText(/^This response was interrupted/).map((row) => row.textContent)
+  ).toEqual([
+    'This response was interrupted. You can continue in this conversation.',
+    'This response was interrupted.'
+  ])
+  const sentence = screen.getByText('This response was interrupted.')
   expect(sentence.parentElement).toContainElement(button)
-  expect(screen.getByTestId('transcript')).toContainElement(button)
-  expect(screen.queryByText(/You can continue in this conversation/)).toBeNull()
+  expect(sentence.parentElement?.parentElement).toHaveClass('text-chat-foreground-faint')
 })

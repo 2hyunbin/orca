@@ -40,6 +40,7 @@ import {
 } from './structured-agent-session-host-test-data'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
+import { agentSessionOrcaStopRowBody } from '../../../shared/agent-session-orca-stop'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
@@ -827,19 +828,14 @@ describe('an unexpected provider exit', () => {
     )
     expect(acquire).toHaveBeenCalledTimes(2)
     // The new child's acquire settled the turn from the release's evidence: ended at the exit's
-    // receipt. The evidence is Orca's log text, so the row says only that the provider stopped.
+    // receipt. The evidence is Orca's log text, so the row says only that the reply was interrupted.
     const history = await host.history({ sessionId: SESSION, direction: 'tail' })
     const items = history.ok ? history.page.items : []
     expect(items.map((item) => readAgentJournalTurn(item.body)).filter(Boolean)).toContainEqual(
       expect.objectContaining({ turnId: 'turn-1', state: 'interrupted', completedAt: NOW })
     )
     const statuses = items.flatMap((item) => (item.body.kind === 'status' ? [item.body] : []))
-    expect(statuses).toContainEqual({
-      kind: 'status',
-      text: UNEXPECTED_PROVIDER_EXIT_OUTCOME,
-      failure: { kind: 'providerExited' },
-      tone: 'error'
-    })
+    expect(statuses).toContainEqual(agentSessionOrcaStopRowBody(undefined))
     expect(statuses.map((status) => status.text).join('\n')).not.toContain('provider exited')
   })
 })

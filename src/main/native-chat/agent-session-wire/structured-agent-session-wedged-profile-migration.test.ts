@@ -11,6 +11,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journa
 // leave the lease in a state an attach can claim, and these tests prove that by adjudicating it
 // rather than by reading fields off it.
 
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../shared/agent-session-orca-stop'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -352,13 +353,7 @@ describe('already-wedged profiles become usable on load', () => {
       const statusRows = restoredJournal()
         .snapshot()
         .items.flatMap((item) => (item.body.kind === 'status' ? [item.body.text] : []))
-      expect(statusRows).toEqual(
-        remote
-          ? []
-          : [
-              'Codex stopped while this response was in progress. You can continue in this conversation.'
-            ]
-      )
+      expect(statusRows).toEqual(remote ? [] : [AGENT_SESSION_ORCA_STOP_TEXT])
       // What the sidebar reads: every status this restart published says the chat is not working.
       expect(published.filter((summary) => summary.sessionId === SESSION)).not.toEqual([])
       expect(published.map((summary) => summary.status)).not.toContain('working')

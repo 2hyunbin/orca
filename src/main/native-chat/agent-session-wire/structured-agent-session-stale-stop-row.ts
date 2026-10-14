@@ -3,7 +3,6 @@
 // after a partly written settle adds no second row.
 
 import { STALE_SESSION_ROW_PREFIX } from '../../../shared/agent-session-stop-row-identity'
-import type { AgentSessionFailureWordsContext } from '../../../shared/agent-session-failure-words'
 import type {
   AgentJournalRenderItem,
   AgentJournalStatusItem
@@ -11,7 +10,7 @@ import type {
 import type { AgentSessionDeathEvidence } from '../../../shared/agent-session-record'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import type { AgentSessionReplacedRuntime } from '../../runtime/agent-session-replaced-runtime'
-import { orcaStopRowBody } from './structured-agent-session-orca-stop-row'
+import { agentSessionOrcaStopRowBody } from '../../../shared/agent-session-orca-stop'
 
 /** Which proof ends an item the settle found running or left `unverifiable`, if any does. */
 export type StaleCut = { by: 'death' } | { by: 'replaced'; fence: number } | null
@@ -25,7 +24,6 @@ export function staleStopRow(
     sessionId: string
     deathEvidence: AgentSessionDeathEvidence | null
     replaced?: AgentSessionReplacedRuntime
-    failureTextContext?: AgentSessionFailureWordsContext
   },
   items: readonly AgentJournalRenderItem[],
   cutBy: (item: AgentJournalRenderItem) => StaleCut
@@ -37,7 +35,7 @@ export function staleStopRow(
   const cuts = items.map(cutBy)
   const evidence = input.deathEvidence
   // The death evidence is Orca's log text, never a sentence for a person: the row says only that
-  // the provider stopped, and how Orca ended when the provider died with it.
+  // the reply was cut, and how Orca ended when the provider died with it.
   if (evidence && cuts.some((cut) => cut?.by === 'death')) {
     return {
       kind: 'item',
@@ -45,7 +43,7 @@ export function staleStopRow(
         provider: 'orca',
         clientMessageId: `${STALE_SESSION_ROW_PREFIX}${input.sessionId}:death-${evidence.ownerFence ?? 'unowned'}-${evidence.observedAt}`
       },
-      body: orcaStopRowBody(input.failureTextContext, evidence.runtimeEnd)
+      body: agentSessionOrcaStopRowBody(evidence.runtimeEnd)
     }
   }
   const fences = cuts.flatMap((cut) => (cut?.by === 'replaced' ? [cut.fence] : []))
@@ -60,8 +58,7 @@ export function staleStopRow(
       provider: 'orca',
       clientMessageId: `${STALE_SESSION_ROW_PREFIX}${input.sessionId}:replaced-${fence}`
     },
-    body: orcaStopRowBody(
-      input.failureTextContext,
+    body: agentSessionOrcaStopRowBody(
       fence === input.replaced.fence ? input.replaced.runtimeEnd : undefined
     )
   }

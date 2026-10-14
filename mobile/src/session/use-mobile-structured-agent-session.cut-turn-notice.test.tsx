@@ -120,8 +120,8 @@ describe('useMobileStructuredAgentSession transcript', () => {
         role: 'system',
         blocks: [
           {
-            text: 'Codex stopped while this response was in progress. You can continue in this conversation.',
-            tone: 'error'
+            text: 'This response was interrupted. You can continue in this conversation.',
+            tone: 'notice'
           }
         ]
       })

@@ -189,9 +189,8 @@ describe('a restart between a Stop and its turn end', () => {
     expect(turn).not.toHaveProperty('outcome')
     expect(label).toMatch(/^Worked for /)
     expect(mark).toBe('failed')
-    expect(errorRows).toEqual([
-      expect.stringContaining('stopped while this response was in progress')
-    ])
+    // Orca's cut reads muted: nothing says the agent failed.
+    expect(errorRows).toEqual([])
   })
 
   it("reads Couldn't confirm when the relaunch cannot prove the child gone, Stop or not", async () => {

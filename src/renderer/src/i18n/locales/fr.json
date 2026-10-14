@@ -18528,6 +18528,7 @@
         "orcaStopCrash": "Orca sur {{machine}} s'est arrêté de manière inattendue pendant que cette réponse était en cours.",
         "orcaStopRemote": "Orca sur {{machine}} s'est arrêté pendant que cette réponse était en cours.",
         "orcaStopCanContinue": "Vous pouvez continuer dans cette conversation.",
+        "orcaStopInterrupted": "Cette réponse a été interrompue.",
         "orcaStopUnnamedServer": "le serveur distant"
       },
       "providerFrame": {

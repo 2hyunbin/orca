@@ -3,6 +3,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journa
 // start it ends the child, never the conversation. Against the real host, store and journal, with a
 // live subscriber opened before each action.
 
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../shared/agent-session-orca-stop'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -373,9 +374,7 @@ describe('settling an earlier child before the next one takes its message', () =
     )
     expect(
       items.flatMap((item) => (item.body.kind === 'status' ? [item.body.text] : []))
-    ).toContain(
-      'Codex stopped while this response was in progress. You can continue in this conversation.'
-    )
+    ).toContain(AGENT_SESSION_ORCA_STOP_TEXT)
     // Handed over at the new child's fence, which the attach reserved after settling.
     const newFence = store.getRecord(SESSION)!.lease.runtimeFence
     expect(newFence).toBeGreaterThan(releasedFence)

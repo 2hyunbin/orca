@@ -1,4 +1,5 @@
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import { AGENT_SESSION_ORCA_STOP_TEXT } from '../../../shared/agent-session-orca-stop'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -505,9 +506,7 @@ describe('stale session state on a cold acquire', () => {
       // The probe's detail is Orca's, so the row carries none.
       expect(
         items.flatMap((item) => (item.body.kind === 'status' ? [item.body.text] : []))
-      ).toEqual([
-        'The agent stopped while this response was in progress. You can continue in this conversation.'
-      ])
+      ).toEqual([AGENT_SESSION_ORCA_STOP_TEXT])
     } finally {
       await journals.closeAll()
       await rm(root, { recursive: true, force: true })

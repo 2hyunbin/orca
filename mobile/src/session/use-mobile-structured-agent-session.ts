@@ -132,13 +132,7 @@ export function useMobileStructuredAgentSession(args: {
 
   // What the transcript reads, as desktop does: the journal plus the one notice a cut turn with no
   // row gets.
-  const transcriptItems = useMemo(
-    () =>
-      withNativeChatCutTurnNotices(state.items, {
-        agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined
-      }),
-    [agent, state.items]
-  )
+  const transcriptItems = useMemo(() => withNativeChatCutTurnNotices(state.items), [state.items])
   const sends = useMobileStructuredSends({
     sessionKey,
     submissions: state.submissions,

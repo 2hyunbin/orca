@@ -157,42 +157,6 @@ describe('the row an Orca stop leaves', () => {
     expect(screen.getByText(sentence)).toBeInTheDocument()
   })
 
-  // A client that re-words unnamed host rows keeps this row's presentation and cause, neutral.
-  it('stays neutral, naming the cause, as a reader that re-presented it neutral hands it on', () => {
-    // Its words and tone replaced, and the failure fact the old words came from dropped with them.
-    const represented: AgentJournalStatusItem = {
-      kind: 'status',
-      text: 'This response was interrupted. You can continue in this conversation.',
-      tone: 'notice',
-      presentation: 'orca-stop',
-      orcaStop: { cause: 'crash' }
-    }
-    renderStatus(represented, 'studio-mac', true)
-    expect(
-      screen.getByText(
-        'Orca on studio-mac stopped unexpectedly while this response was in progress.'
-      ).parentElement?.parentElement
-    ).toHaveClass('text-chat-foreground-faint')
-    cleanup()
-    renderStatus(represented, null, true)
-    expect(
-      screen.getByText('This response was interrupted. You can continue in this conversation.')
-        .parentElement?.parentElement
-    ).toHaveClass('text-chat-foreground-faint')
-  })
-
-  it('keeps the host words for a cause this build does not know', () => {
-    renderStatus(orcaStopRow('power-loss'), 'studio-mac')
-    expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
-  })
-
-  it('keeps the host words when the chat has no machine to name, muted all the same', () => {
-    renderStatus(orcaStopRow('update'), null)
-    expect(screen.getByText(LEGACY_TEXT).parentElement?.parentElement).toHaveClass(
-      'text-chat-foreground-faint'
-    )
-  })
-
   it('calls a paired server with no name the remote server, so its words match the button', () => {
     renderStatus(orcaStopRow('update'), null, true, true)
     expect(

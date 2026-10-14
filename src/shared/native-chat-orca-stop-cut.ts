@@ -1,9 +1,9 @@
-// A reply cut off because the Orca running the chat stopped (an update, a quit, a crash), as the
-// host's row about it says, and whether the chat is still sitting on that cut. Derived from the
-// journal each time, never stored: the client shows Continue from it, and the host re-checks it
+// A reply cut off with nobody asking, as the host's row about it says (an update, a quit, a crash,
+// or an owner a reopen found gone), and whether the chat is still sitting on that cut. Derived from
+// the journal each time, never stored: the client shows Continue from it, and the host re-checks it
 // under the session lock before Continue sends anything.
 
-import { readAgentSessionOrcaStop, type AgentSessionOrcaStopCause } from './agent-session-orca-stop'
+import { readAgentSessionOrcaStopRow, type AgentSessionOrcaStop } from './agent-session-orca-stop'
 import { isRootAgentJournalItem } from './agent-session-journal-producer'
 import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-session-journal-types'
 import { STALE_SESSION_ROW_PREFIX } from './agent-session-stop-row-identity'
@@ -23,17 +23,7 @@ export function orcaShutdownRowClientMessageId(
   return `${STALE_SESSION_ROW_PREFIX}${sessionId}:shutdown-${fence}-${generation}`
 }
 
-/** Why Orca stopped, from a status row the host wrote about it; null for any other row. */
-export function orcaStopCauseOfRow(item: AgentJournalRenderItem): AgentSessionOrcaStopCause | null {
-  return item.body.kind === 'status'
-    ? (readAgentSessionOrcaStop(item.body.orcaStop)?.cause ?? null)
-    : null
-}
-
-export type NativeChatOrcaStopCut = {
-  turnItemId: string
-  cause: AgentSessionOrcaStopCause
-}
+export type NativeChatOrcaStopCut = Partial<AgentSessionOrcaStop> & { turnItemId: string }
 
 /**
  * The latest root turn, when an Orca stop cut it and nothing was sent since: no request after it,
@@ -76,12 +66,12 @@ export function latestNativeChatOrcaStopCut(
     return null
   }
   for (const item of items) {
-    const cause =
+    const stop =
       item.turnScope?.kind === 'turn' && item.turnScope.turnItemId === turnItem.itemId
-        ? orcaStopCauseOfRow(item)
+        ? readAgentSessionOrcaStopRow(item)
         : null
-    if (cause) {
-      return { turnItemId: turnItem.itemId, cause }
+    if (stop) {
+      return { turnItemId: turnItem.itemId, ...stop }
     }
   }
   return null

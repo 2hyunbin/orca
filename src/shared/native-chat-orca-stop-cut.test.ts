@@ -42,8 +42,8 @@ function cutTurn(outcome?: AgentJournalTurnOutcome): AgentJournalRenderItem {
   }
 }
 
-/** The host's row, as a host this build or a newer one writes it: today's words and fact, and the
- *  cause beside them. */
+/** The host's row as an older host writes it: red words blaming the agent, and the cause beside
+ *  them. */
 function stopRow(orcaStop: { cause: string } | undefined, scoped = true): AgentJournalRenderItem {
   return {
     itemId: agentJournalItemKey({
@@ -82,7 +82,7 @@ describe('the cause on a stopped row', () => {
 describe('a client that predates the cause', () => {
   it("reads the host row as the cut turn's one explanation and adds none of its own", () => {
     const items = [userMessage(1), cutTurn(), stopRow(update)]
-    const read = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
+    const read = withNativeChatCutTurnNotices(items)
     expect(read).toBe(items)
     expect(read.filter((item) => item.body.kind === 'status')).toHaveLength(1)
   })

@@ -14,7 +14,10 @@ import {
 import type { NativeChatTextBlock } from '../../../../shared/native-chat-types'
 import { useNativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { NativeChatInterruptedContinueButton } from './NativeChatInterruptedContinue'
-import { nativeChatOrcaStopRowText } from './native-chat-orca-stop-words'
+import {
+  nativeChatInterruptedRowText,
+  nativeChatOrcaStopRowText
+} from './native-chat-orca-stop-words'
 import { AGENT_SESSION_ORCA_STOP_PRESENTATION } from '../../../../shared/agent-session-orca-stop'
 import { ProviderFrameRow } from './NativeChatTranscriptChrome'
 import { Button } from '@/components/ui/button'
@@ -113,9 +116,10 @@ export function NativeChatNoticeRow({
       </Card>
     )
   }
-  // The host's row about an Orca stop names the cause and the machine, muted: Orca stopped, not the
-  // agent. Outside a chat that knows its machine it keeps the host's own words.
+  // A reply cut with nobody asking reads muted: nothing failed. A known Orca stop names its cause and
+  // machine; otherwise the row says only that the reply was interrupted.
   const { orcaStop } = block
+  const cause = orcaStop?.cause
   const { hostLabel, remoteHost, continueAvailable } = orcaStopView
   // A paired server with no name to show is still a remote server; its id is not a name.
   const machine =
@@ -123,7 +127,8 @@ export function NativeChatNoticeRow({
     (remoteHost
       ? translate('components.native-chat.notices.orcaStopUnnamedServer', 'the remote server')
       : null)
-  const named = orcaStop !== undefined && machine !== null
+  const named = cause !== undefined && machine !== null
+  const interrupted = block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION
   const continueOffered =
     orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
@@ -135,17 +140,19 @@ export function NativeChatNoticeRow({
         )
       : undefined
   const text = named
-    ? nativeChatOrcaStopRowText(orcaStop.cause, machine, { continueAvailable, remoteHost })
-    : failure && authSurface
-      ? agentSessionFailureSentence(
-          failure,
-          authSurface,
-          { agentName },
-          sayAgentSessionFailureTranslated
-        )
-      : block.text
-  const tone =
-    named || block.presentation === AGENT_SESSION_ORCA_STOP_PRESENTATION ? 'notice' : block.tone
+    ? nativeChatOrcaStopRowText(cause, machine, { continueAvailable, remoteHost })
+    : interrupted
+      ? // Only a host's own row can be continued; a derived notice keeps saying how to go on.
+        nativeChatInterruptedRowText(continueAvailable && orcaStop !== undefined)
+      : failure && authSurface
+        ? agentSessionFailureSentence(
+            failure,
+            authSurface,
+            { agentName },
+            sayAgentSessionFailureTranslated
+          )
+        : block.text
+  const tone = named || interrupted ? 'notice' : block.tone
   const Icon =
     tone === 'warning'
       ? AlertTriangle

@@ -153,7 +153,7 @@ export function buildNativeChatTranscriptSlots(
         isBackgroundTaskBlock(block) ||
         isStoppedBeforeStartBlock(block)
     ),
-    // A row about Orca's own stop is stored red for clients that predate it; it reports no failure.
+    // An older host stores its row about Orca's stop red; it reports no failure.
     reportsFailure: message.blocks.some(
       (block) =>
         block.type === 'text' &&

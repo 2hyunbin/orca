@@ -10,6 +10,7 @@ import type {
   AgentJournalTurnScope
 } from './agent-session-journal-types'
 import { withNativeChatCutTurnNotices } from './native-chat-cut-turn-notice'
+import { AGENT_SESSION_ORCA_STOP_TEXT } from './agent-session-orca-stop'
 import { hostStatesTurnScopes, nativeChatTurnMembership } from './native-chat-turn-membership'
 import { projectStructuredAgentSessionMessages } from './structured-agent-session-message-projection'
 import {
@@ -21,8 +22,7 @@ import {
 import { structuredAgentSessionStartFailureRowIdentity } from './structured-agent-session-start-failure-row-key'
 
 const THREAD: AgentJournalTurnScope = { kind: 'thread' }
-const NOTICE =
-  'Codex stopped while this response was in progress. You can continue in this conversation.'
+const NOTICE = AGENT_SESSION_ORCA_STOP_TEXT
 let sequence = 0
 
 function item(
@@ -107,7 +107,7 @@ const restartNote = (text: string, tone?: 'error' | 'warning') =>
   )
 
 function notices(items: readonly AgentJournalRenderItem[]) {
-  return withNativeChatCutTurnNotices(items, { agentName: 'Codex' }).flatMap((entry, index) =>
+  return withNativeChatCutTurnNotices(items).flatMap((entry, index) =>
     entry.itemId.includes('cut-turn-notice')
       ? [
           {
@@ -121,7 +121,7 @@ function notices(items: readonly AgentJournalRenderItem[]) {
 }
 
 describe('withNativeChatCutTurnNotices', () => {
-  it('gives a cut turn no row explains one notice in the exit row words, after its last row', () => {
+  it('gives a cut turn no row explains one muted notice, after its last row', () => {
     const items = [
       user('u1'),
       turn('t1', 'u1', CUT),
@@ -130,11 +130,11 @@ describe('withNativeChatCutTurnNotices', () => {
       turn('t2', 'u2', { state: 'completed', outcome: 'success' })
     ]
 
-    const derived = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
+    const derived = withNativeChatCutTurnNotices(items)
 
     expect(notices(items)).toEqual([{ index: 3, text: NOTICE, scope: inTurn('t1') }])
     const notice = derived[3]!
-    expect(notice.body).toMatchObject({ tone: 'error', failure: { kind: 'providerExited' } })
+    expect(notice.body).toMatchObject({ tone: 'notice', presentation: 'orca-stop' })
     // Placed by journal position too, so any reader that sorts keeps it under the turn.
     expect(notice.sequence).toBe(items[2]!.sequence)
     expect(notice.sequenceIndex).toBeGreaterThan(0)
@@ -338,13 +338,13 @@ describe('withNativeChatCutTurnNotices', () => {
 
   it('places the notice in its turn, for desktop and phone alike', () => {
     const items = [user('u1'), turn('t1', 'u1', CUT), reply('a1', inTurn('t1')), user('u2')]
-    const derived = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
+    const derived = withNativeChatCutTurnNotices(items)
     const messages = projectStructuredAgentSessionMessages(derived, [], [])
     const { turnKeys } = nativeChatTurnMembership(messages, { items: derived, submissions: [] })
 
     const notice = messages.findIndex((message) => message.id.includes('cut-turn-notice'))
     expect(messages[notice]?.blocks).toEqual([
-      expect.objectContaining({ type: 'text', text: NOTICE, tone: 'error' })
+      expect.objectContaining({ type: 'text', text: NOTICE, tone: 'notice' })
     ])
     expect(turnKeys[notice]).toBe('u1')
   })
@@ -373,7 +373,7 @@ describe('withNativeChatCutTurnNotices', () => {
         resolvedAt: 60
       }
     ]
-    const derived = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
+    const derived = withNativeChatCutTurnNotices(items)
     const messages = projectStructuredAgentSessionMessages(derived, [], submissions)
     const { turnKeys } = nativeChatTurnMembership(messages, { items: derived, submissions })
 
@@ -390,7 +390,7 @@ describe('withNativeChatCutTurnNotices', () => {
       user('u2', null)
     ]
 
-    const derived = withNativeChatCutTurnNotices(items, { agentName: 'Codex' })
+    const derived = withNativeChatCutTurnNotices(items)
 
     expect(notices(items)).toEqual([{ index: 3, text: NOTICE, scope: undefined }])
     expect(hostStatesTurnScopes(derived)).toBe(false)
