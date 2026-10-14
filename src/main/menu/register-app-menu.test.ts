@@ -397,7 +397,8 @@ describe('registerAppMenu', () => {
       const popupContents = { paste: vi.fn(), copy: vi.fn(), selectAll: vi.fn(), send: vi.fn() }
       const childContents = { paste: vi.fn(), copy: vi.fn(), selectAll: vi.fn(), send: vi.fn() }
       const popupWindow = { webContents: popupContents }
-      markNativeBrowserPopupWindow(popupWindow)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The popup registry only stores window identity; Edit actions use the mocked webContents methods.
+      markNativeBrowserPopupWindow(popupWindow as unknown as Electron.BrowserWindow)
       getFocusedWindowMock.mockReturnValue(popupWindow)
       getFocusedWebContentsMock.mockReturnValue(
         focus === 'child' ? childContents : focus === 'popup' ? popupContents : null

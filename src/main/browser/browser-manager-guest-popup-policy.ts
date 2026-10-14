@@ -3,7 +3,7 @@ import { normalizeExternalBrowserUrl, redactKagiSessionToken } from '../../share
 import { trackBrowserGuestInputGesture } from './browser-guest-input-gesture'
 import {
   isNewBrowserTabPopupIntent,
-  isTabShapedBrowserPopupRequest,
+  isBrowserTabPopupRequest,
   normalizeBrowserPopupUrl
 } from './browser-popup-new-tab-intent'
 import { SAFE_POPUP_WINDOW_OPTIONS, safeOrigin } from './browser-manager-types'
@@ -71,7 +71,7 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
         // Why: the OAuth rule keeps a tab-shaped GET out of tabs only to save its opener. A plain link
         // has none and a Cmd/Ctrl+Shift-click hands over no page at all, so both are ordinary tabs.
         const tabUrl =
-          externalUrl && isTabShapedBrowserPopupRequest({ frameName, disposition, postBody })
+          externalUrl && isBrowserTabPopupRequest({ frameName, disposition, postBody })
             ? externalUrl
             : null
         const openAsTabWithoutOpener = (

@@ -37,7 +37,7 @@ describe('Help menu renderer target', () => {
   it('routes Help actions invoked from a native browser popup to the main window', () => {
     const main = fakeWindow()
     const popup = fakeWindow()
-    markNativeBrowserPopupWindow(popup)
+    markNativeBrowserPopupWindow(asBrowserWindow(popup))
     Object.assign(state, { mainWindow: main })
 
     for (const sendAction of [sendOpenFeatureTour, sendOpenSetupGuide, sendOpenCrashReport]) {

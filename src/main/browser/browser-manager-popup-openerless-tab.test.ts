@@ -60,7 +60,7 @@ type WindowOpenHandler = (details: {
   postBody?: Electron.PostBody
 }) => { action: 'allow' | 'deny'; createWindow?: (options: Record<string, unknown>) => unknown }
 
-function popupContents(opener: object | null) {
+function popupContents(opener: Pick<Electron.WebFrameMain, 'frameTreeNodeId'> | null) {
   return {
     id: 2201,
     opener,
@@ -137,7 +137,7 @@ describe('tab-shaped OAuth opens without an opener', () => {
       features: '',
       disposition: 'foreground-tab'
     })
-    const page = popupContents({ frame: 'opener' })
+    const page = popupContents({ frameTreeNodeId: 1 })
 
     response.createWindow?.({ webContents: page })
 
