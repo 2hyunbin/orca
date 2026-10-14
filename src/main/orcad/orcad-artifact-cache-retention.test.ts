@@ -146,3 +146,12 @@ describe('orcad artifact cache retention', () => {
     expect(await pruneDesktopOrcadArtifactCache(userData)).toEqual([])
   })
 })
+
+it('keeps control-host and repaired resource variants while their executable version is in use', async () => {
+  const root = cacheRoot()
+  const control = slot(root, 'linux-x64-glibc', '0.1.0+abc-control-abcdef123456.repair-1', 10)
+  const versions = [1, 2, 3].map((age) => slot(root, 'linux-x64-glibc', `0.0.${age}+old`, age))
+  const removed = await pruneOrcadArtifactCache(root, { inUseVersions: new Set(['0.1.0+abc']) })
+  expect(removed).not.toContain(control)
+  expect(removed).toContain(versions[2])
+})

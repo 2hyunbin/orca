@@ -72,8 +72,7 @@ export async function selectServeRuntime(
   if (requested && requested !== 'orcad') {
     return electron(`${SERVE_RUNTIME_ENV}=${requested} is neither orcad nor electron`)
   }
-  // Why: orcad has no SSH connection stack yet, so a default serve on it would list no targets
-  // and fail every connect (#25886, #8489). An explicit ORCA_SERVE_RUNTIME=orcad keeps orcad.
+  // Keep saved SSH profiles on the desktop until Node legacy transport migration is qualified.
   const sshReason = requested ? null : profileSshReason(input)
   if (sshReason) {
     return electron(sshReason)
@@ -91,7 +90,8 @@ export async function selectServeRuntime(
   try {
     slotDir = await (input.materializeSlot ?? materializeOrcadArtifact)(target, {
       templateDir,
-      cacheRoot
+      cacheRoot,
+      includeDeploymentTemplate: true
     })
     await placeSlotRuntime(slotDir, target, cacheRoot, input)
   } catch (error) {
@@ -130,12 +130,12 @@ export async function selectServeRuntime(
 function profileSshReason(input: ServeRuntimeSelectionInput): string | null {
   try {
     return (input.profileHasSshTargets ?? serveProfileHasSshTargets)(input.userDataPath)
-      ? 'this profile has SSH targets, which orcad cannot serve yet'
+      ? 'this profile has SSH targets; using the desktop host for compatibility'
       : null
   } catch (error) {
     // Why: fail closed. The read-only probe rejects profiles the serve host would still migrate
     // (an older schema), and guessing "no SSH" there leaves saved targets unreachable.
-    return `could not tell whether this profile has SSH targets, which orcad cannot serve yet (${errorMessage(error)})`
+    return `could not tell whether this profile has SSH targets; using the desktop host for compatibility (${errorMessage(error)})`
   }
 }
 

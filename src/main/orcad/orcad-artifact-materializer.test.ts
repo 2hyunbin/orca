@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -414,5 +415,94 @@ describe('packaged template lookup', () => {
     await expect(materializeOrcadArtifact(TARGET)).rejects.toThrow(
       'The packaged orcad deployment template is missing'
     )
+  })
+})
+
+describe('control-host deployment resources', () => {
+  it('keeps lean deployment slots separate and verifies every copied target', async () => {
+    const fixture = createTemplate()
+    const lean = await assembleOrcadArtifact({ ...fixture, target: TARGET })
+    const control = await assembleOrcadArtifact({
+      ...fixture,
+      target: TARGET,
+      includeDeploymentTemplate: true
+    })
+    expect(control).not.toBe(lean)
+    expect(readFileSync(join(control, ORCAD_VERSION_FILENAME), 'utf8')).toBe(
+      readFileSync(join(lean, ORCAD_VERSION_FILENAME), 'utf8')
+    )
+    expect(existsSync(join(lean, 'resources', 'orcad-template'))).toBe(false)
+    const copied = join(control, 'resources', 'orcad-template')
+    expect(readFileSync(join(copied, ORCAD_TEMPLATE_MANIFEST_FILENAME))).toEqual(
+      readFileSync(join(fixture.templateDir, ORCAD_TEMPLATE_MANIFEST_FILENAME))
+    )
+    expect(
+      readFileSync(join(copied, 'targets', TARGET, ORCAD_NODE_RUNTIME_MARKER_FILENAME), 'utf8')
+    ).toBe(`${pinnedNodeRuntimeAsset(TARGET).executableSha256}\n`)
+    expect(
+      await assembleOrcadArtifact({ ...fixture, target: TARGET, includeDeploymentTemplate: true })
+    ).toBe(control)
+  })
+  it('repairs a corrupt resource copy beside the published control-host slot', async () => {
+    const fixture = createTemplate()
+    const first = await assembleOrcadArtifact({
+      ...fixture,
+      target: TARGET,
+      includeDeploymentTemplate: true
+    })
+    const damaged = join(first, 'resources', 'orcad-template', 'orcad-server.js')
+    writeFileSync(damaged, 'corrupt')
+    const repaired = await assembleOrcadArtifact({
+      ...fixture,
+      target: TARGET,
+      includeDeploymentTemplate: true
+    })
+    expect(repaired).not.toBe(first)
+    expect(readFileSync(damaged, 'utf8')).toBe('corrupt')
+    expect(readFileSync(join(repaired, 'resources', 'orcad-template', 'orcad-server.js'))).toEqual(
+      readFileSync(join(fixture.templateDir, 'orcad-server.js'))
+    )
+  })
+  it('refuses an unverified deployment target even when the host slot is intact', async () => {
+    const fixture = createTemplate()
+    rewriteManifest(fixture.templateDir, (manifest) => {
+      manifest.targets['foreign-target'] = { files: {} }
+    })
+    await expect(
+      assembleOrcadArtifact({ ...fixture, target: TARGET, includeDeploymentTemplate: true })
+    ).rejects.toThrow('Unsupported deployment template target')
+    expect(await assembleOrcadArtifact({ ...fixture, target: TARGET })).toBeTruthy()
+  })
+  it('pins a changed outgoing matrix without changing the host executable identity', async () => {
+    const fixture = createTemplate()
+    const first = await assembleOrcadArtifact({
+      ...fixture,
+      target: TARGET,
+      includeDeploymentTemplate: true
+    })
+    const target = 'darwin-arm64' as const
+    const files: Record<string, string> = {}
+    for (const filename of orcadTemplateTargetFilenames(target)) {
+      const path = join(fixture.templateDir, 'targets', target, filename)
+      write(path, targetContents(target, filename))
+      files[filename] = sha256(path)
+    }
+    rewriteManifest(fixture.templateDir, (manifest) => {
+      manifest.targets[target] = { files }
+    })
+    const second = await assembleOrcadArtifact({
+      ...fixture,
+      target: TARGET,
+      includeDeploymentTemplate: true
+    })
+    expect(second).not.toBe(first)
+    expect(readFileSync(join(second, ORCAD_VERSION_FILENAME))).toEqual(
+      readFileSync(join(first, ORCAD_VERSION_FILENAME))
+    )
+    expect(
+      existsSync(
+        join(second, 'resources', 'orcad-template', 'targets', target, ORCAD_SERVER_TARGET_FILENAME)
+      )
+    ).toBe(true)
   })
 })

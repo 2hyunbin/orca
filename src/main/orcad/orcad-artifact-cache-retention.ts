@@ -1,3 +1,4 @@
+import { orcadCacheExecutableVersion } from './orcad-control-host-resources'
 /**
  * Bounds the desktop's `<userData>/orcad-artifacts` slot cache: per target, keep the most
  * recently used slots and evict the rest at startup. The cache survives uninstall (it lives in userData); this is what keeps it small.
@@ -17,8 +18,6 @@ import { liveDaemonOrcadSlots } from './orcad-daemon-slot-pins'
 /** The in-use slot plus the two most recent others (the newest three when none is in use). */
 export const ORCAD_ARTIFACT_CACHE_KEEP = 3
 
-const REPAIR_SUFFIX = /\.repair-\d+$/u
-
 export type OrcadArtifactCachePruneOptions = {
   keep?: number
   /** Slot versions to keep whatever their age. */
@@ -31,7 +30,7 @@ export async function pruneOrcadArtifactCache(
   options: OrcadArtifactCachePruneOptions = {}
 ): Promise<string[]> {
   const keep = options.keep ?? ORCAD_ARTIFACT_CACHE_KEEP
-  const inUse = options.inUseVersions ?? new Set<string>()
+  const inUse = new Set(Array.from(options.inUseVersions ?? [], orcadCacheExecutableVersion))
   const removed: string[] = []
   for (const target of await listNames(cacheRoot)) {
     // Only target directories hold slots; `node/` is the runtime archive cache.
@@ -48,7 +47,7 @@ export async function pruneOrcadArtifactCache(
     const present = slots.filter(
       (slot): slot is { name: string; mtimeMs: number } => slot.mtimeMs !== null
     )
-    const isInUse = (name: string): boolean => inUse.has(name.replace(REPAIR_SUFFIX, ''))
+    const isInUse = (name: string): boolean => inUse.has(orcadCacheExecutableVersion(name))
     // The in-use version counts toward `keep`; with none in use, the newest stands in for it.
     const othersToKeep = present.some((slot) => isInUse(slot.name)) ? keep - 1 : keep
     const others = present
@@ -86,7 +85,7 @@ export function pruneDesktopOrcadArtifactCache(
     inUseVersions: new Set([
       ...materializedOrcadArtifactVersions(),
       ...(live ? [live] : []),
-      ...daemonSlots.map((slot) => slot.replace(REPAIR_SUFFIX, '')),
+      ...daemonSlots.map((slot) => orcadCacheExecutableVersion(slot)),
       ...alsoInUse
     ])
   })

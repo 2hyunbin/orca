@@ -123,11 +123,11 @@ describe('orca serve runtime selection', () => {
     }
   })
 
-  it('stays on Electron by default when the profile has SSH targets orcad cannot serve (#25886)', async () => {
+  it('preserves desktop compatibility by default for saved SSH profiles', async () => {
     const options = input({ profileHasSshTargets: () => true })
     expect(await selectServeRuntime(options)).toEqual({
       kind: 'electron',
-      reason: 'this profile has SSH targets, which orcad cannot serve yet'
+      reason: 'this profile has SSH targets; using the desktop host for compatibility'
     })
     expect(options.materializeSlot).not.toHaveBeenCalled()
   })
@@ -146,7 +146,7 @@ describe('orca serve runtime selection', () => {
     expect(await selectServeRuntime(unreadable)).toEqual({
       kind: 'electron',
       reason:
-        'could not tell whether this profile has SSH targets, which orcad cannot serve yet (locked)'
+        'could not tell whether this profile has SSH targets; using the desktop host for compatibility (locked)'
     })
     expect(unreadable.materializeSlot).not.toHaveBeenCalled()
   })
@@ -200,7 +200,8 @@ describe('orca serve runtime selection', () => {
     expect(runtime.startsWith(join(root, 'orcad-artifacts'))).toBe(true)
     expect(options.materializeSlot).toHaveBeenCalledWith(TARGET, {
       templateDir: join(root, 'orcad-template'),
-      cacheRoot: join(root, 'orcad-artifacts')
+      cacheRoot: join(root, 'orcad-artifacts'),
+      includeDeploymentTemplate: true
     })
   })
 
