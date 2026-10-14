@@ -133,6 +133,7 @@ export type JiraComment = {
 }
 
 export type JiraIssueUpdate = {
+  labelOperations?: { add?: string[]; remove?: string[] }
   title?: string
   labels?: string[]
   assigneeAccountId?: string | null
