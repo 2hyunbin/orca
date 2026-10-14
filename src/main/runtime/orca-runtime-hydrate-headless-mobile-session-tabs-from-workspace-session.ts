@@ -314,12 +314,7 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       return
     }
     // Every caller stores through here, so subscribers hear a change whichever caller saw it first.
-    this.storingWindowlessProjection = true
-    try {
-      this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
-    } finally {
-      this.storingWindowlessProjection = false
-    }
+    this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
   }
 
   /** Republishes a windowless worktree's list from its saved layout. */

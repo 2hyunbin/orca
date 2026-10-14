@@ -124,9 +124,6 @@ export class OrcaRuntimeWithRuntimeId {
     return stamped
   }
 
-  /** Set while the windowless projection stores its own list. */
-  protected storingWindowlessProjection = false
-
   protected structuredAgentSessionTabRestorePromise: Promise<void> | null = null
 
   // Whether the last tab restore ran with chats on disk but no host to list them.
