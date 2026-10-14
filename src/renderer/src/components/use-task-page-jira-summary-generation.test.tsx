@@ -190,6 +190,34 @@ describe('Jira title generation lifecycle', () => {
     }
   )
 
+  it('ignores output from an earlier visit to the same Jira owner', async () => {
+    const old = deferred()
+    const newer = deferred()
+    mocks.generate.mockReturnValueOnce(old.promise).mockReturnValueOnce(newer.promise)
+    const { result, rerender } = setup()
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.handleGenerateNewJiraIssueSummary()
+    })
+    rerender({ ...initialProps, sourceHost: 'remote-2' })
+    rerender(initialProps)
+    act(() => {
+      second = result.current.handleGenerateNewJiraIssueSummary()
+    })
+    await act(async () => {
+      old.resolve({ success: true, summary: 'Earlier owner visit' })
+      await first
+    })
+    expect(result.current.newJiraIssueTitle).toBe('')
+    expect(result.current.newJiraIssueSummaryGenerating).toBe(true)
+    await act(async () => {
+      newer.resolve({ success: true, summary: 'Current draft title' })
+      await second
+    })
+    expect(result.current.newJiraIssueTitle).toBe('Current draft title')
+  })
+
   it('preserves a title edited and restored before the result arrives', async () => {
     const pending = deferred()
     mocks.generate.mockReturnValue(pending.promise)

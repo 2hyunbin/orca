@@ -53,8 +53,8 @@ describe('generateJiraIssueSummaryFromContext', () => {
     )
 
     expect(prompt).toContain('Generate a concise Jira issue summary')
-    expect(prompt).toContain('Project: Mobile App')
-    expect(prompt).toContain('Issue type: Bug')
+    expect(prompt).toContain('Project: <project>Mobile App</project>')
+    expect(prompt).toContain('Issue type: <issue_type>Bug</issue_type>')
     expect(prompt).toContain('Crash on save')
     expect(prompt).not.toContain('kebab-case')
   })

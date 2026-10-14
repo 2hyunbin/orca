@@ -61,6 +61,13 @@ describe('Jira generation routing', () => {
     ).rejects.toThrow('Disconnected')
     expect(mocks.local).not.toHaveBeenCalled()
   })
+  it('keeps an unknown remote generation method failure on its owner', async () => {
+    mocks.rpc.mockRejectedValue(new Error('method_not_found'))
+    await expect(
+      generateRuntimeJiraIssueSummary(target, args, new AbortController().signal)
+    ).rejects.toThrow('method_not_found')
+    expect(mocks.local).not.toHaveBeenCalled()
+  })
   it('does not dispatch after cancellation during the capability probe', async () => {
     const abort = new AbortController()
     mocks.supports.mockImplementation(async () => {
