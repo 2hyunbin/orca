@@ -68,6 +68,10 @@ class FixtureBrowserManager extends BrowserManager {
             record.permission = typeof permission === 'string' ? permission : 'unknown'
             writeStatus()
           })
+          .catch(() => {
+            record.permission = 'unavailable'
+            writeStatus()
+          })
       })
     }
     writeStatus()
