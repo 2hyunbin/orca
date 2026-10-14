@@ -309,6 +309,28 @@ describe('cloud auth characterization', () => {
       expect(ensureActiveOrcaProfile(userDataPath).profile.cloud?.activeOrgId).toBe('org-2')
     })
 
+    it('refuses a capability reply begun before an org switch, even after switching back', async () => {
+      await signIn()
+      let finish!: (value: unknown) => void
+      net.capabilities.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+      net.selectOrg.mockImplementation(
+        async (_config: unknown, _session: unknown, orgId: string) => ({
+          cloud: cloud(orgId),
+          organizations: orgs,
+          capabilities: { flags: {}, refreshedAt: Date.now() }
+        })
+      )
+      const refreshing = refreshCurrentOrcaProfileAuth(userDataPath)
+      await vi.waitFor(() => expect(net.capabilities).toHaveBeenCalled())
+      await selectCurrentOrcaProfileOrg(userDataPath, 'org-2')
+      await selectCurrentOrcaProfileOrg(userDataPath, 'org-1')
+      finish({ cloud: cloud('org-1'), capabilities: { flags: { stale: true }, refreshedAt: 1 } })
+      await expect(refreshing).resolves.toMatchObject({ status: 'reconnect-required' })
+      expect(getCurrentOrcaProfileAuthStatus(userDataPath)).not.toMatchObject({
+        capabilities: { flags: { stale: true } }
+      })
+    })
+
     it('refreshes the session first when it is about to expire', async () => {
       await signIn(1_000)
       const rotated = issue()

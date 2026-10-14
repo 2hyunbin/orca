@@ -1,4 +1,5 @@
 import { BrowserWindow, nativeTheme, powerMonitor, screen } from 'electron'
+import { flushUnsavedCloudSessions } from '../orca-profiles/profile-cloud-session-owner'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'node:path'
 import { getAppIconPath } from '../app-icon'
@@ -158,6 +159,7 @@ export function createMainWindow(
       })
       // Windows emits no will-quit for an OS shutdown or logoff, so its teardown never records it.
       recordAgentSessionRuntimeEnd('quit')
+      flushUnsavedCloudSessions()
     })
   }
 

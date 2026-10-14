@@ -96,7 +96,7 @@ import {
 } from './profile-cloud-session-store'
 import {
   beginCloudSessionRelink,
-  commitCloudSessionRelink,
+  commitCloudSessionCapabilities,
   readCloudSession,
   signInCloudSession,
   signOutCloudSession,
@@ -248,7 +248,7 @@ describe('cloud session refresh-token rotation', () => {
     for (let renewal = 0; renewal < 12; renewal++) {
       await readFreshOrcaCloudSession(config, active, userDataPath).catch(() => undefined)
       expect(() =>
-        commitCloudSessionRelink(
+        commitCloudSessionCapabilities(
           'profile-1',
           userDataPath,
           takeCloudSessionTicket('profile-1', userDataPath),
@@ -280,7 +280,7 @@ describe('cloud session refresh-token rotation', () => {
     expect(readCloudSession('profile-1', userDataPath).status).toBe('missing')
     // A server reply begun before the revocation must not bring the session back.
     expect(
-      commitCloudSessionRelink('profile-1', userDataPath, ticketBeforeRevocation, {
+      commitCloudSessionCapabilities('profile-1', userDataPath, ticketBeforeRevocation, {
         capabilities: { flags: {}, refreshedAt: 1 }
       })
     ).toBeNull()
@@ -395,6 +395,29 @@ describe('cloud session refresh-token rotation', () => {
     expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
   })
 
+  it('refuses a capability reply begun before the org moved, even after it moved back', async () => {
+    signIn()
+    const ticket = takeCloudSessionTicket('profile-1', userDataPath)
+    for (const orgId of ['org-2', 'org-1']) {
+      commitCloudSessionCapabilities(
+        'profile-1',
+        userDataPath,
+        takeCloudSessionTicket('profile-1', userDataPath),
+        {
+          cloud: { ...cloud, activeOrgId: orgId },
+          capabilities: { flags: {}, refreshedAt: Date.now() }
+        }
+      )
+    }
+
+    expect(
+      commitCloudSessionCapabilities('profile-1', userDataPath, ticket, {
+        cloud,
+        capabilities: { flags: { stale: true }, refreshedAt: Date.now() }
+      })
+    ).toBeNull()
+  })
+
   it('still accepts a later capability update after a failed relink', async () => {
     createRotatingAuthServer(Date.now, { ...cloud, activeOrgId: 'org-2' })
     signIn()
@@ -405,7 +428,7 @@ describe('cloud session refresh-token rotation', () => {
     await readFreshOrcaCloudSession(config, active, userDataPath)
 
     expect(
-      commitCloudSessionRelink(
+      commitCloudSessionCapabilities(
         'profile-1',
         userDataPath,
         takeCloudSessionTicket('profile-1', userDataPath),
@@ -442,11 +465,11 @@ describe('cloud session refresh-token rotation', () => {
       capabilities: { flags: { 'relay.use': true }, refreshedAt: Date.now() }
     }
     const selecting = selectCloudOrg({ config, active, userDataPath, orgId: 'org-2' })
-    // Another reply (e.g. a capability refresh) relinks to org-2 first.
-    commitCloudSessionRelink(
+    // A capability refresh that reports org-2 relinks first.
+    commitCloudSessionCapabilities(
       'profile-1',
       userDataPath,
-      beginCloudSessionRelink('profile-1', userDataPath),
+      takeCloudSessionTicket('profile-1', userDataPath),
       reply
     )
     resolveSelect(reply)

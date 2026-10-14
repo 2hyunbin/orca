@@ -5,7 +5,7 @@ import { refreshOrcaCloudCapabilities } from './profile-cloud-client'
 import { ensureActiveOrcaProfile } from './profile-index-store'
 import { refreshDevOrcaCloudProfile } from './profile-cloud-dev-service'
 import {
-  commitCloudSessionRelink,
+  commitCloudSessionCapabilities,
   takeCloudSessionTicket,
   type CloudSessionTicket
 } from './profile-cloud-session-owner'
@@ -59,7 +59,7 @@ export async function refreshCurrentOrcaProfileAuth(
     ) {
       throw new Error('orca_cloud_identity_changed_during_capability_refresh')
     }
-    const list = commitCloudSessionRelink(active.profile.id, userDataPath, ticket, refresh)
+    const list = commitCloudSessionCapabilities(active.profile.id, userDataPath, ticket, refresh)
     if (!list) {
       return { status: 'reconnect-required', auth: auth() }
     }

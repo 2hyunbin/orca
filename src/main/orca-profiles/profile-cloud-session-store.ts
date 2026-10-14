@@ -182,17 +182,16 @@ export function saveOrcaCloudSession(
   }
 }
 
-function retryUnsavedRotation(key: string): OrcaCloudSession | null {
+function retryUnsavedRotation(key: string): void {
   const unsaved = unsavedRotations.get(key)
   if (!unsaved) {
-    return null
+    return
   }
   try {
     writeOrcaCloudSession(unsaved.profileId, unsaved.userDataPath, unsaved.session)
     unsavedRotations.delete(key)
-    return null
   } catch {
-    return unsaved.session
+    // Still unsaved; the next read or the quit flush tries again.
   }
 }
 
@@ -207,9 +206,10 @@ export function readOrcaCloudSession(
   userDataPath: string
 ): OrcaCloudSessionReadResult {
   const cacheKey = orcaCloudSessionKey(profileId, userDataPath)
-  const unsaved = retryUnsavedRotation(cacheKey)
+  retryUnsavedRotation(cacheKey)
+  const unsaved = unsavedRotations.get(cacheKey)
   if (unsaved) {
-    return { status: 'found', session: unsaved, persistence: 'memory-only' }
+    return { status: 'found', session: unsaved.session, persistence: 'memory-only' }
   }
   const memorySession = memorySessions.get(cacheKey)
   if (memorySession) {
@@ -275,8 +275,9 @@ export function readOrcaCloudSession(
 }
 
 export function clearOrcaCloudSession(profileId: string, userDataPath: string): void {
-  unsavedRotations.delete(orcaCloudSessionKey(profileId, userDataPath))
-  memorySessions.delete(orcaCloudSessionKey(profileId, userDataPath))
+  const key = orcaCloudSessionKey(profileId, userDataPath)
+  unsavedRotations.delete(key)
+  memorySessions.delete(key)
   rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
 }
 

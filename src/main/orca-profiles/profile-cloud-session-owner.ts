@@ -9,6 +9,7 @@ import { getOrcaProfileListState, loadOrCreateProfileIndex } from './profile-ind
 import type { OrcaCloudSessionExchangeResponse } from './profile-cloud-session-exchange'
 import {
   clearOrcaCloudSession,
+  flushUnsavedOrcaCloudSessions,
   orcaCloudSessionKey,
   readOrcaCloudSession,
   saveOrcaCloudSession,
@@ -105,10 +106,8 @@ export function signInCloudSession(
     organizations: exchange.organizations,
     capabilities: exchange.capabilities
   })
-  const owner = ownerOf(profileId, userDataPath)
-  owner.generation++
-  owner.linkVersion++
-  owner.signedOut = false
+  invalidateCloudSessionChanges(profileId, userDataPath)
+  ownerOf(profileId, userDataPath).signedOut = false
 }
 
 // Fences off every change in flight, e.g. before sign-out's network revoke.
@@ -119,10 +118,8 @@ export function invalidateCloudSessionChanges(profileId: string, userDataPath: s
 }
 
 export function signOutCloudSession(profileId: string, userDataPath: string): void {
-  const owner = ownerOf(profileId, userDataPath)
-  owner.generation++
-  owner.linkVersion++
-  owner.signedOut = true
+  invalidateCloudSessionChanges(profileId, userDataPath)
+  ownerOf(profileId, userDataPath).signedOut = true
   try {
     clearOrcaCloudSession(profileId, userDataPath)
   } catch {
@@ -202,19 +199,19 @@ export function beginCloudSessionRelink(
   return takeCloudSessionTicket(profileId, userDataPath)
 }
 
-/** Lands an org-selection or capability reply onto the current session; tokens are untouched. */
-export function commitCloudSessionRelink(
+function commitServerReply(
   profileId: string,
   userDataPath: string,
   ticket: CloudSessionTicket,
-  reply: CloudSessionServerReply
+  reply: CloudSessionServerReply,
+  acceptsSameOrg: boolean
 ): OrcaProfileListState | null {
   const owner = ownerOf(profileId, userDataPath)
   const current = readCloudSession(profileId, userDataPath)
-  const linkMovedElsewhere =
+  const linkMoved =
     owner.linkVersion !== ticket.linkVersion &&
-    !(reply.cloud && isSameOrgAsLink(profileId, userDataPath, reply.cloud))
-  if (owner.generation !== ticket.generation || current.status !== 'found' || linkMovedElsewhere) {
+    !(acceptsSameOrg && reply.cloud && isSameOrgAsLink(profileId, userDataPath, reply.cloud))
+  if (owner.generation !== ticket.generation || current.status !== 'found' || linkMoved) {
     return null
   }
   saveOrcaCloudSession(profileId, userDataPath, {
@@ -225,4 +222,32 @@ export function commitCloudSessionRelink(
   return reply.cloud
     ? relink(owner, profileId, userDataPath, reply.cloud)
     : getOrcaProfileListState(userDataPath)
+}
+
+/**
+ * Lands an org-selection reply; tokens are untouched. A link that already moved to the
+ * selected org still counts as done.
+ */
+export function commitCloudSessionRelink(
+  profileId: string,
+  userDataPath: string,
+  ticket: CloudSessionTicket,
+  reply: CloudSessionServerReply
+): OrcaProfileListState | null {
+  return commitServerReply(profileId, userDataPath, ticket, reply, true)
+}
+
+/** Lands a capability reply; refused if the org link moved at all since the ticket. */
+export function commitCloudSessionCapabilities(
+  profileId: string,
+  userDataPath: string,
+  ticket: CloudSessionTicket,
+  reply: CloudSessionServerReply
+): OrcaProfileListState | null {
+  return commitServerReply(profileId, userDataPath, ticket, reply, false)
+}
+
+// Writes any rotation still held only in memory; called on quit and OS shutdown.
+export function flushUnsavedCloudSessions(): void {
+  flushUnsavedOrcaCloudSessions()
 }
