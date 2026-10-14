@@ -95,8 +95,8 @@
 8 src/renderer/src/store/slices/tabs/tabs-label-actions.ts
 10 src/renderer/src/store/slices/tabs/tabs-move-actions.ts
 9 src/renderer/src/store/slices/tabs/tabs-reconciliation.ts
-1 src/renderer/src/store/slices/tabs/tabs-secondary-actions.ts
 4 src/renderer/src/store/slices/tabs/tabs-session-actions.ts
+1 src/renderer/src/store/slices/tabs/tabs-split-ratio-actions.ts
 5 src/renderer/src/store/slices/tabs/tabs-surface.ts
 6 src/renderer/src/store/slices/terminal-orphan-helpers.ts
 4 src/renderer/src/store/slices/terminal-tab-title-batch.ts
