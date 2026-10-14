@@ -69,6 +69,7 @@ jobs:
           tests/e2e/terminal-inline-images-windows.spec.ts
           --config tests/playwright.config.ts
           --project=electron-headful
+          --output=test-results/terminal-images
           --repeat-each=3
           --workers=1
       - name: Upload terminal image proof
