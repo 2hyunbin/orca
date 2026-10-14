@@ -55,8 +55,8 @@ type CachedOrcaCloudSession = {
 }
 
 const memorySessions = new Map<string, CachedOrcaCloudSession>()
-// Sessions cleared this run whose file could not be removed; reading the file back would
-// resurrect a revoked refresh token and loop on 401s.
+// Sessions cleared this run and not signed in since. A conditional save must not resurrect one
+// (its fence write may have failed), and a file that could not be removed must not be read back.
 const clearedSessionKeys = new Set<string>()
 export const MAX_MEMORY_CLOUD_SESSIONS = 64
 
@@ -164,6 +164,12 @@ export function saveOrcaCloudSession(
       '[orca-cloud] could not persist the account session; keeping it in memory:',
       describeWriteError(error)
     )
+    // The file still holds the spent token; a restart replaying it would revoke the family.
+    try {
+      rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
+    } catch {
+      // Best effort: the in-memory session wins for the rest of this run either way.
+    }
   }
 
   // Why: Orca account refresh tokens must not silently fall back to plaintext
@@ -195,7 +201,10 @@ export function saveOrcaCloudSessionIfCurrent(
 ): OrcaCloudSessionPersistence | null {
   // Why: the check and sync save share one main-process turn, so an async
   // refresh captured before sign-out/org-switch cannot resurrect the session.
-  if (!isCloudSessionMutationCurrent(profileId, userDataPath, snapshot)) {
+  if (
+    clearedSessionKeys.has(sessionCacheKey(profileId, userDataPath)) ||
+    !isCloudSessionMutationCurrent(profileId, userDataPath, snapshot)
+  ) {
     return null
   }
   return saveOrcaCloudSession(profileId, userDataPath, session)
@@ -275,11 +284,10 @@ export function readOrcaCloudSession(
 export function clearOrcaCloudSession(profileId: string, userDataPath: string): void {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
   memorySessions.delete(cacheKey)
+  clearedSessionKeys.add(cacheKey)
   try {
     rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
-    clearedSessionKeys.delete(cacheKey)
   } catch (error) {
-    clearedSessionKeys.add(cacheKey)
     console.warn(
       '[orca-cloud] could not remove the account session file; treating it as signed out:',
       describeWriteError(error)

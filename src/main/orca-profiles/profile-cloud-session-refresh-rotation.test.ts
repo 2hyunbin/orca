@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OrcaCloudAuthConfig } from './profile-cloud-auth-config'
@@ -9,10 +9,16 @@ import type * as Fs from 'node:fs'
 import type { ActiveOrcaProfileState } from './profile-index-store'
 import type { OrcaCloudSession } from './profile-cloud-session-store'
 
-const { refreshMock, linkMock, writeFailure, removeFailure } = vi.hoisted(() => {
+const { refreshMock, selectOrgMock, linkMock, writeFailure, removeFailure } = vi.hoisted(() => {
   const writeFailure: { code: string | null } = { code: null }
   const removeFailure: { code: string | null } = { code: null }
-  return { refreshMock: vi.fn(), linkMock: vi.fn(), writeFailure, removeFailure }
+  return {
+    refreshMock: vi.fn(),
+    selectOrgMock: vi.fn(),
+    linkMock: vi.fn(),
+    writeFailure,
+    removeFailure
+  }
 })
 
 // Stands in for a session file that cannot be deleted (Windows antivirus holding it open).
@@ -57,15 +63,26 @@ vi.mock('../../shared/secure-file', async (importOriginal) => {
 
 vi.mock('./profile-cloud-client', async (importOriginal) => {
   const original = await importOriginal<typeof ProfileCloudClient>()
-  return { ...original, refreshOrcaCloudSession: refreshMock }
+  return {
+    ...original,
+    refreshOrcaCloudSession: refreshMock,
+    selectOrcaCloudOrg: selectOrgMock
+  }
 })
 
 vi.mock('./profile-cloud-index', () => ({ linkOrcaProfileToCloud: linkMock }))
 
 import { OrcaCloudRequestError } from './profile-cloud-client'
 import { readFreshOrcaCloudSession } from './profile-cloud-session-refresh'
-import { readOrcaCloudSession, saveOrcaCloudSessionExchange } from './profile-cloud-session-store'
+import { selectCloudOrgWithMutationFence } from './profile-cloud-org-selection'
 import {
+  getOrcaCloudSessionPath,
+  readOrcaCloudSession,
+  saveOrcaCloudSessionExchange,
+  saveOrcaCloudSessionIfCurrent
+} from './profile-cloud-session-store'
+import {
+  captureCloudSessionMutation,
   cloudSessionIdentity,
   recordCloudSessionIdentityMutation,
   tombstoneCloudSession
@@ -88,7 +105,7 @@ const active = { profile: { id: 'profile-1', cloud } } as ActiveOrcaProfileState
 
 // The auth server's rotation contract: the parent token answers 200 for the grace window,
 // after which any reuse revokes the family and every token in it answers 401.
-function createRotatingAuthServer(now: () => number) {
+function createRotatingAuthServer(now: () => number, reportedCloud = cloud) {
   let generation = 0
   let current = 'refresh-0'
   let parent: { token: string; rotatedAt: number } | null = null
@@ -101,7 +118,7 @@ function createRotatingAuthServer(now: () => number) {
     expiresAt: now() + ACCESS_TTL_MS,
     organizations: [],
     capabilities: { flags: { 'relay.use': true }, refreshedAt: now() },
-    cloud
+    cloud: reportedCloud
   })
   refreshMock.mockImplementation(async (_config: unknown, session: OrcaCloudSession) => {
     sent.push(session.refreshToken)
@@ -166,6 +183,7 @@ describe('cloud session refresh-token rotation', () => {
     writeFailure.code = null
     removeFailure.code = null
     refreshMock.mockReset()
+    selectOrgMock.mockReset()
     linkMock.mockReset()
   })
 
@@ -186,12 +204,18 @@ describe('cloud session refresh-token rotation', () => {
     expect(server.sent).toEqual(['refresh-0'])
     const stored = readOrcaCloudSession('profile-1', userDataPath)
     expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+    // A restart must not read the spent token back from disk.
+    expect(existsSync(getOrcaCloudSessionPath('profile-1', userDataPath))).toBe(false)
   })
 
   it('ends the renewal loop on a 401 even when the revocation cannot be written', async () => {
     const server = createRotatingAuthServer(Date.now)
     signIn()
     server.revoke()
+    const fenceBeforeRevocation = captureCloudSessionMutation(
+      cloudSessionIdentity('profile-1', cloud),
+      userDataPath
+    )
     writeFailure.code = 'ENOSPC'
 
     await expect(readFreshOrcaCloudSession(config, active, userDataPath)).resolves.toEqual({
@@ -200,6 +224,21 @@ describe('cloud session refresh-token rotation', () => {
     await runBrokerRenewals(10)
 
     expect(server.sent).toEqual(['refresh-0'])
+    expect(readOrcaCloudSession('profile-1', userDataPath).status).toBe('missing')
+    // The fence never moved, so a save holding the old fence must still be refused.
+    expect(
+      saveOrcaCloudSessionIfCurrent(
+        'profile-1',
+        userDataPath,
+        {
+          accessToken: 'access-0',
+          refreshToken: 'refresh-0',
+          expiresAt: Date.now() + ACCESS_TTL_MS,
+          capabilities: { flags: {}, refreshedAt: 1 }
+        },
+        fenceBeforeRevocation
+      )
+    ).toBeNull()
     expect(readOrcaCloudSession('profile-1', userDataPath).status).toBe('missing')
   })
 
@@ -234,6 +273,68 @@ describe('cloud session refresh-token rotation', () => {
 
     expect(server.revoked).toBe(false)
     expect(server.sent).toEqual(['refresh-0'])
+    const stored = readOrcaCloudSession('profile-1', userDataPath)
+    expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+  })
+
+  it('does not write spent tokens back when a refresh rotates during org selection', async () => {
+    const server = createRotatingAuthServer(Date.now)
+    signIn()
+    let resolveSelect!: (value: unknown) => void
+    selectOrgMock.mockReturnValue(new Promise((resolve) => (resolveSelect = resolve)))
+    const selecting = selectCloudOrgWithMutationFence({
+      config,
+      active,
+      userDataPath,
+      orgId: 'org-2'
+    })
+    await readFreshOrcaCloudSession(config, active, userDataPath)
+    resolveSelect({
+      cloud: { ...cloud, activeOrgId: 'org-2' },
+      organizations: [],
+      capabilities: { flags: { 'relay.use': true }, refreshedAt: Date.now() }
+    })
+    await selecting
+
+    const stored = readOrcaCloudSession('profile-1', userDataPath)
+    expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+    expect(server.revoked).toBe(false)
+  })
+
+  it('refreshes through the shared single-flight when org selection gets a 401', async () => {
+    const server = createRotatingAuthServer(Date.now)
+    signIn()
+    selectOrgMock.mockRejectedValueOnce(new OrcaCloudRequestError(401)).mockResolvedValueOnce({
+      cloud: { ...cloud, activeOrgId: 'org-2' },
+      organizations: [],
+      capabilities: { flags: { 'relay.use': true }, refreshedAt: Date.now() }
+    })
+    const selecting = selectCloudOrgWithMutationFence({
+      config,
+      active,
+      userDataPath,
+      orgId: 'org-2'
+    })
+    const renewing = readFreshOrcaCloudSession(config, active, userDataPath)
+    await Promise.all([selecting, renewing])
+
+    expect(server.sent).toEqual(['refresh-0'])
+    const stored = readOrcaCloudSession('profile-1', userDataPath)
+    expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
+  })
+
+  it('relinks to the org the server reports when this refresh owns the fence', async () => {
+    createRotatingAuthServer(Date.now, { ...cloud, activeOrgId: 'org-2' })
+    signIn()
+
+    await readFreshOrcaCloudSession(config, active, userDataPath)
+
+    expect(linkMock).toHaveBeenCalledWith(
+      'profile-1',
+      expect.objectContaining({ activeOrgId: 'org-2' }),
+      userDataPath
+    )
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('different active org'))
     const stored = readOrcaCloudSession('profile-1', userDataPath)
     expect(stored.status === 'found' && stored.session.refreshToken).toBe('refresh-1')
   })

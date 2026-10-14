@@ -3,13 +3,19 @@ import type { OrcaCloudAuthConfig } from './profile-cloud-auth-config'
 import type * as ProfileCloudClient from './profile-cloud-client'
 import type { ActiveOrcaProfileState } from './profile-index-store'
 
-const { readMock, saveIfCurrentMock, clearMock, refreshMock, linkMock } = vi.hoisted(() => ({
-  readMock: vi.fn(),
-  saveIfCurrentMock: vi.fn((): string | null => 'memory-only'),
-  clearMock: vi.fn(),
-  refreshMock: vi.fn(),
-  linkMock: vi.fn()
-}))
+const { readMock, saveIfCurrentMock, clearMock, refreshMock, linkMock, liveFenceMock } = vi.hoisted(
+  () => ({
+    liveFenceMock: vi.fn((): { epoch: number; identityKey: string } | null => ({
+      epoch: 1,
+      identityKey: 'identity'
+    })),
+    readMock: vi.fn(),
+    saveIfCurrentMock: vi.fn((): string | null => 'memory-only'),
+    clearMock: vi.fn(),
+    refreshMock: vi.fn(),
+    linkMock: vi.fn()
+  })
+)
 
 vi.mock('./profile-cloud-session-store', () => ({
   readOrcaCloudSession: readMock,
@@ -25,8 +31,9 @@ vi.mock('./profile-cloud-session-mutation', () => ({
     cloudProfileId: cloud.cloudProfileId,
     organizationId: cloud.activeOrgId ?? ''
   })),
-  // Signed out by default: a moved fence then discards the rotation.
-  readLiveCloudSessionMutation: vi.fn(() => null),
+  cloudSessionIdentityKey: vi.fn(() => 'identity'),
+  readLiveCloudSessionMutation: liveFenceMock,
+  recordCloudSessionIdentityMutationIfCurrent: vi.fn(),
   tombstoneCloudSession: vi.fn()
 }))
 
@@ -67,6 +74,7 @@ describe('profile cloud session refresh', () => {
     vi.restoreAllMocks()
     forgetAmbiguousRefreshAttempt('/data\0profile-1')
     saveIfCurrentMock.mockReturnValue('memory-only')
+    liveFenceMock.mockReturnValue({ epoch: 1, identityKey: 'identity' })
     readMock.mockReturnValue({ status: 'found', session: staleSession, persistence: 'memory-only' })
   })
 
@@ -74,7 +82,7 @@ describe('profile cloud session refresh', () => {
     let resolveRefresh!: (value: Record<string, unknown>) => void
     refreshMock.mockReturnValue(new Promise((resolve) => (resolveRefresh = resolve)))
     const refreshing = readFreshOrcaCloudSession(config, active, '/data')
-    saveIfCurrentMock.mockReturnValue(null)
+    liveFenceMock.mockReturnValue(null)
     resolveRefresh({
       accessToken: 'stale-access',
       refreshToken: 'stale-refresh',

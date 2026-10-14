@@ -3,15 +3,13 @@ import type { ActiveOrcaProfileState } from './profile-index-store'
 import {
   clearOrcaCloudSession,
   type OrcaCloudSession,
-  readOrcaCloudSession,
-  saveOrcaCloudSessionIfCurrent
+  readOrcaCloudSession
 } from './profile-cloud-session-store'
 import {
   isAmbiguousCloudRequestFailure,
   OrcaCloudRequestError,
   refreshOrcaCloudSession
 } from './profile-cloud-client'
-import { linkOrcaProfileToCloud } from './profile-cloud-index'
 import type { OrcaCloudSessionExchangeResponse } from './profile-cloud-session-exchange'
 import {
   AmbiguousRefreshReplayBlockedError,
@@ -23,10 +21,13 @@ import {
 import {
   captureCloudSessionMutation,
   cloudSessionIdentity,
-  readLiveCloudSessionMutation,
   tombstoneCloudSession
 } from './profile-cloud-session-mutation'
 import { emitOrcaCloudSessionInvalidated } from './profile-cloud-session-invalidation'
+import {
+  saveRotatedCloudSession,
+  StaleCloudSessionMutationError
+} from './profile-cloud-session-rotation-save'
 
 const CLOUD_SESSION_REFRESH_SKEW_MS = 60_000
 
@@ -49,12 +50,6 @@ export function isOrcaCloudAuthFailure(error: unknown): boolean {
 }
 
 const inflightCloudSessionRefreshes = new Map<string, Promise<OrcaCloudSession>>()
-
-class StaleCloudSessionMutationError extends Error {
-  constructor() {
-    super('stale_cloud_session_mutation')
-  }
-}
 
 function cloudSessionRefreshKey(profileId: string, userDataPath: string): string {
   return `${userDataPath}\0${profileId}`
@@ -166,33 +161,6 @@ async function attemptCloudSessionRefresh(
   }
 }
 
-// Why: once the server rotates, the token we sent is spent, and keeping it means the next
-// refresh replays it and the server revokes the whole family. So an org change or a moved
-// fence still takes the new tokens (identity linkage untouched); only a sign-out, or a store
-// that no longer holds the token we spent, discards them.
-function keepRotatedTokens(
-  profileId: string,
-  userDataPath: string,
-  spent: OrcaCloudSession,
-  rotated: OrcaCloudSessionExchangeResponse
-): OrcaCloudSession {
-  const live = readLiveCloudSessionMutation(profileId, userDataPath)
-  const current = readOrcaCloudSession(profileId, userDataPath)
-  if (!live || current.status !== 'found' || current.session.refreshToken !== spent.refreshToken) {
-    throw new StaleCloudSessionMutationError()
-  }
-  const merged: OrcaCloudSession = {
-    ...current.session,
-    accessToken: rotated.accessToken,
-    refreshToken: rotated.refreshToken,
-    expiresAt: rotated.expiresAt
-  }
-  if (saveOrcaCloudSessionIfCurrent(profileId, userDataPath, merged, live) === null) {
-    throw new StaleCloudSessionMutationError()
-  }
-  return merged
-}
-
 async function refreshStoredCloudSession(
   config: OrcaCloudAuthConfig,
   active: ActiveOrcaProfileState,
@@ -233,21 +201,7 @@ async function refreshStoredCloudSession(
     ) {
       throw new StaleCloudSessionMutationError()
     }
-    const nextSession = {
-      accessToken: refreshed.accessToken,
-      refreshToken: refreshed.refreshToken,
-      expiresAt: refreshed.expiresAt,
-      organizations: refreshed.organizations,
-      capabilities: refreshed.capabilities
-    }
-    if (
-      refreshedIdentity.organizationId === expectedIdentity.organizationId &&
-      saveOrcaCloudSessionIfCurrent(active.profile.id, userDataPath, nextSession, snapshot) !== null
-    ) {
-      linkOrcaProfileToCloud(active.profile.id, refreshed.cloud, userDataPath)
-      return nextSession
-    }
-    return keepRotatedTokens(active.profile.id, userDataPath, session, refreshed)
+    return saveRotatedCloudSession(active.profile.id, userDataPath, session, refreshed, snapshot)
   })()
   inflightCloudSessionRefreshes.set(key, task)
   try {

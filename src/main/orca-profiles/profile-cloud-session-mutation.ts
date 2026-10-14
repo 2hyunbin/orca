@@ -25,7 +25,7 @@ type CloudSessionMutationState = {
   tombstonedIdentityKeys: string[]
 }
 
-function identityKey(identity: CloudSessionIdentity): string {
+export function cloudSessionIdentityKey(identity: CloudSessionIdentity): string {
   return `${identity.localProfileId}\0${identity.cloudUserId}\0${identity.cloudProfileId}\0${identity.organizationId}`
 }
 
@@ -88,7 +88,7 @@ export function captureCloudSessionMutation(
   identity: CloudSessionIdentity,
   userDataPath: string
 ): CloudSessionMutationSnapshot {
-  const key = identityKey(identity)
+  const key = cloudSessionIdentityKey(identity)
   let state = readState(identity.localProfileId, userDataPath)
   if (!state) {
     state = {
@@ -106,7 +106,7 @@ export function recordSuccessfulCloudSessionLogin(
   identity: CloudSessionIdentity,
   userDataPath: string
 ): CloudSessionMutationSnapshot {
-  const key = identityKey(identity)
+  const key = cloudSessionIdentityKey(identity)
   const previous = readState(identity.localProfileId, userDataPath)
   const state: CloudSessionMutationState = {
     version: MUTATION_STATE_VERSION,
@@ -124,7 +124,7 @@ export function recordCloudSessionIdentityMutation(
   identity: CloudSessionIdentity,
   userDataPath: string
 ): CloudSessionMutationSnapshot {
-  const key = identityKey(identity)
+  const key = cloudSessionIdentityKey(identity)
   const previous = readState(identity.localProfileId, userDataPath)
   const state: CloudSessionMutationState = {
     version: MUTATION_STATE_VERSION,
@@ -137,7 +137,7 @@ export function recordCloudSessionIdentityMutation(
 }
 
 export function tombstoneCloudSession(identity: CloudSessionIdentity, userDataPath: string): void {
-  const key = identityKey(identity)
+  const key = cloudSessionIdentityKey(identity)
   const previous = readState(identity.localProfileId, userDataPath)
   const tombstones = new Set(previous?.tombstonedIdentityKeys ?? [])
   tombstones.add(key)

@@ -1,9 +1,6 @@
 import type { OrcaCloudAuthConfig } from './profile-cloud-auth-config'
-import {
-  OrcaCloudRequestError,
-  refreshOrcaCloudSession,
-  selectOrcaCloudOrg
-} from './profile-cloud-client'
+import { OrcaCloudRequestError, selectOrcaCloudOrg } from './profile-cloud-client'
+import { forceRefreshOrcaCloudSession } from './profile-cloud-session-refresh'
 import { linkOrcaProfileToCloud } from './profile-cloud-index'
 import type { ActiveOrcaProfileState } from './profile-index-store'
 import {
@@ -45,20 +42,17 @@ export async function selectCloudOrgWithMutationFence(input: {
       if (!(error instanceof OrcaCloudRequestError) || error.statusCode !== 401) {
         throw error
       }
-      const refreshed = await refreshOrcaCloudSession(input.config, workingSession)
-      if (
-        refreshed.cloud.userId !== cloud.userId ||
-        refreshed.cloud.cloudProfileId !== cloud.cloudProfileId
-      ) {
-        throw new Error('orca_cloud_identity_changed_during_org_selection')
+      // Why: the shared single-flight refresh saves the rotation; a private one raced it.
+      const refreshed = await forceRefreshOrcaCloudSession(
+        input.config,
+        input.active,
+        input.userDataPath,
+        workingSession
+      )
+      if (refreshed.status !== 'found') {
+        throw error
       }
-      workingSession = {
-        accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
-        expiresAt: refreshed.expiresAt,
-        organizations: refreshed.organizations,
-        capabilities: refreshed.capabilities
-      }
+      workingSession = refreshed.session
       selected = await selectOrcaCloudOrg(input.config, workingSession, input.orgId)
     }
     if (
@@ -68,9 +62,15 @@ export async function selectCloudOrgWithMutationFence(input: {
     ) {
       throw new Error('orca_cloud_org_selection_identity_mismatch')
     }
+    // Why: a refresh may have rotated the stored tokens meanwhile; writing back the
+    // tokens this started with would store a spent refresh token.
+    const latest = readOrcaCloudSession(input.active.profile.id, input.userDataPath)
+    if (latest.status !== 'found') {
+      throw new Error('stale_cloud_session_mutation')
+    }
     const nextSession: OrcaCloudSession = {
-      ...workingSession,
-      organizations: selected.organizations ?? workingSession.organizations,
+      ...latest.session,
+      organizations: selected.organizations ?? latest.session.organizations,
       capabilities: selected.capabilities
     }
     if (
