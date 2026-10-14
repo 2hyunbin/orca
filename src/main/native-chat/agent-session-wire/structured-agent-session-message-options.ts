@@ -28,11 +28,7 @@ export async function writeStructuredAgentSessionOption(
     publish: () => session && context.publish(sessionId, session.journal)
   }
   if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID || !session?.child) {
-    return recordStructuredAgentSessionOptionIntent(
-      context.deps,
-      { ...ctx, now: () => context.now() },
-      input
-    )
+    return recordStructuredAgentSessionOptionIntent(context.deps, ctx, input)
   }
   // Held where a start is, so a close, a Stop admitted now or quit ends the wait from outside.
   const wait = context.acquireAborts.begin(sessionId)
