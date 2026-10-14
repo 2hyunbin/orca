@@ -2,14 +2,18 @@ import type { FolderWorkspace } from './folder-workspace-types'
 import type {
   OrcadMigrationCatalogPayload,
   OrcadMigrationImportReceipt,
-  OrcadMigrationLocalWslManifestSource,
   OrcadMigrationManifest,
   OrcadMigrationManifestSource
 } from './orcad-migration-manifest'
-import { isOrcadMigrationLocalWslSource } from './orcad-migration-source-kind'
+import {
+  assertLocalWslScopeMatchesPayload,
+  parseLocalWslSource
+} from './orcad-migration-wsl-source-validation'
 import type { ProjectGroup } from './project-group-types'
 import type { Repo } from './repo-types'
 import {
+  MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES,
+  MAX_ORCAD_MIGRATION_REPOSITORIES,
   assertUniqueIds,
   boundedArray,
   boundedStringArray,
@@ -23,12 +27,11 @@ import {
   parseOrcadMigrationDormantState
 } from './orcad-migration-dormant-state-validation'
 
+export { MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES, MAX_ORCAD_MIGRATION_REPOSITORIES }
 export const ORCAD_MIGRATION_MANIFEST_VERSION = 1 as const
 export type OrcadMigrationManifestVersion = typeof ORCAD_MIGRATION_MANIFEST_VERSION
 export const MAX_ORCAD_MIGRATION_MANIFEST_BYTES = 768 * 1024
-export const MAX_ORCAD_MIGRATION_REPOSITORIES = 1_024
 export const MAX_ORCAD_MIGRATION_PROJECT_GROUPS = 4_096
-export const MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES = 16_384
 export const MAX_ORCAD_MIGRATION_IMPORT_RECEIPTS = 64
 
 export function parseOrcadMigrationManifest(value: unknown): OrcadMigrationManifest {
@@ -162,53 +165,6 @@ function parseSource(value: unknown): OrcadMigrationManifestSource {
     sshTargetId: requiredString(value.sshTargetId, 'source.sshTargetId'),
     sshTargetGeneration: generation === null ? null : Number(generation),
     targetLabel: requiredString(value.targetLabel, 'source.targetLabel')
-  }
-}
-
-function parseLocalWslSource(value: Record<string, unknown>): OrcadMigrationLocalWslManifestSource {
-  // A non-SSH source naming an SSH target could only be a confused or forged manifest.
-  if (value.sshTargetId !== undefined) {
-    throw new Error('orcad_migration_manifest_source_invalid')
-  }
-  const generation = value.generation
-  if (!Number.isSafeInteger(generation) || Number(generation) < 1) {
-    throw new Error('orcad_migration_manifest_source_generation_invalid')
-  }
-  return {
-    kind: 'local-wsl',
-    distro: requiredString(value.distro, 'source.distro'),
-    ...(value.distroGuid === undefined
-      ? {}
-      : { distroGuid: requiredString(value.distroGuid, 'source.distroGuid') }),
-    scopeRepoIds: boundedStringArray(
-      value.scopeRepoIds,
-      MAX_ORCAD_MIGRATION_REPOSITORIES,
-      'source.scopeRepoIds_invalid'
-    ),
-    scopeFolderWorkspaceIds: boundedStringArray(
-      value.scopeFolderWorkspaceIds,
-      MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES,
-      'source.scopeFolderWorkspaceIds_invalid'
-    ),
-    generation: Number(generation)
-  }
-}
-
-/** The catalog a WSL source moves is exactly its declared scope; the host never infers scope. */
-function assertLocalWslScopeMatchesPayload(manifest: OrcadMigrationManifest): void {
-  const { source, payload } = manifest
-  if (!isOrcadMigrationLocalWslSource(source)) {
-    return
-  }
-  const sameIds = (declared: readonly string[], rows: readonly { id: string }[]): boolean => {
-    const ids = new Set(rows.map((row) => row.id))
-    return declared.length === ids.size && declared.every((id) => ids.has(id))
-  }
-  if (
-    !sameIds(source.scopeRepoIds, payload.repositories) ||
-    !sameIds(source.scopeFolderWorkspaceIds, payload.folderWorkspaces)
-  ) {
-    throw new Error('orcad_migration_manifest_source_scope_mismatch')
   }
 }
 
