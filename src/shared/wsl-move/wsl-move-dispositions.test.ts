@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { getDefaultSettings } from '../../../shared/constants'
+import { getDefaultSettings } from '../constants'
 import {
   PERSISTED_STATE_DISPOSITIONS,
   WORKSPACE_SESSION_DISPOSITIONS,
@@ -15,7 +15,7 @@ import {
 } from './wsl-move-storage-dispositions'
 import { SETTINGS_KEYS_NAMING_A_PATH, UI_STATE_DISPOSITIONS } from './wsl-move-ui-dispositions'
 
-const REPO_ROOT = join(__dirname, '../../../..')
+const REPO_ROOT = join(__dirname, '../../..')
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(join(REPO_ROOT, dir), {
@@ -47,6 +47,8 @@ describe('WSL mover dispositions', () => {
 
   it('lists every renderer module that uses localStorage', () => {
     const users = [...sourceFiles('src/renderer/src'), ...sourceFiles('src/shared')]
+      // These tables name localStorage; they do not use it.
+      .filter((path) => !path.startsWith('src/shared/wsl-move/'))
       .filter((path) => /\blocalStorage\b/.test(readFileSync(join(REPO_ROOT, path), 'utf8')))
       .sort()
     expect(users).toEqual(Object.keys(LOCAL_STORAGE_MODULE_DISPOSITIONS).sort())

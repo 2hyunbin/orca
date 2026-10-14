@@ -8,7 +8,7 @@ import {
   type WslMoverProfileName
 } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
 import { findMissingWslMoveAliases } from './wsl-move-compatibility-aliases'
-import { PERSISTED_STATE_DISPOSITIONS } from './wsl-move-dispositions'
+import { PERSISTED_STATE_DISPOSITIONS } from '../../../shared/wsl-move/wsl-move-dispositions'
 import {
   projectWslMoveState,
   WSL_MOVE_PROJECTED_STATE_FIELDS,
@@ -31,7 +31,7 @@ const UNC_APP = `repo-a::\\\\wsl.localhost\\${WSL_MOVER_DISTRO}\\home\\dev\\app`
 describe('projectWslMoveState scope', () => {
   it('compares or defers every state field the move carries', () => {
     const moved = Object.entries(PERSISTED_STATE_DISPOSITIONS)
-      .filter(([, row]) => row.disposition === 'move' || row.disposition === 'per-field')
+      .filter(([, row]) => row.disposition === 'move')
       .map(([field]) => field)
     const accounted = new Set<string>([
       ...WSL_MOVE_PROJECTED_STATE_FIELDS,

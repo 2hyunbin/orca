@@ -5,7 +5,7 @@ import {
   wslMoverProfile,
   wslMoverProfileScope
 } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
-import { WORKSPACE_SESSION_DISPOSITIONS } from './wsl-move-dispositions'
+import { WORKSPACE_SESSION_DISPOSITIONS } from '../../../shared/wsl-move/wsl-move-dispositions'
 import { createWslMoveStringNormalizer, isRecord } from './wsl-move-canonical-form'
 import { projectWslMoveState, type WslMoveProjectionInput } from './wsl-move-state-projection'
 

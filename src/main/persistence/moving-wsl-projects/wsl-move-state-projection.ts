@@ -28,7 +28,7 @@ import {
   createWslMoveStringNormalizer,
   isRecord
 } from './wsl-move-canonical-form'
-import { WSL_MOVE_DROPPED_PTY_BINDING_KEYS } from './wsl-move-dispositions'
+import { WSL_MOVE_DROPPED_PTY_BINDING_KEYS } from '../../../shared/wsl-move/wsl-move-dispositions'
 import {
   fieldOf,
   pickKeys,
@@ -83,7 +83,7 @@ export const WSL_MOVE_PROJECTION_DEFERRED = {
   nativeChatJournalRecords: 'D1b-6.'
 } as const
 
-/** Names of the top-level state fields the projection compares. */
+/** Top-level state fields the projection compares; session and UI have per-field tables. */
 export const WSL_MOVE_PROJECTED_STATE_FIELDS = [
   'repos',
   'projects',
@@ -97,9 +97,7 @@ export const WSL_MOVE_PROJECTED_STATE_FIELDS = [
   'worktreeLineageById',
   'workspaceLineageByChildKey',
   'automations',
-  'automationRuns',
-  'workspaceSession',
-  'ui'
+  'automationRuns'
 ] as const satisfies readonly (keyof PersistedState)[]
 
 /** Host bindings per row kind: what a move changes by definition. */

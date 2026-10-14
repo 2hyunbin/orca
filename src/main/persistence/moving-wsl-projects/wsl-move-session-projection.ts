@@ -8,8 +8,8 @@ import {
 } from '../../../shared/workspace-session-host-records'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { isRecord, parseEditorFileId } from './wsl-move-canonical-form'
-import { WORKSPACE_SESSION_DISPOSITIONS } from './wsl-move-dispositions'
-import { UI_STATE_DISPOSITIONS } from './wsl-move-ui-dispositions'
+import { WORKSPACE_SESSION_DISPOSITIONS } from '../../../shared/wsl-move/wsl-move-dispositions'
+import { UI_STATE_DISPOSITIONS } from '../../../shared/wsl-move/wsl-move-ui-dispositions'
 
 export type WslMoveOwnerInScope = (owner: string | undefined | null) => boolean
 type OwnerInScope = WslMoveOwnerInScope

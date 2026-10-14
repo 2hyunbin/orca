@@ -6,8 +6,8 @@
  * sibling `wsl-move-*-dispositions.ts` files. `item` numbers are the inventory rows in the
  * mover design (docs/design/wsl-via-orcad-lossless-mover.md, section 2).
  */
-import type { PersistedState } from '../../../shared/persisted-state-types'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import type { PersistedState } from '../persisted-state-types'
+import type { WorkspaceSessionState } from '../workspace-session-state-types'
 
 export type WslMoveDisposition =
   /** Carried in the migration manifest; the path stage rewrites UNC to Linux. */
