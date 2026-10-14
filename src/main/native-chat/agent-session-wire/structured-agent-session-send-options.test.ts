@@ -113,8 +113,7 @@ describe('an opening message created with a model and effort', () => {
         fence: rest.store.getRecord(SESSION)!.lease.runtimeFence,
         acquisitionGeneration: (await rest.adapter.acquire.mock.results[0]!.value)
           .acquisitionGeneration,
-        reportedOptions: options,
-        restoreSkippedOptions: []
+        reportedOptions: options
       })
     return { first, proveStart }
   }
