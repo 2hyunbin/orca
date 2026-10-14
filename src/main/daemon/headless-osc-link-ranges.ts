@@ -67,7 +67,9 @@ function collectOscLinkRangesInRows(
   // per call unless handed a target, which is a per-cell allocation across the
   // entire scrollback. See the IBufferLine.getCell docs.
   const scratchCell = buffer.getNullCell()
-  for (let row = startRow; row < endRow; row += 1) {
+  // Restored ranges need mapping, but an empty xterm registry still needs no cell scan.
+  const scanEndRow = hasNoRegisteredOscLinks(service) ? startRow : endRow
+  for (let row = startRow; row < scanEndRow; row += 1) {
     const line = buffer.getLine(row)
     if (!line) {
       continue

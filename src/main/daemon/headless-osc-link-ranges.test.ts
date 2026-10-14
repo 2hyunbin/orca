@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Terminal } from '@xterm/headless'
+import { collectHeadlessOscLinkRanges } from './headless-osc-link-ranges'
 import { HeadlessEmulator } from './headless-emulator'
 
 // Why this suite: collectHeadlessOscLinkRanges skips its per-cell scan when
@@ -59,5 +61,45 @@ describe('headless OSC link ranges', () => {
     const uris = (emulator.getSnapshot().oscLinks ?? []).map((range) => range.uri)
     expect(uris).toContain('https://example.com/1')
     expect(uris).toContain('https://example.com/2')
+  })
+
+  it('maps saved links without reading cells when xterm has no live link registration', () => {
+    const terminal = new Terminal({
+      cols: 120,
+      rows: 24,
+      scrollback: 5_000,
+      allowProposedApi: true
+    })
+    const buffer = terminal.buffer.active
+    const readLine = vi.spyOn(buffer, 'getLine')
+    const restored = { row: 0, startCol: -3, endCol: 130, uri: 'https://example.com/restored' }
+    try {
+      const ranges = collectHeadlessOscLinkRanges(terminal, undefined, [
+        restored,
+        restored,
+        { ...restored, row: 24 },
+        { ...restored, startCol: 120 }
+      ])
+
+      expect(ranges).toEqual([{ ...restored, startCol: 0, endCol: 120 }])
+      expect(readLine).not.toHaveBeenCalled()
+    } finally {
+      readLine.mockRestore()
+      terminal.dispose()
+    }
+  })
+
+  it('includes live links that arrive after restored ranges were seeded', async () => {
+    emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
+    const restored = { row: 0, startCol: 0, endCol: 4, uri: 'https://example.com/restored' }
+    emulator.setRestoredOscLinks([restored])
+    expect(emulator.getSnapshot().oscLinks).toEqual([restored])
+
+    await emulator.write(`\x1b[2;1H${link('https://example.com/live', 'LIVE')}`)
+
+    expect(emulator.getSnapshot().oscLinks).toEqual([
+      { row: 1, startCol: 0, endCol: 4, uri: 'https://example.com/live' },
+      restored
+    ])
   })
 })
