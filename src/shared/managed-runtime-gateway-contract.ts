@@ -27,7 +27,11 @@ export const ManagedRuntimeGatewayDescriptorSchema = z.strictObject({
   runtimeId: EnvironmentIdSchema,
   sshTargetId: z.string().min(1).max(256),
   targetGeneration: GenerationSchema,
-  name: z.string().min(1).max(200)
+  name: z.string().min(1).max(200),
+  childHostKeyFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional()
 })
 export type ManagedRuntimeGatewayDescriptor = z.infer<typeof ManagedRuntimeGatewayDescriptorSchema>
 

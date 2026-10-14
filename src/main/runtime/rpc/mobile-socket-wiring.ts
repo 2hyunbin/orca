@@ -14,6 +14,7 @@ import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-mem
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { RpcBinarySender } from './rpc-binary-sender'
 import type { ManagedWorkspaceRoute } from '../managed-workspace-gateway-contract'
+import { parseManagedWorkspaceGatewayCredential } from '../../../shared/managed-workspace-gateway-credential'
 
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
@@ -208,7 +209,17 @@ export class MobileSocketWiring {
         requireV2: metadata.transport === 'relay',
         outboundMemoryBudget: this.outboundMemoryBudget,
         resolveAuthenticatedDevice: (token) => {
-          const device = this.deviceRegistry.validateToken(token)
+          const gateway = parseManagedWorkspaceGatewayCredential(token)
+          const route = metadata.transport === 'direct' ? metadata.managedGateway : undefined
+          if (
+            gateway &&
+            (!route ||
+              gateway.environmentId !== route.environmentId ||
+              gateway.targetGeneration !== route.targetGeneration)
+          ) {
+            return null
+          }
+          const device = this.deviceRegistry.validateToken(gateway?.parentToken ?? token)
           if (!device) {
             return null
           }
@@ -227,7 +238,12 @@ export class MobileSocketWiring {
           if (metadata.transport === 'relay' && metadata.relayDeviceId !== device.deviceId) {
             return null
           }
-          return toAuthenticatedDevice(device)
+          return {
+            ...toAuthenticatedDevice(device),
+            ...(gateway
+              ? { clientId: token, deviceToken: token, gatewayParentToken: gateway.parentToken }
+              : {})
+          }
         },
         resolveAuthenticatedDeviceKey: (deviceId) => {
           const lookup = this.deviceRegistry.lookupDeviceKey(deviceId)

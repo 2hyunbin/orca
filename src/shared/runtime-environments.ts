@@ -6,6 +6,7 @@ import {
 } from './paired-runtime-connection'
 import { classifyRemotePairingHostname } from './remote-pairing-address'
 import { RuntimeEnvironmentReconciliationRecordSchema } from './runtime-environment-reconciliation-record'
+import { RuntimeEnvironmentGatewayLinkSchema } from './runtime-environment-gateway-link'
 
 export const RuntimeAccessEndpointSchema = z.object({
   id: z.string().min(1),
@@ -62,6 +63,8 @@ export type RuntimeSshAccessOperation = z.infer<typeof RuntimeSshAccessOperation
 
 /** The fields shipped builds read and rewrite in orca-environments.json. */
 export const PersistedRuntimeEnvironmentSchema = z.object({
+  kind: z.literal('managed-gateway').optional(),
+  managedGateway: RuntimeEnvironmentGatewayLinkSchema.optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   createdAt: z.number().finite(),
@@ -83,6 +86,7 @@ export type PersistedRuntimeEnvironment = z.infer<typeof PersistedRuntimeEnviron
  * fields never enter orca-environments.json: shipped builds strip unknown keys when they rewrite it.
  */
 export const KnownRuntimeEnvironmentSchema = PersistedRuntimeEnvironmentSchema.extend({
+  gatewayConnectionBlocked: z.boolean().optional(),
   sshAccess: RuntimeSshAccessLinkSchema.optional(),
   pendingSshAccessOperation: RuntimeSshAccessOperationSchema.optional(),
   orcadDeployment: OrcadDeploymentLinkSchema.optional(),
@@ -90,6 +94,15 @@ export const KnownRuntimeEnvironmentSchema = PersistedRuntimeEnvironmentSchema.e
   orcadMigratedAt: z.string().datetime().optional(),
   reconciliation: RuntimeEnvironmentReconciliationRecordSchema.optional()
 })
+  .refine(
+    (environment) =>
+      environment.kind !== 'managed-gateway' ||
+      (!environment.connectionDependency &&
+        !environment.sshAccess &&
+        !environment.pendingSshAccessOperation &&
+        !environment.orcadDeployment),
+    { message: 'Managed gateway references cannot own independent SSH access.', path: ['kind'] }
+  )
   .refine(
     ({ pendingSshAccessOperation, sshAccess, orcadDeployment, connectionDependency }) =>
       !pendingSshAccessOperation || (!sshAccess && !orcadDeployment && !connectionDependency),
@@ -212,7 +225,12 @@ export function isUserManagedRuntimeEnvironment(
 
 type PreferredEndpointSource = Pick<
   KnownRuntimeEnvironment,
-  'name' | 'endpoints' | 'preferredEndpointId' | 'pairedDeviceId'
+  | 'name'
+  | 'endpoints'
+  | 'preferredEndpointId'
+  | 'pairedDeviceId'
+  | 'kind'
+  | 'gatewayConnectionBlocked'
 >
 
 function preferredEndpoint(environment: PreferredEndpointSource) {
@@ -228,6 +246,9 @@ function preferredEndpoint(environment: PreferredEndpointSource) {
 export function getPreferredPairedRuntimeConnection(
   environment: PreferredEndpointSource
 ): PairedRuntimeConnection {
+  if (environment.kind === 'managed-gateway' && environment.gatewayConnectionBlocked) {
+    throw new Error('This devbox’s control host changed. Reconnect it to refresh workspace access.')
+  }
   const endpoint = preferredEndpoint(environment)
   return pairedRuntimeConnectionFromOffer({
     endpoint: endpoint.endpoint,

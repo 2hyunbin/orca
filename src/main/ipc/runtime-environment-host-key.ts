@@ -14,6 +14,19 @@ import {
 export function publicRuntimeEnvironmentWithHostKey(
   environment: KnownRuntimeEnvironment
 ): PublicKnownRuntimeEnvironment {
+  if (environment.kind === 'managed-gateway') {
+    return {
+      ...redactRuntimeEnvironment(environment),
+      ...(environment.managedGateway?.descriptor.childHostKeyFingerprint
+        ? {
+            hostKeyFingerprint: environment.managedGateway.descriptor.childHostKeyFingerprint.slice(
+              0,
+              32
+            )
+          }
+        : {})
+    }
+  }
   const publicKey = getPreferredPairedRuntimeConnection(environment).hostPublicKeyB64
   return {
     ...redactRuntimeEnvironment(environment),

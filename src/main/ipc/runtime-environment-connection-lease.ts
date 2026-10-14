@@ -16,7 +16,7 @@ export class RuntimeEnvironmentConnectionChangedError extends Error {
 
 export async function prepareRuntimeEnvironmentConnectionLease(
   userDataPath: string,
-  expected: { environmentId: string; pairingRevision: number; runtimeId: string },
+  expected: { environmentId: string; pairingRevision: number; runtimeId?: string },
   onInvalidated: () => void,
   signal?: AbortSignal
 ) {
@@ -46,7 +46,9 @@ export async function prepareRuntimeEnvironmentConnectionLease(
     }
   }
   const invalidate = (): void => {
-    if (retired) {return}
+    if (retired) {
+      return
+    }
     close()
     onInvalidated()
   }
@@ -58,12 +60,18 @@ export async function prepareRuntimeEnvironmentConnectionLease(
   }
   signal?.addEventListener('abort', invalidate, { once: true })
   try {
-    if (!isCurrent()) {throw new RuntimeEnvironmentConnectionChangedError()}
+    if (!isCurrent()) {
+      throw new RuntimeEnvironmentConnectionChangedError()
+    }
     const prepared = await resolveManagedRuntimeEnvironment(userDataPath, environment.id)
-    if (!isCurrent()) {throw new RuntimeEnvironmentConnectionChangedError()}
+    if (!isCurrent()) {
+      throw new RuntimeEnvironmentConnectionChangedError()
+    }
     const pairing = getPreferredPairedRuntimeConnection(prepared)
     fingerprint = JSON.stringify(pairing)
-    if (!isCurrent()) {throw new RuntimeEnvironmentConnectionChangedError()}
+    if (!isCurrent()) {
+      throw new RuntimeEnvironmentConnectionChangedError()
+    }
     return { pairing, isCurrent, close }
   } catch (error) {
     close()

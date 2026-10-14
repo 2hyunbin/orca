@@ -51,11 +51,17 @@ function recordId(raw: unknown): string | undefined {
 function parseRecord(raw: unknown): PersistedRuntimeEnvironment | undefined {
   // Why: a `kind` marks a record type this build predates; reading it as a plain pairing would
   // strip the kind and rewrite it as one.
-  if (typeof raw === 'object' && raw !== null && 'kind' in raw) {
+  if (typeof raw === 'object' && raw !== null && 'kind' in raw && raw.kind !== 'managed-gateway') {
     return undefined
   }
   const parsed = PersistedRuntimeEnvironmentSchema.safeParse(raw)
-  return parsed.success ? parsed.data : undefined
+  if (
+    !parsed.success ||
+    (parsed.data.kind === 'managed-gateway') !== (parsed.data.managedGateway !== undefined)
+  ) {
+    return undefined
+  }
+  return parsed.data
 }
 
 /** The envelope must be valid; individual records that are not are set aside, not rejected. */

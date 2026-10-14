@@ -26,6 +26,20 @@ export async function resolveManagedRuntimeEnvironment(
   selector: string
 ): Promise<ReturnType<typeof resolveEnvironment>> {
   const environment = resolveEnvironment(userDataPath, selector)
+  if (environment.kind === 'managed-gateway' && environment.managedGateway) {
+    if (
+      environment.gatewayConnectionBlocked ||
+      resolveEnvironment(userDataPath, environment.managedGateway.controllerEnvironmentId).kind ===
+        'managed-gateway'
+    ) {
+      throw new Error('The managed workspace needs a valid control host connection')
+    }
+    await resolveManagedRuntimeEnvironment(
+      userDataPath,
+      environment.managedGateway.controllerEnvironmentId
+    )
+    return resolveEnvironment(userDataPath, environment.id)
+  }
   await ensureOrcadManagedTunnel(userDataPath, environment.id)
   // Why: a server that stopped (idle, killed, host rebooted) starts before the call that needs it.
   const serving = await verifyOrcadManagedServing(userDataPath, environment.id)

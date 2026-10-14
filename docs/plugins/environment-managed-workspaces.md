@@ -16,7 +16,7 @@ Reuse the existing managed-server registration, saved target generations, runtim
 
 A public descriptor carries version, controller runtime identity, environment identity, child runtime identity, SSH target identity and target generation. It contains no credentials. Route `/_orca/managed/<encoded-environment-id>/<generation>` is reserved for this connection. The descriptor is not an authorization grant.
 
-The capability `managedServer.workspace-gateway.v1` must be negotiated before constructing a gateway endpoint. It is deliberately not advertised yet. Transport rejects this namespace unless a gateway is composed; malformed and noncanonical variants always refuse before root RPC. Rejected connections retain the existing capacity limit and bounded close timeout. Other legacy transport paths retain their behavior.
+The desktop requires `managedServer.workspace-discovery.v1` before requesting a verified descriptor or constructing an endpoint. The earlier `managedServer.workspace-gateway.v1` foundation capability remains unadvertised. Transport rejects this namespace unless a gateway is composed; malformed and noncanonical variants always refuse before root RPC. Rejected connections retain the existing capacity limit and bounded close timeout. Other legacy transport paths retain their behavior.
 
 Root-path direct WS/WSS endpoints are the initial route-construction contract. Custom paths and relay endpoints refuse construction. Their support needs a separately negotiated transport path; do not silently downgrade to the controller or claim those endpoints are qualified.
 
@@ -28,7 +28,7 @@ Authenticate the incoming socket with the controller's existing encrypted device
 
 Each incoming connection owns its outgoing child session. Reuse the authenticated passthrough machinery and bounded queues; extend it for binary terminal frames rather than building a second terminal protocol. Closing or revoking either side closes its counterpart, cancels pending requests and retires stream ownership. Slow consumers, failed setup and controller shutdown must release sockets, timers, queues and child grants. Avoid per-request SSH subprocesses.
 
-Persist only an additive gateway link in the existing runtime sidecar. Older peers may ignore the link but must never interpret the child's URL as the controller root. Do not store the controller's pairing credential in the child's independent pairing record. Generation changes require refreshed descriptors; stale URLs refuse access.
+Persist an inert `kind: managed-gateway` reference in the existing environment store. Older builds retain unknown record kinds without opening them. The existing sidecar strips unknown fields, so it cannot safely hold this connection identity. Derive the controller credential in memory and always scrub it when writing the child record. Generation changes require refreshed descriptors; stale URLs refuse access.
 
 ## Qualification before enabling
 
@@ -58,4 +58,12 @@ Terminal identity fields are remapped separately from commands and file contents
 
 Qualification uses two real localhost encrypted RPC servers with controlled store and binary-stream fixtures. Separate resolver checks hold connection preparation while changing credentials, and verify ownership, generation, confirmed identity and provider withdrawal. This is backend integration proof, not a native terminal, real SSH gateway, or normal-UI workspace journey.
 
-The gateway capability remains unadvertised. Child discovery, persisted links, controller-aware client authentication and the ordinary desktop workspace flow remain required. Newly deployed servers with unconfirmed identity refuse routing until discovery verifies them. Custom-path/relay, mixed-peer, native interruption and full platform/release gates remain open.
+The gateway capability remains unadvertised. Custom-path/relay, mixed-peer, native interruption and full platform/release gates remain open.
+
+## Discovery and desktop workspace selection
+
+`managedServer.workspace-discovery.v1` is advertised only by a controller with a discovery implementation. `managedServer.workspace.describe` accepts a saved SSH target ID and reviewed generation, verifies the child through its existing private pairing, and learns its current process identity. Runtime IDs identify process incarnations; host keys remain the durable pairing identity. The descriptor exposes no child credential.
+
+The desktop stores a controller-bound reference and derives an audience-bound credential for its canonical child route. Root-path or wrong-generation authentication refuses that credential. An older controller cannot accept the wrapped value as its ordinary paired bearer, even if its transport accepts unrelated paths. Removing or re-pairing the controller blocks dependent references. Child status retains the child runtime identity and reports the authenticated controller device to the desktop; temporary child session credentials remain private.
+
+After reviewing and connecting a provider resource, **Open workspace** uses the existing Add Project dialog with the child selected. It supports Git projects and non-Git folders without changing the default settings host. While the requested host is absent or unavailable, project creation waits instead of falling back to Local. Rendered native qualification remains required before claiming this journey is complete.

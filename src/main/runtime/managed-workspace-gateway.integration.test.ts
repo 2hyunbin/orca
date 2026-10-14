@@ -193,3 +193,50 @@ it('closes both sides when the desktop pairing is revoked', async () => {
   await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1))
   await vi.waitFor(() => expect(f.child.rpc.readClientActivity().openConnections).toBe(0))
 })
+
+it('authenticates audience-bound gateway credentials and reports the controller device with child runtime identity', async () => {
+  const f = await fixture()
+  const { managedWorkspaceGatewayCredential } =
+    await import('../../shared/managed-workspace-gateway-credential')
+  const connection = {
+    ...f.gateway,
+    credential: {
+      kind: 'token' as const,
+      deviceToken: managedWorkspaceGatewayCredential(f.controller.pairing.deviceToken, 'devbox', 1)
+    }
+  }
+  const status = await sendRemoteRuntimeRequest(connection, 'status.get', {}, 5000)
+  expect(status).toMatchObject({
+    ok: true,
+    _meta: { runtimeId: f.child.runtime.getRuntimeId() },
+    result: {
+      runtimeId: f.child.runtime.getRuntimeId(),
+      pairedDeviceId: f.controller.pairing.pairedDeviceId
+    }
+  })
+  expect(f.calls).toEqual({ controller: 0, child: 0 })
+})
+
+it('rejects gateway credentials at the controller root and at another target generation', async () => {
+  const f = await fixture()
+  const { managedWorkspaceGatewayCredential } =
+    await import('../../shared/managed-workspace-gateway-credential')
+  const credential = {
+    kind: 'token' as const,
+    deviceToken: managedWorkspaceGatewayCredential(f.controller.pairing.deviceToken, 'devbox', 1)
+  }
+  for (const endpoint of [
+    f.controller.connection.endpoint,
+    f.gateway.endpoint.replace(/\/1$/u, '/2')
+  ]) {
+    await expect(
+      sendRemoteRuntimeRequest(
+        { ...f.gateway, endpoint, credential },
+        'terminal.gatewayProbe',
+        {},
+        5000
+      )
+    ).rejects.toMatchObject({ code: 'unauthorized' })
+  }
+  expect(f.calls).toEqual({ controller: 0, child: 0 })
+})

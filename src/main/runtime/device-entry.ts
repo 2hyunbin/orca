@@ -4,6 +4,7 @@ import type { MobilePushRegistration } from '../../shared/mobile-push-contract'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { RelayDeviceBinding } from './relay/relay-revoke-outbox'
 import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
+import { parseManagedWorkspaceGatewayCredential } from '../../shared/managed-workspace-gateway-credential'
 
 export type DeviceEntry = {
   deviceId: string
@@ -92,15 +93,24 @@ export type AuthenticatedPrincipalBinding = {
   deviceId: string
   credentialRevision: number
   deviceToken?: string
+  gatewayParentToken?: string
 }
 
 export function isStillAuthenticated(
   device: DeviceEntry,
   principal: AuthenticatedPrincipalBinding
 ): boolean {
+  if (
+    principal.gatewayParentToken !== undefined &&
+    parseManagedWorkspaceGatewayCredential(principal.deviceToken ?? '')?.parentToken !==
+      principal.gatewayParentToken
+  ) {
+    return false
+  }
   return (
     (device.credentialRevision ?? 0) === principal.credentialRevision &&
-    (principal.deviceToken === undefined || device.token === principal.deviceToken) &&
+    (principal.deviceToken === undefined ||
+      device.token === (principal.gatewayParentToken ?? principal.deviceToken)) &&
     // Why: a keyed socket must not survive its row turning back into (or being replaced by) a token row.
     (principal.deviceToken !== undefined || device.credentialKind === 'device-key')
   )

@@ -1,5 +1,7 @@
 import { writeSecureJsonFileWithinLimit } from './bounded-secure-json-file'
 import { JsonStringifyByteLimitError } from './node-bounded-json-stringify'
+import { overlayRuntimeEnvironmentGateways } from './runtime-environment-gateway-overlay'
+import { MANAGED_GATEWAY_INERT_TOKEN } from './runtime-environment-gateway-link'
 import {
   RuntimeEnvironmentStoreSchema,
   type KnownRuntimeEnvironment,
@@ -75,11 +77,13 @@ export function readEnvironmentStore(
   }
   return {
     version: 1,
-    environments: store.environments
-      .filter((environment) => !isHidden(environment.id))
-      .map((environment) =>
-        overlayRuntimeEnvironmentSidecar(environment, sidecar.entries[environment.id])
-      )
+    environments: overlayRuntimeEnvironmentGateways(
+      store.environments
+        .filter((environment) => !isHidden(environment.id))
+        .map((environment) =>
+          overlayRuntimeEnvironmentSidecar(environment, sidecar.entries[environment.id])
+        )
+    )
   }
 }
 
@@ -89,7 +93,25 @@ export function readEnvironmentStore(
  */
 export function writeEnvironmentStore(userDataPath: string, store: RuntimeEnvironmentStore): void {
   const path = getEnvironmentStorePath(userDataPath)
-  const environments = RuntimeEnvironmentStoreSchema.parse(store).environments
+  const environments = RuntimeEnvironmentStoreSchema.parse(store).environments.map(
+    (environment) => {
+      if ((environment.kind === 'managed-gateway') !== (environment.managedGateway !== undefined)) {
+        throw new RuntimeEnvironmentStoreError(
+          'invalid_argument',
+          'Invalid managed gateway reference'
+        )
+      }
+      return environment.kind === 'managed-gateway'
+        ? {
+            ...environment,
+            endpoints: environment.endpoints.map((endpoint) => ({
+              ...endpoint,
+              deviceToken: MANAGED_GATEWAY_INERT_TOKEN
+            }))
+          }
+        : environment
+    }
+  )
   const onDisk = readEnvironmentStoreRecords(userDataPath)
   const readableIds = new Set(onDisk.environments.map((environment) => environment.id))
   const unreadableIds = new Set(onDisk.unreadable.map((record) => record.id))

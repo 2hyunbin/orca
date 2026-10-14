@@ -24,6 +24,7 @@ import {
   ManagedRuntimeSessionOpenSchema,
   ManagedRuntimeSessionSelectorSchema
 } from '../managed-runtime-session-contract'
+import { ManagedWorkspaceDiscoverySelectorSchema } from '../managed-workspace-discovery-contract'
 import {
   PairingGetEndpointsParamsSchema,
   PairingProvisionRelayParamsSchema
@@ -1085,6 +1086,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'managedServer.status': ManagedServerSelector,
   'managedServer.stop': ManagedServerSelector,
   'managedServer.update': ManagedServerUpdate,
+  'managedServer.workspace.describe': ManagedWorkspaceDiscoverySelectorSchema,
   'markdown.readTab': ActivateTab,
   'markdown.saveTab': SaveMarkdownTab,
   'mobileRelay.hosts.list': null,

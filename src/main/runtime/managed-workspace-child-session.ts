@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto'
+import { devicePrincipalOf } from './device-principal'
+import type { DeviceEntry } from './device-entry'
+import type { RpcBinarySender } from './rpc/rpc-binary-sender'
+import { managedWorkspaceStatusReply } from './managed-workspace-gateway-frames'
 import { sendRemoteRuntimeRequest } from '../../shared/remote-runtime-client'
 import {
   MANAGED_RUNTIME_SESSION_CAPABILITY,
@@ -13,6 +18,7 @@ import {
 import type { RuntimeCapability } from '../../shared/protocol-version'
 import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 import type {
+  ManagedWorkspaceGatewayLink,
   ManagedWorkspaceHost,
   ManagedWorkspaceStatus
 } from './managed-workspace-gateway-contract'
@@ -186,4 +192,47 @@ export class ManagedWorkspaceChildSession {
       this.renewing = false
     }
   }
+}
+
+export function createManagedWorkspaceGatewaySession(options: {
+  host: ManagedWorkspaceHost
+  link: ManagedWorkspaceGatewayLink
+  device: DeviceEntry
+  isCurrent(): boolean
+  end(): void
+  reply(frame: string): void
+  binary: RpcBinarySender
+}): ManagedWorkspaceChildSession {
+  const { host, link, device, isCurrent, end, reply, binary } = options
+  const session = new ManagedWorkspaceChildSession({
+    host,
+    subjectKey: createHash('sha256')
+      .update(devicePrincipalOf(device).callerFingerprint)
+      .digest('hex'),
+    grants: [],
+    capabilities: link.socket.clientCapabilities,
+    isCurrent,
+    fail: end,
+    callbacks: {
+      onText: (frame) => {
+        if (!isCurrent()) {
+          end()
+          return
+        }
+        const scoped = managedWorkspaceStatusReply(
+          frame,
+          link.statusIds,
+          link.socket.device.deviceId
+        )
+        reply(scoped.split(session.token).join(link.socket.device.deviceId))
+      },
+      onBinary: (bytes) => {
+        if (!isCurrent() || binary(bytes) === false) {
+          end()
+        }
+      },
+      onClose: end
+    }
+  })
+  return session
 }

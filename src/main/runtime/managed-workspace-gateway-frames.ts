@@ -87,3 +87,41 @@ export function managedWorkspaceBinaryFrame(
 export function managedWorkspaceFailureFrame(id: string, code: string, message: string): string {
   return JSON.stringify({ id, ok: false, error: { code, message } })
 }
+
+/** Authenticate on the controller while retaining the child's runtime and logical host identity. */
+export function managedWorkspaceStatusReply(
+  frame: string,
+  pending: Set<string>,
+  parentDeviceId: string
+): string {
+  if (pending.size === 0) {
+    return frame
+  }
+  try {
+    const parsed = parseRemoteRuntimeJsonText(frame)
+    if (
+      !record(parsed) ||
+      typeof parsed.id !== 'string' ||
+      !pending.delete(parsed.id) ||
+      parsed.ok !== true ||
+      !record(parsed.result)
+    ) {
+      return frame
+    }
+    const capabilities = Array.isArray(parsed.result.capabilities)
+      ? parsed.result.capabilities.filter(
+          (capability) => typeof capability === 'string' && !capability.startsWith('pairing.')
+        )
+      : undefined
+    return JSON.stringify({
+      ...parsed,
+      result: {
+        ...parsed.result,
+        pairedDeviceId: parentDeviceId,
+        ...(capabilities ? { capabilities } : {})
+      }
+    })
+  } catch {
+    return frame
+  }
+}

@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto'
 import type { WebSocket } from 'ws'
 import type { DeviceRegistry, DeviceEntry } from './device-registry'
-import { devicePrincipalOf } from './device-principal'
 import type { RpcMethodPermission } from './rpc/rpc-method-permission'
 import { sameGrants } from './device-entry'
 import { rejectNodeWebSocketConnection } from './rpc/node-websocket-lifecycle'
@@ -12,8 +10,9 @@ import type {
   ManagedWorkspaceRoute,
   ManagedWorkspaceGatewayLink as Link
 } from './managed-workspace-gateway-contract'
-import { ManagedWorkspaceChildSession } from './managed-workspace-child-session'
+import { createManagedWorkspaceGatewaySession } from './managed-workspace-child-session'
 import { admitManagedWorkspaceRequest } from './managed-workspace-gateway-admission'
+import type { ManagedWorkspaceDiscoverySelector } from '../../shared/managed-workspace-discovery-contract'
 import {
   managedWorkspaceRequestFrame,
   managedWorkspaceBinaryFrame,
@@ -32,6 +31,17 @@ export class ManagedWorkspaceGateway {
   private readonly retiringSessions = new Set<Promise<void>>()
   private disposed = false
   private pendingOpens = 0
+
+  get supportsDiscovery(): boolean {
+    return !this.disposed && this.options.hosts.describe !== undefined
+  }
+
+  describe(selector: ManagedWorkspaceDiscoverySelector, controllerRuntimeId: string) {
+    if (!this.supportsDiscovery || !this.options.hosts.describe) {
+      throw new Error('Managed workspace discovery is unavailable')
+    }
+    return this.options.hosts.describe(selector, controllerRuntimeId)
+  }
 
   constructor(
     private readonly options: {
@@ -70,7 +80,7 @@ export class ManagedWorkspaceGateway {
     const admission = admitManagedWorkspaceRequest(
       this.principal(socket),
       request,
-      socket.device.deviceToken,
+      socket.device.clientId,
       this.options.permission(request.method)
     )
     if (!admission.allowed) {
@@ -86,6 +96,12 @@ export class ManagedWorkspaceGateway {
     const link = this.link(socket, route, reply, binary, admission.device)
     if (!link) {
       return
+    }
+    if (request.method === 'status.get') {
+      if (link.statusIds.size >= 256) {
+        return this.end(link)
+      }
+      link.statusIds.add(request.id)
     }
     if (!link.outgoing) {
       link.pendingIds.add(request.id)
@@ -187,7 +203,8 @@ export class ManagedWorkspaceGateway {
       pendingBytes: 0,
       terminalMultiplex: false,
       grants: [...(device.grants ?? [])],
-      pendingIds: new Set()
+      pendingIds: new Set(),
+      statusIds: new Set()
     }
     this.links.set(socket.ws, link)
     this.pendingOpens++
@@ -226,30 +243,14 @@ export class ManagedWorkspaceGateway {
       host.close?.()
       return this.end(link)
     }
-    const session = new ManagedWorkspaceChildSession({
+    const session = createManagedWorkspaceGatewaySession({
       host,
-      subjectKey: createHash('sha256')
-        .update(devicePrincipalOf(device).callerFingerprint)
-        .digest('hex'),
-      grants: [],
-      capabilities: link.socket.clientCapabilities,
+      link,
+      device,
       isCurrent: () => this.current(link),
-      fail: () => this.end(link),
-      callbacks: {
-        onText: (frame) => {
-          if (!this.current(link)) {
-            return this.end(link)
-          }
-          // Private session identities cannot escape through stream presence or diagnostic replies.
-          reply(frame.split(session.token).join(link.socket.device.clientId))
-        },
-        onBinary: (bytes) => {
-          if (!this.current(link) || binary(bytes) === false) {
-            this.end(link)
-          }
-        },
-        onClose: () => this.end(link)
-      }
+      end: () => this.end(link),
+      reply,
+      binary
     })
     link.session = session
     link.outgoing = await session.open()
@@ -291,6 +292,7 @@ export class ManagedWorkspaceGateway {
     this.links.delete(link.socket.ws)
     link.pending.length = 0
     link.pendingIds.clear()
+    link.statusIds.clear()
     link.pendingBytes = 0
     link.session?.close()
     link.host?.close?.()

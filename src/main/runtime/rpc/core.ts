@@ -10,6 +10,8 @@ import type {
 } from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { ManagedRuntimeSessionGrant } from '../../../shared/managed-runtime-session-contract'
+import type { ManagedWorkspaceDiscoverySelector } from '../../../shared/managed-workspace-discovery-contract'
+import type { ManagedRuntimeGatewayDescriptor } from '../../../shared/managed-runtime-gateway-contract'
 import type {
   MobileRelayHostsListResult,
   MobileRelayHostWorktreesResult
@@ -153,6 +155,12 @@ export type RpcContext = {
     ): ManagedRuntimeSessionGrant
     renew(deviceId: string): { expiresAt: number }
     revoke(deviceId: string): boolean
+  }
+  managedWorkspace?: {
+    describe(
+      selector: ManagedWorkspaceDiscoverySelector,
+      controllerRuntimeId: string
+    ): Promise<ManagedRuntimeGatewayDescriptor>
   }
   // Why: mobile terminal traffic bypasses JSON streaming; undefined on Unix/socket and non-E2EE WebSocket paths.
   sendBinary?: RpcBinarySender

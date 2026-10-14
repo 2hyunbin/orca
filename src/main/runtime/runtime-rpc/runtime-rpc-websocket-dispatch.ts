@@ -6,9 +6,8 @@ import type {
 import { callerScopeOf, devicePrincipalOf } from '../device-principal'
 import { registerSocketDeviceKey } from './runtime-rpc-device-key-registration'
 import type { AuthenticatedMobileSocket } from '../rpc/mobile-socket-wiring'
-import type { RpcRequest, RpcResponse } from '../rpc/core'
+import type { RpcRequest } from '../rpc/core'
 import type { WebSocketTransport } from '../rpc/ws-transport'
-import type { DeviceScope } from '../device-registry'
 import { RuntimeRpcMobileDevices } from './runtime-rpc-mobile-devices'
 import { classifyRuntimeLongPoll } from './runtime-rpc-long-poll'
 import type { RpcBinarySender } from '../rpc/rpc-binary-sender'
@@ -17,19 +16,7 @@ import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc-mobile-method-allowli
 import { MOBILE_RPC_METHOD_ROUTES } from './runtime-rpc-mobile-method-routing'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 
-// Why: status.get has no per-connection context in the dispatcher, so stamp the scope here at the transport boundary.
-function injectDeviceScope(response: string, scope: DeviceScope): string {
-  try {
-    const parsed = JSON.parse(response) as RpcResponse
-    if (parsed.ok !== true || typeof parsed.result !== 'object' || parsed.result === null) {
-      return response
-    }
-    ;(parsed.result as Record<string, unknown>).deviceScope = scope
-    return JSON.stringify(parsed)
-  } catch {
-    return response
-  }
-}
+import { injectRuntimeStatusDeviceScope } from './runtime-rpc-status-device-scope'
 
 export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
   // Why: a phone names a server's workspace with `executionHost`; only configured servers are reached,
@@ -189,7 +176,16 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     )
     const replyForRequest =
       request.method === 'status.get'
-        ? (response: string): void => boundedReply(injectDeviceScope(response, device.scope))
+        ? (response: string): void =>
+            boundedReply(
+              injectRuntimeStatusDeviceScope(
+                response,
+                device.scope,
+                device.scope === 'runtime' &&
+                  !device.runtimeLease &&
+                  this.managedWorkspaceGateway?.supportsDiscovery === true
+              )
+            )
         : boundedReply
 
     const connectionId = ws ? this.mobileSocketWiring?.getConnectionId(ws) : undefined
@@ -246,6 +242,15 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         delegatedMobileDevices:
           device.scope === 'runtime' && !device.runtimeLease
             ? { sync: (phones) => this.syncDelegatedMobileDevices(device.deviceId, phones) }
+            : undefined,
+        managedWorkspace:
+          device.scope === 'runtime' &&
+          !device.runtimeLease &&
+          this.managedWorkspaceGateway?.supportsDiscovery
+            ? {
+                describe: (selector, controllerRuntimeId) =>
+                  this.managedWorkspaceGateway!.describe(selector, controllerRuntimeId)
+              }
             : undefined,
         managedRuntimeSessions:
           device.scope === 'runtime' && !device.runtimeLease && this.deviceRegistry

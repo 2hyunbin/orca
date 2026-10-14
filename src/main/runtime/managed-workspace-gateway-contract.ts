@@ -3,8 +3,12 @@ import type { ManagedWorkspaceChildSession } from './managed-workspace-child-ses
 import type { RemoteRuntimePassthroughSocket } from '../../shared/remote-runtime-passthrough-socket'
 import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
-import type { ManagedRuntimeGatewayRoute } from '../../shared/managed-runtime-gateway-contract'
+import type {
+  ManagedRuntimeGatewayRoute,
+  ManagedRuntimeGatewayDescriptor
+} from '../../shared/managed-runtime-gateway-contract'
 import type { RuntimeCapability } from '../../shared/protocol-version'
+import type { ManagedWorkspaceDiscoverySelector } from '../../shared/managed-workspace-discovery-contract'
 
 export type ManagedWorkspaceRoute = Extract<ManagedRuntimeGatewayRoute, { kind: 'managed' }>
 export type ManagedWorkspaceHost = {
@@ -14,6 +18,10 @@ export type ManagedWorkspaceHost = {
   close?(): void
 }
 export type ManagedWorkspaceHosts = {
+  describe?(
+    selector: ManagedWorkspaceDiscoverySelector,
+    controllerRuntimeId: string
+  ): Promise<ManagedRuntimeGatewayDescriptor>
   resolve(route: ManagedWorkspaceRoute): Promise<ManagedWorkspaceHost>
   onRetired(listener: (environmentId: string) => void): () => void
 }
@@ -30,4 +38,5 @@ export type ManagedWorkspaceGatewayLink = {
   terminalMultiplex: boolean
   grants: readonly RuntimeDeviceGrant[]
   pendingIds: Set<string>
+  statusIds: Set<string>
 }

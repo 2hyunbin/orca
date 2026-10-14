@@ -4,6 +4,7 @@ import { prepareRuntimeEnvironmentConnectionLease } from '../ipc/runtime-environ
 import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 import { admitEnvironmentProviderSshTarget } from '../ssh/environment-provider-ssh-admission'
 import type { ManagedWorkspaceHosts } from './managed-workspace-gateway-contract'
+import { discoverManagedWorkspace } from './managed-workspace-discovery'
 
 /** Saved managed ownership and current provider approval decide access; caller endpoints are ignored. */
 export function createManagedWorkspaceHosts(userDataPath: string): ManagedWorkspaceHosts {
@@ -14,6 +15,8 @@ export function createManagedWorkspaceHosts(userDataPath: string): ManagedWorksp
     }
   }
   return {
+    describe: (selector, controllerRuntimeId) =>
+      discoverManagedWorkspace(userDataPath, selector, controllerRuntimeId),
     onRetired(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
