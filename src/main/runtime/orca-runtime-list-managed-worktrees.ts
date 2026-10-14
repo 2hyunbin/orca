@@ -39,7 +39,9 @@ export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreS
     limit = DEFAULT_WORKTREE_LIST_LIMIT,
     sourceDefaultsSupported = true
   ): Promise<RuntimeWorktreeListResult> {
-    return this.managedWorktreeQueries.list(repoSelector, limit, sourceDefaultsSupported)
+    return this.managedWorktreeQueries
+      .list(repoSelector, limit, sourceDefaultsSupported)
+      .then((result) => this.withWindowsTerminalShells(result))
   }
 
   /** Stamps each workspace's honoured Windows shells, so a paired client offers only those. */
@@ -72,9 +74,11 @@ export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreS
     connectionId?: string | null,
     sourceDefaultsSupported = true
   ): Promise<DetectedWorktreeListResult> {
-    return this.listDetectedWorktreesForResolvedRepo(
-      await this.resolveRepoSelectorForConnection(repoSelector, connectionId),
-      sourceDefaultsSupported
+    return this.withWindowsTerminalShells(
+      await this.listDetectedWorktreesForResolvedRepo(
+        await this.resolveRepoSelectorForConnection(repoSelector, connectionId),
+        sourceDefaultsSupported
+      )
     )
   }
 
