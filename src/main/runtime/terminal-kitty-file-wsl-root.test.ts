@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as NodeFsPromises from 'node:fs/promises'
+import type * as NodePath from 'node:path'
 
 const { realpath, open, handle } = vi.hoisted(() => {
   const stats = { size: 5, dev: 1, ino: 1, nlink: 1, isFile: () => true }
@@ -17,6 +18,21 @@ const { realpath, open, handle } = vi.hoisted(() => {
     realpath: vi.fn(async (path: string) => path),
     open: vi.fn(async () => handle),
     handle
+  }
+})
+
+// The real containment guard must use Windows path semantics in these simulated cases.
+vi.mock('node:path', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodePath>()
+  return {
+    ...actual,
+    relative: (from: string, to: string) =>
+      (process.platform === 'win32' ? actual.win32 : actual.posix).relative(from, to),
+    isAbsolute: (path: string) =>
+      (process.platform === 'win32' ? actual.win32 : actual.posix).isAbsolute(path),
+    get sep() {
+      return process.platform === 'win32' ? actual.win32.sep : actual.posix.sep
+    }
   }
 })
 
@@ -51,15 +67,15 @@ describe('authoritative WSL Kitty file roots', () => {
     expect(handle.close).toHaveBeenCalledOnce()
   })
 
-  it('maps the native workspace into that same guest namespace', async () => {
+  it('uses the native path for the guest Windows drive mount', async () => {
     await expect(readTerminalKittyFile({ path: '/mnt/c/repo/image' }, OWNER)).resolves.toEqual({
       base64: 'SU1BR0U='
     })
-    expect(realpath).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo`)
-    expect(open).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo\\image`, expect.any(Number))
+    expect(realpath).toHaveBeenCalledWith('C:\\repo')
+    expect(open).toHaveBeenCalledWith('C:\\repo\\image', expect.any(Number))
   })
 
-  it('maps a POSIX workspace directly without resolving it on native Windows', async () => {
+  it('maps a POSIX workspace to the native drive path', async () => {
     const owner = { workspacePath: '/mnt/c/repo', wslDistro: 'Ubuntu' }
     realpath.mockImplementation(async (path: string) => {
       if (path === owner.workspacePath) {
@@ -70,11 +86,11 @@ describe('authoritative WSL Kitty file roots', () => {
     await expect(readTerminalKittyFile({ path: '/tmp/claude-image' }, owner)).resolves.toEqual({
       base64: 'SU1BR0U='
     })
-    expect(realpath).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo`)
+    expect(realpath).toHaveBeenCalledWith('C:\\repo')
     expect(realpath).not.toHaveBeenCalledWith(owner.workspacePath)
   })
 
-  it('resolves Windows short names before mapping a native workspace into WSL', async () => {
+  it('canonicalizes native short names for guest drive-mount images', async () => {
     const workspacePath = 'C:\\Users\\RUNNER~1\\repo'
     realpath.mockImplementation(async (path: string) => {
       if (path === workspacePath) {
@@ -91,8 +107,23 @@ describe('authoritative WSL Kitty file roots', () => {
         base64: 'SU1BR0U='
       })
     }
-    expect(realpath).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\Users\\runneradmin\\repo`)
+    expect(realpath).toHaveBeenCalledWith(workspacePath)
     expect(realpath).not.toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\Users\\RUNNER~1\\repo`)
+  })
+
+  it('avoids the WSL1 UNC drive mount while allowing guest temporary files', async () => {
+    realpath.mockImplementation(async (path: string) => {
+      if (path.startsWith(`${ROOT}\\mnt\\c`)) {
+        throw new Error('EPERM: operation not permitted, realpath')
+      }
+      return path
+    })
+    for (const path of ['/tmp/claude-image', '/mnt/c/repo/image']) {
+      await expect(readTerminalKittyFile({ path }, OWNER)).resolves.toEqual({
+        base64: 'SU1BR0U='
+      })
+    }
+    expect(realpath).not.toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo`)
   })
 
   it('uses the PTY distro rather than an old workspace UNC distro', async () => {
