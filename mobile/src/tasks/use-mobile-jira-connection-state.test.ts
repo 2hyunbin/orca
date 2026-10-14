@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { MobileJiraConnection } from './jira-mobile-connection'
 import { useMobileJiraConnectionState } from './use-mobile-jira-connection-state'
 
+type ConnectionClient = Parameters<typeof useMobileJiraConnectionState>[0]
+
 const mounted: ReactTestRenderer[] = []
 afterEach(() => {
   act(() => {
@@ -13,9 +15,9 @@ afterEach(() => {
   })
 })
 
-function mountConnection(client: object) {
+function mountConnection(client: ConnectionClient) {
   let value: ReturnType<typeof useMobileJiraConnectionState> | undefined
-  function Probe(props: { client: object; state: string }) {
+  function Probe(props: { client: ConnectionClient; state: string }) {
     value = useMobileJiraConnectionState(props.client, props.state)
     return null
   }
@@ -31,7 +33,7 @@ function mountConnection(client: object) {
       }
       return value
     },
-    update(nextClient: object, state = 'connected') {
+    update(nextClient: ConnectionClient, state = 'connected') {
       act(() => {
         renderer?.update(createElement(Probe, { client: nextClient, state }))
       })
