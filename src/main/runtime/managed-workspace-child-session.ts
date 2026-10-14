@@ -111,13 +111,6 @@ export class ManagedWorkspaceChildSession {
     }
   }
 
-  get token(): string {
-    if (!this.grant) {
-      throw new Error('Managed session is not ready')
-    }
-    return this.grant.token
-  }
-
   get clientId(): string {
     if (!this.grant) {
       throw new Error('Managed session is not ready')
@@ -224,7 +217,7 @@ export function createManagedWorkspaceGatewaySession(options: {
           link.statusIds,
           link.socket.device.deviceId
         )
-        reply(scoped.split(session.token).join(link.socket.device.deviceId))
+        reply(scoped)
       },
       onBinary: (bytes) => {
         if (!isCurrent() || binary(bytes) === false) {

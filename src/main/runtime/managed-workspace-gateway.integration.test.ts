@@ -61,6 +61,40 @@ it('passes binary traffic through both encrypted sessions', async () => {
   expect(f.calls).toEqual({ controller: 0, child: 1 })
 })
 
+it('preserves user content containing the private session token', async () => {
+  const f = await fixture()
+  const registry = f.child.rpc.getDeviceRegistry()
+  if (!registry) {
+    throw new Error('Child device registry unavailable')
+  }
+  const opened = vi.spyOn(registry.managedSessions, 'open')
+  const text = vi.fn()
+  const socket = await openRemoteRuntimePassthroughSocket(
+    f.gateway,
+    [],
+    { onText: text, onBinary: vi.fn(), onClose: vi.fn() },
+    { timeoutMs: 5000 }
+  )
+  cleanups.push(() => socket.close())
+  socket.send(JSON.stringify({ id: 'ready', method: 'terminal.gatewayProbe', params: {} }))
+  await vi.waitFor(() => expect(text).toHaveBeenCalledTimes(1))
+  const grant = opened.mock.results[0]
+  if (grant?.type !== 'return') {
+    throw new Error('Child session not opened')
+  }
+  const contents = `file contains ${grant.value.token} without modification`
+  socket.send(
+    JSON.stringify({ id: 'content', method: 'terminal.gatewayProbe', params: { contents } })
+  )
+  await vi.waitFor(() => expect(text).toHaveBeenCalledTimes(2))
+  expect(JSON.parse(text.mock.calls[1][0])).toMatchObject({
+    id: 'content',
+    ok: true,
+    result: { params: { contents } }
+  })
+  expect(f.calls).toEqual({ controller: 0, child: 2 })
+})
+
 it('denies pairing administration and unknown methods without touching either workspace', async () => {
   const f = await fixture()
   for (const method of [
