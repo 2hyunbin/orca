@@ -21,6 +21,7 @@ import { createPluginCatalogFixture } from './helpers/plugin-catalog-fixture'
 import { createRestartSession } from './helpers/orca-restart'
 import { capturePluginEvidence, getPluginEvidenceDirectory } from './helpers/plugin-evidence'
 import { qualifyProviderEndpointMigration } from './helpers/plugin-provider-endpoint-migration'
+import { qualifyProviderEndpointRestart } from './helpers/plugin-provider-endpoint-restart'
 
 async function dismissUsageNotice(page: Page): Promise<void> {
   const dismiss = page.getByRole('button', { name: 'Got it', exact: true })
@@ -257,7 +258,23 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
       fixtureRoot: fixture.root,
       saved,
       hostClient,
-      managedEnvironmentId: managed.environmentId
+      managedEnvironmentId: managed.environmentId,
+      afterConnected: (updated) => {
+        if (!host || !hostClient) {
+          throw new Error('The owned Node host is unavailable for restart qualification')
+        }
+        return qualifyProviderEndpointRestart({
+          page,
+          app,
+          testInfo,
+          host,
+          hostClient,
+          hostEnvironmentId: environmentId,
+          fixtureRoot: fixture.root,
+          target: updated,
+          managedEnvironmentId: managed.environmentId
+        })
+      }
     })
     const runtime = JSON.parse(
       await readFile(join(fixture.root, 'provider-executed.runtime.json'), 'utf8')
@@ -291,6 +308,9 @@ test('a paired desktop reviews a Node-host provider and connects, sleeps and wak
           endpointCancelPreservesTarget: true,
           endpointApprovalRequiredBeforeSshTraffic: true,
           encryptedRemoteCensusAfterEndpointMigration: true,
+          abruptNodeRestartAfterEndpointMigration: true,
+          coldRestartKeepsEndpointAndManagedIdentity: true,
+          restartReplaysNoProviderMutations: true,
           nativeWindowsHidden: true,
           debugStoreExposed: false
         },

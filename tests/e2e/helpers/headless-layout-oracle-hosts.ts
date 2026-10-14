@@ -27,7 +27,7 @@ export type HeadlessOracleHost = {
   /** Run by `dispose`, after the host stops. */
   cleanups: (() => void)[]
   /** Stops serve and starts it again on the same profile and port; `cold` also kills the PTY daemon. */
-  restart: (options?: { cold?: boolean }) => Promise<void>
+  restart: (options?: { cold?: boolean; abrupt?: boolean }) => Promise<void>
   dispose: () => Promise<void>
 }
 
@@ -116,10 +116,17 @@ async function startOrcadHost(
     kind: 'orcad',
     userDataDir: profile.userDataDir,
     scratch,
-    pairingUrl: serve.ready.pairingUrl,
-    restart: async ({ cold } = {}) => {
-      // SIGTERM is orcad's graceful stop and leaves the PTY daemon running.
-      await serve?.stop()
+    get pairingUrl() {
+      if (!serve) {
+        throw new Error('The owned Node host is not running')
+      }
+      return serve.ready.pairingUrl
+    },
+    restart: async ({ cold, abrupt } = {}) => {
+      if (!serve) {
+        throw new Error('The owned Node host is not available for restart')
+      }
+      await serve.stop(abrupt ? 'SIGKILL' : 'SIGTERM')
       serve = null
       if (cold) {
         await cleanupE2EDaemons(profile.userDataDir)
@@ -145,10 +152,14 @@ async function startElectronHost(scratch: string): Promise<StartedHost> {
     userDataDir: host.userDataDir,
     scratch,
     pairingUrl: host.offer.pairingUrl,
-    restart: ({ cold } = {}) =>
-      host.restartServeProcess(
+    restart: async ({ cold, abrupt } = {}) => {
+      if (abrupt) {
+        throw new Error('This fixture supports abrupt restarts only for Node hosts')
+      }
+      await host.restartServeProcess(
         cold ? { betweenProcesses: () => cleanupE2EDaemons(host.userDataDir) } : {}
-      ),
+      )
+    },
     dispose: async () => {
       await host.dispose()
       rmSync(scratch, PROFILE_REMOVAL)

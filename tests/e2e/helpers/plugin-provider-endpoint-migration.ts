@@ -23,6 +23,7 @@ export async function qualifyProviderEndpointMigration(input: {
   saved: SshEditableTarget
   hostClient: RemoteRuntimeRequestConnection
   managedEnvironmentId: string
+  afterConnected?(target: SshEditableTarget): Promise<void>
 }): Promise<{ targetId: string; previousGeneration: number; nextGeneration: number }> {
   const { page, app, testInfo, saved, hostClient } = input
   const sockets = new Set<Socket>()
@@ -165,6 +166,7 @@ export async function qualifyProviderEndpointMigration(input: {
     expect(census.environmentId).toBe(input.managedEnvironmentId)
     expect(census.terminals.liveSessions).toBe(0)
     await capturePluginEvidence(page, testInfo, 'node-provider-endpoint-connected-native', app)
+    await input.afterConnected?.(updated)
     return {
       targetId: updated.id,
       previousGeneration: saved.generation,

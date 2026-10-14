@@ -64,8 +64,8 @@ export function cliServeProfile(
 export type ReadyProcess<T> = {
   ready: T
   stderr: () => string
-  /** SIGTERM, then waits for exit. */
-  stop: () => Promise<void>
+  /** Signals only the child this fixture launched, then waits for its exit. */
+  stop: (signal?: 'SIGTERM' | 'SIGKILL') => Promise<void>
 }
 
 /** Spawns a serve process and resolves once `parseReady` finds readiness in its stdout. */
@@ -86,13 +86,21 @@ export async function spawnUntilReady<T>(options: {
   let stdout = ''
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')))
-  const stop = async (): Promise<void> => {
+  const stop = async (signal: 'SIGTERM' | 'SIGKILL' = 'SIGTERM'): Promise<void> => {
     if (child.exitCode !== null || child.signalCode !== null) {
+      if (signal === 'SIGKILL') {
+        throw new Error('The owned serve process exited before the crash request')
+      }
       return
     }
     const exited = new Promise((settle) => child.once('exit', settle))
-    child.kill('SIGTERM')
+    if (!child.kill(signal)) {
+      throw new Error('Could not signal the owned serve process')
+    }
     await exited
+    if (signal === 'SIGKILL' && process.platform !== 'win32' && child.signalCode !== signal) {
+      throw new Error('The owned serve process did not exit from the requested crash signal')
+    }
   }
   const ready = await new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
