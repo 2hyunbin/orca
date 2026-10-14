@@ -137,8 +137,25 @@ export function getMarkdownFenceRanges(content: string): MarkdownFenceRanges {
   return ranges
 }
 
+// Fence ranges are ordered and non-overlapping, including for out-of-order probes.
 export function isInsideMarkdownFenceRange(index: number, ranges: MarkdownFenceRanges): boolean {
-  return ranges.some(([start, end]) => index >= start && index < end)
+  if (Number.isNaN(index)) {
+    return false
+  }
+  let low = 0
+  let high = ranges.length - 1
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2)
+    const [start, end] = ranges[middle]
+    if (index < start) {
+      high = middle - 1
+    } else if (index >= end) {
+      low = middle + 1
+    } else {
+      return true
+    }
+  }
+  return false
 }
 
 /** Same test for callers that probe non-decreasing offsets, in linear total time. */
