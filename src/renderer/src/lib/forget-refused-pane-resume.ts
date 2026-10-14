@@ -11,8 +11,8 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 export function namesRefusedResume(
   refused: RefusedPaneResume,
   claim: {
-    agent: string | undefined
-    providerSession: AgentProviderSessionMetadata | undefined
+    agent?: string
+    providerSession?: AgentProviderSessionMetadata
     connectionId?: string | null
   }
 ): boolean {
