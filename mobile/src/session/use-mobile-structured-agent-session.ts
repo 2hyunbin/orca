@@ -41,6 +41,7 @@ import type { MobileNativeChatSendErrorReporter } from './use-mobile-native-chat
 import { useMobileStructuredQueuedMessageControls } from './use-mobile-structured-queued-message-controls'
 import { useMobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
 import { useMobileStructuredSends } from './use-mobile-structured-sends'
+import { useMobileStructuredSendChoice } from './use-mobile-structured-send-choice'
 
 export function useMobileStructuredAgentSession(args: {
   client: RpcClient | null
@@ -197,6 +198,11 @@ export function useMobileStructuredAgentSession(args: {
     onSendError,
     carriesOptions: hostSupport?.sendOptions === true
   })
+  const sendChoiceSupported = useMobileStructuredSendChoice({
+    client,
+    agent,
+    enabled: enabled && connected && mobileStructuredSendQueues(queueCapable, state.items)
+  })
   const turnIndicator = useMemo(
     () => ({
       thinking,
@@ -295,6 +301,7 @@ export function useMobileStructuredAgentSession(args: {
     turnIndicator,
     ...turnTiming,
     sendWithOutcome,
+    sendChoiceSupported,
     cancel: () => {
       void stopPress.track(() => requestCancel())
     },

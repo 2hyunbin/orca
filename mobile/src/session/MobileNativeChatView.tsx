@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { MobileNativeChatSendChoice } from './mobile-native-chat-send'
+import { useNativeChatAcceptedAction } from './use-native-chat-action-outcomes'
 import {
   ActivityIndicator,
   FlatList,
@@ -89,7 +91,8 @@ type Props = ComposerTrayProps & {
   hasMore?: boolean
   loadingEarlier?: boolean
   onLoadEarlier?: () => void
-  onSend: (text: string) => Promise<boolean>
+  onSend: (text: string, choice?: MobileNativeChatSendChoice) => Promise<boolean>
+  sendChoiceSupported?: boolean
   /** Route identity used to fence accepted sends that settle after a tab/view switch. */
   sendSurfaceId: string
   /** Reads the retained route's focus generation for accepted-send fencing. */
@@ -177,6 +180,7 @@ export function MobileNativeChatView({
   loadingEarlier,
   onLoadEarlier,
   onSend,
+  sendChoiceSupported = false,
   sendSurfaceId,
   getSendCompletionGeneration,
   getComposerEditGeneration,
@@ -252,21 +256,11 @@ export function MobileNativeChatView({
     recordScrollMetrics
   } = useMobileNativeChatTailFollow<NativeChatMessage>({ hasItems: data.length > 0 })
 
-  const handleSend = useCallback(
-    async (text: string): Promise<boolean> => {
-      const accepted = await onSend(text)
-      if (!accepted) {
-        return false
-      }
-      // The route-owned banner outlives this send; a success must retire it too,
-      // or a stale "Message not sent" sits above the delivered message.
-      onClearSendError?.()
-      // Always jump to the newest message when the user sends.
-      jumpToTail()
-      return true
-    },
-    [onSend, onClearSendError, jumpToTail]
-  )
+  const onSendAccepted = useCallback(() => {
+    onClearSendError?.()
+    jumpToTail()
+  }, [onClearSendError, jumpToTail])
+  const handleSend = useNativeChatAcceptedAction(onSend, onSendAccepted)
 
   const loadEarlier = useCallback(() => onLoadEarlier?.(), [onLoadEarlier])
 
@@ -452,6 +446,7 @@ export function MobileNativeChatView({
         value={composerText}
         onChangeText={onComposerTextChange}
         onSend={handleSend}
+        sendChoiceEnabled={sendChoiceSupported && agentWorking && !turnIndicator?.stopping}
         sendSurfaceId={sendSurfaceId}
         {...{ getSendCompletionGeneration, getComposerEditGeneration, inputRef }}
         agent={agent}

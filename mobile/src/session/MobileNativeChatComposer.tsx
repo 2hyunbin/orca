@@ -9,7 +9,7 @@ import {
   TextInput,
   View
 } from 'react-native'
-import { ArrowUp, ImagePlus, Mic, Square, X } from 'lucide-react-native'
+import { ImagePlus, Mic, Square, X } from 'lucide-react-native'
 import { colors, radii, spacing } from '../theme/mobile-theme'
 import { structuredSlashCommands } from '../../../src/shared/structured-agent-session-composer'
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
@@ -32,6 +32,8 @@ import type { PendingNativeChatImage } from './mobile-native-chat-image-attachme
 import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import { getMobileNativeChatCommands } from './mobile-native-chat-send-classification'
 import { keepHeldPressThroughLongPress } from './held-press-long-press'
+import { MobileNativeChatSendButton } from './MobileNativeChatSendButton'
+import type { MobileNativeChatSendChoice } from './mobile-native-chat-send'
 
 const NO_FILE_PATHS: string[] = []
 const NO_ATTACHMENTS: PendingNativeChatImage[] = []
@@ -43,7 +45,8 @@ type Props = {
   /** Controlled composer text — owned by the parent so dictation can write to it. */
   value: string
   onChangeText: (text: string) => void
-  onSend: (text: string) => Promise<boolean>
+  onSend: (text: string, choice?: MobileNativeChatSendChoice) => Promise<boolean>
+  sendChoiceEnabled?: boolean
   /** Changes whenever the route focuses a different chat composer surface. */
   sendSurfaceId: string
   /** Reads the retained route's focus generation without forcing a screen render. */
@@ -80,6 +83,7 @@ export function MobileNativeChatComposer({
   value,
   onChangeText,
   onSend,
+  sendChoiceEnabled = false,
   sendSurfaceId,
   getSendCompletionGeneration,
   getComposerEditGeneration,
@@ -189,7 +193,7 @@ export function MobileNativeChatComposer({
     setPendingSelection({ start: nextCursor, end: nextCursor })
   }
 
-  const handleSend = async (): Promise<void> => {
+  const handleSend = async (choice?: MobileNativeChatSendChoice): Promise<void> => {
     if (!canSend || sendingRef.current) {
       return
     }
@@ -201,7 +205,7 @@ export function MobileNativeChatComposer({
     try {
       // Raw, not trimmed: the send seam owns the wire trim, and a rejection has
       // to hand the user back exactly what they typed (#14819).
-      const accepted = await onSend(value)
+      const accepted = choice === undefined ? await onSend(value) : await onSend(value, choice)
       if (
         accepted &&
         mountedRef.current &&
@@ -329,22 +333,12 @@ export function MobileNativeChatComposer({
                 )}
               </Pressable>
             ) : null}
-            <Pressable
-              accessibilityLabel="Send message"
-              style={({ pressed }) => [
-                styles.sendButton,
-                !canSend && styles.sendButtonDisabled,
-                pressed && canSend && styles.pressed
-              ]}
-              onPress={handleSend}
-              disabled={!canSend}
-            >
-              <ArrowUp
-                size={20}
-                color={canSend ? colors.bgBase : colors.textMuted}
-                strokeWidth={2.6}
-              />
-            </Pressable>
+            <MobileNativeChatSendButton
+              key={sendSurfaceId}
+              canSend={canSend}
+              offersChoice={sendChoiceEnabled}
+              onSend={handleSend}
+            />
           </View>
         </View>
       </View>
@@ -421,18 +415,6 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center'
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // White send affordance per design — dark arrow on a light circle.
-    backgroundColor: colors.textPrimary
-  },
-  sendButtonDisabled: {
-    backgroundColor: colors.bgRaised
   },
   pressed: {
     opacity: 0.7

@@ -217,7 +217,7 @@ function Harness(props: HarnessProps) {
     controller: current,
     onOpenFile: vi.fn(),
     images: {
-      sendNativeChat: controller.handleNativeChatSend,
+      sendNativeChat: (text) => controller.handleNativeChatSend(text),
       attachments: [],
       isAttaching: false,
       attachImage: async () => {},

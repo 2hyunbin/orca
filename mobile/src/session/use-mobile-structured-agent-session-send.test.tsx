@@ -16,6 +16,7 @@ import {
 } from './mobile-structured-agent-session-host-support'
 import { agentSessionFailureWords } from '../../../src/shared/agent-session-failure-words'
 import { agentJournalSubmissionKey } from '../../../src/shared/agent-session-journal-item-key'
+import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
 import {
   useMobileNativeChatSendError,
   type MobileNativeChatSendErrorDetails
@@ -117,6 +118,41 @@ describe('mobile structured send actions', () => {
   function calls() {
     return sendRequest.mock.calls.filter(([method]) => method === 'agentSession.send')
   }
+
+  it('keeps Queue as the tap default and sends Steer directly, including attachments', async () => {
+    hostSupport = structuredAgentSessionHostSupport([
+      AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY
+    ])
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send' ? sendResult('accepted') : ok({ models: [], current: {} })
+    )
+    await mountSession()
+    await act(async () => {
+      await hook!.sendWithOutcome('default')
+      await hook!.sendWithOutcome('queued', undefined, undefined, undefined, 'queue')
+      await hook!.sendWithOutcome(
+        'correction',
+        undefined,
+        undefined,
+        [{ path: '/tmp/photo.png', previewUri: 'file:///photo.png' }],
+        'steer'
+      )
+    })
+    expect(calls().map(([, params]) => fieldsOf(params).delivery)).toEqual([
+      'queue-if-active',
+      'queue-if-active',
+      undefined
+    ])
+    expect(calls()[2]?.[1]).toMatchObject({
+      body: { blocks: expect.arrayContaining([{ type: 'image-ref', path: '/tmp/photo.png' }]) }
+    })
+    hostSupport = structuredAgentSessionHostSupport([])
+    await act(async () => renderer!.update(createElement(Harness)))
+    await act(async () => {
+      await hook!.sendWithOutcome('old host', undefined, undefined, undefined, 'queue')
+    })
+    expect(fieldsOf(calls()[3]?.[1])).not.toHaveProperty('delivery')
+  })
 
   function sentIds(): string[] {
     return calls().map(([, params]) =>

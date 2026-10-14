@@ -1,4 +1,7 @@
-import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
+import type {
+  MobileNativeChatSendChoice,
+  MobileNativeChatSendOutcome
+} from './mobile-native-chat-send'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
 import type { MobileChatQuestion } from './mobile-native-chat-question'
@@ -15,6 +18,7 @@ export type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgent
   ReturnType<typeof useMobileStructuredAgentTurnTiming> & {
     session: MobileNativeChatSession
     isWorking: boolean
+    sendChoiceSupported?: boolean
     turnId: string | null
     /** What labels the live turn's one indicator row. */
     turnIndicator: NativeChatLiveTurnIndicator
@@ -22,7 +26,8 @@ export type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgent
       text: string,
       images?: string[],
       deadline?: number,
-      attachments?: readonly StructuredMobileSendAttachment[]
+      attachments?: readonly StructuredMobileSendAttachment[],
+      choice?: MobileNativeChatSendChoice
     ) => Promise<MobileNativeChatSendOutcome>
     cancel: () => void
     permission: MobileChatPermission | null

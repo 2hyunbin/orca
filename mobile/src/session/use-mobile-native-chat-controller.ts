@@ -296,6 +296,7 @@ export function useMobileNativeChatController(args: {
     nativeChatStructured: activeChatStructured,
     nativeChatVisualSource: activeChatStructured ? structuredNativeChat.visualSource : null,
     nativeChatAgentWorking,
+    nativeChatSendChoiceSupported: structuredNativeChat.sendChoiceSupported,
     nativeChatTurnIndicator: activeChatStructured ? structuredNativeChat.turnIndicator : null,
     nativeChatWorkingStartedAt: activeChatStructured ? structuredNativeChat.workingStartedAt : null,
     nativeChatSettledTurns: activeChatStructured ? structuredNativeChat.settledTurns : null,

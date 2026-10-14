@@ -177,3 +177,4 @@ export async function clearMobileNativeChatInput(args: {
     return false
   }
 }
+export type MobileNativeChatSendChoice = 'queue' | 'steer'

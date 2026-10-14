@@ -18,6 +18,7 @@ import {
 } from './mobile-native-chat-image-send'
 import {
   openMobileNativeChatSendBudget,
+  type MobileNativeChatSendChoice,
   type MobileNativeChatSendOutcome
 } from './mobile-native-chat-send'
 import {
@@ -62,7 +63,8 @@ type Args = {
     text: string,
     imagePreviewUris?: string[],
     deadline?: number,
-    attachments?: readonly PendingNativeChatImage[]
+    attachments?: readonly PendingNativeChatImage[],
+    choice?: MobileNativeChatSendChoice
   ) => Promise<MobileNativeChatSendOutcome>
   /** Structured sessions send attachments without the terminal paste path. */
   readonly structuredNativeChat: boolean
@@ -84,7 +86,7 @@ export type MobileNativeChatImageAttachments = {
   readonly removeAttachment: (id: string) => void
   /** Ride any pending images along with `text`, then submit; clears the sent
    *  chips (and only those) once the send is accepted. */
-  readonly sendNativeChat: (text: string) => Promise<boolean>
+  readonly sendNativeChat: (text: string, choice?: MobileNativeChatSendChoice) => Promise<boolean>
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -154,7 +156,7 @@ export function useMobileNativeChatImageAttachments({
   )
 
   const sendNativeChat = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, choice?: MobileNativeChatSendChoice): Promise<boolean> => {
       // Serialize clear/paste/submit ownership per terminal while allowing other
       // tabs to send. Shared with the prompt-card writes (answer/permission), so
       // a card tap can't interleave into a mid-flight paste sequence either.
@@ -182,7 +184,8 @@ export function useMobileNativeChatImageAttachments({
             text,
             pendingImages.map((attachment) => attachment.previewUri),
             deadline,
-            pendingImages
+            pendingImages,
+            choice
           )
           if (outcome !== 'rejected') {
             const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
@@ -226,7 +229,11 @@ export function useMobileNativeChatImageAttachments({
             }
           }
           // Text-only sends paste nothing first, so 'unknown' leaves no stale input.
-          return (await baseSend(text, undefined, deadline)) !== 'rejected'
+          return (
+            (choice === undefined
+              ? await baseSend(text, undefined, deadline)
+              : await baseSend(text, undefined, deadline, undefined, choice)) !== 'rejected'
+          )
         }
         const handle = activeHandleRef.current
         if (!client || !handle || !enabled || connState !== 'connected') {

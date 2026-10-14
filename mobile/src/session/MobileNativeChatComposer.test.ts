@@ -42,6 +42,7 @@ vi.mock('lucide-react-native', () => ({
   ChevronLeft: 'ChevronLeft',
   ChevronRight: 'ChevronRight',
   ImagePlus: 'ImagePlus',
+  ListPlus: 'ListPlus',
   Mic: 'Mic',
   Square: 'Square',
   X: 'X'
@@ -50,8 +51,8 @@ vi.mock('lucide-react-native', () => ({
 vi.mock('../components/BottomDrawer', async () => {
   const React = await import('react')
   return {
-    BottomDrawer: ({ visible, children }: { visible: boolean; children?: unknown }) =>
-      visible ? React.createElement('BottomDrawer', { visible }, children) : null
+    BottomDrawer: ({ visible, children, ...props }: { visible: boolean; children?: unknown }) =>
+      visible ? React.createElement('BottomDrawer', { visible, ...props }, children) : null
   }
 })
 
@@ -110,6 +111,47 @@ describe('MobileNativeChatComposer', () => {
     // back the draft byte-for-byte (#14819).
     expect(onSend).toHaveBeenCalledWith(' hello ')
     expect(onChangeText).not.toHaveBeenCalled()
+  })
+
+  it('opens and dismisses a delivery choice without sending, then submits each choice once', async () => {
+    const onSend = vi.fn().mockResolvedValue(true)
+    const props = {
+      value: 'correction',
+      onChangeText: vi.fn(),
+      onSend,
+      sendChoiceEnabled: true,
+      sendSurfaceId: 'tab-a',
+      getSendCompletionGeneration: getCurrentSendCompletionGeneration
+    }
+    await act(async () => {
+      renderer = create(createElement(MobileNativeChatComposer, props))
+    })
+    const button = () => renderer!.root.findByProps({ accessibilityLabel: 'Send message' })
+    const sheet = () => renderer!.root.findByType('BottomDrawer')
+    await act(async () => button().props.onLongPress())
+    await act(async () => button().props.onPress())
+    expect(onSend).not.toHaveBeenCalled()
+    await act(async () => sheet().props.onClose())
+    expect(onSend).not.toHaveBeenCalled()
+    for (const choice of ['queue', 'steer'] as const) {
+      await act(async () => button().props.onLongPress())
+      const action = sheet().findAllByType('Pressable')[choice === 'queue' ? 0 : 1]
+      await act(async () => action.props.onPress())
+      expect(onSend).toHaveBeenLastCalledWith('correction', choice)
+      expect(renderer!.root.findAllByType('BottomDrawer')).toHaveLength(0)
+    }
+    expect(onSend).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      renderer!.update(
+        createElement(MobileNativeChatComposer, { ...props, sendChoiceEnabled: false })
+      )
+    })
+    expect(button().props.onLongPress).toBeUndefined()
+    await act(async () => {
+      button().props.onPressIn()
+      await button().props.onPress()
+    })
+    expect(onSend).toHaveBeenLastCalledWith('correction')
   })
 
   it('stacks the input above the composer action row', async () => {

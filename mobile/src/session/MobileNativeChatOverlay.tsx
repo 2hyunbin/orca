@@ -121,6 +121,7 @@ export function MobileNativeChatOverlay({
           loadingEarlier={session.loadingEarlier}
           onLoadEarlier={session.loadEarlier}
           onSend={images.sendNativeChat}
+          sendChoiceSupported={controller.nativeChatSendChoiceSupported}
           sendSurfaceId={sendSurfaceId}
           getSendCompletionGeneration={getSendCompletionGeneration}
           getComposerEditGeneration={controller.getChatComposerEditGeneration}
