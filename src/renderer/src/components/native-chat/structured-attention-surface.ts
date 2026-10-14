@@ -16,6 +16,7 @@ import type {
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { isTabOnScreen, isWorkspaceOnScreen } from '@/hooks/agent-auto-ack-targets'
+import { isWorkspaceNotificationMutedBySidebarFilters } from '@/components/sidebar/hidden-workspace-notification-mute'
 import { isStructuredTab, type StructuredTab } from './structured-agent-session-tabs'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
@@ -90,6 +91,8 @@ export function createStructuredAttentionSurface(state: StoreSnapshot): AgentAtt
     // Why: in-app selection alone is not viewing — a backgrounded Orca, Settings or an away user still need unread.
     isWorkspaceViewed: (workspaceId) => isWorkspaceOnScreen(state, workspaceId),
     isWorkspaceActive: (workspaceId) => state.activeWorktreeId === workspaceId,
+    isWorkspaceMuted: (workspaceId) =>
+      isWorkspaceNotificationMutedBySidebarFilters(state, workspaceId),
     resolveViewedSubjectKey: (groupId) => {
       const tab = Object.values(state.unifiedTabsByWorktree)
         .flat()

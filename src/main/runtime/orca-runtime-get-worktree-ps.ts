@@ -56,6 +56,7 @@ import {
   withoutHiddenHosts
 } from './runtime-visible-catalog'
 import { claudeCliFlagSupport } from '../claude/claude-cli-flag-support'
+import { isStructuredAttentionWorkspaceHidden } from './structured-attention-hidden-workspace'
 import {
   createNativeChatVisualsWorkspaceVerdicts,
   readNativeChatVisualsWorkspaceCatalogs
@@ -287,6 +288,15 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
         readNotificationSettings: () => this.requireStore().getSettings().notifications,
         readWorkspaceLabels: (scope) =>
           readStructuredAttentionWorkspaceLabels(this.requireStore(), scope),
+        isWorkspaceHidden: (scope) =>
+          isStructuredAttentionWorkspaceHidden(
+            {
+              store: this.requireStore(),
+              notificationSettings: this.requireStore().getSettings().notifications,
+              resolvedWorktrees: this.resolvedWorktrees.peek()?.worktrees ?? null
+            },
+            scope
+          ),
         dispatch: (event) => this.mobileNotifications.dispatch(event),
         reconcile: (state) => this.mobileNotifications.reconcileStructuredPromptAttention(state),
         now: () => Date.now()

@@ -62,6 +62,7 @@ function settings(overrides: Partial<NotificationSettings> = {}): NotificationSe
     customSoundPath: null,
     customSoundVolume: 1,
     mutedNotificationSourceIds: [],
+    notifyHiddenWorkspaces: true,
     ...overrides
   }
 }
@@ -110,6 +111,15 @@ describe('structured attention mobile delivery', () => {
       ['blocked', 'orca / feature - Claude needs input'],
       ['done', 'orca / feature - Claude failed']
     ])
+  })
+
+  it('sends nothing for a workspace the desktop Filters hide from notifications', () => {
+    const isWorkspaceHidden = vi.fn(() => true)
+    const h = harness({ isWorkspaceHidden })
+    h.delivery.deliver(PROMPT, SUMMARY)
+    h.delivery.deliver(completion('success'), SUMMARY)
+    expect(h.sent).toEqual([])
+    expect(isWorkspaceHidden).toHaveBeenCalledWith(SCOPE)
   })
 
   it('still sends when labels cannot be read, worded generically', () => {

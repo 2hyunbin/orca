@@ -92,7 +92,8 @@ describe('host prompt delivery and retirement', () => {
             customSoundId: 'system',
             customSoundPath: null,
             customSoundVolume: 1,
-            mutedNotificationSourceIds: []
+            mutedNotificationSourceIds: [],
+            notifyHiddenWorkspaces: true
           }),
           readWorkspaceLabels: () => ({}),
           dispatch: (event) => controller.dispatch(event),
