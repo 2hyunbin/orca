@@ -106,6 +106,38 @@ describe('execution-host agent launch settings', () => {
     expect(JSON.stringify(controller.getAgentLaunch())).not.toContain('host-only')
   })
 
+  it('persists and projects None, then clears it for a blank default', async () => {
+    const { controller, host } = fixture()
+    const mutation = AgentLaunchSettingsMutation.parse({
+      type: 'default',
+      agent: 'blank',
+      setupOnly: true
+    })
+    await expect(controller.mutateAgentLaunch(mutation)).resolves.toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: true
+    })
+    expect(host.newWorkspaceSetupOnly).toBe(true)
+    await expect(
+      controller.mutateAgentLaunch({ type: 'default', agent: 'blank' })
+    ).resolves.toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: false
+    })
+    expect(host.newWorkspaceSetupOnly).toBe(false)
+  })
+
+  it('clears None when a legacy client explicitly picks Blank Terminal', async () => {
+    const { controller, host } = fixture()
+    await controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+    await controller.update({ defaultTuiAgent: 'blank' })
+    expect(host.newWorkspaceSetupOnly).toBe(false)
+    expect(controller.getAgentLaunch()).toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: false
+    })
+  })
+
   it('clears the host default when disabling that agent and preserves others', async () => {
     const { controller, host } = fixture()
     host.defaultTuiAgent = 'claude'

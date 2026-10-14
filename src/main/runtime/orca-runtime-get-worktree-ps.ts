@@ -142,6 +142,15 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
     return buildWorktreeListingPage(sorted, limit, this.listKnownExecutionHostIds())
   }
 
+  /** The agent's configured env, with the account a desktop that owns this host's accounts chose
+   *  laid over it, as its own launches here carry. */
+  protected structuredAgentLaunchEnv(agent: StructuredAgentId, settings) {
+    return {
+      ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
+      ...this.accounts.hostLaunchEnvFor(agent)
+    }
+  }
+
   listRepos(): Repo[] {
     return this.store?.getRepos() ?? []
   }
@@ -233,7 +242,7 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
         ),
       resolveAgentLaunchEnv: (agent) =>
         isTuiAgent(agent)
-          ? resolveTuiAgentLaunchEnv(agent, this.requireStore().getSettings().agentDefaultEnv)
+          ? this.structuredAgentLaunchEnv(agent, this.requireStore().getSettings())
           : {},
       resolveAgentCommandSettings: () => this.requireStore().getSettings(),
       resolveCodexAccountKind: (home) =>

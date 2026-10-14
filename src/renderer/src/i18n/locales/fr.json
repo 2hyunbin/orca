@@ -18059,7 +18059,6 @@
         "fastMode": "Mode rapide",
         "speed": "Vitesse",
         "thinking": "Réflexion",
-        "options": "Options",
         "sessionOptions": "Options de session",
         "chooseInAgentPicker": "Choisir dans le sélecteur d'agents…",
         "searchModels": "Rechercher des modèles…",
@@ -18108,7 +18107,12 @@
         "permissionFullAccessCodexDescription": "Ne demande jamais ; peut modifier n’importe quel fichier et utiliser le réseau",
         "permissionFullAccessSharedDescription": "Ne demande jamais avant les modifications ou les commandes",
         "pasteFailed": "Échec du collage.",
-        "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat."
+        "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat.",
+        "optionValueShort": {
+          "minimal": "Min.",
+          "medium": "Moy.",
+          "xhigh": "Extra"
+        }
       },
       "tool": {
         "running": "En cours…",
