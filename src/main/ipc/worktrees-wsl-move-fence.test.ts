@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -117,7 +118,7 @@ describe('worktree IPC under a WSL move', () => {
   })
 
   it('drops passive metadata quietly and refuses a user edit', () => {
-    const updateMeta = (worktreeId: string, updates: object) =>
+    const updateMeta = (worktreeId: string, updates: Partial<WorktreeMeta>) =>
       handlers['worktrees:updateMeta'](null, { worktreeId, updates })
     expect(updateMeta(MOVING, { isUnread: false })).toBeNull()
     expect(updateMeta(MOVING, { isUnread: true, lastActivityAt: 1 })).toBeNull()

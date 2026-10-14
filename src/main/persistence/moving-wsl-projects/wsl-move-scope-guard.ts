@@ -149,13 +149,19 @@ export function assertWslMoveProjectWritable(
 // Background bookkeeping a move drops quietly; anything else is a user edit and is refused.
 const PASSIVE_WORKSPACE_UPDATE_KEYS: ReadonlySet<string> = new Set(['isUnread', 'lastActivityAt'])
 
+/** A worktree meta or folder workspace patch, as the edit entry points receive it. */
+export type WslMoveProjectUpdate = Readonly<Record<string, unknown>> & {
+  readonly isUnread?: boolean
+  readonly lastActivityAt?: number
+}
+
 // Activity carries lastActivityAt and a read clears unread; a bare `isUnread: true` is a user's mark-unread.
-export function isPassiveWorkspaceUpdate(updates: object): boolean {
+export function isPassiveWorkspaceUpdate(updates: WslMoveProjectUpdate): boolean {
   const keys = Object.keys(updates)
   if (keys.length === 0 || !keys.every((key) => PASSIVE_WORKSPACE_UPDATE_KEYS.has(key))) {
     return false
   }
-  return 'lastActivityAt' in updates || ('isUnread' in updates && updates.isUnread === false)
+  return 'lastActivityAt' in updates || updates.isUnread === false
 }
 
 /** A move only takes local projects; the same repo id on another host is a different project. */
@@ -224,7 +230,7 @@ export function assertWslMoveHostSetupIdWritable(
 export function shouldDropWslMoveProjectUpdate(
   store: ProjectStore | undefined,
   ref: WslMoveProjectRef | null,
-  updates: object
+  updates: WslMoveProjectUpdate
 ): boolean {
   if (!isWslMoveProjectBlocked(store, ref)) {
     return false
