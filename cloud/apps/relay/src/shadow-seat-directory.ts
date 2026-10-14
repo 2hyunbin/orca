@@ -16,6 +16,8 @@ export const SHADOW_SEAT_POLL_TIMEOUT_MS = 2_000
 export const SHADOW_SEAT_CELL_LIST_REFRESH_MS = 30_000
 export const SHADOW_SEAT_RECENTLY_LEFT_TTL_MS = 24 * 60 * 60 * 1_000
 export const SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS = 100_000
+// Cells stamp joinedAt by their own clocks: a later join must clear this to outrank across cells.
+export const SHADOW_SEAT_OUTRANK_SKEW_MS = 1_000
 const RECENTLY_LEFT_PER_HOST = 4
 // Google identity tokens live an hour; one per poll would be 26 metadata reads a second.
 const IDENTITY_TOKEN_REUSE_MS = 10 * 60_000
@@ -172,8 +174,7 @@ export type BookedJoin = {
   reservedBy: string
 }
 
-// A seat still taking phones on a reserve cell, behind a later join of the same host at a newer
-// epoch elsewhere: the booking that placed past it held no seat to supersede.
+// A reserve seat behind a later, newer-epoch join of its host elsewhere that placement supersede missed.
 export type OutrankedSeat = {
   cellId: string
   userId: string
@@ -189,6 +190,11 @@ export type HeartbeatSnapshot = { readAt: number; expiresAt: ReadonlyMap<string,
 
 function hostKey(userId: string, relayHostId: string): string {
   return `${userId}\u0000${relayHostId}`
+}
+
+function parseHostKey(key: string): { userId: string; relayHostId: string } {
+  const separator = key.indexOf('\u0000')
+  return { userId: key.slice(0, separator), relayHostId: key.slice(separator + 1) }
 }
 
 export class ShadowSeatDirectory {
@@ -238,11 +244,8 @@ export class ShadowSeatDirectory {
 
   // `polledAt` is when the request left; the reply holds every change before it.
   apply(cellId: string, response: SeatFeedResponse, now: number, polledAt = now): void {
-    try {
-      this.applyResponse(cellId, response, now, polledAt)
-    } finally {
-      this.reportOutranked()
-    }
+    this.applyResponse(cellId, response, now, polledAt)
+    this.reportOutranked()
   }
 
   private applyResponse(cellId: string, response: SeatFeedResponse, now: number, polledAt: number): void {
@@ -328,10 +331,7 @@ export class ShadowSeatDirectory {
   seatsOnCell(cellId: string): Array<{ userId: string; relayHostId: string; seat: ShadowSeat }> {
     const cursor = this.cells.get(cellId)
     if (!cursor) return []
-    return [...cursor.seats].map(([key, seat]) => {
-      const separator = key.indexOf('\u0000')
-      return { userId: key.slice(0, separator), relayHostId: key.slice(separator + 1), seat }
-    })
+    return [...cursor.seats].map(([key, seat]) => ({ ...parseHostKey(key), seat }))
   }
 
   // An old cell (404) has no feed; its last known seats stay, marked by status.
@@ -582,33 +582,25 @@ export class ShadowSeatDirectory {
     if (this.onOutranked && seats.size > 1) this.joinedSinceApply.add(key)
   }
 
-  // After the whole response, so a cell's first snapshot is judged by the mode it carries. Either
-  // feed may arrive first, so every seat of the host is checked. A lower epoch that joined later
-  // (answered from a stale map) is left to the ledger reconcile.
+  // After the whole response, so a cell's first snapshot is judged by the mode it carries. Only a
+  // join triggers it: a cell flipped to reserve later, or a lost demote, waits for the silence close.
+  // A lower epoch that joined later (answered from a stale map) is left to the ledger reconcile.
   private reportOutranked(): void {
-    for (const key of this.joinedSinceApply) {
-      const seats = this.hosts.get(key)
-      if (seats && seats.size > 1) this.reportOutrankedOf(key, seats)
-    }
+    const report = this.onOutranked
+    const keys = [...this.joinedSinceApply]
     this.joinedSinceApply.clear()
-  }
-
-  private reportOutrankedOf(key: string, seats: Map<string, ShadowSeat>): void {
-    const separator = key.indexOf('\u0000')
-    for (const seat of seats.values()) {
-      if (seat.state !== 'active' || this.admitModeOf(seat.cellId) !== 'reserve') continue
-      const by = [...seats.values()].find(
-        (other) => other.epoch > seat.epoch && other.joinedAt > seat.joinedAt
-      )
-      if (!by) continue
-      this.onOutranked!({
-        cellId: seat.cellId,
-        userId: key.slice(0, separator),
-        relayHostId: key.slice(separator + 1),
-        epoch: seat.epoch,
-        joinedAt: seat.joinedAt,
-        byCellId: by.cellId
-      })
+    if (!report) return
+    for (const key of keys) {
+      const seats = [...(this.hosts.get(key)?.values() ?? [])]
+      for (const seat of seats) {
+        if (seat.state !== 'active' || this.admitModeOf(seat.cellId) !== 'reserve') continue
+        const by = seats.find(
+          (other) => other.epoch > seat.epoch && other.joinedAt > seat.joinedAt + SHADOW_SEAT_OUTRANK_SKEW_MS
+        )
+        if (!by) continue
+        const { cellId, epoch, joinedAt } = seat
+        report({ ...parseHostKey(key), cellId, epoch, joinedAt, byCellId: by.cellId })
+      }
     }
   }
 

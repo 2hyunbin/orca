@@ -377,10 +377,10 @@ export class ReserveAssignment {
     return undefined
   }
 
-  // Fire-and-forget; the cell checks the seat's epoch and join itself.
-  demoteSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): void {
+  // Fire-and-forget; the cell checks the seat's epoch and join itself. False: no such cell listed.
+  demoteSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): boolean {
     const cell = this.input.cells().find((entry) => entry.cellId === seat.cellId)
-    if (!cell) return
+    if (!cell) return false
     void this.input.client.demote(cell, {
       v: 1,
       userId: seat.userId,
@@ -388,6 +388,7 @@ export class ReserveAssignment {
       epoch: seat.epoch,
       joinedAt: seat.joinedAt
     })
+    return true
   }
 
   // Supersede at placement: the old seats this director's map holds on reserve cells are told
@@ -411,16 +412,8 @@ export class ReserveAssignment {
     toCellId: string,
     via: 'placement' | 'feed'
   ): void {
-    const cell = this.input.cells().find((entry) => entry.cellId === seat.cellId)
-    if (!cell) return
+    if (!this.demoteSeat(seat)) return
     this.summary.supersedes += 1
-    void this.input.client.demote(cell, {
-      v: 1,
-      userId: seat.userId,
-      relayHostId: seat.relayHostId,
-      epoch: seat.epoch,
-      joinedAt: seat.joinedAt
-    })
     this.input.log?.(
       JSON.stringify({
         event: 'orca_relay_reserve_supersede',

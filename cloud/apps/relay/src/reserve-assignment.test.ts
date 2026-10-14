@@ -355,7 +355,7 @@ describe('reserve assignment on a director', () => {
   it('tells an old reserve seat the booking missed to go once a newer join shows in the feed', () => {
     const { assignment, directory, demoted, now } = setup()
     directory.onOutranked = (seat) => assignment.supersedeOutranked(seat)
-    directory.apply('c2', feed('c2', { full: [seated(6, 2_000)] }), now.value, now.value)
+    directory.apply('c2', feed('c2', { full: [seated(6, 3_000)] }), now.value, now.value)
     expect(demoted).toEqual([])
     directory.apply('c1', feed('c1', { full: [seated(5, 1_000)] }), now.value, now.value)
     expect(demoted).toEqual([{ cellId: 'c1', epoch: 5, joinedAt: 1_000 }])

@@ -9,6 +9,7 @@ import {
   ReservePlacer,
   type PlacementCell
 } from './reserve-placement.js'
+import { SHADOW_SEAT_OUTRANK_SKEW_MS } from './shadow-seat-directory.js'
 
 // A seeded discrete-event model of step 5 that drives the real CellReserveBook and
 // ReservePlacer. Everything else (sockets, the database, desktops) is modelled. The checks
@@ -765,6 +766,8 @@ export async function runReservePlacementSimulation(
     }
   }
 
+  const outranks = (other: { epoch: number; joinedAt: number }, seat: { epoch: number; joinedAt: number }): boolean =>
+    other.epoch > seat.epoch && other.joinedAt > seat.joinedAt + SHADOW_SEAT_OUTRANK_SKEW_MS
   // As shadow-seat-directory.ts onOutranked: once both joins are in this map, a reserve seat behind
   // a later join at a newer epoch is told to go. A lower epoch that joined later is the row's.
   function supersedeOutranked(director: SimDirector, hosts: Iterable<string>): void {
@@ -777,7 +780,7 @@ export async function runReservePlacementSimulation(
       if (seats.length < 2) continue
       for (const { cellId, view, seat } of seats) {
         if (seat.demoted || !view.placement.reserve) continue
-        const by = seats.find((other) => other.seat.epoch > seat.epoch && other.seat.joinedAt > seat.joinedAt)
+        const by = seats.find((other) => outranks(other.seat, seat))
         if (!by) continue
         report.supersedes += 1
         demoteFor(director, host, cellId, seat, { cellId: by.cellId, epoch: by.seat.epoch })
@@ -1311,18 +1314,20 @@ export async function runReservePlacementSimulation(
       for (const { cell, seat } of seats) {
         if (cell.mode !== 'reserve' || seat.epoch === newest) continue
         // A leased seat goes by its renewal, as today.
-        const outrankedByLaterJoin = seats.some(
-          (other) => other.seat.epoch > seat.epoch && other.seat.joinedAt > seat.joinedAt
-        )
-        const bound =
-          !seat.leased && (supersededBy(cell.cellId, seat.joinedAt) || outrankedByLaterJoin) ? supersedeBound : duplicateBound
-        // Timed per bound: a seat outranked loosely starts the tight clock when the later join lands.
-        const key = `${host}\u0000${cell.cellId}\u0000${seat.joinedAt}\u0000${bound}`
-        live.add(key)
-        const since = outrankedSince.get(key) ?? clock.now
-        outrankedSince.set(key, since)
-        if (clock.now - since > bound) {
-          violate(3, `${host}@${seat.epoch} on ${cell.cellId} outranked for ${clock.now - since} ms`)
+        const tight =
+          !seat.leased &&
+          (supersededBy(cell.cellId, seat.joinedAt) || seats.some((other) => outranks(other.seat, seat)))
+        // The loose clock runs from the first outranking; the tight one from when supersede applies.
+        const key = `${host}\u0000${cell.cellId}\u0000${seat.joinedAt}`
+        const clocks: Array<[string, number]> = [[key, duplicateBound]]
+        if (tight) clocks.push([`${key}\u0000tight`, supersedeBound])
+        for (const [clockKey, bound] of clocks) {
+          live.add(clockKey)
+          const since = outrankedSince.get(clockKey) ?? clock.now
+          outrankedSince.set(clockKey, since)
+          if (clock.now - since > bound) {
+            violate(3, `${host}@${seat.epoch} on ${cell.cellId} outranked for ${clock.now - since} ms`)
+          }
         }
       }
     }

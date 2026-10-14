@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { RelayAssignmentStore } from './assignment-store.js'
 import { openInMemoryRelayDatabase } from './database.js'
 import {
+  SHADOW_SEAT_OUTRANK_SKEW_MS,
   SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS,
   ShadowSeatDirectory,
   startShadowSeatPoller,
@@ -607,25 +608,33 @@ describe('ShadowSeatDirectory.onOutranked', () => {
   it('reports a reserve seat a later, newer join elsewhere outranks, in either feed order', () => {
     const first = directory()
     first.map.apply('cell-a', full('cell-a', 3, 10), 100)
-    first.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    first.map.apply('cell-b', full('cell-b', 4, 2_000), 101)
     expect(first.outranked).toEqual([halfOpen])
     const reversed = directory()
-    reversed.map.apply('cell-b', full('cell-b', 4, 20), 100)
+    reversed.map.apply('cell-b', full('cell-b', 4, 2_000), 100)
     reversed.map.apply('cell-a', full('cell-a', 3, 10), 101)
     expect(reversed.outranked).toEqual([halfOpen])
   })
 
-  it('leaves a seat on a database cell, a drain-only seat, and a lower epoch that joined later', () => {
+  it('leaves a database-cell seat, a drain-only seat, a later lower epoch, and a join within the skew', () => {
     const onDatabaseCell = directory()
     onDatabaseCell.map.apply('cell-a', full('cell-a', 3, 10, db), 100)
-    onDatabaseCell.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    onDatabaseCell.map.apply('cell-b', full('cell-b', 4, 2_000), 101)
     const drainOnly = directory()
     drainOnly.map.apply('cell-a', full('cell-a', 3, 10, reserve, 'drain-only'), 100)
-    drainOnly.map.apply('cell-b', full('cell-b', 4, 20), 101)
+    drainOnly.map.apply('cell-b', full('cell-b', 4, 2_000), 101)
     // Answered the old seat from a stale map after the newer join: the row decides that one.
     const staleSticky = directory()
-    staleSticky.map.apply('cell-a', full('cell-a', 3, 30), 100)
-    staleSticky.map.apply('cell-b', full('cell-b', 4, 20), 101)
-    expect([onDatabaseCell, drainOnly, staleSticky].map(({ outranked }) => outranked)).toEqual([[], [], []])
+    staleSticky.map.apply('cell-a', full('cell-a', 3, 3_000), 100)
+    staleSticky.map.apply('cell-b', full('cell-b', 4, 2_000), 101)
+    const withinSkew = directory()
+    withinSkew.map.apply('cell-a', full('cell-a', 3, 10), 100)
+    withinSkew.map.apply('cell-b', full('cell-b', 4, 10 + SHADOW_SEAT_OUTRANK_SKEW_MS), 101)
+    expect([onDatabaseCell, drainOnly, staleSticky, withinSkew].map(({ outranked }) => outranked)).toEqual([
+      [],
+      [],
+      [],
+      []
+    ])
   })
 })
