@@ -1,24 +1,16 @@
-import { connectionLogStore } from '../transport/persisted-connection-log-store'
-import type { ConnectionLogEntry } from '../transport/types'
 import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
-import type { BridgeHostDiagnostic } from './bridge-host-contract'
 import { gateVerdict } from './mobile-web-shell-gates'
 import type {
   MobileWebShellSession,
   MobileWebShellSessionEvent,
   MobileWebShellSessionState
 } from './mobile-web-shell-session-contract'
+import type { ShellLifecycleLine } from './shell-lifecycle-line-recorder'
+import { maskUserText } from './shell-log-path-masking'
 
-/**
- * Sparse OTA shell milestones for the per-host connection log, so an exported report says where a
- * workspace open stalled. Diagnostics only: nothing here feeds back into the session.
- *
- * The store holds 200 entries shared with connection events and every page route mounts its own
- * shell, so a healthy open writes one line (the paint); the rest are failures and one-shot stall
- * warnings. Route paths, generation directories and error stacks stay out: they can name user paths.
- */
-export type ShellLifecycleLine = Required<Pick<ConnectionLogEntry, 'level' | 'message' | 'code'>> &
-  Pick<ConnectionLogEntry, 'detail'>
+/** Session-side shell log lines: reducer steps, one-shot stalls and page-reported failures. */
+
+const BUILD_ID_PREFIX_LENGTH = 8
 
 /**
  * How long a parked waiting state lasts before the log says so. Armed per state object, so for
@@ -41,35 +33,6 @@ export const EMPTY_SHELL_LOG_TRACE: ShellLogTrace = {
   openedFrom: null,
   readyAsks: 0,
   documentLoaded: false
-}
-
-const BUILD_ID_PREFIX_LENGTH = 8
-const FAULT_DETAIL_MAX_CHARS = 160
-
-let lineSequence = 0
-
-// Lines a host flapping between unreachable and dialling would repeat every cycle per mounted shell.
-const FLAPPING_MESSAGES: ReadonlySet<string> = new Set([
-  'Web shell: checking host',
-  'Web shell: host unreachable and no app cached'
-])
-// Per host, the flapping lines already written since the last other shell line for it.
-const flappingWritten = new Map<string, Set<string>>()
-
-export function recordShellLifecycleLine(hostId: string, line: ShellLifecycleLine): void {
-  if (FLAPPING_MESSAGES.has(line.message)) {
-    const written = flappingWritten.get(hostId) ?? new Set<string>()
-    if (written.has(line.message)) {
-      return
-    }
-    written.add(line.message)
-    flappingWritten.set(hostId, written)
-  } else {
-    flappingWritten.delete(hostId)
-  }
-  const ts = Date.now()
-  lineSequence += 1
-  connectionLogStore.append(hostId, { id: `web-shell-${ts}-${lineSequence}`, ts, ...line })
 }
 
 export function traceShellStep(
@@ -171,21 +134,6 @@ export function shellStallLine(
   }
 }
 
-/** Null for routine kinds; the caller already bounds each key to one line per host. */
-export function bridgeDiagnosticLine(diagnostic: BridgeHostDiagnostic): ShellLifecycleLine | null {
-  // Retired terminal streams are routine and one per stream; they would crowd out the log.
-  if (diagnostic.kind === 'terminal-backlog') {
-    return null
-  }
-  const detail = bridgeDiagnosticDetail(diagnostic)
-  return {
-    level: 'warn',
-    code: 'web-shell-bridge',
-    message: `Web shell bridge: ${diagnostic.kind}`,
-    ...(detail === undefined ? {} : { detail })
-  }
-}
-
 export function pageFaultLine(error: BridgeErrorCapture): ShellLifecycleLine {
   const firstLine = error.message.split(/\r?\n/, 1)[0] ?? ''
   return pageLine(
@@ -198,60 +146,6 @@ export function pageFaultLine(error: BridgeErrorCapture): ShellLifecycleLine {
 /** The profile read behind `init` rejected, so no bridge host can be built for this screen. */
 export function hostProfileUnreadableLine(): ShellLifecycleLine {
   return pageLine('warn', 'Web shell: host profile unreadable')
-}
-
-/** A page frame arrived while no bridge host was built, so it was dropped unanswered. */
-export function frameWithoutHostLine(facts: {
-  clientReady: boolean
-  snapshotReady: boolean
-}): ShellLifecycleLine {
-  return pageLine(
-    'warn',
-    'Web shell: page frame with no bridge host',
-    `client=${facts.clientReady ? 'ok' : 'null'} snapshot=${facts.snapshotReady ? 'ok' : 'null'}`
-  )
-}
-
-/** Absolute paths and file URLs masked, then clamped: page and schema text can quote user paths. */
-export function maskUserText(text: string): string {
-  const masked = text
-    .replace(/file:\/\/[^\s)'"`\]]+/g, '[path]')
-    // A following word that still holds a separator is the same path (`C:\Users\John Doe\x`).
-    .replace(
-      /(^|[\s'"`([=:,])(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s)'"`\]]+(?: [^\s)'"`\]]*[\\/][^\s)'"`\]]*)*/g,
-      '$1[path]'
-    )
-  return masked.length > FAULT_DETAIL_MAX_CHARS
-    ? `${masked.slice(0, FAULT_DETAIL_MAX_CHARS)}…`
-    : masked
-}
-
-function bridgeDiagnosticDetail(diagnostic: BridgeHostDiagnostic): string | undefined {
-  switch (diagnostic.kind) {
-    case 'refused':
-      return diagnostic.refusal
-    case 'notify-refused':
-    case 'navigate-back-refused':
-      return diagnostic.why
-    case 'post-failed':
-      return `error=${maskUserText(errorName(diagnostic.error))}`
-    case 'route-refused':
-      return `issue=${maskUserText(diagnostic.issue)}`
-    case 'notify-failed':
-    case 'frame-after-dispose':
-    case 'frame-after-close':
-    case 'storage-refused':
-    case 'route-update-refused':
-    case 'binary-lane-refused':
-    case 'binary-frame-dropped':
-    case 'terminal-backlog':
-      // Their payloads name keys, ids or schema text that is not needed to place a stall.
-      return undefined
-  }
-}
-
-function errorName(error: unknown): string {
-  return error instanceof Error ? error.name : typeof error
 }
 
 function eventLines(

@@ -5,11 +5,8 @@ import type {
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
 import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
-import {
-  bridgeDiagnosticLine,
-  frameWithoutHostLine,
-  recordShellLifecycleLine
-} from './shell-lifecycle-log'
+import { bridgeDiagnosticLine, frameWithoutHostLine } from './shell-bridge-log-lines'
+import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'

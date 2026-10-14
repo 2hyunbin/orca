@@ -12,9 +12,9 @@ import {
 } from './mobile-web-shell-runtime'
 import { readMobileWebShellReachability } from './mobile-web-shell-reachability'
 import { shellPageBackClaimed } from './shell-page-back-claim'
+import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
 import {
   EMPTY_SHELL_LOG_TRACE,
-  recordShellLifecycleLine,
   SHELL_STALL_LOG_MS,
   shellSessionStepLines,
   shellStallLine,

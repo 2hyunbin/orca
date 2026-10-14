@@ -15,17 +15,14 @@ import type {
   MobileWebShellSessionEvent
 } from './mobile-web-shell-session-contract'
 import { connectionLogStore } from '../transport/persisted-connection-log-store'
+import { bridgeDiagnosticLine, frameWithoutHostLine } from './shell-bridge-log-lines'
+import { recordShellLifecycleLine, type ShellLifecycleLine } from './shell-lifecycle-line-recorder'
 import {
-  bridgeDiagnosticLine,
-  recordShellLifecycleLine,
   EMPTY_SHELL_LOG_TRACE,
-  frameWithoutHostLine,
-  maskUserText,
   pageFaultLine,
   shellSessionStepLines,
   shellStallLine,
   traceShellStep,
-  type ShellLifecycleLine,
   type ShellLogTrace
 } from './shell-lifecycle-log'
 
@@ -260,7 +257,7 @@ describe('shell stall lines', () => {
 })
 
 describe('shell failure details', () => {
-  it('masks absolute paths wherever they start in page text', () => {
+  it('keeps device paths out of a page fault', () => {
     expect(
       pageFaultLine({
         category: 'TypeError',
@@ -268,61 +265,6 @@ describe('shell failure details', () => {
         isRpcDeliveryUnknown: false
       }).detail
     ).toBe('TypeError: x is undefined at [path]')
-    expect(maskUserText("open '/var/mobile/Containers/a.db' failed")).toBe("open '[path]' failed")
-    expect(maskUserText('at f (/Users/me/secret.js:1)')).toBe('at f ([path])')
-    expect(maskUserText('bad `/Users/me/x.js` here')).toBe('bad `[path]` here')
-    expect(maskUserText('path="/home/bob/x" [/Users/bob/y]')).toBe('path="[path]" [[path]]')
-    expect(maskUserText('read C:\\Users\\bob\\x.txt and \\\\srv\\share\\y')).toBe(
-      'read [path] and [path]'
-    )
-    expect(maskUserText('key:~/notes.txt')).toBe('key:[path]')
-    expect(maskUserText('open C:\\Users\\John Doe\\proj\\x.ts failed')).toBe('open [path] failed')
-    expect(maskUserText('at /Users/Jane Q/My Proj/a.js and more')).toBe('at [path] and more')
-    expect(maskUserText('a,/Users/x/y')).toBe('a,[path]')
-    expect(maskUserText('Cannot read properties of undefined')).toBe(
-      'Cannot read properties of undefined'
-    )
-  })
-
-  it('skips routine bridge kinds and names the specific failure for the rest', () => {
-    expect(
-      bridgeDiagnosticLine({
-        kind: 'terminal-backlog',
-        id: 't',
-        coalescedFrames: 0,
-        deliveredFrames: 0,
-        peakPendingBytes: 0,
-        ended: null
-      })
-    ).toBeNull()
-    expect(
-      bridgeDiagnosticLine({ kind: 'notify-refused', name: 'fault', why: 'ungranted' })
-    ).toEqual({
-      level: 'warn',
-      code: 'web-shell-bridge',
-      message: 'Web shell bridge: notify-refused',
-      detail: 'ungranted'
-    })
-    const gone = new Error('view gone')
-    gone.name = 'BridgeViewGoneError'
-    expect(bridgeDiagnosticLine({ kind: 'post-failed', error: gone })?.detail).toBe(
-      'error=BridgeViewGoneError'
-    )
-    expect(bridgeDiagnosticLine({ kind: 'post-failed', error: 'nope' })?.detail).toBe(
-      'error=string'
-    )
-    expect(
-      bridgeDiagnosticLine({ kind: 'route-refused', issue: 'Invalid path /Users/bob/wt' })?.detail
-    ).toBe('issue=Invalid path [path]')
-  })
-
-  it('says which half a frame with no bridge host was waiting on', () => {
-    expect(frameWithoutHostLine({ clientReady: false, snapshotReady: true })).toEqual({
-      level: 'warn',
-      code: 'web-shell-page',
-      message: 'Web shell: page frame with no bridge host',
-      detail: 'client=null snapshot=ok'
-    })
   })
 })
 

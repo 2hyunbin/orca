@@ -38,11 +38,8 @@ import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
-import {
-  hostProfileUnreadableLine,
-  pageFaultLine,
-  recordShellLifecycleLine
-} from './shell-lifecycle-log'
+import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
+import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
 
 function failureMessage(reason: MobileWebShellFailureCause): string {
   switch (reason) {
