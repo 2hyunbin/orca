@@ -34,6 +34,13 @@ const ReposSchema = z.object({
   repos: z.array(z.looseObject({ id: z.string(), path: z.string() }))
 })
 const HostsSchema = z.object({ hosts: z.array(z.looseObject({ hostId: z.string() })) })
+const ProjectSectionsSchema = z.object({
+  catalog: z
+    .object({
+      repos: z.array(z.looseObject({ path: z.string(), executionHostId: z.string().optional() }))
+    })
+    .nullable()
+})
 const TabsSchema = z.looseObject({ tabs: z.array(z.looseObject({ id: z.string() })) })
 
 let requestId = 0
@@ -77,6 +84,18 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
     const { repos } = ReposSchema.parse(await result(socket, 'repo.list', {}, serverHostId))
     const repo = `id:${repos.find((entry) => entry.path === serverRepo)?.id ?? ''}`
     const create = { setupDecision: 'skip' }
+    // The desktop window publishes the catalog its sidebar groups Project sections with.
+    await expect
+      .poll(
+        async () =>
+          ProjectSectionsSchema.parse(
+            await result(socket, 'mobileRelay.projectSections', {})
+          ).catalog?.repos.some(
+            (entry) => entry.path === serverRepo && entry.executionHostId === serverHostId
+          ) ?? false,
+        { timeout: 30_000 }
+      )
+      .toBe(true)
 
     // One workspace each: created on the server itself, by the desktop, and by the phone through it.
     await host.client.call('worktree.create', { repo, name: 'from-server', ...create })
