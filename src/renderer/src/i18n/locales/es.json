@@ -17945,7 +17945,6 @@
         "fastMode": "Modo rápido",
         "speed": "Velocidad",
         "thinking": "Razonamiento",
-        "options": "Opciones",
         "sessionOptions": "Opciones de sesión",
         "chooseInAgentPicker": "Elegir en el selector del agente…",
         "searchModels": "Buscar modelos…",
@@ -18006,7 +18005,12 @@
         "permissionFullAccessCodexDescription": "Nunca pregunta; puede editar cualquier archivo y usar la red",
         "permissionFullAccessSharedDescription": "Nunca pregunta antes de ediciones o comandos",
         "pasteFailed": "Error al pegar.",
-        "commandAttachmentsUnsupported": "Quita los archivos adjuntos antes de usar un comando de la sesión de chat."
+        "commandAttachmentsUnsupported": "Quita los archivos adjuntos antes de usar un comando de la sesión de chat.",
+        "optionValueShort": {
+          "minimal": "Mín.",
+          "medium": "Medio",
+          "xhigh": "Muy alto"
+        }
       },
       "tool": {
         "running": "Ejecutando…",
