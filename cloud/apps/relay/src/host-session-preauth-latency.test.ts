@@ -20,6 +20,7 @@ import { ProcessQueuedByteBudget } from './splice-forwarder.js'
 const CELL_ID = 'staging-gce-c1'
 
 class FakeSocket extends EventEmitter {
+  readonly CLOSING = 2
   readonly OPEN = 1
   readonly CLOSED = 3
   readyState = this.OPEN
@@ -28,6 +29,16 @@ class FakeSocket extends EventEmitter {
     this.readyState = this.CLOSED
     this.emit('close', code, Buffer.from(''))
   })
+
+  asWebSocket(): WebSocket {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: FakeSocket implements the registry's WebSocket event and lifecycle surface.
+    return this as unknown as WebSocket
+  }
+
+  // The peer's close frame: ws leaves OPEN at once and emits 'close' later.
+  hangUp(): void {
+    this.readyState = this.CLOSING
+  }
 }
 
 function hostKey(): { keyPair: nacl.BoxKeyPair; identity: RelayTokenClaims } {
@@ -48,7 +59,11 @@ function hostKey(): { keyPair: nacl.BoxKeyPair; identity: RelayTokenClaims } {
   }
 }
 
-function setup(input: { admitMode: 'db' | 'reserve'; databaseSays: boolean }) {
+function setup(input: {
+  admitMode: 'db' | 'reserve'
+  databaseSays: boolean
+  databaseShedding?: boolean
+}) {
   let clock = 1_000_000
   const recordHostPreAuth = vi.fn<NonNullable<RelayRuntimeObserver['recordHostPreAuth']>>()
   const observer = {
@@ -70,15 +85,24 @@ function setup(input: { admitMode: 'db' | 'reserve'; databaseSays: boolean }) {
     mode: () => input.admitMode,
     ticketEnforce: () => false,
     dryRunEnabled: () => false,
-    databaseShedding: () => false,
+    databaseShedding: () => input.databaseShedding ?? false,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: beginProof calls only take() on the reserve book.
     book: { take } as unknown as CellReserveBook,
     verifyLease: vi.fn(async () => 'absent' as const)
   }
-  const verifyCellAssignment = vi.fn(async () => input.databaseSays)
+  let answerDatabase: (valid: boolean) => void = () => {}
+  const databaseAnswered = new Promise<boolean>((resolve) => {
+    answerDatabase = resolve
+  })
+  // Answers at once unless the test holds it with holdDatabase().
+  let held = false
+  const verifyCellAssignment = vi.fn(async () => (held ? databaseAnswered : input.databaseSays))
   const registry = new HostSessionRegistry(
     config(),
     vi.fn(),
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the host hello path never reads credentials.
     {} as RelayCredentialStore,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the host hello path calls only verifyCellAssignment().
     { verifyCellAssignment } as unknown as RelayAssignmentStore,
     new ProcessQueuedByteBudget(),
     observer,
@@ -93,6 +117,10 @@ function setup(input: { admitMode: 'db' | 'reserve'; databaseSays: boolean }) {
     recordHostPreAuth,
     verifyCellAssignment,
     take,
+    holdDatabase: () => {
+      held = true
+    },
+    answerDatabase: (valid: boolean) => answerDatabase(valid),
     advance: (ms: number) => {
       clock += ms
     }
@@ -117,13 +145,20 @@ function sendHello(socket: FakeSocket, keyPair: nacl.BoxKeyPair, relayHostId: st
 }
 
 function answerChallenge(socket: FakeSocket, keyPair: nacl.BoxKeyPair): void {
-  const challenge = JSON.parse(String(socket.send.mock.calls[0]?.[0])) as Record<string, string>
+  const challenge: unknown = JSON.parse(String(socket.send.mock.calls[0]?.[0]))
+  const field = (name: string): string => {
+    const value: unknown =
+      typeof challenge === 'object' && challenge !== null ? Reflect.get(challenge, name) : null
+    if (typeof value !== 'string') throw new Error(`host-challenge has no ${name}`)
+    return value
+  }
   const plaintext = nacl.box.open(
-    Buffer.from(challenge.ciphertextB64!, 'base64'),
-    Buffer.from(challenge.nonceB64!, 'base64'),
-    Buffer.from(challenge.relayEphemeralPublicKeyB64!, 'base64'),
+    Buffer.from(field('ciphertextB64'), 'base64'),
+    Buffer.from(field('nonceB64'), 'base64'),
+    Buffer.from(field('relayEphemeralPublicKeyB64'), 'base64'),
     keyPair.secretKey
-  )!
+  )
+  if (!plaintext) throw new Error('host-challenge did not open')
   const domainLength = new TextEncoder().encode(`${HOST_CHALLENGE_PLAINTEXT_DOMAIN}\0`).length
   const transcriptLength = new DataView(
     plaintext.buffer,
@@ -138,7 +173,7 @@ function answerChallenge(socket: FakeSocket, keyPair: nacl.BoxKeyPair): void {
     Buffer.from(
       JSON.stringify({
         type: 'host-challenge-ack',
-        challengeId: challenge.challengeId,
+        challengeId: field('challengeId'),
         proofB64: createHmac('sha256', secret)
           .update(buildHostProofMacInput(transcript))
           .digest('base64')
@@ -155,7 +190,7 @@ describe('host pre-auth latency', () => {
     const h = setup({ admitMode: 'reserve', databaseSays: false })
     const { keyPair, identity } = hostKey()
     const socket = new FakeSocket()
-    h.registry.acceptControl(socket as unknown as WebSocket, identity)
+    h.registry.acceptControl(socket.asWebSocket(), identity)
     h.advance(30)
     sendHello(socket, keyPair, identity.relayHostId)
     await vi.waitFor(() => expect(socket.send).toHaveBeenCalledTimes(1))
@@ -172,7 +207,7 @@ describe('host pre-auth latency', () => {
     const h = setup({ admitMode: 'db', databaseSays: false })
     const { keyPair, identity } = hostKey()
     const socket = new FakeSocket()
-    h.registry.acceptControl(socket as unknown as WebSocket, identity)
+    h.registry.acceptControl(socket.asWebSocket(), identity)
     h.advance(120)
     sendHello(socket, keyPair, identity.relayHostId)
     await vi.waitFor(() => expect(socket.close).toHaveBeenCalled())
@@ -182,12 +217,12 @@ describe('host pre-auth latency', () => {
     expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('db', 'refused', 120)
   })
 
-  it('records a hello timeout as a db-path refusal, once', () => {
+  it('records a hello timeout as a refusal before any check, once', () => {
     vi.useFakeTimers()
     const h = setup({ admitMode: 'db', databaseSays: true })
     const { identity } = hostKey()
     const socket = new FakeSocket()
-    h.registry.acceptControl(socket as unknown as WebSocket, identity)
+    h.registry.acceptControl(socket.asWebSocket(), identity)
     h.advance(2_000)
     vi.advanceTimersByTime(2_000)
 
@@ -195,7 +230,65 @@ describe('host pre-auth latency', () => {
       RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL,
       'host hello timeout'
     )
-    expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('db', 'refused', 2_000)
+    expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('beforeCheck', 'refused', 2_000)
+  })
+
+  it('records a host that hangs up before its hello as abandoned', () => {
+    const h = setup({ admitMode: 'db', databaseSays: true })
+    const { identity } = hostKey()
+    const socket = new FakeSocket()
+    h.registry.acceptControl(socket.asWebSocket(), identity)
+    h.advance(300)
+    socket.close()
+
+    expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('beforeCheck', 'abandoned', 300)
+  })
+
+  it.each([true, false])(
+    'records a database answer (%s) that arrives after the host hung up as abandoned',
+    async (valid) => {
+      const h = setup({ admitMode: 'db', databaseSays: valid })
+      h.holdDatabase()
+      const { keyPair, identity } = hostKey()
+      const socket = new FakeSocket()
+      h.registry.acceptControl(socket.asWebSocket(), identity)
+      sendHello(socket, keyPair, identity.relayHostId)
+      await vi.waitFor(() => expect(h.verifyCellAssignment).toHaveBeenCalled())
+      socket.hangUp()
+      h.advance(900)
+      h.answerDatabase(valid)
+      await vi.waitFor(() => expect(h.recordHostPreAuth).toHaveBeenCalled())
+
+      expect(socket.send).not.toHaveBeenCalled()
+      expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('db', 'abandoned', 900)
+    }
+  )
+
+  it('records a host that hangs up during its proof as abandoned on its path', async () => {
+    const h = setup({ admitMode: 'reserve', databaseSays: false })
+    const { keyPair, identity } = hostKey()
+    const socket = new FakeSocket()
+    h.registry.acceptControl(socket.asWebSocket(), identity)
+    sendHello(socket, keyPair, identity.relayHostId)
+    await vi.waitFor(() => expect(socket.send).toHaveBeenCalledTimes(1))
+    h.advance(700)
+    socket.close()
+
+    expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('reserve', 'abandoned', 700)
+  })
+
+  it('records the pool-pressure shed as a refusal before any check', async () => {
+    const h = setup({ admitMode: 'reserve', databaseSays: true, databaseShedding: true })
+    h.take.mockReturnValue(null)
+    const { keyPair, identity } = hostKey()
+    const socket = new FakeSocket()
+    h.registry.acceptControl(socket.asWebSocket(), identity)
+    h.advance(40)
+    sendHello(socket, keyPair, identity.relayHostId)
+    await vi.waitFor(() => expect(socket.close).toHaveBeenCalled())
+
+    expect(h.verifyCellAssignment).not.toHaveBeenCalled()
+    expect(h.recordHostPreAuth).toHaveBeenCalledExactlyOnceWith('beforeCheck', 'refused', 40)
   })
 })
 

@@ -106,20 +106,40 @@ export interface RelayRuntimeObserver {
   recordHostPreAuth?(path: HostPreAuthPath, outcome: HostPreAuthOutcome, durationMs: number): void
 }
 
-// How a host hello was admitted: a database assignment check, or the cell's memory in reserve
-// mode (a booking, a seat it remembers, or a lease). Refusals before admission count as 'db'.
-export type HostPreAuthPath = 'db' | 'reserve'
-export type HostPreAuthOutcome = 'admitted' | 'refused'
+// Which check decided a host hello: the cell's memory in reserve mode (a booking, a seat it
+// remembers, or a lease), the database assignment check, or neither (beforeCheck: draining,
+// idle cutover, a bad or late hello, the pool shed, or a check that threw).
+export type HostPreAuthPath = 'beforeCheck' | 'db' | 'reserve'
+// Abandoned: the host hung up before a decision, or before the cell could act on one.
+export type HostPreAuthOutcome = 'admitted' | 'refused' | 'abandoned'
 
-type LatencyReservoir = { samplesMs: number[]; observed: number; maxMs: number }
-type PreAuthLatency = Record<HostPreAuthPath, Record<HostPreAuthOutcome, LatencyReservoir>>
+// Upper bounds in ms; the last bucket is unbounded. 450 is the step-5 t_preauth gate.
+const PRE_AUTH_BUCKET_BOUNDS_MS = [50, 100, 200, 300, 450, 700, 1_000, 2_000, 5_000] as const
 
-const emptyReservoir = (): LatencyReservoir => ({ samplesMs: [], observed: 0, maxMs: 0 })
+type PreAuthLatencyGroup = {
+  samplesMs: number[]
+  observed: number
+  maxMs: number
+  // Non-cumulative; one more slot than there are bounds, for the unbounded bucket.
+  bucketCounts: number[]
+}
+type PreAuthLatency = Record<HostPreAuthPath, Record<HostPreAuthOutcome, PreAuthLatencyGroup>>
 
-const emptyPreAuthLatency = (): PreAuthLatency => ({
-  db: { admitted: emptyReservoir(), refused: emptyReservoir() },
-  reserve: { admitted: emptyReservoir(), refused: emptyReservoir() }
+const emptyPreAuthLatencyGroup = (): PreAuthLatencyGroup => ({
+  samplesMs: [],
+  observed: 0,
+  maxMs: 0,
+  bucketCounts: Array.from({ length: PRE_AUTH_BUCKET_BOUNDS_MS.length + 1 }, () => 0)
 })
+
+const emptyPreAuthLatency = (): PreAuthLatency => {
+  const byOutcome = (): Record<HostPreAuthOutcome, PreAuthLatencyGroup> => ({
+    admitted: emptyPreAuthLatencyGroup(),
+    refused: emptyPreAuthLatencyGroup(),
+    abandoned: emptyPreAuthLatencyGroup()
+  })
+  return { beforeCheck: byOutcome(), db: byOutcome(), reserve: byOutcome() }
+}
 
 // Which serialized accept step the phone had already hung up behind.
 export type RelayClientAcceptStage = 'assignment' | 'credential' | 'activity'
@@ -484,11 +504,13 @@ export class RelayObservability implements RelayRuntimeObserver {
   }
 
   recordHostPreAuth(path: HostPreAuthPath, outcome: HostPreAuthOutcome, durationMs: number): void {
-    const reservoir = this.deltas.preAuthLatency[path][outcome]
-    const observedBefore = reservoir.observed++
+    const group = this.deltas.preAuthLatency[path][outcome]
+    const observedBefore = group.observed++
     // Folded outside the reservoir so a dropped sample cannot hide the worst hello.
-    reservoir.maxMs = Math.max(reservoir.maxMs, durationMs)
-    keepInReservoir(reservoir.samplesMs, observedBefore, durationMs, PRE_AUTH_RESERVOIR_LIMIT)
+    group.maxMs = Math.max(group.maxMs, durationMs)
+    const bucket = PRE_AUTH_BUCKET_BOUNDS_MS.findIndex((bound) => durationMs <= bound)
+    group.bucketCounts[bucket === -1 ? PRE_AUTH_BUCKET_BOUNDS_MS.length : bucket]! += 1
+    keepInReservoir(group.samplesMs, observedBefore, durationMs, PRE_AUTH_RESERVOIR_LIMIT)
   }
 
   start(readCounts: () => RelayProcessCounts, intervalMs = 30_000): void {
@@ -667,22 +689,32 @@ function regionCounterFields(
   )
 }
 
-// Count is every hello in the window; the percentiles summarise the reservoir and are
-// omitted when empty, so a quiet window does not pin p50 at 0.
+// Count and buckets cover every hello in the window, so buckets sum exactly across windows and
+// cells; the percentiles summarise the reservoir and are omitted when empty.
 function preAuthLatencyFields(
   latency: PreAuthLatency
-): Record<HostPreAuthPath, Record<HostPreAuthOutcome, Record<string, number>>> {
-  const summarize = (reservoir: LatencyReservoir): Record<string, number> => {
-    if (reservoir.observed === 0) return { count: 0 }
-    const { p50, p95, p99 } = latencySummary(reservoir.samplesMs)
-    return { count: reservoir.observed, p50, p95, p99, max: roundMs(reservoir.maxMs) }
+): Record<HostPreAuthPath, Record<HostPreAuthOutcome, Record<string, unknown>>> {
+  const summarize = (group: PreAuthLatencyGroup): Record<string, unknown> => {
+    if (group.observed === 0) return { count: 0 }
+    const { p50, p95, p99 } = latencySummary(group.samplesMs)
+    const bucketsLeMs: Record<string, number> = {}
+    PRE_AUTH_BUCKET_BOUNDS_MS.forEach((bound, index) => {
+      bucketsLeMs[String(bound)] = group.bucketCounts[index]!
+    })
+    bucketsLeMs['+Inf'] = group.bucketCounts[PRE_AUTH_BUCKET_BOUNDS_MS.length]!
+    return { count: group.observed, p50, p95, p99, max: roundMs(group.maxMs), bucketsLeMs }
   }
+  const byOutcome = (
+    groups: Record<HostPreAuthOutcome, PreAuthLatencyGroup>
+  ): Record<HostPreAuthOutcome, Record<string, unknown>> => ({
+    admitted: summarize(groups.admitted),
+    refused: summarize(groups.refused),
+    abandoned: summarize(groups.abandoned)
+  })
   return {
-    db: { admitted: summarize(latency.db.admitted), refused: summarize(latency.db.refused) },
-    reserve: {
-      admitted: summarize(latency.reserve.admitted),
-      refused: summarize(latency.reserve.refused)
-    }
+    beforeCheck: byOutcome(latency.beforeCheck),
+    db: byOutcome(latency.db),
+    reserve: byOutcome(latency.reserve)
   }
 }
 
