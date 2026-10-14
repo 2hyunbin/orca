@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -254,6 +254,10 @@ describe('electron-builder config', () => {
         expect.objectContaining({
           from: 'native/windows-cli-launcher/.build/orca.exe',
           to: 'bin/orca.exe'
+        }),
+        expect.objectContaining({
+          from: 'native/windows-cli-launcher/.build/orca-administrator-restart.exe',
+          to: 'bin/orca-administrator-restart.exe'
         })
       ])
     )
@@ -268,6 +272,37 @@ describe('electron-builder config', () => {
       expect.objectContaining({ to: join('node_modules', 'serve-sim') })
     ])
   })
+
+  it.each(['mac', 'linux'])(
+    'loads Codex TOML parsing after %s runtime pruning',
+    async (platform) => {
+      const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-packaged-codex-toml-'))
+      try {
+        const resource = electronBuilderConfig[platform].extraResources.find(
+          (entry) => entry.to === join('node_modules', 'smol-toml')
+        )
+        expect(resource).toBeDefined()
+        await copyFiles([
+          new FileMatcher(resource.from, join(resourcesDir, resource.to), (value) => value)
+        ])
+        require('../packaged-runtime-node-modules.cjs').prunePackagedRuntimeNodeModules(
+          resourcesDir,
+          platform === 'mac' ? 'darwin' : 'linux',
+          process.arch
+        )
+        const stagedRequire = createRequire(join(resourcesDir, 'out', 'main', 'codex', 'trust.cjs'))
+        expect(await realpath(stagedRequire.resolve('smol-toml'))).toBe(
+          await realpath(join(resourcesDir, resource.to, 'dist', 'index.cjs'))
+        )
+        const { parse } = stagedRequire('smol-toml')
+        expect(parse('[projects."/workspace"]\ntrust_level = "trusted"\n')).toEqual({
+          projects: { '/workspace': { trust_level: 'trusted' } }
+        })
+      } finally {
+        await rm(resourcesDir, { recursive: true, force: true })
+      }
+    }
+  )
 
   // Why: serve-sim's addon is a Mach-O, and Windows signing rejects every *.node that is not PE.
   it('keeps serve-sim out of the Windows and Linux runtime closures', () => {
