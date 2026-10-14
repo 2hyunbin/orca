@@ -5,6 +5,7 @@ import {
   classifyShadowSeat,
   SHADOW_COMPARE_FLUSH_MS,
   SHADOW_COMPARE_SAMPLES_PER_CLASS,
+  SHADOW_COMPARE_SUPERSEDED_CLOSE_MS,
   ShadowDirectoryCompare
 } from './shadow-directory-compare.js'
 import { ShadowSeatDirectory, type SeatFeedResponse } from './shadow-seat-directory.js'
@@ -27,8 +28,8 @@ function feed(cellId: string, overrides: Partial<SeatFeedResponse> = {}): SeatFe
   return { v: 1, cellId, incarnation: `inc-${cellId}`, seq: 1, at: 1, full: [], ...overrides }
 }
 
-function seat(epoch: number, state = 'active', relayHostId = HOST) {
-  return { userId: 'user-a', relayHostId, epoch, generation: 1, state, joinedAt: 1 }
+function seat(epoch: number, state = 'active', relayHostId = HOST, joinedAt = 1) {
+  return { userId: 'user-a', relayHostId, epoch, generation: 1, state, joinedAt }
 }
 
 function directoryWith(
@@ -84,7 +85,7 @@ describe('classifyShadowSeat', () => {
         true
       ],
       [
-        directoryWith({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] }),
+        directoryWith({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] }),
         at('cell-a', 3),
         'duplicate-seat',
         false
@@ -191,6 +192,53 @@ describe('classifyShadowSeat', () => {
     })
   })
 
+  describe('a duplicate seat left by a superseded half-open control', () => {
+    // Seated on cell-b at epoch 2 long ago; the host just rejoined cell-a at epoch 3.
+    const joinedAt = 1_000_000
+    const superseded = () =>
+      directoryWith({
+        'cell-a': [seat(3, 'active', HOST, joinedAt)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+
+    it('is explained while the old control may still await its silence close', () => {
+      for (const now of [joinedAt + 1_700, joinedAt + SHADOW_COMPARE_SUPERSEDED_CLOSE_MS]) {
+        expect(classifyShadowSeat(superseded(), IDENTITY, at('cell-a', 3), now)).toEqual({
+          class: 'duplicate-seat',
+          explained: true
+        })
+      }
+    })
+
+    it('is unexplained once the new seat is older than the close bound', () => {
+      const now = joinedAt + SHADOW_COMPARE_SUPERSEDED_CLOSE_MS + 1
+      expect(classifyShadowSeat(superseded(), IDENTITY, at('cell-a', 3), now)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+
+    it('is unexplained when the database names the lower epoch, or matches no seat', () => {
+      for (const answer of [at('cell-b', 2), at('cell-a', 4), at('cell-b', 3)]) {
+        expect(classifyShadowSeat(superseded(), IDENTITY, answer, joinedAt + 1_700)).toEqual({
+          class: 'duplicate-seat',
+          explained: false
+        })
+      }
+    })
+
+    it('is unexplained on a level epoch, which only the row can break', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, joinedAt)],
+        'cell-b': [seat(3, 'active', HOST, 1)]
+      })
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), joinedAt + 1_700)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+  })
+
   it('answers map-incomplete until every listed cell has answered', () => {
     const directory = new ShadowSeatDirectory()
     directory.setCells(['cell-a', 'cell-b'])
@@ -254,14 +302,18 @@ describe('ShadowDirectoryCompare', () => {
     const mismatch = compareOn({ 'cell-a': [], 'cell-b': [seat(4)] })
     mismatch.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     mismatch.flush(0)
-    // A duplicate seat on the database's own cell counts there once, and on the other seat cell.
-    const duplicate = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
+    // A level-epoch duplicate counts on the database's own cell once, and on the other seat cell.
+    const duplicate = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
     duplicate.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     duplicate.flush(0)
     // A drain-only second seat is explained, so it counts only on the database's cell.
     const draining = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2, 'drain-only')] })
     draining.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     draining.flush(0)
+    // A just-superseded older seat is explained, so it too counts only on the database's cell.
+    const superseded = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
+    superseded.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    superseded.flush(0)
     const mapOnly = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
     mapOnly.compare('resolve', IDENTITY, null)
     mapOnly.flush(0)
@@ -271,6 +323,7 @@ describe('ShadowDirectoryCompare', () => {
       ['agree-absent', true, 1, {}],
       ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
+      ['duplicate-seat', true, 1, { 'cell-a': 1 }],
       ['duplicate-seat', true, 1, { 'cell-a': 1 }],
       ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
     ])

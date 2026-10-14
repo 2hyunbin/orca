@@ -1,3 +1,4 @@
+import { RELAY_PROTOCOL_LIMITS } from '@orca-cloud/relay-contract'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
 import type { ShadowSeatDirectory } from './shadow-seat-directory.js'
 
@@ -34,6 +35,12 @@ export const SHADOW_COMPARE_FLUSH_MS = 60_000
 // One poll, its timeout, and a reconnect (p95 ~6 s on 10-02). A move older than
 // this is not "the map catching up": a lost leave must not read as explained forever.
 export const SHADOW_COMPARE_LAG_BOUND_MS = 10_000
+// A superseded half-open control lingers until the cell's silence close (the timeout plus up
+// to one ping interval), then the map trails that close by a poll.
+export const SHADOW_COMPARE_SUPERSEDED_CLOSE_MS =
+  RELAY_PROTOCOL_LIMITS.controlSilenceTimeoutMs +
+  RELAY_PROTOCOL_LIMITS.controlPingIntervalMs +
+  SHADOW_COMPARE_LAG_BOUND_MS
 // Per class per flush window, so a systemic fault cannot flood the log.
 export const SHADOW_COMPARE_SAMPLES_PER_CLASS = 10
 
@@ -72,7 +79,18 @@ export function classifyShadowSeat(
   }
   if (seats.length > 1) {
     // Inside a drain or rehome grace the old seat is drain-only until it closes.
-    return { class: 'duplicate-seat', explained: seats.some((seat) => seat.state === 'drain-only') }
+    if (seats.some((seat) => seat.state === 'drain-only')) {
+      return { class: 'duplicate-seat', explained: true }
+    }
+    // The host reconnected on the database's newer seat; only the row breaks a level epoch.
+    const current = seats.find(
+      (seat) => seat.cellId === answer.cellId && seat.epoch === answer.assignmentEpoch
+    )
+    const superseded =
+      current !== undefined &&
+      seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
+      now - current.joinedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+    return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]
   if (!seat) {
