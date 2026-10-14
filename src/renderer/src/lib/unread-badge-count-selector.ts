@@ -7,6 +7,7 @@ import type { Worktree } from '../../../shared/worktree/types'
 import { sameBucketRecords } from './bucket-record-equality'
 import { getUnreadBadgeCount, hasUnreadFolderTab } from './unread-badge-count'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 type UnreadBadgeCountState = Pick<
   AppState,
@@ -37,7 +38,7 @@ function sameBadgeWorktree(previous: Worktree, next: Worktree): boolean {
         previousCreator.deviceId === nextCreator.deviceId)) &&
     previous.id === next.id &&
     previous.hostId === next.hostId &&
-    previous.isUnread === next.isUnread &&
+    isWorkspaceUnread(previous) === isWorkspaceUnread(next) &&
     previous.isArchived === next.isArchived
   )
 }
@@ -54,7 +55,7 @@ function sameFolderAttention(
     return true
   }
   for (const folder of next.folderWorkspaces) {
-    if (!folder.isUnread) {
+    if (!isWorkspaceUnread(folder)) {
       continue
     }
     const key = folderWorkspaceKey(folder.id)

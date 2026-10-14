@@ -14,7 +14,7 @@ import {
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
 import { resolveTerminalStopRuntimeEnvironmentId } from './terminal-workspace-routing'
-import { removeHibernatedPaneAttention } from '../slices/workspace-attention/subject-attention-transitions'
+import { removePanesAttention } from '../slices/workspace-attention/subject-attention-transitions'
 
 export function createTerminalPaneHibernationActions(
   set: TerminalStoreSet,
@@ -228,7 +228,7 @@ export function createTerminalPaneHibernationActions(
           ...(nextRuntimePaneTitlesByTabId !== s.runtimePaneTitlesByTabId
             ? { runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId }
             : {}),
-          ...removeHibernatedPaneAttention(s, opts.paneKey),
+          ...removePanesAttention(s, new Set([opts.paneKey])),
           lastTerminalInputAtByPaneKey: nextLastTerminalInputAtByPaneKey
         }
       })

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
-import { useAppStore } from '@/store'
+import type { useAppStore } from '@/store'
+import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 import type { Repo } from '../../../../shared/repo-types'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../shared/worktree/types'
@@ -30,6 +31,7 @@ export function useWorktreeContextMenuCommands(args: {
   scopeRef: React.RefObject<HTMLDivElement | null>
   setCreateGroupDialogOpen: (open: boolean) => void
   setMenuOpenState: (open: boolean) => void
+  setWorkspaceUnreadByUser: ReturnType<typeof useAppStore.getState>['setWorkspaceUnreadByUser']
   setWorktreesPinnedAndReveal: ReturnType<
     typeof useAppStore.getState
   >['setWorktreesPinnedAndReveal']
@@ -47,13 +49,11 @@ export function useWorktreeContextMenuCommands(args: {
     window.api.ui.writeClipboardText(resolveWorktreeDisplayName(args.worktree))
   }, [args])
   const handleToggleRead = useCallback(() => {
-    useAppStore
-      .getState()
-      .setWorkspaceUnreadByUser(
-        args.worktree.id,
-        !args.worktree.isUnread,
-        args.worktree.hostId ?? 'local'
-      )
+    args.setWorkspaceUnreadByUser(
+      args.worktree.id,
+      !isWorkspaceUnread(args.worktree),
+      args.worktree.hostId ?? 'local'
+    )
   }, [args])
   const handleTogglePin = useCallback(() => {
     args.setWorktreesPinnedAndReveal([args.worktree.id], !args.worktree.isPinned)

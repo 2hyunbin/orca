@@ -10,6 +10,7 @@ import { writeWorkspaceDragData } from './workspace-status'
 import type { useWorktreeCardFoundation } from './use-worktree-card-foundation'
 import type { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details'
 import type { useWorktreeCardReviewDetails } from './use-worktree-card-review-details'
+import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 type Foundation = ReturnType<typeof useWorktreeCardFoundation>
 type LinkedDetails = ReturnType<typeof useWorktreeCardLinkedDetails>
@@ -91,7 +92,7 @@ export function useWorktreeCardWorkspaceActions({
     },
     [setShowRenameErrorDialog]
   )
-  const unreadTooltip = worktree.isUnread ? 'Mark read' : 'Mark unread'
+  const unreadTooltip = isWorkspaceUnread(worktree) ? 'Mark read' : 'Mark unread'
   const lineageChildAriaLabel =
     lineageChildCount === 1
       ? lineageCollapsed

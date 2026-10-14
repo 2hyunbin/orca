@@ -14,8 +14,6 @@ export type AgentAttentionRequest = {
   settlesTurn: boolean
   /** Out-of-band proof the subject just produced work, used when no live session is visible. */
   hasFreshActivityEvidence: boolean
-  /** Presentation policy: also raise the container/surface attention markers. */
-  groupAttentionEnabled: boolean
 }
 
 export type AgentAttentionUnreadWrite = {
@@ -23,7 +21,6 @@ export type AgentAttentionUnreadWrite = {
   subjectKey: string | null
   groupId: string | null
   reason: AgentAttentionUnreadReason
-  groupAttentionEnabled: boolean
 }
 
 export type AgentAttentionDeliveryRequest = {
@@ -92,15 +89,7 @@ export function resolveAgentAttention(
       : surface.isSurfaceViewed({ workspaceId, surfaceKey: subjectKey })
   return {
     admitted: true,
-    unread: viewed
-      ? null
-      : {
-          workspaceId,
-          subjectKey,
-          groupId,
-          reason: request.reason,
-          groupAttentionEnabled: request.groupAttentionEnabled
-        },
+    unread: viewed ? null : { workspaceId, subjectKey, groupId, reason: request.reason },
     delivery
   }
 }

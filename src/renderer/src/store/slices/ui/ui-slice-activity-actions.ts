@@ -6,7 +6,7 @@ import {
   resolvePaneKeyWorktreeIdFromTabs,
   usableTimestamp
 } from './ui-slice-agent-notification-acknowledgement'
-import { removeAcknowledgedCompletionAttention } from '../workspace-attention/subject-attention-transitions'
+import { removeCompletionAttention } from '../workspace-attention/subject-attention-transitions'
 
 type ActivityActions = Pick<
   UISlice,
@@ -32,7 +32,7 @@ export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): Acti
         const now = Date.now()
         const migrationUnsupported = Object.values(s.migrationUnsupportedByPtyId ?? {})
         let next: Record<string, number> | null = null
-        const nextUnreadCompletions = removeAcknowledgedCompletionAttention(
+        const unreadAgentCompletionPanes = removeCompletionAttention(
           s.unreadAgentCompletionPanes,
           paneKeys
         )
@@ -78,12 +78,13 @@ export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): Acti
             delete nextManual[key]
           }
         }
-        if (!next && !nextUnreadCompletions && !nextManual) {
+        const completionsChanged = unreadAgentCompletionPanes !== s.unreadAgentCompletionPanes
+        if (!next && !completionsChanged && !nextManual) {
           return s
         }
         return {
           ...(next ? { acknowledgedAgentsByPaneKey: next } : {}),
-          ...(nextUnreadCompletions ? { unreadAgentCompletionPanes: nextUnreadCompletions } : {}),
+          ...(completionsChanged ? { unreadAgentCompletionPanes } : {}),
           ...(nextManual ? { manuallyUnreadTurnsByPaneKey: nextManual } : {})
         }
       })

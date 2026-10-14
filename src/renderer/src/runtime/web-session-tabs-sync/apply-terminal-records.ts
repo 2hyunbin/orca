@@ -1,7 +1,7 @@
 import { terminalLayoutEqual } from '@/lib/terminal-layout-equality'
 import type { prepareWebSessionTabsSnapshotGroups } from './apply-preparation-groups'
 import { sameStringArray, writableWebSessionTabsRecord } from './state-equality-core'
-import { removeTerminalTabMarkers } from '@/store/slices/workspace-attention/subject-attention-transitions'
+import { removeTabMarkers } from '@/store/slices/workspace-attention/subject-attention-transitions'
 
 type TerminalRecordContext = ReturnType<typeof prepareWebSessionTabsSnapshotGroups>
 
@@ -85,7 +85,7 @@ export function applyTerminalRecordUpdates(context: TerminalRecordContext) {
     delete nextLocalOnlyScrollbackByTabId[removedId]
   }
 
-  const nextUnreadTerminalTabs = removeTerminalTabMarkers(
+  const nextUnreadTerminalTabs = removeTabMarkers(
     state.unreadTerminalTabs,
     removedTerminalIds,
     () => writableWebSessionTabsRecord(state, 'unreadTerminalTabs', batchContext)

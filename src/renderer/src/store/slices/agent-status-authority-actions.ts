@@ -19,7 +19,7 @@ import {
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import {
   movePaneAttention,
-  removeRetiredPaneAttention
+  removePanesAttention
 } from './workspace-attention/subject-attention-transitions'
 
 export function createAgentStatusAuthorityActions(
@@ -100,7 +100,7 @@ export function createAgentStatusAuthorityActions(
             s.paneForegroundAgentByPaneKey,
             retiredPaneKeySet
           ),
-          ...removeRetiredPaneAttention(s, retiredPaneKeySet),
+          ...removePanesAttention(s, retiredPaneKeySet),
           lastTerminalInputAtByPaneKey: removePaneKeys(
             s.lastTerminalInputAtByPaneKey,
             retiredPaneKeySet

@@ -45,6 +45,7 @@ import {
   shouldUseNativeContextMenu
 } from './worktree-context-menu-policy'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
+import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 export default function WorktreeContextMenuView({ model }: { model: WorktreeContextMenuModel }) {
   const {
@@ -197,12 +198,12 @@ export default function WorktreeContextMenuView({ model }: { model: WorktreeCont
                   : translate('auto.components.sidebar.WorktreeContextMenu.3baa7d6507', 'Pin')}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={handleToggleRead} disabled={isDeleting}>
-                {worktree.isUnread ? (
+                {isWorkspaceUnread(worktree) ? (
                   <BellOff className="size-3.5" />
                 ) : (
                   <Bell className="size-3.5" />
                 )}
-                {worktree.isUnread
+                {isWorkspaceUnread(worktree)
                   ? translate('auto.components.sidebar.WorktreeContextMenu.8dacff1fe0', 'Mark Read')
                   : translate(
                       'auto.components.sidebar.WorktreeContextMenu.f50603c6b2',

@@ -79,7 +79,7 @@ export function createSetActiveWorktree(
 
       const worktree = findKnownWorktreeById(s, worktreeId, executionHostId)
       const unreadRead = readWorkspaceFlagOnActivation(s, worktreeId, executionHostId, worktree)
-      shouldClearUnread = unreadRead.cleared
+      shouldClearUnread = unreadRead !== null
       const {
         restoredRightSidebarExplorerView,
         activeFileId,
@@ -113,11 +113,9 @@ export function createSetActiveWorktree(
       const nextEverActivated = isFirstActivation
         ? new Set([...s.everActivatedWorktreeIds, worktreeId!])
         : s.everActivatedWorktreeIds
-      const {
-        worktreesByRepo: nextWorktrees,
-        detectedWorktreesByRepo: nextDetectedWorktrees,
-        folderWorkspaces: nextFolderWorkspaces
-      } = unreadRead.patch
+      const nextWorktrees = unreadRead?.worktreesByRepo ?? s.worktreesByRepo
+      const nextDetectedWorktrees = unreadRead?.detectedWorktreesByRepo ?? s.detectedWorktreesByRepo
+      const nextFolderWorkspaces = unreadRead?.folderWorkspaces ?? s.folderWorkspaces
       const nextActiveRepoId =
         workspaceScope?.type === 'folder'
           ? null

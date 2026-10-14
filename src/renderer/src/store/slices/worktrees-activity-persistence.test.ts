@@ -12,9 +12,9 @@ import {
   worktreeListMock
 } from './worktrees-slice-test-harness'
 import {
-  markWorkspaceUnread,
-  readWorkspace
-} from './workspace-attention/workspace-flag-test-events'
+  clearWorkspaceUnreadFlag,
+  markWorkspaceUnreadFlag
+} from './workspace-attention/workspace-unread-flag'
 
 const requestWorktreeBaseFallbackNotice = vi.hoisted(() => vi.fn())
 
@@ -116,7 +116,7 @@ describe('worktree remote runtime mutations', () => {
     [
       'markAgentAttentionUnread',
       async (store: ReturnType<typeof createTestStore>, worktreeId: string) => {
-        markWorkspaceUnread(store, worktreeId)
+        markWorkspaceUnreadFlag(store.setState, store.getState, worktreeId)
         await new Promise((resolve) => setTimeout(resolve, 0))
       }
     ]
@@ -205,8 +205,8 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    readWorkspace(store, folderKey)
-    readWorkspace(store, folderKey)
+    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
+    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
@@ -223,7 +223,7 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    markWorkspaceUnread(store, folderKey)
+    markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
     expect(store.getState().folderWorkspaces[0]).toEqual(
       expect.objectContaining({ isUnread: true, lastActivityAt: expect.any(Number) })
     )
@@ -242,8 +242,8 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    markWorkspaceUnread(store, folderKey)
-    readWorkspace(store, folderKey)
+    markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
+    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
     expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(

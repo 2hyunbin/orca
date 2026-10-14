@@ -190,7 +190,11 @@ test.describe('Terminal attention', () => {
       if (!ownerWorktreeId) {
         throw new Error(`No owner worktree found for terminal tab ${tabId}`)
       }
-      state.markTerminalBell({ worktreeId: ownerWorktreeId, tabId, paneKey: `${tabId}:e2e-bell` })
+      const leafId = state.terminalLayoutsByTabId[tabId]?.activeLeafId
+      if (!leafId) {
+        throw new Error(`No active leaf found for terminal tab ${tabId}`)
+      }
+      state.markTerminalBell({ worktreeId: ownerWorktreeId, tabId, paneKey: `${tabId}:${leafId}` })
     }, secondTabId)
 
     await expect

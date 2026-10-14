@@ -23,6 +23,7 @@ import {
   type WorkspaceCleanupWorktreeFacts
 } from './workspace-cleanup-host-identity'
 import { getWorktreeVisitTimestamp } from '@/lib/worktree-visit-recency'
+import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 export type { WorkspaceCleanupWorktreeFacts } from './workspace-cleanup-host-identity'
 
 export type WorkspaceCleanupFacetSources = {
@@ -143,7 +144,7 @@ export function buildWorkspaceCleanupFacets(
     workspaceStatusLabel: getWorkspaceStatusLabel(worktree, sources.workspaceStatuses),
     isArchived: worktree?.isArchived ?? candidate.reasons.includes('archived'),
     isPinned: worktree?.isPinned ?? candidate.blockers.includes('pinned'),
-    isUnread: worktree?.isUnread ?? false,
+    isUnread: worktree ? isWorkspaceUnread(worktree) : false,
     hasComment,
     agentState: toWorkspaceCleanupAgentState(
       sources.liveAgentStatusByWorktreeId?.get(candidate.worktreeId)

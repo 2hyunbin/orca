@@ -1,133 +1,28 @@
-import { vi } from 'vitest'
-import { getDefaultSettings, FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 import type { Worktree } from '../../../../../shared/worktree/types'
-import type { AppState } from '../../types'
-import { persistWorktreeMeta } from '../worktrees/metadata/worktree-meta-persist'
-import { createTestStore, makeTab, makeWorktree, TEST_REPO } from '../store-test-helpers'
-import { createTabsSliceMockApi } from '../tabs-slice-test-harness'
-import { createUnreadBadgeCountSelector } from '@/lib/unread-badge-count-selector'
-import {
-  resetFloatingWorkspaceUnreadSelectorCacheForTest,
-  selectFloatingWorkspaceHasUnread
-} from '@/store/selectors'
 import { applyAgentAttention, resolveAgentAttention } from '@/attention/agent-attention-policy'
 import { createTerminalAttentionSurface } from '@/components/terminal-pane/terminal-attention-surface'
 import { acknowledgeViewedAutoAckTarget } from '@/hooks/agent-auto-ack-surfaces'
+import { isWorkspaceUnread } from './workspace-unread-selector'
+import type { AttentionStore, PaneTarget } from './workspace-unread-characterization-fixture'
 
 // Why a driver: each user/system event is replayed here exactly as its production call site
 // issues it, so the scenario expectations in the characterization suites never change when a
 // call site is rewired — only this file does.
 
-export type AttentionStore = ReturnType<typeof createTestStore>
-
-export type PaneTarget = { worktreeId: string; tabId: string; paneKey: string }
-
-export const WS_A = 'repo1::/path/a'
-export const WS_B = 'repo1::/path/b'
-export const LEAF_1 = '11111111-1111-4111-8111-111111111111'
-export const LEAF_2 = '22222222-2222-4222-8222-222222222222'
-
-export type PersistCall = {
-  kind: 'worktree' | 'folder'
-  id: string
-  updates: Record<string, unknown>
-  executionHostId?: string
-}
-
-export function installAttentionMockApi(): void {
-  Object.assign(createTabsSliceMockApi(), {
-    notifications: { dismiss: vi.fn().mockResolvedValue(undefined) },
-    agentStatus: {}
-  })
-}
-
-export function createAttentionStore(options?: { experimental?: boolean }): {
-  store: AttentionStore
-  persists: () => PersistCall[]
-} {
-  const store = createTestStore()
-  const folderUpdates: PersistCall[] = []
-  const updateFolderWorkspace = vi.fn<AppState['updateFolderWorkspace']>(
-    async (id, updates, opts) => {
-      folderUpdates.push({
-        kind: 'folder',
-        id,
-        updates: { ...updates },
-        ...(opts?.executionHostId ? { executionHostId: opts.executionHostId } : {})
-      })
-      return true
-    }
-  )
-  store.setState({
-    repos: [{ ...TEST_REPO, executionHostId: 'local' }],
-    worktreesByRepo: {
-      repo1: [
-        makeWorktree({ id: WS_A, repoId: 'repo1', path: '/path/a' }),
-        makeWorktree({ id: WS_B, repoId: 'repo1', path: '/path/b' })
-      ]
-    },
-    activeWorktreeId: WS_B,
-    settings: {
-      ...getDefaultSettings('/home/test'),
-      experimentalTerminalAttention: options?.experimental === true
-    },
-    updateFolderWorkspace
-  })
-  return {
-    store,
-    persists: () => {
-      const persistMock = vi.mocked(persistWorktreeMeta)
-      const worktreeCalls = persistMock.mock.calls.map(
-        ([, id, updates, executionHostId]): PersistCall => ({
-          kind: 'worktree',
-          id,
-          updates: { ...updates },
-          ...(executionHostId ? { executionHostId } : {})
-        })
-      )
-      const drained = [...worktreeCalls, ...folderUpdates]
-      persistMock.mockClear()
-      folderUpdates.length = 0
-      return drained
-    }
-  }
-}
-
-/** A live terminal tab with one pane; returns its pane target. */
-export function addLiveTerminalTab(
-  store: AttentionStore,
-  worktreeId: string,
-  tabId: string,
-  leafId: string = LEAF_1
-): PaneTarget {
-  store
-    .getState()
-    .createUnifiedTab(worktreeId, 'terminal', { id: `unified-${tabId}`, entityId: tabId })
-  const ptyId = `pty-${tabId}`
-  const s = store.getState()
-  store.setState({
-    tabsByWorktree: {
-      ...s.tabsByWorktree,
-      [worktreeId]: [
-        ...(s.tabsByWorktree[worktreeId] ?? []),
-        makeTab({ id: tabId, worktreeId, ptyId })
-      ]
-    },
-    ptyIdsByTabId: { ...s.ptyIdsByTabId, [tabId]: [ptyId] },
-    terminalLayoutsByTabId: {
-      ...s.terminalLayoutsByTabId,
-      [tabId]: {
-        root: { type: 'leaf', leafId },
-        activeLeafId: leafId,
-        expandedLeafId: null,
-        ptyIdsByLeafId: { [leafId]: ptyId }
-      }
-    }
-  })
-  return { worktreeId, tabId, paneKey: `${tabId}:${leafId}` }
-}
-
-// ─── Events, replayed as their production call sites issue them ───────────────
+export {
+  addLiveTerminalTab,
+  createAttentionStore,
+  installAttentionMockApi,
+  LEAF_1,
+  LEAF_2,
+  observe,
+  WS_A,
+  WS_B,
+  type AttentionStore,
+  type PaneTarget,
+  type PersistCall
+} from './workspace-unread-characterization-fixture'
+export { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 
 /** pane-pty-visibility-bind.ts onBell and parked-terminal-byte-watcher.ts onBell. */
 export function ringBell(store: AttentionStore, target: PaneTarget): void {
@@ -145,8 +40,7 @@ export function completeAgentTurn(
       subject: { workspaceId: target.worktreeId, surfaceKey: target.paneKey ?? undefined },
       reason: 'agent-completion',
       settlesTurn: true,
-      hasFreshActivityEvidence: true,
-      groupAttentionEnabled: state.settings?.experimentalTerminalAttention === true
+      hasFreshActivityEvidence: true
     },
     createTerminalAttentionSurface(state)
   )
@@ -174,7 +68,7 @@ export function toggleUnreadByUser(
   store: AttentionStore,
   row: Pick<Worktree, 'id' | 'hostId' | 'isUnread'>
 ): void {
-  store.getState().setWorkspaceUnreadByUser(row.id, !row.isUnread, row.hostId ?? 'local')
+  store.getState().setWorkspaceUnreadByUser(row.id, !isWorkspaceUnread(row), row.hostId ?? 'local')
 }
 
 /** useAutoAckViewedAgent: the viewed terminal tab's agent is acknowledged. */
@@ -185,44 +79,3 @@ export function autoAckViewedTab(store: AttentionStore, target: PaneTarget): voi
     surfaceKind: 'terminal'
   })
 }
-
-// ─── Observables ──────────────────────────────────────────────────────────────
-
-const shortId = (id: string): string =>
-  id.replace('repo1::/path/', '').replace(LEAF_1, 'L1').replace(LEAF_2, 'L2')
-
-const markers = (record: Record<string, unknown>): string =>
-  Object.entries(record)
-    .map(([key, reason]) => `${shortId(key)}=${String(reason)}`)
-    .join(' ') || '-'
-
-/** One compact line per observable, so a scenario step reads as a diffable block. */
-export function observe(store: AttentionStore, persists: () => PersistCall[]): string[] {
-  const s = store.getState()
-  resetFloatingWorkspaceUnreadSelectorCacheForTest()
-  const rows = Object.values(s.worktreesByRepo)
-    .flat()
-    .map(
-      (w) =>
-        `${shortId(w.id)}@${w.hostId ?? 'local'}:${w.isUnread ? 'UNREAD' : 'read'}:${w.lastActivityAt}`
-    )
-  const folders = s.folderWorkspaces.map(
-    (f) =>
-      `${f.id}@${f.connectionId ?? 'local'}:${f.isUnread ? 'UNREAD' : 'read'}:${f.lastActivityAt}`
-  )
-  return [
-    `rows ${[...rows, ...folders].join(' ')} sortEpoch=${s.sortEpoch}`,
-    `tabs ${markers(s.unreadTerminalTabs)}`,
-    `panes ${markers(s.unreadTerminalPanes)}`,
-    `completions ${markers(s.unreadAgentCompletionPanes)}`,
-    `dock=${createUnreadBadgeCountSelector()(s)} floatingDot=${selectFloatingWorkspaceHasUnread(s)}`,
-    ...persists().map(
-      (call) =>
-        `persist ${call.kind} ${shortId(call.id)} ${JSON.stringify(call.updates)}${
-          call.executionHostId ? ` host=${call.executionHostId}` : ''
-        }`
-    )
-  ]
-}
-
-export { FLOATING_TERMINAL_WORKTREE_ID }

@@ -158,7 +158,8 @@ export type WorkspaceActivationReadPatch = Pick<
 
 /**
  * Activating a workspace reads its flag: every worktree row with the id, or the folder rows on the
- * activated host. Pure, so activation folds it into its own `set()`; markers are left alone.
+ * activated host. Pure, so activation folds it into its own `set()`; markers are left alone; null
+ * when the activated row is not unread.
  * Why no lastActivityAt: focus isn't smart-sort activity — writing it caused the "jump after focus" bug.
  */
 export function readWorkspaceFlagOnActivation(
@@ -166,36 +167,25 @@ export function readWorkspaceFlagOnActivation(
   worktreeId: string,
   executionHostId: ExecutionHostId | undefined,
   activatedRow: { isUnread?: boolean } | undefined
-): { cleared: boolean; patch: WorkspaceActivationReadPatch } {
-  const cleared = Boolean(activatedRow?.isUnread)
-  if (!cleared) {
-    return {
-      cleared,
-      patch: {
-        worktreesByRepo: s.worktreesByRepo,
-        detectedWorktreesByRepo: s.detectedWorktreesByRepo,
-        folderWorkspaces: s.folderWorkspaces
-      }
-    }
+): WorkspaceActivationReadPatch | null {
+  if (!activatedRow?.isUnread) {
+    return null
   }
   const workspaceScope = parseWorkspaceKey(worktreeId)
   return {
-    cleared,
-    patch: {
-      worktreesByRepo: applyWorktreeUpdates(s.worktreesByRepo, worktreeId, { isUnread: false }),
-      detectedWorktreesByRepo: applyDetectedWorktreeUpdates(s.detectedWorktreesByRepo, worktreeId, {
-        isUnread: false
-      }),
-      folderWorkspaces:
-        workspaceScope?.type === 'folder'
-          ? s.folderWorkspaces.map((workspace) =>
-              workspace.id === workspaceScope.folderWorkspaceId &&
-              (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
-                ? { ...workspace, isUnread: false }
-                : workspace
-            )
-          : s.folderWorkspaces
-    }
+    worktreesByRepo: applyWorktreeUpdates(s.worktreesByRepo, worktreeId, { isUnread: false }),
+    detectedWorktreesByRepo: applyDetectedWorktreeUpdates(s.detectedWorktreesByRepo, worktreeId, {
+      isUnread: false
+    }),
+    folderWorkspaces:
+      workspaceScope?.type === 'folder'
+        ? s.folderWorkspaces.map((workspace) =>
+            workspace.id === workspaceScope.folderWorkspaceId &&
+            (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
+              ? { ...workspace, isUnread: false }
+              : workspace
+          )
+        : s.folderWorkspaces
   }
 }
 

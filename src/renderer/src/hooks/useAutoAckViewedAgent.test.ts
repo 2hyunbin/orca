@@ -308,8 +308,7 @@ describe('agent completion pane unread store marker', () => {
       workspaceId: 'wt-1',
       subjectKey: paneKey,
       groupId: 'tab-1',
-      reason: 'agent-completion',
-      groupAttentionEnabled: false
+      reason: 'agent-completion'
     })
     expect(store.getState().unreadAgentCompletionPanes).toEqual({
       [paneKey]: 'agent-completion'

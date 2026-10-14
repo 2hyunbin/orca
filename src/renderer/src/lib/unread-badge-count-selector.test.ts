@@ -11,7 +11,7 @@ import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../shared/project-group-types'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { createUnreadBadgeCountSelector } from './unread-badge-count-selector'
-import { markWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-flag-test-events'
+import { markWorkspaceUnreadFlag } from '@/store/slices/workspace-attention/workspace-unread-flag'
 
 // Why: marking a folder workspace unread persists through this API; echo the write back.
 Object.assign(createTabsSliceMockApi(), {
@@ -155,7 +155,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
   it('drops a flagged worktree when it is archived in place', () => {
     const store = createStoreOnOtherWorktree()
     const selectCount = createUnreadBadgeCountSelector()
-    markWorkspaceUnread(store, BELL_WORKTREE)
+    markWorkspaceUnreadFlag(store.setState, store.getState, BELL_WORKTREE)
     expect(selectCount(store.getState())).toBe(1)
 
     store.setState({
@@ -238,7 +238,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
         folderWorkspaceKey(store.getState().folderWorkspaces[0].id)
       )
       raiseAttention(store, folderWorkspaceKey(store.getState().folderWorkspaces[0].id), tabId)
-      markWorkspaceUnread(store, BELL_WORKTREE)
+      markWorkspaceUnreadFlag(store.setState, store.getState, BELL_WORKTREE)
       store.getState().setVisibleWorkspaceHostIds(['local'])
       expect(selectCount(store.getState())).toBe(2)
 
@@ -261,7 +261,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
           ]
         }
       })
-      markWorkspaceUnread(store, BELL_WORKTREE)
+      markWorkspaceUnreadFlag(store.setState, store.getState, BELL_WORKTREE)
       expect(selectCount(store.getState())).toBe(1)
 
       store.getState().setVisibleWorkspaceHostIds(['local'])

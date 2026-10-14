@@ -2,7 +2,6 @@ import { vi } from 'vitest'
 import type { PaneForegroundAgentEntry } from '@/store/slices/pane-foreground-agent'
 import { LEAF_1 } from './pty-connection-test-pane-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
-import { attentionEventsOverWriterSpies } from '@/store/slices/workspace-attention/workspace-attention-writer-spies'
 
 export function createInitialStoreState(getState: () => StoreState): StoreState {
   return {
@@ -60,7 +59,6 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
     }),
     registerAgentLaunchConfig: vi.fn(),
     clearAgentLaunchConfig: vi.fn(),
-    markWorktreeUnread: vi.fn(),
     observeTerminalGitHubPullRequestLink: vi.fn(),
     recordTerminalInput: vi.fn(),
     setAgentStatus: vi.fn(
@@ -92,11 +90,8 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
     clearPaneForegroundAgent: vi.fn((paneKey: string) => {
       delete getState().paneForegroundAgentByPaneKey[paneKey]
     }),
-    markTerminalTabUnread: vi.fn(),
-    markTerminalPaneUnread: vi.fn(),
-    markAgentCompletionPaneUnread: vi.fn(),
-    // Why: the real event rules run over the spies above, so tests assert the writes they make.
-    ...attentionEventsOverWriterSpies(getState)
+    markTerminalBell: vi.fn(),
+    markAgentAttentionUnread: vi.fn()
   } as StoreState
 }
 

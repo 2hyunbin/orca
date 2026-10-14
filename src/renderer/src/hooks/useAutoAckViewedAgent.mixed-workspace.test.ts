@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../store/types'
+import { getDefaultSettings } from '../../../shared/constants'
 import { resolveAutoAckTabTargets } from './useAutoAckViewedAgent'
 import { acknowledgeViewedAutoAckTarget } from './agent-auto-ack-surfaces'
 import {
@@ -173,12 +174,15 @@ describe('auto-ack in a workspace holding both a terminal and a structured chat'
 })
 
 function markChatGroupUnread(store: TestStore, groupId: string): void {
+  // Why: tab markers for completions sit behind the experimental attention setting.
+  store.setState({
+    settings: { ...getDefaultSettings('/home/test'), experimentalTerminalAttention: true }
+  })
   store.getState().markAgentAttentionUnread({
     workspaceId: WORKSPACE,
     subjectKey: CHAT_SUBJECT,
     groupId,
-    reason: 'agent-completion',
-    groupAttentionEnabled: true
+    reason: 'agent-completion'
   })
 }
 

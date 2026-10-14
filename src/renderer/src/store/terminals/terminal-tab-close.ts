@@ -16,7 +16,7 @@ import { startTerminalTabProviderRetirement } from './terminal-tab-close-provide
 import { commitTerminalSurfaceClose } from './terminal-surface-close-intent'
 import { omitUnverifiedPtyLossTabIds } from './terminal-unverified-pty-loss'
 import { removePaneKeysByTabPrefix } from '../slices/agent-status-pane-keyed-records'
-import { removeClosedTerminalTabAttention } from '../slices/workspace-attention/subject-attention-transitions'
+import { removeTabsAttention } from '../slices/workspace-attention/subject-attention-transitions'
 import { omitRecordKeys } from '../slices/worktrees/teardown/record-key-omission'
 import { deleteNativeChatComposerDraftsForTab } from '@/components/native-chat/native-chat-composer-draft-store'
 import { dropNativeChatPendingAttachmentsForTab } from '@/components/native-chat/native-chat-pending-attachment-cache'
@@ -125,8 +125,8 @@ export function createTerminalTabCloseActions(
         const nextUnverifiedPtyLossTabIds = omitUnverifiedPtyLossTabIds(s.unverifiedPtyLossTabIds, [
           tabId
         ])
-        // Why: only changed marker records are patched, so unrelated closes don't force full-state selector re-eval.
-        const attentionPatch = removeClosedTerminalTabAttention(s, tabId)
+        // Why: unchanged marker records keep their reference, so unrelated closes don't force full-state selector re-eval.
+        const attentionPatch = removeTabsAttention(s, closingTabIds)
         const nextLastTerminalInputAtByPaneKey = removePaneKeysByTabPrefix(
           s.lastTerminalInputAtByPaneKey,
           tabId

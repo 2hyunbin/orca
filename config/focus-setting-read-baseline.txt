@@ -464,6 +464,7 @@
 1 src/renderer/src/store/slices/tabs/tabs-close-actions.ts
 2 src/renderer/src/store/slices/tabs/tabs-host-mirroring.ts
 2 src/renderer/src/store/slices/terminal-tab-retirement.ts
+3 src/renderer/src/store/slices/workspace-attention/workspace-unread-characterization-fixture.ts
 1 src/renderer/src/store/slices/worktree-visibility-owner-settings.ts
 3 src/renderer/src/store/slices/worktree-visibility-settings-write.ts
 3 src/renderer/src/store/slices/worktrees-slice-test-harness.ts
@@ -485,7 +486,7 @@
 2 src/renderer/src/store/terminals/terminal-active-workspace-creation.ts
 1 src/renderer/src/store/terminals/terminal-pane-hibernation.ts
 1 src/renderer/src/store/terminals/terminal-shutdown.ts
-1 src/renderer/src/store/terminals/terminal-tab-attention.ts
+1 src/renderer/src/store/terminals/terminal-tab-appearance.ts
 1 src/renderer/src/store/terminals/terminal-tab-close-providers.ts
 1 src/renderer/src/store/terminals/terminal-workspace-routing.ts
 1 src/renderer/src/web/preload-api/web-app-api.ts

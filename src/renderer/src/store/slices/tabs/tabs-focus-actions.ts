@@ -1,5 +1,5 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { readTerminalTabsOnActivation } from '../workspace-attention/subject-attention-transitions'
+import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 import {
   findTabAndWorktree,
   findTabByEntityInGroup,
@@ -62,7 +62,7 @@ export function createTabsFocusActions(
         const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
         const nextUnreadTerminalTabs =
           state.activeWorktreeId === worktreeId && terminalEntityId
-            ? readTerminalTabsOnActivation(state.unreadTerminalTabs, [terminalEntityId])
+            ? omitRecordKeys(state.unreadTerminalTabs, [terminalEntityId])
             : state.unreadTerminalTabs
         return {
           unifiedTabsByWorktree: {

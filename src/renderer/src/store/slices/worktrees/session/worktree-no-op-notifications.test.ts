@@ -25,8 +25,7 @@ describe('worktree no-op notifications', () => {
       workspaceId: 'missing',
       subjectKey: null,
       groupId: null,
-      reason: 'agent-completion',
-      groupAttentionEnabled: false
+      reason: 'agent-completion'
     })
     before.readTerminalPaneOnInput({ worktreeId: 'missing', tabId: 'missing', paneKey: null })
     before.bumpWorktreeActivity('missing')

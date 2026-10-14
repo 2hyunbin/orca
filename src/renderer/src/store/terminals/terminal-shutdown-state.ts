@@ -13,7 +13,7 @@ import {
 } from '../slices/agent-status'
 import type { TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { copyOnWriteRecord } from '../copy-on-write-record'
-import { removeShutdownTabsAttention } from '../slices/workspace-attention/subject-attention-transitions'
+import { removeTabsAttention } from '../slices/workspace-attention/subject-attention-transitions'
 
 export function commitTerminalShutdownState({
   exitGuardPtyIds,
@@ -125,7 +125,7 @@ export function commitTerminalShutdownState({
       pendingSetupSplitByTabId: pendingSetupSplitByTabId.read(),
       pendingIssueCommandSplitByTabId: pendingIssueCommandSplitByTabId.read(),
       terminalLayoutsByTabId: terminalLayoutsByTabId.read(),
-      ...removeShutdownTabsAttention(
+      ...removeTabsAttention(
         state,
         tabs.map((tab) => tab.id)
       ),

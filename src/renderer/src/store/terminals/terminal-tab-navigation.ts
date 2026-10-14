@@ -2,7 +2,7 @@ import { resolveActiveTabOwnerWorktreeId } from '../slices/active-tab-owner-work
 import { getTerminalTabOwnerWorktreeId } from '../slices/terminal-tab-owner-index'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { ownsGlobalSelection } from '../global-selection-owner'
-import { readTerminalTabsOnActivation } from '../slices/workspace-attention/subject-attention-transitions'
+import { omitRecordKeys } from '../slices/worktrees/teardown/record-key-omission'
 
 export function createTerminalTabNavigationActions(
   set: TerminalStoreSet,
@@ -67,7 +67,7 @@ export function createTerminalTabNavigationActions(
         const isActiveWorktreeTab =
           tabOwnerWorktreeId !== null && ownsGlobalSelection(s, tabOwnerWorktreeId)
         const nextUnreadTerminalTabs = isActiveWorktreeTab
-          ? readTerminalTabsOnActivation(s.unreadTerminalTabs, [tabId])
+          ? omitRecordKeys(s.unreadTerminalTabs, [tabId])
           : s.unreadTerminalTabs
         // Why: activeTabId marks the visible tab, so background bells remain unread.
         return {

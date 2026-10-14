@@ -173,8 +173,7 @@ describe('createTerminalAttentionSurface', () => {
           subject: { workspaceId, surfaceKey },
           reason: 'agent-completion',
           settlesTurn: true,
-          hasFreshActivityEvidence: false,
-          groupAttentionEnabled: true
+          hasFreshActivityEvidence: false
         },
         createTerminalAttentionSurface(store.getState())
       )

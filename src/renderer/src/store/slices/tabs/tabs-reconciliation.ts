@@ -13,7 +13,7 @@ import {
   writeBatchedWorkspaceRecordEntry,
   type WorktreeTabModelReconciliationBatch
 } from './tabs-reconciliation-batch'
-import { removeTerminalTabMarkers } from '../workspace-attention/subject-attention-transitions'
+import { removeTabMarkers } from '../workspace-attention/subject-attention-transitions'
 
 export type WorktreeTabModelReconciliation = {
   patch: Partial<AppState>
@@ -199,10 +199,11 @@ export function projectWorktreeTabModelReconciliation(
     )
     // A batch that already owns this map published it in an earlier patch, so
     // draining further entries in place needs no second patch entry.
-    const nextUnreadTerminalTabs = removeTerminalTabMarkers(
+    const nextUnreadTerminalTabs = removeTabMarkers(
       state.unreadTerminalTabs,
       droppedTerminalEntityIds,
-      batch?.ownedStateKeys.has('unreadTerminalTabs') === true ? (owned) => owned : undefined
+      (record) =>
+        batch?.ownedStateKeys.has('unreadTerminalTabs') === true ? record : { ...record }
     )
     if (nextUnreadTerminalTabs !== state.unreadTerminalTabs) {
       batch?.ownedStateKeys.add('unreadTerminalTabs')

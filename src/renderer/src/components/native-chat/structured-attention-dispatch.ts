@@ -111,10 +111,7 @@ function dispatchStructuredAttention(
       // The host saw this edge in its own journal. That is the out-of-band proof this
       // flag is for, and it is why a backgrounded chat with no rendered transcript still counts —
       // admission below still rejects a key the tab no longer owns.
-      hasFreshActivityEvidence: true,
-      // Parity with the terminal lane: the tab dot is the same experimental presentation policy
-      // for both, so it reads the same setting rather than a second one.
-      groupAttentionEnabled: state.settings?.experimentalTerminalAttention === true
+      hasFreshActivityEvidence: true
     },
     createStructuredAttentionSurface(state)
   )

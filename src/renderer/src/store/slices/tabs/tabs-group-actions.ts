@@ -8,7 +8,7 @@ import {
   replaceLeaf
 } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { ownsGlobalSelection } from '../../global-selection-owner'
-import { readTerminalTabsOnActivation } from '../workspace-attention/subject-attention-transitions'
+import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 
 export function createTabsGroupActions(
   set: TabsSliceSet,
@@ -72,7 +72,7 @@ export function createTabsGroupActions(
             .filter((tab): tab is (typeof unifiedTabs)[number] => tab?.contentType === 'terminal')
             .map((tab) => tab.entityId)
         )
-        const nextUnreadTerminalTabs = readTerminalTabsOnActivation(
+        const nextUnreadTerminalTabs = omitRecordKeys(
           state.unreadTerminalTabs,
           visibleTerminalEntityIds
         )

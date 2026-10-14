@@ -18,9 +18,9 @@ vi.mock('@/lib/unread-badge-count', async (importOriginal) => {
 import { useAppStore } from '@/store'
 import { clearUnreadDockBadgeCount, useUnreadDockBadge } from './useUnreadDockBadge'
 import {
-  markWorkspaceUnread,
-  readWorkspace
-} from '@/store/slices/workspace-attention/workspace-flag-test-events'
+  clearWorkspaceUnreadFlag,
+  markWorkspaceUnreadFlag
+} from '@/store/slices/workspace-attention/workspace-unread-flag'
 
 const initialState = useAppStore.getInitialState()
 
@@ -115,11 +115,11 @@ describe('useUnreadDockBadge', () => {
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
 
-    act(() => markWorkspaceUnread(useAppStore, worktree.id))
+    act(() => markWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, worktree.id))
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(3)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
 
-    act(() => readWorkspace(useAppStore, worktree.id))
+    act(() => clearWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, worktree.id))
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(4)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
   })
@@ -153,11 +153,15 @@ describe('useUnreadDockBadge', () => {
     expect(useAppStore.getState().tabsByWorktree).not.toBe(tabsByWorktree)
     expect(renders).toBe(rendersAfterMount)
 
-    act(() => markWorkspaceUnread(useAppStore, 'repo::worktree-0'))
+    act(() =>
+      markWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, 'repo::worktree-0')
+    )
     expect(renders).toBe(rendersAfterMount + 1)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(2)
 
-    act(() => readWorkspace(useAppStore, 'repo::worktree-0'))
+    act(() =>
+      clearWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, 'repo::worktree-0')
+    )
     expect(renders).toBe(rendersAfterMount + 2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
   })

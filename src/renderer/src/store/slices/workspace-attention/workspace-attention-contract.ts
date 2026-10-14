@@ -1,8 +1,5 @@
 import type { StateCreator } from 'zustand'
-import type {
-  AgentAttentionUnreadReason,
-  StoredAgentAttentionUnread
-} from '@/attention/agent-attention-contract'
+import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-contract'
 import type { AgentAttentionUnreadWrite } from '@/attention/agent-attention-policy'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { AppState } from '../../types'
@@ -16,21 +13,7 @@ export type TerminalPaneAttentionTarget = {
   paneKey: string
 }
 
-/** The primitive writes every attention event composes; tests may substitute spies. */
-export type WorkspaceAttentionWriters = {
-  markWorkspaceUnread: (worktreeId: string) => void
-  markTabUnread: (tabId: string, reason: AgentAttentionUnreadReason) => void
-  markPaneUnread: (paneKey: string, reason: AgentAttentionUnreadReason) => void
-  markCompletionUnread: (paneKey: string, reason: AgentAttentionUnreadReason) => void
-}
-
-/**
- * The unread records and every transition on them, named by the event that triggers it. The
- * persisted workspace flag `isUnread` lives on worktree/folder rows but only this module writes
- * it from the renderer. Removals and tab activation that happen inside
- * another slice's `set()` (close, sleep, purge, …) use the pure functions in
- * `subject-attention-transitions.ts` instead.
- */
+/** The unread records and every transition on them; in-`set()` ones live in `subject-attention-transitions.ts`. */
 export type WorkspaceAttentionSlice = {
   /** Tab marker, keyed by terminal tab id or a structured chat's unified tab id. Renderer-local. */
   unreadTerminalTabs: Record<string, StoredAgentAttentionUnread>
