@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { wslMoveCutoverFixture as cutover } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { wslMoveJournalDirectory, writeWslMoveCutover } from './wsl-move-cutover-journal'
+import { wslMoveJournalDirectory } from './wsl-move-cutover-journal'
+import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import { loadWslMoveFence, resetWslMoveFenceForTests } from './wsl-move-scope-guard'
 import {
   isWslMoveFolderWorkspaceBlocked,
@@ -28,7 +29,7 @@ afterEach(() => {
 
 describe('WSL move background backoff', () => {
   beforeEach(() => {
-    writeWslMoveCutover(
+    seedWslMoveCutover(
       userDataPath,
       cutover('move-1', 'source-fenced', {}, { repoIds: ['repo-1'], folderWorkspaceIds: ['notes'] })
     )
@@ -81,10 +82,10 @@ it('backs off a folder workspace at a WSL path when the journal is unreadable', 
 })
 
 it('tells a move in flight from a project the WSL host owns', () => {
-  writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+  seedWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
   expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a' })).toBe('moving')
   expect(wslMoveRepoBackoff({ id: 'repo-2', path: '/a' })).toBeNull()
-  writeWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+  seedWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
   expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a' })).toBe('owned')
   expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a', ...onSsh })).toBeNull()
 })

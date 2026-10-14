@@ -12,7 +12,7 @@ import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import type { Store } from '../persistence'
 import { closeTestStores, createStore, testState } from '../persistence-test-harness'
 import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover } from '../persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {
   loadWslMoveFence,
   resetWslMoveFenceForTests
@@ -108,7 +108,7 @@ describe('scheduled automations under a WSL move', () => {
     vi.setSystemTime(new Date('2026-05-13T08:00:00'))
     const store = await createStore()
     const automation = seedAutomation(store)
-    writeWslMoveCutover(fenceDir, cutover('move-1', 'source-fenced', {}, { repoIds: ['r1'] }))
+    seedWslMoveCutover(fenceDir, cutover('move-1', 'source-fenced', {}, { repoIds: ['r1'] }))
     const service = attachedService(store)
 
     await evaluateAt(store, service, automation.id, '2026-05-13T09:01:00')
@@ -128,7 +128,7 @@ describe('scheduled automations under a WSL move', () => {
     vi.setSystemTime(new Date('2026-05-13T08:00:00'))
     const store = await createStore()
     const automation = seedAutomation(store)
-    writeWslMoveCutover(
+    seedWslMoveCutover(
       fenceDir,
       cutover('move-1', 'destination-committed', {}, { repoIds: ['r1'] })
     )
@@ -154,7 +154,7 @@ describe('scheduled automations under a WSL move', () => {
     const store = await createStore()
     const automation = seedAutomation(store, true)
     runAutomationPrecheckMock.mockImplementation(async () => {
-      writeWslMoveCutover(fenceDir, cutover('move-1', 'source-fenced', {}, { repoIds: ['r1'] }))
+      seedWslMoveCutover(fenceDir, cutover('move-1', 'source-fenced', {}, { repoIds: ['r1'] }))
       return {
         command: 'true',
         exitCode: 0,

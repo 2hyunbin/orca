@@ -6,7 +6,7 @@ import { getRepoExecutionHostId, type ExecutionHostId } from '../shared/executio
 import type { Repo } from '../shared/repo-types'
 import { closeTestStores, createStore, testState } from './persistence-test-harness'
 import { wslMoveCutoverFixture as cutover } from './persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover } from './persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import { seedWslMoveCutover } from './persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {
   loadWslMoveFence,
   resetWslMoveFenceForTests
@@ -47,7 +47,7 @@ function repo(id: string, overrides: Partial<Repo> = {}): Repo {
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'wsl-move-backfill-'))
   loadWslMoveFence(testState.dir)
-  writeWslMoveCutover(testState.dir, cutover('move-1', 'source-fenced'))
+  seedWslMoveCutover(testState.dir, cutover('move-1', 'source-fenced'))
   vi.mocked(probeGitRemoteIdentity).mockResolvedValue({
     status: 'resolved',
     identity: { canonicalKey: 'github.com/acme/app', remoteName: 'origin', remoteUrl: 'u' }
@@ -111,7 +111,7 @@ describe('fork upstream backfill under a WSL move', () => {
   })
 
   it('fills the host row, not the hidden local row with the same id', async () => {
-    writeWslMoveCutover(testState.dir, cutover('move-1', 'destination-committed'))
+    seedWslMoveCutover(testState.dir, cutover('move-1', 'destination-committed'))
     const store = createStore()
     store.addRepo(repo(MOVING))
     store.addRepo(repo(MOVING, { executionHostId: 'runtime:env-1' }))

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover } from '../persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {
   loadWslMoveFence,
   resetWslMoveFenceForTests
@@ -27,7 +27,7 @@ let userDataPath: string
 beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-automation-'))
   loadWslMoveFence(userDataPath)
-  writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+  seedWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
 })
 afterEach(() => {
   resetWslMoveFenceForTests()
@@ -44,7 +44,7 @@ describe('describeScheduledRefusal under a WSL move', () => {
   })
 
   it('says the WSL host runs it once the host owns the project', () => {
-    writeWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+    seedWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
     expect(refusalFor(repo('repo-1'))).toBe(WSL_MOVE_OWNED_BY_HOST)
     expect(WSL_MOVE_OWNED_BY_HOST).toBe(
       "This automation's project now runs on its WSL host, which runs this automation there. Orca no longer runs this local copy."

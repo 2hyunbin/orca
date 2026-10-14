@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover } from '../persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {
   loadWslMoveFence,
   resetWslMoveFenceForTests
@@ -60,7 +60,7 @@ let userDataPath: string
 beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-rename-'))
   loadWslMoveFence(userDataPath)
-  writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced', {}, { repoIds: [REPO_ID] }))
+  seedWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced', {}, { repoIds: [REPO_ID] }))
   resetFirstWorkBranchRenameState()
   vi.clearAllMocks()
   resolveTextGenerationParamsMock.mockReturnValue({

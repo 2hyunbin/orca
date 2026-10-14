@@ -10,7 +10,7 @@ import { worktreeWorkspaceKey } from '../shared/workspace-scope'
 import { closeTestStores, createStore, testState } from './persistence-test-harness'
 import type { Store } from './persistence'
 import { wslMoveCutoverFixture as cutover } from './persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover } from './persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import { seedWslMoveCutover } from './persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {
   loadWslMoveFence,
   resetWslMoveFenceForTests
@@ -61,7 +61,7 @@ beforeEach(() => {
   store.addRepo(repo(MOVING))
   store.addRepo(repo(STAYING))
   loadWslMoveFence(testState.dir)
-  writeWslMoveCutover(testState.dir, cutover('move-1', 'source-fenced'))
+  seedWslMoveCutover(testState.dir, cutover('move-1', 'source-fenced'))
 })
 afterEach(async () => {
   resetWslMoveFenceForTests()
