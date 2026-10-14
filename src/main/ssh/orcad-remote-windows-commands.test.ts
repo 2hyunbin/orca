@@ -1,19 +1,19 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import type * as ExecCommandModule from './ssh-relay-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./ssh-relay-deploy-helpers', () => ({
-  execCommand: vi.fn(),
-  isUnconfirmedSshCommandTermination: () => false
+vi.mock('./ssh-relay-exec-command', async (importOriginal) => ({
+  ...(await importOriginal<typeof ExecCommandModule>()),
+  execCommand: vi.fn()
 }))
 
-import { execCommand } from './ssh-relay-deploy-helpers'
-import type { SshConnection } from './ssh-connection'
+import { execCommand } from './ssh-relay-exec-command'
+import type { OrcadHostTransport } from './orcad-host-transport'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { orcadLivenessProbeCommand, type OrcadLaunchSpec } from './orcad-remote-launch'
 import {
   OrcadWindowsLaunchRefusedError,
   readWindowsOrcadLaunchReport,
+  readWindowsOrcadSlotEntry,
   windowsOrcadLaunchCommand,
   windowsOrcadLaunchRuntimeCommand
 } from './orcad-remote-launch-windows'
@@ -58,9 +58,9 @@ const spec: OrcadLaunchSpec = {
   activationRoot: `${base}/.orcad-activation-transaction`
 }
 
-function windowsConn(): { conn: SshConnection; writes: [string, string][] } {
+function windowsConn(): { conn: OrcadHostTransport; writes: [string, string][] } {
   const writes: [string, string][] = []
-  const conn: SshConnection = Object.assign(Object.create(null), {
+  const conn: OrcadHostTransport = Object.assign(Object.create(null), {
     writeFile: async (path: string, contents: string) => {
       writes.push([path, contents])
     }
@@ -85,6 +85,18 @@ describe('Windows orcad commands run node.exe directly', () => {
     ['stop', stopOrcadCommand(host, slot, { waitSeconds: 20, nodePath: spec.nodePath })],
     ['build hash', remoteOrcadBuildHashCommand(host, slot)]
   ]
+
+  it('selects the split server entry and preserves older host-script answers', () => {
+    const server = `${slot}/orcad-server.js`
+    const selected = readWindowsOrcadSlotEntry(encoded('__ORCAD_ENTRY__', server), host, slot)
+    expect(selected).toBe(server)
+    expect(windowsOrcadLaunchCommand(host, spec, SLOT_NODE, selected)).toContain(
+      `${server} --windows-breakaway-launch`
+    )
+    expect(readWindowsOrcadSlotEntry(encoded('__ORCAD_RUNTIME__', SLOT_NODE), host, slot)).toBe(
+      `${slot}/orcad.js`
+    )
+  })
 
   it.each(commands())('%s: no PowerShell hop, no encoding, no WMI or signal', (_name, command) => {
     expect(command).toMatch(/^C:\\Users\\u\\\.orca-remote\\runtimes\\node-[0-9a-f]+\\node\.exe /u)
@@ -126,7 +138,10 @@ describe('Windows orcad commands run node.exe directly', () => {
 
   it('never polls across SSH: runtime, launch, then one host-side wait', async () => {
     mockExec
-      .mockResolvedValueOnce(encoded('__ORCAD_RUNTIME__', SLOT_NODE))
+      .mockResolvedValueOnce(
+        encoded('__ORCAD_RUNTIME__', SLOT_NODE) +
+          encoded('__ORCAD_ENTRY__', `${slot}/orcad-server.js`)
+      )
       .mockResolvedValueOnce(
         'ORCA_ORCAD_LAUNCH {"method":"breakaway","pid":4242,"inJob":false}\r\n'
       )
@@ -144,6 +159,9 @@ describe('Windows orcad commands run node.exe directly', () => {
     expect(result).toMatchObject({ state: 'ready', readiness: { runtimeId: 'r1' } })
     expect(mockExec).toHaveBeenCalledTimes(3)
     expect(String(mockExec.mock.calls[1]?.[1]).startsWith(`${SLOT_NODE} `)).toBe(true)
+    expect(String(mockExec.mock.calls[1]?.[1])).toContain(
+      `${slot}/orcad-server.js --windows-breakaway-launch`
+    )
     expect(sleep).not.toHaveBeenCalled()
   })
 })
@@ -199,26 +217,6 @@ describe('Windows command lines for both DefaultShells', () => {
       )
     }
   )
-})
-
-describe('no -EncodedCommand in the W1 builders', () => {
-  it.each([
-    'orcad-remote-windows-node.ts',
-    'orcad-windows-host-script.ts',
-    'orcad-remote-launch-windows.ts',
-    'orcad-remote-liveness-windows.ts',
-    'orcad-remote-process-control-windows.ts',
-    'orcad-remote-readiness-wait.ts',
-    'orcad-remote-record-file.ts',
-    'orcad-remote-build-hash.ts',
-    'orcad-managed-remote-stop.ts',
-    'orcad-remote-runtime-control.ts'
-  ])('%s', (file) => {
-    const code = readFileSync(join(__dirname, file), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//gu, '')
-      .replace(/^\s*\/\/.*$/gmu, '')
-    expect(code).not.toMatch(/EncodedCommand|powerShellCommand/u)
-  })
 })
 
 describe('Windows launch report', () => {

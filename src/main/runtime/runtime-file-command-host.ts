@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split declarations.
+import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
 import type { Store } from '../persistence'
 import type {
   ResolvedRuntimeFileTarget,
@@ -54,7 +55,8 @@ export type RuntimeFileCommandHost = {
     filePath: string,
     relativePath: string,
     runtimeEnvironmentId?: string | null,
-    navigation?: RuntimeNavigationTarget
+    navigation?: RuntimeNavigationTarget,
+    position?: RuntimeFileOpenPosition
   ): void
   openDiff(
     worktreeId: string,
@@ -172,28 +174,4 @@ export function isMobileBinaryPath(relativePath: string): boolean {
     return false
   }
   return MOBILE_BINARY_EXTENSIONS.has(basename.slice(dotIndex).toLowerCase())
-}
-
-export function isRuntimeDirectoryEntry(entry: {
-  isDirectory(): boolean
-  isSymbolicLink(): boolean
-}): boolean {
-  // Why: listings are passive UI reads; don't stat symlink targets here (explicit open/expand resolves them).
-  if (entry.isSymbolicLink()) {
-    return false
-  }
-  if (entry.isDirectory()) {
-    return true
-  }
-  return false
-}
-
-export function isBinaryBuffer(buffer: Buffer): boolean {
-  const len = Math.min(buffer.length, 8192)
-  for (let i = 0; i < len; i += 1) {
-    if (buffer[i] === 0) {
-      return true
-    }
-  }
-  return false
 }
