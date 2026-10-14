@@ -124,7 +124,15 @@ export function JiraIssueTransitionControl({
             <p className="text-xs text-muted-foreground" role="status">
               {translate('jira.transitions.loading', 'Loading status changes…')}
             </p>
-          ) : requirement?.kind === 'unsupported' ? (
+          ) : null}
+          {requirement?.kind === 'form' && selected ? (
+            <JiraTransitionFieldsForm
+              transition={selected}
+              pending={busy || Boolean(error)}
+              onBack={reset}
+              onSubmit={(updates) => apply(selected, updates)}
+            />
+          ) : error || loading ? null : requirement?.kind === 'unsupported' ? (
             <>
               <p className="text-sm font-medium">
                 {translate('jira.transitions.completeInJira', 'Complete “{{name}}” in Jira', {
@@ -139,13 +147,6 @@ export function JiraIssueTransitionControl({
                 )}
               </p>
             </>
-          ) : requirement?.kind === 'form' && selected ? (
-            <JiraTransitionFieldsForm
-              transition={selected}
-              pending={busy}
-              onBack={reset}
-              onSubmit={(updates) => apply(selected, updates)}
-            />
           ) : selected && submitError ? null : transitions.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               {translate('jira.transitions.empty', 'No status changes available.')}

@@ -85,6 +85,58 @@ describe('Jira transition control', () => {
     )
   })
 
+  it('retains required choices through rejected-save reload and metadata retry', async () => {
+    const transition: JiraTransition = {
+      ...close,
+      fields: [
+        {
+          key: 'resolution',
+          name: 'Resolution',
+          required: true,
+          allowedValues: [{ id: '1', name: 'Fixed' }]
+        },
+        { key: 'comment', name: 'Comment', required: true }
+      ]
+    }
+    const mutate = vi.fn().mockResolvedValue({ ok: false, error: 'Jira rejected the resolution.' })
+    const retry = vi.fn()
+    const props = {
+      issue,
+      transitions: [transition],
+      loading: false,
+      error: null,
+      pending: false,
+      onRetry: retry,
+      onTransition: mutate
+    }
+    const view = render(<JiraIssueTransitionControl {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Change status: Open' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Fixed' }))
+    fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'Verified fix' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change status' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Jira rejected')
+
+    view.rerender(<JiraIssueTransitionControl {...props} loading />)
+    expect(screen.getByLabelText('Comment').getAttribute('disabled')).not.toBeNull()
+    expect(screen.getByDisplayValue('Verified fix')).toBeTruthy()
+    expect(screen.getByRole('combobox').textContent).toContain('Fixed')
+    view.rerender(<JiraIssueTransitionControl {...props} error="Metadata unavailable" />)
+    expect(screen.getByDisplayValue('Verified fix')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Change status' }).hasAttribute('disabled')).toBe(
+      true
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(retry).toHaveBeenCalledOnce()
+
+    view.rerender(<JiraIssueTransitionControl {...props} />)
+    mutate.mockResolvedValue({ ok: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Change status' }))
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(2))
+    expect(mutate.mock.calls[1]).toEqual(mutate.mock.calls[0])
+  })
+
   it('names unsupported fields and opens the correct Jira issue without posting', async () => {
     const openUrl = vi.fn()
     Object.defineProperty(window, 'api', { configurable: true, value: { shell: { openUrl } } })
