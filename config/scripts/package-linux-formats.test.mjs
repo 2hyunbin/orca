@@ -266,16 +266,23 @@ describe('independent Linux package formats', () => {
   })
 })
 
-it('changes only CI deb/rpm compression levels without mutating release settings or hooks', () => {
+it('isolates qualification and compression overrides from release settings and hooks', () => {
   const require = createRequire(import.meta.url)
   const release = require('../electron-builder.config.cjs')
-  const before = { deb: { ...release.deb }, rpm: { ...release.rpm } }
+  const before = {
+    ...release,
+    deb: { ...release.deb },
+    rpm: { ...release.rpm }
+  }
   const ci = require('../electron-builder-pr-linux.config.cjs')
-  expect(release.deb).toEqual(before.deb)
-  expect(release.rpm).toEqual(before.rpm)
+  expect(release).toEqual(before)
   expect(ci).toEqual({
     ...release,
+    publish: null,
+    extraMetadata: { ...release.extraMetadata, orcaQualificationBuild: true },
+    afterPack: expect.any(Function),
     deb: { ...release.deb, fpm: [...(release.deb.fpm ?? []), '--deb-compression-level=1'] },
     rpm: { ...release.rpm, fpm: [...(release.rpm.fpm ?? []), '--rpm-compression-level=1'] }
   })
+  expect(ci.afterPack).not.toBe(release.afterPack)
 })

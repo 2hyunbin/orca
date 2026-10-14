@@ -30,6 +30,7 @@ it('embeds the required SSH deployment template before testing the Linux package
   )
   expect(packageSteps[template]['continue-on-error']).toBeUndefined()
   expect(packageSteps[bundle].env.ORCA_REQUIRE_ORCAD_TEMPLATE).toBe('1')
+  expect(packageSteps[bundle].run).toContain('--config config/electron-builder-pr-linux.config.cjs')
   expect(packageSteps[journey].run).toContain('plugin-packaged-ssh.spec.ts')
   expect(packageSteps[journey].env.ORCA_ORCAD_TEMPLATE_PATH).toBeUndefined()
 })

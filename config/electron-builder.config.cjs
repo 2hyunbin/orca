@@ -404,7 +404,7 @@ module.exports = {
       ensureWaylandClipboard(context.arch)
     }
   },
-  afterPack: async (context) => {
+  afterPack: async (context, { templateTargets } = {}) => {
     const resourcesDir =
       context.electronPlatformName === 'darwin'
         ? join(
@@ -499,6 +499,7 @@ module.exports = {
     finalizePackagedRipgrep(resourcesDir)
     await finalizePackagedOrcadTemplate(resourcesDir, {
       platform: context.electronPlatformName,
+      targets: templateTargets,
       signMacBinary: (path) =>
         signMacStandaloneHelper(path, 'orcad template binary', context.packager)
     })

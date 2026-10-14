@@ -119,7 +119,7 @@ function resealOrcadTemplateManifest(templateDir, signedPaths) {
  * carry the app's Developer ID), reseal, then verify the exact bytes that ship.
  */
 async function finalizePackagedOrcadTemplate(resourcesDir, options) {
-  const { platform, env = process.env, signMacBinary } = options
+  const { platform, env = process.env, signMacBinary, targets } = options
   const templateDir = join(resourcesDir, ORCAD_TEMPLATE_RESOURCE_DIR)
   if (!existsSync(templateDir)) {
     if (isOrcadTemplateRequired(env)) {
@@ -135,7 +135,7 @@ async function finalizePackagedOrcadTemplate(resourcesDir, options) {
     }
     resealOrcadTemplateManifest(templateDir, machO)
   }
-  verifyPackagedOrcadTemplate(resourcesDir)
+  verifyPackagedOrcadTemplate(resourcesDir, targets)
 }
 
 /** `inner-signing-list.txt` lines are app-relative Windows paths; keep the template's. */
