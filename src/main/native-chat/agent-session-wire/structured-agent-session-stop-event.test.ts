@@ -1,5 +1,5 @@
-// A Stop's event, through the real host: written in the Stop's serialized step once it takes
-// effect, before the interrupt and before anything that ends the child, naming the turn and who
+// A Stop's event, through the real host: written in the Stop's serialized step as it is
+// accepted, before the interrupt and before anything that ends the child, naming the turn and who
 // asked; never by a Stop that stopped nothing.
 
 import { afterEach, describe, expect, it } from 'vitest'
@@ -96,8 +96,9 @@ describe("a Stop's event", () => {
       return { cancelled: true }
     })
     const fields = { turnId: 'turn-1' }
+    const operationId = hostTestOperationId()
     const stopped = await rig.host.cancel(QUEUED_RIG_CALLER, {
-      envelope: rig.envelope(fields, 'agentSession.cancel', hostTestOperationId()),
+      envelope: rig.envelope(fields, 'agentSession.cancel', operationId),
       ...fields
     })
     expect(stopped).toMatchObject({ ok: true })
