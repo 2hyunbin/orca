@@ -51,9 +51,40 @@ export async function callRuntimeEnvironment(
       expectedEnvironmentPairingRevision,
       method
     )
-    return failure ?? getRuntimeEnvironmentStatus(userDataPath, selector, timeoutMs, options)
+    return (
+      failure ??
+      getRuntimeEnvironmentStatus(userDataPath, selector, timeoutMs, {
+        ...options,
+        expectedEnvironmentPairingRevision
+      })
+    )
   }
   const environment = resolveEnvironment(userDataPath, selector)
+  const admissionFailure = runtimeEnvironmentRevisionFailure(
+    environment,
+    expectedEnvironmentPairingRevision,
+    method,
+    options?.expectedEnvironmentRuntimeId
+  )
+  if (admissionFailure) {
+    return admissionFailure
+  }
+  const accept = (response: RuntimeRpcResponse<unknown>): RuntimeRpcResponse<unknown> => {
+    const failure = runtimeEnvironmentRevisionFailure(
+      expectedEnvironmentPairingRevision === undefined &&
+        options?.expectedEnvironmentRuntimeId === undefined
+        ? environment
+        : resolveEnvironment(userDataPath, environment.id),
+      expectedEnvironmentPairingRevision,
+      method,
+      options?.expectedEnvironmentRuntimeId
+    )
+    if (failure) {
+      return failure
+    }
+    markEnvironmentUsedFromResponse(userDataPath, environment.id, response)
+    return response
+  }
   // Why: connection failures reject (they don't resolve as ok:false), so the
   // Tailscale hint is applied to the thrown error here — wrapping the resolved
   // value would miss the in-use connect/timeout case the toast surfaces.
@@ -92,8 +123,7 @@ export async function callRuntimeEnvironment(
             options?.signal,
             ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
           )
-          markEnvironmentUsedFromResponse(userDataPath, currentEnvironment.id, response)
-          return response
+          return accept(response)
         }
         if (shouldUseCachedRequestConnection(method)) {
           const response = await sendRemoteRuntimeConnectionRequestAbortable(
@@ -104,8 +134,7 @@ export async function callRuntimeEnvironment(
             effectiveTimeoutMs,
             options?.signal
           )
-          markEnvironmentUsedFromResponse(userDataPath, currentEnvironment.id, response)
-          return response
+          return accept(response)
         }
         if (shouldRouteCallBySupport(method)) {
           return executeSupportRoutedCall({
@@ -130,8 +159,7 @@ export async function callRuntimeEnvironment(
           options?.signal,
           ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
         )
-        markEnvironmentUsedFromResponse(userDataPath, currentEnvironment.id, response)
-        return response
+        return accept(response)
       },
       options?.signal
     )

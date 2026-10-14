@@ -268,3 +268,28 @@ it.each(['capable', 'absent'] as const)(
     expect(setup).toHaveBeenCalledOnce()
   }
 )
+
+it('a pinned shared-control response cannot publish or mark usage after re-pairing', async () => {
+  supportsMock.mockResolvedValue(acceptedOutcome('capable'))
+  const pending = deferred<ReturnType<typeof success>>()
+  const supported = vi.fn().mockReturnValue(pending.promise)
+  const markUsed = vi.fn()
+  const routed = routeRuntimeEnvironmentCallBySupport({
+    userDataPath: '/profile',
+    initialEnvironment: environment(),
+    expectedPairingRevision: 1,
+    method: 'aiVault.resolveSession',
+    timeoutMs: 100,
+    supported,
+    unsupported: vi.fn(),
+    markUsed
+  })
+  await vi.waitFor(() => expect(supported).toHaveBeenCalledOnce())
+  resolveEnvironmentMock.mockReturnValue(environment({ pairingRevision: 2 }))
+  pending.resolve(success())
+  await expect(routed).resolves.toMatchObject({
+    ok: false,
+    error: { code: 'runtime_environment_changed' }
+  })
+  expect(markUsed).not.toHaveBeenCalled()
+})

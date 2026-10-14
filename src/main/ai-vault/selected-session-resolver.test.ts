@@ -2,7 +2,16 @@ import { claudeProviderHandle } from '../../shared/agent-session-provider-handle
 import { resolveSelectedAccountTranscript } from '../native-chat/selected-cli-transcript'
 import { prepareSelectedCodexAdoption } from '../native-chat/selected-codex-adoption-preparation'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm, opendir, truncate } from 'node:fs/promises'
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  opendir,
+  truncate,
+  symlink,
+  realpath
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SelectedSessionResultSchema } from '../../shared/ai-vault-selected-session-contract'
@@ -326,4 +335,52 @@ it('answers existing ownership before account or provider-file eligibility, incl
   expect(await resolveSelectedSessionOnHost(source, runtime, {})).toEqual(owned)
   expect(account).not.toHaveBeenCalled()
   expect(mocks.read).not.toHaveBeenCalled()
+})
+
+it('lookup and create reject escaped host paths while retaining an admitted account alias', async () => {
+  const home = join(root, 'account')
+  const projects = join(home, 'projects')
+  await mkdir(projects, { recursive: true })
+  const content = `${JSON.stringify({
+    type: 'user',
+    sessionId: 'provider-1',
+    cwd: '/repo',
+    message: { role: 'user', content: 'Retain my saved conversation' }
+  })}\n`
+  const file = join(projects, 'provider-1.jsonl')
+  await writeFile(file, content)
+  await writeFile(join(root, 'outside.jsonl'), content)
+  vi.spyOn(runtime, 'resolveStructuredAgentAccountHome').mockResolvedValue({
+    variable: 'CLAUDE_CONFIG_DIR',
+    path: home
+  })
+  const importer = CLAUDE_CLI_CONVERSATIONS.transcriptImport
+  if (!importer) {
+    throw new Error('Missing importer')
+  }
+  const admit = (source: ReturnType<typeof cliSource>) =>
+    resolveStructuredAgentSessionAdoptionForCreate({
+      host: null,
+      settings: {},
+      agent: 'claude',
+      transcriptImport: importer,
+      providerSessionId: source.providerSessionId,
+      selfSessionId: 'new-chat',
+      selectedAccountHomePath: home,
+      selectedSource: source,
+      sourceRows: rows,
+      sourceCwd: '/repo'
+    })
+  const escaped = cliSource(`${projects}/../../outside.jsonl`)
+  await expect(resolveSelectedSessionOnHost(escaped, runtime, {})).rejects.toThrow('account')
+  await expect(admit(escaped)).rejects.toThrow('account')
+  const alias = join(root, 'account-alias')
+  await symlink(home, alias, 'junction')
+  const valid = cliSource(join(alias, 'projects', 'provider-1.jsonl'))
+  const canonical = await realpath(file)
+  await expect(resolveSelectedSessionOnHost(valid, runtime, {})).resolves.toMatchObject({
+    status: 'ready',
+    session: { filePath: canonical, cwd: '/repo', messageCount: 1 }
+  })
+  await expect(admit(valid)).resolves.toEqual({ accountHomePath: home, transcriptPath: canonical })
 })

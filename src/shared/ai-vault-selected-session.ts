@@ -45,6 +45,7 @@ export type AiVaultResolveSessionArgs = {
   source: AiVaultSelectedSessionSource
   executionHostId: ExecutionHostId
   requestToken: string
+  expectedEnvironmentPairingRevision?: number
   legacyList?: Pick<
     AiVaultListArgs,
     'limit' | 'unlimited' | 'scopePaths' | 'includeAntigravityIdeSessions'

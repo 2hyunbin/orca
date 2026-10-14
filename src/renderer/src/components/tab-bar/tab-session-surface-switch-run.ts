@@ -5,6 +5,15 @@ import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { useAppStore } from '@/store'
+import { parseRoutableExecutionHostId } from '../../../../shared/execution-host'
+import {
+  captureWebSessionIntentOwner,
+  matchesWebSessionIntentOwner
+} from '@/runtime/web-runtime-session-environment'
+import {
+  onRuntimeEnvironmentRevisionsChanged,
+  onRuntimeEnvironmentsRetired
+} from '@/runtime/runtime-environment-revision'
 import { isAiVaultSessionResumableContent } from '../../../../shared/ai-vault-types'
 import type {
   AiVaultSessionLaunchContext,
@@ -114,6 +123,10 @@ export async function runTabSessionSurfaceSwitch(args: {
   if (runningSwitches.has(key) || !sourceIdentityIsCurrent(subject, sourceTab)) {
     return
   }
+  const host = parseRoutableExecutionHostId(subject.executionHostId)
+  const intentOwner =
+    host?.kind === 'runtime' ? captureWebSessionIntentOwner(host.environmentId) : null
+  const bindingIsCurrent = () => !intentOwner || matchesWebSessionIntentOwner(intentOwner)
   const owner: PendingSwitch = { stage: 'loading', controller: new AbortController() }
   const requestToken = createBrowserUuid()
   const release = () => {
@@ -129,12 +142,22 @@ export async function runTabSessionSurfaceSwitch(args: {
   }
   runningSwitches.set(key, owner)
   changed()
+  const retirePairing = (ids: readonly string[]) => {
+    if (intentOwner && ids.includes(intentOwner.environmentId)) {
+      abandon()
+    }
+  }
+  const stopRetirement = onRuntimeEnvironmentsRetired(retirePairing)
+  const stopRevision = onRuntimeEnvironmentRevisionsChanged(retirePairing)
+  const stopPairing = () => {
+    stopRetirement()
+    stopRevision()
+  }
   const stopWatching = useAppStore.subscribe(() => {
-    if (!sourceIdentityIsCurrent(subject, sourceTab)) {
+    if (!sourceIdentityIsCurrent(subject, sourceTab) || !bindingIsCurrent()) {
       abandon()
     }
   })
-  const host = subject.executionHostId
   const timer = setTimeout(() => {
     owner.controller.abort(new Error('Conversation lookup timed out.'))
     release()
@@ -154,14 +177,15 @@ export async function runTabSessionSurfaceSwitch(args: {
     const result = await waitForPromiseWithSignal(
       window.api.aiVault.resolveSession({
         source,
-        executionHostId: host,
+        executionHostId: subject.executionHostId,
+        expectedEnvironmentPairingRevision: intentOwner?.pairingRevision,
         requestToken,
         legacyList: aiVaultSessionListArgs(subject.legacyListRequest, { requestToken })
       }),
       owner.controller.signal
     )
     clearTimeout(timer)
-    if (!sourceIdentityIsCurrent(subject, sourceTab)) {
+    if (!sourceIdentityIsCurrent(subject, sourceTab) || !bindingIsCurrent()) {
       return
     }
     if (result.status === 'cancelled') {
@@ -218,7 +242,10 @@ export async function runTabSessionSurfaceSwitch(args: {
       args.launch(row, move.worktreeId, {
         signal: owner.controller.signal,
         isSourceOpen: () =>
-          !owner.controller.signal.aborted && sourceIdentityIsCurrent(subject, sourceTab)
+          !owner.controller.signal.aborted &&
+          bindingIsCurrent() &&
+          sourceIdentityIsCurrent(subject, sourceTab),
+        onDispatch: stopPairing
       }),
       owner.controller.signal
     )
@@ -228,6 +255,7 @@ export async function runTabSessionSurfaceSwitch(args: {
     }
   } finally {
     clearTimeout(timer)
+    stopPairing()
     stopWatching()
     release()
   }

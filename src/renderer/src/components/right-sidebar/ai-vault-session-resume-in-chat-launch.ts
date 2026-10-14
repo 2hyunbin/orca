@@ -46,6 +46,7 @@ export async function resumeAiVaultSessionInNewChat(
           : {})
       }
     })
+    operation?.onDispatch?.()
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan,
       hooks: {},

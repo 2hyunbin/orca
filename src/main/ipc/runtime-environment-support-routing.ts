@@ -201,10 +201,30 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
       outcome.kind !== 'stale_incarnation' &&
       isRuntimeEnvironmentCapabilityOutcomeCurrent(outcome)
     ) {
+      const admissionFailure = runtimeEnvironmentRevisionFailure(
+        args.expectedPairingRevision === undefined
+          ? environment
+          : resolveEnvironment(args.userDataPath, environment.id),
+        args.expectedPairingRevision,
+        args.method
+      )
+      if (admissionFailure) {
+        return admissionFailure
+      }
       const route = { environment, connection, outcome }
       const response = await (outcome.kind === 'supported'
         ? args.supported(route)
         : args.unsupported(route))
+      const acceptanceFailure = runtimeEnvironmentRevisionFailure(
+        args.expectedPairingRevision === undefined
+          ? environment
+          : resolveEnvironment(args.userDataPath, environment.id),
+        args.expectedPairingRevision,
+        args.method
+      )
+      if (acceptanceFailure) {
+        return acceptanceFailure
+      }
       if (isRuntimeEnvironmentCapabilityOutcomeCurrent(outcome)) {
         args.markUsed(environment.id, response)
       }

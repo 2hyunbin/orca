@@ -4,6 +4,9 @@ import { AI_VAULT_SELECTED_SESSION_CAPABILITY } from '../../shared/ai-vault-sele
 import { listResult } from '../ai-vault/structured-session-ownership.test-support'
 
 const mocks = vi.hoisted(() => ({ status: vi.fn(), call: vi.fn() }))
+vi.mock('../../shared/runtime-environment-store', () => ({
+  resolveEnvironment: () => ({ id: 'server-1', pairingRevision: 1, createdAt: 1 })
+}))
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 vi.mock('./runtime-environment-transport-routing', () => ({
   getRuntimeEnvironmentStatus: mocks.status,
@@ -33,7 +36,7 @@ it('capable hosts use selected RPC even when listing is broken; failures never f
     'aiVault.resolveSession',
     expect.any(Object),
     15_000,
-    undefined,
+    1,
     undefined,
     { signal: expect.any(AbortSignal) }
   )

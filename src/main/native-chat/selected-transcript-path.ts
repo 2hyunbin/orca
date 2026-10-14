@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 import { encodeClaudeProjectPaths } from '../ai-vault/claude-project-dir-encoding'
-import { relativePathInsideRoot } from '../../shared/cross-platform-path'
+import { admitTranscriptPath } from './transcript-path-admission'
 import { resolveSessionFilePath } from './session-file-resolver'
 
 export type SelectedTranscriptLookup = {
@@ -42,8 +42,13 @@ export async function findSelectedTranscriptPath(
   const root = join(accountHome, agent === 'claude' ? 'projects' : 'sessions')
   const path = selected.transcriptPath
   if (path) {
-    if (relativePathInsideRoot(root, path) !== null && (await fileExists(path, selected.signal))) {
-      return path
+    const admitted = await admitTranscriptPath(root, path)
+    throwIfSignalAborted(selected.signal)
+    if (!admitted) {
+      throw new Error('The conversation path is outside its account.')
+    }
+    if (await fileExists(admitted.path, selected.signal)) {
+      return admitted.path
     }
   }
   if (agent === 'claude') {

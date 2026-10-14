@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { replaceRuntimeEnvironmentRevisions } from '@/runtime/runtime-environment-revision'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -20,6 +21,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   openTabs: ['tab-1'],
+  nativeSource: false,
   subscribers: new Set<() => void>(),
   resolve: vi.fn(),
   cancel: vi.fn(async () => {}),
@@ -59,7 +61,15 @@ function state() {
   return {
     settings: null,
     tabsByWorktree: { 'wt-1': mocks.openTabs.map((id) => ({ id })) },
-    unifiedTabsByWorktree: {},
+    unifiedTabsByWorktree: mocks.nativeSource
+      ? {
+          'wt-1': mocks.openTabs.map((id) => ({
+            id,
+            contentType: 'agent-session',
+            entityId: 'chat-1'
+          }))
+        }
+      : {},
     agentStatusByPaneKey: {
       'tab-1:leaf-1': { agentType: 'claude', providerSession: { id: 'provider-1' } }
     }
@@ -101,6 +111,7 @@ vi.mock('../right-sidebar/ai-vault-session-resume-in-chat-launch', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.openTabs = ['tab-1']
+  mocks.nativeSource = false
   mocks.resolve.mockResolvedValue({ status: 'ready', session: ROW })
   Object.assign(window, {
     api: { aiVault: { resolveSession: mocks.resolve, cancelResolveSession: mocks.cancel } }
@@ -304,3 +315,48 @@ it('old completion cannot dismiss a newer opening retained across the closing an
   expect(screen.getByRole('menuitem', { name: 'Resume in New Native Chat' })).toBeTruthy()
   vi.restoreAllMocks()
 })
+
+it.each([false, true])(
+  'source pairing owns preparation until destination dispatch (dispatched=%s)',
+  async (dispatched) => {
+    mocks.nativeSource = true
+    replaceRuntimeEnvironmentRevisions([{ id: 'host-1', createdAt: 1, pairingRevision: 1 }])
+    const subject: TabSessionSelectedSource = {
+      kind: 'chat',
+      agent: 'claude',
+      sessionId: 'chat-1',
+      workspaceId: 'wt-1',
+      executionHostId: 'runtime:host-1',
+      legacyListRequest: SUBJECT.legacyListRequest
+    }
+    let finish = () => {}
+    let operation: AiVaultSurfaceSwitchOperation | undefined
+    let destinationAlive = false
+    const launching = runTabSessionSurfaceSwitch({
+      subject,
+      sourceTab: { id: 'tab-1', worktreeId: 'wt-1' },
+      launch: async (_row, _workspace, sourceOperation) => {
+        operation = sourceOperation
+        if (dispatched && sourceOperation.isSourceOpen()) {
+          sourceOperation.onDispatch?.()
+          destinationAlive = true
+        }
+        await new Promise<void>((resolve) => {
+          finish = resolve
+        })
+      }
+    })
+    await vi.waitFor(() => expect(operation).toBeDefined())
+    expect(mocks.resolve.mock.calls[0]?.[0].expectedEnvironmentPairingRevision).toBe(1)
+    replaceRuntimeEnvironmentRevisions([{ id: 'host-1', createdAt: 1, pairingRevision: 2 }], {
+      retired: ['host-1'],
+      sameHost: []
+    })
+    expect(operation?.signal.aborted).toBe(!dispatched)
+    expect(operation?.isSourceOpen()).toBe(false)
+    expect(destinationAlive).toBe(dispatched)
+    finish()
+    await launching
+    replaceRuntimeEnvironmentRevisions([])
+  }
+)

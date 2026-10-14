@@ -28,7 +28,10 @@ export async function resolveWebSelectedSession(
   requests.set(args.requestToken, controller)
   const callOptions = {
     environmentId: environment.id,
-    expectedEnvironmentPairingRevision: environment.pairingRevision ?? environment.createdAt,
+    expectedEnvironmentPairingRevision:
+      args.expectedEnvironmentPairingRevision ??
+      environment.pairingRevision ??
+      environment.createdAt,
     signal: controller.signal
   }
   const started = Date.now()

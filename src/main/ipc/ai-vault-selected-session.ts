@@ -15,6 +15,7 @@ import {
   SelectedSessionSourceSchema
 } from '../../shared/ai-vault-selected-session-contract'
 import { LOCAL_EXECUTION_HOST_ID, parseRoutableExecutionHostId } from '../../shared/execution-host'
+import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
 import {
   callRuntimeEnvironment,
@@ -38,9 +39,15 @@ export async function resolveSelectedSessionByHost(
   if (host?.kind !== 'runtime' || source.kind !== 'chat') {
     throw new Error('The conversation host is unavailable.')
   }
+  const environment = resolveEnvironment(userDataPath, host.environmentId)
+  const revision =
+    args.expectedEnvironmentPairingRevision ?? environment.pairingRevision ?? environment.createdAt
   const status = await withSelectedSessionDeadline(
     (owned) =>
-      getRuntimeEnvironmentStatus(userDataPath, host.environmentId, 15_000, { signal: owned }),
+      getRuntimeEnvironmentStatus(userDataPath, host.environmentId, 15_000, {
+        signal: owned,
+        expectedEnvironmentPairingRevision: revision
+      }),
     signal
   )
   if (!status.ok) {
@@ -66,7 +73,7 @@ export async function resolveSelectedSessionByHost(
               executionHostId: host.id
             },
         timeout,
-        undefined,
+        revision,
         undefined,
         { signal: owned }
       )

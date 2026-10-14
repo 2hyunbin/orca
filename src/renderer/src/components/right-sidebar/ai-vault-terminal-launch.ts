@@ -55,6 +55,7 @@ export async function launchAiVaultSessionInTerminal({
       if (operation && !operation.isSourceOpen()) {
         return
       }
+      operation?.onDispatch?.()
       const launchResult = launchAiVaultSessionInNewTab({
         agent: session.agent,
         worktreeId: targetId.worktreeId,

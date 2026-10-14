@@ -8,7 +8,7 @@ import {
 } from '../../shared/ai-vault-resume-preparation'
 import { getSystemCodexHomePath } from '../codex/codex-home-paths'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
-import { relativePathInsideRoot } from '../../shared/cross-platform-path'
+import { admitTranscriptPath } from './transcript-path-admission'
 
 /** The same host preparation decides credentials for both lookup-based and selected adoption. */
 export async function prepareSelectedCodexAdoption(
@@ -38,14 +38,14 @@ export async function prepareSelectedCodexAdoption(
   if (!home || home === source.accountHomePath) {
     return source
   }
-  const suffix = relativePathInsideRoot(
+  const admitted = await admitTranscriptPath(
     join(source.accountHomePath, 'sessions'),
     source.transcriptPath
   )
-  if (!suffix) {
+  if (!admitted?.relativePath) {
     throw new Error('The prepared conversation path could not be verified.')
   }
-  const transcriptPath = join(home, 'sessions', suffix)
+  const transcriptPath = join(home, 'sessions', admitted.relativePath)
   if (!(await stat(transcriptPath)).isFile()) {
     throw new Error('The prepared conversation history is unavailable.')
   }

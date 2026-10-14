@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { relativePathInsideRoot } from '../../shared/cross-platform-path'
+import { admitTranscriptPath } from './transcript-path-admission'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import type { SelectedCliSessionSource } from '../../shared/ai-vault-selected-session'
 import type { StructuredAgentTranscriptImportSettings } from './structured-agent-cli-conversations'
@@ -64,13 +64,19 @@ export async function resolveSelectedAccountTranscript(input: {
   let homes = [...new Set(importer.accountHomeCandidates(input))]
   if (input.transcriptPath) {
     const attested = input.transcriptPath
-    homes = homes.filter(
-      (home) =>
-        relativePathInsideRoot(
+    const admitted = await Promise.all(
+      homes.map(async (home) => ({
+        home,
+        path: await admitTranscriptPath(
           join(home, input.agent === 'claude' ? 'projects' : 'sessions'),
           attested
-        ) !== null
+        )
+      }))
     )
+    throwIfSignalAborted(input.signal)
+    homes = admitted
+      .filter((candidate) => candidate.path !== null)
+      .map((candidate) => candidate.home)
     if (!homes.length) {
       throw new Error('The conversation account is not available on this host.')
     }
