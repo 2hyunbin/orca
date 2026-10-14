@@ -136,6 +136,20 @@ describe('authoritative WSL Kitty file roots', () => {
     expect(open).toHaveBeenCalledWith(`${ROOT}\\tmp\\claude-image`, expect.any(Number))
   })
 
+  it('does not fold distinct canonical directory names on a Windows drive mount', async () => {
+    await expect(readTerminalKittyFile({ path: '/mnt/c/Repo/private.png' }, OWNER)).rejects.toThrow(
+      'outside this terminal'
+    )
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('allows drive-letter case differences without folding directory names', async () => {
+    const owner = { workspacePath: 'c:\\repo', wslDistro: 'Ubuntu' }
+    await expect(readTerminalKittyFile({ path: '/mnt/c/repo/image' }, owner)).resolves.toEqual({
+      base64: 'SU1BR0U='
+    })
+  })
+
   it('does not fold case in a WSL Linux directory name', async () => {
     const owner = { workspacePath: `${ROOT}\\repo`, wslDistro: 'Ubuntu' }
     await expect(readTerminalKittyFile({ path: '/Repo/image' }, owner)).rejects.toThrow(

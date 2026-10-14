@@ -34,7 +34,7 @@ export async function readTerminalKittyFile(
     )
   ])
   const roots = [workspaceRoot, ...tempRoots]
-  if (!roots.some((root) => kittyFileInsideRoot(root, canonical))) {
+  if (!roots.some((root) => kittyFileInsideRoot(root, canonical, owner.wslDistro !== null))) {
     throw new Error('Kitty image file is outside this terminal workspace and temporary folders')
   }
   const expected = await lstat(canonical)
@@ -69,7 +69,7 @@ export async function readTerminalKittyFile(
   }
 }
 
-function kittyFileInsideRoot(root: string, path: string): boolean {
+function kittyFileInsideRoot(root: string, path: string, wslOwned: boolean): boolean {
   const rootWsl = process.platform === 'win32' ? parseWslUncPath(root) : null
   const pathWsl = process.platform === 'win32' ? parseWslUncPath(path) : null
   if (rootWsl || pathWsl) {
@@ -80,6 +80,11 @@ function kittyFileInsideRoot(root: string, path: string): boolean {
       (pathWsl.linuxPath === rootWsl.linuxPath ||
         pathWsl.linuxPath.startsWith(`${rootWsl.linuxPath.replace(/\/$/, '')}/`))
     )
+  }
+  if (wslOwned && process.platform === 'win32') {
+    const base = root.replace(/^[a-z]:/i, (drive) => drive.toUpperCase()).replace(/\\$/, '')
+    const target = path.replace(/^[a-z]:/i, (drive) => drive.toUpperCase())
+    return target === base || target.startsWith(`${base}\\`)
   }
   return isDescendantOrEqual(path, root)
 }
