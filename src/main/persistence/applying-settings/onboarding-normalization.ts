@@ -104,15 +104,13 @@ export function persistedNotificationSettingsRepaired(
     return true
   }
   const raw = value as Record<string, unknown>
-  const defaultByKey = new Map<string, unknown>(Object.entries(getDefaultNotificationSettings()))
+  const defaults: Record<string, unknown> = getDefaultNotificationSettings()
   // Why the absent-default case: a field newer than the file defaults in memory, and rewriting
   // every profile on upgrade gains nothing.
-  return Object.entries(normalized).some(
-    ([key, normalizedValue]) =>
-      !(
-        raw[key] === undefined &&
-        sameNotificationSettingValue(defaultByKey.get(key), normalizedValue)
-      ) && !sameNotificationSettingValue(raw[key], normalizedValue)
+  return Object.entries(normalized).some(([key, normalizedValue]) =>
+    raw[key] === undefined
+      ? !sameNotificationSettingValue(defaults[key], normalizedValue)
+      : !sameNotificationSettingValue(raw[key], normalizedValue)
   )
 }
 

@@ -16,7 +16,7 @@ import {
 
 /**
  * Whether attention from this workspace must raise nothing — no unread, banner, sound or push —
- * because a Filters-menu switch hides it and "Notify about hidden workspaces" is off.
+ * because a Filters-menu switch hides it and "Notify About Hidden Workspaces" is off.
  *
  * Fails open: unhydrated settings or UI state, terminals not yet reconnected (every restored
  * workspace would read as sleeping), or a workspace this store has no record of, notify.
