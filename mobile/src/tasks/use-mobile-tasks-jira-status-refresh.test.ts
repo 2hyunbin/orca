@@ -26,6 +26,7 @@ afterEach(() => {
 
 function mountRefresh(client: RpcClient, clientRef: { current: RpcClient | null }) {
   const setJiraConnection = vi.fn()
+  const jiraStatusRequestIdRef = { current: 0 }
   const holder: { refresh?: () => Promise<void> } = {}
   function Probe() {
     const input: ProviderLoadActionsInput = {
@@ -36,6 +37,7 @@ function mountRefresh(client: RpcClient, clientRef: { current: RpcClient | null 
       defaultLinearTeamSelectionRef: { current: null },
       githubKind: 'issues',
       setJiraConnection,
+      jiraStatusRequestIdRef,
       setLinearConnected: vi.fn(),
       setLinearTeams: vi.fn(),
       setLinearWorkspaces: vi.fn(),
@@ -82,6 +84,21 @@ describe('mobile Jira status host ownership', () => {
     const fixture = mountRefresh(client, { current: client })
     await fixture.refresh()
     expect(client.sendRequest).toHaveBeenCalledWith('jira.status')
+    expect(fixture.setJiraConnection).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores an earlier explicit refresh that settles after a newer one', async () => {
+    const client = new FakeSession('connected')
+    const earlier = pendingStatus()
+    const newer = pendingStatus()
+    client.sendRequest.mockReturnValueOnce(earlier.response).mockReturnValueOnce(newer.response)
+    const fixture = mountRefresh(client, { current: client })
+    const first = fixture.refresh()
+    const second = fixture.refresh()
+    newer.answer({ id: 'newer', ok: true, result: { connected: true } })
+    await second
+    earlier.answer({ id: 'earlier', ok: true, result: { connected: false } })
+    await first
     expect(fixture.setJiraConnection).toHaveBeenCalledTimes(1)
   })
 

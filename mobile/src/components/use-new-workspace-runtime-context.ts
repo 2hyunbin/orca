@@ -15,6 +15,7 @@ import {
   type MobileJiraConnection
 } from '../tasks/jira-mobile-connection'
 import { jiraConnectionStatusProbe } from '../tasks/mobile-jira-operations'
+import { useMobileJiraConnectionState } from '../tasks/use-mobile-jira-connection-state'
 import type { NewWorktreeRuntimeSettings } from './new-worktree-agent-selection'
 import { newWorkspaceUiStateRead } from './new-workspace-operations'
 
@@ -51,13 +52,10 @@ export function useNewWorkspaceRuntimeContext(
   const [trustedOrcaHooks, setTrustedOrcaHooks] = useState<PersistedTrustedOrcaHooks>({})
   const [availableProviders, setAvailableProviders] = useState<TaskProvider[]>([])
   // Tasks can offer Jira setup; the composer requires a connected site.
-  const [jiraConnection, setJiraConnection] = useState<MobileJiraConnection>({
-    connected: false,
-    sites: [],
-    selection: null,
-    credentialError: null,
-    unavailableReason: null
-  })
+  const [jiraConnection, setJiraConnection] = useMobileJiraConnectionState(
+    client,
+    visible ? `visible:${hostId ?? ''}` : 'hidden'
+  )
 
   useEffect(() => {
     if (!visible || !client) {
@@ -67,9 +65,9 @@ export function useNewWorkspaceRuntimeContext(
     void (async () => {
       const probes = Promise.allSettled([
         taskPreflightRead.request(client),
-        taskLinearStatusRead.request(client),
-        jiraConnectionStatusProbe.request(client)
+        taskLinearStatusRead.request(client)
       ])
+      const jiraProbe = Promise.allSettled([jiraConnectionStatusProbe.request(client)])
       const [settingsRes, uiRes] = await Promise.allSettled([
         optionalSettingsRead.request(client),
         newWorkspaceUiStateRead.request(client)
@@ -96,7 +94,7 @@ export function useNewWorkspaceRuntimeContext(
         }
       }
 
-      const [preflightRes, linearRes, jiraRes] = await probes
+      const [preflightRes, linearRes] = await probes
       if (stale) {
         return
       }
@@ -108,9 +106,6 @@ export function useNewWorkspaceRuntimeContext(
       const linearConnected =
         readProbeMember(settledValue(linearRes, taskLinearStatusRead.interpret), 'connected') ===
         true
-      setJiraConnection(
-        readJiraConnectionProbeReply(jiraRes.status === 'fulfilled' ? jiraRes.value : null)
-      )
       const visibleProviders = normalizeVisibleTaskProviders(settingsValue?.visibleTaskProviders)
       setAvailableProviders(
         filterAvailableTaskProviders(visibleProviders, {
@@ -118,6 +113,12 @@ export function useNewWorkspaceRuntimeContext(
           linearConnected
         }).filter((provider) => visibleProviders.includes(provider))
       )
+      const [jiraRes] = await jiraProbe
+      if (!stale) {
+        setJiraConnection(
+          readJiraConnectionProbeReply(jiraRes.status === 'fulfilled' ? jiraRes.value : null)
+        )
+      }
     })()
     return () => {
       stale = true

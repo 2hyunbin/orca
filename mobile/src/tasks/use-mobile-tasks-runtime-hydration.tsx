@@ -46,6 +46,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setItems,
     setLinearConnected,
     setJiraConnection,
+    jiraStatusRequestIdRef,
     setJiraFilter,
     setLinearFilter,
     setLinearStatusPickerItem,
@@ -243,11 +244,12 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
       setTasksSupportState({ kind: 'supported', client })
       setError('')
       // Jira is advisory and must not delay the other providers.
+      const jiraRequestId = ++jiraStatusRequestIdRef.current
       void jiraConnectionStatusProbe
         .request(client)
         .catch(() => null)
         .then((reply) => {
-          if (!stale) {
+          if (!stale && jiraStatusRequestIdRef.current === jiraRequestId) {
             setJiraConnection(readJiraConnectionProbeReply(reply))
           }
         })

@@ -82,6 +82,7 @@ export function taskListMountAdapters(
         clientRef: { current: context.client },
         connState: 'connected',
         defaultLinearTeamSelectionRef: { current: null },
+        jiraStatusRequestIdRef: { current: 0 },
         githubKind: 'issues',
         taskUiReady: true,
         tasksSupported: true,

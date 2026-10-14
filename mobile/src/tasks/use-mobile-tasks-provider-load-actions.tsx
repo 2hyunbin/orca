@@ -42,6 +42,7 @@ export type ProviderLoadActionsInput = Pick<
   | 'defaultLinearTeamSelectionRef'
   | 'githubKind'
   | 'setJiraConnection'
+  | 'jiraStatusRequestIdRef'
   | 'setLinearConnected'
   | 'setLinearTeams'
   | 'setLinearWorkspaces'
@@ -62,6 +63,7 @@ export function useMobileTasksProviderLoadActions<Model extends ProviderLoadActi
     defaultLinearTeamSelectionRef,
     githubKind,
     setJiraConnection,
+    jiraStatusRequestIdRef,
     setLinearConnected,
     setLinearTeams,
     setLinearWorkspaces,
@@ -75,11 +77,12 @@ export function useMobileTasksProviderLoadActions<Model extends ProviderLoadActi
     if (!client || connState !== 'connected' || !tasksSupported) {
       return
     }
+    const requestId = ++jiraStatusRequestIdRef.current
     const next = await readJiraConnection(client)
-    if (clientRef.current === client) {
+    if (clientRef.current === client && jiraStatusRequestIdRef.current === requestId) {
       setJiraConnection((current) => reconcileJiraConnection(current, next))
     }
-  }, [client, clientRef, connState, tasksSupported, setJiraConnection])
+  }, [client, clientRef, connState, tasksSupported, setJiraConnection, jiraStatusRequestIdRef])
 
   const loadLinearContext = useCallback(async (): Promise<void> => {
     if (!client || connState !== 'connected' || !tasksSupported) {
