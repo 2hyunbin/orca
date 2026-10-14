@@ -841,7 +841,7 @@ describe('NativeChatStructuredSession', () => {
     expect(mocks.revealLatest).toHaveBeenCalledTimes(2)
   })
 
-  it("brings the latest into view when a queued card's Steer sends it now", () => {
+  it("brings the latest into view when an idle queued card's Send starts it now", () => {
     mocks.queuedCards = [
       { messageId: 'draft-1', position: 1, text: 'Also check SSH', state: 'waiting', hold: 'turn' }
     ]
@@ -858,7 +858,7 @@ describe('NativeChatStructuredSession', () => {
       </TooltipProvider>
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Steer/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Send/ }))
 
     expect(mocks.queuedSteer).toHaveBeenCalledWith('draft-1')
     expect(mocks.revealLatest).toHaveBeenCalledOnce()

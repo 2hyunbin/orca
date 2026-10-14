@@ -38,6 +38,7 @@ import {
 } from './structured-agent-session-queued-cards'
 import { hostStatesTurnScopes } from '../../../../shared/native-chat-turn-membership'
 import { pendingPromptsAllUnanswerableHere } from '../../../../shared/agent-session-approval-subject'
+import { isStructuredAgentSessionContinuouslyWorking } from '../../../../shared/structured-agent-session-main-agent-working'
 import { withNativeChatCutTurnNotices } from '../../../../shared/native-chat-cut-turn-notice'
 import { useStructuredAgentSessionRewind } from './use-structured-agent-session-rewind'
 import type { NativeChatRewindHost } from './use-native-chat-rewind'
@@ -202,7 +203,10 @@ export function useStructuredAgentSession(args: {
     write
   })
   // A queued send is a card, never a transcript bubble.
-  const isWorking = transportState.isWorking || transportState.queueSendsNext
+  const isWorking = isStructuredAgentSessionContinuouslyWorking(
+    transportState.isWorking,
+    transportState.queueSendsNext
+  )
   const transcriptPending = useMemo(
     () => pendingSendsOutsideQueuedCards(pending, queuedMessageIds, isWorking),
     [isWorking, pending, queuedMessageIds]

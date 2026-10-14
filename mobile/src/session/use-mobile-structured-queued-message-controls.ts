@@ -12,6 +12,7 @@ import type {
   AgentJournalSubmission
 } from '../../../src/shared/agent-session-journal-types'
 import { agentSessionVisibleFailureFacts } from '../../../src/shared/agent-session-visible-failures'
+import { isStructuredAgentSessionContinuouslyWorking } from '../../../src/shared/structured-agent-session-main-agent-working'
 import type {
   AgentSessionQueuedMessageDeleteResult,
   AgentSessionQueuedMessagesResumeResult,
@@ -34,6 +35,8 @@ export type MobileQueuedMessageEdit = (messageId: string, onCopied?: () => void)
 export type MobileStructuredQueuedMessageControls = {
   /** Host-held drafts as cards above the composer. */
   cards: MobileQueuedMessageCard[]
+  /** The label stays on Steer while the host starts its next queued send. */
+  presentationWorking: boolean
   /** Send-now: dispatch this draft into or ahead of the running turn. */
   send: (messageId: string) => Promise<boolean>
   /** Discard the draft. */
@@ -57,6 +60,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
   submissions: readonly AgentJournalSubmission[]
   /** The chat shows the agent working: a command card offers no send then. */
   agentWorking?: boolean
+  queueSendsNext: boolean
   mutate: MobileStructuredAgentMutate
   /** The active pane's live composer, Edit's copy target; absent = Edit refuses. False when
    *  nothing was copied. */
@@ -76,6 +80,10 @@ export function useMobileStructuredQueuedMessageControls(args: {
     submissions
   } = args
   const agentWorking = args.agentWorking === true
+  const presentationWorking = isStructuredAgentSessionContinuouslyWorking(
+    agentWorking,
+    args.queueSendsNext
+  )
   const cards = useMemo(
     () =>
       mobileQueuedMessageCards(queuedMessages, submissions, {
@@ -170,5 +178,5 @@ export function useMobileStructuredQueuedMessageControls(args: {
   )
   // The header shows only while Resume would send something, as on desktop.
   const pause = mobileQueueHasResumableCard(cards) ? queuePause : null
-  return { cards, send, delete: deleteDraft, edit, pause, resume, sessionKey }
+  return { cards, presentationWorking, send, delete: deleteDraft, edit, pause, resume, sessionKey }
 }

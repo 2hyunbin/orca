@@ -80,6 +80,7 @@ export function queuedDraft(
 
 export function snapshotEvent(input?: {
   queuedMessages?: AgentSessionQueuedMessage[] | null
+  nextQueuedMessageId?: string | null
   runningTurn?: boolean
   submissions?: AgentJournalSubmission[]
 }): AgentSessionSubscribeEvent {
@@ -110,7 +111,10 @@ export function snapshotEvent(input?: {
       hasOlder: false,
       hasNewer: false
     },
-    ...(input?.queuedMessages !== undefined ? { queuedMessages: input.queuedMessages } : {})
+    ...(input?.queuedMessages !== undefined ? { queuedMessages: input.queuedMessages } : {}),
+    ...(input?.nextQueuedMessageId !== undefined
+      ? { nextQueuedMessageId: input.nextQueuedMessageId }
+      : {})
   }
 }
 

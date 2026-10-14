@@ -56,6 +56,7 @@ function overlayElement(tick: Tick): ReturnType<typeof createElement> {
     setChatComposerText: vi.fn(),
     nativeChatQueued: {
       cards: [],
+      presentationWorking: false,
       send: vi.fn(),
       delete: vi.fn(),
       edit: vi.fn(),

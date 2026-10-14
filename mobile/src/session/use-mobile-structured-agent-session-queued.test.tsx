@@ -291,6 +291,23 @@ describe('mobile structured queued messages', () => {
   })
 
   describe('cards from the published list', () => {
+    it('keeps a queued card working through the handoff, then clears at idle', async () => {
+      const draft = queuedDraft({ messageId: 'draft-1' })
+      await mountSession(CAPABLE, snapshotEvent({ runningTurn: true, queuedMessages: [draft] }))
+      expect(hook!.isWorking).toBe(true)
+      expect(hook!.queued.presentationWorking).toBe(true)
+
+      act(() =>
+        listener?.(snapshotEvent({ queuedMessages: [draft], nextQueuedMessageId: 'draft-1' }))
+      )
+      expect(hook!.isWorking).toBe(false)
+      expect(hook!.queued.cards.map((card) => card.messageId)).toEqual(['draft-1'])
+      expect(hook!.queued.presentationWorking).toBe(true)
+
+      act(() => listener?.(snapshotEvent({ queuedMessages: [draft], nextQueuedMessageId: null })))
+      expect(hook!.queued.presentationWorking).toBe(false)
+    })
+
     it('renders published drafts as cards and follows later frames', async () => {
       await mountSession(
         CAPABLE,

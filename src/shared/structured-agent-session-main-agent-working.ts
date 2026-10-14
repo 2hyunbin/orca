@@ -12,3 +12,11 @@ export function isStructuredAgentSessionMainAgentWorking(
     activeTurnId !== null || hasUnansweredStructuredAgentSessionDispatch(submissions, currentFence)
   )
 }
+
+/** Keep the chat's working presentation through the host's next queued send. */
+export function isStructuredAgentSessionContinuouslyWorking(
+  liveWorking: boolean,
+  queueSendsNext: boolean
+): boolean {
+  return liveWorking || queueSendsNext
+}
