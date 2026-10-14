@@ -8,6 +8,8 @@ import {
   parseWslMoveCutover,
   type WslMoveCutover
 } from '../../../shared/wsl-move/wsl-move-cutover'
+import { isRecord } from '../../../shared/orcad-migration-manifest-fields'
+import { assertOrcadMigrationManifestDigest } from '../../orcad/orcad-migration-manifest-digest'
 import {
   createMigrationJournalDirectory,
   orderMigrationJournalChain
@@ -24,7 +26,7 @@ const journals = createMigrationJournalDirectory({
   directoryName: 'orcad-migration-cutovers-wsl',
   // A manifest carries catalog rows and dormant session state; blobs travel on their own channel.
   maxFileBytes: 16 * 1024 * 1024,
-  parse: parseWslMoveCutover,
+  parse: parseVerifiedWslMoveCutover,
   unreadable: (detail) => new WslMoveJournalUnreadableError(detail)
 })
 
@@ -32,8 +34,17 @@ export function wslMoveJournalDirectory(userDataPath: string): string {
   return journals.directory(userDataPath)
 }
 
+/** Detached copies: a caller editing one must not change what the next write compares against. */
 export function listWslMoveCutovers(userDataPath: string): WslMoveCutover[] {
-  return journals.list(userDataPath)
+  return journals.list(userDataPath).map((cutover) => structuredClone(cutover))
+}
+
+/** The record's own fields, plus the manifest's digest recomputed: a scope edit cannot pass. */
+function parseVerifiedWslMoveCutover(value: unknown): WslMoveCutover {
+  const cutover = parseWslMoveCutover(value)
+  // Raw, not parsed: parsing drops fields a newer build signed.
+  assertOrcadMigrationManifestDigest(isRecord(value) ? value.manifest : undefined)
+  return cutover
 }
 
 /** Oldest first; throws unless the distro's journals form one chain of delta moves. */
@@ -56,13 +67,25 @@ export function listWslMoveCutoverChain(
  * once that head finished: one in-flight move per distro (design, section 4.3).
  */
 export function writeWslMoveCutover(userDataPath: string, cutover: WslMoveCutover): void {
-  const parsed = parseWslMoveCutover(cutover)
+  const parsed = parseVerifiedWslMoveCutover(cutover)
+  // Files are named by migration id alone: one id must never name moves of two distros.
+  if (
+    listWslMoveCutovers(userDataPath).some(
+      (entry) => entry.migrationId === parsed.migrationId && entry.journalKey !== parsed.journalKey
+    )
+  ) {
+    throw new Error('wsl_move_id_in_use')
+  }
   const chain = listWslMoveCutoverChain(userDataPath, parsed.journalKey)
   const existing = chain.find((entry) => entry.migrationId === parsed.migrationId)
   const head = chain.at(-1)
   if (existing) {
     assertWslMoveUpdate(existing, parsed, head)
-  } else if (head) {
+  } else if (!head) {
+    if (parsed.supersedesMigrationId !== undefined) {
+      throw new Error('wsl_move_must_extend_its_chain')
+    }
+  } else {
     if (!isWslMoveCutoverFinished(head)) {
       throw new Error('wsl_move_already_in_flight')
     }
@@ -94,6 +117,16 @@ function assertWslMoveUpdate(
   }
 }
 
+/**
+ * Only a record that fences nothing goes: one never fenced (`prepared`) or one finished. A move in
+ * between keeps its fence until it resumes, or until a cancel proves the destination holds nothing.
+ */
 export function removeWslMoveCutover(userDataPath: string, migrationId: string): void {
+  const record = listWslMoveCutovers(userDataPath).find(
+    (entry) => entry.migrationId === migrationId
+  )
+  if (record && record.phase !== 'prepared' && !isWslMoveCutoverFinished(record)) {
+    throw new Error('wsl_move_in_flight')
+  }
   journals.remove(userDataPath, migrationId)
 }

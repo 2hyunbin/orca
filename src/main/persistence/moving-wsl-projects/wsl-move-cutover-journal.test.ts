@@ -95,4 +95,54 @@ describe('WSL move journal', () => {
     // Rewriting the finished link unchanged is fine; nothing may restart it.
     writeWslMoveCutover(userDataPath, cutover('move-1', 'retained'))
   })
+
+  it('hands out records a caller cannot edit into the next comparison', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+    const [listed] = listWslMoveCutovers(userDataPath)
+    if (listed) {
+      listed.phase = 'prepared'
+    }
+    expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('destination-committed')
+    expect(() => writeWslMoveCutover(userDataPath, cutover('move-1', 'prepared'))).toThrow(
+      'wsl_move_phase_regressed'
+    )
+  })
+
+  it('refuses one id for two distros, and a first move that names a predecessor', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1'))
+    const debian = cutover('move-1')
+    const other = { ...debian, journalKey: wslMoveJournalKey('Debian') }
+    other.manifest = { ...debian.manifest, source: { ...debian.manifest.source, distro: 'Debian' } }
+    expect(() => writeWslMoveCutover(userDataPath, other)).toThrow()
+    expect(() =>
+      writeWslMoveCutover(
+        userDataPath,
+        cutover('move-9', 'prepared', { supersedesMigrationId: 'gone' })
+      )
+    ).toThrow()
+  })
+
+  it('keeps the fence: an in-flight record cannot be removed', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+    expect(() => removeWslMoveCutover(userDataPath, 'move-1')).toThrow('wsl_move_in_flight')
+    expect(listWslMoveCutovers(userDataPath)).toHaveLength(1)
+  })
+
+  it('fails closed on a manifest edited without re-signing it', () => {
+    const record = cutover()
+    const edited = {
+      ...record,
+      manifest: {
+        ...record.manifest,
+        source: { ...record.manifest.source, scopeRepoIds: ['repo-2'] },
+        payload: {
+          ...record.manifest.payload,
+          repositories: [{ ...record.manifest.payload.repositories[0], id: 'repo-2' }]
+        }
+      }
+    }
+    mkdirSync(wslMoveJournalDirectory(userDataPath), { recursive: true })
+    writeFileSync(journalPath('move-1'), JSON.stringify(edited))
+    expect(() => listWslMoveCutovers(userDataPath)).toThrow('stay fenced')
+  })
 })
