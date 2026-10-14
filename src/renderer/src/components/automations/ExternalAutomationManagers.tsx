@@ -275,15 +275,10 @@ export function ExternalAutomationManagers({
                     'auto.components.automations.ExternalAutomationManagers.3d58d5b67d',
                     'No'
                   )}{' '}
-                  {manager.provider === 'hermes'
-                    ? translate(
-                        'auto.components.automations.ExternalAutomationManagers.766abf833c',
-                        'Hermes'
-                      )
-                    : translate(
-                        'auto.components.automations.ExternalAutomationManagers.5524365227',
-                        'OpenClaw'
-                      )}{' '}
+                  {translate(
+                    'auto.components.automations.ExternalAutomationManagers.5524365227',
+                    'OpenClaw'
+                  )}{' '}
                   {translate(
                     'auto.components.automations.ExternalAutomationManagers.6da3bfba4b',
                     'automations found.'

@@ -274,8 +274,6 @@ export const api = {
     'runNow',
     'listScoped',
     'listExternalManagerForOwner',
-    'createExternalForOwner',
-    'updateExternalForOwner',
     'runExternalActionForOwner',
     'retainExternalScopes'
   ),

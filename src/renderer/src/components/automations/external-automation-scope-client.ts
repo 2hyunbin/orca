@@ -26,7 +26,7 @@ export type ExternalAutomationScope = {
 /**
  * A discovered manager still carrying the scope it was listed under.
  *
- * Why paired rather than looked up: a manager ID is `hermes:local` on every host
+ * Why paired rather than looked up: a manager ID is `openclaw:local` on every host
  * that has no SSH target, so it does not name an authority. Recovering the scope
  * from the ID would collide for exactly the hosts a scope is meant to separate.
  */

@@ -123,7 +123,7 @@ describe('AutomationsPage list rendering', () => {
     api.automations.list.mockResolvedValue([])
     api.automations.listExternalManagerForOwner.mockImplementation(
       async ({ provider }: { provider: string }) =>
-        provider === 'hermes'
+        provider === 'openclaw'
           ? { manager: makeExternalManager(), error: null, updatedAt: 1 }
           : { manager: null, error: null, updatedAt: 1 }
     )
@@ -132,17 +132,18 @@ describe('AutomationsPage list rendering', () => {
 
     expect(api.automations.listExternalManagerForOwner).toHaveBeenCalledWith({
       owner: DESKTOP_SELF_OWNER,
-      provider: 'hermes'
+      provider: 'openclaw'
     })
-    expect(rows(container, 'external-row')).toEqual(['Hermes job'])
+    expect(api.automations.listExternalManagerForOwner).toHaveBeenCalledTimes(1)
+    expect(rows(container, 'external-row')).toEqual(['OpenClaw job'])
   })
 
-  it('routes each authority’s action to its own host when both report hermes:local', async () => {
+  it('routes each authority’s action to its own host when both report openclaw:local', async () => {
     api.automations.list.mockResolvedValue([])
     api.automations.listExternalManagerForOwner.mockImplementation(
       async ({ provider }: { provider: string }) =>
-        provider === 'hermes'
-          ? { manager: makeExternalManager({ id: 'hermes:local' }), error: null, updatedAt: 1 }
+        provider === 'openclaw'
+          ? { manager: makeExternalManager({ id: 'openclaw:local' }), error: null, updatedAt: 1 }
           : { manager: null, error: null, updatedAt: 1 }
     )
     api.automations.runExternalActionForOwner.mockResolvedValue(undefined)
@@ -153,7 +154,7 @@ describe('AutomationsPage list rendering', () => {
       throw new Error('no external entry to act on')
     }
     // The second authority a multi-host build will list: same provider, same
-    // `hermes:local` manager ID, different machine. The desktop fixture is the
+    // `openclaw:local` manager ID, different machine. The desktop fixture is the
     // only host that actually answers, so a scope recovered from the manager ID
     // would resolve BOTH rows to it and pause the wrong host's cron job.
     const runtimeScope = {

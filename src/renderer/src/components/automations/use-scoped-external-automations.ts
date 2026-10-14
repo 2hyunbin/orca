@@ -16,7 +16,7 @@ import { useExternalAutomationScopeRetention } from './use-external-automation-s
  * External managers for the hosts currently in view, and the scope each one was
  * discovered under.
  *
- * A manager ID is unique only inside one host — `hermes:local` names no
+ * A manager ID is unique only inside one host — `openclaw:local` names no
  * authority at all — so every call here takes the scope its row was discovered
  * under rather than a manager to look one up from. There is no lookup to miss
  * and no host to guess at.

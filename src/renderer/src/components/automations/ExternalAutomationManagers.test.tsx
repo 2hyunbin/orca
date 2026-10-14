@@ -20,6 +20,12 @@ import { externalAutomationActionKey } from './external-automation-scope-keys'
 // environment, matching how the renderer mounts under test.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// Why: the run table fetches from the external automation store; stub it so the
+// test stays focused on the row controls (switch + action cluster).
+vi.mock('./ExternalAutomationRunTable', () => ({
+  ExternalAutomationRunTable: () => <div data-testid="run-table" />
+}))
+
 // Why: Tooltip needs a TooltipProvider mounted higher in the real app; stub the
 // primitives so the row renders standalone and the span trigger stays inspectable.
 vi.mock('@/components/ui/tooltip', () => ({
@@ -35,7 +41,7 @@ function makeJob(overrides: Partial<ExternalAutomationJob> = {}): ExternalAutoma
   return {
     id: 'job-1',
     managerId: 'manager-1',
-    provider: 'hermes',
+    provider: 'openclaw',
     name: 'Nightly backup',
     schedule: '0 0 * * *',
     rawSchedule: null,
@@ -57,11 +63,11 @@ function makeJob(overrides: Partial<ExternalAutomationJob> = {}): ExternalAutoma
 function makeManager(
   overrides: Partial<ExternalAutomationManager> = {}
 ): ExternalAutomationManager {
-  const provider: ExternalAutomationProvider = overrides.provider ?? 'hermes'
+  const provider: ExternalAutomationProvider = overrides.provider ?? 'openclaw'
   return {
     id: 'manager-1',
     provider,
-    label: 'Local Hermes',
+    label: 'Local OpenClaw',
     targetLabel: 'Local',
     target: { type: 'local' },
     status: 'available',
@@ -82,7 +88,7 @@ function makeScope(environmentId: string | null = null): ExternalAutomationScope
           : { kind: 'runtime', environmentId, pairingRevision: 1 },
       selector: { kind: 'self' }
     },
-    provider: 'hermes'
+    provider: 'openclaw'
   }
 }
 
@@ -209,12 +215,12 @@ describe('ExternalAutomationManagers toggle', () => {
   })
 
   it('spins only the host whose action is in flight when two authorities share a manager ID', () => {
-    // Both hosts report `hermes:local` with the same job ID, because that ID
+    // Both hosts report `openclaw:local` with the same job ID, because that ID
     // names a provider and a target kind but no authority. The page keys the
     // in-flight action by scope, so the component must too — matching on
     // manager and job alone would spin the wrong host's row, and a user would
     // watch a machine they never touched appear to run their automation.
-    const local = { id: 'hermes:local', jobs: [makeJob({ id: 'job-1', enabled: true })] }
+    const local = { id: 'openclaw:local', jobs: [makeJob({ id: 'job-1', enabled: true })] }
     const desktop = scoped(local, makeScope())
     const runtime = scoped(local, makeScope('env-7'))
 
@@ -231,7 +237,7 @@ describe('ExternalAutomationManagers toggle', () => {
   })
 
   it('labels the two rows apart when two authorities share a manager and job ID', () => {
-    const local = { id: 'hermes:local', jobs: [makeJob({ id: 'job-1' })] }
+    const local = { id: 'openclaw:local', jobs: [makeJob({ id: 'job-1' })] }
     renderManagers([scoped(local, makeScope()), scoped(local, makeScope('env-7'))])
 
     // A name element ID built from manager and job alone would repeat, and the
@@ -242,7 +248,7 @@ describe('ExternalAutomationManagers toggle', () => {
   })
 
   it('dispatches each row against its own authority when two share a manager ID', () => {
-    const local = { id: 'hermes:local', jobs: [makeJob({ id: 'job-1', enabled: true })] }
+    const local = { id: 'openclaw:local', jobs: [makeJob({ id: 'job-1', enabled: true })] }
     const desktop = scoped(local, makeScope())
     const runtime = scoped(local, makeScope('env-7'))
     const { onAction } = renderManagers([desktop, runtime])

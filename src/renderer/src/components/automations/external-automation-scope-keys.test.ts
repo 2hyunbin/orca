@@ -17,28 +17,22 @@ const sshOwner = (targetId = 't1', targetGeneration = 3): AutomationOwnerRef => 
   selector: { kind: 'ssh', targetId, targetGeneration }
 })
 
-const local: ExternalAutomationScopeRef = { owner: localOwner, provider: 'hermes' }
-const remote: ExternalAutomationScopeRef = { owner: sshOwner(), provider: 'hermes' }
+const local: ExternalAutomationScopeRef = { owner: localOwner, provider: 'openclaw' }
+const remote: ExternalAutomationScopeRef = { owner: sshOwner(), provider: 'openclaw' }
 
 describe('external automation scope keys', () => {
   it('separates the same provider ID across hosts', () => {
     expect(externalAutomationJobKey(local, 'job-1')).not.toBe(
       externalAutomationJobKey(remote, 'job-1')
     )
-    expect(externalAutomationManagerKey(local, 'hermes:local')).not.toBe(
-      externalAutomationManagerKey(remote, 'hermes:local')
-    )
-  })
-
-  it('separates providers on one host', () => {
-    expect(externalAutomationJobKey(local, 'job-1')).not.toBe(
-      externalAutomationJobKey({ ...local, provider: 'openclaw' }, 'job-1')
+    expect(externalAutomationManagerKey(local, 'openclaw:local')).not.toBe(
+      externalAutomationManagerKey(remote, 'openclaw:local')
     )
   })
 
   it('separates host incarnations, so a re-added target does not adopt old keys', () => {
     expect(externalAutomationScopeKey(remote)).not.toBe(
-      externalAutomationScopeKey({ owner: sshOwner('t1', 4), provider: 'hermes' })
+      externalAutomationScopeKey({ owner: sshOwner('t1', 4), provider: 'openclaw' })
     )
   })
 
