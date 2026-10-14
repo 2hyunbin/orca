@@ -1,3 +1,4 @@
+import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import { ipcRenderer } from 'electron'
 import type { JiraProjectStatusOrder } from '../../shared/jira-types'
 import type { PreloadApi } from '../api-types'
@@ -32,7 +33,8 @@ export const jiraApi = {
     siteId?: string
   }) => ipcRenderer.invoke('jira:listIssues', args),
 
-  getIssue: (args: { key: string; siteId?: string }) => ipcRenderer.invoke('jira:getIssue', args),
+  getIssue: (args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) =>
+    ipcRenderer.invoke('jira:getIssue', args),
 
   lookupIssueSummary: (args: { key: string; siteId: string; requestId?: string }) =>
     ipcRenderer.invoke('jira:lookupIssueSummary', args),
@@ -64,7 +66,7 @@ export const jiraApi = {
   }): Promise<{ ok: true; id: string } | { ok: false; error: string }> =>
     ipcRenderer.invoke('jira:addIssueComment', args),
 
-  issueComments: (args: { key: string; siteId?: string }) =>
+  issueComments: (args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) =>
     ipcRenderer.invoke('jira:issueComments', args),
 
   listProjects: (args?: { siteId?: string }) => ipcRenderer.invoke('jira:listProjects', args),

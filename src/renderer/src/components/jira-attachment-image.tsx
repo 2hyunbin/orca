@@ -1,0 +1,87 @@
+import { useEffect, useState } from 'react'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import {
+  acquireJiraImageUrl,
+  hasCachedJiraImage,
+  onJiraImageCacheInvalidated
+} from '@/runtime/runtime-jira-image-cache'
+import { jiraImageProtocolUrl } from '@/runtime/runtime-jira-image-client'
+import { ExpandableMarkdownImage } from './sidebar/MarkdownImageLightbox'
+
+type JiraAttachmentImageProps = {
+  target: RuntimeClientTarget
+  reference: string
+  alt?: string
+  compact: boolean
+}
+
+export function JiraAttachmentImage(props: JiraAttachmentImageProps): React.JSX.Element {
+  const owner = props.target.kind === 'environment' ? props.target.environmentId : 'local'
+  return <ResolvedJiraAttachmentImage key={`${owner}:${props.reference}`} {...props} />
+}
+
+function ResolvedJiraAttachmentImage({
+  target,
+  reference,
+  alt,
+  compact
+}: JiraAttachmentImageProps): React.JSX.Element {
+  const [resolved, setResolved] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  const localProtocol = target.kind === 'local' && !hasCachedJiraImage(target, reference)
+  const src = localProtocol ? jiraImageProtocolUrl(reference) : resolved
+  useEffect(
+    () =>
+      onJiraImageCacheInvalidated((environmentId) => {
+        if (
+          environmentId === null ||
+          (target.kind === 'environment' && environmentId === target.environmentId)
+        ) {
+          setResolved(null)
+          setFailed(true)
+        }
+      }),
+    [target]
+  )
+  useEffect(() => {
+    if (localProtocol) {
+      return
+    }
+    const controller = new AbortController()
+    let release: (() => void) | undefined
+    void acquireJiraImageUrl(target, reference, controller.signal)
+      .then((image) => {
+        if (controller.signal.aborted) {
+          image.release()
+          return
+        }
+        release = image.release
+        setResolved(image.url)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setFailed(true)
+        }
+      })
+    return () => {
+      controller.abort()
+      release?.()
+    }
+  }, [localProtocol, reference, target])
+  if (!src || failed) {
+    return <span>{alt || 'Image'}</span>
+  }
+  return (
+    <ExpandableMarkdownImage
+      src={src}
+      onError={() => setFailed(true)}
+      alt={alt}
+      triggerClassName={compact ? 'my-1' : undefined}
+      className={
+        compact
+          ? 'max-h-32 max-w-full rounded-sm object-contain outline outline-1 outline-border/70'
+          : 'max-h-96 max-w-full rounded-md object-contain outline outline-1 outline-border/70'
+      }
+    />
+  )
+}

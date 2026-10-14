@@ -42,6 +42,7 @@ export const PAIRED_DESKTOP_METHODS = [
   'accounts.selectCodexForTarget',
   'accounts.subscribe',
   'accounts.unsubscribe',
+  'jira.attachmentImage',
   'linear.addIssueComment',
   'linear.agentSearchIssues',
   'linear.connect',

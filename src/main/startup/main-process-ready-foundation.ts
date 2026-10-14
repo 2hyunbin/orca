@@ -33,6 +33,7 @@ import {
 } from '../browser/browser-session-proxy'
 import { installDocPreviewProtocolHandler } from '../browser/doc-preview-protocol'
 import { installMediaPreviewProtocolHandler } from '../media/media-preview-protocol'
+import { installJiraImageProtocolHandler } from '../jira/attachment-image-protocol'
 import { registerDocPreviewGrantHandlers } from '../ipc/doc-preview-grant-ipc'
 import { initializeBrowserSessionsForApp } from '../browser/browser-session-startup'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
@@ -259,6 +260,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   setBrowserNetworkProxySettingsResolver(() => state.store!.getSettings())
   // Why: the preview session is protocol-scoped, so the handler must exist before any preview webview attaches.
   installMediaPreviewProtocolHandler()
+  installJiraImageProtocolHandler()
   installDocPreviewProtocolHandler()
   registerDocPreviewGrantHandlers()
   // Why: browser sessions serve desktop webviews and runtime profile commands, so init at app startup rather than via a renderer IPC path.

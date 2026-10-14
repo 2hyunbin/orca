@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import { connect, disconnect, getStatus, selectSite, testConnection } from '../jira/client'
 import { _resetPreflightCache } from './preflight'
 import { JiraCancellableRequests } from './jira-cancellable-requests'
@@ -163,12 +164,20 @@ export function registerJiraHandlers(): void {
     }
   )
 
-  ipcMain.handle('jira:getIssue', async (_event, args: { key: string; siteId?: string }) => {
-    if (typeof args?.key !== 'string' || !args.key.trim()) {
-      return null
+  ipcMain.handle(
+    'jira:getIssue',
+    async (_event, args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) => {
+      if (typeof args?.key !== 'string' || !args.key.trim()) {
+        return null
+      }
+      return getIssue(
+        args.key.trim(),
+        normalizeSiteId(args.siteId),
+        false,
+        args.mediaFormat === 'reference' ? 'reference' : undefined
+      )
     }
-    return getIssue(args.key.trim(), normalizeSiteId(args.siteId))
-  })
+  )
 
   ipcMain.handle(
     'jira:lookupIssueSummary',
@@ -242,12 +251,20 @@ export function registerJiraHandlers(): void {
     }
   )
 
-  ipcMain.handle('jira:issueComments', async (_event, args: { key: string; siteId?: string }) => {
-    if (typeof args?.key !== 'string' || !args.key.trim()) {
-      return []
+  ipcMain.handle(
+    'jira:issueComments',
+    async (_event, args: { key: string; siteId?: string; mediaFormat?: JiraMediaFormat }) => {
+      if (typeof args?.key !== 'string' || !args.key.trim()) {
+        return []
+      }
+      return getIssueComments(
+        args.key.trim(),
+        normalizeSiteId(args.siteId),
+        false,
+        args.mediaFormat === 'reference' ? 'reference' : undefined
+      )
     }
-    return getIssueComments(args.key.trim(), normalizeSiteId(args.siteId))
-  })
+  )
 
   ipcMain.handle('jira:listProjects', async (_event, args?: { siteId?: JiraSiteSelection }) => {
     return listProjects(normalizeSiteSelection(args?.siteId))

@@ -3,6 +3,7 @@ import {
   JIRA_PAYLOAD_MAX_CHARS
 } from '../../../../shared/jira-payload-stream'
 import { defineMethod, defineStreamingMethod } from '../core'
+import { JIRA_ATTACHMENT_IMAGE_METHODS } from './jira-attachment-image'
 import {
   AssignableUsers,
   Connect,
@@ -35,6 +36,7 @@ function emitJiraPayload(value: unknown, emit: (result: unknown) => void): void 
 }
 
 export const JIRA_METHODS = [
+  ...JIRA_ATTACHMENT_IMAGE_METHODS,
   defineMethod({
     name: 'jira.connect',
     permission: 'accounts-admin',
@@ -96,7 +98,7 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }) =>
-      runtime.jiraGetIssue(params.key.trim(), params.siteId, params.strict)
+      runtime.jiraGetIssue(params.key.trim(), params.siteId, params.strict, params.mediaFormat)
   }),
   defineMethod({
     name: 'jira.lookupIssueSummary',
@@ -115,7 +117,12 @@ export const JIRA_METHODS = [
     params: IssueKey,
     handler: async (params, { runtime }, emit) => {
       emitJiraPayload(
-        await runtime.jiraGetIssue(params.key.trim(), params.siteId, params.strict),
+        await runtime.jiraGetIssue(
+          params.key.trim(),
+          params.siteId,
+          params.strict,
+          params.mediaFormat
+        ),
         emit
       )
     }
@@ -154,7 +161,7 @@ export const JIRA_METHODS = [
     permission: 'workspace',
     params: IssueKey,
     handler: async (params, { runtime }) =>
-      runtime.jiraIssueComments(params.key.trim(), params.siteId, params.strict)
+      runtime.jiraIssueComments(params.key.trim(), params.siteId, params.strict, params.mediaFormat)
   }),
   defineStreamingMethod({
     name: 'jira.issueCommentsStream',
@@ -162,7 +169,12 @@ export const JIRA_METHODS = [
     params: IssueKey,
     handler: async (params, { runtime }, emit) => {
       emitJiraPayload(
-        await runtime.jiraIssueComments(params.key.trim(), params.siteId, params.strict),
+        await runtime.jiraIssueComments(
+          params.key.trim(),
+          params.siteId,
+          params.strict,
+          params.mediaFormat
+        ),
         emit
       )
     }

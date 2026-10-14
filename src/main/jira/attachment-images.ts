@@ -13,6 +13,12 @@ import {
   type AttachmentMeta
 } from './attachment-meta'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+import {
+  JIRA_IMAGE_MAX_BYTES,
+  JIRA_IMAGE_MAX_REFERENCES,
+  type JiraMediaFormat
+} from '../../shared/jira-attachment-image'
+import { registerAttachmentImageGrant } from './attachment-image-grants'
 
 const DOWNLOAD_CONCURRENCY = 3
 
@@ -83,6 +89,9 @@ async function downloadImageAttachment(
   // Approximate byte size from base64 payload when served from cache.
   const base64Part = dataUrl.includes(',') ? dataUrl.slice(dataUrl.indexOf(',') + 1) : ''
   const byteSize = Math.floor((base64Part.length * 3) / 4)
+  if (byteSize === 0 || byteSize > MAX_IMAGE_BYTES) {
+    return null
+  }
 
   return {
     id: meta.id,
@@ -96,9 +105,13 @@ async function downloadImageAttachment(
 export async function loadIssueImageAttachments(
   client: JiraClientForSite,
   attachmentField: unknown,
-  preferredIds: string[] = []
+  preferredIds: string[] = [],
+  mediaFormat?: JiraMediaFormat
 ): Promise<JiraImageAttachment[]> {
-  const metas = parseImageAttachmentMetas(attachmentField)
+  const metas = parseImageAttachmentMetas(
+    attachmentField,
+    mediaFormat ? JIRA_IMAGE_MAX_BYTES : MAX_IMAGE_BYTES
+  )
   if (metas.length === 0 || preferredIds.length === 0) {
     return []
   }
@@ -113,6 +126,16 @@ export async function loadIssueImageAttachments(
       ordered.push(meta)
       used.add(meta.id)
     }
+  }
+
+  if (mediaFormat === 'reference') {
+    return ordered.slice(0, JIRA_IMAGE_MAX_REFERENCES).map((meta) => ({
+      id: meta.id,
+      filename: meta.filename,
+      mimeType: meta.mimeType,
+      byteSize: meta.size,
+      dataUrl: registerAttachmentImageGrant(client, meta)
+    }))
   }
 
   // Why: pre-select by declared size so concurrent downloads do not fetch bodies
@@ -149,7 +172,7 @@ export async function loadIssueImageAttachments(
 }
 
 export type MediaResolutionStats = {
-  /** Attachment-needing media nodes that successfully resolved to a data: image. */
+  /** Attachment-needing media nodes that resolved to an image destination. */
   attachmentResolvedCount: number
 }
 
@@ -202,7 +225,7 @@ export function createMediaMarkdownResolver(
     if (attrs.id) {
       const cached = resolvedByMediaId.get(attrs.id)
       if (cached) {
-        if (stats && !cached.startsWith('*[') && cached.includes('data:')) {
+        if (stats && cached.startsWith('![')) {
           stats.attachmentResolvedCount += 1
         }
         return cached

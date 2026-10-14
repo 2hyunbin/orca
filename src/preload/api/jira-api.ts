@@ -1,3 +1,4 @@
+import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
 import type {
   JiraComment,
   JiraConnectionStatus,
@@ -42,7 +43,11 @@ export type JiraApi = {
     limit?: number
     siteId?: JiraSiteSelection
   }) => Promise<JiraIssue[]>
-  getIssue: (args: { key: string; siteId?: string }) => Promise<JiraIssue | null>
+  getIssue: (args: {
+    key: string
+    siteId?: string
+    mediaFormat?: JiraMediaFormat
+  }) => Promise<JiraIssue | null>
   lookupIssueSummary: (args: {
     key: string
     siteId: string
@@ -62,7 +67,11 @@ export type JiraApi = {
     body: string
     siteId?: string
   }) => Promise<{ ok: true; id: string } | { ok: false; error: string }>
-  issueComments: (args: { key: string; siteId?: string }) => Promise<JiraComment[]>
+  issueComments: (args: {
+    key: string
+    siteId?: string
+    mediaFormat?: JiraMediaFormat
+  }) => Promise<JiraComment[]>
   listProjects: (args?: { siteId?: JiraSiteSelection }) => Promise<JiraProject[]>
   listIssueTypes: (args: { projectIdOrKey: string; siteId?: string }) => Promise<JiraIssueType[]>
   listCreateFields: (args: {

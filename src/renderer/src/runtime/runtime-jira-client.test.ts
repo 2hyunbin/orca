@@ -12,6 +12,8 @@ import {
   jiraSearchIssues,
   jiraSearchUsers
 } from './runtime-jira-client'
+import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
+import { clearJiraImageCache } from './runtime-jira-image-cache'
 import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
 import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import {
@@ -66,6 +68,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  clearJiraImageCache()
   vi.unstubAllGlobals()
 })
 
@@ -386,7 +389,13 @@ describe('runtime Jira client search bounds', () => {
     )
   })
 
-  it('streams image-bearing issue and comment payloads from remote runtimes', async () => {
+  it('streams image-bearing issue and comment payloads from older remote runtimes', async () => {
+    const status = createCompatibleRuntimeStatusResponse()
+    if (!status.ok) {throw new Error('Expected successful status')}
+    status.result.capabilities = status.result.capabilities?.filter(
+      (capability) => capability !== JIRA_IMAGE_CAPABILITY
+    )
+    runtimeCall.mockResolvedValue(status)
     runtimeSubscribe.mockImplementation(
       async (args: RuntimeSubscribeArgs, callbacks: RuntimeSubscribeCallbacks) => {
         const payload =
@@ -436,6 +445,42 @@ describe('runtime Jira client search bounds', () => {
       },
       expect.anything()
     )
-    expect(runtimeCall).not.toHaveBeenCalled()
+    expect(runtimeCall).toHaveBeenCalledWith(expect.objectContaining({ method: 'status.get' }))
   })
+})
+
+it('uses short image references and ordinary detail RPCs when the host advertises support', async () => {
+  const image = '![shot](orca-jira-image://attachment/12345678-1234-1234-1234-123456789012)'
+  runtimeCall.mockImplementation(async (args: { method: string }) =>
+    args.method === 'status.get'
+      ? createCompatibleRuntimeStatusResponse()
+      : {
+          id: 'image',
+          ok: true,
+          result:
+            args.method === 'jira.getIssue'
+              ? { key: 'ORCA-1', description: image }
+              : [{ id: 'comment', body: image }],
+          _meta: { runtimeId: 'remote-runtime' }
+        }
+  )
+  await expect(
+    jiraGetIssue({ kind: 'environment', environmentId: 'env-1' }, 'ORCA-1', 'site-1')
+  ).resolves.toMatchObject({ description: image })
+  await expect(
+    jiraIssueComments({ kind: 'environment', environmentId: 'env-1' }, 'ORCA-1', 'site-1')
+  ).resolves.toMatchObject([{ body: image }])
+  expect(runtimeCall).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: 'jira.getIssue',
+      params: { key: 'ORCA-1', siteId: 'site-1', mediaFormat: 'reference' }
+    })
+  )
+  expect(runtimeCall).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: 'jira.issueComments',
+      params: { key: 'ORCA-1', siteId: 'site-1', mediaFormat: 'reference' }
+    })
+  )
+  expect(runtimeSubscribe).not.toHaveBeenCalled()
 })

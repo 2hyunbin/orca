@@ -32,6 +32,7 @@ import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-wor
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
 import { defaultScopeSource } from '@/lib/default-creation-host'
+import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
 
 type JiraIssueWorkspaceProps = {
   issue: JiraIssue | null
@@ -332,6 +333,7 @@ export default function JiraIssueWorkspace({
 
             <JiraIssueWorkspaceContent
               displayed={displayed}
+              imageTarget={getJiraRuntimeTarget(providerSettings)}
               titleDraft={titleDraft}
               setTitleDraft={setTitleDraft}
               labelsDraft={labelsDraft}
