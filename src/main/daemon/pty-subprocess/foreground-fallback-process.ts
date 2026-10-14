@@ -1,11 +1,17 @@
 import { win32 as pathWin32 } from 'node:path'
 
+// Why: they run before the shell execs, for up to a few hundred ms when many terminals start.
+const LINUX_TERMINAL_SCOPE_WRAPPERS = new Set(['systemd-run', 'env'])
+
 function normalizeForegroundProcessName(processName: string | null | undefined): string | null {
   const trimmed = processName?.trim().replace(/^["']|["']$/g, '') ?? ''
   if (!trimmed || trimmed === 'xterm-256color') {
     return null
   }
-  return trimmed.split(/[\\/]/).pop() || null
+  const name = trimmed.split(/[\\/]/).pop() || null
+  return process.platform === 'linux' && name && LINUX_TERMINAL_SCOPE_WRAPPERS.has(name)
+    ? null
+    : name
 }
 
 /**
