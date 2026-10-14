@@ -1703,7 +1703,6 @@
         "f0470c7383": "Avanzado",
         "ba64270bdb": "Configurar agentes",
         "ab63f25397": "Abrir configuración del agente",
-        "01d1e8f601": "Agente",
         "0c5d6a479c": "[Opcional]",
         "b5a0796911": "Conectar",
         "dccd26d4e4": "Elige proyecto",
@@ -1778,8 +1777,7 @@
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "Crear worktree",
-        "createWorkspace": "Crear espacio de trabajo",
-        "fa90f739a5": "Elija el proyecto, el nombre del espacio de trabajo y el agente antes de crear el espacio de trabajo."
+        "createWorkspace": "Crear espacio de trabajo"
       },
       "PullRequestPage": {
         "2560588245": "No se pudo solicitar el revisor",
@@ -6857,7 +6855,6 @@
           "e8da2af684": "Disponible para instalar",
           "ed3e110e61": "detectado",
           "02e0143be5": "Instalado",
-          "110b74b022": "Sin agente (terminal en blanco)",
           "92033495ff": "Auto",
           "9b175d0f5e": "Agent preseleccionado al abrir un nuevo espacio de trabajo.",
           "385212c7a1": "Agent predeterminado",
@@ -6880,7 +6877,6 @@
           "959b67385b": "Establecer predeterminado",
           "24e032fa34": "Predeterminado",
           "5f986a9b92": "Establecer como predeterminado",
-          "d7625cf8b2": "Agent predeterminado",
           "cfb3f35775": "Argumentos",
           "6f99bf5dd0": "Sin argumentos predeterminados",
           "8fbe1f37c1": "Entorno",
@@ -6900,9 +6896,7 @@
           "remoteDetectionFailed": "Couldn’t detect installed agents. Check the host connection and try again.",
           "retryDetection": "Retry",
           "storedDefaultUndetected": "Guardado como predeterminado, pero no detectado en este momento",
-          "noAgentsDetected": "No se detectaron agentes. Si hay uno instalado, es posible que la sonda haya agotado su tiempo de espera.",
-          "setupOnly": "Ninguno",
-          "setupOnlyHint": "Ejecuta la configuración sin un terminal en blanco adicional en el modo de pestaña nueva. El modo dividido mantiene un panel de shell; si se omite la configuración o falta, se abre un terminal en blanco."
+          "noAgentsDetected": "No se detectaron agentes. Si hay uno instalado, es posible que la sonda haya agotado su tiempo de espera."
         },
         "AppIconSelector": {
           "d5a112dc9b": "Icono siguiente",
@@ -17028,8 +17022,7 @@
           "579c768bde": "Ningún agente coincide con su búsqueda.",
           "48c6a5a9b4": "Agentes de búsqueda...",
           "9c6b59fe58": "Establecer como predeterminado",
-          "1b0d6965fa": "Valor predeterminado actual",
-          "setupOnly": "Ninguno"
+          "1b0d6965fa": "Valor predeterminado actual"
         },
         "AgentSettingsDialog": {
           "50cdb57c03": "Administre agents de IA, establezca un valor predeterminado y personalice comandos.",
@@ -19915,5 +19908,36 @@
     "browser": "Navegador",
     "editor": "Editor",
     "terminal": "Terminal"
+  },
+  "updates": {
+    "installBlock": {
+      "instancesLabel": "Instancias que usan Orca",
+      "browserLabel": "Navegador en segundo plano",
+      "serverLabel": "Servidor en segundo plano",
+      "windowLabel": "Otra ventana de Orca",
+      "instanceLabel": "Otra instancia de Orca",
+      "processId": "PID {{pid}}",
+      "preparingTitle": "Preparando tu actualización",
+      "preparingSummary": "Comprobando las instancias de Orca en ejecución antes de reiniciar.",
+      "later": "Más tarde",
+      "retainedDownload": "Orca sigue abierto. No necesitas descargar la actualización de nuevo.",
+      "retryInstallation": "Reintentar instalación",
+      "waitingLabel": "Actualización en espera",
+      "busyTitle": "Otra instancia de Orca se está actualizando",
+      "busySummary": "Otra instancia de Orca ya está instalando una actualización.",
+      "busyGuidance": "Espera un momento y vuelve a intentarlo. Tu actualización descargada está lista.",
+      "unresponsiveTitle": "Esperando a los servidores en segundo plano",
+      "unresponsiveSummary": "Orca no pudo terminar de pausar sus servidores en segundo plano para la actualización.",
+      "unresponsiveGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "readyTitle": "Tu actualización está lista",
+      "serverSummary": "Un servidor de Orca en segundo plano sigue usando esta aplicación.",
+      "instanceSummary": "Otra instancia de Orca sigue usando esta aplicación.",
+      "serverGuidance": "Detén el servidor desde el terminal o el servicio que lo inició y vuelve a intentarlo. Los dispositivos conectados se desconectarán.",
+      "mixedGuidance": "Cierra las demás ventanas de Orca y detén el servidor desde el terminal o el servicio que lo inició. Los dispositivos conectados se desconectarán. Después, vuelve a intentarlo.",
+      "instanceGuidance": "Cierra las demás instancias de Orca y vuelve a intentarlo. Tu actualización descargada se mantendrá lista.",
+      "waitingAriaLabel": "Actualización en espera de otras instancias de Orca. Haz clic para expandir.",
+      "preparingLabel": "Preparando actualización",
+      "preparingAriaLabel": "Preparando actualización. Haz clic para expandir."
+    }
   }
 }
