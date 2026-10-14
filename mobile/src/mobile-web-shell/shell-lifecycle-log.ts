@@ -48,7 +48,25 @@ const FAULT_DETAIL_MAX_CHARS = 160
 
 let lineSequence = 0
 
+// Lines a host flapping between unreachable and dialling would repeat every cycle per mounted shell.
+const FLAPPING_MESSAGES: ReadonlySet<string> = new Set([
+  'Web shell: checking host',
+  'Web shell: host unreachable and no app cached'
+])
+// Per host, the flapping lines already written since the last other shell line for it.
+const flappingWritten = new Map<string, Set<string>>()
+
 export function recordShellLifecycleLine(hostId: string, line: ShellLifecycleLine): void {
+  if (FLAPPING_MESSAGES.has(line.message)) {
+    const written = flappingWritten.get(hostId) ?? new Set<string>()
+    if (written.has(line.message)) {
+      return
+    }
+    written.add(line.message)
+    flappingWritten.set(hostId, written)
+  } else {
+    flappingWritten.delete(hostId)
+  }
   const ts = Date.now()
   lineSequence += 1
   connectionLogStore.append(hostId, { id: `web-shell-${ts}-${lineSequence}`, ts, ...line })
@@ -198,7 +216,11 @@ export function frameWithoutHostLine(facts: {
 export function maskUserText(text: string): string {
   const masked = text
     .replace(/file:\/\/[^\s)'"`\]]+/g, '[path]')
-    .replace(/(^|[\s'"`([=:])(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s)'"`\]]+/g, '$1[path]')
+    // A following word that still holds a separator is the same path (`C:\Users\John Doe\x`).
+    .replace(
+      /(^|[\s'"`([=:,])(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s)'"`\]]+(?: [^\s)'"`\]]*[\\/][^\s)'"`\]]*)*/g,
+      '$1[path]'
+    )
   return masked.length > FAULT_DETAIL_MAX_CHARS
     ? `${masked.slice(0, FAULT_DETAIL_MAX_CHARS)}…`
     : masked
@@ -251,14 +273,14 @@ function eventLines(
     case 'shell-failed':
       return [pageLine('warn', 'Web shell: page load failed', `reason=${event.reason}`)]
     case 'page-painted':
-      // The one line a healthy open writes, carrying what the open itself would have said.
+      // The one line a healthy open writes; `activatedMs` is flow start to activation, not to paint.
       return before.pagePainted
         ? []
         : [
             pageLine(
               'success',
               'Web shell: page painted',
-              `source=${trace.openedFrom ?? 'unknown'} build=${buildPrefix(before.state.buildId)} elapsed=${before.state.elapsedMs}ms`
+              `source=${trace.openedFrom ?? 'unknown'} build=${buildPrefix(before.state.buildId)} activatedMs=${before.state.elapsedMs}`
             )
           ]
     case 'page-ready-deadline':

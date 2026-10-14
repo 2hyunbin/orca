@@ -244,7 +244,7 @@ export function useMobileWebShellSession(args: {
     return invalidate
   }, [hostId, invalidate, routePathname, runtime])
 
-  // Log-only: one warning per parked state object, cancelled by any state, paint or host change.
+  // Log-only: one warning per parked state object, cancelled by any state, paint, host or route change.
   // `CHECKING` is one shared object, so checking-to-checking steps keep the first open's timer.
   useEffect(() => {
     if (shellStallLine(state, sessionRef.current, logTraceRef.current) === null) {
@@ -256,7 +256,7 @@ export function useMobileWebShellSession(args: {
         recordShellLifecycleLine(hostIdRef.current, line)
       }
     }, SHELL_STALL_LOG_MS)
-  }, [hostId, pageFrame, runtime, state])
+  }, [hostId, pageFrame, routePathname, runtime, state])
 
   useEffect(() => {
     dispatch(epochRef.current, { type: 'layout-changed', wide })

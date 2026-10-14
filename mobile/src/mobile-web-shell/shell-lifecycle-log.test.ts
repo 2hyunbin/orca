@@ -14,8 +14,10 @@ import type {
   MobileWebShellSession,
   MobileWebShellSessionEvent
 } from './mobile-web-shell-session-contract'
+import { connectionLogStore } from '../transport/persisted-connection-log-store'
 import {
   bridgeDiagnosticLine,
+  recordShellLifecycleLine,
   EMPTY_SHELL_LOG_TRACE,
   frameWithoutHostLine,
   maskUserText,
@@ -127,7 +129,7 @@ describe('shell lifecycle log lines', () => {
       { type: 'page-back-claim', claimed: true }
     ])
     expect(summary(lines)).toEqual([
-      `web-shell-page Web shell: page painted | source=cache build=${BUILD} elapsed=1234ms`
+      `web-shell-page Web shell: page painted | source=cache build=${BUILD} activatedMs=1234`
     ])
   })
 
@@ -136,7 +138,7 @@ describe('shell lifecycle log lines', () => {
     expect(summary(lines)).toEqual([
       `web-shell-flow Web shell: downloading app | ${MANIFEST.totalAssets} assets, ${MANIFEST.totalBytes} bytes`,
       'web-shell-flow Web shell: activating app | source=download',
-      `web-shell-page Web shell: page painted | source=download build=${BUILD} elapsed=1234ms`
+      `web-shell-page Web shell: page painted | source=download build=${BUILD} activatedMs=1234`
     ])
     // The generation directory names a device path and never reaches the log.
     expect(JSON.stringify(lines)).not.toContain('/Users/someone')
@@ -274,6 +276,9 @@ describe('shell failure details', () => {
       'read [path] and [path]'
     )
     expect(maskUserText('key:~/notes.txt')).toBe('key:[path]')
+    expect(maskUserText('open C:\\Users\\John Doe\\proj\\x.ts failed')).toBe('open [path] failed')
+    expect(maskUserText('at /Users/Jane Q/My Proj/a.js and more')).toBe('at [path] and more')
+    expect(maskUserText('a,/Users/x/y')).toBe('a,[path]')
     expect(maskUserText('Cannot read properties of undefined')).toBe(
       'Cannot read properties of undefined'
     )
@@ -318,6 +323,39 @@ describe('shell failure details', () => {
       message: 'Web shell: page frame with no bridge host',
       detail: 'client=null snapshot=ok'
     })
+  })
+})
+
+describe('recording shell lines', () => {
+  it('writes a flapping host line once until a different shell line is written', () => {
+    const host = 'flapping-host'
+    const checking = replay([
+      { type: 'gates-changed', gates: gates({ reachability: 'unreachable' }) },
+      { type: 'cache-read', generation: null },
+      { type: 'gates-changed', gates: gates({ reachability: 'connecting' }) }
+    ]).lines
+    expect(summary(checking)).toEqual([
+      'web-shell-flow Web shell: host unreachable and no app cached',
+      'web-shell-flow Web shell: checking host'
+    ])
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      for (const line of checking) {
+        recordShellLifecycleLine(host, line)
+      }
+    }
+    const messages = () => connectionLogStore.get(host).map((entry) => entry.message)
+    expect(messages()).toEqual([
+      'Web shell: host unreachable and no app cached',
+      'Web shell: checking host'
+    ])
+    recordShellLifecycleLine(host, frameWithoutHostLine({ clientReady: true, snapshotReady: true }))
+    recordShellLifecycleLine(host, checking[1]!)
+    recordShellLifecycleLine('other-host', checking[1]!)
+    expect(messages().slice(2)).toEqual([
+      'Web shell: page frame with no bridge host',
+      'Web shell: checking host'
+    ])
+    expect(connectionLogStore.get('other-host')).toHaveLength(1)
   })
 })
 
