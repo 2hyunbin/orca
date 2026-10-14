@@ -7,7 +7,8 @@ import {
   type WslMovePreflightProbes
 } from './wsl-move-preflight'
 
-const unc = (linux: string, distro = 'Ubuntu') => `\\\\wsl.localhost\\${distro}${linux.replaceAll('/', '\\')}`
+const unc = (linux: string, distro = 'Ubuntu') =>
+  `\\\\wsl.localhost\\${distro}${linux.replaceAll('/', '\\')}`
 
 const facts = (root: string, head = 'abc'): WslMovePathFacts => ({
   gitCommonDir: `${root}/.git`,
@@ -16,7 +17,9 @@ const facts = (root: string, head = 'abc'): WslMovePathFacts => ({
 })
 
 /** The desktop answers in UNC form for a real repo at `/home/dev/app`; the host in Linux form. */
-function probes(host: Partial<Record<string, WslMovePathFacts | null>> = {}): WslMovePreflightProbes {
+function probes(
+  host: Partial<Record<string, WslMovePathFacts | null>> = {}
+): WslMovePreflightProbes {
   const linuxFacts = facts('/home/dev/app')
   return {
     desktop: async (path) =>
@@ -27,7 +30,8 @@ function probes(host: Partial<Record<string, WslMovePathFacts | null>> = {}): Ws
             worktrees: [unc('/home/dev/app'), unc('/home/dev/app-feature')]
           }
         : null,
-    host: async (path) => (path in host ? (host[path] ?? null) : path === '/home/dev/app' ? linuxFacts : null)
+    host: async (path) =>
+      path in host ? (host[path] ?? null) : path === '/home/dev/app' ? linuxFacts : null
   }
 }
 
@@ -65,6 +69,8 @@ describe('preflightWslMovePaths', () => {
 describe('wslMoveHostReadiness', () => {
   it('asks for a host update until the host parses WSL moves', () => {
     expect(wslMoveHostReadiness([])).toBe('update-host')
-    expect(wslMoveHostReadiness([ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY])).toBe('ready')
+    expect(wslMoveHostReadiness([ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY])).toBe(
+      'ready'
+    )
   })
 })
