@@ -26,6 +26,8 @@ const initialProps = {
   body: 'Original description',
   context: 'local',
   sourceHost: 'local',
+  accountHost: 'local',
+  hasSourceContext: true,
   accountLabel: 'Account one',
   providerSite: 'site-1',
   project: 'ORCA',
@@ -36,18 +38,23 @@ function setup() {
     (props) => {
       const [title, setTitle] = useState('')
       return useTaskPageJiraSummaryGeneration({
-        settings: null,
-        jiraTaskSourceContext: {
-          kind: 'task-source',
-          provider: 'jira',
-          projectId: 'source-project',
-          hostId:
-            props.sourceHost === 'local'
-              ? LOCAL_EXECUTION_HOST_ID
-              : toRuntimeExecutionHostId(props.sourceHost),
-          accountLabel: props.accountLabel,
-          providerIdentity: { provider: 'jira', siteId: props.providerSite }
-        },
+        accountBackedTaskSourceHostId:
+          props.accountHost === 'local'
+            ? LOCAL_EXECUTION_HOST_ID
+            : toRuntimeExecutionHostId(props.accountHost),
+        jiraTaskSourceContext: props.hasSourceContext
+          ? {
+              kind: 'task-source',
+              provider: 'jira',
+              projectId: 'source-project',
+              hostId:
+                props.sourceHost === 'local'
+                  ? LOCAL_EXECUTION_HOST_ID
+                  : toRuntimeExecutionHostId(props.sourceHost),
+              accountLabel: props.accountLabel,
+              providerIdentity: { provider: 'jira', siteId: props.providerSite }
+            }
+          : null,
         newJiraIssueOpen: props.open,
         newJiraIssueBody: props.body,
         newJiraIssueTitle: title,
@@ -120,6 +127,40 @@ describe('Jira title generation lifecycle', () => {
       expect.any(AbortSignal)
     )
     expect(result.current.newJiraIssueTitle).toBe('Remote title')
+  })
+
+  it('uses the captured account host when no source context is available', async () => {
+    mocks.generate.mockResolvedValue({ success: true, summary: 'Owned title' })
+    const { result, rerender } = setup()
+    rerender({ ...initialProps, hasSourceContext: false, accountHost: 'account-owner' })
+    await act(async () => result.current.handleGenerateNewJiraIssueSummary())
+    expect(mocks.generate).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'account-owner' },
+      expect.objectContaining({ siteId: 'site-1' }),
+      expect.any(AbortSignal)
+    )
+    expect(result.current.newJiraIssueTitle).toBe('Owned title')
+  })
+
+  it('cancels on the captured account owner and ignores its reply after changing owners', async () => {
+    const pending = deferred()
+    mocks.generate.mockReturnValue(pending.promise)
+    const { result, rerender } = setup()
+    rerender({ ...initialProps, hasSourceContext: false, accountHost: 'account-a' })
+    let request!: Promise<void>
+    act(() => {
+      request = result.current.handleGenerateNewJiraIssueSummary()
+    })
+    rerender({ ...initialProps, hasSourceContext: false, accountHost: 'account-b' })
+    await act(async () => {
+      pending.resolve({ success: true, summary: 'Wrong owner title' })
+      await request
+    })
+    expect(result.current.newJiraIssueTitle).toBe('')
+    expect(mocks.cancel).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'account-a' },
+      expect.objectContaining({ siteId: 'site-1' })
+    )
   })
 
   it.each([

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { isWebClientLocation } from '@/lib/web-client-location'
-import { defaultScopeSource } from '@/lib/default-creation-host'
-import { getJiraRuntimeTarget } from '@/runtime/runtime-jira-target'
+import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import {
   generateRuntimeJiraIssueSummary,
   cancelRuntimeJiraIssueSummary
@@ -15,7 +14,7 @@ import type { TaskPageJiraIssueCreationModel } from './use-task-page-jira-issue-
 
 type SummaryGenerationModel = Pick<
   TaskPageJiraIssueCreationModel,
-  | 'settings'
+  | 'accountBackedTaskSourceHostId'
   | 'jiraTaskSourceContext'
   | 'newJiraIssueOpen'
   | 'newJiraIssueTitle'
@@ -29,7 +28,7 @@ type SummaryGenerationModel = Pick<
 
 export function useTaskPageJiraSummaryGeneration<T extends SummaryGenerationModel>(model: T) {
   const {
-    settings,
+    accountBackedTaskSourceHostId,
     jiraTaskSourceContext,
     newJiraIssueOpen,
     newJiraIssueTitle,
@@ -40,11 +39,13 @@ export function useTaskPageJiraSummaryGeneration<T extends SummaryGenerationMode
     setNewJiraIssueTitle,
     providerRuntimeContextKey
   } = model
+  const ownerHostId = jiraTaskSourceContext?.hostId ?? accountBackedTaskSourceHostId
+  const target = useMemo(() => ipcOrRuntimeTargetForHostId(ownerHostId), [ownerHostId])
   const newJiraIssueSummaryAvailable = !isWebClientLocation()
   const [newJiraIssueSummaryGenerating, setNewJiraIssueSummaryGenerating] = useState(false)
   const jiraSourceKey = jiraTaskSourceContext
     ? getTaskSourceCacheScope(jiraTaskSourceContext)
-    : JSON.stringify(getJiraRuntimeTarget(defaultScopeSource(settings)))
+    : ownerHostId
   const draftKey = JSON.stringify([
     newJiraIssueBody,
     newJiraIssueTargetProject?.siteId,
@@ -126,6 +127,7 @@ export function useTaskPageJiraSummaryGeneration<T extends SummaryGenerationMode
       !newJiraIssueOpen ||
       !description ||
       !newJiraIssueTargetProject?.siteId ||
+      !target ||
       generatingRef.current ||
       newJiraIssueSubmitting
     ) {
@@ -135,7 +137,7 @@ export function useTaskPageJiraSummaryGeneration<T extends SummaryGenerationMode
     const titleAtStart = newJiraIssueTitle
     const titleRevisionAtStart = titleRevisionRef.current
     const request = {
-      target: getJiraRuntimeTarget(jiraTaskSourceContext ?? defaultScopeSource(settings)),
+      target,
       args: {
         siteId: newJiraIssueTargetProject.siteId,
         requestId: createBrowserUuid(),
@@ -202,8 +204,7 @@ export function useTaskPageJiraSummaryGeneration<T extends SummaryGenerationMode
     newJiraIssueSummaryAvailable,
     draftKey,
     draftId,
-    settings,
-    jiraTaskSourceContext,
+    target,
     newJiraIssueOpen,
     newJiraIssueBody,
     newJiraIssueSubmitting,
