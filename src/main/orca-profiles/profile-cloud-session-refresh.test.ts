@@ -14,8 +14,7 @@ const { readMock, saveMock, clearMock, refreshMock, linkMock } = vi.hoisted(() =
 vi.mock('./profile-cloud-session-store', () => ({
   readOrcaCloudSession: readMock,
   saveOrcaCloudSession: saveMock,
-  rememberOrcaCloudSessionInMemory: vi.fn(),
-  getOrcaCloudSessionPath: vi.fn(() => '/data/session'),
+  orcaCloudSessionKey: (profileId: string, userDataPath: string) => `${userDataPath}\0${profileId}`,
   clearOrcaCloudSession: clearMock
 }))
 
@@ -25,6 +24,13 @@ vi.mock('./profile-cloud-client', async (importOriginal) => {
 })
 
 vi.mock('./profile-cloud-index', () => ({ linkOrcaProfileToCloud: linkMock }))
+
+vi.mock('./profile-index-store', () => ({
+  loadOrCreateProfileIndex: () => ({
+    profiles: [{ id: 'profile-1', cloud: { activeOrgId: 'org-1' } }]
+  }),
+  getOrcaProfileListState: vi.fn()
+}))
 
 import { readFreshOrcaCloudSession } from './profile-cloud-session-refresh'
 import { OrcaCloudRequestError } from './profile-cloud-client'

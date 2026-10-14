@@ -5,7 +5,7 @@ import type { ActiveOrcaProfileState } from './profile-index-store'
 import type { OrcaProfileListState } from '../../shared/orca-profiles'
 import {
   beginCloudSessionRelink,
-  commitCloudSessionUpdate,
+  commitCloudSessionRelink,
   readCloudSession
 } from './profile-cloud-session-owner'
 
@@ -47,9 +47,9 @@ export async function selectCloudOrg(input: {
   ) {
     throw new Error('orca_cloud_org_selection_identity_mismatch')
   }
-  const committed = commitCloudSessionUpdate(profileId, input.userDataPath, ticket, cloud, selected)
-  if (!committed?.list) {
+  const list = commitCloudSessionRelink(profileId, input.userDataPath, ticket, selected)
+  if (!list) {
     throw new Error('stale_cloud_session_mutation')
   }
-  return committed.list
+  return list
 }

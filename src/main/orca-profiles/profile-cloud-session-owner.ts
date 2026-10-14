@@ -1,4 +1,3 @@
-import { rmSync } from 'node:fs'
 import type {
   OrcaCloudCapabilities,
   OrcaCloudOrgSummary,
@@ -6,12 +5,12 @@ import type {
   OrcaProfileListState
 } from '../../shared/orca-profiles'
 import { linkOrcaProfileToCloud } from './profile-cloud-index'
+import { getOrcaProfileListState, loadOrCreateProfileIndex } from './profile-index-store'
 import type { OrcaCloudSessionExchangeResponse } from './profile-cloud-session-exchange'
 import {
   clearOrcaCloudSession,
-  getOrcaCloudSessionPath,
+  orcaCloudSessionKey,
   readOrcaCloudSession,
-  rememberOrcaCloudSessionInMemory,
   saveOrcaCloudSession,
   type OrcaCloudSession,
   type OrcaCloudSessionReadResult
@@ -23,8 +22,8 @@ import {
 type SessionOwnerState = {
   // Bumped by sign-in and sign-out: a change begun before either may not land.
   generation: number
-  // Bumped when the profile's cloud link moves: a server reply begun before it describes
-  // the old link, so only its tokens may land.
+  // Bumped when the profile's org link moves: a server reply begun before it describes the
+  // old org, so only its tokens may land.
   linkVersion: number
   // Signed out this run: the file is ignored even if it could not be removed.
   signedOut: boolean
@@ -32,7 +31,7 @@ type SessionOwnerState = {
 
 export type CloudSessionTicket = { generation: number; linkVersion: number }
 
-export type CloudSessionServerUpdate = {
+export type CloudSessionServerReply = {
   cloud?: OrcaProfileCloudSummary
   organizations?: OrcaCloudOrgSummary[]
   capabilities: OrcaCloudCapabilities
@@ -41,7 +40,7 @@ export type CloudSessionServerUpdate = {
 const owners = new Map<string, SessionOwnerState>()
 
 function ownerOf(profileId: string, userDataPath: string): SessionOwnerState {
-  const key = `${userDataPath}\0${profileId}`
+  const key = orcaCloudSessionKey(profileId, userDataPath)
   let owner = owners.get(key)
   if (!owner) {
     owner = { generation: 0, linkVersion: 0, signedOut: false }
@@ -50,40 +49,29 @@ function ownerOf(profileId: string, userDataPath: string): SessionOwnerState {
   return owner
 }
 
-function isCurrent(owner: SessionOwnerState, ticket: CloudSessionTicket): boolean {
-  return !owner.signedOut && owner.generation === ticket.generation
-}
-
-function persist(
+function isSameOrgAsLink(
   profileId: string,
   userDataPath: string,
-  session: OrcaCloudSession,
-  rotated: boolean
-): void {
-  try {
-    saveOrcaCloudSession(profileId, userDataPath, session)
-  } catch {
-    // Why: a rotated refresh token is already spent server-side. Losing the new one to a failed
-    // write (disk full, locked file, keychain error) makes the next refresh replay the old token,
-    // which the server reads as reuse and revokes the whole family.
-    rememberOrcaCloudSessionInMemory(profileId, userDataPath, session)
-    if (rotated) {
-      // The file now holds the spent token; a restart replaying it would revoke the family.
-      // Any other failed write leaves a still-valid file in place.
-      try {
-        rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
-      } catch {
-        // The in-memory session still wins for the rest of this run.
-      }
-    }
-  }
+  cloud: OrcaProfileCloudSummary
+): boolean {
+  const linked = loadOrCreateProfileIndex(userDataPath).profiles.find(
+    (profile) => profile.id === profileId
+  )?.cloud
+  return (linked?.activeOrgId ?? '') === (cloud.activeOrgId ?? '')
 }
 
-function orgChanged(
-  linked: OrcaProfileCloudSummary | undefined,
-  next: OrcaProfileCloudSummary
-): boolean {
-  return (linked?.activeOrgId ?? '') !== (next.activeOrgId ?? '')
+function relink(
+  owner: SessionOwnerState,
+  profileId: string,
+  userDataPath: string,
+  cloud: OrcaProfileCloudSummary
+): OrcaProfileListState {
+  const orgChanged = !isSameOrgAsLink(profileId, userDataPath, cloud)
+  const list = linkOrcaProfileToCloud(profileId, cloud, userDataPath)
+  if (orgChanged) {
+    owner.linkVersion++
+  }
+  return list
 }
 
 export function readCloudSession(
@@ -97,7 +85,10 @@ export function readCloudSession(
 }
 
 // Take before a request whose reply will change the session.
-export function cloudSessionTicket(profileId: string, userDataPath: string): CloudSessionTicket {
+export function takeCloudSessionTicket(
+  profileId: string,
+  userDataPath: string
+): CloudSessionTicket {
   const owner = ownerOf(profileId, userDataPath)
   return { generation: owner.generation, linkVersion: owner.linkVersion }
 }
@@ -107,22 +98,17 @@ export function signInCloudSession(
   userDataPath: string,
   exchange: OrcaCloudSessionExchangeResponse
 ): void {
+  saveOrcaCloudSession(profileId, userDataPath, {
+    accessToken: exchange.accessToken,
+    refreshToken: exchange.refreshToken,
+    expiresAt: exchange.expiresAt,
+    organizations: exchange.organizations,
+    capabilities: exchange.capabilities
+  })
   const owner = ownerOf(profileId, userDataPath)
   owner.generation++
   owner.linkVersion++
   owner.signedOut = false
-  persist(
-    profileId,
-    userDataPath,
-    {
-      accessToken: exchange.accessToken,
-      refreshToken: exchange.refreshToken,
-      expiresAt: exchange.expiresAt,
-      organizations: exchange.organizations,
-      capabilities: exchange.capabilities
-    },
-    false
-  )
 }
 
 // Fences off every change in flight, e.g. before sign-out's network revoke.
@@ -168,20 +154,19 @@ export function signOutRevokedCloudSession(
  * Lands a refresh reply. Why the tokens always land unless the session was signed out or
  * replaced: the token we sent is spent once the server rotates, and keeping it means the next
  * refresh replays it and the server revokes the family. Orgs, capabilities and the link follow
- * only when nothing relinked meanwhile; the link is best effort, after the tokens.
+ * only when the org link did not move meanwhile; the link is best effort, after the tokens.
  */
 export function commitCloudSessionRotation(
   profileId: string,
   userDataPath: string,
   ticket: CloudSessionTicket,
-  linked: OrcaProfileCloudSummary | undefined,
   spent: OrcaCloudSession,
   rotated: OrcaCloudSessionExchangeResponse
 ): OrcaCloudSession | null {
   const owner = ownerOf(profileId, userDataPath)
   const current = readCloudSession(profileId, userDataPath)
   if (
-    !isCurrent(owner, ticket) ||
+    owner.generation !== ticket.generation ||
     current.status !== 'found' ||
     current.session.refreshToken !== spent.refreshToken
   ) {
@@ -192,17 +177,14 @@ export function commitCloudSessionRotation(
     refreshToken: rotated.refreshToken,
     expiresAt: rotated.expiresAt
   }
-  const relink = owner.linkVersion === ticket.linkVersion
-  const next = relink
+  const linkUnmoved = owner.linkVersion === ticket.linkVersion
+  const next = linkUnmoved
     ? { ...tokens, organizations: rotated.organizations, capabilities: rotated.capabilities }
     : { ...current.session, ...tokens }
-  persist(profileId, userDataPath, next, true)
-  if (relink) {
+  saveOrcaCloudSession(profileId, userDataPath, next, { spentOnFailure: true })
+  if (linkUnmoved) {
     try {
-      linkOrcaProfileToCloud(profileId, rotated.cloud, userDataPath)
-      if (orgChanged(linked, rotated.cloud)) {
-        owner.linkVersion++
-      }
+      relink(owner, profileId, userDataPath, rotated.cloud)
     } catch {
       // The tokens are saved; the link is retried by the next refresh or org change.
     }
@@ -217,42 +199,30 @@ export function beginCloudSessionRelink(
   userDataPath: string
 ): CloudSessionTicket {
   ownerOf(profileId, userDataPath).linkVersion++
-  return cloudSessionTicket(profileId, userDataPath)
+  return takeCloudSessionTicket(profileId, userDataPath)
 }
 
 /** Lands an org-selection or capability reply onto the current session; tokens are untouched. */
-export function commitCloudSessionUpdate(
+export function commitCloudSessionRelink(
   profileId: string,
   userDataPath: string,
   ticket: CloudSessionTicket,
-  linked: OrcaProfileCloudSummary | undefined,
-  update: CloudSessionServerUpdate
-): { list: OrcaProfileListState | null } | null {
+  reply: CloudSessionServerReply
+): OrcaProfileListState | null {
   const owner = ownerOf(profileId, userDataPath)
   const current = readCloudSession(profileId, userDataPath)
-  if (
-    !isCurrent(owner, ticket) ||
-    owner.linkVersion !== ticket.linkVersion ||
-    current.status !== 'found'
-  ) {
+  const linkMovedElsewhere =
+    owner.linkVersion !== ticket.linkVersion &&
+    !(reply.cloud && isSameOrgAsLink(profileId, userDataPath, reply.cloud))
+  if (owner.generation !== ticket.generation || current.status !== 'found' || linkMovedElsewhere) {
     return null
   }
-  persist(
-    profileId,
-    userDataPath,
-    {
-      ...current.session,
-      organizations: update.organizations ?? current.session.organizations,
-      capabilities: update.capabilities
-    },
-    false
-  )
-  if (!update.cloud) {
-    return { list: null }
-  }
-  const list = linkOrcaProfileToCloud(profileId, update.cloud, userDataPath)
-  if (orgChanged(linked, update.cloud)) {
-    owner.linkVersion++
-  }
-  return { list }
+  saveOrcaCloudSession(profileId, userDataPath, {
+    ...current.session,
+    organizations: reply.organizations ?? current.session.organizations,
+    capabilities: reply.capabilities
+  })
+  return reply.cloud
+    ? relink(owner, profileId, userDataPath, reply.cloud)
+    : getOrcaProfileListState(userDataPath)
 }

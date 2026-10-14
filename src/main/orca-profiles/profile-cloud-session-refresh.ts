@@ -1,6 +1,6 @@
 import type { OrcaCloudAuthConfig } from './profile-cloud-auth-config'
 import type { ActiveOrcaProfileState } from './profile-index-store'
-import type { OrcaCloudSession } from './profile-cloud-session-store'
+import { orcaCloudSessionKey, type OrcaCloudSession } from './profile-cloud-session-store'
 import {
   isAmbiguousCloudRequestFailure,
   OrcaCloudRequestError,
@@ -16,10 +16,10 @@ import {
 } from './profile-cloud-refresh-replay-guard'
 import { emitOrcaCloudSessionInvalidated } from './profile-cloud-session-invalidation'
 import {
-  cloudSessionTicket,
   commitCloudSessionRotation,
   readCloudSession,
-  signOutRevokedCloudSession
+  signOutRevokedCloudSession,
+  takeCloudSessionTicket
 } from './profile-cloud-session-owner'
 
 const CLOUD_SESSION_REFRESH_SKEW_MS = 60_000
@@ -50,10 +50,6 @@ class StaleCloudSessionMutationError extends Error {
   }
 }
 
-function cloudSessionRefreshKey(profileId: string, userDataPath: string): string {
-  return `${userDataPath}\0${profileId}`
-}
-
 function clearCloudSessionIfUnchanged(
   profileId: string,
   userDataPath: string,
@@ -62,7 +58,7 @@ function clearCloudSessionIfUnchanged(
   if (!signOutRevokedCloudSession(profileId, userDataPath, failed)) {
     return
   }
-  forgetAmbiguousRefreshAttempt(cloudSessionRefreshKey(profileId, userDataPath))
+  forgetAmbiguousRefreshAttempt(orcaCloudSessionKey(profileId, userDataPath))
   // Why: the renderer cached auth status at startup; without this it keeps
   // showing "Connected" until the app restarts.
   emitOrcaCloudSessionInvalidated()
@@ -80,7 +76,7 @@ function warnIfPossibleRefreshReplay(
   if (!(error instanceof OrcaCloudRequestError) || error.statusCode !== 401) {
     return
   }
-  const key = cloudSessionRefreshKey(profileId, userDataPath)
+  const key = orcaCloudSessionKey(profileId, userDataPath)
   if (!wasRefreshTokenAmbiguouslyAttempted(key, failed.refreshToken)) {
     return
   }
@@ -143,7 +139,7 @@ async function refreshStoredCloudSession(
   // Why: refresh tokens rotate, so concurrent refreshes must single-flight;
   // a second POST with the same refresh token can trip server reuse detection
   // and revoke the whole token family.
-  const key = cloudSessionRefreshKey(active.profile.id, userDataPath)
+  const key = orcaCloudSessionKey(active.profile.id, userDataPath)
   const inflight = inflightCloudSessionRefreshes.get(key)
   if (inflight) {
     return inflight
@@ -161,7 +157,7 @@ async function refreshStoredCloudSession(
       throw new AmbiguousRefreshReplayBlockedError()
     }
     const linked = active.profile.cloud
-    const ticket = cloudSessionTicket(active.profile.id, userDataPath)
+    const ticket = takeCloudSessionTicket(active.profile.id, userDataPath)
     const attempt = await attemptCloudSessionRefresh(key, config, active, userDataPath, session)
     if (attempt.status === 'rotated-elsewhere') {
       return attempt.session
@@ -177,7 +173,6 @@ async function refreshStoredCloudSession(
       active.profile.id,
       userDataPath,
       ticket,
-      linked,
       session,
       refreshed
     )
