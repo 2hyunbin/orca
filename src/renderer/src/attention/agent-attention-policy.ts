@@ -41,16 +41,9 @@ export type AgentAttentionDecision =
       delivery: AgentAttentionDeliveryRequest
     }
 
-export type AgentAttentionUnreadSink = {
-  /** Workspace unread is a persisted boolean shared with remote clients; it carries no reason. */
-  markWorkspaceUnread: (workspaceId: string) => void
-  markSubjectUnread: (subjectKey: string, reason: AgentAttentionUnreadReason) => void
-  markGroupUnread: (groupId: string, reason: AgentAttentionUnreadReason) => void
-  markSurfaceUnread: (subjectKey: string, reason: AgentAttentionUnreadReason) => void
-}
-
 export type AgentAttentionSink = {
-  unread: AgentAttentionUnreadSink
+  /** The workspace-attention module's `markAgentAttentionUnread`. */
+  unread: (write: AgentAttentionUnreadWrite) => void
   requestDelivery: (request: AgentAttentionDeliveryRequest) => void
 }
 
@@ -112,22 +105,6 @@ export function resolveAgentAttention(
   }
 }
 
-export function applyAgentAttentionUnread(
-  write: AgentAttentionUnreadWrite,
-  sink: AgentAttentionUnreadSink
-): void {
-  sink.markWorkspaceUnread(write.workspaceId)
-  if (write.subjectKey !== null) {
-    // Why: focus-return auto-ack needs an agent-specific marker; the generic surface marker
-    // below also covers bells and is gated behind the experimental attention setting.
-    sink.markSubjectUnread(write.subjectKey, write.reason)
-  }
-  if (write.groupAttentionEnabled && write.groupId !== null && write.subjectKey !== null) {
-    sink.markGroupUnread(write.groupId, write.reason)
-    sink.markSurfaceUnread(write.subjectKey, write.reason)
-  }
-}
-
 /** Unread is written before delivery so a suppressed banner still leaves the marker behind. */
 export function applyAgentAttention(
   decision: AgentAttentionDecision,
@@ -137,7 +114,7 @@ export function applyAgentAttention(
     return
   }
   if (decision.unread !== null) {
-    applyAgentAttentionUnread(decision.unread, sink.unread)
+    sink.unread(decision.unread)
   }
   sink.requestDelivery(decision.delivery)
 }

@@ -18,6 +18,14 @@ import { retireLiveAgentRowOnConfirmedProcessExit } from './confirmed-process-ex
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
+function readPaneOnInput(session: ConnectPanePtySession): void {
+  session.deps.readTerminalPaneOnInput({
+    worktreeId: session.deps.worktreeId,
+    tabId: session.deps.tabId,
+    paneKey: session.cacheKey
+  })
+}
+
 /** Keydown intent, PTY fit binding, side-effect fact consumption, and the agent completion coordinator. */
 export function installTerminalKeydownFit(session: ConnectPanePtySession): void {
   session.onTerminalKeyDown = (event: KeyboardEvent): void => {
@@ -26,9 +34,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       // Why: plain Escape produces real terminal input (\x1b), so it is a
       // genuine "user is here" signal and must still dismiss attention before
       // the early return for interrupt-intent inference.
-      session.deps.clearTerminalTabUnread(session.deps.tabId)
-      session.deps.clearTerminalPaneUnread(session.cacheKey)
-      session.deps.clearWorktreeUnread(session.deps.worktreeId)
+      readPaneOnInput(session)
       return
     }
     if (isCtrlCKeyEvent(event)) {
@@ -66,9 +72,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
     if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       session.sampleVisiblePaneForegroundAgent()
     }
-    session.deps.clearTerminalTabUnread(session.deps.tabId)
-    session.deps.clearTerminalPaneUnread(session.cacheKey)
-    session.deps.clearWorktreeUnread(session.deps.worktreeId)
+    readPaneOnInput(session)
   }
   // Why: infer only from focused xterm key events. Raw PTY bytes cannot
   // distinguish plain Escape from Alt/meta sequences, and programmatic writes

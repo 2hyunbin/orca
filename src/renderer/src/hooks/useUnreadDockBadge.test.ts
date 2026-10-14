@@ -17,6 +17,10 @@ vi.mock('@/lib/unread-badge-count', async (importOriginal) => {
 
 import { useAppStore } from '@/store'
 import { clearUnreadDockBadgeCount, useUnreadDockBadge } from './useUnreadDockBadge'
+import {
+  markWorkspaceUnread,
+  readWorkspace
+} from '@/store/slices/workspace-attention/workspace-flag-test-events'
 
 const initialState = useAppStore.getInitialState()
 
@@ -111,11 +115,11 @@ describe('useUnreadDockBadge', () => {
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
 
-    act(() => useAppStore.getState().markWorktreeUnread(worktree.id))
+    act(() => markWorkspaceUnread(useAppStore, worktree.id))
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(3)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
 
-    act(() => useAppStore.getState().clearWorktreeUnread(worktree.id))
+    act(() => readWorkspace(useAppStore, worktree.id))
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(4)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
   })
@@ -149,11 +153,11 @@ describe('useUnreadDockBadge', () => {
     expect(useAppStore.getState().tabsByWorktree).not.toBe(tabsByWorktree)
     expect(renders).toBe(rendersAfterMount)
 
-    act(() => useAppStore.getState().markWorktreeUnread('repo::worktree-0'))
+    act(() => markWorkspaceUnread(useAppStore, 'repo::worktree-0'))
     expect(renders).toBe(rendersAfterMount + 1)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(2)
 
-    act(() => useAppStore.getState().clearWorktreeUnread('repo::worktree-0'))
+    act(() => readWorkspace(useAppStore, 'repo::worktree-0'))
     expect(renders).toBe(rendersAfterMount + 2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
   })
@@ -201,7 +205,7 @@ describe('useUnreadDockBadge', () => {
     )
     expect(renders).toBe(initialRenders)
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(1)
-    act(() => useAppStore.getState().clearTerminalTabUnread(tab.id))
+    act(() => useAppStore.setState({ unreadTerminalTabs: { orphan: 'terminal-bell' } }))
     expect(renders).toBe(initialRenders + 1)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
   })
@@ -220,7 +224,13 @@ describe('useUnreadDockBadge', () => {
     })
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
 
-    act(() => useAppStore.getState().markTerminalTabUnread(tab.id, 'terminal-bell'))
+    act(() =>
+      useAppStore.getState().markTerminalBell({
+        worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+        tabId: tab.id,
+        paneKey: `${tab.id}:0`
+      })
+    )
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(2)
 
     // An open panel hides the launcher dot; the bell is then only a tab highlight.

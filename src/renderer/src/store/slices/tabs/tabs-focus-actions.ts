@@ -1,4 +1,5 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
+import { readTerminalTabsOnActivation } from '../workspace-attention/subject-attention-transitions'
 import {
   findTabAndWorktree,
   findTabByEntityInGroup,
@@ -60,14 +61,8 @@ export function createTabsFocusActions(
         // Why (activeWorktree guard below): only when the tab is in the active worktree, else the unseen signal is lost (mirrors focusGroup).
         const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
         const nextUnreadTerminalTabs =
-          state.activeWorktreeId === worktreeId &&
-          terminalEntityId &&
-          state.unreadTerminalTabs[terminalEntityId]
-            ? (() => {
-                const copy = { ...state.unreadTerminalTabs }
-                delete copy[terminalEntityId]
-                return copy
-              })()
+          state.activeWorktreeId === worktreeId && terminalEntityId
+            ? readTerminalTabsOnActivation(state.unreadTerminalTabs, [terminalEntityId])
             : state.unreadTerminalTabs
         return {
           unifiedTabsByWorktree: {

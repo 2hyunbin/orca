@@ -13,6 +13,7 @@ import {
 } from '../slices/agent-status'
 import type { TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { copyOnWriteRecord } from '../copy-on-write-record'
+import { removeShutdownTabsAttention } from '../slices/workspace-attention/subject-attention-transitions'
 
 export function commitTerminalShutdownState({
   exitGuardPtyIds,
@@ -89,26 +90,12 @@ export function commitTerminalShutdownState({
     const pendingIssueCommandSplitByTabId = copyOnWriteRecord(state.pendingIssueCommandSplitByTabId)
     const terminalLayoutsByTabId = copyOnWriteRecord(state.terminalLayoutsByTabId)
     const lastKnownRelayPtyIdByTabId = copyOnWriteRecord(state.lastKnownRelayPtyIdByTabId)
-    const unreadTerminalTabs = copyOnWriteRecord(state.unreadTerminalTabs)
-    const unreadTerminalPanes = copyOnWriteRecord(state.unreadTerminalPanes)
-    const unreadAgentCompletionPanes = copyOnWriteRecord(state.unreadAgentCompletionPanes)
     const lastTerminalInputAtByPaneKey = copyOnWriteRecord(state.lastTerminalInputAtByPaneKey)
 
     for (const tab of tabs) {
       pendingSetupSplitByTabId.delete(tab.id)
       pendingIssueCommandSplitByTabId.delete(tab.id)
-      unreadTerminalTabs.delete(tab.id)
       const panePrefix = `${tab.id}:`
-      for (const paneKey of Object.keys(state.unreadTerminalPanes)) {
-        if (paneKey.startsWith(panePrefix)) {
-          unreadTerminalPanes.delete(paneKey)
-        }
-      }
-      for (const paneKey of Object.keys(state.unreadAgentCompletionPanes)) {
-        if (paneKey.startsWith(panePrefix)) {
-          unreadAgentCompletionPanes.delete(paneKey)
-        }
-      }
       for (const paneKey of Object.keys(state.lastTerminalInputAtByPaneKey)) {
         if (paneKey.startsWith(panePrefix)) {
           lastTerminalInputAtByPaneKey.delete(paneKey)
@@ -138,9 +125,10 @@ export function commitTerminalShutdownState({
       pendingSetupSplitByTabId: pendingSetupSplitByTabId.read(),
       pendingIssueCommandSplitByTabId: pendingIssueCommandSplitByTabId.read(),
       terminalLayoutsByTabId: terminalLayoutsByTabId.read(),
-      unreadTerminalTabs: unreadTerminalTabs.read(),
-      unreadTerminalPanes: unreadTerminalPanes.read(),
-      unreadAgentCompletionPanes: unreadAgentCompletionPanes.read(),
+      ...removeShutdownTabsAttention(
+        state,
+        tabs.map((tab) => tab.id)
+      ),
       lastTerminalInputAtByPaneKey: lastTerminalInputAtByPaneKey.read()
     }
   })

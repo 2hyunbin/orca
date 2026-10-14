@@ -99,9 +99,7 @@ export function acknowledgeViewedAutoAckTarget(
   applyAgentAttentionAcknowledgement(
     {
       acknowledgeSubjects: (keys) => state.acknowledgeAgents(keys, []),
-      clearWorkspaceUnread: state.clearWorktreeUnread,
-      clearGroupUnread: state.clearTerminalTabUnread,
-      clearSubjectUnread: state.clearTerminalPaneUnread
+      readViewedAttention: state.readViewedAgentAttention
     },
     {
       workspaceIdToClear:

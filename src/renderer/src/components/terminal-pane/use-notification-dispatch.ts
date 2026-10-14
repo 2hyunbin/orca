@@ -187,12 +187,7 @@ export function dispatchTerminalNotification(
   }
 
   applyAgentAttention(attentionDecision, {
-    unread: {
-      markWorkspaceUnread: state.markWorktreeUnread,
-      markSubjectUnread: state.markAgentCompletionPaneUnread,
-      markGroupUnread: state.markTerminalTabUnread,
-      markSurfaceUnread: state.markTerminalPaneUnread
-    },
+    unread: state.markAgentAttentionUnread,
     requestDelivery
   })
 }

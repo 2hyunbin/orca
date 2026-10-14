@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalSideEffectFact } from '../../../../shared/terminal-side-effect-facts'
 import type { ParkedTerminalByteWatcherOptions } from './parked-terminal-byte-watcher'
 import type * as ParkedTerminalCommandStatus from './parked-terminal-command-status'
+import { attentionEventsOverWriterSpies } from '@/store/slices/workspace-attention/workspace-attention-writer-spies'
 
 const PTY_ID = 'pty-parked-1'
 const TAB_ID = 'tab-1'
@@ -33,6 +34,7 @@ type MockStoreState = {
   markWorktreeUnread: ReturnType<typeof vi.fn>
   markTerminalTabUnread: ReturnType<typeof vi.fn>
   markTerminalPaneUnread: ReturnType<typeof vi.fn>
+  markTerminalBell: ReturnType<typeof vi.fn>
   setCacheTimerStartedAt: ReturnType<typeof vi.fn>
   observeTerminalGitHubPullRequestLink: ReturnType<typeof vi.fn>
   agentStatusByPaneKey: Record<string, { state: string; prompt: string; agentType?: string }>
@@ -63,11 +65,7 @@ vi.mock('@/lib/terminal-theme', () => ({
   getSystemPrefersDark: () => true
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState
-  }
-}))
+vi.mock('@/store', () => ({ useAppStore: { getState: () => mockStoreState } }))
 
 function createMockStoreState(): MockStoreState {
   return {
@@ -87,6 +85,7 @@ function createMockStoreState(): MockStoreState {
     markWorktreeUnread: vi.fn(),
     markTerminalTabUnread: vi.fn(),
     markTerminalPaneUnread: vi.fn(),
+    markTerminalBell: attentionEventsOverWriterSpies(() => mockStoreState).markTerminalBell,
     setCacheTimerStartedAt: vi.fn(),
     observeTerminalGitHubPullRequestLink: vi.fn(),
     agentStatusByPaneKey: {}

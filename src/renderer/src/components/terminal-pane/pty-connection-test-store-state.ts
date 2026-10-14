@@ -127,6 +127,8 @@ export type StoreState = {
   markTerminalTabUnread: ReturnType<typeof vi.fn>
   markTerminalPaneUnread: ReturnType<typeof vi.fn>
   markAgentCompletionPaneUnread: ReturnType<typeof vi.fn>
+  markTerminalBell: ReturnType<typeof vi.fn>
+  markAgentAttentionUnread: ReturnType<typeof vi.fn>
 }
 
 export type WindowsShiftEnterPaneState = Parameters<

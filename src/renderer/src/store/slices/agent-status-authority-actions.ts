@@ -17,6 +17,10 @@ import {
   isRecentlyClosedAgentStatusTab
 } from './agent-status-pane-key-tab-binding'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import {
+  movePaneAttention,
+  removeRetiredPaneAttention
+} from './workspace-attention/subject-attention-transitions'
 
 export function createAgentStatusAuthorityActions(
   runtime: AgentStatusRuntime
@@ -96,11 +100,7 @@ export function createAgentStatusAuthorityActions(
             s.paneForegroundAgentByPaneKey,
             retiredPaneKeySet
           ),
-          unreadTerminalPanes: removePaneKeys(s.unreadTerminalPanes, retiredPaneKeySet),
-          unreadAgentCompletionPanes: removePaneKeys(
-            s.unreadAgentCompletionPanes,
-            retiredPaneKeySet
-          ),
+          ...removeRetiredPaneAttention(s, retiredPaneKeySet),
           lastTerminalInputAtByPaneKey: removePaneKeys(
             s.lastTerminalInputAtByPaneKey,
             retiredPaneKeySet
@@ -234,8 +234,7 @@ export function createAgentStatusAuthorityActions(
         activityClearedAtByPaneKey: movePaneKeyedRecord(s.activityClearedAtByPaneKey, from, to),
         manuallyUnreadTurnsByPaneKey: movePaneKeyedRecord(s.manuallyUnreadTurnsByPaneKey, from, to),
         paneForegroundAgentByPaneKey: movePaneKeyedRecord(s.paneForegroundAgentByPaneKey, from, to),
-        unreadTerminalPanes: movePaneKeyedRecord(s.unreadTerminalPanes, from, to),
-        unreadAgentCompletionPanes: movePaneKeyedRecord(s.unreadAgentCompletionPanes, from, to),
+        ...movePaneAttention(s, from, to),
         lastTerminalInputAtByPaneKey: movePaneKeyedRecord(s.lastTerminalInputAtByPaneKey, from, to),
         cacheTimerByKey: movePaneKeyedRecord(s.cacheTimerByKey, from, to),
         retentionSuppressedPaneKeys: movePaneKeyedRecord(s.retentionSuppressedPaneKeys, from, to)

@@ -3,6 +3,7 @@ import type { Mock } from 'vitest'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import type { Tab, TabGroup } from '../../../../shared/tab-types'
+import { attentionEventsOverWriterSpies } from '@/store/slices/workspace-attention/workspace-attention-writer-spies'
 
 // Why: the mocked store state lives here so each split suite's hoisted `vi.mock` factory can
 // reach it through a lazy dynamic import (hoisted factories cannot close over imports).
@@ -53,6 +54,8 @@ export type NotificationDispatchMockState = {
   markTerminalTabUnread: ReturnType<typeof vi.fn>
   markTerminalPaneUnread: ReturnType<typeof vi.fn>
   markAgentCompletionPaneUnread: ReturnType<typeof vi.fn>
+  markTerminalBell: ReturnType<typeof vi.fn>
+  markAgentAttentionUnread: ReturnType<typeof vi.fn>
 }
 
 /** Annotated explicitly so declaration emit never names @vitest/spy internals. */
@@ -115,7 +118,9 @@ function buildNotificationDispatchMockState(): NotificationDispatchMockState {
     markWorktreeUnread: vi.fn(),
     markTerminalTabUnread: vi.fn(),
     markTerminalPaneUnread: vi.fn(),
-    markAgentCompletionPaneUnread: vi.fn()
+    markAgentCompletionPaneUnread: vi.fn(),
+    // Why: the real event rules run over the spies above, so tests assert the writes they make.
+    ...attentionEventsOverWriterSpies(() => mockState)
   }
 }
 

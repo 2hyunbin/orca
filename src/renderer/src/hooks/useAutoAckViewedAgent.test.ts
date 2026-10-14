@@ -224,12 +224,7 @@ describe('computeAgentAcknowledgementTargets — codex retain race regression', 
 
 describe('applyAgentAttentionAcknowledgement', () => {
   it('acks the visible agent and clears unread worktree/tab/pane attention', () => {
-    const actions = {
-      acknowledgeSubjects: vi.fn(),
-      clearWorkspaceUnread: vi.fn(),
-      clearGroupUnread: vi.fn(),
-      clearSubjectUnread: vi.fn()
-    }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
     const paneKey = makePaneKey('tab-1', CODEX_LEAF_ID)
 
     applyAgentAttentionAcknowledgement(actions, {
@@ -239,18 +234,15 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).toHaveBeenCalledWith([paneKey])
-    expect(actions.clearWorkspaceUnread).toHaveBeenCalledWith('wt-1')
-    expect(actions.clearGroupUnread).toHaveBeenCalledWith('tab-1')
-    expect(actions.clearSubjectUnread).toHaveBeenCalledWith(paneKey)
+    expect(actions.readViewedAttention).toHaveBeenCalledWith({
+      workspaceIdToClear: 'wt-1',
+      groupId: 'tab-1',
+      subjectKeys: new Set([paneKey])
+    })
   })
 
   it('does nothing when there are no visible agent targets', () => {
-    const actions = {
-      acknowledgeSubjects: vi.fn(),
-      clearWorkspaceUnread: vi.fn(),
-      clearGroupUnread: vi.fn(),
-      clearSubjectUnread: vi.fn()
-    }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
 
     applyAgentAttentionAcknowledgement(actions, {
       workspaceIdToClear: 'wt-1',
@@ -259,18 +251,11 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).not.toHaveBeenCalled()
-    expect(actions.clearWorkspaceUnread).not.toHaveBeenCalled()
-    expect(actions.clearGroupUnread).not.toHaveBeenCalled()
-    expect(actions.clearSubjectUnread).not.toHaveBeenCalled()
+    expect(actions.readViewedAttention).not.toHaveBeenCalled()
   })
 
   it('clears visible pane unread even when there is no agent row to acknowledge', () => {
-    const actions = {
-      acknowledgeSubjects: vi.fn(),
-      clearWorkspaceUnread: vi.fn(),
-      clearGroupUnread: vi.fn(),
-      clearSubjectUnread: vi.fn()
-    }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
     const paneKey = makePaneKey('tab-1', CODEX_LEAF_ID)
 
     applyAgentAttentionAcknowledgement(actions, {
@@ -281,9 +266,11 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).not.toHaveBeenCalled()
-    expect(actions.clearWorkspaceUnread).toHaveBeenCalledWith('wt-1')
-    expect(actions.clearGroupUnread).toHaveBeenCalledWith('tab-1')
-    expect(actions.clearSubjectUnread).toHaveBeenCalledWith(paneKey)
+    expect(actions.readViewedAttention).toHaveBeenCalledWith({
+      workspaceIdToClear: 'wt-1',
+      groupId: 'tab-1',
+      subjectKeys: new Set([paneKey])
+    })
   })
 })
 
@@ -317,12 +304,18 @@ describe('agent completion pane unread store marker', () => {
     const store = createTestStore()
     const paneKey = makePaneKey('tab-1', CODEX_LEAF_ID)
 
-    store.getState().markAgentCompletionPaneUnread(paneKey, 'agent-completion')
+    store.getState().markAgentAttentionUnread({
+      workspaceId: 'wt-1',
+      subjectKey: paneKey,
+      groupId: 'tab-1',
+      reason: 'agent-completion',
+      groupAttentionEnabled: false
+    })
     expect(store.getState().unreadAgentCompletionPanes).toEqual({
       [paneKey]: 'agent-completion'
     })
 
-    store.getState().clearTerminalPaneUnread(paneKey)
+    store.getState().readTerminalPaneOnInput({ worktreeId: 'wt-1', tabId: 'tab-1', paneKey })
     expect(store.getState().unreadAgentCompletionPanes).toEqual({})
   })
 })

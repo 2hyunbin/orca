@@ -14,6 +14,7 @@ import {
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { equalStringSets, sortedUniquePtyIds } from './terminal-pty-identities'
 import { resolveTerminalStopRuntimeEnvironmentId } from './terminal-workspace-routing'
+import { removeHibernatedPaneAttention } from '../slices/workspace-attention/subject-attention-transitions'
 
 export function createTerminalPaneHibernationActions(
   set: TerminalStoreSet,
@@ -210,11 +211,7 @@ export function createTerminalPaneHibernationActions(
             delete nextRuntimePaneTitlesByTabId[opts.tabId]
           }
         }
-        const nextUnreadTerminalPanes = { ...s.unreadTerminalPanes }
-        const nextUnreadAgentCompletionPanes = { ...s.unreadAgentCompletionPanes }
         const nextLastTerminalInputAtByPaneKey = { ...s.lastTerminalInputAtByPaneKey }
-        delete nextUnreadTerminalPanes[opts.paneKey]
-        delete nextUnreadAgentCompletionPanes[opts.paneKey]
         delete nextLastTerminalInputAtByPaneKey[opts.paneKey]
         return {
           tabsByWorktree: nextTabsByWorktree,
@@ -231,8 +228,7 @@ export function createTerminalPaneHibernationActions(
           ...(nextRuntimePaneTitlesByTabId !== s.runtimePaneTitlesByTabId
             ? { runtimePaneTitlesByTabId: nextRuntimePaneTitlesByTabId }
             : {}),
-          unreadTerminalPanes: nextUnreadTerminalPanes,
-          unreadAgentCompletionPanes: nextUnreadAgentCompletionPanes,
+          ...removeHibernatedPaneAttention(s, opts.paneKey),
           lastTerminalInputAtByPaneKey: nextLastTerminalInputAtByPaneKey
         }
       })

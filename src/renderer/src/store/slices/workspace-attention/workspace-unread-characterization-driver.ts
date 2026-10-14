@@ -131,12 +131,7 @@ export function addLiveTerminalTab(
 
 /** pane-pty-visibility-bind.ts onBell and parked-terminal-byte-watcher.ts onBell. */
 export function ringBell(store: AttentionStore, target: PaneTarget): void {
-  const state = store.getState()
-  state.markWorktreeUnread(target.worktreeId)
-  state.markTerminalTabUnread(target.tabId, 'terminal-bell')
-  if (state.settings?.experimentalTerminalAttention === true) {
-    state.markTerminalPaneUnread(target.paneKey, 'terminal-bell')
-  }
+  store.getState().markTerminalBell(target)
 }
 
 /** use-notification-dispatch.ts agent-task-complete path; `paneKey: null` is a workspace-only completion. */
@@ -156,22 +151,14 @@ export function completeAgentTurn(
     createTerminalAttentionSurface(state)
   )
   applyAgentAttention(decision, {
-    unread: {
-      markWorkspaceUnread: state.markWorktreeUnread,
-      markSubjectUnread: state.markAgentCompletionPaneUnread,
-      markGroupUnread: state.markTerminalTabUnread,
-      markSurfaceUnread: state.markTerminalPaneUnread
-    },
+    unread: state.markAgentAttentionUnread,
     requestDelivery: () => {}
   })
 }
 
 /** terminal-keydown-fit.ts: a keydown that produces real terminal input. */
 export function typeInPane(store: AttentionStore, target: PaneTarget): void {
-  const state = store.getState()
-  state.clearTerminalTabUnread(target.tabId)
-  state.clearTerminalPaneUnread(target.paneKey)
-  state.clearWorktreeUnread(target.worktreeId)
+  store.getState().readTerminalPaneOnInput(target)
 }
 
 /** use-terminal-pane-title-effects.ts: pointerdown in a tab; `paneKey` null when no leaf was hit. */
@@ -179,12 +166,7 @@ export function pointerDownInTab(
   store: AttentionStore,
   target: { worktreeId: string; tabId: string; paneKey: string | null }
 ): void {
-  const state = store.getState()
-  state.clearTerminalTabUnread(target.tabId)
-  state.clearWorktreeUnread(target.worktreeId)
-  if (target.paneKey) {
-    state.clearTerminalPaneUnread(target.paneKey)
-  }
+  store.getState().readTerminalPaneOnInput(target)
 }
 
 /** Sidebar quick action and context menu "Mark as read/unread". */
@@ -192,13 +174,7 @@ export function toggleUnreadByUser(
   store: AttentionStore,
   row: Pick<Worktree, 'id' | 'hostId' | 'isUnread'>
 ): void {
-  void store
-    .getState()
-    .updateWorktreeMeta(
-      row.id,
-      { isUnread: !row.isUnread },
-      { executionHostId: row.hostId ?? 'local' }
-    )
+  store.getState().setWorkspaceUnreadByUser(row.id, !row.isUnread, row.hostId ?? 'local')
 }
 
 /** useAutoAckViewedAgent: the viewed terminal tab's agent is acknowledged. */

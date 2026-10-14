@@ -467,9 +467,13 @@ describe('connectPanePty', () => {
     Object.defineProperty(keydown, 'shiftKey', { value: false })
     ;(pane.terminal.element as EventTarget).dispatchEvent(keydown)
 
-    expect(deps.clearTerminalTabUnread).toHaveBeenCalledWith('tab-1')
-    expect(deps.clearTerminalPaneUnread).toHaveBeenCalledWith(makePaneKey('tab-1', LEAF_1))
-    expect(deps.clearWorktreeUnread).toHaveBeenCalledWith('wt-1')
+    expect(deps.readTerminalPaneOnInput).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+
+      tabId: 'tab-1',
+
+      paneKey: makePaneKey('tab-1', LEAF_1)
+    })
     expect(transport.sendInput).not.toHaveBeenCalled()
   })
 
@@ -495,9 +499,13 @@ describe('connectPanePty', () => {
     Object.defineProperty(keydown, 'shiftKey', { value: false })
     ;(pane.terminal.element as EventTarget).dispatchEvent(keydown)
 
-    expect(deps.clearTerminalTabUnread).toHaveBeenCalledWith('tab-1')
-    expect(deps.clearTerminalPaneUnread).toHaveBeenCalledWith(makePaneKey('tab-1', LEAF_1))
-    expect(deps.clearWorktreeUnread).toHaveBeenCalledWith('wt-1')
+    expect(deps.readTerminalPaneOnInput).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+
+      tabId: 'tab-1',
+
+      paneKey: makePaneKey('tab-1', LEAF_1)
+    })
   })
 
   it('does not clear pane attention from raw onData after a bell', async () => {
@@ -524,11 +532,14 @@ describe('connectPanePty', () => {
     bellHandler()
     ;(onDataHandler as (data: string) => void)('a')
 
-    expect(deps.markTerminalPaneUnread).toHaveBeenCalledWith(
-      makePaneKey('tab-1', LEAF_1),
-      'terminal-bell'
-    )
-    expect(deps.clearTerminalPaneUnread).not.toHaveBeenCalled()
+    expect(deps.markTerminalBell).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+
+      tabId: 'tab-1',
+
+      paneKey: makePaneKey('tab-1', LEAF_1)
+    })
+    expect(deps.readTerminalPaneOnInput).not.toHaveBeenCalled()
     expect(transport.sendInput).toHaveBeenCalledWith('a', 'query-reply')
   })
 
@@ -555,8 +566,7 @@ describe('connectPanePty', () => {
     }
     ;(onDataHandler as (data: string) => void)('\x1b[?1;2c')
 
-    expect(deps.clearTerminalTabUnread).not.toHaveBeenCalled()
-    expect(deps.clearWorktreeUnread).not.toHaveBeenCalled()
+    expect(deps.readTerminalPaneOnInput).not.toHaveBeenCalled()
   })
 
   // Why: on a stale-codex pane (pending account-switch restart), onData bytes must not count as user interaction; production also blocks sendInput here.
@@ -595,8 +605,7 @@ describe('connectPanePty', () => {
     }
     ;(onDataHandler as (data: string) => void)('a')
 
-    expect(deps.clearTerminalTabUnread).not.toHaveBeenCalled()
-    expect(deps.clearWorktreeUnread).not.toHaveBeenCalled()
+    expect(deps.readTerminalPaneOnInput).not.toHaveBeenCalled()
     // Stale-codex input is also blocked from reaching the transport.
     expect(transport.sendInput).not.toHaveBeenCalled()
   })

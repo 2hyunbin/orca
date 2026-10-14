@@ -1,4 +1,3 @@
-import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-contract'
 import { emitAgentSubjectReads } from '@/attention/agent-subject-read-actions'
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import {
@@ -7,6 +6,7 @@ import {
   resolvePaneKeyWorktreeIdFromTabs,
   usableTimestamp
 } from './ui-slice-agent-notification-acknowledgement'
+import { removeAcknowledgedCompletionAttention } from '../workspace-attention/subject-attention-transitions'
 
 type ActivityActions = Pick<
   UISlice,
@@ -32,12 +32,11 @@ export function createUiActivityActions(set: UISliceSet, _get: UISliceGet): Acti
         const now = Date.now()
         const migrationUnsupported = Object.values(s.migrationUnsupportedByPtyId ?? {})
         let next: Record<string, number> | null = null
-        let nextUnreadCompletions: Record<string, StoredAgentAttentionUnread> | null = null
+        const nextUnreadCompletions = removeAcknowledgedCompletionAttention(
+          s.unreadAgentCompletionPanes,
+          paneKeys
+        )
         for (const key of paneKeys) {
-          if (s.unreadAgentCompletionPanes[key]) {
-            nextUnreadCompletions ??= { ...s.unreadAgentCompletionPanes }
-            delete nextUnreadCompletions[key]
-          }
           const prev = s.acknowledgedAgentsByPaneKey[key] ?? 0
           let stamp = now
           const liveEntry = s.agentStatusByPaneKey?.[key]

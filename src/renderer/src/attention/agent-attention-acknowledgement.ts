@@ -14,9 +14,12 @@ export type AgentAttentionTurnRecords = {
 
 export type AgentAttentionAcknowledgementSink = {
   acknowledgeSubjects: (subjectKeys: string[]) => void
-  clearWorkspaceUnread: (workspaceId: string) => void
-  clearGroupUnread: (groupId: string) => void
-  clearSubjectUnread: (subjectKey: string) => void
+  /** The workspace-attention module's `readViewedAgentAttention`. */
+  readViewedAttention: (args: {
+    workspaceIdToClear: string | null
+    groupId: string
+    subjectKeys: Iterable<string>
+  }) => void
 }
 
 export function readAgentAttentionTurnStartedAt(
@@ -157,12 +160,10 @@ export function applyAgentAttentionAcknowledgement(
   if (args.subjectKeys.length > 0) {
     sink.acknowledgeSubjects(args.subjectKeys)
   }
-  if (args.workspaceIdToClear !== null) {
-    // Why: the selected agent is now visible, so drop the Dock-driving workspace unread.
-    sink.clearWorkspaceUnread(args.workspaceIdToClear)
-  }
-  sink.clearGroupUnread(args.viewedGroupId)
-  for (const subjectKey of subjectKeysToClear) {
-    sink.clearSubjectUnread(subjectKey)
-  }
+  // Why: the selected agent is now visible, so drop the Dock-driving workspace unread too.
+  sink.readViewedAttention({
+    workspaceIdToClear: args.workspaceIdToClear,
+    groupId: args.viewedGroupId,
+    subjectKeys: subjectKeysToClear
+  })
 }

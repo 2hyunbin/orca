@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { useAppStore } from '@/store'
+import { useAppStore } from '@/store'
 import type { Repo } from '../../../../shared/repo-types'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../shared/worktree/types'
@@ -47,11 +47,13 @@ export function useWorktreeContextMenuCommands(args: {
     window.api.ui.writeClipboardText(resolveWorktreeDisplayName(args.worktree))
   }, [args])
   const handleToggleRead = useCallback(() => {
-    args.updateWorktreeMeta(
-      args.worktree.id,
-      { isUnread: !args.worktree.isUnread },
-      { executionHostId: args.worktree.hostId ?? 'local' }
-    )
+    useAppStore
+      .getState()
+      .setWorkspaceUnreadByUser(
+        args.worktree.id,
+        !args.worktree.isUnread,
+        args.worktree.hostId ?? 'local'
+      )
   }, [args])
   const handleTogglePin = useCallback(() => {
     args.setWorktreesPinnedAndReveal([args.worktree.id], !args.worktree.isPinned)

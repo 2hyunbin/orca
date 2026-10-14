@@ -11,6 +11,7 @@ import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../shared/project-group-types'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { createUnreadBadgeCountSelector } from './unread-badge-count-selector'
+import { markWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-flag-test-events'
 
 // Why: marking a folder workspace unread persists through this API; echo the write back.
 Object.assign(createTabsSliceMockApi(), {
@@ -70,10 +71,9 @@ function addTerminalTab(store: TestStore, worktreeId: string): string {
   return unifiedTab.entityId
 }
 
-// The two writes every bell and agent completion makes.
+// A bell: the workspace flag plus the tab marker.
 function raiseAttention(store: TestStore, worktreeId: string, tabId: string): void {
-  store.getState().markWorktreeUnread(worktreeId)
-  store.getState().markTerminalTabUnread(tabId, 'terminal-bell')
+  store.getState().markTerminalBell({ worktreeId, tabId, paneKey: `${tabId}:0` })
 }
 
 function sidebarUnreadCount(store: TestStore): number {
@@ -108,8 +108,9 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     store.getState().setActiveWorktree(BELL_WORKTREE)
     raiseAttention(store, BELL_WORKTREE, bellTabId)
 
-    store.getState().clearTerminalTabUnread(typedTabId)
-    store.getState().clearWorktreeUnread(BELL_WORKTREE)
+    store
+      .getState()
+      .readTerminalPaneOnInput({ worktreeId: BELL_WORKTREE, tabId: typedTabId, paneKey: null })
 
     expect(store.getState().unreadTerminalTabs[bellTabId]).toBe('terminal-bell')
     expect(sidebarUnreadCount(store)).toBe(0)
@@ -140,12 +141,12 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     expect(selectCount(store.getState())).toBe(0)
     const key = folderWorkspaceKey(folderWorkspace.id)
     const tabId = addTerminalTab(store, key)
-    store.getState().markTerminalTabUnread(tabId, 'terminal-bell')
+    raiseAttention(store, key, tabId)
     expect(selectCount(store.getState())).toBe(1)
     store.setState({ tabsByWorktree: {} })
     expect(selectCount(store.getState())).toBe(0)
     const chat = store.getState().createUnifiedTab(key, 'agent-session', { id: 'folder-chat' })
-    store.getState().markTerminalTabUnread(chat.id, 'terminal-bell')
+    raiseAttention(store, key, chat.id)
     expect(selectCount(store.getState())).toBe(1)
     store.setState({ folderWorkspaces: [{ ...folderWorkspace, isUnread: false }] })
     expect(selectCount(store.getState())).toBe(0)
@@ -154,7 +155,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
   it('drops a flagged worktree when it is archived in place', () => {
     const store = createStoreOnOtherWorktree()
     const selectCount = createUnreadBadgeCountSelector()
-    store.getState().markWorktreeUnread(BELL_WORKTREE)
+    markWorkspaceUnread(store, BELL_WORKTREE)
     expect(selectCount(store.getState())).toBe(1)
 
     store.setState({
@@ -215,10 +216,9 @@ describe('Dock unread count against the sidebar (#23363)', () => {
         folderWorkspaces: [folderWorkspace]
       })
       const tabId = addTerminalTab(store, folderWorkspaceKey(folderWorkspace.id))
-      store.getState().markTerminalTabUnread(tabId, 'terminal-bell')
       store.getState().setVisibleWorkspaceHostIds(['local'])
 
-      store.getState().markWorktreeUnread(folderWorkspaceKey(folderWorkspace.id))
+      raiseAttention(store, folderWorkspaceKey(folderWorkspace.id), tabId)
       expect(store.getState().folderWorkspaces[0].isUnread).toBe(true)
       expect(selectCount(store.getState())).toBe(0)
 
@@ -237,8 +237,8 @@ describe('Dock unread count against the sidebar (#23363)', () => {
         store,
         folderWorkspaceKey(store.getState().folderWorkspaces[0].id)
       )
-      store.getState().markTerminalTabUnread(tabId, 'terminal-bell')
-      store.getState().markWorktreeUnread(BELL_WORKTREE)
+      raiseAttention(store, folderWorkspaceKey(store.getState().folderWorkspaces[0].id), tabId)
+      markWorkspaceUnread(store, BELL_WORKTREE)
       store.getState().setVisibleWorkspaceHostIds(['local'])
       expect(selectCount(store.getState())).toBe(2)
 
@@ -261,7 +261,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
           ]
         }
       })
-      store.getState().markWorktreeUnread(BELL_WORKTREE)
+      markWorkspaceUnread(store, BELL_WORKTREE)
       expect(selectCount(store.getState())).toBe(1)
 
       store.getState().setVisibleWorkspaceHostIds(['local'])

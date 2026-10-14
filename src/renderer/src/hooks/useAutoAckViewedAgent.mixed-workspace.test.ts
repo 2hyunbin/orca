@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { AppState } from '../store/types'
 import { resolveAutoAckTabTargets } from './useAutoAckViewedAgent'
 import { acknowledgeViewedAutoAckTarget } from './agent-auto-ack-surfaces'
 import {
@@ -29,9 +30,12 @@ type TestStore = ReturnType<typeof createTestStore>
 function seedMixedWorkspace(seed: {
   visible: 'terminal' | 'chat'
   unreadSubjectKeys: readonly string[]
-}): { store: TestStore; clearWorktreeUnread: ReturnType<typeof vi.fn> } {
+}): { store: TestStore; clearedWorkspaceIds: () => string[] } {
   const store = createTestStore()
-  const clearWorktreeUnread = vi.fn()
+  const realRead = store.getState().readViewedAgentAttention
+  const readViewedAgentAttention = vi.fn<AppState['readViewedAgentAttention']>((args) =>
+    realRead(args)
+  )
   store.setState({
     activeView: 'terminal',
     activeWorktreeId: WORKSPACE,
@@ -74,10 +78,14 @@ function seedMixedWorkspace(seed: {
     unreadAgentCompletionPanes: Object.fromEntries(
       seed.unreadSubjectKeys.map((key) => [key, 'agent-completion'])
     ),
-    // Observed instead of run: the real action persists worktree metadata through the host.
-    clearWorktreeUnread
+    // Observed and run: no worktree row is seeded, so the workspace clear persists nothing.
+    readViewedAgentAttention
   })
-  return { store, clearWorktreeUnread }
+  const clearedWorkspaceIds = (): string[] =>
+    readViewedAgentAttention.mock.calls.flatMap(([args]) =>
+      args.workspaceIdToClear === null ? [] : [args.workspaceIdToClear]
+    )
+  return { store, clearedWorkspaceIds }
 }
 
 /** The hook's scan loop: resolve what is on screen, then acknowledge each target in turn. */
@@ -103,7 +111,7 @@ describe('auto-ack in a workspace holding both a terminal and a structured chat'
   })
 
   it('acknowledging the visible terminal keeps the hidden chat unread', () => {
-    const { store, clearWorktreeUnread } = seedMixedWorkspace({
+    const { store, clearedWorkspaceIds } = seedMixedWorkspace({
       visible: 'terminal',
       unreadSubjectKeys: [TERMINAL_SUBJECT, CHAT_SUBJECT]
     })
@@ -112,11 +120,11 @@ describe('auto-ack in a workspace holding both a terminal and a structured chat'
 
     expect(store.getState().unreadAgentCompletionPanes[TERMINAL_SUBJECT]).toBeUndefined()
     expect(store.getState().unreadAgentCompletionPanes[CHAT_SUBJECT]).toBe('agent-completion')
-    expect(clearWorktreeUnread).not.toHaveBeenCalled()
+    expect(clearedWorkspaceIds()).toEqual([])
   })
 
   it('acknowledging the visible chat keeps the hidden terminal unread', () => {
-    const { store, clearWorktreeUnread } = seedMixedWorkspace({
+    const { store, clearedWorkspaceIds } = seedMixedWorkspace({
       visible: 'chat',
       unreadSubjectKeys: [TERMINAL_SUBJECT, CHAT_SUBJECT]
     })
@@ -125,50 +133,60 @@ describe('auto-ack in a workspace holding both a terminal and a structured chat'
 
     expect(store.getState().unreadAgentCompletionPanes[CHAT_SUBJECT]).toBeUndefined()
     expect(store.getState().unreadAgentCompletionPanes[TERMINAL_SUBJECT]).toBe('agent-completion')
-    expect(clearWorktreeUnread).not.toHaveBeenCalled()
+    expect(clearedWorkspaceIds()).toEqual([])
   })
 
   it('clears workspace attention when the visible terminal held the only unread', () => {
-    const { store, clearWorktreeUnread } = seedMixedWorkspace({
+    const { store, clearedWorkspaceIds } = seedMixedWorkspace({
       visible: 'terminal',
       unreadSubjectKeys: [TERMINAL_SUBJECT]
     })
 
     runAutoAckScan(store)
 
-    expect(clearWorktreeUnread).toHaveBeenCalledWith(WORKSPACE)
+    expect(clearedWorkspaceIds()).toEqual([WORKSPACE])
   })
 
   it('clears workspace attention when the visible chat held the only unread', () => {
-    const { store, clearWorktreeUnread } = seedMixedWorkspace({
+    const { store, clearedWorkspaceIds } = seedMixedWorkspace({
       visible: 'chat',
       unreadSubjectKeys: [CHAT_SUBJECT]
     })
 
     runAutoAckScan(store)
 
-    expect(clearWorktreeUnread).toHaveBeenCalledWith(WORKSPACE)
+    expect(clearedWorkspaceIds()).toEqual([WORKSPACE])
   })
 
   it('keeps workspace attention while a hidden chat holds only container unread', () => {
-    const { store, clearWorktreeUnread } = seedMixedWorkspace({
+    const { store, clearedWorkspaceIds } = seedMixedWorkspace({
       visible: 'terminal',
       unreadSubjectKeys: [TERMINAL_SUBJECT]
     })
-    store.getState().markTerminalTabUnread(CHAT_TAB, 'agent-completion')
+    store.setState({ unreadTerminalTabs: { [CHAT_TAB]: 'agent-completion' } })
 
     runAutoAckScan(store)
 
     expect(store.getState().unreadTerminalTabs[CHAT_TAB]).toBe('agent-completion')
-    expect(clearWorktreeUnread).not.toHaveBeenCalled()
+    expect(clearedWorkspaceIds()).toEqual([])
   })
 })
 
-describe('markTerminalTabUnread container addressing', () => {
+function markChatGroupUnread(store: TestStore, groupId: string): void {
+  store.getState().markAgentAttentionUnread({
+    workspaceId: WORKSPACE,
+    subjectKey: CHAT_SUBJECT,
+    groupId,
+    reason: 'agent-completion',
+    groupAttentionEnabled: true
+  })
+}
+
+describe('tab marker container addressing', () => {
   it('accepts a structured chat addressed by its unified tab id', () => {
     const { store } = seedMixedWorkspace({ visible: 'chat', unreadSubjectKeys: [] })
 
-    store.getState().markTerminalTabUnread(CHAT_TAB, 'agent-completion')
+    markChatGroupUnread(store, CHAT_TAB)
 
     expect(store.getState().unreadTerminalTabs[CHAT_TAB]).toBe('agent-completion')
   })
@@ -176,7 +194,7 @@ describe('markTerminalTabUnread container addressing', () => {
   it('still refuses an id no open tab owns', () => {
     const { store } = seedMixedWorkspace({ visible: 'chat', unreadSubjectKeys: [] })
 
-    store.getState().markTerminalTabUnread('tab-that-never-existed', 'agent-completion')
+    markChatGroupUnread(store, 'tab-that-never-existed')
 
     expect(store.getState().unreadTerminalTabs['tab-that-never-existed']).toBeUndefined()
   })

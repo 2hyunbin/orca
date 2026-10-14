@@ -124,12 +124,7 @@ function dispatchStructuredAttention(
   const row = state.agentStatusByPaneKey[paneKey]
   const sound = readAgentAttentionNotificationSound(state.settings ?? {})
   applyAgentAttention(decision, {
-    unread: {
-      markWorkspaceUnread: state.markWorktreeUnread,
-      markSubjectUnread: state.markAgentCompletionPaneUnread,
-      markGroupUnread: state.markTerminalTabUnread,
-      markSurfaceUnread: state.markTerminalPaneUnread
-    },
+    unread: state.markAgentAttentionUnread,
     requestDelivery: (request) => {
       // Unread writes can synchronously cause a genuine read before delivery.
       if (promptWasRead()) {

@@ -86,7 +86,12 @@ describe('useAutoAckViewedAgent — floating workspace panel visibility', () => 
     renderHook(() => useAutoAckViewedAgent())
 
     // The dot is the only signal a closed panel has, so a store write while hidden must not ack it.
-    useAppStore.getState().markAgentCompletionPaneUnread(FLOATING_PANE_KEY, 'agent-completion')
+    useAppStore.setState((state) => ({
+      unreadAgentCompletionPanes: {
+        ...state.unreadAgentCompletionPanes,
+        [FLOATING_PANE_KEY]: 'agent-completion'
+      }
+    }))
     expect(selectFloatingWorkspaceHasUnread(useAppStore.getState())).toBe(true)
 
     openFloatingPanel()
@@ -139,8 +144,13 @@ describe('useAutoAckViewedAgent — floating workspace panel visibility', () => 
 
     renderHook(() => useAutoAckViewedAgent())
 
-    useAppStore.getState().markAgentCompletionPaneUnread(MAIN_PANE_KEY, 'agent-completion')
-    useAppStore.getState().markAgentCompletionPaneUnread(FLOATING_PANE_KEY, 'agent-completion')
+    useAppStore.setState((state) => ({
+      unreadAgentCompletionPanes: {
+        ...state.unreadAgentCompletionPanes,
+        [MAIN_PANE_KEY]: 'agent-completion',
+        [FLOATING_PANE_KEY]: 'agent-completion'
+      }
+    }))
     expect(selectFloatingWorkspaceHasUnread(useAppStore.getState())).toBe(true)
 
     openFloatingPanel()
@@ -162,10 +172,12 @@ it('does not acknowledge the regular workspace for a colliding floating tab', ()
     unreadAgentCompletionPanes: { [FLOATING_PANE_KEY]: true }
   })
   openFloatingPanel()
-  const cleared = vi.spyOn(useAppStore.getState(), 'clearWorktreeUnread')
+  const read = vi.spyOn(useAppStore.getState(), 'readViewedAgentAttention')
   try {
     renderHook(() => useAutoAckViewedAgent())
-    expect(cleared).not.toHaveBeenCalledWith('regular')
+    expect(read).not.toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceIdToClear: 'regular' })
+    )
   } finally {
     cleanup()
     vi.restoreAllMocks()

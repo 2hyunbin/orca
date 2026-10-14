@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentAttentionSurface } from './agent-attention-contract'
+import { applyAgentAttentionUnread } from '@/store/slices/workspace-attention/subject-attention-marks'
 import {
   applyAgentAttention,
   resolveAgentAttention,
@@ -43,12 +44,13 @@ function makeSink(): AgentAttentionSink & { calls: string[] } {
   const calls: string[] = []
   return {
     calls,
-    unread: {
-      markWorkspaceUnread: (workspaceId) => calls.push(`workspace:${workspaceId}`),
-      markSubjectUnread: (key, reason) => calls.push(`subject:${key}:${reason}`),
-      markGroupUnread: (key, reason) => calls.push(`group:${key}:${reason}`),
-      markSurfaceUnread: (key, reason) => calls.push(`surface:${key}:${reason}`)
-    },
+    unread: (write) =>
+      applyAgentAttentionUnread(write, {
+        markWorkspaceUnread: (workspaceId) => calls.push(`workspace:${workspaceId}`),
+        markCompletionUnread: (key, reason) => calls.push(`subject:${key}:${reason}`),
+        markTabUnread: (key, reason) => calls.push(`group:${key}:${reason}`),
+        markPaneUnread: (key, reason) => calls.push(`surface:${key}:${reason}`)
+      }),
     requestDelivery: (request) => calls.push(`deliver:${request.workspaceId}:${request.subjectKey}`)
   }
 }
