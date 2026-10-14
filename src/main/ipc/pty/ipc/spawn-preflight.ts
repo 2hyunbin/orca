@@ -39,7 +39,7 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
     ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
   }
   if (!ctx.earlyStablePaneOwner) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
     if (admission) {
       await admission
     }
@@ -60,7 +60,7 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
       : null
   ctx.spawnTiming.mark('stable_adoption')
   if (ctx.earlyStablePaneOwner && !ctx.preAdoptedStablePane) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
     if (admission) {
       await admission
     }

@@ -207,8 +207,10 @@ export function registerPtyHandlers(
     mainWindow.webContents.on('did-finish-load', finishLoadHandler)
   }
 
-  const assertWorkspaceAcceptsNewPty = (worktreeId: string | undefined): Promise<void> | void =>
-    assertWorkspaceAcceptsNewPtyImpl(store, worktreeId)
+  const assertWorkspaceAcceptsNewPty = (
+    worktreeId: string | undefined,
+    sessionId?: string
+  ): Promise<void> | void => assertWorkspaceAcceptsNewPtyImpl(store, worktreeId, sessionId)
   const resolvePtySpawnStartupCwd = (
     worktreeId: string | undefined,
     cwd: string | undefined,

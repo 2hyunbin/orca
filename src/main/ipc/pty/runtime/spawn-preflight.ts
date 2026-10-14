@@ -45,7 +45,7 @@ export async function prepareRuntimePtySpawn(
 ): Promise<PtySpawnResult | null> {
   const args = ctx.args
   if (!ctx.preAdoptedStablePane) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
     if (admission) {
       await admission
     }

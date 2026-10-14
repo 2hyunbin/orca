@@ -98,7 +98,10 @@ export type PtySpawnIpcDeps = {
   }
   getLocalPtyStartupPromise: (hostId?: ResolvedPtyHost) => Promise<void> | undefined
   adoptStablePane: (args: AdoptStablePaneArgs) => Promise<AdoptStablePaneResult | null>
-  assertWorkspaceAcceptsNewPty: (worktreeId: string | undefined) => Promise<void> | void
+  assertWorkspaceAcceptsNewPty: (
+    worktreeId: string | undefined,
+    sessionId?: string
+  ) => Promise<void> | void
   resolvePtySpawnStartupCwd: (
     worktreeId: string | undefined,
     cwd: string | undefined,

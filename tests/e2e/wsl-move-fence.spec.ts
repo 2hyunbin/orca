@@ -1,8 +1,10 @@
 /**
  * The WSL move fence on a real desktop: a journal written beside the profile, as a move would,
- * must make the moving project refuse new terminals while it stays listed, and once the host owns
- * it, take it out of the project list. Other projects keep working throughout.
+ * must make the moving projects (a folder and a repo) refuse new terminals while they stay listed,
+ * and once the host owns them, take them out of the project and worktree lists. Other projects
+ * keep working throughout.
  */
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,8 +43,18 @@ async function createFolders(page: Page, folders: { name: string; folderPath: st
   }, folders)
 }
 
+async function addRepo(page: Page, repoPath: string): Promise<string> {
+  return page.evaluate(async (path) => {
+    const result = await window.api.repos.add({ path })
+    if ('error' in result) {
+      throw new Error(result.error)
+    }
+    return result.repo.id
+  }, repoPath)
+}
+
 /** The spawn's outcome as the renderer sees it: a pty id, or the refusal message. */
-async function spawnIn(page: Page, folderWorkspaceId: string, cwd: string): Promise<string> {
+async function spawnIn(page: Page, worktreeId: string, cwd: string): Promise<string> {
   return page.evaluate(
     async ({ id, cwd }) => {
       try {
@@ -50,7 +62,7 @@ async function spawnIn(page: Page, folderWorkspaceId: string, cwd: string): Prom
           cols: 80,
           rows: 24,
           cwd,
-          worktreeId: `folder:${id}`,
+          worktreeId: id,
           initiallyHidden: true
         })
         await window.api.pty.kill(result.id)
@@ -59,14 +71,16 @@ async function spawnIn(page: Page, folderWorkspaceId: string, cwd: string): Prom
         return error instanceof Error ? error.message : String(error)
       }
     },
-    { id: folderWorkspaceId, cwd }
+    { id: worktreeId, cwd }
   )
 }
 
-async function listedFolderIds(page: Page): Promise<string[]> {
-  return page.evaluate(async () =>
-    (await window.api.folderWorkspaces.list()).map((workspace) => workspace.id)
-  )
+async function listed(page: Page) {
+  return page.evaluate(async () => ({
+    folders: (await window.api.folderWorkspaces.list()).map((workspace) => workspace.id),
+    repos: (await window.api.repos.list()).map((repo) => repo.id),
+    worktrees: (await window.api.worktrees.listAll()).map((worktree) => worktree.repoId)
+  }))
 }
 
 test('a WSL move journal fences the moving project, then hides it once the host owns it', async (// oxlint-disable-next-line no-empty-pattern -- Playwright requires destructuring to request no fixtures.
@@ -77,40 +91,59 @@ test('a WSL move journal fences the moving project, then hides it once the host 
     mkdirSync(folderPath)
     return { name, folderPath }
   })
+  const repoPath = join(root, 'moving-repo')
+  mkdirSync(repoPath)
+  const gitIdentity = ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.invalid']
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repoPath })
+  execFileSync('git', [...gitIdentity, 'commit', '-q', '--allow-empty', '-m', 'init'], {
+    cwd: repoPath
+  })
   const session = createRestartSession(testInfo)
   let launched: Awaited<ReturnType<typeof session.launch>> | undefined
   try {
     launched = await session.launch()
     await waitForSessionReady(launched.page)
     const [movingId, stayingId] = await createFolders(launched.page, folders)
+    const repoId = await addRepo(launched.page, repoPath)
+    const repoWorktreeId = `${repoId}::${repoPath}`
     await session.close(launched.app)
     launched = undefined
 
     const record = (phase: 'source-fenced' | 'destination-committed') =>
-      wslMoveCutoverFixture('move-1', phase, {}, { repoIds: [], folderWorkspaceIds: [movingId] })
+      wslMoveCutoverFixture(
+        'move-1',
+        phase,
+        {},
+        { repoIds: [repoId], folderWorkspaceIds: [movingId] }
+      )
+    const expectMovingRefused = async (page: Page) => {
+      expect(await spawnIn(page, `folder:${movingId}`, folders[0].folderPath)).toContain(
+        'moving to its WSL host'
+      )
+      expect(await spawnIn(page, repoWorktreeId, repoPath)).toContain('moving to its WSL host')
+      expect(await spawnIn(page, `folder:${stayingId}`, folders[1].folderPath)).toBe('spawned')
+    }
+
     writeWslMoveCutover(session.userDataDir, record('source-fenced'))
     launched = await session.launch()
     await waitForSessionReady(launched.page)
-    expect(await spawnIn(launched.page, movingId, folders[0].folderPath)).toContain(
-      'moving to its WSL host'
-    )
-    expect(await spawnIn(launched.page, stayingId, folders[1].folderPath)).toBe('spawned')
-    expect(await listedFolderIds(launched.page)).toEqual(
-      expect.arrayContaining([movingId, stayingId])
-    )
+    await expectMovingRefused(launched.page)
+    const whileMoving = await listed(launched.page)
+    expect(whileMoving.folders).toEqual(expect.arrayContaining([movingId, stayingId]))
+    expect(whileMoving.repos).toContain(repoId)
+    expect(whileMoving.worktrees).toContain(repoId)
     await session.close(launched.app)
     launched = undefined
 
     writeWslMoveCutover(session.userDataDir, record('destination-committed'))
     launched = await session.launch()
     await waitForSessionReady(launched.page)
-    const listed = await listedFolderIds(launched.page)
-    expect(listed).toContain(stayingId)
-    expect(listed).not.toContain(movingId)
-    expect(await spawnIn(launched.page, movingId, folders[0].folderPath)).toContain(
-      'moving to its WSL host'
-    )
-    expect(await spawnIn(launched.page, stayingId, folders[1].folderPath)).toBe('spawned')
+    await expectMovingRefused(launched.page)
+    const owned = await listed(launched.page)
+    expect(owned.folders).toContain(stayingId)
+    expect(owned.folders).not.toContain(movingId)
+    expect(owned.repos).not.toContain(repoId)
+    expect(owned.worktrees).not.toContain(repoId)
   } finally {
     if (launched) {
       await session.close(launched.app)

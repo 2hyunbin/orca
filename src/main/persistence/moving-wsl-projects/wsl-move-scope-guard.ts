@@ -5,7 +5,10 @@
  *
  * Held in memory: loaded at startup, before any handler runs, and reloaded on every journal write,
  * since only this process writes the journal. Spawns and list calls never touch the disk for it.
+ * A spawn already past this check when the fence lands is caught by the move itself: the gate runs
+ * again under the fence, and the exit proof refuses any live session in scope.
  */
+import { resolve } from 'node:path'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../shared/wsl-paths'
@@ -28,14 +31,20 @@ type ProjectStore = Pick<Store, 'getRepo' | 'getFolderWorkspace'>
 /** An unreadable journal fences every WSL project and hides none: never edit, never lose a row. */
 type FenceView = { readable: true; state: WslMoveFenceState } | { readable: false }
 
-let loaded: { userDataPath: string; view: FenceView } | null = null
+let loaded: { userDataKey: string; view: FenceView } | null = null
+
+// `app.setName` can respell the same folder; Windows paths compare case-insensitively.
+function userDataKey(userDataPath: string): string {
+  const resolved = resolve(userDataPath)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
 let stopFollowing: (() => void) | null = null
 
 /** Startup, before handlers register. A move must not fence anything until this has run. */
 export function loadWslMoveFence(userDataPath: string): void {
-  loaded = { userDataPath, view: readFence(userDataPath) }
+  loaded = { userDataKey: userDataKey(userDataPath), view: readFence(userDataPath) }
   stopFollowing ??= onWslMoveJournalChange((changedPath) => {
-    if (loaded?.userDataPath === changedPath) {
+    if (loaded?.userDataKey === userDataKey(changedPath)) {
       loaded.view = readFence(changedPath)
     }
   })
@@ -83,29 +92,37 @@ function projectPath(store: ProjectStore, ref: WslMoveProjectRef): string | unde
     : store.getFolderWorkspace(ref.folderWorkspaceId)?.folderPath
 }
 
-/** Throws while a move is taking the project, or once the WSL host owns it. */
-export function assertWslMoveProjectWritable(
-  store: ProjectStore,
+/**
+ * True while a move is taking the project, or once the WSL host owns it. Only an unreadable journal
+ * needs the store, to tell WSL projects apart; with none to ask, it blocks.
+ */
+export function isWslMoveProjectBlocked(
+  store: ProjectStore | undefined,
   ref: WslMoveProjectRef | null
-): void {
+): boolean {
   const fence = loaded?.view
   if (!ref || !fence) {
-    return
+    return false
   }
-  const blocked = fence.readable
-    ? inScope(fence.state.fenced, ref) || inScope(fence.state.hidden, ref)
-    : isWslUncPath(projectPath(store, ref) ?? '')
-  if (blocked) {
-    throw new WslMoveProjectFencedError()
+  if (fence.readable) {
+    return inScope(fence.state.fenced, ref) || inScope(fence.state.hidden, ref)
   }
+  return !store || isWslUncPath(projectPath(store, ref) ?? '')
+}
+
+export function isWslMoveWorkspaceBlocked(
+  store: ProjectStore | undefined,
+  workspaceId: string | null | undefined
+): boolean {
+  return !!workspaceId && isWslMoveProjectBlocked(store, wslMoveProjectRefForWorkspace(workspaceId))
 }
 
 export function assertWslMoveWorkspaceWritable(
-  store: ProjectStore,
+  store: ProjectStore | undefined,
   workspaceId: string | null | undefined
 ): void {
-  if (workspaceId) {
-    assertWslMoveProjectWritable(store, wslMoveProjectRefForWorkspace(workspaceId))
+  if (isWslMoveWorkspaceBlocked(store, workspaceId)) {
+    throw new WslMoveProjectFencedError()
   }
 }
 

@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { wslMoveCutoverFixture as cutover } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
-import { writeWslMoveCutover, wslMoveJournalDirectory } from './wsl-move-cutover-journal'
+import {
+  removeWslMoveCutover,
+  writeWslMoveCutover,
+  wslMoveJournalDirectory
+} from './wsl-move-cutover-journal'
 import {
   WslMoveProjectFencedError,
   assertWslMoveWorkspaceWritable,
@@ -41,6 +45,8 @@ describe('wslMoveProjectRefForWorkspace', () => {
     ['repo-1::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app', { repoId: 'repo-1' }],
     ['worktree:repo-1::/home/dev/app', { repoId: 'repo-1' }],
     ['folder:notes', { folderWorkspaceId: 'notes' }],
+    ['repo-1::/home/dev/app::workspace:7f3c', { repoId: 'repo-1' }],
+    ['repo-1::/home/dev/a::b', { repoId: 'repo-1' }],
     ['bare-id', null]
   ])('%s', (key, expected) => {
     expect(wslMoveProjectRefForWorkspace(key)).toEqual(expected)
@@ -53,6 +59,24 @@ describe('WSL move scope guard', () => {
     writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
     expect(isWslMoveFenceLoaded()).toBe(false)
     expect(writable('repo-1::/x')).not.toThrow()
+  })
+
+  it('follows a write under another spelling of the same profile folder', () => {
+    loadWslMoveFence(`${userDataPath}/./`)
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+    expect(writable('repo-1::/x')).toThrow(WslMoveProjectFencedError)
+  })
+
+  it('lifts the fence when the finished move is removed', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'retained'))
+    expect(writable('repo-1::/x')).toThrow(WslMoveProjectFencedError)
+    removeWslMoveCutover(userDataPath, 'move-1')
+    expect(writable('repo-1::/x')).not.toThrow()
+  })
+
+  it('never matches a project on another host', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+    expect(writable('ssh:target-1|repo-1::/x')).not.toThrow()
   })
 
   it('follows journal writes without rereading on every check', () => {
