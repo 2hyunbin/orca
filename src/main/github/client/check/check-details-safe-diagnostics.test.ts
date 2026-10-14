@@ -121,6 +121,33 @@ describe('check details outward diagnostics', () => {
     }
   )
 
+  it('shared completed log failure keeps captured sentinels out of the actual dispatcher response', async () => {
+    resolverMock.mockResolvedValue({
+      ownerRepo: { owner: 'acme', repo: 'widgets' },
+      ghOptions: { cwd: '/folder', env: { GH_TOKEN: 'scope-fixture' } }
+    })
+    ghMock.mockImplementation(async (argv: string[]) => {
+      if (argv.some((arg) => arg.endsWith('/logs'))) {
+        throw failure()
+      }
+      return success(argv)
+    })
+    const response = await dispatcher().dispatch({
+      id: 'shared',
+      authToken: 'test',
+      method: 'github.prCheckDetails',
+      params: { repo: 'repo', workflowRunId: 2 }
+    })
+    expect(response).toMatchObject({
+      ok: true,
+      result: { jobs: [{ logState: 'error', logTail: null }] }
+    })
+    for (const sentinel of sentinels) {
+      expect(JSON.stringify([response, vi.mocked(console.warn).mock.calls])).not.toContain(sentinel)
+    }
+    expect(prCheckLogTailCache.size).toBe(0)
+  })
+
   it.each(
     ['caller', 'host'].flatMap((mode) =>
       ['check', 'annotations', 'jobs', 'log'].map((stage) => ({ mode, stage }))
