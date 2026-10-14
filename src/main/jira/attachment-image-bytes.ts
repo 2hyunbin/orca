@@ -1,13 +1,15 @@
-import { apiBasePath, jiraRequestBinary, type JiraClientForSite } from './authenticated-request'
+import { jiraRequestBinary, type JiraClientForSite } from './authenticated-request'
 import type { AttachmentMeta } from './attachment-meta'
+import { attachmentContentUrl } from './attachment-content-url'
 import {
   loadAttachmentBytesWithCache,
   type AttachmentImageBytes,
-  attachmentImagesEpoch
+  attachmentImagesEpoch,
+  getCachedAttachmentBytes
 } from './attachment-image-cache'
 import {
   JIRA_IMAGE_MAX_BYTES,
-  JIRA_IMAGE_MAX_REFERENCES,
+  JIRA_IMAGE_MAX_PENDING_READS,
   isJiraImageMimeType
 } from '../../shared/jira-attachment-image'
 import { withJiraDeadline } from './jira-read-failure'
@@ -25,10 +27,14 @@ export async function readAttachmentImageBytes(
   if (signal?.aborted) {
     throw signal.reason ?? new Error('Jira image request cancelled')
   }
+  const cached = getCachedAttachmentBytes(client.site.id, meta.id)
+  if (cached) {
+    return cached
+  }
   const key = `${client.site.id}::${attachmentImagesEpoch(client.site.id)}::${meta.id}`
   let interest = interests.get(key)
   if (!interest || interest.controller.signal.aborted) {
-    if (interests.size >= JIRA_IMAGE_MAX_REFERENCES) {
+    if (interests.size >= JIRA_IMAGE_MAX_PENDING_READS) {
       throw new Error('Jira image queue is full.')
     }
     interest = { controller: new AbortController(), readers: 0 }
@@ -45,17 +51,9 @@ export async function readAttachmentImageBytes(
         load: async () => {
           const release = await downloads.acquire(0, owned.controller.signal)
           try {
-            if (!meta.contentUrl && client.site.authType === 'server') {
+            const url = attachmentContentUrl(client.site, meta)
+            if (!url) {
               return null
-            }
-            const url = meta.contentUrl
-              ? new URL(meta.contentUrl, `${client.site.siteUrl}/`)
-              : new URL(
-                  `${apiBasePath(client.site)}/attachment/content/${encodeURIComponent(meta.id)}`,
-                  client.site.siteUrl
-                )
-            if (/\/rest\/api\/(?:2|3)\/attachment\/content\/[^/]+$/i.test(url.pathname)) {
-              url.searchParams.set('redirect', 'false')
             }
             const binary = await withJiraDeadline(owned.controller.signal, 30_000, (deadline) =>
               waitForPromiseWithSignal(

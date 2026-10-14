@@ -5,7 +5,8 @@ import {
   migrateLegacyJiraImages,
   hasCachedJiraImage,
   clearJiraImageCache,
-  observeJiraImageHostStatus
+  observeJiraImageHostStatus,
+  onJiraImageCacheInvalidated
 } from './runtime-jira-image-cache'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import { jiraImageReference } from '../../../shared/jira-attachment-image'
@@ -28,6 +29,7 @@ beforeEach(() => {
   download.mockReset().mockResolvedValue(new Blob([Uint8Array.of(1)], { type: 'image/png' }))
   createUrl.mockReset().mockImplementation(() => `blob:${createUrl.mock.calls.length}`)
   revoke.mockReset()
+  replaceRuntimeEnvironmentRevisions([])
   replaceRuntimeEnvironmentRevisions([{ id: 'host', createdAt: 1 }])
 })
 afterEach(() => {
@@ -112,6 +114,125 @@ describe('bounded Jira Blob image cache', () => {
     expect(revoke).toHaveBeenCalledWith(image.url)
     image.release()
   })
+  it('allows the combined description and comment queue while keeping three active downloads', async () => {
+    const releases: (() => void)[] = []
+    download.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releases.push(() => resolve(new Blob([Uint8Array.of(1)], { type: 'image/png' })))
+        })
+    )
+    const reads = Array.from({ length: 48 }, (_, id) => acquire(String(id)))
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(3))
+    for (let batch = 0; batch < 16; batch += 1) {
+      await vi.waitFor(() => expect(releases).toHaveLength(3))
+      releases.splice(0).forEach((release) => release())
+    }
+    const images = await Promise.all(reads)
+    expect(images).toHaveLength(48)
+    expect(download).toHaveBeenCalledTimes(48)
+    images.forEach((image) => image.release())
+  })
+
+  it('notifies mounted readers once when a disconnected host is verified again', () => {
+    const listener = vi.fn()
+    const stop = onJiraImageCacheInvalidated(listener)
+    const status = {
+      environmentId: 'host',
+      pairingRevision: 1,
+      sequence: 2,
+      checkedAt: 0,
+      status: null,
+      verification: 'unavailable' as const,
+      transport: 'disconnected' as const
+    }
+    observeJiraImageHostStatus(status)
+    expect(listener).toHaveBeenCalledTimes(1)
+    observeJiraImageHostStatus({ ...status, sequence: 3, transport: 'connecting' })
+    expect(listener).toHaveBeenCalledTimes(1)
+    observeJiraImageHostStatus({
+      ...status,
+      sequence: 4,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    expect(listener).toHaveBeenCalledTimes(2)
+    observeJiraImageHostStatus({
+      ...status,
+      sequence: 4,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    expect(listener).toHaveBeenCalledTimes(2)
+    stop()
+  })
+
+  it('does not let stale host snapshots consume the reconnect retry', () => {
+    const listener = vi.fn()
+    const stop = onJiraImageCacheInvalidated(listener)
+    const status = {
+      environmentId: 'host',
+      pairingRevision: 1,
+      sequence: 3,
+      checkedAt: 0,
+      status: null,
+      verification: 'unavailable' as const,
+      transport: 'disconnected' as const
+    }
+    observeJiraImageHostStatus(status)
+    observeJiraImageHostStatus({
+      ...status,
+      sequence: 2,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    observeJiraImageHostStatus({
+      ...status,
+      pairingRevision: 0,
+      sequence: 10,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    observeJiraImageHostStatus({
+      ...status,
+      sequence: 4,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    expect(listener).toHaveBeenCalledTimes(2)
+    stop()
+  })
+
+  it('forgets the old reconnect marker when a host is replaced', () => {
+    observeJiraImageHostStatus({
+      environmentId: 'host',
+      pairingRevision: 1,
+      sequence: 3,
+      checkedAt: 0,
+      status: null,
+      verification: 'unavailable',
+      transport: 'disconnected'
+    })
+    replaceRuntimeEnvironmentRevisions([{ id: 'host', createdAt: 2 }], {
+      retired: ['host'],
+      sameHost: []
+    })
+    const listener = vi.fn()
+    const stop = onJiraImageCacheInvalidated(listener)
+    observeJiraImageHostStatus({
+      environmentId: 'host',
+      pairingRevision: 2,
+      sequence: 1,
+      checkedAt: 0,
+      status: null,
+      verification: 'verified',
+      transport: 'ready'
+    })
+    expect(listener).not.toHaveBeenCalled()
+    stop()
+  })
+
   it('converts old-host image data into short references before retaining Markdown', async () => {
     const body = migrateLegacyJiraImages(
       '![shot](data:image/png;base64,AQID) and literal data:image/png;base64,AQID',

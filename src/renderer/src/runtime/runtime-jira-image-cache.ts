@@ -2,7 +2,8 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { RuntimeHostStatusSnapshot } from '../../../shared/runtime-host-status'
 import {
   JIRA_IMAGE_MAX_BYTES,
-  JIRA_IMAGE_MAX_REFERENCES
+  JIRA_IMAGE_MAX_REFERENCES,
+  JIRA_IMAGE_MAX_PENDING_READS
 } from '../../../shared/jira-attachment-image'
 import { PrioritySemaphore } from '../../../shared/priority-semaphore'
 import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
@@ -25,6 +26,8 @@ const pending = new Map<
   { promise: Promise<void>; controller: AbortController; users: number }
 >()
 const invalidationListeners = new Set<(environmentId: string | null) => void>()
+const disconnectedHosts = new Set<string>()
+const lastHostStatusSequences = new Map<string, number>()
 let expiryTimer: ReturnType<typeof setTimeout> | undefined
 
 function imageOwner(target: RuntimeClientTarget): string {
@@ -106,7 +109,7 @@ export async function acquireJiraImageUrl(
   if (!entry) {
     let loading = pending.get(key)
     if (!loading || loading.controller.signal.aborted) {
-      if (pending.size >= JIRA_IMAGE_MAX_REFERENCES) {
+      if (pending.size >= JIRA_IMAGE_MAX_PENDING_READS) {
         throw new Error('Jira image queue is full.')
       }
       const controller = new AbortController()
@@ -230,13 +233,32 @@ export function clearJiraImageCache(environmentId?: string): void {
 
 export function observeJiraImageHostStatus(snapshot: RuntimeHostStatusSnapshot): void {
   if (
-    snapshot.retired ||
-    snapshot.transport === 'disconnected' ||
-    snapshot.verification === 'blocked'
+    getRuntimeEnvironmentRevision(snapshot.environmentId) !== snapshot.pairingRevision ||
+    (lastHostStatusSequences.get(snapshot.environmentId) ?? -1) >= snapshot.sequence
+  ) {
+    return
+  }
+  lastHostStatusSequences.set(snapshot.environmentId, snapshot.sequence)
+  if (snapshot.retired || snapshot.verification === 'blocked') {
+    disconnectedHosts.delete(snapshot.environmentId)
+    clearJiraImageCache(snapshot.environmentId)
+  } else if (snapshot.transport === 'disconnected') {
+    disconnectedHosts.add(snapshot.environmentId)
+    clearJiraImageCache(snapshot.environmentId)
+  } else if (
+    snapshot.transport === 'ready' &&
+    snapshot.verification === 'verified' &&
+    disconnectedHosts.delete(snapshot.environmentId)
   ) {
     clearJiraImageCache(snapshot.environmentId)
   }
 }
 
-onRuntimeEnvironmentsRetired((ids) => ids.forEach(clearJiraImageCache))
-onRuntimeEnvironmentRevisionsChanged((ids) => ids.forEach(clearJiraImageCache))
+function forgetJiraImageHost(environmentId: string): void {
+  disconnectedHosts.delete(environmentId)
+  lastHostStatusSequences.delete(environmentId)
+  clearJiraImageCache(environmentId)
+}
+
+onRuntimeEnvironmentsRetired((ids) => ids.forEach(forgetJiraImageHost))
+onRuntimeEnvironmentRevisionsChanged((ids) => ids.forEach(forgetJiraImageHost))

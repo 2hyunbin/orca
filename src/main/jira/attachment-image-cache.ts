@@ -209,6 +209,14 @@ function imageBytes(image: ImageValue): AttachmentImageBytes | null {
   return { data: Uint8Array.from(Buffer.from(match[2], 'base64')), mimeType: match[1] }
 }
 
+export function getCachedAttachmentBytes(
+  siteId: string,
+  attachmentId: string
+): AttachmentImageBytes | null {
+  const image = getCachedImage(siteId, attachmentId)
+  return image === null ? null : imageBytes(image)
+}
+
 export function getCachedAttachmentDataUrl(siteId: string, attachmentId: string): string | null {
   const image = getCachedImage(siteId, attachmentId)
   return image === null ? null : imageDataUrl(image)

@@ -1,5 +1,6 @@
 import type { JiraClientForSite } from './authenticated-request'
-import { JiraApiError, apiBasePath, jiraRequestBinary } from './authenticated-request'
+import { attachmentContentUrl } from './attachment-content-url'
+import { JiraApiError, jiraRequestBinary } from './authenticated-request'
 import type { JiraAdfMediaAttrs, JiraAdfMediaResolver } from './adf-markdown'
 import { escapeMarkdownAlt, unresolvedMediaPlaceholder } from './adf-markdown'
 import { escapeMarkdownLinkDestination } from './adf-media-destination'
@@ -44,16 +45,9 @@ async function downloadImageAttachment(
     attachmentId: meta.id,
     load: async () => {
       try {
-        const contentUrl = meta.contentUrl
-          ? new URL(meta.contentUrl, `${client.site.siteUrl}/`)
-          : // Why: Cloud fallback uses apiBasePath so Server sites that lack contentUrl
-            // still hit /rest/api/2 if ever called; Server still requires content metadata.
-            new URL(
-              `${apiBasePath(client.site)}/attachment/content/${encodeURIComponent(meta.id)}`,
-              client.site.siteUrl
-            )
-        if (/\/rest\/api\/(?:2|3)\/attachment\/content\/[^/]+$/i.test(contentUrl.pathname)) {
-          contentUrl.searchParams.set('redirect', 'false')
+        const contentUrl = attachmentContentUrl(client.site, meta)
+        if (!contentUrl) {
+          return null
         }
         const binary = await jiraRequestBinary(client, contentUrl.toString())
         if (binary.data.byteLength === 0 || binary.data.byteLength > MAX_IMAGE_BYTES) {

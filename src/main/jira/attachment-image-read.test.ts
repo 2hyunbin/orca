@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JiraClientForSite } from './authenticated-request'
+import { JIRA_IMAGE_MAX_PENDING_READS } from '../../shared/jira-attachment-image'
 import { readAttachmentImageBytes } from './attachment-image-bytes'
 import {
   registerAttachmentImageGrant,
@@ -110,7 +111,7 @@ describe('authenticated Jira image reads', () => {
           })
         )
     )
-    const reads = Array.from({ length: 24 }, (_, id) =>
+    const reads = Array.from({ length: JIRA_IMAGE_MAX_PENDING_READS }, (_, id) =>
       readAttachmentImageBytes(client, { ...meta, id: String(id) }, controller.signal).catch(
         (error) => error
       )
@@ -122,6 +123,43 @@ describe('authenticated Jira image reads', () => {
     controller.abort()
     await Promise.all(reads)
     expect(binary).toHaveBeenCalledTimes(3)
+  })
+
+  it('loads the combined 48 description and comment references without rejecting a reader', async () => {
+    const releases: (() => void)[] = []
+    binary.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releases.push(() => resolve({ data: bytes.buffer, contentType: 'image/png' }))
+        })
+    )
+    const reads = Array.from({ length: 48 }, (_, id) =>
+      readAttachmentImageBytes(client, { ...meta, id: String(id) })
+    )
+    await vi.waitFor(() => expect(binary).toHaveBeenCalledTimes(3))
+    for (let batch = 0; batch < 16; batch += 1) {
+      await vi.waitFor(() => expect(releases).toHaveLength(3))
+      releases.splice(0).forEach((release) => release())
+    }
+    expect((await Promise.all(reads)).filter(Boolean)).toHaveLength(48)
+    expect(binary).toHaveBeenCalledTimes(48)
+  })
+
+  it('uses the REST attachment fallback for scoped site links while preserving Server paths', async () => {
+    const scoped = {
+      ...client,
+      site: {
+        ...client.site,
+        apiBaseUrl: 'https://api.atlassian.com/ex/jira/tenant',
+        authType: 'cloud' as const
+      }
+    }
+    await readAttachmentImageBytes(scoped, { ...meta, contentUrl: '/secure/attachment/1/shot.png' })
+    expect(binary).toHaveBeenCalledWith(
+      scoped,
+      'https://jira.test/rest/api/3/attachment/content/1?redirect=false',
+      expect.anything()
+    )
   })
 
   it('expires grants and renews them when the issue is read again', () => {

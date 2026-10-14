@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   acquireJiraImageUrl,
@@ -29,6 +29,8 @@ function ResolvedJiraAttachmentImage({
 }: JiraAttachmentImageProps): React.JSX.Element {
   const [resolved, setResolved] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [generation, setGeneration] = useState(0)
+  const activeRequest = useRef<AbortController | null>(null)
   const localProtocol = target.kind === 'local' && !hasCachedJiraImage(target, reference)
   const src = localProtocol ? jiraImageProtocolUrl(reference) : resolved
   useEffect(
@@ -38,8 +40,10 @@ function ResolvedJiraAttachmentImage({
           environmentId === null ||
           (target.kind === 'environment' && environmentId === target.environmentId)
         ) {
+          activeRequest.current?.abort()
           setResolved(null)
-          setFailed(true)
+          setFailed(false)
+          setGeneration((value) => value + 1)
         }
       }),
     [target]
@@ -49,6 +53,7 @@ function ResolvedJiraAttachmentImage({
       return
     }
     const controller = new AbortController()
+    activeRequest.current = controller
     let release: (() => void) | undefined
     void acquireJiraImageUrl(target, reference, controller.signal)
       .then((image) => {
@@ -66,9 +71,12 @@ function ResolvedJiraAttachmentImage({
       })
     return () => {
       controller.abort()
+      if (activeRequest.current === controller) {
+        activeRequest.current = null
+      }
       release?.()
     }
-  }, [localProtocol, reference, target])
+  }, [generation, localProtocol, reference, target])
   if (!src || failed) {
     return (
       <span>
@@ -78,6 +86,7 @@ function ResolvedJiraAttachmentImage({
   }
   return (
     <ExpandableMarkdownImage
+      key={generation}
       src={src}
       onError={() => setFailed(true)}
       alt={alt}
