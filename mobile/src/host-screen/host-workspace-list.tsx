@@ -7,6 +7,7 @@ import { MobileRepoIcon } from '../components/MobileRepoIcon'
 import { MobileSearchField } from '../components/MobileSearchField'
 import { NewWorkspaceFab, FAB_SIZE } from '../components/NewWorkspaceFab'
 import { WorktreeListRow } from '../components/WorktreeListRow'
+import { SCROLL_KEYBOARD_DISMISS_MODE } from '../platform/scroll-keyboard-dismiss-mode'
 import { colors, spacing } from '../theme/mobile-theme'
 import { getWorktreeRowIdentity } from '../worktree/worktree-host-row-identity'
 import { HostWorkspaceListStates } from '../worktree/host-workspace-list-states'
@@ -95,11 +96,11 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           <MobileSearchField
             value={state.search}
             onChangeText={state.setSearch}
-            placeholder="Search worktrees…"
+            placeholder="Search workspaces…"
             autoFocus
             // Why: new key per open remounts the focus effect across rapid toggles so the keyboard reappears.
             focusKey={state.showSearch}
-            accessibilityLabel="Search worktrees"
+            accessibilityLabel="Search workspaces"
           />
         </View>
       )}
@@ -122,7 +123,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           stickySectionHeadersEnabled={false}
           // Why: keep the search IME up while tapping clear / scrolling results.
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode={SCROLL_KEYBOARD_DISMISS_MODE}
           onScrollToIndexFailed={activeWorktreeScroll.onScrollToIndexFailed}
           // Why: edge-to-edge under the system nav bar; insets.bottom keeps the last row above it.
           contentContainerStyle={[

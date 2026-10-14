@@ -301,8 +301,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted
   },
   // Why the cap is on the name, not the badge: a health word after a long name must stay readable.
+  // Why no shrink: the path beside it gives up space first; the name cap still bounds the badge.
   hostBadge: {
-    flexShrink: 1
+    flexShrink: 0
   },
   hostBadgeText: {
     flexShrink: 1,
