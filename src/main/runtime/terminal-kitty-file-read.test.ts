@@ -105,9 +105,7 @@ describe('PTY-owned Kitty file reads', () => {
     expect(resolveKittyFilePath('/tmp/image', 'Ubuntu')).toBe(
       '\\\\wsl.localhost\\Ubuntu\\tmp\\image'
     )
-    expect(resolveKittyFilePath('/mnt/c/tmp/image', 'Ubuntu')).toBe(
-      '\\\\wsl.localhost\\Ubuntu\\mnt\\c\\tmp\\image'
-    )
+    expect(resolveKittyFilePath('/mnt/c/tmp/image', 'Ubuntu')).toBe('C:\\tmp\\image')
     for (const path of ['C:\\image', '//server/image', 'relative', '/tmp\\image']) {
       expect(() => resolveKittyFilePath(path, 'Ubuntu')).toThrow()
     }

@@ -2,7 +2,12 @@ import { constants } from 'node:fs'
 import { lstat, open, realpath } from 'node:fs/promises'
 import { isAbsolute, win32 } from 'node:path'
 import { isDescendantOrEqual } from '../ipc/filesystem-path-containment'
-import { parseWslUncPath, toLinuxPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
+import {
+  parseWslUncPath,
+  toLinuxPath,
+  toWindowsWslPath,
+  toWindowsWslUncPath
+} from '../../shared/wsl-paths'
 import { readNodeFileHandleWithinLimit } from '../../shared/node-bounded-file-reader'
 import {
   TERMINAL_KITTY_FILE_MAX_BYTES,
@@ -18,18 +23,15 @@ export async function readTerminalKittyFile(
 ): Promise<TerminalKittyFileResult> {
   signal?.throwIfAborted()
   const path = resolveKittyFilePath(request.path, owner.wslDistro)
-  // DrvFS cannot resolve Windows short-name aliases such as RUNNER~1.
-  const workspaceSource =
-    owner.wslDistro && /^[a-z]:[/\\]/i.test(owner.workspacePath)
-      ? await realpath(owner.workspacePath)
-      : owner.workspacePath
   const workspacePath = owner.wslDistro
-    ? toWindowsWslUncPath(toLinuxPath(workspaceSource), owner.wslDistro)
-    : workspaceSource
+    ? toWindowsWslPath(toLinuxPath(owner.workspacePath), owner.wslDistro)
+    : owner.workspacePath
   const [canonical, workspaceRoot, tempRoots] = await Promise.all([
     realpath(path),
     realpath(workspacePath),
-    localTerminalArtifactRoots(workspacePath)
+    localTerminalArtifactRoots(
+      owner.wslDistro ? toWindowsWslUncPath('/', owner.wslDistro) : workspacePath
+    )
   ])
   const roots = [workspaceRoot, ...tempRoots]
   if (!roots.some((root) => kittyFileInsideRoot(root, canonical))) {
@@ -90,7 +92,7 @@ export function resolveKittyFilePath(path: string, wslDistro: string | null): st
     if (process.platform !== 'win32' || !/^\/(?!\/)/.test(path) || path.includes('\\')) {
       throw new Error('Kitty image path must belong to this terminal WSL distro')
     }
-    return toWindowsWslUncPath(path, wslDistro)
+    return toWindowsWslPath(path, wslDistro)
   }
   if (
     !(process.platform === 'win32' ? win32.isAbsolute(path) : isAbsolute(path)) ||
