@@ -40,6 +40,7 @@ export function useMobileStructuredQueuedEdit(args: {
   sessionKey: string
   sessionId: string | null
   client: RpcClient | null
+  chatActive: boolean
   enabled: boolean
   messages: readonly AgentSessionQueuedMessage[] | null
   cards: readonly MobileQueuedMessageCard[]
@@ -48,6 +49,8 @@ export function useMobileStructuredQueuedEdit(args: {
   onActionResolved?: () => void
 }) {
   const { sessionKey, sessionId, client, enabled, mutate, onSendError, onActionResolved } = args
+  const clientRef = useRef({ sessionKey, client })
+  clientRef.current = { sessionKey, client }
   const active = useRef<Edit | null>(null)
   const [shown, setShown] = useState<Edit | null>(null)
   const render = useCallback((edit: Edit | null) => {
@@ -67,7 +70,7 @@ export function useMobileStructuredQueuedEdit(args: {
       setShown(null)
       edit?.lease.end()
     }
-  }, [sessionKey, client, enabled])
+  }, [sessionKey, args.chatActive])
 
   const begin = useCallback(
     async (messageId: string): Promise<boolean> => {
@@ -88,7 +91,8 @@ export function useMobileStructuredQueuedEdit(args: {
         fingerprint,
         saving: false,
         lease: startMobileQueuedEditLease({
-          client,
+          getClient: () =>
+            clientRef.current.sessionKey === sessionKey ? clientRef.current.client : client,
           sessionId,
           messageId,
           expectedBodyFingerprint: fingerprint

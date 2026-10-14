@@ -6,7 +6,7 @@ import { structuredSessionOperationId } from './structured-session-operation-id'
 export type { QueuedEditLease as MobileQueuedEditLease } from '../../../src/shared/queued-message-edit-lease'
 
 export function startMobileQueuedEditLease(args: {
-  client: RpcClient
+  getClient: () => RpcClient | null
   sessionId: string
   messageId: string
   expectedBodyFingerprint: string
@@ -16,9 +16,13 @@ export function startMobileQueuedEditLease(args: {
     messageId: args.messageId,
     editId: structuredSessionOperationId(),
     expectedBodyFingerprint: args.expectedBodyFingerprint,
-    request: (params) =>
-      callAgentSession(args.client, 'agentSession.queuedMessageEditHold', params, undefined, {
-        failWhenDisconnected: true
-      })
+    request: (params) => {
+      const client = args.getClient()
+      return client
+        ? callAgentSession(client, 'agentSession.queuedMessageEditHold', params, undefined, {
+            failWhenDisconnected: true
+          })
+        : Promise.reject(new Error('Disconnected'))
+    }
   })
 }

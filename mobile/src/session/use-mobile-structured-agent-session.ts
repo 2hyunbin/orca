@@ -241,6 +241,7 @@ export function useMobileStructuredAgentSession(args: {
     client,
     sessionId,
     editCapable: hostSupport ? hostSupport.queuedMessageEdit === true : null,
+    chatActive: enabled,
     enabled: enabled && connected,
     mutate,
     appendComposerText,

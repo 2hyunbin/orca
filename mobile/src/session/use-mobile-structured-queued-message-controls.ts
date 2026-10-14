@@ -58,6 +58,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
   sessionKey: string
   sessionId: string | null
   client: RpcClient | null
+  chatActive: boolean
   enabled: boolean
   editCapable: boolean | null
   agentName?: string

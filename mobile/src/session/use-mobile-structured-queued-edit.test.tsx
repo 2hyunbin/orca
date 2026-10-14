@@ -48,18 +48,22 @@ describe('mobile in-place queued Edit', () => {
   function Harness({
     sessionId = SESSION_ID,
     editSupport = true,
-    enabled = true
+    enabled = true,
+    connected = true,
+    transport = client
   }: {
     sessionId?: string
     editSupport?: boolean | null
     enabled?: boolean
+    connected?: boolean
+    transport?: RpcClient | null
   }): null {
     hook = useMobileStructuredAgentSession({
-      client,
+      client: transport,
       sessionId,
       sourceIdentity: 'host-a',
       enabled,
-      connected: enabled,
+      connected,
       agent: 'codex',
       hostSupport:
         editSupport === null
@@ -326,30 +330,34 @@ describe('mobile in-place queued Edit', () => {
     expect(hook!.queued.editor).toBeUndefined()
   })
 
-  it('preserves typing when a late hold answer reports a conflict', async () => {
-    const message = queuedDraft({ messageId: 'slow-hold-card' })
-    await mount(message)
-    act(() => hook!.queued.editor!.cancel())
-    let answerHold: ((response: RpcResponse) => void) | undefined
-    sendRequest.mockImplementation((method, params) =>
-      method === 'agentSession.queuedMessageEditHold' && fieldsOf(params).action === 'acquire'
-        ? new Promise<RpcResponse>((resolve) => {
-            answerHold = resolve
-          })
-        : method === 'agentSession.queuedMessageEditHold'
-          ? Promise.resolve(ok({ status: 'held' }))
-          : Promise.resolve(
-              mutationOk({ status: 'updated', messageId: message.messageId, fingerprint: 'new' })
-            )
+  it('keeps exact typing through disconnect and reacquires the hold on the replacement transport', async () => {
+    vi.useFakeTimers()
+    await mount(queuedDraft({ messageId: 'reconnect-card' }))
+    const text = 'unsaved text\nwith spacing  and 🐈'
+    act(() => hook!.queued.editor!.change(text))
+    await act(async () =>
+      renderer?.update(createElement(Harness, { connected: false, transport: null }))
     )
-    await act(async () => hook!.queued.edit!(message.messageId))
-    act(() => hook!.queued.editor!.change('new typing'))
-    expect(hook!.queued.editor!.text).toBe('new typing')
-    await act(async () => {
-      answerHold?.(ok({ status: 'changed' }))
-    })
-    expect(hook!.queued.editor?.text).toBe('new typing')
-    expect(error).toHaveBeenCalledWith('This message changed while you were editing.')
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    expect(hook!.queued.editor?.text).toBe(text)
+    const reconnectedRequest = vi.fn<RpcClient['sendRequest']>(async (method, params) =>
+      method === 'agentSession.queuedMessageEditHold'
+        ? ok({ status: fieldsOf(params).action === 'renew' ? 'expired' : 'held' })
+        : ok({ models: [], current: {} })
+    )
+    await act(async () =>
+      renderer?.update(
+        createElement(Harness, { transport: { ...client, sendRequest: reconnectedRequest } })
+      )
+    )
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    expect(hook!.queued.editor?.text).toBe(text)
+    expect(
+      reconnectedRequest.mock.calls
+        .filter(([method]) => method === 'agentSession.queuedMessageEditHold')
+        .map(([, params]) => fieldsOf(params).action)
+    ).toEqual(['renew', 'acquire'])
+    expect(error).not.toHaveBeenCalled()
     expect(append).not.toHaveBeenCalled()
   })
 
