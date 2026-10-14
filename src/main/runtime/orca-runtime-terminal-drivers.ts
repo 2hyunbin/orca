@@ -36,6 +36,10 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
   })
 
   protected readonly edgeCommands = new RuntimeEdgeCommandController({
+    jiraHost: {
+      getSettings: () => this.requireStore().getSettings(),
+      getAgentEnvironment: () => this.accounts.getCommitMessageAgentEnvironment()
+    },
     browserHost: {
       getAgentBrowserBridge: () => this.agentBrowserBridge,
       resolveWorktreeSelector: (selector) => this.resolveWorktreeSelector(selector),

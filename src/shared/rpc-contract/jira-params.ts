@@ -99,3 +99,15 @@ export const ProjectStatusOrder = z.object({
   projectKey: requiredString('Project key is required'),
   siteId: OptionalString
 })
+
+export const CancelGenerateIssueSummary = z.object({
+  siteId: requiredString('Site ID is required'),
+  requestId: z.string().trim().min(1).max(128),
+  draftId: z.string().trim().min(1).max(128)
+})
+
+export const GenerateIssueSummary = CancelGenerateIssueSummary.extend({
+  description: z.string().trim().min(1).max(32_000),
+  projectName: z.string().max(255).optional(),
+  issueTypeName: z.string().max(255).optional()
+})

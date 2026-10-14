@@ -222,3 +222,55 @@ describe('jira RPC methods', () => {
     expect(runtime.jiraGetProjectStatusOrder).toHaveBeenCalledWith('ALP', 'site-1')
   })
 })
+
+describe('Jira title generation RPC', () => {
+  it('binds generation and stop to the authenticated device across one-shot sockets', async () => {
+    const generate = vi.fn().mockResolvedValue({ success: true, summary: 'Title' })
+    const cancel = vi.fn().mockReturnValue({ ok: true })
+    const stub = {
+      getRuntimeId: () => 'test-runtime',
+      jiraGenerateIssueSummary: generate,
+      jiraCancelGenerateIssueSummary: cancel
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these methods only use the three supplied runtime operations.
+    const runtime = stub as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
+    const args = { siteId: 'site-1', requestId: 'req-1', draftId: 'draft-1', description: 'Draft' }
+    const abort = new AbortController()
+    await dispatcher.dispatch(makeRequest('jira.generateIssueSummary', args), {
+      connectionId: 'connection-1',
+      pairedDeviceId: 'device-1',
+      signal: abort.signal
+    })
+    await dispatcher.dispatch(makeRequest('jira.cancelGenerateIssueSummary', args), {
+      connectionId: 'connection-2',
+      pairedDeviceId: 'device-1'
+    })
+    expect(generate).toHaveBeenCalledWith(args, 'device:device-1', abort.signal)
+    await dispatcher.dispatch(makeRequest('jira.cancelGenerateIssueSummary', args), {
+      connectionId: 'connection-3',
+      pairedDeviceId: 'device-2'
+    })
+    expect(cancel).toHaveBeenLastCalledWith(
+      { siteId: 'site-1', requestId: 'req-1', draftId: 'draft-1' },
+      'device:device-2'
+    )
+    expect(cancel).toHaveBeenCalledWith(
+      { siteId: 'site-1', requestId: 'req-1', draftId: 'draft-1' },
+      'device:device-1'
+    )
+  })
+
+  it('rejects an unscoped request before generation starts', async () => {
+    const generate = vi.fn()
+    const stub = { getRuntimeId: () => 'test-runtime', jiraGenerateIssueSummary: generate }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: schema rejection never accesses other runtime operations.
+    const runtime = stub as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
+    const reply = await dispatcher.dispatch(
+      makeRequest('jira.generateIssueSummary', { description: 'Draft' })
+    )
+    expect(reply.ok).toBe(false)
+    expect(generate).not.toHaveBeenCalled()
+  })
+})

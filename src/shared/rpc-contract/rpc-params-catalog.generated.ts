@@ -316,8 +316,10 @@ import {
 } from './hosted-review-params'
 import {
   AssignableUsers,
+  CancelGenerateIssueSummary,
   Connect,
   CreateIssue as CreateIssueOfJiraParams,
+  GenerateIssueSummary,
   IssueComment as IssueCommentOfJiraParams,
   IssueKey,
   IssueUpdate,
@@ -980,9 +982,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'hostedReview.forBranch': HostedReviewForBranch,
   'hostedReview.getCreationEligibility': HostedReviewCreationEligibility,
   'jira.addIssueComment': IssueCommentOfJiraParams,
+  'jira.cancelGenerateIssueSummary': CancelGenerateIssueSummary,
   'jira.connect': Connect,
   'jira.createIssue': CreateIssueOfJiraParams,
   'jira.disconnect': SiteSelection,
+  'jira.generateIssueSummary': GenerateIssueSummary,
   'jira.getIssue': IssueKey,
   'jira.getIssueStream': IssueKey,
   'jira.getProjectStatusOrder': ProjectStatusOrder,

@@ -2,9 +2,11 @@ import {
   JIRA_PAYLOAD_CHUNK_CHARS,
   JIRA_PAYLOAD_MAX_CHARS
 } from '../../../../shared/jira-payload-stream'
-import { defineMethod, defineStreamingMethod } from '../core'
+import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
 import {
   AssignableUsers,
+  GenerateIssueSummary,
+  CancelGenerateIssueSummary,
   Connect,
   CreateIssue,
   IssueComment,
@@ -34,7 +36,35 @@ function emitJiraPayload(value: unknown, emit: (result: unknown) => void): void 
   emit({ type: 'end' })
 }
 
+function generationOwner(context: Pick<RpcContext, 'pairedDeviceId' | 'caller'>): string {
+  // One-shot RPCs use different sockets for Generate and Stop.
+  if (context.pairedDeviceId) {
+    return `device:${context.pairedDeviceId}`
+  }
+  if (context.caller?.kind === 'paired-device') {
+    return `device:${context.caller.deviceId}`
+  }
+  if (context.caller?.kind === 'local-cli') {
+    return 'local-cli'
+  }
+  throw new Error('A title generation request needs an authenticated connection.')
+}
+
 export const JIRA_METHODS = [
+  defineMethod({
+    name: 'jira.generateIssueSummary',
+    permission: 'workspace',
+    params: GenerateIssueSummary,
+    handler: (params, context) =>
+      context.runtime.jiraGenerateIssueSummary(params, generationOwner(context), context.signal)
+  }),
+  defineMethod({
+    name: 'jira.cancelGenerateIssueSummary',
+    permission: 'workspace',
+    params: CancelGenerateIssueSummary,
+    handler: (params, context) =>
+      context.runtime.jiraCancelGenerateIssueSummary(params, generationOwner(context))
+  }),
   defineMethod({
     name: 'jira.connect',
     permission: 'accounts-admin',

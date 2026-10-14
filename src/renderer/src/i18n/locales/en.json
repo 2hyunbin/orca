@@ -19237,6 +19237,15 @@
     "agentChildRow": {
       "ended": "Ended"
     },
+    "jiraIssueTitleField": {
+      "generate": "Generate title from description",
+      "stop": "Stop generating title",
+      "canceled": "Generation canceled.",
+      "webUnavailable": "Jira title generation is unavailable in the web client.",
+      "hostUpdateRequired": "Generating Jira titles requires a newer Orca server. Update the Jira connection’s host and try again.",
+      "generating": "Generating title. Click to stop.",
+      "failed": "Failed to generate a summary from the description."
+    },
     "markdown-callout": {
       "note": "Note",
       "tip": "Tip",
