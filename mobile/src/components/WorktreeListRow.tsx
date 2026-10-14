@@ -285,9 +285,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMuted,
     fontFamily: typography.monoFamily,
-    // Why zero basis: the path takes only leftover space; badges keep their width until the row runs out.
-    flexBasis: 0,
-    flexGrow: 1
+    // Why: path takes only leftover space so badges truncate last.
+    flex: 1
   },
   childBadge: {
     flexDirection: 'row',

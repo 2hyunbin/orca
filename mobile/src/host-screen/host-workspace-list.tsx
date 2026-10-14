@@ -1,4 +1,4 @@
-import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native'
+import { Platform, Pressable, RefreshControl, SectionList, Text, View } from 'react-native'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react-native'
 import { AuthFailedBanner } from '../components/AuthFailedBanner'
 import { HostDiagnosticsLink } from '../components/HostDiagnosticsLink'
@@ -7,7 +7,6 @@ import { MobileRepoIcon } from '../components/MobileRepoIcon'
 import { MobileSearchField } from '../components/MobileSearchField'
 import { NewWorkspaceFab, FAB_SIZE } from '../components/NewWorkspaceFab'
 import { WorktreeListRow } from '../components/WorktreeListRow'
-import { SCROLL_KEYBOARD_DISMISS_MODE } from '../platform/scroll-keyboard-dismiss-mode'
 import { colors, spacing } from '../theme/mobile-theme'
 import { getWorktreeRowIdentity } from '../worktree/worktree-host-row-identity'
 import { HostWorkspaceListStates } from '../worktree/host-workspace-list-states'
@@ -123,7 +122,8 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           stickySectionHeadersEnabled={false}
           // Why: keep the search IME up while tapping clear.
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={SCROLL_KEYBOARD_DISMISS_MODE}
+          // Why: react-native-web dismisses on-drag on any scroll, and a narrowing search fires one.
+          keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
           onScrollToIndexFailed={activeWorktreeScroll.onScrollToIndexFailed}
           // Why: edge-to-edge under the system nav bar; insets.bottom keeps the last row above it.
           contentContainerStyle={[
