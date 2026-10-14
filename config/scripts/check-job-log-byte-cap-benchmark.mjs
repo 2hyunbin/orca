@@ -9,18 +9,19 @@ import { build } from 'esbuild'
 import { runProcess } from '@orca/process-host'
 import {
   assertWatchdogExit,
+  assertMeasurementRuntime,
+  validateChildProtocol,
   adverseCaseKey,
   auditBaselineCensoring
 } from './check-job-log-watchdog-protocol.mjs'
-import { BASELINE_REF, createManifest } from './check-job-log-performance-cases.mjs'
+import {
+  BASELINE_REF,
+  BASELINE_SOURCE_HASHES,
+  createManifest,
+  selectRequiredDescriptors
+} from './check-job-log-performance-cases.mjs'
 
-const shared = [
-  'ansi-escape-sequences.ts',
-  'check-job-log-tail-slice.ts',
-  'utf8-byte-limits.ts',
-  'own-retained-string.ts',
-  'owned-utf16-suffix.ts'
-]
+const shared = Object.keys(BASELINE_SOURCE_HASHES)
 export const hash = (value) => createHash('sha256').update(value).digest('hex')
 export const nodeExecutable = () => {
   const executable = process.versions.bun
@@ -46,8 +47,28 @@ export function resetObservations() { for (const key of Object.keys(counters)) d
 `
 
 export async function prepareBenchmark(root = process.cwd(), { profile = false } = {}) {
+  const snapshot = process.env.ORCA_CHECK_LOG_BASELINE_DIR
+  assert(
+    !snapshot || (process.env.CI === 'true' && !path.isAbsolute(snapshot)),
+    'Baseline snapshot must be a CI-only relative directory'
+  )
+  const baselineRoot = snapshot ? path.resolve(root, snapshot) : root
   const directory = await mkdtemp(path.join(os.tmpdir(), 'orca-check-log-benchmark-'))
   try {
+    if (snapshot) {
+      const revision = await runProcess({
+        program: 'git',
+        args: ['rev-parse', 'HEAD'],
+        cwd: baselineRoot,
+        timeoutMs: 10_000,
+        maxOutputBytes: 64 * 1024,
+        env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+      })
+      assert(
+        revision.code === 0 && !revision.signal && !revision.timedOut && !revision.outputTruncated
+      )
+      assert.equal(revision.stdout.trim(), BASELINE_REF, 'Baseline snapshot ref changed')
+    }
     const baseline = new Map()
     const current = new Map()
     for (const name of [...shared, 'check-job-log-excerpt.ts']) {
@@ -59,7 +80,7 @@ export async function prepareBenchmark(root = process.cwd(), { profile = false }
       const result = await runProcess({
         program: 'git',
         args: ['show', `${BASELINE_REF}:src/shared/${name}`],
-        cwd: root,
+        cwd: baselineRoot,
         timeoutMs: 10_000,
         maxOutputBytes: 64 * 1024,
         env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
@@ -69,6 +90,11 @@ export async function prepareBenchmark(root = process.cwd(), { profile = false }
         'Baseline source snapshot failed'
       )
       baseline.set(name, result.stdout)
+      assert.equal(
+        hash(result.stdout),
+        BASELINE_SOURCE_HASHES[name],
+        `Baseline source changed: ${name}`
+      )
       if (!shared.slice(0, 2).includes(name)) {
         assert.equal(hash(result.stdout), hash(current.get(name)), `Dependency drift: ${name}`)
       }
@@ -216,6 +242,7 @@ export async function runDescriptor(context, descriptor) {
     : undefined
   if (initialTimeout && descriptor.sample > 0) {
     assertWatchdogExit(initialTimeout.watchdogTermination)
+    assertMeasurementRuntime(initialTimeout.runtime)
     return {
       ...descriptor,
       capturePath: undefined,
@@ -267,12 +294,8 @@ export async function runDescriptor(context, descriptor) {
   assert(settlementMs < 15_000, 'Child exceeded its outer settlement budget')
   assert(!result.outputTruncated, 'Child protocol truncated')
   assert(result.stderr.length === 0, 'Child emitted unexpected stderr')
-  const protocol = result.stdout
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-  const ready = protocol.find((line) => line.type === 'ready')
+  const { ready, entered, completed, warmups } = validateChildProtocol(result.stdout, descriptor)
+  assert(!result.timedOut || completed.length === 0, 'Completed work cannot be censored')
   assert(
     ready && ready.identity.id === descriptor.id && ready.identity.bundleHash === bundle.hash,
     'Missing or mismatched pre-work identity'
@@ -300,13 +323,6 @@ export async function runDescriptor(context, descriptor) {
     assert.equal(ready.codeUnits, input.length, 'Captured input code units changed')
     assert.equal(ready.inputHash, hash(input), 'Captured input hash changed')
   }
-  assert(
-    !ready.runtime.bun && ready.runtime.node && ready.runtime.platform && ready.runtime.arch,
-    'Measurement requires verified Node'
-  )
-  const entered = protocol.findLast(
-    (line) => line.type === (descriptor.baselineTimeoutAllowed ? 'entered-strip' : 'entered')
-  )
   if (descriptor.mode === 'watchdog') {
     assert.equal(entered?.phase, 'watchdog', 'Watchdog did not enter the synchronous child')
     assertWatchdogExit(result)
@@ -360,26 +376,10 @@ export async function runDescriptor(context, descriptor) {
     !result.timedOut && result.code === 0 && !result.signal,
     'Workload child failed or timed out'
   )
-  const completed = protocol.filter((line) => line.type === 'result')
   assert.equal(completed.length, 1, 'Missing result protocol')
-  assert.equal(completed[0].id, descriptor.id)
-  assert.equal(completed[0].mode, descriptor.mode)
-  assert.equal(completed[0].arm, descriptor.arm)
-  assert.deepEqual(
-    completed[0].inputIdentity,
-    {
-      inputBytes: ready.inputBytes,
-      codeUnits: ready.codeUnits,
-      inputHash: ready.inputHash
-    },
-    'Completion input identity changed'
-  )
   if (descriptor.mode === 'direct' || descriptor.mode === 'cpu') {
     assert.equal(completed[0].samples.length, descriptor.samples, 'Incomplete timed samples')
-    assert.equal(
-      protocol.filter((line) => line.type === 'entered' && line.phase === 'warmup').length,
-      descriptor.warmups ?? 3
-    )
+    assert.equal(warmups, descriptor.warmups ?? 3)
     for (const sample of completed[0].samples) {
       assert(Number.isSafeInteger(sample.calls) && sample.calls > 0)
       for (const value of [
@@ -569,7 +569,9 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
     '__fixtures__',
     'check-job-log-failure-output.json'
   )
-  const manifest = createManifest({ fixturePath, capturePath: process.env.ORCA_CHECK_LOG_CAPTURE })
+  const manifest = selectRequiredDescriptors(
+    createManifest({ fixturePath, capturePath: process.env.ORCA_CHECK_LOG_CAPTURE })
+  )
   const records = []
   try {
     for (const descriptor of manifest) {

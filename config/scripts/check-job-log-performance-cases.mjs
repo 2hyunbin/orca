@@ -2,6 +2,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 export const BASELINE_REF = 'c745051d7d6885b86f27120b616f15396404ba3d'
+export const BASELINE_SOURCE_HASHES = {
+  'ansi-escape-sequences.ts': '75c79a88fb91c8b7a128a1ccc133051cde9e3e09f553d4d4fbb8887f89b6d217',
+  'check-job-log-tail-slice.ts': '24ccf1fc3a0a5b2da7eb3a218a7b3fb7e85e6100e8b60e0b7f6c9fe5665413e4',
+  'utf8-byte-limits.ts': '01574b287b2d6ab0758112887e356c0d270b25db1b72651925ba8329eb4224e6',
+  'own-retained-string.ts': 'addea88bc11c725192be2ff617b91315a875113844c95de03e5529cf3d7ef2e2',
+  'owned-utf16-suffix.ts': '1ca0bb35dfff2d9f3c02caee3d05b0e0c97378df71c878622acf703524d2c475'
+}
 export const LIMIT = 16 * 1024
 export const SEED = 0xc0ffee16
 const mib = 1024 * 1024
@@ -259,4 +266,28 @@ export function createManifest({ fixturePath, capturePath } = {}) {
   }
   manifest.push(item('retention', 'proposed', { family: 'near-cap', count: 3 }))
   return manifest
+}
+
+export function selectRequiredDescriptors(manifest) {
+  return manifest.filter((descriptor) => {
+    if (descriptor.mode === 'coverage') {
+      return (
+        ['osc', 'dcs', 'apc', 'pm', 'sos'].includes(descriptor.family) &&
+        [16 * 1024, 32 * 1024, 2 * mib, 63 * mib].includes(descriptor.bytes) &&
+        ['earlier', 'tail'].includes(descriptor.position) &&
+        descriptor.variant === 'unfinished'
+      )
+    }
+    if (descriptor.mode === 'direct') {
+      return (
+        descriptor.bytes <= 32 * 1024 ||
+        (descriptor.arm === 'proposed' &&
+          descriptor.bytes >= 31.5 * mib &&
+          ['osc', 'dcs', 'dense-osc', 'dense-string', 'mixed', 'sparse'].includes(
+            descriptor.family
+          ))
+      )
+    }
+    return true
+  })
 }

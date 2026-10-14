@@ -6,6 +6,92 @@ export function assertWatchdogExit(result) {
   assert(result.timedOut === true && signalExit, 'Unverified watchdog termination')
 }
 
+export function assertMeasurementRuntime(runtime) {
+  assert(
+    runtime?.bun === false &&
+      typeof runtime.node === 'string' &&
+      /^v\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(runtime.node) &&
+      typeof runtime.platform === 'string' &&
+      /^[a-z][a-z0-9]*$/.test(runtime.platform) &&
+      typeof runtime.arch === 'string' &&
+      /^[a-z][a-z0-9]*$/.test(runtime.arch),
+    'Measurement requires verified Node'
+  )
+}
+
+export function validateChildProtocol(stdout, descriptor) {
+  const protocol = stdout
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+  assert(protocol.every((record) => record && typeof record === 'object'))
+  const readyRecords = protocol.filter((record) => record.type === 'ready')
+  const completed = protocol.filter((record) => record.type === 'result')
+  assert(readyRecords.length === 1 && protocol[0] === readyRecords[0], 'Invalid ready framing')
+  assert(
+    completed.length <= 1 && (!completed.length || protocol.at(-1) === completed[0]),
+    'Invalid result framing'
+  )
+  const ready = readyRecords[0]
+  assertMeasurementRuntime(ready.runtime)
+  if (completed.length) {
+    for (const field of ['id', 'mode', 'arm']) {
+      assert.equal(completed[0][field], descriptor[field], `Completion ${field} changed`)
+    }
+    assert.deepEqual(
+      completed[0].inputIdentity,
+      { inputBytes: ready.inputBytes, codeUnits: ready.codeUnits, inputHash: ready.inputHash },
+      'Completion input identity changed'
+    )
+  }
+  const entries = protocol.slice(1, completed.length ? -1 : undefined)
+  let entered
+  let pendingStrip
+  let warmups = 0
+  let samples = 0
+  for (const entry of entries) {
+    if (descriptor.mode === 'watchdog') {
+      assert(
+        entries.length === 1 && entry.type === 'entered' && entry.phase === 'watchdog',
+        'Invalid watchdog entry'
+      )
+    } else if (entry.type === 'entered-strip') {
+      assert(
+        descriptor.baselineTimeoutAllowed &&
+          descriptor.mode === 'direct' &&
+          descriptor.arm === 'baseline' &&
+          ['warmup', 'sample'].includes(entry.phase) &&
+          ((pendingStrip && pendingStrip.phase === entry.phase) || entries.length === 1),
+        'Invalid strip entry'
+      )
+      pendingStrip = undefined
+    } else {
+      assert(
+        ['direct', 'cpu'].includes(descriptor.mode) && entry.type === 'entered' && !pendingStrip,
+        'Invalid workload entry'
+      )
+      if (entry.phase === 'warmup') {
+        assert(samples === 0 && warmups < (descriptor.warmups ?? 3))
+        assert.equal(entry.warmup, warmups++, 'Invalid warmup order')
+      } else {
+        assert(entry.phase === 'sample' && warmups === (descriptor.warmups ?? 3))
+        assert(samples < descriptor.samples)
+        assert.equal(entry.sample, samples++, 'Invalid sample order')
+      }
+      if (descriptor.baselineTimeoutAllowed) {
+        pendingStrip = entry
+      }
+    }
+    entered =
+      entry.type === (descriptor.baselineTimeoutAllowed ? 'entered-strip' : 'entered')
+        ? entry
+        : undefined
+  }
+  assert(!completed.length || !pendingStrip, 'Completion preceded strip entry')
+  return { ready, entered, completed, warmups }
+}
+
 export const adverseCaseKey = (descriptor) =>
   JSON.stringify([
     descriptor.family,
@@ -28,6 +114,7 @@ export function auditBaselineCensoring(manifest, byId) {
       )
       assert(record.settlementMs < 15000)
       assert.equal(record.identity.baselineRef, BASELINE_REF)
+      assertMeasurementRuntime(record.runtime)
       assertWatchdogExit(record.watchdogTermination)
       assert.equal(record.code, record.watchdogTermination.code)
       assert.equal(record.signal, record.watchdogTermination.signal)
@@ -42,6 +129,7 @@ export function auditBaselineCensoring(manifest, byId) {
       assert.equal(record.deadlineMs, 10000)
       assert(record.settlementMs < 15000)
       assert.equal(record.identity.baselineRef, BASELINE_REF)
+      assertMeasurementRuntime(record.runtime)
       assertWatchdogExit(record.watchdogTermination)
     }
     if (record.status === 'baseline_censored') {

@@ -58,6 +58,21 @@ jobs:
           node-version: ${{ matrix.node }}
           cache-electron-package: 'true'
 
+      - name: Checkout the pinned CI log comparison baseline
+        uses: actions/checkout@v6
+        with:
+          ref: c745051d7d6885b86f27120b616f15396404ba3d
+          fetch-depth: 1
+          persist-credentials: false
+          path: node_modules/.cache/check-log-baseline
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /src/shared/ansi-escape-sequences.ts
+            /src/shared/check-job-log-tail-slice.ts
+            /src/shared/utf8-byte-limits.ts
+            /src/shared/own-retained-string.ts
+            /src/shared/owned-utf16-suffix.ts
+
       - name: Install Electron package binary for tests
         run: node config/scripts/install-electron-package-binary.mjs
 
@@ -76,6 +91,7 @@ jobs:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/orca-node-compile-cache-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.node }}-${{ matrix.shard.index }}
           ORCA_BALANCE_UNIT_SHARDS: '1'
           ORCA_BACKGROUND_LAUNCH: '1'
+          ORCA_CHECK_LOG_BASELINE_DIR: node_modules/.cache/check-log-baseline
         run: |
           ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
           export ORCA_SHARD_SOURCE_SHA

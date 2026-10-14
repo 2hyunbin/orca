@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   auditResults,
+  prepareBenchmark,
   runDescriptor
 } from '../../config/scripts/check-job-log-byte-cap-benchmark.mjs'
 import {
   BASELINE_REF,
-  createManifest
+  createManifest,
+  selectRequiredDescriptors
 } from '../../config/scripts/check-job-log-performance-cases.mjs'
 import { adverseCaseKey } from '../../config/scripts/check-job-log-watchdog-protocol.mjs'
 
@@ -15,6 +17,7 @@ vi.mock('@orca/process-host', () => ({ runProcess: launcher }))
 afterEach(() => {
   launcher.mockReset()
   context.censoredBaselines?.clear()
+  vi.unstubAllEnvs()
 })
 
 const context = {
@@ -50,7 +53,7 @@ const ready = (id = adverse.id, bundleHash = context.bundles['baseline-negative'
   codeUnits: 16384,
   inputHash: createHash('sha256').update('x'.repeat(16384)).digest('hex')
 })
-const protocol = (records: object[]): string =>
+const protocol = (records: unknown[]): string =>
   `${records.map((record) => JSON.stringify(record)).join('\n')}\n`
 const timeoutResult = () => ({
   code: null,
@@ -111,9 +114,141 @@ const terminationProtocol = (descriptor: typeof adverse | typeof watchdog, platf
     }
   ])
 
+const malformedProtocols = (descriptor: typeof adverse | typeof watchdog) => {
+  const prework = ready(
+    descriptor.id,
+    context.bundles[descriptor.mode === 'direct' ? 'baseline-negative' : 'proposed'].hash
+  )
+  const entry = {
+    type: descriptor.mode === 'direct' ? 'entered-strip' : 'entered',
+    phase: descriptor.mode === 'direct' ? 'warmup' : 'watchdog'
+  }
+  const result = {
+    type: 'result',
+    id: descriptor.id,
+    mode: descriptor.mode,
+    arm: descriptor.arm,
+    inputIdentity: {
+      inputBytes: prework.inputBytes,
+      codeUnits: prework.codeUnits,
+      inputHash: prework.inputHash
+    }
+  }
+  return [
+    { label: 'wrong result id', records: [prework, entry, { ...result, id: 'wrong' }] },
+    { label: 'wrong result mode', records: [prework, entry, { ...result, mode: 'wrong' }] },
+    { label: 'wrong result arm', records: [prework, entry, { ...result, arm: 'wrong' }] },
+    { label: 'wrong result input', records: [prework, entry, { ...result, inputIdentity: {} }] },
+    { label: 'duplicate ready', records: [prework, prework, entry] },
+    {
+      label: 'mismatched second ready',
+      records: [prework, { ...prework, identity: { ...prework.identity, id: 'wrong' } }, entry]
+    },
+    { label: 'entry before ready', records: [entry, prework] },
+    { label: 'duplicate result', records: [prework, entry, result, result] },
+    { label: 'result before entry', records: [prework, result, entry] },
+    { label: 'completed timeout', records: [prework, entry, result] },
+    { label: 'duplicate entry', records: [prework, entry, entry] },
+    {
+      label: 'pre-call after strip entry',
+      records: [prework, entry, { type: 'entered', phase: 'warmup', warmup: 0 }]
+    },
+    {
+      label: 'invalid warmup index',
+      records: [prework, { type: 'entered', phase: 'warmup', warmup: -1 }, entry]
+    },
+    {
+      label: 'sample before warmups',
+      records: [prework, { type: 'entered', phase: 'sample', sample: 0 }, entry]
+    },
+    { label: 'unknown entry', records: [prework, { ...entry, type: 'unknown' }, entry] },
+    { label: 'invalid entry phase', records: [prework, { ...entry, phase: 'startup' }] },
+    { label: 'null record', records: [prework, null, entry] },
+    {
+      label: 'truthy malformed runtime',
+      records: [
+        { ...prework, runtime: { node: 'not-node', platform: 42, arch: {}, bun: 0 } },
+        entry
+      ]
+    },
+    ...[
+      { node: 'not-node' },
+      { node: 26 },
+      { platform: 42 },
+      { arch: {} },
+      { bun: 0 },
+      { bun: true },
+      { platform: '' },
+      { arch: '' }
+    ].map((runtime) => ({
+      label: `invalid runtime ${Object.keys(runtime)[0]}=${JSON.stringify(Object.values(runtime)[0])}`,
+      records: [{ ...prework, runtime: { ...prework.runtime, ...runtime } }, entry]
+    }))
+  ]
+}
+
 describe('performance watchdog failure precedence and completeness', () => {
-  it('censors only a verified frozen adverse stripper entered under the watchdog', async () => {
-    launcher.mockResolvedValue(timeoutResult())
+  it('requires an explicitly declared CI-relative baseline snapshot', async () => {
+    vi.stubEnv('CI', 'false')
+    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', 'node_modules/.cache/check-log-baseline')
+    await expect(prepareBenchmark()).rejects.toThrow('CI-only relative directory')
+    vi.stubEnv('CI', 'true')
+    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', process.cwd())
+    await expect(prepareBenchmark()).rejects.toThrow('CI-only relative directory')
+    expect(launcher).not.toHaveBeenCalled()
+  })
+  it('rejects changed historical source in the declared snapshot', async () => {
+    vi.stubEnv('CI', 'true')
+    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', 'node_modules/.cache/check-log-baseline')
+    const success = { code: 0, signal: null, timedOut: false, outputTruncated: false }
+    launcher.mockResolvedValueOnce({ ...success, stdout: `${BASELINE_REF}\n` })
+    launcher.mockResolvedValueOnce({ ...success, stdout: 'changed historical ANSI source' })
+    await expect(prepareBenchmark()).rejects.toThrow(
+      'Baseline source changed: ansi-escape-sequences.ts'
+    )
+    expect(launcher).toHaveBeenCalledTimes(2)
+  })
+  describe.each(['adverse', 'watchdog'])('%s protocol framing', (branch) => {
+    const descriptor = branch === 'adverse' ? adverse : watchdog
+    it.each(malformedProtocols(descriptor))(
+      'rejects $label before timeout acceptance',
+      async (fixture) => {
+        launcher.mockResolvedValue({ ...timeoutResult(), stdout: protocol(fixture.records) })
+        await expect(runDescriptor(context, descriptor)).rejects.toThrow()
+        expect(context.censoredBaselines.size).toBe(0)
+      }
+    )
+  })
+  it.each(malformedProtocols(adverse))(
+    '$label cannot suppress later attempts or pass audit',
+    async (fixture) => {
+      const slots = adverseSlots()
+      const records: object[] = []
+      launcher.mockResolvedValue({ ...timeoutResult(), stdout: protocol(fixture.records) })
+      await expect(runDescriptor(context, slots[0])).rejects.toThrow()
+      records.push({ ...slots[0], status: 'failed' })
+      for (const slot of slots.slice(1)) {
+        launcher.mockResolvedValue({
+          ...timeoutResult(),
+          stdout: terminationProtocol(slot, 'darwin')
+        })
+        records.push(await runDescriptor(context, slot))
+      }
+      expect(launcher).toHaveBeenCalledTimes(7)
+      expect(records.slice(1).every((record) => Object.hasOwn(record, 'watchdogTermination'))).toBe(
+        true
+      )
+      expect(context.censoredBaselines.size).toBe(0)
+      expect(() =>
+        auditResults([...slots, ...differentials], [...records, ...differentialRecords])
+      ).toThrow('Failed descriptor')
+    }
+  )
+  it.each(['warmup', 'sample'])('preserves a verified partial %s strip entry', async (phase) => {
+    launcher.mockResolvedValue({
+      ...timeoutResult(),
+      stdout: protocol([ready(), { type: 'entered-strip', phase }])
+    })
     const record = await runDescriptor(context, adverse)
     expect(record.status).toBe('baseline_timeout')
     expect(record.samples).toEqual([])
@@ -173,7 +308,7 @@ describe('performance watchdog failure precedence and completeness', () => {
       ...timeoutResult(),
       stdout: protocol([
         ready(descriptor.id, context.bundles[baseline ? 'baseline' : 'proposed'].hash),
-        { type: 'entered', phase: 'warmup' }
+        { type: 'entered', phase: 'warmup', warmup: 0 }
       ])
     })
     await expect(runDescriptor(context, descriptor)).rejects.toThrow(
@@ -451,6 +586,66 @@ describe('performance watchdog failure precedence and completeness', () => {
           item.position === 'earlier'
       )
     ).toBe(true)
+  })
+  it('selects the required ordered 944 or 1004 descriptors with complete measurement groups', () => {
+    const full = createManifest({ fixturePath: 'fixture.json', capturePath: 'capture.stdout' })
+    const selected = selectRequiredDescriptors(full)
+    expect(selected).toHaveLength(1004)
+    expect(selectRequiredDescriptors(createManifest({ fixturePath: 'fixture.json' }))).toHaveLength(
+      944
+    )
+    expect(full.filter((descriptor) => selected.includes(descriptor))).toEqual(selected)
+    const coverage = selected.filter((descriptor) => descriptor.mode === 'coverage')
+    const expectedCoverage = ['osc', 'dcs', 'apc', 'pm', 'sos'].flatMap((family) =>
+      [7, 8].flatMap((width) =>
+        [16384, 32768, 2 * 1024 * 1024, 63 * 1024 * 1024].flatMap((bytes) =>
+          ['earlier', 'tail'].map((position) => [family, width, bytes, position])
+        )
+      )
+    )
+    expect(
+      coverage.map(({ family, width, bytes, position }) => [family, width, bytes, position])
+    ).toEqual(expectedCoverage)
+    expect(coverage.every((descriptor) => descriptor.variant === 'unfinished')).toBe(true)
+    expect(selected.filter((descriptor) => descriptor.mode === 'counts')).toHaveLength(52)
+    expect(selected.filter((descriptor) => descriptor.mode === 'retention')).toHaveLength(7)
+    for (const family of ['fixture', 'actual']) {
+      expect(
+        selected.filter((descriptor) => descriptor.mode === 'cpu' && descriptor.family === family)
+      ).toHaveLength(60)
+    }
+    for (const arm of ['baseline', 'proposed', 'baseline-bounded', 'full-log']) {
+      expect(
+        selected.filter((descriptor) => descriptor.mode === 'cpu' && descriptor.arm === arm)
+      ).toHaveLength(40)
+    }
+    const direct = selected.filter((descriptor) => descriptor.mode === 'direct')
+    expect(direct.filter((descriptor) => descriptor.arm === 'baseline')).toHaveLength(280)
+    expect(
+      direct.filter((descriptor) => descriptor.arm === 'proposed' && descriptor.bytes <= 32768)
+    ).toHaveLength(280)
+    expect(direct.filter((descriptor) => descriptor.bytes > 32768)).toHaveLength(140)
+    const groups = new Map<string, typeof direct>()
+    for (const descriptor of direct) {
+      const key = JSON.stringify([descriptor.arm, descriptor.family, descriptor.width])
+      groups.set(key, [...(groups.get(key) ?? []), descriptor])
+    }
+    for (const group of groups.values()) {
+      const sizes = [...new Set(group.map((descriptor) => descriptor.bytes))].sort(
+        (a, b) => Number(a) - Number(b)
+      )
+      expect(sizes.slice(0, 2)).toEqual([16384, 32768])
+      if (sizes.length > 2) {
+        expect(sizes.slice(2)).toEqual([31.5 * 1024 * 1024, 63 * 1024 * 1024])
+      }
+      for (const bytes of sizes) {
+        expect(
+          group
+            .filter((descriptor) => descriptor.bytes === bytes)
+            .map((descriptor) => descriptor.sample)
+        ).toEqual([0, 1, 2, 3, 4, 5, 6])
+      }
+    }
   })
   it('fails missing records and never turns an ordinary failure into completed coverage', () => {
     expect(() => auditResults([adverse], [])).toThrow('Incomplete')

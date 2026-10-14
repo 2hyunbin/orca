@@ -5,19 +5,24 @@ import {
   prepareBenchmark,
   runDescriptor
 } from '../../config/scripts/check-job-log-byte-cap-benchmark.mjs'
-import { createManifest } from '../../config/scripts/check-job-log-performance-cases.mjs'
+import {
+  createManifest,
+  selectRequiredDescriptors
+} from '../../config/scripts/check-job-log-performance-cases.mjs'
 
 const root = process.cwd()
-const manifest = createManifest({
-  fixturePath: path.join(
-    root,
-    'src',
-    'shared',
-    '__fixtures__',
-    'check-job-log-failure-output.json'
-  ),
-  capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
-})
+const manifest = selectRequiredDescriptors(
+  createManifest({
+    fixturePath: path.join(
+      root,
+      'src',
+      'shared',
+      '__fixtures__',
+      'check-job-log-failure-output.json'
+    ),
+    capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
+  })
+)
 let context: Awaited<ReturnType<typeof prepareBenchmark>>
 const records: Awaited<ReturnType<typeof runDescriptor>>[] = []
 
