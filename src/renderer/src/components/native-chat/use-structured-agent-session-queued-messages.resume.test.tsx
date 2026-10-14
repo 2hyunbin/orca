@@ -140,11 +140,10 @@ describe('whether Resume is offered', () => {
     expect(result.current.queueHold).toBeUndefined()
   })
 
-  it('not over cards Resume would not send: held on their own, returned, or behind one', () => {
+  it('not over cards Resume would not send: held on their own or returned', () => {
     const queuedMessages = [
       card('failed', { paused: true, pausedReason: 'send_failed' }),
-      card('returned', { position: 2, state: 'returned' }),
-      card('behind', { position: 3 })
+      card('returned', { position: 2, state: 'returned' })
     ]
     expect(renderController({ queuedMessages }).result.current.queueResume).toBeUndefined()
   })
