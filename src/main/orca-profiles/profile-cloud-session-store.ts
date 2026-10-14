@@ -9,13 +9,6 @@ import type {
 } from '../../shared/orca-profiles'
 import { getOrcaProfileDirectory } from './profile-storage-paths'
 import { allowsPlaintextOrcaCloudSession } from './profile-cloud-auth-config'
-import type { OrcaCloudSessionExchangeResponse } from './profile-cloud-session-exchange'
-import {
-  cloudSessionIdentity,
-  isCloudSessionMutationCurrent,
-  recordSuccessfulCloudSessionLogin,
-  type CloudSessionMutationSnapshot
-} from './profile-cloud-session-mutation'
 
 export type OrcaCloudSession = {
   accessToken: string
@@ -55,14 +48,7 @@ type CachedOrcaCloudSession = {
 }
 
 const memorySessions = new Map<string, CachedOrcaCloudSession>()
-// Sessions cleared this run and not signed in since. A conditional save must not resurrect one
-// (its fence write may have failed), and a file that could not be removed must not be read back.
-const clearedSessionKeys = new Set<string>()
 export const MAX_MEMORY_CLOUD_SESSIONS = 64
-
-function describeWriteError(error: unknown): string {
-  return error instanceof Error && 'code' in error ? String(error.code) : String(error)
-}
 
 function rememberMemorySession(key: string, session: CachedOrcaCloudSession): void {
   memorySessions.delete(key)
@@ -128,52 +114,31 @@ export function getOrcaCloudSessionPath(profileId: string, userDataPath: string)
 export function saveOrcaCloudSession(
   profileId: string,
   userDataPath: string,
-  session: OrcaCloudSession,
-  options: { fileHoldsSpentToken?: boolean } = {}
+  session: OrcaCloudSession
 ): OrcaCloudSessionPersistence {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
-  clearedSessionKeys.delete(cacheKey)
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted: PersistedEncryptedSession = {
-        version: 1,
-        format: 'electron-safe-storage-v1',
-        savedAt: Date.now(),
-        ciphertext: safeStorage.encryptString(JSON.stringify(session)).toString('base64')
-      }
-      writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), encrypted)
-      rememberMemorySession(cacheKey, { session, persistence: 'encrypted' })
-      return 'encrypted'
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted: PersistedEncryptedSession = {
+      version: 1,
+      format: 'electron-safe-storage-v1',
+      savedAt: Date.now(),
+      ciphertext: safeStorage.encryptString(JSON.stringify(session)).toString('base64')
     }
+    writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), encrypted)
+    rememberMemorySession(cacheKey, { session, persistence: 'encrypted' })
+    return 'encrypted'
+  }
 
-    if (allowsPlaintextOrcaCloudSession()) {
-      const plaintext: PersistedPlaintextSession = {
-        version: 1,
-        format: 'dev-plaintext-v1',
-        savedAt: Date.now(),
-        session
-      }
-      writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), plaintext)
-      rememberMemorySession(cacheKey, { session, persistence: 'dev-plaintext' })
-      return 'dev-plaintext'
+  if (allowsPlaintextOrcaCloudSession()) {
+    const plaintext: PersistedPlaintextSession = {
+      version: 1,
+      format: 'dev-plaintext-v1',
+      savedAt: Date.now(),
+      session
     }
-  } catch (error) {
-    // Why: a rotated refresh token is already spent server-side. Dropping it on a failed write
-    // (disk full, locked file, keychain error) makes the next refresh replay the old token,
-    // which the server reads as reuse and revokes the whole token family.
-    console.warn(
-      '[orca-cloud] could not persist the account session; keeping it in memory:',
-      describeWriteError(error)
-    )
-    if (options.fileHoldsSpentToken) {
-      // A restart replaying the spent token on disk would revoke the family; anywhere
-      // else the file still holds a valid token and must stay.
-      try {
-        rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
-      } catch {
-        // Best effort: the in-memory session wins for the rest of this run either way.
-      }
-    }
+    writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), plaintext)
+    rememberMemorySession(cacheKey, { session, persistence: 'dev-plaintext' })
+    return 'dev-plaintext'
   }
 
   // Why: Orca account refresh tokens must not silently fall back to plaintext
@@ -182,52 +147,16 @@ export function saveOrcaCloudSession(
   return 'memory-only'
 }
 
-export function saveOrcaCloudSessionExchange(
+// The session owner keeps a session here when its disk write failed.
+export function rememberOrcaCloudSessionInMemory(
   profileId: string,
   userDataPath: string,
-  exchange: OrcaCloudSessionExchangeResponse
-): OrcaCloudSessionPersistence {
-  recordSuccessfulCloudSessionLogin(cloudSessionIdentity(profileId, exchange.cloud), userDataPath)
-  return saveOrcaCloudSession(profileId, userDataPath, {
-    accessToken: exchange.accessToken,
-    refreshToken: exchange.refreshToken,
-    expiresAt: exchange.expiresAt,
-    organizations: exchange.organizations,
-    capabilities: exchange.capabilities
+  session: OrcaCloudSession
+): void {
+  rememberMemorySession(sessionCacheKey(profileId, userDataPath), {
+    session,
+    persistence: 'memory-only'
   })
-}
-
-/**
- * Re-reads the stored session, applies `update` to it, and saves the result — all in one
- * main-process turn, so a sign-out, org switch or concurrent rotation captured by `snapshot`
- * cannot be overwritten with stale fields or a spent refresh token. Returns null when the
- * fence moved, the session is gone or cleared, or `update` declines.
- */
-export function updateStoredOrcaCloudSession(
-  profileId: string,
-  userDataPath: string,
-  snapshot: CloudSessionMutationSnapshot,
-  update: (current: OrcaCloudSession) => OrcaCloudSession | null,
-  options: { rotatesRefreshToken?: boolean } = {}
-): OrcaCloudSession | null {
-  if (
-    clearedSessionKeys.has(sessionCacheKey(profileId, userDataPath)) ||
-    !isCloudSessionMutationCurrent(profileId, userDataPath, snapshot)
-  ) {
-    return null
-  }
-  const current = readOrcaCloudSession(profileId, userDataPath)
-  if (current.status !== 'found') {
-    return null
-  }
-  const next = update(current.session)
-  if (!next) {
-    return null
-  }
-  saveOrcaCloudSession(profileId, userDataPath, next, {
-    fileHoldsSpentToken: options.rotatesRefreshToken === true
-  })
-  return next
 }
 
 export function readOrcaCloudSession(
@@ -235,9 +164,6 @@ export function readOrcaCloudSession(
   userDataPath: string
 ): OrcaCloudSessionReadResult {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
-  if (clearedSessionKeys.has(cacheKey)) {
-    return { status: 'missing', persistence: 'none' }
-  }
   const memorySession = memorySessions.get(cacheKey)
   if (memorySession) {
     memorySessions.delete(cacheKey)
@@ -302,17 +228,8 @@ export function readOrcaCloudSession(
 }
 
 export function clearOrcaCloudSession(profileId: string, userDataPath: string): void {
-  const cacheKey = sessionCacheKey(profileId, userDataPath)
-  memorySessions.delete(cacheKey)
-  clearedSessionKeys.add(cacheKey)
-  try {
-    rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
-  } catch (error) {
-    console.warn(
-      '[orca-cloud] could not remove the account session file; treating it as signed out:',
-      describeWriteError(error)
-    )
-  }
+  memorySessions.delete(sessionCacheKey(profileId, userDataPath))
+  rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
 }
 
 export function getOrcaCloudMemorySessionCountForTests(): number {

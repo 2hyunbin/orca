@@ -2,16 +2,10 @@ import type { RefreshCurrentOrcaProfileAuthResult } from '../../shared/orca-prof
 import { getOrcaCloudAuthConfig, isOrcaCloudDevAuthEnabled } from './profile-cloud-auth-config'
 import { getOrcaProfileAuthStatusFromProfile } from './profile-cloud-auth-status'
 import { refreshOrcaCloudCapabilities } from './profile-cloud-client'
-import { linkOrcaProfileToCloud } from './profile-cloud-index'
 import { ensureActiveOrcaProfile, getOrcaProfileListState } from './profile-index-store'
 import { refreshDevOrcaCloudProfile } from './profile-cloud-dev-service'
-import {
-  captureCloudSessionMutation,
-  cloudSessionIdentity,
-  recordCloudSessionIdentityMutationIfCurrent
-} from './profile-cloud-session-mutation'
+import { cloudSessionTicket, commitCloudSessionUpdate } from './profile-cloud-session-owner'
 import { runWithFreshOrcaCloudSession } from './profile-cloud-session-refresh'
-import { updateStoredOrcaCloudSession } from './profile-cloud-session-store'
 
 export async function refreshCurrentOrcaProfileAuth(
   userDataPath: string
@@ -38,19 +32,15 @@ export async function refreshCurrentOrcaProfileAuth(
     return { status: 'unconfigured', auth: auth() }
   }
   try {
-    let identity = cloudSessionIdentity(active.profile.id, active.profile.cloud)
-    let mutationSnapshot = captureCloudSessionMutation(identity, userDataPath)
+    const cloud = active.profile.cloud
+    let ticket = cloudSessionTicket(active.profile.id, userDataPath)
     const operation = await runWithFreshOrcaCloudSession(
       configState.config,
       active,
       userDataPath,
       (session) => {
-        // Why: fence at request time, after any refresh; that refresh may relink the org.
-        const linked = ensureActiveOrcaProfile(userDataPath).profile.cloud
-        if (linked) {
-          identity = cloudSessionIdentity(active.profile.id, linked)
-          mutationSnapshot = captureCloudSessionMutation(identity, userDataPath)
-        }
+        // Why: take the ticket at request time, after any refresh; that refresh may relink.
+        ticket = cloudSessionTicket(active.profile.id, userDataPath)
         return refreshOrcaCloudCapabilities(configState.config, session)
       }
     )
@@ -58,42 +48,24 @@ export async function refreshCurrentOrcaProfileAuth(
       return { status: 'reconnect-required', auth: auth() }
     }
     const refresh = operation.value
-    if (refresh.cloud) {
-      const refreshedIdentity = cloudSessionIdentity(active.profile.id, refresh.cloud)
-      if (
-        refreshedIdentity.cloudUserId !== identity.cloudUserId ||
-        refreshedIdentity.cloudProfileId !== identity.cloudProfileId
-      ) {
-        throw new Error('orca_cloud_identity_changed_during_capability_refresh')
-      }
-      if (refreshedIdentity.organizationId !== identity.organizationId) {
-        const advanced = recordCloudSessionIdentityMutationIfCurrent(
-          refreshedIdentity,
-          userDataPath,
-          mutationSnapshot
-        )
-        if (!advanced) {
-          return { status: 'reconnect-required', auth: auth() }
-        }
-        mutationSnapshot = advanced
-      }
+    if (
+      refresh.cloud &&
+      (refresh.cloud.userId !== cloud.userId ||
+        refresh.cloud.cloudProfileId !== cloud.cloudProfileId)
+    ) {
+      throw new Error('orca_cloud_identity_changed_during_capability_refresh')
     }
-    const saved = updateStoredOrcaCloudSession(
+    const committed = commitCloudSessionUpdate(
       active.profile.id,
       userDataPath,
-      mutationSnapshot,
-      (current) => ({
-        ...current,
-        organizations: refresh.organizations ?? current.organizations,
-        capabilities: refresh.capabilities
-      })
+      ticket,
+      ensureActiveOrcaProfile(userDataPath).profile.cloud,
+      refresh
     )
-    if (!saved) {
+    if (!committed) {
       return { status: 'reconnect-required', auth: auth() }
     }
-    const list = refresh.cloud
-      ? linkOrcaProfileToCloud(active.profile.id, refresh.cloud, userDataPath)
-      : getOrcaProfileListState(userDataPath)
+    const list = committed.list ?? getOrcaProfileListState(userDataPath)
     return {
       status: 'refreshed',
       auth: getOrcaProfileAuthStatusFromProfile(
