@@ -2,6 +2,8 @@ import {
   environmentRecipeProviderId,
   parsePluginEnvironmentRecipe,
   PLUGIN_ENVIRONMENT_RECIPE_BYTES,
+  PLUGIN_ENVIRONMENT_ADAPTER_BYTES,
+  environmentRecipeAdapterPaths,
   type PluginEnvironmentRecipe
 } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import type { ValidDiscoveredPlugin } from './plugin-discovery'
@@ -22,6 +24,11 @@ export class PluginEnvironmentRecipeRegistry extends PluginRecipeArtifactRegistr
       parse: parsePluginEnvironmentRecipe,
       identity: environmentRecipeProviderId,
       preserveUnchangedAuthority: true,
+      additionalArtifacts: (recipe) =>
+        environmentRecipeAdapterPaths(recipe).map((path) => ({
+          path,
+          maxBytes: PLUGIN_ENVIRONMENT_ADAPTER_BYTES
+        })),
       canReadCurrentPlugin
     })
   }

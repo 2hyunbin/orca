@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import {
   environmentCommandInput,
   executeReviewedEnvironmentCommand,
-  type EnvironmentCommandInvocation
+  type EnvironmentCommandInvocation,
+  type EnvironmentCommandAuthority
 } from './plugin-environment-command-execution'
 import {
   environmentRecipeRequestSchema,
@@ -38,7 +39,7 @@ export async function executePluginEnvironmentRecipe(input: {
   signal?: AbortSignal
   authorize: (
     invocation: EnvironmentRecipeInvocation
-  ) => Promise<{ isCurrent: () => boolean; signal: AbortSignal } | null>
+  ) => Promise<EnvironmentCommandAuthority | null>
 }): Promise<EnvironmentRecipeExecutionResult> {
   const recipe = pluginEnvironmentRecipeSchema.parse(structuredClone(input.recipe))
   const request = environmentRecipeRequestSchema.parse(structuredClone(input.request))

@@ -14,7 +14,8 @@ import { environmentRecipeDigest } from './plugin-environment-recipe-execution'
 import {
   environmentCommandInput,
   executeReviewedEnvironmentCommand,
-  type EnvironmentCommandInvocation
+  type EnvironmentCommandInvocation,
+  type EnvironmentCommandAuthority
 } from './plugin-environment-command-execution'
 
 export async function executePluginEnvironmentRecovery(input: {
@@ -26,7 +27,7 @@ export async function executePluginEnvironmentRecovery(input: {
   signal?: AbortSignal
   authorize(
     invocation: EnvironmentCommandInvocation<EnvironmentRecipeRecoveryRequest>
-  ): Promise<{ isCurrent(): boolean; signal: AbortSignal } | null>
+  ): Promise<EnvironmentCommandAuthority | null>
 }): Promise<EnvironmentCommandExecutionResult<EnvironmentRecipeRecoveryResponse>> {
   const recipe = pluginEnvironmentRecipeSchema.parse(structuredClone(input.recipe))
   const request = environmentRecipeRecoveryRequestSchema.parse(structuredClone(input.request))

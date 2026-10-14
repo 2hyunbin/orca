@@ -135,6 +135,28 @@ describe('approved environment recipe execution', () => {
     })
     await expect(readFile(join(root, 'request.json'))).rejects.toThrow()
   })
+  it('never resolves a portable runtime through PATH without a host-prepared launch', async () => {
+    const args = input('list')
+    args.recipe = pluginEnvironmentRecipeSchema.parse({
+      schemaVersion: 1,
+      protocolVersion: 2,
+      id: 'devpods',
+      name: 'Development pods',
+      description: 'Company adapter',
+      lifetime: 'both',
+      commands: { list: { program: 'orca:node', entry: 'adapter.mjs', args: [] } }
+    })
+    args.request = environmentRecipeRequestSchema.parse({
+      ...args.request,
+      protocolVersion: 2,
+      contextId: 'company/account'
+    })
+    expect(await executePluginEnvironmentRecipe(args)).toEqual({
+      kind: 'refused',
+      reason: 'approval-required'
+    })
+    await expect(readFile(join(root, 'request.json'))).rejects.toThrow()
+  })
   it('keeps shell syntax, spaces and variables literal in argv', async () => {
     const args = input()
     args.recipe.commands.list.args.push(

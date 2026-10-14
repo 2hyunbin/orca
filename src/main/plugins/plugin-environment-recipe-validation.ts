@@ -2,6 +2,8 @@ import type { PluginManifest } from '../../shared/plugins/plugin-manifest'
 import {
   parsePluginEnvironmentRecipe,
   PLUGIN_ENVIRONMENT_RECIPE_BYTES,
+  PLUGIN_ENVIRONMENT_ADAPTER_BYTES,
+  environmentRecipeAdapterPaths,
   type PluginEnvironmentRecipe
 } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import { readContainedPluginArtifactText } from './plugin-artifact-file-reader'
@@ -28,6 +30,9 @@ export async function readPluginEnvironmentRecipeArtifacts(
         throw new Error(`duplicate environment recipe id "${recipe.id}"`)
       }
       seen.add(recipe.id)
+      for (const entry of environmentRecipeAdapterPaths(recipe)) {
+        await readContainedPluginArtifactText(rootDir, entry, PLUGIN_ENVIRONMENT_ADAPTER_BYTES)
+      }
       recipes.push(recipe)
     } catch (error) {
       throw new Error(

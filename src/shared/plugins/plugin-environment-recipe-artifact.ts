@@ -6,16 +6,18 @@ import {
 } from '../environment-recipe-protocol'
 import { isPluginManifestId } from './plugin-id-format'
 import { isQualifiedPluginKey } from './plugin-tab-key'
+import { isSafePluginRelativePath } from './plugin-path-safety'
 
 export const PLUGIN_ENVIRONMENT_RECIPE_BYTES = 64 * 1024
+export const PLUGIN_ENVIRONMENT_ADAPTER_BYTES = 1024 * 1024
+export const PLUGIN_ENVIRONMENT_NODE_PROGRAM = 'orca:node'
 const literal = (maximum: number) =>
   z
     .string()
     .min(1)
     .max(maximum)
     .refine((value) => !value.includes('\0'), 'NUL bytes are not allowed')
-export const environmentRecipeCommandSchema = z.strictObject({
-  program: literal(4096),
+const commandOptions = {
   args: z
     .array(
       z
@@ -25,7 +27,26 @@ export const environmentRecipeCommandSchema = z.strictObject({
     )
     .max(64),
   timeoutSeconds: z.number().int().min(1).max(600).default(120)
-})
+}
+export const environmentRecipeCommandSchema = z.union([
+  z.strictObject({
+    program: literal(4096).refine((value) => !value.startsWith('orca:'), 'reserved Orca runtime'),
+    ...commandOptions
+  }),
+  z.strictObject({
+    program: z.literal(PLUGIN_ENVIRONMENT_NODE_PROGRAM),
+    entry: literal(4096).refine(
+      (value) =>
+        isSafePluginRelativePath(value) &&
+        value.endsWith('.mjs') &&
+        !value
+          .split(/[\\/]/)
+          .some((segment) => ['.git', 'node_modules'].includes(segment.toLowerCase())),
+      'expected a contained prebuilt .mjs adapter'
+    ),
+    ...commandOptions
+  })
+])
 const field = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
   label: literal(128),
@@ -55,6 +76,13 @@ export const pluginEnvironmentRecipeSchema = z
     })
   })
   .superRefine((recipe, context) => {
+    if (environmentRecipeAdapterPaths(recipe).length && recipe.protocolVersion !== 2) {
+      context.addIssue({
+        code: 'custom',
+        path: ['protocolVersion'],
+        message: 'portable adapters require context-aware protocol 2'
+      })
+    }
     if (recipe.recovery && recipe.protocolVersion !== 2) {
       context.addIssue({
         code: 'custom',
@@ -87,6 +115,21 @@ export const pluginEnvironmentRecipeSchema = z
 
 export type PluginEnvironmentRecipe = z.infer<typeof pluginEnvironmentRecipeSchema>
 export type EnvironmentRecipeCommand = z.infer<typeof environmentRecipeCommandSchema>
+export type ReadonlyEnvironmentRecipeCommand<Command = EnvironmentRecipeCommand> =
+  Command extends EnvironmentRecipeCommand
+    ? Readonly<Omit<Command, 'args'>> & { readonly args: readonly string[] }
+    : never
+
+export function environmentRecipeAdapterPaths(recipe: PluginEnvironmentRecipe): string[] {
+  const commands = [...Object.values(recipe.commands), recipe.recovery?.command]
+  const paths = new Set<string>()
+  for (const command of commands) {
+    if (command && 'entry' in command && typeof command.entry === 'string') {
+      paths.add(command.entry)
+    }
+  }
+  return [...paths]
+}
 
 export function parsePluginEnvironmentRecipe(raw: string): PluginEnvironmentRecipe {
   if (new TextEncoder().encode(raw).byteLength > PLUGIN_ENVIRONMENT_RECIPE_BYTES) {

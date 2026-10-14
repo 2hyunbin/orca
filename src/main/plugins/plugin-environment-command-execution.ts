@@ -4,7 +4,7 @@ import {
   ENVIRONMENT_RECIPE_INPUT_BYTES,
   ENVIRONMENT_RECIPE_OUTPUT_BYTES
 } from '../../shared/environment-recipe-protocol'
-import type { EnvironmentRecipeCommand } from '../../shared/plugins/plugin-environment-recipe-artifact'
+import type { ReadonlyEnvironmentRecipeCommand } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import type {
   EnvironmentCommandExecutionResult,
   EnvironmentCommandUnverifiableReason
@@ -17,9 +17,19 @@ export type EnvironmentCommandInvocation<T extends object> = Readonly<{
   action: string
   recipeDigest: string
   requestDigest: string
-  command: Readonly<Omit<EnvironmentRecipeCommand, 'args'>> & { readonly args: readonly string[] }
+  command: ReadonlyEnvironmentRecipeCommand
   request: Readonly<T>
 }>
+export type EnvironmentCommandLaunch = {
+  program: string
+  args: readonly string[]
+  input: string
+}
+export type EnvironmentCommandAuthority = {
+  isCurrent(): boolean
+  signal: AbortSignal
+  launch?: EnvironmentCommandLaunch
+}
 export function environmentCommandInput(request: object): { stdin: string; requestDigest: string } {
   const stdin = `${JSON.stringify(request)}\n`
   if (Buffer.byteLength(stdin) > ENVIRONMENT_RECIPE_INPUT_BYTES) {
@@ -36,7 +46,7 @@ export async function executeReviewedEnvironmentCommand<T extends object, R>(inp
   signal?: AbortSignal
   authorize(
     invocation: EnvironmentCommandInvocation<T>
-  ): Promise<{ isCurrent(): boolean; signal: AbortSignal } | null>
+  ): Promise<EnvironmentCommandAuthority | null>
   parseResponse(stdout: string, request: T): R
   rejectResponse?(response: R): EnvironmentCommandUnverifiableReason | null
 }): Promise<EnvironmentCommandExecutionResult<R>> {
@@ -44,6 +54,10 @@ export async function executeReviewedEnvironmentCommand<T extends object, R>(inp
   const command = { ...invocation.command, args: [...invocation.command.args] }
   const env = { ...input.env }
   const authority = await input.authorize(invocation)
+  const portable = 'entry' in command
+  if (portable && !authority?.launch) {
+    return { kind: 'refused', reason: 'approval-required' }
+  }
   if (!authority || !authority.isCurrent() || authority.signal.aborted) {
     return { kind: 'refused', reason: 'approval-required' }
   }
@@ -51,14 +65,20 @@ export async function executeReviewedEnvironmentCommand<T extends object, R>(inp
     return { kind: 'refused', reason: 'cancelled' }
   }
   const signal = input.signal ? AbortSignal.any([input.signal, authority.signal]) : authority.signal
+  const launch = portable ? authority.launch : undefined
+  if (portable) {
+    delete env.NODE_OPTIONS
+    delete env.NODE_PATH
+    delete env.ELECTRON_RUN_AS_NODE
+  }
   let result: Awaited<ReturnType<typeof runProcess>>
   try {
     result = await runProcess({
-      program: command.program,
-      args: command.args,
+      program: launch?.program ?? command.program,
+      args: launch ? [...launch.args] : command.args,
       cwd,
       env,
-      input: stdin,
+      input: launch?.input ?? stdin,
       timeoutMs: command.timeoutSeconds * 1000,
       maxOutputBytes: ENVIRONMENT_RECIPE_OUTPUT_BYTES,
       killOnOutputLimit: true,

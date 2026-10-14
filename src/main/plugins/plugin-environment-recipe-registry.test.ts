@@ -55,7 +55,8 @@ function recipe(id = 'pods', name = 'Development pods') {
 }
 async function plugin(
   publisher = 'company',
-  artifacts = [recipe()]
+  artifacts: readonly unknown[] = [recipe()],
+  extraArtifacts: Readonly<Record<string, string>> = {}
 ): Promise<ValidDiscoveredPlugin> {
   const rootDir = await mkdtemp(join(tmpdir(), 'orca-environment-registration-'))
   roots.push(rootDir)
@@ -63,6 +64,9 @@ async function plugin(
   const paths = artifacts.map((_value, i) => `recipes/${i}.json`)
   await Promise.all(
     artifacts.map((value, i) => writeFile(join(rootDir, paths[i]!), JSON.stringify(value)))
+  )
+  await Promise.all(
+    Object.entries(extraArtifacts).map(([path, text]) => writeFile(join(rootDir, path), text))
   )
   const manifest = pluginManifestSchema.parse({
     manifestVersion: 2,
@@ -91,6 +95,67 @@ async function plugin(
 }
 
 describe('registered environment recipes use current reviewed bytes', () => {
+  it('admits the declared adapter bytes, preserves unchanged authority and denies undeclared reads', async () => {
+    const adapter = {
+      ...recipe(),
+      protocolVersion: 2,
+      commands: { list: { program: 'orca:node', entry: 'adapter.mjs', args: [] } }
+    }
+    const p = await plugin('company', [adapter], {
+      'adapter.mjs': 'export const reviewed = true;',
+      'unrelated.mjs': 'export const unrelated = true;'
+    })
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    expect(await held?.readArtifact('adapter.mjs')).toBe('export const reviewed = true;')
+    await expect(held?.readArtifact('unrelated.mjs')).rejects.toThrow('not admitted')
+    expect(held?.isCurrent()).toBe(true)
+    await registry.reconcile([structuredClone(p)], () => true)
+    expect(held?.signal.aborted).toBe(false)
+    expect(await held?.readArtifact('adapter.mjs')).toBe('export const reviewed = true;')
+    await writeFile(join(p.rootDir, 'adapter.mjs'), 'export const reviewed = false;')
+    await expect(held?.readArtifact('adapter.mjs')).rejects.toThrow('changed since')
+    expect(held?.signal.aborted).toBe(true)
+    expect(registry.list()).toEqual([])
+  })
+  it('rejects a changed then restored adapter during admission behind matching source metadata', async () => {
+    const adapter = {
+      ...recipe(),
+      protocolVersion: 2,
+      commands: { list: { program: 'orca:node', entry: 'adapter.mjs', args: [] } }
+    }
+    const p = await plugin('company', [adapter], { 'adapter.mjs': 'export const reviewed = true;' })
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    await writeFile(join(p.rootDir, 'adapter.mjs'), 'export const reviewed = false;')
+    hooks.beforeVerify.mockImplementationOnce(async () =>
+      writeFile(join(p.rootDir, 'adapter.mjs'), 'export const reviewed = true;')
+    )
+    await registry.reconcile([structuredClone(p)], () => true)
+    expect(held?.signal.aborted).toBe(true)
+    expect(registry.list()).toEqual([])
+  })
+  it('refuses missing and oversized adapters before publication or installation', async () => {
+    const adapter = {
+      ...recipe(),
+      protocolVersion: 2,
+      commands: { list: { program: 'orca:node', entry: 'adapter.mjs', args: [] } }
+    }
+    const p = await plugin('company', [adapter])
+    expect(await validateDeclaredPluginArtifacts(p.rootDir, p.manifest)).toMatchObject({
+      ok: false
+    })
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    expect(registry.list()).toEqual([])
+    await writeFile(join(p.rootDir, 'adapter.mjs'), 'x'.repeat(1024 * 1024 + 1))
+    expect(await validateDeclaredPluginArtifacts(p.rootDir, p.manifest)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('limit')
+    })
+  })
   it('retains held authority across identical rediscovery and unrelated provider changes', async () => {
     const p = await plugin()
     const other = await plugin('community')

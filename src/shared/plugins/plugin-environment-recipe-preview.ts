@@ -16,6 +16,7 @@ export type PluginEnvironmentRecipePreview = {
     program: string
     args: string[]
     timeoutSeconds: number
+    entry?: string
   }[]
 }
 
@@ -38,7 +39,8 @@ export function pluginEnvironmentRecipePreview(
                 action,
                 program: command.program,
                 args: [...command.args],
-                timeoutSeconds: command.timeoutSeconds
+                timeoutSeconds: command.timeoutSeconds,
+                ...('entry' in command ? { entry: command.entry } : {})
               }
             ]
           : []

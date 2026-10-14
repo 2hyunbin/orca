@@ -4,7 +4,8 @@ import {
   environmentRecipeDeclaredActions,
   environmentRecipeProviderId,
   parsePluginEnvironmentRecipe,
-  validateEnvironmentRecipeCreateParameters
+  validateEnvironmentRecipeCreateParameters,
+  environmentRecipeAdapterPaths
 } from './plugin-environment-recipe-artifact'
 
 const command = { program: 'devctl', args: ['pods', 'list'] }
@@ -27,6 +28,71 @@ const raw = {
 const parse = (value: unknown) => parsePluginEnvironmentRecipe(JSON.stringify(value))
 
 describe('plugin environment recipe artifacts', () => {
+  it('declares contained prebuilt adapters for lifecycle and receipt inspection without executing them', () => {
+    const adapter = {
+      program: 'orca:node',
+      entry: 'adapters/devpods.mjs',
+      args: ['literal; argument']
+    }
+    const recipe = parse({
+      ...raw,
+      protocolVersion: 2,
+      commands: { list: adapter },
+      createFields: [],
+      recovery: { protocolVersion: 1, command: { ...adapter, entry: 'adapters/receipts.mjs' } }
+    })
+    expect(environmentRecipeAdapterPaths(recipe)).toEqual([
+      'adapters/devpods.mjs',
+      'adapters/receipts.mjs'
+    ])
+    expect(pluginEnvironmentRecipePreview('company.platform', recipe).commands).toMatchObject([
+      {
+        action: 'list',
+        program: 'orca:node',
+        entry: 'adapters/devpods.mjs',
+        args: ['literal; argument']
+      },
+      { action: 'inspect-operation', entry: 'adapters/receipts.mjs' }
+    ])
+  })
+  it.each([
+    '../escape.mjs',
+    '/absolute.mjs',
+    'C:\\escape.mjs',
+    '.git/adapter.mjs',
+    'node_modules/adapter.mjs',
+    'adapters/con.mjs',
+    'adapters/source.ts',
+    'adapters/source.cjs',
+    'adapters/bad\0.mjs'
+  ])('refuses nonportable or unreviewed adapter paths: %s', (entry) => {
+    expect(() =>
+      parse({
+        ...raw,
+        protocolVersion: 2,
+        createFields: [],
+        commands: { list: { program: 'orca:node', entry, args: [] } }
+      })
+    ).toThrow()
+  })
+  it('requires the reserved runtime, explicit entry and context-aware provider protocol together', () => {
+    for (const command of [
+      { program: 'orca:node', args: [] },
+      { program: 'orca:future', entry: 'adapter.mjs', args: [] },
+      { program: 'external-node', entry: 'adapter.mjs', args: [] }
+    ]) {
+      expect(() =>
+        parse({ ...raw, protocolVersion: 2, createFields: [], commands: { list: command } })
+      ).toThrow()
+    }
+    expect(() =>
+      parse({
+        ...raw,
+        createFields: [],
+        commands: { list: { program: 'orca:node', entry: 'adapter.mjs', args: [] } }
+      })
+    ).toThrow('protocol 2')
+  })
   it('declares every lifecycle action and independent provider identity', () => {
     const recipe = parse(raw)
     expect(environmentRecipeDeclaredActions(recipe)).toEqual([

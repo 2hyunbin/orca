@@ -14,6 +14,7 @@ export type PluginRecipeAuthority<Recipe> = {
   plugin: ValidDiscoveredPlugin
   isCurrent(): boolean
   signal: AbortSignal
+  readArtifact(path: string): Promise<string>
 }
 type RecipeAdmission<Recipe> = {
   controller: AbortController
@@ -43,6 +44,7 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
       identity(pluginKey: string, recipe: Recipe): string
       canReadCurrentPlugin?: (plugin: ValidDiscoveredPlugin) => boolean
       preserveUnchangedAuthority?: boolean
+      additionalArtifacts?(recipe: Recipe): readonly { path: string; maxBytes: number }[]
     }
   ) {}
 
@@ -97,21 +99,11 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
     }
     try {
       await verifyInstructionalPluginContent(entry.plugin)
-      await entry.snapshot.read(entry.artifactPath, this.definition.maxBytes)
+      await entry.snapshot.verifyAll()
     } catch (error) {
-      if (!this.active.includes(entry)) {
+      if (!this.withdrawOwner(entry, error)) {
         return null
       }
-      const pluginKey = entry.registration.pluginKey
-      for (const candidate of this.active) {
-        if (candidate.registration.pluginKey === pluginKey) {
-          candidate.controller.abort()
-        }
-      }
-      this.active = this.active.filter(
-        (candidate) => candidate.registration.pluginKey !== pluginKey
-      )
-      this.errors.set(pluginKey, error instanceof Error ? error.message : String(error))
       throw error
     }
     return entry.canRead()
@@ -119,9 +111,40 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
           registration: structuredClone(entry.registration),
           plugin: structuredClone(entry.plugin),
           isCurrent: () => this.active.includes(entry) && entry.canRead(),
-          signal: entry.controller.signal
+          signal: entry.controller.signal,
+          readArtifact: async (path) => {
+            if (!entry.snapshot.hasCaptured(path)) {
+              throw new Error(`${this.definition.label} artifact was not admitted`)
+            }
+            let text: string
+            try {
+              text = await entry.snapshot.readCaptured(path)
+            } catch (error) {
+              this.withdrawOwner(entry, error)
+              throw error
+            }
+            if (!this.active.includes(entry) || !entry.canRead()) {
+              throw new Error(`${this.definition.label} authority changed during artifact read`)
+            }
+            return text
+          }
         }
       : null
+  }
+
+  private withdrawOwner(entry: RecipeAdmission<Recipe>, error: unknown): boolean {
+    if (!this.active.includes(entry)) {
+      return false
+    }
+    const pluginKey = entry.registration.pluginKey
+    for (const candidate of this.active) {
+      if (candidate.registration.pluginKey === pluginKey) {
+        candidate.controller.abort()
+      }
+    }
+    this.active = this.active.filter((candidate) => candidate.registration.pluginKey !== pluginKey)
+    this.errors.set(pluginKey, error instanceof Error ? error.message : String(error))
+    return true
   }
 
   async reconcile(
@@ -175,6 +198,9 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
               throw new Error(`duplicate ${this.definition.label} id "${recipe.id}"`)
             }
             seen.add(recipe.id)
+            for (const artifact of this.definition.additionalArtifacts?.(recipe) ?? []) {
+              await snapshot.capture(artifact.path, artifact.maxBytes)
+            }
             const controller = new AbortController()
             const isCurrent = () =>
               !controller.signal.aborted &&
@@ -194,13 +220,11 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
             entries.push(entry)
           }
           await verifyInstructionalPluginContent(subject)
-          for (const entry of entries) {
-            await snapshot.read(entry.artifactPath, this.definition.maxBytes)
-          }
+          await snapshot.verifyAll()
           for (const entry of this.active.filter(
             (entry) => entry.registration.pluginKey === subject.pluginKey
           )) {
-            await entry.snapshot.read(entry.artifactPath, this.definition.maxBytes)
+            await entry.snapshot.verifyAll()
           }
           if (identity !== JSON.stringify(plugin)) {
             throw new Error(`${this.definition.label} owner changed during admission`)
