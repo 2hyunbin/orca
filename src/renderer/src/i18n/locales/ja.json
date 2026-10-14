@@ -1703,7 +1703,6 @@
         "f0470c7383": "詳細設定",
         "ba64270bdb": "Agent を構成する",
         "ab63f25397": "Agent 設定を開く",
-        "01d1e8f601": "Agent",
         "0c5d6a479c": "[オプション]",
         "b5a0796911": "接続",
         "dccd26d4e4": "プロジェクトを選択",
@@ -1778,8 +1777,7 @@
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "ワークツリーを作成する",
-        "createWorkspace": "ワークスペースを作成",
-        "fa90f739a5": "ワークスペースを作成する前に、プロジェクト、ワークスペース名、および Agent を選択します。"
+        "createWorkspace": "ワークスペースを作成"
       },
       "PullRequestPage": {
         "2560588245": "レビュアーのリクエストに失敗しました",

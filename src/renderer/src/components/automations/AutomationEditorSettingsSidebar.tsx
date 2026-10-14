@@ -103,6 +103,10 @@ export function AutomationEditorSettingsSidebar({
                   agents={visibleAgents}
                   value={draft.agentId}
                   onValueChange={(agentId) => onDraftChange((current) => ({ ...current, agentId }))}
+                  clearSelection={{
+                    cleared: draft.agentId === null,
+                    onClear: () => onDraftChange((current) => ({ ...current, agentId: null }))
+                  }}
                   defaultAgent={settings?.defaultTuiAgent ?? null}
                   triggerClassName={`h-9 w-full min-w-0 ${pickerTriggerClassName}`}
                   allowNarrowTrigger

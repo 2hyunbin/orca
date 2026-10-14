@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { AGENT_CATALOG } from '@/lib/agent-catalog'
 import type { AutomationDraft } from './AutomationEditorDialog'
 import { AutomationEditorSettingsSidebar } from './AutomationEditorSettingsSidebar'
@@ -58,13 +59,22 @@ function renderSidebar(onDraftChange: (updater: (d: AutomationDraft) => Automati
       onProjectChange={vi.fn()}
       onDraftChange={onDraftChange}
       onSetupDecisionTouched={vi.fn()}
-    />
+    />,
+    { wrapper: TooltipProvider }
   )
 }
 
 afterEach(cleanup)
 
 describe('AutomationEditorSettingsSidebar agent picker', () => {
+  it('clears the draft agent instead of keeping a hidden selection', () => {
+    const onDraftChange = vi.fn()
+    renderSidebar(onDraftChange)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear agent selection' }))
+    const updater = onDraftChange.mock.calls[0][0]
+    expect(updater(DRAFT).agentId).toBeNull()
+  })
+
   it('offers agents only, never Blank Terminal', () => {
     const onDraftChange = vi.fn()
     renderSidebar(onDraftChange)

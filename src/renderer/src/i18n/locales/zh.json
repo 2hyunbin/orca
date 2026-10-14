@@ -1703,7 +1703,6 @@
         "f0470c7383": "高级",
         "ba64270bdb": "配置智能体",
         "ab63f25397": "打开智能体设置",
-        "01d1e8f601": "智能体",
         "0c5d6a479c": "[可选]",
         "b5a0796911": "连接",
         "dccd26d4e4": "选择项目",
@@ -1778,8 +1777,7 @@
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "创建工作树",
-        "createWorkspace": "创建工作区",
-        "fa90f739a5": "创建工作区之前选择项目、工作区名称和智能体。"
+        "createWorkspace": "创建工作区"
       },
       "PullRequestPage": {
         "2560588245": "请求评审人失败",

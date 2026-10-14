@@ -136,7 +136,7 @@ function provisionWithSetup(
   })
 }
 
-describe('provisionWorktreeTerminals with the "None" default', () => {
+describe('provisionWorktreeTerminals with a cleared creation choice', () => {
   const none = { defaultTuiAgent: 'blank', newWorkspaceSetupOnly: true }
 
   it('honours a one-off None choice over the host blank default', async () => {
@@ -151,10 +151,10 @@ describe('provisionWorktreeTerminals with the "None" default', () => {
     expect(titles()).toEqual([undefined, 'Setup'])
   })
 
-  it('opens only the Setup tab', async () => {
+  it('ignores the retired saved None flag without an explicit cleared choice', async () => {
     const { host, titles } = createHost(none)
     await expect(provisionWithSetup(host)).resolves.toMatchObject({ setupSpawned: true })
-    expect(titles()).toEqual(['Setup'])
+    expect(titles()).toEqual([undefined, 'Setup'])
   })
 
   it('keeps the blank terminal for a plain blank default', async () => {
@@ -165,7 +165,7 @@ describe('provisionWorktreeTerminals with the "None" default', () => {
 
   it('falls back to a blank terminal when no setup runs', async () => {
     const { host, titles } = createHost(none)
-    await provisionWithSetup(host, false)
+    await provisionWithSetup(host, false, true)
     expect(titles()).toEqual([undefined])
   })
 
@@ -174,7 +174,7 @@ describe('provisionWorktreeTerminals with the "None" default', () => {
     const createTerminal = vi.mocked(host.createTerminal)
     createTerminal.mockRejectedValueOnce(new Error('spawn failed'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await expect(provisionWithSetup(host)).resolves.toEqual({
+    await expect(provisionWithSetup(host, true, true)).resolves.toEqual({
       setupSpawned: false,
       setupTerminalHandle: null
     })
@@ -184,7 +184,7 @@ describe('provisionWorktreeTerminals with the "None" default', () => {
 
   it('keeps the shell a split setup needs', async () => {
     const { host, titles } = createHost({ ...none, setupScriptLaunchMode: 'split-vertical' })
-    await provisionWithSetup(host)
+    await provisionWithSetup(host, true, true)
     expect(titles()).toEqual([undefined])
     expect(host.splitTerminal).toHaveBeenCalledTimes(1)
   })

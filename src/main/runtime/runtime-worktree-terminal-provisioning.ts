@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import { buildObservedSetupCommand } from './orchestration/setup-completion-signal'
 import { buildSetupRunnerCommand } from '../../shared/setup-runner-command'
-import { isNewWorkspaceSetupOnlyDefault } from '../../shared/new-workspace-setup-only'
 import type { RuntimeStore } from './runtime-store-contract'
 
 type TerminalResult = { handle: string }
@@ -132,11 +131,9 @@ export async function provisionWorktreeTerminals(
     let primaryHandle = args.primaryTerminalHandle ?? defaultHandles[0] ?? null
     const settings = host.getSettings()
     const setupLaunchMode = settings.setupScriptLaunchMode ?? 'new-tab'
-    // Why: "None" default leaves the Setup tab as the only surface; a split still needs a shell to split from.
+    // A cleared creation choice leaves Setup as the only surface; splits still need a shell.
     const setupOnly =
-      args.setup !== undefined &&
-      setupLaunchMode === 'new-tab' &&
-      (args.setupOnly ?? isNewWorkspaceSetupOnlyDefault(settings))
+      args.setup !== undefined && setupLaunchMode === 'new-tab' && args.setupOnly === true
     if (!args.hasStartupTerminal && !primaryHandle) {
       if (setupOnly) {
         shellSkippedForSetup = true

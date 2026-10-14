@@ -1814,7 +1814,6 @@
         "f0470c7383": "Avancé",
         "ba64270bdb": "Configurer les agents",
         "ab63f25397": "Ouvrir les paramètres des agents",
-        "01d1e8f601": "Agent",
         "0c5d6a479c": "[Optionnel]",
         "b5a0796911": "Se connecter",
         "dccd26d4e4": "Choisir le projet",
@@ -1886,8 +1885,7 @@
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "Créer un worktree",
-        "createWorkspace": "Créer un espace de travail",
-        "fa90f739a5": "Choisissez le projet, le nom de l'espace de travail et l'agent avant de créer l'espace de travail."
+        "createWorkspace": "Créer un espace de travail"
       },
       "PullRequestPage": {
         "2560588245": "Échec de la demande de reviewer",

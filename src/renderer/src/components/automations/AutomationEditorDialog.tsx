@@ -37,7 +37,7 @@ export const AUTOMATION_EDITOR_SEGMENTED_ITEM_CLASS =
 export type AutomationDraft = {
   name: string
   prompt: string
-  agentId: TuiAgent
+  agentId: TuiAgent | null
   /** Saved as-is; empty means none. */
   extraAgentArgs: string
   projectId: string
@@ -230,7 +230,7 @@ export function AutomationEditorDialog({
           isEditingExternal={isEditingExternal}
           isHermesCreate={isHermesCreate}
           isSaving={isSaving}
-          canSave={canSave}
+          canSave={canSave && (isHermesTarget || draft.agentId !== null)}
           hasProjects={repos.length > 0}
           onOpenChange={onOpenChange}
           onSave={onSave}
