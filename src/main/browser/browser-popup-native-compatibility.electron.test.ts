@@ -312,8 +312,8 @@ describe('hidden Chromium native popup request compatibility', () => {
             },
             { targetOrigin, opaque, shift }
           )
-          if (opaque && name === 'route') {
-            // Electron does not forward opaque OOPIF input to the guest's route gesture gate.
+          if (opaque) {
+            // Prime hidden Linux OOPIF hit testing and the route's root gesture gate.
             await page.locator('#frame-gesture').click()
           }
           await page
