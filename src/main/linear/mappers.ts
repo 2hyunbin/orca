@@ -8,6 +8,8 @@ type IssueWithChildren = Issue & {
 type MapLinearIssueOptions = {
   includeChildren?: boolean
   includeProject?: boolean
+  includeAssignee?: boolean
+  includeLabels?: boolean
 }
 
 async function optionalRelation<T>(value: Promise<T> | T): Promise<T | undefined> {
@@ -39,7 +41,9 @@ export async function mapLinearIssue(
   const [state, team, assignee, project] = await Promise.all([
     optionalRelation(issue.state),
     optionalRelation(issue.team),
-    optionalRelation(issue.assignee),
+    options.includeAssignee === false
+      ? Promise.resolve(undefined)
+      : optionalRelation(issue.assignee),
     options.includeProject ? optionalRelation(issue.project) : Promise.resolve(undefined)
   ])
 
@@ -49,7 +53,7 @@ export async function mapLinearIssue(
   // in the UI, not critical for identification).
   let labelNames: string[] = []
   let labelIds: string[] = []
-  if ('labels' in issue && typeof issue.labels === 'function') {
+  if (options.includeLabels !== false && 'labels' in issue && typeof issue.labels === 'function') {
     try {
       const labelsConnection = await (issue as Issue).labels()
       labelNames = labelsConnection.nodes.map((l) => l.name)

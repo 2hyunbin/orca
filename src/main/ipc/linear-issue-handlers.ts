@@ -106,12 +106,19 @@ export function registerLinearIssueHandlers(): void {
     }
   )
 
-  ipcMain.handle('linear:getIssue', async (_event, args: { id: string; workspaceId?: string }) => {
-    if (typeof args?.id !== 'string' || !args.id.trim()) {
-      return null
+  ipcMain.handle(
+    'linear:getIssue',
+    async (_event, args: { id: string; workspaceId?: string; statusOnly?: boolean }) => {
+      if (typeof args?.id !== 'string' || !args.id.trim()) {
+        return null
+      }
+      return getIssue(
+        args.id.trim(),
+        normalizeWorkspaceId(args.workspaceId),
+        args.statusOnly === true
+      )
     }
-    return getIssue(args.id.trim(), normalizeWorkspaceId(args.workspaceId))
-  })
+  )
 
   ipcMain.handle(
     'linear:updateIssue',

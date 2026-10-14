@@ -46,20 +46,46 @@ export async function linearCreateSubIssue(
   return linearCreateIssue(settings, args)
 }
 
+export type LinearIssueStatus = Pick<
+  LinearIssue,
+  'id' | 'identifier' | 'workspaceId' | 'team' | 'state'
+>
+
+export async function linearGetIssueStatus(
+  settings: RuntimeLinearSettings,
+  id: string,
+  workspaceId?: string | null
+): Promise<LinearIssueStatus | null> {
+  return readLinearIssue(settings, id, workspaceId, true)
+}
+
 export async function linearGetIssue(
   settings: RuntimeLinearSettings,
   id: string,
   workspaceId?: string | null
+): Promise<LinearIssue | null> {
+  return readLinearIssue(settings, id, workspaceId)
+}
+
+async function readLinearIssue(
+  settings: RuntimeLinearSettings,
+  id: string,
+  workspaceId?: string | null,
+  statusOnly = false
 ): Promise<LinearIssue | null> {
   const target = getLinearRuntimeTarget(settings)
   return target.kind === 'environment'
     ? callRuntimeRpc<LinearIssue | null>(
         target,
         'linear.getIssue',
-        { id, workspaceId: workspaceId ?? undefined },
+        { id, workspaceId: workspaceId ?? undefined, ...(statusOnly ? { statusOnly: true } : {}) },
         { timeoutMs: 30_000 }
       )
-    : window.api.linear.getIssue({ id, workspaceId: workspaceId ?? undefined })
+    : window.api.linear.getIssue({
+        id,
+        workspaceId: workspaceId ?? undefined,
+        ...(statusOnly ? { statusOnly: true } : {})
+      })
 }
 
 export async function linearUpdateIssue(

@@ -47,8 +47,12 @@ export class RuntimeLinearContextCommands extends RuntimeLinearStateCommands {
     })
   }
 
-  linearGetIssue(id: string, workspaceId?: string): ReturnType<typeof getLinearIssue> {
-    return getLinearIssue(id, workspaceId)
+  linearGetIssue(
+    id: string,
+    workspaceId?: string,
+    statusOnly = false
+  ): ReturnType<typeof getLinearIssue> {
+    return getLinearIssue(id, workspaceId, statusOnly)
   }
 
   linearUpdateIssue(

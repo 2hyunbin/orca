@@ -56,7 +56,11 @@ export type LinearApi = {
     | { ok: true; id: string; identifier: string; title: string; url: string }
     | { ok: false; error: string }
   >
-  getIssue: (args: { id: string; workspaceId?: string }) => Promise<LinearIssue | null>
+  getIssue: (args: {
+    id: string
+    workspaceId?: string
+    statusOnly?: boolean
+  }) => Promise<LinearIssue | null>
   updateIssue: (args: {
     id: string
     updates: LinearIssueUpdate

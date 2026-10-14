@@ -46,7 +46,8 @@ export const CreateIssue = z.object({
 
 export const IssueId = z.object({
   id: requiredString('Issue ID is required'),
-  workspaceId: OptionalString
+  workspaceId: OptionalString,
+  statusOnly: z.boolean().optional()
 })
 
 export const IssueComment = z.object({

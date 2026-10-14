@@ -35,7 +35,8 @@ const ISSUE_DETAIL_TIMEOUT_MS = 30_000
 
 export async function getIssue(
   id: string,
-  workspaceId?: LinearWorkspaceSelection | null
+  workspaceId?: LinearWorkspaceSelection | null,
+  statusOnly = false
 ): Promise<LinearIssue | null> {
   const controller = new AbortController()
   const timer = setTimeout(
@@ -43,7 +44,7 @@ export async function getIssue(
     ISSUE_DETAIL_TIMEOUT_MS
   )
   try {
-    return await readIssueWithSignal(id, workspaceId, controller.signal)
+    return await readIssueWithSignal(id, workspaceId, controller.signal, statusOnly)
   } finally {
     clearTimeout(timer)
   }
@@ -52,7 +53,8 @@ export async function getIssue(
 async function readIssueWithSignal(
   id: string,
   workspaceId: LinearWorkspaceSelection | null | undefined,
-  signal: AbortSignal
+  signal: AbortSignal,
+  statusOnly: boolean
 ): Promise<LinearIssue | null> {
   const entries = getClients(workspaceId, signal)
   if (entries.length === 0) {
@@ -64,8 +66,10 @@ async function readIssueWithSignal(
     try {
       const issue = await entry.client.issue(id)
       const mapped = await mapIssueForWorkspace(entry, issue, {
-        includeChildren: true,
-        includeProject: true
+        includeChildren: !statusOnly,
+        includeProject: !statusOnly,
+        includeAssignee: !statusOnly,
+        includeLabels: !statusOnly
       })
       const descriptionImageUrls = await getDescriptionImageUrls(
         entry,

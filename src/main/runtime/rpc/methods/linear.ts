@@ -85,7 +85,7 @@ export const LINEAR_METHODS = [
     permission: 'workspace',
     params: IssueId,
     handler: async (params, { runtime }) =>
-      runtime.linearGetIssue(params.id.trim(), params.workspaceId)
+      runtime.linearGetIssue(params.id.trim(), params.workspaceId, params.statusOnly)
   }),
   defineMethod({
     name: 'linear.updateIssue',

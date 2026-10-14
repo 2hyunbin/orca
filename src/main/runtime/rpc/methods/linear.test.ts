@@ -83,6 +83,13 @@ describe('linear RPC methods', () => {
       makeRequest('linear.getIssue', { id: 'issue-3', workspaceId: 'workspace-1' })
     )
     await dispatcher.dispatch(
+      makeRequest('linear.getIssue', {
+        id: 'issue-3',
+        workspaceId: 'workspace-1',
+        statusOnly: true
+      })
+    )
+    await dispatcher.dispatch(
       makeRequest('linear.createIssue', {
         teamId: 'team-1',
         title: 'Fix bug',
@@ -142,7 +149,8 @@ describe('linear RPC methods', () => {
       limit: 5,
       workspaceId: 'workspace-1'
     })
-    expect(runtime.linearGetIssue).toHaveBeenCalledWith('issue-3', 'workspace-1')
+    expect(runtime.linearGetIssue).toHaveBeenNthCalledWith(1, 'issue-3', 'workspace-1', undefined)
+    expect(runtime.linearGetIssue).toHaveBeenNthCalledWith(2, 'issue-3', 'workspace-1', true)
     expect(runtime.linearCreateIssue).toHaveBeenCalledWith(
       'team-1',
       'Fix bug',

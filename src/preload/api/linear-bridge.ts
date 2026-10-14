@@ -42,7 +42,7 @@ export const linearApi = {
     | { ok: false; error: string }
   > => ipcRenderer.invoke('linear:createIssue', args),
 
-  getIssue: (args: { id: string; workspaceId?: string }) =>
+  getIssue: (args: { id: string; workspaceId?: string; statusOnly?: boolean }) =>
     ipcRenderer.invoke('linear:getIssue', args),
 
   updateIssue: (args: {

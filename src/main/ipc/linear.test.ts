@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   handleMock,
+  getIssueMock,
   listIssuesMock,
   listProjectIssuesMock,
   listCustomViewIssuesMock,
@@ -12,6 +13,7 @@ const {
   testConnectionMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
+  getIssueMock: vi.fn(),
   listIssuesMock: vi.fn(),
   listProjectIssuesMock: vi.fn(),
   listCustomViewIssuesMock: vi.fn(),
@@ -37,7 +39,7 @@ vi.mock('../linear/client', () => ({
 }))
 
 vi.mock('../linear/linear-issue-lookups', () => ({
-  getIssue: vi.fn(),
+  getIssue: getIssueMock,
   searchIssues: vi.fn()
 }))
 vi.mock('../linear/linear-issue-listing', () => ({
@@ -82,6 +84,7 @@ describe('registerLinearHandlers', () => {
 
   beforeEach(() => {
     handleMock.mockReset()
+    getIssueMock.mockReset()
     listIssuesMock.mockReset()
     listProjectIssuesMock.mockReset()
     listCustomViewIssuesMock.mockReset()
@@ -91,6 +94,20 @@ describe('registerLinearHandlers', () => {
     handleMock.mockImplementation((channel, handler) => {
       handlers[channel] = handler
     })
+  })
+
+  it('forwards compact status only when explicitly requested', async () => {
+    registerLinearHandlers()
+    await handlers['linear:getIssue'](null, {
+      id: ' ENG-1 ',
+      workspaceId: ' workspace-1 ',
+      statusOnly: true
+    })
+    await handlers['linear:getIssue'](null, { id: 'ENG-1', workspaceId: 'workspace-1' })
+    expect(getIssueMock.mock.calls).toEqual([
+      ['ENG-1', 'workspace-1', true],
+      ['ENG-1', 'workspace-1', false]
+    ])
   })
 
   it('forwards expanded Linear issue list limits through local IPC', async () => {

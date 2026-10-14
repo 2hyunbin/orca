@@ -1,7 +1,10 @@
-import { linearGetIssue, linearUpdateIssue } from '@/runtime/runtime-linear-issue-mutations'
+import {
+  linearGetIssueStatus,
+  linearUpdateIssue,
+  type LinearIssueStatus
+} from '@/runtime/runtime-linear-issue-mutations'
 import { linearTeamStates } from '@/runtime/runtime-linear-project-client'
 import type { LinearMutationResult, RuntimeLinearSettings } from '@/runtime/runtime-linear-client'
-import type { LinearIssue } from '../../../../shared/linear/issue-types'
 import type { LinearWorkflowState } from '../../../../shared/linear/workspace-types'
 import type {
   WorkspaceStatus,
@@ -26,7 +29,7 @@ export type WorkspaceBoardTaskStatusSyncMessage =
   | { kind: 'unexpected-error'; detail?: string }
 
 type WorkspaceBoardTaskStatusSyncDependencies = {
-  getIssue: typeof linearGetIssue
+  getIssue: typeof linearGetIssueStatus
   teamStates: typeof linearTeamStates
   updateIssue: typeof linearUpdateIssue
 }
@@ -74,7 +77,7 @@ export function getWorkspaceBoardTaskStatusSyncRequest(args: {
 }
 
 const defaultDeps: WorkspaceBoardTaskStatusSyncDependencies = {
-  getIssue: linearGetIssue,
+  getIssue: linearGetIssueStatus,
   teamStates: linearTeamStates,
   updateIssue: linearUpdateIssue
 }
@@ -127,7 +130,7 @@ function failed(
   return result
 }
 
-function isAlreadyInState(issue: LinearIssue, workflowState: LinearWorkflowState): boolean {
+function isAlreadyInState(issue: LinearIssueStatus, workflowState: LinearWorkflowState): boolean {
   return (
     normalizeStateName(issue.state.name) === normalizeStateName(workflowState.name) &&
     issue.state.type === workflowState.type
