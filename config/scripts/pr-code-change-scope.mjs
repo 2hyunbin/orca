@@ -334,6 +334,7 @@ const LINUX_PACKAGE_PREFIXES = [
   'config/scripts/process-failure-message.mjs',
   'config/scripts/space-sharing-copy.mjs',
   '.github/actions/prepare-linux-package-fixture/',
+  '.github/actions/prepare-wayland-clipboard/',
   'config/docker/cli-launch-contract/',
   'config/docker/headless-pairing/',
   'config/docker/headless-serve-shutdown/',
@@ -343,6 +344,7 @@ const LINUX_PACKAGE_PREFIXES = [
   'config/scripts/run-daemon-shutdown-descendants-docker',
   'config/scripts/static-appimage-package-contract',
   'native/computer-use-linux/',
+  'native/wayland-clipboard/',
   'resources/linux/',
   'config/scripts/run-headless-serve'
 ]
