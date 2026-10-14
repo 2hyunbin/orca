@@ -364,7 +364,8 @@
       "readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
-      "save": "Save"
+      "save": "Save",
+      "clearDefault": "Clear default agent"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -7091,7 +7092,6 @@
           "remoteDetectionFailed": "Couldn’t detect installed agents. Check the host connection and try again.",
           "retryDetection": "Retry",
           "02e0143be5": "Installed",
-          "110b74b022": "No agent (blank terminal)",
           "92033495ff": "Auto",
           "9b175d0f5e": "Pre-selected agent when opening a new workspace.",
           "385212c7a1": "Default Agent",
@@ -7114,7 +7114,6 @@
           "959b67385b": "Set default",
           "24e032fa34": "Default",
           "5f986a9b92": "Set as default",
-          "d7625cf8b2": "Default agent",
           "cfb3f35775": "Arguments",
           "6f99bf5dd0": "No default arguments",
           "8fbe1f37c1": "Environment",
