@@ -87,7 +87,7 @@ describe('terminal shutdown map identity', () => {
     ]
     const counts = new Map<object, number>()
     const originalKeys = Object.keys
-    const keys = vi.spyOn(Object, 'keys').mockImplementation((record: object) => {
+    const keys = vi.spyOn(Object, 'keys').mockImplementation((record) => {
       if (records.includes(record)) {
         counts.set(record, (counts.get(record) ?? 0) + 1)
       }
