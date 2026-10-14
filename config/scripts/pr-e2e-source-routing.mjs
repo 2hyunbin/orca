@@ -25,16 +25,20 @@ const MANAGED_SSH_HARNESS =
 export const PR_E2E_SOURCE_ROUTES = [
   {
     id: 'ssh.node-control-host',
-    specs: ['tests/e2e/ssh-orcad-node-control-host.spec.ts'],
+    specs: [
+      'tests/e2e/ssh-orcad-node-control-host.spec.ts',
+      'tests/e2e/ssh-orcad-node-provider.spec.ts'
+    ],
     matches: (file) =>
       [
         'config/scripts/build-orcad-node.mjs',
         'config/scripts/build-orcad-template.mjs',
         'config/scripts/orcad-control-host-template.mjs',
-        'tests/e2e/helpers/headless-layout-oracle-hosts.ts'
+        'tests/e2e/helpers/headless-layout-oracle-hosts.ts',
+        'tests/e2e/helpers/orca-serve-cli-host.ts'
       ].includes(file) ||
       (isProductSource(file) &&
-        /^(?:src\/main\/orcad\/(?:orcad-ssh|orcad-entry|orcad-build-version)|src\/shared\/host-app-version)\.ts$/.test(
+        /^(?:src\/main\/orcad\/(?:orcad-ssh|orcad-entry|orcad-build-version|orcad-plugins)|src\/shared\/host-app-version)\.ts$/.test(
           file
         ))
   },

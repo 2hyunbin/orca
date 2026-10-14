@@ -84,9 +84,9 @@ type StartedHost = Omit<HeadlessOracleHost, 'cleanups'>
 async function startOrcadHost(
   scratch: string,
   node: string,
-  grantDesktopControl: boolean
+  options: { grantDesktopControl?: boolean; extraEnv?: NodeJS.ProcessEnv }
 ): Promise<StartedHost> {
-  const profile = cliServeProfile(scratch)
+  const profile = cliServeProfile(scratch, options.extraEnv)
   const port = await reserveLoopbackPort()
   const env = { ...profile.env, ORCA_USER_DATA: profile.userDataDir }
   const launch = (): Promise<ReadyProcess<{ pairingUrl: string; daemon: string }>> =>
@@ -100,7 +100,7 @@ async function startOrcadHost(
         '--port',
         String(port),
         '--json',
-        ...(grantDesktopControl ? ['--grant-desktop-control'] : [])
+        ...(options.grantDesktopControl ? ['--grant-desktop-control'] : [])
       ],
       env,
       timeoutMs: 120_000,
@@ -169,10 +169,10 @@ function profileParent(): string {
 
 export async function startHeadlessOracleHost(
   kind: HeadlessHostKind,
-  options: { grantDesktopControl?: boolean } = {}
+  options: { grantDesktopControl?: boolean; extraEnv?: NodeJS.ProcessEnv } = {}
 ): Promise<HeadlessOracleHost> {
-  if (options.grantDesktopControl && kind !== 'orcad') {
-    throw new Error('Explicit desktop control is supported by the Node fixture only')
+  if ((options.grantDesktopControl || options.extraEnv) && kind !== 'orcad') {
+    throw new Error('Explicit launch options are supported by the Node fixture only')
   }
   const scratch = mkdtempSync(path.join(profileParent(), 'lo-'))
   try {
@@ -181,7 +181,7 @@ export async function startHeadlessOracleHost(
       throw new Error('out/orcad or its pinned Node is missing (pnpm build:orcad)')
     }
     const started = node
-      ? await startOrcadHost(scratch, node, options.grantDesktopControl === true)
+      ? await startOrcadHost(scratch, node, options)
       : await startElectronHost(scratch)
     const cleanups: (() => void)[] = []
     return {

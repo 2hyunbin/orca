@@ -37,13 +37,17 @@ export function isolatedServeProfile(
 }
 
 /** A fresh isolated profile the CLI and whichever host it starts both use. */
-export function cliServeProfile(parent: string): { userDataDir: string; env: NodeJS.ProcessEnv } {
+export function cliServeProfile(
+  parent: string,
+  launchEnv: NodeJS.ProcessEnv = {}
+): { userDataDir: string; env: NodeJS.ProcessEnv } {
   const userDataDir = mkdtempSync(path.join(parent, 'cli-serve-'))
   // The lock flag makes e2e builds take the profile lock this test reads, as the host helper does.
   const isolation = isolatedServeProfile(userDataDir, {
     NODE_ENV: 'development',
     ORCA_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1',
-    ORCA_E2E_HEADLESS: '1'
+    ORCA_E2E_HEADLESS: '1',
+    ...launchEnv
   })
   return {
     userDataDir,

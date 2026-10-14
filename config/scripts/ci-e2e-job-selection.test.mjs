@@ -338,3 +338,14 @@ it('runs the Node SSH journey in the lane that packages its deployment resources
     build?.run.indexOf('mv out/orcad-template')
   )
 })
+
+it('runs the selected Node provider UI in the deployment-template lane', () => {
+  const spec = 'tests/e2e/ssh-orcad-node-provider.spec.ts'
+  expectManagedSshLane(spec)
+  for (const source of [
+    'src/main/orcad/orcad-plugins.ts',
+    'tests/e2e/helpers/orca-serve-cli-host.ts'
+  ]) {
+    expect(selectPrE2eSpecs([source])).toContain(spec)
+  }
+})
