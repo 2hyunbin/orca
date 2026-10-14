@@ -66,7 +66,14 @@ function savedServeTabs(): WorkspaceSessionState {
       title: 'Example'
     })!
   }
-  return session
+  // The tab a window last showed, as it records it.
+  return {
+    ...session,
+    activeBrowserTabIdByWorktree: {
+      ...session.activeBrowserTabIdByWorktree,
+      [TEST_WORKTREE_ID]: 'page-2'
+    }
+  }
 }
 
 /** A tab a window saved: its tab, page and unified tab each have their own id. */
@@ -165,7 +172,7 @@ describe('a saved browser tab on a host with no window', () => {
     expect(listed.tabs.some((tab) => tab.id === 'page-1')).toBe(false)
   })
 
-  it('is saved, as the active tab, when a client creates it', async () => {
+  it('is saved, without becoming the recorded active tab, when a client creates it', async () => {
     const { runtime, getSession } = restartedServe(makeWorkspaceSessionWithHeadlessTerminal())
 
     await runtime.browserTabCreate({
@@ -176,7 +183,8 @@ describe('a saved browser tab on a host with no window', () => {
 
     const saved = getSession().browserTabsByWorktree?.[TEST_WORKTREE_ID] ?? []
     expect(saved.map((tab) => [tab.id, tab.url])).toEqual([['page-new', 'https://example.com/new']])
-    expect(getSession().activeBrowserTabIdByWorktree?.[TEST_WORKTREE_ID]).toBe('page-new')
+    // Which tab shows is a view's choice; opening one records none.
+    expect(getSession().activeBrowserTabIdByWorktree?.[TEST_WORKTREE_ID]).toBeUndefined()
   })
 
   it('keeps its saved title when its page is restored', async () => {

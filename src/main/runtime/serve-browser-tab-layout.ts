@@ -68,7 +68,7 @@ export function withOpenedServeBrowserTab(
     worktreeId: page.worktreeId,
     createdAt: now
   }
-  const saved = saveWorkspaceLayout({
+  return saveWorkspaceLayout({
     ...loaded,
     layout: applied.model,
     facts: {
@@ -80,14 +80,6 @@ export function withOpenedServeBrowserTab(
       browserPagesByWorkspace: { ...facts.browserPagesByWorkspace, [page.pageId]: [savedPage] }
     }
   })
-  // A window shows the browser tab it just opened; a host's tab is named by its page.
-  return {
-    ...saved,
-    activeBrowserTabIdByWorktree: {
-      ...saved.activeBrowserTabIdByWorktree,
-      [page.worktreeId]: page.pageId
-    }
-  }
 }
 
 /**
