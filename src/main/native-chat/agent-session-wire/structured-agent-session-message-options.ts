@@ -19,7 +19,6 @@ export async function writeStructuredAgentSessionOption(
   const ctx = {
     sessionId,
     fence,
-    now: () => context.now(),
     adapter: context.deps.adapter,
     now: context.now,
     persistOptions: (options: Readonly<Record<string, string>>) =>
