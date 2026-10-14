@@ -43,6 +43,7 @@ export async function createPluginCatalogFixture(
     formatViewers?: boolean
     hostileViewers?: boolean
     generatedTemplates?: boolean
+    environmentPortable?: boolean
     environmentRecipes?: boolean
     environmentConnection?: EnvironmentRecipeResource['connection']
     environmentRecovery?: { interruptCreate: boolean }
@@ -204,7 +205,8 @@ export async function createPluginCatalogFixture(
         directory,
         join(root, 'provider-executed'),
         options.environmentConnection,
-        options.environmentRecovery
+        options.environmentRecovery,
+        options.environmentPortable
       )
     } else if (sample.template) {
       await writePluginAuthorTemplateFixture(directory, sample.template)

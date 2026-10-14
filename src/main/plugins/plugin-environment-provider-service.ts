@@ -2,7 +2,8 @@ import { pluginEnvironmentProviderHistorySchema } from '../../shared/plugins/plu
 import { PluginEnvironmentRecipeJournalFile } from './plugin-environment-recipe-journal-file'
 import { PluginEnvironmentProviderMigration } from './plugin-environment-provider-migration'
 import type { SshTarget } from '../../shared/ssh-types'
-import { createPluginEnvironmentProviderControlContext } from './plugin-environment-provider-control-context'
+import type { EnvironmentAdapterRuntime } from './plugin-environment-adapter-launch'
+import { openConfiguredEnvironmentProviderControlContext } from './plugin-environment-provider-control-context'
 import {
   pluginEnvironmentProviderMigrationPrepareSchema,
   pluginEnvironmentProviderMigrationCommitSchema
@@ -21,7 +22,6 @@ import { environmentRecipeRequestSchema } from '../../shared/environment-recipe-
 import { pluginEnvironmentProviderReviewSchema } from '../../shared/plugins/plugin-environment-provider-api'
 import { environmentRecipeDeclaredActions } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import type { PluginService } from './plugin-service'
-import type { PluginServiceOptions } from './plugin-service-options'
 import { PluginEnvironmentProviderContextStore } from './plugin-environment-provider-context-store'
 import { buildPluginEnvironmentRecipeBinding } from './plugin-environment-recipe-binding'
 import { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-provider-release'
@@ -51,6 +51,7 @@ export class PluginEnvironmentProviderService {
       onChanged?(providerId: string): void
       retireConnections?(providerId: string, resourceId?: string): Promise<void>
       retireTarget?(target: SshTarget): Promise<void>
+      adapterRuntime?: EnvironmentAdapterRuntime
     }
   ) {
     this.catalog = new PluginEnvironmentProviderCatalog({
@@ -106,35 +107,15 @@ export class PluginEnvironmentProviderService {
     this.host = new PluginEnvironmentRecipeHost({
       service: options.service,
       userDataPath: options.userDataPath,
-      controlContext: async (providerId) => {
-        const context = await this.contexts.open(providerId)
-        if (!context || this.lifetime.signal.aborted) {
-          return null
-        }
-        return createPluginEnvironmentProviderControlContext({
+      adapterRuntime: options.adapterRuntime,
+      controlContext: (providerId) =>
+        openConfiguredEnvironmentProviderControlContext({
+          providerId,
+          contexts: this.contexts,
           userDataPath: options.userDataPath,
-          binding: context.record.binding,
           launchEnvironment: options.launchEnvironment,
-          signal: this.lifetime.signal,
-          isCurrent: () => !this.lifetime.signal.aborted && context.isCurrent()
+          signal: this.lifetime.signal
         })
-      }
-    })
-  }
-
-  static forService(
-    service: PluginService,
-    options: PluginServiceOptions,
-    onChanged?: (providerId: string) => void
-  ): PluginEnvironmentProviderService {
-    return new PluginEnvironmentProviderService({
-      service,
-      onChanged,
-      retireConnections: options.retireEnvironmentProviderConnections,
-      retireTarget: options.retireEnvironmentProviderSshTarget,
-      userDataPath: options.userDataPath,
-      launchEnvironment:
-        options.getEnvironmentRecipeLaunchEnvironment ?? (async () => ({ ...process.env }))
     })
   }
 

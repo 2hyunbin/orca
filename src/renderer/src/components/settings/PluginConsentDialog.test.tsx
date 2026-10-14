@@ -335,7 +335,13 @@ describe('PluginConsentDialog', () => {
           args: ['orca', 'list', ';literal'],
           timeoutSeconds: 120
         },
-        { action: 'delete', program: 'company-dev', args: ['orca', 'delete'], timeoutSeconds: 60 }
+        {
+          action: 'delete',
+          program: 'orca:node',
+          entry: 'dist/provider.mjs',
+          args: ['delete'],
+          timeoutSeconds: 60
+        }
       ]
     }
     const entry = {
@@ -356,6 +362,11 @@ describe('PluginConsentDialog', () => {
     expect(document.body.textContent).toContain('Environment provider commands')
     expect(document.body.textContent).toContain('company-dev')
     expect(document.body.textContent).toContain('["orca","list",";literal"]')
+    expect(document.body.textContent).toContain('Orca-provided Node runtime')
+    expect(document.body.textContent).toContain('Reviewed adapter: dist/provider.mjs')
+    expect(document.body.textContent).toContain(
+      'account permissions, credentials and network access'
+    )
     expect(document.body.textContent).not.toContain('Declarative content')
     expect(document.body.textContent).not.toContain('validated content only')
     const commands = Array.from(document.querySelectorAll('pre'))

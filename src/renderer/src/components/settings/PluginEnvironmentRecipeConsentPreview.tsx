@@ -18,6 +18,13 @@ function actionLabel(action: PluginEnvironmentRecipePreview['commands'][number][
   )
 }
 
+function reviewedCommandText(command: PluginEnvironmentRecipePreview['commands'][number]): string {
+  const program = command.entry
+    ? `${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.nodeRuntime', 'Orca-provided Node runtime')}\n${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.adapterEntry', 'Reviewed adapter')}: ${command.entry}`
+    : command.program
+  return `${program}\n${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.literalArguments', 'Literal arguments')}: ${JSON.stringify(command.args)}\n${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.timeout', 'Timeout')}: ${command.timeoutSeconds}s`
+}
+
 export function PluginEnvironmentRecipeConsentPreview({
   recipes
 }: {
@@ -30,6 +37,14 @@ export function PluginEnvironmentRecipeConsentPreview({
         'auto.components.settings.PluginEnvironmentRecipeConsentPreview.heading',
         'Environment provider commands'
       )}
+      notice={
+        recipes.some((recipe) => recipe.commands.some((command) => command.entry))
+          ? translate(
+              'auto.components.settings.PluginEnvironmentRecipeConsentPreview.adapterAuthority',
+              'Runs code with this control host’s account permissions, credentials and network access.'
+            )
+          : undefined
+      }
       recipes={recipes.map((recipe) => ({
         id: recipe.providerId,
         name: recipe.name,
@@ -37,7 +52,7 @@ export function PluginEnvironmentRecipeConsentPreview({
         commands: recipe.commands.map((command) => ({
           id: command.action,
           label: actionLabel(command.action),
-          text: `${command.program}\n${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.literalArguments', 'Literal arguments')}: ${JSON.stringify(command.args)}\n${translate('auto.components.settings.PluginEnvironmentRecipeConsentPreview.timeout', 'Timeout')}: ${command.timeoutSeconds}s`
+          text: reviewedCommandText(command)
         }))
       }))}
     />

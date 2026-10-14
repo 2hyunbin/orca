@@ -54,15 +54,15 @@ export async function executeReviewedEnvironmentCommand<T extends object, R>(inp
   const command = { ...invocation.command, args: [...invocation.command.args] }
   const env = { ...input.env }
   const authority = await input.authorize(invocation)
+  if (input.signal?.aborted) {
+    return { kind: 'refused', reason: 'cancelled' }
+  }
   const portable = 'entry' in command
   if (portable && !authority?.launch) {
     return { kind: 'refused', reason: 'approval-required' }
   }
   if (!authority || !authority.isCurrent() || authority.signal.aborted) {
     return { kind: 'refused', reason: 'approval-required' }
-  }
-  if (input.signal?.aborted) {
-    return { kind: 'refused', reason: 'cancelled' }
   }
   const signal = input.signal ? AbortSignal.any([input.signal, authority.signal]) : authority.signal
   const launch = portable ? authority.launch : undefined

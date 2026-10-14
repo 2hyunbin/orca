@@ -10,10 +10,12 @@ export type PluginRecipeConsentContent = {
 export function PluginRecipeConsentPreview({
   headingId,
   heading,
+  notice,
   recipes
 }: {
   headingId: string
   heading: string
+  notice?: string
   recipes: readonly PluginRecipeConsentContent[]
 }): React.JSX.Element | null {
   if (!recipes.length) {
@@ -27,6 +29,7 @@ export function PluginRecipeConsentPreview({
       >
         {heading}
       </h3>
+      {notice ? <p className="text-xs leading-5 text-muted-foreground">{notice}</p> : null}
       {recipes.map((recipe) => (
         <div key={recipe.id} className="space-y-2 rounded-md border border-border p-3">
           <div>

@@ -16,6 +16,7 @@ import { buildPluginEnvironmentRecipeBinding } from './plugin-environment-recipe
 import { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-provider-release'
 import { createPluginEnvironmentProviderControlContext } from './plugin-environment-provider-control-context'
 import { inspectPluginEnvironmentMigrationInventory } from './plugin-environment-provider-migration-inventory'
+import type { EnvironmentAdapterRuntime } from './plugin-environment-adapter-launch'
 import { withFileTransactionLock } from '../file-transaction-lock'
 
 function digest(journal: EnvironmentRecipeJournal): string {
@@ -42,6 +43,7 @@ export class PluginEnvironmentProviderMigration {
       signal: AbortSignal
       retireConnections(providerId: string): Promise<void>
       onChanged?(providerId: string): void
+      adapterRuntime?: EnvironmentAdapterRuntime
     }
   ) {
     this.contexts = new PluginEnvironmentProviderContextStore(options.userDataPath)
@@ -95,7 +97,9 @@ export class PluginEnvironmentProviderMigration {
       review,
       authority,
       control,
-      signal
+      signal,
+      adapterRuntime: this.options.adapterRuntime,
+      userDataPath: this.options.userDataPath
     })
     if (
       !context.isCurrent() ||

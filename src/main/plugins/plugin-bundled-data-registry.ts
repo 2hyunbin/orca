@@ -25,6 +25,17 @@ import {
 } from '../../shared/plugins/plugin-bundled-data-state'
 
 export class PluginBundledDataRegistry {
+  static forService(options: {
+    bundledPluginsRoot?: string
+    hostVersion: string
+  }): PluginBundledDataRegistry {
+    return new PluginBundledDataRegistry(
+      options.bundledPluginsRoot
+        ? { root: options.bundledPluginsRoot, hostVersion: options.hostVersion }
+        : undefined
+    )
+  }
+
   private readonly snapshots = new Map<string, ValidDiscoveredPlugin>()
   private failures: DiscoveredPlugin[] = []
   private readonly selected = new Map<string, ValidDiscoveredPlugin>()

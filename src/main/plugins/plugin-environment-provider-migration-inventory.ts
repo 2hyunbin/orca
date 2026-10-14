@@ -4,6 +4,12 @@ import type { EnvironmentRecipeResource } from '../../shared/environment-recipe-
 import type { EnvironmentRecipeJournalOperation } from '../../shared/plugins/plugin-environment-recipe-journal'
 import { executePluginEnvironmentRecipe } from './plugin-environment-recipe-execution'
 import { environmentCommandInput } from './plugin-environment-command-execution'
+import {
+  prepareEnvironmentAdapterLaunch,
+  type EnvironmentAdapterRuntime
+} from './plugin-environment-adapter-launch'
+import { environmentAdapterRuntime } from './plugin-environment-adapter-runtime'
+import { verifyReviewedPluginRelease } from './plugin-reviewed-release'
 import type { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-provider-release'
 import type { createPluginEnvironmentProviderControlContext } from './plugin-environment-provider-control-context'
 
@@ -12,6 +18,8 @@ export async function inspectPluginEnvironmentMigrationInventory(input: {
   authority: Awaited<ReturnType<typeof resolveReviewedPluginEnvironmentProvider>>
   control: Awaited<ReturnType<typeof createPluginEnvironmentProviderControlContext>>
   signal?: AbortSignal
+  adapterRuntime?: EnvironmentAdapterRuntime
+  userDataPath: string
 }): Promise<{
   resources: EnvironmentRecipeResource[]
   operations: EnvironmentRecipeJournalOperation[]
@@ -37,10 +45,21 @@ export async function inspectPluginEnvironmentMigrationInventory(input: {
       cwd: input.control.cwd,
       env: input.control.env,
       signal: input.signal,
-      authorize: async () => ({
-        isCurrent: () => input.authority.isCurrent() && input.control.isCurrent(),
-        signal: AbortSignal.any([input.authority.signal, input.control.signal])
-      })
+      authorize: async (invocation) => {
+        const signal = AbortSignal.any([input.authority.signal, input.control.signal])
+        const launch = await prepareEnvironmentAdapterLaunch({
+          authority: input.authority,
+          invocation,
+          signal: input.signal ? AbortSignal.any([signal, input.signal]) : signal,
+          runtime: input.adapterRuntime ?? environmentAdapterRuntime(input.userDataPath)
+        })
+        await verifyReviewedPluginRelease(input.authority.plugin, input.review.reviewRevision)
+        return {
+          isCurrent: () => input.authority.isCurrent() && input.control.isCurrent(),
+          signal,
+          ...(launch ? { launch } : {})
+        }
+      }
     })
     if (result.kind !== 'completed' || result.response.kind !== 'inventory') {
       throw new Error('The provider did not confirm migration inventory')

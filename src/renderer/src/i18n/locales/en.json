@@ -12828,7 +12828,10 @@
           "heading": "Environment provider commands",
           "literalArguments": "Literal arguments",
           "timeout": "Timeout",
-          "inspect-operation": "Inspect interrupted operation"
+          "inspect-operation": "Inspect interrupted operation",
+          "nodeRuntime": "Orca-provided Node runtime",
+          "adapterEntry": "Reviewed adapter",
+          "adapterAuthority": "Runs code with this control host’s account permissions, credentials and network access."
         },
         "PluginEnvironmentProviderAccountDialog": {
           "saveError": "Could not save this account. Refresh the provider and review its current source and commands before trying again.",

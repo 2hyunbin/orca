@@ -34,7 +34,8 @@ import { assertPluginWorkerCommand } from './plugin-command-invocation'
 import { deliverPluginEvent } from './plugin-event-delivery'
 import { PluginInstallationState } from './plugin-installation-state'
 import { PluginServiceChangeEvents } from './plugin-service-change-events'
-import { PluginEnvironmentProviderService } from './plugin-environment-provider-service'
+import type { PluginEnvironmentProviderService } from './plugin-environment-provider-service'
+import { createEnvironmentProviderService } from './plugin-environment-provider-service-options'
 import { PluginBundledDataRegistry } from './plugin-bundled-data-registry'
 import {
   refreshPluginServiceContent,
@@ -70,14 +71,7 @@ export class PluginService {
   })
 
   constructor(readonly options: PluginServiceOptions) {
-    this.bundledData = new PluginBundledDataRegistry(
-      options.bundledPluginsRoot
-        ? {
-            root: options.bundledPluginsRoot,
-            hostVersion: options.hostVersion
-          }
-        : undefined
-    )
+    this.bundledData = PluginBundledDataRegistry.forService(options)
     this.contentPacks = new PluginContentPackRegistry(
       this.contentVerifier,
       (pluginKey) => Boolean(this.options.getPluginKillListEntry?.(pluginKey)),
@@ -91,7 +85,7 @@ export class PluginService {
         this.isRuntimeApproved(plugin, false) &&
         JSON.stringify(this.findValidPlugin(plugin.pluginKey)) === JSON.stringify(plugin)
     )
-    this.environmentProviders = PluginEnvironmentProviderService.forService(
+    this.environmentProviders = createEnvironmentProviderService(
       this,
       options,
       this.changeEvents.providerChanged
@@ -193,9 +187,7 @@ export class PluginService {
     return this.installed.discovered
   }
 
-  getLogs(pluginKey: string) {
-    return this.installed.logs.get(pluginKey)
-  }
+  getLogs = (pluginKey: string) => this.installed.logs.get(pluginKey)
 
   findValidPlugin(pluginKey: string): ValidDiscoveredPlugin | null {
     return this.installed.findValid(pluginKey)

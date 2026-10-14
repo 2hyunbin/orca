@@ -25,61 +25,64 @@ async function configured(options: Parameters<typeof fixture>[0] = {}) {
   return { ...f, create }
 }
 describe('installed provider recovery runs only its reviewed receipt command', () => {
-  it('recovers a creation applied before its response was lost, preserving original failure across restart and never creating again', async () => {
-    const f = await configured({ recovery: true, loseCreateResponse: true })
-    const cancelled = new AbortController()
-    const pending = f.service.environmentProviders.execute(f.review, f.create, cancelled.signal)
-    await expect
-      .poll(async () => {
-        try {
-          return JSON.parse(await readFile(join(f.cwd, 'receipts.json'), 'utf8'))[
-            f.create.operationId
-          ]?.outcome?.kind
-        } catch {
-          return null
-        }
+  it.each([false, true])(
+    'recovers a creation applied before its response was lost, preserving original failure across restart and never creating again (portable=%s)',
+    async (portable) => {
+      const f = await configured({ portable, recovery: true, loseCreateResponse: true })
+      const cancelled = new AbortController()
+      const pending = f.service.environmentProviders.execute(f.review, f.create, cancelled.signal)
+      await expect
+        .poll(async () => {
+          try {
+            return JSON.parse(await readFile(join(f.cwd, 'receipts.json'), 'utf8'))[
+              f.create.operationId
+            ]?.outcome?.kind
+          } catch {
+            return null
+          }
+        })
+        .toBe('completed')
+      cancelled.abort()
+      expect(await pending).toMatchObject({
+        kind: 'executed',
+        result: { kind: 'unverifiable', reason: 'cancelled' }
       })
-      .toBe('completed')
-    cancelled.abort()
-    expect(await pending).toMatchObject({
-      kind: 'executed',
-      result: { kind: 'unverifiable', reason: 'cancelled' }
-    })
-    await f.service.dispose()
-    const reopened = await f.reopen()
-    const result = await reopened.environmentProviders.recover({
-      review: f.review,
-      originalOperationId: f.create.operationId,
-      queryId: randomUUID()
-    })
-    expect(result).toMatchObject({
-      kind: 'inspected',
-      result: {
-        kind: 'completed',
-        response: { kind: 'receipt', outcome: { resource: { id: 'sandbox' } } }
-      },
-      operation: {
-        status: 'unverifiable',
-        reason: 'cancelled',
-        recovery: { inventoryConfirmed: true }
-      }
-    })
-    const history = await reopened.environmentProviders.snapshot(f.review)
-    expect(history.resources).toMatchObject([{ id: 'sandbox', state: 'running' }])
-    expect(isEnvironmentRecipeOperationUnresolved(history.operations[0]!)).toBe(false)
-    const processBefore = await readFile(join(f.cwd, 'started'), 'utf8')
-    expect(await reopened.environmentProviders.execute(f.review, f.create)).toMatchObject({
-      kind: 'recorded'
-    })
-    expect(
-      await reopened.environmentProviders.recover({
+      await f.service.dispose()
+      const reopened = await f.reopen()
+      const result = await reopened.environmentProviders.recover({
         review: f.review,
         originalOperationId: f.create.operationId,
         queryId: randomUUID()
       })
-    ).toMatchObject({ kind: 'known' })
-    expect(await readFile(join(f.cwd, 'started'), 'utf8')).toBe(processBefore)
-  })
+      expect(result).toMatchObject({
+        kind: 'inspected',
+        result: {
+          kind: 'completed',
+          response: { kind: 'receipt', outcome: { resource: { id: 'sandbox' } } }
+        },
+        operation: {
+          status: 'unverifiable',
+          reason: 'cancelled',
+          recovery: { inventoryConfirmed: true }
+        }
+      })
+      const history = await reopened.environmentProviders.snapshot(f.review)
+      expect(history.resources).toMatchObject([{ id: 'sandbox', state: 'running' }])
+      expect(isEnvironmentRecipeOperationUnresolved(history.operations[0]!)).toBe(false)
+      const processBefore = await readFile(join(f.cwd, 'started'), 'utf8')
+      expect(await reopened.environmentProviders.execute(f.review, f.create)).toMatchObject({
+        kind: 'recorded'
+      })
+      expect(
+        await reopened.environmentProviders.recover({
+          review: f.review,
+          originalOperationId: f.create.operationId,
+          queryId: randomUUID()
+        })
+      ).toMatchObject({ kind: 'known' })
+      expect(await readFile(join(f.cwd, 'started'), 'utf8')).toBe(processBefore)
+    }
+  )
   it('keeps a pending operation fenced when the provider has no authoritative receipt', async () => {
     const f = await configured({ recovery: true })
     await new PluginEnvironmentRecipeJournalStore(

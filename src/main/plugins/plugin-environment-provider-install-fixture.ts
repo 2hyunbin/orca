@@ -22,6 +22,9 @@ export async function disposePluginEnvironmentProviderInstallFixtures(): Promise
 export async function createPluginEnvironmentProviderInstallFixture(
   options: {
     pageSize?: number
+    portable?: boolean
+    portableArgs?: string[]
+    adapterRuntime?: PluginServiceOptions['environmentAdapterRuntime']
     retireConnections?: (providerId: string, resourceId?: string) => Promise<void>
     retireTarget?: NonNullable<PluginServiceOptions['retireEnvironmentProviderSshTarget']>
     recovery?: boolean
@@ -50,6 +53,7 @@ if(request.contextId!==(process.env.PROVIDER_CONTEXT_ID??'company/account/region
 const identity=request.queryId?{protocolVersion:1,queryId:request.queryId,providerId:request.providerId,contextId:request.contextId,operation:request.operation}:{protocolVersion:2,operationId:request.operationId,providerId:request.providerId,contextId:request.contextId,action:request.action};
 process.stdout.write(JSON.stringify({...identity,kind:'error',code:'authentication-required',...(request.queryId?{}:{message:'Account context mismatch'})}));process.exit(0);}
 await writeFile(startedFile,String(process.pid));
+await writeFile(join(directory,'launch-info.json'),JSON.stringify({argv:process.argv,nodeOptions:process.env.NODE_OPTIONS,nodePath:process.env.NODE_PATH,electronRunAsNode:process.env.ELECTRON_RUN_AS_NODE}));
 if(process.env.PROVIDER_MODE==='hang'){setInterval(()=>{},1000);await new Promise(()=>{});}
 const backend=JSON.parse(await readFile(backendFile,'utf8'));
 let receipts={};try{receipts=JSON.parse(await readFile(receiptsFile,'utf8'));}catch{}
@@ -81,10 +85,16 @@ if((request.action==='create'&&process.env.PROVIDER_LOSE_CREATE==='1')||request.
 }
 process.stdout.write(JSON.stringify({...identity,...response}));`
   )
-  const command = {
-    program: process.execPath,
-    args: ['--input-type=module', '--eval', await readFile(program, 'utf8')]
-  }
+  const command = options.portable
+    ? {
+        program: 'orca:node',
+        entry: 'provider.mjs',
+        args: options.portableArgs ?? []
+      }
+    : {
+        program: process.execPath,
+        args: ['--input-type=module', '--eval', await readFile(program, 'utf8')]
+      }
   const recipe = pluginEnvironmentRecipeSchema.parse({
     schemaVersion: 1,
     protocolVersion: 2,
@@ -139,6 +149,8 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
     hostVersion: '1.4.0',
     retireEnvironmentProviderConnections: options.retireConnections,
     retireEnvironmentProviderSshTarget: options.retireTarget,
+    environmentAdapterRuntime:
+      options.adapterRuntime ?? (options.portable ? async () => process.execPath : undefined),
     getEnvironmentRecipeLaunchEnvironment: async () => ({
       PROVIDER_BACKEND_DIRECTORY: backendDirectory,
       PROVIDER_CONTEXT_ID: backendContext,
@@ -184,6 +196,7 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
   const host = new PluginEnvironmentRecipeHost({
     service,
     userDataPath: service.options.userDataPath,
+    adapterRuntime: service.options.environmentAdapterRuntime,
     controlContext: async () => control
   })
   return {

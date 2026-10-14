@@ -20,6 +20,12 @@ import { verifyReviewedPluginRelease } from './plugin-reviewed-release'
 import type { EnvironmentRecipeJournalBinding } from '../../shared/plugins/plugin-environment-recipe-journal'
 import { buildPluginEnvironmentRecipeBinding } from './plugin-environment-recipe-binding'
 import {
+  prepareEnvironmentAdapterLaunch,
+  type EnvironmentAdapterRuntime
+} from './plugin-environment-adapter-launch'
+import { environmentAdapterRuntime } from './plugin-environment-adapter-runtime'
+import type { EnvironmentCommandInvocation } from './plugin-environment-command-execution'
+import {
   pluginEnvironmentProviderReviewSchema,
   type PluginEnvironmentProviderReview
 } from '../../shared/plugins/plugin-environment-provider-api'
@@ -41,6 +47,7 @@ export class PluginEnvironmentRecipeHost {
       service: Pick<PluginService, 'whenReady' | 'contentPacks'>
       userDataPath: string
       controlContext(providerId: string): Promise<PluginEnvironmentRecipeControlContext | null>
+      adapterRuntime?: EnvironmentAdapterRuntime
     }
   ) {}
 
@@ -78,7 +85,7 @@ export class PluginEnvironmentRecipeHost {
       cwd: admission.control.cwd,
       env: admission.control.env,
       signal,
-      authorize: this.grant(review, admission)
+      authorize: this.grant(review, admission, signal)
     })
   }
 
@@ -105,7 +112,7 @@ export class PluginEnvironmentRecipeHost {
       cwd: admission.control.cwd,
       env: admission.control.env,
       signal,
-      authorize: this.grant(review, admission)
+      authorize: this.grant(review, admission, signal)
     })
     const operation =
       result.kind === 'completed' && result.response.kind === 'receipt'
@@ -122,9 +129,10 @@ export class PluginEnvironmentRecipeHost {
       isCurrent(): boolean
       authority: { signal: AbortSignal }
       control: { signal: AbortSignal }
-    }
+    },
+    requestSignal?: AbortSignal
   ) {
-    return async (invocation: { recipeDigest: string; providerId: string }) => {
+    return async (invocation: EnvironmentCommandInvocation<object>) => {
       if (
         invocation.recipeDigest !== review.recipeDigest ||
         invocation.providerId !== review.providerId ||
@@ -144,13 +152,28 @@ export class PluginEnvironmentRecipeHost {
         return null
       }
       await verifyReviewedPluginRelease(current.plugin, review.reviewRevision)
+      const signal = AbortSignal.any([
+        admission.authority.signal,
+        current.signal,
+        admission.control.signal
+      ])
+      let launch: Awaited<ReturnType<typeof prepareEnvironmentAdapterLaunch>>
+      try {
+        launch = await prepareEnvironmentAdapterLaunch({
+          authority: current,
+          invocation,
+          signal: requestSignal ? AbortSignal.any([signal, requestSignal]) : signal,
+          runtime:
+            this.options.adapterRuntime ?? environmentAdapterRuntime(this.options.userDataPath)
+        })
+      } catch {
+        return null
+      }
+      await verifyReviewedPluginRelease(current.plugin, review.reviewRevision)
       return {
         isCurrent: () => admission.isCurrent() && current.isCurrent(),
-        signal: AbortSignal.any([
-          admission.authority.signal,
-          current.signal,
-          admission.control.signal
-        ])
+        signal,
+        ...(launch ? { launch } : {})
       }
     }
   }

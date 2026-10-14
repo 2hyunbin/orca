@@ -2,6 +2,25 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { EnvironmentRecipeJournalBinding } from '../../shared/plugins/plugin-environment-recipe-journal'
 import { writeSecureFile } from '../../shared/secure-file'
+import type { PluginEnvironmentProviderContextStore } from './plugin-environment-provider-context-store'
+
+export async function openConfiguredEnvironmentProviderControlContext(options: {
+  providerId: string
+  contexts: PluginEnvironmentProviderContextStore
+  userDataPath: string
+  launchEnvironment(): Promise<NodeJS.ProcessEnv>
+  signal: AbortSignal
+}) {
+  const context = await options.contexts.open(options.providerId)
+  if (!context || options.signal.aborted) {
+    return null
+  }
+  return createPluginEnvironmentProviderControlContext({
+    ...options,
+    binding: context.record.binding,
+    isCurrent: () => !options.signal.aborted && context.isCurrent()
+  })
+}
 
 export async function createPluginEnvironmentProviderControlContext(options: {
   userDataPath: string
