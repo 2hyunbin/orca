@@ -206,11 +206,11 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
   const ownership = ctx.preAdoptedStablePane
     ? null
     : await nativeChatSpawnResumeOwnership(ctx.deps.runtime, args, ctx.expectedWslDistro)
-  // Why an unknown owner refuses all but a user's resume: bookkeeping must not block what the user
-  // asked for, and every automatic restore keeps its saved session for the next try.
+  // Why an unknown owner refuses only what admission already calls an automatic restore: bookkeeping
+  // must not block a resume the user asked for, and the refused restore keeps its saved session.
   if (
     ownership?.verdict === 'owned' ||
-    (ownership?.verdict === 'unverifiable' && args.spawnIntent !== 'user-resume')
+    (ownership?.verdict === 'unverifiable' && args.spawnIntent === 'automatic-restore')
   ) {
     ctx.resumeRefusal = ownership
     dropAgentLaunch(args)

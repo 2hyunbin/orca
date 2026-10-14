@@ -10,6 +10,7 @@ import {
 } from '../legacy-worker-terminal-recovery-event'
 import { useAppStore } from '../../store'
 import { forgetRefusedPaneResume, namesRefusedResume } from '@/lib/forget-refused-pane-resume'
+import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
 import { resolvePaneKey } from './agent-status-routing'
 import type { PendingAgentStatusEvent } from './agent-status-bridge-types'
 
@@ -23,7 +24,8 @@ function dropEventsRestoringRefused(
   }
 ): void {
   const restores = (event: AgentStatusIpcPayload): boolean =>
-    event.paneKey === paneKey && namesRefusedResume(refused, { ...event, agent: event.agentType })
+    resolveAgentPaneAuthorityKey(event.paneKey) === paneKey &&
+    namesRefusedResume(refused, { ...event, agent: event.agentType })
   const pending = queues.pendingAgentStatusEvents
   for (let index = pending.length - 1; index >= 0; index -= 1) {
     if (restores(pending[index].data)) {

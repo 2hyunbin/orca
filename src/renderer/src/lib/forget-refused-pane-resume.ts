@@ -24,9 +24,10 @@ export function namesRefusedResume(
 }
 
 /**
- * Main refused `paneKey`'s saved resume because a native chat owns that conversation. Forgets it
- * everywhere this renderer kept it, whether or not the pane is mounted, so nothing offers or
- * retries it. Main already forgot its own copy, so nothing is sent back.
+ * Main refused `paneKey`'s saved resume because a native chat owns that conversation. Forgets it as
+ * this pane's, whether or not the pane is mounted, so nothing offers or retries it here. Another
+ * pane holding the same conversation is refused and forgotten at its own restore. Main already
+ * forgot its own copy, so nothing is sent back.
  */
 export function forgetRefusedPaneResume(
   state: AppState,
@@ -35,32 +36,22 @@ export function forgetRefusedPaneResume(
 ): void {
   const names = (claim: Parameters<typeof namesRefusedResume>[1]) =>
     namesRefusedResume(refused, claim)
-  const live = state.agentStatusByPaneKey[paneKey]
   const retained = state.retainedAgentsByPaneKey[paneKey]
   if (retained && names({ ...retained.entry, agent: retained.agentType })) {
     state.dismissRetainedAgent(paneKey)
   }
-  const tabId = parsePaneKey(paneKey)?.tabId
-  const tab = tabId
-    ? Object.values(state.tabsByWorktree)
-        .flat()
-        .find((candidate) => candidate.id === tabId)
-    : undefined
-  const worktreeId =
-    tab?.worktreeId ?? state.sleepingAgentSessionsByPaneKey[paneKey]?.worktreeId ?? live?.worktreeId
-  // Why: a pane already on another conversation keeps that one's row, launch config and hint;
-  // its next capture replaces its own saved record.
-  const movedOn = live !== undefined && !names({ ...live, agent: live.agentType })
-  // Why this worktree: another host's or namespace's copy of the id is another conversation, and
-  // legacy aliases of this pane hold duplicates of it here.
-  const sleeping = Object.entries(state.sleepingAgentSessionsByPaneKey).flatMap(([key, record]) =>
-    record.worktreeId === worktreeId && names(record) && !(movedOn && key === paneKey) ? [key] : []
-  )
-  if (sleeping.length > 0) {
-    state.clearSleepingAgentSessionsByPaneKey(sleeping)
-  }
-  if (movedOn) {
+  const live = state.agentStatusByPaneKey[paneKey]
+  // Why: a pane already on another conversation keeps that one's row, record, launch config and hint.
+  if (live && !names({ ...live, agent: live.agentType })) {
     return
+  }
+  const tabId = parsePaneKey(paneKey)?.tabId ?? paneKey.split(':')[0]
+  // Why the tab's other keys: legacy aliases of this pane can hold duplicates of its record.
+  const saved = Object.entries(state.sleepingAgentSessionsByPaneKey).flatMap(([key, record]) =>
+    (key === paneKey || key.startsWith(`${tabId}:`)) && names(record) ? [key] : []
+  )
+  if (saved.length > 0) {
+    state.clearSleepingAgentSessionsByPaneKey(saved)
   }
   // Why also with no row: the launch config the pane registered for the refused resume goes too.
   state.removeAgentStatus(paneKey)
@@ -68,6 +59,9 @@ export function forgetRefusedPaneResume(
   if (hint?.agentEvidence === 'launch-record' && hint.agent === refused.agent) {
     state.clearPaneForegroundAgent(paneKey)
   }
+  const tab = Object.values(state.tabsByWorktree)
+    .flat()
+    .find((candidate) => candidate.id === tabId)
   // Why only this pane's tab: the chat's own tab carries the same conversation's title.
   if (
     tab?.aiVaultTitle?.agent === refused.agent &&
