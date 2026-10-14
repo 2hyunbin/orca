@@ -1,3 +1,6 @@
+import { findCmdJTaskWorkspace, openCmdJTask } from './cmd-j/task-search-activation'
+import type { CmdJTaskSearchResult } from './cmd-j/task-search-results'
+import type { WorktreeJumpPaletteTaskSearch } from './use-worktree-jump-palette-task-search'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { activateBrowserPagePaletteResult } from '@/lib/browser-page-palette-activation'
@@ -34,11 +37,15 @@ function getSettingsTargetFromSectionId(sectionId: string): {
 }
 
 type WorktreeJumpPaletteSelectionActionsInput = WorktreeJumpPaletteStoreState &
+  Pick<WorktreeJumpPaletteTaskSearch, 'taskItems'> &
   WorktreeJumpPaletteLocalState &
   Pick<WorktreeJumpPaletteQuickActions, 'buildQuickActionContext'> &
   Pick<WorktreeJumpPaletteSelectionLifecycle, 'focusFallbackSurface' | 'requestBrowserFocus'>
 
 export function useWorktreeJumpPaletteSelectionActions({
+  visible,
+  taskItems,
+  workspaces,
   closeModal,
   recordFeatureInteraction,
   skipRestoreFocusRef,
@@ -245,6 +252,31 @@ export function useWorktreeJumpPaletteSelectionActions({
       revealSidebarRow
     ]
   )
+  const handleSelectTask = useCallback(
+    (result: CmdJTaskSearchResult, createWorkspace = false) => {
+      if (!visible || !taskItems.some((item) => item.id === result.id)) {
+        return
+      }
+      const existing = !createWorkspace && findCmdJTaskWorkspace(result, workspaces)
+      if (existing) {
+        handleSelectWorktree(existing)
+        return
+      }
+      skipRestoreFocusRef.current = true
+      setSelectedItemId('')
+      openCmdJTask(result, createWorkspace)
+      recordFeatureInteraction('cmd-j')
+    },
+    [
+      visible,
+      taskItems,
+      workspaces,
+      handleSelectWorktree,
+      recordFeatureInteraction,
+      skipRestoreFocusRef,
+      setSelectedItemId
+    ]
+  )
   const handleSelectItem = useCallback(
     (item: PaletteItem) => {
       if (item.type === 'worktree') {
@@ -257,6 +289,8 @@ export function useWorktreeJumpPaletteSelectionActions({
         handleSelectSimulatorTab(item.result)
       } else if (item.type === 'workspace-tab') {
         handleSelectWorkspaceTab(item.result)
+      } else if (item.type === 'task') {
+        handleSelectTask(item.result)
       } else if (item.type === 'settings') {
         handleSelectSettings(item.result)
       } else {
@@ -264,6 +298,7 @@ export function useWorktreeJumpPaletteSelectionActions({
       }
     },
     [
+      handleSelectTask,
       handleSelectBrowserPage,
       handleSelectProjectTarget,
       handleSelectQuickAction,
@@ -273,7 +308,7 @@ export function useWorktreeJumpPaletteSelectionActions({
       handleSelectWorktree
     ]
   )
-  return { handleSelectItem }
+  return { handleSelectItem, handleSelectTask }
 }
 
 export type WorktreeJumpPaletteSelectionActions = ReturnType<
