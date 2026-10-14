@@ -1,4 +1,5 @@
 import type { AppState } from '../types'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { CacheEntry } from '../github/cache-model'
 import type { JiraSlice, JiraSliceSet } from './jira-slice-contract'
 import type {
@@ -192,7 +193,7 @@ export function canWriteJiraReadResult(
 }
 
 export function getJiraReadScope(
-  settings: AppState['settings'],
+  settings: Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null | undefined,
   sourceContext?: TaskSourceContext | null
 ): JiraReadScope {
   if (!sourceContext) {

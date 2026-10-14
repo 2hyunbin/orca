@@ -23,6 +23,7 @@ import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
+import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 import {
   editedJiraIssueFields,
@@ -52,6 +53,7 @@ export default function JiraIssueWorkspace({
     () => sourceContext ?? defaultScopeSource(settings),
     [settings, sourceContext]
   )
+  const mutationContextKey = getJiraReadScope(settings, sourceContext).contextKey
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
@@ -203,7 +205,11 @@ export default function JiraIssueWorkspace({
           update: () => jiraUpdateIssue(providerSettings, previous.key, updates, siteId),
           refresh: () => jiraGetIssue(providerSettings, previous.key, previous.siteId),
           patchIssue: (patch) =>
-            patchJiraIssue(previous.key, patch, { sourceContext, siteId: previous.siteId })
+            patchJiraIssue(previous.key, patch, {
+              sourceContext,
+              siteId: previous.siteId,
+              contextKey: mutationContextKey
+            })
         })
       } catch (error) {
         toast.error(
@@ -220,7 +226,16 @@ export default function JiraIssueWorkspace({
         }
       }
     },
-    [displayed, patchJiraIssue, pendingField, providerSettings, requestKey, siteId, sourceContext]
+    [
+      displayed,
+      patchJiraIssue,
+      pendingField,
+      mutationContextKey,
+      providerSettings,
+      requestKey,
+      siteId,
+      sourceContext
+    ]
   )
 
   const handleSaveTitle = useCallback(() => {

@@ -3,12 +3,17 @@
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JiraIssue, JiraTransition } from '../../../shared/jira-types'
+import type { JiraIssue, JiraMutationResult, JiraTransition } from '../../../shared/jira-types'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
+import { getDefaultSettings } from '../../../shared/constants'
 import {
   getTaskSourceCacheScope,
   type TaskSourceContext
 } from '../../../shared/task-source-context'
 import type { JiraPatchOptions } from '../store/slices/jira-slice-contract'
+import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
+import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
+import type { RowLessSource } from '@/lib/default-creation-host'
 import type * as I18n from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import JiraIssueWorkspace from './JiraIssueWorkspace'
@@ -27,12 +32,13 @@ const store = vi.hoisted(() => ({
   patchJiraIssue:
     vi.fn<(key: string, patch: Partial<JiraIssue>, options?: JiraPatchOptions) => void>()
 }))
+let currentSettings: GlobalSettings | null = null
 
 vi.mock('@/runtime/runtime-jira-client', () => runtimeMocks)
 vi.mock('@/store', () => ({
   useAppStore: (selector: (state: object) => unknown) =>
     selector({
-      settings: null,
+      settings: currentSettings,
       patchJiraIssue: (key: string, patch: Partial<JiraIssue>, options?: JiraPatchOptions) =>
         store.patchJiraIssue(key, patch, options)
     })
@@ -73,6 +79,7 @@ const initialSource: TaskSourceContext = {
   projectId: 'project-1',
   hostId: 'local'
 }
+const initialSourceContextKey = getJiraReadScope(null, initialSource).contextKey
 
 // Why: the task page reads the open issue back out of the Jira store, so an
 // optimistic patch hands the workspace a new object for the same issue.
@@ -130,6 +137,7 @@ function saveTitle(from: string, to: string): void {
 let serverTitle = 'Old title'
 
 beforeEach(() => {
+  currentSettings = null
   serverTitle = 'Old title'
   store.patchJiraIssue.mockReset()
   for (const mock of Object.values(runtimeMocks)) {
@@ -153,6 +161,48 @@ afterEach(async () => {
 })
 
 describe('JiraIssueWorkspace optimistic edits', () => {
+  it.each([true, false])(
+    'captures the default host when a save settles after navigation (%s)',
+    async (ok) => {
+      const oldSave = deferred<JiraMutationResult>()
+      runtimeMocks.jiraUpdateIssue.mockReturnValue(oldSave.promise)
+      const contextKey = getProviderRuntimeContextKey(currentSettings)
+      const view = render(
+        <TooltipProvider>
+          <JiraIssueWorkspace issue={jiraIssue('Old title')} onUse={vi.fn()} onClose={vi.fn()} />
+        </TooltipProvider>
+      )
+      await flushPromises()
+      saveTitle('Old title', 'Local edit')
+      await flushPromises()
+      currentSettings = { ...getDefaultSettings(''), activeRuntimeEnvironmentId: 'remote-1' }
+      runtimeMocks.jiraGetIssue.mockImplementation(async (source: RowLessSource) =>
+        jiraIssue(
+          source.kind === 'default-scope' && source.settings?.activeRuntimeEnvironmentId
+            ? 'Remote title'
+            : 'Local edit'
+        )
+      )
+      view.rerender(
+        <TooltipProvider>
+          <JiraIssueWorkspace issue={jiraIssue('Remote title')} onUse={vi.fn()} onClose={vi.fn()} />
+        </TooltipProvider>
+      )
+      await flushPromises()
+      await act(async () =>
+        oldSave.resolve(ok ? { ok: true } : { ok: false, error: 'Local edit rejected' })
+      )
+      await flushPromises()
+
+      expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
+        'ENG-1',
+        expect.objectContaining({ title: ok ? 'Local edit' : 'Old title' }),
+        expect.objectContaining({ contextKey, siteId: 'site-1' })
+      )
+      expect(screen.getByDisplayValue('Remote title')).toBeDefined()
+    }
+  )
+
   it('keeps loaded and submitted comments while a title save patches the shared cache', async () => {
     runtimeMocks.jiraUpdateIssue.mockReturnValue(deferred<{ ok: true }>().promise)
     runtimeMocks.jiraIssueComments.mockResolvedValue([
@@ -401,7 +451,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
       'ENG-1',
       expect.objectContaining({ title: 'Latest edit' }),
-      { sourceContext: initialSource, siteId: 'site-1' }
+      { sourceContext: initialSource, siteId: 'site-1', contextKey: initialSourceContextKey }
     )
     expect(screen.getByDisplayValue('Latest edit')).toBeDefined()
   })
@@ -434,7 +484,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
       'ENG-1',
       expect.objectContaining({ title: 'Latest edit' }),
-      { sourceContext: initialSource, siteId: 'site-1' }
+      { sourceContext: initialSource, siteId: 'site-1', contextKey: initialSourceContextKey }
     )
     expect(screen.getByDisplayValue('Latest edit')).toBeDefined()
   })
@@ -469,7 +519,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
       'ENG-1',
       { title: 'Old title' },
-      { sourceContext: initialSource, siteId: 'site-1' }
+      { sourceContext: initialSource, siteId: 'site-1', contextKey: initialSourceContextKey }
     )
   })
 
@@ -532,7 +582,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
       'ENG-1',
       { title: 'Latest edit' },
-      { sourceContext: initialSource, siteId: 'site-1' }
+      { sourceContext: initialSource, siteId: 'site-1', contextKey: initialSourceContextKey }
     )
   })
 
@@ -568,7 +618,7 @@ describe('JiraIssueWorkspace optimistic edits', () => {
       expect(store.patchJiraIssue).toHaveBeenLastCalledWith(
         'ENG-1',
         { title: 'Old title' },
-        { sourceContext: initialSource, siteId: 'site-1' }
+        { sourceContext: initialSource, siteId: 'site-1', contextKey: initialSourceContextKey }
       )
     }
   )

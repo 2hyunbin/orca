@@ -1,9 +1,7 @@
 import type { JiraIssue, JiraMutationResult } from '../../../shared/jira-types'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
-import {
-  getTaskSourceCacheScope,
-  type TaskSourceContext
-} from '../../../shared/task-source-context'
+import type { TaskSourceContext } from '../../../shared/task-source-context'
+import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
 import {
   editedJiraIssueFields,
   jiraIssueRollbackPatch,
@@ -29,15 +27,15 @@ export function jiraIssueRequestScope(
   sourceContext: TaskSourceContext | null | undefined,
   settings: Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null | undefined
 ): string | null {
-  return issue
-    ? JSON.stringify([
-        sourceContext
-          ? getTaskSourceCacheScope(sourceContext)
-          : (settings?.activeRuntimeEnvironmentId ?? 'local'),
-        issue.siteId ?? 'selected',
-        issue.key
-      ])
-    : null
+  if (!issue) {
+    return null
+  }
+  const scope = getJiraReadScope(settings, sourceContext)
+  return JSON.stringify([
+    scope.cachePrefix ?? scope.contextKey,
+    issue.siteId ?? 'selected',
+    issue.key
+  ])
 }
 
 export function subscribeJiraIssueMutation(
