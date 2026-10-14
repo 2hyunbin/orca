@@ -98,6 +98,7 @@ export function createMigrationJournalDirectory<T extends { migrationId: string 
         throw new Error('orcad_migration_cutover_id_invalid')
       }
       const dir = directory(userDataPath)
+      const created = !existsSync(dir)
       mkdirSync(dir, { recursive: true, mode: 0o700 })
       writeSecureJsonFileWithinLimit(
         join(dir, `${valid.migrationId}.json`),
@@ -106,6 +107,10 @@ export function createMigrationJournalDirectory<T extends { migrationId: string 
         { durable: true }
       )
       syncDirectoryDurablySync(dir)
+      // A new directory's own entry lives in its parent; without this a crash can lose the journal.
+      if (created) {
+        syncDirectoryDurablySync(userDataPath)
+      }
       parsed.delete(dir)
       changed(userDataPath)
     },

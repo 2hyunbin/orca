@@ -75,4 +75,24 @@ describe('WSL move journal', () => {
     writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
     expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('source-fenced')
   })
+
+  it('never moves a record backwards, rebinds it, or advances a superseded one', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+    expect(() => writeWslMoveCutover(userDataPath, cutover('move-1', 'prepared'))).toThrow(
+      'wsl_move_phase_regressed'
+    )
+    expect(() =>
+      writeWslMoveCutover(
+        userDataPath,
+        cutover('move-1', 'retained', {}, { repoIds: ['repo-1', 'repo-2'] })
+      )
+    ).toThrow('wsl_move_binding_changed')
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'retained'))
+    writeWslMoveCutover(
+      userDataPath,
+      cutover('move-2', 'prepared', { supersedesMigrationId: 'move-1' })
+    )
+    // Rewriting the finished link unchanged is fine; nothing may restart it.
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'retained'))
+  })
 })

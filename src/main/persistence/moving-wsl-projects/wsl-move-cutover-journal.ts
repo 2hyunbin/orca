@@ -3,6 +3,7 @@
  * A separate directory from the SSH journal, so an older build never reads a WSL record as SSH.
  */
 import {
+  WSL_MOVE_CUTOVER_PHASES,
   isWslMoveCutoverFinished,
   parseWslMoveCutover,
   type WslMoveCutover
@@ -57,9 +58,11 @@ export function listWslMoveCutoverChain(
 export function writeWslMoveCutover(userDataPath: string, cutover: WslMoveCutover): void {
   const parsed = parseWslMoveCutover(cutover)
   const chain = listWslMoveCutoverChain(userDataPath, parsed.journalKey)
-  const known = chain.some((entry) => entry.migrationId === parsed.migrationId)
+  const existing = chain.find((entry) => entry.migrationId === parsed.migrationId)
   const head = chain.at(-1)
-  if (!known && head) {
+  if (existing) {
+    assertWslMoveUpdate(existing, parsed, head)
+  } else if (head) {
     if (!isWslMoveCutoverFinished(head)) {
       throw new Error('wsl_move_already_in_flight')
     }
@@ -68,6 +71,27 @@ export function writeWslMoveCutover(userDataPath: string, cutover: WslMoveCutove
     }
   }
   journals.write(userDataPath, parsed)
+}
+
+/** A record only moves forward, keeps its binding, and only the head of its chain still moves. */
+function assertWslMoveUpdate(
+  existing: WslMoveCutover,
+  next: WslMoveCutover,
+  head: WslMoveCutover | undefined
+): void {
+  if (
+    next.manifestSha256 !== existing.manifestSha256 ||
+    next.supersedesMigrationId !== existing.supersedesMigrationId
+  ) {
+    throw new Error('wsl_move_binding_changed')
+  }
+  const order = (phase: WslMoveCutover['phase']): number => WSL_MOVE_CUTOVER_PHASES.indexOf(phase)
+  if (order(next.phase) < order(existing.phase)) {
+    throw new Error('wsl_move_phase_regressed')
+  }
+  if (head && head.migrationId !== existing.migrationId && next.phase !== existing.phase) {
+    throw new Error('wsl_move_superseded')
+  }
 }
 
 export function removeWslMoveCutover(userDataPath: string, migrationId: string): void {
