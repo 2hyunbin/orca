@@ -163,6 +163,18 @@ export function isCloudSessionMutationCurrent(
   )
 }
 
+// The fence as it stands now, or null once its identity was signed out.
+export function readLiveCloudSessionMutation(
+  profileId: string,
+  userDataPath: string
+): CloudSessionMutationSnapshot | null {
+  const state = readState(profileId, userDataPath)
+  if (!state || state.tombstonedIdentityKeys.includes(state.expectedIdentityKey)) {
+    return null
+  }
+  return { epoch: state.epoch, identityKey: state.expectedIdentityKey }
+}
+
 export function recordCloudSessionIdentityMutationIfCurrent(
   identity: CloudSessionIdentity,
   userDataPath: string,

@@ -25,6 +25,8 @@ vi.mock('./profile-cloud-session-mutation', () => ({
     cloudProfileId: cloud.cloudProfileId,
     organizationId: cloud.activeOrgId ?? ''
   })),
+  // Signed out by default: a moved fence then discards the rotation.
+  readLiveCloudSessionMutation: vi.fn(() => null),
   tombstoneCloudSession: vi.fn()
 }))
 
@@ -68,7 +70,7 @@ describe('profile cloud session refresh', () => {
     readMock.mockReturnValue({ status: 'found', session: staleSession, persistence: 'memory-only' })
   })
 
-  it('does not publish a refresh whose persistent mutation snapshot became stale', async () => {
+  it('does not publish a refresh that lands after the session was signed out', async () => {
     let resolveRefresh!: (value: Record<string, unknown>) => void
     refreshMock.mockReturnValue(new Promise((resolve) => (resolveRefresh = resolve)))
     const refreshing = readFreshOrcaCloudSession(config, active, '/data')

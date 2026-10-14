@@ -55,7 +55,14 @@ type CachedOrcaCloudSession = {
 }
 
 const memorySessions = new Map<string, CachedOrcaCloudSession>()
+// Sessions cleared this run whose file could not be removed; reading the file back would
+// resurrect a revoked refresh token and loop on 401s.
+const clearedSessionKeys = new Set<string>()
 export const MAX_MEMORY_CLOUD_SESSIONS = 64
+
+function describeWriteError(error: unknown): string {
+  return error instanceof Error && 'code' in error ? String(error.code) : String(error)
+}
 
 function rememberMemorySession(key: string, session: CachedOrcaCloudSession): void {
   memorySessions.delete(key)
@@ -124,28 +131,39 @@ export function saveOrcaCloudSession(
   session: OrcaCloudSession
 ): OrcaCloudSessionPersistence {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
-  if (safeStorage.isEncryptionAvailable()) {
-    const encrypted: PersistedEncryptedSession = {
-      version: 1,
-      format: 'electron-safe-storage-v1',
-      savedAt: Date.now(),
-      ciphertext: safeStorage.encryptString(JSON.stringify(session)).toString('base64')
+  clearedSessionKeys.delete(cacheKey)
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      const encrypted: PersistedEncryptedSession = {
+        version: 1,
+        format: 'electron-safe-storage-v1',
+        savedAt: Date.now(),
+        ciphertext: safeStorage.encryptString(JSON.stringify(session)).toString('base64')
+      }
+      writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), encrypted)
+      rememberMemorySession(cacheKey, { session, persistence: 'encrypted' })
+      return 'encrypted'
     }
-    writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), encrypted)
-    rememberMemorySession(cacheKey, { session, persistence: 'encrypted' })
-    return 'encrypted'
-  }
 
-  if (allowsPlaintextOrcaCloudSession()) {
-    const plaintext: PersistedPlaintextSession = {
-      version: 1,
-      format: 'dev-plaintext-v1',
-      savedAt: Date.now(),
-      session
+    if (allowsPlaintextOrcaCloudSession()) {
+      const plaintext: PersistedPlaintextSession = {
+        version: 1,
+        format: 'dev-plaintext-v1',
+        savedAt: Date.now(),
+        session
+      }
+      writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), plaintext)
+      rememberMemorySession(cacheKey, { session, persistence: 'dev-plaintext' })
+      return 'dev-plaintext'
     }
-    writeSecureJsonFile(getOrcaCloudSessionPath(profileId, userDataPath), plaintext)
-    rememberMemorySession(cacheKey, { session, persistence: 'dev-plaintext' })
-    return 'dev-plaintext'
+  } catch (error) {
+    // Why: a rotated refresh token is already spent server-side. Dropping it on a failed write
+    // (disk full, locked file, keychain error) makes the next refresh replay the old token,
+    // which the server reads as reuse and revokes the whole token family.
+    console.warn(
+      '[orca-cloud] could not persist the account session; keeping it in memory:',
+      describeWriteError(error)
+    )
   }
 
   // Why: Orca account refresh tokens must not silently fall back to plaintext
@@ -188,6 +206,9 @@ export function readOrcaCloudSession(
   userDataPath: string
 ): OrcaCloudSessionReadResult {
   const cacheKey = sessionCacheKey(profileId, userDataPath)
+  if (clearedSessionKeys.has(cacheKey)) {
+    return { status: 'missing', persistence: 'none' }
+  }
   const memorySession = memorySessions.get(cacheKey)
   if (memorySession) {
     memorySessions.delete(cacheKey)
@@ -252,8 +273,18 @@ export function readOrcaCloudSession(
 }
 
 export function clearOrcaCloudSession(profileId: string, userDataPath: string): void {
-  memorySessions.delete(sessionCacheKey(profileId, userDataPath))
-  rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
+  const cacheKey = sessionCacheKey(profileId, userDataPath)
+  memorySessions.delete(cacheKey)
+  try {
+    rmSync(getOrcaCloudSessionPath(profileId, userDataPath), { force: true })
+    clearedSessionKeys.delete(cacheKey)
+  } catch (error) {
+    clearedSessionKeys.add(cacheKey)
+    console.warn(
+      '[orca-cloud] could not remove the account session file; treating it as signed out:',
+      describeWriteError(error)
+    )
+  }
 }
 
 export function getOrcaCloudMemorySessionCountForTests(): number {
