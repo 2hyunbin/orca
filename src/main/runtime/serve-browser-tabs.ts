@@ -41,11 +41,8 @@ export class ServeBrowserTabs {
     }
   ) {}
 
-  /** A created page gets a saved tab; a page this host is restoring already has one. */
+  /** A created page gets a saved tab; a restored page already has one. */
   opened(page: ServeBrowserPage): void {
-    if (this.restoring.has(page.pageId)) {
-      return
-    }
     this.write(page.worktreeId, (hostId, session) =>
       withOpenedServeBrowserTab(hostId, session, page)
     )
@@ -140,18 +137,17 @@ export class ServeBrowserTabs {
     if (!backend) {
       return false
     }
-    // Marked before the create, whose open report can arrive before it returns.
-    const started = Promise.resolve().then(() =>
-      backend.createTab({
+    const started = backend
+      .createTab({
         browserPageId: page.pageId,
         url: page.url,
         worktreeId: page.worktreeId,
         ...(page.profileId ? { profileId: page.profileId } : {})
       })
-    )
-    const settled = started.then(() => undefined).finally(() => this.restoring.delete(page.pageId))
-    this.restoring.set(page.pageId, settled)
-    await settled
+      .then(() => undefined)
+      .finally(() => this.restoring.delete(page.pageId))
+    this.restoring.set(page.pageId, started)
+    await started
     return true
   }
 

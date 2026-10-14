@@ -32,7 +32,7 @@ export class OffscreenBrowserBackend implements BrowserBackend {
     private readonly browserManager: BrowserManager,
     private readonly options: {
       getAgentBrowserBridge?: () => Pick<AgentBrowserBridge, 'onPageClosed'> | null
-      /** A page was created; a restored page is reported too, and the receiver ignores it. */
+      /** A page was created. */
       onPageOpened?: (page: ServeBrowserPage) => void
       /** A page's committed address or title changed, so its saved tab can follow. */
       onPageNavigated?: (page: ServeBrowserPageState) => void
