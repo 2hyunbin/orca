@@ -29,7 +29,18 @@ export function getRepositoryPaneSearchEntries(
         'components.RepositoryJiraProjectSection.description',
         'Default the Jira issue picker and Tasks list to this project. You can change it for each worktree.'
       ),
-      keywords: [repo.displayName, 'jira', 'default project', 'issue picker']
+      keywords: [
+        repo.displayName,
+        ...translateSearchKeyword('components.RepositoryJiraProjectSection.keywordJira', 'jira'),
+        ...translateSearchKeyword(
+          'components.RepositoryJiraProjectSection.keywordDefaultProject',
+          'default project'
+        ),
+        ...translateSearchKeyword(
+          'components.RepositoryJiraProjectSection.keywordIssuePicker',
+          'issue picker'
+        )
+      ]
     },
     {
       title: translate('auto.components.settings.repository.search.7e1e456a95', 'Display Name'),

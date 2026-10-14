@@ -38,6 +38,24 @@ describe('Jira composer project defaults', () => {
     rerender({ current: { ...repo, id: 'other', defaultJiraProject: other } })
     expect(result.current.jiraProject).toEqual(other)
   })
+  it('resets All when switching between same-ID local and SSH repositories', () => {
+    const { result, rerender } = renderHook(
+      ({ current }) => useJiraComposerProject(current, source, true),
+      { initialProps: { current: repo } }
+    )
+    act(() => result.current.setJiraProject(null))
+    rerender({ current: { ...repo, executionHostId: 'ssh:target', defaultJiraProject: other } })
+    expect(result.current.jiraProject).toEqual(other)
+  })
+  it('resets All when switching between distinct same-host repository locations', () => {
+    const { result, rerender } = renderHook(
+      ({ current }) => useJiraComposerProject(current, source, true),
+      { initialProps: { current: repo } }
+    )
+    act(() => result.current.setJiraProject(null))
+    rerender({ current: { ...repo, path: '/other-location', defaultJiraProject: other } })
+    expect(result.current.jiraProject).toEqual(other)
+  })
   it('keeps remote accounts separate and supports direct SSH with the existing local Jira account', () => {
     const remoteRepo: Repo = { ...repo, executionHostId: 'runtime:remote' }
     const { result, rerender } = renderHook(

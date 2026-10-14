@@ -62,8 +62,11 @@ export function useWorkItemSourceFoundation(props: NormalizedWorkItemSourceSearc
     }))
   )
   const selectedRepo = useMemo(
-    () => repos.find((repo) => repo.id === repoId) ?? null,
-    [repoId, repos]
+    () =>
+      props.selectedRepo !== undefined
+        ? props.selectedRepo
+        : (repos.find((repo) => repo.id === repoId) ?? null),
+    [props.selectedRepo, repoId, repos]
   )
   const githubSourceContext = useMemo(() => {
     if (githubSourceContextOverride?.provider === 'github') {

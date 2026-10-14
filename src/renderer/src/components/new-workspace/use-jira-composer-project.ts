@@ -14,7 +14,14 @@ export function useJiraComposerProject(
   enabled: boolean
 ) {
   const inventory = useJiraProjectInventory(source ?? LOCAL_SOURCE, enabled && source !== null)
-  const scopeKey = `${repo?.id ?? ''}:${source?.hostId ?? ''}`
+  const scopeKey = JSON.stringify([
+    repo ? getRepoExecutionHostId(repo) : null,
+    repo?.id ?? null,
+    repo?.path ?? null,
+    source?.hostId ?? null,
+    source?.projectId ?? null,
+    source?.projectHostSetupId ?? null
+  ])
   const [override, setOverride] = useState<{
     scopeKey: string
     project: JiraProjectReference | null
