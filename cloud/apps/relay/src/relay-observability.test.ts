@@ -5,6 +5,7 @@ import { observeRelayDatabase } from './observed-relay-database.js'
 import {
   CONTROL_RTT_RESERVOIR_LIMIT,
   observedRelayRequests,
+  PRE_AUTH_RESERVOIR_LIMIT,
   percentile,
   RelayObservability,
   type RelayProcessCounts
@@ -568,6 +569,57 @@ describe('relay observability', () => {
     // fewer than the 5% the p95 needs is out of reach of this suite.
     expect(entries[0]!.controlRttMsP95).toBe(900)
     expect(entries[0]!.controlRttMsMax).toBe(900)
+  })
+
+  it('summarises host pre-auth latency per admit path and outcome', () => {
+    const entries: Array<Record<string, unknown>> = []
+    const observability = new RelayObservability(
+      { role: 'cell', cellId: 'staging-gce-c1', region: 'us-central1' },
+      (entry) => entries.push(entry)
+    )
+    for (let ms = 1; ms <= 100; ms++) observability.recordHostPreAuth('db', 'admitted', ms)
+    observability.recordHostPreAuth('db', 'refused', 2_000)
+    observability.recordHostPreAuth('reserve', 'admitted', 12.3456)
+    observability.flush(counts)
+    observability.flush(counts)
+
+    expect(entries[0]!.preAuthLatencyMs).toEqual({
+      db: {
+        admitted: { count: 100, p50: 50, p95: 95, p99: 99, max: 100 },
+        refused: { count: 1, p50: 2_000, p95: 2_000, p99: 2_000, max: 2_000 }
+      },
+      reserve: {
+        admitted: { count: 1, p50: 12.346, p95: 12.346, p99: 12.346, max: 12.346 },
+        refused: { count: 0 }
+      }
+    })
+    // The window resets, and an empty window publishes counts only.
+    expect(entries[1]!.preAuthLatencyMs).toEqual({
+      db: { admitted: { count: 0 }, refused: { count: 0 } },
+      reserve: { admitted: { count: 0 }, refused: { count: 0 } }
+    })
+  })
+
+  it('caps the pre-auth reservoir but counts and maxes every hello', () => {
+    const entries: Array<Record<string, unknown>> = []
+    const observability = new RelayObservability(
+      { role: 'cell', cellId: 'staging-gce-c1', region: 'us-central1' },
+      (entry) => entries.push(entry)
+    )
+    const flooded = PRE_AUTH_RESERVOIR_LIMIT * 5
+    for (let sample = 0; sample < flooded; sample++) {
+      observability.recordHostPreAuth('reserve', 'admitted', 10 + (sample % 40))
+    }
+    observability.recordHostPreAuth('reserve', 'admitted', 9_000)
+    observability.flush(counts)
+
+    const reserve = (entries[0]!.preAuthLatencyMs as Record<string, Record<string, Record<string, number>>>)
+      .reserve!.admitted!
+    expect(reserve.count).toBe(flooded + 1)
+    // Exact even when the reservoir declined to keep the slowest hello.
+    expect(reserve.max).toBe(9_000)
+    expect(reserve.p50).toBeGreaterThanOrEqual(10)
+    expect(reserve.p50).toBeLessThanOrEqual(49)
   })
 
   it('observes successful and failed database calls including transactions', async () => {
