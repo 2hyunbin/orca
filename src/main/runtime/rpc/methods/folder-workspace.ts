@@ -1,5 +1,4 @@
 import { defineMethod } from '../core'
-import { withoutWslMovedProjects } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { resolveRpcWorkspaceCreatorProvenance } from '../workspace-creator-context'
 import {
   FolderWorkspaceCreate,
@@ -14,9 +13,7 @@ export const FOLDER_WORKSPACE_METHODS = [
     permission: 'workspace',
     params: null,
     handler: (_params, { runtime }) => ({
-      folderWorkspaces: withoutWslMovedProjects(runtime.listFolderWorkspaces(), (workspace) => ({
-        folderWorkspaceId: workspace.id
-      }))
+      folderWorkspaces: runtime.listVisibleFolderWorkspaces()
     })
   }),
   defineMethod({

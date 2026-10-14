@@ -14,6 +14,10 @@ import {
 } from '../project-groups/folder-workspace-path-status'
 import { FolderWorkspaceCreateRefusedError } from '../project-groups/folder-workspace-create-refusal'
 import type { RuntimeStore } from './runtime-store-contract'
+import {
+  runtimeVisibleFolderWorkspaces,
+  runtimeVisibleProjectGroups
+} from './runtime-visible-catalog'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 
 type RuntimeProjectGroupDependencies = {
@@ -58,6 +62,15 @@ export class RuntimeProjectGroupController {
 
   listFolderWorkspaces(): FolderWorkspace[] {
     return this.deps.getStore()?.getFolderWorkspaces?.() ?? []
+  }
+
+  /** What a client may list; `listGroups`/`listFolderWorkspaces` keep the full store. */
+  listVisibleGroups(): ProjectGroup[] {
+    return runtimeVisibleProjectGroups(this.deps.getStore())
+  }
+
+  listVisibleFolderWorkspaces(): FolderWorkspace[] {
+    return runtimeVisibleFolderWorkspaces(this.deps.getStore())
   }
 
   async createGroup(input: {

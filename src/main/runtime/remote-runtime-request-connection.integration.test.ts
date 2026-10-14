@@ -51,7 +51,7 @@ describe('remote runtime request connection integration', () => {
         cleanupSubscriptionsForConnection: () => {},
         cancelMobileDictationForConnection: () => {},
         onClientDisconnected: () => {},
-        listRepos: () => repos
+        listVisibleRepos: () => repos
       } as unknown as OrcaRuntimeService
       const server = new OrcaRuntimeRpcServer({
         runtime,
@@ -585,7 +585,7 @@ describe('remote runtime request connection integration', () => {
           return () => sessionTabListeners.delete(listener)
         },
         watchFileExplorer: async () => () => {},
-        listRepos: () => [repo],
+        listVisibleRepos: () => [repo],
         showRepo: (selector: string) => {
           if (selector !== repo.id && selector !== `id:${repo.id}`) {
             throw new Error('repo_not_found')

@@ -1,5 +1,4 @@
 import { defineMethod } from '../core'
-import { withoutWslMovedProjects } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { PROJECT_RUNTIME_METHODS } from './project-runtime-rpc-methods'
 import { FOLDER_WORKSPACE_METHODS } from './folder-workspace'
 import {
@@ -38,9 +37,9 @@ export const REPO_METHODS = [
     handler: (_params, context) => {
       context.runtime.enrichMissingRepoGitRemoteIdentities?.()
       return {
-        repos: withoutWslMovedProjects(context.runtime.listRepos(), (repo) => ({
-          repoId: repo.id
-        })).map((repo) => projectRepoVisibilityForClient(repo, context))
+        repos: context.runtime
+          .listVisibleRepos()
+          .map((repo) => projectRepoVisibilityForClient(repo, context))
       }
     }
   }),
@@ -49,7 +48,7 @@ export const REPO_METHODS = [
     name: 'projectGroup.list',
     permission: 'workspace',
     params: null,
-    handler: (_params, { runtime }) => ({ groups: runtime.listProjectGroups() })
+    handler: (_params, { runtime }) => ({ groups: runtime.listVisibleProjectGroups() })
   }),
   defineMethod({
     name: 'projectGroup.create',

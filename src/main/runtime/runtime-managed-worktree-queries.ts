@@ -1,4 +1,5 @@
 import type { DetectedWorktreeListResult, Worktree } from '../../shared/worktree/types'
+import { runtimeHiddenRepoIds } from './runtime-visible-catalog'
 import {
   getLocalWorktreeCatalogVersion,
   localWorktreeCatalogVersionAt
@@ -76,8 +77,10 @@ export class RuntimeManagedWorktreeQueries {
         )
       ])
     )
+    const hiddenRepoIds = runtimeHiddenRepoIds(this.deps.getStore())
     const worktrees = resolved.filter(
       (worktree) =>
+        !hiddenRepoIds.has(worktree.repoId) &&
         (!scopedRepo || worktree.repoId === scopedRepo.id) &&
         this.isVisible(worktree, matchers.get(worktree.repoId), sourceDefaultsSupported)
     )

@@ -104,7 +104,9 @@ describe('repo RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       enrichMissingRepoGitRemoteIdentities: vi.fn(),
-      listRepos: () => [{ id: 'repo-1', path: '/repo', externalWorktreeVisibilityLegacy: false }],
+      listVisibleRepos: () => [
+        { id: 'repo-1', path: '/repo', externalWorktreeVisibilityLegacy: false }
+      ],
       getClientSettings: () => ({ worktreeVisibilityDefaults: { external: 'show' } })
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: REPO_METHODS })
@@ -654,12 +656,12 @@ describe('repo RPC methods', () => {
     }
     const runtime = {
       getRuntimeId: () => 'test-runtime',
-      listProjectGroups: vi.fn().mockReturnValue([group]),
+      listVisibleProjectGroups: vi.fn().mockReturnValue([group]),
       createProjectGroup: vi.fn().mockResolvedValue(group),
       updateProjectGroup: vi.fn().mockResolvedValue({ ...group, name: 'Core' }),
       deleteProjectGroup: vi.fn().mockResolvedValue({ deleted: true }),
       moveProjectToGroup: vi.fn().mockResolvedValue({ id: 'repo-1', projectGroupId: group.id }),
-      listFolderWorkspaces: vi.fn().mockReturnValue([
+      listVisibleFolderWorkspaces: vi.fn().mockReturnValue([
         {
           id: 'folder-workspace-1',
           projectGroupId: group.id,
@@ -735,7 +737,7 @@ describe('repo RPC methods', () => {
       })
     )
 
-    expect(runtime.listProjectGroups).toHaveBeenCalled()
+    expect(runtime.listVisibleProjectGroups).toHaveBeenCalled()
     expect(runtime.createProjectGroup).toHaveBeenCalledWith({
       name: 'Platform',
       parentPath: '/srv/platform',
@@ -747,7 +749,7 @@ describe('repo RPC methods', () => {
     })
     expect(runtime.deleteProjectGroup).toHaveBeenCalledWith(group.id)
     expect(runtime.moveProjectToGroup).toHaveBeenCalledWith('repo-1', group.id, 2)
-    expect(runtime.listFolderWorkspaces).toHaveBeenCalled()
+    expect(runtime.listVisibleFolderWorkspaces).toHaveBeenCalled()
     expect(runtime.createFolderWorkspace).toHaveBeenCalledWith({
       projectGroupId: group.id,
       name: 'Refund fix',
