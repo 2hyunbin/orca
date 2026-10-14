@@ -1,0 +1,582 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 2
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "lifetime": {
+      "type": "string",
+      "enum": [
+        "long-lived",
+        "ephemeral",
+        "both"
+      ]
+    },
+    "createFields": {
+      "default": [],
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "required": {
+            "default": false,
+            "type": "boolean"
+          },
+          "choices": {
+            "minItems": 1,
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "command"
+      ],
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "object",
+      "properties": {
+        "list": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "create": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "delete": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "sleep": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "resume": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "archive": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "args"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "const": "orca:node"
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "args": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "timeoutSeconds": {
+                  "default": 120,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              },
+              "required": [
+                "program",
+                "entry",
+                "args"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "list"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "description",
+    "lifetime",
+    "commands"
+  ],
+  "additionalProperties": false,
+  "$comment": "Generated from Orca runtime schemas. Cross-field, path, identity, source freshness and byte limits require orca-plugin validate; JSON Schema alone is not an approval boundary."
+}

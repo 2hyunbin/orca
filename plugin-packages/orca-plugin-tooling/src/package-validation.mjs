@@ -8,6 +8,7 @@ import {
   createPluginLocaleKit,
   parsePluginLocaleEnvelope,
   readPluginSyntaxContent,
+  readPluginEnvironmentRecipeArtifacts,
   readContainedPluginArtifactText,
   resolveContainedPluginArtifact,
   hashPluginTree,
@@ -82,12 +83,15 @@ export async function validatePackage(root, options = {}) {
   if (
     !types.length ||
     types.some(
-      (type) => !['interface-language', 'coding-language', 'file-viewer'].includes(type)
+      (type) =>
+        !['interface-language', 'coding-language', 'file-viewer', 'environment-provider'].includes(
+          type
+        )
     ) ||
     manifest.capabilities.length
   ) {
     throw new Error(
-      'This toolkit validates locale, syntax and host-ui viewer packages without host capabilities. Other plugin families require their host-specific validator.'
+      'This toolkit validates locale, syntax, viewer and environment-provider packages without general host capabilities. Other plugin families require their host-specific validator.'
     )
   }
   const locales = []
@@ -105,6 +109,7 @@ export async function validatePackage(root, options = {}) {
   await readPluginSyntaxContent(manifest, (path, limit) =>
     readContainedPluginArtifactText(root, path, limit)
   )
+  await readPluginEnvironmentRecipeArtifacts(root, manifest)
   for (const viewer of manifest.contributes.fileViewers) {
     if (
       !(await readContainedPluginArtifactText(root, viewer.entry, PLUGIN_VIEWER_ENTRY_BYTES)).trim()

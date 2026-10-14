@@ -50,7 +50,8 @@ for (const [name, schema] of Object.entries({
   'manifest-v2': runtime.pluginManifestV2Schema,
   'locale-envelope': runtime.pluginLocaleEnvelopeSchema,
   'catalog-v2': runtime.pluginCatalogSchema,
-  'language-configuration': runtime.pluginLanguageConfigurationSchema
+  'language-configuration': runtime.pluginLanguageConfigurationSchema,
+  'environment-recipe': runtime.pluginEnvironmentRecipeSchema
 })) {
   const json = runtime.z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' })
   json.$comment =
@@ -58,5 +59,5 @@ for (const [name, schema] of Object.entries({
   await output(`schemas/${name}.schema.json`, `${JSON.stringify(json, null, 2)}\n`)
 }
 console.log(
-  `Plugin runtime snapshot, four schemas and English translation kit ${check ? 'verified' : 'generated'}.`
+  `Plugin runtime snapshot, five schemas and English translation kit ${check ? 'verified' : 'generated'}.`
 )

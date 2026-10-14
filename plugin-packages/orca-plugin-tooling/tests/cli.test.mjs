@@ -16,9 +16,9 @@ async function cli(args, path = join(root, 'src/cli.mjs')) {
   return JSON.parse(result.stdout)
 }
 
-test('init creates three independent templates with pinned validation and no dependencies', async (t) => {
+test('init creates four independent templates with pinned validation and no installed dependencies', async (t) => {
   const { scratch } = await fixture(t)
-  for (const type of ['locale', 'syntax', 'viewer']) {
+  for (const type of ['locale', 'syntax', 'viewer', 'environment']) {
     const destination = join(scratch, `${type} with spaces`)
     const initialized = await cli([
       'init',
@@ -33,7 +33,10 @@ test('init creates three independent templates with pinned validation and no dep
     const localCli = join(destination, '.orca-tooling/src/cli.mjs')
     const validated = await cli(['validate', destination], localCli)
     assert.equal(validated.valid, true)
-    assert.equal(validated.execution, type === 'viewer' ? 'sandboxed-ui' : 'data')
+    assert.equal(
+      validated.execution,
+      type === 'viewer' ? 'sandboxed-ui' : type === 'environment' ? 'instructional' : 'data'
+    )
     assert.equal(await readFile(join(destination, '.gitignore'), 'utf8'), 'node_modules/\n')
     await assert.rejects(stat(join(destination, 'node_modules')), { code: 'ENOENT' })
     assert.match(

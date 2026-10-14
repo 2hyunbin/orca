@@ -191,3 +191,7 @@ ci-shards/
 .build/preflight-benchmark/
 
 .local/static-analysis-research/
+
+!plugin-packages/orca-plugin-tooling/templates/environment/dist/
+plugin-packages/orca-plugin-tooling/templates/environment/dist/*
+!plugin-packages/orca-plugin-tooling/templates/environment/dist/provider.mjs

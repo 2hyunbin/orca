@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 2,
+  "execution": "instructional",
+  "publisher": "example",
+  "id": "orca-environments-company",
+  "name": "Company development environments",
+  "description": "Connect company devboxes and temporary sandboxes through a reviewed adapter.",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.0" },
+  "pluginApi": 1,
+  "contributes": { "environmentRecipes": [{ "path": "recipes/environments.json" }] }
+}

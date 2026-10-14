@@ -1,0 +1,18 @@
+{
+  "name": "orca-environments-company",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-adapter.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "validate": "node .orca-tooling/src/cli.mjs validate ."
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  }
+}

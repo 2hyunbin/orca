@@ -12,7 +12,7 @@ import { diffCatalogFiles, exportCatalogRelease } from './catalog-release.mjs'
 import { createPluginTemplate } from './plugin-template.mjs'
 
 const HELP = `orca-plugin — offline plugin authoring
-  init locale|syntax|viewer NEW_DIRECTORY --publisher PUBLISHER --id PACKAGE_ID
+  init locale|syntax|viewer|environment NEW_DIRECTORY --publisher PUBLISHER --id PACKAGE_ID
   validate DIRECTORY [--kit KIT]
   inspect DIRECTORY [--kit KIT]
   pack GIT_REPOSITORY NEW_DIRECTORY [--kit KIT]

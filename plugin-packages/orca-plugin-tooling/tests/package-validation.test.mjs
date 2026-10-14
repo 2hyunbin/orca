@@ -11,11 +11,11 @@ import {
 } from '../src/package-validation.mjs'
 import { fixture, json } from './plugin-fixture.mjs'
 
-test('all three templates validate; data packs stay inert and viewer needs review', async (t) => {
-  for (const type of ['locale', 'syntax', 'viewer']) {
+test('all four templates validate; data packs stay inert and executable families need review', async (t) => {
+  for (const type of ['locale', 'syntax', 'viewer', 'environment']) {
     const { repo } = await fixture(t, type)
     const result = await inspectPackage(repo)
-    assert.equal(result.needsExecutableApproval, type === 'viewer')
+    assert.equal(result.needsExecutableApproval, type === 'viewer' || type === 'environment')
     assert.match(result.contentHash, /^[a-f0-9]{64}$/)
     if (type === 'locale') {
       assert.equal(result.locales[0].current, 1)
@@ -41,6 +41,25 @@ test('data-to-code and unknown fields are rejected without executing an entry', 
     await assert.rejects(validatePackage(repo))
   }
   await assert.rejects(readFile(marker), { code: 'ENOENT' })
+})
+
+test('environment validation reads declared adapter bytes without executing them and refuses unsafe artifacts', async (t) => {
+  const { repo, scratch } = await fixture(t, 'environment')
+  const marker = join(scratch, 'executed')
+  const entry = join(repo, 'dist/provider.mjs')
+  await writeFile(
+    entry,
+    `import{writeFileSync}from'node:fs';writeFileSync(${JSON.stringify(marker)},'bad')`
+  )
+  assert.equal((await validatePackage(repo)).manifest.execution, 'instructional')
+  await assert.rejects(readFile(marker), { code: 'ENOENT' })
+  await writeFile(entry, Buffer.alloc(1024 * 1024 + 1, 97))
+  await assert.rejects(validatePackage(repo), /limit|large|exceed/i)
+  const path = join(repo, 'recipes/environments.json')
+  const recipe = JSON.parse(await readFile(path, 'utf8'))
+  recipe.commands.list.entry = '../outside.mjs'
+  await json(path, recipe)
+  await assert.rejects(validatePackage(repo))
 })
 
 test('author validation tolerates ignored dependency files; release inspection refuses symlinks', async (t) => {

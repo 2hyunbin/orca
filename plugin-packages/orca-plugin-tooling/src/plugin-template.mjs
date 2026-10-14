@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { pluginManifestV2Schema } from '../dist/runtime.mjs'
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url))
-const templates = new Set(['locale', 'syntax', 'viewer'])
+const templates = new Set(['locale', 'syntax', 'viewer', 'environment'])
 
 export async function createPluginTemplate(type, destination, options) {
   if (!templates.has(type)) {
-    throw new Error('Template type must be locale, syntax or viewer')
+    throw new Error('Template type must be locale, syntax, viewer or environment')
   }
   if (!options.publisher || !options.id) {
     throw new Error('init requires --publisher and --id')

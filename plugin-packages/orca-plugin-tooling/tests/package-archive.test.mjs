@@ -36,7 +36,7 @@ test('packed tarball initializes and releases all templates with Windows-style G
     join(scratch, archive.filename)
   ])
   const cli = join(scratch, 'installed/node_modules/@orca/plugin-tooling/src/cli.mjs')
-  for (const type of ['locale', 'syntax', 'viewer']) {
+  for (const type of ['locale', 'syntax', 'viewer', 'environment']) {
     const destination = join(scratch, type)
     await run([cli, 'init', type, destination, '--publisher', 'author', '--id', `${type}-archive`])
     const result = await run([
@@ -46,6 +46,9 @@ test('packed tarball initializes and releases all templates with Windows-style G
     ])
     assert.equal(JSON.parse(result.stdout).valid, true)
     assert.ok(await stat(join(destination, '.github/workflows/validate.yml')))
+    if (type === 'environment') {
+      await run(['--test', join(destination, 'tests/provider-client.test.mjs')])
+    }
     await assert.rejects(stat(join(destination, 'node_modules')), { code: 'ENOENT' })
     assert.equal(await readFile(join(destination, '.gitattributes'), 'utf8'), '* -text\n')
     await commitFixture(destination)

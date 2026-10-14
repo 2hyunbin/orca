@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 2,
+  "id": "environments",
+  "name": "Company environments",
+  "description": "Long-lived development machines and temporary sandboxes.",
+  "lifetime": "both",
+  "createFields": [{ "id": "region", "label": "Region", "required": false }],
+  "commands": {
+    "list": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] },
+    "create": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] },
+    "delete": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] },
+    "sleep": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] },
+    "resume": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] },
+    "archive": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] }
+  },
+  "recovery": {
+    "protocolVersion": 1,
+    "command": { "program": "orca:node", "entry": "dist/provider.mjs", "args": [] }
+  }
+}

@@ -20,6 +20,18 @@ export {
 export { pluginLanguageConfigurationSchema } from '../../src/shared/plugins/plugin-syntax-artifact'
 export { PLUGIN_VIEWER_ENTRY_BYTES } from '../../src/shared/plugins/plugin-viewer-contributions'
 export { readPluginSyntaxContent } from '../../src/main/plugins/plugin-syntax-content'
+export { readPluginEnvironmentRecipeArtifacts } from '../../src/main/plugins/plugin-environment-recipe-validation'
+export { pluginEnvironmentRecipeSchema } from '../../src/shared/plugins/plugin-environment-recipe-artifact'
+export {
+  environmentRecipeRequestSchema,
+  parseEnvironmentRecipeResponse,
+  ENVIRONMENT_RECIPE_INPUT_BYTES,
+  ENVIRONMENT_RECIPE_OUTPUT_BYTES
+} from '../../src/shared/environment-recipe-protocol'
+export {
+  environmentRecipeRecoveryRequestSchema,
+  parseEnvironmentRecipeRecoveryResponse
+} from '../../src/shared/environment-recipe-recovery-protocol'
 export {
   readContainedPluginArtifactText,
   resolveContainedPluginArtifact

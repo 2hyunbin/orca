@@ -12,6 +12,7 @@ const GENERATED_PLUGIN_BUNDLES = new Set([
   'plugin-packages/orca-viewer-xlsx/dist/xlsx.worker.js',
   'plugin-packages/orca-plugin-tooling/dist/runtime.mjs',
   'plugin-packages/orca-plugin-tooling/templates/viewer/dist/example.worker.js',
+  'plugin-packages/orca-plugin-tooling/templates/environment/dist/provider.mjs',
   'plugin-packages/orca-viewer-stl/dist/stl.worker.js'
 ])
 const CASTING_RULE = 'typescript/consistent-type-assertions'
