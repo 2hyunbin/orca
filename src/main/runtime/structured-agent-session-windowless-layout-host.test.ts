@@ -14,7 +14,7 @@ import { closeTestJournalHostDatabases } from '../native-chat/agent-session-jour
 import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { seedTestAgentSessionRecordStore } from './agent-session-record-store-test-harness'
 import { OrcaRuntimeService } from './orca-runtime'
-import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import { withChatTabChanges } from './agent-session-tab-layout'
 import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
@@ -189,11 +189,15 @@ describe('a windowless chat tab against the chat host', () => {
       sessionTabs: shown(CHAT_B)
     })
     const { runtime, state } = await runtimeWithSavedChats([CHAT_B])
-    state.session = withOpenedAgentSessionTab('ssh:box', state.session, WT, {
-      sessionId: CHAT_SSH,
-      agent: 'codex',
-      tabId: structuredAgentSessionTabId(CHAT_SSH)
-    })!
+    state.session = withChatTabChanges('ssh:box', state.session, WT, [
+      {
+        open: {
+          sessionId: CHAT_SSH,
+          agent: 'codex',
+          tabId: structuredAgentSessionTabId(CHAT_SSH)
+        }
+      }
+    ])!
     restoringRuntime(runtime)
 
     await runtime.restoreStructuredAgentSessionTabs()
@@ -207,11 +211,15 @@ describe('a windowless chat tab against the chat host', () => {
       sessionTabs: shown(CHAT_B)
     })
     // A desktop mirrors a remote server's chat into that server's partition with no host stamp.
-    const mirrored = withOpenedAgentSessionTab('local', EMPTY_SESSION, WT, {
-      sessionId: CHAT_REMOTE,
-      agent: 'codex',
-      tabId: structuredAgentSessionTabId(CHAT_REMOTE)
-    })!
+    const mirrored = withChatTabChanges('local', EMPTY_SESSION, WT, [
+      {
+        open: {
+          sessionId: CHAT_REMOTE,
+          agent: 'codex',
+          tabId: structuredAgentSessionTabId(CHAT_REMOTE)
+        }
+      }
+    ])!
     const unifiedTabs = {
       [WT]: (mirrored.unifiedTabs?.[WT] ?? []).map(({ executionHostId: _host, ...tab }) => tab)
     }

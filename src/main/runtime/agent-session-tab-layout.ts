@@ -2,95 +2,65 @@
 // layout is a complete record of the host's tabs.
 
 import type { AgentType } from '../../shared/agent-status-types'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import { applyLayoutCommand } from '../../shared/workspace-layout/workspace-layout-commands'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
-import type { WorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-model'
+import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { randomUUID } from 'node:crypto'
+import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 
-/** The partition with a tab for the chat in the active group; null when a saved tab shows it. */
-export function withOpenedAgentSessionTab(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  worktreeId: string,
-  chat: { sessionId: string; agent: AgentType; tabId: string }
-): WorkspaceSessionState | null {
-  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  if (savedAgentSessionTabId(loaded.layout.workspaces[worktreeId], chat.sessionId)) {
-    return null
-  }
-  const groupId = loaded.desktopView.activeGroupIdByWorktree?.[worktreeId]
-  const applied = applyLayoutCommand(
-    loaded.layout,
-    {
-      type: 'openAgentSessionTab',
-      workspace: worktreeId,
-      tabId: chat.tabId,
-      sessionId: chat.sessionId,
-      agent: chat.agent,
-      ...(groupId ? { groupId } : {})
-    },
-    { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
-  )
-  return applied.ok ? saveWorkspaceLayout({ ...loaded, layout: applied.model }) : null
-}
-
-/** The partition without the chat's tab; null when no saved tab shows it. */
-export function withClosedAgentSessionTab(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  worktreeId: string,
-  sessionId: string
-): WorkspaceSessionState | null {
-  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const tabId = savedAgentSessionTabId(loaded.layout.workspaces[worktreeId], sessionId)
-  if (!tabId) {
-    return null
-  }
-  const applied = applyLayoutCommand(
-    loaded.layout,
-    { type: 'closeTabs', workspace: worktreeId, tabIds: [tabId], force: true },
-    { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
-  )
-  return applied.ok ? saveWorkspaceLayout({ ...loaded, layout: applied.model }) : null
-}
-
-function savedAgentSessionTabId(
-  workspace: WorkspaceLayout | undefined,
-  sessionId: string
-): string | null {
-  return (
-    workspace?.tabs.find((tab) => tab.kind === 'agent-session' && tab.entityId === sessionId)?.id ??
-    null
-  )
-}
-
-export type SavedAgentSessionTab = { worktreeId: string; hostId: ExecutionHostId }
+export type ChatTabChange =
+  | { open: { sessionId: string; agent: AgentType; tabId: string } }
+  | { close: string }
 
 /**
- * This host's chats with a saved tab, by session, in every partition: a tab can be left in one
- * whose runtime id rotated (#18202). A tab stamped with another execution host is that host's chat,
- * listed in its index, not this one's; so is an unstamped tab outside the local partition.
+ * The partition with the worktree's chat tabs changed in one layout load: a chat opens in the active
+ * group unless a saved tab shows it, and a close drops the chat's tab. Null when nothing changed.
  */
-export function listSavedAgentSessionTabs(store: {
-  getWorkspaceSessionHostIds?: () => ExecutionHostId[]
-  getWorkspaceSession?: (hostId: ExecutionHostId) => WorkspaceSessionState | null | undefined
-}): Map<string, SavedAgentSessionTab[]> {
-  const saved = new Map<string, SavedAgentSessionTab[]>()
-  for (const hostId of store.getWorkspaceSessionHostIds?.() ?? [LOCAL_EXECUTION_HOST_ID]) {
-    const session = store.getWorkspaceSession?.(hostId)
-    for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
-      for (const tab of tabs) {
-        // An unstamped tab is the partition's: SSH and remote-runtime partitions hold those hosts' chats.
-        const ownHost = (tab.executionHostId ?? hostId) === LOCAL_EXECUTION_HOST_ID
-        if (tab.contentType === 'agent-session' && ownHost) {
-          saved.set(tab.entityId, [...(saved.get(tab.entityId) ?? []), { worktreeId, hostId }])
-        }
-      }
+export function withChatTabChanges(
+  hostId: ExecutionHostId,
+  session: WorkspaceSessionState,
+  worktreeId: string,
+  changes: readonly ChatTabChange[]
+): WorkspaceSessionState | null {
+  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const groupId = loaded.desktopView.activeGroupIdByWorktree?.[worktreeId]
+  let layout = loaded.layout
+  for (const change of changes) {
+    const workspace = layout.workspaces[worktreeId]
+    const sessionId = 'close' in change ? change.close : change.open.sessionId
+    const tabId =
+      workspace?.tabs.find((tab) => tab.kind === 'agent-session' && tab.entityId === sessionId)
+        ?.id ?? null
+    let command: LayoutCommand | null = null
+    if ('close' in change && tabId) {
+      command = { type: 'closeTabs', workspace: worktreeId, tabIds: [tabId], force: true }
+    } else if ('open' in change && !tabId) {
+      const open = { type: 'openAgentSessionTab', workspace: worktreeId, ...change.open } as const
+      command = groupId ? { ...open, groupId } : open
+    }
+    const applied = command
+      ? applyLayoutCommand(layout, command, {
+          mintId: randomUUID,
+          mintLeafId: randomUUID,
+          now: Date.now
+        })
+      : null
+    if (applied?.ok) {
+      layout = applied.model
     }
   }
-  return saved
+  return layout === loaded.layout ? null : saveWorkspaceLayout({ ...loaded, layout })
+}
+
+/** The id the window, the index and status updates all address the chat's tab by. */
+export function chatTabId(sessionId: string): string {
+  return (
+    getStructuredAgentSessionHost()?.getSessionTabId?.(sessionId) ??
+    structuredAgentSessionTabId(sessionId)
+  )
 }

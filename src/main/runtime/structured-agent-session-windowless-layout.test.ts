@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from './orca-runtime'
-import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import { withChatTabChanges } from './agent-session-tab-layout'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 
 const WT = 'repo-1::/tmp/worktree-a'
@@ -136,7 +136,7 @@ describe('a chat tab on a host with no window', () => {
     expect(savedChatIds(state)).toEqual([])
   })
 
-  it("leaves another partition that still saves this host's tab, and another host's chat alone", () => {
+  it("closes this host's chat tab in the local partition and leaves every other partition alone", () => {
     const empty: WorkspaceSessionState = {
       activeRepoId: 'repo-1',
       activeWorktreeId: WT,
@@ -145,15 +145,19 @@ describe('a chat tab on a host with no window', () => {
       terminalLayoutsByTabId: {}
     }
     const sessions = new Map<string, WorkspaceSessionState>([
-      ['local', empty],
-      // This host's tab, left in a rotated runtime partition (#18202).
-      ['runtime:env-old', withOpenedAgentSessionTab('local', empty, WT, chat('chat-1'))!],
+      ['local', withChatTabChanges('local', empty, WT, [{ open: chat('chat-1') }])!],
       // A chat that runtime runs, which this host's index never lists.
-      ['runtime:env-x', withOpenedAgentSessionTab('runtime:env-x', empty, WT, chat('chat-x'))!],
+      [
+        'runtime:env-x',
+        withChatTabChanges('runtime:env-x', empty, WT, [{ open: chat('chat-x') }])!
+      ],
       // An SSH host's chat in a layout saved before tabs were stamped with their host.
-      ['ssh:box', unstamped(withOpenedAgentSessionTab('local', empty, WT, chat('chat-ssh'))!)],
+      ['ssh:box', unstamped(withChatTabChanges('local', empty, WT, [{ open: chat('chat-ssh') }])!)],
       // A remote server's chat a desktop mirrors, which carries no host stamp.
-      ['runtime:env-y', unstamped(withOpenedAgentSessionTab('local', empty, WT, chat('chat-y'))!)]
+      [
+        'runtime:env-y',
+        unstamped(withChatTabChanges('local', empty, WT, [{ open: chat('chat-y') }])!)
+      ]
     ])
     const remote = sessions.get('runtime:env-x')
     const ssh = sessions.get('ssh:box')
@@ -176,8 +180,7 @@ describe('a chat tab on a host with no window', () => {
     runtime.onStructuredSessionTabHidden('chat-ssh')
     runtime.onStructuredSessionTabHidden('chat-y')
 
-    expect(sessions.get('runtime:env-old')?.unifiedTabs?.[WT] ?? []).toEqual([])
-    expect(sessions.get('local')).toBe(empty)
+    expect(sessions.get('local')?.unifiedTabs?.[WT] ?? []).toEqual([])
     expect(sessions.get('runtime:env-x')).toBe(remote)
     expect(sessions.get('ssh:box')).toBe(ssh)
     expect(sessions.get('runtime:env-y')).toBe(mirrored)
