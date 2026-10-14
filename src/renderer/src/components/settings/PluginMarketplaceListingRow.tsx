@@ -52,7 +52,13 @@ export function PluginMarketplaceListingRow({
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground" title={listing.pluginKey}>
             {listing.pluginKey.split('.')[0]}
-            {listing.release ? ` · v${listing.release.version}` : null}
+            {listing.release
+              ? translate(
+                  'auto.components.settings.PluginMarketplaceListingRow.releaseVersion',
+                  ' · v{{version}}',
+                  { version: listing.release.version }
+                )
+              : null}
           </p>
           {installed && listing.release && installed.version !== listing.release.version && (
             <p className="mt-0.5 text-xs text-muted-foreground">

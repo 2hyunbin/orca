@@ -75,5 +75,69 @@
     "text": "sidebar",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/PluginViewerCellInspection.tsx",
+    "kind": "jsx-expression",
+    "text": "Cell details",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Older host compatibility fallback; current host sends plugins.viewer.cellDetails in validated chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/PluginViewerCellInspection.tsx",
+    "kind": "jsx-expression",
+    "text": "Close",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Older host compatibility fallback; current host sends localized close label in validated chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/PluginViewerCellInspection.tsx",
+    "kind": "jsx-attribute:aria-label",
+    "text": "Cell value",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Older host compatibility fallback; current host sends plugins.viewer.cellValue in validated chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/PluginViewerCellInspection.tsx",
+    "kind": "jsx-expression",
+    "text": "Copy value",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Older host compatibility fallback; current host sends plugins.viewer.copy in validated chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/plugin-viewer-frame-transport.ts",
+    "kind": "object-property:error",
+    "text": "cancelled",
+    "dynamic": false,
+    "count": 2,
+    "reason": "Stable machine-readable wire error code; rendered errors are localized by host chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/plugin-viewer-parent.ts",
+    "kind": "object-property:error",
+    "text": "read_failed",
+    "dynamic": false,
+    "count": 2,
+    "reason": "Stable machine-readable wire error code; rendered errors are localized by host chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/plugin-viewer-selection-copy.ts",
+    "kind": "user-visible-call",
+    "text": "Copied",
+    "dynamic": false,
+    "count": 1,
+    "reason": "Older host compatibility fallback; current host sends localized plugins.viewer.copied in validated chrome."
+  },
+  {
+    "filePath": "src/renderer/src/plugin-viewer/plugin-viewer-selection-copy.ts",
+    "kind": "user-visible-call",
+    "text": "Could not copy. Select the value and copy with your keyboard.",
+    "dynamic": false,
+    "count": 2,
+    "reason": "Older host compatibility fallback; current host sends localized plugins.viewer.copyFailed in validated chrome."
   }
 ]

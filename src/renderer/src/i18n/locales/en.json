@@ -11930,7 +11930,8 @@
           "checkUpdate": "Check for update",
           "install": "Install",
           "installedVersion": "Installed v{{version}}",
-          "update": "Update"
+          "update": "Update",
+          "releaseVersion": " · v{{version}}"
         },
         "PluginMarketplacePreviewDialog": {
           "languagePacksOne": "1 language pack",
@@ -11972,7 +11973,8 @@
           "environmentOne": "1 environment provider",
           "environments": "{{count}} environment providers",
           "providerPreviewMissing": "This host did not provide all provider commands for review. Update Orca and review again; this release cannot be approved here.",
-          "providerWarning": "Environment provider commands run with your account on the selected execution host. They can create, stop and delete machines. Review the program and literal arguments before approving this release."
+          "providerWarning": "Environment provider commands run with your account on the selected execution host. They can create, stop and delete machines. Review the program and literal arguments before approving this release.",
+          "contentAndAccess": "Plugin content and access"
         },
         "PluginMarketplaceSourceDialog": {
           "addFailed": "Could not add this marketplace. Check the Git URL, ref, and your Git credentials.",
@@ -12929,7 +12931,10 @@
           "connecting": "Connecting to {{machine}} on {{host}}…"
         },
         "PluginEnvironmentResources": {
-          "connect": "Connect"
+          "connect": "Connect",
+          "openingWorkspace": "Opening workspace…",
+          "openWorkspace": "Open workspace",
+          "reconnect": "Reconnect"
         },
         "PluginEnvironmentRecoveryDialog": {
           "unresolved": "The provider has not confirmed a terminal outcome. Orca keeps the original operation unresolved. Check your provider’s status or sign-in before checking again.",

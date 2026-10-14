@@ -95,7 +95,10 @@ export function PluginMarketplacePreviewDialog({
             </DialogHeader>
             <div
               role="region"
-              aria-label="Plugin content and access"
+              aria-label={translate(
+                'auto.components.settings.PluginMarketplacePreviewDialog.contentAndAccess',
+                'Plugin content and access'
+              )}
               className="max-h-[50vh] space-y-4 overflow-y-auto scrollbar-sleek"
             >
               {reviewedUpdate ? (
