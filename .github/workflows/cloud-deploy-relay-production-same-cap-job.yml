@@ -503,7 +503,7 @@ jobs:
         run: echo 'Exact same-cap rollback point verified.'
 
       # The sample can age the first one-hour token by up to 20 min; the drain's restart-safe
-      # wait (20 min at the default pace, 50 at the slowest) gets a fresh one.
+      # wait (20 min at the default pace, 35 at the slowest) gets a fresh one.
       - id: drain-auth
         if: ${{ inputs.mode != 'verify' && env.ROLLBACK_RESUME != 'true' }}
         uses: google-github-actions/auth@v2
