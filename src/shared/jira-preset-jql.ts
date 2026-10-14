@@ -5,7 +5,7 @@ export function buildJiraPresetJql(
   filter: JiraIssueFilter,
   filters?: JiraIssueListFilters
 ): string {
-  const clauses = []
+  const clauses: string[] = []
   if (filter === 'assigned' || filter === 'done') {
     clauses.push('assignee = currentUser()')
   } else if (filter === 'reported') {
