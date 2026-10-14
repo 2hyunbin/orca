@@ -345,8 +345,26 @@ describe('Jira CLI', () => {
       'jira.updateIssue': { ok: false, error: 'Permission denied' }
     })
     expect(errorOutput()).toMatchObject({
-      error: { code: 'jira_write_failed', message: 'Permission denied' }
+      error: {
+        code: 'jira_write_failed',
+        message: expect.stringContaining('Permission denied')
+      }
     })
+  })
+
+  it('preserves uncertainty when the host returns a failed comment result', async () => {
+    await run(['comment', 'add', 'ENG-123', '--body', 'Ready'], {
+      'jira.addIssueComment': { ok: false, error: 'Connection closed while reading the response' }
+    })
+    expect(errorOutput()).toMatchObject({
+      error: {
+        code: 'jira_write_failed',
+        message: expect.stringContaining('Verify in Jira before retrying')
+      }
+    })
+    expect(
+      mocks.callMock.mock.calls.filter(([method]) => method === 'jira.addIssueComment')
+    ).toHaveLength(1)
   })
 
   it('does not retry a timed-out write or claim it did not happen', async () => {

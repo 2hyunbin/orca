@@ -59,7 +59,10 @@ async function applyUpdate(context: HandlerContext, updates: JiraIssueUpdate): P
     updates
   })
   if (!response.result.ok) {
-    throw new RuntimeClientError('jira_write_failed', response.result.error)
+    throw new RuntimeClientError(
+      'jira_write_failed',
+      `${response.result.error} Jira did not confirm the change. Verify in Jira before retrying.`
+    )
   }
   printResult(
     { ...response, result: { ...response.result, key: target.key, siteId: target.siteId } },
@@ -113,7 +116,10 @@ async function transition(context: HandlerContext): Promise<void> {
     updates: { transitionId: matches[0].id }
   })
   if (!response.result.ok) {
-    throw new RuntimeClientError('jira_write_failed', response.result.error)
+    throw new RuntimeClientError(
+      'jira_write_failed',
+      `${response.result.error} Jira did not confirm the change. Verify in Jira before retrying.`
+    )
   }
   printResult(response, context.json, () => `Transitioned ${target.key} (${target.siteId})`)
 }
@@ -187,7 +193,10 @@ async function create(context: HandlerContext): Promise<void> {
     userFieldKeys
   })
   if (!response.result.ok) {
-    throw new RuntimeClientError('jira_write_failed', response.result.error)
+    throw new RuntimeClientError(
+      'jira_write_failed',
+      `${response.result.error} Jira did not confirm the change. Verify in Jira before retrying.`
+    )
   }
   printResult({ ...response, result: response.result }, context.json, formatJiraCreate)
 }
@@ -203,7 +212,10 @@ export const JIRA_WRITE_HANDLERS: Record<string, CommandHandler> = {
       { key: target.key, body, siteId: target.siteId }
     )
     if (!response.result.ok) {
-      throw new RuntimeClientError('jira_write_failed', response.result.error)
+      throw new RuntimeClientError(
+        'jira_write_failed',
+        `${response.result.error} Jira did not confirm the change. Verify in Jira before retrying.`
+      )
     }
     printResult(response, context.json, () => `Commented on ${target.key} (${target.siteId})`)
   },

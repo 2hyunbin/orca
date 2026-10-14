@@ -88,7 +88,7 @@ ORCA jira status list ENG-123 --json
 ORCA jira status set ENG-123 --to "Ready for Review" --json
 ```
 
-`--to` matches either the transition name or the destination status name, case-insensitively. When it matches none, the error lists every available transition — read that list rather than guessing. Use `--to-id` when you already hold a transition id; it skips the lookup.
+`--to` matches either the transition name or the destination status name, case-insensitively. When it matches none, the error lists every available transition — read that list rather than guessing. Use `--to-id` when you already hold a transition id; Orca still checks that it is available on this exact issue.
 
 Before any status move, read the issue's current status. Do not move an issue that is already in a terminal status category (`done`) back into an earlier one unless the user asked. If zero or multiple transitions plausibly match a requested review state, leave the status unchanged and say so in the completion comment.
 
@@ -121,7 +121,7 @@ Include a concise repro, expected behavior, actual behavior, and any useful file
 
 ## Errors
 
-Jira reports some write failures inside a successful HTTP response. The CLI turns those into command failures, so a non-zero exit means the write did not land.
+Jira reports some write failures inside a successful RPC response. The CLI turns those into command failures. A non-zero exit means the change was not confirmed; a network failure or lost reply can leave its outcome uncertain.
 
 - Missing required fields on a transition: Jira rejects the update when the target transition has a required screen field (for example a resolution). Read the message, set the field in Jira, then retry.
 - `No transition matching "<name>"`: the error lists the available transitions for the issue's current status; pick one of those.
