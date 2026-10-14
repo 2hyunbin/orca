@@ -13,6 +13,12 @@ import {
 } from '../../shared/plugins/plugin-consent-state'
 import type { Store } from '../persistence'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
+import { setEnvironmentProviderSshAuthorizer } from '../ssh/environment-provider-ssh-admission'
+import {
+  retireEnvironmentProviderConnections,
+  retireEnvironmentProviderSshTarget,
+  watchEnvironmentProviderSshLease
+} from '../ipc/environment-provider-ssh-retirement'
 
 export async function startOrcadPlugins(options: {
   store: Pick<Store, 'getSettings' | 'updateSettings' | 'onSettingsChanged'>
@@ -30,6 +36,8 @@ export async function startOrcadPlugins(options: {
   await safetyList.initialize()
   let management: PluginManagementController | undefined
   const service = new PluginService({
+    retireEnvironmentProviderConnections,
+    retireEnvironmentProviderSshTarget,
     retirePluginManagement: () => management?.dispose() ?? Promise.resolve(),
     userDataPath: options.userDataPath,
     hostVersion: options.hostVersion,
@@ -94,6 +102,7 @@ export async function startOrcadPlugins(options: {
     stopSettings()
     stopSafety()
     setPluginServiceForRpc(null)
+    setEnvironmentProviderSshAuthorizer(null)
     try {
       await service.dispose()
     } finally {
@@ -101,6 +110,11 @@ export async function startOrcadPlugins(options: {
     }
   })
   await service.initialize()
+  setEnvironmentProviderSshAuthorizer(async (target) => {
+    const lease = await service.environmentProviders.ssh.authorize(target)
+    watchEnvironmentProviderSshLease(target, lease)
+    return lease
+  })
   setPluginServiceForRpc(service, {
     management,
     applyConsent: (request) => applyPluginConsent({ store, pluginService: service, ...request }),

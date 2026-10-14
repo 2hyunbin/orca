@@ -57,6 +57,8 @@ import { wakeFolderRepoGitUpgradeWatch } from '../ipc/folder-repo-git-upgrade-wa
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { MACHINE_NAME_PUBLISH_WAIT_MS } from './runtime-machine-name'
 import { getManagedServerActions } from './managed-server-actions-registry'
+import { sshTargetStackAvailable } from '../ssh/ssh-target-registry'
+import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from '../../shared/ssh-target-management'
 
 type RuntimeStatusHost = {
   getAvailableAuthoritativeWindow(): unknown
@@ -103,6 +105,7 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
       process.platform === 'win32' && isWindowsProcessStartTimeAvailable()
     const capabilities: RuntimeCapability[] = RUNTIME_CAPABILITIES.filter(
       (capability) =>
+        (capability !== SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY || sshTargetStackAvailable()) &&
         (capability !== PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY ||
           environmentProviderRpcAvailable()) &&
         (capability !== 'browser.screencast.v1' || canBrowse) &&

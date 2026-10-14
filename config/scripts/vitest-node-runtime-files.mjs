@@ -60,6 +60,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-environment-adapter.integration.test.ts',
   'src/main/runtime/rpc/methods/plugin-environment-providers.integration.test.ts',
   'src/main/orcad/orcad-plugins.integration.test.ts',
+  'src/main/orcad/orcad-ssh.integration.test.ts',
   'src/main/runtime/rpc/methods/plugin-management.integration.test.ts',
   'src/main/plugins/plugin-environment-provider-recovery.integration.test.ts',
   'src/main/plugins/plugin-environment-provider-migration.integration.test.ts',

@@ -221,13 +221,6 @@ async function startOrcadRuntime(
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
   const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
-  const { startOrcadPlugins } = await import('./orcad-plugins')
-  await startOrcadPlugins({
-    store: profileStore,
-    userDataPath: runtimeUserDataPath,
-    hostVersion: orcadPluginHostVersion(),
-    registerCleanup
-  })
   uninstallObservedStatusIdentity = agentHookServer.subscribeEnrichedStatus((enriched) =>
     observedStatusCapture.observe(enriched)
   )
@@ -314,6 +307,21 @@ async function startOrcadRuntime(
     undefined,
     profileStore
   )
+
+  const { startOrcadSsh } = await import('./orcad-ssh')
+  startOrcadSsh({
+    store: profileStore,
+    runtime,
+    userDataPath: runtimeUserDataPath,
+    registerCleanup
+  })
+  const { startOrcadPlugins } = await import('./orcad-plugins')
+  await startOrcadPlugins({
+    store: profileStore,
+    userDataPath: runtimeUserDataPath,
+    hostVersion: orcadPluginHostVersion(),
+    registerCleanup
+  })
 
   // Why: same post-registration reconciliation `--serve` performs. Skipping it leaves
   // restored orchestration rows claiming an authority this host never took over.

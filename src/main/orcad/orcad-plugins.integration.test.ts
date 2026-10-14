@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as runtimeCapabilities from '../../shared/remote-runtime-client-capabilities'
 import { Store } from '../persistence'
+import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
 import { OrcadRuntimeLifetime } from './orcad-runtime-lifetime'
 import { startOrcadPlugins } from './orcad-plugins'
 import { PluginKillListService } from '../plugins/plugin-kill-list-service'
@@ -29,6 +30,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).toReversed()) {
     await cleanup()
   }
+  await closeTestStores()
   await disposePluginEnvironmentProviderInstallFixtures()
 })
 
@@ -37,10 +39,11 @@ async function fixture(
 ) {
   const f = await createPluginEnvironmentProviderInstallFixture({ portable: true, ...options })
   await f.service.dispose()
-  const store = new Store({
+  const store = createSqliteTestStore(Store, {
     dataFile: join(f.root, 'profile.json'),
-    serializedState: JSON.stringify({ settings: { pluginSystemEnabled: true } })
+    storageAuthority: 'runtime'
   })
+  store.updateSettings({ pluginSystemEnabled: true })
   const lifetime = new OrcadRuntimeLifetime()
   lifetime.add(() => store.freezeWritesAsync())
   cleanups.push(() => lifetime.stop())

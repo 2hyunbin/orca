@@ -3,6 +3,10 @@ export class QuitTeardownStartGate {
 
   tryStart(event: { preventDefault(): void }): boolean {
     event.preventDefault()
+    return this.start()
+  }
+
+  start(): boolean {
     if (this.started) {
       return false
     }
