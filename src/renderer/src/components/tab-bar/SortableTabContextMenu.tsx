@@ -22,7 +22,7 @@ import { formatShortcutLabel, useOptionalShortcutLabel } from '@/hooks/useShortc
 import { translate } from '@/i18n/i18n'
 import { TerminalTabSplitMenuSection } from './TerminalTabSplitMenuSection'
 import { TabSessionSurfaceSwitchMenuItems } from './TabSessionSurfaceSwitchMenuItems'
-import type { NativeChatTabSession } from './tab-session-history-switch'
+import type { NativeChatTabSession } from './tab-session-selected-source'
 import { TAB_CONTEXT_MENU_CONTENT_CLASS } from './tab-context-menu-sizing'
 import { CopyTabIdMenuItem } from './CopyTabIdMenuItem'
 
@@ -95,6 +95,8 @@ type SortableTabContextMenuProps = {
   groupId: string
   isActive: boolean
   open: boolean
+  openingId: number
+  onSessionSwitchComplete: () => void
   point: { x: number; y: number }
   tabCount: number
   hasTabsToRight: boolean
@@ -129,6 +131,8 @@ export function SortableTabContextMenu({
   groupId,
   isActive,
   open,
+  openingId,
+  onSessionSwitchComplete,
   point,
   tabCount,
   hasTabsToRight,
@@ -193,10 +197,11 @@ export function SortableTabContextMenu({
           </>
         ) : null}
         <TabSessionSurfaceSwitchMenuItems
+          key={openingId}
           tab={tab}
           nativeChat={nativeChat}
           leadingSeparator={!showTerminalViewSwitch}
-          onComplete={() => onOpenChange(false)}
+          onComplete={onSessionSwitchComplete}
         />
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onTogglePin}>

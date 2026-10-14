@@ -9,7 +9,6 @@ import {
 } from '../../../../shared/ai-vault-selected-session'
 import { SelectedSessionResultSchema } from '../../../../shared/ai-vault-selected-session-contract'
 import { selectedSessionFromLegacyList } from '../../../../shared/ai-vault-selected-session-legacy'
-import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { toRuntimeExecutionHostId } from '../../../../shared/execution-host'
 import type { AiVaultListResult } from '../../../../shared/ai-vault-types'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
@@ -27,15 +26,22 @@ export async function resolveWebSelectedSession(
   }
   const controller = new AbortController()
   requests.set(args.requestToken, controller)
+  const callOptions = {
+    environmentId: environment.id,
+    expectedEnvironmentPairingRevision: environment.pairingRevision ?? environment.createdAt,
+    signal: controller.signal
+  }
   const started = Date.now()
   let timer = setTimeout(
     () => controller.abort(new Error('Conversation lookup timed out.')),
     SELECTED_SESSION_LOOKUP_TIMEOUT_MS
   )
   try {
-    const status = await waitForPromiseWithSignal(
-      callRuntimeResult<RuntimeStatus>('status.get'),
-      controller.signal
+    const status = await callRuntimeResult<RuntimeStatus>(
+      'status.get',
+      undefined,
+      SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
+      callOptions
     )
     const modern = status.capabilities?.includes(AI_VAULT_SELECTED_SESSION_CAPABILITY) === true
     if (!modern) {
@@ -44,19 +50,19 @@ export async function resolveWebSelectedSession(
         () => controller.abort(new Error('Conversation lookup timed out.')),
         Math.max(1, LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS - (Date.now() - started))
       )
-      const listed = await waitForPromiseWithSignal(
-        callRuntimeResult<AiVaultListResult>(
-          'aiVault.listSessions',
-          { ...args.legacyList, executionHostId: hostId },
-          LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS
-        ),
-        controller.signal
+      const listed = await callRuntimeResult<AiVaultListResult>(
+        'aiVault.listSessions',
+        { ...args.legacyList, executionHostId: hostId },
+        LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
+        callOptions
       )
       return selectedSessionFromLegacyList(listed, args.source, hostId)
     }
-    const result = await waitForPromiseWithSignal(
-      callRuntimeResult('aiVault.resolveSession', { source: args.source, executionHostId: hostId }),
-      controller.signal
+    const result = await callRuntimeResult(
+      'aiVault.resolveSession',
+      { source: args.source, executionHostId: hostId },
+      SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
+      callOptions
     )
     return SelectedSessionResultSchema.parse(result)
   } finally {

@@ -26,6 +26,9 @@ export function selectedCliSourceStatus(input: {
   if (!row) {
     throw new Error('The source conversation is no longer available.')
   }
+  if (row.providerSession?.transcriptPath && isWslUncPath(row.providerSession.transcriptPath)) {
+    throw new Error('This conversation cannot be resumed on this host.')
+  }
   return row
 }
 
@@ -42,9 +45,6 @@ export async function resolveSelectedCliTranscript(input: {
   throwIfSignalAborted(input.signal)
   const row = selectedCliSourceStatus(input)
   const transcriptPath = row.providerSession?.transcriptPath
-  if (transcriptPath && isWslUncPath(transcriptPath)) {
-    throw new Error('This conversation cannot be resumed on this host.')
-  }
   return resolveSelectedAccountTranscript({ ...input, transcriptPath })
 }
 
@@ -62,9 +62,6 @@ export async function resolveSelectedAccountTranscript(input: {
     throw new Error('Conversation import is unavailable.')
   }
   let homes = [...new Set(importer.accountHomeCandidates(input))]
-  if (homes.length > 64) {
-    throw new Error('Conversation lookup exceeded its account limit.')
-  }
   if (input.transcriptPath) {
     const attested = input.transcriptPath
     homes = homes.filter(
@@ -78,7 +75,6 @@ export async function resolveSelectedAccountTranscript(input: {
       throw new Error('The conversation account is not available on this host.')
     }
   }
-  const budget = { directories: 0, entries: 0 }
   return resolveStructuredAgentSessionAdoption({
     providerSessionId: input.providerSessionId,
     candidateAccountHomes: homes,
@@ -89,8 +85,7 @@ export async function resolveSelectedAccountTranscript(input: {
         selected: {
           cwd: input.cwd,
           transcriptPath: input.transcriptPath,
-          signal: input.signal,
-          budget
+          signal: input.signal
         }
       })
     }

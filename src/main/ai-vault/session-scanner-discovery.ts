@@ -1,5 +1,9 @@
-import type { Dirent } from 'node:fs'
-import { extname, join } from 'node:path'
+import { forEachSessionFile } from './session-file-walk'
+export {
+  forEachSessionFile,
+  walkSessionFiles,
+  type SessionFileWalkOptions
+} from './session-file-walk'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
 import { PrioritySemaphore } from '../../shared/priority-semaphore'
 import { isWslUncPath } from '../../shared/wsl-paths'
@@ -210,77 +214,4 @@ function isMissingSidecarError(error: unknown): boolean {
       ? error.code
       : null
   return code === 'ENOENT' || code === 'ENOTDIR'
-}
-
-export type SessionFileWalkOptions = {
-  extensions: Set<string>
-  filePredicate?: (path: string) => boolean
-  // Return false to skip descending into a directory; depth 0 is a child of
-  // rootDir, so pruned subtrees are never stat'd or parsed.
-  directoryPredicate?: (name: string, depth: number) => boolean
-  readDirectory?: (dirPath: string) => Promise<Dirent[]>
-  signal?: AbortSignal
-}
-
-/** Collecting form for callers that want every match; bounded scans stream. */
-export async function walkSessionFiles(
-  dirPath: string,
-  agent: AiVaultAgent,
-  issues: AiVaultScanIssue[],
-  options: SessionFileWalkOptions
-): Promise<string[]> {
-  const files: string[] = []
-  await forEachSessionFile(dirPath, agent, issues, options, async (path) => {
-    files.push(path)
-  })
-  return files
-}
-
-/** Streams matches to `onFile` so a bounded consumer never retains the whole tree. */
-export async function forEachSessionFile(
-  dirPath: string,
-  agent: AiVaultAgent,
-  issues: AiVaultScanIssue[],
-  options: SessionFileWalkOptions,
-  onFile: (path: string) => void | Promise<void>,
-  depth = 0
-): Promise<void> {
-  options.signal?.throwIfAborted()
-  let entries
-  try {
-    entries = options.readDirectory
-      ? await options.readDirectory(dirPath)
-      : await wslGatedReaddir(dirPath, 'scan', options.signal)
-  } catch (error) {
-    options.signal?.throwIfAborted()
-    // Why: a gate refusal means the scan could not run, not that the tree is
-    // empty — swallowing it would misreport a stalled distro as "no transcript".
-    if (error instanceof WslTranscriptFsError) {
-      throw error
-    }
-    return
-  }
-
-  for (const entry of entries) {
-    options.signal?.throwIfAborted()
-    const fullPath = join(dirPath, entry.name)
-    if (entry.isDirectory()) {
-      // Skip whole subtrees an agent never wants (e.g. subagent transcripts),
-      // avoiding the readdir cost of descending into them.
-      if (options.directoryPredicate?.(entry.name, depth) ?? true) {
-        await forEachSessionFile(fullPath, agent, issues, options, onFile, depth + 1)
-      }
-      continue
-    }
-    if (
-      entry.isFile() &&
-      options.extensions.has(extname(entry.name).toLowerCase()) &&
-      (options.filePredicate?.(fullPath) ?? true)
-    ) {
-      const observation = onFile(fullPath)
-      if (observation) {
-        await observation
-      }
-    }
-  }
 }

@@ -5,6 +5,7 @@ import type { RuntimeRpcResponse } from '../../../../shared/runtime-rpc-envelope
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
+  assertActiveEnvironment,
   getClientForEnvironment,
   manuallyDisconnectedEnvironmentIds,
   manuallyDisconnectedResponse,
@@ -14,56 +15,75 @@ import {
   updateEnvironmentFromResponse
 } from './web-runtime-session'
 
+export type WebRuntimeCallOptions = {
+  signal?: AbortSignal
+  environmentId?: string
+  expectedEnvironmentPairingRevision?: number
+}
+
 export type WebRuntimeResultCaller = <TResult>(
   method: string,
   params?: unknown,
-  timeoutMs?: number
+  timeoutMs?: number,
+  options?: WebRuntimeCallOptions
 ) => Promise<TResult>
 
 export type WebRuntimeEnvelopeCaller = <TResult>(
   method: string,
   params?: unknown,
-  timeoutMs?: number
+  timeoutMs?: number,
+  options?: WebRuntimeCallOptions
 ) => Promise<RuntimeRpcResponse<TResult>>
 
 export async function callRuntimeEnvelope<TResult = unknown>(
   method: string,
   params?: unknown,
-  timeoutMs?: number
+  timeoutMs?: number,
+  options?: WebRuntimeCallOptions
 ): Promise<RuntimeRpcResponse<TResult>> {
-  const environment = requireActiveEnvironment()
-  if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
-    return manuallyDisconnectedResponse(environment)
-  }
-  const response = await runtimeCallQueuePool.enqueue(environment.id, method, () => {
-    if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
-      return Promise.resolve(manuallyDisconnectedResponse(environment))
-    }
-    return getClientForEnvironment(environment).call(method, params, { timeoutMs })
-  })
-  if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
-    return manuallyDisconnectedResponse(environment)
-  }
-  updateEnvironmentFromResponse(environment, response)
-  return response as RuntimeRpcResponse<TResult>
+  return callEnvironmentEnvelope<TResult>(
+    options?.environmentId ?? requireActiveEnvironment().id,
+    method,
+    params,
+    timeoutMs,
+    options
+  )
 }
 
 export async function callEnvironmentEnvelope<TResult = unknown>(
   selector: string,
   method: string,
   params?: unknown,
-  timeoutMs?: number
+  timeoutMs?: number,
+  options?: WebRuntimeCallOptions
 ): Promise<RuntimeRpcResponse<TResult>> {
   const environment = resolveEnvironment(selector)
+  const assertPairing = () => {
+    if (options?.expectedEnvironmentPairingRevision !== undefined) {
+      assertActiveEnvironment(environment.id, options.expectedEnvironmentPairingRevision)
+    }
+  }
+  assertPairing()
   if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
     return manuallyDisconnectedResponse(environment)
   }
-  const response = await runtimeCallQueuePool.enqueue(environment.id, method, () => {
-    if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
-      return Promise.resolve(manuallyDisconnectedResponse(environment))
-    }
-    return getClientForEnvironment(environment).call(method, params, { timeoutMs })
-  })
+  const response = await runtimeCallQueuePool.enqueue(
+    environment.id,
+    method,
+    () => {
+      assertPairing()
+      if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
+        return Promise.resolve(manuallyDisconnectedResponse(environment))
+      }
+      return getClientForEnvironment(environment).call(method, params, {
+        timeoutMs,
+        signal: options?.signal
+      })
+    },
+    0,
+    options?.signal
+  )
+  assertPairing()
   if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
     return manuallyDisconnectedResponse(environment)
   }
@@ -74,9 +94,10 @@ export async function callEnvironmentEnvelope<TResult = unknown>(
 export async function callRuntimeResult<TResult>(
   method: string,
   params?: unknown,
-  timeoutMs?: number
+  timeoutMs?: number,
+  options?: WebRuntimeCallOptions
 ): Promise<TResult> {
-  const response = await callRuntimeEnvelope(method, params, timeoutMs)
+  const response = await callRuntimeEnvelope(method, params, timeoutMs, options)
   if (!response.ok) {
     // Why keep the code: callers classify recoverable host failures by token, and the message alone
     // (e.g. "Parent selector was not found.") carries none.

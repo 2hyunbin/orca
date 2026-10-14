@@ -22,6 +22,7 @@ import {
 } from '../native-chat/selected-cli-transcript'
 import { readSelectedSessionInBackground } from './selected-session-reader-client'
 import {
+  findStructuredAiVaultOwnership,
   projectStructuredAiVaultSessions,
   OPENS_EVERY_STRUCTURED_CHAT
 } from './structured-session-ownership'
@@ -156,7 +157,15 @@ async function resolveCli(
   cwd: string,
   signal: AbortSignal
 ): Promise<AiVaultResolveSessionResult> {
+  const owned = selectedCliOwnedSession(source, runtime)
+  if (owned) {
+    return owned
+  }
   const selected = await runtime.resolveStructuredAgentAccountHome(source.agent)
+  const afterAccount = selectedCliOwnedSession(source, runtime)
+  if (afterAccount) {
+    return afterAccount
+  }
   if (!isLegacyAgentSessionAccountHome(selected)) {
     throw new Error('Conversation account is unavailable.')
   }
@@ -170,6 +179,10 @@ async function resolveCli(
     cwd,
     signal
   })
+  const beforeRead = selectedCliOwnedSession(source, runtime)
+  if (beforeRead) {
+    return beforeRead
+  }
   const row = await readSelectedSessionInBackground(
     {
       agent: source.agent,
@@ -178,12 +191,10 @@ async function resolveCli(
     },
     signal
   )
-  selectedCliSourceStatus({
-    agent: source.agent,
-    providerSessionId: source.providerSessionId,
-    source,
-    rows: runtime.getAgentProviderSessionRows()
-  })
+  const afterRead = selectedCliOwnedSession(source, runtime)
+  if (afterRead) {
+    return afterRead
+  }
   if (!row) {
     return { status: 'missing' }
   }
@@ -204,6 +215,40 @@ async function resolveCli(
       ...projected,
       accountHome: { variable: selected.variable, path: resolved.accountHomePath },
       selectedSource: { paneKey: source.paneKey, workspaceId: source.workspaceId }
+    }
+  }
+}
+
+function selectedCliOwnedSession(
+  source: Extract<AiVaultSelectedSessionSource, { kind: 'cli' }>,
+  runtime: SelectedSessionRuntime
+): AiVaultResolveSessionResult | null {
+  selectedCliSourceStatus({
+    agent: source.agent,
+    providerSessionId: source.providerSessionId,
+    source,
+    rows: runtime.getAgentProviderSessionRows()
+  })
+  const owner = findStructuredAiVaultOwnership(source.agent, source.providerSessionId)
+  if (!owner) {
+    return null
+  }
+  // Existing-owner actions consume identity; provider import metadata is unused.
+  return {
+    status: 'ready',
+    session: {
+      agent: source.agent,
+      sessionId: source.providerSessionId,
+      executionHostId: LOCAL_EXECUTION_HOST_ID,
+      executionHostPlatform: process.platform,
+      structuredSession: { sessionId: owner.sessionId, workspaceId: owner.workspaceId },
+      title: owner.conversationName ?? '',
+      filePath: '',
+      cwd: null,
+      codexHome: null,
+      branch: null,
+      messageCount: 0,
+      previewMessages: []
     }
   }
 }

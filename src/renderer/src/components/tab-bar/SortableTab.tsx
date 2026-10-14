@@ -21,6 +21,7 @@ import {
 import { preventMiddleButtonDefault } from './middle-button-default-guard'
 import { useSortableTabRename } from './use-sortable-tab-rename'
 import { SortableTabContextMenu } from './SortableTabContextMenu'
+import { useSortableTabContextMenu } from './use-sortable-tab-context-menu'
 import { translate } from '@/i18n/i18n'
 import { TAB_LABEL_WIDTH_CLASSES } from './tab-width-rules'
 import { useTabStripSlotProps } from './use-tab-strip-slot-props'
@@ -33,7 +34,7 @@ import {
   terminalTabHasUnreadActivity
 } from './terminal-tab-activity-status'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
-import type { NativeChatTabSession } from './tab-session-history-switch'
+import type { NativeChatTabSession } from './tab-session-selected-source'
 
 /** What the strip draws for a terminal or native chat tab; never a source of agent identity. */
 type SortableTabModel = Pick<
@@ -139,7 +140,12 @@ export default function SortableTab({
   })
 
   // Why: no transform/transition/opacity so tabs stay anchored during drag, only the insertion bar moves (see TabBar.tsx).
-  const [menuOpen, setMenuOpen] = useState(false)
+  const {
+    open: menuOpen,
+    openingId,
+    onOpenChange: setMenuOpen,
+    onComplete
+  } = useSortableTabContextMenu()
   const [menuPoint, setMenuPoint] = useState({ x: 0, y: 0 })
   const {
     isEditing,
@@ -163,7 +169,7 @@ export default function SortableTab({
     const closeMenu = (): void => setMenuOpen(false)
     window.addEventListener(CLOSE_ALL_CONTEXT_MENUS_EVENT, closeMenu)
     return () => window.removeEventListener(CLOSE_ALL_CONTEXT_MENUS_EVENT, closeMenu)
-  }, [])
+  }, [setMenuOpen])
 
   // Why: webview clicks miss the renderer pointerdown Radix uses for outside-click, so dismiss on window blur instead.
   useEffect(() => {
@@ -173,7 +179,7 @@ export default function SortableTab({
     const dismiss = (): void => setMenuOpen(false)
     window.addEventListener('blur', dismiss)
     return () => window.removeEventListener('blur', dismiss)
-  }, [menuOpen])
+  }, [menuOpen, setMenuOpen])
 
   // Why: while editing, drop drag listeners so typing can't start a drag; attributes stay spread to keep dnd-kit a11y.
   const dragListeners = isEditing ? undefined : listeners
@@ -401,6 +407,8 @@ export default function SortableTab({
         groupId={groupId}
         isActive={isActive}
         open={menuOpen}
+        openingId={openingId}
+        onSessionSwitchComplete={onComplete}
         point={menuPoint}
         tabCount={tabCount}
         hasTabsToRight={hasTabsToRight}

@@ -8,10 +8,11 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useSortableTabContextMenu } from './use-sortable-tab-context-menu'
 import { TabSessionSurfaceSwitchMenuItems } from './TabSessionSurfaceSwitchMenuItems'
 import { TerminalPaneResumeInChatButton } from '../terminal-pane/TerminalPaneResumeInChatButton'
 import { runTabSessionSurfaceSwitch } from './tab-session-surface-switch-run'
-import type { TabSessionHistorySubject } from './tab-session-history-switch'
+import type { TabSessionSelectedSource } from './tab-session-selected-source'
 import type {
   AiVaultSessionLaunchContext,
   AiVaultResolveSessionResult
@@ -33,13 +34,14 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
   complete: vi.fn()
 }))
-const SUBJECT: TabSessionHistorySubject = {
+const SUBJECT: TabSessionSelectedSource = {
   kind: 'cli',
   agent: 'claude',
   providerSessionId: 'provider-1',
   paneKey: 'tab-1:leaf-1',
   workspaceId: 'wt-1',
-  request: { executionHostScope: 'local', scopePaths: ['/repo'], sessionLimit: 250 }
+  executionHostId: 'local',
+  legacyListRequest: { executionHostScope: 'local', scopePaths: ['/repo'], sessionLimit: 250 }
 }
 const ROW: AiVaultSessionLaunchContext = {
   agent: 'claude',
@@ -83,8 +85,8 @@ vi.mock('sonner', () => ({ toast: { error: mocks.error } }))
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
   activateAiVaultStructuredSession: mocks.activate
 }))
-vi.mock('./tab-session-history-switch', () => ({
-  resolveTabSessionHistorySubject: () => SUBJECT,
+vi.mock('./tab-session-selected-source', () => ({
+  resolveTabSessionSelectedSource: () => SUBJECT,
   resolveTabSessionSwitch: () => ({ action: 'resume-in-new-chat', worktreeId: 'wt-1' })
 }))
 vi.mock('../right-sidebar/ai-vault-session-launch-actions', () => ({
@@ -110,23 +112,40 @@ afterEach(async () => {
     mocks.subscribers.forEach((listener) => listener())
   })
   cleanup()
+  vi.restoreAllMocks()
 })
-function mount() {
-  return render(
-    <TooltipProvider>
-      <DropdownMenu open modal={false}>
+function ControlledMenu() {
+  const menu = useSortableTabContextMenu()
+  return (
+    <>
+      <button onClick={() => menu.onOpenChange(false)}>Dismiss</button>
+      <button onClick={() => menu.onOpenChange(true)}>Reopen</button>
+      <DropdownMenu open={menu.open} onOpenChange={menu.onOpenChange} modal={false}>
         <DropdownMenuTrigger>Menu</DropdownMenuTrigger>
         <DropdownMenuContent>
           <TabSessionSurfaceSwitchMenuItems
+            key={menu.openingId}
             tab={{ id: 'tab-1', worktreeId: 'wt-1' }}
             leadingSeparator
-            onComplete={mocks.complete}
+            onComplete={() => {
+              mocks.complete()
+              menu.onComplete()
+            }}
           />
         </DropdownMenuContent>
       </DropdownMenu>
+    </>
+  )
+}
+function mount() {
+  const view = render(
+    <TooltipProvider>
+      <ControlledMenu />
       <TerminalPaneResumeInChatButton tabId="tab-1" worktreeId="wt-1" paneKey="tab-1:leaf-1" />
     </TooltipProvider>
   )
+  fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
+  return view
 }
 async function clickMenu() {
   await act(async () =>
@@ -240,4 +259,48 @@ it('an abandoned preparation stays abandoned when the same source appears again'
   expect(operation?.isSourceOpen()).toBe(false)
   expect(operation?.signal.aborted).toBe(true)
   await act(async () => finish())
+})
+
+it('old completion cannot dismiss a newer opening retained across the closing animation', async () => {
+  const computed = window.getComputedStyle.bind(window)
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+    const style = computed(element, pseudo)
+    if (element.getAttribute('data-slot') === 'dropdown-menu-content') {
+      return new Proxy(style, {
+        get(target, key) {
+          if (key === 'animationName') {
+            return element.getAttribute('data-state') === 'open' ? 'enter' : 'exit'
+          }
+          if (key === 'getPropertyValue') {
+            return target.getPropertyValue.bind(target)
+          }
+          return typeof key === 'string'
+            ? target.getPropertyValue(key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`))
+            : undefined
+        }
+      })
+    }
+    return style
+  })
+  let finish: (value: AiVaultResolveSessionResult) => void = () => {}
+  mocks.resolve.mockReturnValueOnce(
+    new Promise<AiVaultResolveSessionResult>((resolve) => {
+      finish = resolve
+    })
+  )
+  mount()
+  await clickMenu()
+  const oldItem = screen.getByRole('menuitem', { name: 'Loading conversation…' })
+  const content = oldItem.closest('[data-slot="dropdown-menu-content"]')
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss' })))
+  expect(oldItem.isConnected).toBe(true)
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Reopen' })))
+  const newItem = screen.getByRole('menuitem', { name: 'Loading conversation…' })
+  expect(newItem).not.toBe(oldItem)
+  expect(newItem.closest('[data-slot="dropdown-menu-content"]')).toBe(content)
+  await act(async () => finish({ status: 'ready', session: ROW }))
+  expect(mocks.launch).toHaveBeenCalledOnce()
+  expect(content?.getAttribute('data-state')).toBe('open')
+  expect(screen.getByRole('menuitem', { name: 'Resume in New Native Chat' })).toBeTruthy()
+  vi.restoreAllMocks()
 })

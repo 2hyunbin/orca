@@ -2,9 +2,11 @@ import { claudeProviderHandle } from '../../shared/agent-session-provider-handle
 import { resolveSelectedAccountTranscript } from '../native-chat/selected-cli-transcript'
 import { prepareSelectedCodexAdoption } from '../native-chat/selected-codex-adoption-preparation'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, opendir, truncate } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { SelectedSessionResultSchema } from '../../shared/ai-vault-selected-session-contract'
+import { SELECTED_TRANSCRIPT_MAX_BYTES } from '../../shared/ai-vault-selected-session'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
@@ -21,6 +23,7 @@ const mocks = vi.hoisted(() => {
   return {
     ...state,
     snapshot: vi.fn(),
+    read: vi.fn(),
     list: vi.fn(() => {
       throw new Error('Global scanner unavailable')
     })
@@ -39,7 +42,7 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
 }))
 vi.mock('./selected-session-reader-client', () => ({
   readSelectedSessionInBackground: (...args: Parameters<typeof readSelectedSessionFile>) =>
-    readSelectedSessionFile(...args)
+    mocks.read(...args)
 }))
 vi.mock('./cached-session-list', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -58,9 +61,11 @@ beforeEach(async () => {
   vi.stubEnv('ORCA_USER_DATA_PATH', join(root, 'orca-data'))
   rows = []
   mocks.record = null
+  mocks.read.mockImplementation(readSelectedSessionFile)
 })
 afterEach(async () => {
   await rm(root, { recursive: true, force: true })
+  vi.restoreAllMocks()
   vi.unstubAllEnvs()
   vi.clearAllMocks()
 })
@@ -218,4 +223,107 @@ it('attested account wins over another account alias until existing host prepara
     )
   ).toEqual({ accountHomePath: selectedHome, transcriptPath: targetPath })
   expect(prepare).toHaveBeenCalledOnce()
+})
+
+function cliSource(transcriptPath?: string) {
+  const source = {
+    kind: 'cli',
+    agent: 'claude',
+    providerSessionId: 'provider-1',
+    paneKey: 'tab-1:leaf-1',
+    workspaceId: 'workspace-1'
+  } as const
+  rows = [
+    {
+      paneKey: source.paneKey,
+      worktreeId: source.workspaceId,
+      agentType: source.agent,
+      providerSession: { key: 'session_id', id: source.providerSessionId, transcriptPath },
+      connectionId: null,
+      receivedAt: 1,
+      stateStartedAt: 1,
+      state: 'waiting',
+      prompt: ''
+    }
+  ]
+  return source
+}
+
+it('finds and admits a small relocated transcript beyond the former directory quota', async () => {
+  const projects = join(root, 'projects')
+  for (let index = 0; index < 132; index++) {
+    await mkdir(join(projects, `former-project-${index}`), { recursive: true })
+  }
+  const names: string[] = []
+  for await (const entry of await opendir(projects)) {
+    names.push(entry.name)
+  }
+  const bucket = names[66]
+  if (!bucket) {
+    throw new Error('Missing project fixture')
+  }
+  const file = join(projects, bucket, 'provider-1.jsonl')
+  await writeFile(
+    file,
+    `${JSON.stringify({
+      type: 'user',
+      sessionId: 'provider-1',
+      cwd: '/repo',
+      message: { role: 'user', content: 'Keep the relocated conversation' }
+    })}\n`
+  )
+  const source = cliSource()
+  const result = await resolveSelectedSessionOnHost(source, runtime, {})
+  expect(result).toMatchObject({
+    status: 'ready',
+    session: { filePath: file, cwd: '/repo', messageCount: 1 }
+  })
+  const importer = CLAUDE_CLI_CONVERSATIONS.transcriptImport
+  if (!importer) {
+    throw new Error('Missing importer')
+  }
+  await expect(
+    resolveStructuredAgentSessionAdoptionForCreate({
+      host: null,
+      settings: {},
+      agent: 'claude',
+      transcriptImport: importer,
+      providerSessionId: 'provider-1',
+      selfSessionId: 'new-chat',
+      selectedAccountHomePath: root,
+      selectedSource: source,
+      sourceRows: rows,
+      sourceCwd: '/repo'
+    })
+  ).resolves.toEqual({ accountHomePath: root, transcriptPath: file })
+  expect(mocks.list).not.toHaveBeenCalled()
+})
+
+it('answers existing ownership before account or provider-file eligibility, including oversized history', async () => {
+  const file = join(root, 'unavailable.jsonl')
+  const source = cliSource(file)
+  const fixture = agentSessionRecordFixture()
+  mocks.record = {
+    ...fixture,
+    location: { ...fixture.location, workspaceId: 'owner-workspace' },
+    providerHandleChain: fixture.providerHandleChain.map((link) => ({
+      ...link,
+      handle: claudeProviderHandle('provider-1', null)
+    }))
+  }
+  const account = vi
+    .spyOn(runtime, 'resolveStructuredAgentAccountHome')
+    .mockRejectedValue(new Error('Account unavailable'))
+  const owned = await resolveSelectedSessionOnHost(source, runtime, {})
+  expect(SelectedSessionResultSchema.parse(owned)).toMatchObject({
+    status: 'ready',
+    session: {
+      structuredSession: { sessionId: fixture.sessionId, workspaceId: 'owner-workspace' }
+    }
+  })
+  await writeFile(file, '')
+  await truncate(file, SELECTED_TRANSCRIPT_MAX_BYTES + 1)
+  expect(await resolveSelectedSessionOnHost(source, runtime, {})).toEqual(owned)
+  expect(account).not.toHaveBeenCalled()
+  expect(mocks.read).not.toHaveBeenCalled()
 })

@@ -10,20 +10,14 @@ import type {
   AiVaultSessionLaunchContext,
   AiVaultSelectedSessionSource
 } from '../../../../shared/ai-vault-selected-session'
-import {
-  SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
-  LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
-  AI_VAULT_SELECTED_SESSION_CAPABILITY
-} from '../../../../shared/ai-vault-selected-session'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS } from '../../../../shared/ai-vault-selected-session'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
-import { resolveHostCapabilities } from '@/lib/agent-launch-route-input'
 import { formatAgentTypeLabel } from '../../../../shared/agent-type-label'
 import {
   resolveTabSessionSwitch,
-  type TabSessionHistorySubject
-} from './tab-session-history-switch'
+  type TabSessionSelectedSource
+} from './tab-session-selected-source'
 
 type Stage = 'loading' | 'opening'
 type PendingSwitch = { stage: Stage; controller: AbortController }
@@ -40,9 +34,9 @@ export function isTabStillOpen(tab: { id: string; worktreeId: string }): boolean
   )
 }
 
-function subjectKey(subject: TabSessionHistorySubject): string {
+function subjectKey(subject: TabSessionSelectedSource): string {
   return [
-    subject.request.executionHostScope,
+    subject.executionHostId,
     subject.kind,
     subject.agent,
     subject.kind === 'chat' ? subject.sessionId : subject.providerSessionId
@@ -55,7 +49,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useTabSessionSurfaceSwitchPending(
-  subject: TabSessionHistorySubject | null
+  subject: TabSessionSelectedSource | null
 ): Stage | null {
   return useSyncExternalStore(
     subscribe,
@@ -65,7 +59,7 @@ export function useTabSessionSurfaceSwitchPending(
 }
 
 function sourceIdentityIsCurrent(
-  subject: TabSessionHistorySubject,
+  subject: TabSessionSelectedSource,
   tab: { id: string; worktreeId: string }
 ): boolean {
   if (!isTabStillOpen(tab)) {
@@ -90,7 +84,7 @@ export function tabSessionSwitchPendingLabel(stage: Stage): string {
     : translate('components.tabBar.sessionSwitch.opening', 'Opening…')
 }
 
-function notifyFailure(subject: TabSessionHistorySubject, error: unknown): void {
+function notifyFailure(subject: TabSessionSelectedSource, error: unknown): void {
   toast.error(
     subject.kind === 'chat'
       ? translate(
@@ -106,7 +100,7 @@ function notifyFailure(subject: TabSessionHistorySubject, error: unknown): void 
 }
 
 export async function runTabSessionSurfaceSwitch(args: {
-  subject: TabSessionHistorySubject
+  subject: TabSessionSelectedSource
   sourceTab: { id: string; worktreeId: string }
   intent?: 'new-chat' | 'open-or-resume-chat'
   launch: (
@@ -116,9 +110,6 @@ export async function runTabSessionSurfaceSwitch(args: {
   ) => Promise<void>
 }): Promise<void> {
   const { subject, sourceTab } = args
-  if (subject.request.executionHostScope === 'all') {
-    return
-  }
   const key = subjectKey(subject)
   if (runningSwitches.has(key) || !sourceIdentityIsCurrent(subject, sourceTab)) {
     return
@@ -143,20 +134,12 @@ export async function runTabSessionSurfaceSwitch(args: {
       abandon()
     }
   })
-  const host = subject.request.executionHostScope
-  const legacyHost =
-    host !== LOCAL_EXECUTION_HOST_ID &&
-    resolveHostCapabilities(useAppStore.getState(), host)?.includes(
-      AI_VAULT_SELECTED_SESSION_CAPABILITY
-    ) !== true
-  const timer = setTimeout(
-    () => {
-      owner.controller.abort(new Error('Conversation lookup timed out.'))
-      release()
-      void window.api.aiVault.cancelResolveSession({ requestToken }).catch(() => undefined)
-    },
-    legacyHost ? LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS : SELECTED_SESSION_LOOKUP_TIMEOUT_MS
-  )
+  const host = subject.executionHostId
+  const timer = setTimeout(() => {
+    owner.controller.abort(new Error('Conversation lookup timed out.'))
+    release()
+    void window.api.aiVault.cancelResolveSession({ requestToken }).catch(() => undefined)
+  }, LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS)
   try {
     const source: AiVaultSelectedSessionSource =
       subject.kind === 'chat'
@@ -173,8 +156,7 @@ export async function runTabSessionSurfaceSwitch(args: {
         source,
         executionHostId: host,
         requestToken,
-        ...(legacyHost ? { legacyHost: true } : {}),
-        legacyList: aiVaultSessionListArgs(subject.request, { requestToken })
+        legacyList: aiVaultSessionListArgs(subject.legacyListRequest, { requestToken })
       }),
       owner.controller.signal
     )

@@ -121,6 +121,8 @@ function renderMenu(overrides: Partial<ComponentProps<typeof SortableTabContextM
         groupId="group-1"
         isActive
         open
+        openingId={1}
+        onSessionSwitchComplete={vi.fn()}
         point={{ x: 0, y: 0 }}
         tabCount={2}
         hasTabsToRight

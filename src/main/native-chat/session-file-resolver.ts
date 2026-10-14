@@ -50,6 +50,7 @@ function grokSessionsDir(): string {
 }
 
 export type ResolveSessionFileOptions = {
+  selectedLookup?: true
   /** Override the Claude projects root (used by tests / isolated scans). */
   claudeProjectsDir?: string
   /** Override the Codex sessions roots, searched in order (tests / isolated
@@ -164,21 +165,24 @@ async function resolveSessionFileById(
     const override = options.claudeProjectsDir
     return resolveTiered('claude', trimmedId, override ? [override] : claudeProjectsDirs(), {
       wslTier: !override,
-      signal
+      signal,
+      selectedLookup: options.selectedLookup
     })
   }
   if (transcriptAgent === 'codex') {
     const override = options.codexSessionsDirs
     return resolveTiered('codex', trimmedId, override ?? codexSessionsDirs(), {
       wslTier: !override,
-      signal
+      signal,
+      selectedLookup: options.selectedLookup
     })
   }
   if (transcriptAgent === 'grok') {
     const override = options.grokSessionsDir
     return resolveTiered('grok', trimmedId, [override ?? grokSessionsDir()], {
       wslTier: !override,
-      signal
+      signal,
+      selectedLookup: options.selectedLookup
     })
   }
   if (transcriptAgent === 'omp') {
@@ -186,7 +190,8 @@ async function resolveSessionFileById(
     const root = resolveOmpSessionsDir({ sessionsDir: override })
     return resolveTiered('omp', trimmedId, root ? [root] : [], {
       wslTier: override === undefined,
-      signal
+      signal,
+      selectedLookup: options.selectedLookup
     })
   }
   // Why: a new transcript agent must pick its own resolver. Falling through to
@@ -204,10 +209,10 @@ async function resolveTiered(
   agent: SessionIdLookupAgent,
   sessionId: string,
   hostDirs: readonly string[],
-  options: { wslTier: boolean; signal?: AbortSignal }
+  options: { wslTier: boolean; signal?: AbortSignal; selectedLookup?: true }
 ): Promise<string | null> {
   const { signal } = options
-  const hit = await findFirstInDirs(agent, sessionId, hostDirs, signal)
+  const hit = await findFirstInDirs(agent, sessionId, hostDirs, signal, options.selectedLookup)
   if (hit || !options.wslTier) {
     return hit
   }
@@ -216,21 +221,22 @@ async function resolveTiered(
   // user left stopped. Only pay that after this host's own roots miss (#10326, #13789).
   const wslDirs = (await wslAgentSessionsDirs(agent)).filter((dir) => !hostDirs.includes(dir))
   signal?.throwIfAborted()
-  return findFirstInDirs(agent, sessionId, wslDirs, signal)
+  return findFirstInDirs(agent, sessionId, wslDirs, signal, options.selectedLookup)
 }
 
 async function findFirstInDirs(
   agent: SessionIdLookupAgent,
   sessionId: string,
   dirs: readonly string[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  selectedLookup?: true
 ): Promise<string | null> {
   let unavailable: WslTranscriptFsError | undefined
   for (const dir of dirs) {
     try {
       const hit = isWslUncPath(dir)
         ? await findWslSessionPath(agent, dir, sessionId, signal)
-        : await findHostSessionFile(agent, dir, sessionId, signal)
+        : await findHostSessionFile(agent, dir, sessionId, signal, selectedLookup)
       if (hit) {
         return hit
       }
@@ -252,7 +258,8 @@ async function findHostSessionFile(
   agent: SessionIdLookupAgent,
   root: string,
   sessionId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  selectedLookup?: true
 ): Promise<string | null> {
   if (agent === 'grok') {
     // Why: Native Chat runs on the main thread; use the bounded async direct-layout
@@ -268,6 +275,8 @@ async function findHostSessionFile(
   // probe would block the main thread.
   const files = await walkSessionFiles(root, agent, [], {
     extensions: new Set(['.jsonl']),
+    firstMatch: selectedLookup,
+    strictReadErrors: selectedLookup,
     filePredicate: (path) => fileMatchesId(path, sessionId),
     directoryPredicate: directoryPredicate
       ? (name, depth) => directoryPredicate(name, depth, wanted)

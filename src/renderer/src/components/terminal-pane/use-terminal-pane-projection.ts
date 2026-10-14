@@ -21,7 +21,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { resolvePaneAgentSessionId } from './pane-agent-session-id'
-import { canPaneOfferResumeInNewChat } from '../tab-bar/tab-session-history-switch'
+import { canPaneOfferResumeInNewChat } from '../tab-bar/tab-session-selected-source'
 
 export function useTerminalPaneProjection(controller: TerminalPaneMobileController) {
   const {

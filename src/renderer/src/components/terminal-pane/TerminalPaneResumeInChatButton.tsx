@@ -8,7 +8,7 @@ import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { useAppStore } from '@/store'
 import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import { resumeAiVaultSessionInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
-import { resolveTabSessionHistorySubject } from '../tab-bar/tab-session-history-switch'
+import { resolveTabSessionSelectedSource } from '../tab-bar/tab-session-selected-source'
 import {
   runTabSessionSurfaceSwitch,
   useTabSessionSurfaceSwitchPending,
@@ -36,7 +36,7 @@ export function TerminalPaneResumeInChatButton({
 }): React.JSX.Element {
   const sourceStatus = useAppStore((state) => state.agentStatusByPaneKey[paneKey])
   const subject = sourceStatus
-    ? resolveTabSessionHistorySubject(useAppStore.getState(), {
+    ? resolveTabSessionSelectedSource(useAppStore.getState(), {
         tab: { id: tabId, worktreeId },
         paneKey
       })
@@ -48,7 +48,7 @@ export function TerminalPaneResumeInChatButton({
   )
 
   const resume = async (): Promise<void> => {
-    const subject = resolveTabSessionHistorySubject(useAppStore.getState(), {
+    const subject = resolveTabSessionSelectedSource(useAppStore.getState(), {
       tab: { id: tabId, worktreeId },
       paneKey
     })

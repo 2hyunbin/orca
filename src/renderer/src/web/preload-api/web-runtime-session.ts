@@ -207,8 +207,15 @@ export function requireActiveEnvironmentOrNull(): StoredWebRuntimeEnvironment | 
 
 const PAIRING_CHANGED_MESSAGE = 'The paired Orca server changed while the request was in progress.'
 
-export function assertActiveEnvironment(environmentId: string): void {
-  if (requireActiveEnvironment().id !== environmentId) {
+export function assertActiveEnvironment(
+  environmentId: string,
+  expectedPairingRevision?: number
+): void {
+  const active = requireActiveEnvironment()
+  if (
+    active.id !== environmentId ||
+    (expectedPairingRevision !== undefined && pairingRevisionOf(active) !== expectedPairingRevision)
+  ) {
     throw new Error(PAIRING_CHANGED_MESSAGE)
   }
 }

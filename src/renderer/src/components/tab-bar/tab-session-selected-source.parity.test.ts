@@ -19,8 +19,8 @@ import {
 } from '../right-sidebar/ai-vault-session-worktree'
 import {
   resolveTabSessionSwitch,
-  type TabSessionHistorySubject
-} from './tab-session-history-switch'
+  type TabSessionSelectedSource
+} from './tab-session-selected-source'
 
 // Only the host's answers are staged (its capabilities arrive over IPC at boot, and the chat
 // route's own feasibility is pinned elsewhere); the composition both surfaces share runs for real.
@@ -119,13 +119,14 @@ describe('the tab menu offers exactly what the Session History row offers', () =
   it('Resume in New Native Chat for a CLI conversation', () => {
     const state = useAppStore.getState()
     const session = row()
-    const subject: TabSessionHistorySubject = {
+    const subject: TabSessionSelectedSource = {
       kind: 'cli',
       agent: 'claude',
       paneKey: 'tab-1:leaf-1',
       providerSessionId: session.sessionId,
       workspaceId: WORKTREE_ID,
-      request
+      executionHostId: 'local',
+      legacyListRequest: request
     }
     const panel = panelTargets(state, session)
 
@@ -149,7 +150,8 @@ describe('the tab menu offers exactly what the Session History row offers', () =
         paneKey: 'tab-1:leaf-1',
         providerSessionId: owned.sessionId,
         workspaceId: WORKTREE_ID,
-        request
+        executionHostId: 'local',
+        legacyListRequest: request
       })
     ).toBeNull()
   })
@@ -167,19 +169,21 @@ describe('the tab menu offers exactly what the Session History row offers', () =
         paneKey: 'tab-1:leaf-1',
         providerSessionId: session.sessionId,
         workspaceId: WORKTREE_ID,
-        request
+        executionHostId: 'local',
+        legacyListRequest: request
       })
     ).toEqual({ action: 'resume-in-new-chat', worktreeId: SIBLING_ID })
   })
 
   it('Resume in New CLI for a native chat, and nothing once it has no saved turns', () => {
     const state = useAppStore.getState()
-    const subject: TabSessionHistorySubject = {
+    const subject: TabSessionSelectedSource = {
       kind: 'chat',
       agent: 'claude',
       sessionId: 'orca-chat-1',
       workspaceId: WORKTREE_ID,
-      request
+      executionHostId: 'local',
+      legacyListRequest: request
     }
     const chatRow = row({
       structuredSession: { sessionId: 'orca-chat-1', workspaceId: WORKTREE_ID }
@@ -230,7 +234,8 @@ describe('the tab menu offers exactly what the Session History row offers', () =
         paneKey: 'tab-1:leaf-1',
         providerSessionId: session.sessionId,
         workspaceId: WORKTREE_ID,
-        request
+        executionHostId: 'local',
+        legacyListRequest: request
       })
     ).toEqual({ action: 'resume-in-new-chat', worktreeId: folderWorkspaceKey('folder-1') })
   })

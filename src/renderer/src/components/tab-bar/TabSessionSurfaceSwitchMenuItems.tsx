@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { useAppStore } from '../../store'
@@ -6,9 +6,9 @@ import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { AiVaultSessionSurfaceSwitchMenuItems } from '../right-sidebar/AiVaultSessionSurfaceSwitchMenuItems'
 import { useAiVaultSessionLaunchActions } from '../right-sidebar/ai-vault-session-launch-actions'
 import {
-  resolveTabSessionHistorySubject,
+  resolveTabSessionSelectedSource,
   type NativeChatTabSession
-} from './tab-session-history-switch'
+} from './tab-session-selected-source'
 import {
   runTabSessionSurfaceSwitch,
   useTabSessionSurfaceSwitchPending,
@@ -29,20 +29,13 @@ export function TabSessionSurfaceSwitchMenuItems({
   leadingSeparator: boolean
   onComplete?: () => void
 }): React.JSX.Element | null {
-  // Mounted only while the menu is open, so this resolves once per right-click.
+  // The controller keys this content to its opening, including animated close/reopen.
   const [subject] = useState(() =>
-    resolveTabSessionHistorySubject(useAppStore.getState(), {
+    resolveTabSessionSelectedSource(useAppStore.getState(), {
       tab: { id: tab.id, worktreeId: tab.worktreeId },
       nativeChat
     })
   )
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-    }
-  }, [])
   const pending = useTabSessionSurfaceSwitchPending(subject)
   const targetState = useAppStore(
     useShallow((state) => ({
@@ -73,11 +66,7 @@ export function TabSessionSurfaceSwitchMenuItems({
         subject.kind === 'chat'
           ? launchActions.handleResumeInNewCli
           : launchActions.handleResumeInNewChat
-    }).finally(() => {
-      if (mounted.current) {
-        onComplete?.()
-      }
-    })
+    }).finally(() => onComplete?.())
   }
   return (
     <>

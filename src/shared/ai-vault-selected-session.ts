@@ -45,8 +45,6 @@ export type AiVaultResolveSessionArgs = {
   source: AiVaultSelectedSessionSource
   executionHostId: ExecutionHostId
   requestToken: string
-  /** Compatibility lookup is allowed only when the paired host lacks the capability. */
-  legacyHost?: true
   legacyList?: Pick<
     AiVaultListArgs,
     'limit' | 'unlimited' | 'scopePaths' | 'includeAntigravityIdeSessions'
