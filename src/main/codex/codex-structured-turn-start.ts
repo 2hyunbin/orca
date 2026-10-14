@@ -13,6 +13,9 @@ import {
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import { readCodexTurnId } from './codex-structured-thread-facts'
+import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
+import { presentCodexServiceTier } from './codex-structured-service-tier'
+import type { CodexSessionCatalogAccess } from './codex-structured-session-state'
 import {
   codexRunningOrOpeningTurn,
   type CodexTurnOpenWaits
@@ -55,11 +58,27 @@ export type CodexTurnHost = {
   threadId: string
   options: Map<string, string>
   reportedOptions?: { model?: string }
+  catalogAccess?: CodexSessionCatalogAccess
   dispatchEchoes: CodexDispatchEchoes
   activeTurnIds?: ReadonlySet<string>
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
   abortedTurnIds?: ReadonlySet<string>
   turnOpenWaits: Pick<CodexTurnOpenWaits, 'wait'>
+}
+
+/** The turn's options; a picked tier the model does not offer goes as standard, as the picker shows it. */
+function codexTurnOptions(host: CodexTurnHost): Record<string, string> {
+  const options = Object.fromEntries(host.options)
+  const listing = codexAcquireCatalogListing(host.catalogAccess)
+  const shown =
+    options.serviceTier && listing
+      ? presentCodexServiceTier(
+          options.serviceTier,
+          listing.models,
+          options.model ?? host.reportedOptions?.model
+        ).serviceTier
+      : undefined
+  return shown ? { ...options, serviceTier: shown } : options
 }
 
 function turnInputFor(body: AgentJournalMessageItem): Record<string, unknown>[] {
@@ -145,8 +164,7 @@ export async function startCodexTurn(
       threadId: host.threadId,
       clientUserMessageId: input.clientMessageId,
       input: turnInputFor(input.body),
-      // Codex omits a tier the model does not list.
-      ...Object.fromEntries(host.options)
+      ...codexTurnOptions(host)
     },
     { timeoutMs: input.timeoutMs }
   )
