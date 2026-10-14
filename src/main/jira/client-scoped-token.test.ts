@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadJiraClientModule } from './client-test-harness'
+import { loadJiraClientModule } from './__mocks__/jira-client-module'
 import { jiraFixtureJson, startJiraAuthFixture } from './auth-http-fixture'
 
 const SITE = 'https://example.atlassian.net'
