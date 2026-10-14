@@ -56,7 +56,7 @@ export type Harness = {
   routeParamClears: () => readonly { param: string; value: string }[]
   routeRefusals: string[]
   pageFaults: BridgeErrorCapture[]
-  frames: () => BridgeHostMessage[]
+  frames: (from?: number) => BridgeHostMessage[]
   last: () => BridgeHostMessage
 }
 
@@ -186,8 +186,8 @@ export function harness(
   }
   // Read back through the page's own reader: a frame the host sends that the page would refuse is
   // a frame that never arrives, and this is the only place both halves meet in one test.
-  const frames = (): BridgeHostMessage[] =>
-    posted.map((json) => {
+  const frames = (from = 0): BridgeHostMessage[] =>
+    posted.slice(from).map((json) => {
       const read = readBridgeHostMessage(json)
       if (!read.ok) {
         throw new Error(`the page would refuse this frame: ${read.refusal}`)

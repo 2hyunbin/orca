@@ -9,6 +9,7 @@ import { harness, ID, OTHER } from './bridge-host-test-harness'
 import { TERMINAL_STREAM_MAX_PENDING_BYTES } from './bridge-terminal-output-backlog'
 import { mobileTerminalSnapshotByteBudget } from '../session/terminal-snapshot-byte-budget.web'
 import type { TerminalBacklogTimers } from './bridge-terminal-output-backlog'
+import type { BridgeHostMessage } from './bridge/bridge-envelope'
 
 /**
  * A terminal stream against a page that reads slower than the host writes, which is every terminal.
@@ -108,6 +109,8 @@ function replay(chunks: readonly string[], options: { method?: string } = {}): R
   )
   const stream = client.streams[0]
   const delivered: string[] = []
+  const events: Extract<BridgeHostMessage, { type: 'event' }>[] = []
+  let decodedFrames = 0
   let readFrames = 0
   let lastReadSeq = 0
   let unreadFrames = 0
@@ -116,9 +119,15 @@ function replay(chunks: readonly string[], options: { method?: string } = {}): R
 
   /** One frame off the page's queue, or false when it has caught up. This is the drain. */
   const readOne = (): boolean => {
-    const events = bridge.frames().filter((frame) => frame.type === 'event' && frame.id === ID)
+    // Read each posted frame once, as a page does; rereading the transcript costs quadratic work.
+    for (const frame of bridge.frames(decodedFrames)) {
+      if (frame.type === 'event' && frame.id === ID) {
+        events.push(frame)
+      }
+    }
+    decodedFrames = bridge.posted.length
     const frame = events[readFrames]
-    if (frame === undefined || frame.type !== 'event') {
+    if (frame === undefined) {
       return false
     }
     readFrames += 1
@@ -159,12 +168,12 @@ function replay(chunks: readonly string[], options: { method?: string } = {}): R
   while (readOne()) {
     // The page reads; the interval acks inside `readOne` are the only ones it sends.
   }
-  const events = bridge.frames().filter((frame) => frame.type === 'event' && frame.id === ID)
+  const frames = bridge.frames()
   return {
     delivered,
-    largestFrameBytes: Math.max(0, ...bridge.frames().map((frame) => JSON.stringify(frame).length)),
+    largestFrameBytes: Math.max(0, ...frames.map((frame) => JSON.stringify(frame).length)),
     frames: events.length,
-    ended: bridge.frames().some((frame) => frame.type === 'end' && frame.id === ID)
+    ended: frames.some((frame) => frame.type === 'end' && frame.id === ID)
   }
 }
 

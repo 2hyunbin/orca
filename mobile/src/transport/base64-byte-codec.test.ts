@@ -42,7 +42,9 @@ describe('base64 byte codec', () => {
       const bytes = backing.subarray(3, length + 3)
       const encoded = encodeBase64Bytes(bytes)
       expect(encoded).toBe(Buffer.from(bytes).toString('base64'))
-      expect(decodeBase64Bytes(encoded)).toEqual(bytes)
+      const decoded = decodeBase64Bytes(encoded)
+      expect(decoded).toBeInstanceOf(Uint8Array)
+      expect(Buffer.from(decoded).equals(Buffer.from(bytes))).toBe(true)
     }
   )
 
