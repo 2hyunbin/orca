@@ -102,9 +102,15 @@ describe('jira RPC methods', () => {
     await dispatcher.dispatch(makeRequest('jira.issueComments', { key: 'ABC-3', siteId: 'site-1' }))
 
     // Why: this dispatch carries no cancellation signal, so search runs unbounded by the caller.
-    expect(runtime.jiraSearchIssues).toHaveBeenCalledWith('project = ABC', 30, 'all', undefined)
-    expect(runtime.jiraListIssues).toHaveBeenCalledWith('assigned', 20, 'site-1')
-    expect(runtime.jiraGetIssue).toHaveBeenCalledWith('ABC-3', 'site-1')
+    expect(runtime.jiraSearchIssues).toHaveBeenCalledWith(
+      'project = ABC',
+      30,
+      'all',
+      undefined,
+      undefined
+    )
+    expect(runtime.jiraListIssues).toHaveBeenCalledWith('assigned', 20, 'site-1', undefined)
+    expect(runtime.jiraGetIssue).toHaveBeenCalledWith('ABC-3', 'site-1', undefined)
     expect(runtime.jiraLookupIssueSummary).toHaveBeenCalledWith(
       'ABC-3',
       'site-1',
@@ -130,7 +136,49 @@ describe('jira RPC methods', () => {
       'site-1'
     )
     expect(runtime.jiraAddIssueComment).toHaveBeenCalledWith('ABC-3', 'Looks good', 'site-1')
-    expect(runtime.jiraIssueComments).toHaveBeenCalledWith('ABC-3', 'site-1')
+    expect(runtime.jiraIssueComments).toHaveBeenCalledWith('ABC-3', 'site-1', undefined)
+  })
+
+  it('passes verified read requests and atomic label operations through RPC', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      jiraGetIssue: vi.fn().mockResolvedValue(null),
+      jiraIssueComments: vi.fn().mockResolvedValue([]),
+      jiraUpdateIssue: vi.fn().mockResolvedValue({ ok: true })
+    }
+    const dispatcher = new RpcDispatcher({
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher test only invokes the three methods implemented by the fixture.
+      runtime: runtime as unknown as OrcaRuntimeService,
+      methods: JIRA_METHODS
+    })
+    await dispatcher.dispatch(
+      makeRequest('jira.getIssue', { key: 'ABC-1', siteId: 'site-1', strict: true })
+    )
+    await dispatcher.dispatch(
+      makeRequest('jira.issueComments', { key: 'ABC-1', siteId: 'site-1', strict: true })
+    )
+    await dispatcher.dispatch(
+      makeRequest('jira.updateIssue', {
+        key: 'ABC-1',
+        siteId: 'site-1',
+        updates: { labelOperations: { add: ['bug'] } }
+      })
+    )
+    expect(runtime.jiraGetIssue).toHaveBeenCalledWith('ABC-1', 'site-1', true)
+    expect(runtime.jiraIssueComments).toHaveBeenCalledWith('ABC-1', 'site-1', true)
+    expect(runtime.jiraUpdateIssue).toHaveBeenCalledWith(
+      'ABC-1',
+      { labelOperations: { add: ['bug'] } },
+      'site-1'
+    )
+    const conflict = await dispatcher.dispatch(
+      makeRequest('jira.updateIssue', {
+        key: 'ABC-1',
+        updates: { labels: ['replace'], labelOperations: { add: ['bug'] } }
+      })
+    )
+    expect(conflict).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    expect(runtime.jiraUpdateIssue).toHaveBeenCalledTimes(1)
   })
 
   it('requires an explicit site for isolated Jira summary reads', async () => {
@@ -212,13 +260,23 @@ describe('jira RPC methods', () => {
       makeRequest('jira.getProjectStatusOrder', { projectKey: 'ALP', siteId: 'site-1' })
     )
 
-    expect(runtime.jiraListProjects).toHaveBeenCalledWith('all')
-    expect(runtime.jiraListIssueTypes).toHaveBeenCalledWith('project-1', 'site-1')
-    expect(runtime.jiraListCreateFields).toHaveBeenCalledWith('project-1', 'type-1', 'site-1')
-    expect(runtime.jiraListPriorities).toHaveBeenCalledWith('site-1')
-    expect(runtime.jiraListAssignableUsers).toHaveBeenCalledWith('ABC-3', 'Ada', 'site-1')
+    expect(runtime.jiraListProjects).toHaveBeenCalledWith('all', undefined)
+    expect(runtime.jiraListIssueTypes).toHaveBeenCalledWith('project-1', 'site-1', undefined)
+    expect(runtime.jiraListCreateFields).toHaveBeenCalledWith(
+      'project-1',
+      'type-1',
+      'site-1',
+      undefined
+    )
+    expect(runtime.jiraListPriorities).toHaveBeenCalledWith('site-1', undefined)
+    expect(runtime.jiraListAssignableUsers).toHaveBeenCalledWith(
+      'ABC-3',
+      'Ada',
+      'site-1',
+      undefined
+    )
     expect(runtime.jiraSearchUsers).toHaveBeenCalledWith('Grace', 'site-1')
-    expect(runtime.jiraListTransitions).toHaveBeenCalledWith('ABC-3', 'site-1')
+    expect(runtime.jiraListTransitions).toHaveBeenCalledWith('ABC-3', 'site-1', undefined)
     expect(runtime.jiraGetProjectStatusOrder).toHaveBeenCalledWith('ALP', 'site-1')
   })
 })

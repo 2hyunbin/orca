@@ -10,6 +10,7 @@ import {
   readStoredCredentialToken
 } from '../integration-credential-file'
 import type { JiraSite, JiraSiteSelection } from '../../shared/jira-types'
+import { isJiraGatewayBaseUrl } from './gateway-base-url'
 
 export type JiraSiteFile = {
   version: 1
@@ -82,6 +83,12 @@ function normalizeSite(input: unknown): JiraSite | null {
   ) {
     return null
   }
+  if (record.apiBaseUrl !== undefined && !isJiraGatewayBaseUrl(record.apiBaseUrl)) {
+    return null
+  }
+  if (record.authType !== 'server' && !record.email && !isJiraGatewayBaseUrl(record.apiBaseUrl)) {
+    return null
+  }
   return {
     id: record.id,
     siteUrl: record.siteUrl,
@@ -89,7 +96,10 @@ function normalizeSite(input: unknown): JiraSite | null {
     displayName: record.displayName,
     accountId: record.accountId,
     // Sites saved before self-hosted support have no authType; they are Cloud.
-    authType: record.authType === 'server' ? 'server' : 'cloud'
+    authType: record.authType === 'server' ? 'server' : 'cloud',
+    ...(record.authType !== 'server' && isJiraGatewayBaseUrl(record.apiBaseUrl)
+      ? { apiBaseUrl: record.apiBaseUrl }
+      : {})
   }
 }
 
