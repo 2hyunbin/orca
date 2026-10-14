@@ -12,6 +12,12 @@ import {
 } from './mobile-web-shell-runtime'
 import { readMobileWebShellReachability } from './mobile-web-shell-reachability'
 import { shellPageBackClaimed } from './shell-page-back-claim'
+import {
+  recordShellLifecycleLine,
+  SHELL_STALL_LOG_MS,
+  shellSessionStepLines,
+  shellStallLine
+} from './shell-lifecycle-log'
 import { shellPageFrame, type ShellPageFrame } from './shell-page-frame'
 import {
   createMobileWebShellSession,
@@ -102,6 +108,8 @@ export function useMobileWebShellSession(args: {
   // Cancelled on the same bump, for the same reason: an armed deadline belongs to the generation it
   // was armed under, and the epoch check alone would leave a real timer alive until it fired.
   const timersRef = useRef<Set<() => void>>(new Set())
+  // The log's host for `dispatch`, which is stable; moved with the session rebuild below.
+  const hostIdRef = useRef(hostId)
   const runEffectRef = useRef<
     ((epoch: number, flow: number, effect: MobileWebShellSessionEffect) => void) | null
   >(null)
@@ -111,6 +119,9 @@ export function useMobileWebShellSession(args: {
       return
     }
     const stepped = reduceMobileWebShellSession(sessionRef.current, event)
+    for (const line of shellSessionStepLines(sessionRef.current, event, stepped.session)) {
+      recordShellLifecycleLine(hostIdRef.current, line)
+    }
     sessionRef.current = stepped.session
     setState(stepped.session.state)
     setPageReady(stepped.session.pageReady)
@@ -218,6 +229,7 @@ export function useMobileWebShellSession(args: {
   useEffect(() => {
     // A new host is a new session: the old one's latches, cache handle and in-flight work all go.
     invalidate()
+    hostIdRef.current = hostId
     sessionRef.current = createMobileWebShellSession(routePathname, wide)
     startedAtRef.current = runtime.now()
     setState(sessionRef.current.state)
@@ -225,6 +237,19 @@ export function useMobileWebShellSession(args: {
     setPageFrame(shellPageFrame(sessionRef.current))
     return invalidate
   }, [hostId, invalidate, routePathname, runtime])
+
+  // Log-only: one warning per parked state, cancelled by any state or paint change.
+  useEffect(() => {
+    if (shellStallLine(state, sessionRef.current) === null) {
+      return
+    }
+    return runtime.setTimer(() => {
+      const line = shellStallLine(state, sessionRef.current)
+      if (line !== null) {
+        recordShellLifecycleLine(hostIdRef.current, line)
+      }
+    }, SHELL_STALL_LOG_MS)
+  }, [pageFrame, runtime, state])
 
   useEffect(() => {
     dispatch(epochRef.current, { type: 'layout-changed', wide })

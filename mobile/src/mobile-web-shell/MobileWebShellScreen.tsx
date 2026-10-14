@@ -38,6 +38,7 @@ import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
+import { pageFaultLine, recordShellLifecycleLine } from './shell-lifecycle-log'
 
 function failureMessage(reason: MobileWebShellFailureCause): string {
   switch (reason) {
@@ -245,6 +246,7 @@ export function MobileWebShellScreen({
     // handler on the other, and neither has anywhere to put a throw.
     onPageFault: (error) => {
       console.warn('[web-shell] the page faulted', error)
+      recordShellLifecycleLine(hostId, pageFaultLine(error))
       reportShellFailure('document-load-failed')
     },
     // The `init` this ready is answered with is already built from the app's writes, which reach

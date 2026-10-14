@@ -67,6 +67,9 @@ const doubles = vi.hoisted((): Doubles => {
 })
 
 vi.mock('expo-crypto', () => ({ getRandomBytes: (length: number) => new Uint8Array(length) }))
+vi.mock('@react-native-async-storage/async-storage', () => ({
+  default: { getItem: async () => null, setItem: async () => undefined }
+}))
 vi.mock('expo-file-system', () => ({ Directory: class {}, File: class {}, Paths: { cache: '' } }))
 vi.mock('../transport/mobile-endpoint-supervisor-support', () => ({
   encodeBase64Url: () => 'session-id'
@@ -95,6 +98,8 @@ vi.mock('../transport/mobile-web-bundle-fetch', () => ({
 
 import { BRIDGE_READY_RETRY_MAX_MS } from './bridge/bridge-client-init-handshake'
 import { PAGE_READY_DEADLINE_MS } from './mobile-web-shell-runtime'
+import { SHELL_STALL_LOG_MS } from './shell-lifecycle-log'
+import { connectionLogStore } from '../transport/persisted-connection-log-store'
 import { useMobileWebShellSession } from './use-mobile-web-shell-session'
 
 const HOST_ID = 'host-1'
@@ -471,7 +476,12 @@ describe('the wait for the page to speak', () => {
     await act(async () => {
       mounted.documentLoaded()
     })
-    expect(mounted.timers.armed.map((timer) => timer.delayMs)).toEqual([PAGE_READY_DEADLINE_MS])
+    // The other armed timer is the log-only stall warning (SHELL_STALL_LOG_MS).
+    expect(mounted.timers.armed.map((timer) => timer.delayMs)).toEqual([
+      SHELL_STALL_LOG_MS,
+      PAGE_READY_DEADLINE_MS
+    ])
+    expect(SHELL_STALL_LOG_MS).not.toBe(PAGE_READY_DEADLINE_MS)
     await act(async () => {
       mounted.timers.fire()
     })
@@ -523,7 +533,9 @@ describe('the wait for the page to speak', () => {
     })
     // The race is real on a device: the page's first frame crosses the bridge while the WebView's
     // own load callback is still in the native queue.
-    expect(mounted.timers.armed).toHaveLength(0)
+    expect(
+      mounted.timers.armed.filter((timer) => timer.delayMs === PAGE_READY_DEADLINE_MS)
+    ).toEqual([])
     await act(async () => {
       mounted.tree.unmount()
     })
@@ -576,6 +588,32 @@ describe('the wait for the page to speak', () => {
     expect(seen.at(-1)?.kind).toBe('native-route')
     await act(async () => {
       tree.unmount()
+    })
+  })
+
+  it('logs one stall warning for a page that never draws, without moving the session', async () => {
+    const logged = () => connectionLogStore.get(HOST_ID).map((entry) => entry.message)
+    const before = logged().length
+    const mounted = await ready()
+    await act(async () => {
+      mounted.documentLoaded()
+      mounted.pageReady()
+    })
+    const stallTimers = mounted.timers.armed.filter((timer) => timer.delayMs === SHELL_STALL_LOG_MS)
+    // A page signal that leaves the cover up re-arms nothing.
+    expect(stallTimers).toHaveLength(1)
+    await act(async () => {
+      stallTimers[0]?.run()
+    })
+    expect(mounted.states().at(-1)?.kind).toBe('ready')
+    expect(logged().slice(before)).toEqual([
+      expect.stringContaining('Web shell: app opened'),
+      'Web shell: page document loaded',
+      'Web shell: page ready',
+      'Web shell: page has not drawn after 15s'
+    ])
+    await act(async () => {
+      mounted.tree.unmount()
     })
   })
 

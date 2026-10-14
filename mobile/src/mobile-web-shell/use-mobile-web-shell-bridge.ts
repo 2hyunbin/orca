@@ -5,6 +5,7 @@ import type {
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
 import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
+import { bridgeDiagnosticLine, recordShellLifecycleLine } from './shell-lifecycle-log'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'
@@ -214,7 +215,12 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
           ? Promise.reject(new BridgeViewGoneError())
           : mounted.handle.postBridgeMessage(json)
       },
-      onDiagnostic: createBridgeDiagnosticReporter(),
+      onDiagnostic: createBridgeDiagnosticReporter((diagnostic) => {
+        const line = bridgeDiagnosticLine(diagnostic)
+        if (line !== null) {
+          recordShellLifecycleLine(latest.hostId, line)
+        }
+      }),
       onNavigate: (href) => argsRef.current.onNavigate(href),
       onNavigateBack: () => argsRef.current.onNavigateBack(),
       onExternalLink: (url) => argsRef.current.onExternalLink(url),
