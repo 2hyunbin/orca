@@ -94,22 +94,29 @@ export function commitTerminalShutdownState({
     const unreadAgentCompletionPanes = copyOnWriteRecord(state.unreadAgentCompletionPanes)
     const lastTerminalInputAtByPaneKey = copyOnWriteRecord(state.lastTerminalInputAtByPaneKey)
 
+    // These source records stay immutable throughout the commit, so enumerate once for all tabs.
+    const unreadTerminalPaneKeys = tabs.length === 0 ? [] : Object.keys(state.unreadTerminalPanes)
+    const unreadAgentCompletionPaneKeys =
+      tabs.length === 0 ? [] : Object.keys(state.unreadAgentCompletionPanes)
+    const terminalInputPaneKeys =
+      tabs.length === 0 ? [] : Object.keys(state.lastTerminalInputAtByPaneKey)
+
     for (const tab of tabs) {
       pendingSetupSplitByTabId.delete(tab.id)
       pendingIssueCommandSplitByTabId.delete(tab.id)
       unreadTerminalTabs.delete(tab.id)
       const panePrefix = `${tab.id}:`
-      for (const paneKey of Object.keys(state.unreadTerminalPanes)) {
+      for (const paneKey of unreadTerminalPaneKeys) {
         if (paneKey.startsWith(panePrefix)) {
           unreadTerminalPanes.delete(paneKey)
         }
       }
-      for (const paneKey of Object.keys(state.unreadAgentCompletionPanes)) {
+      for (const paneKey of unreadAgentCompletionPaneKeys) {
         if (paneKey.startsWith(panePrefix)) {
           unreadAgentCompletionPanes.delete(paneKey)
         }
       }
-      for (const paneKey of Object.keys(state.lastTerminalInputAtByPaneKey)) {
+      for (const paneKey of terminalInputPaneKeys) {
         if (paneKey.startsWith(panePrefix)) {
           lastTerminalInputAtByPaneKey.delete(paneKey)
         }

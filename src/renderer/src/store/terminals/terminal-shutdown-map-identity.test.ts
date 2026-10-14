@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { commitTerminalShutdownState } from './terminal-shutdown-state'
@@ -64,13 +64,71 @@ function commit(state: AppState, exitGuardPtyIds: readonly string[] = []): AppSt
     }) as never,
     shutdownReason: 'manual-sleep',
     sleepingAgentSessionRecords: {},
-    tabs: [tab],
+    tabs: state.tabsByWorktree[WORKTREE] ?? [],
     worktreeId: WORKTREE
   })
   return current
 }
 
 describe('terminal shutdown map identity', () => {
+  it.each([0, 1, 20])('enumerates each global pane record at most once for %i tabs', (tabCount) => {
+    const tabs = Array.from({ length: tabCount }, (_, index) => ({ ...tab, id: `tab-${index}` }))
+    const before = buildState({
+      tabsByWorktree: { [WORKTREE]: tabs },
+      ptyIdsByTabId: Object.fromEntries(tabs.map((entry) => [entry.id, []])),
+      unreadTerminalPanes: { 'other-tab:1': true },
+      unreadAgentCompletionPanes: { 'other-tab:1': true },
+      lastTerminalInputAtByPaneKey: { 'other-tab:1': 123 }
+    })
+    const records: object[] = [
+      before.unreadTerminalPanes,
+      before.unreadAgentCompletionPanes,
+      before.lastTerminalInputAtByPaneKey
+    ]
+    const counts = new Map<object, number>()
+    const originalKeys = Object.keys
+    const keys = vi.spyOn(Object, 'keys').mockImplementation((record: object) => {
+      if (records.includes(record)) {
+        counts.set(record, (counts.get(record) ?? 0) + 1)
+      }
+      return originalKeys(record)
+    })
+    try {
+      const after = commit(before)
+      for (const record of records) {
+        expect(counts.get(record) ?? 0).toBe(tabCount === 0 ? 0 : 1)
+      }
+      expect(after.unreadTerminalPanes).toBe(before.unreadTerminalPanes)
+      expect(after.unreadAgentCompletionPanes).toBe(before.unreadAgentCompletionPanes)
+      expect(after.lastTerminalInputAtByPaneKey).toBe(before.lastTerminalInputAtByPaneKey)
+    } finally {
+      keys.mockRestore()
+    }
+  })
+
+  it('clears only matching tab prefixes without mutating the original pane records', () => {
+    const before = buildState({
+      unreadTerminalPanes: {
+        [`${TAB_ID}:1`]: true,
+        [`${TAB_ID}:`]: true,
+        [`${TAB_ID}:legacy:leaf`]: true,
+        [`${TAB_ID}-other:1`]: true,
+        [TAB_ID]: true
+      },
+      unreadAgentCompletionPanes: { [`${TAB_ID}:1`]: true, 'other-tab:1': true },
+      lastTerminalInputAtByPaneKey: { [`${TAB_ID}:1`]: 100, 'other-tab:1': 200 }
+    })
+
+    const after = commit(before)
+
+    expect(after.unreadTerminalPanes).toEqual({ [`${TAB_ID}-other:1`]: true, [TAB_ID]: true })
+    expect(after.unreadAgentCompletionPanes).toEqual({ 'other-tab:1': true })
+    expect(after.lastTerminalInputAtByPaneKey).toEqual({ 'other-tab:1': 200 })
+    expect(before.unreadTerminalPanes[`${TAB_ID}:1`]).toBe(true)
+    expect(before.unreadAgentCompletionPanes[`${TAB_ID}:1`]).toBe(true)
+    expect(before.lastTerminalInputAtByPaneKey[`${TAB_ID}:1`]).toBe(100)
+  })
+
   it('keeps every map reference when the panes already exited', () => {
     const before = buildState()
 
