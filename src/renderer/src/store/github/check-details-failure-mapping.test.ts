@@ -1,24 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PRCheckDetail, PRCheckRunDetails } from '../../../../shared/github/check-types'
-import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
+import type { PRCheckRunDetails } from '../../../../shared/github/check-types'
 import zh from '../../i18n/locales/zh.json'
-import { requestGitHubCheckDetails } from '@/components/github-item-dialog/inspect-pull-request/checks-tab-request-details'
-import type { ChecksTabActionContext } from '@/components/github-item-dialog/inspect-pull-request/checks-tab-actions'
-import { requestPullRequestCheckDetails } from '@/components/pull-request-page/checks/details-request'
-import {
-  createGitHubChecksTabState,
-  resolveGitHubChecksTabState
-} from '@/components/github-checks-tab-state'
 import { recordRuntimeSubscription } from '@/runtime/runtime-environment-bridge-fixture'
 import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
 import {
-  createTestStore,
-  githubSourceContext,
   mockApi,
   resetRemoteRuntimeMocks,
   runtimeEnvironmentSubscribe,
   runtimeEnvironmentTransportCall
 } from '../slices/github-slice-test-harness'
+
+import {
+  check,
+  prRepo,
+  details,
+  surfaces,
+  transports,
+  createLoader,
+  expectRequestCounts,
+  successResponse,
+  type Surface
+} from './check-details-loader-test-fixture'
+import * as normalization from '@/lib/check-run-details-log-normalization'
+import * as sanitation from '../../../../shared/check-job-log-excerpt'
+import {
+  checkLogJob,
+  legacyControls,
+  expectedLegacyControls
+} from '@/lib/check-run-details-log-normalization-test-fixture'
 
 vi.mock('@/i18n/i18n', async () => {
   const { default: catalog } = await import('../../i18n/locales/zh.json')
@@ -40,137 +49,6 @@ const genericMessages = {
   dialog: zh.auto.components.GitHubItemDialog.e45324fbed,
   page: zh.auto.components.PullRequestPage.e04c027d98
 }
-const check: PRCheckDetail = {
-  name: 'fork-build',
-  status: 'completed',
-  conclusion: 'failure',
-  checkRunId: 123,
-  workflowRunId: 456,
-  url: 'https://github.example.com/fork/widgets/actions/runs/456'
-}
-const prRepo = { owner: 'Fork', repo: 'Widgets', host: 'github.example.com' }
-const details: PRCheckRunDetails = {
-  name: check.name,
-  status: 'completed',
-  conclusion: 'failure',
-  url: check.url,
-  detailsUrl: null,
-  startedAt: null,
-  completedAt: null,
-  title: 'Synthetic result',
-  summary: null,
-  text: null,
-  annotations: [],
-  jobs: []
-}
-const surfaces = ['store', 'dialog', 'page'] as const
-const transports = ['ipc', 'rpc'] as const
-type Surface = (typeof surfaces)[number]
-type Transport = (typeof transports)[number]
-type StoreSettlement =
-  | { status: 'fulfilled'; details: PRCheckRunDetails | null }
-  | { status: 'rejected'; error: unknown }
-
-function createLoader(surface: Surface, transport: Transport) {
-  const sourceContext = githubSourceContext(
-    transport === 'rpc' ? 'runtime:source-env' : 'ssh:source-host',
-    'source-repo-id'
-  )
-  const store = createTestStore()
-  store.setState({
-    settings: createGlobalSettingsFixture({ activeRuntimeEnvironmentId: 'focused-env' }),
-    repos: [
-      {
-        id: 'caller-repo',
-        path: '/folder',
-        displayName: 'Folder',
-        badgeColor: '',
-        addedAt: 1,
-        kind: 'folder'
-      }
-    ]
-  })
-  let state = createGitHubChecksTabState([check], 'source-context')
-  let storeSettlement: StoreSettlement | undefined
-  const ctx: ChecksTabActionContext = {
-    canUseChecksRepoContext: true,
-    runtimeHost:
-      transport === 'rpc'
-        ? { kind: 'runtime', id: 'runtime:source-env', environmentId: 'source-env' }
-        : null,
-    sourceContext,
-    repoId: 'caller-repo',
-    repoPath: '/folder',
-    itemNumber: 42,
-    itemRepoId: 'item-repo',
-    headSha: 'head',
-    prRepo,
-    mountedRef: { current: true },
-    committedChecksContextOwnerRef: { current: state.contextOwner },
-    nextChecksRefreshRequestIdRef: { current: 0 },
-    activeChecksRefreshRequestIdRef: { current: null },
-    nextCheckDetailsRequestIdRef: { current: 0 },
-    setChecksState: (updater) => {
-      state = typeof updater === 'function' ? updater(state) : updater
-    },
-    setRefreshingOwner: vi.fn(),
-    setRerunningOwner: vi.fn(),
-    onChecksUpdated: vi.fn()
-  }
-  const start = (nextCheck = check): void => {
-    if (surface === 'store') {
-      void store
-        .getState()
-        .fetchPRCheckDetails(
-          '/folder',
-          { ...nextCheck, checkName: nextCheck.name, prRepo },
-          { repoId: 'caller-repo', sourceContext: ctx.sourceContext }
-        )
-        .then(
-          (result) => {
-            storeSettlement = { status: 'fulfilled', details: result }
-          },
-          (error: unknown) => {
-            storeSettlement = { status: 'rejected', error }
-          }
-        )
-    } else if (surface === 'dialog') {
-      expect(requestGitHubCheckDetails(ctx, nextCheck, 'check')).toBeUndefined()
-    } else {
-      expect(
-        requestPullRequestCheckDetails({
-          ...ctx,
-          check: nextCheck,
-          key: 'check',
-          item: {
-            id: 'pr',
-            type: 'pr',
-            number: 42,
-            title: 'Fork PR',
-            state: 'open',
-            url: 'https://github.example.com/fork/widgets/pull/42',
-            labels: [],
-            updatedAt: '2026-10-13T00:00:00Z',
-            author: null,
-            repoId: 'item-repo'
-          }
-        })
-      ).toBeUndefined()
-    }
-  }
-  return {
-    start,
-    ctx,
-    store,
-    state: () => state,
-    storeSettlement: () => storeSettlement,
-    replaceContext: () => {
-      state = resolveGitHubChecksTabState(state, [check], 'replacement-context')
-      ctx.sourceContext = githubSourceContext('runtime:replacement-env', 'replacement-repo')
-    }
-  }
-}
-
 type Loader = ReturnType<typeof createLoader>
 function expectFailure(loader: Loader, surface: Surface, message: string, original?: unknown) {
   if (surface === 'store') {
@@ -182,9 +60,23 @@ function expectFailure(loader: Loader, surface: Surface, message: string, origin
     expect(result.error.message).toBe(message)
     expect(result.error).not.toBe(original)
     expect(result.error.name).toBe(message === 'Runtime request aborted' ? 'AbortError' : 'Error')
-    expect(Reflect.ownKeys(result.error).sort()).toEqual(
+    const fixedFields =
       message === 'Runtime request aborted' ? ['message', 'name', 'stack'] : ['message', 'stack']
-    )
+    const localFields = process.versions.bun ? ['line', 'column', 'sourceURL'] : []
+    expect(
+      Reflect.ownKeys(result.error).every(
+        (key) => typeof key === 'string' && [...fixedFields, ...localFields].includes(key)
+      )
+    ).toBe(true)
+    expect(Object.hasOwn(result.error, 'message')).toBe(true)
+    expect(Object.hasOwn(result.error, 'stack')).toBe(true)
+    for (const key of localFields) {
+      const value: unknown = Object.getOwnPropertyDescriptor(result.error, key)?.value
+      if (value !== undefined) {
+        expect(typeof value).toBe(key === 'sourceURL' ? 'string' : 'number')
+        expect(String(value)).not.toContain('SYNTHETIC_SECRET')
+      }
+    }
     expect(result.error.stack).not.toContain('SYNTHETIC_SECRET')
     expect(JSON.stringify(loader.store.getState())).not.toContain('SYNTHETIC_SECRET')
   } else {
@@ -196,17 +88,11 @@ function expectFailure(loader: Loader, surface: Surface, message: string, origin
     })
     expect(JSON.stringify(loader.state())).not.toContain('SYNTHETIC_SECRET')
   }
+  expect(normalization.normalizeCheckRunDetailsLogTails).not.toHaveBeenCalled()
+  expect(sanitation.sanitizeCheckJobLogExcerpt).not.toHaveBeenCalled()
   expect(console.warn).not.toHaveBeenCalled()
   expect(console.error).not.toHaveBeenCalled()
   expect(vi.getTimerCount()).toBe(0)
-}
-
-function expectRequestCounts(transport: Transport, count = 1) {
-  expect(mockApi.gh.prCheckDetails).toHaveBeenCalledTimes(transport === 'ipc' ? count : 0)
-  expect(runtimeEnvironmentSubscribe).toHaveBeenCalledTimes(transport === 'rpc' ? count : 0)
-  expect(runtimeEnvironmentTransportCall.mock.calls.map(([args]) => args.method)).toEqual(
-    transport === 'rpc' ? ['status.get'] : []
-  )
 }
 
 function hostileError(message = 'SYNTHETIC_SECRET_message') {
@@ -217,12 +103,11 @@ function hostileError(message = 'SYNTHETIC_SECRET_message') {
     cause: { message: 'SYNTHETIC_SECRET_cause', cause: new Error('SYNTHETIC_SECRET_nested') },
     code: 'SYNTHETIC_SECRET_code',
     response: { error: { message: 'SYNTHETIC_SECRET_rpc' } },
+    line: 'SYNTHETIC_SECRET_line',
+    column: 'SYNTHETIC_SECRET_column',
+    sourceURL: 'SYNTHETIC_SECRET_sourceURL',
     arbitrary: 'SYNTHETIC_SECRET_property'
   })
-}
-
-function successResponse(value: PRCheckRunDetails | null = details) {
-  return { id: 'details', ok: true, result: value, _meta: { runtimeId: 'source-runtime' } }
 }
 
 beforeEach(() => {
@@ -231,6 +116,8 @@ beforeEach(() => {
   resetRemoteRuntimeMocks()
   mockApi.gh.prCheckDetails.mockReset()
   mockApi.runtimeEnvironments.cancelSubscription.mockClear()
+  vi.spyOn(normalization, 'normalizeCheckRunDetailsLogTails')
+  vi.spyOn(sanitation, 'sanitizeCheckJobLogExcerpt')
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -546,7 +433,11 @@ for (const surface of ['dialog', 'page'] as const) {
           await vi.advanceTimersByTimeAsync(0)
           loader.start()
           await vi.advanceTimersByTimeAsync(0)
-          const newerDetails = { ...details, title: 'Newer request' }
+          const newerDetails = {
+            ...details,
+            title: 'Newer request',
+            jobs: [checkLogJob(legacyControls)]
+          }
           newer.resolve(newerDetails)
           if (transport === 'rpc') {
             newSubscription.respond(successResponse(newerDetails))
@@ -556,7 +447,10 @@ for (const surface of ['dialog', 'page'] as const) {
           expect(current.detailsByCheckKey.check).toEqual({
             requestId: 2,
             loading: false,
-            details: newerDetails,
+            details: {
+              ...newerDetails,
+              jobs: [{ ...newerDetails.jobs[0], logTail: expectedLegacyControls }]
+            },
             error: null
           })
           if (oldOutcome === 'success') {
@@ -573,6 +467,12 @@ for (const surface of ['dialog', 'page'] as const) {
           }
           await vi.advanceTimersByTimeAsync(0)
           expect(loader.state()).toBe(current)
+          expect(normalization.normalizeCheckRunDetailsLogTails).toHaveBeenCalledTimes(
+            oldOutcome === 'success' ? 2 : 1
+          )
+          expect(sanitation.sanitizeCheckJobLogExcerpt).toHaveBeenCalledExactlyOnceWith(
+            legacyControls
+          )
           expectRequestCounts(transport, 2)
           expect(vi.getTimerCount()).toBe(0)
         }
@@ -597,14 +497,15 @@ for (const surface of ['dialog', 'page'] as const) {
           loader.ctx.mountedRef.current = false
         }
         const current = loader.state()
+        const rawDetails = { ...details, jobs: [checkLogJob(legacyControls)] }
         if (transport === 'ipc') {
           if (outcome === 'success') {
-            upstream.resolve(details)
+            upstream.resolve(rawDetails)
           } else {
             upstream.reject(hostileError())
           }
         } else if (outcome === 'success') {
-          subscription.respond(successResponse())
+          subscription.respond(successResponse(rawDetails))
         } else {
           subscription
             .callbacks()
@@ -612,6 +513,12 @@ for (const surface of ['dialog', 'page'] as const) {
         }
         await vi.advanceTimersByTimeAsync(0)
         expect(loader.state()).toBe(current)
+        expect(normalization.normalizeCheckRunDetailsLogTails).toHaveBeenCalledTimes(
+          outcome === 'success' ? 1 : 0
+        )
+        expect(sanitation.sanitizeCheckJobLogExcerpt).toHaveBeenCalledTimes(
+          outcome === 'success' ? 1 : 0
+        )
         expectRequestCounts(transport)
         expect(vi.getTimerCount()).toBe(0)
       })
