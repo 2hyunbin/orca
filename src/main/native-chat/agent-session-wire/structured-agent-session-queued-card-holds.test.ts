@@ -191,26 +191,6 @@ function expectOneWorkingRun(views: readonly ClientView[]): void {
 }
 
 describe('a Stop holds the queue, in order', () => {
-  it('a card typed while the Stop lands runs once it lands; its turn releases the held cards, in order', async () => {
-    const working = await rig.workingSend()
-    const first = await queuedDraft('A')
-    const second = await queuedDraft('B')
-    await rig.stop()
-    const typed = await queuedDraft('typed while the stop lands')
-    const views = await watchClient()
-    await rig.settleAccepted(working, 'stopped')
-    await eventually(async () => expect(await rig.handoff(typed)).toBeDefined())
-    await expectNothingSent(first, second)
-    await rig.settleAccepted(await rig.handoffId(typed), 'typed')
-    await eventually(async () => expect(await rig.handoff(first)).toBeDefined())
-    expect(await rig.handoff(second)).toBeUndefined()
-    await rig.settleAccepted(await rig.handoffId(first), 'A')
-    await eventually(async () => expect(await rig.handoff(second)).toBeDefined())
-    // The card going past the held ones lifts the pause, so no paused row ever shows.
-    expect(views.filter((view) => view.header || view.dialog)).toEqual([])
-    expectOneWorkingRun(views)
-  })
-
   it('after Resume over held cards the chat goes from idle with Resume straight to working with Stop', async () => {
     const working = await rig.workingSend()
     const first = await queuedDraft('first')

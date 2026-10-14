@@ -89,8 +89,9 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-function send(text: string) {
+function send(text: string, delivery?: 'queue-if-active') {
   const body = hostTestMessage(text)
+  const fields = { body, ...(delivery ? { delivery } : {}) }
   return host.send(CALLER, {
     envelope: {
       sessionId: SESSION,
@@ -99,11 +100,36 @@ function send(text: string) {
       payloadFingerprint: computeAgentSessionPayloadFingerprint({
         method: 'agentSession.send',
         sessionId: SESSION,
-        fields: { body }
+        fields
       })
     },
-    body
+    ...fields
   })
+}
+
+async function queuedCard(text: string): Promise<string> {
+  const queued = await send(text, 'queue-if-active')
+  if (!queued.ok || !('queued' in queued.value)) {
+    throw new Error(`expected a queued receipt: ${JSON.stringify(queued)}`)
+  }
+  return queued.value.queued.messageId
+}
+
+async function handedOffCard(messageId: string) {
+  await vi.waitFor(async () =>
+    expect(
+      (await host.journalSnapshot(SESSION)).submissions.find(
+        (submission) => submission.queuedMessageId === messageId
+      )?.handedOverAt
+    ).toBeDefined()
+  )
+  const submission = (await host.journalSnapshot(SESSION)).submissions.find(
+    (entry) => entry.queuedMessageId === messageId
+  )
+  if (!submission) {
+    throw new Error(`missing hand-off for ${messageId}`)
+  }
+  return submission
 }
 
 function stop(turnId?: string) {
@@ -290,6 +316,48 @@ describe('a Codex Stop whose interrupt failed', () => {
     }
   )
 
+  it('sends C ahead of Stop-held A and B after a refused interrupt precedes the turn end', async () => {
+    await runningTurn()
+    const a = await queuedCard('A')
+    const b = await queuedCard('B')
+    codex.routes['turn/interrupt'] = () => {
+      throw refused('no active turn to interrupt')
+    }
+
+    const stopping = stop()
+    const receivingC = queuedCard('C')
+    expect(await stopping).toMatchObject({ ok: true, value: { cancelled: false } })
+    const c = await receivingC
+    expect((await journalRows()).turns).toEqual(['running'])
+    expect(childEndedByStop()).toBe(false)
+    expect(
+      (await host.journalSnapshot(SESSION)).submissions.filter((s) => s.queuedMessageId)
+    ).toEqual([])
+
+    // Codex writes turn/completed after answering the interrupt and after C was received.
+    turns.end('completed')
+    for (const [card, next] of [
+      [c, a],
+      [a, b]
+    ] as const) {
+      const submission = await handedOffCard(card)
+      expect(
+        (await host.journalSnapshot(SESSION)).submissions.some((s) => s.queuedMessageId === next)
+      ).toBe(false)
+      turns.start()
+      turns.echo(submission.clientMessageId)
+      await vi.waitFor(async () => expect((await journalRows()).turns.at(-1)).toBe('running'))
+      turns.end('completed')
+    }
+    await handedOffCard(b)
+    const queuedIds = new Set([a, b, c])
+    expect(
+      (await host.journalSnapshot(SESSION)).submissions
+        .map((submission) => submission.queuedMessageId)
+        .filter((messageId) => messageId !== undefined && queuedIds.has(messageId))
+    ).toEqual([c, a, b])
+  })
+
   it.each([
     ['naming no turn', undefined],
     ['naming its turn', 'turn-1']
@@ -373,26 +441,7 @@ describe('a Codex Stop whose interrupt failed', () => {
 
   it('holds a card queued before it while the child it ends goes, its event written first', async () => {
     await runningTurn()
-    const body = hostTestMessage('queued before the Stop')
-    const delivery = 'queue-if-active' as const
-    const queued = await host.send(CALLER, {
-      envelope: {
-        sessionId: SESSION,
-        clientOperationId: hostTestOperationId(),
-        expectedRuntimeFence: 1,
-        payloadFingerprint: computeAgentSessionPayloadFingerprint({
-          method: 'agentSession.send',
-          sessionId: SESSION,
-          fields: { body, delivery }
-        })
-      },
-      body,
-      delivery
-    })
-    if (!queued.ok || !('queued' in queued.value)) {
-      throw new Error(`expected a queued receipt: ${JSON.stringify(queued)}`)
-    }
-    const cardId = queued.value.queued.messageId
+    const cardId = await queuedCard('queued before the Stop')
     codex.routes['turn/interrupt'] = () => {
       throw interruptFailure('internal error')
     }
