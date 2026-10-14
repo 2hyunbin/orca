@@ -20,6 +20,7 @@ export type PullRequestGenerationContext = {
   requestId: number
   repoId: string
   branch: string
+  jiraIssueKey?: string | null
   /** The worktree owner's transport, captured when the request started. */
   runtimeTarget: RuntimeClientTarget
 }

@@ -1,3 +1,4 @@
+import { prefixJiraReviewTitle } from '../../../../shared/jira-review-title'
 import type {
   PullRequestGenerationFields,
   PullRequestGenerationRecord
@@ -9,7 +10,8 @@ export type PullRequestGenerationOptions = { autoSubmit?: boolean }
 type ResolvableRecord = Pick<
   PullRequestGenerationRecord,
   'autoSubmit' | 'seed' | 'seedFieldRevisions'
->
+> &
+  Pick<Partial<PullRequestGenerationRecord>, 'context'>
 
 /**
  * Draft is a decision, not prose: the agent may flag unfinished work, but it never reverts a box the
@@ -32,5 +34,12 @@ export function resolveGeneratedFields(
   result: PullRequestGenerationFields
 ): PullRequestGenerationFields {
   const draft = resolveGeneratedDraft(record, result)
-  return record.autoSubmit ? { ...result, base: record.seed.base, draft } : { ...result, draft }
+  const jiraIssueKey = record.context?.jiraIssueKey
+  const title =
+    jiraIssueKey && record.seedFieldRevisions.title > 0
+      ? record.seed.title
+      : prefixJiraReviewTitle(result.title, jiraIssueKey)
+  return record.autoSubmit
+    ? { ...result, base: record.seed.base, title, draft }
+    : { ...result, title, draft }
 }

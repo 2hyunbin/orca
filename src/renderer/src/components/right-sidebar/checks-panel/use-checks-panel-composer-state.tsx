@@ -33,6 +33,7 @@ type ChecksPanelComposerStateInput = Pick<
   > &
   Pick<
     ChecksPanelControllerState,
+    | 'activeWorktree'
     | 'activeWorktreeId'
     | 'activeWorktreePath'
     | 'agentComposerState'
@@ -64,6 +65,7 @@ export function useChecksPanelComposerState(model: ChecksPanelComposerStateInput
     activePullRequestGenerationRecord,
     activePullRequestGenerationSeedRestoreKey,
     activeWorktreeId,
+    activeWorktree,
     activeWorktreePath,
     agentComposerState,
     asyncResultKeyRef,
@@ -125,6 +127,7 @@ export function useChecksPanelComposerState(model: ChecksPanelComposerStateInput
     worktreeId: activeWorktreeId,
     worktreePath: activeWorktreePath ?? '',
     branch,
+    workspace: activeWorktree,
     eligibility: hostedReviewCreation,
     repo,
     settings: ownerSettings,

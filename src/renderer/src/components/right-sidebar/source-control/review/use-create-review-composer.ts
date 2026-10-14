@@ -20,6 +20,7 @@ export function useSourceControlCreateReviewComposer({
   activeRepo,
   activeRepoTarget,
   activeWorktreeId,
+  activeWorktree,
   branchName,
   effectiveBaseRef,
   fetchHostedReviewForBranch,
@@ -43,6 +44,7 @@ export function useSourceControlCreateReviewComposer({
   activeRepo: SourceControlWorktreeContext['activeRepo']
   activeRepoTarget: SourceControlWorktreeContext['activeRepoTarget']
   activeWorktreeId: string | null
+  activeWorktree?: SourceControlWorktreeContext['activeWorktree']
   branchName: string
   effectiveBaseRef: string | null
   fetchHostedReviewForBranch: SourceControlStoreActions['fetchHostedReviewForBranch']
@@ -93,6 +95,7 @@ export function useSourceControlCreateReviewComposer({
     worktreeId: activeWorktreeId,
     worktreePath: worktreePath ?? '',
     branch: branchName,
+    workspace: activeWorktree,
     eligibility: hostedReviewCreation,
     currentBaseRef: effectiveBaseRef,
     repo: activeRepo ?? null,
