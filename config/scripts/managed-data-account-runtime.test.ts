@@ -32,6 +32,18 @@ beforeAll(async () => {
       sourcemap: false,
       rollupOptions: {
         ...main.build.rollupOptions,
+        // This fixture emits only credential capture; full-app asset and entry guards run separately.
+        plugins: main.build.rollupOptions?.plugins?.filter(
+          (plugin) =>
+            !(
+              plugin &&
+              typeof plugin === 'object' &&
+              'name' in plugin &&
+              (plugin.name === 'plugin-viewer-assets' ||
+                plugin.name === 'orca-sandboxed-preload-guard' ||
+                plugin.name === 'orca-plain-node-entry-guard')
+            )
+        ),
         input: join(projectDir, 'src/main/managed-data-accounts/credential-capture.ts'),
         output: { format: 'cjs', entryFileNames: 'credential-capture.cjs' }
       }

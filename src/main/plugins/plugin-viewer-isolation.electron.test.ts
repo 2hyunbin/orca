@@ -239,14 +239,17 @@ describe('native viewer isolation spike', () => {
       const launched = await runProcess({
         program: needsDisplay ? 'xvfb-run' : electronBinary,
         args: needsDisplay ? ['--auto-servernum', electronBinary, ...electronArgs] : electronArgs,
-        env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' },
+        env: { ...env, ORCA_BACKGROUND_LAUNCH: '1', ELECTRON_ENABLE_LOGGING: '1' },
         timeoutMs: 40_000,
         maxOutputBytes: 256 * 1024,
         detached: true,
         terminationBarrier: true
       })
       expect(launched.timedOut, launched.stderr).toBe(false)
-      expect(launched.code, launched.stderr).toBe(0)
+      expect(
+        launched.code,
+        JSON.stringify({ stdout: launched.stdout, stderr: launched.stderr })
+      ).toBe(0)
       const result = resultSchema.parse(JSON.parse(await readFile(resultPath, 'utf8')))
       const netlog = netlogSchema.parse(JSON.parse(await readFile(netLogPath, 'utf8')))
       const evidence = {
