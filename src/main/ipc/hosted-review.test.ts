@@ -396,7 +396,8 @@ describe('registerHostedReviewHandlers', () => {
       repoId: repo.id,
       worktreePath,
       branch: 'feature/pr',
-      base: 'main'
+      base: 'main',
+      revalidateReview: true
     })
 
     expect(getHostedReviewCreationEligibilityMock).toHaveBeenCalledWith(
@@ -404,7 +405,8 @@ describe('registerHostedReviewHandlers', () => {
         repoPath: worktreePath,
         executionHostId: 'ssh:ssh-1',
         branch: 'feature/pr',
-        base: 'main'
+        base: 'main',
+        revalidateReview: true
       })
     )
     expect(resolveRegisteredWorktreePathMock).not.toHaveBeenCalled()

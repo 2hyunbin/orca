@@ -136,6 +136,7 @@ describe('hosted review slice', () => {
     })
 
     expect(store.getState().hostedReviewCache['local::repo-1::feature/github']).toEqual({
+      lookupRevision: expect.any(Number),
       data: githubReview,
       fetchedAt: expect.any(Number),
       linkedReviewHintKey: 'github:12'
@@ -575,7 +576,8 @@ describe('hosted review slice', () => {
       repoPath: '/repo',
       worktreePath: 'C:\\worktrees\\feature',
       branch: 'feature/create-pr',
-      base: 'main'
+      base: 'main',
+      revalidateReview: true
     })
 
     expect(runtimeRpc.callRuntimeRpc).toHaveBeenCalledWith(
@@ -585,7 +587,8 @@ describe('hosted review slice', () => {
         repo: 'repo-1',
         worktree: 'path:C:\\worktrees\\feature',
         branch: 'feature/create-pr',
-        base: 'main'
+        base: 'main',
+        revalidateReview: true
       },
       { timeoutMs: 30_000 }
     )

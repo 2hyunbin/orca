@@ -95,7 +95,15 @@ export const createGitHubSlice: StateCreator<AppState, [], [], GitHubSlice> = (s
       const persisted = await window.api.cache.getGitHub()
       if (persisted) {
         set({
-          prCache: evictStaleEntries(persisted.pr || {}),
+          // Publication revisions belong to this renderer session, not the persisted cache.
+          prCache: evictStaleEntries(
+            Object.fromEntries(
+              Object.entries(persisted.pr || {}).map(([key, entry]) => [
+                key,
+                { ...entry, lookupRevision: undefined }
+              ])
+            )
+          ),
           issueCache: evictStaleEntries(persisted.issue || {})
         })
       }

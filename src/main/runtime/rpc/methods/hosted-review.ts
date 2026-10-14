@@ -42,6 +42,7 @@ export const HOSTED_REVIEW_METHODS = [
         repoSelector: params.repo,
         worktreeSelector: params.worktree,
         branch: params.branch,
+        ...(params.revalidateReview === true ? { revalidateReview: true } : {}),
         base: params.base ?? null,
         hasUncommittedChanges: params.hasUncommittedChanges,
         hasUpstream: params.hasUpstream,

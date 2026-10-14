@@ -195,6 +195,8 @@ export type HostedReviewCreationEligibilityArgs = {
   worktreePath?: string
   connectionId?: string | null
   branch: string
+  /** Retire the selected worktree's host cache after an accepted review lookup publication. */
+  revalidateReview?: boolean
   base?: string | null
   hasUncommittedChanges?: boolean
   hasUpstream?: boolean

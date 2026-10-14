@@ -12,7 +12,10 @@ import type { GitBranchChangeEntry } from '../../../../../../shared/git-diff-com
 import type { GitStatusEntry } from '../../../../../../shared/git-status-types'
 import { isFolderRepo } from '../../../../../../shared/repo-kind'
 import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
-import { selectReviewCacheData, selectReviewCacheEntry } from '../../review-cache-entry-selection'
+import {
+  selectLatestReviewLookup,
+  selectReviewCacheEntry
+} from '../../review-cache-entry-selection'
 
 const EMPTY_GIT_STATUS_ENTRIES: GitStatusEntry[] = []
 const EMPTY_BRANCH_CHANGE_ENTRIES: GitBranchChangeEntry[] = []
@@ -106,7 +109,12 @@ export function useSourceControlWorktreeContext() {
     selectReviewCacheEntry(s.hostedReviewCache, hostedReviewCacheKey)
   )
   const hostedReviewEntryData = hostedReviewEntry?.data ?? null
-  const activePrFromQueue = useAppStore((s) => selectReviewCacheData(s.prCache, activePrCacheKey))
+  const activePrEntry = useAppStore((s) => selectReviewCacheEntry(s.prCache, activePrCacheKey))
+  const activePrFromQueue = activePrEntry?.data ?? null
+  const hostedReviewLookup = useMemo(
+    () => selectLatestReviewLookup(hostedReviewEntry, activePrEntry),
+    [activePrEntry, hostedReviewEntry]
+  )
   // Why: git calls and repo metadata go to the repo's OWNER host; `null` (no repo row) runs nothing.
   const activeRepoTarget = useMemo(
     () =>
@@ -169,6 +177,7 @@ export function useSourceControlWorktreeContext() {
     hostedReviewCacheKey,
     hostedReviewEntry,
     hostedReviewEntryData,
+    hostedReviewLookup,
     inFlightRemoteOpKind,
     isBranchVisible,
     isFolder,

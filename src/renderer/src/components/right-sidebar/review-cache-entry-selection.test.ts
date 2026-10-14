@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { selectReviewCacheData, selectReviewCacheEntry } from './review-cache-entry-selection'
+import {
+  selectLatestReviewLookup,
+  selectReviewCacheData,
+  selectReviewCacheEntry
+} from './review-cache-entry-selection'
 
 type Review = { id: string }
 type ReviewEntry = { data: Review | null; fetchedAt: number }
@@ -75,5 +79,61 @@ describe('review cache entry selection', () => {
     expect(selectReviewCacheEntry({}, ACTIVE_KEY)).toBeUndefined()
     expect(selectReviewCacheData({}, ACTIVE_KEY)).toBeNull()
     expect(selectReviewCacheEntry({ [ACTIVE_KEY]: first }, null)).toBeUndefined()
+  })
+
+  it('selects the newer GitHub or hosted lookup, including a confirmed miss', () => {
+    const hosted = { data: { provider: 'gitlab' as const, number: 42 }, lookupRevision: 2 }
+    const pr = { data: { number: 73 }, lookupRevision: 1 }
+    expect(selectLatestReviewLookup(hosted, pr)).toEqual({
+      revision: 2,
+      provider: 'gitlab',
+      number: 42
+    })
+    expect(selectLatestReviewLookup(hosted, { ...pr, lookupRevision: 3 })).toEqual({
+      revision: 3,
+      provider: 'github',
+      number: 73
+    })
+    expect(selectLatestReviewLookup(hosted, { data: null, lookupRevision: 3 })).toEqual({
+      revision: 3,
+      provider: null,
+      number: null
+    })
+    expect(selectLatestReviewLookup({ data: null, lookupRevision: 4 }, pr)).toEqual({
+      revision: 4,
+      provider: null,
+      number: null
+    })
+  })
+
+  it('does not use missing or invalidated entries as new lookup evidence', () => {
+    expect(selectLatestReviewLookup(undefined, undefined)).toBeNull()
+    expect(
+      selectLatestReviewLookup({ data: null, lookupRevision: 2, stale: true }, undefined)
+    ).toBeNull()
+    expect(
+      selectLatestReviewLookup(
+        { data: null, lookupRevision: 2, stale: true },
+        { data: null, lookupRevision: 3 }
+      )
+    ).toEqual({ revision: 3, provider: null, number: null })
+  })
+
+  it('selects only the current host and repository branch’s evidence', () => {
+    const entry = { data: null, lookupRevision: 1 }
+    const cache = {
+      'local::repo-1::feature': entry,
+      'ssh:other::repo-1::feature': { data: null, lookupRevision: 2 }
+    }
+    expect(
+      selectLatestReviewLookup(selectReviewCacheEntry(cache, 'local::repo-1::feature'), undefined)
+        ?.revision
+    ).toBe(1)
+    expect(
+      selectLatestReviewLookup(selectReviewCacheEntry(cache, 'local::repo-2::feature'), undefined)
+    ).toBeNull()
+    expect(
+      selectLatestReviewLookup(selectReviewCacheEntry(cache, 'local::repo-1::other'), undefined)
+    ).toBeNull()
   })
 })

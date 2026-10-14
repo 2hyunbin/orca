@@ -99,10 +99,12 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
         })
       ).resolves.toBeNull()
       expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+        lookupRevision: expect.any(Number),
         data: null,
         fetchedAt: 2
       })
       expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+        lookupRevision: expect.any(Number),
         data: null,
         fetchedAt: 2,
         linkedReviewHintKey: 'github:12'
@@ -163,6 +165,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       })
     ).resolves.toEqual(mergedPR)
     expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+      lookupRevision: expect.any(Number),
       data: mergedPR,
       fetchedAt: 2
     })
@@ -364,6 +367,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       .flat()
       .find((worktree) => worktree.id === testCase.worktreeId)?.head
     expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+      lookupRevision: expect.any(Number),
       data: null,
       fetchedAt: 2,
       ...(fetchedHeadOid ? { fetchedHeadOid } : {})
@@ -465,10 +469,12 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       store.getState().fetchPRForBranch(repoPath, branch, { force: true, repoId })
     ).resolves.toBeNull()
     expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+      lookupRevision: expect.any(Number),
       data: null,
       fetchedAt: 2
     })
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: null,
       fetchedAt: 2,
       linkedReviewHintKey: 'github:44'

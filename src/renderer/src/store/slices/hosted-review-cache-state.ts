@@ -13,6 +13,7 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 export type HostedReviewCacheEntry<T> = {
   data: T | null
   fetchedAt: number
+  lookupRevision?: number
   stale?: boolean
   linkedReviewHintKey?: string
   branchLookupGitHubPRNumber?: number
@@ -179,6 +180,12 @@ export function hasNewerHostedReviewCacheEntry(
   // Why: GitHub refresh events can update this shared cache while a branch
   // lookup is in flight; older lookups must not resurrect stale results.
   const entry = cache[cacheKey]
+  if (entry?.lookupRevision !== undefined) {
+    return entry.lookupRevision > (requestStartedEntry?.lookupRevision ?? 0)
+  }
+  if (entry === requestStartedEntry) {
+    return false
+  }
   return (
     entry !== undefined &&
     (entry.fetchedAt > requestStartedAt ||

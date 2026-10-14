@@ -122,6 +122,10 @@ export async function getHostedReviewCreationEligibility(
   let review: Awaited<ReturnType<typeof getHostedReviewForBranch>> = null
   // Why: track lookup failure so a swallowed error isn't mistaken for authoritative no-review evidence.
   let lookupFailed = false
+  if (args.revalidateReview) {
+    // Card lookups use the repo root; eligibility owns a separate worktree cache, including in-flight reads.
+    invalidateHostedReviewBranchCache(args.repoPath, args.executionHostId)
+  }
   try {
     review = await getHostedReviewForBranch({
       repoPath: args.repoPath,

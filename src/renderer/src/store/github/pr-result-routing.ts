@@ -10,6 +10,7 @@ import {
   withHostedReviewCacheEntry
 } from '../slices/hosted-review-cache-state'
 import type { GitHubPRFallbackSource } from './cache-model'
+import { nextReviewLookupRevision } from '../review-lookup-publication'
 
 export function githubHostedReviewFallbackPRNumber(
   state: AppState,
@@ -82,6 +83,7 @@ export function syncHostedReviewCacheFromGitHubPRResult(args: {
   hasRepoOwner?: boolean
   pr: PRInfo | null
   fetchedAt: number
+  lookupRevision?: number
   linkedPRNumber?: number | null
   fallbackPRNumber?: number | null
   fallbackPRSource?: GitHubPRFallbackSource | null
@@ -151,6 +153,7 @@ export function syncHostedReviewCacheFromGitHubPRResult(args: {
     cache: withHostedReviewCacheEntry(args.cache, hostedReviewCacheKey, {
       data: args.pr ? hostedReviewInfoFromGitHubPRInfo(args.pr) : null,
       fetchedAt: args.fetchedAt,
+      lookupRevision: args.lookupRevision ?? nextReviewLookupRevision(),
       linkedReviewHintKey: args.pr
         ? linkedReviewHintKey({ linkedGitHubPR: args.pr.number })
         : linkedReviewHintKeyForNoGitHubPR(hostedReviewEntry),

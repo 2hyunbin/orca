@@ -9,6 +9,7 @@ import {
   syncHostedReviewCacheFromGitHubPRResult
 } from './pr-result-routing'
 import { findWorktreeById } from './worktree-refresh'
+import { nextReviewLookupRevision } from '../review-lookup-publication'
 
 const PR_REFRESH_STARTED_HOSTED_REVIEW_ENTRY_MAX = 128
 
@@ -40,7 +41,8 @@ export function applyPRCacheResult(
   fetchedAt: number,
   accepted: boolean,
   preserveExisting: boolean,
-  fetchedHeadOid?: string | null
+  fetchedHeadOid?: string | null,
+  lookupRevision?: number
 ): AppState['prCache'] {
   if (preserveExisting) {
     return cache
@@ -49,6 +51,7 @@ export function applyPRCacheResult(
     return withBoundedCacheEntry(cache, cacheKey, {
       data: pr,
       fetchedAt,
+      lookupRevision: lookupRevision ?? nextReviewLookupRevision(),
       ...(fetchedHeadOid ? { fetchedHeadOid } : {})
     })
   }
@@ -125,6 +128,7 @@ export function applyGitHubPRResultToCaches(
     linkedPRNumber: args.linkedPRNumber,
     rejectedPRUrls: args.rejectedPRUrls
   })
+  const lookupRevision = nextReviewLookupRevision()
   const hostedReviewSync = syncHostedReviewCacheFromGitHubPRResult({
     cache: args.hostedReviewCache,
     repoPath: args.repoPath,
@@ -136,6 +140,7 @@ export function applyGitHubPRResultToCaches(
     hasRepoOwner: args.hasRepoOwner,
     pr: args.pr,
     fetchedAt: args.fetchedAt,
+    lookupRevision,
     linkedPRNumber: args.linkedPRNumber,
     fallbackPRNumber: args.fallbackPRNumber,
     fallbackPRSource: args.fallbackPRSource,
@@ -166,7 +171,8 @@ export function applyGitHubPRResultToCaches(
         fallbackPRNumber: args.fallbackPRNumber
       }),
       preserveExistingPRForFallbackMiss,
-      args.fetchedHeadOid
+      args.fetchedHeadOid,
+      lookupRevision
     ),
     hostedReviewCache: hostedReviewSync.cache
   }

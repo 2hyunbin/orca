@@ -357,6 +357,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       linkedReviewHintKey: 'github:12'
     })
     expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+      lookupRevision: expect.any(Number),
       data: pr,
       fetchedAt: expect.any(Number)
     })
@@ -413,6 +414,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
 
     await expect(request).resolves.toEqual(pr)
     expect(store.getState().prCache[`${repoId}::${branch}`]).toEqual({
+      lookupRevision: expect.any(Number),
       data: pr,
       fetchedAt: expect.any(Number)
     })

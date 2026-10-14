@@ -589,8 +589,13 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
         outcome: { kind: 'no-pr', fetchedAt: 2 }
       })
 
-      expect(store.getState().prCache[cacheKey]).toEqual({ data: null, fetchedAt: 2 })
+      expect(store.getState().prCache[cacheKey]).toEqual({
+        lookupRevision: expect.any(Number),
+        data: null,
+        fetchedAt: 2
+      })
       expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+        lookupRevision: expect.any(Number),
         data: null,
         fetchedAt: 2,
         linkedReviewHintKey: 'github:12'
@@ -739,6 +744,10 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       outcome: { kind: 'no-pr', fetchedAt: 2 }
     })
 
-    expect(store.getState().prCache[cacheKey]).toEqual({ data: null, fetchedAt: 2 })
+    expect(store.getState().prCache[cacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
+      data: null,
+      fetchedAt: 2
+    })
   })
 })

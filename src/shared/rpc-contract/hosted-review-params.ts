@@ -22,6 +22,7 @@ export const HostedReviewCreationEligibility = z.object({
   repo: requiredString('Missing repo selector'),
   worktree: z.string().min(1, 'Missing worktree selector').optional(),
   branch: requiredString('Missing branch'),
+  revalidateReview: z.boolean().optional(),
   base: z.string().nullable().optional(),
   hasUncommittedChanges: z.boolean().optional(),
   hasUpstream: z.boolean().optional(),

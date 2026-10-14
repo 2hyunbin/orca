@@ -9,6 +9,7 @@ import type {
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { AppState } from '../types'
 import { nextLookupGeneration } from '../lookup-generation-sequence'
+import { nextReviewLookupRevision } from '../review-lookup-publication'
 import {
   getHostedReviewCacheKey,
   linkedReviewHintKey,
@@ -244,6 +245,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
                 hostedReviewCache: withHostedReviewCacheEntry(state.hostedReviewCache, cacheKey, {
                   data: review,
                   fetchedAt: Date.now(),
+                  lookupRevision: nextReviewLookupRevision(),
                   linkedReviewHintKey: hintKey,
                   // Why: fallback PR hints come from this branch's PR cache; preserve that provenance separately from request identity.
                   ...(review?.provider === 'github' &&

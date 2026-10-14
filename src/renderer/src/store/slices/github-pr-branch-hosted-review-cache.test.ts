@@ -484,7 +484,11 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       outcome: { kind: 'no-pr', fetchedAt: 2 }
     })
 
-    expect(store.getState().prCache[cacheKey]).toEqual({ data: null, fetchedAt: 2 })
+    expect(store.getState().prCache[cacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
+      data: null,
+      fetchedAt: 2
+    })
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toBeUndefined()
   })
 
@@ -512,7 +516,11 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       outcome: { kind: 'no-pr', fetchedAt: 2 }
     })
 
-    expect(store.getState().prCache[cacheKey]).toEqual({ data: null, fetchedAt: 2 })
+    expect(store.getState().prCache[cacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
+      data: null,
+      fetchedAt: 2
+    })
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
       data: null,
       fetchedAt: 1
@@ -544,8 +552,13 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       outcome: { kind: 'no-pr', fetchedAt: 2 }
     })
 
-    expect(store.getState().prCache[cacheKey]).toEqual({ data: null, fetchedAt: 2 })
+    expect(store.getState().prCache[cacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
+      data: null,
+      fetchedAt: 2
+    })
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: null,
       fetchedAt: 2,
       linkedReviewHintKey: 'github:12'
@@ -604,6 +617,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
       repoPath
     })
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: gitlabReview,
       fetchedAt: expect.any(Number),
       linkedReviewHintKey: ''
@@ -645,6 +659,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
     ).resolves.toEqual(gitlabReview)
     expect(mockApi.hostedReview.forBranch).toHaveBeenCalledTimes(1)
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: gitlabReview,
       fetchedAt: expect.any(Number),
       linkedReviewHintKey: ''
@@ -685,6 +700,7 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
     })
 
     expect(store.getState().hostedReviewCache[hostedReviewCacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: null,
       fetchedAt: 2,
       linkedReviewHintKey: 'github:12'

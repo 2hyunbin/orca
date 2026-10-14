@@ -483,16 +483,19 @@ describe('useSourceControlHostedReviewCreation', () => {
         suppressedGitHubPR: null
       })
       useSourceControlHostedReviewEligibility({
+        activeGitStatusHead: null,
         activeRepoConnectionId: null,
         activeRepoExecutionHostId: null,
         activeRepoId: 'repo-1',
         activeRepoPath: '/repo',
+        activeRepoRemoteUrl: null,
         activeWorktreeId: 'wt-1',
         branchName: 'fix-readme-typo',
         effectiveBaseRef: 'main',
         fallbackGitHubPRNumber: null,
         getHostedReviewCreationEligibility: getEligibility,
         hasUncommittedEntries: false,
+        hostedReviewLookup: null,
         isBranchVisible: true,
         isCreatePrIntentInFlight: false,
         isCreatingPr: inFlight['wt-1'] === true,

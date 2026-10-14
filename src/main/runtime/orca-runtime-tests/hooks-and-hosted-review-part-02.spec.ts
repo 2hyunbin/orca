@@ -408,6 +408,7 @@ describe('OrcaRuntimeService', () => {
     await runtime.getHostedReviewCreationEligibility({
       repoSelector: `id:${TEST_REPO_ID}`,
       branch: 'feature/ssh',
+      revalidateReview: true,
       base: 'main',
       hasUncommittedChanges: false,
       hasUpstream: true,
@@ -437,7 +438,8 @@ describe('OrcaRuntimeService', () => {
       expect.objectContaining({
         repoPath: '/remote/repo',
         executionHostId: 'ssh:ssh-1',
-        branch: 'feature/ssh'
+        branch: 'feature/ssh',
+        revalidateReview: true
       })
     )
     expect(createHostedReviewMock).toHaveBeenCalledWith(

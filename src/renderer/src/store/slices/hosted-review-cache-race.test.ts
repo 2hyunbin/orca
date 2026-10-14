@@ -296,6 +296,7 @@ describe('hosted review cache race protection', () => {
         .fetchHostedReviewForBranch('/repo', 'feature/same-ms-existing', { force: true })
     ).resolves.toEqual(freshReview)
     expect(store.getState().hostedReviewCache[cacheKey]).toEqual({
+      lookupRevision: expect.any(Number),
       data: freshReview,
       fetchedAt: 100,
       linkedReviewHintKey: ''

@@ -147,6 +147,7 @@ export class RuntimeHostedReviewCommands {
       executionHostId: getRepoHostedReviewExecutionHostId(repo),
       branch: args.branch,
       base: args.base ?? null,
+      ...(args.revalidateReview === true ? { revalidateReview: true } : {}),
       hasUncommittedChanges: args.hasUncommittedChanges,
       hasUpstream: args.hasUpstream,
       ahead: args.ahead,

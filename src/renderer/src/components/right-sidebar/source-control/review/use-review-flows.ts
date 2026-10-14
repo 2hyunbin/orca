@@ -11,6 +11,7 @@ import { useSourceControlPullRequestGeneration } from './use-pull-request-genera
  */
 export function useSourceControlReviewFlows(foundation: SourceControlPanelFoundation) {
   const {
+    activeGitStatusHead,
     activeRepo,
     activeRepoConnectionId,
     activeRepoExecutionHostId,
@@ -34,6 +35,7 @@ export function useSourceControlReviewFlows(foundation: SourceControlPanelFounda
     hostedReviewCreateProvider,
     hostedReviewCreation,
     hostedReviewCreationProviderHintRef,
+    hostedReviewLookup,
     isBranchVisible,
     isCreatePrIntentInFlight,
     isCreatingPr,
@@ -128,16 +130,19 @@ export function useSourceControlReviewFlows(foundation: SourceControlPanelFounda
   const { prBase, prBody, prDraft, prGenerating, prTitle } = createReviewComposer
 
   useSourceControlHostedReviewEligibility({
+    activeGitStatusHead,
     activeRepoConnectionId,
     activeRepoExecutionHostId,
     activeRepoId,
     activeRepoPath,
+    activeRepoRemoteUrl: activeRepo?.gitRemoteIdentity?.remoteUrl ?? null,
     activeWorktreeId,
     branchName,
     effectiveBaseRef,
     fallbackGitHubPRNumber,
     getHostedReviewCreationEligibility,
     hasUncommittedEntries,
+    hostedReviewLookup,
     isBranchVisible,
     isCreatePrIntentInFlight,
     isCreatingPr,
