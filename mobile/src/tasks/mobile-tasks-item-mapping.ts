@@ -1,3 +1,6 @@
+import { getGitHubTaskKind } from '../../../src/shared/task-github-search'
+export { scopeGitHubTaskSearch } from '../../../src/shared/task-github-search'
+export { getTaskPresetQuery } from '../../../src/shared/task-preset-query'
 import { type RpcSuccess, type GitHubOwnerRepo, colors } from './mobile-tasks-dependencies'
 import type {
   GitHubPreset,
@@ -40,22 +43,6 @@ export function formatUpdatedAt(value: string): string {
   return `${Math.floor(hours / 24)}d`
 }
 
-export function getTaskPresetQuery(preset: GitHubPreset): string {
-  switch (preset) {
-    case 'my-issues':
-      return 'assignee:@me is:issue is:open'
-    case 'prs':
-      return 'is:pr is:open'
-    case 'my-prs':
-      return 'author:@me is:pr is:open'
-    case 'review':
-      return 'review-requested:@me is:pr is:open'
-    case 'issues':
-    default:
-      return 'is:issue is:open'
-  }
-}
-
 export { isTaskProvider } from '../../../src/shared/task-providers'
 
 export function normalizeGitHubPreset(value: unknown): GitHubPreset {
@@ -75,15 +62,7 @@ export function normalizeLinearFilter(value: unknown): LinearFilter {
 }
 
 export function githubKindFromQuery(query: string, fallbackPreset: GitHubPreset): GitHubTaskKind {
-  if (/\bis:pr\b/i.test(query)) {
-    return 'prs'
-  }
-  if (/\bis:issue\b/i.test(query)) {
-    return 'issues'
-  }
-  return fallbackPreset === 'prs' || fallbackPreset === 'my-prs' || fallbackPreset === 'review'
-    ? 'prs'
-    : 'issues'
+  return getGitHubTaskKind(fallbackPreset, query)
 }
 
 export function projectRowType(row: GitHubProjectRow): 'issue' | 'pr' | null {
@@ -156,17 +135,6 @@ export function projectRowStatusLabel(row: GitHubProjectRow): string {
     return 'Closed'
   }
   return 'Open'
-}
-
-export function scopeGitHubTaskSearch(query: string, kind: GitHubTaskKind): string {
-  const trimmed = query.trim()
-  if (!trimmed) {
-    return getTaskPresetQuery(kind === 'prs' ? 'prs' : 'issues')
-  }
-  if (/\bis:(?:issue|pr)\b/i.test(trimmed)) {
-    return trimmed
-  }
-  return `${kind === 'prs' ? 'is:pr' : 'is:issue'} ${trimmed}`
 }
 
 export function gitHubStatusLabel(item: GitHubWorkItem): string {

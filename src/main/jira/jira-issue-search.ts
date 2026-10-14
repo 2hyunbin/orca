@@ -6,6 +6,7 @@ import { clearToken, getClients, isAuthError } from './client'
 import { ISSUE_LIST_FIELDS, mapJiraIssue } from './jira-issue-mapping'
 import type { JiraSearchResponse } from './jira-record-pages'
 import {
+  requireStrictJiraSite,
   shouldSurfaceSiteFailure,
   toIssueSearchFailureError,
   withJiraDeadline,
@@ -61,18 +62,21 @@ async function searchIssuesForClient(
 export async function listIssues(
   filter: JiraIssueFilter = 'assigned',
   limit = 30,
-  siteId?: JiraSiteSelection | null
+  siteId?: JiraSiteSelection | null,
+  strict = false
 ): Promise<JiraIssue[]> {
-  return searchIssues(filterToJql(filter), limit, siteId)
+  return searchIssues(filterToJql(filter), limit, siteId, undefined, strict)
 }
 
 export async function searchIssues(
   jql: string,
   limit = 30,
   siteId?: JiraSiteSelection | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  strict = false
 ): Promise<JiraIssue[]> {
   const entries = getClients(siteId)
+  requireStrictJiraSite(entries, siteId, strict)
   if (entries.length === 0 || !jql.trim()) {
     return []
   }

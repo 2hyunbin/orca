@@ -13,6 +13,7 @@ import {
 import type { JiraRecord } from './jira-record-pages'
 import {
   getErrorStatus,
+  requireStrictJiraSite,
   settleJiraSummaryRead,
   shouldSurfaceSiteFailure,
   withJiraDeadline
@@ -22,9 +23,11 @@ const ISSUE_SUMMARY_TIMEOUT_MS = 30_000
 
 export async function getIssue(
   key: string,
-  siteId?: JiraSiteSelection | null
+  siteId?: JiraSiteSelection | null,
+  strict = false
 ): Promise<JiraIssue | null> {
   const entries = getClients(siteId)
+  requireStrictJiraSite(entries, siteId, strict)
   for (const entry of entries) {
     let mediaRequest: MediaRequest | undefined
     let issue: JiraRecord | undefined
@@ -50,6 +53,9 @@ export async function getIssue(
         }
       } else {
         console.warn('[jira] getIssue failed:', error)
+      }
+      if (strict) {
+        throw error
       }
       continue
     } finally {
