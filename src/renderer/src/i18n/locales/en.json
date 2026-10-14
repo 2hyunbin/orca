@@ -20015,6 +20015,13 @@
     "copy": {
       "context": "Copy context for {{key}}",
       "actions": "Copy issue context"
+    },
+    "savedFilters": {
+      "retry": "Retry",
+      "find": "Find a saved filter",
+      "noMatch": "No matching filters.",
+      "loadFailed": "Could not load saved Jira filters.",
+      "saveFailed": "Could not save Jira filters."
     }
   }
 }

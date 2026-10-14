@@ -1,3 +1,4 @@
+import { useTaskPageJiraSavedFilters } from './use-task-page-jira-saved-filters'
 import type { TaskPageLinearViewStateModel } from './use-task-page-linear-view-state'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { JiraIssue, JiraProjectStatusOrder, JiraPriority } from '../../../shared/jira-types'
@@ -27,6 +28,11 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     setJiraLinkedView(enabled)
     saveJiraLinkedView(enabled)
   }, [])
+  const setSavedFilterQuery = useCallback((jql: string) => {
+    setJiraSearchInput(jql)
+    setAppliedJiraSearch(jql)
+  }, [])
+  const savedFilters = useTaskPageJiraSavedFilters(model, setSavedFilterQuery)
   const [activeJiraPreset, setActiveJiraPreset] = useState<JiraPresetId>('assigned')
   const [jiraRefreshNonce, setJiraRefreshNonce] = useState(0)
   const [jiraProjectStatusOrder, setJiraProjectStatusOrder] = useState<{
@@ -94,6 +100,7 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
   return Object.assign(model, {
     jiraHasWorkspace,
     setJiraHasWorkspace,
+    ...savedFilters,
     jiraIssues,
     setJiraIssues,
     jiraLoading,

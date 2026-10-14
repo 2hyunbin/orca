@@ -40,6 +40,9 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setAppliedJiraSearch,
     activeJiraPreset,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
     setJiraProjectStatusOrder,
     displayedJiraIssues
   } = model
@@ -73,7 +76,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     if (taskSource !== 'jira') {
       return
     }
-    if (!jiraConnected) {
+    if (!jiraConnected || jiraSavedFiltersLoading) {
       return
     }
     const force = previousJiraRefreshNonceRef.current !== jiraRefreshNonce
@@ -84,14 +87,19 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setJiraJqlRejection(null)
     setJiraErrorDetailsOpen(false)
     const trimmed = jiraRemoteSearch.trim()
+    const savedFilter = jiraSavedFilters.find((filter) => filter.id === jiraActiveSavedFilterId)
+    const exactSavedJql = savedFilter?.jql === trimmed
     const request = jiraHasWorkspace
       ? readLinkedJiraIssues(linkedJiraIssueRefs, searchJiraIssues, jiraTaskSourceContext, force)
       : trimmed.length > 0
-        ? searchTaskPageJiraIssues(trimmed, (jql) =>
-            searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
-              sourceContext: jiraTaskSourceContext,
-              force
-            })
+        ? searchTaskPageJiraIssues(
+            trimmed,
+            (jql) =>
+              searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
+                sourceContext: jiraTaskSourceContext,
+                force
+              }),
+            exactSavedJql ? 'jql' : 'input'
           ).then((result) => ({ ...result, error: null }))
         : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
             sourceContext: jiraTaskSourceContext,
@@ -150,6 +158,9 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     jiraHasWorkspace,
     linkedJiraIssueRefsSignature,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
     taskResumeApplied,
     jiraTaskSourceContext,
     jiraTaskSourceScopeKey

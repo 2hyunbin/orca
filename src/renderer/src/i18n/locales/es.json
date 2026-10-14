@@ -17852,6 +17852,23 @@
         "resuming": "Reanudando automáticamente tras el reinicio.",
         "resumed": "Reanudados automáticamente tras el reinicio.",
         "changeInSettings": "Cambiar en Ajustes"
+      },
+      "TaskPageJiraSavedFilters": {
+        "6c381858a1": "Saved filters",
+        "d14121662d": "No saved filters yet.",
+        "af0dd8c528": "Edit {{value0}}",
+        "bae9bd87bf": "You can save up to {{value0}} filters.",
+        "85506127a5": "Save current filter",
+        "7aef259c28": "Edit Jira filter",
+        "4f0e55d2e5": "Save Jira filter",
+        "466c1b12ce": "Give this JQL query a name for quick access.",
+        "e4c2f52972": "Name",
+        "0ab71bb840": "A saved filter with this name already exists.",
+        "42ce360813": "JQL",
+        "7b21c59a26": "Delete filter",
+        "a62f9db53d": "Cancel",
+        "c77189bc0c": "Update filter",
+        "19af906d12": "Save filter"
       }
     },
     "i18n": {
@@ -19938,6 +19955,15 @@
       "waitingAriaLabel": "Actualización en espera de otras instancias de Orca. Haz clic para expandir.",
       "preparingLabel": "Preparando actualización",
       "preparingAriaLabel": "Preparando actualización. Haz clic para expandir."
+    }
+  },
+  "jira": {
+    "savedFilters": {
+      "retry": "Reintentar",
+      "find": "Buscar un filtro guardado",
+      "noMatch": "No hay filtros coincidentes.",
+      "loadFailed": "No se pudieron cargar los filtros guardados de Jira.",
+      "saveFailed": "No se pudieron guardar los filtros de Jira."
     }
   }
 }

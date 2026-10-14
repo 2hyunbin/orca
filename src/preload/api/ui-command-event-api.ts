@@ -1,4 +1,5 @@
 import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
+import type { JiraSavedFilterState, JiraSavedFilterMutation } from '../../shared/jira-saved-filters'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -50,6 +51,8 @@ import type {
 export type CloseActiveTabPayload = { sourceId: string }
 
 export type UiCommandEventApi = {
+  getJiraSavedFilters?: () => Promise<JiraSavedFilterState>
+  mutateJiraSavedFilters?: (mutation: JiraSavedFilterMutation) => Promise<JiraSavedFilterState>
   get: () => Promise<PersistedUIState>
   set: (args: Partial<PersistedUIState>) => Promise<void>
   /** Like set, but REJECTS when the update did not reach the host (the web preload's set
