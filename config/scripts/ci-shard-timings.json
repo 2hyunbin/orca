@@ -8000,7 +8000,7 @@
       "src/renderer/src/components/sidebar/workspace-attachment-source-label.test.ts": 80,
       "src/renderer/src/components/sidebar/workspace-attachment-source-result.test.ts": 1721,
       "src/renderer/src/components/sidebar/workspace-board-task-status-sync.test.ts": 127,
-      "src/renderer/src/components/sidebar/workspace-creator-visibility.test.ts": 84,
+      "src/shared/workspace-creator-visibility.test.ts": 84,
       "src/renderer/src/components/sidebar/workspace-delete-lineage.test.ts": 52,
       "src/renderer/src/components/sidebar/workspace-hover-attachments.test.ts": 119,
       "src/renderer/src/components/sidebar/workspace-kanban-area-selection.test.ts": 181,

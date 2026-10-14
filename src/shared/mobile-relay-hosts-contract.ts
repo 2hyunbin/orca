@@ -22,10 +22,16 @@ export const MobileRelayHostWorktreesParamsSchema = z
   .strict()
 
 /** One of a server's own `worktree.ps` rows (RuntimeWorktreePsSummary), carrying the server's host id. */
-export type MobileRelayServerWorktreeRow = Record<string, unknown> & { hostId: `runtime:${string}` }
+export type MobileRelayServerWorktreeRow = Record<string, unknown> & {
+  hostId: `runtime:${string}`
+  /** The desktop's "Hide other-client workspaces" hides this row; sent only while that is on. */
+  desktopOtherClient?: true
+  /** The desktop's saved browser or native-chat tabs keep this row out of "Hide sleeping". */
+  desktopSidebarActivity?: true
+}
 
 /**
  * The server's own `worktree.ps` rows as the desktop last fetched them, refreshed when the server
- * answers; rows are never rewritten beyond their host id.
+ * answers; rows are rewritten only by their host id and the desktop's own sidebar marks above.
  */
 export type MobileRelayHostWorktreesResult = { worktrees: MobileRelayServerWorktreeRow[] | null }
