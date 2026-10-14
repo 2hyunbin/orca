@@ -12805,6 +12805,7 @@
           "add": "Add WSL distro",
           "connect": "Connect",
           "remove": "Remove",
+          "forceUpdate": "Force update",
           "turnOn": "Turn on in Experimental"
         }
       },
