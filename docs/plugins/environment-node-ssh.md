@@ -1,5 +1,7 @@
 # Node control-host SSH composition
 
+For desktop workspace access through this controller, see [managed workspace routing](environment-managed-workspaces.md). Deployment and terminal census are qualified below; the controller-mediated desktop workspace flow still needs implementation.
+
 The Node control host now installs the same SSH connection manager, target store, mutation rules, managed-server decision and public state publication used by the desktop. Provider accounts, credentials, SSH configuration, agent, source approvals, saved target generations and machine history remain on that host. A paired desktop does not dial its provider endpoint locally.
 
 Startup creates a writable SQLite profile, then the SSH registry and managed-server actions, then provider admission, before exposing RPC. SSH target management and provider SSH capabilities reflect actual composition. A second owner or a stopping host cannot install another registry.

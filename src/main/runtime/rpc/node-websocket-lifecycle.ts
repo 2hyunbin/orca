@@ -145,8 +145,13 @@ export async function stopNodeWebSocketTransport(args: {
 
 // Why: force-terminate soon after the 1013 close since a half-open phone may never ack and would hold the descriptor past the WS cap; the 'error' listener absorbs a reset while closing.
 export function rejectNodeWebSocketOverCapacity(ws: WebSocket): void {
+  rejectNodeWebSocketConnection(ws, 1013, 'Maximum connections reached')
+}
+
+/** Bound descriptor retention even when a rejected peer never acknowledges the close. */
+export function rejectNodeWebSocketConnection(ws: WebSocket, code: number, reason: string): void {
   ws.on('error', () => {})
-  ws.close(1013, 'Maximum connections reached')
+  ws.close(code, reason)
   const terminateTimer = setTimeout(() => ws.terminate(), 1_000)
   terminateTimer.unref?.()
   ws.once('close', () => clearTimeout(terminateTimer))

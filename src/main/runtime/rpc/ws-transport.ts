@@ -8,12 +8,14 @@ import { hasWebClientUpgradeMarker } from '../../../shared/web-origin-security'
 import {
   attachNodeWebSocketLifecycle,
   clearNodeWebSocketPreAuthTimer,
+  rejectNodeWebSocketConnection,
   rejectNodeWebSocketOverCapacity,
   stopNodeWebSocketTransport,
   type WebSocketConnectionCloseHandler,
   type WebSocketMessageHandler
 } from './node-websocket-lifecycle'
 import { RemoteRuntimeServerHeartbeat } from './remote-runtime-server-heartbeat'
+import { parseManagedRuntimeGatewayRoute } from '../../../shared/managed-runtime-gateway-contract'
 
 const WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES = 1024 * 1024
 // Why: one desktop remote-host client can hold many concurrent streams, so keep the cap high enough that stale streams don't starve control RPCs.
@@ -223,6 +225,10 @@ export class WebSocketTransport implements RpcTransport {
     wss.on('connection', (ws, request) => {
       if (wss.clients.size > WEBSOCKET_TRANSPORT_MAX_CONNECTIONS) {
         rejectNodeWebSocketOverCapacity(ws)
+        return
+      }
+      if (parseManagedRuntimeGatewayRoute(request.url).kind !== 'root') {
+        rejectNodeWebSocketConnection(ws, 1008, 'Managed workspace gateway is unavailable')
         return
       }
       if (hasWebClientUpgradeMarker(request.url)) {
