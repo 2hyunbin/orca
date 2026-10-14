@@ -197,6 +197,9 @@ export async function startHeadlessOracleHost(
     const cleanups: (() => void)[] = []
     return {
       ...started,
+      get pairingUrl() {
+        return started.pairingUrl
+      },
       cleanups,
       dispose: async () => {
         await started.dispose()

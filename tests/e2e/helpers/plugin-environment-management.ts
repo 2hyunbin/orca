@@ -1,11 +1,19 @@
 import type { Page } from '@stablyai/playwright-test'
 
-export async function installPluginEnvironmentProvider(page: Page) {
-  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+export async function openPluginEnvironmentHost(page: Page, hostName?: string): Promise<void> {
   const notice = page.getByRole('status', { name: 'Usage display is now compact', exact: true })
   if (await notice.isVisible()) {
     await notice.getByRole('button', { name: 'Dismiss', exact: true }).click()
   }
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  if (hostName) {
+    await page.getByRole('combobox', { name: 'Host', exact: true }).click()
+    await page.getByRole('option', { name: hostName, exact: true }).click()
+  }
+}
+
+export async function installPluginEnvironmentProvider(page: Page, hostName?: string) {
+  await openPluginEnvironmentHost(page, hostName)
   await page.getByRole('button', { name: 'Plugins', exact: true }).click()
   const feature = page.getByRole('switch', { name: 'Plugin system', exact: true })
   if (!(await feature.isChecked())) {

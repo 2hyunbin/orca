@@ -60,6 +60,18 @@ function expectManagedSshLane(spec) {
   ).toBe(true)
 }
 
+it('runs independent provider clients in the server-building job', () => {
+  const spec = 'tests/e2e/ssh-orcad-provider-competing-clients.spec.ts'
+  expectManagedSshLane(spec)
+  for (const source of [
+    'src/shared/plugins/plugin-environment-provider-runtime-client.ts',
+    'tests/e2e/helpers/headless-layout-oracle-hosts.ts',
+    'tests/e2e/helpers/plugin-environment-management.ts'
+  ]) {
+    expect(selectPrE2eSpecs([source]), source).toContain(spec)
+  }
+})
+
 it('runs real browser file-drop ownership in the template-building Docker job', () => {
   const spec = 'tests/e2e/ssh-orcad-browser-drop-owner.spec.ts'
   expectManagedSshLane(spec)
