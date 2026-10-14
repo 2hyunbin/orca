@@ -13,7 +13,8 @@ const unc = (linux: string, distro = 'Ubuntu') =>
 const facts = (root: string, head = 'abc'): WslMovePathFacts => ({
   gitCommonDir: `${root}/.git`,
   head,
-  worktrees: [root, `${root}-feature`]
+  worktrees: [root, `${root}-feature`],
+  marker: 'nonce-1'
 })
 
 /** The desktop answers in UNC form for a real repo at `/home/dev/app`; the host in Linux form. */
@@ -27,7 +28,8 @@ function probes(
         ? {
             gitCommonDir: unc('/home/dev/app/.git'),
             head: 'abc',
-            worktrees: [unc('/home/dev/app'), unc('/home/dev/app-feature')]
+            worktrees: [unc('/home/dev/app'), unc('/home/dev/app-feature')],
+            marker: 'nonce-1'
           }
         : null,
     host: async (path) =>
@@ -63,6 +65,34 @@ describe('preflightWslMovePaths', () => {
       'not-in-distro',
       'unreadable-on-desktop'
     ])
+  })
+})
+
+describe('preflightWslMovePaths outside git', () => {
+  const folder = (marker: string | null): WslMovePathFacts => ({
+    gitCommonDir: null,
+    head: null,
+    worktrees: [],
+    marker
+  })
+  const run = (desktopMarker: string | null, hostMarker: string | null) =>
+    preflightWslMovePaths([unc('/srv/notes')], 'Ubuntu', {
+      desktop: async () => folder(desktopMarker),
+      host: async () => folder(hostMarker)
+    })
+
+  it('accepts a folder only when the host reads back the marker the desktop wrote', async () => {
+    await expect(run('nonce-1', 'nonce-1')).resolves.toEqual({ refused: [] })
+  })
+
+  it.each([
+    [null, null, 'identity-unproven'],
+    ['nonce-1', null, 'identity-unproven'],
+    ['nonce-1', 'nonce-2', 'different-object']
+  ] as const)('refuses desktop marker %s / host marker %s', async (desktop, host, reason) => {
+    await expect(run(desktop, host)).resolves.toEqual({
+      refused: [{ path: unc('/srv/notes'), reason }]
+    })
   })
 })
 

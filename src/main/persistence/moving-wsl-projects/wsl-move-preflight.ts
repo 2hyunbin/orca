@@ -14,6 +14,12 @@ export type WslMovePathFacts = {
   head: string | null
   /** Worktree paths `git worktree list` reports, in the reader's own path form. */
   worktrees: readonly string[]
+  /**
+   * The contents of a one-off marker the desktop wrote into the folder for this preflight, as each
+   * side reads it back; null when it could not be written or read. The only identity evidence a
+   * folder outside git has.
+   */
+  marker: string | null
 }
 
 export type WslMovePreflightProbes = {
@@ -25,6 +31,7 @@ export type WslMovePreflightRefusal =
   | 'missing-on-host'
   | 'unreadable-on-desktop'
   | 'different-object'
+  | 'identity-unproven'
   | 'windows-drive'
   | 'not-in-distro'
 
@@ -45,6 +52,7 @@ export async function preflightWslMovePaths(
       refused.push({ path, reason: 'not-in-distro' })
       continue
     }
+    // Windows folds the `/mnt/<drive>` tail of a UNC path case-insensitively (wsl-paths.ts).
     if (isDrvfsLinuxPath(linux.toLowerCase())) {
       refused.push({ path, reason: 'windows-drive' })
       continue
@@ -55,9 +63,7 @@ export async function preflightWslMovePaths(
         ? 'unreadable-on-desktop'
         : host === null
           ? 'missing-on-host'
-          : sameObject(desktop, host, distro)
-            ? null
-            : 'different-object'
+          : identityVerdict(desktop, host, distro)
     if (reason) {
       refused.push({ path, reason })
     }
@@ -66,17 +72,28 @@ export async function preflightWslMovePaths(
 }
 
 /** Both readers must agree once the desktop's UNC answers are read as Linux paths. */
-function sameObject(desktop: WslMovePathFacts, host: WslMovePathFacts, distro: string): boolean {
+function identityVerdict(
+  desktop: WslMovePathFacts,
+  host: WslMovePathFacts,
+  distro: string
+): WslMovePreflightRefusal | null {
+  if (desktop.marker !== null && host.marker !== null && desktop.marker !== host.marker) {
+    return 'different-object'
+  }
+  if (desktop.gitCommonDir === null && host.gitCommonDir === null) {
+    // Matching emptiness proves nothing: outside git, only the marker shows it is one folder.
+    return desktop.marker !== null && desktop.marker === host.marker ? null : 'identity-unproven'
+  }
   const asLinux = (value: string | null): string | null =>
     value === null ? null : (wslUncPathToLinux(value, distro) ?? value.replace(/\\/g, '/'))
   const sorted = (paths: readonly string[], map: (path: string) => string | null): string[] =>
     paths.map((path) => map(path) ?? path).sort()
-  return (
+  const same =
     asLinux(desktop.gitCommonDir) === host.gitCommonDir &&
     desktop.head === host.head &&
     JSON.stringify(sorted(desktop.worktrees, asLinux)) ===
       JSON.stringify(sorted(host.worktrees, (path) => path))
-  )
+  return same ? null : 'different-object'
 }
 
 export type WslMoveHostReadiness = 'ready' | 'update-host'
