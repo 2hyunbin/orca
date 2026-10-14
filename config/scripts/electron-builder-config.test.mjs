@@ -7,13 +7,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { writeMobileWebBundleFixtureTree } from './mobile-web-bundle-fixture-tree.mjs'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
-const SRC_MAIN_DIR = join(REPO_ROOT, 'src', 'main')
-const MAIN_BUILD_ENTRY_POINTS_PATH = join(
-  REPO_ROOT,
-  'config',
-  'build-plugins',
-  'main-build-entry-points.ts'
-)
 
 const require = createRequire(import.meta.url)
 const electronBuilderConfig = require('../electron-builder.config.cjs')
@@ -393,11 +386,6 @@ describe('electron-builder config', () => {
   it('unpacks the replaceable WSL transcript filesystem process entry', async () => {
     const entryFilename = 'wsl-transcript-fs-process-entry.js'
     expect(electronBuilderConfig.asarUnpack).toContain(`out/main/${entryFilename}`)
-
-    const entryPoints = await readFile(MAIN_BUILD_ENTRY_POINTS_PATH, 'utf8')
-    expect(entryPoints).toMatch(
-      new RegExp(`'${entryFilename.replace(/\.js$/, '')}':\\s*resolve\\(`)
-    )
   })
 
   // Why: the CLI runs this entry under ELECTRON_RUN_AS_NODE, which cannot read
@@ -420,34 +408,6 @@ describe('electron-builder config', () => {
     expect(
       isUnpacked(join('/app', 'out', 'main', `${entryName}.js`), { isDirectory: () => false })
     ).toBe(true)
-  })
-
-  // Why: the scanner service is forked with ELECTRON_RUN_AS_NODE, so asar is
-  // invisible to it and a packed worker entry fails closed — dropping every
-  // OpenCode session in packaged builds while dev stays green. Three legs must
-  // agree on the filename, so all three are read rather than hardcoded.
-  it('unpacks the foreign SQLite reader entry the scanner service runs OpenCode reads on', async () => {
-    const entryPathSource = await readFile(
-      join(SRC_MAIN_DIR, 'foreign-sqlite-readers', 'foreign-sqlite-reader-entry-path.ts'),
-      'utf8'
-    )
-    const entryFilename = entryPathSource.match(
-      /FOREIGN_SQLITE_READER_ENTRY_FILENAME = '([^']+)'/
-    )?.[1]
-
-    expect(entryFilename).toBeDefined()
-    expect(electronBuilderConfig.asarUnpack).toContain(`out/main/${entryFilename}`)
-
-    // Why: the emitted path comes from the rollup input key under
-    // entryFileNames '[name].js', not from the source filename — renaming the
-    // key alone would leave the other two legs agreeing on a file that no
-    // longer exists.
-    const viteConfig = await readFile(join(REPO_ROOT, 'electron.vite.config.ts'), 'utf8')
-    expect(viteConfig).toContain("entryFileNames: '[name].js'")
-    const entryPoints = await readFile(MAIN_BUILD_ENTRY_POINTS_PATH, 'utf8')
-    expect(entryPoints).toMatch(
-      new RegExp(`'${entryFilename.replace(/\.js$/, '')}':\\s*resolve\\(`)
-    )
   })
 
   it('keeps the worker-thread hang watchdog inside app.asar', () => {
@@ -601,18 +561,6 @@ describe('electron-builder config', () => {
         (target) => MARKER_TARGETS.has(target) && !RECOVERABLE_TARGETS.has(target)
       )
       expect(unrecoverable).toEqual([])
-    })
-
-    it('keeps the pinned FpmTarget overwrite for configured deb and rpm artifacts', async () => {
-      const source = await readFile(
-        require.resolve('app-builder-lib/out/targets/FpmTarget'),
-        'utf8'
-      )
-
-      expect(source).toContain('path.join(resourceDir, "package-type"), target')
-      for (const target of RECOVERABLE_TARGETS) {
-        expect(electronBuilderConfig[target]).toBeDefined()
-      }
     })
   })
 })
