@@ -18,6 +18,7 @@ export const SHADOW_SEAT_RECENTLY_LEFT_TTL_MS = 24 * 60 * 60 * 1_000
 export const SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS = 100_000
 // Cells stamp joinedAt by their own clocks: a later join must clear this to outrank across cells.
 export const SHADOW_SEAT_OUTRANK_SKEW_MS = 1_000
+const SHADOW_SEAT_OUTRANKED_REPORTS_MAX = 100_000
 
 export function seatOutranks(
   newer: { epoch: number; joinedAt: number },
@@ -592,8 +593,8 @@ export class ShadowSeatDirectory {
   }
 
   // After the whole response, so a cell's first snapshot is judged by the mode it carries. Only a
-  // join triggers it, once per seat: a cell flipped to reserve later, or a lost demote, waits for the silence close.
-  // A lower epoch that joined later (answered from a stale map) is left to the ledger reconcile.
+  // join triggers it, once per seat: a cell flipped to reserve later, or a lost demote, falls to
+  // the silence close or the ledger reconcile, as does a lower epoch that joined later.
   private reportOutranked(): void {
     const report = this.onOutranked
     const keys = [...this.joinedSinceApply]
@@ -609,8 +610,9 @@ export class ShadowSeatDirectory {
         const reported = `${key}\u0000${cellId}\u0000${epoch}\u0000${joinedAt}`
         if (this.reportedOutranked.has(reported)) continue
         this.reportedOutranked.add(reported)
-        if (this.reportedOutranked.size > SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS) {
-          this.reportedOutranked.delete(this.reportedOutranked.values().next().value!)
+        if (this.reportedOutranked.size > SHADOW_SEAT_OUTRANKED_REPORTS_MAX) {
+          const oldest = this.reportedOutranked.values().next().value
+          if (oldest !== undefined) this.reportedOutranked.delete(oldest)
         }
         report({ ...parseHostKey(key), cellId, epoch, joinedAt, byCellId: by.cellId })
       }
