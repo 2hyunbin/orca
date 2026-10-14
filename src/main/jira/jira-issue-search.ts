@@ -54,7 +54,8 @@ async function readIssuesForClient(
         entry,
         `project in (${ids.join(', ')}) AND ${jql}`,
         limit,
-        signal
+        signal,
+        true
       ))
     )
   }
@@ -65,23 +66,44 @@ async function searchIssuesForClient(
   entry: JiraClientForSite,
   jql: string,
   limit: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  collectPages = false
 ): Promise<JiraIssue[]> {
   // Server/DC only has the classic /search resource; /search/jql is Cloud-only.
   const searchPath =
     entry.site.authType === 'server'
       ? `${apiBasePath(entry.site)}/search`
       : '/rest/api/3/search/jql'
-  const result = await jiraRequest<JiraSearchResponse>(entry, searchPath, {
-    method: 'POST',
-    body: JSON.stringify({
-      jql,
-      maxResults: limit,
-      fields: ISSUE_LIST_FIELDS
-    }),
-    signal
-  })
-  return (result.issues ?? []).map((issue) => mapJiraIssue(entry.site, issue))
+  const issues: JiraIssue[] = []
+  const seenTokens = new Set<string>()
+  let nextPageToken: string | undefined
+  for (let page = 0; page < 100; page += 1) {
+    const result = await jiraRequest<JiraSearchResponse>(entry, searchPath, {
+      method: 'POST',
+      body: JSON.stringify({
+        jql,
+        maxResults: limit - issues.length,
+        fields: ISSUE_LIST_FIELDS,
+        ...(nextPageToken ? { nextPageToken } : {})
+      }),
+      signal
+    })
+    issues.push(...(result.issues ?? []).map((issue) => mapJiraIssue(entry.site, issue)))
+    if (
+      !collectPages ||
+      issues.length >= limit ||
+      result.isLast === true ||
+      !result.nextPageToken
+    ) {
+      return issues.slice(0, limit)
+    }
+    if (typeof result.nextPageToken !== 'string' || seenTokens.has(result.nextPageToken)) {
+      throw new Error('Jira returned an invalid or repeated issue page token.')
+    }
+    nextPageToken = result.nextPageToken
+    seenTokens.add(nextPageToken)
+  }
+  throw new Error('Jira issue search exceeded the page limit. Select a project with JQL instead.')
 }
 
 export async function listIssues(

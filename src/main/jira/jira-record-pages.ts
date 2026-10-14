@@ -4,6 +4,8 @@ export type JiraRecord = Record<string, unknown>
 
 export type JiraSearchResponse = {
   issues?: JiraRecord[]
+  nextPageToken?: string
+  isLast?: boolean
 }
 
 export type JiraPagedResponse<T> = {

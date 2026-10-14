@@ -181,6 +181,120 @@ describe('Jira preset filters', () => {
     expect(jiraRequest).toHaveBeenCalledTimes(3)
   })
 
+  it('follows partial issue pages in every batch before merging the newest results', async () => {
+    const requests: { batch: string; token: string | undefined; limit: number }[] = []
+    jiraRequest.mockImplementation(async (_entry, path, init) => {
+      if (path.includes('/project/search')) {
+        return {
+          isLast: true,
+          values: Array.from({ length: 101 }, (_, index) => ({ id: String(index) }))
+        }
+      }
+      const body = JSON.parse(init.body)
+      const batch = body.jql.includes('"100"') ? 'last' : 'first'
+      requests.push({ batch, token: body.nextPageToken, limit: body.maxResults })
+      if (!body.nextPageToken) {
+        return {
+          issues: [
+            issue(`${batch}-1`, false, false, batch === 'last' ? '2026-10-10' : '2026-10-09')
+          ],
+          nextPageToken: `${batch}-next`
+        }
+      }
+      expect(body.nextPageToken).toBe(`${batch}-next`)
+      return {
+        issues: [
+          issue(`${batch}-2`, false, false, batch === 'last' ? '2026-10-08' : '2026-10-07'),
+          issue(`${batch}-3`, false, false, '2020-01-01')
+        ],
+        isLast: true
+      }
+    })
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 3, 'cloud')).resolves.toMatchObject([
+      { key: 'last-1' },
+      { key: 'first-1' },
+      { key: 'last-2' }
+    ])
+    expect(requests).toEqual([
+      { batch: 'first', token: undefined, limit: 3 },
+      { batch: 'first', token: 'first-next', limit: 2 },
+      { batch: 'last', token: undefined, limit: 3 },
+      { batch: 'last', token: 'last-next', limit: 2 }
+    ])
+  })
+
+  it('continues across an empty issue page with a next token', async () => {
+    jiraRequest
+      .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
+      .mockResolvedValueOnce({ issues: [], nextPageToken: 'next' })
+      .mockResolvedValueOnce({ issues: [issue('ALP-1', false, false)], isLast: true })
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 3, 'cloud')).resolves.toMatchObject([{ key: 'ALP-1' }])
+    expect(jiraRequest).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops when a batch reaches the requested limit even if another token exists', async () => {
+    jiraRequest
+      .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
+      .mockResolvedValueOnce({ issues: [issue('ALP-1', false, false)], nextPageToken: 'unused' })
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 1, 'cloud')).resolves.toMatchObject([{ key: 'ALP-1' }])
+    expect(jiraRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it('surfaces a repeated issue page token instead of looping or returning an incomplete list', async () => {
+    jiraRequest
+      .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
+      .mockResolvedValue({ issues: [], nextPageToken: 'repeat' })
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 3, 'cloud')).rejects.toThrow('repeated issue page token')
+    expect(jiraRequest).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounds empty token pages with a safety limit', async () => {
+    let token = 0
+    jiraRequest.mockImplementation(async (_entry, path) =>
+      path.includes('/project/search')
+        ? { values: [{ id: '10' }], isLast: true }
+        : { issues: [], nextPageToken: String(++token) }
+    )
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(listIssues('all', 3, 'cloud')).rejects.toThrow(
+      'issue search exceeded the page limit'
+    )
+    expect(jiraRequest).toHaveBeenCalledTimes(101)
+  })
+
+  it('keeps subsequent issue pages under the original search deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      let firstSignal: AbortSignal | undefined
+      jiraRequest
+        .mockResolvedValueOnce({ values: [{ id: '10' }], isLast: true })
+        .mockImplementationOnce(async (_entry, _path, init: { signal: AbortSignal }) => {
+          firstSignal = init.signal
+          return { issues: [], nextPageToken: 'next' }
+        })
+        .mockImplementationOnce((_entry, _path, init: { signal: AbortSignal }) => {
+          expect(init.signal).toBe(firstSignal)
+          return new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true })
+          })
+        })
+      const { listIssues } = await import('./jira-issue-search')
+      const result = listIssues('all', 3, 'cloud').then(
+        () => null,
+        (error: unknown) => error
+      )
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(await result).toMatchObject({ name: 'AbortError' })
+      expect(jiraRequest).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('restricts projects separately for each Cloud site while keeping Server search unchanged', async () => {
     getClients.mockReturnValue([site('a'), site('b'), site('server', 'server')])
     const queries = new Map<string, string>()
