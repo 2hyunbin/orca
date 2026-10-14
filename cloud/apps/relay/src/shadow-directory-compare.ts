@@ -21,7 +21,8 @@ export type ShadowCompareClass =
   | 'cell-mismatch'
   | 'epoch-mismatch'
   | 'duplicate-seat'
-  // A superseded-shaped duplicate with no prior sighting (e.g. first since a restart), so no age.
+  // A superseded-shaped duplicate with no prior sighting, in the instance's first 100 s. Later,
+  // no sighting (compares served by another instance, or evicted) is a plain duplicate-seat.
   | 'superseded-unknown-age'
   | 'map-only'
   // The map seats the host on a cell the database does not call live, so resolve answered null.
@@ -53,7 +54,9 @@ export function classifyShadowSeat(
   directory: ShadowSeatDirectory,
   identity: { userId: string; relayHostId: string },
   answer: ShadowCompareDatabaseAnswer,
-  now: number
+  now: number,
+  // When this instance began comparing; omitted, a missing sighting is never excused.
+  startedAt = -Infinity
 ): ShadowCompareVerdict {
   // Pure: only ShadowDirectoryCompare records sightings. An epoch never seen is new; unlike the
   // superseded rule, a wrong guess here only explains a mismatch for one lag bound.
@@ -97,8 +100,10 @@ export function classifyShadowSeat(
       now - current.joinedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     if (!supersededShape) return { class: 'duplicate-seat', explained: false }
     const known = directory.databaseEpochOf(identity.userId, identity.relayHostId)
-    // The gate discounts this only in the instance's first 100 s (`uptimeMs` on the count line).
-    if (!known) return { class: 'superseded-unknown-age', explained: false }
+    if (!known) {
+      const starting = now - startedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+      return { class: starting ? 'superseded-unknown-age' : 'duplicate-seat', explained: false }
+    }
     const supersededAt = movedSince(known, answer, now)
     const superseded =
       supersededAt !== undefined && now - supersededAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
@@ -171,14 +176,15 @@ export class ShadowDirectoryCompare {
   private counts = new Map<string, ShadowCompareCount>()
   private samples = new Map<ShadowCompareClass, number>()
   private windowStartedAt: number
+  private readonly startedAt: number
 
   constructor(
     private readonly directory: ShadowSeatDirectory,
     private readonly now: () => number = Date.now,
-    private readonly log: (line: string) => void = (line) => console.warn(line),
-    private readonly uptimeMs: () => number = () => Math.round(process.uptime() * 1_000)
+    private readonly log: (line: string) => void = (line) => console.warn(line)
   ) {
-    this.windowStartedAt = now()
+    this.startedAt = now()
+    this.windowStartedAt = this.startedAt
   }
 
   compare(
@@ -188,7 +194,7 @@ export class ShadowDirectoryCompare {
   ): ShadowCompareVerdict {
     const now = this.now()
     // Classify first, so it can tell a first-ever sighting from one seen before.
-    const verdict = classifyShadowSeat(this.directory, identity, answer, now)
+    const verdict = classifyShadowSeat(this.directory, identity, answer, now, this.startedAt)
     // Every answer, so a move's age counts from its first sighting on either route.
     if (answer) {
       this.directory.observeDatabaseEpoch(
@@ -213,7 +219,6 @@ export class ShadowDirectoryCompare {
   // One line per route and class per window; the log metric sums `count`. `countByCell`
   // counts each compare once on every cell it involves (see comparedCells).
   flush(now: number = this.now()): void {
-    const uptimeMs = this.uptimeMs()
     for (const [key, { count, countByCell }] of this.counts) {
       const [route, verdictClass, explained] = key.split('\u0000')
       this.log(
@@ -224,8 +229,7 @@ export class ShadowDirectoryCompare {
           explained: explained === 'true',
           count,
           windowMs: now - this.windowStartedAt,
-          countByCell,
-          uptimeMs
+          countByCell
         })
       )
     }
