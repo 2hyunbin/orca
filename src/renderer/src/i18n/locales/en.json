@@ -3664,6 +3664,9 @@
           },
           "TabGroupDropOverlay": {
             "paneColumnLabel": "New split"
+          },
+          "useTabGroupCreationCommands": {
+            "newTerminalFailed": "Couldn't open a new terminal."
           }
         },
         "bar": {
