@@ -5,6 +5,7 @@ import type { AgentSessionQueuedMessage } from '../../../src/shared/agent-sessio
 import { agentSessionSendBodyFingerprint } from '../../../src/shared/structured-agent-session-send-mutation'
 import { queuedMessageWithEditedText } from '../../../src/shared/queued-message-text-edit'
 import type { RpcClient } from '../transport/rpc-client'
+import type { RpcResponse } from '../transport/types'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import {
@@ -45,17 +46,19 @@ describe('mobile in-place queued Edit', () => {
   }
   function Harness({
     sessionId = SESSION_ID,
-    editSupport = true
+    editSupport = true,
+    enabled = true
   }: {
     sessionId?: string
     editSupport?: boolean | null
+    enabled?: boolean
   }): null {
     hook = useMobileStructuredAgentSession({
       client,
       sessionId,
       sourceIdentity: 'host-a',
-      enabled: true,
-      connected: true,
+      enabled,
+      connected: enabled,
       agent: 'codex',
       hostSupport:
         editSupport === null
@@ -217,5 +220,127 @@ describe('mobile in-place queued Edit', () => {
         .filter(([method]) => method === 'agentSession.queuedMessageEditHold')
         .map(([, params]) => fieldsOf(params).action)
     ).toEqual(['acquire', 'release'])
+  })
+
+  it.each([
+    ['updated', false],
+    ['changed', true]
+  ] as const)('settles a deferred %s reply after leaving the chat', async (status, returnsText) => {
+    const message = queuedDraft({ messageId: 'deferred-card' })
+    await mount(message)
+    let answer: ((response: RpcResponse) => void) | undefined
+    sendRequest.mockImplementation((method) =>
+      method === 'agentSession.queuedMessageUpdate'
+        ? new Promise<RpcResponse>((resolve) => {
+            answer = resolve
+          })
+        : Promise.resolve(ok({ status: 'held' }))
+    )
+    act(() => hook!.queued.editor!.change('edited in place'))
+    let save: Promise<boolean> | undefined
+    act(() => {
+      save = hook!.queued.editor!.save()
+    })
+    expect(hook!.queued.editor!.saving).toBe(true)
+    await act(async () =>
+      renderer?.update(
+        createElement(Harness, returnsText ? { enabled: false } : { sessionId: 'other-chat' })
+      )
+    )
+    expect(append).not.toHaveBeenCalled()
+    await act(async () => {
+      answer?.(mutationOk({ status, messageId: message.messageId, fingerprint: 'new' }))
+      await save
+    })
+    expect(append).toHaveBeenCalledTimes(returnsText ? 1 : 0)
+    if (returnsText) {
+      expect(append).toHaveBeenCalledWith('edited in place')
+    }
+  })
+
+  it('keeps an unknown Save out of the draft until the published card settles it', async () => {
+    const message = queuedDraft({ messageId: 'lost-reply-card' })
+    await mount(message)
+    let loseReply: ((error: Error) => void) | undefined
+    sendRequest.mockImplementation((method) =>
+      method === 'agentSession.queuedMessageUpdate'
+        ? new Promise<RpcResponse>((_resolve, reject) => {
+            loseReply = reject
+          })
+        : Promise.resolve(ok({ status: 'held' }))
+    )
+    act(() => hook!.queued.editor!.change('landed despite disconnect'))
+    let save: Promise<boolean> | undefined
+    act(() => {
+      save = hook!.queued.editor!.save()
+    })
+    await act(async () => renderer?.update(createElement(Harness, { sessionId: 'other-chat' })))
+    await act(async () => {
+      loseReply?.(markRpcDeliveryUnknown(new Error('reply lost')))
+      await save
+    })
+    expect(append).not.toHaveBeenCalled()
+    const body = queuedMessageWithEditedText(message.body, 'landed despite disconnect')!
+    await act(async () => renderer?.update(createElement(Harness, { sessionId: SESSION_ID })))
+    expect(hook!.queued.editor).toBeUndefined()
+    act(() =>
+      listener?.(snapshotEvent({ queuedMessages: [{ ...message, body }], runningTurn: true }))
+    )
+    expect(hook!.queued.cards).toMatchObject([
+      { messageId: message.messageId, text: 'landed despite disconnect' }
+    ])
+    expect(append).not.toHaveBeenCalled()
+  })
+
+  it('preserves typing when a late hold answer reports a conflict', async () => {
+    const message = queuedDraft({ messageId: 'slow-hold-card' })
+    await mount(message)
+    act(() => hook!.queued.editor!.cancel())
+    let answerHold: ((response: RpcResponse) => void) | undefined
+    sendRequest.mockImplementation((method, params) =>
+      method === 'agentSession.queuedMessageEditHold' && fieldsOf(params).action === 'acquire'
+        ? new Promise<RpcResponse>((resolve) => {
+            answerHold = resolve
+          })
+        : method === 'agentSession.queuedMessageEditHold'
+          ? Promise.resolve(ok({ status: 'held' }))
+          : Promise.resolve(
+              mutationOk({ status: 'updated', messageId: message.messageId, fingerprint: 'new' })
+            )
+    )
+    await act(async () => hook!.queued.edit!(message.messageId))
+    act(() => hook!.queued.editor!.change('new typing'))
+    expect(hook!.queued.editor!.text).toBe('new typing')
+    await act(async () => {
+      answerHold?.(ok({ status: 'changed' }))
+    })
+    expect(append).toHaveBeenCalledWith('new typing')
+  })
+
+  it('submits Save while hold acquisition is still pending', async () => {
+    const message = queuedDraft({ messageId: 'save-before-hold' })
+    await mount(message)
+    act(() => hook!.queued.editor!.cancel())
+    let answerHold: ((response: RpcResponse) => void) | undefined
+    sendRequest.mockImplementation((method, params) =>
+      method === 'agentSession.queuedMessageEditHold' && fieldsOf(params).action === 'acquire'
+        ? new Promise<RpcResponse>((resolve) => {
+            answerHold = resolve
+          })
+        : method === 'agentSession.queuedMessageEditHold'
+          ? Promise.resolve(ok({ status: 'held' }))
+          : Promise.resolve(
+              mutationOk({ status: 'updated', messageId: message.messageId, fingerprint: 'new' })
+            )
+    )
+    await act(async () => hook!.queued.edit!(message.messageId))
+    act(() => hook!.queued.editor!.change('saved without hold reply'))
+    await act(async () => {
+      expect(await hook!.queued.editor!.save()).toBe(true)
+    })
+    expect(hook!.queued.editor).toBeUndefined()
+    expect(answerHold).toBeDefined()
+    await act(async () => answerHold?.(ok({ status: 'held' })))
+    expect(append).not.toHaveBeenCalled()
   })
 })

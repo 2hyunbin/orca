@@ -86,11 +86,19 @@ describe('MobileNativeChatQueuedMessages', () => {
     const save = vi.fn(async () => true)
     const cancel = vi.fn()
     const mounted = await mount({
-      cards: [card({ messageId: 'a' }), card({ messageId: 'b' })],
+      cards: [
+        card({
+          messageId: 'a',
+          attribution: 'From Alex',
+          caption: 'Returned',
+          needsAttention: true,
+          state: 'returned'
+        }),
+        card({ messageId: 'b' })
+      ],
       editor: {
         messageId: 'a',
         text: 'edited text',
-        acquiring: false,
         saving: false,
         canSave: true,
         change,
@@ -100,6 +108,11 @@ describe('MobileNativeChatQueuedMessages', () => {
     })
     const input = mounted.root.findByProps({ accessibilityLabel: 'Edit queued message' })
     expect(input.props.value).toBe('edited text')
+    expect(texts(mounted)).toContain('From Alex')
+    expect(texts(mounted)).toContain('Returned')
+    expect(nodeTypes(mounted.root.findAllByProps({ testID: 'queued-card-row' })[0]!)).toContain(
+      'AlertCircle'
+    )
     act(() => input.props.onChangeText('updated text'))
     expect(change).toHaveBeenCalledWith('updated text')
     await act(async () =>
@@ -112,10 +125,30 @@ describe('MobileNativeChatQueuedMessages', () => {
         .props.onPress()
     )
     expect(cancel).toHaveBeenCalledOnce()
-    expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(1)
+    expect(mounted.root.findAllByProps({ testID: 'queued-card-row' })).toHaveLength(2)
     expect(mounted.root.findByProps({ accessibilityLabel: 'More actions' }).props.disabled).toBe(
       true
     )
+    await act(async () =>
+      mounted.update(
+        createElement(MobileNativeChatQueuedMessages, {
+          cards: [card({ messageId: 'a' })],
+          editor: {
+            messageId: 'a',
+            text: 'edited text',
+            saving: true,
+            canSave: true,
+            change,
+            save,
+            cancel
+          }
+        })
+      )
+    )
+    expect(
+      mounted.root.findByProps({ accessibilityLabel: 'Cancel editing queued message' }).props
+        .disabled
+    ).toBe(true)
   })
 
   it('draws a plain waiting card as one compact row with no caption', async () => {

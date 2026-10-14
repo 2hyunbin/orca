@@ -11,17 +11,15 @@ export function MobileNativeChatQueuedMessageEditor({
 }): React.JSX.Element {
   const input = useRef<TextInput>(null)
   useEffect(() => {
-    if (!editor.acquiring) {
-      input.current?.focus()
-    }
-  }, [editor.acquiring])
+    input.current?.focus()
+  }, [])
   return (
     <View style={styles.editor} testID="queued-card-editor">
       <TextInput
         ref={input}
         accessibilityLabel="Edit queued message"
         value={editor.text}
-        editable={!editor.acquiring && !editor.saving}
+        editable={!editor.saving}
         multiline
         style={styles.input}
         onChangeText={editor.change}
@@ -30,7 +28,13 @@ export function MobileNativeChatQueuedMessageEditor({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Cancel editing queued message"
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          accessibilityState={{ disabled: editor.saving }}
+          disabled={editor.saving}
+          style={({ pressed }) => [
+            styles.action,
+            pressed && styles.pressed,
+            editor.saving && styles.disabled
+          ]}
           onPress={editor.cancel}
         >
           <Text style={styles.label}>Cancel</Text>
@@ -38,13 +42,13 @@ export function MobileNativeChatQueuedMessageEditor({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Save queued message"
-          accessibilityState={{ disabled: editor.acquiring || editor.saving || !editor.canSave }}
-          disabled={editor.acquiring || editor.saving || !editor.canSave}
+          accessibilityState={{ disabled: editor.saving || !editor.canSave }}
+          disabled={editor.saving || !editor.canSave}
           style={({ pressed }) => [
             styles.action,
             styles.save,
             pressed && styles.pressed,
-            (editor.acquiring || editor.saving || !editor.canSave) && styles.disabled
+            (editor.saving || !editor.canSave) && styles.disabled
           ]}
           onPress={() => void editor.save()}
         >
@@ -56,7 +60,7 @@ export function MobileNativeChatQueuedMessageEditor({
 }
 
 const styles = StyleSheet.create({
-  editor: { padding: spacing.sm, gap: spacing.xs },
+  editor: { gap: spacing.xs },
   input: {
     minHeight: 44,
     maxHeight: 160,

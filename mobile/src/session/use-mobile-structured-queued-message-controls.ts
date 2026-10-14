@@ -60,7 +60,6 @@ export function useMobileStructuredQueuedMessageControls(args: {
   client: RpcClient | null
   enabled: boolean
   editCapable: boolean | null
-  promptOpen: boolean
   captureComposerTextAppender?: () => ((text: string) => boolean) | undefined
   agentName?: string
   journalItems?: readonly AgentJournalRenderItem[]
