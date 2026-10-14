@@ -19303,6 +19303,23 @@
     },
     "JiraIssueWorkspace": {
       "pendingChange": "Another issue change is in progress."
+    },
+    "jiraProjectPicker": {
+      "search": "Search Jira projects",
+      "empty": "No projects found.",
+      "label": "Jira project",
+      "all": "All Jira projects"
+    },
+    "RepositoryJiraProjectSection": {
+      "saveFailed": "Could not save the default Jira project.",
+      "runtimeUpdate": "Update this runtime to save a default Jira project.",
+      "title": "Default Jira project",
+      "description": "Default the Jira issue picker and Tasks list to this project. You can change it for each worktree.",
+      "none": "No default project",
+      "connect": "Connect Jira in Integrations to choose a project.",
+      "keywordJira": "jira",
+      "keywordDefaultProject": "default project",
+      "keywordIssuePicker": "issue picker"
     }
   },
   "dashboardPopout": {
@@ -20094,7 +20111,7 @@
       "chooseTransition": "Choose a status change:",
       "cancel": "Cancel",
       "noTransition": "No status change to {{column}} is available for {{key}}.",
-      "queryTooLong": "The Jira query is too long with Current sprint selected. Shorten the query or turn off Current sprint."
+      "queryTooLong": "The Jira query is too long. Shorten the query or clear filters."
     }
   }
 }

@@ -22,12 +22,25 @@ export class WslMoveJournalUnreadableError extends Error {
   }
 }
 
+const changeListeners = new Set<(userDataPath: string) => void>()
+
+/** Runs after every durable write or removal; returns the unsubscribe. */
+export function onWslMoveJournalChange(listener: (userDataPath: string) => void): () => void {
+  changeListeners.add(listener)
+  return () => changeListeners.delete(listener)
+}
+
 const journals = createMigrationJournalDirectory({
   directoryName: 'orcad-migration-cutovers-wsl',
   // A manifest carries catalog rows and dormant session state; blobs travel on their own channel.
   maxFileBytes: 16 * 1024 * 1024,
   parse: parseVerifiedWslMoveCutover,
-  unreadable: (detail) => new WslMoveJournalUnreadableError(detail)
+  unreadable: (detail) => new WslMoveJournalUnreadableError(detail),
+  onChange: (userDataPath) => {
+    for (const listener of changeListeners) {
+      listener(userDataPath)
+    }
+  }
 })
 
 export function wslMoveJournalDirectory(userDataPath: string): string {
@@ -37,6 +50,11 @@ export function wslMoveJournalDirectory(userDataPath: string): string {
 /** Detached copies: a caller editing one must not change what the next write compares against. */
 export function listWslMoveCutovers(userDataPath: string): WslMoveCutover[] {
   return journals.list(userDataPath).map((cutover) => structuredClone(cutover))
+}
+
+/** Shared, not copied, for read-only scans on hot paths such as fence checks. Never mutate. */
+export function scanWslMoveCutovers(userDataPath: string): readonly Readonly<WslMoveCutover>[] {
+  return journals.list(userDataPath)
 }
 
 /** The record's own fields, plus the manifest's digest recomputed: a scope edit cannot pass. */
