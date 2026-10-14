@@ -13,6 +13,13 @@ import {
   type OrcadMigrationSnapshotChunkRequest,
   type OrcadMigrationSnapshotChunkResult
 } from '../../shared/orcad-migration-scrollback'
+import {
+  findUnsupportedMigrationBlobKind,
+  orcadMigrationBlobKindUnsupportedBlocker,
+  parseOrcadMigrationBlobChunkResult,
+  type OrcadMigrationBlobChunkRequest,
+  type OrcadMigrationBlobChunkResult
+} from '../../shared/orcad-migration-blob-transfer'
 import { parsePairingCode } from '../../shared/pairing'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import { ORCAD_MIGRATION_CATALOG_RUNTIME_CAPABILITY } from '../../shared/orcad-runtime-capabilities'
@@ -109,6 +116,36 @@ export async function stageRemoteOrcadMigrationSnapshotChunk(
   return parseOrcadMigrationSnapshotChunkResult(response.result, request)
 }
 
+export async function stageRemoteOrcadMigrationBlobChunk(
+  pairingCode: string,
+  request: OrcadMigrationBlobChunkRequest,
+  options: CatalogRequestOptions = {}
+): Promise<OrcadMigrationBlobChunkResult> {
+  const pairing = parsePairingCode(pairingCode)
+  if (!pairing) {
+    throw new Error('orcad_migration_pairing_code_invalid')
+  }
+  const response = await sendSupportedMigrationRequest(
+    pairing,
+    'orcad.migration.stageBlobChunk',
+    request,
+    options,
+    false,
+    null,
+    // Per request: a downgraded destination must refuse the kind, never stage what it can't install.
+    (capabilities) => {
+      const unsupported = findUnsupportedMigrationBlobKind([request.blob], capabilities)
+      if (unsupported) {
+        throw new Error(orcadMigrationBlobKindUnsupportedBlocker(unsupported))
+      }
+    }
+  )
+  if (!response.ok) {
+    throw new Error(`orcad_migration_blob_failed:${response.error.message}`)
+  }
+  return parseOrcadMigrationBlobChunkResult(response.result, request)
+}
+
 async function requestCatalogState(
   pairingCode: string,
   operation: Exclude<OrcadCatalogMigrationOperation, 'abort'>,
@@ -155,7 +192,8 @@ async function sendSupportedMigrationRequest(
   params: unknown,
   options: CatalogRequestOptions,
   requiresExtraAgentArgs = false,
-  requiredSourceCapability: string | null = null
+  requiredSourceCapability: string | null = null,
+  assertCapabilities: (capabilities: readonly string[]) => void = () => {}
 ): Promise<RuntimeRpcResponse<unknown>> {
   const response = await sendRemoteRuntimeRequestWithStatusPreflight<unknown>(
     pairedRuntimeConnectionFromOffer(pairing),
@@ -187,6 +225,7 @@ async function sendSupportedMigrationRequest(
       ) {
         throw new Error(ORCAD_MIGRATION_DESTINATION_SOURCE_KIND_UNSUPPORTED)
       }
+      assertCapabilities(status.result.capabilities ?? [])
     },
     undefined,
     ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES,

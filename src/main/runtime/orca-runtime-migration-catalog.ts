@@ -7,6 +7,10 @@ import type {
   OrcadMigrationSnapshotChunkRequest,
   OrcadMigrationSnapshotChunkResult
 } from '../../shared/orcad-migration-scrollback'
+import type {
+  OrcadMigrationBlobChunkRequest,
+  OrcadMigrationBlobChunkResult
+} from '../../shared/orcad-migration-blob-transfer'
 import {
   abortStagedOrcadMigrationCatalogDurably,
   commitStagedOrcadMigrationCatalogDurably,
@@ -20,6 +24,7 @@ type MigrationStoreKey =
   | 'stageOrcadMigrationCatalog'
   | 'commitStagedOrcadMigrationCatalog'
   | 'stageOrcadMigrationSnapshotChunk'
+  | 'stageOrcadMigrationBlobChunk'
   | 'abortStagedOrcadMigrationCatalog'
   | 'getOrcadMigrationCatalogState'
   | 'flushPendingOrThrowAsync'
@@ -61,6 +66,15 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
     // SAFETY: The virtual Store may differ from the checked Store; preserve its native failure.
     return this.requireMigrationStore('stageOrcadMigrationSnapshotChunk')
       .stageOrcadMigrationSnapshotChunk!(request)
+  }
+
+  stageOrcadMigrationBlobChunk(
+    request: OrcadMigrationBlobChunkRequest
+  ): OrcadMigrationBlobChunkResult {
+    // SAFETY: The virtual Store may differ from the checked Store; preserve its native failure.
+    return this.requireMigrationStore('stageOrcadMigrationBlobChunk').stageOrcadMigrationBlobChunk!(
+      request
+    )
   }
 
   async abortStagedOrcadMigrationCatalog(

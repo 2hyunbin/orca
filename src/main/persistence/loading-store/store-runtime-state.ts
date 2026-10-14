@@ -9,6 +9,7 @@ import {
 } from '../../terminal-scrollback-snapshots'
 import { ProtectedSecretPersistence } from '../../protected-secret-persistence'
 import { getDataFile, getGithubCacheFile } from './user-data-path'
+import { dirname, join } from 'node:path'
 import { STALE_DURABLE_WRITE_TEMP_AGE_MS } from '../tracking-repos/worktree-metadata-normalization'
 import type { ProjectGroupPersistenceOperations } from '../tracking-repos/project-group-operations'
 import type { FolderWorkspacePersistenceOperations } from '../restoring-sessions/folder-workspace-operations'
@@ -45,6 +46,8 @@ export class StoreRuntimeState {
   automationListProjectionCache: AutomationListProjectionCache | null = null
   activeViewPreference!: ActiveViewPreference
   readonly terminalScrollbackSnapshotStorage: TerminalScrollbackSnapshotStorage
+  /** Staged and received migration blobs (see orcad-migration-blob-staging.ts). */
+  readonly orcadMigrationBlobRoot: string
   /** Scrollback refs each in-flight migration export still reads, keyed by migration id. */
   readonly retainedScrollbackRefsByMigrationId = new Map<string, ReadonlySet<string>>()
   writeTimer: ReturnType<typeof setTimeout> | null = null
@@ -112,5 +115,6 @@ export class StoreRuntimeState {
       snapshotRoot: profileSnapshotRoot,
       fallbackSnapshotRoot: legacySnapshotRoot === profileSnapshotRoot ? null : legacySnapshotRoot
     }
+    this.orcadMigrationBlobRoot = join(dirname(this.dataFile), 'orcad-migration-blobs')
   }
 }
