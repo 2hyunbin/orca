@@ -2,6 +2,7 @@ import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreePsResult,
   RuntimeWorktreeRecord,
+  RuntimeWorktreeSetResult,
   RuntimeWorktreeCreateResult,
   RuntimeWorktreeRemoveResult
 } from '../../shared/runtime-types'
@@ -256,7 +257,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     const worktree = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { worktree })
-    const result = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.set', {
+    const result = await client.call<RuntimeWorktreeSetResult>('worktree.set', {
       worktree,
       displayName: getOptionalStringFlag(flags, 'display-name'),
       ...reviewLinks,
@@ -267,6 +268,11 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       parentWorktree: await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client),
       noParent: flags.get('no-parent') === true
     })
+    if (!json) {
+      for (const warning of result.result.warnings ?? []) {
+        console.error(`warning: ${warning.message}`)
+      }
+    }
     printResult(result, json, formatWorktreeShow)
   },
   'worktree rm': async ({ flags, client, cwd, json }) => {

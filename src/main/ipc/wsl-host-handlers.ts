@@ -17,7 +17,7 @@ import {
 } from '../wsl/wsl-host-e2e-fake-connector'
 import { hasOrcadTemplate } from '../orcad/orcad-artifact-materializer'
 import { WslHostService } from '../wsl/wsl-host-service'
-import { WSL_HOSTS_GATED_OFF_MESSAGE, wslHostsGateOpen } from '../wsl/wsl-host-gate'
+import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { getWslHostService, setWslHostService } from '../wsl/wsl-host-service-instance'
 import { retireRemovedRuntimeEnvironment } from './runtime-environment-removal-cleanup'
 import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
@@ -72,11 +72,13 @@ function wslHostRuntimeAccess(getUserDataPath: () => string): WslHostRuntimeAcce
   }
 }
 
-function createService(args: {
+type WslHostHandlerArgs = {
   store: Store
   getUserDataPath: () => string
   invalidateTransport: (environmentId: string) => Promise<void> | void
-}): WslHostService | null {
+}
+
+function createService(args: WslHostHandlerArgs): WslHostService | null {
   // Closed gate: no service, so no holder adoption, wsl.exe spawn or reconnect can start.
   if (!wslHostsGateOpen()) {
     return null
@@ -116,67 +118,56 @@ function createService(args: {
   return created
 }
 
-export function registerWslHostHandlers(args: {
-  store: Store
-  getUserDataPath: () => string
-  invalidateTransport: (environmentId: string) => Promise<void> | void
-}): void {
+function startService(args: WslHostHandlerArgs): WslHostService | null {
+  const created = createService(args)
+  if (!created) {
+    return null
+  }
+  setWslHostService(created)
+  args.store.onSettingsChanged((updates, settings) => {
+    if ('experimentalWslHosts' in updates) {
+      void created.enabledChanged(settings.experimentalWslHosts === true).catch((error) => {
+        console.warn('[wsl-hosts] Could not apply the WSL hosts setting:', error)
+      })
+    }
+  })
+  void created.start().catch((error: unknown) => {
+    console.warn('[wsl-hosts] Could not adopt WSL distro holders:', error)
+  })
+  return created
+}
+
+export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
   for (const channel of WSL_HOST_HANDLER_CHANNELS) {
     ipcMain.removeHandler(channel)
   }
-  if (!getWslHostService()) {
-    const created = createService(args)
-    setWslHostService(created)
-    args.store.onSettingsChanged((updates, settings) => {
-      if ('experimentalWslHosts' in updates) {
-        void created?.enabledChanged(settings.experimentalWslHosts === true).catch((error) => {
-          console.warn('[wsl-hosts] Could not apply the WSL hosts setting:', error)
-        })
-      }
-    })
-    void created?.start().catch((error: unknown) => {
-      console.warn('[wsl-hosts] Could not adopt WSL distro holders:', error)
-    })
+  // Why none at all: without a service (gate closed, or not Windows) the preload exposes no API.
+  const wsl = getWslHostService() ?? startService(args)
+  if (!wsl) {
+    return
   }
-  const wsl = getWslHostService()
-  ipcMain.handle('wslHosts:listDistros', () => wsl?.listDistros() ?? [])
+  ipcMain.handle('wslHosts:listDistros', () => wsl.listDistros())
   ipcMain.handle(
     'wslHosts:add',
-    (
-      _event,
-      request: { distro: string; startIfStopped?: boolean }
-    ): Promise<WslHostAddResult> | WslHostAddResult => {
-      if (!wslHostsGateOpen()) {
-        return { ok: false, kind: 'disabled', message: WSL_HOSTS_GATED_OFF_MESSAGE }
-      }
-      return wsl
-        ? wsl.add(request)
-        : { ok: false, kind: 'failed', message: 'WSL hosts are not available on this computer.' }
-    }
+    (_event, request: { distro: string; startIfStopped?: boolean }): Promise<WslHostAddResult> =>
+      wsl.add(request)
   )
   ipcMain.handle('wslHosts:remove', async (_event, request: { environmentId: string }) => {
-    // A closed gate leaves persisted WSL hosts untouched on disk.
-    if (!wslHostsGateOpen()) {
-      throw new Error(WSL_HOSTS_GATED_OFF_MESSAGE)
-    }
     if (args.store.getSettings().activeRuntimeEnvironmentId === request.environmentId) {
       throw new Error(
         'This server is the default host for new projects. Choose another one in Advanced before removing it.'
       )
     }
-    return wsl ? wsl.remove(request.environmentId) : { stopped: true }
+    return wsl.remove(request.environmentId)
   })
-  ipcMain.handle('wslHosts:connect', async (_event, request: { environmentId: string }) => {
-    if (!wslHostsGateOpen()) {
-      throw new Error(WSL_HOSTS_GATED_OFF_MESSAGE)
-    }
-    await wsl?.connect(request.environmentId)
-  })
+  ipcMain.handle('wslHosts:connect', (_event, request: { environmentId: string }) =>
+    wsl.connect(request.environmentId)
+  )
   ipcMain.handle('wslHosts:getCapability', (): WslHostCapability => ({
-    serverFiles: wsl?.hasServerFiles() ?? false
+    serverFiles: wsl.hasServerFiles()
   }))
-  ipcMain.handle('wslHosts:getStatuses', () => wsl?.getStatuses() ?? [])
+  ipcMain.handle('wslHosts:getStatuses', () => wsl.getStatuses())
   ipcMain.handle('wslHosts:setVisibleWork', (_event, request: { environmentIds: string[] }) => {
-    wsl?.setVisibleWork(Array.isArray(request.environmentIds) ? request.environmentIds : [])
+    wsl.setVisibleWork(Array.isArray(request.environmentIds) ? request.environmentIds : [])
   })
 }
