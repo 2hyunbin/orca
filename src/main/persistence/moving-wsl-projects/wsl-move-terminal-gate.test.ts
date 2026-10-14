@@ -16,13 +16,13 @@ const gate = (panes: WslMovePaneFacts[], runs: string[] = [], dispatches: string
   assessWslMoveTerminals({ panes, runningAutomationRunIds: runs, activeDispatchIds: dispatches })
 
 describe('assessWslMoveTerminals', () => {
-  it('lets idle shells and resumable settled or failed agents through', () => {
+  it('lets idle shells and resumable settled agents through', () => {
     expect(
       gate([
         pane('t1:a'),
-        pane('t1:b', { agent: { state: 'done', resumable: true } }),
+        pane('t1:b', { agent: { state: 'done', resumable: true, ownsForeground: false } }),
         pane('t2:a', {
-          agent: { state: 'blocked', resumable: true },
+          agent: { state: 'done', resumable: true, ownsForeground: true },
           foreground: 'process-running'
         })
       ])
@@ -32,26 +32,54 @@ describe('assessWslMoveTerminals', () => {
   it.each([
     [
       'an agent mid-turn',
-      { agent: { state: 'working', resumable: true } },
+      { agent: { state: 'working', resumable: true, ownsForeground: true } },
       'agent-working',
       ['wait', 'end']
     ],
     [
       'an agent at a permission prompt',
-      { agent: { state: 'waiting', resumable: true } },
+      { agent: { state: 'waiting', resumable: true, ownsForeground: true } },
+      'agent-working',
+      ['wait', 'end']
+    ],
+    [
+      // Copilot, Pi and Freebuff report a pending ask or approval as 'blocked'.
+      'an agent reported blocked on a person',
+      { agent: { state: 'blocked', resumable: true, ownsForeground: true } },
       'agent-working',
       ['wait', 'end']
     ],
     [
       'an agent with no session to resume',
-      { agent: { state: 'done', resumable: false } },
+      { agent: { state: 'done', resumable: false, ownsForeground: true } },
       'agent-not-resumable',
       ['end', 'skip-project']
     ],
     ['a dev server', { foreground: 'process-running' }, 'process-running', ['end', 'skip-project']],
     [
+      'a dev server under a stale agent row',
+      {
+        foreground: 'process-running',
+        agent: { state: 'done', resumable: true, ownsForeground: false }
+      },
+      'process-running',
+      ['end', 'skip-project']
+    ],
+    [
       'a pane the daemon cannot answer for',
       { foreground: 'unverifiable' },
+      'unverifiable',
+      ['wait', 'skip-project']
+    ],
+    [
+      'a pane with no byte count',
+      { scrollbackBytes: Number.NaN },
+      'unverifiable',
+      ['wait', 'skip-project']
+    ],
+    [
+      'a pane with a negative byte count',
+      { scrollbackBytes: -1 },
       'unverifiable',
       ['wait', 'skip-project']
     ],
@@ -92,5 +120,33 @@ describe('assessWslMoveTerminals', () => {
       verdict: 'blocked',
       blockers: [{ kind: 'scrollback-too-large' }]
     })
+  })
+
+  it('lets a move exactly at the transfer caps through', () => {
+    const atCount = Array.from({ length: MAX_ORCAD_MIGRATION_SCROLLBACK_SNAPSHOTS }, (_, i) =>
+      pane(`t${i}:a`)
+    )
+    expect(gate(atCount).verdict).toBe('ready')
+    const perPane = MAX_ORCAD_MIGRATION_SCROLLBACK_TOTAL_BYTES / 64
+    const atTotal = Array.from({ length: 64 }, (_, i) =>
+      pane(`b${i}:a`, { scrollbackBytes: perPane })
+    )
+    expect(gate(atTotal).verdict).toBe('ready')
+  })
+
+  it('reports a pane over its own cap together with a move over the total cap', () => {
+    const over = TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT + 1
+    const panes = [
+      pane('huge:a', { scrollbackBytes: over }),
+      ...Array.from({ length: 52 }, (_, i) =>
+        pane(`b${i}:a`, { scrollbackBytes: TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT })
+      )
+    ]
+    const verdict = gate(panes)
+    expect(verdict.verdict).toBe('blocked')
+    const blocker = verdict.verdict === 'blocked' ? verdict.blockers[0] : undefined
+    expect(blocker?.kind).toBe('scrollback-too-large')
+    expect(blocker?.ids).toHaveLength(53)
+    expect(new Set(blocker?.ids).size).toBe(53)
   })
 })

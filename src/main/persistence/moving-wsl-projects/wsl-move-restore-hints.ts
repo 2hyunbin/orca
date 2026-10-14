@@ -12,6 +12,8 @@ export type WslMoveRestoreHintCapture = {
   hints: WslMoveRestoreHint[]
   /** Panes whose checkpoint could not be read; the preview names them, the move still runs. */
   unreadablePaneKeys: string[]
+  /** Panes restored from a checkpoint whose newer log was unreadable, so the folder may be older. */
+  staleCwdPaneKeys: string[]
 }
 
 type ColdRestoreReader = {
@@ -26,7 +28,11 @@ export async function captureWslMoveRestoreHints(
   panes: readonly { paneKey: string; sessionId: string }[],
   distro: string
 ): Promise<WslMoveRestoreHintCapture> {
-  const capture: WslMoveRestoreHintCapture = { hints: [], unreadablePaneKeys: [] }
+  const capture: WslMoveRestoreHintCapture = {
+    hints: [],
+    unreadablePaneKeys: [],
+    staleCwdPaneKeys: []
+  }
   for (const pane of panes) {
     // A sleep ends the session cleanly; its checkpoint is exactly what a cold restore would read.
     const detection = await reader.detectColdRestoreState(pane.sessionId, {
@@ -39,6 +45,9 @@ export async function captureWslMoveRestoreHints(
     }
     if (detection.status !== 'restored') {
       continue
+    }
+    if (detection.hasUnreadableRecovery) {
+      capture.staleCwdPaneKeys.push(pane.paneKey)
     }
     // The checkpoint holds the bridge's UNC spelling or the shell's own Linux path; only a path
     // inside the moved distro means anything on the host.
