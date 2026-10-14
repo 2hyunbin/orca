@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from 'react'
 import { act, cleanup, fireEvent, screen } from '@testing-library/react'
-import { afterEach, beforeEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi, type Mock } from 'vitest'
 import type { JiraIssue } from '../../../../shared/jira-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import {
@@ -11,17 +11,27 @@ import type { JiraPatchOptions } from '../../store/slices/jira-slice-contract'
 import type { AppState } from '../../store/types'
 import { getJiraReadIdentity } from '@/store/slices/jira-read-coordination'
 import type * as I18n from '@/i18n/i18n'
+import type * as RuntimeJiraClient from '@/runtime/runtime-jira-client'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import JiraIssueWorkspace from '../JiraIssueWorkspace'
 
-const runtimeMocks = vi.hoisted(() => ({
-  jiraAddIssueCommentForTarget: vi.fn(),
-  jiraGetIssueForTarget: vi.fn(),
-  jiraIssueCommentsForTarget: vi.fn(),
-  jiraListAssignableUsersForTarget: vi.fn(),
-  jiraListPrioritiesForTarget: vi.fn(),
-  jiraListTransitionsForTarget: vi.fn(),
-  jiraUpdateIssueForTarget: vi.fn()
+const runtimeMocks: {
+  jiraAddIssueCommentForTarget: Mock<typeof RuntimeJiraClient.jiraAddIssueCommentForTarget>
+  jiraGetIssueForTarget: Mock<typeof RuntimeJiraClient.jiraGetIssueForTarget>
+  jiraIssueCommentsForTarget: Mock<typeof RuntimeJiraClient.jiraIssueCommentsForTarget>
+  jiraListAssignableUsersForTarget: Mock<typeof RuntimeJiraClient.jiraListAssignableUsersForTarget>
+  jiraListPrioritiesForTarget: Mock<typeof RuntimeJiraClient.jiraListPrioritiesForTarget>
+  jiraListTransitionsForTarget: Mock<typeof RuntimeJiraClient.jiraListTransitionsForTarget>
+  jiraUpdateIssueForTarget: Mock<typeof RuntimeJiraClient.jiraUpdateIssueForTarget>
+} = vi.hoisted(() => ({
+  jiraAddIssueCommentForTarget: vi.fn<typeof RuntimeJiraClient.jiraAddIssueCommentForTarget>(),
+  jiraGetIssueForTarget: vi.fn<typeof RuntimeJiraClient.jiraGetIssueForTarget>(),
+  jiraIssueCommentsForTarget: vi.fn<typeof RuntimeJiraClient.jiraIssueCommentsForTarget>(),
+  jiraListAssignableUsersForTarget:
+    vi.fn<typeof RuntimeJiraClient.jiraListAssignableUsersForTarget>(),
+  jiraListPrioritiesForTarget: vi.fn<typeof RuntimeJiraClient.jiraListPrioritiesForTarget>(),
+  jiraListTransitionsForTarget: vi.fn<typeof RuntimeJiraClient.jiraListTransitionsForTarget>(),
+  jiraUpdateIssueForTarget: vi.fn<typeof RuntimeJiraClient.jiraUpdateIssueForTarget>()
 }))
 
 const store = vi.hoisted(() => ({
