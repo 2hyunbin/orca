@@ -40,7 +40,7 @@ async function readIssuesForClient(
   if (query.filter !== 'all' || entry.site.authType === 'server') {
     return searchIssuesForClient(entry, jql, limit, signal)
   }
-  const projects = await readProjectsForClient(entry, signal)
+  const projects = await readProjectsForClient(entry, signal, true)
   const projectIds = [...new Set(projects.map((project) => project.id || project.key))]
   if (projectIds.some((id) => !id)) {
     throw new Error('Jira returned a project without an ID or key.')

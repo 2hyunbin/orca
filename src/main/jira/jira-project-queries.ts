@@ -8,7 +8,8 @@ import { requireStrictJiraSite, shouldSurfaceSiteFailure } from './jira-read-fai
 
 export async function readProjectsForClient(
   entry: JiraClientForSite,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  requireComplete = false
 ): Promise<JiraProject[]> {
   // Server/DC exposes the complete array through the classic project resource.
   const projects =
@@ -27,7 +28,7 @@ export async function readProjectsForClient(
             return `/rest/api/3/project/search?${params.toString()}`
           },
           100,
-          { signal, requireComplete: true }
+          { signal, requireComplete }
         )
   return projects.map((project) => mapProject(project, entry.site))
 }
