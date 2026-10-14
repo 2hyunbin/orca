@@ -1479,6 +1479,7 @@ jobs:
       ref: ${{ github.event.pull_request.head.sha }}
 
   verify:
+    name: PR checks passed
     if: ${{ !cancelled() }}
     needs:
       - code_paths
