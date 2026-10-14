@@ -4,14 +4,10 @@ import { join } from 'node:path'
 import { getSecretStore } from '../../shared/secret-store'
 import { readCredentialFileProtection } from '../credential-file-protection'
 import type { SecretAtRestProtection } from '../../shared/secret-at-rest-protection'
-import {
-  CredentialDecryptionError,
-  credentialFileHasContent,
-  readStoredCredentialToken
-} from '../integration-credential-file'
 import type { JiraSite, JiraSiteSelection } from '../../shared/jira-types'
 import { createIntegrationStateFileCache } from '../integration-state-file-cache'
 import { isJiraGatewayBaseUrl } from './gateway-base-url'
+import { createIntegrationTokenFileCache } from '../integration-token-file-cache'
 
 export type JiraSiteFile = {
   version: 1
@@ -24,10 +20,11 @@ const siteFileCache = createIntegrationStateFileCache({
   filePath: getSiteFilePath,
   readFromDisk: readSiteFileFromDisk
 })
-const cachedTokens = new Map<string, string>()
-// Why: decrypt failures are recorded per site so getStatus can explain
-// failing reads without re-touching the keychain on every status poll.
-export const credentialErrors = new Map<string, string>()
+const tokenFileCache = createIntegrationTokenFileCache({ service: 'Jira', filePath: getTokenPath })
+
+export function getCredentialError(siteId: string): string | undefined {
+  return tokenFileCache.error(siteId)
+}
 
 function getOrcaDir(): string {
   return join(homedir(), '.orca')
@@ -69,7 +66,7 @@ function emptySiteFile(): JiraSiteFile {
 }
 
 export function hasStoredToken(siteId: string): boolean {
-  return cachedTokens.has(siteId) || credentialFileHasContent(getTokenPath(siteId))
+  return tokenFileCache.has(siteId)
 }
 
 function normalizeSite(input: unknown): JiraSite | null {
@@ -117,7 +114,6 @@ function readSiteFileFromDisk(): JiraSiteFile {
       ? parsed.sites
           .map((site) => normalizeSite(site))
           .filter((site): site is JiraSite => site !== null)
-          .filter((site) => hasStoredToken(site.id))
       : []
     const activeSiteId =
       typeof parsed.activeSiteId === 'string' &&
@@ -137,11 +133,11 @@ function readSiteFileFromDisk(): JiraSiteFile {
 }
 
 export function getSiteFile(): JiraSiteFile {
-  return siteFileCache.get()
+  const file = siteFileCache.get()
+  return selectableSiteFile(file)
 }
 
-export function writeSiteFile(file: JiraSiteFile): void {
-  ensureOrcaDir()
+function selectableSiteFile(file: JiraSiteFile): JiraSiteFile {
   const sites = file.sites.filter((site) => hasStoredToken(site.id))
   const activeSiteId =
     file.activeSiteId && sites.some((site) => site.id === file.activeSiteId)
@@ -154,12 +150,17 @@ export function writeSiteFile(file: JiraSiteFile): void {
         ? file.selectedSiteId
         : activeSiteId
 
-  const next: JiraSiteFile = {
+  return {
     version: 1,
     activeSiteId,
     selectedSiteId,
     sites
   }
+}
+
+export function writeSiteFile(file: JiraSiteFile): void {
+  ensureOrcaDir()
+  const next = selectableSiteFile(file)
   writeFileSync(getSiteFilePath(), JSON.stringify(next, null, 2), {
     encoding: 'utf-8',
     mode: 0o600
@@ -177,29 +178,7 @@ function writeEncryptedToken(path: string, apiToken: string): void {
 }
 
 export function readToken(siteId: string): string | null {
-  const cached = cachedTokens.get(siteId)
-  if (cached !== undefined) {
-    return cached
-  }
-  const path = getTokenPath(siteId)
-  if (!existsSync(path)) {
-    return null
-  }
-  try {
-    const raw = readFileSync(path)
-    const token = readStoredCredentialToken('Jira', raw)
-    if (token) {
-      cachedTokens.set(siteId, token)
-    }
-    credentialErrors.delete(siteId)
-    return token
-  } catch (error) {
-    if (error instanceof CredentialDecryptionError) {
-      credentialErrors.set(siteId, error.message)
-      throw error
-    }
-    return null
-  }
+  return tokenFileCache.read(siteId)
 }
 
 /** How a site's stored token sits on disk, or null when none is stored. */
@@ -211,13 +190,12 @@ export function saveToken(siteId: string, apiToken: string): void {
   ensureOrcaDir()
   ensureTokenDir()
   writeEncryptedToken(getTokenPath(siteId), apiToken)
-  cachedTokens.set(siteId, apiToken)
-  credentialErrors.delete(siteId)
+  // The next action reads the actual file, including any overlapping writer's replacement.
+  tokenFileCache.forget(siteId)
 }
 
 export function deleteToken(siteId: string): void {
-  cachedTokens.delete(siteId)
-  credentialErrors.delete(siteId)
+  tokenFileCache.forget(siteId)
   try {
     unlinkSync(getTokenPath(siteId))
   } catch {
