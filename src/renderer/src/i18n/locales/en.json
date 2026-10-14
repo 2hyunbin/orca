@@ -19935,5 +19935,36 @@
     "browser": "Browser",
     "editor": "Editor",
     "terminal": "Terminal"
+  },
+  "updates": {
+    "installBlock": {
+      "instancesLabel": "Instances using Orca",
+      "browserLabel": "Background browser",
+      "serverLabel": "Background server",
+      "windowLabel": "Other Orca window",
+      "instanceLabel": "Other Orca instance",
+      "processId": "PID {{pid}}",
+      "preparingTitle": "Preparing your update",
+      "preparingSummary": "Checking running Orca instances before restarting.",
+      "later": "Later",
+      "retainedDownload": "Orca stays open. No need to download again.",
+      "retryInstallation": "Retry installation",
+      "waitingLabel": "Update waiting",
+      "busyTitle": "Another Orca is updating",
+      "busySummary": "An update is already being installed by another Orca instance.",
+      "busyGuidance": "Wait a moment, then retry. Your downloaded update is ready.",
+      "unresponsiveTitle": "Waiting for background servers",
+      "unresponsiveSummary": "Orca could not finish pausing its background servers for the update.",
+      "unresponsiveGuidance": "Stop it from the terminal or service that started it, then retry. Connected devices will disconnect.",
+      "readyTitle": "Your update is ready",
+      "serverSummary": "A background Orca server is still using this app.",
+      "instanceSummary": "Another Orca instance is still using this app.",
+      "serverGuidance": "Stop the server from the terminal or service that started it, then retry. Connected devices will disconnect.",
+      "mixedGuidance": "Close any other Orca windows and stop the server from the terminal or service that started it. Connected devices will disconnect. Then retry.",
+      "instanceGuidance": "Quit other Orca instances, then retry. Your downloaded update will be kept ready.",
+      "waitingAriaLabel": "Update waiting for other Orca instances. Click to expand.",
+      "preparingLabel": "Preparing update",
+      "preparingAriaLabel": "Preparing update. Click to expand."
+    }
   }
 }
