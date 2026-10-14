@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { agentSessionLeaseFixture } from '../../shared/agent-session-record.test-fixture'
+import { generatedSessionTitle } from './session-scanner-accumulator'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   assertLegacyAiVaultResumeAllowed,
@@ -74,18 +75,21 @@ describe('structured AI Vault ownership', () => {
   })
 
   it.each(['claude', 'codex'] as const)(
-    'keeps an unnamed %s chat at its ordinary label',
+    'titles an unnamed %s chat after its conversation, as a terminal row is',
     (provider) => {
       installOwnership({ provider })
-      const result = listResult()
-      result.sessions = result.sessions.map((session) => ({
-        ...session,
-        agent: provider,
-        title: 'First prompt'
-      }))
-      expect(
-        projectStructuredAiVaultSessions(result, OPENS_EVERY_STRUCTURED_CHAT).sessions[0]?.title
-      ).toBe(provider === 'claude' ? 'Claude Chat' : 'Codex Chat')
+      const titled = (title: string) => {
+        const result = listResult()
+        result.sessions = result.sessions.map((session) => ({ ...session, agent: provider, title }))
+        return projectStructuredAiVaultSessions(result, OPENS_EVERY_STRUCTURED_CHAT).sessions[0]
+          ?.title
+      }
+      expect(titled('First prompt')).toBe('First prompt')
+      // History's "<Agent> <id prefix>" placeholder names nothing, so the chat label stands in.
+      const sessionId = listResult().sessions[0]!.sessionId
+      expect(titled(generatedSessionTitle(provider, sessionId))).toBe(
+        provider === 'claude' ? 'Claude Chat' : 'Codex Chat'
+      )
     }
   )
 

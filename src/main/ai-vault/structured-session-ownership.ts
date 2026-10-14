@@ -1,7 +1,7 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { agentSessionLeaseAdmitsWriter } from '../../shared/agent-session-lease-adjudication'
 import { defaultAgentChatLabel } from '../../shared/agent-session-chat-label'
-import type { AiVaultListResult } from '../../shared/ai-vault-types'
+import type { AiVaultAgent, AiVaultListResult } from '../../shared/ai-vault-types'
 import { historyRowShowsChatName } from '../../shared/structured-chat-row-name'
 import type { AiVaultSearchResponse } from '../../shared/ai-vault-search-types'
 import type { AiVaultPrepareSessionResumeArgs } from '../../shared/ai-vault-resume-preparation'
@@ -22,6 +22,7 @@ import {
   type StructuredAgentRuntimeRegistration
 } from '../runtime/structured-agent-runtime-registrations'
 import { commandName, commandProgramIndex, shellCommands } from './shell-command-words'
+import { structuredChatHistoryTitle } from '../native-chat/structured-chat-history-title'
 
 /** Whether the client a projection answers opens a chat of this agent from its history row. A row
  *  owned by a chat it cannot open is hidden from it: resuming that row in a terminal is refused. */
@@ -45,7 +46,7 @@ export function projectStructuredAiVaultSessions(
     if (!opensChat(ownership.provider)) {
       return []
     }
-    return [{ ...session, ...ownedRow(session.agent, ownership) }]
+    return [{ ...session, ...ownedRow(session, ownership) }]
   })
   return sessions.length === result.sessions.length &&
     sessions.every((row, index) => row === result.sessions[index])
@@ -74,7 +75,7 @@ export function projectStructuredAiVaultSearchResponse(
         return []
       }
       const { resumeCommand: _resumeCommand, ...owned } = hit
-      return [{ ...owned, ...ownedRow(hit.agent, ownership) }]
+      return [{ ...owned, ...ownedRow(hit, ownership) }]
     })
   }
 }
@@ -104,14 +105,22 @@ export async function searchWithStructuredOwners(
     : response
 }
 
-function ownedRow(rowAgent: string, ownership: StructuredProviderSessionOwnership) {
+/** A chat's row keeps its conversation's own title under the chat's saved name, as the chat's tab
+ *  does; the chat label stands in only where History has nothing to call it. */
+function ownedRow(
+  row: { agent: AiVaultAgent; sessionId: string; title: string },
+  ownership: StructuredProviderSessionOwnership
+) {
   const structuredSession = {
     sessionId: ownership.sessionId,
     workspaceId: ownership.workspaceId
   }
-  return historyRowShowsChatName(rowAgent)
+  return historyRowShowsChatName(row.agent)
     ? {
-        title: ownership.conversationName ?? defaultAgentChatLabel(ownership.provider),
+        title:
+          ownership.conversationName ??
+          structuredChatHistoryTitle(row.agent, row.sessionId, row.title) ??
+          defaultAgentChatLabel(ownership.provider),
         structuredSession
       }
     : { structuredSession }

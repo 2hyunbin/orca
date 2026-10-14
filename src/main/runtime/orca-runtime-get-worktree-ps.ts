@@ -33,6 +33,8 @@ import { maybeAutoRenameWorkspaceOnFirstStructuredTurn } from '../agent-hooks/fi
 import { firstWorkRenameDeps } from '../agent-hooks/first-work-rename-runtime'
 import { createStructuredChatNamingHandler } from '../native-chat/structured-chat-naming'
 import { structuredChatNamingDeps } from './structured-chat-naming-runtime'
+import { createStructuredChatHistoryTitles } from '../native-chat/structured-chat-history-title'
+import { resolveLocalAiVaultSessionTitles } from '../ai-vault/session-title-resolver'
 import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { buildWorktreeListingPage } from './worktree-listing-host-scope'
@@ -222,6 +224,12 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
         logger
       )
     )
+    const chatHistoryTitles = createStructuredChatHistoryTitles({
+      resolveTitles: (requests) => resolveLocalAiVaultSessionTitles(requests),
+      onChanged: (workspaceId, sessionId) =>
+        this.refreshStructuredConversationTabTitle(workspaceId, sessionId)
+    })
+    this.structuredChatHistoryTitles = chatHistoryTitles
     await installStructuredAgentSessionHost({
       stateDirectory: getProfileUserDataPath(),
       hostId: LOCAL_EXECUTION_HOST_ID,
@@ -274,6 +282,7 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
       onSessionStatusChanged: (summary, options) => {
         this.onStructuredSessionStatusForMail(summary)
         nameChat(summary, options)
+        chatHistoryTitles.observe(summary, options)
         void maybeAutoRenameWorkspaceOnFirstStructuredTurn(
           summary,
           options,

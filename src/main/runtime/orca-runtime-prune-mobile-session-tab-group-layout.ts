@@ -24,6 +24,7 @@ import { buildRuntimeMobileAgentStatus } from './runtime-mobile-agent-status-bui
 import { FIRST_PANE_ID } from '../../shared/pane-key'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
+import { structuredAgentSessionProviderSessionMetadata } from '../native-chat/agent-session-wire/structured-agent-session-history-result'
 import { structuredWorkerHandleAgentStatus } from './orchestration/structured-worker-group-addressing'
 import {
   retitleStructuredConversationTab,
@@ -80,12 +81,28 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
   protected toMobileSessionTabsResult(
     snapshot: RuntimeMobileSessionTabsSnapshot
   ): RuntimeMobileSessionTabsResult {
-    const host = getStructuredAgentSessionHost()
-    snapshot = titleStructuredConversationTabs(snapshot, (sessionId) => {
-      const record = host?.deps?.store?.getRecord(sessionId)
-      return record?.location.workspaceId === snapshot.worktree ? record.conversationName : null
-    })
+    snapshot = titleStructuredConversationTabs(snapshot, (sessionId) =>
+      this.structuredChatTabName(snapshot.worktree, sessionId)
+    )
     return projectRuntimeMobileSessionTabs(snapshot, this.getMobileSessionProjectionHost())
+  }
+
+  /** The chat's saved name, else its conversation's Session History title. */
+  private structuredChatTabName(workspaceId: string, sessionId: string): string | null {
+    const record = getStructuredAgentSessionHost()?.deps?.store?.getRecord(sessionId)
+    if (record?.location.workspaceId !== workspaceId) {
+      return null
+    }
+    return (
+      record.conversationName ??
+      this.structuredChatHistoryTitles?.titleFor({
+        sessionId,
+        workspaceId,
+        agent: record.provider,
+        providerSession: structuredAgentSessionProviderSessionMetadata(record)
+      }) ??
+      null
+    )
   }
 
   refreshStructuredConversationTabTitle(workspaceId: string, sessionId: string): void {
@@ -93,8 +110,7 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
     if (!snapshot) {
       return
     }
-    const record = getStructuredAgentSessionHost()?.deps?.store?.getRecord(sessionId)
-    const name = record?.location.workspaceId === workspaceId ? record.conversationName : null
+    const name = this.structuredChatTabName(workspaceId, sessionId)
     const next = retitleStructuredConversationTab(snapshot, sessionId, name)
     if (next) {
       this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(workspaceId, next))
