@@ -140,6 +140,42 @@ describe('synthetic diagnostic excerpts', () => {
     )
   })
 
+  it.each([
+    'Error: failed to open database at database.ts:4:5',
+    '::error file=database.ts::invalid declaration at database.ts:4:5'
+  ])('does not borrow a later diagnostic as a frame: %s', (diagnostic) => {
+    const frame = ' at real.ts:8:9'
+    for (const context of ['', 'intervening context\n']) {
+      for (const timestamp of ['', '2026-01-02T03:04:05.123Z ']) {
+        const segment = `[worker] caught Error: expected\n${context}${timestamp}${diagnostic}\n${frame}`
+        for (const text of [
+          segment,
+          `Error: earlier failure\n${separator}\n${segment}`,
+          `${segment}\n${separator}\nnormal recent output`
+        ]) {
+          const anchor = findInitialCheckLogDiagnostic(text)
+          expect(anchor && text.slice(anchor.start, anchor.end)).toBe(diagnostic)
+          expect(anchor && text.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(frame)
+        }
+      }
+    }
+  })
+
+  it('does not borrow a diagnostic or its frame from across the omission boundary', () => {
+    const text = `[worker] caught Error: expected\n${separator}\nError: failed to open database at database.ts:4:5\n at real.ts:8:9`
+    const anchor = findInitialCheckLogDiagnostic(text)
+    expect(anchor && text.slice(anchor.start, anchor.end)).toBe(
+      'Error: failed to open database at database.ts:4:5'
+    )
+    expect(anchor && text.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(
+      ' at real.ts:8:9'
+    )
+    const fallback = findInitialCheckLogDiagnostic(
+      `[worker] caught Error: expected\n${separator}\n at real.ts:8:9`
+    )
+    expect(fallback?.nearbyStackStart).toBeUndefined()
+  })
+
   it('retains unframed inline diagnostics as the recent-segment fallback', () => {
     const text = `Error: earlier failure\n${separator}\n[worker] failed EACCES: open database\n##[error]Process completed with exit code 1`
     const anchor = findInitialCheckLogDiagnostic(text)

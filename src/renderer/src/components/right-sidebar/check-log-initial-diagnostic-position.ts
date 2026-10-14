@@ -54,12 +54,12 @@ export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticA
       }
       const anchor: CheckLogDiagnosticAnchor = { start: line.start + match.index, end: line.end }
       for (let nearby = index + 1; nearby < Math.min(to, index + 13); nearby += 1) {
+        if (diagnosticPattern.test(lines[nearby].text)) {
+          break
+        }
         if (framePattern.test(lines[nearby].text)) {
           anchor.nearbyStackStart = lines[nearby].start
           anchor.nearbyStackEnd = lines[nearby].end
-          break
-        }
-        if (diagnosticPattern.test(lines[nearby].text)) {
           break
         }
       }
