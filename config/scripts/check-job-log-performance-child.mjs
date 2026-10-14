@@ -12,6 +12,13 @@ const descriptor = JSON.parse(serialized)
 const identity = JSON.parse(identityJson)
 const digest = (value) => createHash('sha256').update(value).digest('hex')
 assert.equal(digest(readFileSync(bundlePath)), identity.bundleHash)
+for (const [name, expectedHash] of Object.entries(identity.measurementScriptHashes)) {
+  assert.equal(
+    digest(readFileSync(new URL(name, import.meta.url))),
+    expectedHash,
+    `Measurement script changed: ${name}`
+  )
+}
 const module = await import(pathToFileURL(bundlePath).href)
 const runtime = {
   node: process.version,
@@ -108,13 +115,18 @@ async function measure(operation, tiny = false, control = false) {
   }
 }
 
+let inputIdentity
 function ready(input = '') {
+  inputIdentity = {
+    inputBytes: Buffer.byteLength(input),
+    codeUnits: input.length,
+    inputHash: digest(input)
+  }
   emit({
     type: 'ready',
     identity,
     runtime,
-    inputBytes: Buffer.byteLength(input),
-    codeUnits: input.length
+    ...inputIdentity
   })
 }
 function result(fields) {
@@ -127,6 +139,7 @@ function result(fields) {
     family: descriptor.family,
     width: descriptor.width,
     bytes: descriptor.bytes,
+    inputIdentity,
     variant: descriptor.variant,
     ...fields,
     processLifetimeMaxRssKiB: process.resourceUsage().maxRSS,

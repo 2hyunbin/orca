@@ -210,25 +210,20 @@ export function createManifest({ fixturePath, capturePath } = {}) {
       )
     }
   }
-  // Each large descriptor keeps one sample and its own fresh three warmups.
+  // Parent ordering alternates every direct pair; each child gets fresh three warmups.
   for (const family of families) {
     for (let pair = 0; pair < directSizes.length; pair += 2) {
       const sizes = directSizes.slice(pair, pair + 2)
-      const partitions = sizes[0] >= 8 * mib ? 7 : 1
-      for (let sample = 0; sample < partitions; sample++) {
+      for (let sample = 0; sample < 7; sample++) {
         for (const arm of sample % 2 ? ['baseline', 'proposed'] : ['proposed', 'baseline']) {
           for (const bytes of sample % 2 ? sizes.toReversed() : sizes) {
-            // One old adverse attempt per size; a censored record owns unavailable samples.
-            if (arm === 'baseline' && family.adverse && sample > 0) {
-              continue
-            }
             manifest.push(
               item('direct', arm, {
                 family: family.family,
                 width: family.width,
                 bytes,
                 sample,
-                samples: partitions === 1 || (arm === 'baseline' && family.adverse) ? 7 : 1,
+                samples: 1,
                 baselineTimeoutAllowed: arm === 'baseline' && family.adverse
               })
             )

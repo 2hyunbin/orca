@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import fixture from './__fixtures__/check-job-log-failure-output.json'
+import { readCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
 import { PR_CHECK_LOG_TAIL_BYTES, sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt'
 import * as ansi from './ansi-escape-sequences'
 import * as ownership from './own-retained-string'
 import * as bytes from './utf8-byte-limits'
 
 const limit = PR_CHECK_LOG_TAIL_BYTES
+const fixture = readCheckLogFixture()
 
 describe('bounded owned check log sanitation', () => {
   afterEach(() => {

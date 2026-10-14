@@ -23,18 +23,20 @@ export const PR_CHECK_LOG_TAIL_EARLIER_SEPARATOR = '… earlier errors …'
 const ERROR_LINE_PATTERN =
   /(?:##\[error\]|::error::|::error\b|\berror:|FAILED|exit code|ENOENT|EACCES|panic:|AssertionError)/i
 
+function matchesErrorMarker(candidate: string): boolean {
+  return ERROR_LINE_PATTERN.test(
+    stripAnsiEscapeSequences(candidate).replace(TERMINAL_CONTROL_CHARACTER_PATTERN, '')
+  )
+}
+
 function hasErrorMarker(rawLine: string): boolean {
-  const matches = (candidate: string): boolean =>
-    ERROR_LINE_PATTERN.test(
-      stripAnsiEscapeSequences(candidate).replace(TERMINAL_CONTROL_CHARACTER_PATTERN, '')
-    )
   if (isUtf8ByteLengthWithinLimit(rawLine, PR_CHECK_LOG_TAIL_BYTES)) {
-    return matches(rawLine)
+    return matchesErrorMarker(rawLine)
   }
   const windowBytes = PR_CHECK_LOG_TAIL_BYTES / 2
   return (
-    matches(clampUtf8TextPrefix(rawLine, windowBytes)) ||
-    matches(clampUtf8TextTail(rawLine, windowBytes).text)
+    matchesErrorMarker(clampUtf8TextPrefix(rawLine, windowBytes)) ||
+    matchesErrorMarker(clampUtf8TextTail(rawLine, windowBytes).text)
   )
 }
 

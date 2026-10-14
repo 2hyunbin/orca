@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ansi from './ansi-escape-sequences'
 import * as byteLimits from './utf8-byte-limits'
-import fixture from './__fixtures__/check-job-log-failure-output.json'
+import { readCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
 import {
   PR_CHECK_LOG_TAIL_BYTES,
   PR_CHECK_LOG_TAIL_EARLIER_SEPARATOR,
@@ -9,6 +9,7 @@ import {
 } from './check-job-log-tail-slice'
 
 const trailing = Array.from({ length: 210 }, (_, index) => `recent ${index}`).join('\n')
+const fixture = readCheckLogFixture()
 const earlier = (line: string): string => `${line}\n${trailing}`
 
 describe('bounded ANSI-aware marker candidates', () => {

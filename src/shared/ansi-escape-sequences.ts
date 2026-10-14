@@ -1,11 +1,6 @@
 /* eslint-disable no-control-regex -- these patterns exist to match terminal control bytes. */
 import { ownRetainedString } from './own-retained-string'
 
-/** OSC title/progress frames, 7-bit (ESC ]) and 8-bit (U+009D) introducers. */
-export const OSC_SEQUENCE_PATTERN = /(?:\u001b\]|\u009d)[\s\S]*?(?:\u0007|\u001b\\|\u009c)/g
-/** DCS/APC/PM/SOS string sequences terminated by ST. */
-export const STRING_SEQUENCE_PATTERN =
-  /(?:\u001b[P_^X]|\u0090|\u0098|\u009e|\u009f)[\s\S]*?(?:\u001b\\|\u009c)/g
 /** CSI sequences (colors, cursor moves, `\u001b[0K` erase-to-EOL). */
 export const CSI_SEQUENCE_PATTERN = /(?:\u001b\[|\u009b)[0-?]*[ -/]*[@-~]/g
 /** Remaining two/three-byte escape sequences (charset selection, RIS, ...). */
@@ -17,6 +12,7 @@ export const TERMINAL_CONTROL_CHARACTER_PATTERN =
 type TerminatorSearch = { cursor: number; start: number; end: number }
 const OSC_INTRODUCER_PATTERN = /\u001b\]|\u009d/
 const STRING_INTRODUCER_PATTERN = /\u001b[P_^X]|[\u0090\u0098\u009e\u009f]/
+const CONTROL_STRING_INTRODUCER_PATTERN = /\u001b[\]P_^X]|[\u0090\u0098\u009d-\u009f]/
 const ANSI_INTRODUCER_PATTERN = /[\u001b\u0090\u0098\u009b\u009d-\u009f]/
 
 function nextSt(value: string, payloadStart: number, search: TerminatorSearch): void {
@@ -109,7 +105,11 @@ export function stripAnsiEscapeSequences(value: string): string {
   if (!ANSI_INTRODUCER_PATTERN.test(value)) {
     return value
   }
-  return stripControlStrings(stripControlStrings(value, true), false)
-    .replace(CSI_SEQUENCE_PATTERN, '')
-    .replace(ESCAPE_SEQUENCE_PATTERN, '')
+  const stripped = CONTROL_STRING_INTRODUCER_PATTERN.test(value)
+    ? stripControlStrings(stripControlStrings(value, true), false)
+    : value
+  const withoutCsi = stripped.replace(CSI_SEQUENCE_PATTERN, '')
+  return withoutCsi.includes('\u001b')
+    ? withoutCsi.replace(ESCAPE_SEQUENCE_PATTERN, '')
+    : withoutCsi
 }

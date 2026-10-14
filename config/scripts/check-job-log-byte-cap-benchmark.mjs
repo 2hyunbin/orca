@@ -7,6 +7,11 @@ import { pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { build } from 'esbuild'
 import { runProcess } from '@orca/process-host'
+import {
+  assertWatchdogExit,
+  adverseCaseKey,
+  auditBaselineCensoring
+} from './check-job-log-watchdog-protocol.mjs'
 import { BASELINE_REF, createManifest } from './check-job-log-performance-cases.mjs'
 
 const shared = [
@@ -40,7 +45,7 @@ export function enterStrip() { if (phase) { process.stdout.write(JSON.stringify(
 export function resetObservations() { for (const key of Object.keys(counters)) delete counters[key]; }
 `
 
-export async function prepareBenchmark(root = process.cwd()) {
+export async function prepareBenchmark(root = process.cwd(), { profile = false } = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'orca-check-log-benchmark-'))
   try {
     const baseline = new Map()
@@ -70,6 +75,20 @@ export async function prepareBenchmark(root = process.cwd()) {
     }
     const identity = {
       baselineRef: BASELINE_REF,
+      measurementScriptHashes: Object.fromEntries(
+        await Promise.all(
+          [
+            'check-job-log-byte-cap-benchmark.mjs',
+            'check-job-log-performance-cases.mjs',
+            'check-job-log-performance-child.mjs',
+            'check-job-log-differential-cases.mjs',
+            'check-job-log-watchdog-protocol.mjs'
+          ].map(async (name) => [
+            name,
+            hash(await readFile(path.join(root, 'config', 'scripts', name)))
+          ])
+        )
+      ),
       baselineSourceHashes: Object.fromEntries(
         [...baseline].map(([name, value]) => [name, hash(value)])
       ),
@@ -83,7 +102,7 @@ export async function prepareBenchmark(root = process.cwd()) {
         const sources = arm === 'baseline' ? baseline : current
         const result = await build({
           stdin: {
-            contents: `export { sliceCheckLogTail } from './check-job-log-tail-slice'; export { stripAnsiEscapeSequences, TERMINAL_CONTROL_CHARACTER_PATTERN } from './ansi-escape-sequences'; export { ownRetainedString, resetOwnRetainedStringCopier } from './own-retained-string'; ${arm === 'proposed' ? "export { sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt';" : ''} export { observations, resetObservations, setPhase } from 'check-log-observations';`,
+            contents: `export { sliceCheckLogTail } from './check-job-log-tail-slice'; export { stripAnsiEscapeSequences, TERMINAL_CONTROL_CHARACTER_PATTERN } from './ansi-escape-sequences'; export { ownRetainedString, resetOwnRetainedStringCopier } from './own-retained-string'; ${arm === 'proposed' ? "export { sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt';" : ''} ${profile && arm === 'proposed' ? "export { hasErrorMarker } from './check-job-log-tail-slice'; export { stripControlStrings } from './ansi-escape-sequences'; export { isUtf8ByteLengthWithinLimit } from './utf8-byte-limits';" : ''} export { observations, resetObservations, setPhase } from 'check-log-observations';`,
             resolveDir: path.join(root, 'src', 'shared'),
             loader: 'ts'
           },
@@ -112,6 +131,14 @@ export async function prepareBenchmark(root = process.cwd()) {
                     const name = path.basename(filename)
                     let contents = sources.get(name)
                     assert(contents, `Unexpected module in ${arm} graph: ${name}`)
+                    if (profile && arm === 'proposed') {
+                      contents = contents
+                        .replace('function hasErrorMarker(', 'export function hasErrorMarker(')
+                        .replace(
+                          'function stripControlStrings(',
+                          'export function stripControlStrings('
+                        )
+                    }
                     if (instrumented === 'negative') {
                       if (name === 'ansi-escape-sequences.ts') {
                         contents =
@@ -183,6 +210,26 @@ export async function runDescriptor(context, descriptor) {
   const key = `${baseline ? 'baseline' : 'proposed'}${descriptor.baselineTimeoutAllowed ? '-negative' : descriptor.mode === 'coverage' ? '-observed' : ''}`
   const bundle = context.bundles[key]
   const identity = { ...context.identity, bundleHash: bundle.hash, id: descriptor.id }
+  const censored = (context.censoredBaselines ??= new Map())
+  const initialTimeout = descriptor.baselineTimeoutAllowed
+    ? censored.get(adverseCaseKey(descriptor))
+    : undefined
+  if (initialTimeout && descriptor.sample > 0) {
+    return {
+      ...descriptor,
+      capturePath: undefined,
+      status: 'baseline_censored',
+      attempted: false,
+      initialTimeoutId: initialTimeout.id,
+      identity,
+      runtime: initialTimeout.runtime,
+      inputBytes: initialTimeout.inputBytes,
+      codeUnits: initialTimeout.codeUnits,
+      inputHash: initialTimeout.inputHash,
+      unavailableSamples: descriptor.samples,
+      samples: []
+    }
+  }
   const started = performance.now()
   const controller = new AbortController()
   let outerTimer
@@ -233,8 +280,24 @@ export async function runDescriptor(context, descriptor) {
   assert.equal(ready.identity.baselineRef, BASELINE_REF)
   assert(Number.isSafeInteger(ready.inputBytes) && ready.inputBytes >= 0)
   assert(Number.isSafeInteger(ready.codeUnits) && ready.codeUnits >= 0)
-  if (descriptor.mode === 'direct' || descriptor.mode === 'counts') {
+  assert(ready.inputBytes >= ready.codeUnits && ready.inputBytes <= ready.codeUnits * 3)
+  assert(typeof ready.inputHash === 'string' && /^[a-f0-9]{64}$/.test(ready.inputHash))
+  if (
+    descriptor.mode === 'direct' ||
+    descriptor.mode === 'counts' ||
+    (descriptor.mode === 'cpu' && descriptor.family === 'short-lines')
+  ) {
     assert.equal(ready.inputBytes, descriptor.bytes, 'Generator byte size changed')
+  }
+  if (descriptor.mode === 'cpu' && ['actual', 'fixture'].includes(descriptor.family)) {
+    const source = await readFile(
+      descriptor.family === 'actual' ? descriptor.capturePath : descriptor.fixturePath,
+      'utf8'
+    )
+    const input = descriptor.family === 'actual' ? source : JSON.parse(source).rawLog
+    assert.equal(ready.inputBytes, Buffer.byteLength(input), 'Captured input bytes changed')
+    assert.equal(ready.codeUnits, input.length, 'Captured input code units changed')
+    assert.equal(ready.inputHash, hash(input), 'Captured input hash changed')
   }
   assert(
     !ready.runtime.bun && ready.runtime.node && ready.runtime.platform && ready.runtime.arch,
@@ -248,21 +311,24 @@ export async function runDescriptor(context, descriptor) {
       result.timedOut && entered?.phase === 'watchdog',
       'Watchdog did not terminate the synchronous child'
     )
+    assertWatchdogExit(result, ready.runtime.platform)
     return {
+      ...descriptor,
       id: descriptor.id,
       status: 'watchdog_passed',
+      attempted: true,
       settlementMs,
       signal: result.signal,
+      code: result.code,
+      identity,
+      inputBytes: ready.inputBytes,
+      codeUnits: ready.codeUnits,
+      inputHash: ready.inputHash,
       runtime: ready.runtime
     }
   }
   if (result.timedOut && descriptor.baselineTimeoutAllowed) {
-    assert(
-      result.signal === 'SIGTERM' ||
-        result.signal === 'SIGKILL' ||
-        (ready.runtime.platform === 'win32' && result.code !== 0),
-      'Unverified watchdog termination'
-    )
+    assertWatchdogExit(result, ready.runtime.platform)
     assert(
       descriptor.mode === 'direct' &&
         descriptor.arm === 'baseline' &&
@@ -270,7 +336,7 @@ export async function runDescriptor(context, descriptor) {
         ['warmup', 'sample'].includes(entered.phase),
       'Invalid adverse baseline censoring'
     )
-    return {
+    const record = {
       ...descriptor,
       capturePath: undefined,
       status: 'baseline_timeout',
@@ -278,6 +344,7 @@ export async function runDescriptor(context, descriptor) {
       runtime: ready.runtime,
       inputBytes: ready.inputBytes,
       codeUnits: ready.codeUnits,
+      inputHash: ready.inputHash,
       phase: entered.phase,
       deadlineMs: 10_000,
       settlementMs,
@@ -285,6 +352,11 @@ export async function runDescriptor(context, descriptor) {
       unavailableSamples: descriptor.samples,
       samples: []
     }
+    record.attempted = true
+    if (descriptor.sample === 0) {
+      censored.set(adverseCaseKey(descriptor), record)
+    }
+    return record
   }
   assert(
     !result.timedOut && result.code === 0 && !result.signal,
@@ -295,6 +367,15 @@ export async function runDescriptor(context, descriptor) {
   assert.equal(completed[0].id, descriptor.id)
   assert.equal(completed[0].mode, descriptor.mode)
   assert.equal(completed[0].arm, descriptor.arm)
+  assert.deepEqual(
+    completed[0].inputIdentity,
+    {
+      inputBytes: ready.inputBytes,
+      codeUnits: ready.codeUnits,
+      inputHash: ready.inputHash
+    },
+    'Completion input identity changed'
+  )
   if (descriptor.mode === 'direct' || descriptor.mode === 'cpu') {
     assert.equal(completed[0].samples.length, descriptor.samples, 'Incomplete timed samples')
     assert.equal(
@@ -322,7 +403,18 @@ export async function runDescriptor(context, descriptor) {
       }
     }
   }
-  return { ...completed[0], identity, runtime: ready.runtime, settlementMs, status: 'completed' }
+  return {
+    ...descriptor,
+    capturePath: undefined,
+    fixturePath: undefined,
+    ...completed[0],
+    ...completed[0].inputIdentity,
+    identity,
+    runtime: ready.runtime,
+    settlementMs,
+    status: 'completed',
+    attempted: true
+  }
 }
 
 export function median(values) {
@@ -332,18 +424,36 @@ export function median(values) {
 }
 
 export function auditResults(manifest, records) {
+  assert.equal(
+    new Set(manifest.map((item) => item.id)).size,
+    manifest.length,
+    'Duplicate manifest IDs'
+  )
+  assert.equal(records.length, manifest.length, 'Incomplete or duplicate descriptor coverage')
   const byId = new Map(records.map((record) => [record.id, record]))
   assert.equal(byId.size, manifest.length, 'Incomplete or duplicate descriptor coverage')
+  const expectedIds = new Set(manifest.map((item) => item.id))
+  assert(
+    records.every((record) => expectedIds.has(record.id)),
+    'Unexpected descriptor record'
+  )
   for (const descriptor of manifest) {
     const record = byId.get(descriptor.id)
     assert(
-      record && ['completed', 'baseline_timeout', 'watchdog_passed'].includes(record.status),
+      record &&
+        ['completed', 'baseline_timeout', 'baseline_censored', 'watchdog_passed'].includes(
+          record.status
+        ),
       `Failed descriptor: ${descriptor.id}`
     )
+    for (const field of ['mode', 'arm', 'family', 'width', 'bytes', 'sample']) {
+      assert.equal(record[field], descriptor[field], `Descriptor identity changed: ${field}`)
+    }
     if (descriptor.arm === 'proposed') {
-      assert(record.status !== 'baseline_timeout')
+      assert(!['baseline_timeout', 'baseline_censored'].includes(record.status))
     }
   }
+  auditBaselineCensoring(manifest, byId)
   const differentials = records.filter((record) => record.mode === 'differential')
   assert.equal(differentials.length, 2)
   assert.equal(differentials[0].cases, 5126)
@@ -444,6 +554,8 @@ export function auditResults(manifest, records) {
     descriptors: manifest.length,
     proposed: manifest.filter((item) => item.arm === 'proposed').length,
     censoredBaselines: records.filter((record) => record.status === 'baseline_timeout').length,
+    censoredSampleSlots: records.filter((record) => record.status === 'baseline_censored').length,
+    attemptedDescriptors: records.filter((record) => record.attempted !== false).length,
     scaling,
     ordinary
   }

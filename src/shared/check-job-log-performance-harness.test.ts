@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import {
   auditResults,
   runDescriptor
@@ -10,9 +11,13 @@ import {
 
 const launcher = vi.hoisted(() => vi.fn())
 vi.mock('@orca/process-host', () => ({ runProcess: launcher }))
-afterEach(() => launcher.mockReset())
+afterEach(() => {
+  launcher.mockReset()
+  context.censoredBaselines?.clear()
+})
 
 const context = {
+  censoredBaselines: new Map(),
   root: process.cwd(),
   identity: {
     baselineRef: BASELINE_REF,
@@ -33,6 +38,7 @@ const adverse = {
   width: 7,
   bytes: 16384,
   samples: 7,
+  sample: 0,
   baselineTimeoutAllowed: true
 }
 const ready = (id = adverse.id, bundleHash = context.bundles['baseline-negative'].hash) => ({
@@ -40,7 +46,8 @@ const ready = (id = adverse.id, bundleHash = context.bundles['baseline-negative'
   identity: { ...context.identity, id, bundleHash },
   runtime: { node: process.version, platform: process.platform, arch: process.arch, bun: false },
   inputBytes: 16384,
-  codeUnits: 16384
+  codeUnits: 16384,
+  inputHash: createHash('sha256').update('x'.repeat(16384)).digest('hex')
 })
 const protocol = (records: object[]): string =>
   `${records.map((record) => JSON.stringify(record)).join('\n')}\n`
@@ -122,6 +129,154 @@ describe('performance watchdog failure precedence and completeness', () => {
       'Workload child failed or timed out'
     )
   })
+  it('censors only remaining slots of the exact verified initial adverse timeout', async () => {
+    const initial = { ...adverse, samples: 1 }
+    launcher.mockResolvedValue(timeoutResult())
+    await runDescriptor(context, initial)
+    const later = { ...initial, id: 'later-slot', sample: 1 }
+    const record = await runDescriptor(context, later)
+    expect(record).toMatchObject({
+      status: 'baseline_censored',
+      attempted: false,
+      initialTimeoutId: initial.id,
+      unavailableSamples: 1,
+      samples: []
+    })
+    expect(launcher).toHaveBeenCalledTimes(1)
+    expect(record).not.toHaveProperty('settlementMs')
+    launcher.mockResolvedValue({ ...timeoutResult(), stdout: '' })
+    await expect(runDescriptor(context, { ...later, bytes: 32768 })).rejects.toThrow()
+    expect(launcher).toHaveBeenCalledTimes(2)
+  })
+  it('audits seven logical adverse slots and their initial termination proof', async () => {
+    const slots = Array.from({ length: 7 }, (_, sample) => ({
+      ...adverse,
+      id: sample ? `slot-${sample}` : adverse.id,
+      samples: 1,
+      sample
+    }))
+    launcher.mockResolvedValue(timeoutResult())
+    const records: Awaited<ReturnType<typeof runDescriptor>>[] = []
+    for (const slot of slots) {
+      records.push(await runDescriptor(context, slot))
+    }
+    const differentials = ['baseline', 'proposed'].map((arm) => ({
+      id: `diff-${arm}`,
+      mode: 'differential',
+      arm
+    }))
+    const results = [
+      ...records,
+      ...differentials.map((item) => ({
+        ...item,
+        status: 'completed',
+        cases: 5126,
+        outputHash: 'same'
+      }))
+    ]
+    const summary = auditResults([...slots, ...differentials], results)
+    expect(summary).toMatchObject({
+      descriptors: 9,
+      attemptedDescriptors: 3,
+      censoredSampleSlots: 6,
+      censoredBaselines: 1
+    })
+    expect(() =>
+      auditResults(
+        [...slots, ...differentials],
+        results.map((item) => (item.id === adverse.id ? { ...item, phase: 'startup' } : item))
+      )
+    ).toThrow()
+    expect(() =>
+      auditResults(
+        [...slots, ...differentials],
+        results.map((item) =>
+          item.id === 'slot-1' ? { ...item, initialTimeoutId: 'missing' } : item
+        )
+      )
+    ).toThrow('Missing verified initial')
+  })
+  it.each(['adverse', 'watchdog'])(
+    'validates Windows %s termination independently of this host',
+    async (mode) => {
+      const descriptor =
+        mode === 'adverse'
+          ? adverse
+          : { ...adverse, mode: 'watchdog', arm: 'proposed', baselineTimeoutAllowed: false }
+      const bundleHash = context.bundles[mode === 'adverse' ? 'baseline-negative' : 'proposed'].hash
+      for (const [signal, code, accepted] of [
+        ['SIGTERM', null, true],
+        ['SIGKILL', null, true],
+        [null, 1, true],
+        ['SIGSEGV', null, false],
+        ['SIGSEGV', 1, false],
+        [null, null, false],
+        [null, 0, false],
+        [null, 1.5, false]
+      ] as const) {
+        launcher.mockResolvedValue({
+          ...timeoutResult(),
+          signal,
+          code,
+          stdout: protocol([
+            {
+              ...ready(descriptor.id, bundleHash),
+              runtime: { node: process.version, platform: 'win32', arch: 'x64', bun: false }
+            },
+            {
+              type: mode === 'adverse' ? 'entered-strip' : 'entered',
+              phase: mode === 'adverse' ? 'warmup' : 'watchdog'
+            }
+          ])
+        })
+        if (accepted) {
+          expect((await runDescriptor(context, descriptor)).status).toBe(
+            mode === 'adverse' ? 'baseline_timeout' : 'watchdog_passed'
+          )
+        } else {
+          await expect(runDescriptor(context, descriptor)).rejects.toThrow(
+            'Unverified watchdog termination'
+          )
+        }
+      }
+    }
+  )
+  it.each(['linux', 'darwin'])(
+    'rejects an unverified numeric-only %s watchdog settlement',
+    async (platform) => {
+      launcher.mockResolvedValue({
+        ...timeoutResult(),
+        signal: null,
+        code: 1,
+        stdout: protocol([
+          { ...ready(), runtime: { node: process.version, platform, arch: 'x64', bun: false } },
+          { type: 'entered-strip', phase: 'warmup' }
+        ])
+      })
+      await expect(runDescriptor(context, adverse)).rejects.toThrow(
+        'Unverified watchdog termination'
+      )
+    }
+  )
+  it('alternates seven parent-selected pairs at every direct size', () => {
+    const direct = createManifest().filter(
+      (item) => item.mode === 'direct' && item.family === 'plain'
+    )
+    for (let pair = 0; pair < direct.length; pair += 28) {
+      const sizes = direct.slice(pair, pair + 2).map((item) => item.bytes)
+      for (let sample = 0; sample < 7; sample++) {
+        const expectedArms = sample % 2 ? ['baseline', 'proposed'] : ['proposed', 'baseline']
+        const expectedSizes = sample % 2 ? sizes.toReversed() : sizes
+        expect(
+          direct
+            .slice(pair + sample * 4, pair + sample * 4 + 4)
+            .map((item) => [item.arm, item.bytes, item.sample, item.samples])
+        ).toEqual(
+          expectedArms.flatMap((arm) => expectedSizes.map((bytes) => [arm, bytes, sample, 1]))
+        )
+      }
+    }
+  })
   it('predeclares full proposed coverage before adverse baseline descriptors', () => {
     const manifest = createManifest({ fixturePath: 'fixture.json' })
     const firstBaseline = manifest.findIndex((item) => item.arm === 'baseline')
@@ -152,6 +307,75 @@ describe('performance watchdog failure precedence and completeness', () => {
     expect(() => auditResults([adverse], [])).toThrow('Incomplete')
     expect(() => auditResults([adverse], [{ id: adverse.id, status: 'failed' }])).toThrow(
       'Failed descriptor'
+    )
+  })
+  it('rejects extra, duplicate, unexpected records and duplicate manifest IDs explicitly', () => {
+    const record = { id: adverse.id, status: 'baseline_timeout' }
+    expect(() => auditResults([adverse], [record, record])).toThrow('duplicate descriptor')
+    expect(() => auditResults([adverse, { ...adverse, id: 'other' }], [record, record])).toThrow(
+      'duplicate descriptor'
+    )
+    expect(() => auditResults([adverse], [{ ...record, id: 'unexpected' }])).toThrow(
+      'Unexpected descriptor'
+    )
+    expect(() => auditResults([adverse, adverse], [record, record])).toThrow('Duplicate manifest')
+  })
+  it.each(['bytes', 'units', 'hash'])(
+    'rejects invalid pre-work input %s identities',
+    async (field) => {
+      const identity = ready()
+      if (field === 'bytes') {
+        identity.inputBytes++
+      }
+      if (field === 'units') {
+        identity.codeUnits = -1
+      }
+      if (field === 'hash') {
+        identity.inputHash = 'unverified'
+      }
+      launcher.mockResolvedValue({
+        ...timeoutResult(),
+        stdout: protocol([identity, { type: 'entered-strip', phase: 'warmup' }])
+      })
+      await expect(runDescriptor(context, adverse)).rejects.toThrow()
+    }
+  )
+  it('validates completion input identity against the pre-work protocol', async () => {
+    const descriptor = { id: 'control', mode: 'control', arm: 'proposed' }
+    const prework = ready(descriptor.id, context.bundles.proposed.hash)
+    const inputIdentity = {
+      inputBytes: prework.inputBytes,
+      codeUnits: prework.codeUnits,
+      inputHash: prework.inputHash
+    }
+    launcher.mockResolvedValue({
+      ...timeoutResult(),
+      timedOut: false,
+      code: 0,
+      signal: null,
+      stdout: protocol([prework, { type: 'result', ...descriptor, samples: [], inputIdentity }])
+    })
+    expect(await runDescriptor(context, descriptor)).toMatchObject({
+      ...inputIdentity,
+      status: 'completed'
+    })
+    launcher.mockResolvedValue({
+      ...timeoutResult(),
+      timedOut: false,
+      code: 0,
+      signal: null,
+      stdout: protocol([
+        prework,
+        {
+          type: 'result',
+          ...descriptor,
+          samples: [],
+          inputIdentity: { ...inputIdentity, codeUnits: 1 }
+        }
+      ])
+    })
+    await expect(runDescriptor(context, descriptor)).rejects.toThrow(
+      'Completion input identity changed'
     )
   })
 })

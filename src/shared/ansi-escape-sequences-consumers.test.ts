@@ -1,23 +1,22 @@
-import { describe, expect, it } from 'vitest'
-import { parseAnsiSegments } from '../renderer/src/components/editor/ipynb-ansi'
-import { restoredSnapshotPaintsPrintableContent } from '../renderer/src/components/terminal-pane/restored-snapshot-coverage'
-import { parseCodexLoginAuthUrl } from '../main/codex-accounts/codex-login-auth-url'
-import { TerminalCommandPaint } from '../main/runtime/terminal-command-paint'
-import { claudePermissionSubject } from '../main/claude/claude-permission-presentation'
-import { terminalSafe } from '../cli/agent-session-search-format'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadAnsiConsumers } from '../../config/scripts/check-job-log-consumer-oracles.mjs'
 import { gitLabJobTraceToLogExcerpt } from './gitlab-job-log-excerpt'
 import { surfaceNativeChatCommandOutputs } from './native-chat-command-output'
 import type { NativeChatMessage } from './native-chat-types'
 import { normalizeNativeChatUserText } from './native-chat-image-transcript-markers'
-import { createAutomationRunOutputSnapshotBuffer } from '../renderer/src/components/automations/automation-run-output-snapshot'
+
+let consumers: Awaited<ReturnType<typeof loadAnsiConsumers>>
+beforeAll(async () => {
+  consumers = await loadAnsiConsumers()
+})
 
 const mixed = '\x1bPleft\x1b]hidden\x1b\\right\x1b\\KEEP'
 
 describe('ANSI consumer compatibility with independent literal oracles', () => {
   it('preserves notebook malformed 8-bit and unrelated controls', () => {
-    expect(parseAnsiSegments('\x9dunfinished')).toEqual([{ text: '\x9dunfinished' }])
-    expect(parseAnsiSegments('\x00\t\r\n\x85')).toEqual([{ text: '\x00\t\r\n\x85' }])
-    expect(parseAnsiSegments(mixed)).toEqual([{ text: 'KEEP' }])
+    expect(consumers.parseAnsiSegments('\x9dunfinished')).toEqual([{ text: '\x9dunfinished' }])
+    expect(consumers.parseAnsiSegments('\x00\t\r\n\x85')).toEqual([{ text: '\x00\t\r\n\x85' }])
+    expect(consumers.parseAnsiSegments(mixed)).toEqual([{ text: 'KEEP' }])
   })
   it('keeps GitLab visible CR section headers after ANSI stripping', () => {
     expect(
@@ -29,26 +28,28 @@ describe('ANSI consumer compatibility with independent literal oracles', () => {
   it('requires a complete Codex URL terminated by whitespace', () => {
     const prefix = `${mixed}\nNavigate to this URL to authenticate: `
     expect(
-      parseCodexLoginAuthUrl(`${prefix}https://auth.example.test/path?state=public`)
+      consumers.parseCodexLoginAuthUrl(`${prefix}https://auth.example.test/path?state=public`)
     ).toBeNull()
     expect(
-      parseCodexLoginAuthUrl(
+      consumers.parseCodexLoginAuthUrl(
         `${prefix}\x1b[32mhttps://auth.example.test/path?state=public\x1b[0m\n`
       )
     ).toBe('https://auth.example.test/path?state=public')
   })
   it('keeps terminal-safe CLI and permission text literal', () => {
-    expect(terminalSafe(`\x00${mixed}\r\n\t\x85`)).toBe('KEEP\r\n\t')
-    expect(claudePermissionSubject('ExitPlanMode', { plan: `\x00${mixed}\x85` })).toEqual({
-      kind: 'plan',
-      text: 'KEEP'
-    })
+    expect(consumers.terminalSafe(`\x00${mixed}\r\n\t\x85`)).toBe('KEEP\r\n\t')
+    expect(consumers.claudePermissionSubject('ExitPlanMode', { plan: `\x00${mixed}\x85` })).toEqual(
+      {
+        kind: 'plan',
+        text: 'KEEP'
+      }
+    )
   })
   it('distinguishes control-only snapshots and command paint from visible text', () => {
     const invisible = '\x1b]title\x07\x1b[0m\x00\x85 \n'
-    expect(restoredSnapshotPaintsPrintableContent({ data: invisible })).toBe(false)
-    expect(restoredSnapshotPaintsPrintableContent({ scrollbackAnsi: mixed })).toBe(true)
-    const paint = new TerminalCommandPaint()
+    expect(consumers.restoredSnapshotPaintsPrintableContent({ data: invisible })).toBe(false)
+    expect(consumers.restoredSnapshotPaintsPrintableContent({ scrollbackAnsi: mixed })).toBe(true)
+    const paint = new consumers.TerminalCommandPaint()
     paint.observe('\x1b]133;C\x07', '')
     paint.observe(invisible, invisible)
     expect(paint.hasPainted()).toBe(false)
@@ -84,7 +85,7 @@ describe('ANSI consumer compatibility with independent literal oracles', () => {
   })
   it('preserves pending echo and automation snapshots with literal oracles', () => {
     expect(normalizeNativeChatUserText(`\x00${mixed}\r\n\tword`)).toBe('KEEP word')
-    const output = createAutomationRunOutputSnapshotBuffer()
+    const output = consumers.createAutomationRunOutputSnapshotBuffer()
     output.append(`\x00${mixed}\r\n\tword\x85`)
     expect(output.snapshot()).toMatchObject({
       format: 'plain_text',
