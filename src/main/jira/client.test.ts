@@ -682,6 +682,36 @@ describe('Jira client credential storage', () => {
 })
 
 describe('Jira site file cross-process visibility', () => {
+  it('keeps a captured request on its site after an external selection change', async () => {
+    const sites = [
+      { id: 'site-alpha', token: 'token-alpha' },
+      { id: 'site-beta', token: 'token-beta' }
+    ]
+    writeMultiSiteFiles(sites, 'site-alpha')
+    const jira = await loadClientModule()
+    const captured = jira.getClients()[0]
+    if (!captured) {
+      throw new Error('Expected stored Jira client')
+    }
+
+    writeMultiSiteFiles(sites, 'site-beta')
+    expect(jira.getClients()[0]?.site.id).toBe('site-beta')
+    netFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ issues: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    const signal = new AbortController().signal
+    await jira.jiraRequest(captured, '/rest/api/3/search/jql', { signal })
+
+    expect(captured.site.id).toBe('site-alpha')
+    expect(netFetchMock).toHaveBeenCalledWith(
+      'https://site-alpha.atlassian.net/rest/api/3/search/jql',
+      expect.objectContaining({ signal })
+    )
+  })
+
   it('picks up a site connected by another Orca process', async () => {
     // Every Orca process on the machine shares ~/.orca. Loading before any site
     // exists must not pin "disconnected" for the life of the process.

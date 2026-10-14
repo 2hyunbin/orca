@@ -44,7 +44,7 @@ function workspaceTokenPath(workspaceId: string): string {
 }
 
 function writeMultiWorkspaceFiles(
-  workspaces: { id: string; token: string | Buffer }[],
+  workspaces: { id: string; token: string | Buffer; credentialRevision?: number }[],
   selectedWorkspaceId: string
 ): void {
   const orcaDir = join(tempHome, '.orca')
@@ -60,7 +60,8 @@ function writeMultiWorkspaceFiles(
         organizationId: workspace.id,
         organizationName: workspace.id,
         displayName: 'Ada',
-        email: 'ada@example.com'
+        email: 'ada@example.com',
+        credentialRevision: workspace.credentialRevision
       }))
     }),
     { encoding: 'utf-8' }
@@ -420,6 +421,29 @@ describe('Linear client workspace storage', () => {
 })
 
 describe('Linear workspace file cross-process visibility', () => {
+  it('preserves external credential revisions and captured request deadlines', async () => {
+    writeMultiWorkspaceFiles(
+      [{ id: 'ws-alpha', token: 'token-alpha', credentialRevision: 3 }],
+      'ws-alpha'
+    )
+    const linear = await loadClientModule()
+    const signal = new AbortController().signal
+    const captured = linear.getClients('ws-alpha', signal)[0]
+    expect(captured?.workspace.credentialRevision).toBe(3)
+
+    writeMultiWorkspaceFiles(
+      [{ id: 'ws-alpha', token: 'token-alpha', credentialRevision: 4 }],
+      'ws-alpha'
+    )
+
+    expect(linear.getStatus().workspaces?.[0]?.credentialRevision).toBe(4)
+    const current = linear.getClients('ws-alpha', signal)[0]
+    expect(current?.workspace.credentialRevision).toBe(4)
+    expect(linearClientMock).toHaveBeenLastCalledWith({ apiKey: 'token-alpha', signal })
+    expect(captured?.workspace.credentialRevision).toBe(3)
+    expect(captured?.apiKey).toBe('token-alpha')
+  })
+
   it('observes a disconnect written by another process', async () => {
     writeMultiWorkspaceFiles([{ id: 'ws-alpha', token: 'token-alpha' }], 'ws-alpha')
     const linear = await loadClientModule()
