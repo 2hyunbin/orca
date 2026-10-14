@@ -5,8 +5,38 @@ import {
   findInitialCheckLogDiagnostic,
   measureInitialCheckLogScrollTop
 } from './check-log-initial-diagnostic-position'
+import {
+  capturedCheckLogExcerpt,
+  capturedCheckLogFailure,
+  capturedCheckLogFrame
+} from './check-job-log-captured-fixture'
 
-describe('synthetic diagnostic excerpts (real scrubbed fixture pending upstream)', () => {
+describe('captured check log failure', () => {
+  it('retains the literal diagnostic and complete frame in a bounded new-host excerpt', () => {
+    expect(new TextEncoder().encode(capturedCheckLogExcerpt).length).toBeLessThanOrEqual(16 * 1024)
+    expect(capturedCheckLogExcerpt).toContain(capturedCheckLogFailure.expectedDiagnostic)
+    expect(capturedCheckLogExcerpt).toContain(capturedCheckLogFrame)
+    expect(capturedCheckLogExcerpt).toContain(capturedCheckLogFailure.benignMarker)
+    expect(capturedCheckLogExcerpt).toContain(capturedCheckLogFailure.genericExitMarker)
+  })
+
+  it('opens at the actual failure and complete nearby frame instead of the benign logger or exit', () => {
+    const anchor = findInitialCheckLogDiagnostic(capturedCheckLogExcerpt)
+    expect(anchor).not.toBeNull()
+    if (!anchor) {
+      throw new Error('Missing captured failure anchor')
+    }
+    const selected = capturedCheckLogExcerpt.slice(anchor.start, anchor.end)
+    expect(selected).toBe(capturedCheckLogFailure.expectedDiagnostic)
+    expect(selected).not.toContain(capturedCheckLogFailure.benignMarker)
+    expect(selected).not.toContain(capturedCheckLogFailure.genericExitMarker)
+    expect(capturedCheckLogExcerpt.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(
+      capturedCheckLogFrame
+    )
+  })
+})
+
+describe('synthetic diagnostic excerpts', () => {
   it.each([
     ['stderr | test output\nError: first failure\nError: second failure', 'Error: first failure'],
     [
@@ -79,6 +109,41 @@ describe('synthetic diagnostic excerpts (real scrubbed fixture pending upstream)
     const text = 'stderr | suite > case TypeError: expected a function\n at actual.ts:1:2'
     const anchor = findInitialCheckLogDiagnostic(text)
     expect(anchor && text.slice(anchor.start, anchor.end)).toBe('TypeError: expected a function')
+  })
+
+  it.each([
+    ['[worker] handled rejection Error: expected', 'Error: failed to open database'],
+    ['2026-01-02T03:04:05Z [queue] probe Error: unavailable', 'panic: corrupted database'],
+    ['logger caught TypeError: invalid value', 'error TS2322: incompatible return type'],
+    ['stderr | case [cache] miss Error: unavailable', '##[error]unable to publish artifact']
+  ])('prefers a diagnostic-shaped line over unframed inline output %j', (logger, diagnostic) => {
+    const text = `${logger}\n${diagnostic}\n at database.ts:4:5`
+    const anchor = findInitialCheckLogDiagnostic(text)
+    expect(anchor && text.slice(anchor.start, anchor.end)).toBe(diagnostic)
+  })
+
+  it.each(['', '2026-01-02T03:04:05.1234567Z ', '2026-01-02T03:04:05+02:00 '])(
+    'keeps the first standalone stderr diagnostic after timestamp %j',
+    (prefix) => {
+      const text = `stderr | failed case\n${prefix}TypeError: invalid argument\nError: later failure`
+      const anchor = findInitialCheckLogDiagnostic(text)
+      expect(anchor && text.slice(anchor.start, anchor.end)).toBe('TypeError: invalid argument')
+    }
+  )
+
+  it('keeps an inline diagnostic with stack context ahead of a later standalone error', () => {
+    const text = '[worker] failed TypeError: invalid argument\n at worker.ts:3:4\nError: later'
+    const anchor = findInitialCheckLogDiagnostic(text)
+    expect(anchor && text.slice(anchor.start, anchor.end)).toBe('TypeError: invalid argument')
+    expect(anchor && text.slice(anchor.nearbyStackStart, anchor.nearbyStackEnd)).toBe(
+      ' at worker.ts:3:4'
+    )
+  })
+
+  it('retains unframed inline diagnostics as the recent-segment fallback', () => {
+    const text = `Error: earlier failure\n${separator}\n[worker] failed EACCES: open database\n##[error]Process completed with exit code 1`
+    const anchor = findInitialCheckLogDiagnostic(text)
+    expect(anchor && text.slice(anchor.start, anchor.end)).toBe('EACCES: open database')
   })
 
   it('searches at most twelve retained lines without crossing the omission boundary', () => {

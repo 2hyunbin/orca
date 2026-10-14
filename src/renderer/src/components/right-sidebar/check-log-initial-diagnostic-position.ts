@@ -14,6 +14,8 @@ const genericExitPattern =
 const genericHeadingPattern =
   /^(?:FAILED|\d+\s+tests?\s+failed|(?:test\s+)?stderr(?:\s*\|.*)?)[.!]?\s*$/i
 const framePattern = /^\s*at\s+\S|\S+\.[\w]+:\d+:\d+\b/
+const diagnosticPrefixPattern =
+  /^\s*(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\s+)?$/
 
 export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticAnchor | null {
   const lines: { text: string; start: number; end: number }[] = []
@@ -31,6 +33,7 @@ export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticA
           [0, separator]
         ]
   for (const [from, to] of segments) {
+    let inlineFallback: CheckLogDiagnosticAnchor | null = null
     for (let index = from; index < to; index += 1) {
       const line = lines[index]
       if (/^\s*at\s/i.test(line.text)) {
@@ -56,8 +59,23 @@ export function findInitialCheckLogDiagnostic(text: string): CheckLogDiagnosticA
           anchor.nearbyStackEnd = lines[nearby].end
           break
         }
+        if (diagnosticPattern.test(lines[nearby].text)) {
+          break
+        }
+      }
+      // Embedded logger errors are weaker evidence without nearby stack context.
+      if (
+        !diagnosticPrefixPattern.test(line.text.slice(0, match.index)) &&
+        !/^(?:##\[error\]|::error)/.test(candidate) &&
+        anchor.nearbyStackStart === undefined
+      ) {
+        inlineFallback ??= anchor
+        continue
       }
       return anchor
+    }
+    if (inlineFallback) {
+      return inlineFallback
     }
   }
   return null
