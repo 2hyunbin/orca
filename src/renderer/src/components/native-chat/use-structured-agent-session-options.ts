@@ -138,14 +138,15 @@ export function useStructuredAgentSessionOptions(args: {
       const sameRecord = (): boolean => activeOptionRecordRef.current === targetRecord
       const isCurrent = (): boolean =>
         sameRecord() && optionMutationGeneration.current === mutationGeneration
+      const currentPick = (): boolean => isCurrent() || pendingOptionsRef.current[id] === encoded
       // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
       const shownAtOnce = providerStarting || id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
-      pendingOptionsRef.current[id] = encoded
       if (shownAtOnce) {
         updateOptionState((current) =>
           commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
         )
       } else {
+        pendingOptionsRef.current[id] = encoded
         updateOptionState((current) => ({ ...current, pendingId: id }))
       }
       let result: AgentSessionOptionResult | null = null
@@ -155,7 +156,7 @@ export function useStructuredAgentSessionOptions(args: {
           'agentSession.setOption',
           { key: id, value: encoded }
         )
-        if (result && sameRecord()) {
+        if (result && sameRecord() && currentPick()) {
           const returned = result.options ?? { [id]: encoded }
           const committed = isCurrent() ? returned : { [id]: returned[id] ?? encoded }
           updateOptionState((current) =>
