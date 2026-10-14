@@ -17,6 +17,9 @@ function createModel(): TaskPageLinearCollectionEffectsModel {
     selectedJiraSiteId: 'site-1',
     taskSource: 'jira',
     jiraTaskSourceContext: null,
+    jiraHasWorkspace: false,
+    linkedJiraIssueRefs: [],
+    linkedJiraIssueRefsSignature: '[]',
     jiraTaskSourceScopeKey: 'fixture',
     jiraSearchPersistReadyRef: { current: true },
     taskResumeApplied: true,
@@ -34,6 +37,12 @@ function createModel(): TaskPageLinearCollectionEffectsModel {
     setAppliedJiraSearch: vi.fn(),
     activeJiraPreset: 'assigned',
     jiraRefreshNonce: 0,
+    jiraActiveSavedFilterId: null,
+    jiraSavedFilters: [],
+    jiraSavedFiltersLoading: false,
+    selectedJiraStatuses: [],
+    jiraQuickFiltersLoading: false,
+    setJiraStatusCatalog: vi.fn(),
     setJiraProjectStatusOrder: vi.fn(),
     displayedJiraIssues: []
   }
@@ -49,6 +58,56 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
     vi.clearAllMocks()
     listJiraIssues.mockResolvedValue([])
     searchJiraIssues.mockResolvedValue([])
+  })
+
+  it('loads linked keys directly and does not reread them for local search text', async () => {
+    const model = createModel()
+    model.jiraHasWorkspace = true
+    model.linkedJiraIssueRefs = [{ key: 'APP-1', siteId: 'site-1' }]
+    model.linkedJiraIssueRefsSignature = JSON.stringify(model.linkedJiraIssueRefs)
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    expect(listJiraIssues).not.toHaveBeenCalled()
+    expect(searchJiraIssues).toHaveBeenCalledWith('key = APP-1', 1, {
+      sourceContext: null,
+      siteId: 'site-1',
+      force: false
+    })
+    model.appliedJiraSearch = 'login'
+    rerender()
+    await waitFor(() => expect(model.setJiraLoading).toHaveBeenLastCalledWith(false))
+    expect(searchJiraIssues).toHaveBeenCalledTimes(1)
+    model.jiraRefreshNonce = 1
+    rerender()
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(2))
+    expect(searchJiraIssues).toHaveBeenLastCalledWith('key = APP-1', 1, {
+      sourceContext: null,
+      siteId: 'site-1',
+      force: true
+    })
+  })
+
+  it('ignores a linked read that completes after the source changes', async () => {
+    const model = createModel()
+    model.jiraHasWorkspace = true
+    model.linkedJiraIssueRefs = [{ key: 'APP-1', siteId: 'site-1' }]
+    model.linkedJiraIssueRefsSignature = JSON.stringify(model.linkedJiraIssueRefs)
+    let complete: (value: []) => void = () => {}
+    searchJiraIssues.mockImplementationOnce(
+      () =>
+        new Promise<[]>((resolve) => {
+          complete = resolve
+        })
+    )
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    model.taskSource = 'linear'
+    rerender()
+    await act(async () => {
+      complete([])
+      await Promise.resolve()
+    })
+    expect(model.setJiraIssues).not.toHaveBeenCalled()
   })
 
   it('passes force only for a refresh nonce change', async () => {
@@ -82,6 +141,40 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
       sourceContext: null,
       force: false
     })
+  })
+
+  it('uses the preset list path for status filters and restores it after clearing', async () => {
+    const model = createModel()
+    model.selectedJiraStatuses = ['In Progress', 'Blocked']
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(listJiraIssues).toHaveBeenCalledTimes(1))
+    expect(listJiraIssues).toHaveBeenLastCalledWith('assigned', 50, {
+      sourceContext: null,
+      force: false,
+      filters: { statuses: ['In Progress', 'Blocked'] }
+    })
+    expect(searchJiraIssues).not.toHaveBeenCalled()
+    await act(async () => {
+      model.selectedJiraStatuses = []
+      rerender()
+    })
+    expect(listJiraIssues).toHaveBeenLastCalledWith('assigned', 50, {
+      sourceContext: null,
+      force: false
+    })
+  })
+
+  it('keeps manual JQL independent of a persisted status selection', async () => {
+    const model = createModel()
+    model.selectedJiraStatuses = ['Blocked']
+    model.appliedJiraSearch = 'project = APP ORDER BY created ASC'
+    renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() => expect(searchJiraIssues).toHaveBeenCalledTimes(1))
+    expect(searchJiraIssues).toHaveBeenCalledWith('project = APP ORDER BY created ASC', 50, {
+      sourceContext: null,
+      force: false
+    })
+    expect(listJiraIssues).not.toHaveBeenCalled()
   })
 
   it('passes force through the text-search wrapper on refresh', async () => {
