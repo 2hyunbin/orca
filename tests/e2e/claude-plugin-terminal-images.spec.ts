@@ -17,7 +17,10 @@ import { nodeTerminalCommand } from './terminal-node-command'
 const enabled = process.env.ORCA_REAL_CLAUDE_PLUGIN_TEST === '1'
 const command = process.env.ORCA_REAL_CLAUDE_COMMAND || resolveClaudeCommand()
 
-test.use({ launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' } })
+test.use({
+  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' },
+  orcaAppExtraArgs: ['--force-color-profile=srgb']
+})
 test.skip(!enabled, 'Set ORCA_REAL_CLAUDE_PLUGIN_TEST=1 to run the installed Claude UI')
 
 for (const acceleration of ['off', 'on'] as const) {
