@@ -1,3 +1,4 @@
+import { PluginManagementController } from '../plugins/plugin-management-controller'
 import { app, BrowserWindow } from 'electron'
 import { performance } from 'node:perf_hooks'
 import { PluginService } from '../plugins/plugin-service'
@@ -49,7 +50,7 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     if (store.getSettings().pluginSystemEnabled !== true) {
       return
     }
-    void state.pluginMarketplaceService
+    void management
       ?.seedOfficialSource()
       .catch((error) =>
         console.warn('[plugins] failed to configure the official marketplace:', error)
@@ -66,7 +67,9 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath()
   })
+  let management: PluginManagementController | undefined
   state.pluginService = new PluginService({
+    retirePluginManagement: () => management?.dispose() ?? Promise.resolve(),
     getEnvironmentRecipeLaunchEnvironment: () => resolveLoginShellEnvironment(),
     retireEnvironmentProviderConnections,
     retireEnvironmentProviderSshTarget,
@@ -81,6 +84,10 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     getKeybindings: () => state.keybindings?.getOverrides() ?? {},
     getPluginKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null,
     hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged)
+  })
+  management = new PluginManagementController(state.pluginService, store, {
+    marketplace: state.pluginMarketplaceService,
+    installer: state.pluginMarketplaceInstaller
   })
   const providers = state.pluginService.environmentProviders
   setEnvironmentProviderSshAuthorizer(async (target) => {
@@ -130,6 +137,7 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
   // methods, which resolve the service via this module-level setter. Consent
   // over RPC uses the same hash-keyed write path as the desktop dialog.
   setPluginServiceForRpc(state.pluginService, {
+    management,
     applyConsent: (request) =>
       applyPluginConsent({ store, pluginService: state.pluginService!, ...request }),
     applyEnablement: (pluginKey, enabled) =>

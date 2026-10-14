@@ -1,5 +1,7 @@
 import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-environment-provider-runtime-capability'
 import { environmentProviderRpcAvailable } from './rpc/methods/plugin-environment-provider-service'
+import { pluginManagementRpcAvailable } from './rpc/methods/plugin-management'
+import { PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-management-api'
 import { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
 import type { RuntimeDegradation, RuntimeStatus } from '../../shared/runtime-types'
 import {
@@ -115,6 +117,9 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     )
     if (hasOffscreen || hasHeadlessCommands) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
+    }
+    if (pluginManagementRpcAvailable()) {
+      capabilities.push(PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY)
     }
     // Why not a static capability: the identity is this host's own process-wide choice, fixed
     // before ready. A host that never initialized the store has no identity to report or change,

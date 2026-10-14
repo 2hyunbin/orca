@@ -1,3 +1,10 @@
+import {
+  pluginManagementRequestSchema,
+  PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY,
+  type PluginManagementInput,
+  type PluginManagementMethod,
+  type PluginManagementResults
+} from './plugin-management-api'
 import { z } from 'zod'
 import type { PairedRuntimeConnection } from '../paired-runtime-connection'
 import { RemoteRuntimeRequestConnection } from '../remote-runtime-request-connection'
@@ -40,12 +47,16 @@ export class PluginEnvironmentProviderRuntimeClient {
   constructor(
     pairing: PairedRuntimeConnection,
     readonly runtimeId: string,
-    private readonly onRetired: () => void = () => undefined
+    private readonly onRetired: () => void = () => undefined,
+    private readonly purpose: 'providers' | 'management' = 'providers'
   ) {
     z.string().min(1).max(256).parse(runtimeId)
     this.connection = new RemoteRuntimeRequestConnection(
       { ...pairing, credential: { ...pairing.credential } },
-      [PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY],
+      [
+        PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY,
+        ...(purpose === 'management' ? [PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY] : [])
+      ],
       {
         kind: 'single-connection',
         onClosed: () => this.close(),
@@ -75,6 +86,31 @@ export class PluginEnvironmentProviderRuntimeClient {
         `plugins.environments.${method}`,
         params,
         timeoutMs,
+        this.lifetime.signal
+      )
+      this.lifetime.signal.throwIfAborted()
+      return this.result(response)
+    } catch (error) {
+      this.close()
+      throw error
+    }
+  }
+
+  async manage<Method extends PluginManagementMethod>(
+    method: Method,
+    input: PluginManagementInput<Method>
+  ): Promise<PluginManagementResults[Method]> {
+    this.lifetime.signal.throwIfAborted()
+    if (this.purpose !== 'management') {
+      throw new Error('This review does not manage plugins')
+    }
+    const params = pluginManagementRequestSchema.parse({ runtimeId: this.runtimeId, method, input })
+    try {
+      await this.ready()
+      const response = await this.connection.request<PluginManagementResults[Method]>(
+        'plugins.management.call',
+        params,
+        120_000,
         this.lifetime.signal
       )
       this.lifetime.signal.throwIfAborted()
@@ -136,7 +172,9 @@ export class PluginEnvironmentProviderRuntimeClient {
     if (this.observationReady && this.observationId === undefined && type?.success) {
       this.observationId = response.id
     }
-    if (response.id !== this.observationId || this.lifetime.signal.aborted) {return}
+    if (response.id !== this.observationId || this.lifetime.signal.aborted) {
+      return
+    }
     if (response._meta?.runtimeId !== this.runtimeId || !response.ok) {
       this.close()
       return
@@ -193,6 +231,12 @@ export class PluginEnvironmentProviderRuntimeClient {
     })
     if (compatibility.kind === 'blocked') {
       throw new Error(describeRuntimeCompatBlock(compatibility))
+    }
+    if (
+      this.purpose === 'management' &&
+      !status.capabilities.includes(PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY)
+    ) {
+      throw new Error('Update Orca on this host to manage its plugin catalog')
     }
     if (!status.capabilities.includes(PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY)) {
       throw new Error('This host does not support environment providers')

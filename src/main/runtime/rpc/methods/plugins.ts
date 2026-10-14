@@ -4,6 +4,8 @@ import type { PluginPanelEntry } from '../../../../shared/plugins/plugin-panel-b
 import { listPluginsForClients } from '../../../plugins/plugin-client-list'
 import type { PluginListEntry } from '../../../plugins/plugin-list-projection'
 import type { PluginService } from '../../../plugins/plugin-service'
+import type { PluginManagementController } from '../../../plugins/plugin-management-controller'
+import { setPluginManagementControllerForRpc } from './plugin-management'
 import type { PluginChangeEvent } from '../../../../shared/plugins/plugin-change-event'
 import {
   pluginConsentRequestSchema,
@@ -37,9 +39,11 @@ export function setPluginServiceForRpc(
   writes?: {
     applyConsent: (request: PluginConsentRequest) => Promise<void>
     applyEnablement: (pluginKey: string, enabled: boolean) => Promise<void>
+    management?: PluginManagementController
   }
 ): void {
   setEnvironmentProviderServiceForRpc(service?.environmentProviders ?? null)
+  setPluginManagementControllerForRpc(service ? (writes?.management ?? null) : null)
   pluginServiceForRpc = service
   pluginConsentForRpc = writes?.applyConsent ?? null
   pluginEnablementForRpc = writes?.applyEnablement ?? null

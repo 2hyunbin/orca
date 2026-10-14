@@ -5,6 +5,7 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { EnvironmentAdapterRuntime } from './plugin-environment-adapter-launch'
 
 export type PluginServiceOptions = {
+  retirePluginManagement?: () => Promise<void>
   retireEnvironmentProviderConnections?: (providerId: string, resourceId?: string) => Promise<void>
   retireEnvironmentProviderSshTarget?: (target: SshTarget) => Promise<void>
   getEnvironmentRecipeLaunchEnvironment?: () => Promise<NodeJS.ProcessEnv>

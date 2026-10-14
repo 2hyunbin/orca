@@ -15,14 +15,7 @@ const storageMocks = vi.hoisted(() => ({
   })
 }))
 
-vi.mock('electron', () => ({
-  safeStorage: {
-    isEncryptionAvailable: () => storageMocks.available,
-    encryptString: storageMocks.encryptString,
-    decryptString: storageMocks.decryptString
-  }
-}))
-
+import { setSecretStore, _resetSecretStoreForTests } from '../../shared/secret-store'
 import { PluginSecretsStore } from './plugin-secrets-store'
 
 const roots: string[] = []
@@ -34,6 +27,12 @@ async function tempRoot(): Promise<string> {
 }
 
 beforeEach(() => {
+  setSecretStore({
+    isEncryptionAvailable: () => storageMocks.available,
+    describeProtectionGap: () => null,
+    encryptString: storageMocks.encryptString,
+    decryptString: storageMocks.decryptString
+  })
   storageMocks.available = true
   storageMocks.encryptString.mockImplementation((value) =>
     Buffer.from(`encrypted:${value}`, 'utf8')
@@ -48,6 +47,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  _resetSecretStoreForTests()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
@@ -114,4 +114,51 @@ describe('PluginSecretsStore', () => {
     const root = await tempRoot()
     expect(() => new PluginSecretsStore(root, 'constructor.demo')).toThrow('unsafe plugin key')
   })
+})
+
+it('refuses a backend that can round-trip bytes but reports weak protection', async () => {
+  const root = await tempRoot()
+  setSecretStore({
+    isEncryptionAvailable: () => true,
+    describeProtectionGap: () => 'weak protection',
+    encryptString: storageMocks.encryptString,
+    decryptString: storageMocks.decryptString
+  })
+  expect(new PluginSecretsStore(root, 'acme.demo').set('token', 'secret')).toMatchObject({
+    ok: false
+  })
+  await expect(readFile(join(root, 'acme.demo', 'secrets.json.enc'))).rejects.toMatchObject({
+    code: 'ENOENT'
+  })
+})
+it('preserves legacy ciphertext and refuses to overwrite an unknown vault format', async () => {
+  const root = await tempRoot()
+  const directory = join(root, 'acme.demo')
+  await mkdir(directory, { recursive: true })
+  const path = join(directory, 'secrets.json.enc')
+  await writeFile(
+    path,
+    JSON.stringify({
+      version: 1,
+      format: 'electron-safe-storage-v1',
+      ciphertexts: { token: Buffer.from('encrypted:legacy').toString('base64') }
+    })
+  )
+  const vault = new PluginSecretsStore(root, 'acme.demo')
+  expect(vault.get('token')).toEqual({ ok: true, value: 'legacy' })
+  expect(vault.set('next', 'new')).toEqual({ ok: true, value: true })
+  expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+    version: 2,
+    format: 'host-secret-store-v1'
+  })
+  expect(vault.get('token')).toEqual({ ok: true, value: 'legacy' })
+  const unknown = JSON.stringify({
+    version: 99,
+    format: 'future',
+    ciphertexts: { token: 'preserved' }
+  })
+  await writeFile(path, unknown)
+  expect(vault.set('next', 'lost')).toMatchObject({ ok: false })
+  vault.delete('token')
+  expect(await readFile(path, 'utf8')).toBe(unknown)
 })

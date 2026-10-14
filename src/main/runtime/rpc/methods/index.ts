@@ -1,4 +1,5 @@
 import { STATUS_METHODS } from './status'
+import { PLUGIN_MANAGEMENT_METHODS } from './plugin-management'
 import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
 import { ORCAD_MIGRATION_METHODS } from './orcad-migration'
 import { AI_VAULT_METHODS } from './ai-vault'
@@ -66,6 +67,7 @@ import { WORKSPACE_LAYOUT_METHODS } from './workspace-layout'
 // grep-point for "what methods does the RPC server expose?" — useful when
 // auditing the security boundary or wiring new CLI commands.
 export const ALL_RPC_METHODS = [
+  ...PLUGIN_MANAGEMENT_METHODS,
   ...STATUS_METHODS,
   ...ORCAD_TERMINAL_CENSUS_METHODS,
   ...ORCAD_MIGRATION_METHODS,

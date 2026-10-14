@@ -49,6 +49,9 @@ async function fixture(
     userDataPath: f.service.options.userDataPath,
     hostVersion: '1.4.0',
     registerCleanup: (cleanup) => lifetime.add(cleanup),
+    marketplaceFetcher: async () => {
+      throw new Error('Offline test catalog')
+    },
     safetyList: new PluginKillListService({
       pluginsDataDir: getPluginsDataDir(f.service.options.userDataPath),
       fetcher: async () => ({ version: 1, generatedAt: new Date().toISOString(), plugins: [] })

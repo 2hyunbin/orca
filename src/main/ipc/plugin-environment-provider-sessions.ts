@@ -5,6 +5,7 @@ import { isTrustedBrowserRenderer } from './browser-renderer-trust'
 import { prepareRuntimeEnvironmentConnectionLease } from './runtime-environment-connection-lease'
 import { PluginEnvironmentProviderRuntimeClient } from '../../shared/plugins/plugin-environment-provider-runtime-client'
 import {
+  pluginManagementSessionCallSchema,
   pluginEnvironmentProviderSessionOpenSchema,
   pluginEnvironmentProviderSessionCallSchema,
   pluginEnvironmentProviderSessionCloseSchema
@@ -23,7 +24,9 @@ export class PluginEnvironmentProviderSessions {
   private readonly sessions = new Map<string, Session>()
   private readonly windows = new PluginEnvironmentProviderWindowOwners((key) => {
     for (const [id, session] of this.sessions) {
-      if (session.ownerKey === key) {this.retire(id)}
+      if (session.ownerKey === key) {
+        this.retire(id)
+      }
     }
   })
   constructor(
@@ -43,8 +46,12 @@ export class PluginEnvironmentProviderSessions {
     this.requireTrusted(sender)
     const input = pluginEnvironmentProviderSessionOpenSchema.parse(raw)
     const ownerKey = this.windows.ownerKey(sender)
-    if (this.sessions.has(input.sessionId)) {throw new Error('Provider review already exists')}
-    if (this.sessions.size >= 64) {throw new Error('Too many provider reviews')}
+    if (this.sessions.has(input.sessionId)) {
+      throw new Error('Provider review already exists')
+    }
+    if (this.sessions.size >= 64) {
+      throw new Error('Too many provider reviews')
+    }
     if ([...this.sessions.values()].filter((value) => value.ownerKey === ownerKey).length >= 8) {
       throw new Error('Too many provider reviews in this window')
     }
@@ -66,7 +73,8 @@ export class PluginEnvironmentProviderSessions {
       session.client = new PluginEnvironmentProviderRuntimeClient(
         lease.pairing,
         input.runtimeId,
-        () => this.retire(input.sessionId, session)
+        () => this.retire(input.sessionId, session),
+        input.purpose
       )
       session.client.onChanged((change) => {
         if (session.lease?.isCurrent() && !session.lifetime.signal.aborted) {
@@ -89,22 +97,39 @@ export class PluginEnvironmentProviderSessions {
     const input = pluginEnvironmentProviderSessionCallSchema.parse(raw)
     const session = this.owned(sender, input.sessionId)
     this.requireCurrent(session)
-    if (!session.client) {throw new Error('Provider review is not ready')}
+    if (!session.client) {
+      throw new Error('Provider review is not ready')
+    }
     const result = await session.client.call(input.method, input.input)
+    this.requireCurrent(session)
+    return result
+  }
+  async manage(sender: PluginEnvironmentProviderSender, raw: unknown) {
+    this.requireTrusted(sender)
+    const input = pluginManagementSessionCallSchema.parse(raw)
+    const session = this.owned(sender, input.sessionId)
+    this.requireCurrent(session)
+    if (!session.client || input.request.runtimeId !== session.client.runtimeId) {
+      throw new Error('Plugin catalog belongs to another host or is not ready')
+    }
+    const result = await session.client.manage(input.request.method, input.request.input)
     this.requireCurrent(session)
     return result
   }
   close(sender: PluginEnvironmentProviderSender, raw: unknown): boolean {
     this.requireTrusted(sender)
     const { sessionId } = pluginEnvironmentProviderSessionCloseSchema.parse(raw)
-    if (!this.sessions.has(sessionId)) {return false}
+    if (!this.sessions.has(sessionId)) {
+      return false
+    }
     this.owned(sender, sessionId)
     this.retire(sessionId)
     return true
   }
   private requireTrusted(sender: PluginEnvironmentProviderSender): void {
-    if (sender.isDestroyed() || !this.trusted(sender))
-      {throw new Error('Provider reviews require the trusted app window')}
+    if (sender.isDestroyed() || !this.trusted(sender)) {
+      throw new Error('Provider reviews require the trusted app window')
+    }
   }
   private owned(sender: PluginEnvironmentProviderSender, id: string): Session {
     const session = this.sessions.get(id)
@@ -121,7 +146,9 @@ export class PluginEnvironmentProviderSessions {
   }
   private retire(id: string, expected?: Session): void {
     const session = this.sessions.get(id)
-    if (!session || (expected && expected !== session)) {return}
+    if (!session || (expected && expected !== session)) {
+      return
+    }
     this.sessions.delete(id)
     session.lifetime.abort()
     session.lease?.close()
@@ -143,6 +170,9 @@ export function registerPluginEnvironmentProviderSessionHandlers(userDataPath: s
     isTrustedBrowserRenderer,
     (sender, sessionId, change) =>
       send(sender, 'plugins:environmentProviderSessionChanged', { sessionId, change })
+  )
+  registerPluginRendererHandler('plugins:callPluginManagementSession', (event, input: unknown) =>
+    sessions.manage(event.sender, input)
   )
   registerPluginRendererHandler('plugins:openEnvironmentProviderSession', (event, input: unknown) =>
     sessions.open(event.sender, input)

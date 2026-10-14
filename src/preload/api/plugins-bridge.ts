@@ -19,10 +19,14 @@ import type {
 } from '../api-types'
 
 export const pluginsApi = {
+  callPluginManagementSession: (input) =>
+    ipcRenderer.invoke('plugins:callPluginManagementSession', input),
   onEnvironmentProviderSessionChanged: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, value: unknown): void => {
       const parsed = pluginEnvironmentProviderSessionChangeSchema.safeParse(value)
-      if (parsed.success) {callback(parsed.data)}
+      if (parsed.success) {
+        callback(parsed.data)
+      }
     }
     ipcRenderer.on('plugins:environmentProviderSessionChanged', listener)
     return () => ipcRenderer.removeListener('plugins:environmentProviderSessionChanged', listener)
@@ -36,7 +40,9 @@ export const pluginsApi = {
   onEnvironmentProviderSessionRetired: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, value: unknown): void => {
       const parsed = pluginEnvironmentProviderSessionCloseSchema.safeParse(value)
-      if (parsed.success) {callback(parsed.data)}
+      if (parsed.success) {
+        callback(parsed.data)
+      }
     }
     ipcRenderer.on('plugins:environmentProviderSessionRetired', listener)
     return () => ipcRenderer.removeListener('plugins:environmentProviderSessionRetired', listener)

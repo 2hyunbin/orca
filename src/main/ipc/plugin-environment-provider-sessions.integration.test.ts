@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { PluginManagementController } from '../plugins/plugin-management-controller'
+import { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
+import { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
+import { getPluginsDataDir } from '../plugins/plugin-discovery'
+import { applyPluginConsent, applyPluginEnablement } from '../plugins/plugin-enablement'
 import { Store } from '../persistence'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { pairedRuntimeRpcFixture } from '../runtime/runtime-paired-rpc-test-fixture'
@@ -93,7 +98,7 @@ async function fixture(
   cleanups.push(() => {
     sender.emit('destroyed')
   })
-  return { ...f, host, clientRoot, environment, notify, changed, sessions, sender, input }
+  return { ...f, store, host, clientRoot, environment, notify, changed, sessions, sender, input }
 }
 
 it('opens an inert host-owned review and routes account and explicit execution through real pairing', async () => {
@@ -279,4 +284,47 @@ it('keeps new plugin events off a real older peer’s otherwise compatible event
   await legacy.sendRequest('status.get', undefined, 5000)
   expect(events).not.toContainEqual(expect.objectContaining({ type: 'pluginsChanged' }))
   expect(errors).toEqual([])
+})
+
+it('routes a catalog session to the saved host and refuses changed identity or a provider-only review', async () => {
+  const f = await fixture()
+  const marketplace = new PluginMarketplaceService({
+    pluginsDataDir: getPluginsDataDir(f.service.options.userDataPath)
+  })
+  const installer = new PluginMarketplaceInstaller({
+    marketplace,
+    userDataPath: f.service.options.userDataPath,
+    hostVersion: '1.4.0'
+  })
+  const controller = new PluginManagementController(f.service, f.store, { marketplace, installer })
+  cleanups.push(() => controller.dispose())
+  setPluginServiceForRpc(f.service, {
+    management: controller,
+    applyConsent: (request) =>
+      applyPluginConsent({ store: f.store, pluginService: f.service, ...request }),
+    applyEnablement: (pluginKey, enabled) =>
+      applyPluginEnablement({ store: f.store, pluginService: f.service, pluginKey, enabled })
+  })
+  await f.sessions.open(f.sender, { ...f.input, purpose: 'management' })
+  const request = {
+    runtimeId: f.input.runtimeId,
+    method: 'updateSettings',
+    input: { uiLanguage: 'fr' }
+  }
+  const call = { sessionId: f.input.sessionId, request }
+  await expect(f.sessions.manage(new Sender(2), call)).rejects.toThrow('another window')
+  await expect(
+    f.sessions.manage(f.sender, { ...call, request: { ...request, runtimeId: 'different' } })
+  ).rejects.toThrow('another host')
+  expect(f.store.getSettings().uiLanguage).not.toBe('fr')
+  expect(await f.sessions.manage(f.sender, call)).toMatchObject({ uiLanguage: 'fr' })
+  expect(f.store.getSettings().uiLanguage).toBe('fr')
+  f.sender.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+  await expect(f.sessions.manage(f.sender, call)).rejects.toThrow()
+  const provider = { ...f.input, sessionId: randomUUID() }
+  await f.sessions.open(f.sender, provider)
+  await expect(
+    f.sessions.manage(f.sender, { ...call, sessionId: provider.sessionId })
+  ).rejects.toThrow('does not manage plugins')
+  await expect(readFile(join(f.cwd, 'started'))).rejects.toThrow()
 })

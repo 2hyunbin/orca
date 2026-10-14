@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { guardedSafeStorage as safeStorage } from '../host/safe-storage-availability'
+import { z } from 'zod'
+import { getSecretStore } from '../../shared/secret-store'
 import { isUnreadableError, writeSecureFile } from '../../shared/secure-file'
 import {
   PLUGIN_STORAGE_KEY_LIMIT,
@@ -9,19 +10,26 @@ import {
 import { pluginDataDir } from './plugin-storage-store'
 
 /**
- * Per-plugin secret vault, following the repo's safeStorage-backed
+ * Per-plugin secret vault, using the host's protected secret backend and
  * credential-file pattern (versioned envelope + base64 ciphertext via the
  * atomic secure-file writer). No plaintext fallback: when OS encryption is
  * unavailable, writes fail loudly instead of silently downgrading — plugin
  * secrets are API-token grade.
  */
 
-type PersistedSecretsFile = {
-  version: 1
-  format: 'electron-safe-storage-v1'
-  /** key → base64 ciphertext of the secret value. */
-  ciphertexts: Record<string, string>
-}
+const persistedSecretsSchema = z.discriminatedUnion('format', [
+  z.strictObject({
+    version: z.literal(1),
+    format: z.literal('electron-safe-storage-v1'),
+    ciphertexts: z.record(z.string(), z.string())
+  }),
+  z.strictObject({
+    version: z.literal(2),
+    format: z.literal('host-secret-store-v1'),
+    ciphertexts: z.record(z.string(), z.string())
+  })
+])
+type PersistedSecretsFile = z.infer<typeof persistedSecretsSchema>
 
 export type PluginSecretsResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -37,8 +45,8 @@ export class PluginSecretsStore {
   /** `null` means the vault exists and this process may not read it — which is never "empty". */
   private read(): PersistedSecretsFile | null {
     const empty: PersistedSecretsFile = {
-      version: 1,
-      format: 'electron-safe-storage-v1',
+      version: 2,
+      format: 'host-secret-store-v1',
       ciphertexts: {}
     }
     try {
@@ -46,19 +54,15 @@ export class PluginSecretsStore {
         return empty
       }
       if (statSync(this.filePath).size > PLUGIN_STORAGE_TOTAL_MAX_BYTES) {
-        return empty
+        return null
       }
-      const parsed = JSON.parse(readFileSync(this.filePath, 'utf8')) as PersistedSecretsFile
-      if (
-        parsed &&
-        parsed.version === 1 &&
-        parsed.format === 'electron-safe-storage-v1' &&
-        parsed.ciphertexts &&
-        typeof parsed.ciphertexts === 'object' &&
-        !Array.isArray(parsed.ciphertexts)
-      ) {
-        return parsed
+      const parsed = persistedSecretsSchema.safeParse(
+        JSON.parse(readFileSync(this.filePath, 'utf8'))
+      )
+      if (parsed.success) {
+        return parsed.data
       }
+      return null
     } catch (error) {
       // Being denied the read is not evidence the vault is corrupt. Returning `empty` here would
       // make the next set() write a vault containing only that one key, silently dropping every
@@ -66,9 +70,8 @@ export class PluginSecretsStore {
       if (isUnreadableError(error)) {
         return null
       }
-      // Corrupt vaults read as empty; set() rewrites a valid file.
+      return null
     }
-    return empty
   }
 
   get(key: string): PluginSecretsResult<string | null> {
@@ -80,19 +83,22 @@ export class PluginSecretsStore {
     if (typeof ciphertext !== 'string') {
       return { ok: true, value: null }
     }
-    if (!safeStorage.isEncryptionAvailable()) {
+    if (!getSecretStore().isEncryptionAvailable()) {
       return { ok: false, error: 'OS-backed encryption is unavailable' }
     }
     try {
-      return { ok: true, value: safeStorage.decryptString(Buffer.from(ciphertext, 'base64')) }
+      return { ok: true, value: getSecretStore().decryptString(Buffer.from(ciphertext, 'base64')) }
     } catch {
       return { ok: false, error: 'failed to decrypt stored secret' }
     }
   }
 
   set(key: string, value: string): PluginSecretsResult<true> {
-    if (!safeStorage.isEncryptionAvailable()) {
-      return { ok: false, error: 'OS-backed encryption is unavailable; secret not stored' }
+    if (
+      !getSecretStore().isEncryptionAvailable() ||
+      getSecretStore().describeProtectionGap() !== null
+    ) {
+      return { ok: false, error: 'Protected host encryption is unavailable; secret not stored' }
     }
     const file = this.read()
     if (!file) {
@@ -104,8 +110,12 @@ export class PluginSecretsStore {
     ) {
       return { ok: false, error: `secret vault exceeds the ${PLUGIN_STORAGE_KEY_LIMIT}-key limit` }
     }
-    file.ciphertexts[key] = safeStorage.encryptString(value).toString('base64')
-    const nextFile = JSON.stringify(file, null, 2)
+    file.ciphertexts[key] = getSecretStore().encryptString(value).toString('base64')
+    const nextFile = JSON.stringify(
+      { ...file, version: 2, format: 'host-secret-store-v1' },
+      null,
+      2
+    )
     if (Buffer.byteLength(nextFile, 'utf8') > PLUGIN_STORAGE_TOTAL_MAX_BYTES) {
       return { ok: false, error: `secret vault exceeds ${PLUGIN_STORAGE_TOTAL_MAX_BYTES} bytes` }
     }

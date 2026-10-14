@@ -1,3 +1,7 @@
+import {
+  pluginManagementRequestSchema,
+  type PluginManagementRequest
+} from './plugin-management-api'
 import { z } from 'zod'
 import { environmentProviderRuntimeInputs } from './plugin-environment-provider-runtime-calls'
 import { pluginChangeEventSchema, type PluginChangeEvent } from './plugin-change-event'
@@ -8,6 +12,7 @@ import type {
 } from './plugin-environment-provider-runtime-calls'
 
 export const pluginEnvironmentProviderSessionOpenSchema = z.strictObject({
+  purpose: z.enum(['providers', 'management']).optional(),
   sessionId: z.uuid(),
   environmentId: z.string().min(1).max(256),
   pairingRevision: z.number().int().nonnegative(),
@@ -54,7 +59,15 @@ export const pluginEnvironmentProviderSessionCallSchema = z.discriminatedUnion('
   call('cancel', environmentProviderRuntimeInputs.cancel.omit({ runtimeId: true }))
 ])
 
+export const pluginManagementSessionCallSchema = z.strictObject({
+  sessionId: z.uuid(),
+  request: pluginManagementRequestSchema
+})
 export type PluginEnvironmentProviderSessionApi = {
+  callPluginManagementSession?: (input: {
+    sessionId: string
+    request: PluginManagementRequest
+  }) => Promise<unknown>
   openEnvironmentProviderSession?: (
     input: PluginEnvironmentProviderSessionOpen
   ) => Promise<{ sessionId: string; runtimeId: string }>

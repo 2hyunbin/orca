@@ -45,6 +45,7 @@ import {
   pluginEnvironmentProviderRuntimeSavedSnapshotSchema,
   pluginEnvironmentProviderRuntimeSnapshotSchema
 } from '../plugins/plugin-environment-provider-runtime-api'
+import { pluginManagementRequestSchema } from '../plugins/plugin-management-api'
 import {
   pluginViewerRuntimeLeaseSchema,
   pluginViewerRuntimeOpenSchema,
@@ -1165,6 +1166,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'plugins.environments.snapshot': pluginEnvironmentProviderRuntimeSnapshotSchema,
   'plugins.invokeCommand': PluginInvokeCommandParams,
   'plugins.list': null,
+  'plugins.management.call': pluginManagementRequestSchema,
   'plugins.panelAction': PluginsPanelActionParams,
   'plugins.readPanelEntry': PluginReadPanelEntryParams,
   'plugins.setEnabled': PluginSetEnabledParams,

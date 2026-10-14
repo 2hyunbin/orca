@@ -1,3 +1,6 @@
+import { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
+import { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
+import { PluginManagementController } from '../plugins/plugin-management-controller'
 import { PluginService } from '../plugins/plugin-service'
 import { PluginKillListService } from '../plugins/plugin-kill-list-service'
 import { getPluginsDataDir } from '../plugins/plugin-discovery'
@@ -16,6 +19,7 @@ export async function startOrcadPlugins(options: {
   userDataPath: string
   hostVersion: string
   registerCleanup(cleanup: OrcadRuntimeCleanup): void
+  marketplaceFetcher?: ConstructorParameters<typeof PluginMarketplaceService>[0]['fetcher']
   safetyList?: PluginKillListService
   launchEnvironment?: () => Promise<NodeJS.ProcessEnv>
 }): Promise<PluginService> {
@@ -24,7 +28,9 @@ export async function startOrcadPlugins(options: {
     options.safetyList ??
     new PluginKillListService({ pluginsDataDir: getPluginsDataDir(options.userDataPath) })
   await safetyList.initialize()
+  let management: PluginManagementController | undefined
   const service = new PluginService({
+    retirePluginManagement: () => management?.dispose() ?? Promise.resolve(),
     userDataPath: options.userDataPath,
     hostVersion: options.hostVersion,
     getEnvironmentRecipeLaunchEnvironment:
@@ -36,6 +42,18 @@ export async function startOrcadPlugins(options: {
     getDisabledBundledDataPlugins: () => store.getSettings().disabledBundledDataPlugins ?? [],
     getPluginKillListEntry: (key) => safetyList.find(key)
   })
+  const marketplace = new PluginMarketplaceService({
+    fetcher: options.marketplaceFetcher,
+    pluginsDataDir: getPluginsDataDir(options.userDataPath),
+    getKillListEntry: (key) => safetyList.find(key)
+  })
+  const installer = new PluginMarketplaceInstaller({
+    marketplace,
+    userDataPath: options.userDataPath,
+    hostVersion: options.hostVersion,
+    blockedPluginReason: (key) => safetyList.reason(key)
+  })
+  management = new PluginManagementController(service, store, { marketplace, installer })
   let stopping = false
   const report = (error: unknown): void => {
     if (!stopping) {
@@ -67,6 +85,7 @@ export async function startOrcadPlugins(options: {
       reconcile()
     }
     if (updates.pluginSystemEnabled === true) {
+      void management?.seedOfficialSource().catch(report)
       void safetyList.refresh().catch(report)
     }
   })
@@ -83,11 +102,13 @@ export async function startOrcadPlugins(options: {
   })
   await service.initialize()
   setPluginServiceForRpc(service, {
+    management,
     applyConsent: (request) => applyPluginConsent({ store, pluginService: service, ...request }),
     applyEnablement: (pluginKey, enabled) =>
       applyPluginEnablement({ store, pluginService: service, pluginKey, enabled })
   })
   if (store.getSettings().pluginSystemEnabled === true) {
+    void management?.seedOfficialSource().catch(report)
     void safetyList.refresh().catch(report)
   }
   return service
