@@ -17,7 +17,7 @@ import { getWorktreeRowIdentity } from './worktree-host-row-identity'
 import {
   buildProjectGroupingIndex,
   buildProjectSections,
-  type ProjectGroupingModel
+  type ProjectSectionModel
 } from '../../../src/shared/project-section-grouping'
 import { withRepoSectionDisplayLabels } from '../../../src/shared/project-section-order'
 import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
@@ -29,7 +29,7 @@ export type ProjectSectionCatalog = {
   /** Catalog repos of the hosts the list shows; each without rows gets an empty section. */
   repos: readonly SectionRepo[]
   /** Null until the desktop's catalog answers; rows then group by repo, as the desktop's would. */
-  grouping: ProjectGroupingModel | null
+  grouping: ProjectSectionModel | null
   /** Manual header rank; undefined keeps first-row order. */
   repoOrder: ReadonlyMap<string, number> | undefined
   projectOrderBy: ProjectOrderBy

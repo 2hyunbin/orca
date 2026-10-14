@@ -1,6 +1,5 @@
 // Host answers both the desktop sidebar's and the phone's Project grouping tests run on.
-import { foldHostProjectCatalogs, type AllHostProjectCatalog } from './all-host-project-catalog'
-import { adoptEndpointProjectCatalog, adoptEndpointRepo } from './endpoint-catalog-adoption'
+import type { MobileProjectSectionCatalog } from './mobile-project-sections-contract'
 import type { ExecutionHostId } from './execution-host'
 import {
   projectHostSetupProjectionFromRepos,
@@ -129,18 +128,121 @@ export const PROJECT_SECTION_PARITY_HEADERS = {
   manual: [STABLY, ASSETS, WORKSPACE, WINDOWS, M4, M4_TWO]
 } as const
 
-/** The phone's path: each host's answers adopted as the phone fetches them, then folded. */
-export function parityPhoneCatalog(): AllHostProjectCatalog {
-  return foldHostProjectCatalogs(
-    PROJECT_SECTION_PARITY_HOSTS.map((host) => {
-      const repos = host.repos.map((repo) => adoptEndpointRepo(host.target, repo))
-      return {
-        hostId: host.hostId,
-        repos,
-        projection: host.lists
-          ? adoptEndpointProjectCatalog(host.target, host.lists.projects, host.lists.setups)
-          : projectHostSetupProjectionFromRepos(repos)
-      }
-    })
-  )
+/** What main serves the phone for these answers (the renderer's published catalog). */
+export const PROJECT_SECTION_PARITY_SERVED: MobileProjectSectionCatalog = {
+  repos: [
+    {
+      id: 'local-stably',
+      displayName: 'orca',
+      path: '/Users/jinwoo/stably/orca',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'local'
+    },
+    {
+      id: 'local-assets',
+      displayName: 'design-assets',
+      path: '/Users/jinwoo/design-assets',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'local'
+    },
+    {
+      id: 'local-workspace',
+      displayName: 'orca',
+      path: '/Users/jinwoo/orca/workspaces/orca/orca',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'local'
+    },
+    {
+      id: 'win-orca',
+      displayName: 'orca',
+      path: 'C:/Users/jinwo/orca/orca',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'runtime:windows2'
+    },
+    {
+      id: 'm4-orca',
+      displayName: 'orca',
+      path: '/Users/m4air/orca/orca',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'runtime:m4air'
+    },
+    {
+      id: 'm4-orca-two',
+      displayName: 'orca',
+      path: '/Users/m4air/orca-two/orca',
+      badgeColor: '#737373',
+      addedAt: 1,
+      executionHostId: 'runtime:m4air'
+    }
+  ],
+  projects: [
+    { id: 'repo:local-assets', displayName: 'design-assets' },
+    { id: 'github:stablyai/orca', displayName: 'orca' }
+  ],
+  setups: [
+    {
+      id: 'local-stably',
+      projectId: 'github:stablyai/orca',
+      hostId: 'local',
+      repoId: 'local-stably',
+      path: '/Users/jinwoo/stably/orca',
+      displayName: 'orca',
+      setupMethod: 'legacy-repo'
+    },
+    {
+      id: 'local-assets',
+      projectId: 'repo:local-assets',
+      hostId: 'local',
+      repoId: 'local-assets',
+      path: '/Users/jinwoo/design-assets',
+      displayName: 'design-assets',
+      setupMethod: 'legacy-repo'
+    },
+    {
+      id: 'local-workspace',
+      projectId: 'github:stablyai/orca',
+      hostId: 'local',
+      repoId: 'local-workspace',
+      path: '/Users/jinwoo/orca/workspaces/orca/orca',
+      displayName: 'orca',
+      setupMethod: 'legacy-repo'
+    },
+    {
+      id: 'win-setup',
+      projectId: 'github:stablyai/orca',
+      hostId: 'runtime:windows2',
+      repoId: 'win-orca',
+      path: 'C:/Users/jinwo/orca/orca',
+      displayName: 'orca',
+      setupMethod: 'imported-existing-folder',
+      connectionId: null,
+      executionHostId: 'runtime:windows2'
+    },
+    {
+      id: 'm4-orca',
+      projectId: 'github:stablyai/orca',
+      hostId: 'runtime:m4air',
+      repoId: 'm4-orca',
+      path: '/Users/m4air/orca/orca',
+      displayName: 'orca',
+      setupMethod: 'legacy-repo',
+      executionHostId: 'runtime:m4air'
+    },
+    {
+      id: 'm4-orca-two',
+      projectId: 'github:stablyai/orca',
+      hostId: 'runtime:m4air',
+      repoId: 'm4-orca-two',
+      path: '/Users/m4air/orca-two/orca',
+      displayName: 'orca',
+      setupMethod: 'legacy-repo',
+      executionHostId: 'runtime:m4air'
+    }
+  ],
+  projectOrderBy: 'manual'
 }

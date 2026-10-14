@@ -48,6 +48,7 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
       [
         'setActionError',
         'setCatalogError',
+        'setDesktopRepos',
         'setError',
         'setHostLabelById',
         'setHostHealthById',
@@ -58,6 +59,7 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
         'setOptimisticActiveWorktreeIdentity',
         'setPinnedIds',
         'setRepoHostIdByRepoId',
+        'setServedProjectSections',
         'setSleptIds',
         'setWorktrees',
         'setWorktreesLoaded'

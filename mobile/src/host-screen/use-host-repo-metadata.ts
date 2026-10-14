@@ -11,6 +11,12 @@ import {
 } from '../worktree/worktree-host-context-labels'
 import { buildSshHostHealthById } from '../worktree/worktree-host-health'
 import {
+  projectSectionsRead,
+  readServedProjectSections
+} from '../worktree/project-sections-operations'
+import type { SectionRepo } from '../worktree/workspace-list-types'
+import type { HostRepoCatalogRow } from './host-screen-reply-schema'
+import {
   hostPlatformRead,
   hostRepoCatalogRead,
   hostSshTargetSummariesRead
@@ -40,6 +46,18 @@ function acceptedMetadata<Value>(
   return verdict.accepted ? verdict.value : null
 }
 
+/** A desktop repo.list row as Project sections read it, for a desktop that serves no catalog. */
+function desktopSectionRepo(repo: HostRepoCatalogRow): SectionRepo {
+  return {
+    id: repo.id,
+    displayName: repo.displayName,
+    path: repo.path ?? repo.id,
+    executionHostId: getRepoExecutionHostId(repo),
+    ...(repo.badgeColor ? { badgeColor: repo.badgeColor } : {}),
+    ...(repo.repoIcon ? { repoIcon: repo.repoIcon } : {})
+  }
+}
+
 function readHostSettingOverrides(result: unknown): unknown {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
   return (result as { hostSettingOverrides?: unknown } | null)?.hostSettingOverrides
@@ -59,8 +77,10 @@ export function useHostRepoMetadata(args: {
     repoMetadataFetchedAtRef,
     setHostLabelById,
     setHostHealthById,
+    setDesktopRepos,
     setHostPlatform,
-    setRepoHostIdByRepoId
+    setRepoHostIdByRepoId,
+    setServedProjectSections
   } = state
 
   const fetchRepoMetadata = useCallback(
@@ -84,11 +104,16 @@ export function useHostRepoMetadata(args: {
       try {
         do {
           fetchRepoMetadataPendingRef.current.delete(requestClient)
-          const repoReply = await settledMetadataReply(() =>
-            hostRepoCatalogRead.request(requestClient)
-          )
+          const [repoReply, sectionsReply] = await Promise.all([
+            settledMetadataReply(() => hostRepoCatalogRead.request(requestClient)),
+            settledMetadataReply(() => projectSectionsRead.request(requestClient))
+          ])
           if (clientRef.current !== requestClient || hostId !== requestHostId) {
             return
+          }
+          const sections = readServedProjectSections(sectionsReply)
+          if (sections.kind === 'answered') {
+            setServedProjectSections(sections.value)
           }
           const repos = repoReply && hostRepoCatalogRead.interpret(repoReply)
           if (!repos || !repos.accepted) {
@@ -97,6 +122,7 @@ export function useHostRepoMetadata(args: {
           const catalog = repos.value
           repoMetadataFetchedAtRef.current = Date.now()
           setCachedRepos(requestHostId, catalog)
+          setDesktopRepos(catalog.map(desktopSectionRepo))
           setRepoHostIdByRepoId(buildRepoHostIdByRepoId(catalog))
           // Why: rows name their host when the list spans hosts or an SSH host may be unhealthy,
           // so a local-only catalog never pays for the label lookups. Counted over repos, not the

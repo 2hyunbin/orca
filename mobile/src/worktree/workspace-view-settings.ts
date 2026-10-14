@@ -22,8 +22,6 @@ export type WorkspaceViewSettings = {
   workspaceStatuses?: WorkspaceStatusDefinition[]
   /** Read-only here: the desktop's shown hosts. */
   visibleWorkspaceHostIds?: string[] | null
-  /** Read-only here: the desktop's project header order. */
-  projectOrderBy?: 'manual' | 'recent'
 }
 
 const GROUP_TO_DESKTOP: Record<MobileGroupMode, NonNullable<WorkspaceViewSettings['groupBy']>> = {

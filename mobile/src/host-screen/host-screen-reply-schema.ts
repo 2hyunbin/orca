@@ -12,10 +12,6 @@ export const WORKSPACE_GROUP_BY_ARMS = hostUnionArms<PersistedUIState['groupBy']
   repo: true,
   'pr-status': true
 })
-const PROJECT_ORDER_BY_ARMS = hostUnionArms<PersistedUIState['projectOrderBy']>({
-  manual: true,
-  recent: true
-})
 export const WORKSPACE_SORT_BY_ARMS = hostUnionArms<PersistedUIState['sortBy']>({
   name: true,
   smart: true,
@@ -56,8 +52,8 @@ export function readMobileRepoIcon(value: unknown): MobileHostRepoIcon | null {
  *
  * `id` and `displayName` are required and a row without either drops: `displayName` is what the
  * new-workspace picker shows from the repo cache, and `id` is the Map key the workspace rows
- * resolve their host through. Project sections, their colours and icons read
- * project-catalog-operations.ts instead.
+ * resolve their host through. `path` labels an older desktop's repo sections (the newer one serves
+ * project-sections-operations.ts instead).
  *
  * `badgeColor` sits behind main's own `||` fallback to `repoColor`, so a salvaged member draws the
  * same swatch. `repoIcon` is declared as the three arms MobileRepoIcon renders, and an arm this
@@ -79,6 +75,7 @@ export const hostRepoCatalogSchema = z
       z.looseObject({
         id: z.string(),
         displayName: z.string(),
+        path: salvagedOptional('path', z.string()),
         badgeColor: salvagedOptional('badgeColor', z.string()),
         repoIcon: salvagedOptional('repoIcon', mobileRepoIconSchema),
         connectionId: salvagedOptional('connectionId', z.string().nullable()),
@@ -173,8 +170,7 @@ export const hostViewSettingsSchema = z
       visibleWorkspaceHostIds: salvagedOptional(
         'visibleWorkspaceHostIds',
         z.array(z.string()).nullable()
-      ),
-      projectOrderBy: salvagedOptional('projectOrderBy', z.enum(PROJECT_ORDER_BY_ARMS))
+      )
     })
   })
   .transform((reply) => reply.ui)
@@ -196,6 +192,8 @@ export const hostViewSettingsSchema = z
  * (:141) is chained `.then(…).catch(…)` and would survive a throw.
  */
 export const hostScreenUnreadReplySchema = z.unknown()
+
+export type HostRepoCatalogRow = z.output<typeof hostRepoCatalogSchema>[number]
 
 /** One decoded catalog icon: the members MobileRepoIcon reads, with the rest passed through. */
 export type MobileHostRepoIcon = NonNullable<

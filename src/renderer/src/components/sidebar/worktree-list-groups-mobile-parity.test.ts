@@ -14,7 +14,7 @@ import {
   PROJECT_SECTION_PARITY_HEADERS,
   PROJECT_SECTION_PARITY_HOSTS,
   PROJECT_SECTION_PARITY_ROWS,
-  parityPhoneCatalog
+  PROJECT_SECTION_PARITY_SERVED
 } from '../../../../shared/project-section-parity.test-fixture'
 import type { Repo } from '../../../../shared/repo-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -29,11 +29,13 @@ import {
 import { getProjectHostSetupProjectionFromState } from '../../store/project-host-setup-selector'
 import { buildRows } from './worktree-list/grouping/build-rows'
 import { worktree as worktreeFixture } from './worktree-list-groups-test-fixtures'
+import type { MobileProjectSectionCatalog } from '../../../../shared/mobile-project-sections-contract'
+import { getProjectSectionCatalogFromState } from '../../runtime/sync-runtime-graph/project-section-catalog'
 
 // Why: the phone's Project sections must be the desktop sidebar's by construction. The desktop
 // half answers the renderer's own catalog fetch and runs its merge, selector, repo order and
-// buildRows; mobile/src/worktree/workspace-list-sections-desktop-parity.test.ts pins the phone's
-// buildSections to the same headers.
+// buildRows; the phone half groups what main serves from the renderer's published catalog, and
+// mobile/src/worktree/workspace-list-sections-desktop-parity.test.ts runs buildSections on it.
 
 const { rpc, assertCapability } = vi.hoisted(() => ({ rpc: vi.fn(), assertCapability: vi.fn() }))
 vi.mock('../../runtime/runtime-rpc-client', () => ({
@@ -139,20 +141,36 @@ async function desktopHeaders(projectOrderBy: ProjectOrderBy) {
   ).flatMap((row) => (row.type === 'header' ? [{ key: row.key, label: row.label }] : []))
 }
 
-function phoneHeaders(projectOrderBy: ProjectOrderBy) {
-  const catalog = parityPhoneCatalog()
+/**
+ * What main serves the phone: the renderer's published catalog as JSON crosses the wire. Main
+ * stores and answers it unchanged (src/main/ipc/runtime.test.ts, mobile-project-sections.test.ts).
+ */
+async function servedCatalog(projectOrderBy: ProjectOrderBy): Promise<MobileProjectSectionCatalog> {
+  const { repos, rows } = await desktopCatalog()
+  const published = getProjectSectionCatalogFromState({ repos, ...rows, projectOrderBy })
+  if (!published) {
+    throw new Error('the renderer published no catalog')
+  }
+  return JSON.parse(JSON.stringify(published))
+}
+
+/** The phone's grouping over a served catalog (mobile/src/worktree/project-section-catalog.ts). */
+function phoneHeaders(served: MobileProjectSectionCatalog) {
   const withRows = new Set(PROJECT_SECTION_PARITY_ROWS.map((row) => row.repoId))
   return withRepoSectionDisplayLabels(
     buildProjectSections({
       items: PROJECT_SECTION_PARITY_ROWS,
       repoIdOf: (row) => row.repoId,
-      repoMap: new Map(catalog.repos.map((repo) => [repo.id, repo])),
-      projectIndex: buildProjectGroupingIndex(catalog.grouping),
-      placeholderRepoIds: catalog.repos
+      repoMap: new Map(served.repos.map((repo) => [repo.id, repo])),
+      projectIndex: buildProjectGroupingIndex({
+        projects: served.projects,
+        projectHostSetups: served.setups
+      }),
+      placeholderRepoIds: served.repos
         .filter((repo) => !withRows.has(repo.id))
         .map((repo) => repo.id),
-      repoOrder: getLogicalRepoOrderRankById(catalog.repos.map((repo) => repo.id)),
-      projectOrderBy
+      repoOrder: getLogicalRepoOrderRankById(served.repos.map((repo) => repo.id)),
+      projectOrderBy: served.projectOrderBy
     })
   ).map(([key, section]) => ({ key, label: section.label }))
 }
@@ -169,7 +187,9 @@ describe('the phone groups by Project exactly as the paired desktop sidebar', ()
       expect(await desktopHeaders(projectOrderBy)).toEqual(
         PROJECT_SECTION_PARITY_HEADERS[projectOrderBy]
       )
-      expect(phoneHeaders(projectOrderBy)).toEqual(PROJECT_SECTION_PARITY_HEADERS[projectOrderBy])
+      const served = await servedCatalog(projectOrderBy)
+      expect(served).toEqual({ ...PROJECT_SECTION_PARITY_SERVED, projectOrderBy })
+      expect(phoneHeaders(served)).toEqual(PROJECT_SECTION_PARITY_HEADERS[projectOrderBy])
     }
   )
 })

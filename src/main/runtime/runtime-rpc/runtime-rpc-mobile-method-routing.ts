@@ -146,10 +146,7 @@ export const EXECUTION_HOST_METHODS = [
   'nativeChat.unsubscribe',
   // Why: the phone reports a takeover out of band, the same signal the desktop renderer sends.
   'orchestration.workerTerminalUserInput',
-  // Read-only catalogs the phone groups each host's workspaces by, as the desktop sidebar does.
-  'project.list',
   'projectGroup.list',
-  'projectHostSetup.list',
   'repo.baseRefDefault',
   'repo.gitAvailable',
   'repo.hooks',

@@ -6,6 +6,7 @@ import {
 } from './execution-host'
 import {
   normalizeProjectHostSetupRow,
+  normalizeProjectHostSetupRows,
   normalizeProjectRows
 } from './project-catalog-row-normalization'
 import type { ProjectHostSetupProjection } from './project-host-setup-projection'
@@ -52,6 +53,12 @@ export function adoptEndpointProjectCatalog(
   projects: readonly Project[],
   setups: readonly ProjectHostSetup[]
 ): ProjectHostSetupProjection {
+  if (target.kind === 'local') {
+    return {
+      projects: normalizeProjectRows([...projects]),
+      setups: normalizeProjectHostSetupRows([...setups])
+    }
+  }
   return {
     // Why projects too: the same wire response carries them, and a remote host on another
     // Orca version can publish a row whose declared field types do not hold.

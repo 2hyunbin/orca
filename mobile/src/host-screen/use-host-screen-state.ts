@@ -13,7 +13,8 @@ import type {
   MobileViewState
 } from '../worktree/workspace-view-settings'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
-import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
+import type { ServedProjectSections } from '../worktree/project-sections-operations'
+import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
@@ -64,8 +65,12 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
     DEFAULT_MOBILE_WORKSPACE_STATUSES
   )
-  // The desktop's project header order (ui.get projectOrderBy), read only.
-  const [projectOrderBy, setProjectOrderBy] = useState<ProjectOrderBy>('manual')
+  // The desktop sidebar's Project grouping inputs; null for a desktop that serves none.
+  const [servedProjectSections, setServedProjectSections] = useState<ServedProjectSections | null>(
+    null
+  )
+  // The desktop's own repos from repo.list: an older desktop's rows group by these.
+  const [desktopRepos, setDesktopRepos] = useState<readonly SectionRepo[]>([])
   // Host-label inputs for rows: repo → host, SSH/override labels, and the host's own platform.
   const [repoHostIdByRepoId, setRepoHostIdByRepoId] = useState<Map<string, ExecutionHostId>>(
     new Map()
@@ -132,7 +137,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     optimisticActiveWorktreeIdentity,
     pinnedIds,
     repoHostIdByRepoId,
-    projectOrderBy,
+    servedProjectSections,
+    desktopRepos,
     repoMetadataFetchedAtRef,
     routeActionState,
     search,
@@ -156,7 +162,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
     setRepoHostIdByRepoId,
-    setProjectOrderBy,
+    setServedProjectSections,
+    setDesktopRepos,
     setRouteActionState,
     setSearch,
     setServerNotice,
