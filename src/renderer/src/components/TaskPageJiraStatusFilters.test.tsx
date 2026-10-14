@@ -7,6 +7,7 @@ afterEach(cleanup)
 function model(): TaskPageComposerActionsModel {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture supplies every field read by the status-controls component.
   return {
+    jiraHasWorkspace: false,
     selectedJiraStatuses: ['Developed'],
     selectJiraStatuses: vi.fn().mockResolvedValue(undefined),
     jiraQuickFiltersReady: true,
@@ -64,4 +65,12 @@ it('hides status controls and preserves an existing manual query', () => {
   expect(screen.queryByRole('button', { name: 'Developed' })).toBeNull()
   expect(screen.getByText(/Status filters apply to preset views/)).toBeDefined()
   expect(state.setJiraSearchInput).not.toHaveBeenCalled()
+})
+it('hides statuses and query preview in linked mode without clearing selection', () => {
+  const state = model()
+  state.jiraHasWorkspace = true
+  const { container } = render(<TaskPageJiraStatusFilters model={state} />)
+  expect(container.innerHTML).toBe('')
+  expect(state.selectJiraStatuses).not.toHaveBeenCalled()
+  expect(state.selectedJiraStatuses).toEqual(['Developed'])
 })

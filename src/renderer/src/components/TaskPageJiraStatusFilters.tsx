@@ -12,6 +12,7 @@ export function TaskPageJiraStatusFilters({
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
   const {
+    jiraHasWorkspace,
     selectedJiraStatuses,
     selectJiraStatuses,
     jiraQuickFiltersReady,
@@ -29,6 +30,9 @@ export function TaskPageJiraStatusFilters({
     clearJiraSavedFilterSelection,
     jiraSavedFiltersPending
   } = model
+  if (jiraHasWorkspace) {
+    return null
+  }
   const scopeKey = `${jiraTaskSourceScopeKey}::${selectedJiraSiteId}::${activeJiraPreset}`
   const statuses = includeSelectedJiraStatuses(
     jiraStatusCatalog?.scopeKey === scopeKey ? jiraStatusCatalog.items : [],
