@@ -142,7 +142,7 @@ describe('connectPanePty', () => {
     await restoreTerminalTestGlobals()
   })
   /** A pane running an agent, with the live recovery record the app keeps for every agent turn. */
-  async function connectWithAgent(opts: { visible: boolean; hibernated?: boolean }) {
+  async function connectWithAgent(opts: { visible: boolean; turnDone?: boolean }) {
     const { connectPanePty } = await import('./pty-connection')
     const { deliverPtyExitToHandlers } = await import('./pty-exit-delivery')
     const transport = createMockTransport('pty-pane-2')
@@ -160,10 +160,10 @@ describe('connectPanePty', () => {
       agent: 'claude',
       providerSession: { key: 'session_id', id: 'sess-1' },
       prompt: 'fix it',
-      state: opts.hibernated ? 'done' : 'working',
+      state: opts.turnDone ? 'done' : 'working',
       capturedAt: 1,
       updatedAt: 1,
-      origin: opts.hibernated ? 'worktree-sleep' : 'live'
+      origin: 'live'
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
     const args = [pane, createManager(1), deps] as unknown as Parameters<typeof connectPanePty>
@@ -247,18 +247,19 @@ describe('connectPanePty', () => {
     expect(pane.connects()).toBe(before)
   })
 
-  it('lets the hibernation wake own a restart-replaced pane that was put to sleep', async () => {
-    const pane = await connectWithAgent({ visible: false, hibernated: true })
+  it('resumes an agent whose turn had finished the same way, once, when shown', async () => {
+    const pane = await connectWithAgent({ visible: false, turnDone: true })
     const before = pane.connects()
     await pane.exit(true)
+    expect(pane.connects()).toBe(before)
 
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()
 
-    // One spawn in all: the wake's, not a second one for the restart.
     expect(pane.connects()).toBe(before + 1)
+    expect(pane.lastCommand()).toContain('sess-1')
   })
 
   it('leaves a pane lost to any other -1 exit without a process', async () => {

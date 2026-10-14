@@ -263,6 +263,11 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
       // Why: the action that suppressed the exit owns whether the leaf binding
       // is a wake hint or should be discarded; runtime cleanup above is enough.
       session.manager.setPaneGpuRendering(session.pane.id, true)
+      if (replacedByRestart) {
+        // Nothing else will replace this process; the pane takes it back when shown.
+        armRestartReplacement(session, ptyId)
+        return
+      }
       const sleepingRecordEntry = session.getSleepingRecordForPane(useAppStore.getState())
       if (sleepingRecordEntry && noteArmsHibernatedPaneWake(sleepingRecordEntry.record)) {
         // Why: hibernation killed this pane's PTY while hidden. The frozen TUI
@@ -286,13 +291,8 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
             session.consumeHibernatedAgentWake()
           })
         }
-      } else {
-        if (session.pendingHibernatedWakeTarget?.ptyId === ptyId) {
-          session.pendingHibernatedWakeTarget = null
-        }
-        if (replacedByRestart) {
-          armRestartReplacement(session, ptyId)
-        }
+      } else if (session.pendingHibernatedWakeTarget?.ptyId === ptyId) {
+        session.pendingHibernatedWakeTarget = null
       }
       return
     }
