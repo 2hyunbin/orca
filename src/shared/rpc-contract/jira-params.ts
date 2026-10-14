@@ -10,7 +10,8 @@ export const VALID_FILTERS = ['assigned', 'reported', 'all', 'done'] as const
 
 export const SiteSelection = z
   .object({
-    siteId: OptionalString
+    siteId: OptionalString,
+    strict: z.boolean().optional()
   })
   .optional()
 
@@ -29,20 +30,23 @@ export const SelectSite = z.object({
 export const SearchIssues = z.object({
   jql: requiredString('Missing JQL'),
   limit: OptionalFiniteNumber,
-  siteId: OptionalString
+  siteId: OptionalString,
+  strict: z.boolean().optional()
 })
 
 export const ListIssues = z
   .object({
     filter: z.enum(VALID_FILTERS).optional(),
     limit: OptionalFiniteNumber,
-    siteId: OptionalString
+    siteId: OptionalString,
+    strict: z.boolean().optional()
   })
   .optional()
 
 export const IssueKey = z.object({
   key: requiredString('Issue key is required'),
-  siteId: OptionalString
+  siteId: OptionalString,
+  strict: z.boolean().optional()
 })
 
 export const CreateIssue = z.object({
@@ -58,13 +62,24 @@ export const CreateIssue = z.object({
 export const IssueUpdate = z.object({
   key: requiredString('Issue key is required'),
   siteId: OptionalString,
-  updates: z.object({
-    title: OptionalString,
-    labels: z.array(z.string()).optional(),
-    assigneeAccountId: z.union([z.string(), z.null()]).optional(),
-    priorityId: z.union([z.string(), z.null()]).optional(),
-    transitionId: OptionalString
-  })
+  updates: z
+    .object({
+      title: OptionalString,
+      labels: z.array(z.string()).optional(),
+      labelOperations: z
+        .object({
+          add: z.array(requiredString('Label cannot be empty')).optional(),
+          remove: z.array(requiredString('Label cannot be empty')).optional()
+        })
+        .strict()
+        .optional(),
+      assigneeAccountId: z.union([z.string(), z.null()]).optional(),
+      priorityId: z.union([z.string(), z.null()]).optional(),
+      transitionId: OptionalString
+    })
+    .refine((updates) => !(updates.labels && updates.labelOperations), {
+      message: 'Pass labels or labelOperations, not both'
+    })
 })
 
 export const IssueComment = z.object({
@@ -75,19 +90,22 @@ export const IssueComment = z.object({
 
 export const ProjectIssueTypes = z.object({
   projectIdOrKey: requiredString('Project is required'),
-  siteId: OptionalString
+  siteId: OptionalString,
+  strict: z.boolean().optional()
 })
 
 export const ProjectIssueTypeFields = z.object({
   projectIdOrKey: requiredString('Project is required'),
   issueTypeId: requiredString('Issue type is required'),
-  siteId: OptionalString
+  siteId: OptionalString,
+  strict: z.boolean().optional()
 })
 
 export const AssignableUsers = z.object({
   key: requiredString('Issue key is required'),
   query: OptionalPlainString,
-  siteId: OptionalString
+  siteId: OptionalString,
+  strict: z.boolean().optional()
 })
 
 export const UserSearch = z.object({
