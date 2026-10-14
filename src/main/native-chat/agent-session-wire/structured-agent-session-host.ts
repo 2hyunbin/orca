@@ -100,7 +100,8 @@ export class StructuredAgentSessionHost {
       this.sessions,
       this.subscribers,
       (sessionId) => this.lifetime.conversation(sessionId),
-      this.clientDelivery.readChildWork
+      this.clientDelivery.readChildWork,
+      this.clientDelivery.childWorkIncomplete
     )
     this.runtimeState = new StructuredAgentSessionHostRuntimeState(
       deps,
@@ -123,7 +124,7 @@ export class StructuredAgentSessionHost {
       ensureProviderChild: (sessionId, startedFor) =>
         agentStart.ensureStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
-      stopSignedOutAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
+      stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
       clientDelivery: this.clientDelivery
     })
     this.restore = reveal.createStructuredAgentSessionHostRestore(deps, {
@@ -142,7 +143,7 @@ export class StructuredAgentSessionHost {
       sessions: this.sessions,
       flushLifecycle: (sessionId) => this.runtimeState.lifecycleBarrier(sessionId),
       publishStatus: this.clientDelivery.publishStatusAndSettlement,
-      generationEnded: this.generationEnded,
+      generationEnded: this.clientDelivery.publishGenerationEnded,
       serialize: (sessionId, task) => this.tasks.trackAttach(this.serialize(sessionId, task)),
       now: () => this.now(),
       runtimeState: this.runtimeState,
@@ -167,14 +168,6 @@ export class StructuredAgentSessionHost {
   }
 
   private now = (): number => this.deps.now?.() ?? Date.now()
-  /** A generation ended: what readers cache of current work is keyed on the bump, then all re-derive. */
-  private generationEnded = (sessionId: string, options?: { restate?: boolean }): void => {
-    const session = this.sessions.get(sessionId)
-    if (session) {
-      session.operationalRevision = (session.operationalRevision ?? 0) + 1
-    }
-    this.clientDelivery.publishGenerationEnded(sessionId, options)
-  }
 
   hasSession = (sessionId: string): boolean => this.sessions.has(sessionId)
   hasLoadedProviders = (): boolean =>
@@ -192,7 +185,7 @@ export class StructuredAgentSessionHost {
       sessions: this.sessions,
       now: () => this.now(),
       publishStatus: this.clientDelivery.publishStatus,
-      generationEnded: this.generationEnded,
+      generationEnded: this.clientDelivery.publishGenerationEnded,
       wakeDelivery: (sessionId: string) => this.conversationDelivery.loop.wake(sessionId),
       endExitedChild: this.eventRecovery.endExitedChildUnderSerialize
     } satisfies StructuredAgentSessionLifetimeContext
@@ -281,6 +274,8 @@ export class StructuredAgentSessionHost {
       publish: (sessionId, journal) => this.subscribers.publish(sessionId, journal),
       conversation: this.lifetime.conversation,
       readChildWork: this.clientDelivery.readChildWork,
+      publishChildWork: this.clientDelivery.publishChildWork,
+      childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openConversation: this.conversationDelivery.open,
       ensureAgent: (sessionId) =>

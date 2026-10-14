@@ -2,6 +2,8 @@ import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
 
+// The desktop's server-list feed loads react-native; its timer never runs without a subscriber.
+vi.mock('react-native', () => ({}))
 vi.mock('../cache/worktree-cache', () => ({
   getCachedWorktrees: () => null,
   setCachedWorktrees: () => {}
@@ -30,7 +32,6 @@ function row(worktreeId: string, repoId: string): Worktree {
     path: `/home/me/${worktreeId}`,
     liveTerminalCount: 0,
     hasAttachedPty: false,
-    preview: '',
     unread: false,
     isPinned: false,
     linkedPR: null

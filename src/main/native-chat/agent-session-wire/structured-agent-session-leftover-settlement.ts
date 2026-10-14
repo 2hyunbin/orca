@@ -98,9 +98,7 @@ export async function settleStructuredAgentSessionLeftovers(
           deathEvidence: input.store.getRecord(sessionId)?.lease.deathEvidence ?? null,
           replaced,
           failureTextContext,
-          below,
-          // With an exit's account, nothing is live: every entry of what is settled is ended.
-          ...(exit ? {} : { entriesBelow: below })
+          below
         })
         const mutations = [...exited.mutations, ...stale.mutations]
         const dispatches = [
