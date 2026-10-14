@@ -155,7 +155,6 @@ test('Linux Sogou commits land in the native chat composer', async ({ orcaPage }
   const session = await orcaPage.context().newCDPSession(orcaPage)
   await composer.evaluate((element) => {
     const log: string[] = []
-    Object.assign(window, { __sogouEventLog: log })
     for (const type of ['keydown', 'keypress', 'keyup', 'beforeinput', 'compositionstart']) {
       element.addEventListener(
         type,
@@ -167,6 +166,7 @@ test('Linux Sogou commits land in the native chat composer', async ({ orcaPage }
                 ? `${event.inputType}/${event.data}`
                 : ''
           log.push(`${type}:${detail}`)
+          document.documentElement.dataset.sogouEventLog = JSON.stringify(log)
         },
         true
       )
@@ -177,7 +177,11 @@ test('Linux Sogou commits land in the native chat composer', async ({ orcaPage }
   await plainSelectorPick(session, { key: ' ', code: 'Space', keyCode: 32 }, '你')
   await expect.poll(() => draft(composer)).toBe('你')
   // Guards the replay itself: it must match the recorded fixture shape.
-  expect(await orcaPage.evaluate(() => Reflect.get(window, '__sogouEventLog'))).toEqual([
+  expect(
+    await orcaPage.evaluate((): unknown =>
+      JSON.parse(document.documentElement.dataset.sogouEventLog ?? '[]')
+    )
+  ).toEqual([
     'keyup:n/78/0',
     'keyup:i/73/0',
     'keydown: /32/0',
