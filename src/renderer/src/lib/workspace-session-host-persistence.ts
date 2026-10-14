@@ -28,6 +28,11 @@ import {
   type HostIdByWorktreeId
 } from './workspace-session-host-split'
 import {
+  recordPersistedWorkspaceKeys,
+  workspaceKeysByField,
+  type PersistedWorkspaceKeysByField
+} from './workspace-session-persisted-keys'
+import {
   indexWorkspaceRuntimeHostOwnership,
   type WorkspaceRuntimeOwnerProjection
 } from './workspace-runtime-host-ownership'
@@ -204,37 +209,13 @@ export function buildHostIdByWorktreeId(state: HostPersistenceState): HostIdByWo
   return buildHostSessionRouting(state).hostIdByWorktreeId
 }
 
-/** Every non-local partition this client can route rows to: repo hosts, folder-workspace hosts,
- *  and hosts a restored row was read from before their catalog answered. */
-function knownPartitionHostIds(state: HostPersistenceState): ExecutionHostId[] {
-  const hostIds = new Set<ExecutionHostId>()
-  const add = (hostId: string | null | undefined): void => {
-    const partition = workspaceSessionPartitionHostId(hostId)
-    if (partition !== LOCAL_EXECUTION_HOST_ID) {
-      hostIds.add(partition)
-    }
-  }
-  for (const repo of state.repos) {
-    add(getRepoExecutionHostId(repo))
-  }
-  for (const entry of [...(state.projectGroups ?? []), ...(state.folderWorkspaces ?? [])]) {
-    add(entry.executionHostId)
-  }
-  for (const hostId of [
-    ...Object.values(state.restoredRuntimeHostIdByWorkspaceSessionKey ?? {}),
-    ...Object.values(state.contestedPrimaryHostBySessionKey ?? {})
-  ]) {
-    add(hostId)
-  }
-  return [...hostIds]
-}
-
 /** Partition a session for writing: route each entry to its owner host, then restore the parked
  *  rows of every host that lost a contested id so this write cannot erase them. */
 function splitWorkspaceSessionForWrite(
-  payload: WorkspaceSessionState,
+  payload: WorkspaceSessionPatch,
   state: HostPersistenceState,
-  mode: HostSessionWriteMode
+  mode: HostSessionWriteMode,
+  previousKeysByField: PersistedWorkspaceKeysByField | undefined
 ): HostSessionSlices {
   const routing = buildHostSessionRouting(state)
   // Why the live catalogs: a debounced patch carries only the fields that changed, so a park
@@ -244,9 +225,7 @@ function splitWorkspaceSessionForWrite(
   const worktreeIdByTabId = extendWorktreeIdByTabId(buildWorktreeIdByTabId(payload), state)
   const slices = splitWorkspaceSessionByHost(payload, routing.hostIdByWorktreeId, {
     worktreeIdByTabId,
-    // Why: closing a host's last row drops its key from the payload; without its own (empty)
-    // field that host's partition would keep the row and restore it after a crash.
-    partitionHostIds: knownPartitionHostIds(state)
+    previousKeysByField
   })
   attachHostSessionShadow(slices, state.contestedHostWorkspaceSessions, routing.claims, mode)
   return slices
@@ -258,9 +237,11 @@ function splitWorkspaceSessionForWrite(
 export function patchWorkspaceSessionByHost(
   api: SessionApi,
   patch: WorkspaceSessionPatch,
-  state: HostPersistenceState
+  state: HostPersistenceState,
+  keys?: PersistedWorkspaceKeysByField
 ): { localWrite: Promise<void>; written: Promise<void> } {
-  const slices = splitWorkspaceSessionForWrite(patch as WorkspaceSessionState, state, 'patch')
+  const slices = splitWorkspaceSessionForWrite(patch, state, 'patch', keys)
+  const sentKeys = workspaceKeysByField(patch)
   const local = (slices[LOCAL_EXECUTION_HOST_ID] ?? patch) as WorkspaceSessionPatch
   const localWrite = api.patch(local)
   const hostWrites = nonLocalHostSessionEntries(slices).map(([hostId, slice]) =>
@@ -274,6 +255,10 @@ export function patchWorkspaceSessionByHost(
     const failure = results.find((result) => result.status === 'rejected')
     if (failure) {
       throw failure.reason
+    }
+    // Why only on success: a failed write is retried, and the retry must still clear removed keys.
+    if (keys) {
+      recordPersistedWorkspaceKeys(keys, sentKeys)
     }
   })
   // Why: a host failure must not surface as an unhandled rejection on the upload chain's promise.
@@ -298,10 +283,11 @@ export async function persistWorkspaceSessionByHost(
 /** Build local-first full-session snapshots for the beforeunload / quit paths. */
 export function buildWorkspaceSessionHostSnapshots(
   payload: WorkspaceSessionState,
-  state: HostPersistenceState
+  state: HostPersistenceState,
+  persistedKeys?: PersistedWorkspaceKeysByField
 ): WorkspaceSessionHostSnapshot[] {
   // Why 'replace': quit snapshots are applied as full partition sets.
-  const slices = splitWorkspaceSessionForWrite(payload, state, 'replace')
+  const slices = splitWorkspaceSessionForWrite(payload, state, 'replace', persistedKeys)
   return [
     { state: slices[LOCAL_EXECUTION_HOST_ID] ?? payload },
     ...nonLocalHostSessionEntries(slices).map(([hostId, hostState]) => ({
