@@ -17,7 +17,7 @@ type QueueFields = AgentSessionQueuePublicationFields & {
   queuedMessages?: AgentSessionQueuedMessage[] | null
 }
 
-function readsQueuedImageCards(ctx: QueuedImageReader): boolean {
+export function readsQueuedImageCards(ctx: QueuedImageReader): boolean {
   // An in-process caller is this build; only a negotiated client can predate image cards.
   return (
     ctx.clientKind === undefined ||

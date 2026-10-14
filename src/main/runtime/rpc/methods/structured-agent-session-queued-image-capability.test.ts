@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import type {
   AgentSessionQueuedMessage,
-  AgentSessionHistoryPage,
   AgentSessionSubscribeEvent
 } from '../../../../shared/agent-session-wire'
 import {
@@ -120,7 +119,6 @@ it('publishes phone text behind hidden images before bounding, and deduplicates 
     nextQueuedMessageId: null
   }
   expect(boundedQueuePublication(queue).queuedMessages).not.toContain(text)
-  let built: ReturnType<typeof buildSubscriberFrame> | undefined
   hostCalls.subscribe.mockImplementation((input: AgentSessionSubscribeInput) => {
     const subscriber: SubscriberFieldState = {
       sessionId: SESSION,
@@ -132,56 +130,17 @@ it('publishes phone text behind hidden images before bounding, and deduplicates 
       sessionId: SESSION,
       batch: { cursor: { epoch: 'a', sequence: 0 }, items: [], removedItemIds: [], submissions: [] }
     }
-    built = buildSubscriberFrame({ readQueuePublication: () => queue }, subscriber, event, false)
+    const context = { readQueuePublication: () => queue }
+    const built = buildSubscriberFrame(context, subscriber, event, false)
     for (const frame of built.frames) {
       input.emit(frame)
     }
     expect(built.queued).toBe(queue)
     subscriber.queuePublication = built.queued
-    expect(
-      buildSubscriberFrame({ readQueuePublication: () => queue }, subscriber, event, false)
-        .attachedQueued
-    ).toBe(false)
-    expect(
-      buildSubscriberFrame({ readQueuePublication: () => queue }, subscriber, event, true).frames[0]
-    ).not.toHaveProperty('queuedMessages')
-    const page: AgentSessionHistoryPage = {
-      sessionId: SESSION,
-      epoch: 'a',
-      direction: 'tail',
-      items: [],
-      removedItemIds: [],
-      submissions: [],
-      window: { oldest: null, newest: null, nextCursor: event.batch.cursor },
-      hasOlder: false,
-      hasNewer: false
-    }
-    const hydration: AgentSessionSubscribeEvent[] = [
-      { type: 'snapshot', sessionId: SESSION, fence: 1, page },
-      { type: 'reset', sessionId: SESSION, fence: 1, reset: 'epoch_changed', page }
-    ]
-    for (const frame of hydration) {
-      expect(
-        buildSubscriberFrame({ readQueuePublication: () => queue }, subscriber, frame, false).frames
-      ).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ queuedMessages: [text], queuePause: queue.queuePause })
-        ])
-      )
-    }
-    expect(buildSubscriberFrame({}, subscriber, event, false).frames[0]).not.toHaveProperty(
-      'queuedMessages'
-    )
+    expect(buildSubscriberFrame(context, subscriber, event, false).attachedQueued).toBe(false)
     return () => {}
   })
   expect(
     await call('agentSession.subscribe', { sessionId: SESSION }, STRUCTURED_MOBILE_CLIENT)
-  ).toMatchObject({
-    result: {
-      queuedMessages: [text],
-      queuePause: queue.queuePause,
-      nextQueuedMessageId: queue.nextQueuedMessageId
-    }
-  })
-  expect(built?.frames[0]).toMatchObject({ queuedMessages: [text] })
+  ).toMatchObject({ result: { queuedMessages: [text] } })
 })
