@@ -33,7 +33,7 @@ function fixture() {
   temporary.push(directory)
   const root = join(directory, 'checkout')
   mkdirSync(root)
-  writeFileSync(join(root, 'package.json'), '{"type":"module"}')
+  writeFileSync(join(root, 'package.json'), '{"type":"module","version":"1.4.0"}')
   const identity = compilerCacheIdentity({ policyHash: 'policy', cacheRoot: directory })
   packCompilerCache({ identity })
   return { root, identity }

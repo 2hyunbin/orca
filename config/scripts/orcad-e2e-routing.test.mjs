@@ -96,7 +96,7 @@ it('builds the e2e app when only a build-dependent orcad spec is requested', () 
 it('runs every managed-SSH spec in one sharded lane, only when one is routed', () => {
   const lane = jobs['orcad-ssh-docker']
   expect(lane.if).toBe(
-    `inputs.test_files == '' || contains(inputs.test_files, '${MANAGED_SSH_E2E_SPEC_PREFIX}')`
+    `inputs.test_files == '' || contains(inputs.test_files, '${MANAGED_SSH_E2E_SPEC_PREFIX}') || contains(inputs.test_files, 'tests/e2e/plugin-viewer-managed-runtime.spec.ts') || contains(inputs.test_files, 'tests/e2e/plugin-environment-ssh.spec.ts') || contains(inputs.test_files, 'tests/e2e/plugin-environment-endpoint.spec.ts')`
   )
   expect(lane.strategy.matrix.shard).toEqual(['1/2', '2/2'])
   const run = lane.steps.find((step) => step.env?.ORCA_E2E_SSH_DOCKER === '1').run

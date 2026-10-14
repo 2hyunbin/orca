@@ -156,6 +156,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       'runtimeEnvironments:retryConnectionsNow',
       'runtimeEnvironments:getStatus',
       'runtimeEnvironments:call',
+      'runtimeEnvironments:openManagedWorkspace',
       'runtimeEnvironments:linkSshAccess',
       'runtimeEnvironments:unlinkSshAccess',
       'runtimeEnvironments:createOrcadSshHost',
@@ -186,6 +187,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     registerRuntimeEnvironmentHandlers(store as never)
 
     expect(removeHandlerMock.mock.calls.map((call) => call[0])).toEqual([
+      'runtimeEnvironments:openManagedWorkspace',
       'runtimeEnvironments:list',
       'runtimeEnvironments:addFromPairingCode',
       'runtimeEnvironments:verifyAndAddFromPairingCode',

@@ -31,6 +31,7 @@ vi.mock('../runtime/runtime-rpc', () => ({
     })
     setOnUnpairedDeviceAuthFailure = vi.fn()
     setMobileDesktopRelayHosts = vi.fn()
+    setManagedWorkspaceHosts = vi.fn()
   }
 }))
 vi.mock('../runtime/headless-runtime-graph', () => ({ publishHeadlessRuntimeGraph: vi.fn() }))

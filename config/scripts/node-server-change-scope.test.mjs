@@ -473,9 +473,9 @@ describe('the actual Bun build and profile-test dependency graph', () => {
   it('tracks the shared close probe without pulling in its mocked renderer adapter', () => {
     expect(inputs.has('src/shared/pty-running-work-probe.ts')).toBe(true)
     expect(inputs.has('src/shared/pty-running-work-probe.test.ts')).toBe(true)
-    expect(inputs.has('src/renderer/src/components/terminal/pty-running-work-probe.ts')).toBe(false)
-    expect(inputs.has('src/renderer/src/runtime/runtime-terminal-inspection.ts')).toBe(false)
-    expect([...inputs].some((file) => file.startsWith('src/renderer/'))).toBe(false)
+    expect([...inputs].filter((file) => file.startsWith('src/renderer/'))).toEqual([
+      'src/renderer/src/i18n/locales/en.json'
+    ])
   })
 
   it.each([

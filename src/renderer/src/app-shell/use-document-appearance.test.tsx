@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../lib/document-theme', () => ({
-  applyDocumentTheme: mocks.applyDocumentTheme
+  applyDocumentTheme: mocks.applyDocumentTheme,
+  applyPluginAppTheme: vi.fn()
 }))
 
 vi.mock('@/lib/app-font-family', () => ({

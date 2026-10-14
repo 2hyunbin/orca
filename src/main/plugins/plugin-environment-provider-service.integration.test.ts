@@ -97,7 +97,9 @@ describe('provider management uses durable host account configuration', () => {
     await f.service.environmentProviders.configure(f.review)
     await f.service.dispose()
     expect(await f.service.environmentProviders.list()).toEqual([])
-    await expect(f.service.environmentProviders.configure(f.review)).rejects.toThrow('stopped')
+    await expect(f.service.environmentProviders.configure(f.review)).rejects.toThrow(
+      'The environment provider host is shutting down'
+    )
     await expect(
       f.service.environmentProviders.execute(f.review, request(f.review))
     ).rejects.toThrow()

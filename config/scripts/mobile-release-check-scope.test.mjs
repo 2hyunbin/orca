@@ -138,6 +138,7 @@ function fixture(detectorStep = detector) {
     'package.json',
     'config/scripts/pr-code-change-scope.mjs',
     'config/scripts/pr-layout-oracle-route.mjs',
+    'config/scripts/pr-static-analysis-scan-roots.mjs',
     'config/scripts/mobile-release-check-scope.mjs',
     'config/scripts/mobile-test-change-scope.mjs'
   ]) {

@@ -77,6 +77,7 @@ function fixture(
         discardEnvironmentProviderSshReview: discard,
         cancelEnvironmentProvider: cancel
       },
+      runtimeEnvironments: {},
       ssh: { listTargets: vi.fn(async () => [target]), connect }
     }
   })
