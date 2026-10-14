@@ -6,7 +6,7 @@ import {
   makeTabGroup,
   makeUnifiedTab
 } from '@/store/slices/store-test-helpers'
-import { isTabOnVisibleSurface, resolveAutoAckTabTargets } from './agent-auto-ack-targets'
+import { isTabOnScreen, resolveAutoAckTabTargets } from './agent-auto-ack-targets'
 
 const FLOATING = FLOATING_TERMINAL_WORKTREE_ID
 const TERMINAL = 'terminal-tab'
@@ -52,7 +52,7 @@ describe('visible agent acknowledgement target', () => {
       })
 
       expect(store.getState().getActiveTab(FLOATING)?.id).toBe(content.id)
-      expect(isTabOnVisibleSurface(store.getState(), FLOATING, TERMINAL, 'terminal')).toBe(false)
+      expect(isTabOnScreen(store.getState(), FLOATING, TERMINAL, 'terminal')).toBe(false)
       expect(resolveAutoAckTabTargets(store.getState())).toEqual([])
     }
   )
@@ -70,13 +70,13 @@ describe('visible agent acknowledgement target', () => {
     })
 
     expect(store.getState().getActiveTab(FLOATING)).toBeNull()
-    expect(isTabOnVisibleSurface(store.getState(), FLOATING, TERMINAL, 'terminal')).toBe(false)
+    expect(isTabOnScreen(store.getState(), FLOATING, TERMINAL, 'terminal')).toBe(false)
     expect(resolveAutoAckTabTargets(store.getState())).toEqual([])
   })
 
   it('acknowledges the active terminal in the focused group', () => {
     const state = floatingStore().getState()
 
-    expect(isTabOnVisibleSurface(state, FLOATING, TERMINAL, 'terminal')).toBe(true)
+    expect(isTabOnScreen(state, FLOATING, TERMINAL, 'terminal')).toBe(true)
   })
 })

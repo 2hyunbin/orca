@@ -1,4 +1,5 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
+import { isOrcaWindowForegroundFocused } from '@/components/terminal-pane/terminal-notification-pane-visibility'
 import { isStructuredTab } from '@/components/native-chat/structured-agent-session-tabs'
 import type { Tab } from '../../../shared/tab-types'
 import {
@@ -69,20 +70,23 @@ export function resolveAutoAckTabTargets(state: AutoAckTargetState): AutoAckTabT
 }
 
 /**
- * Whether a tab of either kind is on a visible surface — the one "did the user see it" rule.
- * Attention dispatch and auto-ack both read it, so a surface the user is watching neither earns
- * an unread marker nor has one to clear.
+ * Whether a tab of either kind is on screen in a visible, focused window — the one "did the user
+ * see it" rule. Marking, attention dispatch and the on-screen read all use it, so a tab the user is
+ * watching neither earns an unread marker nor keeps one.
  */
-export function isTabOnVisibleSurface(
+export function isTabOnScreen(
   state: AutoAckTargetState,
   worktreeId: string,
   tabId: string,
   surfaceKind: AutoAckTabTarget['surfaceKind']
 ): boolean {
-  return resolveAutoAckTabTargets(state).some(
-    (target) =>
-      target.surfaceKind === surfaceKind &&
-      target.tabId === tabId &&
-      target.worktreeId === worktreeId
+  return (
+    isOrcaWindowForegroundFocused() &&
+    resolveAutoAckTabTargets(state).some(
+      (target) =>
+        target.surfaceKind === surfaceKind &&
+        target.tabId === tabId &&
+        target.worktreeId === worktreeId
+    )
   )
 }

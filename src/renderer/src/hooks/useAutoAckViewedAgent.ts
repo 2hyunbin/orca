@@ -14,9 +14,6 @@ export function useAutoAckViewedAgent(): void {
   useEffect(
     () =>
       startViewedAttentionScan(useAppStore, {
-        isWindowOnScreen: () =>
-          typeof document === 'undefined' ||
-          (document.visibilityState === 'visible' && document.hasFocus()),
         // Browsers have no native idle capability; their visible/focused gates still apply.
         readDesktopAway: isWebClientLocation()
           ? null

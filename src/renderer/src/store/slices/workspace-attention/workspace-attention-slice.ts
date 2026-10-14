@@ -6,6 +6,7 @@ import { collectRemovedAttention, dismissReadNotifications } from './attention-r
 import { removeTabsAttention } from './subject-attention-transitions'
 import { markWorkspaceUnreadFlag, settleWorkspaceUnreadFlag } from './workspace-unread-flag'
 import { workspaceMarkerTabIds } from './workspace-live-markers'
+import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
 
 export const createWorkspaceAttentionSlice: StateCreator<
   AppState,
@@ -66,8 +67,11 @@ export const createWorkspaceAttentionSlice: StateCreator<
     unreadTerminalPanes: {},
     unreadAgentCompletionPanes: {},
     markTerminalBell: ({ worktreeId, tabId, paneKey }) => {
-      // Why: a bell is authoritative PTY output, so it marks even the pane the user is watching;
-      // the on-screen read then reads it.
+      // Why: a bell on the tab on screen is already read; marking it would persist the flag
+      // true then false, and a remote owner turns each persist into an RPC.
+      if (isTabOnScreen(get(), worktreeId, tabId, 'terminal')) {
+        return
+      }
       markWorkspaceUnreadFlag(set, get, worktreeId)
       markTabUnread(tabId, 'terminal-bell')
       if (paneAttentionEnabled()) {

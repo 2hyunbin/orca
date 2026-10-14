@@ -109,8 +109,8 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     const store = createStoreOnOtherWorktree()
     const typedTabId = addTerminalTab(store, BELL_WORKTREE)
     const bellTabId = addTerminalTab(store, BELL_WORKTREE)
-    store.getState().setActiveWorktree(BELL_WORKTREE)
     raiseAttention(store, BELL_WORKTREE, bellTabId)
+    store.getState().setActiveWorktree(BELL_WORKTREE)
 
     store.getState().readOnScreenAttention([{ worktreeId: BELL_WORKTREE, tabId: typedTabId }], {
       settleFlags: true

@@ -58,14 +58,22 @@ export function screenOf(store: AttentionStore): AttentionScreen {
   return screen
 }
 
-/** Runs the hook's scan against `store`; browsers' gate (no native idle query) keeps it synchronous. */
+/**
+ * Runs the hook's scan against `store`, with the window's visibility+focus behind a fake document
+ * so marking and the scan read the same gate; no native idle query keeps it synchronous.
+ */
 function installAttentionScreen(store: AttentionStore, onScreen: boolean): void {
   let windowOnScreen = onScreen
+  vi.stubGlobal('document', {
+    get visibilityState() {
+      return windowOnScreen ? 'visible' : 'hidden'
+    },
+    hasFocus: () => windowOnScreen
+  })
   let rescan = (): void => {}
   let input = (): void => {}
   let terminalInput = (): void => {}
   startViewedAttentionScan(store, {
-    isWindowOnScreen: () => windowOnScreen,
     readDesktopAway: null,
     subscribeStructuredViews: () => () => {},
     subscribePresenceSignals: (onRescan, onInput) => {

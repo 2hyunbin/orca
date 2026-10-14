@@ -23,6 +23,7 @@ import { registryEntryMatchesStatus } from './agent-status-launch-config'
 import { copyLaunchConfig } from './agent-status-sleeping-records'
 import { agentVerdictFields } from '../../../../shared/agent-main-agent-verdict'
 import { removeCompletionAttention } from './workspace-attention/subject-attention-transitions'
+import { settleRemovedAttention } from './workspace-attention/attention-removal-follow-up'
 
 export function createAgentStatusProviderSessionActions(
   runtime: AgentStatusRuntime
@@ -50,6 +51,7 @@ export function createAgentStatusProviderSessionActions(
         return
       }
       let removedLiveStatus = false
+      const attentionBefore = get()
       set((s) => {
         const existingStatus = s.agentStatusByPaneKey[paneKey]
         const existingRecord = s.sleepingAgentSessionsByPaneKey[paneKey]
@@ -168,6 +170,7 @@ export function createAgentStatusProviderSessionActions(
           sortEpoch: removedLiveStatus ? s.sortEpoch + 1 : s.sortEpoch
         }
       })
+      settleRemovedAttention(set, get, attentionBefore)
       if (removedLiveStatus) {
         requestFreshness(true)
       }

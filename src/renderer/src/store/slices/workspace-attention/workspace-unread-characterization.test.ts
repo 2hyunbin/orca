@@ -98,7 +98,7 @@ describe('bells', () => {
     `)
   })
 
-  it('a bell in the pane on screen in a focused window is read immediately', () => {
+  it('a bell in the pane on screen in a focused window leaves no marker and no flag write', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
@@ -107,20 +107,18 @@ describe('bells', () => {
     ringBell(store, pane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
         "dock=0 floatingDot=false",
-        "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
-        "persist worktree a {"isUnread":false}",
       ]
     `)
 
     pointerDownInTab(store, { ...pane, paneKey: null })
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
@@ -131,7 +129,7 @@ describe('bells', () => {
     typeInPane(store, pane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
@@ -579,13 +577,11 @@ describe('manual, inbound and restart', () => {
     typeInPane(store, folderPane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:UNREAD:0 folder-1@local:read:2000 sortEpoch=1",
+        "rows a@local:UNREAD:0 folder-1@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
         "dock=1 floatingDot=false",
-        "persist folder folder-1 {"isUnread":true,"lastActivityAt":2000}",
-        "persist folder folder-1 {"isUnread":false} host=local",
       ]
     `)
   })

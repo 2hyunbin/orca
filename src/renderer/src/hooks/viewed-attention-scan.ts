@@ -19,6 +19,7 @@ import {
   computeLapsedManualUnreadProtections
 } from '@/attention/agent-attention-acknowledgement'
 import { isWorkspaceFlagSet } from '@/store/slices/workspace-attention/workspace-unread-flag'
+import { isOrcaWindowForegroundFocused } from '@/components/terminal-pane/terminal-notification-pane-visibility'
 
 type ScanStore = {
   getState: () => AppState
@@ -27,8 +28,6 @@ type ScanStore = {
 
 /** The window the scan runs in; the hook binds the real document, tests bind a fake. */
 export type ViewedAttentionEnvironment = {
-  /** Orca's window is visible and focused. */
-  isWindowOnScreen: () => boolean
   /** Null where there is no native idle capability (browsers): the window gate stands alone. */
   readDesktopAway: (() => Promise<boolean | undefined>) | null
   subscribeStructuredViews: (onView: (view: StructuredSubjectRead) => void) => () => void
@@ -160,7 +159,7 @@ export function startViewedAttentionScan(
     lastUnreadAgentCompletionPanes = s.unreadAgentCompletionPanes
 
     // Why: tab-active only proxies "seen"; gate on window visible+focused so away-time transitions don't silently clear the bold signal.
-    if (!env.isWindowOnScreen()) {
+    if (!isOrcaWindowForegroundFocused()) {
       lastReadScreenKey = null
       return
     }

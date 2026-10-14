@@ -99,7 +99,7 @@ describe('on screen means read', () => {
     expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
   })
 
-  it('a bell in the focused pane on screen is read and its notification dismissed', () => {
+  it('a bell in the pane on screen of a focused window leaves no marker and writes no flag', () => {
     const { store, persists } = createAttentionStore()
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
@@ -108,16 +108,34 @@ describe('on screen means read', () => {
     ringBell(store, pane)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
-        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
         "panes -",
         "completions -",
         "dock=0 floatingDot=false",
-        "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
-        "persist worktree a {"isUnread":false}",
       ]
     `)
-    expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
+    expect(dismiss).not.toHaveBeenCalled()
+  })
+
+  it('a completion in any split pane of the tab on screen leaves no marker and writes no flag', () => {
+    const { store, persists } = createAttentionStore({ experimental: true })
+    addLiveTerminalTab(store, WS_A, 'tab-a1')
+    splitTab(store, 'tab-a1')
+    store.getState().setActiveWorktree(WS_A)
+    observe(store, persists)
+
+    completeAgentTurn(store, { worktreeId: WS_A, paneKey: `tab-a1:${LEAF_2}` })
+    expect(observe(store, persists)).toMatchInlineSnapshot(`
+      [
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
+        "tabs -",
+        "panes -",
+        "completions -",
+        "dock=0 floatingDot=false",
+      ]
+    `)
+    expect(dismiss).not.toHaveBeenCalled()
   })
 
   it('a tab-level bell dismisses every pane of its split tab; a pane completion only its pane', () => {
@@ -216,6 +234,34 @@ describe('the flag follows its markers', () => {
         "persist worktree a {"isUnread":false}",
       ]
     `)
+  })
+
+  it('a superseded turn removing the last completion marker clears the flag', () => {
+    const { store, persists } = createAttentionStore()
+    const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
+    completeAgentTurn(store, pane)
+    observe(store, persists)
+
+    store
+      .getState()
+      .recordAgentProviderSession(
+        pane.paneKey,
+        'codex',
+        { key: 'session_id', id: 'session-a1' },
+        { updatedAt: 2000 },
+        { tabId: pane.tabId, worktreeId: WS_A }
+      )
+    expect(observe(store, persists)).toMatchInlineSnapshot(`
+      [
+        "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
+        "tabs -",
+        "panes -",
+        "completions -",
+        "dock=0 floatingDot=false",
+        "persist worktree a {"isUnread":false}",
+      ]
+    `)
+    expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
   })
 
   it('Mark as read removes every marker in the workspace and dismisses their panes', () => {

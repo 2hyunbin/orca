@@ -16,7 +16,7 @@ import type {
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { isOrcaWindowForegroundFocused } from '../terminal-pane/terminal-notification-pane-visibility'
-import { isTabOnVisibleSurface } from '@/hooks/agent-auto-ack-targets'
+import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
 import { isStructuredTab, type StructuredTab } from './structured-agent-session-tabs'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
@@ -71,10 +71,7 @@ function isViewedStructuredTab(
   workspaceId: string,
   tab: StructuredTab
 ): boolean {
-  return (
-    isOrcaWindowForegroundFocused() &&
-    isTabOnVisibleSurface(state, workspaceId, tab.id, 'structured')
-  )
+  return isTabOnScreen(state, workspaceId, tab.id, 'structured')
 }
 
 /** Binds the neutral surface contract to one store snapshot. */

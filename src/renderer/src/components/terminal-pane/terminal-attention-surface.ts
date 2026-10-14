@@ -20,7 +20,7 @@ import {
   isCurrentLivePaneKey
 } from './terminal-notification-state'
 import { isOrcaWindowForegroundFocused } from './terminal-notification-pane-visibility'
-import { isTabOnVisibleSurface } from '@/hooks/agent-auto-ack-targets'
+import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
 
@@ -48,16 +48,10 @@ function resolveViewedPaneKey(state: StoreSnapshot, tabId: string): string | nul
   return leafId !== null && isTerminalLeafId(leafId) ? makePaneKey(tabId, leafId) : null
 }
 
-// Why: split panes hide their inactive leaves, so only the active leaf of a visible tab is viewed —
-// the same pane auto-ack resolves as the one to acknowledge.
+// Why the whole tab: every split pane of the tab on screen is read, so none earns a marker.
 function isViewedTerminalPane(state: StoreSnapshot, workspaceId: string, paneKey: string): boolean {
   const tabId = getPaneKeyTabId(paneKey)
-  return (
-    tabId !== null &&
-    isOrcaWindowForegroundFocused() &&
-    isTabOnVisibleSurface(state, workspaceId, tabId, 'terminal') &&
-    resolveViewedPaneKey(state, tabId) === paneKey
-  )
+  return tabId !== null && isTabOnScreen(state, workspaceId, tabId, 'terminal')
 }
 
 /** Binds the neutral surface contract to one store snapshot. */

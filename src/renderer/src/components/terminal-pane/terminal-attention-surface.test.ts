@@ -126,7 +126,7 @@ describe('createTerminalAttentionSurface', () => {
     expect(surfaceFor(store).resolveViewedSubjectKey(TAB)).toBeNull()
   })
 
-  it('treats only the active leaf of the active tab as viewed', () => {
+  it('treats every split pane of the tab on screen as viewed', () => {
     const store = seedLiveTab()
     store.setState({ activeWorktreeId: WORKSPACE, activeTabId: TAB })
     const hidden = createTerminalAttentionSurface(store.getState())
@@ -137,7 +137,7 @@ describe('createTerminalAttentionSurface', () => {
         workspaceId: WORKSPACE,
         surfaceKey: makePaneKey(TAB, OTHER_LEAF)
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 
   describe('unread on a settled turn', () => {
@@ -257,8 +257,8 @@ describe('createTerminalAttentionSurface', () => {
       expect(unreadFor(seedMainSplit(), WORKSPACE, PANE)).toBe(false)
     })
 
-    it('marks an inactive split leaf of the viewed main tab unread', () => {
-      expect(unreadFor(seedMainSplit(), WORKSPACE, makePaneKey(TAB, OTHER_LEAF))).toBe(true)
+    it('does not mark an inactive split leaf of the viewed main tab unread', () => {
+      expect(unreadFor(seedMainSplit(), WORKSPACE, makePaneKey(TAB, OTHER_LEAF))).toBe(false)
     })
   })
 })
