@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { applyClaudeTerminalImageViewerEnv } from './terminal-image-viewer-env'
 import * as dependencies from './orca-runtime-create-terminal-dependencies'
 import type { OrcaRuntimeWithCreateTerminal } from './orca-runtime-create-terminal'
 import type { RuntimeTerminalPresentation } from '../../shared/runtime-types'
@@ -17,9 +18,10 @@ export async function createDesktopTerminal(
   const workspace = worktreeSelector
     ? await runtime.resolveTerminalWorkspaceLaunchScope(worktreeSelector, createdWorktree)
     : null
-  const launchOpts = workspace
-    ? await runtime.resolveAgentTerminalCreateOptions(workspace, opts)
-    : opts
+  const launchOpts = applyClaudeTerminalImageViewerEnv(
+    workspace ? await runtime.resolveAgentTerminalCreateOptions(workspace, opts) : opts,
+    opts.terminalImageViewerSupported
+  )
   // `resolveAgentTerminalCreateOptions` refuses an unapplicable shell, and it only runs with a
   // workspace; a worktree-less create has no execution host to apply one to either.
   if (!workspace && opts.shellOverride) {

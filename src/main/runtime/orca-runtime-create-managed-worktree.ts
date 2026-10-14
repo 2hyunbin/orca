@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { applyClaudeTerminalImageViewerEnv } from './terminal-image-viewer-env'
 import { OrcaRuntimeWithGetWorktreeTerminalProvisioningHost } from './orca-runtime-get-worktree-terminal-provisioning-host'
 import type { RuntimeManagedWorktreeCreateArgs } from './runtime-managed-worktree-create-types'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
@@ -76,7 +77,18 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
             args.startupLaunchSource
           )
         : null
-    const effectiveStartup = args.startup ?? agentStartup?.startup ?? draftStartup?.startup
+    const resolvedStartup = args.startup ?? agentStartup?.startup ?? draftStartup?.startup
+    const effectiveStartup = resolvedStartup
+      ? applyClaudeTerminalImageViewerEnv(
+          resolvedStartup,
+          args.terminalImageViewerSupported,
+          resolvedStartup.launchAgent ??
+            args.startupAgent ??
+            args.createdWithAgent ??
+            agentStartup?.agent ??
+            draftStartup?.agent
+        )
+      : undefined
     const effectiveStartupFollowup = agentStartup?.followup
     const effectiveCreatedWithAgent = args.startup
       ? args.createdWithAgent

@@ -1,3 +1,4 @@
+import { terminalImageViewerSupported } from '../../terminal-image-viewer-env'
 import {
   finishAutomationWorkspaceProvenanceRequest,
   releaseAutomationWorkspaceProvenanceRequest,
@@ -119,7 +120,10 @@ export const WORKTREE_METHODS = [
                 }),
                 creatorProvenance: resolveRpcWorkspaceCreatorProvenance(context)
               },
-              context.clientKind ? { clientKind: context.clientKind } : {}
+              {
+                clientKind: context.clientKind,
+                terminalImageViewerSupported: terminalImageViewerSupported(context)
+              }
             )
           )
           finishAutomationWorkspaceProvenanceRequest(params.automationProvenanceRequest)

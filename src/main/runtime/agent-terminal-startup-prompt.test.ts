@@ -57,6 +57,26 @@ function spawnedCommand(spawn: ReturnType<typeof vi.fn>): string {
 }
 
 describe('a terminal create that is handed a launch prompt', () => {
+  it.each([
+    { supported: undefined, flag: undefined },
+    { supported: true, flag: undefined },
+    { supported: false, flag: '0' }
+  ])('applies viewer policy after startupAgent resolution (%s)', async ({ supported, flag }) => {
+    vi.stubEnv('CLAUDE_CODE_FORCE_TERMINAL_IMAGES', undefined)
+    try {
+      const { runtime, spawn } = runtimeWithAgentLaunch()
+      await runtime.createTerminal('id:wt-1', {
+        startupAgent: 'claude',
+        terminalImageViewerSupported: supported
+      })
+      expect(spawn.mock.calls[0]?.[0]?.env.CLAUDE_CODE_FORCE_TERMINAL_IMAGES).toBe(flag)
+      expect(spawn.mock.calls[0]?.[0]?.launchAgent).toBe('claude')
+      expect(spawnedCommand(spawn)).toContain('claude')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('folds an argv agent’s prompt into the command it spawns, and says it did', async () => {
     const { runtime, spawn } = runtimeWithAgentLaunch()
     const onStartupPromptCarry = vi.fn()

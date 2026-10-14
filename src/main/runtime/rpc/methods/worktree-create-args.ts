@@ -15,10 +15,13 @@ type CreateProvenance = Pick<
 export function buildManagedWorktreeCreateArgs(
   params: WorktreeCreateParams,
   provenance: CreateProvenance,
-  origin: { clientKind?: 'mobile' | 'runtime' } = {}
+  origin: { clientKind?: 'mobile' | 'runtime'; terminalImageViewerSupported?: boolean } = {}
 ): ManagedWorktreeCreateArgs {
   return {
     repoSelector: params.repo,
+    ...(origin.terminalImageViewerSupported !== undefined
+      ? { terminalImageViewerSupported: origin.terminalImageViewerSupported }
+      : {}),
     name: params.name ?? '',
     // Absent means the user typed the name, which must never be retired.
     ...(params.nameWasGenerated === true ? { nameWasGenerated: true } : {}),

@@ -67,6 +67,7 @@ export type TerminalCreateOptions = {
   agentArgs?: string | null
   launchPreferences?: AgentLaunchPreferences
   terminalKittyKeyboardProtocol?: boolean
+  terminalImageViewerSupported?: boolean
   terminalColorQueryReplies?: TerminalOscColorQueryReplyColors
   viewMode?: 'terminal' | 'chat'
   /** The tab group a background create joins; defaults to the first group. */

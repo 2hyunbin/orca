@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { applyClaudeTerminalImageViewerEnv } from './terminal-image-viewer-env'
 import { OrcaRuntimeWithRemoveManagedWorktree } from './orca-runtime-remove-managed-worktree'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type {
@@ -243,7 +244,10 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
     workspace: TerminalWorkspaceLaunchScope,
     opts: TerminalCreateOptions
   ): Promise<TerminalCreateOptions> {
-    const launch = await this.buildAgentTerminalCreateOptions(workspace, opts)
+    const launch = applyClaudeTerminalImageViewerEnv(
+      await this.buildAgentTerminalCreateOptions(workspace, opts),
+      opts.terminalImageViewerSupported
+    )
     return resolveQoderTerminalCommandForWorkspace(
       launch,
       workspace,

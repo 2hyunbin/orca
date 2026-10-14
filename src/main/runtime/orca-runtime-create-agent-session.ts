@@ -180,6 +180,7 @@ export class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithGetAgentSe
           env: startup.env,
           launchConfig: startup.launchConfig,
           launchAgent: request.agent,
+          terminalImageViewerSupported: caller.terminalImageViewerSupported,
           terminalKittyKeyboardProtocol: request.terminalKittyKeyboardProtocol,
           startupCommandDelivery: startup.startupCommandDelivery,
           // A fresh agent this host built; the request has no surface field, so it counts as `unknown`.

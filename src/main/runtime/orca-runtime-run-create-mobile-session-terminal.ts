@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { applyClaudeTerminalImageViewerEnv } from './terminal-image-viewer-env'
 import { OrcaRuntimeWithCreateMobileSessionTerminal } from './orca-runtime-create-mobile-session-terminal'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -30,6 +31,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
       agentPrompt?: string
       launchConfig?: SleepingAgentLaunchConfig
       launchAgent?: TuiAgent
+      terminalImageViewerSupported?: boolean
       viewMode?: 'terminal' | 'chat'
       activate?: boolean
       clientNavigationId?: string
@@ -62,7 +64,10 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         afterDesktopTabId = anchor.type === 'terminal' ? anchor.parentTabId : anchor.id
       }
     }
-    const startupCommand = await this.resolveMobileSessionTerminalCommand(workspace, opts)
+    const startupCommand = applyClaudeTerminalImageViewerEnv(
+      await this.resolveMobileSessionTerminalCommand(workspace, opts),
+      opts.terminalImageViewerSupported
+    )
     this.assertStableReadyGraph(graphEpoch)
     if (opts.signal?.aborted) {
       throw new Error('client_disconnected')

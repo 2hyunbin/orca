@@ -78,6 +78,13 @@ for (const acceleration of ['off', 'on'] as const) {
         })
         const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
         const colors = async (name: string) => {
+          const notice = orcaPage.getByRole('status', {
+            name: 'Usage display is now compact',
+            exact: true
+          })
+          if (await notice.isVisible()) {
+            await notice.getByRole('button', { name: 'Got it', exact: true }).click()
+          }
           const png = PNG.sync.read(await screen.screenshot({ path: testInfo.outputPath(name) }))
           const counts = { red: 0, blue: 0, green: 0, yellow: 0 }
           for (let i = 0; i < png.data.length; i += 4) {

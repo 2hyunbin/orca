@@ -51,6 +51,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   observeSetupCompletion?: boolean
   createdWithAgent?: TuiAgent
   startupAgent?: TuiAgent
+  terminalImageViewerSupported?: boolean
   startupLaunchPreferences?: AgentLaunchPreferences
   startupPrompt?: string
   /** Main-internal: set by a caller that delivers an uncarried `startupPrompt` itself, so the text
