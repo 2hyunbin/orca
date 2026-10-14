@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { plainLogDifferentialCases } from './check-job-log-differential-cases.mjs'
 import { LIMIT, workload } from './check-job-log-performance-cases.mjs'
+import { createCheckLogFixture } from './check-job-log-test-fixture.mjs'
 
 assert(!process.versions.bun, 'Measurement child must use Node')
 const [bundlePath, serialized, identityJson] = process.argv.slice(2)
@@ -386,10 +387,16 @@ try {
           diagnosticRetained = plain.includes(
             descriptor.family === 'short-lines'
               ? 'error: CPU_DIAGNOSTIC'
-              : 'No "Copy" export is defined on the "lucide-react" mock'
+              : descriptor.family === 'fixture'
+                ? createCheckLogFixture().expectedDiagnostic
+                : 'No "Copy" export is defined on the "lucide-react" mock'
           )
           stackRetained = plain.includes(
-            descriptor.family === 'short-lines' ? 'CPU_FRAME.ts:18:8' : 'CopyTabIdMenuItem.tsx:18:8'
+            descriptor.family === 'short-lines'
+              ? 'CPU_FRAME.ts:18:8'
+              : descriptor.family === 'fixture'
+                ? createCheckLogFixture().expectedStackFrame
+                : 'CopyTabIdMenuItem.tsx:18:8'
           )
           assert(diagnosticRetained && stackRetained)
         }

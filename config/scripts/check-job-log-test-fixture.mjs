@@ -1,24 +1,20 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-
-export function readCheckLogFixture(root = process.cwd()) {
-  const fixture = JSON.parse(
-    readFileSync(
-      path.join(root, 'src', 'shared', '__fixtures__', 'check-job-log-failure-output.json'),
-      'utf8'
-    )
-  )
-  for (const name of [
-    'rawLog',
-    'expectedDiagnostic',
-    'expectedStackFrame',
-    'benignMarker',
-    'genericExitMarker',
-    'escapeRefusalStderr'
-  ]) {
-    assert.equal(typeof fixture[name], 'string', `Invalid fixture field: ${name}`)
+export function createCheckLogFixture() {
+  const expectedDiagnostic = 'Error: expected 200, received 500'
+  const expectedStackFrame = 'request.test.ts:18:8'
+  const benignMarker = 'stderr | request test: retrying connection'
+  const genericExitMarker = '##[error]Process completed with exit code 1.'
+  return {
+    expectedDiagnostic,
+    expectedStackFrame,
+    benignMarker,
+    genericExitMarker,
+    rawLog: [
+      `\x1b[90m${benignMarker}\x1b[0m`,
+      '\x1b[41m FAIL \x1b[0m request test',
+      `\x1b[31mError\x1b[0m: expected 200, received 500`,
+      `  at handleRequest (${expectedStackFrame})`,
+      genericExitMarker,
+      ''
+    ].join('\n')
   }
-  assert.equal(fixture.provenance.kind, 'scrubbed-job-excerpt')
-  return fixture
 }

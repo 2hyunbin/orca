@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
+import { createCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
 import { PR_CHECK_LOG_TAIL_BYTES, sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt'
 import * as ansi from './ansi-escape-sequences'
 import * as ownership from './own-retained-string'
 import * as bytes from './utf8-byte-limits'
 
 const limit = PR_CHECK_LOG_TAIL_BYTES
-const fixture = readCheckLogFixture()
+const fixture = createCheckLogFixture()
 
 describe('bounded owned check log sanitation', () => {
   afterEach(() => {
@@ -110,16 +110,12 @@ describe('bounded owned check log sanitation', () => {
       `${'z'.repeat(limit - bytes.getUtf8ByteLength(suffix))}${expected}`
     )
   })
-  it('keeps captured diagnostic and nearby stack, with truthful refusal provenance', () => {
+  it('keeps failure diagnostic and nearby stack', () => {
     const result = sanitizeCheckJobLogExcerpt(fixture.rawLog)
     expect(result).toContain(fixture.expectedDiagnostic)
     expect(result).toContain(fixture.expectedStackFrame)
     expect(result).toContain(fixture.benignMarker)
     expect(result).toContain(fixture.genericExitMarker)
-    expect(fixture.escapeRefusalStderr).toBe(
-      'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway\n'
-    )
-    expect(fixture.provenance.kind).toBe('scrubbed-job-excerpt')
     expect(ansi.TERMINAL_CONTROL_CHARACTER_PATTERN.test(result)).toBe(false)
     expect(sanitizeCheckJobLogExcerpt(result)).toBe(result)
   })

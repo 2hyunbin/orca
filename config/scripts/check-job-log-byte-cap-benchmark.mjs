@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { build } from 'esbuild'
 import { runProcess } from '@orca/process-host'
+import { createCheckLogFixture } from './check-job-log-test-fixture.mjs'
 import {
   assertWatchdogExit,
   assertMeasurementRuntime,
@@ -89,6 +90,7 @@ export async function prepareBenchmark(
           [
             'check-job-log-byte-cap-benchmark.mjs',
             'check-job-log-performance-cases.mjs',
+            'check-job-log-test-fixture.mjs',
             'check-job-log-performance-child.mjs',
             'check-job-log-differential-cases.mjs',
             'check-job-log-watchdog-protocol.mjs'
@@ -297,11 +299,10 @@ export async function runDescriptor(context, descriptor) {
     assert.equal(ready.inputBytes, descriptor.bytes, 'Generator byte size changed')
   }
   if (descriptor.mode === 'cpu' && ['actual', 'fixture'].includes(descriptor.family)) {
-    const source = await readFile(
-      descriptor.family === 'actual' ? descriptor.capturePath : descriptor.fixturePath,
-      'utf8'
-    )
-    const input = descriptor.family === 'actual' ? source : JSON.parse(source).rawLog
+    const input =
+      descriptor.family === 'actual'
+        ? await readFile(descriptor.capturePath, 'utf8')
+        : createCheckLogFixture().rawLog
     assert.equal(ready.inputBytes, Buffer.byteLength(input), 'Captured input bytes changed')
     assert.equal(ready.codeUnits, input.length, 'Captured input code units changed')
     assert.equal(ready.inputHash, hash(input), 'Captured input hash changed')
@@ -387,7 +388,6 @@ export async function runDescriptor(context, descriptor) {
   return {
     ...descriptor,
     capturePath: undefined,
-    fixturePath: undefined,
     ...completed[0],
     ...completed[0].inputIdentity,
     identity,
@@ -547,15 +547,8 @@ export function auditResults(manifest, records, { compareBaseline = true } = {})
 // Manual before/after comparison requires the pinned baseline in local Git history.
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const context = await prepareBenchmark()
-  const fixturePath = path.join(
-    context.root,
-    'src',
-    'shared',
-    '__fixtures__',
-    'check-job-log-failure-output.json'
-  )
   const manifest = selectRequiredDescriptors(
-    createManifest({ fixturePath, capturePath: process.env.ORCA_CHECK_LOG_CAPTURE })
+    createManifest({ capturePath: process.env.ORCA_CHECK_LOG_CAPTURE })
   )
   const records = []
   try {

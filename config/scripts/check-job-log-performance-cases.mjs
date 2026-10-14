@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { createCheckLogFixture } from './check-job-log-test-fixture.mjs'
 
 export const BASELINE_REF = 'c745051d7d6885b86f27120b616f15396404ba3d'
 export const BASELINE_SOURCE_HASHES = {
@@ -79,7 +80,7 @@ export function workload(descriptor) {
       return { text: readFileSync(descriptor.capturePath, 'utf8') }
     }
     if (descriptor.family === 'fixture') {
-      return { text: JSON.parse(readFileSync(descriptor.fixturePath, 'utf8')).rawLog }
+      return { text: createCheckLogFixture().rawLog }
     }
     const line = '2026-10-10T05:41:30.4306569Z \x1b[32mordinary successful output 界\x1b[0m\n'
     const suffix = '\n\x1b[31merror: CPU_DIAGNOSTIC\x1b[0m\n  at CPU_FRAME.ts:18:8\n'
@@ -165,7 +166,7 @@ function item(mode, arm, fields) {
   return value
 }
 
-export function createManifest({ fixturePath, capturePath } = {}) {
+export function createManifest({ capturePath } = {}) {
   const manifest = [
     item('control', 'proposed', { family: 'monitor', sample: 0 }),
     item('control', 'proposed', { family: 'cleanup', sample: 0 }),
@@ -240,7 +241,7 @@ export function createManifest({ fixturePath, capturePath } = {}) {
     }
   }
   const cpuCases = [
-    { family: 'fixture', fixturePath, bytes: 0, samples: 15, warmups: 3 },
+    { family: 'fixture', bytes: 0, samples: 15, warmups: 3 },
     ...(capturePath ? [{ family: 'actual', capturePath, bytes: 0, samples: 15, warmups: 3 }] : []),
     ...[8 * mib, 63 * mib].map((bytes) => ({
       family: 'short-lines',

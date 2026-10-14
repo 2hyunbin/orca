@@ -560,7 +560,7 @@ describe('performance watchdog failure precedence and completeness', () => {
     }
   })
   it('predeclares full proposed coverage before adverse baseline descriptors', () => {
-    const manifest = createManifest({ fixturePath: 'fixture.json' })
+    const manifest = createManifest()
     const firstBaseline = manifest.findIndex((item) => item.arm === 'baseline')
     const lastCoverage = manifest.findLastIndex((item) => item.mode === 'coverage')
     expect(lastCoverage).toBeLessThan(firstBaseline)
@@ -586,12 +586,10 @@ describe('performance watchdog failure precedence and completeness', () => {
     ).toBe(true)
   })
   it('selects the required ordered 944 or 1004 descriptors with complete measurement groups', () => {
-    const full = createManifest({ fixturePath: 'fixture.json', capturePath: 'capture.stdout' })
+    const full = createManifest({ capturePath: 'capture.stdout' })
     const selected = selectRequiredDescriptors(full)
     expect(selected).toHaveLength(1004)
-    expect(selectRequiredDescriptors(createManifest({ fixturePath: 'fixture.json' }))).toHaveLength(
-      944
-    )
+    expect(selectRequiredDescriptors(createManifest())).toHaveLength(944)
     expect(full.filter((descriptor) => selected.includes(descriptor))).toEqual(selected)
     const coverage = selected.filter((descriptor) => descriptor.mode === 'coverage')
     const expectedCoverage = ['osc', 'dcs', 'apc', 'pm', 'sos'].flatMap((family) =>

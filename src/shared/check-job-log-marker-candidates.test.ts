@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ansi from './ansi-escape-sequences'
 import * as byteLimits from './utf8-byte-limits'
-import { readCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
+import { createCheckLogFixture } from '../../config/scripts/check-job-log-test-fixture.mjs'
 import {
   PR_CHECK_LOG_TAIL_BYTES,
   PR_CHECK_LOG_TAIL_EARLIER_SEPARATOR,
@@ -9,7 +9,7 @@ import {
 } from './check-job-log-tail-slice'
 
 const trailing = Array.from({ length: 210 }, (_, index) => `recent ${index}`).join('\n')
-const fixture = readCheckLogFixture()
+const fixture = createCheckLogFixture()
 const earlier = (line: string): string => `${line}\n${trailing}`
 
 describe('bounded ANSI-aware marker candidates', () => {
@@ -107,14 +107,16 @@ describe('bounded ANSI-aware marker candidates', () => {
       }
     }
   )
-  it('preserves captured failure context in recent and generated earlier modes', () => {
+  it('preserves failure context in recent and generated earlier modes', () => {
     const recent = sliceCheckLogTail(fixture.rawLog)
     expect(recent).toContain(fixture.expectedDiagnostic)
     expect(recent).toContain(fixture.expectedStackFrame)
     const rawRows = fixture.rawLog.split('\n')
     const diagnostic =
-      rawRows.find((line) => line.includes('lucide-react') && line.includes('Copy')) ?? ''
-    const frame = rawRows.find((line) => line.includes('CopyTabIdMenuItem.tsx:')) ?? ''
+      rawRows.find((line) =>
+        ansi.stripAnsiEscapeSequences(line).includes(fixture.expectedDiagnostic)
+      ) ?? ''
+    const frame = rawRows.find((line) => line.includes(fixture.expectedStackFrame)) ?? ''
     const output = sliceCheckLogTail(`${diagnostic}\n${frame}\n${trailing}`)
     expect(output).toContain(fixture.expectedDiagnostic)
     expect(output).toContain(fixture.expectedStackFrame)

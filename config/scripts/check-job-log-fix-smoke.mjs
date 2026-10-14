@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 import { createManifest } from './check-job-log-performance-cases.mjs'
 import { prepareBenchmark, runDescriptor, hash } from './check-job-log-byte-cap-benchmark.mjs'
 
 assert(process.env.ORCA_CHECK_LOG_SMOKE_REPORT)
 const context = await prepareBenchmark()
 const manifest = createManifest({
-  fixturePath: path.join(
-    context.root,
-    'src',
-    'shared',
-    '__fixtures__',
-    'check-job-log-failure-output.json'
-  ),
   capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
 }).filter(
   (item) => item.mode === 'cpu' && ['baseline', 'proposed'].includes(item.arm) && item.sample < 3

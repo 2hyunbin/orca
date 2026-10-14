@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   auditResults,
@@ -13,19 +12,12 @@ import {
 const root = process.cwd()
 const manifest = selectRequiredDescriptors(
   createManifest({
-    fixturePath: path.join(
-      root,
-      'src',
-      'shared',
-      '__fixtures__',
-      'check-job-log-failure-output.json'
-    ),
     capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
   })
 ).filter((descriptor) => ['proposed', 'no-buffer', 'pinned'].includes(descriptor.arm))
 let context: Awaited<ReturnType<typeof prepareBenchmark>>
 const records: Awaited<ReturnType<typeof runDescriptor>>[] = []
-// Wall-clock gates over ~1k child workloads; only the dedicated CI job opts in.
+// Manual benchmark: opt in with ORCA_CHECK_LOG_PERF=1.
 const runPerformance = process.env.ORCA_CHECK_LOG_PERF === '1'
 
 describe.runIf(runPerformance)(

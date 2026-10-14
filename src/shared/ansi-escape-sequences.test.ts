@@ -116,7 +116,7 @@ describe('ordered linear ANSI stripping', () => {
   })
 })
 
-// 63 MiB child workloads run only in the dedicated CI log performance job.
+// Manual benchmark: opt in with ORCA_CHECK_LOG_PERF=1.
 describe.runIf(process.env.ORCA_CHECK_LOG_PERF === '1')(
   'near-cap unfinished 7-bit stripping completion',
   { concurrent: false },

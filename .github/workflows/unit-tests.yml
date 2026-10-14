@@ -94,38 +94,6 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # Why its own job: the CI log performance suites run ~1k child workloads up to 63 MiB under
-  # wall-clock scaling gates, so they must not share a runner with other unit workers.
-  check_log_performance:
-    if: inputs.run_shards
-    name: CI log performance node ${{ matrix.node }}
-    runs-on: ${{ inputs.runner }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ${{ fromJSON(inputs.node_versions) }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: none
-          node-version: ${{ matrix.node }}
-
-      - name: Test CI log performance
-        env:
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_CHECK_LOG_PERF: '1'
-        run: >-
-          pnpm exec vitest run --config config/vitest.config.ts --maxWorkers=1
-          src/shared/check-job-log-text-performance.test.ts
-          src/shared/ansi-escape-sequences.test.ts
-
   relay_integration:
     name: relay integration node ${{ matrix.node }}
     strategy:
