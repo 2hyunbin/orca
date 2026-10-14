@@ -209,8 +209,7 @@ describe('CI native cache ownership', () => {
       'native-runtime': 'electron',
       'node-version': '${{ steps.deps.outputs.node-version }}'
     })
-    expect(nativeWait.if).toContain('!cancelled()')
-    expect(nativeWait.if).toContain(electron.if)
+    expect(nativeWait).toEqual({ wait: electron.id })
     for (const name of ['e2e', 'changed-e2e', 'orcad-serve-mode-switch', 'orcad-ssh-docker']) {
       expect(e2e.jobs[name].needs, name).toEqual(['build'])
       expect(

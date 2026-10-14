@@ -159,7 +159,6 @@ jobs:
           if-no-files-found: error
 
       - wait: electron-native-runtime
-        if: ${{ !cancelled() && steps.native-runtime-action.outputs.available == 'true' && steps.deps.outputs.node-version != '' }}
 
   e2e:
     name: e2e ${{ matrix.shard_name }}
