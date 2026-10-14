@@ -391,7 +391,9 @@ describe('runtime Jira client search bounds', () => {
 
   it('streams image-bearing issue and comment payloads from older remote runtimes', async () => {
     const status = createCompatibleRuntimeStatusResponse()
-    if (!status.ok) {throw new Error('Expected successful status')}
+    if (!status.ok) {
+      throw new Error('Expected successful status')
+    }
     status.result.capabilities = status.result.capabilities?.filter(
       (capability) => capability !== JIRA_IMAGE_CAPABILITY
     )
