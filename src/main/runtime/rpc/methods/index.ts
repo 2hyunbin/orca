@@ -50,6 +50,7 @@ import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
 import { RUNTIME_CLIENT_CAPABILITY_METHODS } from './runtime-client-capabilities'
 import { EMULATOR_METHODS } from './emulator'
 import { PAIRING_METHODS } from './pairing'
+import { MANAGED_RUNTIME_SESSION_METHODS } from './managed-runtime-sessions'
 import { MOBILE_RELAY_HOSTS_METHODS } from './mobile-relay-hosts'
 import { UPDATER_METHODS } from './updater'
 import { AUTOMATIC_WORK_METHODS } from './automatic-work'
@@ -128,6 +129,7 @@ export const ALL_RPC_METHODS = [
   ...CLIENT_UI_METHODS,
   ...EMULATOR_METHODS,
   ...PAIRING_METHODS,
+  ...MANAGED_RUNTIME_SESSION_METHODS,
   ...MOBILE_RELAY_HOSTS_METHODS,
   ...UPDATER_METHODS,
   ...AUTOMATIC_WORK_METHODS

@@ -92,9 +92,13 @@ export class MobileSocketWiring {
   private readonly authenticatedSockets = new Map<WebSocket, AuthenticatedMobileSocket>()
   private readonly transports = new Set<MobileSocketTransport>()
   private readonly outboundMemoryBudget = createMobileE2EEOutboundMemoryBudget()
+  private readonly stopManagedSessionRetirement: () => void
 
   constructor(options: MobileSocketWiringOptions) {
     this.deviceRegistry = options.deviceRegistry
+    this.stopManagedSessionRetirement = this.deviceRegistry.managedSessions.onRetired((deviceId) =>
+      this.terminateDeviceConnections(deviceId)
+    )
     this.e2eeKeypair = options.e2eeKeypair
     this.onText = options.onText
     this.onBinary = options.onBinary
@@ -112,6 +116,8 @@ export class MobileSocketWiring {
 
   dispose(): void {
     clearInterval(this.ephemeralSweep)
+    this.deviceRegistry.managedSessions.dispose()
+    this.stopManagedSessionRetirement()
   }
 
   /** Removes idle session-only browser rows and cuts any socket still bound to them. */
@@ -285,8 +291,10 @@ export class MobileSocketWiring {
       })
       channel.onBinaryMessage((bytes) => {
         const socket = this.authenticatedSockets.get(ws)
-        if (socket) {
+        if (socket && this.deviceRegistry.resolveAuthenticatedPrincipal(socket.device)) {
           this.onBinary(socket, bytes)
+        } else if (socket) {
+          ws.terminate()
         }
       })
       this.channels.set(ws, channel)

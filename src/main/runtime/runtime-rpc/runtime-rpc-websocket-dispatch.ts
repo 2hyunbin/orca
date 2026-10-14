@@ -236,7 +236,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
             : undefined,
         pairing: pairingContext,
         deviceSelf:
-          authenticatedSocket && this.deviceRegistry
+          authenticatedSocket && this.deviceRegistry && !device.runtimeLease
             ? {
                 registerDeviceKey: (params) =>
                   registerSocketDeviceKey(this.deviceRegistry!, authenticatedSocket, params)
@@ -244,8 +244,24 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
             : undefined,
         mobileRelayHosts: this.mobileRelayHostCatalog ?? undefined,
         delegatedMobileDevices:
-          device.scope === 'runtime'
+          device.scope === 'runtime' && !device.runtimeLease
             ? { sync: (phones) => this.syncDelegatedMobileDevices(device.deviceId, phones) }
+            : undefined,
+        managedRuntimeSessions:
+          device.scope === 'runtime' && !device.runtimeLease && this.deviceRegistry
+            ? {
+                open: (subjectKey, name, grants) =>
+                  this.deviceRegistry!.managedSessions.open(
+                    device.deviceId,
+                    subjectKey,
+                    name,
+                    grants
+                  ),
+                renew: (deviceId) =>
+                  this.deviceRegistry!.managedSessions.renew(device.deviceId, deviceId),
+                revoke: (deviceId) =>
+                  this.deviceRegistry!.managedSessions.revoke(device.deviceId, deviceId)
+              }
             : undefined,
         signal: abortRegistration?.signal,
         sendBinary,

@@ -10,6 +10,7 @@ export * from './native-runtime-client-capabilities'
 import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from './plugins/plugin-environment-provider-runtime-capability'
 import { WORKSPACE_ATTACHMENT_RUNTIME_CAPABILITIES } from './workspace-attachment-capabilities'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from './ssh-target-management'
+import { MANAGED_RUNTIME_SESSION_CAPABILITY } from './managed-runtime-session-contract'
 import { AUTOMATION_RUNTIME_CAPABILITIES } from './automation-runtime-capabilities'
 export {
   AUTOMATION_LIST_HOST_SCOPE_RUNTIME_CAPABILITY,
@@ -339,6 +340,7 @@ export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const
 
 export const RUNTIME_CAPABILITIES = [
+  MANAGED_RUNTIME_SESSION_CAPABILITY,
   PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY,
   PLUGIN_VIEWER_RUNTIME_DOCUMENT_CAPABILITY,
   PLUGIN_VIEWER_RUNTIME_SELECTION_CAPABILITY,

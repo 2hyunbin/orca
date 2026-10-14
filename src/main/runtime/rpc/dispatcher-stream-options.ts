@@ -19,6 +19,7 @@ export type RpcDispatchStreamingOptions = Pick<
   | 'deviceSelf'
   | 'mobileRelayHosts'
   | 'delegatedMobileDevices'
+  | 'managedRuntimeSessions'
   | 'sendBinary'
   | 'registerBinaryStreamHandler'
   | 'registerBinaryMessageHandler'
@@ -54,6 +55,7 @@ export function rpcContextFromTransport(
     deviceSelf: options?.deviceSelf,
     mobileRelayHosts: options?.mobileRelayHosts,
     delegatedMobileDevices: options?.delegatedMobileDevices,
+    managedRuntimeSessions: options?.managedRuntimeSessions,
     sendBinary: options?.sendBinary,
     registerBinaryStreamHandler: options?.registerBinaryStreamHandler,
     registerBinaryMessageHandler: options?.registerBinaryMessageHandler,

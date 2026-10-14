@@ -21,6 +21,10 @@ import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
 import {
+  ManagedRuntimeSessionOpenSchema,
+  ManagedRuntimeSessionSelectorSchema
+} from '../managed-runtime-session-contract'
+import {
   PairingGetEndpointsParamsSchema,
   PairingProvisionRelayParamsSchema
 } from '../mobile-relay-credential-contract'
@@ -1148,6 +1152,9 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.workerTerminalUserInput': OrchestrationWorkerTerminalUserInputParams,
   'pairing.delegatedMobileDevice.sync': DelegatedMobileDeviceSyncParamsSchema,
   'pairing.getEndpoints': PairingGetEndpointsParamsSchema,
+  'pairing.managedRuntimeSession.open': ManagedRuntimeSessionOpenSchema,
+  'pairing.managedRuntimeSession.renew': ManagedRuntimeSessionSelectorSchema,
+  'pairing.managedRuntimeSession.revoke': ManagedRuntimeSessionSelectorSchema,
   'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,
   'plugins.consent': pluginConsentRequestSchema,

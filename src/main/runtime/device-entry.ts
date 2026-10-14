@@ -24,6 +24,8 @@ export type DeviceEntry = {
   // Why: a phone relayed by a paired desktop is that desktop's child; it dies with the parent's grant.
   parentDeviceId?: string
   phoneKey?: string
+  /** In-memory managed workspace session; cannot become a durable device or delegate further. */
+  runtimeLease?: true
   // Why: administrative permissions are granted only when pairing; absent on older rows means none.
   grants?: RuntimeDeviceGrant[]
   // Why: authenticated sockets are bound to this; a credential change bumps it. Absent = 0.
@@ -59,6 +61,21 @@ export function isPendingTokenRow(device: DeviceEntry): device is TokenDeviceEnt
 export function sameGrants(entry: DeviceEntry, grants: readonly RuntimeDeviceGrant[]): boolean {
   const current = entry.grants ?? []
   return current.length === grants.length && current.every((grant) => grants.includes(grant))
+}
+
+export function findPendingDevice(
+  devices: readonly DeviceEntry[],
+  scope: DeviceScope,
+  grants?: readonly RuntimeDeviceGrant[]
+): TokenDeviceEntry | null {
+  return (
+    devices.find(
+      (device): device is TokenDeviceEntry =>
+        isPendingTokenRow(device) &&
+        device.scope === scope &&
+        (grants === undefined || sameGrants(device, grants))
+    ) ?? null
+  )
 }
 
 // Why: "unknown" must mean "readable and absent" — clients delete their key only on that verdict.

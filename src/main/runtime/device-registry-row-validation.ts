@@ -44,6 +44,7 @@ export function validRelayBinding(
 export function normalizeLoadedDeviceRow(device: DeviceEntry): DeviceEntry {
   return {
     ...device,
+    runtimeLease: undefined,
     // Why: older registries only existed for phone pairing. Treat missing
     // scope as mobile so legacy device tokens do not gain new CLI powers.
     scope: device.scope === 'runtime' ? 'runtime' : 'mobile',

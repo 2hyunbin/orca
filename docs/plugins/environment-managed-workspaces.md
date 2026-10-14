@@ -36,4 +36,14 @@ Use the production hidden desktop, packaged Node controller and an owned real Li
 
 Exercise binary terminal input/output, multiple sessions, cancellation during setup, controller crash/restart, sleep/wake, reviewed endpoint migration, credential revocation and a conflicting generation update. Old controller/child builds must refuse unsupported access with an actionable update message. Test relay/custom-path behavior separately, alongside Windows/WSL and the release matrix. A terminal census is retained evidence for deployment, not acceptance of this workspace journey.
 
-Current foundation checks cover route identity, descriptor validation, negotiation, reserved-path refusal and root transport compatibility. Gateway forwarding, delegation, persistence and rendered workspace selection remain implementation work.
+Current foundation checks cover route identity, descriptor validation, negotiation, reserved-path refusal and root transport compatibility. Controller-to-child forwarding, persistence and rendered workspace selection remain implementation work.
+
+## Implemented child-session boundary · 14 October 2026
+
+`pairing.managedRuntimeSession.open/renew/revoke` now creates an in-memory runtime device bound to the authenticated controller. Its capability is separate from the still-unadvertised workspace gateway. A session inherits the controller's existing runtime permissions. Optional desktop-control is absent by default; an explicit request must be within the controller's grants, allowing the gateway to narrow it to the incoming desktop's authority. It receives its own bearer and device identity, plus a stable caller fingerprint scoped to the controller and desktop subject. It cannot mint further sessions or phones, register a permanent key, or acquire pairing administration.
+
+The controller renews within a 30-second lease; it never receives an immortal delegated pairing. Parent removal, credential-revision/token changes and grant changes retire the session. Expiry and explicit revocation close authenticated sockets without waiting for incoming traffic. Shutdown drains these memory-only credentials; ordinary registry saves omit them. Per-controller and total session caps bound retained state.
+
+Binary input revalidates the authenticated principal before entering runtime stream handlers. The existing encrypted passthrough now sends binary input through its existing bounded outbound queue, preserving one session for text and binary traffic. Real localhost encrypted-session checks cover input/output, revoked socket closure and refused binary delivery. The test stream is a controlled RPC fixture, not a native terminal or a complete controller gateway.
+
+This makes child delegation and its transport usable for the forthcoming gateway. It does not make provider workspace access available in the desktop yet. The production normal-UI journey above remains required.

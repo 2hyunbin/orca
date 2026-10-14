@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nacl from 'tweetnacl'
 import type { WebSocket } from 'ws'
 import {
@@ -8,7 +11,8 @@ import {
   type MobileE2EEV2Ready
 } from '../../../shared/mobile-e2ee-v2-contract'
 import { sealMobileE2EEV2Frame } from '../../../shared/mobile-e2ee-v2-framing'
-import type { DeviceRegistry } from '../device-registry'
+import { DeviceRegistry } from '../device-registry'
+import { DEVICE_REGISTRY_FILENAME } from '../mobile-pairing-files'
 import { deriveSharedKey, encrypt, generateKeyPair } from './e2ee-crypto'
 import { deriveMobileE2EEV2KeySchedule } from '../../../shared/mobile-e2ee-v2-node-key-schedule'
 import {
@@ -49,26 +53,28 @@ class FakeTransport implements MobileSocketTransport {
   }
 }
 
+const registryFixtures: { directory: string; registry: DeviceRegistry }[] = []
+afterEach(() => {
+  for (const { directory, registry } of registryFixtures.splice(0)) {
+    registry.managedSessions.dispose()
+    registry.flushPendingLastSeen()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 function registryFor(
   deviceId: string,
   token: string,
   scope: 'mobile' | 'runtime' = 'mobile'
 ): DeviceRegistry {
-  return {
-    validateToken: (candidate: string) =>
-      candidate === token
-        ? {
-            deviceId,
-            token,
-            name: 'Phone',
-            scope,
-            pairedAt: 1,
-            lastSeenAt: 0
-          }
-        : null,
-    updateLastSeen: vi.fn(),
-    updateLastSeenDeferred: vi.fn()
-  } as unknown as DeviceRegistry
+  const directory = mkdtempSync(join(tmpdir(), 'orca-socket-registry-'))
+  writeFileSync(
+    join(directory, DEVICE_REGISTRY_FILENAME),
+    JSON.stringify([{ deviceId, token, name: 'Phone', scope, pairedAt: 1, lastSeenAt: 0 }])
+  )
+  const registry = new DeviceRegistry(directory)
+  registryFixtures.push({ directory, registry })
+  return registry
 }
 
 describe('MobileSocketWiring', () => {

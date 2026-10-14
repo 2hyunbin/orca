@@ -7,7 +7,8 @@ import { writeDurableSecureJsonFile, writeSecureJsonFile } from '../../shared/se
 import type { DeviceScope } from '../../shared/runtime-types'
 import { removeStaleDurableWriteTempFiles } from '../durable-file-write'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
-import { mintDeviceCredential } from './device-credential'
+import { mintPairedDeviceEntry } from './device-credential'
+import { ManagedRuntimeSessionLeases } from './managed-runtime-session-leases'
 import { planDeviceKeyFork } from './device-key-fork'
 import { planIdleEphemeralPrune, withoutEphemeralRows } from './ephemeral-device-rows'
 import { quarantineCorruptRegistry } from './device-registry-corruption'
@@ -24,11 +25,11 @@ import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 import { validGrants } from './device-registry-row-validation'
 import {
   isPendingTokenRow,
+  findPendingDevice,
   mobilePairingConnectionModeOf,
   isStillAuthenticated,
   type AuthenticatedPrincipalBinding,
   lookupDeviceKeyRow,
-  sameGrants,
   type DeviceEntry,
   type DeviceKeyLookup,
   type TokenDeviceEntry
@@ -45,6 +46,9 @@ const LAST_SEEN_FLUSH_DELAY_MS = 250
 const STALE_WRITE_TEMP_AGE_MS = 24 * 60 * 60 * 1000
 
 export class DeviceRegistry {
+  readonly managedSessions = new ManagedRuntimeSessionLeases(
+    (deviceId) => this.devices.find((device) => device.deviceId === deviceId) ?? null
+  )
   private readonly registryPath: string
   private devices: DeviceEntry[] = []
   /** Set when the registry exists but could not be read, which makes `devices` a lie to save from. */
@@ -79,16 +83,7 @@ export class DeviceRegistry {
     pairingReach: RuntimePairingReach,
     grants: readonly RuntimeDeviceGrant[]
   ): TokenDeviceEntry {
-    const validatedGrants = validGrants(grants, scope)
-    const entry: TokenDeviceEntry = {
-      ...mintDeviceCredential(),
-      name,
-      scope,
-      pairedAt: Date.now(),
-      lastSeenAt: 0,
-      pairingReach,
-      ...(validatedGrants ? { grants: validatedGrants } : {})
-    }
+    const entry = mintPairedDeviceEntry(name, scope, pairingReach, grants)
     const nextDevices = [...existingDevices, entry]
     // Why: a credential is not valid until its durable registry write succeeds.
     this.save(nextDevices)
@@ -109,27 +104,18 @@ export class DeviceRegistry {
     grants: readonly RuntimeDeviceGrant[] = []
   ): TokenDeviceEntry {
     // Why: a pending token is reused only for the same grants, so re-advertising never widens one.
-    const existing = this.devices.find(
-      (d): d is TokenDeviceEntry =>
-        isPendingTokenRow(d) && d.scope === scope && sameGrants(d, validGrants(grants, scope) ?? [])
-    )
+    const existing = findPendingDevice(this.devices, scope, validGrants(grants, scope) ?? [])
     if (existing) {
       // Why: the same pending token can be re-advertised at a broader reach; widen it but never narrow it,
       // or a link already handed out for off-host use would stop being served after the next launch.
-      return pairingReach === 'network' && existing.pairingReach === 'this-computer'
-        ? this.setPairingReach(existing, 'network')
-        : existing
+      if (pairingReach === 'network' && existing.pairingReach === 'this-computer') {
+        const updated: TokenDeviceEntry = { ...existing, pairingReach: 'network' }
+        this.replaceRow(existing.deviceId, () => updated)
+        return updated
+      }
+      return existing
     }
     return this.addDevice(name, scope, pairingReach, grants)
-  }
-
-  private setPairingReach(
-    existing: TokenDeviceEntry,
-    pairingReach: RuntimePairingReach
-  ): TokenDeviceEntry {
-    const updated: TokenDeviceEntry = { ...existing, pairingReach }
-    this.replaceRow(existing.deviceId, () => updated)
-    return updated
   }
 
   // Why: explicit rotation path for "Regenerate QR" — invalidates any
@@ -158,6 +144,9 @@ export class DeviceRegistry {
     parent: DeviceEntry,
     phones: readonly DelegatedPhone[]
   ): DelegatedMobileDeviceEntry[] {
+    if (parent.runtimeLease) {
+      throw new Error('managed_session_cannot_delegate')
+    }
     const { nextDevices, entries } = planDelegatedMobileDevices(this.devices, parent, phones)
     if (nextDevices !== this.devices) {
       this.save(nextDevices)
@@ -175,19 +164,18 @@ export class DeviceRegistry {
     // only in-process while disk still lists it (and vice versa on reload).
     this.save(nextDevices)
     this.devices = nextDevices
+    this.managedSessions.retireParent(deviceId)
     return true
   }
 
   getDevice(deviceId: string): DeviceEntry | null {
-    return this.devices.find((d) => d.deviceId === deviceId) ?? null
+    return (
+      this.devices.find((d) => d.deviceId === deviceId) ?? this.managedSessions.resolve(deviceId)
+    )
   }
 
   getPendingDevice(scope: DeviceScope = 'mobile'): TokenDeviceEntry | null {
-    return (
-      this.devices.find(
-        (device): device is TokenDeviceEntry => isPendingTokenRow(device) && device.scope === scope
-      ) ?? null
-    )
+    return findPendingDevice(this.devices, scope)
   }
 
   setRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {
@@ -226,6 +214,7 @@ export class DeviceRegistry {
   validateToken(token: string): DeviceEntry | null {
     return (
       (token && this.devices.find((d) => d.credentialKind === undefined && d.token === token)) ||
+      this.managedSessions.validateToken(token) ||
       null
     )
   }
@@ -245,6 +234,9 @@ export class DeviceRegistry {
     label: string,
     options: { ephemeral?: boolean } = {}
   ): DeviceEntry {
+    if (this.managedSessions.resolve(legacyDeviceId)) {
+      throw new Error('managed_session_cannot_persist')
+    }
     const fork = planDeviceKeyFork(
       this.devices,
       legacyDeviceId,
@@ -290,6 +282,9 @@ export class DeviceRegistry {
    */
   updateLastSeenDeferred(deviceId: string): void {
     const existing = this.getDevice(deviceId)
+    if (existing?.runtimeLease) {
+      return
+    }
     if (!existing || existing.lastSeenAt === 0) {
       return existing ? this.updateLastSeen(deviceId) : undefined
     }

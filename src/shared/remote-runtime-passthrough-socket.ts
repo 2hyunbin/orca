@@ -17,6 +17,8 @@ import { RemoteRuntimeSubscriptionOutbound } from './remote-runtime-subscription
 export type RemoteRuntimePassthroughSocket = {
   /** Queues one plaintext RPC frame; false when the socket can no longer carry it. */
   send: (plaintext: string) => boolean
+  /** Queues a plaintext binary frame through the same authenticated session and memory budget. */
+  sendBinary: (bytes: Uint8Array<ArrayBufferLike>) => boolean
   close: () => void
 }
 
@@ -167,6 +169,10 @@ export function openRemoteRuntimePassthroughSocket(
         send: (plaintext) =>
           state === 'ready' && ws.readyState === WebSocket.OPEN
             ? outbound.enqueueRequest(ws, handshake.channel.sealText(plaintext))
+            : false,
+        sendBinary: (bytes) =>
+          state === 'ready' && ws.readyState === WebSocket.OPEN
+            ? outbound.enqueueBinary(ws, Buffer.from(handshake.channel.sealBinary(bytes)))
             : false,
         close: () => end(null)
       })

@@ -9,6 +9,7 @@ import type {
   PairingProvisionRelayParams
 } from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
+import type { ManagedRuntimeSessionGrant } from '../../../shared/managed-runtime-session-contract'
 import type {
   MobileRelayHostsListResult,
   MobileRelayHostWorktreesResult
@@ -21,7 +22,7 @@ import type { OrchestrationCompatibilityEvidence } from '../../../shared/orchest
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
 import type { RpcCallerIdentity } from './rpc-caller-identity'
 import type { RpcBinarySender } from './rpc-binary-sender'
-import type { RpcMethodPermission } from './rpc-method-permission'
+import type { RpcMethodPermission, RuntimeDeviceGrant } from './rpc-method-permission'
 import type {
   RegisterDeviceKeyParams,
   RegisterDeviceKeyResult
@@ -143,6 +144,15 @@ export type RpcContext = {
   // Why: set only for an authenticated runtime-scope device and bound to it, so it manages only its own phones.
   delegatedMobileDevices?: {
     sync(phones: readonly DelegatedPhone[]): DelegatedMobileDeviceSyncResult
+  }
+  managedRuntimeSessions?: {
+    open(
+      subjectKey: string,
+      name: string,
+      grants?: readonly RuntimeDeviceGrant[]
+    ): ManagedRuntimeSessionGrant
+    renew(deviceId: string): { expiresAt: number }
+    revoke(deviceId: string): boolean
   }
   // Why: mobile terminal traffic bypasses JSON streaming; undefined on Unix/socket and non-E2EE WebSocket paths.
   sendBinary?: RpcBinarySender
