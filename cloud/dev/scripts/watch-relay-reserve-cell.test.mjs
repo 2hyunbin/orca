@@ -10,14 +10,14 @@ import {
   measuredBackground
 } from './relay-reserve-watch-rules.mjs'
 import {
+  ALARM_EVENT,
+  ALARM_LOG_NAME,
   FLIP_BACK_ATTEMPTS,
   FLIP_BACK_RUNTIME_ATTEMPTS,
   flipBack,
-  ALARM_EVENT,
-  ALARM_LOG_NAME,
   parseWatchArguments,
-  raiseAlarm,
   parseWatchSegment,
+  raiseAlarm,
   readDirector503Minutes,
   readSeatBehindRowSample,
   recordOutcome,
@@ -949,4 +949,10 @@ test('an alarm is an escaped error annotation everywhere, and in write mode a pa
   assert.deepEqual(failed, { paged: false })
   assert.match(lines.at(-1), /^::error title=Reserve watch page failed::.*nothing pages: PERMISSION_DENIED/)
   await assert.rejects(alarm({ kind: 'other' }), /--kind must be one of/)
+  // A missing project still annotates, then names the page it could not send.
+  const before = calls.length
+  assert.deepEqual(await alarm({ projectId: undefined }), { paged: false })
+  assert.equal(calls.length, before)
+  assert.match(lines.at(-2), /^::error title=Reserve watch refused for /)
+  assert.match(lines.at(-1), /nothing pages: --project-id is not a GCP project id/)
 })

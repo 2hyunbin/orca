@@ -484,6 +484,8 @@ export async function raiseAlarm({ mode, cellId, projectId, kind, reason }, { ru
   if (mode !== 'write') return { paged: false }
   const entry = JSON.stringify({ event: ALARM_EVENT, cellId, kind, reason })
   try {
+    // The flag tool's project check: a missing --project-id must not reach gcloud as "undefined".
+    if (!/^[a-z][a-z0-9-]{4,62}$/.test(projectId ?? '')) throw new Error('--project-id is not a GCP project id')
     await runGcloud(
       ['logging', 'write', ALARM_LOG_NAME, entry, '--payload-type=json', '--severity=ERROR', '--project', projectId],
       { timeoutMs: 30_000 }

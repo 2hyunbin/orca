@@ -841,9 +841,10 @@ delays a trip by its lag but cannot hide one, because a later read sees its poin
 minutes before `flipped-at` are published (3 minutes past it) the 503 rule is pending, which does
 not add to the streak. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which
 every placing director logs each minute, in the same query and window: with no summary from the
-last 150 s in it, the read is blind and the sample unverifiable, not zero duplicates. The duplicate rule keys a seat by
-director instance, so a director restart (a new instance id) starts its first-seen clock over. A
-cell whose switch file no longer says reserve ends the watch without a write.
+last 150 s in it, the read is blind and the sample unverifiable, not zero duplicates. The duplicate
+rule keys a seat by director instance, so a director restart (a new instance id) starts its
+first-seen clock over. A cell whose switch file no longer says reserve ends the watch without a
+write.
 
 In `write` mode a watch that fails, times out or is cancelled before a verdict flips the cell back
 as a trip would; the flip-back job and each of its steps run on `always()`, so a cancel during the
@@ -864,10 +865,11 @@ failed login, a cell that does not answer) can each leave the cell in reserve wi
 it, so both raise an `::error::` annotation naming the cell, as the clock-skew monitor does. In
 `write` mode both also log `orca_relay_reserve_watch_alarm` (log `orca-relay-reserve-watch`,
 resource `global`) with the deploy identity, and the `Orca Relay: reserve cell may be unwatched`
-alert pages on any such line. A runner that cannot log in cannot write that line either, so a
-failed login pages only through the operator watching the run. The workflow logs in, and the
-alarm line is written, only once the root Terraform that adds the workflow to the shared deploy
-identity's provider condition and grants that identity `roles/logging.logWriter` is applied.
+alert pages on any such line. A failed login cannot page: the runner then has no credentials for
+`gcloud logging write`, so only the `::error::` and the operator watching the run report it. Apply
+the root Terraform that adds the workflow to the shared deploy identity's provider condition and
+grants that identity `roles/logging.logWriter` before the first `write` run; until then the
+workflow cannot log in and no alarm line can be written.
 
 ## Mobile push gateway
 
