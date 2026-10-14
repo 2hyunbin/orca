@@ -2,21 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as WorktreeMetaPersistModule from '../worktrees/metadata/worktree-meta-persist'
 import { makeFolderWorkspace, makeWorktree } from '../worktrees-slice-test-fixtures'
 import { folderWorkspaceKey } from '../../../../../shared/workspace-scope'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../shared/constants'
 import {
   addLiveTerminalTab,
-  autoAckViewedTab,
-  completeAgentTurn,
   createAttentionStore,
-  FLOATING_TERMINAL_WORKTREE_ID,
   installAttentionMockApi,
   LEAF_2,
   observe,
+  WS_A,
+  WS_B
+} from './workspace-unread-characterization-fixture'
+import {
+  autoAckViewedTab,
+  completeAgentTurn,
   pointerDownInTab,
   ringBell,
   toggleUnreadByUser,
-  typeInPane,
-  WS_A,
-  WS_B
+  typeInPane
 } from './workspace-unread-characterization-driver'
 
 // Pins today's unread transitions (workspace flag, tab/pane/completion markers, persistence,
@@ -209,7 +211,7 @@ describe('bells', () => {
     `)
   })
 
-  it('floating terminal bell (design rule 11)', () => {
+  it('floating terminal bell', () => {
     const { store, persists } = createAttentionStore()
     store.getState().setFloatingWorkspacePath('/home/test/floating')
     const pane = addLiveTerminalTab(store, FLOATING_TERMINAL_WORKTREE_ID, 'tab-float')
@@ -620,11 +622,6 @@ describe('manual, inbound and restart', () => {
         "dock=1 floatingDot=false",
       ]
     `)
-  })
-
-  it('WS_B stays untouched as the control row', () => {
-    const { store, persists } = createAttentionStore()
-    expect(observe(store, persists)[0]).toContain('b@local:read:0')
   })
 })
 

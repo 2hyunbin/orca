@@ -11,10 +11,6 @@ import {
   runtimeEnvironmentCall,
   worktreeListMock
 } from './worktrees-slice-test-harness'
-import {
-  clearWorkspaceUnreadFlag,
-  markWorkspaceUnreadFlag
-} from './workspace-attention/workspace-unread-flag'
 
 const requestWorktreeBaseFallbackNotice = vi.hoisted(() => vi.fn())
 
@@ -116,7 +112,12 @@ describe('worktree remote runtime mutations', () => {
     [
       'markAgentAttentionUnread',
       async (store: ReturnType<typeof createTestStore>, worktreeId: string) => {
-        markWorkspaceUnreadFlag(store.setState, store.getState, worktreeId)
+        store.getState().markAgentAttentionUnread({
+          workspaceId: worktreeId,
+          subjectKey: null,
+          groupId: null,
+          reason: 'agent-completion'
+        })
         await new Promise((resolve) => setTimeout(resolve, 0))
       }
     ]
@@ -205,8 +206,8 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
-    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
+    store.getState().readTerminalPaneOnInput({ worktreeId: folderKey, tabId: '', paneKey: null })
+    store.getState().readTerminalPaneOnInput({ worktreeId: folderKey, tabId: '', paneKey: null })
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
@@ -223,7 +224,12 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
+    store.getState().markAgentAttentionUnread({
+      workspaceId: folderKey,
+      subjectKey: null,
+      groupId: null,
+      reason: 'agent-completion'
+    })
     expect(store.getState().folderWorkspaces[0]).toEqual(
       expect.objectContaining({ isUnread: true, lastActivityAt: expect.any(Number) })
     )
@@ -242,8 +248,13 @@ describe('worktree remote runtime mutations', () => {
     const folderKey = folderWorkspaceKey(folderWorkspace.id)
     store.setState({ folderWorkspaces: [folderWorkspace] } as Partial<AppState>)
 
-    markWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
-    clearWorkspaceUnreadFlag(store.setState, store.getState, folderKey)
+    store.getState().markAgentAttentionUnread({
+      workspaceId: folderKey,
+      subjectKey: null,
+      groupId: null,
+      reason: 'agent-completion'
+    })
+    store.getState().readTerminalPaneOnInput({ worktreeId: folderKey, tabId: '', paneKey: null })
 
     expect(store.getState().folderWorkspaces[0]?.isUnread).toBe(false)
     expect(store.getState().updateFolderWorkspace).toHaveBeenNthCalledWith(

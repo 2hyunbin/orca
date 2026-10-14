@@ -10,7 +10,6 @@ import type { WorktreeCardPresentation } from './worktree-card-presentation'
 import { WorktreeCardSecondaryRows } from './worktree-card-secondary-rows'
 import { WorktreeCardStatusSlot } from './WorktreeCardStatusSlot'
 import type { WorktreeCardController } from './use-worktree-card-controller'
-import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 export function WorktreeCardParentContent({
   card,
@@ -150,7 +149,7 @@ export function WorktreeCardParentContent({
             worktreeId={worktree.id}
             showStatus={showStatus}
             showUnreadAction={showUnreadQuickAction}
-            isUnread={isWorkspaceUnread(worktree)}
+            isUnread={worktree.isUnread}
             unreadTooltip={unreadTooltip}
             onPointerDown={stopQuickActionPointerPropagation}
             onToggleUnread={handleToggleUnreadQuick}

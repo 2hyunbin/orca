@@ -3,6 +3,7 @@ import {
   type AgentAttentionRemainder,
   type ReadableAgentAttentionUnread
 } from './agent-attention-contract'
+import type { WorkspaceAttentionSlice } from '@/store/slices/workspace-attention/workspace-attention-contract'
 
 /** Subject-keyed turn bookkeeping the acknowledgement policy reads; no surface shape here. */
 export type AgentAttentionTurnRecords = {
@@ -14,12 +15,7 @@ export type AgentAttentionTurnRecords = {
 
 export type AgentAttentionAcknowledgementSink = {
   acknowledgeSubjects: (subjectKeys: string[]) => void
-  /** The workspace-attention module's `readViewedAgentAttention`. */
-  readViewedAttention: (args: {
-    workspaceIdToClear: string | null
-    groupId: string
-    subjectKeys: Iterable<string>
-  }) => void
+  readViewedAgentAttention: WorkspaceAttentionSlice['readViewedAgentAttention']
 }
 
 export function readAgentAttentionTurnStartedAt(
@@ -161,7 +157,7 @@ export function applyAgentAttentionAcknowledgement(
     sink.acknowledgeSubjects(args.subjectKeys)
   }
   // Why: the selected agent is now visible, so drop the Dock-driving workspace unread too.
-  sink.readViewedAttention({
+  sink.readViewedAgentAttention({
     workspaceIdToClear: args.workspaceIdToClear,
     groupId: args.viewedGroupId,
     subjectKeys: subjectKeysToClear

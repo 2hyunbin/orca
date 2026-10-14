@@ -20,7 +20,7 @@ import {
   structuredAgentSessionFocusOwner,
   structuredAgentSessionTargetForTab
 } from '@/runtime/structured-agent-session-owner'
-import { removeTabMarkers } from '../workspace-attention/subject-attention-transitions'
+import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 
 export function createTabsCloseActions(
   set: TabsSliceSet,
@@ -96,9 +96,7 @@ export function createTabsCloseActions(
         )
         // Why: close-to-right/others bypass terminals.closeTab, so clear the entityId-keyed unread flag here or a stale dot leaks.
         const nextUnreadTerminalTabs = terminalEntityId
-          ? removeTabMarkers(current.unreadTerminalTabs, [terminalEntityId], (record) => ({
-              ...record
-            }))
+          ? omitRecordKeys(current.unreadTerminalTabs, [terminalEntityId])
           : current.unreadTerminalTabs
         let nextGroups = (current.groupsByWorktree[worktreeId] ?? []).map((candidate) =>
           candidate.id === group?.id

@@ -1,11 +1,8 @@
-import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../../../shared/workspace-scope'
-import type { AppState } from '../../types'
 import { applyWorktreeUpdates } from '../worktree-helpers'
 import {
   applyDetectedWorktreeUpdates,
-  findKnownWorktreeById,
-  folderWorkspaceMatchesHost
+  findKnownWorktreeById
 } from '../worktrees/listing/detected-worktree-meta'
 import { persistPassiveWorktreeMetaForOwner } from '../worktrees/listing/worktree-owner-settings'
 import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-attention-contract'
@@ -148,66 +145,5 @@ export function clearWorkspaceUnreadFlag(
     worktreeId,
     { isUnread: false },
     'persist cleared unread worktree state'
-  )
-}
-
-export type WorkspaceActivationReadPatch = Pick<
-  AppState,
-  'worktreesByRepo' | 'detectedWorktreesByRepo' | 'folderWorkspaces'
->
-
-/**
- * Activating a workspace reads its flag: every worktree row with the id, or the folder rows on the
- * activated host. Pure, so activation folds it into its own `set()`; markers are left alone; null
- * when the activated row is not unread.
- * Why no lastActivityAt: focus isn't smart-sort activity — writing it caused the "jump after focus" bug.
- */
-export function readWorkspaceFlagOnActivation(
-  s: WorkspaceActivationReadPatch,
-  worktreeId: string,
-  executionHostId: ExecutionHostId | undefined,
-  activatedRow: { isUnread?: boolean } | undefined
-): WorkspaceActivationReadPatch | null {
-  if (!activatedRow?.isUnread) {
-    return null
-  }
-  const workspaceScope = parseWorkspaceKey(worktreeId)
-  return {
-    worktreesByRepo: applyWorktreeUpdates(s.worktreesByRepo, worktreeId, { isUnread: false }),
-    detectedWorktreesByRepo: applyDetectedWorktreeUpdates(s.detectedWorktreesByRepo, worktreeId, {
-      isUnread: false
-    }),
-    folderWorkspaces:
-      workspaceScope?.type === 'folder'
-        ? s.folderWorkspaces.map((workspace) =>
-            workspace.id === workspaceScope.folderWorkspaceId &&
-            (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
-              ? { ...workspace, isUnread: false }
-              : workspace
-          )
-        : s.folderWorkspaces
-  }
-}
-
-/** Persists the read that {@link readWorkspaceFlagOnActivation} applied. */
-export function persistWorkspaceReadOnActivation(
-  get: WorkspaceAttentionGet,
-  worktreeId: string,
-  executionHostId: ExecutionHostId | undefined
-): void {
-  const workspaceScope = parseWorkspaceKey(worktreeId)
-  if (workspaceScope?.type === 'folder') {
-    void get().updateFolderWorkspace(
-      workspaceScope.folderWorkspaceId,
-      { isUnread: false },
-      executionHostId ? { executionHostId } : undefined
-    )
-    return
-  }
-  persistPassiveWorktreeMetaForOwner(
-    get,
-    worktreeId,
-    { isUnread: false },
-    'persist worktree activation state'
   )
 }

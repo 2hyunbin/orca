@@ -99,7 +99,7 @@ export function acknowledgeViewedAutoAckTarget(
   applyAgentAttentionAcknowledgement(
     {
       acknowledgeSubjects: (keys) => state.acknowledgeAgents(keys, []),
-      readViewedAttention: state.readViewedAgentAttention
+      readViewedAgentAttention: state.readViewedAgentAttention
     },
     {
       workspaceIdToClear:

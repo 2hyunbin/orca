@@ -1,5 +1,4 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 import {
   findTabAndWorktree,
   findTabByEntityInGroup,
@@ -61,8 +60,14 @@ export function createTabsFocusActions(
         // Why (activeWorktree guard below): only when the tab is in the active worktree, else the unseen signal is lost (mirrors focusGroup).
         const terminalEntityId = tab.contentType === 'terminal' ? tab.entityId : null
         const nextUnreadTerminalTabs =
-          state.activeWorktreeId === worktreeId && terminalEntityId
-            ? omitRecordKeys(state.unreadTerminalTabs, [terminalEntityId])
+          state.activeWorktreeId === worktreeId &&
+          terminalEntityId &&
+          state.unreadTerminalTabs[terminalEntityId]
+            ? (() => {
+                const copy = { ...state.unreadTerminalTabs }
+                delete copy[terminalEntityId]
+                return copy
+              })()
             : state.unreadTerminalTabs
         return {
           unifiedTabsByWorktree: {

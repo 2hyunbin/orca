@@ -4,7 +4,6 @@ import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { recordRendererCrashBreadcrumb } from '@/lib/crash-diagnostics'
 import { activateWorktreeFromSidebar } from '@/lib/sidebar-worktree-activation'
 import { isEventTargetInsideCurrentTarget } from './worktree-card-dom-events'
-import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 import type { WorktreeCardProps } from './worktree-card-model'
 import type { useWorktreeCardFoundation } from './use-worktree-card-foundation'
 import type { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details'
@@ -156,14 +155,13 @@ export function useWorktreeCardActivationActions({
     ]
   )
 
-  const worktreeIsUnread = isWorkspaceUnread(worktree)
   const handleToggleUnreadQuick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault()
       event.stopPropagation()
-      setWorkspaceUnreadByUser(worktree.id, !worktreeIsUnread, worktree.hostId ?? 'local')
+      setWorkspaceUnreadByUser(worktree.id, !worktree.isUnread, worktree.hostId ?? 'local')
     },
-    [worktree.hostId, worktree.id, worktreeIsUnread, setWorkspaceUnreadByUser]
+    [worktree.hostId, worktree.id, worktree.isUnread, setWorkspaceUnreadByUser]
   )
 
   return { handleClick, handleRenameTitle, handleDoubleClick, handleToggleUnreadQuick }

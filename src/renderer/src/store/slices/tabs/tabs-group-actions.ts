@@ -8,7 +8,6 @@ import {
   replaceLeaf
 } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { ownsGlobalSelection } from '../../global-selection-owner'
-import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 
 export function createTabsGroupActions(
   set: TabsSliceSet,
@@ -72,10 +71,21 @@ export function createTabsGroupActions(
             .filter((tab): tab is (typeof unifiedTabs)[number] => tab?.contentType === 'terminal')
             .map((tab) => tab.entityId)
         )
-        const nextUnreadTerminalTabs = omitRecordKeys(
-          state.unreadTerminalTabs,
-          visibleTerminalEntityIds
-        )
+        const nextUnreadTerminalTabs =
+          visibleTerminalEntityIds.size > 0
+            ? (() => {
+                let changed = false
+                const copy = { ...state.unreadTerminalTabs }
+                for (const terminalEntityId of visibleTerminalEntityIds) {
+                  if (!copy[terminalEntityId]) {
+                    continue
+                  }
+                  delete copy[terminalEntityId]
+                  changed = true
+                }
+                return changed ? copy : state.unreadTerminalTabs
+              })()
+            : state.unreadTerminalTabs
         const activeSurfacePatch = buildActiveSurfacePatch(
           {
             ...state,

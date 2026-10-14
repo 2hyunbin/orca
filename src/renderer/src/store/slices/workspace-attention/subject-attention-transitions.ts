@@ -47,33 +47,6 @@ export function removePanesAttention(s: Markers, paneKeys: ReadonlySet<string>):
   }
 }
 
-/** A superseded or acknowledged turn drops only its completion marker. */
-export function removeCompletionAttention(
-  unreadAgentCompletionPanes: MarkerRecord,
-  paneKeys: Iterable<string>
-): MarkerRecord {
-  return removePaneKeys(unreadAgentCompletionPanes, new Set(paneKeys))
-}
-
-/** Tab markers only, for terminals retired elsewhere; `copyOnWrite` returns the record to drain. */
-export function removeTabMarkers(
-  unreadTerminalTabs: MarkerRecord,
-  tabIds: Iterable<string>,
-  copyOnWrite: (record: MarkerRecord) => MarkerRecord
-): MarkerRecord {
-  let next = unreadTerminalTabs
-  for (const tabId of tabIds) {
-    if (!next[tabId]) {
-      continue
-    }
-    if (next === unreadTerminalTabs) {
-      next = copyOnWrite(unreadTerminalTabs)
-    }
-    delete next[tabId]
-  }
-  return next
-}
-
 /** A pane authority moving to a new key carries its pane and completion layers along. */
 export function movePaneAttention(s: Markers, fromPaneKey: string, toPaneKey: string): PaneMarkers {
   return {

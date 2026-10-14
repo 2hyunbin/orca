@@ -1,5 +1,7 @@
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
+import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
+import { applyWorktreeUpdates } from '../../worktree-helpers'
 import { projectWorktreeTabModelReconciliation } from '../../tabs'
 import { moveFocusToRendererBeforeFocusedWebviewHidden } from '../../browser-webview-cleanup'
 import { tabHasLivePty } from '@/lib/tab-has-live-pty'
@@ -15,11 +17,12 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
-import { findKnownWorktreeById } from '../listing/detected-worktree-meta'
 import {
-  persistWorkspaceReadOnActivation,
-  readWorkspaceFlagOnActivation
-} from '../../workspace-attention/workspace-unread-flag'
+  applyDetectedWorktreeUpdates,
+  findKnownWorktreeById,
+  folderWorkspaceMatchesHost
+} from '../listing/detected-worktree-meta'
+import { persistPassiveWorktreeMetaForOwner } from '../listing/worktree-owner-settings'
 import { resolveActivatedWorktreeSurface } from './active-worktree-surface'
 import { clearWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import {
@@ -78,8 +81,7 @@ export function createSetActiveWorktree(
       }
 
       const worktree = findKnownWorktreeById(s, worktreeId, executionHostId)
-      const unreadRead = readWorkspaceFlagOnActivation(s, worktreeId, executionHostId, worktree)
-      shouldClearUnread = unreadRead !== null
+      shouldClearUnread = Boolean(worktree?.isUnread)
       const {
         restoredRightSidebarExplorerView,
         activeFileId,
@@ -92,6 +94,9 @@ export function createSetActiveWorktree(
         stateTransition?.preferredActiveUnifiedTabId,
         reconciledActiveTabId
       )
+
+      // Why: focus isn't smart-sort activity — writing lastActivityAt here caused the "jump after focus" bug; only clear unread.
+      const metaUpdates: Partial<WorktreeMeta> = shouldClearUnread ? { isUnread: false } : {}
 
       // Why: prep is deferred (shell render deferred below) so it waits for input quiet instead of blocking the click.
       // Why first-activation guard, not tab.ptyId==null: reconnectPersistedTerminals repopulates ptyId before mount.
@@ -113,9 +118,21 @@ export function createSetActiveWorktree(
       const nextEverActivated = isFirstActivation
         ? new Set([...s.everActivatedWorktreeIds, worktreeId!])
         : s.everActivatedWorktreeIds
-      const nextWorktrees = unreadRead?.worktreesByRepo ?? s.worktreesByRepo
-      const nextDetectedWorktrees = unreadRead?.detectedWorktreesByRepo ?? s.detectedWorktreesByRepo
-      const nextFolderWorkspaces = unreadRead?.folderWorkspaces ?? s.folderWorkspaces
+      const nextWorktrees = shouldClearUnread
+        ? applyWorktreeUpdates(s.worktreesByRepo, worktreeId, metaUpdates)
+        : s.worktreesByRepo
+      const nextDetectedWorktrees = shouldClearUnread
+        ? applyDetectedWorktreeUpdates(s.detectedWorktreesByRepo, worktreeId, metaUpdates)
+        : s.detectedWorktreesByRepo
+      const nextFolderWorkspaces =
+        shouldClearUnread && workspaceScope?.type === 'folder'
+          ? s.folderWorkspaces.map((workspace) =>
+              workspace.id === workspaceScope.folderWorkspaceId &&
+              (!executionHostId || folderWorkspaceMatchesHost(workspace, executionHostId))
+                ? { ...workspace, isUnread: false }
+                : workspace
+            )
+          : s.folderWorkspaces
       const nextActiveRepoId =
         workspaceScope?.type === 'folder'
           ? null
@@ -267,7 +284,20 @@ export function createSetActiveWorktree(
     }
 
     if (shouldClearUnread) {
-      persistWorkspaceReadOnActivation(get, worktreeId, executionHostId)
+      if (workspaceScope?.type === 'folder') {
+        void get().updateFolderWorkspace(
+          workspaceScope.folderWorkspaceId,
+          { isUnread: false },
+          executionHostId ? { executionHostId } : undefined
+        )
+        return true
+      }
+      persistPassiveWorktreeMetaForOwner(
+        get,
+        worktreeId,
+        { isUnread: false },
+        'persist worktree activation state'
+      )
     }
     return true
   }

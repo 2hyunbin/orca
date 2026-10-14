@@ -13,7 +13,6 @@ import {
   writeBatchedWorkspaceRecordEntry,
   type WorktreeTabModelReconciliationBatch
 } from './tabs-reconciliation-batch'
-import { removeTabMarkers } from '../workspace-attention/subject-attention-transitions'
 
 export type WorktreeTabModelReconciliation = {
   patch: Partial<AppState>
@@ -197,16 +196,23 @@ export function projectWorktreeTabModelReconciliation(
     const droppedTerminalEntityIds = unifiedTabs.flatMap((tab) =>
       tab.contentType === 'terminal' && !validTabIds.has(tab.id) ? [tab.entityId] : []
     )
-    // A batch that already owns this map published it in an earlier patch, so
-    // draining further entries in place needs no second patch entry.
-    const nextUnreadTerminalTabs = removeTabMarkers(
-      state.unreadTerminalTabs,
-      droppedTerminalEntityIds,
-      (record) =>
-        batch?.ownedStateKeys.has('unreadTerminalTabs') === true ? record : { ...record }
-    )
-    if (nextUnreadTerminalTabs !== state.unreadTerminalTabs) {
-      batch?.ownedStateKeys.add('unreadTerminalTabs')
+    let nextUnreadTerminalTabs = state.unreadTerminalTabs
+    if (droppedTerminalEntityIds.length > 0) {
+      // A batch that already owns this map published it in an earlier patch, so
+      // draining further entries in place needs no second patch entry.
+      const owned = batch?.ownedStateKeys.has('unreadTerminalTabs') === true
+      const copy = owned ? state.unreadTerminalTabs : { ...state.unreadTerminalTabs }
+      let changed = false
+      for (const entityId of droppedTerminalEntityIds) {
+        if (copy[entityId]) {
+          delete copy[entityId]
+          changed = true
+        }
+      }
+      if (changed) {
+        nextUnreadTerminalTabs = copy
+        batch?.ownedStateKeys.add('unreadTerminalTabs')
+      }
     }
     patch = {
       unifiedTabsByWorktree: writeBatchedWorkspaceRecordEntry(

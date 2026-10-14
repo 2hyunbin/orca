@@ -224,7 +224,7 @@ describe('computeAgentAcknowledgementTargets — codex retain race regression', 
 
 describe('applyAgentAttentionAcknowledgement', () => {
   it('acks the visible agent and clears unread worktree/tab/pane attention', () => {
-    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAgentAttention: vi.fn() }
     const paneKey = makePaneKey('tab-1', CODEX_LEAF_ID)
 
     applyAgentAttentionAcknowledgement(actions, {
@@ -234,7 +234,7 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).toHaveBeenCalledWith([paneKey])
-    expect(actions.readViewedAttention).toHaveBeenCalledWith({
+    expect(actions.readViewedAgentAttention).toHaveBeenCalledWith({
       workspaceIdToClear: 'wt-1',
       groupId: 'tab-1',
       subjectKeys: new Set([paneKey])
@@ -242,7 +242,7 @@ describe('applyAgentAttentionAcknowledgement', () => {
   })
 
   it('does nothing when there are no visible agent targets', () => {
-    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAgentAttention: vi.fn() }
 
     applyAgentAttentionAcknowledgement(actions, {
       workspaceIdToClear: 'wt-1',
@@ -251,11 +251,11 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).not.toHaveBeenCalled()
-    expect(actions.readViewedAttention).not.toHaveBeenCalled()
+    expect(actions.readViewedAgentAttention).not.toHaveBeenCalled()
   })
 
   it('clears visible pane unread even when there is no agent row to acknowledge', () => {
-    const actions = { acknowledgeSubjects: vi.fn(), readViewedAttention: vi.fn() }
+    const actions = { acknowledgeSubjects: vi.fn(), readViewedAgentAttention: vi.fn() }
     const paneKey = makePaneKey('tab-1', CODEX_LEAF_ID)
 
     applyAgentAttentionAcknowledgement(actions, {
@@ -266,7 +266,7 @@ describe('applyAgentAttentionAcknowledgement', () => {
     })
 
     expect(actions.acknowledgeSubjects).not.toHaveBeenCalled()
-    expect(actions.readViewedAttention).toHaveBeenCalledWith({
+    expect(actions.readViewedAgentAttention).toHaveBeenCalledWith({
       workspaceIdToClear: 'wt-1',
       groupId: 'tab-1',
       subjectKeys: new Set([paneKey])

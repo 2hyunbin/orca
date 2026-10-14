@@ -17,7 +17,6 @@ import type { StoredAgentAttentionUnread } from '@/attention/agent-attention-con
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { Tab } from '../../../shared/tab-types'
 import type { Worktree } from '../../../shared/worktree/types'
-import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 export type UnreadBadgeCountSources = {
   worktreesByRepo: Readonly<Record<string, readonly Worktree[]>>
@@ -58,7 +57,7 @@ export function getUnreadBadgeCount(sources: UnreadBadgeCountSources): number {
     for (const worktree of worktrees) {
       // Why: the sidebar never renders an archived worktree, nor one on a host it is not showing.
       if (
-        isWorkspaceUnread(worktree) &&
+        worktree.isUnread &&
         !worktree.isArchived &&
         (!sources.hiddenOtherDevicePairings ||
           !isWorkspaceFromOtherDevice(worktree, sources.hiddenOtherDevicePairings)) &&
@@ -75,8 +74,7 @@ export function getUnreadBadgeCount(sources: UnreadBadgeCountSources): number {
 function countUnreadFolderRows(sources: UnreadBadgeCountSources): number {
   const { projectGroups, visibleHostIds, defaultHostId, hiddenOtherDevicePairings } = sources
   const unread = sources.folderWorkspaces.filter(
-    (folder) =>
-      isWorkspaceUnread(folder) && hasUnreadFolderTab(sources, folderWorkspaceKey(folder.id))
+    (folder) => folder.isUnread && hasUnreadFolderTab(sources, folderWorkspaceKey(folder.id))
   )
   if (unread.length === 0) {
     return 0
