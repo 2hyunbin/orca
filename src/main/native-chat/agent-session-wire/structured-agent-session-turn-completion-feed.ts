@@ -52,7 +52,8 @@ export type StructuredAgentSessionTurnCompletionFeedDeps = {
   ) => StructuredAgentSessionStatusState | null
 }
 
-type RequestMark = Pick<StructuredAgentSessionLatestRequest, 'kind' | 'id'>
+/** `decided`: the request already carried a verdict, so a revision adding one is not news. */
+type RequestMark = Pick<StructuredAgentSessionLatestRequest, 'kind' | 'id'> & { decided: boolean }
 
 /** Per-session baseline. `settled` is the last settled request this feed has accounted for and
  *  `prompts` the prompts already pending; absence of the whole entry — not an empty field — is
@@ -63,7 +64,9 @@ type SessionBaseline = CompletionFeedCursor & {
 }
 
 function settledMark(request: StructuredAgentSessionLatestRequest | null): RequestMark | null {
-  return request && request.turnState !== 'running' ? { kind: request.kind, id: request.id } : null
+  return request && request.turnState !== 'running'
+    ? { kind: request.kind, id: request.id, decided: request.outcome !== null }
+    : null
 }
 
 export class StructuredAgentSessionTurnCompletionFeed {
@@ -104,7 +107,8 @@ export class StructuredAgentSessionTurnCompletionFeed {
    *
    * The first observation of a session only records where it is, so restore, restart, rewind and
    * a re-read of history all pass through silently. An already-settled request republished by an
-   * in-place revision carries the same identity and so cannot fire twice; nor can a prompt.
+   * in-place revision carries the same identity and so cannot fire twice; nor can a prompt. A
+   * verdict first recorded on a request that had already settled without one fires once.
    */
   observe(
     sessionId: string,
@@ -201,11 +205,15 @@ export class StructuredAgentSessionTurnCompletionFeed {
     // Owed work waits, so sends refused one commit at a time announce once, when the last is
     // answered. A pending prompt does not wait: the event says so itself, and answering it keeps
     // the same identity.
-    // A withdrawn send leaves the older request latest.
+    // A withdrawn send leaves the older request latest. The host's exit settlement can add a
+    // turn's verdict after the adapter's outcome-less end was published; that verdict is the news.
+    const known = baseline.settled
     if (
       state.owesWork ||
       !request ||
-      (baseline.settled?.kind === request.kind && baseline.settled.id === request.id)
+      (known?.kind === request.kind &&
+        known.id === request.id &&
+        (known.decided || request.outcome === null))
     ) {
       return null
     }

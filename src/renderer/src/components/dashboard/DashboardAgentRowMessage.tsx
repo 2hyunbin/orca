@@ -8,7 +8,7 @@ import { translate } from '@/i18n/i18n'
 
 type DashboardAgentRowMessageProps = {
   expanded: boolean
-  /** A request ended the turn; a crash that cut it off reads failed instead. */
+  /** The turn was cut short: by a request, or by Orca losing it; a provider crash reads failed. */
   isInterrupted: boolean
   /** Whether that request was the user's Stop; a newer send replacing the turn names no one. */
   stoppedByUser: boolean

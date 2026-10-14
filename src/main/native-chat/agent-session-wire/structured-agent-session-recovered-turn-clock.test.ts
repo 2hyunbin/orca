@@ -32,6 +32,11 @@ import { indexedStatusFeedSession } from './structured-agent-session-status-feed
 import { StructuredAgentSessionTurnCompletionFeed } from './structured-agent-session-turn-completion-feed'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../shared/agent-session-record.test-fixture'
+import { settleStructuredAgentSessionChildExit } from './structured-agent-session-child-exit'
 
 const SESSION = 'recovered-turn-session'
 const THREAD = 'thread-1'
@@ -127,8 +132,7 @@ async function sessionWithRunningTurn() {
 
 function settleDeadGeneration(
   journal: AgentSessionJournal,
-  verdict: StructuredAgentSessionTurnVerdict,
-  exit?: { providerFailed: true }
+  verdict: StructuredAgentSessionTurnVerdict
 ): ReturnType<typeof settleStructuredAgentSessionDeadGeneration> {
   return settleStructuredAgentSessionDeadGeneration({
     journal,
@@ -136,8 +140,7 @@ function settleDeadGeneration(
     fence: 2,
     settlementId: 'settle-1',
     verdict,
-    pendingSubmissionReason: 'provider_exited_before_acknowledgement',
-    ...exit
+    pendingSubmissionReason: 'provider_exited_before_acknowledgement'
   })
 }
 
@@ -290,23 +293,54 @@ describe('a turn recovery settled after its host went away', () => {
 // A provider that exits on its own while Orca runs fails its turn; Orca losing it (above) does not.
 describe('a turn whose provider exited on its own', () => {
   it.each([
-    ['fails, announced as any failure', false, 'failed', ['failure']],
-    ["stays a person's earlier Stop", true, 'interrupted', ['cancellation']]
-  ] as const)('%s', async (_label, stopFirst, mark, announced) => {
+    ['fails, announced once as any failure', false, undefined, 'failed', ['failure']],
+    ["stays a person's earlier Stop", true, undefined, 'interrupted', ['cancellation']],
+    ['stays interrupted when Orca cut it', false, { kind: 'hostFault' }, 'interrupted', []]
+  ] as const)('%s', async (_label, stopFirst, failure, mark, announced) => {
     const session = await sessionWithRunningTurn()
     session.recoverAt(EXIT_OBSERVED)
     if (stopFirst) {
       await session.journal.appendStopEvent({ reason: 'user-stop', turnId: 'turn-1' }, 1)
     }
-    const verdict = { state: 'interrupted', completedAt: EXIT_OBSERVED } as const
-    await settleDeadGeneration(session.journal, verdict, { providerFailed: true })
+    const record = agentSessionRecordFixture(agentSessionLeaseFixture())
+    const child = { generation: 'gen-1', fence: 1, phase: 'ready' as const }
+    const cut = { state: 'interrupted', completedAt: EXIT_OBSERVED } as const
+    await settleStructuredAgentSessionChildExit(
+      {
+        logger: createStructuredAgentSessionLogger(),
+        store: { getRecord: () => record, transitionHandoff: async () => record },
+        sessions: new Map([[SESSION, { child, journal: session.journal }]]),
+        // The adapter's own outcome-less end lands and is published before the host settles.
+        flushLifecycle: async () => {
+          await session.journal.appendItem(
+            { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 9 },
+            { kind: 'turn', turnId: 'turn-1', startedAt: TURN_STARTED, ...cut },
+            { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+          )
+          session.publish()
+          return { ok: true }
+        },
+        publishFence: () => {},
+        serialize: async (_sessionId, task) => task(),
+        now: () => EXIT_OBSERVED
+      },
+      {
+        type: 'ended',
+        sessionId: SESSION,
+        reason: 'exited',
+        cause: 'unexpected-exit',
+        fence: 1,
+        acquisitionGeneration: 'gen-1',
+        observedAt: EXIT_OBSERVED,
+        ...(failure ? { failure } : {})
+      }
+    )
     session.publish()
 
     const [row] = session.server.getStatusSnapshot()
     expect(row && agentVerdictDisplayMark(row)).toBe(mark)
-    const outcomes = session.completionEvents.map(
-      (event) => event.type === 'completion' && event.completion.outcome
+    expect(session.completionEvents).toMatchObject(
+      announced.map((outcome) => ({ completion: { outcome } }))
     )
-    expect(outcomes).toEqual(announced)
   })
 })

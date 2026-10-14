@@ -1,8 +1,8 @@
 // The one handler that ends a provider child's record, whether its exit was expected (a close this
 // host asked for) or not (the child died on its own). The exit was seen or proven first-hand, so
 // every step after it is bookkeeping: each is attempted and reported, none keeps the child on
-// record, and the record ends in `finally`. `expected` changes only what the chat is told, and
-// whether the turn the exit cut is the provider's failure.
+// record, and the record ends in `finally`. `expected` changes only what the chat is told; the
+// exit's failure fact says whether the turn it cut is the provider's failure.
 
 import {
   agentSessionFailureFact,
@@ -223,7 +223,8 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
         : {}),
       exit: watched,
       ...(unrunRejection ? { unrunRejection } : {}),
-      providerFailed: !expected
+      // An exit with no fact is the provider's own, as `providerEndFailure` reads it; Orca's cut is not.
+      providerFailed: !expected && (exit.failure?.kind ?? 'providerExited') === 'providerExited'
     })
     if (!settled.ok) {
       logExitFailure(context, sessionId, 'exit-settlement', settled.error)

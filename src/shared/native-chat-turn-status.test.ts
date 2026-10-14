@@ -120,14 +120,7 @@ describe('formatNativeChatTurnStatusLabel', () => {
   })
 
   // The phone's turn bar renders through this function, so it reads the same as desktop.
-  it('reads an Orca-cut turn and a Stop alike as interrupted in English', () => {
-    expect(
-      formatNativeChatTurnStatusLabel({
-        workedSeconds: 222,
-        elapsedSeconds: 0,
-        verdict: 'interruption'
-      })
-    ).toBe('Interrupted after 3m 42s')
+  it('reads a cut turn as interrupted in English', () => {
     expect(
       formatNativeChatTurnStatusLabel({
         workedSeconds: 222,
