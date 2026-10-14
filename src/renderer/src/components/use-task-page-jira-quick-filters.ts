@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import {
   readJiraQuickFilterState,
@@ -25,17 +25,18 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     state: normalizeJiraQuickFilterState(undefined)
   })
   const [loading, setLoading] = useState(true)
-  const [pending, setPending] = useState(false)
+  const lifetime = useMemo(() => ({ ownerKey }), [ownerKey])
+  const [pendingLifetime, setPendingLifetime] = useState<typeof lifetime | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
-  const ownerRef = useRef(ownerKey)
-  const epochRef = useRef(0)
-  const writePendingRef = useRef(false)
-  if (ownerRef.current !== ownerKey) {
-    epochRef.current += 1
-    ownerRef.current = ownerKey
-    writePendingRef.current = false
-  }
+  const lifetimeRef = useRef<typeof lifetime | null>(null)
+  const writePendingRef = useRef<typeof lifetime | null>(null)
+  useLayoutEffect(() => {
+    lifetimeRef.current = lifetime
+    return () => {
+      lifetimeRef.current = null
+    }
+  }, [lifetime])
   const ready = target !== null && snapshot.ownerKey === ownerKey
   const state = ready ? snapshot.state : EMPTY_QUICK_FILTER_STATE
   useEffect(() => {
@@ -44,19 +45,17 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     }
     let cancelled = false
     setLoading(true)
-    setPending(false)
     setError(null)
-    if (!target) {
-      setLoading(false)
-      return
-    }
-    void readJiraQuickFilterState(target)
-      .then((next) => {
+    const load = async () => {
+      try {
+        if (!target) {
+          return
+        }
+        const next = await readJiraQuickFilterState(target)
         if (!cancelled) {
           setSnapshot({ ownerKey, state: next })
         }
-      })
-      .catch((reason: unknown) => {
+      } catch (reason) {
         if (!cancelled) {
           setError(
             reason instanceof Error
@@ -64,27 +63,32 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
               : translate('jira.statusFilters.loadFailed', 'Could not load Jira status filters.')
           )
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) {
           setLoading(false)
         }
-      })
+      }
+    }
+    void load()
     return () => {
       cancelled = true
     }
   }, [ownerKey, target, model.taskResumeApplied, model.taskSource, refresh])
 
   const select = async (statuses: string[]): Promise<void> => {
-    if (!ready || loading || writePendingRef.current || !target || ownerRef.current !== ownerKey) {
+    if (
+      !ready ||
+      loading ||
+      writePendingRef.current === lifetime ||
+      !target ||
+      lifetimeRef.current !== lifetime
+    ) {
       return
     }
     const expectedOwner = ownerKey
-    const expectedEpoch = epochRef.current
-    const stillCurrent = () =>
-      ownerRef.current === expectedOwner && epochRef.current === expectedEpoch
-    writePendingRef.current = true
-    setPending(true)
+    const stillCurrent = () => lifetimeRef.current === lifetime
+    writePendingRef.current = lifetime
+    setPendingLifetime(lifetime)
     setError(null)
     try {
       const next = await writeJiraQuickFilterState(target, { statuses })
@@ -102,8 +106,8 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
       throw reason
     } finally {
       if (stillCurrent()) {
-        writePendingRef.current = false
-        setPending(false)
+        writePendingRef.current = null
+        setPendingLifetime(null)
       }
     }
   }
@@ -111,7 +115,7 @@ export function useTaskPageJiraQuickFilters(model: JiraQuickFilterModel) {
     selectedJiraStatuses: state.statuses,
     jiraQuickFiltersReady: ready,
     jiraQuickFiltersLoading: loading,
-    jiraQuickFiltersPending: pending,
+    jiraQuickFiltersPending: pendingLifetime === lifetime,
     jiraQuickFiltersError: error,
     retryJiraQuickFilters: () => setRefresh((value) => value + 1),
     selectJiraStatuses: select

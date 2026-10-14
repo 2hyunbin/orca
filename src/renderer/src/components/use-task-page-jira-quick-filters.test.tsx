@@ -148,3 +148,73 @@ it('does not send a status filter action retained from a previous account owner'
   await act(async () => oldAction(['Open']))
   expect(write).not.toHaveBeenCalled()
 })
+it('rejects a retained status action after returning to its earlier owner', async () => {
+  read.mockResolvedValue({ statuses: ['Open'] })
+  write.mockResolvedValue({ statuses: ['Closed'] })
+  const { result, rerender } = renderHook(({ host }) => useTaskPageJiraQuickFilters(model(host)), {
+    initialProps: { host: 'a' }
+  })
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  const oldAction = result.current.selectJiraStatuses
+  rerender({ host: 'b' })
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  rerender({ host: 'a' })
+  await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+  await act(async () => oldAction(['Closed']))
+  expect(write).not.toHaveBeenCalled()
+})
+it.each(['success', 'failure'] as const)(
+  'keeps a new owner visit pending after an old %s settlement',
+  async (outcome) => {
+    read.mockResolvedValue({ statuses: ['Open'] })
+    let finishOld: (state: JiraQuickFilterState) => void = () => {}
+    let failOld: (reason: Error) => void = () => {}
+    let finishNew: (state: JiraQuickFilterState) => void = () => {}
+    write
+      .mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          finishOld = resolve
+          failOld = reject
+        })
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishNew = resolve
+        })
+      )
+    const { result, rerender } = renderHook(
+      ({ host }) => useTaskPageJiraQuickFilters(model(host)),
+      { initialProps: { host: 'a' } }
+    )
+    await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+    let oldWrite = Promise.resolve()
+    act(() => {
+      oldWrite = result.current.selectJiraStatuses(['Closed']).catch(() => {})
+    })
+    rerender({ host: 'b' })
+    await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+    rerender({ host: 'a' })
+    await waitFor(() => expect(result.current.jiraQuickFiltersLoading).toBe(false))
+    let newWrite = Promise.resolve()
+    act(() => {
+      newWrite = result.current.selectJiraStatuses(['In Progress'])
+    })
+    await act(async () => {
+      if (outcome === 'success') {
+        finishOld({ statuses: ['Closed'] })
+      } else {
+        failOld(new Error('Old request failed'))
+      }
+      await oldWrite
+    })
+    expect(result.current.jiraQuickFiltersPending).toBe(true)
+    expect(result.current.selectedJiraStatuses).toEqual(['Open'])
+    expect(result.current.jiraQuickFiltersError).toBeNull()
+    await act(async () => {
+      finishNew({ statuses: ['In Progress'] })
+      await newWrite
+    })
+    expect(result.current.selectedJiraStatuses).toEqual(['In Progress'])
+    expect(result.current.jiraQuickFiltersPending).toBe(false)
+  }
+)

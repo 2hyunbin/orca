@@ -11,5 +11,5 @@ const JiraStatuses = z
   )
   .max(MAX_JIRA_STATUS_FILTERS)
 
-export const JiraQuickFilterStateParam = z.object({ statuses: JiraStatuses }).strict()
-export const JiraIssueListFiltersParam = z.object({ statuses: JiraStatuses.optional() }).strict()
+export const JiraQuickFilterStateParam = z.strictObject({ statuses: JiraStatuses })
+export const JiraIssueListFiltersParam = z.strictObject({ statuses: JiraStatuses.optional() })
