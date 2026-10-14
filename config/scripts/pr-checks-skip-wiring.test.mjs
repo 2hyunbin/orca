@@ -1,10 +1,39 @@
-import { readFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runProcess } from '@orca/process-host'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { projectDir, prWorkflow, expensiveJobs } from './pr-checks-workflow-test-fixture.mjs'
 
 describe('PR Checks skip wiring', () => {
+  it('executes path classification from only the files declared by the sparse checkout', async () => {
+    const checkout = prWorkflow.jobs.code_paths.steps.find((step) => step.with?.['sparse-checkout'])
+    const files = checkout.with['sparse-checkout']
+      .trim()
+      .split('\n')
+      .map((file) => file.trim().replace(/^\//u, ''))
+    const directory = mkdtempSync(join(tmpdir(), 'orca-pr-sparse-checkout-'))
+    try {
+      for (const file of files) {
+        const destination = join(directory, file)
+        mkdirSync(join(destination, '..'), { recursive: true })
+        cpSync(join(projectDir, file), destination, { recursive: true })
+      }
+      const result = await runProcess({
+        program: process.execPath,
+        args: ['config/scripts/pr-code-change-scope.mjs'],
+        cwd: directory,
+        input: 'src/main/plugins/plugin-service.ts\n',
+        timeoutMs: 30_000
+      })
+      expect(result.code, result.stderr).toBe(0)
+      expect(result.stdout).toContain('should_run=true')
+      expect(result.stdout).toContain('static_analysis=true')
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
   it('runs the candidate daemon shutdown Docker oracle in the existing Linux package job', () => {
     const steps = prWorkflow.jobs.package.steps
     const install = steps.findIndex(
