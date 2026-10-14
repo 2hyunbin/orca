@@ -56,7 +56,9 @@ describe('MobileNativeChatQueuedMessages', () => {
     const mounted = create(createElement('View'))
     renderer = mounted
     await act(async () => {
-      mounted.update(createElement(MobileNativeChatQueuedMessages, props))
+      mounted.update(
+        createElement(MobileNativeChatQueuedMessages, { agentWorking: true, ...props })
+      )
     })
     return mounted
   }
@@ -80,22 +82,28 @@ describe('MobileNativeChatQueuedMessages', () => {
     return mounted.root.find((node) => String(node.type) === 'ActionSheetModal')
   }
 
-  it('draws a plain waiting card as one compact row with no caption', async () => {
-    const mounted = await mount({ cards: [card({ messageId: 'w', text: 'next' })] })
-    const rows = mounted.root.findAllByProps({ testID: 'queued-card-row' })
-    expect(rows).toHaveLength(1)
+  it('draws a waiting card with Steer while working and Send when idle', async () => {
+    const cards = [card({ messageId: 'w', text: 'next' })]
+    const onSend = vi.fn(async () => true)
+    const mounted = await mount({ cards, onSend })
     expect(texts(mounted)).toEqual(['next', 'Steer'])
-    // At most two lines: the row has no hover title to read the rest from.
-    expect(
-      mounted.root.find(
-        (node) =>
-          String(node.type) === 'Text' &&
-          node.props.children === 'next' &&
-          !node.props.accessibilityElementsHidden
-      ).props.numberOfLines
-    ).toBe(2)
-    expect(nodeTypes(rows[0]!)).toContain('ListEnd')
-    expect(nodeTypes(rows[0]!)).not.toContain('AlertCircle')
+    expect(nodeTypes(mounted.root)).toContain('CornerDownRight')
+    await act(async () =>
+      mounted.update(
+        createElement(MobileNativeChatQueuedMessages, {
+          cards,
+          agentWorking: false,
+          onSend
+        })
+      )
+    )
+    expect(texts(mounted)).toEqual(['next', 'Send'])
+    expect(nodeTypes(mounted.root)).toContain('Send')
+    expect(nodeTypes(mounted.root)).not.toContain('CornerDownRight')
+    await act(async () =>
+      mounted.root.findByProps({ accessibilityLabel: 'Send this message' }).props.onPress()
+    )
+    expect(onSend).toHaveBeenCalledWith('w')
   })
 
   // The hidden copy lays the whole text out at the card's width; its line count says if it clips.

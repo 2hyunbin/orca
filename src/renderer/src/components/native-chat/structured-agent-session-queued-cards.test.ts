@@ -161,7 +161,7 @@ describe('queued message cards', () => {
     })
     expect(cards.map((card) => card.hold)).toEqual(['queue-paused', 'queue-paused'])
     // Still Steer: the header row, not the card, says it waits.
-    expect(cards.map((card) => queuedMessageCardSteers(card))).toEqual([true, true])
+    expect(cards.map((card) => queuedMessageCardSteers(card, true))).toEqual([true, true])
   })
 
   it("the header names the queue's pause while it holds a card, and none over cards Resume would not send", () => {

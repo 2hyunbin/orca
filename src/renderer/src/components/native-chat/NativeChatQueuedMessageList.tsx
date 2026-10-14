@@ -16,6 +16,7 @@ import { focusNativeChatPromptCard } from './use-native-chat-prompt-card-focus'
  */
 export function NativeChatQueuedMessageList({
   controller,
+  agentWorking,
   chatWorktreeId,
   agentName,
   statedFailures,
@@ -23,6 +24,7 @@ export function NativeChatQueuedMessageList({
   focusComposer
 }: {
   controller: StructuredAgentSessionQueuedMessagesController
+  agentWorking: boolean
   /** Where a card's sender is opened from; null shows it unlinked. */
   chatWorktreeId: string | null
   agentName?: string
@@ -103,6 +105,7 @@ export function NativeChatQueuedMessageList({
                 <NativeChatQueuedMessageCard
                   key={card.messageId}
                   card={card}
+                  agentWorking={agentWorking}
                   chatWorktreeId={chatWorktreeId}
                   agentName={agentName}
                   statedFailures={statedFailures}

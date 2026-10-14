@@ -102,13 +102,16 @@ export function queuedMessageCardCaption(
 }
 
 /** Steer's or Send's label and tooltip (`queuedMessageCardSteers`). */
-export function queuedMessageCardSendNow(card: QueuedMessageCard): {
+export function queuedMessageCardSendNow(
+  card: QueuedMessageCard,
+  agentWorking: boolean
+): {
   /** Steer's ↳, or Send's paper plane. */
   steers: boolean
   label: string
   hint: string
 } {
-  if (!queuedMessageCardSteers(card)) {
+  if (!queuedMessageCardSteers(card, agentWorking)) {
     return {
       steers: false,
       label: translate('components.native-chat.queuedMessages.send', 'Send'),
@@ -127,6 +130,7 @@ export function queuedMessageCardSendNow(card: QueuedMessageCard): {
 
 export function NativeChatQueuedMessageCard({
   card,
+  agentWorking,
   chatWorktreeId,
   agentName,
   statedFailures,
@@ -140,6 +144,7 @@ export function NativeChatQueuedMessageCard({
   onTurnOffQueueing
 }: {
   card: QueuedMessageCard
+  agentWorking: boolean
   /** The chat's worktree, whose host its sender is found on; null shows the sender unlinked. */
   chatWorktreeId: string | null
   agentName?: string
@@ -161,7 +166,7 @@ export function NativeChatQueuedMessageCard({
 }): React.JSX.Element {
   const caption = queuedMessageCardCaption(card, agentName, statedFailures)
   const returned = card.state === 'returned'
-  const sendNow = queuedMessageCardSendNow(card)
+  const sendNow = queuedMessageCardSendNow(card, agentWorking)
   const isMac = isMacPlatform()
   // A clipped line opens below the row, at the card's full width: a card can hold text the person
   // never typed (another agent's message), and Steer or Delete must not be a blind choice.

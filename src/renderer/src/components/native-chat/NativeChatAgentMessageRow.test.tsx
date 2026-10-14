@@ -128,6 +128,7 @@ describe("another agent's queued card", () => {
     return render(
       <TooltipProvider>
         <NativeChatQueuedMessageCard
+          agentWorking
           card={{
             messageId: 'card',
             position: 1,

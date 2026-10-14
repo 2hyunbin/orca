@@ -125,10 +125,9 @@ export function queuedMessagesQueuePause(
   return cards.some((card) => card.hold === 'queue-paused') ? queuePause : null
 }
 
-/** Steer names the mid-turn jump, also while the whole queue is paused; a card held on its own or
- *  returned is not waiting on the turn, so its action is plainly Send. A command never steers. */
-export function queuedMessageCardSteers(card: QueuedMessageCard): boolean {
-  return card.hold !== 'paused' && card.hold !== 'returned' && !card.command
+/** Steer joins a running turn; idle, held and returned cards use Send. Commands never steer. */
+export function queuedMessageCardSteers(card: QueuedMessageCard, agentWorking: boolean): boolean {
+  return agentWorking && card.hold !== 'paused' && card.hold !== 'returned' && !card.command
 }
 
 /** The card Cmd/Ctrl+Enter steers: the newest one, unless it is a command, which never steers. */

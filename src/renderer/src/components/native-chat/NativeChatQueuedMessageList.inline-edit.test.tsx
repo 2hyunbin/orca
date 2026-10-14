@@ -29,7 +29,7 @@ import type { StructuredAgentSessionQueuedMessagesController } from './use-struc
 function renderList(owner: StructuredAgentSessionQueuedMessagesController) {
   return render(
     <TooltipProvider delayDuration={0}>
-      <NativeChatQueuedMessageList chatWorktreeId={null} controller={owner} />
+      <NativeChatQueuedMessageList agentWorking chatWorktreeId={null} controller={owner} />
     </TooltipProvider>
   )
 }
@@ -134,6 +134,7 @@ describe('NativeChatQueuedMessageList inline edit', () => {
     rerender(
       <TooltipProvider delayDuration={0}>
         <NativeChatQueuedMessageList
+          agentWorking
           chatWorktreeId={null}
           controller={controller(cards, null, true, {
             editCapable: true,
@@ -166,6 +167,7 @@ describe('NativeChatQueuedMessageList inline edit', () => {
       <div data-native-chat-root="true">
         <TooltipProvider delayDuration={0}>
           <NativeChatQueuedMessageList
+            agentWorking
             chatWorktreeId={null}
             controller={owner}
             focusComposer={focusComposer}

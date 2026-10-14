@@ -66,6 +66,7 @@ export function MobileNativeChatOverlay({
   const composerTray = useMobileNativeChatComposerTray({
     queued: {
       cards: queued.cards,
+      agentWorking: controller.nativeChatAgentWorking,
       onSend: queued.send,
       onDelete: queued.delete,
       onEdit: queued.edit,

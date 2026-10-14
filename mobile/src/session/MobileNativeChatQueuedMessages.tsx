@@ -25,8 +25,8 @@ const RESUME_KEY = '\u0000resume'
 
 export type MobileNativeChatQueuedMessagesProps = {
   cards?: MobileQueuedMessageCard[]
-  /** Steer for a waiting card, the paused queue's included; plain Send for a card held on its own
-   *  (its send failed), or a returned one. */
+  agentWorking?: boolean
+  /** Steer joins a running turn; idle, held and returned cards use Send. */
   onSend?: (messageId: string) => Promise<boolean>
   onDelete?: (messageId: string) => Promise<boolean>
   /** Copy the card's text into the composer, then delete the card. */
@@ -42,6 +42,7 @@ export type MobileNativeChatQueuedMessagesProps = {
  *  composer — a queued message is never an optimistic transcript bubble. */
 export function MobileNativeChatQueuedMessages({
   cards,
+  agentWorking = false,
   onSend,
   onDelete,
   onEdit,
@@ -108,9 +109,7 @@ export function MobileNativeChatQueuedMessages({
         {cards.map((card, index) => {
           const busy = busyIds.has(card.messageId)
           const returned = card.state === 'returned'
-          // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
-          // own send failed, or a returned one, is sent again.
-          const steers = !returned && !card.paused && !card.command
+          const steers = agentWorking && !returned && !card.paused && !card.command
           return (
             <View
               key={card.messageId}
