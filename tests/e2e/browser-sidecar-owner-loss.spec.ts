@@ -6,6 +6,7 @@ import { BROWSER_SIDECAR_OWNER_ENV } from '../../src/shared/browser-sidecar-life
 import { getRuntimeMetadataPath } from '../../src/shared/runtime-bootstrap'
 import { expect, test } from './helpers/orca-app'
 import { resolveElectronExecutable } from './helpers/daemon-generation-runtime-fixture'
+import { getOrcaElectronLaunchArgs } from './helpers/electron-launch-args'
 import { isolatedServeProfile } from './helpers/orca-serve-cli-host'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
 
@@ -24,14 +25,12 @@ for (const early of [false, true]) {
     const child = spawnProcess({
       program: resolveElectronExecutable(process.cwd()),
       args: [
-        join(process.cwd(), 'out', 'main', 'index.js'),
+        ...getOrcaElectronLaunchArgs(join(process.cwd(), 'out', 'main', 'index.js'), false),
         '--serve',
         '--serve-port',
         '0',
         '--serve-json',
         '--serve-no-pairing',
-        '--password-store=basic',
-        '--use-mock-keychain',
         `--user-data-dir=${profile}`
       ],
       env: { ...isolation.env, [BROWSER_SIDECAR_OWNER_ENV]: '1' },
