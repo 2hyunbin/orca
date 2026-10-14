@@ -1,5 +1,5 @@
 // Execution provenance (`JournalItemRow.ownerFence`): the generation whose execution produced an
-// item, kept apart from each row's writer fence. Every writer states it; the fold prefers it.
+// item, kept apart from each row's writer fence. Creation states it; every revision keeps it.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -74,9 +74,11 @@ afterEach(async () => {
 })
 
 describe('execution provenance', () => {
-  it("records a provider observation's owner, a host revision keeps it, and a reopen reads it", async () => {
+  it("records the creating observation's owner, every revision keeps it, and a reopen reads it", async () => {
     const journal = await open()
     await journal.appendItem(TURN, RUNNING, { fence: 4, ownerFence: 3, turnScope: SCOPE })
+    // A newer run's provider revising it (a start's context-usage report on the newest saved turn).
+    await journal.appendItem(TURN, RUNNING, { fence: 5, ownerFence: 5, turnScope: SCOPE })
     // Host bookkeeping under a later writer fence states no owner of its own.
     await journal.appendItem(TURN, SETTLED, { fence: 5, turnScope: SCOPE })
     // A first write with no stated owner is its writer generation's.
@@ -89,7 +91,7 @@ describe('execution provenance', () => {
     expect(journal.itemFence(TURN_ID)).toBe(3)
     expect(journal.itemFence(agentJournalItemKey(item(2)))).toBe(6)
     // Every row states it: none leaves the reader to guess from the writer fence.
-    expect(storedOwnerFences()).toEqual([3, 3, 6])
+    expect(storedOwnerFences()).toEqual([3, 3, 3, 6])
     await journals.closeAll()
     expect((await open()).itemFence(TURN_ID)).toBe(3)
   })
@@ -118,12 +120,7 @@ describe('execution provenance', () => {
   })
 
   it("a rewind's retained row carries the old fold's provenance; an older record's is never current", () => {
-    const row = {
-      itemId: TURN_ID,
-      body: RUNNING,
-      observedAt: 1,
-      ownerFence: 2
-    }
+    const row = { itemId: TURN_ID, body: RUNNING, observedAt: 1, ownerFence: 2 }
     expect(retainedRowReplacement(row).ownerFence).toBe(2)
     const { ownerFence: _stated, ...older } = row
     expect(retainedRowReplacement(older).ownerFence).toBe(0)
