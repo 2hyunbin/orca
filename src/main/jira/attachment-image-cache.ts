@@ -16,7 +16,10 @@ type CacheEntry = {
 }
 
 const cache = new Map<string, CacheEntry>()
-const inFlight = new Map<string, { promise: Promise<ImageValue | null>; signal?: AbortSignal }>()
+const inFlight = new Map<
+  string,
+  { promise: Promise<ImageValue | null>; signal?: AbortSignal; generation: symbol }
+>()
 let expiryTimer: ReturnType<typeof setTimeout> | null = null
 let scheduledExpiryAt = Infinity
 // Why: mid-flight downloads must not repopulate cache after disconnect/clearToken.
@@ -160,6 +163,7 @@ async function loadImageWithCache(args: {
   }
 
   const epochAtStart = attachmentImagesEpoch(args.siteId)
+  const generation = Symbol()
   const promise = (async (): Promise<ImageValue | null> => {
     try {
       const loaded = await args.load()
@@ -178,13 +182,13 @@ async function loadImageWithCache(args: {
       return loaded.image
     } finally {
       // A cleared generation no longer owns the current download's singleflight slot.
-      if (inFlight.get(key)?.promise === promise) {
+      if (inFlight.get(key)?.generation === generation) {
         inFlight.delete(key)
       }
     }
   })()
 
-  inFlight.set(key, { promise, signal: args.signal })
+  inFlight.set(key, { promise, signal: args.signal, generation })
   return promise
 }
 
