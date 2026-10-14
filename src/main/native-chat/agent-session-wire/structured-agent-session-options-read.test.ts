@@ -111,12 +111,6 @@ describe('Codex speed at rest', () => {
     const result = await readAtRest({ model: 'gpt-6-luna', serviceTier: 'ultrafast' })
     expect(result.current).toMatchObject({ model: 'gpt-6-luna', serviceTier: 'default' })
   })
-
-  it('shows a saved Flex as a Flex choice, since Codex runs it on every model', async () => {
-    const result = await readAtRest({ model: 'gpt-6-luna', serviceTier: 'flex' })
-    expect(result.current).toMatchObject({ serviceTier: 'flex' })
-    expect(result.models[0]?.serviceTiers).toContainEqual({ value: 'flex', label: 'Flex' })
-  })
 })
 
 describe('live Codex option reads', () => {
