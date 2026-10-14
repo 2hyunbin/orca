@@ -2,7 +2,6 @@ import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type { AgentJournalStatusItem } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionCancelResult } from '../../../shared/agent-session-wire'
-import { refuseUnclassified } from '../../../shared/agent-session-wire-refusals'
 import { latestJournalDispatchObservation } from '../agent-session-journal/journal-dispatch-observation'
 import type { AgentSessionCancelOutcome } from './structured-agent-session-adapter'
 import {
@@ -27,10 +26,6 @@ import type { JournalStopFailedOn } from '../agent-session-journal/queued-messag
 import { structuredAgentSessionFailedStopMark } from './structured-agent-session-stopping'
 import { settleTakenStop } from './structured-agent-session-taken-stop-settle'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
-import {
-  stopStructuredAgentSessionBackgroundWork,
-  type StructuredAgentSessionBackgroundStopInput
-} from './structured-agent-session-background-stop'
 
 /** Whether the fold reads working. Every write has landed by its call's return, so a Stop reads it
  *  without waiting on the write queue. */
@@ -108,11 +103,10 @@ export async function performCancel(
   }
 }
 
-type PerformCancelInput = StructuredAgentSessionBackgroundStopInput & {
+type PerformCancelInput = {
   clientOperationId: string
   /** Absent: whatever the conversation has in flight; present: only while that turn is current. */
   turnId?: string
-  scope?: 'background-tasks'
   prompt?: { itemId: string; expectedRevision: number }
   /** Ends the provider child, for a running command the provider did not take the Stop on, or a
    *  turn whose interrupt failed. */
@@ -145,7 +139,7 @@ async function cancelAndNote(
   }
   // The turn the Stop names, read before the cancel settles it: the note reports on that turn.
   const turnScope =
-    (input.turnId !== undefined && !input.scope
+    (input.turnId !== undefined
       ? structuredAgentSessionNamedTurnScope(ctx.journal, input.turnId)
       : null) ?? ctx.journal.liveTurnScope()
   // Only the provider's end or the child's ends a command. A command the provider has not opened a
@@ -163,7 +157,7 @@ async function cancelAndNote(
   const stoppedBefore =
     runningCommand && structuredAgentSessionCommandWasStopped(ctx.journal, liveTurnId)
   // One rule for every agent: a chat's Stop ends its session, background work included; the next
-  // send resumes the conversation. A row's Stop (`scope`) stops only that task.
+  // send resumes the conversation. A task row's Stop has its own targeted path.
   const endsSession = input.endSession !== undefined
   const stoppedAt = Date.now()
   const noteIdentity = structuredAgentSessionStopNoteIdentity(
@@ -188,38 +182,17 @@ async function cancelAndNote(
   let refusal: AgentSessionCancelOutcome['refusal']
   try {
     const dispatchStatus = latestJournalDispatchObservation(ctx.journal, ctx.fence)
-    const background =
-      input.scope && !stoppedBefore
-        ? await stopStructuredAgentSessionBackgroundWork(
-            ctx,
-            input,
-            () => ctx.journal.activeTurnId() === null && !isMainAgentWorking(ctx)
-          )
-        : undefined
-    // A background Stop writes no row, so a task the agent shows still running after it goes back
-    // to the client that pressed it.
-    if (background?.stillRunning) {
-      return {
-        ok: false,
-        refusal: refuseUnclassified(
-          'agent_session_operation_invalid',
-          'a background task still runs after its stop'
-        )
-      }
-    }
     const outcome: AgentSessionCancelOutcome = stoppedBefore
       ? { cancelled: false }
-      : input.scope
-        ? { cancelled: background?.cancelled === true }
-        : await ctx.adapter.cancelTurn({
-            sessionId: ctx.sessionId,
-            ...(input.turnId !== undefined ? { turnId: input.turnId } : {}),
-            fence: ctx.fence,
-            // The journal is what the client read to name a turn, so it is what judges the request.
-            resolveLiveTurnId: () => ctx.journal.activeTurnId(),
-            ...(dispatchStatus ? { dispatchStatus } : {}),
-            ...(input.prompt ? { prompt: { itemId: input.prompt.itemId } } : {})
-          })
+      : await ctx.adapter.cancelTurn({
+          sessionId: ctx.sessionId,
+          ...(input.turnId !== undefined ? { turnId: input.turnId } : {}),
+          fence: ctx.fence,
+          // The journal is what the client read to name a turn, so it is what judges the request.
+          resolveLiveTurnId: () => ctx.journal.activeTurnId(),
+          ...(dispatchStatus ? { dispatchStatus } : {}),
+          ...(input.prompt ? { prompt: { itemId: input.prompt.itemId } } : {})
+        })
     taken = outcome.cancelled
     cancelled = outcome.cancelled
     refusal = outcome.refusal
@@ -241,16 +214,6 @@ async function cancelAndNote(
   } catch (error) {
     if (input.prompt) {
       throw error
-    }
-    // A timeout or lost contact proves nothing about the task: unconfirmed, never "not stopped".
-    if (input.scope) {
-      return {
-        ok: false,
-        refusal: refuseUnclassified(
-          'agent_session_operation_unknown',
-          `background task stop unconfirmed: ${error instanceof Error ? error.message : String(error)}`
-        )
-      }
     }
     interruptFailed = true
     // The adapter's error is Orca's; the row says only that the stop is unconfirmed.
@@ -322,11 +285,11 @@ async function cancelAndNote(
     // A Stop that failed reads "Stopping…" through the turn it could not stop; its end stays its own.
     binding.failedOn = structuredAgentSessionFailedStopMark(ctx.journal)
   }
-  if (taken === true && stoppedTurn !== undefined && !binding.closedByWindDown && !input.scope) {
+  if (taken === true && stoppedTurn !== undefined && !binding.closedByWindDown) {
     await settleTakenStop(ctx, stoppedTurn)
   }
   const value = { ...(input.turnId !== undefined ? { turnId: input.turnId } : {}), cancelled }
-  if (input.scope || note === null) {
+  if (note === null) {
     return { ok: true, value }
   }
   await (!noteWritten || note.text !== STOP_NOTE_CANCELLATION_REQUESTED

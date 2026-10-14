@@ -497,6 +497,38 @@ describe('useStructuredAgentSessionOptions', () => {
   })
 
   describe('before the provider starts', () => {
+    it('keeps a picked effort visible after a model pick during startup', async () => {
+      let reads = 0
+      answer({
+        options: async () => {
+          if (reads++ > 0) {
+            return new Promise(() => {})
+          }
+          return {
+            models: ['opus', 'sonnet'].map((id) => ({
+              id,
+              label: id,
+              efforts: ['low', 'high'].map((value) => ({ value, label: value }))
+            })),
+            current: { model: 'opus' }
+          }
+        }
+      })
+      const { mutate } = mutateWith(async (_description, _method, fields) => fields)
+      const { result, unmount } = renderOptions(
+        { ...REOPENED, agent: 'claude', providerStarting: true },
+        mutate
+      )
+      await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('opus'))
+      await act(async () => {
+        await result.current.setStructuredOption('effort', 'low')
+        await result.current.setStructuredOption('model', 'sonnet')
+      })
+      expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet')
+      expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
+      unmount()
+    })
+
     // What a started Claude host reports: the model its settings or env make Claude run.
     const CLAUDE_STARTED = {
       models: [

@@ -87,24 +87,35 @@ describe('a Grok model pick Grok never answers during send', () => {
   })
 
   it('bounds its write, frees the chat, and keeps what Grok answers late', async () => {
-    const { rig, host } = await openAttachedHostRig({
+    const { rig, host, store, fence } = await openAttachedHostRig({
       optionWriteTimeoutMs: 100,
       script: (agent) => agent.on('session/set_config_option', () => {})
     })
     expect(await pick(host, 'grok-4.6')).toMatchObject({ ok: true })
+    const savedModel = store.getRecord(SESSION)?.options?.model
+    expect(savedModel).toBe('grok-4.6')
     await send(host, 'hello')
     await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(1))
+    await waitFor(() =>
+      expect(
+        host.collaboratorsForTests().sessions.get(SESSION)?.journal.submissions()[0]?.dispatchState
+      ).toBe('unknown')
+    )
     // The chat's queue moved on: a later operation runs.
     expect(await within(host.readOptions(SESSION), 1_000)).not.toBe('pending')
     const [frame] = framesOf(rig.child(), 'session/set_config_option')
     rig.child().agent.reply(frame!, {
       configOptions: GROK_CONFIG_OPTIONS.map((option) =>
-        option.id === 'model' ? { ...option, currentValue: 'grok-4.6' } : option
+        option.id === 'model' ? { ...option, currentValue: 'grok-4.7' } : option
       )
     })
     await waitFor(async () =>
-      expect((await host.readOptions(SESSION)).current).toMatchObject({ model: 'grok-4.6' })
+      expect(
+        (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current.model
+      ).toBe('grok-4.7')
     )
+    expect((await host.readOptions(SESSION)).current.model).toBe(savedModel)
+    expect(store.getRecord(SESSION)?.options?.model).toBe(savedModel)
     await host.close(SESSION, 'user-close')
   })
 })
