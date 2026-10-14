@@ -8,8 +8,10 @@ import type { SshConnectionState } from './ssh-types'
 import type { TerminalSideEffectBatch } from './terminal-side-effect-facts'
 import type { RuntimeNativeChatLaunchDraftResolution } from './runtime-types'
 import type { RuntimeNavigationTarget } from './runtime-navigation'
+import type { PluginChangeEvent } from './plugins/plugin-change-event'
 
 export type RuntimeClientEvent =
+  | { type: 'pluginsChanged'; change: PluginChangeEvent }
   | { type: 'reposChanged' }
   | { type: 'worktreesChanged'; repoId: string; sortOrderOnly?: boolean }
   | ({ type: 'nativeChatLaunchDraftResolved' } & RuntimeNativeChatLaunchDraftResolution)

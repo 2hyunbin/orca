@@ -1,3 +1,4 @@
+import type { PluginEnvironmentProviderSessionApi } from '../../shared/plugins/plugin-environment-provider-session'
 import type { PluginEnvironmentProviderMigrationPreview } from '../../shared/plugins/plugin-environment-provider-migration-api'
 import type { PluginEnvironmentProviderHistory } from '../../shared/plugins/plugin-environment-provider-history-api'
 import type {
@@ -198,7 +199,7 @@ export type PluginMarketplaceDataActionResult =
   | { kind: 'review'; preview: PluginMarketplaceHostInstallPreview }
   | { kind: 'error'; error: string }
 
-export type PluginsApi = {
+export type PluginsApi = PluginEnvironmentProviderSessionApi & {
   listSavedEnvironmentProviders?: () => Promise<PluginEnvironmentProviderSavedEntry[]>
   savedEnvironmentProviderSnapshot?: (input: {
     providerId: string

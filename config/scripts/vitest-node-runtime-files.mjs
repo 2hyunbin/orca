@@ -112,6 +112,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/runtime/runtime-plugin-viewer-worktree-authority.test.ts',
   'src/main/runtime/plugin-viewer-runtime-client.integration.test.ts',
   'src/main/ipc/plugin-viewer-runtime-file-route.integration.test.ts',
+  'src/main/ipc/plugin-environment-provider-sessions.integration.test.ts',
   'src/shared/remote-runtime-connect-bound.test.ts',
   // Bun's built-in ws client ignores maxPayload; the product opener only runs on Node.
   'src/shared/remote-runtime-request-websocket.test.ts',

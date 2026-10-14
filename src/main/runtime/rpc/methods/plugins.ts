@@ -4,6 +4,7 @@ import type { PluginPanelEntry } from '../../../../shared/plugins/plugin-panel-b
 import { listPluginsForClients } from '../../../plugins/plugin-client-list'
 import type { PluginListEntry } from '../../../plugins/plugin-list-projection'
 import type { PluginService } from '../../../plugins/plugin-service'
+import type { PluginChangeEvent } from '../../../../shared/plugins/plugin-change-event'
 import {
   pluginConsentRequestSchema,
   type PluginConsentRequest
@@ -49,6 +50,10 @@ function requirePluginService(): PluginService {
     throw new Error('Plugin service is not available on this runtime')
   }
   return pluginServiceForRpc
+}
+
+export function onPluginChangeForRpc(listener: (event: PluginChangeEvent) => void): () => void {
+  return pluginServiceForRpc?.onChanged(listener) ?? (() => undefined)
 }
 
 async function listForRpc(): Promise<PluginListEntry[]> {

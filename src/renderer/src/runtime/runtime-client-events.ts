@@ -6,6 +6,7 @@ import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import { isRuntimeSubscriptionReplayResponse } from '../../../shared/runtime-subscription-replay'
 import { admitSshConnectionState } from '../../../shared/ssh-retained-payload-admission'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
+import { pluginChangeEventSchema } from '../../../shared/plugins/plugin-change-event'
 import { subscribeRuntimeEnvironment } from './runtime-environment-pairing-refresh'
 
 export type RuntimeClientEventSubscription = {
@@ -52,6 +53,7 @@ function handleRuntimeClientEventResponse(
   if (isRuntimeSubscriptionReplayResponse(response)) {
     onReplayedAfterReconnect?.()
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Registered client-event successes carry the host's event contract; SSH and plugin payloads are admitted below before use.
   const message = response.result as RuntimeClientEventStreamMessage
   if (message.type === 'ready') {
     for (const sshState of message.snapshot?.sshStates ?? []) {
@@ -65,6 +67,15 @@ function handleRuntimeClientEventResponse(
     return
   }
   if (message.type === 'end') {
+    return
+  }
+  if (message.type === 'pluginsChanged') {
+    const change = pluginChangeEventSchema.safeParse(message.change)
+    if (change.success) {
+      onEvent({ type: 'pluginsChanged', change: change.data })
+    } else {
+      onError(new Error('Invalid plugin change event'))
+    }
     return
   }
   if (message.type === 'sshStateChanged') {

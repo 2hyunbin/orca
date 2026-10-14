@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginLockfile } from '../../shared/plugins/plugin-install-lockfile'
 import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
 import type { ValidDiscoveredPlugin } from '../plugins/plugin-discovery'
-import type { PluginService } from '../plugins/plugin-service'
-import type { Store } from '../persistence'
+import { PluginService } from '../plugins/plugin-service'
+import { Store } from '../persistence'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const electronMocks = vi.hoisted(() => ({ handle: vi.fn(), on: vi.fn() }))
 vi.mock('electron', () => ({
@@ -169,25 +172,29 @@ describe('plugin removal authority', () => {
 })
 
 describe('plugin settings lifecycle authority', () => {
-  it('refreshes from the main-process settings listener without renderer follow-up', () => {
-    let settingsListener!: (updates: {
-      pluginSystemEnabled?: boolean
-      devPluginPaths?: string[]
-    }) => void
-    const store = {
-      onSettingsChanged: vi.fn((listener) => {
-        settingsListener = listener
-        return vi.fn()
-      })
-    } as unknown as Store
-    const service = {
-      setRuntimeDelegate: vi.fn(),
-      refresh: vi.fn().mockResolvedValue(undefined)
-    } as unknown as PluginService
-    registerPluginHandlers(store, service, null)
-
-    settingsListener({ pluginSystemEnabled: false })
-
-    expect(service.refresh).toHaveBeenCalledOnce()
+  it('refreshes from the main-process settings listener without renderer follow-up', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-plugin-settings-'))
+    const store = new Store({
+      dataFile: join(root, 'profile.json'),
+      serializedState: JSON.stringify({ settings: { pluginSystemEnabled: true } })
+    })
+    const service = new PluginService({
+      userDataPath: root,
+      hostVersion: '1.4.0',
+      isPluginSystemEnabled: () => store.getSettings().pluginSystemEnabled,
+      getDevPluginPaths: () => [],
+      getDisabledPlugins: () => [],
+      getPluginConsents: () => ({})
+    })
+    const refresh = vi.spyOn(service, 'refresh').mockResolvedValue(undefined)
+    try {
+      registerPluginHandlers(store, service, null)
+      store.updateSettings({ pluginSystemEnabled: false }, { notifyListeners: true })
+      expect(refresh).toHaveBeenCalledOnce()
+    } finally {
+      await service.dispose()
+      await store.freezeWritesAsync()
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

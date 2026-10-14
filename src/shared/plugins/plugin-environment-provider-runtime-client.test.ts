@@ -6,15 +6,24 @@ import {
 } from '../protocol-version'
 import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from './plugin-environment-provider-runtime-capability'
 import { PluginEnvironmentProviderRuntimeClient } from './plugin-environment-provider-runtime-client'
+import type { RuntimeRpcResponse } from '../runtime-rpc-envelope'
 
 const transport = vi.hoisted(() => {
-  const retirement: { onClosed?: () => void } = {}
+  const retirement: {
+    onClosed?: () => void
+    onResponse?: (response: RuntimeRpcResponse<unknown>) => void
+  } = {}
   return { request: vi.fn(), close: vi.fn(), retirement }
 })
 vi.mock('../remote-runtime-request-connection', () => ({
   RemoteRuntimeRequestConnection: class {
-    constructor(_pairing: unknown, _capabilities: unknown, lifetime: { onClosed(): void }) {
+    constructor(
+      _pairing: unknown,
+      _capabilities: unknown,
+      lifetime: { onClosed(): void; onResponse?(response: RuntimeRpcResponse<unknown>): void }
+    ) {
       transport.retirement.onClosed = lifetime.onClosed
+      transport.retirement.onResponse = lifetime.onResponse
     }
     request = transport.request
     close = transport.close
@@ -28,7 +37,7 @@ const status = {
   runtimeProtocolVersion: RUNTIME_PROTOCOL_VERSION,
   minCompatibleRuntimeClientVersion: MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION
 }
-function reply(result: unknown, runtimeId = 'owned-host') {
+function reply(result: unknown, runtimeId = 'owned-host'): RuntimeRpcResponse<unknown> {
   return { id: 'response', ok: true, result, _meta: { runtimeId } }
 }
 function client(onRetired?: () => void) {
@@ -136,4 +145,45 @@ it('validates input before opening a connection', async () => {
   await expect(value.call('saveSsh', { input: { ticketId: 'invalid' } })).rejects.toThrow()
   expect(transport.request).not.toHaveBeenCalled()
   await expect(value.call('list', {})).resolves.toEqual([])
+})
+
+it('observes changes only from its own event stream and withdraws malformed or foreign events', async () => {
+  transport.request
+    .mockResolvedValueOnce(reply(status))
+    .mockResolvedValueOnce(reply({ type: 'ready', subscriptionId: 'events' }))
+  const value = client(),
+    changed = vi.fn()
+  value.onChanged(changed)
+  await value.observe()
+  const event = { type: 'pluginsChanged', change: { contentPacksChanged: true } }
+  transport.retirement.onResponse?.({ ...reply(event), id: 'another-stream' })
+  expect(changed).not.toHaveBeenCalled()
+  transport.retirement.onResponse?.(reply(event))
+  expect(changed).toHaveBeenCalledExactlyOnceWith(event.change)
+  transport.retirement.onResponse?.(reply(event, 'another-instance'))
+  await expect(value.call('list', {})).rejects.toThrow()
+})
+
+it('waits for ready after the event stream sends retained terminal state first', async () => {
+  transport.request
+    .mockResolvedValueOnce(reply(status))
+    .mockResolvedValueOnce(reply({ type: 'worktreeTerminalSleepState' }))
+  const value = client()
+  const observation = value.observe()
+  await vi.waitFor(() => expect(transport.request).toHaveBeenCalledTimes(2))
+  transport.retirement.onResponse?.(reply({ type: 'ready', subscriptionId: 'events' }))
+  await observation
+  expect(transport.close).not.toHaveBeenCalled()
+})
+
+it('retires an event stream whose plugin payload no longer matches its contract', async () => {
+  transport.request
+    .mockResolvedValueOnce(reply(status))
+    .mockResolvedValueOnce(reply({ type: 'ready', subscriptionId: 'events' }))
+  const value = client()
+  await value.observe()
+  transport.retirement.onResponse?.(
+    reply({ type: 'pluginsChanged', change: { contentPacksChanged: 'yes' } })
+  )
+  await expect(value.call('list', {})).rejects.toThrow()
 })

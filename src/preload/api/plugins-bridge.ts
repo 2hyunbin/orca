@@ -6,6 +6,10 @@ import type {
 import type { PluginConsentRequest } from '../../shared/plugins/plugin-consent-request'
 import type { PluginChangeEvent } from '../../shared/plugins/plugin-change-event'
 import { pluginViewerUnavailableSchema } from '../../shared/plugins/plugin-viewer-unavailable'
+import {
+  pluginEnvironmentProviderSessionCloseSchema,
+  pluginEnvironmentProviderSessionChangeSchema
+} from '../../shared/plugins/plugin-environment-provider-session'
 import type {
   PluginHostInstallResult,
   PluginHostInstallSource,
@@ -15,6 +19,28 @@ import type {
 } from '../api-types'
 
 export const pluginsApi = {
+  onEnvironmentProviderSessionChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+      const parsed = pluginEnvironmentProviderSessionChangeSchema.safeParse(value)
+      if (parsed.success) {callback(parsed.data)}
+    }
+    ipcRenderer.on('plugins:environmentProviderSessionChanged', listener)
+    return () => ipcRenderer.removeListener('plugins:environmentProviderSessionChanged', listener)
+  },
+  openEnvironmentProviderSession: (input) =>
+    ipcRenderer.invoke('plugins:openEnvironmentProviderSession', input),
+  callEnvironmentProviderSession: (input) =>
+    ipcRenderer.invoke('plugins:callEnvironmentProviderSession', input),
+  closeEnvironmentProviderSession: (input) =>
+    ipcRenderer.invoke('plugins:closeEnvironmentProviderSession', input),
+  onEnvironmentProviderSessionRetired: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, value: unknown): void => {
+      const parsed = pluginEnvironmentProviderSessionCloseSchema.safeParse(value)
+      if (parsed.success) {callback(parsed.data)}
+    }
+    ipcRenderer.on('plugins:environmentProviderSessionRetired', listener)
+    return () => ipcRenderer.removeListener('plugins:environmentProviderSessionRetired', listener)
+  },
   list: (): Promise<PluginHostListEntry[]> => ipcRenderer.invoke('plugins:list'),
   prepareEnvironmentProviderSsh: (input) =>
     ipcRenderer.invoke('plugins:prepareEnvironmentProviderSsh', input),

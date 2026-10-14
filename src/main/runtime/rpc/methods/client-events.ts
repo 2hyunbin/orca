@@ -2,6 +2,8 @@ import { getRegisteredSshState, listRegisteredSshTargets } from '../../../ssh/ss
 import { getPublicSshState } from '../../public-ssh-state'
 import { defineMethod, defineStreamingMethod } from '../core'
 import { ClientEventsUnsubscribeParams } from '../../../../shared/rpc-contract/client-events-params'
+import { PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY } from '../../../../shared/plugins/plugin-environment-provider-runtime-capability'
+import { onPluginChangeForRpc } from './plugins'
 
 let clientEventSubscriptionSeq = 0
 
@@ -10,7 +12,7 @@ export const CLIENT_EVENT_METHODS = [
     name: 'runtime.clientEvents.subscribe',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime, connectionId, clientKind }, emit) => {
+    handler: async (_params, { runtime, connectionId, clientKind, clientCapabilities }, emit) => {
       await new Promise<void>((resolve) => {
         // Why: mobile discards terminalSideEffects; excluding it stops the
         // per-OSC batch frames from crossing the relay.
@@ -20,6 +22,11 @@ export const CLIENT_EVENT_METHODS = [
           },
           { consumesTerminalSideEffects: clientKind !== 'mobile' }
         )
+        const stopPlugins =
+          clientKind === 'runtime' &&
+          clientCapabilities?.includes(PLUGIN_ENVIRONMENT_PROVIDER_RUNTIME_CAPABILITY)
+            ? onPluginChangeForRpc((change) => emit({ type: 'pluginsChanged', change }))
+            : () => undefined
 
         const seq = ++clientEventSubscriptionSeq
         const subscriptionId = `runtime-client-events-${connectionId ?? 'inproc'}-${seq}`
@@ -27,6 +34,7 @@ export const CLIENT_EVENT_METHODS = [
           subscriptionId,
           () => {
             unsubscribe()
+            stopPlugins()
             emit({ type: 'end' })
             resolve()
           },

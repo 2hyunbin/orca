@@ -1,20 +1,15 @@
 import { posix, win32 } from 'node:path'
 import { isRuntimePathAbsolute, isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import { parseExecutionHostId, toRuntimeExecutionHostId } from '../../shared/execution-host'
-import { resolveEnvironment } from '../../shared/runtime-environment-store'
-import { getPreferredPairedRuntimeConnection } from '../../shared/runtime-environments'
 import { PluginViewerDocumentError } from '../../shared/plugins/plugin-viewer-document'
 import { PluginViewerRuntimeClient } from '../../shared/plugins/plugin-viewer-runtime-client'
 import type { PluginViewerOpenRequest } from '../../shared/plugins/plugin-viewer-open'
 import type { PluginViewerFileRequest } from '../../shared/plugins/plugin-viewer-file-resource'
 import type { PluginViewerFileAuthority } from '../plugins/plugin-viewer-file-authority'
-import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
-import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
-import { runtimeEnvironmentRevisionFailure } from './runtime-environment-revision-guard'
 import {
-  getRuntimeEnvironmentTransportGeneration,
-  onRuntimeEnvironmentTransportChanged
-} from './runtime-environment-transport-generation'
+  prepareRuntimeEnvironmentConnectionLease,
+  RuntimeEnvironmentConnectionChangedError
+} from './runtime-environment-connection-lease'
 
 export async function resolvePluginViewerRuntimeFileRoute(
   userDataPath: string,
@@ -33,42 +28,26 @@ export async function resolvePluginViewerRuntimeFileRoute(
     throw new PluginViewerDocumentError('unauthorized')
   }
   const runtimeId = request.expectedEnvironmentRuntimeId
-  const environment = resolveEnvironment(userDataPath, host.environmentId)
-  const generation = getRuntimeEnvironmentTransportGeneration(environment.id)
-  let fingerprint: string | null = null
   let retired = false
   let client: PluginViewerRuntimeClient | null = null
   const listeners = new Set<() => void>()
-  const isCurrent = (): boolean => {
-    try {
-      const current = resolveEnvironment(userDataPath, environment.id)
-      return (
-        !retired &&
-        environment.id === host.environmentId &&
-        !isRuntimeEnvironmentManuallyDisconnected(environment.id) &&
-        getRuntimeEnvironmentTransportGeneration(environment.id) === generation &&
-        (fingerprint === null ||
-          JSON.stringify(getPreferredPairedRuntimeConnection(current)) === fingerprint) &&
-        !runtimeEnvironmentRevisionFailure(
-          current,
-          request.expectedEnvironmentPairingRevision,
-          'files.pluginViewer.open',
-          request.expectedEnvironmentRuntimeId
-        )
-      )
-    } catch {
-      return false
+  let lease: Awaited<ReturnType<typeof prepareRuntimeEnvironmentConnectionLease>> | null = null
+  lease = await prepareRuntimeEnvironmentConnectionLease(
+    userDataPath,
+    {
+      environmentId: host.environmentId,
+      pairingRevision: request.expectedEnvironmentPairingRevision,
+      runtimeId
+    },
+    () => invalidate()
+  ).catch((error: unknown) => {
+    if (error instanceof RuntimeEnvironmentConnectionChangedError) {
+      throw new PluginViewerDocumentError('unauthorized')
     }
-  }
-  if (!isCurrent()) {
-    throw new PluginViewerDocumentError('unauthorized')
-  }
-  const prepared = await resolveManagedRuntimeEnvironment(userDataPath, environment.id)
-  if (!isCurrent()) {
-    throw new PluginViewerDocumentError('unauthorized')
-  }
-  const pairing = getPreferredPairedRuntimeConnection(prepared)
-  fingerprint = JSON.stringify(pairing)
+    throw error
+  })
+  const isCurrent = (): boolean => !retired && lease?.isCurrent() === true
+  const pairing = lease.pairing
   // This boundary is only an opaque route identity; the host derives actual file authority.
   const file = Object.freeze({
     boundaryPath: (isWindowsAbsolutePathLike(request.filePath) ? win32 : posix).dirname(
@@ -76,11 +55,12 @@ export async function resolvePluginViewerRuntimeFileRoute(
     ),
     entryPath: request.filePath
   })
-  const invalidate = (): void => {
+  function invalidate(): void {
     if (retired) {
       return
     }
     retired = true
+    lease?.close()
     client?.close()
     for (const listener of Array.from(listeners)) {
       try {
@@ -117,7 +97,6 @@ export async function resolvePluginViewerRuntimeFileRoute(
       },
       onInvalidated: (listener) => {
         listeners.add(listener)
-        const stop = onRuntimeEnvironmentTransportChanged(environment.id, invalidate)
         if (!isCurrent()) {
           if (retired) {
             listener()
@@ -126,10 +105,10 @@ export async function resolvePluginViewerRuntimeFileRoute(
           }
         }
         return () => {
-          stop()
           listeners.delete(listener)
           if (listeners.size === 0) {
             retired = true
+            lease?.close()
             client?.close()
           }
         }

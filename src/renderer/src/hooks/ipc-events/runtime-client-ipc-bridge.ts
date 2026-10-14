@@ -108,6 +108,9 @@ export function registerRuntimeClientIpcBridge(
       applyNativeChatLaunchDraftResolved(useAppStore.getState(), event)
       return
     }
+    if (event.type === 'pluginsChanged') {
+      return
+    }
     if (event.type === 'reposChanged') {
       requestProjectRefresh(environmentId)
       return

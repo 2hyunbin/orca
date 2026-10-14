@@ -26,6 +26,8 @@ import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
 import { pluginConsentRequestSchema } from '../../shared/plugins/plugin-consent-request'
 import { normalizePluginIdList } from '../../shared/plugins/plugin-consent-state'
 import { registerPluginEnvironmentProviderHandlers } from './plugin-environment-providers'
+import { registerPluginEnvironmentProviderSessionHandlers } from './plugin-environment-provider-sessions'
+import { bindPluginSettingsDiscovery } from './plugin-settings-discovery'
 import { registerPluginViewerGuestHandlers } from './plugin-viewer-guests'
 import { registerPluginViewerTabHandlers } from './plugin-viewer-tabs'
 import {
@@ -106,6 +108,7 @@ export function registerPluginHandlers(
   marketplaceServices?: PluginMarketplaceHandlerServices
 ): void {
   registerPluginEnvironmentProviderHandlers(pluginService.environmentProviders)
+  registerPluginEnvironmentProviderSessionHandlers(pluginService.options.userDataPath)
   registerPluginViewerGuestHandlers(pluginService)
   registerPluginViewerTabHandlers(store)
   // The runtime IS the delegate: the structural PluginRuntimeDelegate type
@@ -114,15 +117,7 @@ export function registerPluginHandlers(
     pluginService.setRuntimeDelegate(runtime)
   }
 
-  store.onSettingsChanged((updates) => {
-    if ('pluginSystemEnabled' in updates || 'devPluginPaths' in updates) {
-      // Main owns plugin lifecycle. Renderer follow-up refreshes are UX only;
-      // a crashed or remote caller must not leave old workers authoritative.
-      void pluginService.refresh().catch((error) => {
-        console.warn('[plugins] failed to apply plugin settings change:', error)
-      })
-    }
-  })
+  bindPluginSettingsDiscovery(store, pluginService)
 
   // Why: startup discovery is fire-and-forget; every handler awaits it so an
   // early renderer fetch can't observe the empty pre-discovery list.
