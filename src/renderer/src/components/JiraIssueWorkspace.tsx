@@ -16,8 +16,8 @@ import {
   jiraIssueComments,
   jiraListAssignableUsers,
   jiraListPriorities,
-  jiraListTransitions,
-  jiraUpdateIssue
+  jiraListTransitionsForTarget,
+  jiraUpdateIssueForTarget
 } from '@/runtime/runtime-jira-client'
 import type {
   JiraComment,
@@ -32,7 +32,8 @@ import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
 import { JiraIssueCommentComposer, JiraIssueWorkspaceContent } from './jira-issue-workspace-content'
 import { getJiraIssueWorkspaceActions } from './jira-issue-workspace-actions'
-import { defaultScopeHost, defaultScopeSource } from '@/lib/default-creation-host'
+import { defaultScopeHost } from '@/lib/default-creation-host'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 import { getTaskSourceCacheScope } from '../../../shared/task-source-context'
 
 type JiraIssueWorkspaceProps = {
@@ -50,7 +51,7 @@ export default function JiraIssueWorkspace({
 }: JiraIssueWorkspaceProps): React.JSX.Element {
   const settings = useAppStore((s) => s.settings)
   const providerSettings = useMemo(
-    () => sourceContext ?? defaultScopeSource(settings),
+    () => (sourceContext ? taskSourceRuntimeTarget(sourceContext) : defaultScopeHost(settings)),
     [settings, sourceContext]
   )
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
@@ -75,7 +76,7 @@ export default function JiraIssueWorkspace({
   const displayed = fullIssue ?? issue
   const siteId = displayed?.siteId ?? undefined
   const metadataKey = JSON.stringify([
-    sourceContext ? getTaskSourceCacheScope(sourceContext) : defaultScopeHost(settings),
+    sourceContext ? getTaskSourceCacheScope(sourceContext) : providerSettings,
     siteId,
     displayed?.key
   ])
@@ -114,7 +115,7 @@ export default function JiraIssueWorkspace({
       setTransitionsError(null)
       setTransitions([])
       try {
-        const result = await jiraListTransitions(
+        const result = await jiraListTransitionsForTarget(
           providerSettings,
           targetIssue.key,
           targetIssue.siteId
@@ -218,7 +219,7 @@ export default function JiraIssueWorkspace({
   const mutateIssue = useCallback(
     async (
       field: string,
-      updates: Parameters<typeof jiraUpdateIssue>[2],
+      updates: Parameters<typeof jiraUpdateIssueForTarget>[2],
       optimistic?: Partial<JiraIssue>
     ): Promise<JiraMutationResult> => {
       if (!displayed || pendingField) {
@@ -231,7 +232,12 @@ export default function JiraIssueWorkspace({
           setFullIssue({ ...displayed, ...optimistic })
           patchJiraIssue(displayed.key, optimistic, { sourceContext })
         }
-        const result = await jiraUpdateIssue(providerSettings, displayed.key, updates, siteId)
+        const result = await jiraUpdateIssueForTarget(
+          providerSettings,
+          displayed.key,
+          updates,
+          siteId
+        )
         if (!result.ok) {
           throw new Error(result.error)
         }

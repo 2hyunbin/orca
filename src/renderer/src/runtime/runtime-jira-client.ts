@@ -16,13 +16,20 @@ import type {
   JiraViewer
 } from '../../../shared/jira-types'
 import { searchLocalJiraIssues } from './local-jira-search-cancellation'
-import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rpc-client'
+import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { readRuntimeJiraPayload } from './runtime-jira-payload-stream'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
-import { JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  jiraListTransitionsForTarget,
+  jiraUpdateIssueForTarget
+} from './runtime-jira-transition-client'
+export {
+  jiraListTransitionsForTarget,
+  jiraUpdateIssueForTarget
+} from './runtime-jira-transition-client'
 
 export { jiraLookupIssueSummary, jiraReadStatus } from './runtime-jira-summary-client'
 export {
@@ -166,21 +173,7 @@ export async function jiraUpdateIssue(
   updates: JiraIssueUpdate,
   siteId?: string | null
 ): Promise<JiraMutationResult> {
-  const target = getJiraRuntimeTarget(settings)
-  if (
-    target.kind === 'environment' &&
-    (updates.transitionFields || updates.transitionComment !== undefined)
-  ) {
-    await assertRuntimeEnvironmentCapability(
-      target.environmentId,
-      JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
-      'Update the remote Orca server to submit required transition fields, or complete the transition in Jira.'
-    )
-  }
-  const args = { key, updates, siteId: siteId ?? undefined }
-  return target.kind === 'environment'
-    ? callRuntimeRpc<JiraMutationResult>(target, 'jira.updateIssue', args, { timeoutMs: 30_000 })
-    : window.api.jira.updateIssue(args)
+  return jiraUpdateIssueForTarget(getJiraRuntimeTarget(settings), key, updates, siteId)
 }
 
 export async function jiraAddIssueComment(
@@ -275,11 +268,7 @@ export async function jiraListTransitions(
   key: string,
   siteId?: string | null
 ): Promise<JiraTransition[]> {
-  const target = getJiraRuntimeTarget(settings)
-  const args = { key, siteId: siteId ?? undefined }
-  return target.kind === 'environment'
-    ? callRuntimeRpc<JiraTransition[]>(target, 'jira.listTransitions', args, { timeoutMs: 30_000 })
-    : window.api.jira.listTransitions(args)
+  return jiraListTransitionsForTarget(getJiraRuntimeTarget(settings), key, siteId)
 }
 
 export async function jiraGetProjectStatusOrder(

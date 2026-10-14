@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import type { ComponentProps, ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JiraIssue, JiraTransition } from '../../../shared/jira-types'
+import { taskSourceRuntimeTarget } from '@/lib/task-source-runtime-target'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import type { JiraIssueMetadataBar } from './jira-issue-workspace-chrome'
 import JiraIssueWorkspace from './JiraIssueWorkspace'
@@ -31,10 +32,10 @@ vi.mock('@/i18n/i18n', () => ({
 vi.mock('@/runtime/runtime-jira-client', () => ({
   jiraGetIssue: async () => null,
   jiraIssueComments: async () => [],
-  jiraListTransitions: mocks.transitions,
+  jiraListTransitionsForTarget: mocks.transitions,
   jiraListPriorities: async () => [],
   jiraListAssignableUsers: async () => [],
-  jiraUpdateIssue: mocks.update,
+  jiraUpdateIssueForTarget: mocks.update,
   jiraAddIssueComment: async () => ({ ok: true })
 }))
 vi.mock('@/components/ui/sheet', () => {
@@ -140,7 +141,7 @@ describe('Jira transition form source ownership', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Change status' }))
       await waitFor(() =>
         expect(mocks.update).toHaveBeenCalledWith(
-          next,
+          taskSourceRuntimeTarget(next),
           issue.key,
           { transitionId: 'new', transitionComment: 'New source comment' },
           'site-a'
@@ -148,6 +149,52 @@ describe('Jira transition form source ownership', () => {
       )
     }
   )
+  it('keeps transition reads and required-field submission on the issue owner after settings change', async () => {
+    const view = render(workspace(source))
+    await openForm()
+    mocks.settings = { activeRuntimeEnvironmentId: 'unrelated-default' }
+    view.rerender(workspace(source))
+    await waitForTransitions()
+    await screen.findByLabelText('Comment')
+    fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'Owned comment' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change status' }))
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith(
+        { kind: 'environment', environmentId: 'environment-a' },
+        issue.key,
+        { transitionId: 'old', transitionComment: 'Owned comment' },
+        'site-a'
+      )
+    )
+    expect(
+      mocks.transitions.mock.calls.every(([owner]) => owner.environmentId === 'environment-a')
+    ).toBe(true)
+  })
+  it('ignores a transition response from the previous execution host', async () => {
+    let finishOldRead = (_transitions: JiraTransition[]): void => {}
+    mocks.transitions.mockReturnValueOnce(
+      new Promise<JiraTransition[]>((resolve) => {
+        finishOldRead = resolve
+      })
+    )
+    const view = render(workspace(source))
+    await waitFor(() => expect(mocks.transitions).toHaveBeenCalledTimes(1))
+    mocks.transitions.mockResolvedValue([transition('new-owner')])
+    view.rerender(workspace({ ...source, hostId: 'runtime:environment-b' }))
+    await waitForTransitions()
+    await act(async () => finishOldRead([transition('old-owner')]))
+    await openForm()
+    fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'New owner comment' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Change status' }))
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith(
+        { kind: 'environment', environmentId: 'environment-b' },
+        issue.key,
+        { transitionId: 'new-owner', transitionComment: 'New owner comment' },
+        'site-a'
+      )
+    )
+  })
   it('drops the form when a source without a selected project changes execution host', async () => {
     const view = render(workspace())
     await openForm()
