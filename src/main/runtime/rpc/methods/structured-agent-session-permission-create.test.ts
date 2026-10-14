@@ -35,7 +35,8 @@ describe('legacy attach-shaped permission creation', () => {
         expect.objectContaining({
           options: { permissionMode: 'full-access' },
           envelope: params.envelope
-        })
+        }),
+        ...(method === 'agentSession.create' ? [{ signal: expect.any(AbortSignal) }] : [])
       )
     }
   )
