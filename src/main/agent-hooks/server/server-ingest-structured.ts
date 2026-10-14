@@ -152,7 +152,7 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
     )
     if (next && savedStructuredSessionStatusChanged(previous?.summary, next)) {
       this.savedStructuredStatuses.set(summary.sessionId, { summary: next })
-      this.runStatusPersist()
+      this.scheduleStatusPersist()
     }
   }
 
@@ -164,7 +164,7 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
     }
     // The host let go of the chat (its tab closed, or it closed unlisted): no restart shows it.
     if (this.savedStructuredStatuses.delete(parsed.sessionId)) {
-      this.runStatusPersist()
+      this.scheduleStatusPersist()
     }
     const previous = this.canonicalStatusStore.getParent(parsed)
     if (!previous) {

@@ -143,6 +143,7 @@ async function attach(input: {
       probe: { outcome: 'reservation-unused' }
     },
     callerKey: 'client-1',
+    optionRevision: () => 0,
     params: input.params,
     now: () => NOW,
     onAttached: async (attached) => {
@@ -216,7 +217,7 @@ it('keeps saved history readable without a registration and resumes when it retu
   try {
     expect(router.supportsCreate(params('2', created.fence).location, 'grok')).toBe(false)
     expect(store.listVisibleSessionIds()).toEqual([SESSION])
-    await host.collaboratorsForTests().restoreReadableSessions([SESSION])
+    await host.restoreReadableSessions([SESSION])
     expect(host.hasSession(SESSION)).toBe(true)
     await expect(host.revealSession(SESSION)).resolves.toMatchObject({
       sessionId: SESSION,

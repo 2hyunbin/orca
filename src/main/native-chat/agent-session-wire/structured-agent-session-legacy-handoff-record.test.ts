@@ -167,7 +167,7 @@ describe('a record an older build left mid terminal handoff', () => {
       claimStatus: 'released'
     })
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       handoffStage: null,
@@ -201,7 +201,7 @@ describe('a record an older build left mid terminal handoff', () => {
     })
     expect(store.getRecord(SESSION)?.lease.handoffStage).toBe('recovering')
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       handoffStage: null,
@@ -221,7 +221,7 @@ describe('a record an older build left mid terminal handoff', () => {
       claimStatus: 'live'
     })
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       handoffStage: null,
@@ -244,7 +244,7 @@ describe('a record an older build left mid terminal handoff', () => {
     })
     probe.mockResolvedValue({ outcome: 'identity-matched', matchedOn: ['spawn-token'] })
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'conflicted',

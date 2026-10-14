@@ -120,7 +120,7 @@ async function runningTurn(): Promise<AgentSessionStatusEvent[]> {
 
 /** What the settle wrote, read back from the journal the next reader opens. */
 async function settledTurn() {
-  await host.collaboratorsForTests().restoreReadableSessions([SESSION])
+  await host.restoreReadableSessions([SESSION])
   const { items } = await host.journalSnapshot(SESSION)
   const turn = items.map((item) => readAgentJournalTurn(item.body)).find(Boolean)
   const [settled] = [...selectStructuredAgentSettledTurns(items).values()]

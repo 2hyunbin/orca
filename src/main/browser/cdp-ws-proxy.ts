@@ -9,6 +9,7 @@ import { CdpPageNavigationCommands } from './cdp-page-navigation-commands'
 import { CdpDomFocusReplay } from './cdp-dom-focus-replay'
 import { CdpPageCaptureCommands } from './cdp-page-capture-commands'
 import type { CapturePaintHold } from './cdp-screenshot'
+import { isTrustedCdpLoopbackRequest } from './cdp-loopback-request-guard'
 
 export class CdpWsProxy {
   private httpServer: Server | null = null
@@ -54,8 +55,18 @@ export class CdpWsProxy {
   async start(): Promise<string> {
     await this.debuggerChannel.attachDebugger()
     return new Promise<string>((resolve, reject) => {
-      this.httpServer = createServer((req, res) => this.discovery.handleHttpRequest(req, res))
-      this.wss = new WebSocketServer({ server: this.httpServer })
+      this.httpServer = createServer((req, res) => {
+        if (!isTrustedCdpLoopbackRequest(req, this.port)) {
+          res.writeHead(403)
+          res.end()
+          return
+        }
+        this.discovery.handleHttpRequest(req, res)
+      })
+      this.wss = new WebSocketServer({
+        server: this.httpServer,
+        verifyClient: ({ req }, done) => done(isTrustedCdpLoopbackRequest(req, this.port), 403)
+      })
       const failStart = (error: Error): void => {
         this.httpServer?.removeListener('error', onListenError)
         this.wss?.close()
@@ -162,10 +173,9 @@ export class CdpWsProxy {
     }
     const effectiveSessionId = this.sessions.resolveDebuggerSessionId(msg.sessionId)
     this.domFocusReplay.invalidateForMethod(msg.method, effectiveSessionId)
-    if (msg.method === 'Page.bringToFront') {
-      if (!this.webContents.isDestroyed()) {
-        this.webContents.focus()
-      }
+    // Why: an agent raising its page must not take the user's keyboard focus (#20595); the
+    // page needs no native focus to receive input, so these succeed without side effects.
+    if (msg.method === 'Page.bringToFront' || msg.method === 'Target.activateTarget') {
       this.responder.sendResult(clientId, {}, client)
       return
     }

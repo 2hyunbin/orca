@@ -4,8 +4,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { spawnProcess } from '../../../shared/child-process/run-process'
-import { CODEX_SPAWN_TOKEN_ENV } from '../../codex/codex-structured-owner-identity'
+import { spawnProcess } from '@orca/process-host'
+import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../../shared/agent-session-caller-env'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { readProcessStartTimeMs } from '../../runtime/agent-session-process-identity-probe'
@@ -39,7 +39,7 @@ async function spawnOwner(spawnToken: string) {
   const child = spawnProcess({
     program: process.execPath,
     args: ['-e', 'setInterval(() => {}, 1_000)'],
-    env: { ...process.env, [CODEX_SPAWN_TOKEN_ENV]: spawnToken }
+    env: { ...process.env, [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: spawnToken }
   })
   spawnedOwners.add(child)
   const pid = child.pid
@@ -186,7 +186,7 @@ describe('recovery exits', () => {
       mintSpawnToken: () => 'spawn-c',
       probeOwner: async () => ({ outcome: 'pid-absent' })
     })
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     // Death proof releases the residue outright: no handoff continuation, no spawned child,
     // no stage a user would have to clear by hand.
@@ -262,7 +262,7 @@ describe('recovery exits', () => {
       stopOwnerProcess
     })
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
 
     // Healing is startup's job; spawning is not. The orphan is stopped and the lease is free, but
     // nothing has asked this session for work, so no replacement child exists yet.
@@ -323,7 +323,7 @@ describe('recovery exits', () => {
       }
     })
 
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       runtimeFence: 2,
       claimStatus: 'released',

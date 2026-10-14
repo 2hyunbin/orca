@@ -148,7 +148,7 @@ describe('a chat at rest keeps its worktree activatable', () => {
     await host.flushAllStreamedEvents()
     store = await openTestAgentSessionRecordStore(root)
     openHost()
-    await host.collaboratorsForTests().restoreReadableSessions()
+    await host.restoreReadableSessions()
     expect(host.hasSession(SESSION)).toBe(true)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',

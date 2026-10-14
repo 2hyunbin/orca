@@ -7,24 +7,32 @@ import type { StructuredAgentSessionStatusState } from './structured-agent-sessi
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 import { structuredAgentSessionProviderSessionMetadata } from './structured-agent-session-history-result'
 import { agentSessionPinnedLaunchDirectory } from '../../runtime/agent-session-record-launch-directory'
+import { isAgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 
 /** The summary fields the record owns, read the same way for a live row and a restored one. */
 export function structuredAgentSessionRecordSummaryFields(
   record: AgentSessionRecord | null
 ): Pick<
   AgentSessionStatusSummary,
-  'rewindBlockedReason' | 'model' | 'providerSession' | 'launchDirectory' | 'conversationName'
+  | 'rewindBlockedReason'
+  | 'model'
+  | 'permissionMode'
+  | 'providerSession'
+  | 'launchDirectory'
+  | 'conversationName'
 > {
   const providerSession = structuredAgentSessionProviderSessionMetadata(record)
   // The journal has no model: the record's acknowledged options are where a mid-session
   // switch lands, so the row follows whichever is in force.
   const model = normalizeOptionalField(record?.options?.model, AGENT_MODEL_MAX_LENGTH)
+  const permissionMode = record?.permissionMode
   const launchDirectory = record ? agentSessionPinnedLaunchDirectory(record) : undefined
   return {
     ...(record?.rewind?.phase === 'prepared' || record?.rewind?.phase === 'provider-succeeded'
       ? { rewindBlockedReason: 'outcome-unknown' as const }
       : {}),
     ...(model ? { model } : {}),
+    ...(isAgentChatPermissionMode(permissionMode) ? { permissionMode } : {}),
     ...(providerSession ? { providerSession } : {}),
     ...(launchDirectory ? { launchDirectory } : {}),
     ...(record?.conversationName ? { conversationName: record.conversationName } : {})
@@ -45,6 +53,7 @@ export function structuredAgentSessionStatusSummary({
   session: {
     params: { location: AgentSessionRecord['location']; provider: AgentSessionRecord['provider'] }
     child?: Pick<StructuredAgentSessionProviderChild, 'phase'> | null
+    restartResume?: AgentSessionStatusSummary['restartResume']
   }
   journal: AgentSessionJournal
   record: AgentSessionRecord | null
@@ -65,6 +74,7 @@ export function structuredAgentSessionStatusSummary({
           hostExecutionPhase: session.child.phase
         }
       : {}),
+    ...(session.restartResume ? { restartResume: { phase: session.restartResume.phase } } : {}),
     ...projected,
     // Only a working session is still being stopped; any other status already ended that work.
     ...(stopping && projected.status === 'working' ? { stopping: true as const } : {}),

@@ -7,8 +7,8 @@ afterEach(() => setStructuredAgentSessionHost(null))
 describe('structured session cold restoration', () => {
   it('publishes a versioned title change and derives listAll titles from the record', async () => {
     const runtime = new OrcaRuntimeService()
-    runtime.replaceStructuredAgentSessionTab({
-      sourceSessionId: 'source-session',
+    runtime.projectStructuredAgentSessionTab({
+      activate: false,
       sessionId: 'session-1',
       workspaceId: 'workspace-1',
       agent: 'claude'
@@ -77,7 +77,10 @@ describe('structured session cold restoration', () => {
     internal.refreshMobileSessionPtyRecords = refresh
     internal.ensureStructuredAgentSessionHost = ensureHost
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup restore calls only the host members this stub defines.
-    setStructuredAgentSessionHost({ reconcileRestartLeases, restoreSavedStatuses } as never)
+    setStructuredAgentSessionHost({
+      reconcileRestartLeases,
+      restore: { restoreSavedStatuses }
+    } as never)
 
     await runtime.prepareStructuredAgentSessionStartupRestoration()
 
@@ -112,7 +115,7 @@ describe('structured session cold restoration', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup restore calls only the host members this stub defines.
     setStructuredAgentSessionHost({
       reconcileRestartLeases,
-      restoreSavedStatuses,
+      restore: { restoreSavedStatuses },
       listSessionTabs: () => []
     } as never)
 
@@ -178,7 +181,7 @@ describe('structured session cold restoration', () => {
         present: true,
         sessionIds: ['session-survives-rollback']
       }),
-      restoreSavedStatuses,
+      restore: { restoreSavedStatuses },
       listSessionTabs
     } as never)
 
@@ -235,7 +238,7 @@ describe('structured session cold restoration', () => {
     setStructuredAgentSessionHost({
       reconcileRestartLeases: async () => undefined,
       getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }),
-      restoreSavedStatuses,
+      restore: { restoreSavedStatuses },
       listSessionTabs: () => []
     } as never)
 
@@ -268,7 +271,7 @@ describe('structured session cold restoration', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup restore calls only the host members this stub defines.
     setStructuredAgentSessionHost({
       reconcileRestartLeases: async () => undefined,
-      restoreSavedStatuses: async () => undefined,
+      restore: { restoreSavedStatuses: async () => undefined },
       close: closeStructuredSession,
       setSessionTabVisibility,
       listSessionTabs: () => [
@@ -384,7 +387,7 @@ describe('structured session cold restoration', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup restore calls only the host members this stub defines.
     setStructuredAgentSessionHost({
       reconcileRestartLeases: async () => undefined,
-      restoreSavedStatuses: async () => undefined,
+      restore: { restoreSavedStatuses: async () => undefined },
       listSessionTabs: () => [
         {
           sessionId: 'agent-session:agent-session:restored-claude',
@@ -415,30 +418,6 @@ describe('structured session cold restoration', () => {
         })
       ])
     )
-  })
-
-  // The /clear commit moved the tab in the store already, so replacing it only projects.
-  it('replaces a cleared conversation tab without a store write', async () => {
-    const runtime = new OrcaRuntimeService()
-    const setSessionTabVisibility = vi.fn(async () => undefined)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: replacing a tab reaches the host only through setSessionTabVisibility, which must stay uncalled.
-    setStructuredAgentSessionHost({ setSessionTabVisibility } as never)
-
-    runtime.replaceStructuredAgentSessionTab({
-      sourceSessionId: 'cleared-session',
-      sessionId: 'replacement-session',
-      workspaceId: 'workspace-1',
-      agent: 'codex'
-    })
-
-    const snapshot = await runtime.listMobileSessionTabs('id:workspace-1')
-    expect(snapshot.tabs).toEqual([
-      expect.objectContaining({
-        id: 'agent-session:replacement-session',
-        replacesSessionId: 'cleared-session'
-      })
-    ])
-    expect(setSessionTabVisibility).not.toHaveBeenCalled()
   })
 
   it('commits the host close when the renderer already removed the structured tab', async () => {

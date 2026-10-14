@@ -32,6 +32,7 @@ import {
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
 } from '../../../src/shared/protocol-version'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-create-capabilities'
 import { resolveBaselineReleaseRef } from './release-checkout'
 import {
   callBuild,
@@ -98,7 +99,9 @@ beforeAll(async () => {
  */
 function legacyClientCapabilities(): string[] {
   return baseline.capabilities.filter(
-    (capability) => capability !== STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
+    (capability) =>
+      capability !== STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY &&
+      capability !== AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY
   )
 }
 
@@ -781,7 +784,7 @@ describe('cross-version structured agent sessions', () => {
       const held = first.cursor
 
       const restarted = await bootHost('b')
-      await restarted.collaboratorsForTests().restoreReadableSessions()
+      await restarted.restoreReadableSessions()
       // Restart restores the session for READING. The chat the client still has open takes its
       // hold, and that is what gives the session a provider child again.
       await answer('agentSession.hold', { sessionId: SESSION, holderId: 'surface-1' })

@@ -122,7 +122,7 @@ async function restartAfterDeath(): Promise<void> {
 }
 
 async function reread() {
-  await host.collaboratorsForTests().restoreReadableSessions([SESSION])
+  await host.restoreReadableSessions([SESSION])
   const { items } = await host.journalSnapshot(SESSION)
   const turnItemId = items.find((item) => item.body.kind === 'turn')?.itemId
   const stopRows = items.filter(

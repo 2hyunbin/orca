@@ -80,6 +80,7 @@ describe('prompt delivery after host recovery', () => {
       notificationSeq: delivered.notificationSeq
     }
     unsubscribe()
+    await original.closeDismissals()
     const restarted = new RuntimeMobileNotificationController()
     restarted.configureDismissalStore(h.root)
     const events: MobileNotificationEvent[] = []
@@ -99,7 +100,7 @@ describe('prompt delivery after host recovery', () => {
     const stop = wire(host, restarted)
     try {
       await host.reconcileRestartLeases()
-      await host.collaboratorsForTests().restoreReadableSessions()
+      await host.restoreReadableSessions()
       const history = await host.history({ sessionId: SESSION, direction: 'tail' })
       expect(history.ok).toBe(true)
       expect(
@@ -109,11 +110,12 @@ describe('prompt delivery after host recovery', () => {
       expect(events.filter((event) => event.type === 'dismiss')).toEqual([
         expect.objectContaining({ dismissedDelivery: identity })
       ])
+      await restarted.flushDismissals()
       expect(
         new MobileNotificationDismissalStore(h.root).liveDeliveries(identity.notificationId)
       ).toEqual([])
       expect(restarted.reconcileDismissedPushes([identity])).toEqual([identity])
-      await host.collaboratorsForTests().restoreReadableSessions()
+      await host.restoreReadableSessions()
       expect(events.filter((event) => event.type === 'dismiss')).toHaveLength(1)
     } finally {
       stop()

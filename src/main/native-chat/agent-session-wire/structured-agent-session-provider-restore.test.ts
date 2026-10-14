@@ -102,7 +102,7 @@ describe('structured session provider restore', () => {
       reason: 'read does not need ownership'
     }))
 
-    await restarted.collaboratorsForTests().restoreReadableSessions()
+    await restarted.restoreReadableSessions()
 
     expect(restarted.listSessionTabs([HOST_TEST_SESSION])).toEqual([
       { sessionId: HOST_TEST_SESSION, workspaceId: 'workspace-1', agent: 'claude' }

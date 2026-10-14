@@ -81,7 +81,7 @@ async function relaunch(
 /** What startup does: the lease check, then saved statuses, then the tab list. */
 async function startUp(listed: string[] = [SESSION]): Promise<void> {
   await host.reconcileRestartLeases()
-  await host.restoreSavedStatuses(listed)
+  await host.restore.restoreSavedStatuses(listed)
 }
 
 async function turnState(): Promise<string | undefined> {

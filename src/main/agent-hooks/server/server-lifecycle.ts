@@ -41,7 +41,7 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     }
     this.token = randomUUID()
     this.endpointFileWritten = false
-    this.lastWrittenJson = null
+    this.closeStatusSnapshotWriter()
     this.loadSavedStructuredStatuses()
     if (this.statusHooksEnabled) {
       this.initializeStatusHookOwner()
@@ -215,7 +215,9 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.endpointFileWritten = false
   }
 
-  stop(): void {
+  /** `keepStatus`: quit only. The chat teardown after it still reads each chat's subagents and
+   *  background tasks from the status store to decide what to offer to resume; exit frees it. */
+  stop(options?: { keepStatus?: boolean }): void {
     // Terminal status may still have a pending write while hook ingress is disabled; native chats
     // save whatever that setting says.
     if (this.statusHooksEnabled || this.statusPersistTimer || this.savedStructuredStatuses.size) {
@@ -243,7 +245,7 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.endpointFilePathCache = null
     this.endpointFileWritten = false
     this.lastStatusFilePath = null
-    this.lastWrittenJson = null
+    this.closeStatusSnapshotWriter()
     this.savedStructuredStatuses.clear()
     this.unhydratedStatusFile = null
     this.runtimeObservedStatusPaneKeys.clear()
@@ -266,8 +268,10 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
     this.ownerStateInitialized = false
     // Why: don't unlink the endpoint file — a stale file matches fail-open and avoids a TOCTOU race with a concurrent Orca.
     clearAllListenerCaches(this.state)
-    this.resetCanonicalStatus()
-    this.notifyStatusChangeListeners()
+    if (!options?.keepStatus) {
+      this.resetCanonicalStatus()
+      this.notifyStatusChangeListeners()
+    }
     this.paneStatusClearListeners.clear()
     this.statusDropListeners.clear()
     this.statusChangeListeners.clear()

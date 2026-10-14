@@ -17,6 +17,7 @@ import type {
   AgentSessionStatusSummary
 } from '../../../shared/agent-session-wire'
 import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
+import type { AgentChildWorkRecord } from '../../../shared/agent-status-child-work'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
@@ -46,6 +47,7 @@ type StatusFeedSession = {
   journal: AgentSessionJournal
   params: { location: AgentSessionRecord['location']; provider: AgentSessionRecord['provider'] }
   child?: Pick<StructuredAgentSessionProviderChild, 'phase' | 'generation' | 'fence'> | null
+  restartResume?: AgentSessionStatusSummary['restartResume']
 }
 
 export type StructuredAgentSessionStatusFeedDeps = {
@@ -164,6 +166,7 @@ export class StructuredAgentSessionStatusFeed {
       hostExecutionOwned: _hostExecutionOwned,
       hostExecutionPhase: _hostExecutionPhase,
       stopping: _stopping,
+      restartResume: _restartResume,
       ...retained
     } = previous
     this.published.set(sessionId, {
@@ -171,10 +174,7 @@ export class StructuredAgentSessionStatusFeed {
       firstInputSubmissionKey: publication?.firstInputSubmissionKey ?? null
     })
     this.sink(retained)
-    this.broadcast({
-      type: 'status',
-      session: retained
-    })
+    this.broadcast({ type: 'status', session: retained })
   }
 
   /** The record's name changed outside the journal. A closed chat's retained row follows it too,
@@ -197,12 +197,11 @@ export class StructuredAgentSessionStatusFeed {
 
   /** A restart's saved status for a chat nothing has opened yet; its first publish replaces it. */
   restoreSaved(summary: AgentSessionStatusSummary, location: AgentSessionRecord['location']): void {
-    if (this.published.has(summary.sessionId)) {
-      return
+    if (!this.published.has(summary.sessionId)) {
+      this.published.set(summary.sessionId, { summary, firstInputSubmissionKey: null })
+      this.sink(summary, location)
+      this.broadcast({ type: 'status', session: summary })
     }
-    this.published.set(summary.sessionId, { summary, firstInputSubmissionKey: null })
-    this.sink(summary, location)
-    this.broadcast({ type: 'status', session: summary })
   }
 
   /** The summary last published for the session, as every status subscriber last saw it. */
@@ -334,6 +333,14 @@ export class StructuredAgentSessionStatusFeed {
       return undefined
     }
   }
+
+  childWorkIncomplete = (sessionId: string): boolean =>
+    this.ownership.childWorkIncomplete(sessionId)
+
+  /** The records the views project. Read only from the child-work observer, which already
+   *  reports a failure. */
+  readChildWorkRecords = (sessionId: string): AgentChildWorkRecord[] | undefined =>
+    this.ownership.readChildWorkRecords(sessionId)
 
   private admitChildWork(
     sessionId: string,
