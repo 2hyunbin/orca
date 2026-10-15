@@ -184,7 +184,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             >
               <Layers size={14} color={colors.textSecondary} />
               <Text style={styles.sortLabel} numberOfLines={1}>
-                {workspaceGroupChipLabel(state.groupMode)}
+                {workspaceGroupChipLabel(state.view.groupBy)}
               </Text>
             </Pressable>
           </View>
@@ -314,7 +314,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           >
             <Layers size={14} color={colors.textSecondary} />
             <Text style={styles.sortLabel} numberOfLines={1}>
-              {workspaceGroupChipLabel(state.groupMode)}
+              {workspaceGroupChipLabel(state.view.groupBy)}
             </Text>
           </Pressable>
 

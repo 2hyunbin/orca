@@ -173,9 +173,9 @@ async function mountScreen(first: RpcClient, hostCapabilities: string[]): Promis
     poll,
     hideHosts: (ids) =>
       act(() =>
-        held.state?.setFilters((filters) => ({
-          ...filters,
-          visibleHostIds: normalizeVisibleExecutionHostIds(ids)
+        held.state?.setView((view) => ({
+          ...view,
+          filters: { ...view.filters, visibleHostIds: normalizeVisibleExecutionHostIds(ids) }
         }))
       ),
     open: (worktreeId) =>
@@ -330,7 +330,7 @@ describe("a desktop's server workspaces on the phone", () => {
     const shown = () =>
       filterWorktrees(
         screen.rows(),
-        screen.state().filters,
+        screen.state().view.filters,
         '',
         screen.state().repoHostIdByRepoId
       ).map((entry) => entry.worktreeId)

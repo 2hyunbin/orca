@@ -1,20 +1,10 @@
 import type { MountAdapter } from '../recording-scenario'
-import { NO_WORKSPACE_ROW_FILTERS } from '../../../../../src/shared/workspace-view/workspace-row-filters'
-import { DEFAULT_CARD_VIEW } from '../../../worktree/workspace-view-settings'
+import { INITIAL_MOBILE_VIEW } from '../../../worktree/workspace-view-settings'
 import { hookMount, performHookAction } from '../hook-mount'
 import { observableModel, projectObservable } from '../observable-model'
 import type { operationModuleLoader } from '../operation-module-loader'
 
 const HOST = 'host-1'
-
-const INITIAL_VIEW_STATE = {
-  groupMode: 'none',
-  sortMode: 'recent',
-  filters: NO_WORKSPACE_ROW_FILTERS,
-  ...DEFAULT_CARD_VIEW,
-  collapsedGroups: [],
-  workspaceStatuses: []
-}
 
 /**
  * The host screen's shared view settings, and the Home card's per-host stats read. Both belong to
@@ -29,16 +19,9 @@ export function hostScreenMountAdapters(
         typeof import('../../../host-screen/use-host-view-settings')
       >('mobile/src/host-screen/use-host-view-settings.ts').useHostViewSettings
       const state = observableModel(context, {
-        cardSettings: { compactWorktreeCards: false, newCardStyle: false },
-        ...DEFAULT_CARD_VIEW,
         clientRef: { current: context.client },
-        collapsedGroups: new Set<string>(),
-        sharesOtherClientFilter: false,
-        filters: NO_WORKSPACE_ROW_FILTERS,
-        groupMode: 'none',
-        sortMode: 'recent',
-        viewStateRef: { current: { ...INITIAL_VIEW_STATE } },
-        workspaceStatuses: []
+        view: INITIAL_MOBILE_VIEW,
+        viewRef: { current: INITIAL_MOBILE_VIEW }
       })
       let actions: ReturnType<typeof useViewSettings>
       const hook = hookMount(() => {
@@ -66,18 +49,7 @@ export function hostScreenMountAdapters(
           }
           throw new Error(`Unknown view settings action: ${name}`)
         },
-        state: () =>
-          projectObservable({
-            groupMode: state.groupMode,
-            sortMode: state.sortMode,
-            filters: state.filters,
-            projectOrderBy: state.projectOrderBy,
-            worktreeCardProperties: state.worktreeCardProperties,
-            agentActivityDisplayMode: state.agentActivityDisplayMode,
-            cardSettings: state.cardSettings,
-            collapsed: state.collapsedGroups,
-            statuses: state.workspaceStatuses
-          }),
+        state: () => projectObservable({ view: state.view }),
         dispose: hook.unmount
       }
     },

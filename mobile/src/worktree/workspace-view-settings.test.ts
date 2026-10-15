@@ -1,46 +1,35 @@
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
+import { DEFAULT_WORKSPACE_STATUSES } from '../../../src/shared/workspace-statuses'
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
-  changedFilters,
-  groupModeFromDesktop,
-  groupModeToDesktop,
-  sortModeFromDesktop,
-  DEFAULT_CARD_VIEW,
-  type MobileViewState
+  INITIAL_MOBILE_VIEW,
+  rowFiltersForView,
+  type MobileViewState,
+  type WorkspaceViewSettings
 } from './workspace-view-settings'
 
 const base: MobileViewState = {
-  groupMode: 'repo',
-  sortMode: 'recent',
+  ...INITIAL_MOBILE_VIEW,
   filters: { ...NO_WORKSPACE_ROW_FILTERS, alwaysShowDefaultBranchWorkspace: false },
-  ...DEFAULT_CARD_VIEW,
-  collapsedGroups: [],
-  workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
+  sharesOtherClientFilter: true
 }
 
-describe('group mode mapping', () => {
-  it('round-trips every mobile group mode through the desktop value', () => {
-    for (const mode of ['none', 'workspaceStatus', 'repo', 'prStatus'] as const) {
-      expect(groupModeFromDesktop(groupModeToDesktop(mode))).toBe(mode)
-    }
+describe('the other-client filter on an older desktop', () => {
+  it('hides marked rows when the desktop keeps the filter to itself, as its marks are its verdict', () => {
+    expect(rowFiltersForView({ ...base, sharesOtherClientFilter: false })).toMatchObject({
+      hideWorkspacesFromOtherDevices: true
+    })
+    expect(rowFiltersForView(base).hideWorkspacesFromOtherDevices).toBe(false)
   })
 
-  it('maps the desktop kebab-case values back to mobile', () => {
-    expect(groupModeFromDesktop('workspace-status')).toBe('workspaceStatus')
-    expect(groupModeFromDesktop('pr-status')).toBe('prStatus')
-    expect(groupModeFromDesktop(undefined)).toBeNull()
-  })
-})
-
-describe('sort mode mapping', () => {
-  it('accepts shared sort values and rejects unknown', () => {
-    expect(sortModeFromDesktop('manual')).toBe('manual')
-    expect(sortModeFromDesktop('smart')).toBe('smart')
-    expect(sortModeFromDesktop(undefined)).toBeNull()
-    expect(sortModeFromDesktop('bogus' as never)).toBeNull()
+  it('learns from each ui.get whether the desktop shares the filter', () => {
+    expect(applyDesktopViewSettings(base, {}).sharesOtherClientFilter).toBe(false)
+    expect(
+      applyDesktopViewSettings(base, { hideWorkspacesFromOtherDevices: false })
+        .sharesOtherClientFilter
+    ).toBe(true)
   })
 })
 
@@ -53,19 +42,32 @@ describe('applyDesktopViewSettings', () => {
     })
     expect(next).toEqual({
       ...base,
-      groupMode: 'prStatus',
+      groupBy: 'pr-status',
+      sharesOtherClientFilter: false,
       filters: { ...base.filters, hideSleepingWorkspaces: true, filterRepoIds: ['repo-1'] }
     })
   })
 
   it('keeps current values when the desktop payload is empty', () => {
-    expect(applyDesktopViewSettings(base, {})).toEqual(base)
+    expect(applyDesktopViewSettings(base, {})).toEqual({ ...base, sharesOtherClientFilter: false })
   })
 
   it('keeps renderable workspace statuses when desktop sends an empty catalog', () => {
     const next = applyDesktopViewSettings(base, { workspaceStatuses: [] })
 
-    expect(next.workspaceStatuses).toBe(DEFAULT_MOBILE_WORKSPACE_STATUSES)
+    expect(next.workspaceStatuses).toBe(DEFAULT_WORKSPACE_STATUSES)
+  })
+
+  it("falls back to the desktop's legacy host scope when no host list is saved", () => {
+    const scoped = applyDesktopViewSettings(base, {
+      visibleWorkspaceHostIds: null,
+      workspaceHostScope: 'ssh:box'
+    })
+    expect(scoped.filters.visibleHostIds).toEqual(['ssh:box'])
+    expect(
+      applyDesktopViewSettings(scoped, { visibleWorkspaceHostIds: null, workspaceHostScope: 'all' })
+        .filters.visibleHostIds
+    ).toBeNull()
   })
 
   it("reads the desktop's shown hosts into the host filter, and null as every host", () => {
@@ -78,7 +80,10 @@ describe('applyDesktopViewSettings', () => {
 
   it('ignores an unrecognized groupBy rather than blanking the mode', () => {
     const next = applyDesktopViewSettings(base, { groupBy: 'mystery' as never })
-    expect(next.groupMode).toBe('repo')
+    expect(next.groupBy).toBe('repo')
+    // A sort a newer desktop adds arrives untyped over the wire.
+    const newerSort: WorkspaceViewSettings = JSON.parse('{"sortBy":"bogus"}')
+    expect(applyDesktopViewSettings(base, newerSort).sortBy).toBe('recent')
   })
 })
 
@@ -97,8 +102,8 @@ describe('buildWorkspaceViewSettingsUpdate', () => {
     ).toEqual({ hideSleepingWorkspaces: true })
     expect(
       buildWorkspaceViewSettingsUpdate(
-        { groupMode: 'workspaceStatus' },
-        { ...base, groupMode: 'workspaceStatus' }
+        { groupBy: 'workspace-status' },
+        { ...base, groupBy: 'workspace-status' }
       )
     ).toEqual({ groupBy: 'workspace-status' })
     expect(
@@ -150,22 +155,6 @@ describe('buildWorkspaceViewSettingsUpdate', () => {
 
   it('returns an empty update for an empty patch', () => {
     expect(buildWorkspaceViewSettingsUpdate({}, base)).toEqual({})
-  })
-})
-
-describe('changedFilters', () => {
-  it('names only the filters that differ, so Clear never sends a field an older host lacks', () => {
-    const current = {
-      ...NO_WORKSPACE_ROW_FILTERS,
-      hideSleepingWorkspaces: true,
-      filterRepoIds: ['r1'],
-      visibleHostIds: null
-    }
-    expect(changedFilters(current, NO_WORKSPACE_ROW_FILTERS)).toEqual({
-      hideSleepingWorkspaces: false,
-      filterRepoIds: []
-    })
-    expect(changedFilters(NO_WORKSPACE_ROW_FILTERS, { ...NO_WORKSPACE_ROW_FILTERS })).toEqual({})
   })
 })
 

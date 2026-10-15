@@ -2,20 +2,8 @@ import { isDeepStrictEqual } from 'node:util'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
-import { WORKSPACE_ROW_FILTER_UI_FIELDS } from '../../shared/workspace-view/workspace-row-filters'
+import { ALL_WORKSPACE_VIEW_UI_FIELDS } from '../../shared/workspace-view/workspace-view-ui-fields'
 import type { RuntimeStore } from './runtime-store-contract'
-
-/** The UI state a phone's Workspace options re-read applies (applyDesktopViewSettings). */
-const WORKSPACE_VIEW_UI_FIELDS: readonly (keyof PersistedUIState)[] = [
-  ...Object.values(WORKSPACE_ROW_FILTER_UI_FIELDS),
-  'groupBy',
-  'sortBy',
-  'projectOrderBy',
-  'worktreeCardProperties',
-  'agentActivityDisplayMode',
-  'collapsedGroups',
-  'workspaceStatuses'
-]
 
 /** The settings behind Card layout and which card options show. */
 const WORKSPACE_VIEW_SETTINGS: readonly (keyof GlobalSettings)[] = [
@@ -24,7 +12,7 @@ const WORKSPACE_VIEW_SETTINGS: readonly (keyof GlobalSettings)[] = [
 ]
 
 function workspaceViewUiValues(ui: PersistedUIState): unknown[] {
-  return WORKSPACE_VIEW_UI_FIELDS.map((key) => ui[key])
+  return ALL_WORKSPACE_VIEW_UI_FIELDS.map((key) => ui[key])
 }
 
 /**

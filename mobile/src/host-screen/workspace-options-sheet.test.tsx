@@ -13,7 +13,7 @@ vi.mock('../components/BottomDrawer', () => ({ BottomDrawer: 'BottomDrawer' }))
 vi.mock('../components/MobileSearchField', () => ({ MobileSearchField: 'MobileSearchField' }))
 
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
-import { DEFAULT_CARD_VIEW } from '../worktree/workspace-view-settings'
+import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 import { WorkspaceOptionsSheet } from './workspace-options-sheet'
 
 let renderer: ReactTestRenderer | null = null
@@ -48,17 +48,19 @@ function render(options: { newCardStyle: boolean; hideSleeping: boolean }) {
     settings,
     state: {
       cardSettings: { compactWorktreeCards: false, newCardStyle: options.newCardStyle },
-      ...DEFAULT_CARD_VIEW,
-      filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: options.hideSleeping },
-      groupMode: 'repo',
+      view: {
+        ...INITIAL_MOBILE_VIEW,
+        filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: options.hideSleeping },
+        groupBy: 'repo',
+        sortBy: 'smart',
+        sharesOtherClientFilter: true
+      },
       hostLabelById: new Map(),
       hostPlatform: null,
       repoHostIdByRepoId: new Map([['r2', 'ssh:box']]),
       serverWorkspaces: { hosts: [{ hostId: 'runtime:vm', label: 'VM' }], worktrees: [] },
       setShowWorkspaceOptions: vi.fn(),
-      sharesOtherClientFilter: true,
-      showWorkspaceOptions: true,
-      sortMode: 'smart'
+      showWorkspaceOptions: true
     }
   }
   act(() => {

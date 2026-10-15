@@ -1,5 +1,5 @@
 import type { Worktree } from './workspace-list-types'
-import type { MobileSortMode } from './workspace-view-settings'
+import type { WorkspaceSortBy } from '../../../src/shared/workspace-view/workspace-view-options'
 import {
   buildWorkspaceRowComparator,
   recentActivityWithCreateGrace
@@ -18,7 +18,7 @@ const AGENT_ATTENTION_STATUS_ORDER = { permission: 0, working: 1, done: 2, activ
 
 export function sortWorktrees(
   worktrees: Worktree[],
-  mode: MobileSortMode,
+  mode: WorkspaceSortBy,
   now = Date.now()
 ): Worktree[] {
   // Why lastOutputAt too: headless serve hosts only stamp lastActivityAt at creation, so live

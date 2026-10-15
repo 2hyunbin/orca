@@ -12,7 +12,6 @@ import {
 } from '../../../src/shared/workspace-view/workspace-view-options'
 import { getHostContextLabel } from '../../../src/shared/worktree/host-context-labels'
 import { WORKSPACE_VIEW_SHARED_NOTE } from '../worktree/workspace-list-picker-options'
-import { groupModeToDesktop } from '../worktree/workspace-view-settings'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
@@ -67,14 +66,15 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
   const { settings, state } = controller
   const hosts = useWorkspaceOptionHosts(controller)
   const sections = getShownWorkspaceViewSections({
-    groupBy: groupModeToDesktop(state.groupMode),
-    hideSleepingWorkspaces: state.filters.hideSleepingWorkspaces,
-    hideWorkspacesFromOtherDevices: state.filters.hideWorkspacesFromOtherDevices,
+    groupBy: state.view.groupBy,
+    hideSleepingWorkspaces: state.view.filters.hideSleepingWorkspaces,
+    hideWorkspacesFromOtherDevices: state.view.filters.hideWorkspacesFromOtherDevices,
     newCardStyle: state.cardSettings.newCardStyle,
     hasRemoteHosts: hosts.some((host) => parseExecutionHostId(host.id)?.kind !== 'local'),
     projectCount: controller.sectionsResult.uniqueRepos.length,
     // Why the host's say-so: a host that keeps the filter to itself cannot apply the phone's value.
-    mayHaveServerHosts: state.sharesOtherClientFilter && state.serverWorkspaces.hosts.length > 0
+    mayHaveServerHosts:
+      state.view.sharesOtherClientFilter && state.serverWorkspaces.hosts.length > 0
   })
 
   return (

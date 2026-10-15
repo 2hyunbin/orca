@@ -8,6 +8,7 @@ import {
   WORKSPACE_CARD_DISPLAY_CHOICES,
   WORKSPACE_CARD_LAYOUT_CHOICES,
   WORKSPACE_CARD_PROPERTY_CHOICES,
+  WORKSPACE_GROUP_BY_CHOICES,
   WORKSPACE_PROJECT_ORDER_CHOICES,
   WORKSPACE_SORT_BY_CHOICES,
   getWorkspaceCardDisplayChoiceLabel,
@@ -21,7 +22,6 @@ import {
 } from '../../../src/shared/workspace-view/workspace-host-visibility'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { WorktreeCardProperty } from '../../../src/shared/ui-chrome-types'
-import { WORKSPACE_GROUP_CHOICES } from '../worktree/workspace-list-picker-options'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
 
@@ -113,7 +113,7 @@ function ChoiceRows<Id extends string>(props: {
 // As the desktop: while every host shows, no single host is checked, and tapping one shows only it.
 function HostsRows({ controller, hosts }: WorkspaceOptionRowsProps) {
   const { settings, state } = controller
-  const visible = state.filters.visibleHostIds
+  const visible = state.view.filters.visibleHostIds
   const checked = new Set(visible ? getCheckedHostRows(hosts, visible).map((host) => host.id) : [])
   const write = (next: ExecutionHostId[] | null | undefined) => {
     if (next !== undefined) {
@@ -170,7 +170,7 @@ function ProjectsRows({ controller }: WorkspaceOptionRowsProps) {
           <CheckRow
             key={repo.key}
             label={repo.name}
-            checked={state.filters.filterRepoIds.includes(repo.id)}
+            checked={state.view.filters.filterRepoIds.includes(repo.id)}
             onPress={() => settings.toggleRepoFilter(repo.id)}
             leading={<View style={[styles.filterRepoDot, { backgroundColor: repo.color }]} />}
           />
@@ -191,7 +191,7 @@ function CardPropertyRows(props: {
         <CheckRow
           key={choice.id}
           label={choice.label}
-          checked={state.worktreeCardProperties.includes(choice.id)}
+          checked={state.view.worktreeCardProperties.includes(choice.id)}
           onPress={() => settings.toggleCardProperty(choice.id)}
         />
       ))}
@@ -202,7 +202,7 @@ function CardPropertyRows(props: {
 function filterRow(key: Extract<WorkspaceViewOptionKey, `hide${string}` | `always${string}`>) {
   const isExemption = key === 'alwaysShowDefaultBranchWorkspace'
   return function FilterRow({ controller, label }: WorkspaceOptionRowsProps) {
-    const value = controller.state.filters[key]
+    const value = controller.state.view.filters[key]
     // The exemption's absence means on (#8873), so only an explicit false reads as off.
     const checked = isExemption ? value !== false : value === true
     return (
@@ -225,15 +225,15 @@ export const WORKSPACE_OPTION_ROWS: Record<
   projects: ProjectsRows,
   groupBy: ({ controller }) => (
     <ChoiceRows
-      choices={WORKSPACE_GROUP_CHOICES}
-      selected={controller.state.groupMode}
+      choices={WORKSPACE_GROUP_BY_CHOICES}
+      selected={controller.state.view.groupBy}
       onSelect={controller.settings.handleGroupChange}
     />
   ),
   sortBy: ({ controller }) => (
     <ChoiceRows
       choices={WORKSPACE_SORT_BY_CHOICES}
-      selected={controller.state.sortMode}
+      selected={controller.state.view.sortBy}
       onSelect={controller.settings.handleSortChange}
     />
   ),
@@ -257,7 +257,7 @@ export const WORKSPACE_OPTION_ROWS: Record<
       <Text style={styles.optionSubheading}>Agent activity layout</Text>
       <ChoiceRows
         choices={WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES}
-        selected={controller.state.agentActivityDisplayMode}
+        selected={controller.state.view.agentActivityDisplayMode}
         onSelect={controller.settings.setAgentActivityDisplayMode}
       />
     </>

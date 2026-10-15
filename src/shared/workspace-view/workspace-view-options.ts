@@ -9,6 +9,9 @@ import type {
 // table keyed on WorkspaceViewOptionKey, so an option added here fails to compile until it renders.
 // The labels are the English copy; the desktop localizes its own, checked equal by a test.
 
+export type WorkspaceGroupBy = PersistedUIState['groupBy']
+export type WorkspaceSortBy = PersistedUIState['sortBy']
+
 export type WorkspaceViewChoice<Id extends string> = {
   id: Id
   label: string

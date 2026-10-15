@@ -18,6 +18,11 @@ import {
   SORT_OPTIONS,
   getWorktreeCardDisplayOptions
 } from './sidebar-workspace-option-items'
+import {
+  PR_GROUP_LABELS,
+  PR_GROUP_ORDER
+} from '../../../../shared/workspace-view/workspace-pr-groups'
+import { PR_GROUP_META } from './worktree-list/grouping/group-keys'
 
 // The desktop's localized copy must read, in English, exactly as the shared copy the phone shows.
 const sharedCopy = (choices: readonly { id: string; label: string; description?: string }[]) =>
@@ -36,6 +41,12 @@ describe('desktop Workspace options copy', () => {
       sharedCopy(WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES)
     )
     expect(desktopCopy(PROPERTY_OPTIONS)).toEqual(sharedCopy(WORKSPACE_CARD_PROPERTY_CHOICES))
+  })
+
+  it('labels the PR lanes as the shared table does', () => {
+    for (const key of PR_GROUP_ORDER) {
+      expect(PR_GROUP_META[key].label).toBe(PR_GROUP_LABELS[key])
+    }
   })
 
   it('matches the shared card display choices, with or without project groups', () => {

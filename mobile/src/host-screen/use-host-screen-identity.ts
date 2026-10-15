@@ -5,6 +5,7 @@ import { loadHosts, updateLastConnected } from '../transport/host-store'
 import type { RpcClient } from '../transport/rpc-client'
 import type { Worktree } from '../worktree/workspace-list-sections'
 import type { HostScreenState } from './use-host-screen-state'
+import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 
 export function useHostScreenIdentity(args: {
   client: RpcClient | null
@@ -27,9 +28,9 @@ export function useHostScreenIdentity(args: {
     setLastKnownWorktrees,
     setPinnedIds,
     setRepoHostIdByRepoId,
+    setView,
+    viewRef,
     setShowPinnedInGroups,
-    setSharesOtherClientFilter,
-    setProjectOrderBy,
     setWorktrees,
     setWorktreesLoaded
   } = state
@@ -62,15 +63,15 @@ export function useHostScreenIdentity(args: {
     setHostStoredDescriptor(null)
     setError('')
     setRepoHostIdByRepoId(new Map())
+    // Another desktop's Workspace options must not stand in until this one's are read.
+    viewRef.current = INITIAL_MOBILE_VIEW
+    setView(INITIAL_MOBILE_VIEW)
     setHostLabelById(new Map())
     setServedProjectSections(null)
     setDesktopRepos([])
     setHostHealthById(new Map())
     setHostPlatform(null)
     setShowPinnedInGroups(false)
-    setSharesOtherClientFilter(false)
-    // Null so the new desktop's served order stands in until its shared value is read.
-    setProjectOrderBy(null)
     repoMetadataFetchedAtRef.current = 0
     // Why: useState initializer runs only on first mount, so re-seed the cache when Expo Router reuses this screen for a new hostId.
     const freshCache = hostId ? (getCachedWorktrees(hostId) as Worktree[] | null) : null

@@ -1,22 +1,13 @@
 import { useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
-import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import { getCachedWorktrees } from '../cache/worktree-cache'
 import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
-import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../worktree/mobile-workspace-statuses'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
-import {
-  DEFAULT_CARD_VIEW,
-  type MobileGroupMode,
-  type MobileSortMode,
-  type MobileViewState
-} from '../worktree/workspace-view-settings'
+import { INITIAL_MOBILE_VIEW, type MobileViewState } from '../worktree/workspace-view-settings'
 import type { HostCardSettings } from './host-screen-reply-schema'
-import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
-import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
-import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
+import type { Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
@@ -60,24 +51,11 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [lastKnownWorktrees, setLastKnownWorktrees] = useState<Worktree[]>(initialCache ?? [])
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
-  const [sortMode, setSortMode] = useState<MobileSortMode>('recent')
-  const [filters, setFilters] = useState<FilterState>(NO_WORKSPACE_ROW_FILTERS)
-  const [groupMode, setGroupMode] = useState<MobileGroupMode>('repo')
-  const [projectOrderBy, setProjectOrderBy] = useState<ProjectOrderBy | null>(
-    DEFAULT_CARD_VIEW.projectOrderBy
-  )
-  const [worktreeCardProperties, setWorktreeCardProperties] = useState(
-    DEFAULT_CARD_VIEW.worktreeCardProperties
-  )
-  const [agentActivityDisplayMode, setAgentActivityDisplayMode] = useState(
-    DEFAULT_CARD_VIEW.agentActivityDisplayMode
-  )
+  // The Workspace options this screen shares with the desktop; viewRef mirrors it for writes.
+  const [view, setView] = useState<MobileViewState>(INITIAL_MOBILE_VIEW)
+  const viewRef = useRef(view)
+  // Card layout and the card style are desktop settings, not UI state; read with the view.
   const [cardSettings, setCardSettings] = useState<HostCardSettings>(NO_CARD_SETTINGS)
-  // Whether this host shares "Hide other-client workspaces" with its phone; older hosts keep it.
-  const [sharesOtherClientFilter, setSharesOtherClientFilter] = useState(false)
-  const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
-    DEFAULT_MOBILE_WORKSPACE_STATUSES
-  )
   // The desktop sidebar's Project grouping inputs; null for a desktop that serves none.
   const [servedProjectSections, setServedProjectSections] = useState<ServedProjectSections | null>(
     null
@@ -108,26 +86,14 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   )
   const [sleptIds, setSleptIds] = useState<Set<string>>(new Set())
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   // Desktop's "Also show pinned worktrees in their original lists"; off by default.
   const [showPinnedInGroups, setShowPinnedInGroups] = useState(false)
-  // Why: ref so the ui.get merge and ui.set writes read the latest values without re-creating callbacks on every state change.
-  const viewStateRef = useRef<MobileViewState>({
-    groupMode: 'repo',
-    sortMode: 'recent',
-    filters: NO_WORKSPACE_ROW_FILTERS,
-    ...DEFAULT_CARD_VIEW,
-    collapsedGroups: [],
-    workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
-  })
 
   return {
     actionTarget,
+    cardSettings,
     catalogError,
     clientRef,
-    cardSettings,
-    agentActivityDisplayMode,
-    collapsedGroups,
     confirmDelete,
     confirmRemoveHost,
     actionError,
@@ -135,8 +101,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     fetchRepoMetadataInFlightRef,
     fetchRepoMetadataPendingRef,
     fetchWorktreesInFlightRef,
-    filters,
-    groupMode,
     hostLabelById,
     hostHealthById,
     hostName,
@@ -147,7 +111,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     newWorktreeModalVisibleRef,
     optimisticActiveWorktreeIdentity,
     pinnedIds,
-    projectOrderBy,
     repoHostIdByRepoId,
     servedProjectSections,
     desktopRepos,
@@ -158,15 +121,11 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     serverWorkspaces,
     setActionTarget,
     setCardSettings,
-    setAgentActivityDisplayMode,
     setCatalogError,
-    setCollapsedGroups,
     setConfirmDelete,
     setConfirmRemoveHost,
     setActionError,
     setError,
-    setFilters,
-    setGroupMode,
     setHostLabelById,
     setHostHealthById,
     setHostName,
@@ -175,7 +134,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setLastKnownWorktrees,
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
-    setProjectOrderBy,
     setRepoHostIdByRepoId,
     setServedProjectSections,
     setDesktopRepos,
@@ -183,29 +141,23 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setSearch,
     setServerNotice,
     setServerWorkspaces,
-    setSharesOtherClientFilter,
     setShowWorkspaceOptions,
     setShowPinnedInGroups,
     setShowGroupPicker,
     setShowSearch,
     setShowSortPicker,
     setSleptIds,
-    setSortMode,
-    setWorkspaceStatuses,
-    setWorktreeCardProperties,
     setWorktrees,
     setWorktreesLoaded,
-    sharesOtherClientFilter,
     showWorkspaceOptions,
     showPinnedInGroups,
     showGroupPicker,
     showSearch,
+    setView,
+    view,
+    viewRef,
     showSortPicker,
     sleptIds,
-    sortMode,
-    viewStateRef,
-    workspaceStatuses,
-    worktreeCardProperties,
     worktreeCatalogRef,
     worktrees,
     worktreesLoaded

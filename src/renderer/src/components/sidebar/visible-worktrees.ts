@@ -3,7 +3,7 @@ import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 export type { SidebarFilterState } from './visible-worktree-kinds'
 export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
-export type { ClearFilterActions } from './sidebar-filter-actions'
+import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   getVisibleWorkspaceHostIdSet,
   worktreeMatchesVisibleHost
@@ -21,7 +21,6 @@ import { buildVisibleWorktreeOptionsFromState } from './visible-worktree-options
 import { useAppStore } from '@/store'
 import { getAllWorktreesFromState, getRepoMapFromState } from '@/store/selectors'
 import {
-  ALL_EXECUTION_HOSTS_SCOPE,
   getSettingsFocusedExecutionHostId,
   type ExecutionHostId,
   type ExecutionHostScope
@@ -73,22 +72,9 @@ export function computeVisibleWorktrees(
   // every other valid ancestor can bypass filters so children never orphan.
   const lineageAncestorById = getLineageAncestorIndex(worktreesByRepo)
 
-  const visibleHostIds =
-    opts.visibleWorkspaceHostIds ??
-    (opts.workspaceHostScope === ALL_EXECUTION_HOSTS_SCOPE ? null : [opts.workspaceHostScope])
   all = filterWorkspaceRows(
     all,
-    {
-      hideSleepingWorkspaces: !opts.showSleepingWorkspaces,
-      alwaysShowDefaultBranchWorkspace: opts.alwaysShowDefaultBranchWorkspace,
-      hideDefaultBranchWorkspace: opts.hideDefaultBranchWorkspace,
-      hideAutomationGeneratedWorkspaces: opts.hideAutomationGeneratedWorkspaces,
-      hideCliCreatedWorkspaces: opts.hideCliCreatedWorkspaces,
-      hideDetachedHeadWorkspaces: opts.hideDetachedHeadWorkspaces,
-      hideWorkspacesFromOtherDevices: opts.hideWorkspacesFromOtherDevices,
-      filterRepoIds: opts.filterRepoIds,
-      visibleHostIds
-    },
+    sidebarWorkspaceRowFilters(opts),
     buildDesktopWorkspaceRowFactReader(opts)
   )
 

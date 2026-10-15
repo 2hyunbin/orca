@@ -2,13 +2,10 @@ import type { PickerOption } from '../components/PickerModal'
 import {
   WORKSPACE_GROUP_BY_CHOICES,
   WORKSPACE_SORT_BY_CHOICES,
+  type WorkspaceGroupBy,
+  type WorkspaceSortBy,
   type WorkspaceViewChoice
 } from '../../../src/shared/workspace-view/workspace-view-options'
-import {
-  groupModeFromDesktop,
-  type MobileGroupMode,
-  type MobileSortMode
-} from './workspace-view-settings'
 
 // Why: the host may be headless, so the note can't promise a desktop sidebar.
 export const WORKSPACE_VIEW_SHARED_NOTE = 'Synced across your devices'
@@ -22,22 +19,16 @@ function toPickerOption<Id extends string>(choice: WorkspaceViewChoice<Id>): Pic
 }
 
 /** The desktop's Sort by choices, in its order and words. */
-export const WORKSPACE_SORT_OPTIONS: PickerOption<MobileSortMode>[] =
+export const WORKSPACE_SORT_OPTIONS: PickerOption<WorkspaceSortBy>[] =
   WORKSPACE_SORT_BY_CHOICES.map(toPickerOption)
 
-/** The desktop's Group by choices, keyed by the phone's own group modes. */
-export const WORKSPACE_GROUP_CHOICES: WorkspaceViewChoice<MobileGroupMode>[] =
-  WORKSPACE_GROUP_BY_CHOICES.flatMap((choice) => {
-    const mode = groupModeFromDesktop(choice.id)
-    return mode ? [{ id: mode, label: choice.label }] : []
-  })
-
-export const WORKSPACE_GROUP_OPTIONS: PickerOption<MobileGroupMode>[] =
-  WORKSPACE_GROUP_CHOICES.map(toPickerOption)
+/** The desktop's Group by choices, in its order and words. */
+export const WORKSPACE_GROUP_OPTIONS: PickerOption<WorkspaceGroupBy>[] =
+  WORKSPACE_GROUP_BY_CHOICES.map(toPickerOption)
 
 /** The Group chip's label: the chosen grouping, or "Group" when there is none. */
-export function workspaceGroupChipLabel(mode: MobileGroupMode): string {
-  return mode === 'none'
+export function workspaceGroupChipLabel(groupBy: WorkspaceGroupBy): string {
+  return groupBy === 'none'
     ? 'Group'
-    : (WORKSPACE_GROUP_OPTIONS.find((option) => option.value === mode)?.label ?? 'Group')
+    : (WORKSPACE_GROUP_OPTIONS.find((option) => option.value === groupBy)?.label ?? 'Group')
 }

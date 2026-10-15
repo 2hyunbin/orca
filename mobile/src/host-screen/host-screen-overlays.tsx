@@ -49,7 +49,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         title="Sort By"
         subtitle={WORKSPACE_VIEW_SHARED_NOTE}
         options={SORT_OPTIONS}
-        selected={state.sortMode}
+        selected={state.view.sortBy}
         onSelect={settings.handleSortChange}
         onClose={() => state.setShowSortPicker(false)}
       />
@@ -59,7 +59,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         title="Group By"
         subtitle={WORKSPACE_VIEW_SHARED_NOTE}
         options={GROUP_OPTIONS}
-        selected={state.groupMode}
+        selected={state.view.groupBy}
         onSelect={settings.handleGroupChange}
         onClose={() => state.setShowGroupPicker(false)}
       />

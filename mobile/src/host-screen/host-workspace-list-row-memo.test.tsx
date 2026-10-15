@@ -96,7 +96,7 @@ function listProps(worktrees: Worktree[]) {
     state: {
       actionError: '',
       setActionTarget: noop,
-      groupMode: 'none',
+      view: { groupBy: 'none' },
       search: '',
       showSearch: false,
       worktreesLoaded: true

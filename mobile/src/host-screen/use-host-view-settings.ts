@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { getMobileWorkspaceLineageGroupKey } from '../worktree/mobile-workspace-lineage'
@@ -6,15 +6,15 @@ import { WORKSPACE_SORT_OPTIONS as SORT_OPTIONS } from '../worktree/workspace-li
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
-  changedFilters,
-  type MobileGroupMode,
-  type MobileSortMode,
   type MobileViewPatch,
   type MobileViewState,
   type WorkspaceViewSettings
 } from '../worktree/workspace-view-settings'
 import type { Worktree } from '../worktree/workspace-list-sections'
-import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
+import {
+  changedWorkspaceRowFilters,
+  NO_WORKSPACE_ROW_FILTERS
+} from '../../../src/shared/workspace-view/workspace-row-filters'
 import {
   hostCardLayoutWrite,
   hostCardSettingsRead,
@@ -30,10 +30,6 @@ import { getWorktreeCardModeUpdates } from '../../../src/shared/worktree/card-pr
 import type { HostScreenState } from './use-host-screen-state'
 import type { FilterState } from '../worktree/workspace-list-types'
 
-type BooleanFilterKey = {
-  [Key in keyof FilterState]-?: FilterState[Key] extends boolean | undefined ? Key : never
-}[keyof FilterState]
-
 export function useHostViewSettings(args: {
   client: RpcClient | null
   connState: ConnectionState
@@ -41,68 +37,21 @@ export function useHostViewSettings(args: {
   state: HostScreenState
 }) {
   const { client, connState, hostId, state } = args
-  const {
-    agentActivityDisplayMode,
-    clientRef,
-    collapsedGroups,
-    projectOrderBy,
-    setCardSettings,
-    setSharesOtherClientFilter,
-    filters,
-    groupMode,
-    setCollapsedGroups,
-    setFilters,
-    setGroupMode,
-    setSortMode,
-    setWorkspaceStatuses,
-    sortMode,
-    viewStateRef,
-    workspaceStatuses,
-    worktreeCardProperties
-  } = state
+  const { clientRef, setCardSettings, setView, viewRef } = state
 
   const localEditsRef = useRef(0)
 
-  useEffect(() => {
-    viewStateRef.current = {
-      groupMode,
-      sortMode,
-      filters,
-      projectOrderBy,
-      worktreeCardProperties,
-      agentActivityDisplayMode,
-      collapsedGroups: [...collapsedGroups],
-      workspaceStatuses
-    }
-  }, [
-    groupMode,
-    sortMode,
-    filters,
-    projectOrderBy,
-    worktreeCardProperties,
-    agentActivityDisplayMode,
-    collapsedGroups,
-    workspaceStatuses
-  ])
-
-  // Apply a MobileViewState onto the individual states and the snapshot ref in one shot.
+  // The one writer of the view: the ref is its synchronous mirror for edits made before a render.
   const applyViewState = useCallback((next: MobileViewState) => {
-    viewStateRef.current = next
-    setGroupMode(next.groupMode)
-    setSortMode(next.sortMode)
-    setWorkspaceStatuses(next.workspaceStatuses)
-    setCollapsedGroups(new Set(next.collapsedGroups))
-    setFilters(next.filters)
-    state.setProjectOrderBy(next.projectOrderBy)
-    state.setWorktreeCardProperties(next.worktreeCardProperties)
-    state.setAgentActivityDisplayMode(next.agentActivityDisplayMode)
+    viewRef.current = next
+    setView(next)
   }, [])
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
     (patch: MobileViewPatch) => {
       localEditsRef.current += 1
-      const previous = viewStateRef.current
+      const previous = viewRef.current
       const { _worktreeCardModeDefaulted: _writeOnly, ...fields } = patch
       const next: MobileViewState = {
         ...previous,
@@ -154,8 +103,7 @@ export function useHostViewSettings(args: {
       if (!ui) {
         return
       }
-      setSharesOtherClientFilter(ui.hideWorkspacesFromOtherDevices !== undefined)
-      applyViewState(applyDesktopViewSettings(viewStateRef.current, ui))
+      applyViewState(applyDesktopViewSettings(viewRef.current, ui))
       // Card layout is a setting, not UI state; read after, so a refusal leaves the view applied.
       const cardReply = await hostCardSettingsRead.request(requestClient)
       const cardSettings = hostCardSettingsRead.interpret(cardReply)
@@ -172,8 +120,8 @@ export function useHostViewSettings(args: {
   }, [client, connState, hostId, applyViewState])
 
   const handleSortChange = useCallback(
-    (value: MobileSortMode) => {
-      persistViewSettings({ sortMode: value })
+    (value: MobileViewState['sortBy']) => {
+      persistViewSettings({ sortBy: value })
     },
     [persistViewSettings]
   )
@@ -185,16 +133,9 @@ export function useHostViewSettings(args: {
     [persistViewSettings]
   )
 
-  const toggleFilter = useCallback(
-    (key: BooleanFilterKey) => {
-      persistViewSettings({ filters: { [key]: !viewStateRef.current.filters[key] } })
-    },
-    [persistViewSettings]
-  )
-
   const toggleRepoFilter = useCallback(
     (repoId: string) => {
-      const current = viewStateRef.current.filters.filterRepoIds
+      const current = viewRef.current.filters.filterRepoIds
       setFilter(
         'filterRepoIds',
         current.includes(repoId) ? current.filter((id) => id !== repoId) : [...current, repoId]
@@ -206,16 +147,17 @@ export function useHostViewSettings(args: {
   // Why every filter: Clear filters on the desktop resets them all, not only the ones shown here.
   const clearFilters = useCallback(() => {
     persistViewSettings({
-      filters: changedFilters(viewStateRef.current.filters, NO_WORKSPACE_ROW_FILTERS)
+      // Only what differs: an older host's strict ui.set refuses a key it does not know.
+      filters: changedWorkspaceRowFilters(viewRef.current.filters, NO_WORKSPACE_ROW_FILTERS)
     })
   }, [persistViewSettings])
 
   const selectedSortLabel =
-    SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? 'Recent'
+    SORT_OPTIONS.find((option) => option.value === state.view.sortBy)?.label ?? 'Recent'
 
   const handleGroupChange = useCallback(
-    (value: MobileGroupMode) => {
-      persistViewSettings({ groupMode: value })
+    (value: MobileViewState['groupBy']) => {
+      persistViewSettings({ groupBy: value })
     },
     [persistViewSettings]
   )
@@ -232,7 +174,7 @@ export function useHostViewSettings(args: {
 
   const toggleCardProperty = useCallback(
     (property: WorktreeCardProperty) => {
-      const current = viewStateRef.current.worktreeCardProperties
+      const current = viewRef.current.worktreeCardProperties
       persistViewSettings({
         worktreeCardProperties: current.includes(property)
           ? current.filter((candidate) => candidate !== property)
@@ -260,7 +202,7 @@ export function useHostViewSettings(args: {
 
   const toggleCollapsed = useCallback(
     (key: string) => {
-      const next = new Set(viewStateRef.current.collapsedGroups)
+      const next = new Set(viewRef.current.collapsedGroups)
       if (!next.delete(key)) {
         next.add(key)
       }
@@ -285,7 +227,6 @@ export function useHostViewSettings(args: {
     syncViewSettingsFromDesktop,
     toggleCollapsed,
     setFilter,
-    toggleFilter,
     toggleRepoFilter,
     toggleWorktreeLineage
   }
