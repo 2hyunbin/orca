@@ -54,7 +54,6 @@ const noop = () => {}
 
 export function resetFavouriteTransport() {
   vi.resetAllMocks()
-  localStorage.clear()
   favouriteTransport.catalogue.mockImplementation(async (_target, siteId: string) => ({
     supported: true,
     filters: [{ ...favourite, siteId }],

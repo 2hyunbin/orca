@@ -13,7 +13,10 @@ import {
 } from './__mocks__/task-page-jira-favourite-fixture'
 
 afterEach(cleanup)
-beforeEach(resetFavouriteTransport)
+beforeEach(() => {
+  localStorage.clear()
+  resetFavouriteTransport()
+})
 
 async function ready(result: { current: ReturnType<typeof useFavouriteTaskPage> }) {
   act(() => result.current.loadJiraFavouriteFilters())
