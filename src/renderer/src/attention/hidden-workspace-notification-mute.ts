@@ -45,6 +45,8 @@ export function isWorkspaceNotificationMutedBySidebarFilters(
   if (!known) {
     return false
   }
+  // Why the full sidebar pass per call: measured at ~0.2-0.3 ms with 1,000 workspaces, and a
+  // per-row shortcut would have to mirror every way the sidebar adds rows back.
   const visibleIds = computeVisibleWorktreeIds(state.worktreesByRepo, [], {
     ...inputs,
     filterRepoIds: [],
