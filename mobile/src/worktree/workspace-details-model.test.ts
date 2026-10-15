@@ -108,16 +108,16 @@ describe('buildWorkspaceDetailLinks', () => {
   })
 
   it('drops attachments this build cannot place and never opens a non-web link', () => {
-    const links = buildWorkspaceDetailLinks(
-      row({
-        linkedItems: [
-          'garbage',
-          { provider: 'sourceforge', type: 'issue', number: 1 },
-          { provider: 'github', type: 'issue', number: 0 },
-          { provider: 'github', type: 'issue', number: 8, url: 'javascript:alert(1)' }
-        ]
-      })
+    // Rows arrive unvalidated, so the list may hold anything.
+    const linkedItems = JSON.parse(
+      JSON.stringify([
+        'garbage',
+        { provider: 'sourceforge', type: 'issue', number: 1 },
+        { provider: 'github', type: 'issue', number: 0 },
+        { provider: 'github', type: 'issue', number: 8, url: 'javascript:alert(1)' }
+      ])
     )
+    const links = buildWorkspaceDetailLinks(row({ linkedItems }))
 
     expect(links).toEqual([expect.objectContaining({ label: 'Issue #8', url: undefined })])
   })

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { ChevronLeft } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
@@ -101,10 +101,14 @@ function WorkspaceOptionsContent({
   const pageOption = sections
     .flatMap(({ options }) => options)
     .find((option) => option.key === pager.page)
-  if (pager.page !== null && !pageOption) {
-    // Forget it, so the page does not reopen by itself if the option shows again.
-    pager.forget()
-  }
+  // Forget it, so the page does not reopen by itself if the option shows again.
+  const pageGone = pager.page !== null && !pageOption
+  const { forget } = pager
+  useEffect(() => {
+    if (pageGone) {
+      forget()
+    }
+  }, [pageGone, forget])
   const pageControl = pageOption ? WORKSPACE_OPTION_CONTROLS[pageOption.key] : null
   // Back from a page returns to the main sheet; the drawer's own claim closes it from there.
   useBackClaim(

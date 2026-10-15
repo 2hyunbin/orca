@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 function fakeClient(replies: Record<string, Reply>) {
-  const sendRequest = vi.fn(async (method: string): Promise<RpcResponse> => {
+  const sendRequest = vi.fn(async (method: string, _params?: unknown): Promise<RpcResponse> => {
     const reply = replies[method]
     if (!reply || 'error' in reply) {
       return { id: '1', ok: false, error: { code: 'forbidden', message: reply?.error ?? 'no' } }

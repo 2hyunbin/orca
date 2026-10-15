@@ -145,7 +145,9 @@ describe('the long-press details section', () => {
     expect(writeText).toHaveBeenCalledWith('localhost:5173')
     expect(pressable(root, 'Copied localhost:5173')).toBeTruthy()
 
-    act(() => vi.advanceTimersByTime(1500))
+    act(() => {
+      vi.advanceTimersByTime(1500)
+    })
     expect(pressable(root, 'Copy localhost:5173')).toBeTruthy()
   })
 
