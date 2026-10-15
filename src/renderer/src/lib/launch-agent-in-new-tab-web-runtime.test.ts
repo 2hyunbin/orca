@@ -111,7 +111,7 @@ describe('launchAgentInNewTab paired web runtime', () => {
     await Promise.resolve()
     // Why: host creation is async, so the user may be viewing another worktree by the time it lands.
     expect(mocks.setActiveTabType).toHaveBeenCalledExactlyOnceWith('terminal', 'wt-1')
-    // A local tab closes through the host like any other tab, so a launch leaves it alone.
+    // A local tab closes locally (the host close no-ops), so a launch leaves it alone.
     expect(mocks.closeTab).not.toHaveBeenCalled()
   })
 
