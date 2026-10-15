@@ -7,8 +7,8 @@ import type { TuiAgent } from './tui-agent'
  * that scope, so it needs no placement of its own. Ids are Orca agent ids so a
  * detected agent maps straight to a destination.
  */
-export type SkillInstallProviderDefinition<Id extends TuiAgent = SkillInstallProviderId> = {
-  id: Id
+type SkillInstallProviderEntry = {
+  id: TuiAgent
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
@@ -18,7 +18,7 @@ export type SkillInstallProviderDefinition<Id extends TuiAgent = SkillInstallPro
   homeEnv?: string
 }
 
-const PROVIDER_TABLE = [
+export const SKILL_INSTALL_PROVIDERS = Object.freeze([
   // Why: Codex reads the canonical .agents/skills root at both scopes.
   {
     id: 'codex',
@@ -95,16 +95,13 @@ const PROVIDER_TABLE = [
     globalSegments: ['.zcode', 'skills'],
     workspaceSegments: null
   }
-] as const satisfies readonly SkillInstallProviderDefinition<TuiAgent>[]
+] satisfies SkillInstallProviderEntry[])
 
-export type SkillInstallProviderId = (typeof PROVIDER_TABLE)[number]['id']
-
-export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] = PROVIDER_TABLE
-
-const PROVIDERS_BY_ID = new Map(SKILL_INSTALL_PROVIDERS.map((provider) => [provider.id, provider]))
+export type SkillInstallProviderDefinition = (typeof SKILL_INSTALL_PROVIDERS)[number]
+export type SkillInstallProviderId = SkillInstallProviderDefinition['id']
 
 export function isSkillInstallProviderId(value: string): value is SkillInstallProviderId {
-  return PROVIDERS_BY_ID.has(value as SkillInstallProviderId)
+  return SKILL_INSTALL_PROVIDERS.some((provider) => provider.id === value)
 }
 
 /**
