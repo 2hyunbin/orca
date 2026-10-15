@@ -9,6 +9,15 @@ import {
   type StructuredPointerSubmission
 } from './structured-pointer-operation-id'
 import type { StructuredWorkerIdentity } from '../structured-worker-identity'
+import type { DeliveryHolderReader } from './delivery-holder'
+
+// No mail was handed to any turn here.
+const NO_HOLDERS: DeliveryHolderReader = {
+  holderOf: () => null,
+  sessionTurns: async () => null,
+  terminalTurnEnd: () => 'unknown',
+  runtimeId: () => 'runtime-test'
+}
 
 const IDENTITY: StructuredWorkerIdentity = {
   handle: 'structworker_1',
@@ -26,11 +35,6 @@ function harness(options: {
   dispatchState?: 'accepted' | 'rejected' | 'unknown'
   /** The chat was busy: its queue holds the pointer as a card. */
   queued?: true
-  /** The coordinator of this worker's Run is mid-batch: it checked and has not acked yet. */
-  outstandingRunDelivery?: boolean
-  outstandingOwnDelivery?: boolean
-  /** The session's agent is mid-turn. */
-  working?: boolean
   /** The mailbox this worker owns; its own handle for direct peer mail outside a dispatch. */
   mailbox?: string
   dispatchId?: string | null
@@ -62,9 +66,6 @@ function harness(options: {
   const stored = new Map<string, StructuredPointerOperationRow>()
   const db = {
     getDispatchContextById: () => ({ run_id: 'run_1' }),
-    hasOutstandingMailboxDelivery: (handle: string) =>
-      ((options.outstandingRunDelivery ?? false) && handle.startsWith('run:')) ||
-      ((options.outstandingOwnDelivery ?? false) && !handle.startsWith('run:')),
     getUndeliveredUnreadMessages: () => mail.filter((message) => !pointed.has(message.id)),
     markAsDelivered,
     getStructuredPointerOperation: (key: string) => stored.get(key),
@@ -79,11 +80,11 @@ function harness(options: {
       mailboxHandle === mailbox ? { sessionId: IDENTITY.sessionId, dispatchId } : null,
     getCliCommand: () => 'orca-dev',
     senderName: (party) => (party.address === 'term_coord' ? 'Coordinator' : null),
+    holders: NO_HOLDERS,
     host: {
       readSessionFacts: async () => (attached ? { submissions } : null),
       currentFence: () => 4,
       currentContextClearOperationId: readContext,
-      isWorking: () => options.working ?? false,
       send
     }
   })
@@ -251,29 +252,6 @@ describe('structured mailbox pointer delivery', () => {
     expect(send.mock.calls[1]![0].body.blocks[0]).toMatchObject({
       text: expect.stringContaining('You have 1 orchestration message.')
     })
-  })
-
-  it('nudges the worker while its coordinator holds an unacked Run delivery', async () => {
-    // The exact window in which a coordinator replies to its workers: it checked, is acting on the
-    // batch, and has not acked yet. The gate is keyed on the handle being nudged, so the
-    // coordinator's `run:` delivery is invisible here — gating the WORKER's dispatch mailbox on it
-    // dropped the nudge with nothing parked, and the worker sat idle on mail it was never told of.
-    const { delivery, send, markAsDelivered } = harness({
-      outstandingRunDelivery: true
-    })
-    delivery.deliverForHandle('dispatch:d1')
-    await flush()
-    expect(send).toHaveBeenCalledTimes(1)
-    expect(markAsDelivered).toHaveBeenCalledWith(['m1'])
-  })
-
-  it('does not re-nudge a mailbox whose working turn holds its own unacked batch', async () => {
-    // The other half of the same gate: the consumer already has this batch, so a second nudge
-    // spends a whole provider turn telling it something it was told.
-    const { delivery, send } = harness({ outstandingOwnDelivery: true, working: true })
-    delivery.deliverForHandle('dispatch:d1')
-    await flush()
-    expect(send).not.toHaveBeenCalled()
   })
 
   it('retries a rejected nudge on the next journal edge, under the same id', async () => {
@@ -455,7 +433,6 @@ describe('forgetting one settled worker', () => {
     }))
     const db = {
       getDispatchContextById: () => ({ run_id: 'run_1' }),
-      hasOutstandingMailboxDelivery: () => false,
       getUndeliveredUnreadMessages: () => [
         { id: 'm1', type: 'status', sequence: 3, from_handle: 'term_coord', run_id: 'run_1' }
       ],
@@ -475,11 +452,11 @@ describe('forgetting one settled worker', () => {
       },
       getCliCommand: () => 'orca',
       senderName: () => null,
+      holders: NO_HOLDERS,
       host: {
         readSessionFacts: async () => (attached ? { submissions: [] } : null),
         currentFence: () => 4,
         currentContextClearOperationId: () => undefined,
-        isWorking: () => false,
         send
       }
     })
@@ -548,7 +525,6 @@ describe('a mailbox a /clear moves while its nudge is in flight', () => {
     const stored = new Map<string, StructuredPointerOperationRow>()
     const db = {
       getDispatchContextById: () => ({ run_id: 'run_1' }),
-      hasOutstandingMailboxDelivery: () => false,
       getUndeliveredUnreadMessages: () => mail.filter((message) => !pointed.has(message.id)),
       markAsDelivered: (ids: string[]) => ids.forEach((id) => pointed.add(id)),
       getStructuredPointerOperation: (key: string) => stored.get(key),
@@ -577,11 +553,11 @@ describe('a mailbox a /clear moves while its nudge is in flight', () => {
       resolveStructuredTarget: () => ({ sessionId: target, dispatchId: 'd1' }),
       getCliCommand: () => 'orca-dev',
       senderName: () => null,
+      holders: NO_HOLDERS,
       host: {
         readSessionFacts: async () => ({ submissions: [] }),
         currentFence: () => 4,
         currentContextClearOperationId: () => contextClearOperationId,
-        isWorking: () => false,
         send
       }
     })

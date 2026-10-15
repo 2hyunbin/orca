@@ -1,4 +1,9 @@
-import type { MessageRow, MessageType, OrchestrationDb } from '../../../../orchestration/db'
+import type {
+  DeliveryHolder,
+  MessageRow,
+  MessageType,
+  OrchestrationDb
+} from '../../../../orchestration/db'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { RpcContext } from '../../../core'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
@@ -21,6 +26,7 @@ export async function checkRunMailbox(args: {
   handle: string
   paneKey: string | undefined
   callerSession: OrchestrationSessionCaller | undefined
+  holder?: DeliveryHolder | null
   typeFilter: MessageType[] | undefined
   signal: AbortSignal | undefined
   legacyCoordinatorRunId: string | undefined
@@ -133,7 +139,12 @@ export async function checkRunMailbox(args: {
   })
   const readPeek = () => db.getUnreadRunMailbox(run.id, 100, typeFilter)
   const readDelivery = (wakeTypes?: MessageType[]) =>
-    db.getOrCreateRunDelivery({ runId: run.id, consumerGeneration: generation, wakeTypes })
+    db.getOrCreateRunDelivery({
+      runId: run.id,
+      consumerGeneration: generation,
+      wakeTypes,
+      holder: args.holder ?? undefined
+    })
   let peeked = params.peek ? readPeek() : []
   if (params.peek && peeked.length > 0) {
     return peekResult(peeked)

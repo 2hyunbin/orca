@@ -723,7 +723,7 @@ describe('orchestration notification mailbox consistency', () => {
       })
     )
     const notificationQuery = vi.spyOn(db, 'getUndeliveredUnreadMessages')
-    const submitRevalidation = vi.spyOn(db, 'areUnreadMessages')
+    const submitRevalidation = vi.spyOn(db, 'getPointerOwedMessageIds')
     const prepare = vi.spyOn(sqliteFor(db), 'prepare')
 
     await driveToLiveIdle(harness.runtime)
@@ -736,17 +736,15 @@ describe('orchestration notification mailbox consistency', () => {
       expect.stringContaining('You have 50 orchestration messages')
     )
     expect(notificationQuery.mock.results[0]?.value).toHaveLength(50)
-    expect(submitRevalidation).toHaveBeenCalledWith(
-      `run:${run.id}`,
-      messages.slice(0, 50).map((message) => message.id)
-    )
+    const staged = messages.slice(0, 50).map((message) => message.id)
+    expect(submitRevalidation).toHaveBeenCalledWith(`run:${run.id}`, staged, undefined)
     const revalidationSql = prepare.mock.calls
       .map(([sql]) => sql)
-      .find((sql) => sql.includes('SELECT COUNT(*)') && sql.includes('id IN'))
+      .find((sql) => sql.includes('SELECT id FROM messages') && sql.includes('json_each'))
     expect(revalidationSql).toContain('INDEXED BY idx_messages_id')
     const revalidationPlan = sqliteFor(db)
       .prepare(`EXPLAIN QUERY PLAN ${revalidationSql}`)
-      .all(`run:${run.id}`, ...messages.slice(0, 50).map((message) => message.id)) as {
+      .all(`run:${run.id}`, JSON.stringify(staged), '') as {
       detail: string
     }[]
     expect(revalidationPlan.map((row) => row.detail).join(' ')).toContain('idx_messages_id')
@@ -832,7 +830,8 @@ describe('orchestration notification mailbox consistency', () => {
     db.close()
   })
 
-  it('does not point newer Run mail behind an outstanding Delivery', async () => {
+  // An unacknowledged batch used to hold every later notice back from an idle agent.
+  it('points newer Run mail while an earlier batch waits unacknowledged, which check replays first', async () => {
     vi.useFakeTimers()
     const db = new OrchestrationDb(':memory:')
     const harness = createRuntime(db)
@@ -852,9 +851,10 @@ describe('orchestration notification mailbox consistency', () => {
     })
 
     await driveToLiveIdle(harness.runtime)
+    await vi.advanceTimersByTimeAsync(500)
     const replayed = await checkBoundMailbox(harness.runtime)
 
-    expect(pointerCount(harness.write)).toBe(0)
+    expect(pointerCount(harness.write)).toBe(1)
     expect(replayed.messages).toEqual([expect.objectContaining({ id: firstMessage.id })])
     expect(replayed.deliveryId).toBe(firstDelivery.deliveryId)
 

@@ -15,6 +15,7 @@ import {
 } from './db/messages/mailbox-pointer-enter-state'
 import { resumePendingOrchestrationMailboxPointer } from './mailbox-pointer-resume'
 import { stageOrchestrationMailboxPointer } from './mailbox-pointer-stage'
+import { settleClaimedTerminalDelivery } from './delivery-holder'
 
 export type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 
@@ -67,9 +68,8 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     if (!this.deps.getTerminalHandleForLeafKey(this.leafKey(leaf))) {
       return
     }
-    if (db.hasOutstandingMailboxDelivery?.(mailboxHandle)) {
-      return
-    }
+    // Held mail never holds the notice back; a cut holder's batch is offered once more.
+    const excludeDeliveryId = settleClaimedTerminalDelivery(db, mailboxHandle, this.deps.holders)
     // Why the gate lives HERE and not at each caller: this method is the single point at
     // which this subsystem commits to typing the pointer into the pane, and it has four
     // callers (handle delivery, post-probe redelivery, flight settle, and the notification
@@ -122,7 +122,8 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
       db,
       mailboxHandle,
       waiters,
-      reservedTypes: options.reservedTypes
+      reservedTypes: options.reservedTypes,
+      excludeDeliveryId
     })
     if (unread.length === 0 || !leaf.writable || !leaf.ptyId) {
       return

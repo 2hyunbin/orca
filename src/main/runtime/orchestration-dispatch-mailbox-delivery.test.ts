@@ -34,7 +34,7 @@ describe('Dispatch mailbox Delivery', () => {
     }
   })
 
-  it('wakes once, replays after restart, and leaves concurrent guidance for the next ack', async () => {
+  it('wakes once, replays after restart, and points concurrent guidance once behind the replay', async () => {
     vi.useFakeTimers()
     const directory = mkdtempSync(join(tmpdir(), 'orca-dispatch-delivery-'))
     temporaryDirectories.push(directory)
@@ -88,7 +88,9 @@ describe('Dispatch mailbox Delivery', () => {
     const restarted = createRuntime(restartedDb)
     await driveToLiveIdle(restarted.runtime)
     await vi.advanceTimersByTimeAsync(2_500)
-    expect(pointerCount(restarted.write)).toBe(0)
+    // The unacknowledged batch no longer holds the new guidance's notice back; `check` still
+    // replays the batch first.
+    expect(pointerCount(restarted.write)).toBe(1)
 
     const replayed = await checkBoundMailbox(restarted.runtime)
     expect(replayed).toMatchObject({

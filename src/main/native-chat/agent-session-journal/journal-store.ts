@@ -21,6 +21,7 @@ import type { AgentSessionContextUsage } from '../../../shared/agent-session-con
 import { latestStructuredAgentContextFacts } from '../../../shared/structured-agent-session-context-usage'
 import {
   newestStructuredAgentSessionTurnBySequence,
+  newestStructuredAgentSessionTurnItemBySequence,
   runningStructuredAgentSessionTurnItemBySequence
 } from '../../../shared/structured-agent-session-live-turn'
 import type { JournalReplacementItem } from './journal-epoch-replacement'
@@ -230,6 +231,14 @@ export class AgentSessionJournal {
    *  current work is the host projection's to say (`structuredAgentSessionCurrentWork`). */
   runningTurn = (): { item: AgentJournalRenderItem; turnId: string } | null =>
     runningStructuredAgentSessionTurnItemBySequence(this.state.items.values())
+
+  /** The newest turn record's item whatever state it settled in, for a reader that classifies it. */
+  newestTurnItem = (): AgentJournalRenderItem | null =>
+    newestStructuredAgentSessionTurnItemBySequence(this.state.items.values())
+
+  /** An item by any key it is known by, a provider's echo key included (a turn's `userItemId`). */
+  itemByKey = (key: string): AgentJournalRenderItem | null =>
+    this.state.items.get(this.state.aliases.get(key) ?? key) ?? null
 
   /** The newest turn record whatever state it settled in, for readers that need the outcome. */
   newestTurn = (): AgentJournalTurnLifecycle | null =>

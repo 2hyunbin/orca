@@ -227,6 +227,17 @@ export class StructuredAgentSessionCurrentWork {
       : null
   }
 
+  /** Whether a runtime this one replaced produced this item: its generation ended with that Orca. */
+  ranUnderReplacedRuntime(itemId: string): boolean {
+    const fence = this.journal.itemFence(itemId)
+    return this.replaced !== undefined && fence !== undefined && fence <= this.replaced.fence
+  }
+
+  /** Whether the item's generation may still be running somewhere this host cannot see. */
+  ownerUnverifiableFor(itemId: string): boolean {
+    return this.ownerUnverifiable && !this.isCurrentItem(itemId)
+  }
+
   /** The newest turn record as a client is told it: a running one an ended generation opened is
    *  none, interrupted when it died on its own (`diedTurn`), or unverifiable while its owner is, so
    *  no client reads it as working, steers into it or reads it finished. */

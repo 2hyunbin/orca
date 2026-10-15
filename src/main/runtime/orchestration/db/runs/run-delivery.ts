@@ -1,4 +1,5 @@
 import type { MessageType, MessageRow, RunRow, DeliveryRow } from '../../types'
+import type { DeliveryHolder } from '../messages/delivery-holder-store'
 import { OrchestrationError } from '../../orchestration-error'
 import { exposeMessageListTimestamps } from '../utc-timestamp'
 import type { OrchestrationDb } from '../orchestration-db'
@@ -25,6 +26,7 @@ export function getOrCreateRunDelivery(
     consumerGeneration: number
     limit?: number
     wakeTypes?: MessageType[]
+    holder?: DeliveryHolder
   }
 ): { delivery: DeliveryRow; messages: MessageRow[]; replayed: boolean } | undefined {
   return this.getOrCreateMailboxDelivery({
@@ -32,7 +34,8 @@ export function getOrCreateRunDelivery(
     mailboxHandle: `run:${params.runId}`,
     consumerGeneration: params.consumerGeneration,
     limit: params.limit,
-    wakeTypes: params.wakeTypes
+    wakeTypes: params.wakeTypes,
+    holder: params.holder
   })
 }
 

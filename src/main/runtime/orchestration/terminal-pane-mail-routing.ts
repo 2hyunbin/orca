@@ -340,10 +340,12 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     let handles: Set<string>
     try {
       const db = this._orchestrationDb
-      // Pointer-phase rows are excluded from the undelivered scan, so they need their own.
+      // Pointer-phase rows are excluded from the undelivered scan, so they need their own; so do
+      // batches whose holder's turn a restart may have cut (`delivery-holder.ts`).
       handles = new Set([
         ...(db?.getUndeliveredUnreadMailboxHandles?.() ?? []),
-        ...(db?.getPendingMailboxPointerHandles?.() ?? [])
+        ...(db?.getPendingMailboxPointerHandles?.() ?? []),
+        ...(db?.getClaimedDeliveryMailboxHandles?.() ?? [])
       ])
     } catch (error) {
       console.warn('[orchestration] failed to scan restored mailboxes', error)

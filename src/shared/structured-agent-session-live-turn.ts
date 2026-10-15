@@ -89,10 +89,10 @@ export function liveStructuredAgentSessionTurnScope(
   return running ? { kind: 'turn', turnItemId: running.item.itemId } : AGENT_JOURNAL_THREAD_SCOPE
 }
 
-/** The newest turn record's item when that turn is running, by sequence. */
-export function runningStructuredAgentSessionTurnItemBySequence(
+/** The newest turn record's item, whatever state it is in, by sequence; none past a context clear. */
+export function newestStructuredAgentSessionTurnItemBySequence(
   items: Iterable<AgentJournalRenderItem>
-): { item: AgentJournalRenderItem; turnId: string } | null {
+): AgentJournalRenderItem | null {
   let newest: AgentJournalRenderItem | null = null
   for (const item of items) {
     if (
@@ -102,6 +102,14 @@ export function runningStructuredAgentSessionTurnItemBySequence(
       newest = item
     }
   }
+  return newest && readAgentJournalTurn(newest.body) ? newest : null
+}
+
+/** The newest turn record's item when that turn is running, by sequence. */
+export function runningStructuredAgentSessionTurnItemBySequence(
+  items: Iterable<AgentJournalRenderItem>
+): { item: AgentJournalRenderItem; turnId: string } | null {
+  const newest = newestStructuredAgentSessionTurnItemBySequence(items)
   const turn = newest ? readAgentJournalTurn(newest.body) : null
   return newest && turn?.state === 'running' ? { item: newest, turnId: turn.turnId } : null
 }

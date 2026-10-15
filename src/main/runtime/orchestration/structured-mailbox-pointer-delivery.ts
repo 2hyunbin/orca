@@ -25,6 +25,11 @@ import {
   type StructuredPointerSubmission
 } from './structured-pointer-operation-id'
 import { structuredMailSource } from './structured-mail-source'
+import {
+  reofferCutNotice,
+  settleClaimedDelivery,
+  type DeliveryHolderReader
+} from './delivery-holder'
 import type { SenderNameResolver } from './agent-message-sender'
 import {
   retainReasonForDispatch,
@@ -74,8 +79,6 @@ export type StructuredMailboxPointerHost = {
   /** Current lease fence; `null` when no record backs the session any more. */
   currentFence: (sessionId: string) => number | null
   currentContextClearOperationId: (sessionId: string) => string | undefined
-  /** Whether the session's agent is working now: a running turn or a send it owes. */
-  isWorking: (sessionId: string) => boolean
 }
 
 type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageWaiter> = {
@@ -93,6 +96,8 @@ type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageW
   /** What Orca calls a sender now, snapshotted onto the message; null when it has no name. */
   senderName: SenderNameResolver
   host: StructuredMailboxPointerHost
+  /** How the turns mail was handed to ended (`delivery-holder.ts`). */
+  holders: DeliveryHolderReader
   onRetain?: (input: {
     mailboxHandle: string
     sessionId: string
@@ -174,31 +179,22 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     if (!db || this.inFlight.has(mailboxHandle)) {
       return
     }
-    // Don't re-nudge a mailbox whose consumer still holds an unacknowledged batch. The lookup is
-    // keyed on the exact handle being nudged, so a coordinator's own `run:` delivery is invisible
-    // to a worker's `dispatch:` gate and cannot suppress the nudges a coordinator sends its
-    // workers. Worth more here than in the PTY lane: a structured nudge costs a whole provider
-    // turn, not a line of text into a composer.
-    // Only a working turn holds a batch: one that ended unacknowledged (finished, stopped, killed
-    // with Orca) never acks, and this nudge is what starts the turn whose check replays it.
-    if (
-      db.hasOutstandingMailboxDelivery?.(mailboxHandle) &&
-      this.deps.host.isWorking(target.sessionId)
-    ) {
-      return
-    }
-    const unread = selectOrchestrationPointerBatch({
-      db,
-      mailboxHandle,
-      waiters: this.deps.getMessageWaiters(mailboxHandle),
-      reservedTypes
-    })
-    if (unread.length === 0) {
-      return
-    }
     this.inFlight.add(mailboxHandle)
     let contextKey: string | undefined
     try {
+      // Held mail never holds the notice back: a busy chat queues it as a card, like any message.
+      const excludeDeliveryId = await settleClaimedDelivery(db, mailboxHandle, this.deps.holders)
+      await reofferCutNotice(db, mailboxHandle, target.sessionId, this.deps.holders)
+      const unread = selectOrchestrationPointerBatch({
+        db,
+        mailboxHandle,
+        waiters: this.deps.getMessageWaiters(mailboxHandle),
+        reservedTypes,
+        excludeDeliveryId
+      })
+      if (unread.length === 0) {
+        return
+      }
       const session = await this.deps.host.readSessionFacts(target.sessionId)
       const contextClearOperationId = this.deps.host.currentContextClearOperationId(
         target.sessionId

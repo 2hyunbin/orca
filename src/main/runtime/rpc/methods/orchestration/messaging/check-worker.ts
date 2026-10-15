@@ -1,4 +1,4 @@
-import type { MessageType, OrchestrationDb } from '../../../../orchestration/db'
+import type { DeliveryHolder, MessageType, OrchestrationDb } from '../../../../orchestration/db'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { formatMessageBanner } from '../../../../orchestration/formatter'
@@ -30,6 +30,7 @@ export async function checkWorkerMailbox(args: {
   revalidateConsumer?: () => void
   deferDelivery?: () => boolean
   recordMutationReceipt?: (receipt: unknown) => void
+  holder?: DeliveryHolder | null
 }) {
   const {
     params,
@@ -204,7 +205,8 @@ export async function checkWorkerMailbox(args: {
         mailboxHandle: address,
         consumerGeneration: workerMailbox.generation,
         consumerSource: activeDispatch ? 'dispatch' : 'attachment',
-        wakeTypes
+        wakeTypes,
+        holder: args.holder ?? undefined
       })
     } catch (error) {
       throw asDispatchFence(error)

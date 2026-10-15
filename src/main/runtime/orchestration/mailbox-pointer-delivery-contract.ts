@@ -1,6 +1,7 @@
 import type { OrchestrationDb } from './db'
 import type { OrchestrationMailboxDeliveryTarget } from './mailbox-delivery-target'
 import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
+import type { DeliveryHolderReader } from './delivery-holder'
 import type { OrchestrationMailboxLeaf, OrchestrationMailboxOwner } from './mailbox-owner'
 import type { OrchestrationMailboxPointerSubmitTarget } from './mailbox-pointer-submit'
 import type { OrchestrationCliCommand } from './cli-command'
@@ -19,6 +20,8 @@ export type PointerDeliveryDependencies<TWaiter extends OrchestrationMessageWait
   mailboxOwner: OrchestrationMailboxOwner
   deliveryTarget: OrchestrationMailboxDeliveryTarget
   getDb: () => OrchestrationDb | null
+  /** How the turns mail was handed to ended (`delivery-holder.ts`). */
+  holders: DeliveryHolderReader
   getLeaf: (leafKey: string) => OrchestrationMailboxLeaf | undefined
   getLeafKey: (tabId: string, leafId: string) => string
   getLiveLeafForHandle: (handle: string) => OrchestrationMailboxLeaf

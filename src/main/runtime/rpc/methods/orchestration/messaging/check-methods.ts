@@ -42,6 +42,11 @@ export const ORCHESTRATION_CHECK_METHODS = [
         paneKey: runtime.getTerminalPaneKey(handle) ?? params.terminalPaneKey
       })
       const paneKey = caller.paneKey ?? undefined
+      // The turn this check runs in holds whatever batch it hands out (`delivery-holder.ts`).
+      const holder = runtime.deliveryHolderReader.holderOf({
+        sessionId: orchestrationCaller?.sessionId ?? null,
+        handle
+      })
       const boundRun = hasRunBindingKey(caller) ? db.getCurrentRunForCoordinator(caller) : undefined
       if (params.run || boundRun) {
         return checkRunMailbox({
@@ -51,6 +56,7 @@ export const ORCHESTRATION_CHECK_METHODS = [
           handle,
           paneKey,
           callerSession: orchestrationCaller,
+          holder,
           typeFilter,
           signal,
           legacyCoordinatorRunId,
@@ -91,6 +97,7 @@ export const ORCHESTRATION_CHECK_METHODS = [
           signal,
           activeDispatch,
           remoteAttachment,
+          holder,
           recordMutationReceipt
         })
       }

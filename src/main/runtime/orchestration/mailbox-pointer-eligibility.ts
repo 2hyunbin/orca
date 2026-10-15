@@ -43,6 +43,8 @@ export function selectOrchestrationPointerBatch(input: {
   mailboxHandle: string
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined
+  /** The mailbox's claimed batch (`settleClaimedDelivery`): fetched mail is not new mail. */
+  excludeDeliveryId?: string
 }): MessageRow[] {
   if (hasUnfilteredOrchestrationWaiter(input.waiters)) {
     return []
@@ -55,26 +57,27 @@ export function selectOrchestrationPointerBatch(input: {
   }
   return input.db.getUndeliveredUnreadMessages(input.mailboxHandle, undefined, {
     excludeTypes: [...excludedTypes],
+    excludeDeliveryId: input.excludeDeliveryId,
     limit: ORCHESTRATION_DELIVERY_BATCH_LIMIT
   })
 }
 
+/** Release a staged pointer once none of its messages is still owed: each was read, or fetched into
+ *  the batch a `check` holds. Per message, so a batch fetched before staging never counts. */
 export function shouldReleaseOrchestrationPointer(
   db: OrchestrationDb | null,
   mailboxHandle: string,
   messages: readonly { id: string; type: string }[],
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
 ): boolean {
-  if (db?.hasOutstandingMailboxDelivery?.(mailboxHandle)) {
-    return true
-  }
   if (messages.some((message) => messageTypeHasOrchestrationWaiter(waiters, message.type))) {
     return true
   }
-  return !(
-    db?.areUnreadMessages?.(
-      mailboxHandle,
-      messages.map((message) => message.id)
-    ) ?? true
+  const ids = messages.map((message) => message.id)
+  const owed = db?.getPointerOwedMessageIds?.(
+    mailboxHandle,
+    ids,
+    db.getClaimedMailboxDelivery?.(mailboxHandle)?.id
   )
+  return owed ? owed.length === 0 : !(db?.areUnreadMessages?.(mailboxHandle, ids) ?? true)
 }

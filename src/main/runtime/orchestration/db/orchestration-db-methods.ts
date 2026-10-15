@@ -33,6 +33,7 @@ import type { MailboxPointerEnterStateMethods } from './messages/mailbox-pointer
 import type { MessageInboxMethods } from './messages/message-inbox'
 import type { MessageInsertMethods } from './messages/message-insert'
 import type { RoleMailboxDeliveryMethods } from './messages/role-mailbox-delivery'
+import type { DeliveryHolderStoreMethods } from './messages/delivery-holder-store'
 import type { MutationReceiptStoreMethods } from './mutation-receipts/mutation-receipt-store'
 import type { LifecycleTransitionMethods } from './lifecycle-transition'
 import type { QuestionThreadsMethods } from './questions/question-threads'
@@ -93,6 +94,7 @@ export type OrchestrationDbMethods = AttemptObservationStoreMethods &
   RunDeliveryMethods &
   MessageInsertMethods &
   RoleMailboxDeliveryMethods &
+  DeliveryHolderStoreMethods &
   MessageInboxMethods &
   MailboxPointerEnterStateMethods &
   DirectMailboxRoutingMethods &

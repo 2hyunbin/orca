@@ -68,6 +68,13 @@ export type DeliveryRow = {
   status: DeliveryStatus
   created_at: string
   acknowledged_at: string | null
+  /** Who holds it; see `delivery-holder.ts`. Absent on a database before v44. */
+  holder_session_id?: string | null
+  holder_turn_item_id?: string | null
+  holder_terminal_handle?: string | null
+  holder_process_incarnation?: string | null
+  holder_agent_session_id?: string | null
+  holder_agent_turn_started_at?: number | null
 }
 
 export type LegacyAdoptionRow = {
@@ -256,6 +263,7 @@ export type MessageRow = {
   pointer_enter_pending?: number
   pointer_pty_id?: string | null
   pointer_process_incarnation?: string | null
+  reoffered_by_runtime?: string | null
 }
 
 export type TaskRow = {

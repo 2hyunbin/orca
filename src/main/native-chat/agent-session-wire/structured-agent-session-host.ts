@@ -1,4 +1,5 @@
 import type { AgentSessionRewindParams } from '../../../shared/agent-session-rewind'
+import { readStructuredHeldTurns } from './structured-agent-session-held-turn'
 import { rewindStructuredAgentSession } from './structured-agent-session-rewind'
 import { StructuredConversationCommandController } from './structured-conversation-command-controller'
 // Structured agent-session host: where the lease, journal, and provider adapter meet.
@@ -332,6 +333,10 @@ export class StructuredAgentSessionHost {
 
   /** The host's projection of a held chat's current work (`structuredAgentSessionCurrentWork`). */
   currentWork = this.clientDelivery.readCurrentWork
+
+  /** How the chat's turns that were handed orchestration mail ended (opens it at rest). */
+  heldTurns = (id: string) =>
+    readStructuredHeldTurns(this.lifetime.conversation, this.currentWork, id)
 
   subscribe = (input: AgentSessionSubscribeInput) => this.backgroundTasks.subscribe(input)
 

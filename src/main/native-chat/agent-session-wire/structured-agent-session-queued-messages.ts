@@ -240,6 +240,8 @@ export type QueuedMessageDrainDeps = {
   currentWork: (sessionId: string) => StructuredAgentSessionCurrentWork | null
   /** The consumed submission is ordinary #22821 work from here on. */
   wakeDelivery: (sessionId: string) => void
+  /** `StructuredAgentSessionHostDeps.queuedCardOwed`. */
+  cardOwed?: (body: AgentJournalMessageItem) => Promise<boolean>
   logger: StructuredAgentSessionLogger
 }
 
@@ -325,6 +327,14 @@ export class StructuredAgentSessionQueuedMessageDrain {
     const work = this.deps.currentWork(sessionId)
     const next = work ? nextStructuredQueuedMessage({ journal, record, work }) : null
     if (this.disposed || !next) {
+      return
+    }
+    // A notice whose mail was read or fetched while it waited would start a turn with nothing to do.
+    if ((await this.deps.cardOwed?.(next.body)) === false) {
+      await journal.queuedMessages.withdraw({
+        messageIds: [next.messageId],
+        settledByOp: `host:spent-card:${next.messageId}`
+      })
       return
     }
     // Always a fresh id: the submission names its draft by `queuedMessageId`, never by id equality.

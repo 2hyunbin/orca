@@ -35,6 +35,8 @@ import {
   type FakeConnection
 } from './structured-chat-coordinator-fake-codex-fixture'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
+import { beginAgentSessionRuntimeIncarnationForTest } from './agent-session-runtime-attribution'
+import { queuedCardOwed } from './orchestration/delivery-holder'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
 
 export const COORDINATOR = '4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
@@ -242,12 +244,7 @@ export async function startClearedContext(sessionId: string): Promise<void> {
   await settleTurn(sessionId, 0)
 }
 
-beforeEach(async () => {
-  resetProviderFaults()
-  root = await mkdtemp(join(tmpdir(), 'orca-structured-coordinator-mail-'))
-  codex = fakeCodex()
-  db = new OrchestrationDb(':memory:')
-  runtime = startRuntime()
+async function installHost(): Promise<void> {
   host = await ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),
     stateDirectory: root,
@@ -261,8 +258,26 @@ beforeEach(async () => {
     ...scriptedCodexTransport(codex.openConnection),
     // The same calls the runtime's own host install makes.
     onSessionStatusChanged: (summary) => runtime.onStructuredSessionStatusForMail(summary),
-    onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId)
+    onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId),
+    queuedCardOwed: (body) => queuedCardOwed(db, body, runtime.deliveryHolderReader)
   })
+}
+
+/** Orca quits with whatever is running and starts again over the same records and database. */
+export async function restartOrca(): Promise<void> {
+  await stopStructuredAgentSessionRuntime()
+  beginAgentSessionRuntimeIncarnationForTest()
+  restartRuntime()
+  await installHost()
+}
+
+beforeEach(async () => {
+  resetProviderFaults()
+  root = await mkdtemp(join(tmpdir(), 'orca-structured-coordinator-mail-'))
+  codex = fakeCodex()
+  db = new OrchestrationDb(':memory:')
+  runtime = startRuntime()
+  await installHost()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
 })
 
@@ -314,6 +329,8 @@ export function turnText(turn: { text: string }): string {
 
 /** What an Orca restart leaves behind: a new runtime over the same database and host. */
 export function restartRuntime(): void {
+  // The quit process is gone: its pending repoints must not reach the shared database.
+  runtime.setOrchestrationDb(new OrchestrationDb(':memory:'))
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
 }

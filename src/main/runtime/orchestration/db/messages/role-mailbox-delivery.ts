@@ -5,6 +5,7 @@ import type { OrchestrationDb } from '../orchestration-db'
 import { exposeDeliveryTimestamps, exposeMessageListTimestamps } from '../utc-timestamp'
 import { requireMailboxConsumer } from './mailbox-consumer'
 import { ORCHESTRATION_DELIVERY_BATCH_LIMIT } from './mailbox-routing-page'
+import { stampDeliveryHolder, type DeliveryHolder } from './delivery-holder-store'
 
 export function getDeliveryRaw(this: OrchestrationDb, id: string): DeliveryRow | undefined {
   return this.db.prepare('SELECT * FROM deliveries WHERE id = ?').get(id) as DeliveryRow | undefined
@@ -33,6 +34,8 @@ export function getOrCreateMailboxDelivery(
     consumerSource?: 'dispatch' | 'attachment'
     limit?: number
     wakeTypes?: MessageType[]
+    /** The turn that fetches it; absent when none is known, which never erases a recorded one. */
+    holder?: DeliveryHolder
   }
 ): { delivery: DeliveryRow; messages: MessageRow[]; replayed: boolean } | undefined {
   const limit = Math.min(
@@ -53,6 +56,9 @@ export function getOrCreateMailboxDelivery(
         )
       }
       const messages = this.getDeliveryMessages(existing)
+      if (params.holder) {
+        stampDeliveryHolder(this, existing.id, params.holder)
+      }
       this.db.exec('COMMIT')
       return { delivery: exposeDeliveryTimestamps(existing), messages, replayed: true }
     }
@@ -99,6 +105,9 @@ export function getOrCreateMailboxDelivery(
         params.consumerGeneration,
         JSON.stringify(messages.map((message) => message.id))
       )
+    if (params.holder) {
+      stampDeliveryHolder(this, deliveryId, params.holder)
+    }
     const delivery = this.getDeliveryRaw(deliveryId) as DeliveryRow
     this.db.exec('COMMIT')
     return { delivery: exposeDeliveryTimestamps(delivery), messages, replayed: false }

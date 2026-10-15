@@ -16,7 +16,11 @@ import { localOrchestrationCliCommand } from './orchestration/cli-command'
 import { formatMessagePointer } from './orchestration/formatter'
 import { currentRunCoordinatorOrcaSessionId } from './orchestration/db/runs/run-coordinator-orca-session'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
-import { operationId, providerFaults } from './structured-chat-coordinator-fake-codex-fixture'
+import {
+  operationId,
+  providerFaults,
+  type FakeConnection
+} from './structured-chat-coordinator-fake-codex-fixture'
 
 import {
   COORDINATOR,
@@ -44,7 +48,8 @@ import {
   ptyPointer,
   turnText,
   queuedCardTexts,
-  restartRuntime
+  restartRuntime,
+  restartOrca
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
 describe('a worker result reaches the structured chat that coordinates it', () => {
@@ -442,48 +447,91 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(await userTexts(COORDINATOR)).toEqual([expect.stringMatching(POINTER)])
   })
 
-  it('wakes a coordinator whose agent stopped holding an unacknowledged batch, and tells workers once it cannot read mail', async () => {
-    // The chat checked and its agent stopped before acknowledging: nothing but the next report's
-    // pointer can start the turn that would.
+  /** Idle edges, then a fixed window, not a poll: a loop would start the agent again in it. */
+  async function quietWindow(): Promise<void> {
+    runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
+    await observationClock.observe(1_500)
+    runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
+    await observationClock.observe(1_500)
+  }
+
+  /** The provider opens the turn the chat sent it and echoes its input: the turn is running. */
+  async function startTurn(chat: FakeConnection, index: number, turnId: string): Promise<void> {
+    chat.handlers.onNotification?.('turn/started', { turn: { id: turnId } })
+    chat.handlers.onNotification?.('item/completed', {
+      item: {
+        type: 'userMessage',
+        id: `echo-${turnId}`,
+        clientId: chat.turns[index]!.clientUserMessageId,
+        content: [{ type: 'text', text: 'pointer' }]
+      }
+    })
+    await host.flushStreamedEvents(COORDINATOR)
+  }
+
+  it('offers once, at launch, the batch a turn still running when Orca quit had fetched', async () => {
+    // The incident: the chat fetched the Run's last report and Orca quit before the turn that
+    // fetched it acknowledged anything. Nothing else would ever point that report again.
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
-    const second = await call(
-      'orchestration.taskCreate',
-      { spec: 'more' },
-      { sessionId: COORDINATOR }
-    )
     await finishWorker(taskId)
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    await startTurn(chat, 0, 'turn-1')
     const held = await call('orchestration.check', {}, { sessionId: COORDINATOR })
-    expect(held).toMatchObject({ count: 1 })
-    await settleTurn(COORDINATOR, 0)
-    await host.close(COORDINATOR, 'evict')
+    expect(held).toMatchObject({ count: 1, messages: [{ type: 'worker_done' }] })
     const before = codex.connections.length
 
-    await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+    await restartOrca()
 
     await vi.waitFor(() => expect(codex.connections.length).toBe(before + 1), WAIT)
-    await vi.waitFor(() => expect(connectionFor(COORDINATOR).turns).toHaveLength(1), WAIT)
+    const relaunched = connectionFor(COORDINATOR)
+    await vi.waitFor(() => expect(relaunched.turns).toHaveLength(1), WAIT)
+    await startTurn(relaunched, 0, 'turn-1')
     expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
       deliveryId: held.deliveryId,
       replayed: true
     })
+    await call('orchestration.check', { ack: held.deliveryId }, { sessionId: COORDINATOR })
+    await settleTurn(COORDINATOR, 0)
+    await quietWindow()
+    expect(relaunched.turns).toHaveLength(1)
     expect(await call('orchestration.runShow', { id: runId })).toMatchObject({
       coordinator: { address: `orca_session_id:${COORDINATOR}`, status: 'live' }
     })
 
     // A chat the user closed is not revived, and a worker writing to it hears so.
     await host.setSessionTabVisibility(COORDINATOR, false)
-    expect(await call('orchestration.runShow', { id: runId })).toMatchObject({
-      coordinator: { status: 'exited', reason: 'The chat was closed.' }
-    })
     const sent = await call('orchestration.send', {
-      from: 'term_worker_2',
+      from: 'term_worker',
       to: `run:${runId}`,
       subject: 'Go or no-go?',
       type: 'question'
     })
     expect(sent.warnings).toEqual([expect.objectContaining({ code: 'recipient_unreachable' })])
+  })
+
+  it('offers a batch a provider death cut once more, and not again when it dies again', async () => {
+    observationClock.start()
+    const chat = await openChat(COORDINATOR)
+    const { taskId } = await coordinatorRunAndTask()
+    await finishWorker(taskId)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    await startTurn(chat, 0, 'turn-1')
+    const held = await call('orchestration.check', {}, { sessionId: COORDINATOR })
+    const before = codex.connections.length
+    chat.handlers.onExit?.(new Error('provider died'))
+
+    await vi.waitFor(() => expect(codex.connections.length).toBe(before + 1), WAIT)
+    const revived = connectionFor(COORDINATOR)
+    await vi.waitFor(() => expect(revived.turns).toHaveLength(1), WAIT)
+    await startTurn(revived, 0, 'turn-2')
+    expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
+      deliveryId: held.deliveryId,
+      replayed: true
+    })
+    revived.handlers.onExit?.(new Error('provider died'))
+    await quietWindow()
+    expect(codex.connections.length).toBe(before + 1)
   })
 
   it('points mail at the idle edge when it arrived mid-turn', async () => {

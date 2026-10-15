@@ -26,6 +26,7 @@ export type {
   MailboxRoutingPage
 } from './db/messages/mailbox-routing-page'
 export type { MessageInsert } from './db/messages/message-insert'
+export type { DeliveryHolder } from './db/messages/delivery-holder-store'
 export type { LegacyAdoptedMailboxOwner } from './db/runs/run-lookup'
 
 export type {

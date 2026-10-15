@@ -1,7 +1,10 @@
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
-import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalCursor,
+  AgentJournalMessageItem
+} from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
   AgentSessionStatusSummary,
@@ -155,6 +158,9 @@ export type StructuredAgentSessionHostDeps = {
   startupLimits?: Partial<StructuredAgentSessionStartupLimits>
   /** Whether an orchestration dispatch still owns this session's worker; absent answers no. */
   hasOpenDispatch?: (record: AgentSessionRecord) => boolean
+  /** Whether a waiting card still owes its send when the queue reaches it: a mail notice whose
+   *  every message was read or fetched owes none and is withdrawn. Absent answers yes. */
+  queuedCardOwed?: (body: AgentJournalMessageItem) => Promise<boolean>
   /** A chat tab left the screen: closed, or its workspace removed. Advisory; a throw is logged. */
   onSessionTabHidden?: (sessionId: string) => void
   /** Where every failure the host carries on past is reported. Required: a host without one would

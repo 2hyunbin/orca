@@ -6,6 +6,7 @@ import type * as PtyControllerContract from './runtime-pty-controller-contract'
 import { createStructuredMailboxPointerHost } from './orchestration/structured-mailbox-pointer-host'
 import { localOrchestrationCliCommand } from './orchestration/cli-command'
 import { RuntimeOrchestrationSenderNames } from './runtime-orchestration-sender-names'
+import { createDeliveryHolderReader } from './runtime-delivery-holder-reader'
 import { isStructuredWorkerHandle } from './structured-worker-identity'
 import { ORCA_SESSION_ADDRESS_PREFIX } from '../../shared/orca-session-address'
 import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
@@ -257,8 +258,24 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     isLeafPtyProvenAbsent: (ptyId) => this.isLeafPtyProvenAbsent(ptyId)
   })
 
+  // What the runtime reads of a terminal's agent: its sender name, and the turn mail was handed to.
+  private readonly terminalAgentFacts = {
+    getHandleRecord: (handle: string) => this.handles.get(handle),
+    getPtyAgents: (ptyId: string) => this.ptysById.get(ptyId),
+    getTerminalPaneKey: (handle: string) => this.getTerminalPaneKey(handle),
+    getAgentStatusSnapshotForPane: (paneKey: string) =>
+      this.getAgentStatusSnapshotForPaneFn?.(paneKey) ??
+      this.getAgentStatusSnapshotFn?.().filter((row) => row.paneKey === paneKey) ??
+      [],
+    getTerminalProcessIncarnation: (handle: string) => this.getTerminalProcessIncarnation(handle),
+    getRuntimeId: () => this.runtimeId
+  }
+
+  readonly deliveryHolderReader = createDeliveryHolderReader(this.terminalAgentFacts)
+
   protected readonly orchestrationMailboxPointerDelivery = new OrchestrationMailboxPointerDelivery({
     mailboxOwner: this.orchestrationMailboxOwner,
+    holders: this.deliveryHolderReader,
     deliveryTarget: this.orchestrationMailboxDeliveryTarget,
     getDb: () => this._orchestrationDb,
     getLeaf: (leafKey) => this.leaves.get(leafKey),
@@ -285,21 +302,16 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
       getCliCommand: localOrchestrationCliCommand,
       senderName: (party, reportedDispatchId) =>
         this.orchestrationSenderNames.nameOf(party, reportedDispatchId),
-      host: createStructuredMailboxPointerHost()
+      host: createStructuredMailboxPointerHost(),
+      holders: this.deliveryHolderReader
     })
 
   /** What Orca calls an agent that sends through it; public for every such send site. */
   readonly orchestrationSenderNames = new RuntimeOrchestrationSenderNames({
+    ...this.terminalAgentFacts,
     getDb: () => this._orchestrationDb,
-    getHandleRecord: (handle) => this.handles.get(handle),
-    getPtyAgents: (ptyId) => this.ptysById.get(ptyId),
-    getTerminalPaneKey: (handle) => this.getTerminalPaneKey(handle),
     getWorkspaceSession: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
     getGeneratedTitlesEnabled: () => this.store?.getSettings?.()?.tabAutoGenerateTitle === true,
-    getAgentStatusSnapshotForPane: (paneKey) =>
-      this.getAgentStatusSnapshotForPaneFn?.(paneKey) ??
-      this.getAgentStatusSnapshotFn?.().filter((row) => row.paneKey === paneKey) ??
-      [],
     getTrackedTitle: (ptyId) => this.getTrackedDisplayTitleForPty(ptyId)
   })
 

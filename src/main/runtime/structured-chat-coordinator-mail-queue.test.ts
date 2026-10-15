@@ -1,9 +1,10 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 // A busy structured chat holds the orchestration pointer as a card in its own queue, sent when the
-// turn ends, as it holds a message the person sends then; the queue does nothing else with it. End
-// to end on the coordinator-mail rig.
+// turn ends, as it holds a message the person sends then; a card whose mail the chat already took
+// is withdrawn instead. End to end on the coordinator-mail rig.
 
 import { describe, expect, it, vi } from 'vitest'
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import { structuredAgentSessionMessageSendMutation } from '../../shared/structured-agent-session-send-mutation'
 import { operationId, type FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
@@ -136,7 +137,7 @@ describe("a busy chat's orchestration pointer waits in its queue", () => {
     expect(await queuedCardTexts()).toEqual([])
   })
 
-  it("leaves the chat's own `check` as it is: the mail stays readable, and the card stays", async () => {
+  it("withdraws the card once the chat's own `check` took its mail, when the turn ends", async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
     const endTurn = await runningUserTurn(chat)
@@ -147,8 +148,51 @@ describe("a busy chat's orchestration pointer waits in its queue", () => {
       count: 1,
       messages: [{ id: mail!.id }]
     })
-    expect(await queuedCardTexts()).toEqual([ptyPointer(`run:${runId}`)])
     await endTurn()
+    await vi.waitFor(async () => expect(await queuedCardTexts()).toEqual([]), WAIT)
+    await idleEdgesSettled()
+    expect(chat.turns).toHaveLength(1)
+  })
+
+  // Rule: mail is a message from another agent. Stop holds its card like any queued card; mail
+  // that arrives after the Stop is a new message and starts a turn.
+  it('holds a mail card behind Stop like any queued card, and starts a turn for later mail', async () => {
+    const chat = await openChat(COORDINATOR)
+    const { runId, taskId } = await coordinatorRunAndTask()
+    const second = await secondTask()
+    await runningUserTurn(chat)
+    await finishWorker(taskId)
+    await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(1), WAIT)
+    const cancelling = host.cancel(
+      { callerKey: 'test-surface' },
+      {
+        envelope: {
+          sessionId: COORDINATOR,
+          clientOperationId: operationId(),
+          expectedRuntimeFence: host.deps.store.getRecord(COORDINATOR)!.lease.runtimeFence,
+          payloadFingerprint: computeAgentSessionPayloadFingerprint({
+            method: 'agentSession.cancel',
+            sessionId: COORDINATOR,
+            fields: { turnId: 'turn-1' }
+          })
+        },
+        turnId: 'turn-1'
+      }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    chat.handlers.onNotification?.('turn/completed', {
+      turn: { id: 'turn-1', status: 'interrupted' }
+    })
+    await host.flushStreamedEvents(COORDINATOR)
+    expect(await cancelling).toMatchObject({ ok: true })
+    await idleEdgesSettled()
+    expect(chat.turns).toHaveLength(1)
+    expect(await queuedCardTexts()).toEqual([ptyPointer(`run:${runId}`)])
+
+    await finishWorker(second, { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+    expect(turnText(chat.turns[1]!)).toBe(ptyPointer(`run:${runId}`))
+    expect(await queuedCardTexts()).toEqual([ptyPointer(`run:${runId}`)])
   })
 
   // The queue once refused every send past twenty cards, so a busy coordinator's mail locked the
