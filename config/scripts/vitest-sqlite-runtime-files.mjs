@@ -265,6 +265,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/ssh/orcad-migration-cutover-coordinator.test.ts',
   'src/main/ssh/orcad-migration-delta-move.test.ts',
   'src/main/ssh/orcad-migration-delta-snapshot.test.ts',
+  'src/main/ssh/orcad-migration-repository-link.test.ts',
   'src/main/ssh/orcad-migration-snapshot-resume.test.ts',
   'src/main/ssh/orcad-migration-source-fence.test.ts',
   'src/main/ssh/orcad-migration-ssh-relay-source.test.ts',
