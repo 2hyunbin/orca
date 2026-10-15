@@ -18,12 +18,12 @@ import {
   accumulatorSessionIdentity,
   addPreviewContent,
   createAccumulator,
-  skipAccumulatorToTail,
   finalizeSession,
   sessionIdFromFileName,
   updateLatestLocation,
   updateTimeline
 } from './session-scanner-accumulator'
+import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
 import { countSubagentTranscripts } from './session-scanner-subagent-transcripts'
 import {
   asRecord,

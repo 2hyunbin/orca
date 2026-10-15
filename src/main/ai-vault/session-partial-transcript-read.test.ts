@@ -88,11 +88,10 @@ async function candidateFor(fixture: IncrementalAgentFixture): Promise<SessionFi
 describe.each([claudeFixture(), codexFixture()])('partial list read: $agent', (fixture) => {
   it('lists a large transcript from its ends without publishing, and re-reads whole on demand', async () => {
     const path = join(root, fixture.fileName)
-    const [lastAppend, ...firstAppends] = [...fixture.appendLines].reverse()
-    await writeFile(
-      path,
-      `${[...fixture.seedLines, ...Array(FILLER_LINES).fill(FILLER_LINE), ...firstAppends.reverse()].join('\n')}\n`
-    )
+    const firstAppends = fixture.appendLines.slice(0, -1)
+    const lastAppend = fixture.appendLines.at(-1)
+    const filler = Array<string>(FILLER_LINES).fill(FILLER_LINE)
+    await writeFile(path, `${[...fixture.seedLines, ...filler, ...firstAppends].join('\n')}\n`)
     const stats = createSessionParseStats()
     const whole = await parseAgentSessionFile(await candidateFor(fixture), process.platform)
     const partial = await parseAgentSessionFileCached(
@@ -131,7 +130,9 @@ describe.each([claudeFixture(), codexFixture()])('partial list read: $agent', (f
 
     // A caller that needs the whole file never gets the partial row.
     const exact = await parseAgentSessionFileCached(await candidateFor(fixture), process.platform)
-    expect(exact).toEqual(await parseAgentSessionFile(await candidateFor(fixture), process.platform))
+    expect(exact).toEqual(
+      await parseAgentSessionFile(await candidateFor(fixture), process.platform)
+    )
     expect(exact?.contentCoverage).toBeUndefined()
     expect(begins.map((start) => start.mode)).toEqual(['replace'])
   })

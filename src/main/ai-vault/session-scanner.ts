@@ -17,13 +17,11 @@ import { sessionCandidatesFromDiscoveries } from './session-scanner-candidates'
 import { ensureSessionParseCacheLoaded } from './session-parse-cache-persistence'
 import {
   createSessionParseStats,
-  parseAgentSessionFileCached,
   type SessionParseReadRequirement,
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import { recordSessionScanIssue } from './session-scan-issues'
-import { getSessionParseCacheEntry } from './session-parse-cache-store'
-import { describeSkippedTranscriptRecords } from './session-transcript-record-budget'
+import { parseSessionCandidate } from './session-scanner-candidate-parse'
 import { canStopParsingSessions } from './session-scan-cutoff'
 import { discoverInScopeCwdBucketFiles } from './session-scanner-scope-discovery'
 import {
@@ -36,10 +34,9 @@ import { cursorChatMetaRefusals, withCursorChatMetaScan } from './session-scanne
 import type {
   AiVaultScanOptions,
   SessionFileCandidate,
-  SessionFileDiscovery,
-  SessionParseResult
+  SessionFileDiscovery
 } from './session-scanner-types'
-import { clampPositiveInteger, errorMessage } from './session-scanner-values'
+import { clampPositiveInteger } from './session-scanner-values'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import { DEFAULT_AI_VAULT_SCAN_LIMIT } from '../../shared/ai-vault-session-depth'
 import { withDevinSessionsDbScan } from './session-scanner-devin-db'
@@ -282,78 +279,4 @@ async function parseSessionCandidates(args: {
   }
 
   return [...sessions.values()]
-}
-
-async function parseSessionCandidate(
-  candidate: SessionFileCandidate,
-  args: {
-    platform: NodeJS.Platform
-    executionHostId: ExecutionHostId
-    parseStats: SessionParseStats
-    requireRead?: SessionParseReadRequirement
-    antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
-    signal?: AbortSignal
-  }
-): Promise<SessionParseResult> {
-  const { platform, executionHostId, antigravityWorkspaceResolver } = args
-  try {
-    let session = await parseAgentSessionFileCached(
-      candidate,
-      platform,
-      args.parseStats,
-      args.requireRead,
-      args.signal
-    )
-    if (session && candidate.antigravityHistoryPath && antigravityWorkspaceResolver) {
-      session = await antigravityWorkspaceResolver.enrich(session, candidate.antigravityHistoryPath)
-    }
-    return {
-      session: session ? withSessionExecutionHost(session, executionHostId) : null,
-      issue: skippedRecordIssue(candidate, executionHostId)
-    }
-  } catch (err) {
-    return {
-      session: null,
-      issue: {
-        executionHostId,
-        agent: candidate.agent,
-        path: candidate.file.path,
-        message: errorMessage(err)
-      }
-    }
-  }
-}
-
-// The session still listed, but part of it did not: report the loss as a notice
-// so the panel does not count it as a skipped transcript file.
-function skippedRecordIssue(
-  candidate: SessionFileCandidate,
-  executionHostId: ExecutionHostId
-): AiVaultScanIssue | null {
-  const skipped = getSessionParseCacheEntry(candidate.file.path)?.resume?.skippedRecords
-  const message = skipped ? describeSkippedTranscriptRecords(skipped) : null
-  if (message === null) {
-    return null
-  }
-  return {
-    executionHostId,
-    agent: candidate.agent,
-    kind: 'notice',
-    path: candidate.file.path,
-    message
-  }
-}
-
-function withSessionExecutionHost(
-  session: AiVaultSession,
-  executionHostId: ExecutionHostId
-): AiVaultSession {
-  if (session.executionHostId === executionHostId) {
-    return session
-  }
-  return {
-    ...session,
-    executionHostId,
-    id: `${executionHostId}:${session.agent}:${session.sessionId}:${session.filePath}`
-  }
 }

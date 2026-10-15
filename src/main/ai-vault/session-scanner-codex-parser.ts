@@ -7,11 +7,11 @@ import {
   accumulatorSessionIdentity,
   cloneSessionAccumulator,
   createAccumulator,
-  skipAccumulatorToTail,
   finalizeSession,
   sessionIdFromFileName,
   updateTimeline
 } from './session-scanner-accumulator'
+import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
 import {
   consumeCodexCompletedMessage,
   consumeCodexLegacyEventMessage,
