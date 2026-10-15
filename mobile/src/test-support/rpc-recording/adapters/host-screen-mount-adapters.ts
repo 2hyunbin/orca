@@ -1,5 +1,6 @@
 import type { MountAdapter } from '../recording-scenario'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../../../src/shared/workspace-view/workspace-row-filters'
+import { DEFAULT_CARD_VIEW } from '../../../worktree/workspace-view-settings'
 import { hookMount, performHookAction } from '../hook-mount'
 import { observableModel, projectObservable } from '../observable-model'
 import type { operationModuleLoader } from '../operation-module-loader'
@@ -10,6 +11,7 @@ const INITIAL_VIEW_STATE = {
   groupMode: 'none',
   sortMode: 'recent',
   filters: NO_WORKSPACE_ROW_FILTERS,
+  ...DEFAULT_CARD_VIEW,
   collapsedGroups: [],
   workspaceStatuses: []
 }
@@ -27,8 +29,11 @@ export function hostScreenMountAdapters(
         typeof import('../../../host-screen/use-host-view-settings')
       >('mobile/src/host-screen/use-host-view-settings.ts').useHostViewSettings
       const state = observableModel(context, {
+        cardSettings: { compactWorktreeCards: false, newCardStyle: false },
+        cardView: DEFAULT_CARD_VIEW,
         clientRef: { current: context.client },
         collapsedGroups: new Set<string>(),
+        sharesOtherClientFilter: false,
         filters: NO_WORKSPACE_ROW_FILTERS,
         groupMode: 'none',
         sortMode: 'recent',
@@ -66,6 +71,8 @@ export function hostScreenMountAdapters(
             groupMode: state.groupMode,
             sortMode: state.sortMode,
             filters: state.filters,
+            cardView: state.cardView,
+            cardSettings: state.cardSettings,
             collapsed: state.collapsedGroups,
             statuses: state.workspaceStatuses
           }),

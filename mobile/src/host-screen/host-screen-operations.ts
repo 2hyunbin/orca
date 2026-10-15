@@ -1,6 +1,7 @@
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 import {
+  hostCardSettingsSchema,
   hostPlatformSchema,
   hostRepoCatalogSchema,
   hostScreenUnreadReplySchema,
@@ -14,7 +15,7 @@ import {
 //
 // A skip's reader runs only on a reply the policy already admitted, so an unreadable one throws
 // rather than skipping. Both readers that project a list are inside the metadata refresh's own
-// try/catch, which already treats a failed refresh as "retry on the next one"; the four writes read
+// try/catch, which already treats a failed refresh as "retry on the next one"; the five writes read
 // no reply body at all. host-screen-reply-schema.ts says which members each screen actually reads.
 
 export const hostRepoCatalogRead = bindDeferredRpcOperation(
@@ -72,6 +73,28 @@ export const hostViewSettingsWrite = bindDeferredRpcOperation(
     acceptance: 'success-result-or-skip',
     barrier: 'after-caller-barrier',
     read: rpcResultVariant('ui-view-settings-written', hostScreenUnreadReplySchema)
+  })
+)
+
+/** Card layout lives in settings, not UI state; read with the view settings. */
+export const hostCardSettingsRead = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'settings.host-card-settings-or-skip',
+    method: 'settings.get',
+    acceptance: 'success-result-or-skip',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('card-settings', hostCardSettingsSchema)
+  })
+)
+
+/** Card layout's settings half. Best-effort like the ui.set it pairs with. */
+export const hostCardLayoutWrite = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'settings.update-card-layout-or-skip',
+    method: 'settings.update',
+    acceptance: 'success-result-or-skip',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant('card-layout-written', hostScreenUnreadReplySchema)
   })
 )
 

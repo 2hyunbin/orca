@@ -116,13 +116,21 @@ export function useHostScreenController({
 
   const displayWorktrees = useHostDisplayWorktrees(connState, state, hostId)
   const projectCatalog = useMemo(
-    () =>
-      buildProjectSectionCatalog(
+    () => ({
+      ...buildProjectSectionCatalog(
         state.servedProjectSections,
         state.desktopRepos,
         state.filters.visibleHostIds
       ),
-    [state.servedProjectSections, state.desktopRepos, state.filters.visibleHostIds]
+      // Why the shared value: a Project order picked here applies before the desktop republishes.
+      projectOrderBy: state.cardView.projectOrderBy
+    }),
+    [
+      state.servedProjectSections,
+      state.desktopRepos,
+      state.filters.visibleHostIds,
+      state.cardView.projectOrderBy
+    ]
   )
   const sectionsResult = useWorkspaceSections({
     displayWorktrees,

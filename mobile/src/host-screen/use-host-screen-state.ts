@@ -7,16 +7,21 @@ import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../worktree/mobile-workspace-statuses'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
-import type {
-  MobileGroupMode,
-  MobileSortMode,
-  MobileViewState
+import {
+  DEFAULT_CARD_VIEW,
+  type MobileCardView,
+  type MobileGroupMode,
+  type MobileSortMode,
+  type MobileViewState
 } from '../worktree/workspace-view-settings'
+import type { HostCardSettings } from './host-screen-reply-schema'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
+
+const NO_CARD_SETTINGS: HostCardSettings = { compactWorktreeCards: false, newCardStyle: false }
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
   const [initialCache] = useState(() =>
@@ -58,6 +63,10 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [sortMode, setSortMode] = useState<MobileSortMode>('recent')
   const [filters, setFilters] = useState<FilterState>(NO_WORKSPACE_ROW_FILTERS)
   const [groupMode, setGroupMode] = useState<MobileGroupMode>('repo')
+  const [cardView, setCardView] = useState<MobileCardView>(DEFAULT_CARD_VIEW)
+  const [cardSettings, setCardSettings] = useState<HostCardSettings>(NO_CARD_SETTINGS)
+  // Whether this host shares "Hide other-client workspaces" with its phone; older hosts keep it.
+  const [sharesOtherClientFilter, setSharesOtherClientFilter] = useState(false)
   const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
     DEFAULT_MOBILE_WORKSPACE_STATUSES
   )
@@ -99,6 +108,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     groupMode: 'repo',
     sortMode: 'recent',
     filters: NO_WORKSPACE_ROW_FILTERS,
+    ...DEFAULT_CARD_VIEW,
     collapsedGroups: [],
     workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
   })
@@ -107,6 +117,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     actionTarget,
     catalogError,
     clientRef,
+    cardSettings,
+    cardView,
     collapsedGroups,
     confirmDelete,
     confirmRemoveHost,
@@ -136,6 +148,8 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     serverNotice,
     serverWorkspaces,
     setActionTarget,
+    setCardSettings,
+    setCardView,
     setCatalogError,
     setCollapsedGroups,
     setConfirmDelete,
@@ -159,6 +173,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setSearch,
     setServerNotice,
     setServerWorkspaces,
+    setSharesOtherClientFilter,
     setShowFilterModal,
     setShowPinnedInGroups,
     setShowGroupPicker,
@@ -169,6 +184,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setWorkspaceStatuses,
     setWorktrees,
     setWorktreesLoaded,
+    sharesOtherClientFilter,
     showFilterModal,
     showPinnedInGroups,
     showGroupPicker,

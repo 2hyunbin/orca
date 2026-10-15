@@ -201,6 +201,24 @@ export const hostViewSettingsSchema = z
   })
   .transform((reply) => reply.ui)
 
+/** The two settings behind Card layout and which card options the desktop shows; absent is off. */
+export const hostCardSettingsSchema = z
+  .looseObject({
+    settings: z.looseObject({
+      compactWorktreeCards: salvagedOptional('compactWorktreeCards', z.boolean()),
+      experimentalNewWorktreeCardStyle: salvagedOptional(
+        'experimentalNewWorktreeCardStyle',
+        z.boolean()
+      )
+    })
+  })
+  .transform(({ settings }) => ({
+    compactWorktreeCards: settings.compactWorktreeCards === true,
+    newCardStyle: settings.experimentalNewWorktreeCardStyle === true
+  }))
+
+export type HostCardSettings = z.output<typeof hostCardSettingsSchema>
+
 /**
  * The four host-list writes whose reply body no call site reads.
  *

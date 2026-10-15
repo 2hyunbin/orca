@@ -12,7 +12,11 @@ import {
 import { normalizeVisibleExecutionHostIds } from '../../../src/shared/execution-host'
 import type { PersistedUIState } from '../../../src/shared/persisted-ui-state-types'
 import type { FilterState } from './workspace-list-types'
-import type { AgentActivityDisplayMode, ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
+import type {
+  AgentActivityDisplayMode,
+  ProjectOrderBy,
+  WorktreeCardProperty
+} from '../../../src/shared/ui-chrome-types'
 import { DEFAULT_WORKTREE_CARD_PROPERTIES } from '../../../src/shared/worktree/card-properties'
 
 export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
@@ -31,7 +35,7 @@ export type WorkspaceViewSettings = {
   groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
   sortBy?: MobileSortMode
   projectOrderBy?: ProjectOrderBy
-  worktreeCardProperties?: string[]
+  worktreeCardProperties?: WorktreeCardProperty[]
   _worktreeCardModeDefaulted?: boolean
   agentActivityDisplayMode?: AgentActivityDisplayMode
   collapsedGroups?: string[]
@@ -103,6 +107,8 @@ export function buildWorkspaceViewSettingsUpdate(
   }
   if ('worktreeCardProperties' in patch) {
     update.worktreeCardProperties = [...next.worktreeCardProperties]
+    // As the desktop's own edit: a hand-picked set is no longer a Card layout preset.
+    update._worktreeCardModeDefaulted = false
   }
   if ('agentActivityDisplayMode' in patch) {
     update.agentActivityDisplayMode = next.agentActivityDisplayMode
@@ -143,18 +149,20 @@ export type MobileViewState = {
   sortMode: MobileSortMode
   filters: FilterState
   projectOrderBy: ProjectOrderBy
-  /** Strings: a property a newer desktop adds is carried back unchanged. */
-  worktreeCardProperties: readonly string[]
+  /** May hold a property a newer desktop added; it is carried back unchanged. */
+  worktreeCardProperties: readonly WorktreeCardProperty[]
   agentActivityDisplayMode: AgentActivityDisplayMode
   collapsedGroups: string[]
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
 }
 
-/** The desktop's defaults, until its own values arrive. */
-export const DEFAULT_CARD_VIEW: Pick<
+export type MobileCardView = Pick<
   MobileViewState,
   'projectOrderBy' | 'worktreeCardProperties' | 'agentActivityDisplayMode'
-> = {
+>
+
+/** The desktop's defaults, until its own values arrive. */
+export const DEFAULT_CARD_VIEW: MobileCardView = {
   projectOrderBy: 'manual',
   worktreeCardProperties: DEFAULT_WORKTREE_CARD_PROPERTIES,
   agentActivityDisplayMode: 'compact'

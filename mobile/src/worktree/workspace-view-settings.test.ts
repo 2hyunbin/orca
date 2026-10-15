@@ -8,6 +8,7 @@ import {
   groupModeFromDesktop,
   groupModeToDesktop,
   sortModeFromDesktop,
+  DEFAULT_CARD_VIEW,
   type MobileViewState
 } from './workspace-view-settings'
 
@@ -15,6 +16,7 @@ const base: MobileViewState = {
   groupMode: 'repo',
   sortMode: 'recent',
   filters: { ...NO_WORKSPACE_ROW_FILTERS, alwaysShowDefaultBranchWorkspace: false },
+  ...DEFAULT_CARD_VIEW,
   collapsedGroups: [],
   workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
 }
@@ -164,5 +166,29 @@ describe('changedFilters', () => {
       filterRepoIds: []
     })
     expect(changedFilters(NO_WORKSPACE_ROW_FILTERS, { ...NO_WORKSPACE_ROW_FILTERS })).toEqual({})
+  })
+})
+
+describe('card view settings', () => {
+  it('reads the shared card values and writes a hand-picked property set as no longer a preset', () => {
+    const next = applyDesktopViewSettings(base, {
+      projectOrderBy: 'recent',
+      worktreeCardProperties: ['pr'],
+      agentActivityDisplayMode: 'full'
+    })
+    expect([
+      next.projectOrderBy,
+      next.worktreeCardProperties,
+      next.agentActivityDisplayMode
+    ]).toEqual(['recent', ['pr'], 'full'])
+    expect(
+      buildWorkspaceViewSettingsUpdate(
+        { worktreeCardProperties: ['pr', 'host'] },
+        {
+          ...next,
+          worktreeCardProperties: ['pr', 'host']
+        }
+      )
+    ).toEqual({ worktreeCardProperties: ['pr', 'host'], _worktreeCardModeDefaulted: false })
   })
 })

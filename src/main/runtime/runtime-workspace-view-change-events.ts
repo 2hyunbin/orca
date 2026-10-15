@@ -9,6 +9,9 @@ const WORKSPACE_VIEW_UI_FIELDS: readonly (keyof PersistedUIState)[] = [
   ...Object.values(WORKSPACE_ROW_FILTER_UI_FIELDS),
   'groupBy',
   'sortBy',
+  'projectOrderBy',
+  'worktreeCardProperties',
+  'agentActivityDisplayMode',
   'collapsedGroups',
   'workspaceStatuses'
 ]

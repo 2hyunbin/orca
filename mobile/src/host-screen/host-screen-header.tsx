@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from 'react-native'
+import { workspaceGroupChipLabel } from '../worktree/workspace-list-picker-options'
 import {
   ChevronLeft,
   Filter,
@@ -183,13 +184,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             >
               <Layers size={14} color={colors.textSecondary} />
               <Text style={styles.sortLabel} numberOfLines={1}>
-                {state.groupMode === 'none'
-                  ? 'Group'
-                  : state.groupMode === 'workspaceStatus'
-                    ? 'Status'
-                    : state.groupMode === 'repo'
-                      ? 'Repo'
-                      : 'PR'}
+                {workspaceGroupChipLabel(state.groupMode)}
               </Text>
             </Pressable>
           </View>
@@ -319,13 +314,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           >
             <Layers size={14} color={colors.textSecondary} />
             <Text style={styles.sortLabel} numberOfLines={1}>
-              {state.groupMode === 'none'
-                ? 'Group'
-                : state.groupMode === 'workspaceStatus'
-                  ? 'Status'
-                  : state.groupMode === 'repo'
-                    ? 'Repo'
-                    : 'PR'}
+              {workspaceGroupChipLabel(state.groupMode)}
             </Text>
           </Pressable>
 

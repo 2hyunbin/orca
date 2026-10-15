@@ -15,7 +15,18 @@ import {
 } from '../worktree/workspace-view-settings'
 import type { Worktree } from '../worktree/workspace-list-sections'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
-import { hostViewSettingsRead, hostViewSettingsWrite } from './host-screen-operations'
+import {
+  hostCardLayoutWrite,
+  hostCardSettingsRead,
+  hostViewSettingsRead,
+  hostViewSettingsWrite
+} from './host-screen-operations'
+import type {
+  AgentActivityDisplayMode,
+  ProjectOrderBy,
+  WorktreeCardProperty
+} from '../../../src/shared/ui-chrome-types'
+import { getWorktreeCardModeUpdates } from '../../../src/shared/worktree/card-properties'
 import type { HostScreenState } from './use-host-screen-state'
 import type { FilterState } from '../worktree/workspace-list-types'
 
@@ -31,8 +42,12 @@ export function useHostViewSettings(args: {
 }) {
   const { client, connState, hostId, state } = args
   const {
+    cardView,
     clientRef,
     collapsedGroups,
+    setCardSettings,
+    setCardView,
+    setSharesOtherClientFilter,
     filters,
     groupMode,
     setCollapsedGroups,
@@ -52,10 +67,11 @@ export function useHostViewSettings(args: {
       groupMode,
       sortMode,
       filters,
+      ...cardView,
       collapsedGroups: [...collapsedGroups],
       workspaceStatuses
     }
-  }, [groupMode, sortMode, filters, collapsedGroups, workspaceStatuses])
+  }, [groupMode, sortMode, filters, cardView, collapsedGroups, workspaceStatuses])
 
   // Apply a MobileViewState onto the individual states and the snapshot ref in one shot.
   const applyViewState = useCallback((next: MobileViewState) => {
@@ -65,11 +81,23 @@ export function useHostViewSettings(args: {
     setWorkspaceStatuses(next.workspaceStatuses)
     setCollapsedGroups(new Set(next.collapsedGroups))
     setFilters(next.filters)
+    setCardView((current) =>
+      current.projectOrderBy === next.projectOrderBy &&
+      current.worktreeCardProperties === next.worktreeCardProperties &&
+      current.agentActivityDisplayMode === next.agentActivityDisplayMode
+        ? current
+        : {
+            projectOrderBy: next.projectOrderBy,
+            worktreeCardProperties: next.worktreeCardProperties,
+            agentActivityDisplayMode: next.agentActivityDisplayMode
+          }
+    )
   }, [])
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
+  // `extra` rides along unchanged, for fields the local view does not hold.
   const persistViewSettings = useCallback(
-    (patch: MobileViewPatch) => {
+    (patch: MobileViewPatch, extra: WorkspaceViewSettings = {}) => {
       localEditsRef.current += 1
       const previous = viewStateRef.current
       const next: MobileViewState = {
@@ -84,7 +112,10 @@ export function useHostViewSettings(args: {
       // Send only the touched fields: the host merges partial updates, so a stale
       // mirror can no longer revert sibling settings another client just changed
       // (STA-5781; supersedes the #8873 whole-payload special case).
-      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next)
+      const payload: WorkspaceViewSettings = {
+        ...buildWorkspaceViewSettingsUpdate(patch, next),
+        ...extra
+      }
       if (Object.keys(payload).length === 0) {
         return
       }
@@ -122,7 +153,14 @@ export function useHostViewSettings(args: {
       if (!ui) {
         return
       }
+      setSharesOtherClientFilter(ui.hideWorkspacesFromOtherDevices !== undefined)
       applyViewState(applyDesktopViewSettings(viewStateRef.current, ui))
+      // Card layout is a setting, not UI state; read after, so a refusal leaves the view applied.
+      const cardReply = await hostCardSettingsRead.request(requestClient)
+      const cardSettings = hostCardSettingsRead.interpret(cardReply)
+      if (clientRef.current === requestClient && cardSettings.accepted) {
+        setCardSettings(cardSettings.value)
+      }
     } catch {
       // Transient transport failure; retry on the next focus/connect.
     }
@@ -177,6 +215,44 @@ export function useHostViewSettings(args: {
     [persistViewSettings]
   )
 
+  const setProjectOrderBy = useCallback(
+    (value: ProjectOrderBy) => persistViewSettings({ projectOrderBy: value }),
+    [persistViewSettings]
+  )
+
+  const setAgentActivityDisplayMode = useCallback(
+    (value: AgentActivityDisplayMode) => persistViewSettings({ agentActivityDisplayMode: value }),
+    [persistViewSettings]
+  )
+
+  const toggleCardProperty = useCallback(
+    (property: WorktreeCardProperty) => {
+      const current = viewStateRef.current.worktreeCardProperties
+      persistViewSettings({
+        worktreeCardProperties: current.includes(property)
+          ? current.filter((candidate) => candidate !== property)
+          : [...current, property]
+      })
+    },
+    [persistViewSettings]
+  )
+
+  // Why both halves: a layout is a preset, so the desktop also resets the shown properties.
+  const setCardLayout = useCallback(
+    (layout: 'detailed' | 'compact') => {
+      const updates = getWorktreeCardModeUpdates(layout === 'compact' ? 'Compact' : 'Default')
+      setCardSettings((current) => ({ ...current, ...updates.settings }))
+      persistViewSettings(
+        { worktreeCardProperties: updates.ui.worktreeCardProperties },
+        { _worktreeCardModeDefaulted: true }
+      )
+      if (client) {
+        void hostCardLayoutWrite.request(client, updates.settings).catch(() => {})
+      }
+    },
+    [client, persistViewSettings]
+  )
+
   const toggleCollapsed = useCallback(
     (key: string) => {
       const next = new Set(viewStateRef.current.collapsedGroups)
@@ -194,6 +270,10 @@ export function useHostViewSettings(args: {
 
   return {
     clearFilters,
+    setAgentActivityDisplayMode,
+    setCardLayout,
+    setProjectOrderBy,
+    toggleCardProperty,
     handleGroupChange,
     handleSortChange,
     selectedSortLabel,

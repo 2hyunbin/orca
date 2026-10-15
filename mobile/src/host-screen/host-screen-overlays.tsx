@@ -1,6 +1,6 @@
 import { openExternalLink } from '../platform/external-link'
 import { Pressable, Text, View } from 'react-native'
-import { Check, Moon } from 'lucide-react-native'
+import { Moon } from 'lucide-react-native'
 import { buildWorktreeNavigationActions } from '../agent-history/worktree-navigation-actions'
 import { workspaceRouteHref } from '../navigation/workspace-execution-host'
 import { useWorkspaceServer } from '../transport/workspace-server'
@@ -9,7 +9,6 @@ import { BottomDrawer } from '../components/BottomDrawer'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { PickerModal } from '../components/PickerModal'
-import { colors } from '../theme/mobile-theme'
 import { hostNewWorktreeSessionRoute } from '../host-route-action-state'
 import {
   WORKSPACE_GROUP_OPTIONS as GROUP_OPTIONS,
@@ -18,6 +17,7 @@ import {
 } from '../worktree/workspace-list-picker-options'
 import { isWorktreePinned } from '../worktree/workspace-list-sections'
 import { hostScreenStyles as styles } from './host-screen-styles'
+import { WorkspaceOptionsSheet } from './workspace-options-sheet'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostScreenOverlays({ controller }: { controller: HostScreenController }) {
@@ -64,65 +64,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         onClose={() => state.setShowGroupPicker(false)}
       />
 
-      <BottomDrawer visible={state.showFilterModal} onClose={() => state.setShowFilterModal(false)}>
-        <View style={styles.filterModalHeader}>
-          <View style={styles.filterModalHeading}>
-            <Text style={styles.filterModalTitle}>Filter</Text>
-            <Text style={styles.filterModalSubtitle}>{WORKSPACE_VIEW_SHARED_NOTE}</Text>
-          </View>
-          {controller.activeFilterCount > 0 && (
-            <Pressable onPress={settings.clearFilters}>
-              <Text style={styles.clearFiltersText}>Clear filters</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <Text style={styles.filterSectionLabel}>Workspaces</Text>
-        <View style={styles.filterGroup}>
-          <Pressable
-            style={styles.filterRow}
-            onPress={() => settings.toggleFilter('hideSleepingWorkspaces')}
-          >
-            <Text style={styles.filterRowText}>Hide sleeping</Text>
-            {state.filters.hideSleepingWorkspaces && <Check size={14} color={colors.textPrimary} />}
-          </Pressable>
-          <View style={styles.filterSeparator} />
-          <Pressable
-            style={styles.filterRow}
-            onPress={() => settings.toggleFilter('hideDefaultBranchWorkspace')}
-          >
-            <Text style={styles.filterRowText}>Hide default branch</Text>
-            {state.filters.hideDefaultBranchWorkspace && (
-              <Check size={14} color={colors.textPrimary} />
-            )}
-          </Pressable>
-        </View>
-
-        {controller.sectionsResult.uniqueRepos.length > 1 && (
-          <>
-            <Text style={styles.filterSectionLabel}>Repositories</Text>
-            <View style={styles.filterGroup}>
-              {controller.sectionsResult.uniqueRepos.map((repo, i) => (
-                <View key={repo.key}>
-                  {i > 0 && <View style={styles.filterSeparator} />}
-                  <Pressable
-                    style={styles.filterRow}
-                    onPress={() => settings.toggleRepoFilter(repo.id)}
-                  >
-                    <View style={[styles.filterRepoDot, { backgroundColor: repo.color }]} />
-                    <Text style={styles.filterRowText} numberOfLines={1}>
-                      {repo.name}
-                    </Text>
-                    {state.filters.filterRepoIds.includes(repo.id) && (
-                      <Check size={14} color={colors.textPrimary} />
-                    )}
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-      </BottomDrawer>
+      <WorkspaceOptionsSheet controller={controller} />
 
       {/* Worktree long-press action sheet (inline confirm to avoid double-Modal lag) */}
       <BottomDrawer
