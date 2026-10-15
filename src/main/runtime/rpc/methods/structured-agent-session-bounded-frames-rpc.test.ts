@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import type { AgentSessionSubscribeInput } from '../../../native-chat/agent-session-wire/structured-agent-session-subscribers'
 import { AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
+import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from '../../../ipc/desktop-renderer-runtime-capabilities'
 import {
   call,
   clearStructuredHostStub,
@@ -41,4 +42,21 @@ it.each([
   await call('agentSession.subscribe', { sessionId: SESSION }, client)
   expect(input?.boundedFrames === true).toBe(bounded)
   expect(input?.snapshotCatchUp).toBe(snapshot)
+})
+
+it('allows the local desktop renderer to replace a missed gap with a snapshot', async () => {
+  let input: AgentSessionSubscribeInput | undefined
+  hostCalls.subscribe.mockImplementation((opened: AgentSessionSubscribeInput) => {
+    input = opened
+    opened.emit({ type: 'end' })
+    return () => {}
+  })
+  const cursor = { epoch: 'epoch-a', sequence: 10 }
+  await call('agentSession.subscribe', { sessionId: SESSION, cursor }, {
+    clientId: 'desktop-renderer',
+    clientKind: 'runtime',
+    clientCapabilities: [...DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES]
+  })
+  expect(input?.cursor).toEqual(cursor)
+  expect(input?.snapshotCatchUp).toBe(true)
 })
