@@ -56,6 +56,7 @@ import {
 } from '../../runtime/runtime-terminal-stream'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
+import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -2317,7 +2318,8 @@ export function createRemoteRuntimePtyTransport(
         onSnapshot: (data, meta) => {
           // Why: an empty snapshot can still carry a pending mid-escape tail that must replay so the next live chunk completes it.
           if ((data || meta?.pendingEscapeTailAnsi) && isCurrentSubscription()) {
-            subscriptionSnapshotHadContent = true
+            // Why printable: a host model holding only mode/cursor bytes paints a cursor-only pane.
+            subscriptionSnapshotHadContent ||= restoredSnapshotPaintsPrintableContent({ data })
             if (subscribedPtyId && bufferPtyShutdownReplayData(subscribedPtyId, data)) {
               return
             }
@@ -2378,9 +2380,9 @@ export function createRemoteRuntimePtyTransport(
           markRecoveryHealthy()
           emitRecoveryState()
           storedCallbacks.onConnect?.()
-          // Why: a subscribe that replayed no image (empty push, or one over the client's replay
-          // limit) leaves an idle or exited pane blank, so pull the retained buffer instead of
-          // waiting for bytes it may never send (#18464, #21208).
+          // Why: a subscribe that replayed no visible image (empty, escape-only, or over the client's
+          // replay limit) leaves an idle or exited pane blank, so pull the retained buffer instead
+          // of waiting for bytes it may never send (#18464, #21208).
           if (
             !subscriptionSnapshotHadContent &&
             (expectedRecoveryEpoch !== undefined || subscribedHandle !== spawnedHandle)

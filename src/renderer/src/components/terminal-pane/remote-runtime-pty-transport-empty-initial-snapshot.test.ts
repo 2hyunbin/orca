@@ -121,6 +121,21 @@ describe('remote pane whose first attach replays no image', () => {
     }
   )
 
+  it('pulls the retained buffer when the initial image holds only modes and a cursor', async () => {
+    const { transport, streamId, onReplayData, onStreamRecovered, onConnect } =
+      await attachTransport('attach')
+
+    // A host model seeded only by bytes since attach: bracketed paste, cursor home, cursor shown.
+    emitSnapshot(streamId, '\x1b[?2004h\x1b[H\x1b[?25h')
+    subscribed(streamId)
+
+    await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
+    // Still replayed so its modes apply; the pull then supplies the screen.
+    expect(onReplayData).toHaveBeenCalledTimes(1)
+    expect(onStreamRecovered).toHaveBeenCalledTimes(1)
+    transport.destroy?.()
+  })
+
   it('pulls the retained buffer when the initial snapshot exceeded the replay limit', async () => {
     const { transport, streamId, onReplayData, onStreamRecovered, onConnect, onError } =
       await attachTransport('attach')
