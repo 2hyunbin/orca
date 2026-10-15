@@ -9,7 +9,8 @@ export function reviewUnitSelection(records) {
       timing.sourceSha,
       timing.runId,
       timing.runAttempt,
-      timing.nodeVersion
+      timing.nodeVersion,
+      timing.bunVersion
     ])
     if (!groups.has(key)) {
       groups.set(key, [])
@@ -62,6 +63,7 @@ export function reviewUnitSelection(records) {
       runId: first.runId,
       runAttempt: first.runAttempt,
       nodeVersion: first.nodeVersion,
+      ...(first.bunVersion ? { bunVersion: first.bunVersion } : {}),
       mode: plan.mode,
       completeFullRun: complete && plan.mode === 'shadow',
       selectionEvaluated: complete && plan.mode === 'shadow' && plan.selectionAvailable === true,
@@ -75,11 +77,7 @@ export function reviewUnitSelection(records) {
   })
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const directory = process.argv[2]
-  if (!directory) {
-    throw new Error('Usage: ci-unit-selection-review.mjs ARTIFACT_DIRECTORY')
-  }
+export function readUnitSelectionRecords(directory) {
   const records = globSync('**/unit-timings.json', { cwd: directory }).map((file) => {
     const timing = JSON.parse(readFileSync(join(directory, file), 'utf8'))
     const plan = JSON.parse(
@@ -93,6 +91,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (!records.length) {
     throw new Error('No unit selection evidence')
   }
+  return records
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const directory = process.argv[2]
+  if (!directory) {
+    throw new Error('Usage: ci-unit-selection-review.mjs ARTIFACT_DIRECTORY')
+  }
+  const records = readUnitSelectionRecords(directory)
   const review = reviewUnitSelection(records)
   writeFileSync(join(directory, 'selection-review.json'), `${JSON.stringify(review, null, 2)}\n`)
   const summary = [
@@ -100,7 +107,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     '',
     ...review.map(
       (row) =>
-        `- Node ${row.nodeVersion}: ${row.completeFullRun ? 'complete full reference' : 'incomplete or selected evidence'}; ${row.selectionEvaluated ? 'selection evaluated' : 'not selection-validation evidence'}; ${row.candidateFiles}/${row.files} candidate files; ${row.missedFailures.length} failures outside selection; ${(row.potentiallyOmittedWorkerMs / 60_000).toFixed(1)} potentially omitted worker-minutes. ${row.reason ?? ''}`
+        `- Node ${row.nodeVersion}${row.bunVersion ? ` / Bun ${row.bunVersion}` : ''}: ${row.completeFullRun ? 'complete full reference' : 'incomplete or selected evidence'}; ${row.selectionEvaluated ? 'selection evaluated' : 'not selection-validation evidence'}; ${row.candidateFiles}/${row.files} candidate files; ${row.missedFailures.length} failures outside selection; ${(row.potentiallyOmittedWorkerMs / 60_000).toFixed(1)} potentially omitted worker-minutes. ${row.reason ?? ''}`
     ),
     '',
     'Worker time overlaps across processes; it is not runner time. Promote only after representative complete references show no missed failures.',

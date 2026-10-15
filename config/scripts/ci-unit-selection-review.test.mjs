@@ -69,3 +69,29 @@ it('requires all ten full assignments exactly once for complete evidence', () =>
   expect(reviewUnitSelection(records.slice(0, -1))[0].completeFullRun).toBe(false)
   expect(reviewUnitSelection([...records.slice(0, -1), records[0]])[0].completeFullRun).toBe(false)
 })
+
+it('keeps Bun versions separate so partial runtime runs cannot form a complete reference', () => {
+  const rows = [record(1, 'a', 'passed'), record(2, 'b', 'passed')]
+  for (const versions of [
+    ['1.2.1', '1.3.0'],
+    ['1.2.1', undefined]
+  ]) {
+    const review = reviewUnitSelection(
+      rows.map((row, index) => ({
+        ...row,
+        timing: { ...row.timing, bunVersion: versions[index] }
+      }))
+    )
+    expect(review).toHaveLength(2)
+    expect(review.every((row) => !row.completeFullRun && !row.selectionEvaluated)).toBe(true)
+    expect(review[0].bunVersion).toBe('1.2.1')
+  }
+  expect(
+    reviewUnitSelection(
+      rows.map((row) => ({
+        ...row,
+        timing: { ...row.timing, bunVersion: '1.3.0' }
+      }))
+    )[0]
+  ).toMatchObject({ completeFullRun: true, bunVersion: '1.3.0' })
+})
