@@ -5,11 +5,17 @@ import {
   sendPaneCommandToLayoutOwner
 } from './terminal-pane-layout-owner-commands'
 
-const mocks = vi.hoisted(() => ({
-  callRuntimeRpc: vi.fn(),
-  hostId: 'local',
-  layoutOwnerIsMain: false
-}))
+const mocks = vi.hoisted(
+  (): {
+    callRuntimeRpc: ReturnType<typeof vi.fn>
+    ownerEnvironmentId: string | null
+    layoutOwnerIsMain: boolean
+  } => ({
+    callRuntimeRpc: vi.fn(),
+    ownerEnvironmentId: null,
+    layoutOwnerIsMain: false
+  })
+)
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
@@ -20,7 +26,7 @@ vi.mock('../../../../shared/layout-owner-switch', () => ({
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExecutionHostIdForWorktree: () => mocks.hostId
+  getExplicitRuntimeEnvironmentIdForWorktree: () => mocks.ownerEnvironmentId
 }))
 
 const SPLIT = {
@@ -37,7 +43,7 @@ function handlers() {
 describe('sendPaneCommandToLayoutOwner', () => {
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
-    mocks.hostId = 'local'
+    mocks.ownerEnvironmentId = null
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
@@ -89,7 +95,7 @@ describe('sendPaneCommandToLayoutOwner', () => {
   })
 
   it('leaves a paired server’s workspace to today’s path', () => {
-    mocks.hostId = 'runtime:env-1'
+    mocks.ownerEnvironmentId = 'env-1'
 
     expect(sendPaneCommandToLayoutOwner('worktree-1', SPLIT, handlers())).toBe(false)
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
@@ -99,7 +105,7 @@ describe('sendPaneCommandToLayoutOwner', () => {
 describe('equalizeTerminalPanes', () => {
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
-    mocks.hostId = 'local'
+    mocks.ownerEnvironmentId = null
     mocks.layoutOwnerIsMain = false
   })
 

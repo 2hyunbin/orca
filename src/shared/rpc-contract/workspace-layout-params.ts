@@ -24,7 +24,7 @@ const SplitPaneCommand = z.object({
   direction: z.enum(['horizontal', 'vertical'])
 })
 
-/** Main adds what makes it the user's close (the pane's incarnation); the window cannot send it. */
+/** Main marks a close as the user's; the window cannot send that mark. */
 const ClosePaneCommand = z.object({ type: z.literal('closePane'), ...OnPane })
 
 /** A title is trimmed and non-empty; null clears it. */

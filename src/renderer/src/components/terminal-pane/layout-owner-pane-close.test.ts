@@ -1,20 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { preparePendingSplitClose } from './pending-split-close-test-fixture'
+import type { sendPaneCommandToLayoutOwner } from './terminal-pane-layout-owner-commands'
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: false,
   commitTerminalSurfaceClose: vi.fn(),
-  sendPaneCommandToLayoutOwner: vi.fn<
-    (
-      worktreeId: string,
-      command: unknown,
-      handlers: {
-        apply: (result: object) => void
-        asToday: () => void
-        refused?: (code: string) => void
-      }
-    ) => boolean
-  >()
+  sendPaneCommandToLayoutOwner: vi.fn<typeof sendPaneCommandToLayoutOwner>()
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({

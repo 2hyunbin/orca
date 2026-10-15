@@ -95,7 +95,7 @@ describe('layout.apply', () => {
 
     expect(
       apply?.params?.parse({
-        command: { type: 'closePane', ...pane, userPaneClose: { incarnationId: 'forged' } }
+        command: { type: 'closePane', ...pane, userPaneClose: true }
       })
     ).toEqual({ command: { type: 'closePane', ...pane } })
     expect(

@@ -84,7 +84,7 @@ describe('layout.apply closePane against the legacy pane close', () => {
               workspace: worktreeId,
               tabId: tab.id,
               leafId,
-              userPaneClose: {}
+              userPaneClose: true
             })
             const label = `${tab.id}:${leafId}`
             if (legacy.resolution !== 'pane') {
@@ -103,7 +103,9 @@ describe('layout.apply closePane against the legacy pane close', () => {
     }
   )
 
-  it('refuses a pane restarted since main read the close', () => {
+  // The legacy persisted close refuses a pane restarted after the request, but the window has
+  // already removed it and saves its layout without it; main closes it outright.
+  it('closes a pane whose terminal restarted after the window asked', () => {
     const window = new WindowSession(getDefaultWorkspaceSession())
     window.addTab(WORKTREE, TAB, LEAF_A)
     window.setLayout(
@@ -114,23 +116,21 @@ describe('layout.apply closePane against the legacy pane close', () => {
         first: { type: 'leaf', leafId: LEAF_A },
         second: { type: 'leaf', leafId: LEAF_B }
       },
-      { [LEAF_A]: 'pty-a', [LEAF_B]: 'pty-b' }
+      { [LEAF_A]: 'pty-a', [LEAF_B]: 'pty-b-restarted' }
     )
     window.session.terminalPtyIncarnationsByPaneKey = { [`${TAB}:${LEAF_B}`]: 'incarnation-2' }
-    const close = { type: 'closePane', workspace: WORKTREE, tabId: TAB, leafId: LEAF_B } as const
 
-    expect(
-      applyCommandToSession('local', window.snapshot(), {
-        ...close,
-        userPaneClose: { incarnationId: 'incarnation-1' }
-      }).value
-    ).toEqual({ ok: false, code: 'pane_restarted' })
-    expect(
-      applyCommandToSession('local', window.snapshot(), {
-        ...close,
-        userPaneClose: { incarnationId: 'incarnation-2' }
-      }).value.ok
-    ).toBe(true)
+    const closed = applyCommandToSession('local', window.snapshot(), {
+      type: 'closePane',
+      workspace: WORKTREE,
+      tabId: TAB,
+      leafId: LEAF_B,
+      userPaneClose: true
+    })
+
+    expect(closed.value.ok).toBe(true)
+    expect(leafIds(closed.session?.terminalLayoutsByTabId[TAB]?.root)).toEqual([LEAF_A])
+    expect(closed.session?.terminalPtyIncarnationsByPaneKey?.[`${TAB}:${LEAF_B}`]).toBeUndefined()
   })
 })
 
@@ -162,7 +162,7 @@ describe('Store.applyLayoutCommand pane operations', () => {
     const store = await storeWithSplitTab(['local', 'ssh:target-1'])
 
     const reply = await store.applyLayoutCommand(
-      { type: 'closePane', workspace: WORKTREE, tabId: TAB, leafId: LEAF_B, userPaneClose: {} },
+      { type: 'closePane', workspace: WORKTREE, tabId: TAB, leafId: LEAF_B, userPaneClose: true },
       ['local', 'ssh:target-1']
     )
 

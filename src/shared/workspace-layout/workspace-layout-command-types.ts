@@ -46,9 +46,9 @@ export type LayoutCommand =
       leafId: string
       /**
        * A user's close of one pane of a split, as the desktop's pane close: the tab's last pane is
-       * refused (closing it is a tab close), and so is a pane restarted since `incarnationId`.
+       * refused (closing it is a tab close).
        */
-      userPaneClose?: { incarnationId?: string }
+      userPaneClose?: true
     })
   | (On & {
       type: 'closeTabs'
@@ -142,7 +142,6 @@ export type LayoutRefusalCode =
   | 'pane_structure_changed'
   | 'same_pane'
   | 'last_pane'
-  | 'pane_restarted'
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
