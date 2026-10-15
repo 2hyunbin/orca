@@ -20,6 +20,10 @@ import { resolveRuntimeTerminalTitle } from './sync-projections'
 import { measureTerminalGroupGridSizes } from './terminal-group-grid-sizes'
 import { getProjectSectionCatalogFromState } from './project-section-catalog'
 import {
+  getNotificationHiddenWorkspaceKeysFromState,
+  sameNotificationHiddenWorkspaceKeys
+} from './notification-hidden-workspace-keys'
+import {
   collectAmbiguousTerminalTabIds,
   graphState,
   mobilePublicationEpoch,
@@ -62,6 +66,11 @@ export async function syncRuntimeGraph(): Promise<void> {
   const publication = partitionMobileSessionPublication(mobileSessionTabs)
   const gridSizes = measureTerminalGroupGridSizes(state.settings?.terminalFontSize ?? 14)
   const projectSectionCatalog = getProjectSectionCatalogFromState(state)
+  const notificationHiddenWorkspaceKeys = getNotificationHiddenWorkspaceKeysFromState(state)
+  const hiddenKeysChanged = !sameNotificationHiddenWorkspaceKeys(
+    notificationHiddenWorkspaceKeys,
+    graphState.publishedNotificationHiddenWorkspaceKeys
+  )
   const graph: RuntimeRendererSyncWindowGraph = {
     tabs: [],
     leaves: [],
@@ -74,6 +83,9 @@ export async function syncRuntimeGraph(): Promise<void> {
       : {}),
     ...(projectSectionCatalog && projectSectionCatalog !== graphState.publishedProjectSectionCatalog
       ? { projectSectionCatalog }
+      : {}),
+    ...(hiddenKeysChanged
+      ? { notificationHiddenWorkspaceKeys: [...notificationHiddenWorkspaceKeys] }
       : {})
   }
 
@@ -205,6 +217,7 @@ export async function syncRuntimeGraph(): Promise<void> {
     graphState.publishedTerminalGroupGridSizesKey = JSON.stringify(gridSizes ?? null)
     graphState.publishedProjectSectionCatalog =
       projectSectionCatalog ?? graphState.publishedProjectSectionCatalog
+    graphState.publishedNotificationHiddenWorkspaceKeys = notificationHiddenWorkspaceKeys
     commitMobileSessionPublication(mobileSessionTabs, result?.mobileSessionResyncWorktrees)
     const currentState = graphState.getStoreState()
     currentState?.setRuntimeAgentOrchestrationByPaneKey?.(result?.agentOrchestrationByPaneKey ?? {})

@@ -7,6 +7,8 @@ import type {
   RuntimeSyncWindowGraphResult
 } from '../../../shared/runtime-session-contracts'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
+import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 
 /** The runtime indexes graph tabs by bare id, so duplicate ids cannot be routed safely. */
@@ -23,6 +25,18 @@ function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void
 export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow {
   declare protected terminalGroupGridSizes?: RuntimeSyncWindowGraph['terminalGroupGridSizes']
   declare protected singleGroupWorkspaceGridSize?: RuntimeSyncWindowGraph['singleGroupWorkspaceGridSize']
+  /** Kept across renderer reloads and a closed window: filters cannot change without a renderer. */
+  declare protected notificationHiddenWorkspaceKeys?: ReadonlySet<string>
+
+  /** The authoritative window's answer; with none published yet (a headless server never does), notify. */
+  isNotificationHiddenWorkspace(
+    scope: Pick<AgentSessionExecutionLocation, 'workspaceId' | 'workspaceKind'>
+  ): boolean {
+    // Why: the host scopes a folder by its bare id, the renderer keys it as `folder:<id>`.
+    const key =
+      scope.workspaceKind === 'folder' ? folderWorkspaceKey(scope.workspaceId) : scope.workspaceId
+    return this.notificationHiddenWorkspaceKeys?.has(key) === true
+  }
 
   shouldRelayTerminalBrowserOpens(): boolean {
     return this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID
@@ -81,6 +95,9 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     }
     if (graph.singleGroupWorkspaceGridSize) {
       this.singleGroupWorkspaceGridSize = graph.singleGroupWorkspaceGridSize
+    }
+    if (graph.notificationHiddenWorkspaceKeys) {
+      this.notificationHiddenWorkspaceKeys = new Set(graph.notificationHiddenWorkspaceKeys)
     }
     const graphWasReady = this.graphStatus === 'ready'
     const previousTabs = this.tabs

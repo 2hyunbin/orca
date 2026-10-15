@@ -170,6 +170,9 @@ export type RuntimeSyncWindowGraph = {
   singleGroupWorkspaceGridSize?: { cols: number; rows: number }
   /** The sidebar's Project grouping inputs for paired phones; sent only when they changed. */
   projectSectionCatalog?: MobileProjectSectionCatalog
+  /** Workspaces this window's sidebar Filters keep quiet (bare worktree ids, `folder:<id>`), for
+   *  the host's own phone push; the whole set, sent only when it changed. */
+  notificationHiddenWorkspaceKeys?: string[]
 }
 
 export type RuntimeRendererSyncWindowGraph = RuntimeSyncWindowGraph & {

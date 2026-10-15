@@ -6,8 +6,7 @@ import type { Worktree } from './types'
 /**
  * Predicates for what KIND of workspace a row is, as the sidebar's Filters switches classify it.
  *
- * Why shared: main applies the persisted switches to the phone push it sends for local chat
- * sessions, and a second copy of these predicates is how that push drifts from the sidebar.
+ * Why one module: the sidebar, activity scope and jump palette must classify a row the same way.
  */
 
 type WorkspaceKindFields = Pick<

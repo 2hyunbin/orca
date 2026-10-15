@@ -9,6 +9,39 @@ type NotificationDispatch = { source?: string; worktreeId?: string }
 
 declare global {
   var __hiddenWorkspaceDispatchLog: NotificationDispatch[] | undefined
+  var __hiddenWorkspaceGraphKeys: string[][] | undefined
+}
+
+/** Records each notification-hidden set the renderer publishes to main on the window graph. */
+async function installGraphHiddenKeysSpy(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ ipcMain }) => {
+    if (globalThis.__hiddenWorkspaceGraphKeys) {
+      return
+    }
+    const log: string[][] = []
+    globalThis.__hiddenWorkspaceGraphKeys = log
+    type Handler = (
+      event: unknown,
+      graph: { notificationHiddenWorkspaceKeys?: string[] }
+    ) => unknown
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Electron keeps invoke handlers in this private map; the throw below covers its absence.
+    const handlers = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })
+      ._invokeHandlers
+    const existing = handlers?.get('runtime:syncWindowGraph')
+    if (!handlers || !existing) {
+      throw new Error('runtime:syncWindowGraph handler not found')
+    }
+    handlers.set('runtime:syncWindowGraph', (event, graph) => {
+      if (graph.notificationHiddenWorkspaceKeys) {
+        log.push(graph.notificationHiddenWorkspaceKeys)
+      }
+      return existing(event, graph)
+    })
+  })
+}
+
+async function lastPublishedHiddenKeys(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(() => globalThis.__hiddenWorkspaceGraphKeys?.at(-1) ?? [])
 }
 
 async function installNotificationDispatchSpy(app: ElectronApplication): Promise<void> {
@@ -95,6 +128,7 @@ test.describe('Hidden workspace notifications', () => {
     const ptyId = await waitForActivePanePtyId(orcaPage)
     await waitForPtyShellEcho(orcaPage, ptyId, 30_000)
     await installNotificationDispatchSpy(electronApp)
+    await installGraphHiddenKeysSpy(electronApp)
     await installRendererTitleLog(orcaPage)
     // The seeded active workspace is the primary checkout, which "Hide default branch" hides.
     expect(
@@ -115,6 +149,10 @@ test.describe('Hidden workspace notifications', () => {
 
     // Hidden and the setting off: no unread dot and no request, past the bell's 250 ms delay.
     await setFilterAndSetting(orcaPage, true, false)
+    // Main's own phone push for local chats reads this published set.
+    await expect
+      .poll(() => lastPublishedHiddenKeys(electronApp), { timeout: 5_000 })
+      .toContain(worktreeId)
     await ringBellOffScreen(orcaPage, ptyId, worktreeId, 'hwn-hidden')
     await orcaPage.waitForTimeout(1_500)
     expect(await bellRequests(electronApp, worktreeId)).toBe(1)
@@ -122,6 +160,9 @@ test.describe('Hidden workspace notifications', () => {
 
     // Hidden with "Notify About Hidden Workspaces" on: both come back.
     await setFilterAndSetting(orcaPage, true, true)
+    await expect
+      .poll(() => lastPublishedHiddenKeys(electronApp), { timeout: 5_000 })
+      .not.toContain(worktreeId)
     await ringBellOffScreen(orcaPage, ptyId, worktreeId, 'hwn-opted-in')
     await expect.poll(() => bellRequests(electronApp, worktreeId), { timeout: 5_000 }).toBe(2)
     expect(await isWorkspaceUnread(orcaPage, worktreeId)).toBe(true)
