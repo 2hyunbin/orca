@@ -51,15 +51,16 @@ export function createFakeWslHostConnector(
   const port = offer ? Number(new URL(offer.endpoint).port) : 0
   const active = new Map<string, WslOrcadConnection>()
   const key = (distro: string): string => distro.toLowerCase()
+  const listDistros = async () =>
+    (config.distrosFile
+      ? FakeDistrosSchema.parse(JSON.parse(readFileSync(config.distrosFile, 'utf8')))
+      : config.distros
+    ).map((distro, index) => ({
+      ...distro,
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+    }))
   return {
-    listDistros: async () =>
-      (config.distrosFile
-        ? FakeDistrosSchema.parse(JSON.parse(readFileSync(config.distrosFile, 'utf8')))
-        : config.distros
-      ).map((distro, index) => ({
-        ...distro,
-        id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
-      })),
+    listDistros,
     readOrcadPublicKey: async () => null,
     connect: async (distro) => {
       // Same guard as the real connector: nothing starts for a host that is gone.
@@ -72,6 +73,8 @@ export function createFakeWslHostConnector(
       onChange(distro, null, { state: 'connecting' })
       const connection: WslOrcadConnection = {
         distro,
+        distroId:
+          (await listDistros()).find((candidate) => key(candidate.name) === key(distro))?.id ?? null,
         environmentId: defaultWslOrcadEnvironmentId(distro),
         localPort: port,
         remotePort: port,

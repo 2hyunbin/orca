@@ -303,7 +303,7 @@ export class WslHostService {
         record: {
           kind: 'wsl',
           distro: distro.name,
-          distroId: distro.id,
+          distroId: connection.distroId ?? undefined,
           localPort: connection.localPort,
           remotePort: connection.remotePort
         }

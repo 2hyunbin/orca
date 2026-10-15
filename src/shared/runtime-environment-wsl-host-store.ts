@@ -110,7 +110,7 @@ export function addWslHostEnvironment(
 export function refreshWslHostPairing(
   userDataPath: string,
   environmentId: string,
-  args: { pairingCode: string } & WslHostPorts,
+  args: { pairingCode: string; distroId?: string | null } & WslHostPorts,
   now = Date.now()
 ): { environment: KnownRuntimeEnvironment; pairingChanged: boolean } {
   const offer = parseBridgedPairing(args.pairingCode)
@@ -118,41 +118,53 @@ export function refreshWslHostPairing(
   if (!record) {
     throw new RuntimeEnvironmentStoreError('invalid_argument', 'This server is not a WSL host.')
   }
-  if (record.localPort !== args.localPort || record.remotePort !== args.remotePort) {
+  const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId)
+  const pairingChanged = !samePairing(getPreferredPairingOffer(current), offer)
+  const registrationChanged = !args.distroId || record.distroId !== args.distroId
+  // Withdraw old installation proof before a revision can authorize any new connection.
+  if (registrationChanged && record.distroId) {
+    writeWslHostDeployment(userDataPath, environmentId, { ...record, distroId: undefined })
+  }
+  if (pairingChanged || registrationChanged) {
+    const store = readPersistedEnvironmentStore(userDataPath)
+    const existing = resolveEnvironmentFromStore(store, environmentId)
+    const next = PersistedRuntimeEnvironmentSchema.parse({
+      ...(pairingChanged
+        ? createEnvironmentFromPairingOffer({
+            id: existing.id,
+            name: existing.name,
+            now: existing.createdAt,
+            offer,
+            runtimeId: existing.runtimeId
+          })
+        : existing),
+      updatedAt: now,
+      pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
+      lastUsedAt: existing.lastUsedAt
+    })
+    assertPairingUsesBridge(next, args.localPort)
+    writeEnvironmentStore(userDataPath, {
+      version: 1,
+      environments: store.environments.map((candidate) =>
+        candidate.id === existing.id ? next : candidate
+      )
+    })
+  }
+  if (
+    registrationChanged ||
+    record.localPort !== args.localPort ||
+    record.remotePort !== args.remotePort
+  ) {
     writeWslHostDeployment(userDataPath, environmentId, {
       ...record,
+      distroId: args.distroId ?? undefined,
       localPort: args.localPort,
       remotePort: args.remotePort
     })
   }
-  const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId)
-  if (samePairing(getPreferredPairingOffer(current), offer)) {
-    return { environment: current, pairingChanged: false }
-  }
-  const store = readPersistedEnvironmentStore(userDataPath)
-  const existing = resolveEnvironmentFromStore(store, environmentId)
-  const next = PersistedRuntimeEnvironmentSchema.parse({
-    ...createEnvironmentFromPairingOffer({
-      id: existing.id,
-      name: existing.name,
-      now: existing.createdAt,
-      offer,
-      runtimeId: existing.runtimeId
-    }),
-    updatedAt: now,
-    pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
-    lastUsedAt: existing.lastUsedAt
-  })
-  assertPairingUsesBridge(next, args.localPort)
-  writeEnvironmentStore(userDataPath, {
-    version: 1,
-    environments: store.environments.map((candidate) =>
-      candidate.id === existing.id ? next : candidate
-    )
-  })
   return {
     environment: resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId),
-    pairingChanged: true
+    pairingChanged: pairingChanged || registrationChanged
   }
 }
 

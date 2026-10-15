@@ -11,16 +11,12 @@ export function persistWslHostConnection(
   record: WslHostDeploymentRecord,
   connection: WslOrcadConnection
 ): boolean {
-  try {
-    return refreshWslHostPairing(userDataPath, record.environmentId, {
-      pairingCode: connection.pairingOffer,
-      localPort: connection.localPort,
-      remotePort: connection.remotePort
-    }).pairingChanged
-  } catch (error) {
-    console.warn(`[wsl-hosts] Could not save the new pairing for ${record.distro}:`, error)
-    return false
-  }
+  return refreshWslHostPairing(userDataPath, record.environmentId, {
+    pairingCode: connection.pairingOffer,
+    distroId: connection.distroId,
+    localPort: connection.localPort,
+    remotePort: connection.remotePort
+  }).pairingChanged
 }
 
 export function toWslHostStatus(

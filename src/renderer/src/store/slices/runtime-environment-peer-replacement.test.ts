@@ -42,12 +42,9 @@ function retired(previous: ReturnType<typeof managed>, next: ReturnType<typeof m
 }
 
 describe('which re-paired environments name a different machine', () => {
-  it.each([false, true])(
-    'keeps open work when a managed server re-pairs with the same proven host key (WSL: %s)',
-    (wsl) => {
-      expect(retired(managed({}, wsl), managed({ pairingRevision: 2 }, wsl))).toEqual([])
-    }
-  )
+  it('keeps open work when a managed server re-pairs with the same proven host key', () => {
+    expect(retired(managed(), managed({ pairingRevision: 2 }))).toEqual([])
+  })
 
   it('retires the same target registration when the host proves a different key', () => {
     expect(retired(managed(), managed({ pairingRevision: 2, hostKey: 'key-reinstalled' }))).toEqual(
@@ -86,8 +83,8 @@ describe('which re-pairs a live pane may follow', () => {
   const classify = (previous: ReturnType<typeof managed>, next: ReturnType<typeof managed>) =>
     classifyPeerReplacements([previous], [next], replacedRuntimeEnvironmentIds([previous], [next]))
 
-  it('reports a same-key update as a same-host rotation from the old pairing', () => {
-    expect(classify(managed(), managed({ pairingRevision: 2 }))).toEqual({
+  it.each([false, true])('reports the exact same-host continuation (WSL: %s)', (wsl) => {
+    expect(classify(managed({}, wsl), managed({ pairingRevision: 2 }, wsl))).toEqual({
       retired: [],
       sameHost: [{ id: 'env-1', fromRevision: 1, toRevision: 2 }]
     })

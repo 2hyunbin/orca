@@ -8,7 +8,7 @@ type CatalogEnvironment = Pick<
   'id' | 'createdAt' | 'pairingRevision' | 'orcadDeployment' | 'hostKeyFingerprint'
 >
 
-/** Ids whose pairing rotated since the previous catalog. */
+/** Ids whose pairing or WSL installation changed since the previous catalog. */
 export function replacedRuntimeEnvironmentIds(
   previous: readonly CatalogEnvironment[],
   next: readonly CatalogEnvironment[]
@@ -17,7 +17,14 @@ export function replacedRuntimeEnvironmentIds(
   return next
     .filter((environment) => {
       const before = previousById.get(environment.id)
-      return before !== undefined && pairingRevisionOf(before) !== pairingRevisionOf(environment)
+      if (!before) return false
+      const left = before.orcadDeployment
+      const right = environment.orcadDeployment
+      const registrationChanged =
+        (left?.kind === 'wsl' || right?.kind === 'wsl') &&
+        (left?.kind !== right?.kind ||
+          (left?.kind === 'wsl' && right?.kind === 'wsl' && left.distroId !== right.distroId))
+      return registrationChanged || pairingRevisionOf(before) !== pairingRevisionOf(environment)
     })
     .map((environment) => environment.id)
 }

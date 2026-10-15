@@ -33,7 +33,10 @@ import { joinRemotePath } from '../ssh/ssh-remote-platform'
 import { readLocalFullVersion } from '../ssh/remote-versioned-install'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
-import { readWslDistroRegistryIdShared } from './wsl-distro-registry-id'
+import {
+  invalidateWslDistroRegistryIdSharedRead,
+  readWslDistroRegistryIdShared
+} from './wsl-distro-registry-id'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport, type WslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { readWslOrcadIncumbent, type WslOrcadIncumbent } from './wsl-orcad-incumbent'
@@ -100,6 +103,7 @@ export async function deployAndLaunchWslOrcad(
     distro: name,
     label: options.label ?? name
   }
+  invalidateWslDistroRegistryIdSharedRead(name)
   const conn = (options.createTransport ?? defaultTransport)(target)
   try {
     return await launchOverTransport(name, target, conn, options)

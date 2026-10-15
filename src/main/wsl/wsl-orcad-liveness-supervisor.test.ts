@@ -52,6 +52,7 @@ function harness(options: { visible?: boolean } = {}) {
       }
       connection = {
         distro,
+        distroId: null,
         environmentId: 'wsl:ubuntu',
         localPort: 7000,
         remotePort: 6768,

@@ -31,6 +31,8 @@ import {
 
 export type WslOrcadConnection = {
   distro: string
+  /** Current Windows registration observed by this deployment; never the saved enrollment ID. */
+  distroId: string | null
   environmentId: string
   /** The loopback port on this machine the pairing offer points at. */
   localPort: number
@@ -269,6 +271,7 @@ export class WslOrcadConnectionManager {
         forward,
         connection: {
           distro,
+          distroId: launch.distroId,
           environmentId,
           localPort: forward.entry.localPort,
           remotePort: launch.port,
@@ -281,7 +284,7 @@ export class WslOrcadConnectionManager {
       }
       this.active.set(key, entry)
       trackWslOrcadHostEnvironment(entry.connection, entry.connection)
-      this.dependencies.onChange?.(distro, entry.connection, status.ready)
+      await this.publishReady(entry, status.ready)
       return entry.connection
     } catch (error) {
       await forward.close()
@@ -289,30 +292,47 @@ export class WslOrcadConnectionManager {
     }
   }
 
-  private refreshOffer(
+  private async refreshOffer(
     key: string,
     entry: ActiveWslOrcadConnection,
     launch: Extract<WslOrcadLaunch, { outcome: 'ready' }>,
     pairingOffer: string,
     /** Reported even when nothing changed; null stays quiet then. */
     announce: WslOrcadConnectionStatus | null
-  ): WslOrcadConnection {
+  ): Promise<WslOrcadConnection> {
     const deferredUpdate = launch.deferredUpdate ?? null
     const changed =
+      launch.distroId !== entry.connection.distroId ||
       pairingOffer !== entry.connection.pairingOffer ||
       launch.fullVersion !== entry.connection.fullVersion ||
       launch.pid !== entry.connection.pid ||
       JSON.stringify(deferredUpdate) !== JSON.stringify(entry.connection.deferredUpdate)
     if (changed) {
-      const { fullVersion, pid } = launch
-      entry.connection = { ...entry.connection, pairingOffer, fullVersion, pid, deferredUpdate }
+      const { distroId, fullVersion, pid } = launch
+      entry.connection = {
+        ...entry.connection,
+        distroId, pairingOffer, fullVersion, pid, deferredUpdate
+      }
       this.active.set(key, entry)
     }
     trackWslOrcadHostEnvironment(entry.connection, entry.connection)
     if (changed || announce) {
-      this.dependencies.onChange?.(entry.connection.distro, entry.connection, announce ?? READY)
+      await this.publishReady(entry, announce ?? READY)
     }
     return entry.connection
+  }
+
+  private async publishReady(
+    entry: ActiveWslOrcadConnection,
+    status: WslOrcadConnectionStatus
+  ): Promise<void> {
+    try {
+      this.dependencies.onChange?.(entry.connection.distro, entry.connection, status)
+    } catch (error) {
+      // A bridge must not serve another installation before its identity is published.
+      await this.closeEntry(wslDistroHolderKey(entry.connection.distro), entry)
+      throw error
+    }
   }
 
   /** A persisted local port may be taken by now; a free one beats no connection. */

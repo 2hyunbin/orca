@@ -83,6 +83,7 @@ describe('WSL host environment store', () => {
     expect(
       refreshWslHostPairing(userDataPath, 'wsl:ubuntu', {
         pairingCode: code(42000),
+        distroId: record.distroId,
         localPort: 42000,
         remotePort: 6768
       }).pairingChanged
@@ -91,7 +92,7 @@ describe('WSL host environment store', () => {
     const refreshed = refreshWslHostPairing(
       userDataPath,
       'wsl:ubuntu',
-      { pairingCode: code(42001, 'token-2'), localPort: 42001, remotePort: 6770 },
+      { pairingCode: code(42001, 'token-2'), distroId: record.distroId, localPort: 42001, remotePort: 6770 },
       500
     )
     expect(refreshed.pairingChanged).toBe(true)

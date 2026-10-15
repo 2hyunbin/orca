@@ -3,6 +3,7 @@ import {
   parseWslDistroRegistrations,
   readWslDistroRegistryId,
   readWslDistroRegistryIdShared,
+  invalidateWslDistroRegistryIdSharedRead,
   resetWslDistroRegistryIdSharedReadsForTests
 } from './wsl-distro-registry-id'
 
@@ -80,8 +81,10 @@ describe('readWslDistroRegistryIdShared', () => {
     const now = () => clock
     expect(await readWslDistroRegistryIdShared('Ubuntu', now, read)).toBe('guid-1')
     expect(await readWslDistroRegistryIdShared('ubuntu', now, read)).toBe('guid-1')
-    clock = 31_000
+    invalidateWslDistroRegistryIdSharedRead('ubuntu')
     expect(await readWslDistroRegistryIdShared('Ubuntu', now, read)).toBe('guid-2')
-    expect(reads).toBe(2)
+    clock = 31_000
+    expect(await readWslDistroRegistryIdShared('Ubuntu', now, read)).toBe('guid-3')
+    expect(reads).toBe(3)
   })
 })

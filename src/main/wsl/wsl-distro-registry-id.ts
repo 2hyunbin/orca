@@ -111,6 +111,11 @@ export function readWslDistroRegistryIdShared(
   return id
 }
 
+/** A new deployment must not reuse a prior installation's observation. */
+export function invalidateWslDistroRegistryIdSharedRead(distro: string): void {
+  sharedReads.delete(distro.trim().toLowerCase())
+}
+
 export function resetWslDistroRegistryIdSharedReadsForTests(): void {
   sharedReads.clear()
 }

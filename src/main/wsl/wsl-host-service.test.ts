@@ -24,6 +24,7 @@ function pairing(port: number, deviceToken = 'token-1', publicKeyB64 = KEY): str
 function connection(distro: string, port = 42000, token = 'token-1'): WslOrcadConnection {
   return {
     distro,
+    distroId: UBUNTU_ID,
     environmentId: `wsl:${distro.toLowerCase()}`,
     localPort: port,
     remotePort: 6768,
