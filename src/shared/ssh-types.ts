@@ -330,6 +330,8 @@ export type SshManagedServerStatus =
       terminalsElsewhere?: boolean
       /** The refusal is only saved state the user may leave on this desktop ("Move anyway"). */
       canLeaveBehind?: true
+      /** A move to the managed server stopped short and keeps the host locked until it resumes. */
+      held?: true
     }
 
 /** Plain SSH terminals and SFTP browsing only; `reason` is the ladder's classified cause. */
