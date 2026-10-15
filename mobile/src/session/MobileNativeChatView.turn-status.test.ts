@@ -261,7 +261,9 @@ describe('MobileNativeChatView', () => {
 
       expect(footerProps()).toBeNull()
       expect(rowProps('a1').activeTurnIsWorking).toBe(true)
-      expect(renderer!.root.find((node) => node.type === 'Composer').props.stop).not.toBeNull()
+      expect(
+        renderer!.root.find((node) => String(node.type) === 'Composer').props.stop
+      ).not.toBeNull()
       expect(renderer!.root.findAll((node) => node.type === testCase.cardType)).toHaveLength(1)
 
       await update(working)
