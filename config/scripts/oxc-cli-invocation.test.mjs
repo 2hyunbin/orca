@@ -30,6 +30,7 @@ for (const { name, resolveInvocation } of [
         windowsHide: true
       })
       expect(result.error).toBeUndefined()
+      expect(result.status).toBe(0)
       expect(result.stdout).toContain(name)
     })
   })
