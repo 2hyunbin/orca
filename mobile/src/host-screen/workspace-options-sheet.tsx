@@ -1,5 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { ChevronLeft } from 'lucide-react-native'
+import { colors } from '../theme/mobile-theme'
+import { useBackClaim } from '../navigation/use-back-claim'
 import { BottomDrawer } from '../components/BottomDrawer'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -8,7 +11,8 @@ import {
 } from '../../../src/shared/execution-host'
 import {
   WORKSPACE_VIEW_SECTION_LABELS,
-  getShownWorkspaceViewSections
+  getShownWorkspaceViewSections,
+  type WorkspaceViewOptionKey
 } from '../../../src/shared/workspace-view/workspace-view-options'
 import { getHostContextLabel } from '../../../src/shared/worktree/host-context-labels'
 import {
@@ -19,11 +23,12 @@ import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
+import { DrillRow, OptionRowList } from './workspace-option-rows'
 import {
-  OptionRowList,
-  WORKSPACE_OPTION_ROWS,
-  type WorkspaceOptionHost
-} from './workspace-option-rows'
+  WORKSPACE_OPTION_CONTROLS,
+  type WorkspaceOptionHost,
+  type WorkspaceOptionProps
+} from './workspace-option-controls'
 
 /** Every host the list can show, this computer first; labelled as the rows label them. */
 function useWorkspaceOptionHosts(controller: HostScreenController): WorkspaceOptionHost[] {
@@ -80,6 +85,40 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
       state.view.sharesOtherClientFilter === true && state.serverWorkspaces.hosts.length > 0
   })
 
+  // The drilled-into option; it falls back to the main sheet once the option stops showing.
+  const [page, setPage] = useState<WorkspaceViewOptionKey | null>(null)
+  const pageOption = sections
+    .flatMap(({ options }) => options)
+    .find((option) => option.key === page)
+  const pageControl = pageOption ? WORKSPACE_OPTION_CONTROLS[pageOption.key] : null
+  // Back from a page returns to the main sheet; the drawer's own claim closes it from there.
+  useBackClaim(
+    pageOption
+      ? () => {
+          setPage(null)
+          return true
+        }
+      : null
+  )
+  if (pageOption && pageControl?.kind === 'page') {
+    const { Page } = pageControl
+    return (
+      <>
+        <Pressable
+          style={styles.optionBack}
+          onPress={() => setPage(null)}
+          accessibilityRole="button"
+          accessibilityLabel={`Back to ${WORKSPACE_OPTIONS_TITLE}`}
+        >
+          <ChevronLeft size={16} color={colors.textSecondary} />
+          <Text style={styles.optionBackText}>{WORKSPACE_OPTIONS_TITLE}</Text>
+        </Pressable>
+        <Text style={[styles.filterModalTitle, styles.optionPageTitle]}>{pageOption.label}</Text>
+        <Page controller={controller} hosts={hosts} label={pageOption.label} />
+      </>
+    )
+  }
+
   return (
     <>
       <View style={styles.filterModalHeader}>
@@ -96,39 +135,33 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
 
       {sections.map(({ section, options }) => {
         const sectionLabel = WORKSPACE_VIEW_SECTION_LABELS[section]
+        const rows = (framed: boolean) =>
+          options.flatMap((option) => {
+            const control = WORKSPACE_OPTION_CONTROLS[option.key]
+            const props: WorkspaceOptionProps = { controller, hosts, label: option.label }
+            if (control.kind === 'page') {
+              return framed
+                ? [
+                    <DrillRow
+                      key={option.key}
+                      label={option.label}
+                      value={control.value(props)}
+                      onPress={() => setPage(option.key)}
+                    />
+                  ]
+                : []
+            }
+            return control.framed === framed ? [<control.Row key={option.key} {...props} />] : []
+          })
+        const framedRows = rows(true)
         return (
-          <View key={section}>
+          <View key={section} testID={`workspace-option-section-${section}`}>
             {sectionLabel && <Text style={styles.filterSectionLabel}>{sectionLabel}</Text>}
-            {section === 'filters' ? (
+            {rows(false)}
+            {framedRows.length > 0 && (
               <View style={styles.filterGroup}>
-                <OptionRowList>
-                  {options.map((option) => {
-                    const Rows = WORKSPACE_OPTION_ROWS[option.key]
-                    return (
-                      <Rows
-                        key={option.key}
-                        controller={controller}
-                        hosts={hosts}
-                        label={option.label}
-                      />
-                    )
-                  })}
-                </OptionRowList>
+                <OptionRowList>{framedRows}</OptionRowList>
               </View>
-            ) : (
-              options.map((option) => {
-                const Rows = WORKSPACE_OPTION_ROWS[option.key]
-                return (
-                  <View key={option.key} testID={`workspace-option-${option.key}`}>
-                    {option.label !== sectionLabel && (
-                      <Text style={styles.optionHeading}>{option.label}</Text>
-                    )}
-                    <View style={styles.filterGroup}>
-                      <Rows controller={controller} hosts={hosts} label={option.label} />
-                    </View>
-                  </View>
-                )
-              })
             )}
           </View>
         )

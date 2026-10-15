@@ -1,40 +1,10 @@
-import { Children, useState, type ComponentType, type ReactNode } from 'react'
-import { Pressable, Text, View } from 'react-native'
-import { Check } from 'lucide-react-native'
-import { MobileSearchField } from '../components/MobileSearchField'
+import { Children, type ReactNode } from 'react'
+import { Pressable, Switch, Text, View } from 'react-native'
+import { Check, ChevronRight } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
-import {
-  WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES,
-  WORKSPACE_CARD_DISPLAY_CHOICES,
-  WORKSPACE_CARD_LAYOUT_CHOICES,
-  WORKSPACE_CARD_PROPERTY_CHOICES,
-  WORKSPACE_GROUP_BY_CHOICES,
-  WORKSPACE_PROJECT_ORDER_CHOICES,
-  WORKSPACE_SORT_BY_CHOICES,
-  getWorkspaceCardDisplayChoiceLabel,
-  type WorkspaceViewChoice,
-  type WorkspaceViewOptionKey
-} from '../../../src/shared/workspace-view/workspace-view-options'
-import {
-  getCheckedHostRows,
-  toggleAllVisibleHosts,
-  toggleVisibleHostRow
-} from '../../../src/shared/workspace-view/workspace-host-visibility'
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import type { WorktreeCardProperty } from '../../../src/shared/ui-chrome-types'
+import type { WorkspaceViewChoice } from '../../../src/shared/workspace-view/workspace-view-options'
 import { hostScreenStyles as styles } from './host-screen-styles'
-import type { HostScreenController } from './use-host-screen-controller'
-
-export type WorkspaceOptionHost = { id: ExecutionHostId; label: string }
-
-export type WorkspaceOptionRowsProps = {
-  controller: HostScreenController
-  hosts: readonly WorkspaceOptionHost[]
-  /** The shared option's label. */
-  label: string
-}
-
-function CheckRow(props: {
+export function CheckRow(props: {
   label: string
   checked: boolean
   onPress: () => void
@@ -89,7 +59,7 @@ export function OptionRowList({ children }: { children: ReactNode[] }) {
   )
 }
 
-function ChoiceRows<Id extends string>(props: {
+export function ChoiceRows<Id extends string>(props: {
   choices: readonly WorkspaceViewChoice<Id>[]
   selected: Id
   onSelect: (id: Id) => void
@@ -110,173 +80,51 @@ function ChoiceRows<Id extends string>(props: {
   )
 }
 
-// As the desktop: while every host shows, no single host is checked, and tapping one shows only it.
-function HostsRows({ controller, hosts }: WorkspaceOptionRowsProps) {
-  const { settings, state } = controller
-  const visible = state.view.filters.visibleHostIds
-  const checked = new Set(visible ? getCheckedHostRows(hosts, visible).map((host) => host.id) : [])
-  const write = (next: ExecutionHostId[] | null | undefined) => {
-    if (next !== undefined) {
-      settings.setFilter('visibleHostIds', next)
-    }
-  }
-  return (
-    <OptionRowList>
-      {[
-        <CheckRow
-          key="all"
-          label="All hosts"
-          detail="Show every host"
-          checked={!visible}
-          onPress={() => write(toggleAllVisibleHosts(hosts, visible))}
-        />,
-        ...hosts.map((host) => {
-          const next = toggleVisibleHostRow(hosts, visible, host)
-          return (
-            <CheckRow
-              key={host.id}
-              label={host.label}
-              checked={checked.has(host.id)}
-              // The last shown host cannot be turned off.
-              disabled={next === undefined}
-              onPress={() => write(next)}
-            />
-          )
-        })
-      ]}
-    </OptionRowList>
-  )
-}
-
-function ProjectsRows({ controller }: WorkspaceOptionRowsProps) {
-  const { settings, state } = controller
-  const [query, setQuery] = useState('')
-  const needle = query.trim().toLowerCase()
-  const repos = controller.sectionsResult.uniqueRepos.filter(
-    (repo) => !needle || repo.name.toLowerCase().includes(needle)
-  )
-  return (
-    <>
-      <View style={styles.optionSearch}>
-        <MobileSearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search projects…"
-          accessibilityLabel="Search projects"
-        />
-      </View>
-      <OptionRowList>
-        {repos.map((repo) => (
-          <CheckRow
-            key={repo.key}
-            label={repo.name}
-            checked={state.view.filters.filterRepoIds.includes(repo.id)}
-            onPress={() => settings.toggleRepoFilter(repo.id)}
-            leading={<View style={[styles.filterRepoDot, { backgroundColor: repo.color }]} />}
-          />
-        ))}
-      </OptionRowList>
-    </>
-  )
-}
-
-function CardPropertyRows(props: {
-  controller: HostScreenController
-  choices: readonly WorkspaceViewChoice<WorktreeCardProperty>[]
+/** A filter switch, as the desktop's switch rows. */
+export function SwitchRow(props: {
+  label: string
+  value: boolean
+  onChange: (value: boolean) => void
+  indent?: boolean
 }) {
-  const { settings, state } = props.controller
   return (
-    <OptionRowList>
-      {props.choices.map((choice) => (
-        <CheckRow
-          key={choice.id}
-          label={choice.label}
-          checked={state.view.worktreeCardProperties.includes(choice.id)}
-          onPress={() => settings.toggleCardProperty(choice.id)}
-        />
-      ))}
-    </OptionRowList>
+    <Pressable
+      style={[styles.filterRow, props.indent && styles.optionRowIndented]}
+      onPress={() => props.onChange(!props.value)}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: props.value }}
+      accessibilityLabel={props.label}
+    >
+      <Text style={styles.filterRowText} numberOfLines={1}>
+        {props.label}
+      </Text>
+      <Switch
+        value={props.value}
+        onValueChange={props.onChange}
+        trackColor={{ false: colors.bgRaised, true: colors.textSecondary }}
+        thumbColor={colors.textPrimary}
+        importantForAccessibility="no"
+      />
+    </Pressable>
   )
 }
 
-function filterRow(key: Extract<WorkspaceViewOptionKey, `hide${string}` | `always${string}`>) {
-  const isExemption = key === 'alwaysShowDefaultBranchWorkspace'
-  return function FilterRow({ controller, label }: WorkspaceOptionRowsProps) {
-    const value = controller.state.view.filters[key]
-    // The exemption's absence means on (#8873), so only an explicit false reads as off.
-    const checked = isExemption ? value !== false : value === true
-    return (
-      <CheckRow
-        label={label}
-        checked={checked}
-        indent={isExemption}
-        onPress={() => controller.settings.setFilter(key, !checked)}
-      />
-    )
-  }
-}
-
-/** One phone control per shared option; a new option fails to compile until it has one. */
-export const WORKSPACE_OPTION_ROWS: Record<
-  WorkspaceViewOptionKey,
-  ComponentType<WorkspaceOptionRowsProps>
-> = {
-  hosts: HostsRows,
-  projects: ProjectsRows,
-  groupBy: ({ controller }) => (
-    <ChoiceRows
-      choices={WORKSPACE_GROUP_BY_CHOICES}
-      selected={controller.state.view.groupBy}
-      onSelect={controller.settings.handleGroupChange}
-    />
-  ),
-  sortBy: ({ controller }) => (
-    <ChoiceRows
-      choices={WORKSPACE_SORT_BY_CHOICES}
-      selected={controller.state.view.sortBy}
-      onSelect={controller.settings.handleSortChange}
-    />
-  ),
-  projectOrderBy: ({ controller }) => (
-    <ChoiceRows
-      choices={WORKSPACE_PROJECT_ORDER_CHOICES}
-      selected={controller.projectOrderBy}
-      onSelect={controller.settings.setProjectOrderBy}
-    />
-  ),
-  cardLayout: ({ controller }) => (
-    <ChoiceRows
-      choices={WORKSPACE_CARD_LAYOUT_CHOICES}
-      selected={controller.state.cardSettings.compactWorktreeCards ? 'compact' : 'detailed'}
-      onSelect={controller.settings.setCardLayout}
-    />
-  ),
-  cardProperties: ({ controller }) => (
-    <>
-      <CardPropertyRows controller={controller} choices={WORKSPACE_CARD_PROPERTY_CHOICES} />
-      <Text style={styles.optionSubheading}>Agent activity layout</Text>
-      <ChoiceRows
-        choices={WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES}
-        selected={controller.state.view.agentActivityDisplayMode}
-        onSelect={controller.settings.setAgentActivityDisplayMode}
-      />
-    </>
-  ),
-  cardDisplay: ({ controller }) => (
-    <CardPropertyRows
-      controller={controller}
-      // The phone cannot see the desktop's project groups, so it uses the plain label.
-      choices={WORKSPACE_CARD_DISPLAY_CHOICES.map((choice) => ({
-        id: choice.id,
-        label: getWorkspaceCardDisplayChoiceLabel(choice, false)
-      }))}
-    />
-  ),
-  hideSleepingWorkspaces: filterRow('hideSleepingWorkspaces'),
-  alwaysShowDefaultBranchWorkspace: filterRow('alwaysShowDefaultBranchWorkspace'),
-  hideDefaultBranchWorkspace: filterRow('hideDefaultBranchWorkspace'),
-  hideAutomationGeneratedWorkspaces: filterRow('hideAutomationGeneratedWorkspaces'),
-  hideCliCreatedWorkspaces: filterRow('hideCliCreatedWorkspaces'),
-  hideWorkspacesFromOtherDevices: filterRow('hideWorkspacesFromOtherDevices'),
-  hideDetachedHeadWorkspaces: filterRow('hideDetachedHeadWorkspaces')
+/** An option with its current value; tapping it opens the option's own page. */
+export function DrillRow(props: { label: string; value: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={styles.filterRow}
+      onPress={props.onPress}
+      accessibilityRole="button"
+      accessibilityLabel={props.value ? `${props.label}, ${props.value}` : props.label}
+    >
+      <Text style={styles.filterRowText} numberOfLines={1}>
+        {props.label}
+      </Text>
+      <Text style={styles.optionRowValue} numberOfLines={1}>
+        {props.value}
+      </Text>
+      <ChevronRight size={16} color={colors.textMuted} />
+    </Pressable>
+  )
 }

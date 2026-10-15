@@ -5,10 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
+  Switch: 'Switch',
   Text: 'Text',
   View: 'View'
 }))
-vi.mock('lucide-react-native', () => ({ Check: 'Check' }))
+vi.mock('lucide-react-native', () => ({
+  Check: 'Check',
+  ChevronLeft: 'ChevronLeft',
+  ChevronRight: 'ChevronRight'
+}))
+vi.mock('../navigation/use-back-claim', () => ({ useBackClaim: () => {} }))
 vi.mock('../components/BottomDrawer', () => ({ BottomDrawer: 'BottomDrawer' }))
 vi.mock('../components/MobileSearchField', () => ({ MobileSearchField: 'MobileSearchField' }))
 
@@ -82,30 +88,35 @@ const texts = () =>
     .map((node) => node.props.children)
     .filter((child): child is string => typeof child === 'string')
 
-/** Taps the row named `label`, inside one option's card when `option` is given. */
-const press = (label: string, option?: string) => {
-  const scope = option
-    ? renderer!.root.find((node) => node.props.testID === `workspace-option-${option}`)
-    : renderer!.root
-  scope
-    .find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label)
-    .props.onPress()
+/** Taps the control whose accessibility label is `label`. */
+const press = (label: string) => {
+  act(() => {
+    renderer!.root
+      .find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label)
+      .props.onPress()
+  })
 }
 
+const back = () => press('Back to Workspace options')
+
 describe('the phone Workspace options sheet', () => {
-  it('shows the classic card options and the default-branch exemption while sleeping ones hide', () => {
+  it('shows the classic card options as rows with their values, and filters as switches', () => {
     render({ newCardStyle: false, hideSleeping: true })
     const shown = texts()
     for (const label of [
       'Show',
       'Hosts',
+      'All hosts',
       'Projects',
+      'All projects',
       'Group by',
+      'Project',
       'Sort by',
+      'Agent Activity',
       'Project order',
       'Card layout',
+      'Detailed',
       'Show properties',
-      'Agent activity layout',
       'Filters',
       'Hide sleeping',
       'Except default branch',
@@ -115,6 +126,8 @@ describe('the phone Workspace options sheet', () => {
       expect(shown).toContain(label)
     }
     expect(shown).not.toContain('Card display')
+    // The choices themselves live on each option's page.
+    expect(shown).not.toContain('Agent activity layout')
   })
 
   it('swaps in Card display for the new card style and drops the exemption when nothing sleeps', () => {
@@ -126,17 +139,43 @@ describe('the phone Workspace options sheet', () => {
     expect(shown).not.toContain('Except default branch')
   })
 
+  it('opens an option page from its row, stays there after a pick, and goes back', () => {
+    const settings = render({ newCardStyle: false, hideSleeping: false })
+    press('Sort by, Agent Activity')
+    expect(texts()).toContain('Agents that need attention, then most recent activity.')
+    press('Recent')
+    expect(settings.handleSortChange).toHaveBeenCalledWith('recent')
+    expect(texts()).toContain('Name')
+    back()
+    expect(texts()).toContain('Filters')
+  })
+
   it('writes each control to the shared value it names', () => {
     const settings = render({ newCardStyle: false, hideSleeping: false })
     press('Hide CLI-created')
     expect(settings.setFilter).toHaveBeenCalledWith('hideCliCreatedWorkspaces', true)
-    press('Compact', 'cardLayout')
+    press('PR')
+    expect(settings.handleGroupChange).toHaveBeenCalledWith('pr-status')
+    press('Card layout, Detailed')
+    press('Compact')
     expect(settings.setCardLayout).toHaveBeenCalledWith('compact')
-    press('Recent', 'sortBy')
-    expect(settings.handleSortChange).toHaveBeenCalledWith('recent')
-    press('Recent', 'projectOrderBy')
+    back()
+    press('Project order, Manual')
+    press('Recent')
     expect(settings.setProjectOrderBy).toHaveBeenCalledWith('recent')
-    press('VM', 'hosts')
+    back()
+    press('Hosts, All hosts')
+    press('VM')
     expect(settings.setFilter).toHaveBeenCalledWith('visibleHostIds', ['runtime:vm'])
+    back()
+    press('Projects, All projects')
+    press('docs')
+    expect(settings.toggleRepoFilter).toHaveBeenCalledWith('r2')
+    back()
+    press('Show properties, All')
+    press('Ports')
+    expect(settings.toggleCardProperty).toHaveBeenCalledWith('ports')
+    press('Full list')
+    expect(settings.setAgentActivityDisplayMode).toHaveBeenCalledWith('full')
   })
 })

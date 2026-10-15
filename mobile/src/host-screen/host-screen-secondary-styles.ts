@@ -128,6 +128,33 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   optionSearch: {
     padding: spacing.sm
   },
+  optionRowValue: {
+    flexShrink: 1,
+    maxWidth: '45%',
+    fontSize: 13,
+    color: colors.textMuted
+  },
+  // On the drawer's base color, so the track takes the panel color the option cards use.
+  optionSegmented: {
+    backgroundColor: colors.bgPanel,
+    marginBottom: spacing.md
+  },
+  optionBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs
+  },
+  optionBackText: {
+    fontSize: 14,
+    color: colors.textSecondary
+  },
+  optionPageTitle: {
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.md
+  },
   filterRepoDot: {
     width: 8,
     height: 8,
