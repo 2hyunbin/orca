@@ -1,15 +1,16 @@
 import type { ExecutionHostId } from '../execution-host'
 import type { PersistedUIState } from '../persisted-ui-state-types'
+import {
+  isHiddenByKindSwitch,
+  type WorkspaceKind,
+  type WorkspaceKindSwitches
+} from '../worktree/workspace-kinds'
 
 /** The Workspace options filters, under their persisted names. One value, shared by every surface. */
-export type WorkspaceRowFilters = {
+export type WorkspaceRowFilters = WorkspaceKindSwitches & {
   hideSleepingWorkspaces: boolean
   /** Keeps each project's main workspace out of the "Hide sleeping" sweep. Absent means on (#8873). */
   alwaysShowDefaultBranchWorkspace?: boolean
-  hideDefaultBranchWorkspace: boolean
-  hideAutomationGeneratedWorkspaces: boolean
-  hideCliCreatedWorkspaces: boolean
-  hideDetachedHeadWorkspaces: boolean
   hideWorkspacesFromOtherDevices: boolean
   filterRepoIds: readonly string[]
   /** The hosts shown; null shows every host. */
@@ -83,6 +84,17 @@ export function isSleepingSweepExempt(
 }
 
 /** Whether a row survives the Workspace options filters; the sets are built once per call. */
+// How the evaluator asks each kind of a row; the switch for each kind comes from WORKSPACE_KIND_SWITCH.
+const KIND_READERS: Record<
+  WorkspaceKind,
+  <Row>(read: WorkspaceRowFactReader<Row>, row: Row) => boolean
+> = {
+  defaultBranch: (read, row) => read.isDefaultBranch(row),
+  automationCreated: (read, row) => read.isAutomationCreated(row),
+  cliCreated: (read, row) => read.isCliCreated(row),
+  detachedHead: (read, row) => read.isDetachedHead(row)
+}
+
 function buildWorkspaceRowPredicate<Row>(
   filters: WorkspaceRowFilters,
   read: WorkspaceRowFactReader<Row>
@@ -105,16 +117,7 @@ function buildWorkspaceRowPredicate<Row>(
     if (read.isFolderWorkspace(row)) {
       return true
     }
-    if (filters.hideDefaultBranchWorkspace && read.isDefaultBranch(row)) {
-      return false
-    }
-    if (filters.hideAutomationGeneratedWorkspaces && read.isAutomationCreated(row)) {
-      return false
-    }
-    if (filters.hideCliCreatedWorkspaces && read.isCliCreated(row)) {
-      return false
-    }
-    if (filters.hideDetachedHeadWorkspaces && read.isDetachedHead(row)) {
+    if (isHiddenByKindSwitch(filters, (kind) => KIND_READERS[kind](read, row))) {
       return false
     }
     if (repoIds && !repoIds.has(read.repoId(row))) {
