@@ -82,19 +82,8 @@ export function isSleepingSweepExempt(
   return alwaysShowDefaultBranchWorkspace !== false && isMainWorktree
 }
 
-/**
- * Whether turning the exemption off is narrowing the list. It only bites during the "Hide
- * sleeping" sweep, so its row and the filter badge ignore it while sleeping workspaces are shown.
- */
-export function isSleepingSweepExemptionNarrowingList(
-  hideSleepingWorkspaces: boolean,
-  alwaysShowDefaultBranchWorkspace: boolean | undefined
-): boolean {
-  return hideSleepingWorkspaces && alwaysShowDefaultBranchWorkspace === false
-}
-
 /** Whether a row survives the Workspace options filters; the sets are built once per call. */
-export function buildWorkspaceRowPredicate<Row>(
+function buildWorkspaceRowPredicate<Row>(
   filters: WorkspaceRowFilters,
   read: WorkspaceRowFactReader<Row>
 ): (row: Row) => boolean {
@@ -153,23 +142,55 @@ export function filterWorkspaceRows<Row>(
  * The options button's badge: one per narrowing filter, plus one per selected project.
  * Why only known repos: a stale id left behind by a removed repo must not read as a filter.
  */
+/** The filters `target` sets differently from `current`; the exemption's absence means on. */
+export function changedWorkspaceRowFilters(
+  current: WorkspaceRowFilters,
+  target: WorkspaceRowFilters
+): Partial<WorkspaceRowFilters> {
+  const changed: Partial<WorkspaceRowFilters> = {}
+  for (const key of WORKSPACE_ROW_FILTER_KEYS) {
+    const from = comparableFilterValue(current, key)
+    const to = comparableFilterValue(target, key)
+    const same =
+      Array.isArray(from) && Array.isArray(to)
+        ? from.length === to.length && from.every((value, i) => value === to[i])
+        : from === to
+    if (!same) {
+      Object.assign(changed, { [key]: target[key] })
+    }
+  }
+  return changed
+}
+
+function comparableFilterValue(
+  filters: WorkspaceRowFilters,
+  key: keyof WorkspaceRowFilters
+): WorkspaceRowFilters[keyof WorkspaceRowFilters] {
+  return key === 'alwaysShowDefaultBranchWorkspace'
+    ? filters.alwaysShowDefaultBranchWorkspace !== false
+    : filters[key]
+}
+
+/** The filters set away from their defaults: what Clear filters resets. */
+export function activeWorkspaceRowFilterKeys(
+  filters: WorkspaceRowFilters
+): (keyof WorkspaceRowFilters)[] {
+  return WORKSPACE_ROW_FILTER_KEYS.filter(
+    (key) => key in changedWorkspaceRowFilters(filters, NO_WORKSPACE_ROW_FILTERS)
+  )
+}
+
+/** The badge count: each active filter once, projects one per selected known project. */
 export function countActiveWorkspaceFilters(
   filters: WorkspaceRowFilters,
   knownRepoIds: readonly string[]
 ): number {
-  const flags = [
-    filters.hideSleepingWorkspaces,
-    filters.hideDefaultBranchWorkspace,
-    filters.hideAutomationGeneratedWorkspaces,
-    filters.hideCliCreatedWorkspaces,
-    filters.hideDetachedHeadWorkspaces,
-    filters.hideWorkspacesFromOtherDevices,
-    isSleepingSweepExemptionNarrowingList(
-      filters.hideSleepingWorkspaces,
-      filters.alwaysShowDefaultBranchWorkspace
-    ),
-    filters.visibleHostIds !== null
-  ]
+  const counted = activeWorkspaceRowFilterKeys(filters).filter(
+    (key) =>
+      key !== 'filterRepoIds' &&
+      // Why: the exemption only narrows the list while sleeping workspaces are swept.
+      (key !== 'alwaysShowDefaultBranchWorkspace' || filters.hideSleepingWorkspaces)
+  )
   const selectedRepoCount = knownRepoIds.filter((id) => filters.filterRepoIds.includes(id)).length
-  return flags.filter(Boolean).length + selectedRepoCount
+  return counted.length + selectedRepoCount
 }

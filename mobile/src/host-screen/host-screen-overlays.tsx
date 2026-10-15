@@ -49,7 +49,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         title="Sort By"
         subtitle={WORKSPACE_VIEW_SHARED_NOTE}
         options={SORT_OPTIONS}
-        selected={state.sortMode}
+        selected={state.view.sortBy}
         onSelect={settings.handleSortChange}
         onClose={() => state.setShowSortPicker(false)}
       />
@@ -59,7 +59,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         title="Group By"
         subtitle={WORKSPACE_VIEW_SHARED_NOTE}
         options={GROUP_OPTIONS}
-        selected={state.groupMode}
+        selected={state.view.groupBy}
         onSelect={settings.handleGroupChange}
         onClose={() => state.setShowGroupPicker(false)}
       />
@@ -81,18 +81,30 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         <View style={styles.filterGroup}>
           <Pressable
             style={styles.filterRow}
-            onPress={() => settings.toggleFilter('hideSleepingWorkspaces')}
+            onPress={() =>
+              settings.setFilter(
+                'hideSleepingWorkspaces',
+                !state.view.filters.hideSleepingWorkspaces
+              )
+            }
           >
             <Text style={styles.filterRowText}>Hide sleeping</Text>
-            {state.filters.hideSleepingWorkspaces && <Check size={14} color={colors.textPrimary} />}
+            {state.view.filters.hideSleepingWorkspaces && (
+              <Check size={14} color={colors.textPrimary} />
+            )}
           </Pressable>
           <View style={styles.filterSeparator} />
           <Pressable
             style={styles.filterRow}
-            onPress={() => settings.toggleFilter('hideDefaultBranchWorkspace')}
+            onPress={() =>
+              settings.setFilter(
+                'hideDefaultBranchWorkspace',
+                !state.view.filters.hideDefaultBranchWorkspace
+              )
+            }
           >
             <Text style={styles.filterRowText}>Hide default branch</Text>
-            {state.filters.hideDefaultBranchWorkspace && (
+            {state.view.filters.hideDefaultBranchWorkspace && (
               <Check size={14} color={colors.textPrimary} />
             )}
           </Pressable>
@@ -113,7 +125,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                     <Text style={styles.filterRowText} numberOfLines={1}>
                       {repo.name}
                     </Text>
-                    {state.filters.filterRepoIds.includes(repo.id) && (
+                    {state.view.filters.filterRepoIds.includes(repo.id) && (
                       <Check size={14} color={colors.textPrimary} />
                     )}
                   </Pressable>

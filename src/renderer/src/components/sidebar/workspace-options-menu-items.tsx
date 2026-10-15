@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { countActiveWorkspaceFilters } from '../../../../shared/workspace-view/workspace-row-filters'
+import { useShallow } from 'zustand/react/shallow'
+import { selectSidebarFilterState, sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import SidebarRepositoryFilterSection from './SidebarRepositoryFilterSection'
 import { WorkspaceFilterOptionRow } from './workspace-filter-option-row'
 import { getSidebarHostVisibilityLabel, shouldShowHostScopeControls } from './sidebar-host-options'
@@ -36,50 +38,18 @@ export function useWorkspaceOptionsFilterBadge(): {
   activeFilterCount: number
   activeFilterLabel: string
 } {
-  const showSleepingWorkspaces = useAppStore((s) => s.showSleepingWorkspaces)
-  const hideDefaultBranchWorkspace = useAppStore((s) => s.hideDefaultBranchWorkspace)
-  const hideAutomationGeneratedWorkspaces = useAppStore((s) => s.hideAutomationGeneratedWorkspaces)
-  const hideCliCreatedWorkspaces = useAppStore((s) => s.hideCliCreatedWorkspaces)
-  const hideDetachedHeadWorkspaces = useAppStore((s) => s.hideDetachedHeadWorkspaces)
-  const hideWorkspacesFromOtherDevices = useAppStore((s) => s.hideWorkspacesFromOtherDevices)
-  const alwaysShowDefaultBranchWorkspace = useAppStore((s) => s.alwaysShowDefaultBranchWorkspace)
-  const filterRepoIds = useAppStore((s) => s.filterRepoIds)
+  const filterState = useAppStore(useShallow(selectSidebarFilterState))
   const repos = useAppStore((s) => s.repos)
-  const visibleWorkspaceHostIds = useAppStore((s) => s.visibleWorkspaceHostIds)
-
   const activeFilterCount = useMemo(
     () =>
       countActiveWorkspaceFilters(
-        {
-          hideSleepingWorkspaces: !showSleepingWorkspaces,
-          alwaysShowDefaultBranchWorkspace,
-          hideDefaultBranchWorkspace,
-          hideAutomationGeneratedWorkspaces,
-          hideCliCreatedWorkspaces,
-          hideDetachedHeadWorkspaces,
-          hideWorkspacesFromOtherDevices,
-          filterRepoIds,
-          visibleHostIds: visibleWorkspaceHostIds
-        },
+        sidebarWorkspaceRowFilters(filterState),
         repos.map((repo) => repo.id)
       ),
-    [
-      showSleepingWorkspaces,
-      alwaysShowDefaultBranchWorkspace,
-      hideDefaultBranchWorkspace,
-      hideAutomationGeneratedWorkspaces,
-      hideCliCreatedWorkspaces,
-      hideDetachedHeadWorkspaces,
-      hideWorkspacesFromOtherDevices,
-      filterRepoIds,
-      visibleWorkspaceHostIds,
-      repos
-    ]
+    [filterState, repos]
   )
-  const hasAnyFilter = activeFilterCount > 0
-
   return {
-    hasAnyFilter,
+    hasAnyFilter: activeFilterCount > 0,
     activeFilterCount,
     activeFilterLabel: formatActiveFilterLabel(activeFilterCount)
   }

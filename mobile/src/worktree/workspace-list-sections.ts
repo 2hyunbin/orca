@@ -11,7 +11,10 @@ import {
 } from './mobile-workspace-lineage'
 import { getPRGroupKey, PR_GROUP_LABELS, PR_GROUP_ORDER } from './workspace-pr-status-groups'
 import type { FilterState, Section, SectionRepo, Worktree } from './workspace-list-types'
-import type { MobileGroupMode, MobileSortMode } from './workspace-view-settings'
+import type {
+  WorkspaceGroupBy,
+  WorkspaceSortBy
+} from '../../../src/shared/workspace-view/workspace-view-options'
 import { sortWorktrees } from './workspace-list-ordering'
 import { getWorktreeRowIdentity } from './worktree-host-row-identity'
 import { resolveWorktreeHostId } from './worktree-host-context-labels'
@@ -190,10 +193,10 @@ function getPinnedSectionIdentities(
 
 export function buildSections(
   worktrees: Worktree[],
-  sortMode: MobileSortMode,
+  sortMode: WorkspaceSortBy,
   filters: FilterState,
   search: string,
-  groupMode: MobileGroupMode,
+  groupMode: WorkspaceGroupBy,
   pinnedIds: Set<string>,
   projectCatalog: ProjectSectionCatalog = NO_PROJECT_SECTION_CATALOG,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = DEFAULT_MOBILE_WORKSPACE_STATUSES,
@@ -248,7 +251,7 @@ export function buildSections(
         })
       )
     }
-  } else if (groupMode === 'workspaceStatus') {
+  } else if (groupMode === 'workspace-status') {
     const renderableWorkspaceStatuses = coerceMobileWorkspaceStatuses(workspaceStatuses)
     const byStatus = new Map<string, Worktree[]>()
     for (const w of canonicalGroupWorktrees) {
@@ -273,7 +276,7 @@ export function buildSections(
         )
       }
     }
-  } else if (groupMode === 'prStatus') {
+  } else if (groupMode === 'pr-status') {
     const byGroup = new Map<string, Worktree[]>()
     for (const w of canonicalGroupWorktrees) {
       const key = getPRGroupKey(w)

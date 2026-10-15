@@ -4,17 +4,23 @@
 // or filter change on the phone show up on desktop and vice-versa.
 
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
-import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
 import {
+  coerceMobileWorkspaceStatuses,
+  DEFAULT_MOBILE_WORKSPACE_STATUSES
+} from './mobile-workspace-statuses'
+import {
+  NO_WORKSPACE_ROW_FILTERS,
   WORKSPACE_ROW_FILTER_KEYS,
   WORKSPACE_ROW_FILTER_UI_FIELDS
 } from '../../../src/shared/workspace-view/workspace-row-filters'
-import { normalizeVisibleExecutionHostIds } from '../../../src/shared/execution-host'
+import { resolveVisibleWorkspaceHostIds } from '../../../src/shared/workspace-view/workspace-host-visibility'
 import type { PersistedUIState } from '../../../src/shared/persisted-ui-state-types'
+import type { WORKSPACE_VIEW_UI_FIELDS } from '../../../src/shared/workspace-view/workspace-view-ui-fields'
 import type { FilterState } from './workspace-list-types'
-
-export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
-export type MobileSortMode = PersistedUIState['sortBy']
+import {
+  WORKSPACE_GROUP_BY_CHOICES,
+  WORKSPACE_SORT_BY_CHOICES
+} from '../../../src/shared/workspace-view/workspace-view-options'
 
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
 export type WorkspaceViewSettings = {
@@ -25,45 +31,54 @@ export type WorkspaceViewSettings = {
     : Key extends 'visibleHostIds'
       ? string[] | null
       : FilterState[Key]
-} & {
-  groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
-  sortBy?: MobileSortMode
-  collapsedGroups?: string[]
-  workspaceStatuses?: WorkspaceStatusDefinition[]
+} & Partial<Pick<PersistedUIState, (typeof WORKSPACE_VIEW_UI_FIELDS)[number]>>
+
+export type MobileViewState = {
+  groupBy: PersistedUIState['groupBy']
+  sortBy: PersistedUIState['sortBy']
+  filters: FilterState
+  collapsedGroups: readonly string[]
+  workspaceStatuses: readonly WorkspaceStatusDefinition[]
+  /**
+   * Whether the desktop shares "Hide other-client workspaces" with this phone. One that does not
+   * (before #28986) marks a row other-client only while its own filter hides it.
+   */
+  sharesOtherClientFilter: boolean
 }
 
-const GROUP_TO_DESKTOP: Record<MobileGroupMode, NonNullable<WorkspaceViewSettings['groupBy']>> = {
-  none: 'none',
-  workspaceStatus: 'workspace-status',
-  repo: 'repo',
-  prStatus: 'pr-status'
+/** What the screen shows until the desktop's own values arrive. */
+export const INITIAL_MOBILE_VIEW: MobileViewState = {
+  groupBy: 'repo',
+  sortBy: 'recent',
+  filters: NO_WORKSPACE_ROW_FILTERS,
+  collapsedGroups: [],
+  workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES,
+  sharesOtherClientFilter: false
 }
 
-const GROUP_FROM_DESKTOP: Record<NonNullable<WorkspaceViewSettings['groupBy']>, MobileGroupMode> = {
-  none: 'none',
-  'workspace-status': 'workspaceStatus',
-  repo: 'repo',
-  'pr-status': 'prStatus'
+/** An edit: the fields it sets, and for filters only the filters it touches. */
+export type MobileViewPatch = Partial<
+  Omit<MobileViewState, 'filters' | 'sharesOtherClientFilter'>
+> & {
+  filters?: Partial<FilterState>
 }
 
-const SORT_VALUES: readonly MobileSortMode[] = ['smart', 'name', 'recent', 'repo', 'manual']
+const GROUP_BY_VALUES: readonly string[] = WORKSPACE_GROUP_BY_CHOICES.map((choice) => choice.id)
+const SORT_BY_VALUES: readonly string[] = WORKSPACE_SORT_BY_CHOICES.map((choice) => choice.id)
 
-export function groupModeToDesktop(
-  mode: MobileGroupMode
-): NonNullable<WorkspaceViewSettings['groupBy']> {
-  return GROUP_TO_DESKTOP[mode]
+function isGroupBy(value: string | undefined): value is PersistedUIState['groupBy'] {
+  return value !== undefined && GROUP_BY_VALUES.includes(value)
 }
 
-export function groupModeFromDesktop(
-  groupBy: WorkspaceViewSettings['groupBy']
-): MobileGroupMode | null {
-  return groupBy ? (GROUP_FROM_DESKTOP[groupBy] ?? null) : null
+function isSortBy(value: string | undefined): value is PersistedUIState['sortBy'] {
+  return value !== undefined && SORT_BY_VALUES.includes(value)
 }
 
-export function sortModeFromDesktop(
-  sortBy: WorkspaceViewSettings['sortBy']
-): MobileSortMode | null {
-  return sortBy && SORT_VALUES.includes(sortBy) ? sortBy : null
+/** The filters the list applies: an older desktop's other-client marks are already its verdict. */
+export function rowFiltersForView(view: MobileViewState): FilterState {
+  return view.sharesOtherClientFilter
+    ? view.filters
+    : { ...view.filters, hideWorkspacesFromOtherDevices: true }
 }
 
 /**
@@ -78,11 +93,11 @@ export function buildWorkspaceViewSettingsUpdate(
   next: MobileViewState
 ): WorkspaceViewSettings {
   const update: WorkspaceViewSettings = {}
-  if ('groupMode' in patch) {
-    update.groupBy = groupModeToDesktop(next.groupMode)
+  if ('groupBy' in patch) {
+    update.groupBy = next.groupBy
   }
-  if ('sortMode' in patch) {
-    update.sortBy = next.sortMode
+  if ('sortBy' in patch) {
+    update.sortBy = next.sortBy
   }
   for (const key of WORKSPACE_ROW_FILTER_KEYS) {
     if (patch.filters && key in patch.filters) {
@@ -93,42 +108,12 @@ export function buildWorkspaceViewSettingsUpdate(
     }
   }
   if ('collapsedGroups' in patch) {
-    update.collapsedGroups = next.collapsedGroups
+    update.collapsedGroups = [...next.collapsedGroups]
   }
   if ('workspaceStatuses' in patch) {
     update.workspaceStatuses = [...next.workspaceStatuses]
   }
   return update
-}
-
-/** The filters `target` sets differently from `current`; an older host's strict ui.set refuses unknown keys. */
-export function changedFilters(current: FilterState, target: FilterState): Partial<FilterState> {
-  const changed: Partial<FilterState> = {}
-  for (const key of WORKSPACE_ROW_FILTER_KEYS) {
-    const from = current[key]
-    const to = target[key]
-    const same =
-      Array.isArray(from) && Array.isArray(to)
-        ? from.length === to.length && from.every((value, i) => value === to[i])
-        : from === to
-    if (!same) {
-      Object.assign(changed, { [key]: to })
-    }
-  }
-  return changed
-}
-
-/** An edit: the fields it sets, and for filters only the filters it touches. */
-export type MobileViewPatch = Partial<Omit<MobileViewState, 'filters'>> & {
-  filters?: Partial<FilterState>
-}
-
-export type MobileViewState = {
-  groupMode: MobileGroupMode
-  sortMode: MobileSortMode
-  filters: FilterState
-  collapsedGroups: string[]
-  workspaceStatuses: readonly WorkspaceStatusDefinition[]
 }
 
 // Apply a desktop PersistedUIState onto the local view state, leaving any field
@@ -137,8 +122,6 @@ export function applyDesktopViewSettings(
   current: MobileViewState,
   settings: WorkspaceViewSettings
 ): MobileViewState {
-  const groupMode = groupModeFromDesktop(settings.groupBy)
-  const sortMode = sortModeFromDesktop(settings.sortBy)
   // Why: a partially hydrated desktop settings payload may carry an empty
   // status catalog; mobile must keep renderable groups instead of hiding rows.
   const workspaceStatuses = settings.workspaceStatuses
@@ -147,20 +130,24 @@ export function applyDesktopViewSettings(
   const filters: FilterState = { ...current.filters }
   for (const key of WORKSPACE_ROW_FILTER_KEYS) {
     const value = settings[WORKSPACE_ROW_FILTER_UI_FIELDS[key]]
-    if (value !== undefined) {
-      Object.assign(filters, {
-        [key]:
-          key === 'visibleHostIds'
-            ? normalizeVisibleExecutionHostIds(settings.visibleWorkspaceHostIds)
-            : value
-      })
+    if (key !== 'visibleHostIds' && value !== undefined) {
+      Object.assign(filters, { [key]: value })
     }
   }
+  // As the desktop reads it: with no list saved, its legacy single-host scope still narrows.
+  if (settings.visibleWorkspaceHostIds !== undefined || settings.workspaceHostScope !== undefined) {
+    filters.visibleHostIds = resolveVisibleWorkspaceHostIds(
+      settings.visibleWorkspaceHostIds,
+      settings.workspaceHostScope
+    )
+  }
   return {
-    groupMode: groupMode ?? current.groupMode,
-    sortMode: sortMode ?? current.sortMode,
+    groupBy: isGroupBy(settings.groupBy) ? settings.groupBy : current.groupBy,
+    sortBy: isSortBy(settings.sortBy) ? settings.sortBy : current.sortBy,
     filters,
     collapsedGroups: settings.collapsedGroups ?? current.collapsedGroups,
-    workspaceStatuses
+    workspaceStatuses,
+    // Each ui.get is the desktop's whole state, so the field's absence means it keeps the filter.
+    sharesOtherClientFilter: settings.hideWorkspacesFromOtherDevices !== undefined
   }
 }

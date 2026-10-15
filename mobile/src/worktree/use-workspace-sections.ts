@@ -1,7 +1,10 @@
 import { useMemo } from 'react'
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import type { MobileGroupMode, MobileSortMode } from './workspace-view-settings'
+import type {
+  WorkspaceGroupBy,
+  WorkspaceSortBy
+} from '../../../src/shared/workspace-view/workspace-view-options'
 import {
   buildSectionRepoMap,
   buildSections,
@@ -15,10 +18,10 @@ import { buildFilterRepos, type WorkspaceSectionRepo } from './workspace-filter-
 
 export function useWorkspaceSections(args: {
   displayWorktrees: Worktree[]
-  sortMode: MobileSortMode
+  sortMode: WorkspaceSortBy
   filters: FilterState
   search: string
-  groupMode: MobileGroupMode
+  groupMode: WorkspaceGroupBy
   pinnedIds: Set<string>
   showPinnedInGroups: boolean
   projectCatalog: ProjectSectionCatalog

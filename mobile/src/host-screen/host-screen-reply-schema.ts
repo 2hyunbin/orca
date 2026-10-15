@@ -196,7 +196,8 @@ export const hostViewSettingsSchema = z
       visibleWorkspaceHostIds: salvagedOptional(
         'visibleWorkspaceHostIds',
         z.array(z.string()).nullable()
-      )
+      ),
+      workspaceHostScope: salvagedOptional('workspaceHostScope', z.string())
     })
   })
   .transform((reply) => reply.ui)

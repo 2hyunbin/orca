@@ -4,38 +4,66 @@
   "family": "host.view-settings",
   "namedDeltas": [],
   "values": {
-    "0078bce46c03": {
+    "14771ab9449b": {
+      "view": {
+        "collapsedGroups": [],
+        "filters": {
+          "alwaysShowDefaultBranchWorkspace": true,
+          "filterRepoIds": [],
+          "hideAutomationGeneratedWorkspaces": false,
+          "hideCliCreatedWorkspaces": false,
+          "hideDefaultBranchWorkspace": false,
+          "hideDetachedHeadWorkspaces": false,
+          "hideSleepingWorkspaces": true,
+          "hideWorkspacesFromOtherDevices": false,
+          "visibleHostIds": {
+            "$rpc": "null"
+          }
+        },
+        "groupBy": "repo",
+        "sharesOtherClientFilter": false,
+        "sortBy": "name",
+        "workspaceStatuses": [
+          {
+            "color": "conductor-done",
+            "icon": "conductor-done",
+            "id": "completed",
+            "label": "Done"
+          },
+          {
+            "color": "conductor-review",
+            "icon": "conductor-review",
+            "id": "in-review",
+            "label": "In review"
+          },
+          {
+            "color": "conductor-progress",
+            "icon": "conductor-progress",
+            "id": "in-progress",
+            "label": "In progress"
+          },
+          {
+            "color": "neutral",
+            "icon": "circle",
+            "id": "todo",
+            "label": "Todo"
+          }
+        ]
+      }
+    },
+    "3337ab8c1ffc": {
       "name": "ui.set#1",
-      "ordinal": 14,
+      "ordinal": 6,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
     },
-    "02e97e94bdf2": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      },
-      "groupMode": "repo",
-      "sortMode": "name",
-      "statuses": []
+    "582477c8e0af": {
+      "name": "ui.get#1",
+      "ordinal": 2,
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
     },
-    "49b07092d960": {
-      "name": "sortMode",
-      "ordinal": 9,
-      "value": "name"
-    },
-    "4c8dbecc905b": {
+    "5b5eda740798": {
       "name": "ui.set#1",
-      "ordinal": 13,
+      "ordinal": 5,
       "args": [
         {
           "name": "method",
@@ -66,40 +94,6 @@
           }
         }
       }
-    },
-    "502a83a190c2": {
-      "name": "workspaceStatuses",
-      "ordinal": 10,
-      "value": []
-    },
-    "51bd1b75d3f1": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": false,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      },
-      "groupMode": "none",
-      "sortMode": "recent",
-      "statuses": []
-    },
-    "582477c8e0af": {
-      "name": "ui.get#1",
-      "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
-    },
-    "641f71cd84d7": {
-      "name": "collapsedGroups",
-      "ordinal": 6,
-      "value": []
     },
     "651e8014c9ff": {
       "name": "ui.get#1",
@@ -139,28 +133,6 @@
         }
       }
     },
-    "734dda8a7102": {
-      "name": "filters",
-      "ordinal": 12,
-      "value": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      }
-    },
-    "840c5f323f3d": {
-      "name": "groupMode",
-      "ordinal": 3,
-      "value": "repo"
-    },
     "9270aeb7d9c6": {
       "status": "pending",
       "startedAt": 0
@@ -191,37 +163,101 @@
         "startedAt": 0
       }
     },
-    "a8806d0780bb": {
-      "name": "sortMode",
-      "ordinal": 4,
-      "value": "name"
-    },
-    "aac6fc68cab0": {
-      "name": "filters",
-      "ordinal": 7,
+    "d8928b75d8f8": {
+      "name": "view",
+      "ordinal": 3,
       "value": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
+        "collapsedGroups": [],
+        "filters": {
+          "alwaysShowDefaultBranchWorkspace": true,
+          "filterRepoIds": [],
+          "hideAutomationGeneratedWorkspaces": false,
+          "hideCliCreatedWorkspaces": false,
+          "hideDefaultBranchWorkspace": false,
+          "hideDetachedHeadWorkspaces": false,
+          "hideSleepingWorkspaces": true,
+          "hideWorkspacesFromOtherDevices": false,
+          "visibleHostIds": {
+            "$rpc": "null"
+          }
+        },
+        "groupBy": "repo",
+        "sharesOtherClientFilter": false,
+        "sortBy": "name",
+        "workspaceStatuses": [
+          {
+            "color": "conductor-done",
+            "icon": "conductor-done",
+            "id": "completed",
+            "label": "Done"
+          },
+          {
+            "color": "conductor-review",
+            "icon": "conductor-review",
+            "id": "in-review",
+            "label": "In review"
+          },
+          {
+            "color": "conductor-progress",
+            "icon": "conductor-progress",
+            "id": "in-progress",
+            "label": "In progress"
+          },
+          {
+            "color": "neutral",
+            "icon": "circle",
+            "id": "todo",
+            "label": "Todo"
+          }
+        ]
       }
     },
-    "b6d257a61780": {
-      "name": "groupMode",
-      "ordinal": 8,
-      "value": "repo"
-    },
-    "b7731124942f": {
-      "name": "collapsedGroups",
-      "ordinal": 11,
-      "value": []
+    "e06c240f89c4": {
+      "view": {
+        "collapsedGroups": [],
+        "filters": {
+          "alwaysShowDefaultBranchWorkspace": true,
+          "filterRepoIds": [],
+          "hideAutomationGeneratedWorkspaces": false,
+          "hideCliCreatedWorkspaces": false,
+          "hideDefaultBranchWorkspace": false,
+          "hideDetachedHeadWorkspaces": false,
+          "hideSleepingWorkspaces": false,
+          "hideWorkspacesFromOtherDevices": false,
+          "visibleHostIds": {
+            "$rpc": "null"
+          }
+        },
+        "groupBy": "repo",
+        "sharesOtherClientFilter": false,
+        "sortBy": "recent",
+        "workspaceStatuses": [
+          {
+            "color": "conductor-done",
+            "icon": "conductor-done",
+            "id": "completed",
+            "label": "Done"
+          },
+          {
+            "color": "conductor-review",
+            "icon": "conductor-review",
+            "id": "in-review",
+            "label": "In review"
+          },
+          {
+            "color": "conductor-progress",
+            "icon": "conductor-progress",
+            "id": "in-progress",
+            "label": "In progress"
+          },
+          {
+            "color": "neutral",
+            "icon": "circle",
+            "id": "todo",
+            "label": "Todo"
+          }
+        ]
+      }
     },
     "eb79a9b3682a": {
       "status": "fulfilled",
@@ -231,10 +267,54 @@
         "$rpc": "undefined"
       }
     },
-    "fa699d780625": {
-      "name": "workspaceStatuses",
-      "ordinal": 5,
-      "value": []
+    "fb0aadce7fdf": {
+      "name": "view",
+      "ordinal": 4,
+      "value": {
+        "collapsedGroups": [],
+        "filters": {
+          "alwaysShowDefaultBranchWorkspace": true,
+          "filterRepoIds": [],
+          "hideAutomationGeneratedWorkspaces": false,
+          "hideCliCreatedWorkspaces": false,
+          "hideDefaultBranchWorkspace": false,
+          "hideDetachedHeadWorkspaces": false,
+          "hideSleepingWorkspaces": true,
+          "hideWorkspacesFromOtherDevices": false,
+          "visibleHostIds": {
+            "$rpc": "null"
+          }
+        },
+        "groupBy": "repo",
+        "sharesOtherClientFilter": false,
+        "sortBy": "name",
+        "workspaceStatuses": [
+          {
+            "color": "conductor-done",
+            "icon": "conductor-done",
+            "id": "completed",
+            "label": "Done"
+          },
+          {
+            "color": "conductor-review",
+            "icon": "conductor-review",
+            "id": "in-review",
+            "label": "In review"
+          },
+          {
+            "color": "conductor-progress",
+            "icon": "conductor-progress",
+            "id": "in-progress",
+            "label": "In progress"
+          },
+          {
+            "color": "neutral",
+            "icon": "circle",
+            "id": "todo",
+            "label": "Todo"
+          }
+        ]
+      }
     }
   },
   "recording": {
@@ -249,33 +329,22 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "51bd1b75d3f1",
+          "state": "e06c240f89c4",
           "effects": []
         }
       },
       {
         "id": "settled",
         "observation": {
-          "sender": ["651e8014c9ff", "4c8dbecc905b"],
-          "payloads": ["582477c8e0af", "0078bce46c03"],
+          "sender": ["651e8014c9ff", "5b5eda740798"],
+          "payloads": ["582477c8e0af", "3337ab8c1ffc"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "02e97e94bdf2",
-          "effects": [
-            "840c5f323f3d",
-            "a8806d0780bb",
-            "fa699d780625",
-            "641f71cd84d7",
-            "aac6fc68cab0",
-            "b6d257a61780",
-            "49b07092d960",
-            "502a83a190c2",
-            "b7731124942f",
-            "734dda8a7102"
-          ]
+          "state": "14771ab9449b",
+          "effects": ["d8928b75d8f8", "fb0aadce7fdf"]
         }
       }
     ]

@@ -292,7 +292,7 @@ describe('buildSections', () => {
       'manual',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -338,7 +338,7 @@ describe('buildSections', () => {
       'smart',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -662,7 +662,7 @@ describe('buildSections', () => {
       'manual',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -686,7 +686,7 @@ describe('buildSections', () => {
       'manual',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       []
@@ -698,7 +698,7 @@ describe('buildSections', () => {
     expect(sections[0]?.data.map((worktree) => worktree.worktreeId)).toEqual(['progress'])
   })
 
-  describe.each(['none', 'repo', 'workspaceStatus', 'prStatus'] as const)(
+  describe.each(['none', 'repo', 'workspace-status', 'pr-status'] as const)(
     'pinned placement in %s grouping',
     (groupMode) => {
       const sibling = worktree({ worktreeId: 'sibling', workspaceStatus: 'in-progress' })
@@ -812,7 +812,7 @@ describe('buildSections', () => {
       'manual',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -840,7 +840,7 @@ describe('buildSections', () => {
       'manual',
       { ...NO_WORKSPACE_ROW_FILTERS },
       '',
-      'workspaceStatus',
+      'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
       DEFAULT_MOBILE_WORKSPACE_STATUSES,
