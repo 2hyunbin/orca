@@ -65,7 +65,8 @@ const PARAMS = FederationAttachStartParams.parse({
 function launch(
   f: ReturnType<typeof fakes>,
   worktree?: { id: string },
-  supportsAgentSession = false
+  supportsAgentSession = false,
+  nativeChatDefault?: boolean
 ) {
   const effects: FederationEffect[] = []
   const setups: WorkerSetupReceipt[] = []
@@ -75,7 +76,7 @@ function launch(
     runtime: f.runtime as unknown as OrcaRuntimeService,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch records only attachment stages.
     db: f.db as unknown as OrchestrationDb,
-    params: { ...PARAMS, supportsAgentSession },
+    params: { ...PARAMS, supportsAgentSession, nativeChatDefault },
     agent: 'claude',
     launchPreferences: { model: 'opus' },
     ...(worktree ? { worktree } : {}),
@@ -198,7 +199,7 @@ describe('a federated worker through the launch executor', () => {
   })
 
   it.each([undefined, { id: 'folder:remote' }])(
-    'uses the receiving host chat preference after resolving workspace %j',
+    'uses the coordinator chat preference after resolving workspace %j',
     async (worktree) => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worker creation reads only subscribe and the local execution location.
       setStructuredAgentSessionHost({
@@ -208,7 +209,8 @@ describe('a federated worker through the launch executor', () => {
         }
       } as never)
       const f = fakes()
-      const placed = await launch(f, worktree, true).done
+      f.runtime.getClientSettings.mockReturnValue({ experimentalNativeChat: false })
+      const placed = await launch(f, worktree, true, true).done
       expect(placed).toMatchObject({
         mode: { mode: 'structured', reason: 'user_default' },
         agentSession: { kind: 'structured', handle: placed.terminalHandle },
@@ -223,4 +225,12 @@ describe('a federated worker through the launch executor', () => {
       }
     }
   )
+
+  it('keeps the coordinator terminal default when the receiver prefers chat', async () => {
+    const f = fakes()
+    await expect(launch(f, { id: 'folder:remote' }, true, false).done).resolves.toMatchObject({
+      mode: { mode: 'terminal', preferred: 'terminal', reason: 'user_default' }
+    })
+    expect(f.runtime.getStructuredAgentSessionCreateSupport).not.toHaveBeenCalled()
+  })
 })

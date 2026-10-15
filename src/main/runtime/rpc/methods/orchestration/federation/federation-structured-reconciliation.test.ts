@@ -63,7 +63,7 @@ it('reconciles an accepted structured worker after losing its launch reply witho
   vi.spyOn(worker, 'ensureStructuredAgentSessionHost').mockResolvedValue(undefined)
   vi.spyOn(worker, 'getStructuredAgentSessionCreateSupport').mockResolvedValue({ supported: true })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mode resolution reads only this chat preference.
-  vi.spyOn(worker, 'getClientSettings').mockReturnValue({ experimentalNativeChat: true } as never)
+  vi.spyOn(worker, 'getClientSettings').mockReturnValue({ experimentalNativeChat: false } as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: launch reads only the workspace id and an absent setup receipt.
   vi.mocked(worker.createManagedWorktree).mockResolvedValue({
     worktree: { id: 'repo::windows-worktree', repoId: 'repo' }
@@ -97,6 +97,8 @@ it('reconciles an accepted structured worker after losing its launch reply witho
   }
   const home = new OrcaRuntimeService(null, undefined, { orchestrationEnvironmentTransport: transport })
   home.setOrchestrationDb(homeDb)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mode resolution reads only this chat preference.
+  vi.spyOn(home, 'getClientSettings').mockReturnValue({ experimentalNativeChat: true } as never)
   runtimes.push(home, worker)
   vi.spyOn(home, 'getTerminalPaneKey').mockReturnValue('tab_coord:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
   const sender = new RpcDispatcher({ runtime: home, methods: ORCHESTRATION_METHODS })

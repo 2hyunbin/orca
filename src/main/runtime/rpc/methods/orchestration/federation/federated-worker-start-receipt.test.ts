@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY,
-  ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY
+  ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
 } from '../../../../../../shared/protocol-version'
 import { OrcaRuntimeService } from '../../../../orca-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
@@ -96,6 +97,8 @@ describe('federated worker start receipt validation', () => {
     runtime.setOrchestrationDb(db)
     databases.push(db)
     vi.spyOn(runtime, 'ensureOrchestrationFederationRelay').mockImplementation(() => undefined)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mode resolution reads only this chat preference.
+    vi.spyOn(runtime, 'getClientSettings').mockReturnValue({ experimentalNativeChat: true } as never)
     const run = db.createRun({
       objective: 'federated worker',
       coordinatorHandle: 'term_coord',
@@ -116,7 +119,12 @@ describe('federated worker start receipt validation', () => {
             capabilities: [
               ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY,
               ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY,
-              ...(capable ? [ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY] : [])
+              ...(capable
+                ? [
+                    ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY,
+                    STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+                  ]
+                : [])
             ]
           }
         }
@@ -172,12 +180,13 @@ describe('federated worker start receipt validation', () => {
     )
     expect(attachCall?.[2]).toEqual(
       expect.objectContaining({
-        ...(capable ? { supportsAgentSession: true } : {}),
+        ...(capable ? { supportsAgentSession: true, nativeChatDefault: true } : {}),
         protocolVersion: 1
       })
     )
     if (!capable) {
       expect(attachCall?.[2]).not.toHaveProperty('supportsAgentSession')
+      expect(attachCall?.[2]).not.toHaveProperty('nativeChatDefault')
     }
     expect(result).toMatchObject(
       capable
@@ -189,7 +198,7 @@ describe('federated worker start receipt validation', () => {
         : {
             state: 'ready',
             agentSession: { kind: 'terminal', handle: 'term_remote' },
-            mode: { mode: 'terminal' }
+            mode: { mode: 'terminal', preferred: 'structured', reason: 'remote_execution_host' }
           }
     )
   })

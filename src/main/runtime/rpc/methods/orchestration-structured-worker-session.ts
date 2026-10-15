@@ -198,10 +198,10 @@ function structuredCreateMayHaveCommitted(
 export async function discardStructuredWorkerSession(
   sessionId: string,
   runtime: Pick<OrcaRuntimeService, 'retireStructuredAgentSessionTabFromSnapshot'>
-): Promise<void> {
+): Promise<boolean> {
   const host = getStructuredAgentSessionHost()
   if (!host) {
-    return
+    return false
   }
   try {
     await host.setSessionTabVisibility?.(sessionId, false)
@@ -212,9 +212,10 @@ export async function discardStructuredWorkerSession(
       sessionId,
       error
     )
-    return
+    return false
   }
   retireSettledStructuredWorkerTab(sessionId, runtime)
+  return true
 }
 
 /** A submission reason as a clause: host sentences end in a period, legacy markers do not. */

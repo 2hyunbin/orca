@@ -258,7 +258,7 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
                   placed?.mode ??
                   decideAgentLaunchMode({
                     placement: { agent, terminal: terminalHandle },
-                    settings: readAgentLaunchModeSettings(runtime),
+                    settings: readAgentLaunchModeSettings(runtime, params.nativeChatDefault),
                     vocabulary: WORKER_START_VOCABULARY
                   })
               }
@@ -268,13 +268,17 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           residualResources: []
         }
       } catch (error) {
+        let discardedSessionHandle: string | undefined
         // An unacknowledged turn may still run; only a definite failure authorizes compensation.
         if (!isFederationEffectUnknown(error, failedStage)) {
-          await tearDownFailedWorkerStart({
+          const discarded = await tearDownFailedWorkerStart({
             runtime,
             structuredSession: placed?.structuredSession ?? null,
             dispatchId: params.dispatchId
           })
+          if (discarded) {
+            discardedSessionHandle = placed?.structuredSession?.identity.handle
+          }
         }
         return failFederatedAttachmentWithReceipt({
           db,
@@ -284,6 +288,7 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           error,
           setup,
           launch: launch.receipt,
+          discardedSessionHandle,
           ...(params.supportsAgentSession && placed
             ? { mode: placed.mode, agentSession: placed.agentSession }
             : {})

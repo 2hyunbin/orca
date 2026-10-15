@@ -14,9 +14,19 @@ export function failFederatedAttachmentWithReceipt(args: {
   launch: OrchestrationWorkerLaunchReceipt
   mode?: AgentLaunchResult['receipt']
   agentSession?: AgentLaunchResult['outcome']
+  discardedSessionHandle?: string
 }): unknown {
   const reason = args.error instanceof Error ? args.error.message : String(args.error)
   const unknown = isFederationEffectUnknown(args.error, args.failedStage)
+  if (args.discardedSessionHandle) {
+    const current = args.db.getRemoteDispatchAttachment(args.dispatchId)
+    const residualResources: { id?: string }[] = JSON.parse(current?.residual_resources ?? '[]')
+    args.db.recordRemoteAttachmentStage({
+      dispatchId: args.dispatchId,
+      stage: args.failedStage,
+      residualResources: residualResources.filter(({ id }) => id !== args.discardedSessionHandle)
+    })
+  }
   const attachment = args.db.failRemoteAttachment(
     args.dispatchId,
     args.failedStage,

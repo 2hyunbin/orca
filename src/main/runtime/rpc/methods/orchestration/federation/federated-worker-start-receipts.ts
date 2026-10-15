@@ -5,7 +5,10 @@ import type {
 } from '../../../../../../shared/agent-launch-intent'
 import type { ReadyRemoteFederatedWorkerStartReceipt } from './federated-attach-receipt'
 
-export function federatedReadySurfaceReceipt(remote: ReadyRemoteFederatedWorkerStartReceipt): {
+export function federatedReadySurfaceReceipt(
+  remote: ReadyRemoteFederatedWorkerStartReceipt,
+  nativeChatDefault: boolean
+): {
   agentSession: AgentLaunchOutcome
   mode: AgentLaunchModeReceipt
 } {
@@ -13,7 +16,7 @@ export function federatedReadySurfaceReceipt(remote: ReadyRemoteFederatedWorkerS
     agentSession: remote.agentSession ?? { kind: 'terminal', handle: remote.terminalHandle },
     mode: remote.mode ?? {
       mode: 'terminal',
-      preferred: 'terminal',
+      preferred: nativeChatDefault ? 'structured' : 'terminal',
       reason: 'remote_execution_host',
       detail: 'Started a terminal agent worker through the older federation contract.'
     }

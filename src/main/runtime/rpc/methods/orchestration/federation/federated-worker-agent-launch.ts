@@ -63,7 +63,8 @@ export async function launchFederatedWorkerAgent(args: {
         target: args.worktree
           ? { kind: 'existing', worktree: args.worktree.id }
           : { kind: 'create-worktree', create: {} },
-        launchSource: 'orchestration'
+        launchSource: 'orchestration',
+        nativeChatDefault: params.nativeChatDefault
       },
       terminalOnly: !params.supportsAgentSession,
       vocabulary: WORKER_START_VOCABULARY,

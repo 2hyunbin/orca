@@ -107,11 +107,19 @@ async function attach(runtime: OrcaRuntimeService, createsWorktree: boolean) {
 describe('structured federation start compensation', () => {
   it('retires the created session when setup fails before task delivery', async () => {
     const host = receiver()
-    await expect(attach(host.runtime, true)).resolves.toMatchObject({
+    const result = await attach(host.runtime, true)
+    expect(result).toMatchObject({
       state: 'failed',
       failedStage: 'setup_wait',
       mode: { mode: 'structured' }
     })
+    expect(result).toHaveProperty('residualResources', [
+      expect.objectContaining({ kind: 'worktree' }),
+      expect.objectContaining({ kind: 'terminal', id: 'term_setup' })
+    ])
+    expect(host.db.getRemoteDispatchAttachment('ctx_remote')?.residual_resources).not.toContain(
+      'structworker_'
+    )
     expect(host.send).not.toHaveBeenCalled()
     expect(host.close).toHaveBeenCalledOnce()
     expect(structuredWorkerIdentities.list()).toEqual([])

@@ -8,8 +8,11 @@ import {
   ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_PROTOCOL_VERSION,
   ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_RUNTIME_CAPABILITY,
-  ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY
+  ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
 } from '../../../../../../shared/protocol-version'
+import { isNativeChatEnabled } from '../../../../../../shared/structured-native-chat-launch-route'
+import { readAgentLaunchModeSettings } from '../../../../../agent-launch/agent-launch-mode'
 import { orchestrationMigrationData } from '../../../../../../shared/orchestration-rpc-contract'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
@@ -123,6 +126,7 @@ export async function startFederatedWorker(args: {
   const supportsAgentSession =
     status.capabilities?.includes(ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY) ??
     false
+  const nativeChatDefault = isNativeChatEnabled(readAgentLaunchModeSettings(runtime))
 
   const setupDecision = createsWorktree ? (params.setup ?? 'run') : 'not_applicable'
   const started = db.createStartingWorkerDispatch({
@@ -182,6 +186,10 @@ export async function startFederatedWorker(args: {
           depth: started.dispatch.depth,
           protocolVersion: federationProtocolVersion,
           ...(supportsAgentSession ? { supportsAgentSession: true } : {}),
+          ...(supportsAgentSession &&
+          status.capabilities?.includes(STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY)
+            ? { nativeChatDefault }
+            : {}),
           worktree,
           name: params.name,
           repo: params.repo,
@@ -246,7 +254,7 @@ export async function startFederatedWorker(args: {
         server: { environmentId: server.environmentId, name: server.name },
         setup: remote.setup,
         launch,
-        ...federatedReadySurfaceReceipt(remote),
+        ...federatedReadySurfaceReceipt(remote, nativeChatDefault),
         timeoutMs: budgets.readinessTimeoutMs,
         effects: remote.effects ?? [],
         residualResources: remote.residualResources ?? []

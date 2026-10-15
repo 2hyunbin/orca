@@ -20,10 +20,11 @@ export async function tearDownFailedWorkerStart(args: {
   runtime: OrcaRuntimeService
   structuredSession: Awaited<ReturnType<typeof createStructuredWorkerSessionForWorktree>> | null
   dispatchId: string
-}): Promise<void> {
+}): Promise<boolean> {
   const { runtime, structuredSession } = args
   releaseStructuredWorkerSession(args.dispatchId, runtime)
   if (structuredSession) {
-    await discardStructuredWorkerSession(structuredSession.identity.sessionId, runtime)
+    return discardStructuredWorkerSession(structuredSession.identity.sessionId, runtime)
   }
+  return false
 }

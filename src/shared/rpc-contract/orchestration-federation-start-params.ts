@@ -13,6 +13,8 @@ export const FederationAttachStartParams = z.object({
   protocolVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   /** Sent only to a peer advertising the federation agent-session capability. */
   supportsAgentSession: z.boolean().optional(),
+  /** The coordinator's chat preference; the execution host still checks launch support. */
+  nativeChatDefault: z.boolean().optional(),
   worktree: requiredString('Missing remote worktree selector'),
   name: OptionalString,
   repo: OptionalString,
