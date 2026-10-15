@@ -244,38 +244,48 @@ export function awaitStructuredRouteHostAnswer(
     return null
   }
   let stopCapabilitiesWait = (): void => {}
-  const ask = async (): Promise<void> => {
-    const readyInput = needsInventory
-      ? { ...input, installedHere: (await store.ensureNativeDetectedAgents?.()) ?? null }
-      : input
-    if (!structuredRouteAwaits(readyInput)) {
-      return
-    }
-    let capabilities = readyInput.hostCapabilities
-    // Either route may be missing this computer's capabilities: wait for the probe that lands
-    // them, since one that failed at startup answers null at once.
-    if (capabilities === null && parseExecutionHostId(input.executionHostId)?.kind === 'local') {
-      const wait = awaitLocalRuntimeCapabilities()
-      stopCapabilitiesWait = wait.stop
-      capabilities = await wait.known
-    }
-    await relearnHostStructuredAgents(
-      input.executionHostId,
-      capabilities,
-      store.runtimeStatusByEnvironmentId
-    )
-  }
+  const timedOut = Symbol('host-answer-timeout')
   let timer: ReturnType<typeof setTimeout> | undefined
-  const answered = ask().catch((error: unknown) => {
-    console.warn('[agent-launch-route] could not ask the host', error)
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(timedOut), waitMs)
   })
-  const deadline = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, waitMs)
-  })
-  return Promise.race([answered, deadline]).finally(() => {
-    clearTimeout(timer)
-    stopCapabilitiesWait()
-  })
+  return (async (): Promise<void> => {
+    try {
+      const readyInput = needsInventory
+        ? {
+            ...input,
+            installedHere:
+              (await Promise.race([store.ensureNativeDetectedAgents?.(), deadline])) ?? null
+          }
+        : input
+      if (!structuredRouteAwaits(readyInput)) {
+        return
+      }
+      let capabilities = readyInput.hostCapabilities
+      // Either route may be missing this computer's capabilities: wait for the probe that lands
+      // them, since one that failed at startup answers null at once.
+      if (capabilities === null && parseExecutionHostId(input.executionHostId)?.kind === 'local') {
+        const wait = awaitLocalRuntimeCapabilities()
+        stopCapabilitiesWait = wait.stop
+        capabilities = await Promise.race([wait.known, deadline])
+      }
+      await Promise.race([
+        relearnHostStructuredAgents(
+          input.executionHostId,
+          capabilities,
+          store.runtimeStatusByEnvironmentId
+        ),
+        deadline
+      ])
+    } catch (error) {
+      if (error !== timedOut) {
+        console.warn('[agent-launch-route] could not ask the host', error)
+      }
+    } finally {
+      clearTimeout(timer)
+      stopCapabilitiesWait()
+    }
+  })()
 }
 
 /** The one place a launch route is decided. Delivery mode is fixed here too, so the settle loop
