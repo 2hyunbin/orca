@@ -73,7 +73,7 @@ export async function registerProjectOnWslHost(
   }
   const targetPath = posix.normalize(name === null ? path.linuxPath : posix.join(path.linuxPath, name))
   const targetKey = foldWslUncPathCaseInsensitiveParts(
-    `//wsl.localhost/${path.distro}${targetPath}`
+    `//wsl.localhost/${path.distro}${targetPath}`.replace(/\/+$/, '')
   )
   const owner = await resolveNewWslProjectHost(store, operation.path, targetKey, executionHostId)
   if (!owner) {

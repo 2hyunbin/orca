@@ -45,7 +45,7 @@ describe('new WSL project ownership', () => {
     expect(mocks.call).not.toHaveBeenCalled()
     ready('wsl:ubuntu')
     await expect(adding).resolves.toMatchObject({
-      id: guest.id, path: guest.path, executionHostId: 'runtime:wsl:ubuntu'
+      id: guest.id, path: guest.path, executionHostId: 'runtime:wsl%3Aubuntu'
     })
     await registerProjectOnWslHost(store, {
       kind: 'add', path: '\\\\wsl$\\Ubuntu\\home\\me\\notes', repoKind: 'folder'
@@ -126,7 +126,7 @@ describe('new WSL project ownership', () => {
       parentPath: '/home/me', mode: 'separate', projectPaths: ['/home/me/new']
     })
     expect(result).toMatchObject({
-      executionHostId: 'runtime:wsl:ubuntu', importedCount: 1, alreadyKnownCount: 1,
+      executionHostId: 'runtime:wsl%3Aubuntu', importedCount: 1, alreadyKnownCount: 1,
       projects: [
         { path: saved.path, projectId: saved.id, status: 'already-known' },
         { projectId: 'new', status: 'imported' }

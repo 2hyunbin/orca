@@ -13,7 +13,7 @@ import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { upsertAddedRepoWithProjectHostSetup } from './add-repo-store-upsert'
 import { addedRepoRefreshOptions, resolveAddRepoRuntimeTarget } from './add-repo-runtime-owner'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 
 export function useCreateRepo(
   fetchWorktrees: (
@@ -169,7 +169,7 @@ export function useCreateRepo(
         const folderWorktree = useAppStore
           .getState()
           .worktreesByRepo[repo.id]?.find(
-            (worktree) => worktree.hostId === ownerOptions.executionHostId
+            (worktree) => getWorktreeExecutionHostId(worktree, repo) === ownerOptions.executionHostId
           )
         if (folderWorktree) {
           activateAndRevealWorktree(folderWorktree.id, {

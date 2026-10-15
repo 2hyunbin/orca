@@ -9,7 +9,7 @@ import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-t
 import { defaultCreationHost } from '@/lib/default-creation-host'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { translate } from '@/i18n/i18n'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { fetchRuntimeAddProjectPathStatus, getRuntimeEnvironmentDisplayName } from './owner-routing'
@@ -176,7 +176,7 @@ export function createRepoAddActions(
         const executionHostId = getRepoExecutionHostId(repo)
         await get().fetchWorktrees(repo.id, { executionHostId })
         const folderWorktree = get().worktreesByRepo[repo.id]?.find(
-          (worktree) => worktree.hostId === executionHostId
+          (worktree) => getWorktreeExecutionHostId(worktree, repo) === executionHostId
         )
         if (folderWorktree) {
           const onboarding = await window.api.onboarding.get().catch(() => null)
