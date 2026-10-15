@@ -15549,7 +15549,11 @@
           "setupFailed": "No funcionó. Salida de Python:",
           "tryAgain": "Intentar de nuevo",
           "useAnotherPython": "Usar otro Python…",
-          "venvDescription": "Orca creará un .venv en {{folder}} desde '{{env}}', instalará ipykernel en él y ejecutará este notebook allí."
+          "venvDescription": "Orca creará un .venv en {{folder}} desde '{{env}}', instalará ipykernel en él y ejecutará este notebook allí.",
+          "earlierOutputHidden": "La salida anterior está oculta.",
+          "moreOutputsHidden": "Hay {{count}} salidas más ocultas.",
+          "moreOutputsHidden_one": "Hay {{count}} salida más oculta.",
+          "moreOutputsHidden_other": "Hay {{count}} salidas más ocultas."
         },
         "MarkdownPreview": {
           "e4683f70c4": "Cancelar",

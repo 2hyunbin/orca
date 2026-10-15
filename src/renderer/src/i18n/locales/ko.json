@@ -15549,7 +15549,11 @@
           "setupFailed": "실패했습니다. Python 출력:",
           "tryAgain": "다시 시도",
           "useAnotherPython": "다른 Python 사용…",
-          "venvDescription": "Orca가 '{{env}}'에서 {{folder}}에 .venv를 만들고, ipykernel을 설치한 뒤 이 노트북을 거기서 실행합니다."
+          "venvDescription": "Orca가 '{{env}}'에서 {{folder}}에 .venv를 만들고, ipykernel을 설치한 뒤 이 노트북을 거기서 실행합니다.",
+          "earlierOutputHidden": "이전 출력은 숨겨져 있습니다.",
+          "moreOutputsHidden": "출력 {{count}}개가 더 숨겨져 있습니다.",
+          "moreOutputsHidden_one": "출력 {{count}}개가 더 숨겨져 있습니다.",
+          "moreOutputsHidden_other": "출력 {{count}}개가 더 숨겨져 있습니다."
         },
         "MarkdownPreview": {
           "e4683f70c4": "취소",

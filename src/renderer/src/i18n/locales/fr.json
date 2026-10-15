@@ -15657,7 +15657,11 @@
           "setupFailed": "Cela n'a pas fonctionné. Sortie de Python :",
           "tryAgain": "Réessayer",
           "useAnotherPython": "Utiliser un autre Python…",
-          "venvDescription": "Orca va créer un .venv dans {{folder}} à partir de « {{env}} », y installer ipykernel, puis y exécuter ce notebook."
+          "venvDescription": "Orca va créer un .venv dans {{folder}} à partir de « {{env}} », y installer ipykernel, puis y exécuter ce notebook.",
+          "earlierOutputHidden": "La sortie précédente est masquée.",
+          "moreOutputsHidden": "{{count}} autres sorties sont masquées.",
+          "moreOutputsHidden_one": "{{count}} autre sortie est masquée.",
+          "moreOutputsHidden_other": "{{count}} autres sorties sont masquées."
         },
         "MarkdownPreview": {
           "e4683f70c4": "Annuler",

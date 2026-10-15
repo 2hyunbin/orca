@@ -79,7 +79,10 @@ describe('ipynb parsing', () => {
       executionCount: 7,
       language: 'python'
     })
-    expect(notebook.cells[1]?.outputs[0]).toMatchObject({ kind: 'stream', text: 'hi\n' })
+    expect(notebook.cells[1]?.outputs[0]).toMatchObject({
+      kind: 'stream',
+      drawn: { text: 'hi\n', truncated: false }
+    })
     expect(notebook.cells[1]?.outputs[1]).toMatchObject({
       kind: 'display',
       items: [{ mime: 'text/html' }, { mime: 'text/plain' }]

@@ -15549,7 +15549,11 @@
           "setupFailed": "処理に失敗しました。Python の出力:",
           "tryAgain": "再試行",
           "useAnotherPython": "別の Python を使用…",
-          "venvDescription": "Orca は '{{env}}' から {{folder}} に .venv を作成し、ipykernel をインストールして、このノートブックをそこで実行します。"
+          "venvDescription": "Orca は '{{env}}' から {{folder}} に .venv を作成し、ipykernel をインストールして、このノートブックをそこで実行します。",
+          "earlierOutputHidden": "以前の出力は非表示です。",
+          "moreOutputsHidden": "さらに {{count}} 件の出力が非表示です。",
+          "moreOutputsHidden_one": "さらに {{count}} 件の出力が非表示です。",
+          "moreOutputsHidden_other": "さらに {{count}} 件の出力が非表示です。"
         },
         "MarkdownPreview": {
           "e4683f70c4": "キャンセル",

@@ -5,7 +5,8 @@ import { IpynbCellOutputs } from './IpynbCellOutputs'
 import { IpynbCellSource, IpynbMarkdownCell } from './IpynbCellEditor'
 import { IpynbRunPrompt } from './IpynbCellToolbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { IpynbCell, IpynbOutput } from './ipynb-parse'
+import { DRAWN_OUTPUT_LINES, DRAWN_OUTPUTS_PER_CELL } from './ipynb-output-tail'
+import { parseIpynbOutput, type IpynbCell, type IpynbOutput } from './ipynb-parse'
 
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
@@ -145,7 +146,10 @@ describe('notebook outputs', () => {
             kind: 'error',
             name: 'ZeroDivisionError',
             message: 'division by zero',
-            traceback: '\u001b[0;31mZeroDivisionError\u001b[0m: division by zero'
+            drawn: {
+              text: '\u001b[0;31mZeroDivisionError\u001b[0m: division by zero',
+              truncated: false
+            }
           }
         ])}
       />
@@ -154,6 +158,31 @@ describe('notebook outputs', () => {
     expect(name.tagName).toBe('SPAN')
     expect(name.style.color).not.toBe('')
     expect(document.body.textContent).not.toContain('\u001b')
+  })
+
+  it('draws only the end of a long output and the first outputs of a cell, saying what is hidden', () => {
+    const long = parseIpynbOutput({
+      output_type: 'stream',
+      name: 'stdout',
+      text: Array.from({ length: DRAWN_OUTPUT_LINES + 1 }, (_, index) => `line ${index}\n`)
+    })
+    const short = Array.from(
+      { length: DRAWN_OUTPUTS_PER_CELL },
+      (): IpynbOutput => ({
+        kind: 'stream',
+        name: 'stdout',
+        drawn: { text: 'x', truncated: false }
+      })
+    )
+    if (!long) {
+      throw new Error('Missing stream output')
+    }
+    render(<IpynbCellOutputs cell={cell('code', 'spam()', [long, ...short])} />)
+    const pres = document.querySelectorAll('pre')
+    expect(pres).toHaveLength(DRAWN_OUTPUTS_PER_CELL)
+    expect(pres[0]?.textContent?.startsWith('line 1\n')).toBe(true)
+    expect(pres[0]?.previousElementSibling?.textContent).toBe('Earlier output is hidden.')
+    expect(screen.getByText('{{count}} more outputs are hidden.')).toBeTruthy()
   })
 
   it('sandboxes HTML output behind a no-network CSP and strips scripts', () => {

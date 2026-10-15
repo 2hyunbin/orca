@@ -381,6 +381,10 @@
           "d07e4b8553": "branch",
           "d16e037f40": "rich"
         },
+        "IpynbViewer": {
+          "moreOutputsHidden_one": "{{count}} more output is hidden.",
+          "moreOutputsHidden_other": "{{count}} more outputs are hidden."
+        },
         "ReviewNotesSendMenuContent": {
           "50f7e753ea": "Sending notes to active agent...",
           "bb9c69a0c9": "Notes sent to active agent.",

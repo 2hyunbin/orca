@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
-import {
-  applyKernelOutput,
-  collapseCarriageReturns,
-  toStoredOutputs,
-  type LiveOutputs
-} from './ipynb-kernel-outputs'
+import { applyKernelOutput, toStoredOutputs, type LiveOutputs } from './ipynb-kernel-outputs'
+import { collapseCarriageReturns } from './ipynb-stream-text'
 
 const EMPTY: LiveOutputs = { outputs: [], clearOnNextOutput: false }
 

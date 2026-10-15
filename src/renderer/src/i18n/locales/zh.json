@@ -15549,7 +15549,11 @@
           "setupFailed": "操作失败。Python 输出：",
           "tryAgain": "重试",
           "useAnotherPython": "使用其他 Python…",
-          "venvDescription": "Orca 将基于“{{env}}”在 {{folder}} 中创建 .venv，安装 ipykernel，并在其中运行此笔记本。"
+          "venvDescription": "Orca 将基于“{{env}}”在 {{folder}} 中创建 .venv，安装 ipykernel，并在其中运行此笔记本。",
+          "earlierOutputHidden": "较早的输出已隐藏。",
+          "moreOutputsHidden": "另有 {{count}} 个输出已隐藏。",
+          "moreOutputsHidden_one": "另有 {{count}} 个输出已隐藏。",
+          "moreOutputsHidden_other": "另有 {{count}} 个输出已隐藏。"
         },
         "MarkdownPreview": {
           "e4683f70c4": "取消",

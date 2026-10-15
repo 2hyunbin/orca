@@ -218,7 +218,7 @@ describe('finished notebook runs retained while the viewer is hidden', () => {
       expect(cells[index]?.outputs[0]).toEqual({
         kind: 'stream',
         name: 'stdout',
-        text: `α😀 ${index}\nsecond\n`
+        drawn: { text: `α😀 ${index}\nsecond\n`, truncated: false }
       })
       expect(cells[index]?.outputs[1]).toMatchObject({
         kind: 'display',
