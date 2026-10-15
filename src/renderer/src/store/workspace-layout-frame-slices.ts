@@ -2,7 +2,8 @@
 // content facts beside them and this window's view (design phase E2a). Not called yet: the switch
 // sets these slices from frames instead of restoring them from disk. Records come from the shared
 // Serializer and slices from the window's own restore builders, so a frame shows what the same
-// session restored from disk shows. Global selection (active workspace and tab) stays the view's.
+// session restored from disk shows. Global selection (active workspace and tab) stays the view's;
+// a remote server's workspaces stay the mirror's, so the caller passes only the ones frames own.
 
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type {
