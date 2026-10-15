@@ -1,12 +1,31 @@
 import type { TuiAgent } from '../../../shared/tui-agent'
+import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 import type { AppState } from '@/store/types'
 import { TUI_AGENT_CONFIG } from '../../../shared/tui-agent-config'
 import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
 import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import { resolveSourceControlLaunchPlatform } from '@/lib/source-control-launch-platform'
+import {
+  resolveExecutionHostAgentStartupShell,
+  type ExecutionHostPlatformFact
+} from '@/lib/execution-host-facts'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
 import type { DeclinedStructuredLaunchTerminalOptions } from '@/lib/structured-agent-session-launch-admission'
+
+/** Shell a work-item agent is quoted for; the client's shell setting only shapes local launches. */
+export function resolveDirectWorkItemStartupShell(
+  hostFact: ExecutionHostPlatformFact,
+  launchPlatform: NodeJS.Platform,
+  settings: AppState['settings']
+): AgentStartupShell | undefined {
+  return hostFact.kind === 'known'
+    ? resolveExecutionHostAgentStartupShell(
+        { ...hostFact, platform: launchPlatform },
+        settings?.terminalWindowsShell
+      )
+    : undefined
+}
 
 export function buildDirectWorkItemStartup(args: {
   agent: TuiAgent | null
@@ -18,6 +37,8 @@ export function buildDirectWorkItemStartup(args: {
   launchConnectionId: string | null
   worktreePath: string
   repoProjectRuntime?: Parameters<typeof resolveSourceControlLaunchPlatform>[0]['projectRuntime']
+  /** The repo owner host the worktree was created on. */
+  hostFact: ExecutionHostPlatformFact
 }): ReturnType<typeof buildDirectWorkItemAgentStartupPlan> {
   const launchPlatform =
     args.launchPlatform ??
@@ -33,6 +54,7 @@ export function buildDirectWorkItemStartup(args: {
     promptDelivery: args.promptDelivery,
     settings: args.settings,
     launchPlatform,
+    shell: resolveDirectWorkItemStartupShell(args.hostFact, launchPlatform, args.settings),
     // Why: SSH hosts run the plain `orca` shim, so the Linux-only `orca-ide` rename is not applied.
     isRemote: typeof args.launchConnectionId === 'string'
   })
