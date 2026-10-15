@@ -35,6 +35,7 @@ export type StructuredAgentSessionQueuedMessagesController = {
   /** The host queues sends. Without it a card can still show — a message the host kept unsent —
    *  but queueing settings and the steer chord would do nothing. */
   queueCapable: boolean
+  /** No card is still sending or has its own action in flight, so Clear all would take every one. */
   clearCapable: boolean
   /** Why the queue holds cards Resume would send: the header row above them. A string reason: a
    *  newer host may name one this build does not know. */
@@ -200,16 +201,18 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   )
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
-  const clearCapable = !cards.some((card) => card.hold === 'sending')
+  // Clear all waits out a card's own action rather than skip the card, so it never clears less.
+  const clearCapable = !cards.some(
+    (card) => card.hold === 'sending' || inFlight.has(card.messageId)
+  )
   const clear = useCallback(async (): Promise<boolean> => {
-    // A card whose own action is out is left to it.
     const messageIds = cardsRef.current
-      .filter((card) => card.hold !== 'sending' && !inFlightRef.current.has(card.messageId))
+      .filter((card) => card.hold !== 'sending')
       .map((card) => card.messageId)
     if (!clearCapable || messageIds.length === 0) {
       return false
     }
-    // Every card it deletes shows busy until the whole Clear settles.
+    // Refused while any of these cards is in flight; each shows busy until the whole Clear settles.
     return run([QUEUE_KEY, ...messageIds], async () => {
       const results = await mapSettledWithConcurrency(
         messageIds,
