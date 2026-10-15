@@ -179,7 +179,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     }
   }
 
-  /** The host's hook store places this conversation in another pane whose PTY is still connected. */
+  /** The host's hook store places this conversation in another pane whose PTY is not proven exited. */
   private isProviderSessionLiveInAnotherPane(record: SleepingAgentSessionRecord): boolean {
     const otherPaneKeys = new Set(
       (this.getAgentProviderSessionSnapshotFn?.() ?? [])
@@ -193,7 +193,8 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
       return false
     }
     for (const pty of this.ptysById.values()) {
-      if (pty.connected && pty.paneKey && otherPaneKeys.has(pty.paneKey)) {
+      // Why: an unverifiable PTY (e.g. a dropped SSH relay) may still be writing the transcript.
+      if (pty.paneKey && otherPaneKeys.has(pty.paneKey) && !this.isPtyKnownExited(pty.ptyId)) {
         return true
       }
     }

@@ -301,29 +301,51 @@ describe('OrcaRuntimeService', () => {
       expect(tap.spawn.mock.calls[0]?.[0]).toMatchObject({ spawnIntent: 'user-resume' })
     })
 
-    it('does not resume a session the hook store places in another live pane', async () => {
+    function makeRuntimeWithOtherPaneHolder(livePtyIds: string[]) {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
-      const otherPaneKey = `other-tab:${HEADLESS_SECOND_LEAF_ID}`
-      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
-        livePtyIds: ['other-pty'],
+      const parked = makeParkedRuntime(runtimeStore, {
+        livePtyIds,
         deps: {
           getAgentProviderSessionSnapshot: () => [
             // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only paneKey and providerSession.
             {
-              paneKey: otherPaneKey,
+              paneKey: `other-tab:${HEADLESS_SECOND_LEAF_ID}`,
               providerSession: { key: 'session_id', id: 'provider-session-1' }
             } as never
           ]
         }
       })
-      runtime.registerPty('other-pty', TEST_WORKTREE_ID, null, {
+      parked.runtime.registerPty('other-pty', TEST_WORKTREE_ID, null, {
         tabId: 'other-tab',
         leafId: HEADLESS_SECOND_LEAF_ID
       })
+      return parked
+    }
+
+    it('does not resume a session the hook store places in another live pane', async () => {
+      const { runtime, spawn } = makeRuntimeWithOtherPaneHolder(['other-pty'])
 
       await userActivate(runtime)
 
       expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
+    })
+
+    // Why: losing sight of the holder (a dropped SSH relay) is not evidence it stopped writing.
+    it('does not resume while the other pane holding the session is unverifiable', async () => {
+      const { runtime, spawn } = makeRuntimeWithOtherPaneHolder([])
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
+    })
+
+    it('resumes once the other pane holding the session has proven exited', async () => {
+      const { runtime, spawn } = makeRuntimeWithOtherPaneHolder([])
+      runtime.onPtyExit('other-pty', 0)
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command).toContain('provider-session-1')
     })
 
     // Why: a session id names a transcript on the machine that captured it.
