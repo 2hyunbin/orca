@@ -20,7 +20,7 @@ import type { WslOrcadLaunch } from './wsl-orcad-deploy'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { listenWslOrcadStdioBridge } from './wsl-orcad-stdio-bridge'
 import { wslOrcadHostDistro } from './wsl-orcad-host-environments'
-import { persistWslHostConnection } from './wsl-host-connection-record'
+import { WslHostService } from './wsl-host-service'
 import {
   addWslHostEnvironment,
   findWslHostDeployment
@@ -179,14 +179,14 @@ describe('WslOrcadConnectionManager', () => {
     const profile = mkdtempSync(join(tmpdir(), 'wsl-installation-'))
     const g1 = '00000000-0000-4000-8000-000000000001'
     const g2 = '00000000-0000-4000-8000-000000000002'
-    const { manager, launches } = setup({
-      onChange: (_distro, connection, _status, publication = 'connection') => {
-        const record = findWslHostDeployment(profile, 'wsl:ubuntu')
-        if (record && connection && publication === 'connection') {
-          persistWslHostConnection(profile, record, connection)
-        }
-      }
+    const invalidated = vi.fn()
+    const service = new WslHostService({
+      userDataPath: () => profile,
+      isEnabled: () => true,
+      hasServerFiles: () => true,
+      publish: vi.fn(), pairingChanged: invalidated, ready: vi.fn(), removed: vi.fn()
     })
+    const { manager, launches } = setup({ onChange: service.handleConnectionChange.bind(service) })
     try {
       launches.push({ ...ready(first.port), distroId: g1 })
       const firstConnection = await manager.ensure('Ubuntu')
@@ -206,6 +206,7 @@ describe('WslOrcadConnectionManager', () => {
       const after = [publicRuntimeEnvironmentWithHostKey(environment)]
       expect(refreshed.pairingOffer).toBe(firstConnection.pairingOffer)
       expect(environment.orcadDeployment).toMatchObject({ distroId: g2 })
+      expect(invalidated).toHaveBeenCalledWith('wsl:ubuntu')
       expect(classifyPeerReplacements(enrolled, after, replacedRuntimeEnvironmentIds(enrolled, after)))
         .toEqual({ retired: ['wsl:ubuntu'], sameHost: [] })
       expect(runtimeEnvironmentRevisionFailure(environment, enrolled[0].pairingRevision, 'test'))
