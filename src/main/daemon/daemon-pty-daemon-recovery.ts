@@ -77,6 +77,10 @@ export abstract class DaemonPtyDaemonRecovery extends DaemonPtyCheckpointPersist
         if (this.writeRecoveryPromise === recovery) {
           this.writeRecoveryPromise = null
         }
+        // Why: a daemon that died while this recovery ran re-armed the latch but was turned away.
+        if (!this.client.isConnected() && this.activeSessionIds.size > 0) {
+          this.startDaemonRecovery()
+        }
       })
     this.writeRecoveryPromise = recovery
   }
