@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
-import { WORKSPACE_LAYOUT_PROFILES } from '../../shared/workspace-layout/workspace-layout-profile.test-fixture'
-import { getDefaultSettings } from '../../shared/constants'
-import { OrcaRuntimeService } from './orca-runtime'
+import { describe, expect, it, vi } from 'vitest'
+import * as layoutLoad from '../../../shared/workspace-layout/workspace-layout-load'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
+import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
+import {
+  addWorkspace,
+  emptySession,
+  leaf
+} from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import { getDefaultSettings } from '../../../shared/constants'
+import { OrcaRuntimeService } from '../orca-runtime'
 
 const repos = ['repo-1', 'repo-ssh', 'repo-server'].map((id) => ({
   id,
@@ -13,13 +19,8 @@ const repos = ['repo-1', 'repo-ssh', 'repo-server'].map((id) => ({
   addedAt: 1
 }))
 
-/** What a phone is sent per workspace when no window publishes: terminal panes and groups. */
-function phoneView(name: string) {
-  const profile = [...WORKSPACE_LAYOUT_PROFILES, ...LEGACY_WORKSPACE_LAYOUT_PROFILES].find(
-    (entry) => entry.name === name
-  )!
-  const session: WorkspaceSessionState = profile.build()
-  const runtime = new OrcaRuntimeService({
+function runtimeFor(session: WorkspaceSessionState) {
+  return new OrcaRuntimeService({
     getRepo: (id: string) => repos.find((repo) => repo.id === id),
     getRepos: () => repos,
     getAllWorktreeMeta: () => ({}),
@@ -40,6 +41,14 @@ function phoneView(name: string) {
     getWorkspaceSession: () => session,
     setWorkspaceSession: () => {}
   })
+}
+
+/** What a phone is sent per workspace when no window publishes: terminal panes and groups. */
+function phoneView(name: string) {
+  const profile = [...WORKSPACE_LAYOUT_PROFILES, ...LEGACY_WORKSPACE_LAYOUT_PROFILES].find(
+    (entry) => entry.name === name
+  )!
+  const runtime = runtimeFor(profile.build())
   runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(undefined, { force: true })
   return [...runtime.mobileSessionTabsByWorktree.values()].map((snapshot) => ({
     panes: snapshot.tabs.flatMap((tab) =>
@@ -97,5 +106,20 @@ describe('headless phone tabs come from the shared Loader', () => {
     expect(phoneView('remote server partition')[0]?.panes).toEqual([
       'tab-server remote:env-1@@handle-1 Terminal 1'
     ])
+  })
+
+  it('loads a partition once when listing every workspace', async () => {
+    let session = emptySession()
+    for (const name of ['a', 'b', 'c']) {
+      session = addWorkspace(session, `repo-1::/repos/repo-1/${name}`, [
+        {
+          id: `g-${name}`,
+          tabs: [{ id: `tab-${name}`, leaves: [[leaf(1), `ssh:target-1@@pty-${name}`]] }]
+        }
+      ])
+    }
+    const load = vi.spyOn(layoutLoad, 'loadWorkspaceLayoutWithoutReport')
+    await runtimeFor(session).listAllMobileSessionTabs()
+    expect(load).toHaveBeenCalledTimes(1)
   })
 })

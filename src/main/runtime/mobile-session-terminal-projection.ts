@@ -1,12 +1,33 @@
 import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import type { TerminalTab } from '../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
+import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
+import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import {
   cloneTerminalLayoutSnapshot,
   collectPersistedTerminalLeafIds,
   deriveHeadlessLegacyTerminalLeafId,
   isPersistedTerminalLeafActive
 } from './mobile-session-layout-projection'
+
+/**
+ * The stored partition as the shared Loader resolves it: which rows are tabs, and which pane
+ * shows a terminal another row already holds, as the window and every other reader see it.
+ * `cache` lives for one caller loop, since the Loader reads the whole partition.
+ */
+export function loadTerminalSession(
+  hostId: ExecutionHostId,
+  session: WorkspaceSessionState,
+  cache?: Map<WorkspaceSessionState, WorkspaceSessionState>
+): WorkspaceSessionState {
+  const loaded =
+    cache?.get(session) ??
+    saveWorkspaceLayout(loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext()))
+  cache?.set(session, loaded)
+  return loaded
+}
 
 export function buildHeadlessMobileSessionTerminalTabs(
   worktreeId: string,

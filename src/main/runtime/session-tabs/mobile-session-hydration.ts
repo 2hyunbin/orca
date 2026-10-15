@@ -6,10 +6,10 @@ import { RuntimeSessionTabsInventoryPublication } from './session-tabs-inventory
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
-import { buildHeadlessMobileSessionTerminalTabs } from '../mobile-session-terminal-projection'
-import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
-import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
-import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
+import {
+  buildHeadlessMobileSessionTerminalTabs,
+  loadTerminalSession
+} from '../mobile-session-terminal-projection'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { buildHeadlessMobileSessionEditorTabs } from '../mobile-session-editor-projection'
 import type {
@@ -106,6 +106,8 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
       onlyRuntimeOwnedTerminals?: boolean
       runtimeOwnedTerminalCandidateKnown?: boolean
       workspaceSession?: WorkspaceSessionState
+      /** Shared across one caller loop over worktrees, so each stored partition loads once. */
+      loadedSessions?: Map<WorkspaceSessionState, WorkspaceSessionState>
     } = {}
   ): Set<string> {
     // Why: report which worktrees were reconciled in place so callers don't
@@ -162,8 +164,6 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
     // repo inventory on the hot poll path, and `null` when the store cannot
     // report repos — an unavailable list must not read as "every repo is gone".
     let liveRepoIds: Set<string> | null | undefined
-    // Why: the shared Loader decides which stored rows are tabs and which pane shows a terminal
-    // another row already holds, as for the window and every other reader; raw rows repeat them.
     let loaded: WorkspaceSessionState | undefined
     for (const [entryWorktreeId] of entries) {
       const ownerRepoId = splitWorktreeIdForFilesystem(entryWorktreeId)?.repoId
@@ -195,14 +195,12 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
       const runtimeOwnedOnly =
         options.onlyRuntimeOwnedTerminals === true &&
         (existing !== undefined || hasAuthoritativeWindow)
-      loaded ??= saveWorkspaceLayout(
-        loadWorkspaceLayoutWithoutReport(
-          worktreeId
-            ? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
-            : LOCAL_EXECUTION_HOST_ID,
-          session,
-          nameBasedLoadContext()
-        )
+      loaded ??= loadTerminalSession(
+        worktreeId
+          ? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
+          : LOCAL_EXECUTION_HOST_ID,
+        session,
+        options.loadedSessions
       )
       const terminalTabs = buildHeadlessMobileSessionTerminalTabs(
         entryWorktreeId,
