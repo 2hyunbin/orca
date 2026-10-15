@@ -42,6 +42,7 @@ import {
 import { DaemonClient } from './client'
 import { clearSeveredDaemon } from './daemon-host-image-state'
 import { PROTOCOL_VERSION } from './types'
+import { recoverRetiredMacDaemonJobs } from './macos-retired-daemon-recovery'
 
 export type { RestartDaemonResult } from './daemon-restart-state'
 
@@ -60,6 +61,9 @@ async function runRestartDaemon(expectedDaemonPid?: number): Promise<RestartDaem
   }
 
   const runtimeDir = getRuntimeDir()
+  if (expectedDaemonPid === undefined) {
+    await recoverRetiredMacDaemonJobs(runtimeDir)
+  }
   if (expectedDaemonPid !== undefined) {
     // Why before any teardown: a targeted restart must not end a single terminal when the
     // endpoint now belongs to a replacement daemon.
