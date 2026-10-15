@@ -506,32 +506,15 @@ function sortedEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   )
 }
 
-/** The child as the provider sees it: the supervisor's wrapper unwrapped, its spec decoded. */
+/** The child as the provider sees it. */
 function childOf(capture: { spec: ProcessSpec; envToDelete: readonly string[] }) {
   const { spec } = capture
-  const env = { ...spec.env }
-  const encoded = env.ORCA_PROVIDER_SUPERVISOR_SPEC
-  delete env.ORCA_PROVIDER_SUPERVISOR_SPEC
-  delete env.ELECTRON_RUN_AS_NODE
-  const supervised = spec.args?.[0] === '-e' && encoded !== undefined
-  const argv = supervised ? (spec.args ?? []).slice((spec.args ?? []).indexOf('--') + 1) : []
-  const supervisor: Record<string, unknown> | null = supervised
-    ? JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
-    : null
   return {
-    command: normalized(supervised ? (argv[0] ?? '') : spec.program),
-    args: (supervised ? argv.slice(1) : (spec.args ?? [])).map(normalized),
+    command: normalized(spec.program),
+    args: (spec.args ?? []).map(normalized),
     cwd: normalized(spec.cwd ?? ''),
-    env: sortedEnv(env),
-    envToDelete: [...new Set(capture.envToDelete)].sort(),
-    supervisor: supervisor
-      ? {
-          cwd: normalized(String(supervisor.cwd)),
-          closeRequest: supervisor.closeRequest,
-          lifetime: supervisor.lifetime,
-          nodeEnv: supervisor.nodeEnv
-        }
-      : null
+    env: sortedEnv({ ...spec.env }),
+    envToDelete: [...new Set(capture.envToDelete)].sort()
   }
 }
 

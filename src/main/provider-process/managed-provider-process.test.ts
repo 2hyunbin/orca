@@ -2,8 +2,6 @@ import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from './provider-process-supervisor'
-import { PROVIDER_SPAWN_FAILURE_MARKER } from './provider-spawn-failure-report'
 import { spawnManagedProviderProcess } from './managed-provider-process'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import type { ProviderProcessTree } from './provider-process-close'
@@ -42,7 +40,7 @@ function launch(fixture: ReturnType<typeof fakeChild>, platform: NodeJS.Platform
       platform,
       site: 'fixture-provider-teardown',
       acceptClose: (result) => result.root === 'exited',
-      policy: () => ({ gracefulExitMs: 100, forcedExitMs: 50 })
+      policy: { gracefulExitMs: 100, forcedExitMs: 50 }
     }
   )
 }
@@ -66,7 +64,7 @@ function fakeTree(initial: DescendantTreeVerdict = 'unverifiable') {
 }
 
 describe('managed provider process', () => {
-  it('applies launch environment and uses the supervisor on its execution platform', () => {
+  it('applies launch environment and leads its own group on its execution platform', () => {
     const fixture = fakeChild()
     const managed = spawnManagedProviderProcess(
       {
@@ -81,7 +79,7 @@ describe('managed provider process', () => {
         inheritedEnv: { SECRET: 'inherited', PATH: '/bin' },
         site: 'fixture',
         acceptClose: (result) => result.root === 'exited' && result.tree === 'exited',
-        policy: () => ({ gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS, forcedExitMs: 50 })
+        policy: { gracefulExitMs: 100, forcedExitMs: 50 }
       }
     )
     expect(managed.supervised).toBe(true)
@@ -179,7 +177,7 @@ describe('managed provider process', () => {
     await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
   })
 
-  it('names a missing provider executable from a direct spawn error or a supervisor report', async () => {
+  it('names a missing provider executable from its spawn error', () => {
     const direct = fakeChild(null)
     const directManaged = launch(direct)
     direct.child.emit(
@@ -190,33 +188,6 @@ describe('managed provider process', () => {
       })
     )
     expect(directManaged.executableMissing).toBe(true)
-
-    const supervisedLaunch = (fixture: ReturnType<typeof fakeChild>) =>
-      spawnManagedProviderProcess(
-        { command: 'fixture-provider', args: ['serve'], cwd: '/workspace' },
-        {
-          spawnImpl: fixture.spawn,
-          platform: 'linux',
-          site: 'fixture-provider-teardown',
-          policy: () => ({ gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS, forcedExitMs: 50 })
-        }
-      )
-    const supervised = fakeChild()
-    const supervisedManaged = supervisedLaunch(supervised)
-    const report = (code: string): string =>
-      `${PROVIDER_SPAWN_FAILURE_MARKER}${JSON.stringify({ thrown: false, code, message: `spawn fixture-provider ${code}` })}\n`
-    supervised.child.stderr.write(report('ENOENT'))
-    await new Promise((resolve) => setImmediate(resolve))
-    expect(supervisedManaged.executableMissing).toBe(false)
-    supervised.child.emit('exit', 127, null)
-    expect(supervisedManaged.executableMissing).toBe(true)
-
-    const denied = fakeChild()
-    const deniedManaged = supervisedLaunch(denied)
-    denied.child.stderr.write(report('EACCES'))
-    await new Promise((resolve) => setImmediate(resolve))
-    denied.child.emit('exit', 127, null)
-    expect(deniedManaged.executableMissing).toBe(false)
   })
 
   it('does not turn a transport close with an existing pid into Claude exit proof', () => {
@@ -253,7 +224,7 @@ describe('managed provider process', () => {
         platform: 'darwin',
         site: 'fixture',
         acceptClose: (result) => result.root === 'exited' && result.tree === 'exited',
-        policy: () => ({ gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS, forcedExitMs: 50 })
+        policy: { gracefulExitMs: 100, forcedExitMs: 50 }
       }
     )
     const proof = fakeTree()
@@ -295,36 +266,5 @@ describe('managed provider process', () => {
     fixture.child.emit('exit', null, 'SIGKILL')
     await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
     expect(managed.lastCloseResult).toEqual({ root: 'live', tree: 'unverifiable' })
-  })
-
-  it('lets a supervised caller signal immediately and waits its configured grace before forcing', async () => {
-    vi.useFakeTimers()
-    const fixture = fakeChild()
-    const managed = spawnManagedProviderProcess(
-      { command: 'fixture-provider', args: [] },
-      {
-        spawnImpl: fixture.spawn,
-        platform: 'darwin',
-        site: 'fixture',
-        acceptClose: (result) => result.root === 'exited' && result.tree === 'exited',
-        policy: () => ({
-          gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS + 500,
-          forcedExitMs: 50,
-          signalSupervisorOnClose: true
-        })
-      }
-    )
-    fixture.child.kill.mockImplementation(() => {
-      setTimeout(() => fixture.child.emit('exit', 0, 'SIGTERM'), 550)
-      return true
-    })
-    const close = managed.close()
-    await vi.advanceTimersByTimeAsync(549)
-    expect(fixture.child.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM')
-    expect(managed.rootVerdict).toBe('live')
-    await vi.advanceTimersByTimeAsync(1)
-    await expect(close).resolves.toMatchObject({ root: 'exited' })
-    expect(fixture.child.kill).not.toHaveBeenCalledWith('SIGKILL')
-    expect(vi.getTimerCount()).toBe(0)
   })
 })

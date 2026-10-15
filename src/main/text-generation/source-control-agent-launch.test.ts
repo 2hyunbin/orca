@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RunProcess from '@orca/process-host'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
-import { POSIX_PROVIDER_SUPERVISOR_SCRIPT } from '../provider-process/provider-process-supervisor'
 import { generateCommitMessageFromContext } from './commit-message-text-generation'
 import { withPlatform } from './commit-message-text-generation-test-harness'
 import { spawnSourceControlAgent } from './source-control-agent-launch'
@@ -26,10 +25,6 @@ function lastSpawnSpec(): ProcessSpec {
   return spawnProcessMock.mock.calls.at(-1)![0]
 }
 
-function decodedSupervisorSpec(spec: ProcessSpec): Record<string, unknown> {
-  return JSON.parse(Buffer.from(spec.env!.ORCA_PROVIDER_SUPERVISOR_SPEC!, 'base64').toString())
-}
-
 const folder = mkdtempSync(join(tmpdir(), 'orca-agent-launch-'))
 afterAll(() => rmSync(folder, { recursive: true, force: true }))
 
@@ -41,9 +36,9 @@ describe('spawnSourceControlAgent', () => {
   it.each([
     ['in its own cwd', true, '/work/repo'],
     ['in the process cwd', false, process.cwd()]
-  ])('runs a POSIX agent one-shot under the provider supervisor %s', (_, useCwd, cwd) => {
+  ])('spawns a POSIX agent directly as the leader of its own group %s', (_, useCwd, cwd) => {
     spawnProcessMock.mockReturnValueOnce(fakeChild())
-    const child = withPlatform('linux', () =>
+    withPlatform('linux', () =>
       spawnSourceControlAgent({
         binary: '/opt/agent/claude',
         args: ['-p', '--verbose'],
@@ -55,19 +50,17 @@ describe('spawnSourceControlAgent', () => {
     )
 
     const spec = lastSpawnSpec()
-    expect(child.supervised).toBe(true)
     expect(spec).toMatchObject({
-      program: process.execPath,
-      args: ['-e', POSIX_PROVIDER_SUPERVISOR_SCRIPT, '--', '/opt/agent/claude', '-p', '--verbose'],
+      program: '/opt/agent/claude',
+      args: ['-p', '--verbose'],
       cwd,
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe']
     })
     expect(spec.env).toMatchObject({ PATH: '/usr/bin', AGENT_TOKEN: 'kept' })
-    expect(decodedSupervisorSpec(spec)).toMatchObject({ cwd, lifetime: 'one-shot' })
   })
 
-  it('spawns a Windows agent directly, without a supervisor', () => {
+  it('spawns a Windows agent directly, without a group', () => {
     spawnProcessMock.mockReturnValueOnce(fakeChild())
     const child = withPlatform('win32', () =>
       spawnSourceControlAgent({
@@ -79,13 +72,12 @@ describe('spawnSourceControlAgent', () => {
       })
     )
 
-    expect(child.supervised).toBeUndefined()
+    expect(child.group).toBeUndefined()
     expect(lastSpawnSpec()).toMatchObject({ program: 'C:/tools/agent.exe', args: ['--print'] })
-    expect(lastSpawnSpec().env).not.toHaveProperty('ORCA_PROVIDER_SUPERVISOR_SPEC')
   })
 })
 
-describe.runIf(process.platform !== 'win32')('supervised agent processes', () => {
+describe.runIf(process.platform !== 'win32')('group-led agent processes', () => {
   it('reports a missing agent binary as not found, as a direct spawn does', async () => {
     const missing = join(folder, 'missing-agent')
 
@@ -118,7 +110,7 @@ describe.runIf(process.platform !== 'win32')('supervised agent processes', () =>
   })
 
   it.each([
-    // Only macOS throws ENOEXEC; glibc's execvp hands such a file to /bin/sh, direct or supervised.
+    // Only macOS throws ENOEXEC; glibc's execvp hands such a file to /bin/sh.
     ...(process.platform === 'darwin'
       ? [['an executable that is not a program', 'garbage', (path: string) => path] as const]
       : []),
@@ -140,26 +132,6 @@ describe.runIf(process.platform !== 'win32')('supervised agent processes', () =>
     })
   })
 
-  // Electron prints startup warnings (a bad NODE_EXTRA_CA_CERTS); Node's debug log stands in here.
-  it('reads a missing binary as not found past the runtime own stderr output', async () => {
-    const missing = join(folder, 'missing-behind-warning')
-
-    await expect(
-      generateCommitMessageFromContext(
-        { branch: 'main', stagedSummary: 'M README.md', stagedPatch: '+test' },
-        { agentId: 'custom', model: '', customAgentCommand: `"${missing}"` },
-        {
-          kind: 'local',
-          cwd: folder,
-          env: { ...process.env, NODE_DEBUG: 'child_process' }
-        }
-      )
-    ).resolves.toEqual({
-      success: false,
-      error: `${missing} not found on PATH. Install ${missing} to use AI commit messages.`
-    })
-  })
-
   it('passes the stdin end through so the agent can answer its request', async () => {
     const agent = join(folder, 'echo-agent.cjs')
     writeFileSync(
@@ -178,6 +150,5 @@ process.stdin.on('end', () => setTimeout(() => console.log(prompt.includes('READ
       )
     ).resolves.toMatchObject({ success: true, message: 'Update README' })
     expect(lastSpawnSpec().program).toBe(process.execPath)
-    expect(decodedSupervisorSpec(lastSpawnSpec())).toMatchObject({ lifetime: 'one-shot' })
   })
 })

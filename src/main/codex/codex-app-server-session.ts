@@ -4,10 +4,6 @@ import { resolveProviderChildEnv } from '../provider-process/provider-process-la
 import { stderrIndicatesMissingAppServer } from './codex-app-server-capability-signal'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
-  providerStderrForDisplay,
-  supervisedProviderSpawnFailure
-} from '../provider-process/provider-spawn-failure-report'
-import {
   killCodexAppServerProcessTree,
   spawnCodexAppServerProcess,
   type CodexAppServerSpawn
@@ -134,7 +130,6 @@ export async function runCodexAppServerSession<T>(
   const { child } = managed
 
   let exited = false
-  let exitCode: number | null = null
   let nextRequestId = 1
   let timedOut = false
   const pending = new Map<
@@ -142,9 +137,8 @@ export async function runCodexAppServerSession<T>(
     { resolve: (r: JsonRpcResponse) => void; reject: (e: Error) => void }
   >()
 
-  managed.onExit((exit) => {
+  managed.onExit(() => {
     exited = true
-    exitCode = exit.code
   })
   // Why: 'error' fires instead of 'exit' when the spawn itself fails
   // (ENOENT); surface it to every in-flight request or they wait forever.
@@ -198,7 +192,7 @@ export async function runCodexAppServerSession<T>(
   })
   function endSession(error: Error): void {
     timedOut = true
-    // A supervised child is stopped by the finally below, which this rejection runs at once.
+    // A group-led child is stopped by the finally below, which this rejection runs at once.
     if (!managed.supervised) {
       killCodexAppServerProcessTree(child)
     }
@@ -288,19 +282,11 @@ export async function runCodexAppServerSession<T>(
     return response.result
   }
 
-  // The supervisor's spawn-failure report reads as Node's own spawn error line.
   function stderrDetail(): string {
-    return providerStderrForDisplay(managed.stderrTail()).trim().slice(0, STDERR_DETAIL_MAX_CHARS)
+    return managed.stderrTail().trim().slice(0, STDERR_DETAIL_MAX_CHARS)
   }
 
   function buildEarlyExitError(): Error {
-    // A supervisor reports a provider it could not start as exit 127; callers classify that error.
-    const spawnFailure = managed.supervised
-      ? supervisedProviderSpawnFailure(exitCode, managed.stderrTail())
-      : null
-    if (spawnFailure) {
-      return spawnFailure.error
-    }
     if (stderrIndicatesMissingAppServer(managed.stderrTail())) {
       return new CodexAppServerUnsupportedError(
         `codex CLI does not support the app-server subcommand: ${stderrDetail()}`
@@ -335,17 +321,9 @@ export async function runCodexAppServerSession<T>(
     }
     throw error
   } finally {
-    // A session past its deadline is wedged; its stdin end would only add a grace.
-    if (timedOut && managed.supervised && !exited) {
-      try {
-        child.stdin.end()
-      } catch {
-        // A destroyed stdin still leaves the SIGTERM and the close below.
-      }
-      child.kill('SIGTERM')
-    }
-    // Ends stdin, gives a supervisor its full stop time (a direct child 1.5 s), then the tree.
-    await managed.close()
+    // Ends stdin, stops the group (a direct child gets 1.5 s), then the tree. A session past its
+    // deadline is wedged, so its group is SIGTERMed at once: the stdin-end grace would only wait.
+    await managed.close(undefined, timedOut && !exited ? 'stdin-end-and-sigterm' : undefined)
     clearTimeout(deadline)
     invocation.signal?.removeEventListener('abort', onAbort)
   }

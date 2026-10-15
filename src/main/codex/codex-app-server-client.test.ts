@@ -13,9 +13,9 @@ import {
 } from './codex-app-server-client'
 import { killCodexAppServerProcessTree } from './codex-app-server-process-tree-kill'
 import {
-  PROVIDER_SIGTERM_GRACE_MS,
-  PROVIDER_SUPERVISOR_MAX_STOP_MS
-} from '../provider-process/provider-process-supervisor'
+  PROVIDER_GROUP_MAX_STOP_MS,
+  PROVIDER_SIGTERM_GRACE_MS
+} from '../provider-process/provider-group-watchdog'
 import { runCodexAppServerSession } from './codex-app-server-session'
 
 // Stub codex app-server speaking the same JSONL protocol: initialize →
@@ -166,7 +166,7 @@ function createStubRequest(
 
 const MANAGED_COMMAND = "/bin/sh '/tmp/orca/codex-hook.sh'"
 // The deadline starts at spawn and the stub writes its pid only once it runs; on a loaded host the
-// supervisor and stub have taken over 2 s to start, so a shorter deadline can stop it first.
+// stub has taken over 2 s to start, so a shorter deadline can stop it first.
 const STUB_START_DEADLINE_MS = 8_000
 
 function managedHook(key: string, trustStatus = 'untrusted'): StubHook {
@@ -449,10 +449,10 @@ describe('runCodexHookTrustGrantSession', () => {
       await expect(runCodexHookTrustGrantSession(request)).rejects.toBeInstanceOf(
         CodexAppServerTimeoutError
       )
-      // The supervisor SIGTERMs its group at the deadline and SIGKILLs it after the grace.
+      // The group stop SIGTERMs the group at the deadline and SIGKILLs it after the grace.
       const pastDeadline = Date.now() - startedAt - STUB_START_DEADLINE_MS
       expect(pastDeadline).toBeGreaterThanOrEqual(PROVIDER_SIGTERM_GRACE_MS - 100)
-      expect(pastDeadline).toBeLessThan(PROVIDER_SUPERVISOR_MAX_STOP_MS + 1_000)
+      expect(pastDeadline).toBeLessThan(PROVIDER_GROUP_MAX_STOP_MS + 1_000)
       const childPid = Number(readFileSync(pidFile, 'utf8'))
       expect(() => process.kill(childPid, 0)).toThrow()
     }

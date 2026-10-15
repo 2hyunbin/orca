@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { WILL_QUIT_TEARDOWN_DEADLINE_MS } from '../../../shared/quit-teardown-deadline'
-import {
-  GRACEFUL_EXIT_MS as CLAUDE_WINDOWS_GRACEFUL_EXIT_MS,
-  SUPERVISED_GRACEFUL_EXIT_MS
-} from '../../claude/claude-child-exit-proof-ladder'
+import { GRACEFUL_EXIT_MS as CLAUDE_WINDOWS_GRACEFUL_EXIT_MS } from '../../claude/claude-child-exit-proof-ladder'
 import { GRACEFUL_EXIT_MS as CODEX_WINDOWS_GRACEFUL_EXIT_MS } from '../../codex/codex-app-server-connection'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
+import { PROVIDER_GROUP_MAX_STOP_MS } from '../../provider-process/provider-group-watchdog'
 import { SNAPSHOT_DRAIN_TIMEOUT_MS } from './structured-agent-session-eviction'
 import {
   CHILD_EVICTION_TIMEOUT_MS,
@@ -45,14 +42,13 @@ describe('structured agent-session host teardown', () => {
     ])
   })
 
-  it("derives quit's child-eviction bound from every provider's supervised close", () => {
+  it("derives quit's child-eviction bound from every provider's close", () => {
     // Eviction drains the sink for the resume offer before it stops the child, inside one bound.
-    // Each close's tree-kill fallback is deliberately outside it: once main exits the supervisor
-    // stops its group itself, and next launch's recovery settles the lease.
+    // Each close's tree-kill fallback is deliberately outside it: once main exits the host
+    // watchdog stops the group itself, and next launch's recovery settles the lease.
     const closes = {
-      claude: SUPERVISED_GRACEFUL_EXIT_MS,
-      codex: PROVIDER_SUPERVISOR_MAX_STOP_MS,
-      // No supervisor on Windows, so its closes wait less than any supervised one.
+      posixGroupStop: PROVIDER_GROUP_MAX_STOP_MS,
+      // No group stop on Windows, so its closes wait less than a POSIX one.
       claudeWindows: CLAUDE_WINDOWS_GRACEFUL_EXIT_MS,
       codexWindows: CODEX_WINDOWS_GRACEFUL_EXIT_MS
     }

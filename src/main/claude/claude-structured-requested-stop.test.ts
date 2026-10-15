@@ -58,7 +58,7 @@ describe('a requested stop of a structured Claude chat', () => {
         { type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'sleep 120' } }
       ])
     )
-    // What Claude 2.1.283 emitted within 35 ms of the supervised SIGTERM mid-tool, recorded
+    // What Claude 2.1.283 emitted within 35 ms of the close's SIGTERM mid-tool, recorded
     // against the real CLI: the killed tool's result, a status frame, and no `result` frame.
     connection.close = async () => {
       connection.handlers.onMessage?.(

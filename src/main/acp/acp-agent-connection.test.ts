@@ -2,7 +2,6 @@ import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { ROOT_ONLY_GRACEFUL_EXIT_MS } from '../provider-process/provider-process-close'
 import type { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import {
@@ -20,8 +19,8 @@ vi.mock('../provider-process/provider-process-teardown', () => ({
 }))
 
 const opened: { connection: AcpAgentConnection; exit: () => void }[] = []
-const grace =
-  process.platform === 'win32' ? ROOT_ONLY_GRACEFUL_EXIT_MS : PROVIDER_SUPERVISOR_MAX_STOP_MS
+// A fake child leads no group, so its close waits the root-only grace on every platform.
+const grace = ROOT_ONLY_GRACEFUL_EXIT_MS
 const start = { cwd: '/execution-host/folder', mcpServers: [] }
 const prompt = [{ type: 'text', text: 'hello' }] as const
 
@@ -70,7 +69,7 @@ afterEach(async () => {
 })
 
 describe('ACP process-owning connection', () => {
-  it('spawns through the supervisor with the host launch and exposes typed session calls', async () => {
+  it('spawns with the host launch and exposes typed session calls', async () => {
     const { connection, spawn, child, agent } = fixture()
     await connection.spawned
     expect(connection.pid).toBe(child.pid)

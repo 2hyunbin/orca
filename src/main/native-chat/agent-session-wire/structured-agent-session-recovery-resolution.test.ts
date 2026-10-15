@@ -10,7 +10,6 @@ import {
 } from '../../runtime/agent-session-older-build-lease.test-fixture'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
-import { supervisedPosixLaunch } from '../../provider-process/provider-process-supervisor'
 import {
   resolveStructuredSessionRecovery,
   type StructuredSessionRecoveryResolutionDeps
@@ -329,71 +328,82 @@ describe('structured session recovery resolution', () => {
   })
 })
 
-describe.runIf(process.platform !== 'win32')(
-  'structured session recovery of a supervised owner',
-  () => {
-    const recordedPids: number[] = []
-    const alive = (pid: number): boolean => {
-      try {
-        process.kill(pid, 0)
-        return true
-      } catch (error) {
-        return !(error instanceof Error && 'code' in error && error.code === 'ESRCH')
+// A new build's owner: the provider leads its group, and its helper stops on the group SIGTERM.
+const GROUP_LEADER = String.raw`
+  const helper = require('node:child_process').spawn(process.execPath, ['-e',
+    "process.on('SIGTERM', () => process.exit(0)); process.stdout.write(String(process.pid)); setInterval(() => {}, 60000)"],
+    { stdio: ['ignore', 'pipe', 'ignore'] })
+  helper.stdout.once('data', (pid) => process.stdout.write(process.pid + ' ' + pid + '\n'))
+  process.on('SIGTERM', () => process.exit(0))
+  setInterval(() => {}, 60000)
+`
+// An older build's owner: a supervisor, alone in its own group, that takes a moment to stop its
+// provider on SIGTERM and exits only then.
+const OLDER_BUILD_SUPERVISOR = String.raw`
+  process.stdout.write(process.pid + '\n')
+  process.on('SIGTERM', () => setTimeout(() => process.exit(143), 300))
+  setInterval(() => {}, 60000)
+`
+
+describe.runIf(process.platform !== 'win32')('structured session recovery of a live owner', () => {
+  const recordedPids: number[] = []
+  const alive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (error) {
+      return !(error instanceof Error && 'code' in error && error.code === 'ESRCH')
+    }
+  }
+
+  afterEach(() => {
+    for (const pid of recordedPids.splice(0)) {
+      if (alive(pid)) {
+        process.kill(pid, 'SIGKILL')
       }
     }
+  })
 
-    afterEach(() => {
-      for (const pid of recordedPids.splice(0)) {
-        if (alive(pid)) {
-          process.kill(pid, 'SIGKILL')
-        }
-      }
+  async function recoverOwner(script: string): Promise<number[]> {
+    const owner = spawn(process.execPath, ['-e', script], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      detached: true
     })
-
-    it('evicts only after the supervisor has reaped a provider that ignores SIGTERM', async () => {
-      const launch = supervisedPosixLaunch(
-        {
-          command: process.execPath,
-          args: [
-            '-e',
-            "process.on('SIGTERM', () => {}); process.stdout.write(process.pid + '\\n'); setInterval(() => {}, 60000)"
-          ]
-        },
-        process.env
-      )
-      const supervisor = spawn(launch.command, launch.args, {
-        env: launch.env,
-        stdio: ['pipe', 'pipe', 'ignore'],
-        detached: true
+    recordedPids.push(owner.pid!)
+    const pids = await new Promise<number[]>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('owner never started')), 10_000)
+      owner.stdout.once('data', (chunk: Buffer) => {
+        clearTimeout(timeout)
+        resolve(chunk.toString().trim().split(' ').map(Number))
       })
-      recordedPids.push(supervisor.pid!)
-      const provider = await new Promise<number>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('provider never started')), 10_000)
-        supervisor.stdout.once('data', (chunk: Buffer) => {
-          clearTimeout(timeout)
-          resolve(Number(chunk.toString().trim()))
-        })
-      })
-      recordedPids.push(provider)
-      const store = await openStore()
-      await liveOwner(store, supervisor.pid!)
-      await latch(store)
-
-      const result = await resolveStructuredSessionRecovery(
-        {
-          store,
-          // The recorded pid is the supervisor's; its absence is the proof recovery evicts on.
-          probeRecord: async () =>
-            alive(supervisor.pid!) ? MATCHED : { outcome: 'pid-absent' as const },
-          now: () => NOW + 10_000
-        },
-        SESSION
-      )
-
-      expect(result).toBe('resolved')
-      // Evicted on proof of death, which must hold for the provider too, not only the supervisor.
-      expect(store.getRecord(SESSION)?.lease.deathEvidence).not.toBeNull()
-      expect(alive(provider)).toBe(false)
     })
+    recordedPids.push(...pids)
+    const store = await openStore()
+    await liveOwner(store, owner.pid!)
+    await latch(store)
+    const result = await resolveStructuredSessionRecovery(
+      {
+        store,
+        probeRecord: async () => (alive(owner.pid!) ? MATCHED : { outcome: 'pid-absent' as const }),
+        now: () => NOW + 10_000
+      },
+      SESSION
+    )
+    expect(result).toBe('resolved')
+    // Evicted on proof of death, not released as an unproven owner.
+    expect(store.getRecord(SESSION)?.lease.deathEvidence).not.toBeNull()
+    return pids
   }
-)
+
+  it('stops a group-led owner through its group, its helpers included', async () => {
+    const [provider, helper] = await recoverOwner(GROUP_LEADER)
+    expect(alive(provider)).toBe(false)
+    // A SIGTERM to the provider alone would have left its helper running.
+    await vi.waitFor(() => expect(alive(helper)).toBe(false))
+  })
+
+  it("stops an older build's owner, a supervisor that leads a group of its own", async () => {
+    const [supervisor] = await recoverOwner(OLDER_BUILD_SUPERVISOR)
+    expect(alive(supervisor)).toBe(false)
+  })
+})

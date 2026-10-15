@@ -19,7 +19,6 @@ import {
   createClaudeUserMessageQueue
 } from './claude-agent-sdk-user-message-queue'
 import type { ClaudeStructuredSdkOptions } from './claude-structured-launch-resolution'
-import { providerStderrForDisplay } from '../provider-process/provider-spawn-failure-report'
 import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
 
 export { ClaudeControlRequestError }
@@ -114,7 +113,7 @@ export type ClaudeStreamJsonConnection = ClaudeControlSurface & {
 type ExitStatus = { code: number | null; signal: NodeJS.Signals | null }
 
 function exitError(stderrTail: string, status: ExitStatus | null, cause?: Error): Error {
-  const detail = providerStderrForDisplay(stderrTail).trim()
+  const detail = stderrTail.trim()
   // The status is the diagnostic a signed-out or refused start leaves behind;
   // it has to survive every wrapper between here and the user.
   const how =

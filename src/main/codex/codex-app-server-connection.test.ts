@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { PassThrough } from 'node:stream'
 import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ProcessSpec, PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 
 import {
   isCodexAppServerRequestError,
@@ -13,12 +13,11 @@ import {
   type CodexAppServerConnection,
   type CodexAppServerConnectionHandlers
 } from './codex-app-server-connection'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import { isCodexAppServerHandshakeExitUnprovenError } from './codex-app-server-handshake-exit-proof'
 
-// close() waits out the supervisor's own stop before forcing the tree.
-const GRACEFUL_EXIT_MS = process.platform === 'win32' ? 1_500 : PROVIDER_SUPERVISOR_MAX_STOP_MS
+// A fake child leads no group, so close() waits the root-only grace before forcing the tree.
+const GRACEFUL_EXIT_MS = 1_500
 
 const originalCodexHome = process.env.CODEX_HOME
 
@@ -187,31 +186,6 @@ function responseLine(targetBytes: number, id: number): string {
 }
 
 describe('openCodexAppServerConnection', () => {
-  it.runIf(process.platform !== 'win32')(
-    'has its supervisor close Codex by its stdin end, the way its own close does',
-    async () => {
-      const { child, spawnImpl } = stubChild()
-      const specs: ProcessSpec[] = []
-      answerInitialize(child)
-
-      const connection = await openCodexAppServerConnection(
-        { command: 'codex', args: ['app-server'] },
-        {},
-        (spec) => {
-          specs.push(spec)
-          return spawnImpl(spec)
-        }
-      )
-
-      expect(
-        JSON.parse(
-          Buffer.from(String(specs[0]?.env?.ORCA_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
-        )
-      ).toMatchObject({ closeRequest: 'stdin-end' })
-      await connection.close()
-    }
-  )
-
   it('advertises the experimental API required for rollout-path resume', async () => {
     const { child, spawnImpl, written } = stubChild()
     answerInitialize(child)

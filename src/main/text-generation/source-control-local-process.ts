@@ -1,5 +1,4 @@
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
-import { supervisedProviderSpawnFailure } from '../provider-process/provider-spawn-failure-report'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'
 import { UnsafeWindowsBatchArgumentsError } from '../win32-utils'
 import { terminateWindowsProcessTree } from '../windows-process-tree-kill'
@@ -33,8 +32,8 @@ export async function killSourceControlAgentProcess(
   if (!pid) {
     return
   }
-  if (child.supervised) {
-    await stopSupervisedChildProcess(child, { site: SOURCE_CONTROL_KILL_SITE })
+  if (child.group) {
+    await stopSupervisedChildProcess(child, child.group, { site: SOURCE_CONTROL_KILL_SITE })
     return
   }
   if (process.platform === 'win32') {
@@ -227,17 +226,6 @@ export function runLocalSourceControlPlan(input: {
           success: false,
           error: `${plan.label} CLI command produced too much output. Check the agent CLI configuration and try again.`
         })
-        return
-      }
-      // A supervised spawn failure reads as the same failure a direct spawn reports.
-      const spawnFailure = supervisedProviderSpawnFailure(code, stderr)
-      if (spawnFailure?.thrown) {
-        console.error('[commit-message] Failed to spawn local generator:', spawnFailure.error)
-        finalize({ success: false, error: couldNotStart })
-        return
-      }
-      if (spawnFailure) {
-        onError(spawnFailure.error)
         return
       }
       finalize(

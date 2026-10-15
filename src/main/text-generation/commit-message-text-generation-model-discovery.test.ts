@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process'
 import type * as ChildProcess from 'node:child_process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { discoverCommitMessageModelsLocal } from './commit-message-text-generation'
-import { PROVIDER_SPAWN_FAILURE_MARKER } from '../provider-process/provider-spawn-failure-report'
 import {
   createChildTerminationExpectation,
   createMockDiscoveryChild,
@@ -35,7 +34,7 @@ function spawnError(errno: string): Error {
 const expectChildTerminated = createChildTerminationExpectation(terminateWindowsProcessTreeMock)
 
 // These suites drive fake children down the Windows direct-child path, taskkill included. The POSIX
-// supervised stop with the Codex home lock (generation: timeout, cancel, output limit; discovery:
+// group stop with the Codex home lock (generation: timeout, cancel, output limit; discovery:
 // timeout, output limit) is in source-control-local-process.test.ts.
 const hostPlatform = process.platform
 
@@ -66,7 +65,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
   })
 
   it('discovers dynamic models through the agent CLI', async () => {
-    // The host's own spawn shape: supervised on POSIX, direct on Windows.
+    // The host's own spawn shape: group-led on POSIX, direct on Windows.
     Object.defineProperty(process, 'platform', { configurable: true, value: hostPlatform })
     const listeners = new Map<string, (value: unknown) => void>()
     const child = {
@@ -97,7 +96,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
   })
 
   it('writes the Claude list_models request to stdin and parses the control response', async () => {
-    // The host's own spawn shape: supervised on POSIX, direct on Windows.
+    // The host's own spawn shape: group-led on POSIX, direct on Windows.
     Object.defineProperty(process, 'platform', { configurable: true, value: hostPlatform })
     const listeners = new Map<string, (value: unknown) => void>()
     const child = {
@@ -195,7 +194,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
   })
 
   it('discovers dynamic models through the configured agent command override', async () => {
-    // The host's own spawn shape: supervised on POSIX, direct on Windows.
+    // The host's own spawn shape: group-led on POSIX, direct on Windows.
     Object.defineProperty(process, 'platform', { configurable: true, value: hostPlatform })
     const listeners = new Map<string, (value: unknown) => void>()
     const child = {
@@ -360,40 +359,6 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
   const notFound = 'claude not found on PATH. Install Claude to discover models.'
   const failedToStart =
     'Claude model discovery failed to start. Check the agent CLI configuration and try again.'
-  const couldNotStart =
-    'Claude model discovery could not be started. Check the agent CLI configuration and try again.'
-  it.each([
-    ['ENOENT', false, notFound],
-    ['EACCES', false, failedToStart],
-    ['ENOTDIR', true, couldNotStart]
-  ])(
-    'reports a supervisor %s spawn failure as a direct spawn does',
-    async (errno, thrown, error) => {
-      const child = createMockDiscoveryChild()
-      spawnMock.mockReturnValue(child as never)
-
-      const pending = discoverCommitMessageModelsLocal('claude', undefined)
-      child.stderr.emit(
-        'data',
-        Buffer.from(
-          `Warning: an Electron startup notice\n${PROVIDER_SPAWN_FAILURE_MARKER}${JSON.stringify({
-            thrown,
-            code: errno,
-            message: `spawn claude ${errno}`
-          })}\n`
-        )
-      )
-      child.emit('close', 127)
-
-      await expect(pending).resolves.toEqual({
-        success: false,
-        error,
-        // A missing binary is typed so the catalog can say the CLI is not installed.
-        ...(errno === 'ENOENT' ? { unavailable: { reason: 'cliMissing' } } : {})
-      })
-    }
-  )
-
   it.each([
     ['ENOENT', notFound],
     ['EACCES', failedToStart]

@@ -357,7 +357,7 @@ describe('Codex state DB backfill recovery', () => {
     expect(spawnProcess).toHaveBeenCalledTimes(2)
     expect(timerDurations).toEqual([5_000, 2_000, 5_000])
     expect(terminate).toHaveBeenCalledTimes(1)
-    expect(terminate).toHaveBeenCalledWith(children[1], process.platform !== 'win32')
+    expect(terminate).toHaveBeenCalledWith(children[1], null)
   })
 
   it('keeps the successful app-server claimant alive until Codex marks its DB complete', async () => {
@@ -377,7 +377,7 @@ describe('Codex state DB backfill recovery', () => {
         now: vi.fn(() => 1_000)
       })
     ).resolves.toEqual({ outcome: 'completed', spawnCount: 1 })
-    expect(terminate).toHaveBeenCalledWith(child, process.platform !== 'win32')
+    expect(terminate).toHaveBeenCalledWith(child, null)
   })
 
   it('hands the Codex shim itself to the spawn chokepoint for native Windows recovery', async () => {
@@ -422,9 +422,9 @@ describe('Codex state DB backfill recovery', () => {
     ])
     expect(spawnOptions.cwd).toBe('C:\\Users\\alice\\.codex')
     expect(spawnOptions.env?.CODEX_HOME).toBe('C:\\Users\\alice\\.codex')
-    // Windows has no supervisor: the drain-first probe termination stays its stop.
+    // Windows leads no group: the drain-first probe termination stays its stop.
     expect(spawnOptions).not.toHaveProperty('detached')
-    expect(terminate).toHaveBeenCalledWith(child, false)
+    expect(terminate).toHaveBeenCalledWith(child, null)
   })
 
   it('retries a live foreign lease until one durable claimant can recover it', async () => {

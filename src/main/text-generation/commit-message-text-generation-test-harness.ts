@@ -31,7 +31,7 @@ export function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
 
 // Binds the caller's hoisted tree-kill mock so test bodies keep calling
 // expectChildTerminated(child) with no extra argument. Asserts the Windows direct-child kill; a
-// supervised POSIX child is stopped with SIGTERM instead (source-control-local-process.test.ts).
+// group-led POSIX child is stopped through its group instead (source-control-local-process.test.ts).
 export function createChildTerminationExpectation(
   terminateWindowsProcessTreeMock: ReturnType<typeof vi.fn>
 ): (child: { pid: number; kill: ReturnType<typeof vi.fn> }) => Promise<void> {
@@ -49,10 +49,7 @@ export function createChildTerminationExpectation(
   }
 }
 
-/** The argv a spawn started as the agent: past the supervisor script's '--' when supervised. */
+/** The argv a spawn started as the agent. */
 export function spawnedAgentArgv([file, args]: readonly unknown[]): unknown[] {
-  const argv: unknown[] = Array.isArray(args) ? args : []
-  return file === process.execPath && argv[0] === '-e'
-    ? argv.slice(argv.indexOf('--') + 1)
-    : [file, ...argv]
+  return [file, ...(Array.isArray(args) ? args : [])]
 }

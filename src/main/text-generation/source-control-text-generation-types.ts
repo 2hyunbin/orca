@@ -1,6 +1,7 @@
 import type { AgentSessionUnavailable } from '../../shared/agent-session-availability'
 import type { spawnProcess } from '@orca/process-host'
 import type { AgentGenerationFailureOutput } from './agent-failure-output'
+import type { ProviderProcessGroup } from '../provider-process/provider-process-group'
 import type {
   CommitMessageAgentCapability,
   CommitMessageModelCapability
@@ -93,8 +94,8 @@ export type LocalProcessExecution<T> = {
 }
 
 export type SpawnedSourceControlAgentProcess = ReturnType<typeof spawnProcess> & {
-  /** True when the child is the POSIX provider supervisor: SIGTERM stops the agent's group, then itself. */
-  readonly supervised?: boolean
+  /** POSIX: the group the agent leads, which stops with Orca however Orca exits. */
+  readonly group?: ProviderProcessGroup | null
 }
 
 export type LocalGenerationTarget = Extract<CommitMessageGenerationTarget, { kind: 'local' }>

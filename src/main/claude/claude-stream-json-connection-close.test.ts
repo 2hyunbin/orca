@@ -140,7 +140,7 @@ describe('Claude stream-json close ordering', () => {
     await expect(connection.close()).resolves.toBe(true)
   })
 
-  // Stdout can end before the exit is seen, as when the provider supervisor's own exit closes it.
+  // Stdout can end before the exit is seen.
   it('reports an exit whose stdout ended first once the exit is seen, with its usual reason', async () => {
     mocks.refresh.mockReset()
     mocks.proveClaudeChildExit.mockReset()

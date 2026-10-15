@@ -35,7 +35,7 @@ const spawnMock = vi.mocked(spawn)
 const expectChildTerminated = createChildTerminationExpectation(terminateWindowsProcessTreeMock)
 
 // These suites drive fake children down the Windows direct-child path, taskkill included. The POSIX
-// supervised stop with the Codex home lock (generation: timeout, cancel, output limit; discovery:
+// group stop with the Codex home lock (generation: timeout, cancel, output limit; discovery:
 // timeout, output limit) is in source-control-local-process.test.ts.
 const hostPlatform = process.platform
 

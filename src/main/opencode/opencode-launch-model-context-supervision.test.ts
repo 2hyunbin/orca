@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
+import { PROVIDER_GROUP_MAX_STOP_MS } from '../provider-process/provider-group-watchdog'
 import {
   alive,
   createSupervisedProbeRig,
@@ -10,7 +10,7 @@ import {
 import { probeOpenCodeLaunchModelContext } from './opencode-launch-model-context'
 
 // Like `opencode serve`, it never exits on stdin end. It starts listening only after the session
-// stdin-end grace, so a supervisor that treated the probe's stdin end as a stop would kill it first.
+// stdin-end grace, so a stop that treated the probe's stdin end as a close would kill it first.
 const SERVE = String.raw`
 setTimeout(() => {
   const server = require('node:http').createServer((request, response) => {
@@ -49,7 +49,7 @@ afterEach(() => {
   rig = null
 })
 
-describe.runIf(process.platform !== 'win32')('supervised OpenCode launch-context probe', () => {
+describe.runIf(process.platform !== 'win32')('group-led OpenCode launch-context probe', () => {
   it('reads the context after its stdin end, then stops the whole server group', async () => {
     rig = createSupervisedProbeRig()
     const executable = rig.writeStandIn('opencode', SERVE)
@@ -70,7 +70,7 @@ describe.runIf(process.platform !== 'win32')('supervised OpenCode launch-context
     expect(existsSync(rig.signalFile) && readFileSync(rig.signalFile, 'utf8')).toBe('SIGTERM')
     expect(alive(pids.provider)).toBe(false)
     // A descendant that ignores SIGTERM holds none of the probe's pipes, so a closed pipe never
-    // proved it gone; only the supervisor's group SIGKILL ends it.
+    // proved it gone; only the group SIGKILL ends it.
     expect(alive(pids.grandchild)).toBe(false)
     // Once the server exits on its SIGTERM, the rest of its group is killed at once, not after the
     // SIGTERM grace; every launch waits on this preflight.
@@ -89,7 +89,7 @@ describe.runIf(process.platform !== 'win32')('supervised OpenCode launch-context
     expect(
       await waitFor(
         () => !alive(pids.provider) && !alive(pids.grandchild),
-        PROVIDER_SUPERVISOR_MAX_STOP_MS + 1_000
+        PROVIDER_GROUP_MAX_STOP_MS + 1_000
       )
     ).toBe(true)
   })

@@ -43,7 +43,7 @@ type RunningServer = {
   connection: CodexAppServerConnection
   descendantPid: number
   exit: Promise<Error>
-  supervisorPid: number
+  rootPid: number
 }
 
 async function openServer(
@@ -74,13 +74,13 @@ async function openServer(
     connection,
     descendantPid: await descendant.promise,
     exit: exit.promise,
-    supervisorPid: connection.pid ?? 0
+    rootPid: connection.pid ?? 0
   }
 }
 
 async function cleanupServer(server: RunningServer): Promise<void> {
   await server.connection.close().catch(() => false)
-  for (const pid of [server.descendantPid, server.supervisorPid]) {
+  for (const pid of [server.descendantPid, server.rootPid]) {
     if (pid > 0 && processExists(pid)) {
       process.kill(pid, 'SIGKILL')
     }
@@ -114,7 +114,7 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
         const server = await openServer(iteration, exitMode)
         try {
           await server.exit
-          expect(processExists(server.supervisorPid)).toBe(false)
+          expect(processExists(server.rootPid)).toBe(false)
           expect(processExists(server.descendantPid)).toBe(false)
           await expect(server.connection.close()).resolves.toBe(true)
         } finally {
@@ -130,7 +130,7 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
       const server = await openServer(iteration, 'stdin-race')
       try {
         await expect(server.connection.close()).resolves.toBe(true)
-        expect(processExists(server.supervisorPid)).toBe(false)
+        expect(processExists(server.rootPid)).toBe(false)
         expect(processExists(server.descendantPid)).toBe(false)
       } finally {
         await cleanupServer(server)

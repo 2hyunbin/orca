@@ -3,13 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SpawnOptions as SdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import type { PipedProcessSpawner, ProcessSpec } from '@orca/process-host/process-spec'
 
-import type * as ProviderSupervisor from '../provider-process/provider-process-supervisor'
-import { createProviderSpawnSpec } from '../provider-process/provider-process-supervisor'
+import type * as ProviderProcessGroup from '../provider-process/provider-process-group'
+import { createProviderSpawnSpec } from '../provider-process/provider-process-group'
 import { createClaudeCodeProcessSpawn } from './claude-agent-sdk-process-spawn'
-import { proveClaudeChildExitWithReaper } from './claude-child-exit-proof-ladder'
 
-vi.mock('../provider-process/provider-process-supervisor', async (importOriginal) => {
-  const actual = await importOriginal<typeof ProviderSupervisor>()
+vi.mock('../provider-process/provider-process-group', async (importOriginal) => {
+  const actual = await importOriginal<typeof ProviderProcessGroup>()
   return { ...actual, createProviderSpawnSpec: vi.fn(actual.createProviderSpawnSpec) }
 })
 
@@ -46,8 +45,6 @@ describe('claude agent SDK process spawn', () => {
     expect(child).toBe(process.child)
     expect(spawn.child).toBe(process.child)
     expect(spawn.pid).toBe(4321)
-    // Windows has no supervisor: Claude itself is the child.
-    expect(spawn.supervised).toBe(false)
     expect(process.specs[0]).toEqual({
       program: '/usr/local/bin/claude',
       args: ['--output-format', 'stream-json'],
@@ -59,31 +56,21 @@ describe('claude agent SDK process spawn', () => {
   })
 
   it.each(['darwin', 'linux'] as const)(
-    'starts Claude under the provider supervisor on %s, which is then the pid the lease records',
+    'starts Claude directly as the leader of its own group on %s, whose pid the lease records',
     (platform) => {
       const process = fakeSpawn()
       const spawn = createClaudeCodeProcessSpawn(process.spawnImpl, platform)
       spawn.spawn(sdkOptions())
 
-      const [spec] = process.specs
-      if (!spec) {
-        throw new Error('the spawner never built a spec')
-      }
-      expect(spawn.supervised).toBe(true)
       expect(spawn.pid).toBe(4321)
-      expect(spec.program).toBe(globalThis.process.execPath)
-      expect(spec.args?.[0]).toBe('-e')
-      expect(spec.args?.slice(2)).toEqual([
-        '--',
-        '/usr/local/bin/claude',
-        '--output-format',
-        'stream-json'
-      ])
-      expect(spec.detached).toBe(true)
-      expect(spec.cwd).toBe('/work/repo')
-      const supervisorSpec = JSON.parse(
-        Buffer.from(String(spec.env?.ORCA_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
-      )
+      expect(process.specs[0]).toEqual({
+        program: '/usr/local/bin/claude',
+        args: ['--output-format', 'stream-json'],
+        cwd: '/work/repo',
+        env: { PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/accounts/one' },
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
       // A gone Orca closes Claude as its own close does (stdin end and SIGTERM), not with the
       // root-only stdin-end drain a managed provider gets by default.
       expect(vi.mocked(createProviderSpawnSpec)).toHaveBeenLastCalledWith(
@@ -92,57 +79,6 @@ describe('claude agent SDK process spawn', () => {
         platform,
         { closeRequest: 'stdin-end-and-sigterm' }
       )
-      expect(supervisorSpec).toMatchObject({
-        closeRequest: 'stdin-end-and-sigterm',
-        cwd: '/work/repo',
-        ownerPid: globalThis.process.pid
-      })
-      // The supervisor passes its env to Claude minus its own two keys.
-      expect(spec.env).toMatchObject({ PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/accounts/one' })
-    }
-  )
-
-  it.each([
-    { platform: 'darwin', specSupervised: false },
-    { platform: 'win32', specSupervised: true }
-  ] as const)(
-    'stops Claude by the spawn spec\u2019s supervision on $platform, never the platform',
-    async ({ platform, specSupervised }) => {
-      const actual = await vi.importActual<typeof ProviderSupervisor>(
-        '../provider-process/provider-process-supervisor'
-      )
-      vi.mocked(createProviderSpawnSpec).mockImplementationOnce((...args) => ({
-        ...actual.createProviderSpawnSpec(...args),
-        supervised: specSupervised
-      }))
-      const process = fakeSpawn()
-      const spawn = createClaudeCodeProcessSpawn(process.spawnImpl, platform)
-      spawn.spawn(sdkOptions())
-      expect(spawn.supervised).toBe(specSupervised)
-
-      const managed = spawn.managed
-      if (!managed) {
-        throw new Error('Claude spawner did not retain its managed child')
-      }
-      // Claude leaves shortly after stdin ends, before the forced stop.
-      process.child.stdin.on('finish', () =>
-        setTimeout(() => process.child.emit('exit', 0, null), 10)
-      )
-      const tree = {
-        capture: vi.fn(async () => {}),
-        reap: vi.fn(async () => 'exited' as const),
-        treeVerdict: 'exited' as const,
-        forcedReapAttempted: false
-      }
-      await expect(proveClaudeChildExitWithReaper({ managed, tree }, () => tree)).resolves.toBe(
-        true
-      )
-      // SIGTERM to an unsupervised Claude on Windows is TerminateProcess; a skipped one leaves it running.
-      if (specSupervised) {
-        expect(process.child.kill).toHaveBeenCalledWith('SIGTERM')
-      } else {
-        expect(process.child.kill).not.toHaveBeenCalled()
-      }
     }
   )
 

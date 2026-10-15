@@ -3,17 +3,16 @@ import { spawnProcess } from '@orca/process-host'
 import { RetryableProcessExitProof } from '@orca/process-host/retryable-process-exit-proof'
 import type { ProviderProcessLaunch } from './provider-process-launch'
 import {
-  PROVIDER_SUPERVISOR_MAX_STOP_MS,
   createProviderSpawnSpec,
-  type ProviderSupervisorLifetime
-} from './provider-process-supervisor'
+  type ProviderCloseRequest,
+  type ProviderProcessLifetime
+} from './provider-process-group'
 import {
   terminateProviderProcessTree,
   type ProviderProcessTeardownVerdict
 } from './provider-process-teardown'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import { isMissingProviderExecutable } from './provider-executable-missing'
-import { supervisedProviderSpawnFailure } from './provider-spawn-failure-report'
 import {
   acceptProviderRootExit,
   closeProviderProcess,
@@ -34,20 +33,21 @@ export type ProviderProcessExit = {
 type ManagedProviderProcessOptions = {
   site: string
   /** Defaults to the root-only policy; only a provider with its own reaper overrides it. */
-  policy?: (supervised: boolean) => ProviderProcessClosePolicy
+  policy?: ProviderProcessClosePolicy
   spawnImpl?: PipedProcessSpawner
   platform?: NodeJS.Platform
   inheritedEnv?: NodeJS.ProcessEnv
   /** Defaults to "the root is gone". */
   acceptClose?: (result: ProviderProcessCloseResult) => boolean
   /** Defaults to `session`; a one-shot's stdin end completes its request instead of stopping it. */
-  lifetime?: ProviderSupervisorLifetime
+  lifetime?: ProviderProcessLifetime
   /** Any stdout or stderr chunk: the child is doing something. */
   onOutput?: () => void
 }
 
 export type ManagedProviderProcess = {
   child: PipedChildProcess
+  /** POSIX: the child leads its own process group, which stops with Orca however Orca exits. */
   supervised: boolean
   /** The spawn failed before a process existed: absence is proven, but no exit was observed. */
   readonly processless: boolean
@@ -58,14 +58,17 @@ export type ManagedProviderProcess = {
   /** The last close that ran the ladder; the already-exited answer only when none did. */
   readonly lastCloseResult: ProviderProcessCloseResult | null
   readonly exitPromise: Promise<void>
-  /** The provider's own executable was not found: a direct spawn's ENOENT, or the one a
-   *  supervisor reported before exiting. */
+  /** The provider's own executable was not found: the spawn's ENOENT. */
   readonly executableMissing: boolean
   /** The last 8 KiB of stderr, which the managed process drains so the child never blocks on it. */
   stderrTail(): string
   onExit(listener: (exit: ProviderProcessExit) => void): void
   terminateTree(): Promise<ProviderProcessTeardownVerdict>
-  close(tree?: ProviderProcessTree): Promise<ProviderProcessCloseResult>
+  /** `closeRequest` overrides the policy's for this close, as a wedged child's SIGTERM at once. */
+  close(
+    tree?: ProviderProcessTree,
+    closeRequest?: ProviderCloseRequest
+  ): Promise<ProviderProcessCloseResult>
 }
 
 /** One child owns its exit observation and every retry of an unconfirmed close. */
@@ -74,18 +77,12 @@ export function spawnManagedProviderProcess(
   options: ManagedProviderProcessOptions
 ): ManagedProviderProcess {
   const platform = options.platform ?? process.platform
-  const closePolicy = options.policy ?? rootOnlyProviderClosePolicy
+  const policy = options.policy ?? rootOnlyProviderClosePolicy
   const spec = createProviderSpawnSpec(launch, options.inheritedEnv ?? process.env, platform, {
-    // A gone owner gets the close this provider's own close would make under the supervisor.
-    closeRequest: closePolicy(true).signalSupervisorOnClose ? 'stdin-end-and-sigterm' : 'stdin-end',
+    // A gone owner gets the close this provider's own close makes.
+    closeRequest: policy.closeRequest ?? 'stdin-end',
     ...(options.lifetime ? { lifetime: options.lifetime } : {})
   })
-  const policy = closePolicy(spec.supervised)
-  if (spec.supervised && !(policy.gracefulExitMs >= PROVIDER_SUPERVISOR_MAX_STOP_MS)) {
-    throw new RangeError(
-      `Supervised provider graceful exit must wait at least ${PROVIDER_SUPERVISOR_MAX_STOP_MS} ms; received ${policy.gracefulExitMs} ms`
-    )
-  }
   const child = (options.spawnImpl ?? spawnProcess)({
     program: spec.program,
     args: spec.args,
@@ -94,6 +91,7 @@ export function spawnManagedProviderProcess(
     detached: spec.detached,
     stdio: ['pipe', 'pipe', 'pipe']
   })
+  const group = spec.adopt(child)
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
   let spawnFailed = false
@@ -124,7 +122,15 @@ export function spawnManagedProviderProcess(
     }
     listeners.clear()
   }
-  child.on('exit', (code, signal) => observeExit({ code, signal, processless: false }))
+  child.on('exit', (code, signal) => {
+    const exit = { code, signal, processless: false }
+    // A group-led provider's exit is reported once its group is gone, never before a member.
+    if (group) {
+      void group.exited.then(() => observeExit(exit))
+    } else {
+      observeExit(exit)
+    }
+  })
   child.on('error', (error) => {
     spawnFailed ||= child.pid === undefined
     spawnError ??= error
@@ -154,10 +160,7 @@ export function spawnManagedProviderProcess(
       return observed !== null && !observed.processless
     },
     get executableMissing() {
-      const failure =
-        spawnError ??
-        (observed ? supervisedProviderSpawnFailure(observed.code, stderrTail)?.error : null)
-      return isMissingProviderExecutable(failure, launch.command)
+      return isMissingProviderExecutable(spawnError, launch.command)
     },
     stderrTail: () => stderrTail,
     get lastCloseResult() {
@@ -171,7 +174,7 @@ export function spawnManagedProviderProcess(
       }
     },
     terminateTree,
-    close(tree) {
+    close(tree, closeRequest) {
       return exitProof.run(async () => {
         // The one already-exited guard. It observed nothing, so an earlier close's findings stay.
         if (observed && !tree) {
@@ -183,8 +186,8 @@ export function spawnManagedProviderProcess(
           child,
           exitPromise,
           rootVerdict,
-          supervised: spec.supervised,
-          policy,
+          group,
+          policy: closeRequest ? { ...policy, closeRequest } : policy,
           tree,
           terminateTree
         })

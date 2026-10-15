@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import type * as ProcessTreeKill from './codex-app-server-process-tree-kill'
 import {
@@ -72,42 +71,6 @@ function startWedgedSession(child: FakeChild, platform: NodeJS.Platform): Promis
 }
 
 describe('runCodexAppServerSession stop', () => {
-  it('SIGTERMs a supervised session at its deadline instead of waiting out its stdin grace', async () => {
-    vi.useFakeTimers()
-    const child = fakeChild('SIGTERM')
-    let stdinEnded = false
-    child.stdin.on('finish', () => (stdinEnded = true))
-
-    const outcome = startWedgedSession(child, 'darwin')
-    await vi.advanceTimersByTimeAsync(1_000)
-
-    expect(child.kill.mock.calls).toEqual([['SIGTERM']])
-    expect(stdinEnded).toBe(true)
-    expect(await outcome).toBeInstanceOf(CodexAppServerTimeoutError)
-    expect(terminateProviderProcessTree).not.toHaveBeenCalled()
-    expect(killCodexAppServerProcessTree).not.toHaveBeenCalled()
-  })
-
-  it('tears a supervised session down only once the supervisor has had its full stop time', async () => {
-    vi.useFakeTimers()
-    const child = fakeChild(null)
-
-    const outcome = startWedgedSession(child, 'linux')
-    await vi.advanceTimersByTimeAsync(1_000 + PROVIDER_SUPERVISOR_MAX_STOP_MS - 1)
-    expect(terminateProviderProcessTree).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(1)
-
-    expect(terminateProviderProcessTree).toHaveBeenCalledWith(child, {
-      site: 'codex-app-server-session',
-      platform: 'linux'
-    })
-    await vi.advanceTimersByTimeAsync(1_000)
-    expect(await outcome).toBeInstanceOf(CodexAppServerTimeoutError)
-    // The session's only own signal is the deadline SIGTERM; only the teardown forces.
-    expect(child.kill.mock.calls).toEqual([['SIGTERM']])
-    expect(killCodexAppServerProcessTree).not.toHaveBeenCalled()
-  })
-
   it('keeps the Windows deadline kill and its 1.5 s close wait', async () => {
     vi.useFakeTimers()
     const child = fakeChild(null)

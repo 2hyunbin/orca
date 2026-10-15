@@ -4,7 +4,7 @@ import {
   rootOnlyProviderClosePolicy,
   type ProviderProcessCloseResult
 } from './provider-process-close'
-import type { ProviderCloseRequest } from './provider-process-supervisor'
+import type { ProviderCloseRequest, ProviderProcessGroup } from './provider-process-group'
 import { terminateProviderProcessTree } from './provider-process-teardown'
 
 type SupervisedChild = Pick<
@@ -13,11 +13,12 @@ type SupervisedChild = Pick<
 >
 
 /**
- * Closes a supervised child that is not a managed provider process: the shared close, with the
- * root-only policy, its tree forced (filed under `site`) only after the supervisor's full stop.
+ * Closes a group-led child that is not a managed provider process: the shared close, with the
+ * root-only policy, its tree forced (filed under `site`) only after the group's own stop.
  */
 export async function stopSupervisedChildProcess(
   child: SupervisedChild,
+  group: ProviderProcessGroup,
   {
     site,
     closeRequest = 'stdin-end-and-sigterm'
@@ -31,11 +32,8 @@ export async function stopSupervisedChildProcess(
     child,
     exitPromise: new Promise<void>((resolve) => child.once('exit', () => resolve())),
     rootVerdict: () => (exited() ? 'exited' : 'live'),
-    supervised: true,
-    policy: {
-      ...rootOnlyProviderClosePolicy(true),
-      signalSupervisorOnClose: closeRequest === 'stdin-end-and-sigterm'
-    },
+    group,
+    policy: { ...rootOnlyProviderClosePolicy, closeRequest },
     terminateTree: () => terminateProviderProcessTree(child, { site })
   })
 }

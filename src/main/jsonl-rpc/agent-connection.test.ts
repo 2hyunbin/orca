@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { ROOT_ONLY_GRACEFUL_EXIT_MS } from '../provider-process/provider-process-close'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import type { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import { JsonlRpcAgentConnection, type JsonlRpcAgentConnectionOptions } from './agent-connection'
 
@@ -14,8 +13,8 @@ vi.mock('../provider-process/provider-process-teardown', () => ({
   terminateProviderProcessTree: teardown
 }))
 const opened: { connection: JsonlRpcAgentConnection; exit: () => void }[] = []
-const grace =
-  process.platform === 'win32' ? ROOT_ONLY_GRACEFUL_EXIT_MS : PROVIDER_SUPERVISOR_MAX_STOP_MS
+// A fake child leads no group, so its close waits the root-only grace on every platform.
+const grace = ROOT_ONLY_GRACEFUL_EXIT_MS
 
 function fixture(
   options: JsonlRpcAgentConnectionOptions = {},

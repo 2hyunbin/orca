@@ -7,7 +7,7 @@ import { claudeChildClosePolicy, claudeChildCloseProven } from './claude-child-e
 
 const managedChildren = new WeakMap<object, ManagedProviderProcess>()
 
-/** `closePlatform` picks the close rules; the spawn itself always skips the POSIX supervisor. */
+/** `closePlatform` picks the close rules; the spawn itself never adopts a POSIX group. */
 export function managedChild(
   child: PipedChildProcess,
   closePlatform: NodeJS.Platform = 'linux'
@@ -22,7 +22,7 @@ export function managedChild(
       spawnImpl: () => child,
       platform: 'win32',
       site: 'claude-proof-fixture',
-      policy: (supervised) => claudeChildClosePolicy(supervised, closePlatform),
+      policy: claudeChildClosePolicy(closePlatform),
       acceptClose: claudeChildCloseProven
     }
   )

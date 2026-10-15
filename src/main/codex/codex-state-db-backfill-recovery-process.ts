@@ -6,8 +6,9 @@ import { CODEX_READ_ONLY_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-ap
 import { terminateCodexProbeChild } from '../rate-limits/codex-probe-termination'
 import {
   createProviderSpawnSpec,
-  type ProviderCloseRequest
-} from '../provider-process/provider-process-supervisor'
+  type ProviderCloseRequest,
+  type ProviderProcessGroup
+} from '../provider-process/provider-process-group'
 import type { CodexAppServerSpawn } from './codex-app-server-process-tree-kill'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'
 
@@ -16,7 +17,10 @@ const BACKFILL_RECOVERY_KILL_SITE = 'codex-state-db-backfill-recovery'
 // for the spawn spec (a gone Orca) and the stop (Orca stopping it), so they cannot drift.
 const BACKFILL_RECOVERY_CLOSE_REQUEST: ProviderCloseRequest = 'stdin-end'
 
-export type CodexBackfillRecoveryProcess = { child: ChildProcessHandle; supervised: boolean }
+export type CodexBackfillRecoveryProcess = {
+  child: ChildProcessHandle
+  group: ProviderProcessGroup | null
+}
 
 /** Starts the read-only app-server whose presence lets Codex finish its own backfill. */
 export function spawnCodexBackfillRecoveryProcess(
@@ -39,10 +43,10 @@ export function spawnCodexBackfillRecoveryProcess(
         env: process.env
       }
     )
-    return { child, supervised: false }
+    return { child, group: null }
   }
   const command = resolveCommand()
-  // Kept alive up to an hour; on POSIX the supervisor stops it with Orca, however Orca exits.
+  // Kept alive up to an hour; on POSIX its group stops with Orca, however Orca exits.
   const spawnSpec = createProviderSpawnSpec(
     { command, args: [...CODEX_READ_ONLY_APP_SERVER_ARGS], cwd: codexHomePath },
     withCliRuntimeOnPath(command, { ...process.env, CODEX_HOME: codexHomePath }),
@@ -54,18 +58,18 @@ export function spawnCodexBackfillRecoveryProcess(
     stdio: ['pipe', 'ignore', 'ignore'],
     windowsHide: true,
     env: spawnSpec.env,
-    ...(spawnSpec.supervised ? { detached: true } : {})
+    ...(spawnSpec.detached ? { detached: true } : {})
   })
-  return { child, supervised: spawnSpec.supervised }
+  return { child, group: spawnSpec.adopt(child) }
 }
 
 export async function stopCodexBackfillRecoveryProcess(
   child: ChildProcessHandle,
-  supervised: boolean
+  group: ProviderProcessGroup | null
 ): Promise<void> {
-  if (supervised) {
-    // A session supervisor turns stdin end into its group stop, as a Codex connection close does.
-    await stopSupervisedChildProcess(child, {
+  if (group) {
+    // A draining session: stdin end, then the group stop, as a Codex connection close does.
+    await stopSupervisedChildProcess(child, group, {
       site: BACKFILL_RECOVERY_KILL_SITE,
       closeRequest: BACKFILL_RECOVERY_CLOSE_REQUEST
     })

@@ -1,16 +1,13 @@
-import { EventEmitter } from 'node:events'
 import { existsSync, readFileSync } from 'node:fs'
-import { PassThrough } from 'node:stream'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  PROVIDER_STDIN_END_GRACE_MS,
-  PROVIDER_SUPERVISOR_MAX_STOP_MS
-} from '../provider-process/provider-process-supervisor'
+  PROVIDER_GROUP_MAX_STOP_MS,
+  PROVIDER_STDIN_END_GRACE_MS
+} from '../provider-process/provider-group-watchdog'
 import type { CodexAppServerSpawn } from './codex-app-server-process-tree-kill'
 import { CodexAppServerTimeoutError, runCodexAppServerSession } from './codex-app-server-session'
 import { classifyCodexTrustGrantError } from './codex-trust-grant-telemetry'
-import { PROVIDER_SPAWN_FAILURE_MARKER } from '../provider-process/provider-spawn-failure-report'
 import {
   alive,
   createSupervisedProbeRig,
@@ -61,16 +58,8 @@ function captureSpawn(): { spawnImpl: CodexAppServerSpawn; calls: CapturedSpawn[
   }
 }
 
-function decodedSupervisorSpec(env: unknown): unknown {
-  const encoded =
-    typeof env === 'object' && env !== null && 'ORCA_PROVIDER_SUPERVISOR_SPEC' in env
-      ? String(env.ORCA_PROVIDER_SUPERVISOR_SPEC)
-      : ''
-  return JSON.parse(Buffer.from(encoded, 'base64').toString() || 'null')
-}
-
 describe('short-lived Codex app-server session spawn', () => {
-  it('runs a POSIX session under the provider supervisor in session lifetime', async () => {
+  it('spawns a POSIX session directly as the leader of its own group', async () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const { spawnImpl, calls } = captureSpawn()
 
@@ -83,42 +72,9 @@ describe('short-lived Codex app-server session spawn', () => {
     ).rejects.toThrow('spawn captured')
 
     const [{ program, args, options }] = calls
-    expect(program).toBe(process.execPath)
-    expect(args.slice(args.indexOf('--') + 1)).toEqual(['/bin/codex', 'app-server'])
+    expect(program).toBe('/bin/codex')
+    expect(args).toEqual(['app-server'])
     expect(options.detached).toBe(true)
-    expect(decodedSupervisorSpec(options.env)).toMatchObject({
-      lifetime: 'session',
-      ownerPid: process.pid
-    })
-  })
-
-  it('never shows the supervisor spawn-failure marker in an early-exit error', async () => {
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
-    const report = { thrown: false, code: 'ENOENT', message: 'spawn /bin/codex ENOENT' }
-    const child = Object.assign(new EventEmitter(), {
-      pid: 4242,
-      stdin: new PassThrough(),
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      kill: () => true
-    })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the session reads only pid, stdio, kill and the exit/close/error events, which the fake implements.
-    const spawnImpl: CodexAppServerSpawn = () => child as never
-    // A report on an exit other than 127 is no spawn failure, but its text still reaches the user.
-    child.stderr.once('end', () => {
-      child.emit('exit', 1, null)
-      child.emit('close', 1, null)
-    })
-    child.stderr.end(`${PROVIDER_SPAWN_FAILURE_MARKER}${JSON.stringify(report)}\n`)
-
-    const error = await runCodexAppServerSession(
-      { command: '/bin/codex', cliPath: null, args: ['app-server'], timeoutMs: 5_000 },
-      async () => null,
-      spawnImpl
-    ).catch((caught: unknown) => caught)
-
-    expect(String(error)).toContain('spawn /bin/codex ENOENT')
-    expect(String(error)).not.toContain(PROVIDER_SPAWN_FAILURE_MARKER)
   })
 
   it('spawns a Windows session directly, as before', async () => {
@@ -134,14 +90,13 @@ describe('short-lived Codex app-server session spawn', () => {
     ).rejects.toThrow('spawn captured')
 
     const [{ program, args, options }] = calls
-    expect(decodedSupervisorSpec(options.env)).toBeNull()
     expect(program).toBe('C:\\codex.exe')
     expect(args).toEqual(['app-server'])
     expect(options).not.toHaveProperty('detached')
   })
 })
 
-describe.runIf(process.platform !== 'win32')('supervised Codex app-server sessions', () => {
+describe.runIf(process.platform !== 'win32')('group-led Codex app-server sessions', () => {
   it('stops a wedged session at its deadline with SIGTERM to its whole group', async () => {
     rig = createSupervisedProbeRig()
     const standIn = rig.writeStandIn('codex', WEDGED_APP_SERVER)
@@ -190,7 +145,7 @@ describe.runIf(process.platform !== 'win32')('supervised Codex app-server sessio
     expect(
       await waitFor(
         () => !alive(pids.provider) && !alive(pids.grandchild),
-        PROVIDER_SUPERVISOR_MAX_STOP_MS + 1_000
+        PROVIDER_GROUP_MAX_STOP_MS + 1_000
       )
     ).toBe(true)
     // A gone owner gets the close its owner makes: the stdin end, its grace, and only then SIGTERM.
