@@ -23,7 +23,8 @@ export type PaneLayoutCommand =
 /**
  * A pane command in a layout-owner build: main applies it first, then `apply` shows main's result.
  * `asToday` runs instead when main says a paired server holds the tab (#18202); `refused` on any
- * other refusal. False when a paired server owns the workspace's layout; the caller acts as today.
+ * other refusal; `failed` when the call throws (main rolled its write back). False when a paired
+ * server owns the workspace's layout; the caller acts as today.
  */
 export function sendPaneCommandToLayoutOwner(
   worktreeId: string,
@@ -32,6 +33,7 @@ export function sendPaneCommandToLayoutOwner(
     apply: (result: LayoutCommandResult) => void
     asToday: () => void
     refused?: (code: LayoutRefusalCode) => void
+    failed?: () => void
   }
 ): boolean {
   // Why: the same owner test that mirrors a workspace's tabs from a paired server; a focused
@@ -55,6 +57,7 @@ export function sendPaneCommandToLayoutOwner(
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : error
       console.warn(`[layout-owner] ${command.type} failed:`, message)
+      handlers.failed?.()
     })
   return true
 }

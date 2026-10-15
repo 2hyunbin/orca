@@ -84,6 +84,16 @@ describe('sendPaneCommandToLayoutOwner', () => {
     await vi.waitFor(() => expect(on.refused).toHaveBeenCalledWith('last_pane'))
   })
 
+  it('tells the caller when the call fails', async () => {
+    mocks.callRuntimeRpc.mockRejectedValue(new Error('rpc_failed'))
+    const on = { ...handlers(), failed: vi.fn() }
+
+    sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)
+
+    await vi.waitFor(() => expect(on.failed).toHaveBeenCalledOnce())
+    expect(on.refused).not.toHaveBeenCalled()
+  })
+
   it('acts as today when main says a paired server holds the tab', async () => {
     mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'host_not_owned' })
     const on = handlers()
