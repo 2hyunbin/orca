@@ -45,7 +45,6 @@ on:
       - 'resources/build/icon.ico'
   pull_request:
     paths:
-      - '.github/workflows/ci-cache-warmup.yml'
       - '.github/workflows/ci-cache-warmup-platforms.yml'
       - '.github/workflows/ci-cache-warmup-platform-jobs.yml'
 

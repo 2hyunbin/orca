@@ -50,8 +50,6 @@ on:
   pull_request:
     paths:
       - '.github/workflows/ci-cache-warmup.yml'
-      - '.github/workflows/ci-cache-warmup-platform-jobs.yml'
-      - '.github/workflows/ci-cache-warmup-platforms.yml'
       - '.github/actions/prepare-headless-compiler/**'
       - 'config/scripts/headless-detector-compiler-cache.mjs'
       - '.github/actions/prepare-wayland-clipboard/**'
