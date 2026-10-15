@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AI_VAULT_AGENT_SOURCES } from './session-scanner-agent-sources'
 import { ompSessionsRootDirs } from './session-scanner-roots'
+import { buildAiVaultServiceEnv } from './session-scanner-service-env'
 
 describe('claude session roots', () => {
   afterEach(() => {
@@ -31,6 +32,33 @@ describe('claude session roots', () => {
         []
       )
     ).toEqual(['/scan/projects'])
+  })
+
+  it('scans the user home through the service boundary when Orca injected an account home', () => {
+    const account = join(homedir(), 'orca-accounts', 'selected')
+    const custom = join(homedir(), 'custom-claude')
+    const defaultProjects = join(homedir(), '.claude', 'projects')
+    for (const [config, user, expected] of [
+      [account, undefined, [defaultProjects]],
+      [account, custom, [join(custom, 'projects'), defaultProjects]],
+      [custom, undefined, [join(custom, 'projects'), defaultProjects]],
+      ['relative-home', undefined, [defaultProjects]]
+    ] as const) {
+      const childEnv = buildAiVaultServiceEnv({
+        CLAUDE_CONFIG_DIR: config,
+        ORCA_CLAUDE_INJECTED_CONFIG_DIR: account,
+        ORCA_CLAUDE_USER_CONFIG_DIR: user
+      })
+      vi.stubEnv('CLAUDE_CONFIG_DIR', childEnv.CLAUDE_CONFIG_DIR)
+      vi.stubEnv('ORCA_CLAUDE_INJECTED_CONFIG_DIR', childEnv.ORCA_CLAUDE_INJECTED_CONFIG_DIR)
+      vi.stubEnv('ORCA_CLAUDE_USER_CONFIG_DIR', childEnv.ORCA_CLAUDE_USER_CONFIG_DIR)
+      expect(
+        AI_VAULT_AGENT_SOURCES.claude.rootDirs(
+          { claudeProfileProjectsDirs: [] },
+          ['/wsl/home/ada']
+        )
+      ).toEqual([...expected, join('/wsl/home/ada', '.claude', 'projects')])
+    }
   })
 })
 

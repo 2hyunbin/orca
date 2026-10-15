@@ -1,3 +1,8 @@
+import {
+  CLAUDE_INJECTED_CONFIG_DIR_ENV,
+  CLAUDE_USER_CONFIG_DIR_ENV
+} from '../../shared/claude-profile-routing'
+
 /**
  * Environments for the AI Vault service children.
  *
@@ -37,6 +42,9 @@ const AGENT_ROOT_ENV_ALLOWLIST = [
   // machines relocate away from the profile default.
   'APPDATA',
   'CLAUDE_CONFIG_DIR',
+  // The child must distinguish an inherited account home from the user's override.
+  CLAUDE_INJECTED_CONFIG_DIR_ENV,
+  CLAUDE_USER_CONFIG_DIR_ENV,
   'CODEX_HOME',
   'CLINE_SESSION_DATA_DIR',
   'COPILOT_HOME',
