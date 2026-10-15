@@ -12,8 +12,6 @@ type SkillInstallProviderEntry = {
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
-  /** Skill source label is `<shortName ?? displayName> home`. */
-  shortName?: string
   /** Env var relocating the agent's home (skills in `<home>/skills`); the WSL probe is still Grok-only. */
   homeEnv?: string
 }
@@ -29,7 +27,6 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
   {
     id: 'claude',
     displayName: 'Claude Code',
-    shortName: 'Claude',
     globalSegments: ['.claude', 'skills'],
     workspaceSegments: ['.claude', 'skills'],
     homeEnv: 'CLAUDE_CONFIG_DIR'
@@ -45,7 +42,6 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
   {
     id: 'gemini',
     displayName: 'Gemini CLI',
-    shortName: 'Gemini',
     globalSegments: ['.gemini', 'skills'],
     workspaceSegments: null
   },

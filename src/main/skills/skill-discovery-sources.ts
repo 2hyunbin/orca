@@ -56,7 +56,7 @@ function providerHomeSources(
     return [
       source(
         `home-${provider.id}`,
-        `${provider.shortName ?? provider.displayName} home`,
+        `${provider.displayName} home`,
         overrides[provider.id] ?? pathApi.join(home, ...provider.globalSegments),
         'home',
         skillProvidersFor(provider.id),

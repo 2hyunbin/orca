@@ -24,6 +24,7 @@ describe('skill install provider table drives discovery', () => {
         expect(sources, provider.id).toContainEqual(
           expect.objectContaining({
             path: posix.join(HOME, ...provider.globalSegments),
+            label: `${provider.displayName} home`,
             sourceKind: 'home',
             owner: provider.id
           })
