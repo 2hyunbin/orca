@@ -114,6 +114,11 @@ test('a relay-era desktop joins the server another version runs for the same log
     app = null
 
     // 2. Desktop B's relay-era profile already holds the same repository on the same host.
+    const established = await desktopB.launch()
+    app = established.app
+    await waitForSessionReady(established.page)
+    await desktopB.close(app)
+    app = null
     const seeded = seedRelayEraProfile(desktopB.userDataDir, host.input, {
       repoPath: host.remoteRepoPath,
       folderPath: host.remoteFolderPath
