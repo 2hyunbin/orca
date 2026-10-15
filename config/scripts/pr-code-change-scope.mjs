@@ -565,6 +565,10 @@ function isProductBundlePath(file, extraPrefixes) {
 // These shared fixtures are consumed only by unit tests.
 export function isUnitTestSupportSource(file) {
   return (
+    file === 'src/renderer/src/store/slices/editor-slice-test-harness.ts' ||
+    file === 'src/renderer/src/store/slices/browser-slice-test-harness.ts' ||
+    file === 'src/renderer/src/runtime/web-runtime-session-test-harness.ts' ||
+    file === 'src/renderer/src/runtime/sync-runtime-graph-test-harness.ts' ||
     file === 'src/renderer/src/runtime/web-session-tabs-sync-test-harness.ts' ||
     file === 'src/renderer/src/components/native-chat/NativeChatStructuredSession.test-harness.tsx'
   )
