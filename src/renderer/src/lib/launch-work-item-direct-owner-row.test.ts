@@ -97,32 +97,28 @@ describe('launchWorkItemDirect owner row', () => {
     expect(mocks.createWorktree.mock.calls[0]?.at(-1)).toEqual({ executionHostId: 'runtime:env-b' })
   })
 
-  it('quotes the agent for this computer cmd.exe only when the owner row runs locally', async () => {
+  it('quotes a local work-item agent for the cmd.exe pane it runs in', async () => {
     mocks.store.settings = { terminalWindowsShell: 'cmd.exe' }
+    mocks.store.repos = [{ id: 'repo-1', path: 'C:\\r', addedAt: 1, executionHostId: 'local' }]
     mocks.createWorktree.mockResolvedValue({ worktree: { id: 'wt', path: 'C:\\r-wt' } })
-    mocks.activateAndRevealWorktree.mockReturnValue({ primaryTabId: null })
     Object.assign(mocks.store, {
       ensureDetectedAgents: vi.fn().mockResolvedValue(['claude']),
       updateWorktreeMeta: vi.fn().mockResolvedValue(undefined),
-      setSidebarOpen: vi.fn(),
-      runtimeStatusByEnvironmentId: new Map([['win', { status: { hostPlatform: 'win32' } }]])
+      setSidebarOpen: vi.fn()
     })
-    const launchCommand = async (executionHostId: string) => {
-      mocks.store.repos = [{ id: 'repo-1', path: 'C:\\r', addedAt: 1, executionHostId }]
-      await launchWorkItemDirect({
-        repoId: 'repo-1',
-        launchSource: 'task_page',
-        openModalFallback: vi.fn(),
-        agentOverride: 'claude',
-        item: { type: 'issue', number: 1, title: 'Fix', url: 'u', pasteContent: 'Fix A & B' }
-      })
-      return mocks.activateAndRevealWorktree.mock.calls.at(-1)?.[1]?.startup?.command
-    }
+    const item = { type: 'issue', number: 1, title: 'Fix', url: 'https://x/issues/1' } as const
+    await launchWorkItemDirect({
+      repoId: 'repo-1',
+      launchSource: 'task_page',
+      openModalFallback: vi.fn(),
+      agentOverride: 'claude',
+      item
+    })
 
-    // cmd.exe has no single quotes: PowerShell's 'Fix A & B' would run `B'` as a second command.
-    expect(await launchCommand('local')).toContain('--prefill "Fix A ^& B"')
-    // This client's shell setting doesn't describe a paired server's shell, so it keeps today's quoting.
-    expect(await launchCommand('runtime:win')).toContain("--prefill 'Fix A & B'")
+    // PowerShell's '…' quoting reaches a cmd.exe agent as literal quotes, so the flag would not apply.
+    expect(mocks.activateAndRevealWorktree.mock.calls[0]?.[1]?.startup?.command).toBe(
+      'claude "--dangerously-skip-permissions" --prefill "https://x/issues/1"'
+    )
   })
 
   it('asks the user instead of tie-breaking by focus when two hosts share the repo id', async () => {

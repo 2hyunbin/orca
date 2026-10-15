@@ -22,7 +22,13 @@ import {
  * stop there, because the client's or the endpoint's OS would quote the command for the wrong shell.
  */
 export type ExecutionHostPlatformFact =
-  | { kind: 'known'; platform: NodeJS.Platform; hostKind: ParsedExecutionHost['kind'] }
+  | {
+      kind: 'known'
+      platform: NodeJS.Platform
+      hostKind: ParsedExecutionHost['kind']
+      /** A local host's project runtime, which decides the shell its panes spawn. */
+      projectRuntime?: ProjectExecutionRuntimeResolution
+    }
   | { kind: 'withheld'; reason: string }
 
 type HostFactsState = Pick<
@@ -82,8 +88,14 @@ function resolveHostPlatform(
     return { kind: 'withheld', reason: HOST_UNRESOLVED_WITHHELD }
   }
   if (host.kind === 'local') {
-    const platform = resolveLocalPlatform(args.projectRuntime(), args.workspacePath)
-    return { kind: 'known', platform, hostKind: 'local' }
+    const projectRuntime = args.projectRuntime()
+    const platform = resolveLocalPlatform(projectRuntime, args.workspacePath)
+    return {
+      kind: 'known',
+      platform,
+      hostKind: 'local',
+      ...(projectRuntime ? { projectRuntime } : {})
+    }
   }
   const sshTargetId = host.kind === 'ssh' ? host.targetId : args.nestedSshTargetId
   if (sshTargetId) {
@@ -166,7 +178,8 @@ export function resolveExecutionHostAgentStartupShell(
     ? resolveLocalWindowsAgentStartupShell({
         platform: fact.platform,
         isRemote: fact.hostKind !== 'local',
-        terminalWindowsShell
+        terminalWindowsShell,
+        projectRuntime: fact.projectRuntime
       })
     : undefined
 }

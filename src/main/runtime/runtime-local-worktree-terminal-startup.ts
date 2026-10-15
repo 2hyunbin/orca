@@ -5,7 +5,7 @@ import type { Repo } from '../../shared/repo-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { Worktree } from '../../shared/worktree/types'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
-import type { AgentLaunchRuntime } from '../../shared/agent-launch-runtime'
+import { agentLaunchQuotingShell, type AgentLaunchRuntime } from '../../shared/agent-launch-runtime'
 import { createSequencedSetupAgentCommands } from '../../shared/setup-agent-sequencing'
 import { getSetupRunnerCommandPlatformForPath } from '../../shared/setup-runner-command'
 import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
@@ -89,7 +89,11 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
       runnerScriptPath: setup.runnerScriptPath,
       startupCommand: startup.command,
       platform,
-      shell: setup.shell
+      shell: setup.shell,
+      // Why: only a host-built command is known to be quoted for this pane's shell.
+      ...(args.startupLaunchRuntime && !(args.startupLaunchRuntime instanceof Error)
+        ? { startupShell: agentLaunchQuotingShell(args.startupLaunchRuntime) }
+        : {})
     })
     sequencedStartup = {
       ...startup,

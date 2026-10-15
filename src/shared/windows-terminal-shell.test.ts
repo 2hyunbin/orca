@@ -3,8 +3,57 @@ import {
   canonicalizeWindowsShellOverride,
   isSupportedWindowsShellOverride,
   listSupportedWindowsShellOverrides,
+  resolveLocalWindowsAgentStartupShell,
   resolveWindowsShellStartupFamily
 } from './windows-terminal-shell'
+import { createSequencedSetupAgentCommands } from './setup-agent-sequencing'
+import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
+
+const WINDOWS_HOST: ProjectExecutionRuntimeResolution = {
+  status: 'resolved',
+  runtime: {
+    kind: 'windows-host',
+    hostPlatform: 'win32',
+    projectId: 'p',
+    reason: 'global-default',
+    cacheKey: 'k'
+  }
+}
+
+// Why: a Windows agent command must be quoted for whichever shell actually reads it.
+describe('the shell that reads a local Windows agent command', () => {
+  const quotingShell = (
+    setting: string,
+    projectRuntime?: ProjectExecutionRuntimeResolution,
+    isRemote = false
+  ) =>
+    resolveLocalWindowsAgentStartupShell({
+      platform: 'win32',
+      isRemote,
+      terminalWindowsShell: setting,
+      projectRuntime
+    })
+
+  it('is the shell tab creation spawns, and never this computer setting for a remote host', () => {
+    expect(quotingShell('wsl.exe')).toBe('posix')
+    expect(quotingShell('wsl.exe', WINDOWS_HOST)).toBe('powershell')
+    expect(quotingShell('cmd.exe', undefined, true)).toBeUndefined()
+  })
+
+  it('is the cmd pane after the setup gate, which only waits', () => {
+    const gate = (startupShell: 'cmd' | 'powershell') =>
+      createSequencedSetupAgentCommands({
+        runnerScriptPath: 'C:\\repo\\setup-runner.cmd',
+        startupCommand: 'agent',
+        platform: 'windows',
+        startupShell
+      }).startupCommand
+    expect(gate('cmd')).toMatch(/^powershell\.exe .* && %ORCA_SEQUENCED_STARTUP_COMMAND%$/)
+    expect(gate('powershell')).toMatch(
+      /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand \S+$/
+    )
+  })
+})
 
 describe('resolveWindowsShellStartupFamily', () => {
   it('defaults to PowerShell when unset', () => {

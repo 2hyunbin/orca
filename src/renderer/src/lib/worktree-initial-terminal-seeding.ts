@@ -9,6 +9,10 @@ import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-t
 import { isTerminalWorkspaceEmptiedOnPurpose } from '../../../shared/closed-terminal-tab-tombstones'
 import { shouldSeedWorktreePrimaryTerminal } from '../../../shared/worktree-first-surface'
 import { createSequencedSetupAgentCommands } from '../../../shared/setup-agent-sequencing'
+import {
+  resolveExecutionHostAgentStartupShell,
+  resolveWorktreeExecutionHostPlatform
+} from '@/lib/execution-host-facts'
 import { getSetupRunnerCommandPlatformForPath } from '../../../shared/setup-runner-command'
 import { agentKindToTuiAgent } from '../../../shared/agent-kind'
 import { useAppStore } from '@/store'
@@ -120,7 +124,12 @@ export function ensureWorktreeHasInitialTerminal(
       runnerScriptPath: setup.runnerScriptPath,
       startupCommand: startup.command,
       platform,
-      shell: setup.shell
+      shell: setup.shell,
+      // Why: the same shell the launcher quoted the command for, so the gate can hand it back.
+      startupShell: resolveExecutionHostAgentStartupShell(
+        resolveWorktreeExecutionHostPlatform(useAppStore.getState(), worktreeId, undefined),
+        ownerState.settings?.terminalWindowsShell
+      )
     })
     sequencedStartup = {
       ...startup,

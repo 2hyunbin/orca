@@ -10,6 +10,7 @@ import {
 } from './setup-runner-command'
 import { createNonSecureContextUuid } from './non-secure-context-uuid'
 import { quotePowerShellLiteral } from './powershell-native-argument'
+import type { AgentStartupShell } from './tui-agent-startup-shell'
 
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 2 * 60 * 60
 // Exported so the gate and its tests share one definition.
@@ -40,6 +41,8 @@ export function createSequencedSetupAgentCommands(args: {
   startupCommand: string
   platform: SetupRunnerCommandPlatform
   shell?: SetupRunnerShell
+  /** The shell `startupCommand` is quoted for: the pane's own, which runs it after the gate. */
+  startupShell?: AgentStartupShell
   nonce?: string
   waitTimeoutSeconds?: number
 }): SequencedSetupAgentCommands {
@@ -65,7 +68,12 @@ export function createSequencedSetupAgentCommands(args: {
         markerPath,
         nonce
       ),
-      startupCommand: buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds),
+      // Why: a cmd-quoted command must be read by cmd, so the gate only waits and the pane runs
+      // it; cmd expands the variable before parsing the line.
+      startupCommand:
+        args.startupShell === 'cmd'
+          ? `${buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, false)} && %${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}%`
+          : buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, true),
       startupEnv: {
         [SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV]: args.startupCommand
       }
@@ -223,7 +231,8 @@ function buildWindowsSetupCommand(
 function buildWindowsStartupCommand(
   markerPath: string,
   nonce: string,
-  waitTimeoutSeconds: number
+  waitTimeoutSeconds: number,
+  runStartup: boolean
 ): string {
   const timeout = Math.max(1, Math.floor(waitTimeoutSeconds))
   // Why: native Windows setup runners launch through cmd.exe, but PowerShell
@@ -269,15 +278,19 @@ function buildWindowsStartupCommand(
     '        [Console]::Error.WriteLine("Setup failed; skipping agent startup.")',
     '        exit $setupStatus',
     '      }',
-    `      $startup = $env:${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}`,
-    '      if ([string]::IsNullOrWhiteSpace($startup)) {',
-    '        [Console]::Error.WriteLine("Missing sequenced startup command.")',
-    '        exit 1',
-    '      }',
-    `      [Console]::Error.WriteLine(${quotePowerShellLiteral(SETUP_COMPLETE_MESSAGE)})`,
-    '      Invoke-Expression $startup',
-    '      if ($global:LASTEXITCODE -ne $null) { exit $global:LASTEXITCODE }',
-    '      if (-not $?) { exit 1 }',
+    ...(runStartup
+      ? [
+          `      $startup = $env:${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}`,
+          '      if ([string]::IsNullOrWhiteSpace($startup)) {',
+          '        [Console]::Error.WriteLine("Missing sequenced startup command.")',
+          '        exit 1',
+          '      }',
+          `      [Console]::Error.WriteLine(${quotePowerShellLiteral(SETUP_COMPLETE_MESSAGE)})`,
+          '      Invoke-Expression $startup',
+          '      if ($global:LASTEXITCODE -ne $null) { exit $global:LASTEXITCODE }',
+          '      if (-not $?) { exit 1 }'
+        ]
+      : [`      [Console]::Error.WriteLine(${quotePowerShellLiteral(SETUP_COMPLETE_MESSAGE)})`]),
     '      exit 0',
     '    }',
     '  }',

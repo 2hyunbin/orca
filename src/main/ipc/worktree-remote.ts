@@ -115,6 +115,8 @@ import {
   getSetupRunnerCommandPlatformForPath
 } from '../../shared/setup-runner-command'
 import { createSequencedSetupAgentCommands } from '../../shared/setup-agent-sequencing'
+import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
+import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 import {
   createWorktreeCreateTimingRecorder,
   localWorktreeCreateExecutionHost,
@@ -314,6 +316,7 @@ async function spawnLocalStartupAndSetupTerminals(args: {
   setup: CreateWorktreeResult['setup']
   defaultTabs: CreateWorktreeResult['defaultTabs']
   settings: GlobalSettings
+  store: Store
   createdWithAgent: CreateWorktreeArgs['createdWithAgent']
 }): Promise<StagedStartupResult> {
   const { runtime, worktree, startup, setup, defaultTabs, settings, createdWithAgent } = args
@@ -336,7 +339,14 @@ async function spawnLocalStartupAndSetupTerminals(args: {
       runnerScriptPath: setup.runnerScriptPath,
       startupCommand: startup.command,
       platform,
-      shell: setup.shell
+      shell: setup.shell,
+      // Why: the window quoted this command by the same rule, for this worktree's pane.
+      startupShell: resolveLocalWindowsAgentStartupShell({
+        platform: process.platform,
+        isRemote: false,
+        terminalWindowsShell: settings.terminalWindowsShell,
+        projectRuntime: resolveLocalProjectRuntimeForWorktreeId(args.store, worktree.id)
+      })
     })
     sequencedStartup = {
       ...startup,
@@ -1698,6 +1708,7 @@ async function performLocalWorktreeCreate(
       setup,
       defaultTabs,
       settings,
+      store,
       createdWithAgent: args.createdWithAgent
     })
   )

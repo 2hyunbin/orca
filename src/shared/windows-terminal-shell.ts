@@ -1,4 +1,6 @@
 import type { AgentStartupShell } from './tui-agent-startup-shell'
+import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
+import { resolveLocalWindowsTerminalShellOverrideForTab } from './local-windows-terminal-runtime'
 
 export const WINDOWS_GIT_BASH_SHELL = 'git-bash'
 
@@ -46,13 +48,22 @@ export function resolveLocalWindowsAgentStartupShell(args: {
   platform: NodeJS.Platform
   isRemote: boolean
   terminalWindowsShell?: string | null
+  /** The pane's project runtime; a Windows-host runtime replaces a `wsl.exe` setting. */
+  projectRuntime?: ProjectExecutionRuntimeResolution
 }): AgentStartupShell | undefined {
   // Why: terminalWindowsShell describes the local host shell; SSH/remote
   // targets need their own shell signal before we can safely override quoting.
   if (args.platform !== 'win32' || args.isRemote) {
     return undefined
   }
-  return resolveWindowsShellStartupFamily(args.terminalWindowsShell)
+  // Why: quote for the shell the pane really spawns, by the rule tab creation uses.
+  const paneShell = resolveLocalWindowsTerminalShellOverrideForTab({
+    explicitShellOverride: undefined,
+    defaultWindowsShell: args.terminalWindowsShell ?? undefined,
+    isWslWorktree: false,
+    projectRuntime: args.projectRuntime
+  })
+  return resolveWindowsShellStartupFamily(paneShell)
 }
 
 /**

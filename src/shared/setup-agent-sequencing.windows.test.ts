@@ -101,6 +101,36 @@ describe.skipIf(process.platform !== 'win32')('Windows setup-agent sequencing', 
   })
 
   it(
+    'lets a cmd pane run its own cmd-quoted command once setup finishes',
+    async () => {
+      const tempDir = makeTempDir('cmd pane & (parens)')
+      const runnerScriptPath = join(tempDir, 'setup runner.cmd')
+      const agentScript = join(tempDir, 'agent.js')
+      const argvPath = join(dirname(tempDir), 'agent-argv.json')
+      writeFileSync(runnerScriptPath, '@echo off\r\nexit /b 0\r\n', 'utf8')
+      writeFileSync(
+        agentScript,
+        `require('fs').writeFileSync(${JSON.stringify(argvPath)}, JSON.stringify(process.argv.slice(2)))`
+      )
+      const commands = createSequencedSetupAgentCommands({
+        runnerScriptPath,
+        // `call` exists only in cmd, so this passes only if cmd, not the PowerShell gate, reads it.
+        startupCommand: `call node "${agentScript}" "spaces & pipe | (parens)"`,
+        startupShell: 'cmd',
+        platform: 'windows',
+        nonce: 'cmd-pane-sequence',
+        waitTimeoutSeconds: 2
+      })
+      const run = (name: string, command: string, env?: Record<string, string>) =>
+        waitForExit(spawnWindowsCommand(dirname(tempDir), name, command, env))
+      expect((await run('setup.cmd', commands.setupCommand)).code).toBe(0)
+      expect((await run('startup.cmd', commands.startupCommand, commands.startupEnv)).code).toBe(0)
+      expect(JSON.parse(readFileSync(argvPath, 'utf8'))).toEqual(['spaces & pipe | (parens)'])
+    },
+    WINDOWS_PROCESS_TEST_TIMEOUT_MS
+  )
+
+  it(
     'propagates setup failure without launching the agent',
     async () => {
       const tempDir = makeTempDir('failure path & metacharacters!')
