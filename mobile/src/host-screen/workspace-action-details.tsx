@@ -6,9 +6,10 @@ import {
 } from '../worktree/workspace-details-model'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { useWorkspaceDetailExtras } from './use-workspace-detail-extras'
-import { WorkspaceDetailsSection } from './workspace-details-section'
+import { getWorktreeGitIdentityDisplay } from '../../../src/shared/worktree/git-identity-display'
+import { WorkspaceDetailsHeader, WorkspaceDetailsSection } from './workspace-details-section'
 
-/** The long-press sheet's details for `row`: what the row carries, filled in by the host's reads. */
+/** The long-press sheet's heading and details for `row`: what the row carries, filled in by the host's reads. */
 export function WorkspaceActionDetails({
   row,
   client,
@@ -22,22 +23,21 @@ export function WorkspaceActionDetails({
   if (!row) {
     return null
   }
-  const isFolder = row.workspaceKind === 'folder-workspace'
+  const identity = getWorktreeGitIdentityDisplay({ branch: row.branch })
   return (
-    <WorkspaceDetailsSection
-      links={buildWorkspaceDetailLinks(row, extras.review)}
-      origin={buildWorkspaceOrigin(row, extras.origin)}
-      notes={workspaceNotes(row)}
-      ports={extras.ports ?? null}
-      onOpenLink={onOpenLink}
-      // Only a folder's sheet can be otherwise empty; ports are named only once the scan said none.
-      emptyText={
-        isFolder && extras.ports !== undefined
-          ? extras.ports
-            ? 'No links, notes or live ports'
-            : 'No links or notes'
-          : undefined
-      }
-    />
+    <>
+      <WorkspaceDetailsHeader
+        name={row.displayName || row.repo}
+        branch={identity?.kind === 'branch' ? identity.branchName : null}
+        origin={buildWorkspaceOrigin(row, extras.origin)}
+      />
+      <WorkspaceDetailsSection
+        links={buildWorkspaceDetailLinks(row, extras.review)}
+        notes={workspaceNotes(row)}
+        onOpenLink={onOpenLink}
+        // A folder's sheet has no actions, so it says when there is nothing to show.
+        emptyText={row.workspaceKind === 'folder-workspace' ? 'No links or notes' : undefined}
+      />
+    </>
   )
 }

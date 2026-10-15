@@ -6,6 +6,7 @@ import type { Worktree } from '../worktree/workspace-list-types'
 import { useWorkspaceDetailExtras, type WorkspaceDetailExtras } from './use-workspace-detail-extras'
 
 type Reply = { result: unknown } | { error: string }
+type Client = { sendRequest: (method: string, params?: unknown) => Promise<RpcResponse> }
 
 let renderer: ReactTestRenderer | null = null
 
@@ -42,54 +43,41 @@ function row(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
-async function readExtras(
-  target: Worktree,
-  client: ReturnType<typeof fakeClient>
-): Promise<WorkspaceDetailExtras> {
-  let latest: WorkspaceDetailExtras = {}
-  function Probe() {
-    latest = useWorkspaceDetailExtras(target, client)
+function renderProbe(client: Client | null, target: Worktree | null) {
+  const seen: { latest: WorkspaceDetailExtras } = { latest: {} }
+  function Probe({ value }: { value: Worktree | null }) {
+    seen.latest = useWorkspaceDetailExtras(value, client)
     return null
   }
-  await act(async () => {
-    renderer = create(createElement(Probe))
-  })
-  return latest
+  return {
+    seen,
+    mount: () =>
+      act(async () => {
+        renderer = create(createElement(Probe, { value: target }))
+      }),
+    show: (value: Worktree | null) =>
+      act(async () => {
+        renderer!.update(createElement(Probe, { value }))
+      })
+  }
 }
 
 const methods = (client: ReturnType<typeof fakeClient>) =>
   client.sendRequest.mock.calls.map(([method]) => method)
 
-const portScan = {
-  result: {
-    executionHostId: 'local',
-    platform: 'darwin',
-    scannedAt: 1,
-    ports: [
-      {
-        id: 'a',
-        kind: 'workspace',
-        owner: { worktreeId: 'repo::/src/app' },
-        bindHost: '0.0.0.0',
-        connectHost: 'localhost',
-        port: 5173,
-        protocol: 'http'
-      }
-    ]
-  }
+const automationShow = {
+  result: { worktree: { automationProvenance: { automationNameSnapshot: 'Nightly' } } }
 }
 
 describe('the long-press details reads', () => {
-  it('asks a plain workspace only for its ports, scoped to that workspace', async () => {
-    const client = fakeClient({ 'workspacePorts.scanHost': portScan })
+  it('asks nothing of a workspace whose row shows no review and no automation', async () => {
+    const client = fakeClient({})
+    // The CLI origin is all on the row.
+    const probe = renderProbe(client, row({ comment: 'notes', linkedIssue: 3, cliCreated: true }))
+    await probe.mount()
 
-    const extras = await readExtras(row(), client)
-
-    expect(methods(client)).toEqual(['workspacePorts.scanHost'])
-    expect(client.sendRequest.mock.calls[0]?.[1]).toEqual({ worktree: 'id:repo::/src/app' })
-    expect(extras.ports).toEqual([
-      { id: 'a', port: 5173, address: 'localhost:5173', processName: undefined }
-    ])
+    expect(methods(client)).toEqual([])
+    expect(probe.seen.latest).toEqual({})
   })
 
   it("reads the branch review for a row with a PR, and who made an automation's workspace", async () => {
@@ -106,113 +94,91 @@ describe('the long-press details reads', () => {
           mergeable: 'MERGEABLE'
         }
       },
-      'worktree.show': {
-        result: { worktree: { automationProvenance: { automationNameSnapshot: 'Nightly' } } }
-      },
-      'workspacePorts.scanHost': portScan
+      'worktree.show': automationShow
     })
-
-    const extras = await readExtras(
-      row({ linkedPR: { number: 12, state: 'open' }, automationCreated: true }),
-      client
+    const probe = renderProbe(
+      client,
+      row({ linkedPR: { number: 12, state: 'open' }, automationCreated: true })
     )
+    await probe.mount()
 
-    expect(methods(client).sort()).toEqual([
-      'hostedReview.forBranch',
-      'workspacePorts.scanHost',
-      'worktree.show'
-    ])
-    const reviewParams = client.sendRequest.mock.calls.find(
-      ([method]) => method === 'hostedReview.forBranch'
-    )?.[1]
-    expect(reviewParams).toMatchObject({ branch: 'feat/x', linkedGitHubPR: 12, active: false })
-    expect(extras.review).toMatchObject({ title: 'Search keyboard' })
-    expect(extras.origin?.automation).toEqual({ name: 'Nightly', runTitle: undefined })
+    expect(methods(client).sort()).toEqual(['hostedReview.forBranch', 'worktree.show'])
+    const params = (method: string) =>
+      client.sendRequest.mock.calls.find(([called]) => called === method)?.[1]
+    // A one-off read must not take the host's active-branch slot from the open session.
+    expect(params('hostedReview.forBranch')).toMatchObject({
+      branch: 'feat/x',
+      linkedGitHubPR: 12,
+      active: false
+    })
+    expect(params('worktree.show')).toEqual({ worktree: 'id:repo::/src/app' })
+    expect(probe.seen.latest.review).toMatchObject({ title: 'Search keyboard' })
+    expect(probe.seen.latest.origin).toEqual({ automationName: 'Nightly' })
   })
 
   it('leaves each section at what the row says when an older desktop refuses its read', async () => {
-    const client = fakeClient({})
-
-    const extras = await readExtras(
-      row({ linkedPR: { number: 12, state: 'open' }, cliCreated: true }),
-      client
+    const probe = renderProbe(
+      fakeClient({}),
+      row({ linkedPR: { number: 12, state: 'open' }, automationCreated: true })
     )
+    await probe.mount()
 
-    expect(extras).toEqual({ review: null, origin: null, ports: null })
+    expect(probe.seen.latest).toEqual({ review: null, origin: null })
   })
 
   it('does not ask a folder workspace for a branch review', async () => {
-    const client = fakeClient({ 'workspacePorts.scanHost': portScan })
+    const client = fakeClient({})
+    await renderProbe(
+      client,
+      row({
+        workspaceKind: 'folder-workspace',
+        worktreeId: 'folder:f1',
+        linkedPR: { number: 2, state: 'open' }
+      })
+    ).mount()
 
-    await readExtras(
-      row({ workspaceKind: 'folder-workspace', worktreeId: 'folder:f1', linkedIssue: 3 }),
-      client
-    )
-
-    expect(methods(client)).toEqual(['workspacePorts.scanHost'])
+    expect(methods(client)).toEqual([])
   })
 
   it('reads nothing without a host to ask (a server not reachable yet)', async () => {
-    let latest: WorkspaceDetailExtras | null = null
-    function Probe() {
-      latest = useWorkspaceDetailExtras(row(), null)
-      return null
-    }
-    await act(async () => {
-      renderer = create(createElement(Probe))
-    })
-    expect(latest).toEqual({})
+    const probe = renderProbe(null, row({ automationCreated: true }))
+    await probe.mount()
+
+    expect(probe.seen.latest).toEqual({})
   })
 
   it('drops a late reply for the row the sheet has moved off', async () => {
     let answerA: (value: RpcResponse) => void = () => {}
-    const sendRequest = vi.fn((_method: string, params?: unknown): Promise<RpcResponse> =>
-      JSON.stringify(params).includes('wt-a')
-        ? new Promise((resolve) => {
-            answerA = resolve
-          })
-        : Promise.resolve({ id: '1', ok: true, result: { ports: [] } })
-    )
-    const client = { sendRequest }
-    let latest: WorkspaceDetailExtras = {}
-    function Probe({ target }: { target: Worktree }) {
-      latest = useWorkspaceDetailExtras(target, client)
-      return null
+    const client = {
+      sendRequest: vi.fn((_method: string, params?: unknown): Promise<RpcResponse> =>
+        JSON.stringify(params).includes('wt-a')
+          ? new Promise((resolve) => {
+              answerA = resolve
+            })
+          : Promise.resolve({ id: '1', ok: true, result: { worktree: {} } })
+      )
     }
+    const probe = renderProbe(client, row({ worktreeId: 'wt-a', automationCreated: true }))
+    await probe.mount()
+    await probe.show(row({ worktreeId: 'wt-b', automationCreated: true }))
     await act(async () => {
-      renderer = create(createElement(Probe, { target: row({ worktreeId: 'wt-a' }) }))
-    })
-    await act(async () => {
-      renderer!.update(createElement(Probe, { target: row({ worktreeId: 'wt-b' }) }))
-    })
-    await act(async () => {
-      answerA({ id: '1', ok: true, result: portScan.result })
+      answerA({ id: '1', ok: true, result: automationShow.result })
     })
 
-    expect(latest).toEqual({ ports: [] })
+    expect(probe.seen.latest).toEqual({ origin: null })
   })
 
   it('forgets the last open when the sheet closes, so a reopen reads afresh', async () => {
-    const client = fakeClient({ 'workspacePorts.scanHost': portScan })
-    let latest: WorkspaceDetailExtras = {}
-    function Probe({ target }: { target: Worktree | null }) {
-      latest = useWorkspaceDetailExtras(target, client)
-      return null
-    }
-    await act(async () => {
-      renderer = create(createElement(Probe, { target: row() }))
-    })
-    await act(async () => {
-      renderer!.update(createElement(Probe, { target: null }))
-    })
-    client.sendRequest.mockImplementation(
-      () => new Promise<RpcResponse>(() => {}) // the reopened scan has not answered
-    )
-    await act(async () => {
-      renderer!.update(createElement(Probe, { target: row() }))
-    })
+    const client = fakeClient({ 'worktree.show': automationShow })
+    const target = row({ automationCreated: true })
+    const probe = renderProbe(client, target)
+    await probe.mount()
+    await probe.show(null)
+    // The reopened read has not answered yet.
+    client.sendRequest.mockImplementation(() => new Promise<RpcResponse>(() => {}))
+    await probe.show(target)
 
-    expect(latest).toEqual({})
-    expect(methods(client)).toEqual(['workspacePorts.scanHost', 'workspacePorts.scanHost'])
+    expect(probe.seen.latest).toEqual({})
+    expect(methods(client)).toEqual(['worktree.show', 'worktree.show'])
   })
 })

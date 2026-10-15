@@ -22,12 +22,6 @@ describe('mobile RPC method routing census', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('paired-desktop')
   })
 
-  it("scans a workspace's ports on its own host, and lets the phone only read them", () => {
-    expect(MOBILE_RPC_METHOD_ROUTES.get('workspacePorts.scanHost')).toBe('execution-host')
-    expect(MOBILE_RPC_METHOD_ROUTES.has('workspacePorts.killHost')).toBe(false)
-    expect(MOBILE_RPC_METHOD_ROUTES.has('workspacePorts.scan')).toBe(false)
-  })
-
   it('sends a targeted status to the server, whose features a server workspace gates on', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get('status.get')).toBe('execution-host')
   })

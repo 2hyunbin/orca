@@ -3,8 +3,8 @@ import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-o
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 import { readWorkspaceOriginDetails, type WorkspaceOriginDetails } from './workspace-details-model'
 
-// The long-press details' two reads beyond the row. Both are skips when refused: a host that
-// predates them, or will not answer, just leaves its section at what the row already says.
+// The long-press details' read of who made the workspace. A skip when refused: a host that will
+// not answer leaves the section at what the row's flags already say.
 
 const originSchema: z.ZodType<WorkspaceOriginDetails | null, unknown> = z
   .object({ worktree: z.unknown() })
@@ -19,16 +19,5 @@ export const workspaceOriginRead = bindDeferredRpcOperation(
     acceptance: 'success-result-or-skip',
     barrier: 'after-caller-barrier',
     read: rpcResultVariant('workspace-origin', originSchema)
-  })
-)
-
-/** The workspace's host scanned for listeners; the reader filters to this workspace's own. */
-export const workspacePortsScanRead = bindDeferredRpcOperation(
-  defineRpcOperation({
-    name: 'workspacePorts.scan-host-or-skip',
-    method: 'workspacePorts.scanHost',
-    acceptance: 'success-result-or-skip',
-    barrier: 'after-caller-barrier',
-    read: rpcResultVariant('workspace-ports-scan', z.unknown())
   })
 )

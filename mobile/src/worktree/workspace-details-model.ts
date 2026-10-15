@@ -1,4 +1,3 @@
-import { formatAgentTypeLabel } from '../../../src/shared/agent-type-label'
 import type { CheckStatus } from '../../../src/shared/github/pull-request-types'
 import type { HostedReviewInfo } from '../../../src/shared/hosted-review'
 import { getWorkspaceAttachmentKey } from '../../../src/shared/workspace-attachment-normalization'
@@ -24,23 +23,10 @@ export type WorkspaceDetailLink = {
 }
 
 /** Who made the workspace, as the desktop hover card's Automation / Orca CLI sections say. */
-export type WorkspaceOrigin =
-  | { kind: 'automation'; name?: string; runTitle?: string }
-  | { kind: 'cli'; fromAgent?: boolean; startupAgent?: string }
+export type WorkspaceOrigin = { kind: 'automation'; name?: string } | { kind: 'cli' }
 
-/** The provenance `worktree.show` carries beyond the row's `automationCreated`/`cliCreated` flags. */
-export type WorkspaceOriginDetails = {
-  automation?: { name?: string; runTitle?: string }
-  cli?: { fromAgent: boolean; startupAgent?: string }
-}
-
-export type WorkspaceDetailPort = {
-  id: string
-  port: number
-  /** What Copy puts on the clipboard, as the desktop's: the printed origin's host, else host:port. */
-  address: string
-  processName?: string
-}
+/** What `worktree.show` adds to the row's `automationCreated` flag: the automation's name. */
+export type WorkspaceOriginDetails = { automationName?: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -147,94 +133,26 @@ export function buildWorkspaceDetailLinks(
   return links.sort((a, b) => Number(a.type === 'issue') - Number(b.type === 'issue'))
 }
 
-/** The row's origin, filled in from `worktree.show` once it answers. */
+/** The row's origin, the automation named once `worktree.show` answers. */
 export function buildWorkspaceOrigin(
   row: Worktree,
   details?: WorkspaceOriginDetails | null
 ): WorkspaceOrigin | null {
-  if (row.automationCreated || details?.automation) {
-    return { kind: 'automation', ...details?.automation }
+  if (row.automationCreated || details?.automationName) {
+    return details?.automationName
+      ? { kind: 'automation', name: details.automationName }
+      : { kind: 'automation' }
   }
-  if (row.cliCreated || details?.cli) {
-    return { kind: 'cli', ...details?.cli }
-  }
-  return null
+  return row.cliCreated ? { kind: 'cli' } : null
 }
 
-/** `worktree.show`'s provenance fields, or null when the record carries neither. */
+/** The automation `worktree.show` names on the record, or null when it names none. */
 export function readWorkspaceOriginDetails(worktree: unknown): WorkspaceOriginDetails | null {
-  if (!isRecord(worktree)) {
-    return null
-  }
-  const automation = isRecord(worktree.automationProvenance)
-    ? {
-        name: optionalText(worktree.automationProvenance.automationNameSnapshot),
-        runTitle: optionalText(worktree.automationProvenance.automationRunTitleSnapshot)
-      }
-    : undefined
-  const cliProvenance = isRecord(worktree.cliProvenance) ? worktree.cliProvenance : null
-  const startupAgent = optionalText(cliProvenance?.startupAgent)
-  const cli = cliProvenance
-    ? {
-        fromAgent: optionalText(cliProvenance.callerTerminalHandle) !== undefined,
-        startupAgent: startupAgent ? formatAgentTypeLabel(startupAgent) : undefined
-      }
-    : undefined
-  return automation || cli ? { automation, cli } : null
-}
-
-function portHost(connectHost: string | undefined): string {
-  if (!connectHost) {
-    return 'localhost'
-  }
-  return connectHost.includes(':') ? `[${connectHost}]` : connectHost
-}
-
-function advertisedHost(advertisedUrl: unknown): string | undefined {
-  const url = webUrl(advertisedUrl)
-  if (!url) {
-    return undefined
-  }
-  try {
-    return new URL(url).host || undefined
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * This workspace's listeners from a host-scoped port scan, or null when the host could not scan
- * (an SSH host this endpoint does not serve): an unknown answer is never "no ports".
- */
-export function readWorkspaceDetailPorts(
-  scan: unknown,
-  worktreeId: string
-): WorkspaceDetailPort[] | null {
-  if (!isRecord(scan) || !Array.isArray(scan.ports) || optionalText(scan.unavailableReason)) {
-    return null
-  }
-  return scan.ports.flatMap((port): WorkspaceDetailPort[] => {
-    if (
-      !isRecord(port) ||
-      port.kind !== 'workspace' ||
-      !isRecord(port.owner) ||
-      port.owner.worktreeId !== worktreeId ||
-      !isPositiveNumber(port.port)
-    ) {
-      return []
-    }
-    const address =
-      advertisedHost(port.advertisedUrl) ??
-      `${portHost(optionalText(port.connectHost))}:${port.port}`
-    return [
-      {
-        id: optionalText(port.id) ?? address,
-        port: port.port,
-        address,
-        processName: optionalText(port.processName)
-      }
-    ]
-  })
+  const automationName =
+    isRecord(worktree) && isRecord(worktree.automationProvenance)
+      ? optionalText(worktree.automationProvenance.automationNameSnapshot)
+      : undefined
+  return automationName ? { automationName } : null
 }
 
 export function workspaceNotes(row: Pick<Worktree, 'comment'>): string | null {

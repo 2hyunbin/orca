@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
   CalendarClock,
-  Check,
   CircleDot,
-  Copy,
   ExternalLink,
   GitMerge,
   GitPullRequest,
   GitPullRequestClosed,
   GitPullRequestDraft,
-  Plug,
   SquareTerminal,
   StickyNote
 } from 'lucide-react-native'
@@ -19,15 +16,9 @@ import { prStateColor } from '../components/WorktreeMetaGlyphs'
 import { hostScreenStyles } from './host-screen-styles'
 import { OptionRowList } from './workspace-option-rows'
 import { TaskProviderLogo } from '../components/TaskProviderLogo'
-import { useClipboardWriter } from '../platform/clipboard'
-import type {
-  WorkspaceDetailLink,
-  WorkspaceDetailPort,
-  WorkspaceOrigin
-} from '../worktree/workspace-details-model'
+import type { WorkspaceDetailLink, WorkspaceOrigin } from '../worktree/workspace-details-model'
 
-const ICON_SIZE = 16
-const COPIED_MS = 1500
+const ICON_SIZE = 18
 
 const PROVIDER_LABELS: Record<WorkspaceDetailLink['provider'], string> = {
   github: 'GitHub',
@@ -51,12 +42,46 @@ const CHECK_LABELS: Record<string, string> = {
   pending: 'Checks: Pending'
 }
 
+/** The sheet's heading: the workspace, its branch, and, quietly, who created it. */
+export function WorkspaceDetailsHeader(props: {
+  name: string
+  branch?: string | null
+  origin: WorkspaceOrigin | null
+}) {
+  const { name, branch, origin } = props
+  const OriginIcon = origin?.kind === 'automation' ? CalendarClock : SquareTerminal
+  return (
+    <View style={styles.header}>
+      <Text style={styles.heading} numberOfLines={1}>
+        {name}
+      </Text>
+      {branch ? (
+        <Text style={styles.branch} numberOfLines={1}>
+          {branch}
+        </Text>
+      ) : null}
+      {origin ? (
+        <View style={styles.origin} testID="workspace-origin">
+          <OriginIcon size={12} color={colors.textMuted} style={styles.originIcon} />
+          <Text style={styles.originText} numberOfLines={2}>
+            {originLabel(origin)}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+function originLabel(origin: WorkspaceOrigin): string {
+  if (origin.kind === 'cli') {
+    return 'Created from Orca CLI'
+  }
+  return origin.name ? `Created by automation \u201c${origin.name}\u201d` : 'Created by automation'
+}
+
 export type WorkspaceDetailsSectionProps = {
   links: readonly WorkspaceDetailLink[]
-  origin: WorkspaceOrigin | null
   notes: string | null
-  /** null while the scan is out, or when the host could not say; the section then stays hidden. */
-  ports: readonly WorkspaceDetailPort[] | null
   onOpenLink: (url: string) => void
   /** Shown when nothing else is, for a sheet that has no actions to fall back on. */
   emptyText?: string
@@ -64,50 +89,27 @@ export type WorkspaceDetailsSectionProps = {
 
 /**
  * The long-press sheet's details, the phone's take on the desktop sidebar card's hover card:
- * linked reviews and tasks (tap to open), who created the workspace, its notes, and live ports.
- * Only sections the workspace has are drawn.
+ * linked reviews and tasks (tap to open) and the workspace's notes. Who created it is the
+ * header's. Nothing is drawn for a workspace with neither.
  */
 export function WorkspaceDetailsSection(props: WorkspaceDetailsSectionProps) {
-  const { links, origin, notes, ports, onOpenLink, emptyText } = props
+  const { links, notes, onOpenLink, emptyText } = props
   const rows: ReactNode[] = [
     ...links.map((item) => <LinkRow key={item.key} item={item} onOpen={onOpenLink} />),
-    origin ? <OriginRow key="origin" origin={origin} /> : null,
     notes ? (
       <DetailRow key="notes" icon={<StickyNote size={ICON_SIZE} color={colors.textSecondary} />}>
-        <Text style={styles.notes} numberOfLines={8} selectable>
+        <Text style={styles.notes} selectable>
           {notes}
         </Text>
       </DetailRow>
     ) : null
   ].filter(Boolean)
-  const hasPorts = ports !== null && ports.length > 0
-
-  if (rows.length === 0 && !hasPorts) {
+  if (rows.length === 0) {
     return emptyText ? <Text style={styles.empty}>{emptyText}</Text> : null
   }
   return (
-    <View testID="workspace-details">
-      {rows.length > 0 && <Card>{rows}</Card>}
-      {hasPorts && (
-        <>
-          <Text style={hostScreenStyles.filterSectionLabel}>
-            Live ports <Text style={styles.sectionCount}>{ports.length}</Text>
-          </Text>
-          <Card>
-            {ports.map((port) => (
-              <PortRow key={port.id} port={port} />
-            ))}
-          </Card>
-        </>
-      )}
-    </View>
-  )
-}
-
-function Card({ children }: { children: ReactNode[] }) {
-  return (
-    <View style={hostScreenStyles.filterGroup}>
-      <OptionRowList>{children}</OptionRowList>
+    <View testID="workspace-details" style={hostScreenStyles.filterGroup}>
+      <OptionRowList>{rows}</OptionRowList>
     </View>
   )
 }
@@ -192,7 +194,7 @@ function LinkRow({ item, onOpen }: { item: WorkspaceDetailLink; onOpen: (url: st
       accessibilityLabel={`Open ${item.label}${item.title ? `, ${item.title}` : ''}`}
       trailing={url ? <ExternalLink size={14} color={colors.textMuted} /> : undefined}
     >
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={styles.title} numberOfLines={1}>
         {item.title ?? item.label}
       </Text>
       {meta ? (
@@ -204,105 +206,44 @@ function LinkRow({ item, onOpen }: { item: WorkspaceDetailLink; onOpen: (url: st
   )
 }
 
-function OriginRow({ origin }: { origin: WorkspaceOrigin }) {
-  if (origin.kind === 'automation') {
-    return (
-      <DetailRow icon={<CalendarClock size={ICON_SIZE} color={colors.textSecondary} />}>
-        <Text style={styles.title} numberOfLines={2}>
-          {origin.name ?? 'Created by automation'}
-        </Text>
-        <Text style={styles.meta} numberOfLines={1}>
-          {['Automation', origin.runTitle].filter(Boolean).join(' · ')}
-        </Text>
-      </DetailRow>
-    )
-  }
-  return (
-    <DetailRow icon={<SquareTerminal size={ICON_SIZE} color={colors.textSecondary} />}>
-      <Text style={styles.title} numberOfLines={2}>
-        {origin.fromAgent ? 'Created by an agent via ' : 'Created via '}
-        <Text style={styles.code}>orca worktree create</Text>
-      </Text>
-      <Text style={styles.meta} numberOfLines={1}>
-        {['Orca CLI', origin.startupAgent ? `Started with ${origin.startupAgent}` : null]
-          .filter(Boolean)
-          .join(' · ')}
-      </Text>
-    </DetailRow>
-  )
-}
-
-function PortRow({ port }: { port: WorkspaceDetailPort }) {
-  const clipboard = useClipboardWriter()
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const mounted = useRef(true)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-      if (timer.current) {
-        clearTimeout(timer.current)
-      }
-    }
-  }, [])
-  const copy = () => {
-    void clipboard
-      .writeText(port.address)
-      .then(() => {
-        // The sheet may have closed while the clipboard answered.
-        if (!mounted.current) {
-          return
-        }
-        setCopied(true)
-        if (timer.current) {
-          clearTimeout(timer.current)
-        }
-        timer.current = setTimeout(() => setCopied(false), COPIED_MS)
-      })
-      .catch(() => {
-        if (mounted.current) {
-          setCopied(false)
-        }
-      })
-  }
-  return (
-    <DetailRow
-      icon={<Plug size={ICON_SIZE} color={colors.textSecondary} />}
-      trailing={
-        <Pressable
-          style={({ pressed }) => [styles.iconButton, pressed && styles.rowPressed]}
-          onPress={copy}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={copied ? `Copied ${port.address}` : `Copy ${port.address}`}
-        >
-          {copied ? (
-            <Check size={15} color={colors.textPrimary} />
-          ) : (
-            <Copy size={15} color={colors.textSecondary} />
-          )}
-        </Pressable>
-      }
-    >
-      <Text style={[styles.title, styles.code]} numberOfLines={1}>
-        {port.address}
-      </Text>
-      {port.processName ? (
-        <Text style={styles.meta} numberOfLines={1}>
-          {port.processName}
-        </Text>
-      ) : null}
-    </DetailRow>
-  )
-}
-
 const styles = StyleSheet.create({
+  header: {
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.md - 2
+  },
+  heading: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary
+  },
+  branch: {
+    marginTop: 1,
+    fontSize: 11.5,
+    fontFamily: typography.monoFamily,
+    color: colors.textMuted
+  },
+  origin: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+    marginTop: 3
+  },
+  // Sits on the first line of the 12/16 text beside it.
+  originIcon: {
+    marginTop: 2
+  },
+  originText: {
+    flex: 1,
+    fontSize: typography.metaSize,
+    lineHeight: 16,
+    color: colors.textMuted
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm + 2,
-    paddingVertical: spacing.md,
+    gap: spacing.md,
+    minHeight: 46,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md + 2
   },
   rowPressed: {
@@ -310,10 +251,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     width: ICON_SIZE,
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    // Centers the icon on the first line of a 14/19 title.
-    paddingTop: 2
+    alignItems: 'center'
   },
   text: {
     flex: 1,
@@ -325,30 +263,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textPrimary
   },
-  code: {
-    fontFamily: typography.monoFamily,
-    fontSize: 13
-  },
   meta: {
     marginTop: 2,
     fontSize: typography.metaSize,
     color: colors.textMuted
   },
   notes: {
-    fontSize: typography.bodySize,
-    lineHeight: 19,
-    color: colors.textPrimary
-  },
-  iconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: -spacing.xs
-  },
-  sectionCount: {
-    fontWeight: '400'
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary
   },
   empty: {
     fontSize: typography.metaSize,

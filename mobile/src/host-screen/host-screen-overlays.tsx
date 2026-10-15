@@ -1,6 +1,6 @@
 import { openExternalLink } from '../platform/external-link'
 import { Pressable, Text, View } from 'react-native'
-import { Moon } from 'lucide-react-native'
+import { Moon, Pin, PinOff } from 'lucide-react-native'
 import { buildWorktreeNavigationActions } from '../agent-history/worktree-navigation-actions'
 import { workspaceRouteHref } from '../navigation/workspace-execution-host'
 import { useWorkspaceServer } from '../transport/workspace-server'
@@ -88,8 +88,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
           </View>
         ) : (
           <ActionSheetContent
-            title={actionTarget ? actionTarget.displayName || actionTarget.repo : undefined}
-            message={actionTarget?.branch}
             actions={
               // A folder's sheet is its details only: Sleep, Pin, Delete and Source Control act on worktrees.
               actionTarget && actionTarget.workspaceKind !== 'folder-workspace'
@@ -119,6 +117,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                         ]),
                     {
                       label: isWorktreePinned(actionTarget, state.pinnedIds) ? 'Unpin' : 'Pin',
+                      icon: isWorktreePinned(actionTarget, state.pinnedIds) ? PinOff : Pin,
                       onPress: () => {
                         actions.togglePin(actionTarget)
                         state.setActionTarget(null)

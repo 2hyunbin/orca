@@ -2,8 +2,6 @@ import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const writeText = vi.fn<(value: string) => Promise<void>>()
-
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
@@ -13,15 +11,12 @@ vi.mock('react-native', () => ({
 vi.mock('lucide-react-native', () => {
   const icons = [
     'CalendarClock',
-    'Check',
     'CircleDot',
-    'Copy',
     'ExternalLink',
     'GitMerge',
     'GitPullRequest',
     'GitPullRequestClosed',
     'GitPullRequestDraft',
-    'Plug',
     'SquareTerminal',
     'StickyNote',
     'ChevronRight'
@@ -30,9 +25,9 @@ vi.mock('lucide-react-native', () => {
 })
 vi.mock('../components/TaskProviderLogo', () => ({ TaskProviderLogo: 'TaskProviderLogo' }))
 vi.mock('../components/MobileSwitch', () => ({ MobileSwitch: 'MobileSwitch' }))
-vi.mock('../platform/clipboard', () => ({ useClipboardWriter: () => ({ writeText }) }))
 
 import {
+  WorkspaceDetailsHeader,
   WorkspaceDetailsSection,
   type WorkspaceDetailsSectionProps
 } from './workspace-details-section'
@@ -42,8 +37,6 @@ let renderer: ReactTestRenderer | null = null
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = null
-  writeText.mockReset()
-  vi.useRealTimers()
 })
 
 function render(props: Partial<WorkspaceDetailsSectionProps>) {
@@ -54,7 +47,6 @@ function render(props: Partial<WorkspaceDetailsSectionProps>) {
         links: [],
         origin: null,
         notes: null,
-        ports: null,
         onOpenLink,
         ...props
       })
@@ -117,55 +109,40 @@ describe('the long-press details section', () => {
     )
   })
 
-  it('shows the automation, CLI origin and notes in the desktop order', () => {
-    const { root } = render({
-      origin: { kind: 'automation', name: 'Nightly deps', runTitle: 'Run 3' },
-      notes: 'Check iPad layout'
-    })
-    expect(texts(root)).toEqual(['Nightly deps', 'Automation · Run 3', 'Check iPad layout'])
+  it('shows notes as plain text, with no links group when nothing is linked', () => {
+    const { root } = render({ notes: 'Check iPad layout' })
+    expect(texts(root)).toEqual(['Check iPad layout'])
+    expect(root.findAll((node) => node.props.accessibilityRole === 'link')).toEqual([])
+  })
 
-    act(() => renderer?.unmount())
-    const cli = render({ origin: { kind: 'cli', fromAgent: true, startupAgent: 'Claude' } })
-    expect(texts(cli.root)).toEqual([
-      'Created by an agent via orca worktree create',
-      'orca worktree create',
-      'Orca CLI · Started with Claude'
+  it('says so when a sheet with no actions has nothing to show', () => {
+    expect(texts(render({ emptyText: 'No links or notes' }).root)).toEqual(['No links or notes'])
+  })
+
+  it('heads the sheet with the workspace, its branch and who created it', () => {
+    const header = (origin: Parameters<typeof WorkspaceDetailsHeader>[0]['origin']) => {
+      act(() => {
+        renderer = create(
+          createElement(WorkspaceDetailsHeader, {
+            name: 'nightly-deps',
+            branch: 'nightly-deps',
+            origin
+          })
+        )
+      })
+      return renderer!.root
+    }
+    expect(texts(header({ kind: 'automation', name: 'Nightly dependency bump' }))).toEqual([
+      'nightly-deps',
+      'nightly-deps',
+      'Created by automation \u201cNightly dependency bump\u201d'
     ])
-  })
-
-  it('lists live ports and copies one, saying so until the confirmation fades', async () => {
-    vi.useFakeTimers()
-    writeText.mockResolvedValue()
-    const { root } = render({
-      ports: [{ id: 'a', port: 5173, address: 'localhost:5173', processName: 'vite' }]
-    })
-    expect(texts(root)).toEqual(['Live ports 1', '1', 'localhost:5173', 'vite'])
-
-    await act(async () => {
-      pressable(root, 'Copy localhost:5173').props.onPress()
-    })
-    expect(writeText).toHaveBeenCalledWith('localhost:5173')
-    expect(pressable(root, 'Copied localhost:5173')).toBeTruthy()
-
-    act(() => {
-      vi.advanceTimersByTime(1500)
-    })
-    expect(pressable(root, 'Copy localhost:5173')).toBeTruthy()
-  })
-
-  it('does not claim a copy the clipboard refused', async () => {
-    writeText.mockRejectedValue(new Error('refused'))
-    const { root } = render({ ports: [{ id: 'a', port: 3000, address: 'localhost:3000' }] })
-
-    await act(async () => {
-      pressable(root, 'Copy localhost:3000').props.onPress()
-    })
-    expect(pressable(root, 'Copy localhost:3000')).toBeTruthy()
-  })
-
-  it('hides ports while unknown, and says what it verified is empty when asked', () => {
-    expect(texts(render({ ports: null, emptyText: 'No links or notes' }).root)).toEqual([
-      'No links or notes'
+    expect(header({ kind: 'automation' }).findByProps({ testID: 'workspace-origin' })).toBeTruthy()
+    expect(texts(header({ kind: 'cli' }))).toEqual([
+      'nightly-deps',
+      'nightly-deps',
+      'Created from Orca CLI'
     ])
+    expect(header(null).findAll((node) => node.props.testID === 'workspace-origin')).toEqual([])
   })
 })

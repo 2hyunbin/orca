@@ -4,22 +4,15 @@ import { fetchHostedReviewForBranch } from '../session/github-pr-rpc'
 import type { RpcOperationSender } from '../transport/rpc-operation-sender'
 import {
   buildWorkspaceDetailLinks,
-  readWorkspaceDetailPorts,
-  type WorkspaceDetailPort,
   type WorkspaceOriginDetails
 } from '../worktree/workspace-details-model'
-import {
-  workspaceOriginRead,
-  workspacePortsScanRead
-} from '../worktree/workspace-details-operations'
+import { workspaceOriginRead } from '../worktree/workspace-details-operations'
 import type { Worktree } from '../worktree/workspace-list-types'
 
 /** What the long-press details read beyond the row; `undefined` while a read is still out. */
 export type WorkspaceDetailExtras = {
   review?: HostedReviewInfo | null
   origin?: WorkspaceOriginDetails | null
-  /** null: the host could not say (older host, unserved SSH host), which is not "no ports". */
-  ports?: WorkspaceDetailPort[] | null
 }
 
 async function readReview(
@@ -43,17 +36,10 @@ async function readOrigin(client: RpcOperationSender, selector: string) {
   return verdict.accepted ? verdict.value : null
 }
 
-async function readPorts(client: RpcOperationSender, selector: string, worktreeId: string) {
-  const verdict = workspacePortsScanRead.interpret(
-    await workspacePortsScanRead.request(client, { worktree: selector })
-  )
-  return verdict.accepted ? readWorkspaceDetailPorts(verdict.value, worktreeId) : null
-}
-
 /**
  * One workspace's details the row does not carry, read once when its long-press sheet opens and
- * only for sections the row says exist: the branch review's title and checks, who created it, and
- * its live ports. Each read is independent, so a slow or refused one leaves only its own section
+ * only for sections the row says exist: the branch review's title and checks, and the automation that created it.
+ * Each read is independent, so a slow or refused one leaves only its own section
  * at what the row says. `client` is the workspace's own host (the server for a server's row).
  */
 export function useWorkspaceDetailExtras(
@@ -69,7 +55,8 @@ export function useWorkspaceDetailExtras(
     row !== null &&
     row.workspaceKind !== 'folder-workspace' &&
     buildWorkspaceDetailLinks(row).some((link) => link.type !== 'issue')
-  const readsOrigin = Boolean(row?.automationCreated || row?.cliCreated)
+  // The CLI origin is all on the row; only an automation's name needs the host.
+  const readsOrigin = Boolean(row?.automationCreated)
 
   // One effect per read, so a refresh that changes one section's inputs re-reads only that one.
   const read = <Field extends keyof WorkspaceDetailExtras>(
@@ -110,12 +97,7 @@ export function useWorkspaceDetailExtras(
     () => read('origin', client && readsOrigin ? () => readOrigin(client, selector) : null),
     [worktreeId, client, readsOrigin]
   )
-  useEffect(
-    () =>
-      read('ports', client && worktreeId ? () => readPorts(client, selector, worktreeId) : null),
-    [worktreeId, client]
-  )
-  // A reopened sheet reads afresh rather than showing the last open's ports.
+  // A reopened sheet reads afresh rather than showing the last open's answers.
   if (!worktreeId && extras) {
     setExtras(null)
   }

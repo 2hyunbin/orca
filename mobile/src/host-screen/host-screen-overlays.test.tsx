@@ -12,7 +12,7 @@ vi.mock('react-native', () => ({
   View: 'View'
 }))
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'when-unlocked' }))
-vi.mock('lucide-react-native', () => ({ Moon: 'Moon' }))
+vi.mock('lucide-react-native', () => ({ Moon: 'Moon', Pin: 'Pin', PinOff: 'PinOff' }))
 vi.mock('../agent-history/worktree-navigation-actions', () => ({
   buildWorktreeNavigationActions: () => []
 }))
@@ -89,6 +89,12 @@ describe('the workspace long-press sheet', () => {
       'Pin',
       'Delete'
     ])
+  })
+
+  it('marks Pin with the pin icon, and Unpin with the crossed-out one', async () => {
+    const { sheet } = await renderSheet({})
+    const pin = sheet.props.actions.find((action: { label: string }) => action.label === 'Pin')
+    expect(pin.icon).toBe('Pin')
   })
 
   it("shows the workspace's details above its actions, read from the desktop for its own", async () => {

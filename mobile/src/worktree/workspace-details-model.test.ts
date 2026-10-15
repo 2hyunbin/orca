@@ -4,7 +4,6 @@ import type { Worktree } from './workspace-list-types'
 import {
   buildWorkspaceDetailLinks,
   buildWorkspaceOrigin,
-  readWorkspaceDetailPorts,
   readWorkspaceOriginDetails,
   workspaceNotes
 } from './workspace-details-model'
@@ -145,7 +144,7 @@ describe('buildWorkspaceDetailLinks', () => {
 })
 
 describe('workspace origin', () => {
-  it('names the automation and its run once worktree.show answers', () => {
+  it('names the automation once worktree.show answers', () => {
     const details = readWorkspaceOriginDetails({
       automationProvenance: {
         automationNameSnapshot: 'Nightly deps',
@@ -155,69 +154,16 @@ describe('workspace origin', () => {
 
     expect(buildWorkspaceOrigin(row({ automationCreated: true }), details)).toEqual({
       kind: 'automation',
-      name: 'Nightly deps',
-      runTitle: 'Run 3'
+      name: 'Nightly deps'
     })
   })
 
-  it("says only what the row's flag says until then", () => {
+  it("says only what the row's flag says until then, or when the record names nothing", () => {
+    expect(buildWorkspaceOrigin(row({ automationCreated: true }))).toEqual({ kind: 'automation' })
     expect(buildWorkspaceOrigin(row({ cliCreated: true }))).toEqual({ kind: 'cli' })
     expect(buildWorkspaceOrigin(row())).toBeNull()
-  })
-
-  it('tells an agent-run CLI create from a hand-typed one, and names the startup agent', () => {
-    expect(
-      readWorkspaceOriginDetails({
-        cliProvenance: { callerTerminalHandle: 'term-1', startupAgent: 'claude' }
-      })
-    ).toEqual({ automation: undefined, cli: { fromAgent: true, startupAgent: 'Claude' } })
-    expect(readWorkspaceOriginDetails({ cliProvenance: {} })?.cli).toEqual({
-      fromAgent: false,
-      startupAgent: undefined
-    })
-    expect(readWorkspaceOriginDetails({})).toBeNull()
-  })
-})
-
-describe('readWorkspaceDetailPorts', () => {
-  const port = (overrides: Record<string, unknown>) => ({
-    id: 'p',
-    kind: 'workspace',
-    owner: { worktreeId: 'repo::/src/app' },
-    bindHost: '0.0.0.0',
-    connectHost: 'localhost',
-    port: 5173,
-    protocol: 'http',
-    ...overrides
-  })
-
-  it("keeps only this workspace's listeners, copying the address the desktop copies", () => {
-    const ports = readWorkspaceDetailPorts(
-      {
-        ports: [
-          port({ id: 'a', processName: 'vite' }),
-          port({ id: 'b', port: 3001, advertisedUrl: 'https://local.example.com:3001/' }),
-          port({ id: 'c', connectHost: '::1', port: 8080 }),
-          port({ id: 'd', owner: { worktreeId: 'other' } }),
-          port({ id: 'e', kind: 'external' })
-        ]
-      },
-      'repo::/src/app'
-    )
-
-    expect(ports).toEqual([
-      { id: 'a', port: 5173, address: 'localhost:5173', processName: 'vite' },
-      { id: 'b', port: 3001, address: 'local.example.com:3001', processName: undefined },
-      { id: 'c', port: 8080, address: '[::1]:8080', processName: undefined }
-    ])
-  })
-
-  it('answers unknown, not none, when the host could not scan', () => {
-    expect(
-      readWorkspaceDetailPorts({ ports: [], unavailableReason: 'SSH host not served' }, 'x')
-    ).toBeNull()
-    expect(readWorkspaceDetailPorts(null, 'x')).toBeNull()
-    expect(readWorkspaceDetailPorts({ ports: [] }, 'x')).toEqual([])
+    expect(readWorkspaceOriginDetails({ cliProvenance: {} })).toBeNull()
+    expect(readWorkspaceOriginDetails(null)).toBeNull()
   })
 })
 
