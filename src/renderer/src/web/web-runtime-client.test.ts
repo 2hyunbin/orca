@@ -28,6 +28,7 @@ import {
   WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY
 } from '../../../shared/protocol-version'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from '../../../shared/agent-session-background-task-child-views-capability'
+import { AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY } from '../../../shared/ai-vault-partial-rows-capability'
 
 const fakeSockets: FakeWebSocket[] = []
 
@@ -136,7 +137,8 @@ describe('WebRuntimeClient', () => {
         WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
         WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
         WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY,
-        WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY
+        WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY,
+        AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY
       ]
     })
 
