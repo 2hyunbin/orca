@@ -7,10 +7,10 @@ import {
   editorArtifactSourceKey
 } from './editor-artifact-upload'
 
-const mocks = vi.hoisted(() => ({
-  drafts: {} as Record<string, string>,
-  flush: vi.fn()
-}))
+const mocks = vi.hoisted(() => {
+  const drafts: Record<string, string> = {}
+  return { drafts, flush: vi.fn() }
+})
 
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({ editorDrafts: mocks.drafts }) }
