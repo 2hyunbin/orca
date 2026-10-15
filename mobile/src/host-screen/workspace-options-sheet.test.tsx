@@ -45,7 +45,9 @@ afterEach(() => {
   renderer = null
 })
 
-function buildController(options: { newCardStyle: boolean; hideSleeping: boolean }) {
+type SheetOptions = { newCardStyle: boolean; hideSleeping: boolean; hasFolderRow?: boolean }
+
+function buildController(options: SheetOptions) {
   const settings = {
     clearFilters: vi.fn(),
     handleGroupChange: vi.fn(),
@@ -82,13 +84,12 @@ function buildController(options: { newCardStyle: boolean; hideSleeping: boolean
       repoHostIdByRepoId: new Map([['r2', 'ssh:box']]),
       serverWorkspaces: { hosts: [{ hostId: 'runtime:vm', label: 'VM' }], worktrees: [] },
       setShowWorkspaceOptions: vi.fn(),
-      showWorkspaceOptions: true
+      showWorkspaceOptions: true,
+      worktrees: options.hasFolderRow ? [{ workspaceKind: 'folder-workspace' }] : []
     }
   }
   return { controller, settings }
 }
-
-type SheetOptions = { newCardStyle: boolean; hideSleeping: boolean }
 
 function sheet(options: SheetOptions, settings?: ReturnType<typeof buildController>['settings']) {
   const built = buildController(options)
@@ -173,7 +174,14 @@ describe('the phone Workspace options sheet', () => {
     expect(shown).not.toContain('Except default branch')
     press('Card display')
     expect(texts()).toContain('Orca CLI')
+    expect(texts()).toContain('Branch name')
     expect(texts()).not.toContain('Ports')
+  })
+
+  it('names the branch choice for folder paths too once the desktop has folder workspaces', () => {
+    render({ newCardStyle: true, hideSleeping: false, hasFolderRow: true })
+    press('Card display')
+    expect(texts()).toContain('Branch / folder path')
   })
 
   it('opens an option page from its row, stays there after a pick, and goes back', () => {
