@@ -120,14 +120,18 @@ WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
     const branch = [`${prefix}left`, `${prefix}left extended`, `${prefix}right`,
       `${prefix}right extended`, `${prefix}left final`, prefix, '']
       .map((text, index) => item(386 + index, text, 'branch'))
-    for (const row of branch) put(row)
+    for (const row of branch) {
+      put(row)
+    }
     const expected = legacyRows()
     host.close()
     host = JournalHostDatabase.open(root)
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 0)).toEqual(expected)
     const generation = host.db.prepare('SELECT text_generation FROM journal_rows_data WHERE seq = 386')
       .get()?.text_generation
-    if (typeof generation !== 'string') throw new Error('missing branch generation')
+    if (typeof generation !== 'string') {
+      throw new Error('missing branch generation')
+    }
     const reader = new JournalTextPieceReader(host.db)
     expect(reader.read(SESSION, EPOCH, generation, 388)).toBe(`${prefix}right`)
     // The cached right branch no longer retains the older left extension's required prefix.
