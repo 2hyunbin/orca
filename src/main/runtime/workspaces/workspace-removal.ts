@@ -36,6 +36,10 @@ import { removeStaleLocalWorktreeRegistration } from '../../local-worktree-remov
 import { cleanupUnusedWorktreePushTargetRemote } from '../../ipc/worktree-remote'
 import { removeRuntimeRegisteredLocalWorktree } from '../runtime-registered-local-worktree-removal'
 import { removeOrphanOrFolderWorktree } from './workspace-registration-removal'
+import {
+  assertWslMoveWorkspaceWritable,
+  isWslMoveSourceHost
+} from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 export abstract class OrcaRuntimeWithRemoveManagedWorktree extends OrcaRuntimeWithCreateManagedRemoteWorktree {
   abstract forgetStructuredSessionMail(sessionId: string): void
@@ -85,6 +89,13 @@ export abstract class OrcaRuntimeWithRemoveManagedWorktree extends OrcaRuntimeWi
     const store = this.store
     const cleanupHostId = parseExecutionHostId(hostId)?.id
     const removalTarget = await this.resolveWorktreeRemovalTarget(worktreeSelector, cleanupHostId)
+    // The repo row names the host; a caller may omit hostId for a worktree on another host.
+    const fenceOwner = resolveWorktreeRemovalRepoOwner(store, removalTarget.repoId, cleanupHostId)
+    const fenceHostId =
+      fenceOwner.kind === 'resolved' ? getRepoExecutionHostId(fenceOwner.repo) : cleanupHostId
+    if (isWslMoveSourceHost(fenceHostId)) {
+      assertWslMoveWorkspaceWritable(store, removalTarget.id)
+    }
     // Why: a retry or a second client asking while Git still deletes joins that removal.
     const pending = this.joinPendingWorktreeRemoval(removalTarget.id, options)
     if (pending) {

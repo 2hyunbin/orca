@@ -309,6 +309,27 @@ describe('NativeChatStructuredSession', () => {
     expect(mocks.loadOlder).toHaveBeenCalledOnce()
   })
 
+  // What the transcript marks as new rests on this: without it the list never counts as watched.
+  it('tells the list whether the read has caught up with the host', () => {
+    // A fresh element each time: React skips a rerender handed the very same one.
+    const pane = () => (
+      <NativeChatStructuredSession
+        isVisible
+        isFocusedGroup
+        tabId="structured-tab-current"
+        sessionId="session-current"
+        target={{ kind: 'local' }}
+        agent="codex"
+      />
+    )
+    const { rerender } = render(pane())
+    expect(mocks.messageListProps?.session).toMatchObject({ readCurrent: false })
+
+    mocks.readCurrent = true
+    rerender(pane())
+    expect(mocks.messageListProps?.session).toMatchObject({ readCurrent: true })
+  })
+
   // Transcript image previews shipped Codex-first, and the runtime context they
   // need comes from the tab rather than the agent, so it is never agent-gated.
   it('hands the transcript the image runtime context', () => {
