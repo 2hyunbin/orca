@@ -63,6 +63,7 @@ export type WslHostServiceDependencies = {
   /** A connection came up: verify the server now rather than on the status owner's backoff. */
   ready: (environmentId: string) => void
   removed: (environmentId: string) => Promise<void> | void
+  call?: (environmentId: string, method: string, params: unknown, timeoutMs: number) => Promise<unknown>
 }
 
 export class WslHostService {
@@ -146,6 +147,13 @@ export class WslHostService {
   /** Explicit project actions may start their distro, and wait for its paired server. */
   ensure(distro: string): Promise<string> {
     return this.projectHosts.ensure(distro)
+  }
+
+  callProject(environmentId: string, method: string, params: unknown): Promise<unknown> {
+    if (!this.deps.call) {
+      throw new Error('WSL host project operations are not available.')
+    }
+    return this.deps.call(environmentId, method, params, 10 * 60_000)
   }
 
   async remove(environmentId: string): Promise<WslHostServerStop> {

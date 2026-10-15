@@ -21,6 +21,7 @@ import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { ProjectGroupImportNestedArgs, parseProjectGroupIpcArgs } from './repo-ipc-arg-schemas'
 import { getCompletedNestedRepoScan, scanNestedReposForIpc } from './nested-repo-scan-ipc'
+import { importNestedProjectsOnWslHost } from '../../wsl/wsl-nested-project-import'
 
 function sanitizeNestedRepoImportError(context: string, error: unknown): string {
   console.warn(`[project-groups] ${context}`, error)
@@ -37,6 +38,11 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
         'invalid_project_group_import_nested_args'
       )
       const requestedPaths = args.projectPaths
+      const hosted = await importNestedProjectsOnWslHost(store, args)
+      if (hosted) {
+        notifyReposChanged(mainWindow)
+        return hosted
+      }
       const completedScan = getCompletedNestedRepoScan(args)
       const scan =
         completedScan ??

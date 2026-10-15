@@ -1,6 +1,5 @@
 import { posix } from 'node:path'
 import { z } from 'zod'
-import { getAppEnvironment } from '../../shared/app-environment'
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
@@ -10,9 +9,9 @@ import {
 import type { Repo } from '../../shared/repo-types'
 import { foldWslUncPathCaseInsensitiveParts, parseWslUncPath } from '../../shared/wsl-paths'
 import { deriveCloneRepoNameFromUrl } from '../git/repo-clone-path'
-import { callRuntimeEnvironment } from '../ipc/runtime-environment-transport-routing'
 import { getWslHostService } from './wsl-host-service-instance'
 import { wslHostsGateOpen } from './wsl-host-gate'
+import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
@@ -78,20 +77,11 @@ export async function registerProjectOnWslHost(
       : operation.kind === 'clone'
         ? { destination: path.linuxPath, url: operation.url }
         : { parentPath: path.linuxPath, name, kind: operation.repoKind }
-  const response = await callRuntimeEnvironment(
-    getAppEnvironment().getPath('userData'),
-    environmentId,
-    method,
-    params,
-    10 * 60_000
-  )
-  if (!response.ok) {
-    throw new Error(response.error.message)
+  const result = await callWslProjectHost(environmentId, method, params)
+  if (typeof result === 'object' && result && 'error' in result) {
+    throw new Error(String(result.error))
   }
-  if (typeof response.result === 'object' && response.result && 'error' in response.result) {
-    throw new Error(String(response.result.error))
-  }
-  const { repo } = ProjectReply.parse(response.result)
+  const { repo } = ProjectReply.parse(result)
   return { ...repo, executionHostId: toRuntimeExecutionHostId(environmentId) }
 }
 
@@ -114,6 +104,7 @@ export async function resolveNewWslProjectHost(
     return null
   }
   const existing = store.getRepos().find((repo) =>
+    targetKey !== null &&
     getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
     foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
   )
@@ -121,4 +112,22 @@ export async function resolveNewWslProjectHost(
   return existing
     ? { repo: existing }
     : { environmentId: await service.ensure(path.distro), linuxPath: path.linuxPath }
+}
+
+/** A paired client cannot address an environment saved only on this Windows desktop. */
+export function assertWslProjectRoutingCaller(path: string, caller?: RpcCallerIdentity): void {
+  if (
+    process.platform === 'win32' && parseWslUncPath(path) && wslHostsGateOpen() &&
+    getWslHostService()?.isEnabled() && caller?.kind !== 'local-cli' && caller?.kind !== 'desktop'
+  ) {
+    throw new Error('Add this WSL project from the Windows desktop, then open it on its WSL host.')
+  }
+}
+
+export function callWslProjectHost(environmentId: string, method: string, params: unknown): Promise<unknown> {
+  const service = getWslHostService()
+  if (!service) {
+    throw new Error('WSL hosts are not available on this computer.')
+  }
+  return service.callProject(environmentId, method, params)
 }

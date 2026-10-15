@@ -1,3 +1,5 @@
+import type { ExecutionHostId } from './execution-host'
+
 export type ProjectGroupCreatedFrom = 'manual' | 'folder-scan' | 'migration'
 
 export type ProjectGroup = {
@@ -52,6 +54,8 @@ export type ProjectGroupImportProjectResult = {
 }
 
 export type ProjectGroupImportResult = {
+  /** Present when an explicit local import was handled by another execution host. */
+  executionHostId?: ExecutionHostId
   group?: ProjectGroup
   projects: ProjectGroupImportProjectResult[]
   importedCount: number

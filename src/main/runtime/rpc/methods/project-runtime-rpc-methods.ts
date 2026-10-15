@@ -1,4 +1,5 @@
 import { defineMethod } from '../core'
+import { assertWslProjectRoutingCaller } from '../../../wsl/wsl-project-registration'
 import { projectRepoResultVisibilityForClient } from '../repo-visibility-projection'
 import {
   ProjectHostSetupClone,
@@ -48,23 +49,23 @@ export const PROJECT_RUNTIME_METHODS = [
     name: 'projectHostSetup.setupExistingFolder',
     permission: 'workspace',
     params: ProjectHostSetupExistingFolder,
-    handler: async (params, context) => ({
-      result: projectRepoResultVisibilityForClient(
-        await context.runtime.setupProjectExistingFolder(params),
-        context
-      )
-    })
+    handler: async (params, context) => {
+      assertWslProjectRoutingCaller(params.path, context.caller)
+      return { result: projectRepoResultVisibilityForClient(
+        await context.runtime.setupProjectExistingFolder(params), context
+      ) }
+    }
   }),
   defineMethod({
     name: 'projectHostSetup.clone',
     permission: 'workspace',
     params: ProjectHostSetupClone,
-    handler: async (params, context) => ({
-      result: projectRepoResultVisibilityForClient(
-        await context.runtime.setupProjectClone(params),
-        context
-      )
-    })
+    handler: async (params, context) => {
+      assertWslProjectRoutingCaller(params.destination, context.caller)
+      return { result: projectRepoResultVisibilityForClient(
+        await context.runtime.setupProjectClone(params), context
+      ) }
+    }
   }),
   defineMethod({
     name: 'projectHostSetup.update',

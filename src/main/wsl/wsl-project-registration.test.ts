@@ -7,15 +7,8 @@ const mocks = vi.hoisted(() => ({
   enabled: true
 }))
 vi.mock('./wsl-host-service-instance', () => ({
-  getWslHostService: () => ({ isEnabled: () => mocks.enabled, ensure: mocks.ensure })
+  getWslHostService: () => ({ isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call })
 }))
-vi.mock('../ipc/runtime-environment-transport-routing', () => ({
-  callRuntimeEnvironment: mocks.call
-}))
-vi.mock('../../shared/app-environment', () => ({
-  getAppEnvironment: () => ({ getPath: () => '/profile' })
-}))
-
 import { registerProjectOnWslHost } from './wsl-project-registration'
 
 const guest: Repo = {
@@ -30,7 +23,7 @@ describe('new WSL project ownership', () => {
     vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
     mocks.enabled = true
     mocks.ensure.mockReset().mockResolvedValue('wsl:ubuntu')
-    mocks.call.mockReset().mockResolvedValue({ ok: true, result: { repo: guest } })
+    mocks.call.mockReset().mockResolvedValue({ repo: guest })
   })
   afterEach(() => {
     Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
@@ -58,7 +51,7 @@ describe('new WSL project ownership', () => {
     await registerProjectOnWslHost(store, {
       kind: 'create', path: '\\\\wsl$\\Ubuntu\\home\\me', name: 'repo', repoKind: 'git'
     })
-    expect(mocks.call.mock.calls.map((call) => call.slice(1, 4))).toEqual([
+    expect(mocks.call.mock.calls.map((call) => call.slice(0, 3))).toEqual([
       ['wsl:ubuntu', 'repo.add', { path: '/home/me/repo', kind: undefined, displayName: undefined }],
       ['wsl:ubuntu', 'repo.add', { path: '/home/me/notes', kind: 'folder', displayName: undefined }],
       ['wsl:ubuntu', 'repo.clone', { destination: '/home/me', url: 'https://example.com/repo.git' }],

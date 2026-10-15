@@ -17,6 +17,7 @@ import {
 } from '../project-groups/nested-repo-import'
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
 import type { RuntimeStore } from './runtime-store-contract'
+import { importNestedProjectsOnWslHost } from '../wsl/wsl-nested-project-import'
 
 type RuntimeNestedRepoImportDependencies = {
   getStore: () => RuntimeStore | null
@@ -47,11 +48,15 @@ export class RuntimeNestedRepoImport {
     projectPaths: string[]
     mode: ProjectGroupImportMode
   }): Promise<ProjectGroupImportResult> {
-    await awaitWindowsHostGitEnvironmentReady({ cwd: args.parentPath })
     const store = this.deps.getStore()
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
       throw new Error('runtime_unavailable')
     }
+    const hosted = await importNestedProjectsOnWslHost(store, args)
+    if (hosted) {
+      return hosted
+    }
+    await awaitWindowsHostGitEnvironmentReady({ cwd: args.parentPath })
     if (!isAbsolute(args.parentPath)) {
       throw new Error('Project path must be an absolute path')
     }

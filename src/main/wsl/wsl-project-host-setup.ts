@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { getAppEnvironment } from '../../shared/app-environment'
 import { adoptEndpointProjectHostSetup, adoptEndpointRepo } from '../../shared/endpoint-catalog-adoption'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type {
@@ -10,8 +9,7 @@ import type {
 import type { Repo } from '../../shared/repo-types'
 import { foldWslUncPathCaseInsensitiveParts, parseWslUncPath } from '../../shared/wsl-paths'
 import { deriveCloneRepoNameFromUrl } from '../git/repo-clone-path'
-import { callRuntimeEnvironment } from '../ipc/runtime-environment-transport-routing'
-import { resolveNewWslProjectHost } from './wsl-project-registration'
+import { callWslProjectHost, resolveNewWslProjectHost } from './wsl-project-registration'
 
 const SetupReply = z.object({ result: z.object({
   project: z.object({
@@ -46,19 +44,15 @@ export async function setupProjectOnWslHost(
   if (!owner || 'repo' in owner) {
     return null
   }
-  const response = await callRuntimeEnvironment(
-    getAppEnvironment().getPath('userData'), owner.environmentId,
+  const response = await callWslProjectHost(
+    owner.environmentId,
     cloning ? 'projectHostSetup.clone' : 'projectHostSetup.setupExistingFolder',
     {
       ...args, hostId: LOCAL_EXECUTION_HOST_ID,
       ...(cloning ? { destination: owner.linuxPath } : { path: owner.linuxPath })
-    },
-    10 * 60_000
+    }
   )
-  if (!response.ok) {
-    throw new Error(response.error.message)
-  }
-  const { result } = SetupReply.parse(response.result)
+  const { result } = SetupReply.parse(response)
   const target = { kind: 'environment' as const, environmentId: owner.environmentId }
   return {
     ...result,
