@@ -58,7 +58,9 @@ async function agentDiscoveries(
   issues: AiVaultScanIssue[]
 ): Promise<SessionFileDiscovery[]> {
   const configuredRoots = source.rootDirs(options, wslHomeDirs)
-  const rootDirs = agent === 'claude' ? await uniqueLinkedRoots(configuredRoots) : configuredRoots
+  const rootDirs = source.walkLinkedRootsOnce
+    ? await uniqueLinkedRoots(configuredRoots)
+    : configuredRoots
   const discover = (rootDir: string): Promise<SessionFileDiscovery> =>
     discoverFiles({
       rootDir,
@@ -76,10 +78,9 @@ async function agentDiscoveries(
     : Promise.all(rootDirs.map(discover))
 }
 
-// Claude profiles link their projects folder to the shared one, so one history
-// has several spellings; walk it once under the first. Lookup and deletion
-// still accept every spelling (uniqueDirs). Codex is excluded: its aliases are
-// hardlinked files whose owning home is ranked after parse.
+// A CLAUDE_CONFIG_DIR naming an Orca account home (whose projects is a link) or
+// a user alias of ~/.claude gives one history several spellings; walk it once
+// under the first. Lookup and deletion still accept every spelling.
 async function uniqueLinkedRoots(roots: readonly string[]): Promise<string[]> {
   const canonical = await Promise.all(roots.map(localRealpath))
   const seen = new Set<string>()

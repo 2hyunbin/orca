@@ -15,26 +15,32 @@ vi.mock('./session-scanner-antigravity-sources', () => ({ antigravityDiscoveries
 import { discoverAiVaultSessionSources } from './session-scanner-source-discovery'
 import { claudeProjectsRootDirs } from './session-scanner-roots'
 
-it('discovers linked Claude history once through the first account spelling', async () => {
+it('walks history once when CLAUDE_CONFIG_DIR/projects links to ~/.claude/projects', async () => {
   const home = await mkdtemp(join(tmpdir(), 'orca-linked-history-'))
   try {
-    const projects = join(home, 'projects')
-    const profile = join(home, 'profile-projects')
-    await mkdir(projects)
+    const projects = join(home, '.claude', 'projects')
+    // An Orca account home: its projects folder links to the default one.
+    const configHome = join(home, 'account-home')
+    const alias = join(configHome, 'projects')
+    await mkdir(projects, { recursive: true })
+    await mkdir(configHome)
     await writeFile(join(projects, 'session.jsonl'), '{}\n')
-    await symlink(projects, profile, process.platform === 'win32' ? 'junction' : 'dir')
-    const options = { claudeProjectsDir: profile, claudeProfileProjectsDirs: [projects] }
+    await symlink(projects, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('USERPROFILE', home)
+    vi.stubEnv('CLAUDE_CONFIG_DIR', configHome)
     const discoveries = await discoverAiVaultSessionSources({
-      options,
+      options: {},
       limitPerAgent: 10,
       issues: []
     })
-    expect(discoveries.map((discovery) => discovery.rootDir)).toEqual([profile])
+    expect(discoveries.map((discovery) => discovery.rootDir)).toEqual([alias])
     expect(discoveries.flatMap((discovery) => discovery.files.map((file) => file.path))).toEqual([
-      join(profile, 'session.jsonl')
+      join(alias, 'session.jsonl')
     ])
-    expect(claudeProjectsRootDirs(options)).toEqual([profile, projects])
+    expect(claudeProjectsRootDirs({})).toEqual([alias, projects])
   } finally {
+    vi.unstubAllEnvs()
     await rm(home, { recursive: true, force: true })
   }
 })
