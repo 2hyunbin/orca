@@ -457,6 +457,35 @@ describe('remote terminal frame-drop resync', () => {
     }
   })
 
+  it('escalates to stall recovery when the host never answers a recovery', async () => {
+    vi.useFakeTimers()
+    try {
+      const onTransportClose = vi.fn()
+      await getRemoteRuntimeTerminalMultiplexer('env-1').subscribeTerminal({
+        terminal: 'terminal-1',
+        client: { id: 'desktop-1', type: 'desktop' },
+        callbacks: { onData: vi.fn(), onSnapshot: vi.fn(), onTransportClose }
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      server.holdNextRecoverySnapshot = true
+      server.output('aaa')
+      server.dropNextOutput = true
+      server.output('bbb')
+      server.output('ccc')
+      await vi.advanceTimersByTimeAsync(10_000)
+      server.holdNextRecoverySnapshot = true
+      await vi.advanceTimersByTimeAsync(500)
+      expect(server.snapshotRequests).toEqual([undefined, undefined])
+      expect(onTransportClose).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(onTransportClose).toHaveBeenCalledWith({ recoverable: true })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('does not re-request a recovery that is still streaming on a slow link', async () => {
     vi.useFakeTimers()
     try {

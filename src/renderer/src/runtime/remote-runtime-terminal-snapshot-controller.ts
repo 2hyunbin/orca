@@ -6,6 +6,7 @@ import { TERMINAL_MULTIPLEX_RECOVERY_SCROLLBACK_ROWS } from '../../../shared/ter
 import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 import { RemoteRuntimeTerminalMultiplexerBase } from './remote-runtime-terminal-multiplexer-base'
 import {
+  REMOTE_TERMINAL_RESYNC_MAX_UNANSWERED_TIMEOUTS,
   REMOTE_TERMINAL_RESYNC_RETRY_BASE_MS,
   REMOTE_TERMINAL_RESYNC_RETRY_MAX_MS,
   REMOTE_TERMINAL_RESYNC_TIMEOUT_MS,
@@ -115,6 +116,7 @@ export abstract class RemoteRuntimeTerminalSnapshotController extends RemoteRunt
   // Why: a large recovery on a slow link can take longer than the timeout to
   // stream; expiring mid-transfer would request a second one and repaint twice.
   protected noteResyncSnapshotProgress(stream: RemoteRuntimeMultiplexedTerminalState): void {
+    stream.resyncUnansweredTimeouts = 0
     if (stream.resyncInFlight && !stream.resyncPendingSend) {
       this.startResyncTimer(stream)
     }
@@ -131,6 +133,12 @@ export abstract class RemoteRuntimeTerminalSnapshotController extends RemoteRunt
         return
       }
       stream.resyncTimer = null
+      stream.resyncUnansweredTimeouts += 1
+      if (stream.resyncUnansweredTimeouts >= REMOTE_TERMINAL_RESYNC_MAX_UNANSWERED_TIMEOUTS) {
+        // Why: pending recovery refuses the watchdog's probe, so escalate here instead.
+        this.recoverStalledStream(stream)
+        return
+      }
       // Why retry, not reopen: reopening left expectedSeq before the gap, so the
       // next frame re-tripped it and recovery ran on the timeout's cadence (#18488).
       this.scheduleResyncRetry(stream)
