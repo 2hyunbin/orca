@@ -13,7 +13,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { countActiveWorkspaceFilters } from '../../../../shared/workspace-view/workspace-row-filters'
 import SidebarRepositoryFilterSection from './SidebarRepositoryFilterSection'
 import { WorkspaceFilterOptionRow } from './workspace-filter-option-row'
-import { getSidebarHostVisibilityLabel, shouldShowHostScopeControls } from './sidebar-host-options'
+import {
+  getSidebarHostVisibilityLabel,
+  shouldShowHostScopeControls,
+  type SidebarHostOption
+} from './sidebar-host-options'
 import { useSidebarHostScopeOptions } from './use-sidebar-host-scope-options'
 import { SidebarHostScopeMenuSection } from './SidebarHostScopeMenuSection'
 import { PROJECT_ORDER_OPTIONS, SORT_OPTIONS } from './sidebar-workspace-option-items'
@@ -85,13 +89,18 @@ export function useWorkspaceOptionsFilterBadge(): {
   }
 }
 
-type OptionItemProps = { preserveWorkspaceBoardOpen: boolean }
+type OptionItemProps = {
+  preserveWorkspaceBoardOpen: boolean
+  hostOptions: SidebarHostOption[]
+}
 
-function HostsOptionItem({ preserveWorkspaceBoardOpen }: OptionItemProps): JSX.Element {
+function HostsOptionItem({
+  preserveWorkspaceBoardOpen,
+  hostOptions
+}: OptionItemProps): JSX.Element {
   const setWorkspaceHostScope = useAppStore((s) => s.setWorkspaceHostScope)
   const visibleWorkspaceHostIds = useAppStore((s) => s.visibleWorkspaceHostIds)
   const setVisibleWorkspaceHostIds = useAppStore((s) => s.setVisibleWorkspaceHostIds)
-  const { hostOptions } = useSidebarHostScopeOptions()
   return (
     <SidebarHostScopeMenuSection
       hostVisibilityLabel={getSidebarHostVisibilityLabel(visibleWorkspaceHostIds, hostOptions)}
@@ -324,6 +333,7 @@ export function WorkspaceOptionsMenuItems({
               <OptionItem
                 key={option.key}
                 preserveWorkspaceBoardOpen={preserveWorkspaceBoardOpen}
+                hostOptions={hostOptions}
               />
             )
           })}
