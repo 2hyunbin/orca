@@ -2,13 +2,13 @@ import type Database from '../../sqlite/sync-database'
 
 /** Runs inside the schema migration transaction, before its version is published. */
 export function ensureJournalTextPieceSchema(db: Database.Database): void {
-  const shape = db.prepare("SELECT type FROM sqlite_master WHERE name = 'journal_rows'").get()?.type
-  if (shape === 'table') {
+  const relationType = db.prepare("SELECT type FROM sqlite_master WHERE name = 'journal_rows'").get()?.type
+  if (relationType === 'table') {
     db.exec('ALTER TABLE journal_rows RENAME TO journal_rows_data')
     db.exec('ALTER TABLE journal_rows_data ADD COLUMN text_generation TEXT')
     db.exec('ALTER TABLE journal_rows_data ADD COLUMN text_item_id TEXT')
     db.exec('ALTER TABLE journal_rows_data ADD COLUMN text_path TEXT')
-  } else if (shape === 'view') {
+  } else if (relationType === 'view') {
     db.exec(`
 DROP TRIGGER IF EXISTS journal_rows_compat_insert;
 DROP TRIGGER IF EXISTS journal_rows_compat_update;
