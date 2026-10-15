@@ -94,6 +94,8 @@ export function spawnManagedProviderProcess(
   const group = spec.adopt(child)
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
+  // The root's own exit, which can precede `observed` while the rest of its group is reaped.
+  let rootExited = false
   let spawnFailed = false
   let spawnError: unknown = null
   let lastCloseResult: ProviderProcessCloseResult | null = null
@@ -123,6 +125,7 @@ export function spawnManagedProviderProcess(
     listeners.clear()
   }
   child.on('exit', (code, signal) => {
+    rootExited = true
     const exit = { code, signal, processless: false }
     // A group-led provider's exit is reported once its group is gone, never before a member.
     if (group) {
@@ -142,7 +145,7 @@ export function spawnManagedProviderProcess(
     }
   })
   const rootVerdict = (): DescendantTreeVerdict =>
-    observed ? 'exited' : child.pid === undefined ? 'unverifiable' : 'live'
+    observed || rootExited ? 'exited' : child.pid === undefined ? 'unverifiable' : 'live'
   const terminateTree = (): Promise<ProviderProcessTeardownVerdict> =>
     terminateProviderProcessTree(child, { site: options.site, platform })
 
@@ -157,7 +160,7 @@ export function spawnManagedProviderProcess(
       return rootVerdict()
     },
     get rootExitObserved() {
-      return observed !== null && !observed.processless
+      return rootExited
     },
     get executableMissing() {
       return isMissingProviderExecutable(spawnError, launch.command)

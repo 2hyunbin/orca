@@ -149,6 +149,7 @@ process.stdin.on('end', () => setTimeout(() => console.log(prompt.includes('READ
         { kind: 'local', cwd: folder }
       )
     ).resolves.toMatchObject({ success: true, message: 'Update README' })
-    expect(lastSpawnSpec().program).toBe(process.execPath)
+    // The host watchdog's own spawn can land after the agent's.
+    expect(spawnProcessMock.mock.calls.map(([spec]) => spec.program)).toContain(process.execPath)
   })
 })
