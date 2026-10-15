@@ -638,7 +638,7 @@ describe('a chat after startup permission backfill', () => {
       await heldBehindStart('hello')
       expect(acquire.mock.calls.at(-1)![0].permissionMode).toBe(mode)
       await host.handleAdapterEvent(startedEvent())
-      await vi.advanceTimersByTimeAsync(50)
+      await new Promise((resolve) => setTimeout(resolve, 50))
       await host.flushStreamedEvents(SESSION)
       expect(store.getRecord(SESSION)?.permissionMode).toBe(mode)
       await store.backfillChatPermissionModes(() => mode === 'ask')
