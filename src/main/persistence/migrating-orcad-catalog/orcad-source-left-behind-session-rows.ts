@@ -123,7 +123,15 @@ function withoutForeignTerminalRows(
     remoteSessionIdsByTabId: filtered(session.remoteSessionIdsByTabId, keepTab),
     localOnlyScrollbackByTabId: filtered(session.localOnlyScrollbackByTabId, keepTab),
     sleepingAgentSessionsByPaneKey: filtered(session.sleepingAgentSessionsByPaneKey, keepPane),
-    terminalPtyIncarnationsByPaneKey: filtered(session.terminalPtyIncarnationsByPaneKey, keepPane)
+    terminalPtyIncarnationsByPaneKey: filtered(session.terminalPtyIncarnationsByPaneKey, keepPane),
+    terminalSurfaceTombstonesByPaneKey: filtered(
+      session.terminalSurfaceTombstonesByPaneKey,
+      ([paneKey, tombstone]) => keepPane([paneKey, tombstone]) && !tabIds.has(tombstone.parentTabId)
+    ),
+    closedTerminalTabTombstonesByTabId: filtered(
+      session.closedTerminalTabTombstonesByTabId,
+      ([tabId]) => !tabIds.has(tabId)
+    )
   }
 }
 

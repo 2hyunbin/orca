@@ -480,6 +480,16 @@ describe('"Move anyway"', () => {
     }
     host.remoteSessionIdsByTabId = { 'runtime-tab': 'remote-1' }
     host.activeTabIdByWorktree = { [worktreeId]: 'runtime-tab' }
+    host.terminalSurfaceTombstonesByPaneKey = {
+      [`runtime-tab:${LEAF}`]: {
+        worktreeId,
+        parentTabId: 'runtime-tab',
+        leafId: LEAF,
+        ptyId: 'pty-old',
+        incarnationId: 'inc-1',
+        retiredAt: 1
+      }
+    }
     const loaded = load(state)
     confirmed(loaded)
     const result = await connectMove(loaded)
@@ -492,6 +502,7 @@ describe('"Move anyway"', () => {
     expect(Object.keys(session?.terminalLayoutsByTabId ?? {})).not.toContain('runtime-tab')
     expect(session?.remoteSessionIdsByTabId?.['runtime-tab']).toBeUndefined()
     expect(session?.activeTabIdByWorktree?.[worktreeId]).not.toBe('runtime-tab')
+    expect(session?.terminalSurfaceTombstonesByPaneKey ?? {}).toEqual({})
   })
 
   it('drops the editor tab of a file it leaves behind', async () => {
