@@ -111,7 +111,7 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         expect(render(state)).toEqual({ type: 'text', text: ordinary.text })
         expect(rig.journal.cursor()).toEqual(held)
       })
-      it('catches up through byte-bounded pages without losing the dependent note or cursor', async () => {
+      it('reopens on the newest page and loads the dependent note with a released client', async () => {
         const before = await seed()
         const held = rig.journal.cursor()
         for (const clientMessageId of ['large-a', 'large-b']) {
@@ -134,10 +134,20 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         const first = await page({ direction: 'after', cursor: held, limit: 3 })
         expect(first.hasNewer).toBe(true)
         const caughtUp = await subscribe(held)
-        const after = reduce(before, caughtUp)
+        let after = reduce(before, caughtUp)
+        expect(events(caughtUp)[0]).toMatchObject({ type: 'snapshot', page: { hasOlder: true } })
+        expect(after.cursor).toEqual(rig.journal.cursor())
+        while (after.hasOlder && !after.items.some((item) => item.itemId === noteId)) {
+          const requestedCursor = { epoch: after.epoch!, sequence: after.items[0]!.sequence }
+          const older = await page({ direction: 'before', cursor: requestedCursor })
+          after = rig.client.reduceStructuredAgentSession(after, {
+            type: 'older-page',
+            requestedCursor,
+            page: older
+          })
+        }
         expect(render(after)).toEqual({ type: 'text', text: ordinary.text })
         expect(after.cursor).toEqual(rig.journal.cursor())
-        expect(events(caughtUp).filter((event) => event.type === 'batch').length).toBeGreaterThan(1)
       })
       it.each(['running', 'completed', 'unverifiable', 'missing', 'other-failure'] as const)(
         'keeps %s wording through the released page reader',
