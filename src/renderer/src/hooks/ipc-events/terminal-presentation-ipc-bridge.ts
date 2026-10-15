@@ -2,6 +2,7 @@ import { presentAgentLaunchTab } from '@/lib/agent-launch-tab-presentation'
 import { requestBackgroundTerminalWorktreeMount } from '@/components/terminal/background-terminal-worktree-mount'
 import { hasRegisteredRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 import { planMobileTerminalTabMount } from '@/lib/mobile-terminal-tab-mount'
+import { consumeRestartReplacementForPty } from '@/components/terminal-pane/pty-connection/restart-replacement-on-show'
 import { resolveTerminalTabPtyOwnership } from '@/lib/terminal-tab-for-pty-id'
 import { SPLIT_TERMINAL_PANE_EVENT } from '@/constants/terminal'
 import type { SplitTerminalPaneDetail } from '@/constants/terminal'
@@ -260,6 +261,9 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
   unsubs.push(
     window.api.ui.onRequestTerminalTabMount(({ worktreeId, tabId, ptyId }) => {
       if (!worktreeId) {
+        return
+      }
+      if (ptyId && consumeRestartReplacementForPty(ptyId)) {
         return
       }
       // Why: synthetic pty handles need persisted-tab resolution; a miss must not mount every saved tab in a hidden worktree.

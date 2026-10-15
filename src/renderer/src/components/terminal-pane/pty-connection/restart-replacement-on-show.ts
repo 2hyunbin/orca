@@ -1,13 +1,19 @@
 import { useAppStore } from '@/store'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
+// Why by PTY id: a paired client opening the pane names only the dead process, not the pane.
+const armedSessionsByPtyId = new Map<string, ConnectPanePtySession>()
+
 /**
  * A terminal service restart ended this pane's process and nothing replaced it. The pane gets its
  * replacement the way a relaunch would (fresh shell, cold-restore agent resume, old output kept),
- * but only once it is shown, so a restart never resumes every background agent at once.
+ * but only once it is shown or opened on a paired client, so a restart never resumes every
+ * background agent at once.
  */
 export function armRestartReplacement(session: ConnectPanePtySession, ptyId: string): void {
+  dropRestartReplacement(session)
   session.restartReplacementPtyId = ptyId
+  armedSessionsByPtyId.set(ptyId, session)
   if (session.deps.isVisibleRef.current) {
     // Deferred off the exit handler, as the hibernation wake is.
     queueMicrotask(() => consumeRestartReplacement(session))
@@ -20,7 +26,7 @@ export function consumeRestartReplacement(session: ConnectPanePtySession): void 
   if (!ptyId) {
     return
   }
-  session.restartReplacementPtyId = null
+  dropRestartReplacement(session)
   const currentPtyId = session.transport.getPtyId()
   const storedPtyId =
     useAppStore.getState().terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[
@@ -35,4 +41,22 @@ export function consumeRestartReplacement(session: ConnectPanePtySession): void 
     return
   }
   void session.startFreshColdRestoreAgentResume()
+}
+
+/** A paired client (phone or another desktop) opened the pane, which counts as showing it. */
+export function consumeRestartReplacementForPty(ptyId: string): boolean {
+  const session = armedSessionsByPtyId.get(ptyId)
+  if (!session) {
+    return false
+  }
+  consumeRestartReplacement(session)
+  return true
+}
+
+export function dropRestartReplacement(session: ConnectPanePtySession): void {
+  const ptyId: string | null = session.restartReplacementPtyId ?? null
+  session.restartReplacementPtyId = null
+  if (ptyId && armedSessionsByPtyId.get(ptyId) === session) {
+    armedSessionsByPtyId.delete(ptyId)
+  }
 }

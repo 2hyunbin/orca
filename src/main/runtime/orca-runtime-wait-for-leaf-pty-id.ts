@@ -77,17 +77,7 @@ export class OrcaRuntimeWithWaitForLeafPtyId extends OrcaRuntimeWithRestoreLiveP
     if (!tabId && !ptyId) {
       return false
     }
-    try {
-      this.getAuthoritativeWindow().webContents.send('terminal:requestTabMount', {
-        worktreeId: record.worktreeId,
-        ...(tabId ? { tabId } : {}),
-        ...(ptyId ? { ptyId } : {})
-      })
-      return true
-    } catch {
-      // No authoritative window (shutdown/headless): subscribe keeps its empty-snapshot fallback.
-      return false
-    }
+    return this.sendRendererTerminalTabMount({ worktreeId: record.worktreeId, tabId, ptyId })
   }
 
   getRendererTerminalSerializerGeneration(ptyId: string): number {

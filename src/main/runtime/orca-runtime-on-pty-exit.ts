@@ -119,9 +119,11 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         )
       }
       // Why both kinds: a sleep keeps its wake hint, and a restart's replacement takes the pane.
-      const preservesIntentionallyStoppedSurface =
-        this.intentionalPtyStops.claimExit(ptyId, exitIncarnationId ?? pty?.incarnationId).length >
-        0
+      const intentionalStopKinds = this.intentionalPtyStops.claimExit(
+        ptyId,
+        exitIncarnationId ?? pty?.incarnationId
+      )
+      const preservesIntentionallyStoppedSurface = intentionalStopKinds.length > 0
       advertisedUrlWatcher.unbindPty(ptyId)
       // Clean up new mobile state for this PTY
       this.mobileSubscribers.delete(ptyId)
@@ -210,6 +212,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         pty.disconnectedAt = Date.now()
         pty.lastExitCode = exitCode
         pty.lastExitCause = exitCause
+        pty.replacedByRestart = intentionalStopKinds.includes('replaced') || undefined
         // Why: the exited process's live frames say nothing about a replacement.
         // A same-id respawn makes the leaf writable again before any new title,
         // so leaving this true would let push delivery type into the new process

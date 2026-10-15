@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store'
-import { consumeRestartReplacement } from './restart-replacement-on-show'
+import { consumeRestartReplacement, dropRestartReplacement } from './restart-replacement-on-show'
 import { shouldReconcileMissingSession, type HasPty } from '../terminal-dead-session-reconcile'
 import { cancelPendingSafeFitContinuations } from '@/lib/pane-manager/pane-tree-ops'
 import { PANE_PTY_RESIZE_HOLD_FLUSH_EVENT } from '@/lib/pane-manager/pane-pty-resize-hold'
@@ -147,6 +147,7 @@ export function installSessionReconcileDispose(session: ConnectPanePtySession): 
       session.spawnedFreshPtyId === ptyId && !Number.isFinite(session.lastTerminalInputAt),
     dispose() {
       session.disposed = true
+      dropRestartReplacement(session)
       session.disposeSpawnDeferral()
       session.startupTiming?.finish('disposed')
       const unsentReplacedPtyId: string | null = session.claimPendingReplacedPtyId()

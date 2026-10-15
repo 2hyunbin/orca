@@ -205,6 +205,37 @@ describe('connectPanePty', () => {
     expect(pane.connects()).toBe(before + 1)
   })
 
+  it('resumes a restart-replaced hidden pane once when a paired client opens it', async () => {
+    const { consumeRestartReplacementForPty } =
+      await import('./pty-connection/restart-replacement-on-show')
+    const pane = await connectWithAgent({ visible: false })
+    await pane.exit(true)
+    const before = pane.connects()
+
+    expect(consumeRestartReplacementForPty('tab-pty')).toBe(true)
+    await flushAsyncTicks()
+    expect(pane.connects()).toBe(before + 1)
+    expect(pane.lastCommand()).toContain('sess-1')
+
+    pane.binding.noteVisibilityResume()
+    await flushAsyncTicks()
+    expect(consumeRestartReplacementForPty('tab-pty')).toBe(false)
+    expect(pane.connects()).toBe(before + 1)
+  })
+
+  it('has nothing for a paired client once the pane closed', async () => {
+    const { consumeRestartReplacementForPty } =
+      await import('./pty-connection/restart-replacement-on-show')
+    const pane = await connectWithAgent({ visible: false })
+    await pane.exit(true)
+    const before = pane.connects()
+
+    pane.binding.dispose()
+
+    expect(consumeRestartReplacementForPty('tab-pty')).toBe(false)
+    expect(pane.connects()).toBe(before)
+  })
+
   it('resumes a restart-replaced pane at once when it is visible', async () => {
     const pane = await connectWithAgent({ visible: true })
     const before = pane.connects()

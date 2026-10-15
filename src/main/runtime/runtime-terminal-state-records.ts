@@ -73,6 +73,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   disconnectedAt: number | null
   lastExitCode: number | null
   lastExitCause: TerminalExitCause | null
+  /** The last exit was a restart's; the window that saw it spawns the replacement. */
+  replacedByRestart?: true
   lastAgentStatus: AgentStatus | null
   lastAgentStatusObservedLive: boolean
   /** Latest first-party state from the agent's own OSC 9999 status stream — what the
