@@ -281,7 +281,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY cumulative acknowledgement accounting', () => {
   const {
     mainWindow,
     createMockProc,

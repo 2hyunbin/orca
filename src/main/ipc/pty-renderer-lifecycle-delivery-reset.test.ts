@@ -448,7 +448,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY renderer send recovery', () => {
   const {
     handlers,
     mainWindow,

@@ -340,7 +340,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY SSH lease lifecycle', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
 
   describe('spawn environment', () => {

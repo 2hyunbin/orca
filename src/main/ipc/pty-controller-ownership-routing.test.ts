@@ -250,7 +250,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY controller ownership recovery', () => {
   const {
     createAgentClaimProvider,
     recoveredAgentClaim,

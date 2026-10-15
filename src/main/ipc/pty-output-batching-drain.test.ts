@@ -437,7 +437,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY bounded output draining', () => {
   const {
     handlers,
     mainWindow,

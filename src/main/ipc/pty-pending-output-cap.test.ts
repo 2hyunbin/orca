@@ -232,7 +232,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY producer flow control', () => {
   const { mainWindow, installObservableDaemonTestProvider, getPtyDataSendCalls } =
     setupPtyIpcSuite()
 

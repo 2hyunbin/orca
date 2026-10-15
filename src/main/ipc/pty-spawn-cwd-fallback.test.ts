@@ -319,7 +319,7 @@ describe('registerPtyHandlers', () => {
   })
 })
 
-describe('registerPtyHandlers', () => {
+describe('PTY WSL working-directory validation', () => {
   const { handlers, mainWindow, installDaemonTestProvider, spawnAndGetCall } = setupPtyIpcSuite()
 
   it.each([
