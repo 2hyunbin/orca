@@ -9,8 +9,10 @@ import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { AppState } from './types'
 import type { LayoutFrameSlices } from './workspace-layout-frame-slices'
 
-/** Row fields the save strips: they describe this window's mounted panes, never main's layout. */
-const WINDOW_ONLY_TERMINAL_TAB_FIELDS = [
+/** Row fields this window owns: what its mounted panes are doing, and which terminal each row
+ *  binds (main publishes the saved binding; the live one stays the window's until main owns it). */
+const WINDOW_TERMINAL_TAB_FIELDS = [
+  'ptyId',
   'pendingActivationSpawn',
   'recovery',
   'restoredFromSession',
@@ -39,9 +41,9 @@ function same(a: unknown, b: unknown): boolean {
   return a === b || stableJson(a) === stableJson(b)
 }
 
-function withoutWindowOnlyFields(tab: TerminalTab): Partial<TerminalTab> {
+function withoutWindowFields(tab: TerminalTab): Partial<TerminalTab> {
   const fields: Partial<TerminalTab> = { ...tab }
-  for (const field of WINDOW_ONLY_TERMINAL_TAB_FIELDS) {
+  for (const field of WINDOW_TERMINAL_TAB_FIELDS) {
     delete fields[field]
   }
   return fields
@@ -51,12 +53,17 @@ function mergeTerminalRow(existing: TerminalTab | undefined, built: TerminalTab)
   if (!existing) {
     return built
   }
-  if (same(withoutWindowOnlyFields(existing), built)) {
+  if (same(withoutWindowFields(existing), withoutWindowFields(built))) {
     return existing
   }
-  const merged: TerminalTab = { ...built }
-  for (const field of WINDOW_ONLY_TERMINAL_TAB_FIELDS) {
-    if (existing[field] !== undefined) {
+  const merged: TerminalTab = { ...built, ptyId: existing.ptyId }
+  for (const field of WINDOW_TERMINAL_TAB_FIELDS) {
+    if (field === 'ptyId') {
+      continue
+    }
+    if (existing[field] === undefined) {
+      delete merged[field]
+    } else {
       Object.assign(merged, { [field]: existing[field] })
     }
   }
@@ -83,14 +90,14 @@ function mergeById<T extends { id: string }>(
 }
 
 const isEmpty = (value: unknown): boolean =>
-  value === undefined || (Array.isArray(value) && value.length === 0)
+  value === undefined || value === null || (Array.isArray(value) && value.length === 0)
 
 function setKey<T>(
   map: Record<string, T>,
   key: string,
   value: T | undefined
 ): Record<string, T> | null {
-  // A workspace with no records of a kind may be listed empty or left out; either reads the same.
+  // A workspace with no records or selection of a kind may be listed empty or left out.
   if (isEmpty(map[key]) && isEmpty(value)) {
     return null
   }

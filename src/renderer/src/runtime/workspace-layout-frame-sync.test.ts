@@ -139,11 +139,16 @@ describe('the window drawn from layout frames', () => {
     store.setState({
       tabsByWorktree: {
         ...store.getState().tabsByWorktree,
-        [GIT_KEY]: store
-          .getState()
-          .tabsByWorktree[GIT_KEY]!.map((tab) =>
-            tab.id === 'tab-shell' ? { ...tab, pendingActivationSpawn: true } : tab
-          )
+        [GIT_KEY]: store.getState().tabsByWorktree[GIT_KEY]!.map((tab) =>
+          tab.id === 'tab-shell'
+            ? {
+                ...tab,
+                ptyId: 'live-pty',
+                pendingActivationSpawn: true,
+                restoredFromSession: undefined
+              }
+            : tab
+        )
       }
     })
     const renamed = structuredClone(layouts[GIT_KEY]!)
@@ -151,7 +156,13 @@ describe('the window drawn from layout frames', () => {
     stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: renamed })
     await flushMicrotasks()
     const shell = store.getState().tabsByWorktree[GIT_KEY]!.find((tab) => tab.id === 'tab-shell')!
-    expect(shell).toMatchObject({ customTitle: 'renamed', pendingActivationSpawn: true })
+    expect(shell).toMatchObject({
+      customTitle: 'renamed',
+      ptyId: 'live-pty',
+      pendingActivationSpawn: true
+    })
+    // Restore marks every row it builds; a row whose terminal bound since must not get it back.
+    expect(shell).not.toHaveProperty('restoredFromSession')
     sync.close()
   })
 
