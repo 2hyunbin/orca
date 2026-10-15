@@ -7,8 +7,6 @@ export const WORKSPACE_VIEW_UI_FIELDS = [
   'sortBy',
   'projectOrderBy',
   'worktreeCardProperties',
-  // Write only: whether the card properties are a Card layout preset.
-  '_worktreeCardModeDefaulted',
   'agentActivityDisplayMode',
   'collapsedGroups',
   'workspaceStatuses',

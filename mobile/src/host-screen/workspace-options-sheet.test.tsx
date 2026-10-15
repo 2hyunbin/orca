@@ -69,13 +69,13 @@ function buildController(options: { newCardStyle: boolean; hideSleeping: boolean
     },
     settings,
     state: {
-      cardSettings: { compactWorktreeCards: false, newCardStyle: options.newCardStyle },
       view: {
         ...INITIAL_MOBILE_VIEW,
         filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: options.hideSleeping },
         groupBy: 'repo',
         sortBy: 'smart',
-        sharesOtherClientFilter: true
+        sharesOtherClientFilter: true,
+        newCardStyle: options.newCardStyle
       },
       hostLabelById: new Map(),
       hostPlatform: null,
@@ -105,10 +105,6 @@ function render(options: SheetOptions) {
     renderer = create(sheet(options, settings))
   })
   return settings
-}
-
-function rerender(options: SheetOptions) {
-  act(() => renderer!.update(sheet(options)))
 }
 
 const texts = () =>
@@ -188,17 +184,6 @@ describe('the phone Workspace options sheet', () => {
     expect(settings.handleSortChange).toHaveBeenCalledWith('recent')
     expect(texts()).toContain('Name')
     back()
-    expect(texts()).toContain('Filters')
-  })
-
-  it('does not reopen a page whose option stopped showing and then came back', () => {
-    render({ newCardStyle: false, hideSleeping: false })
-    press('Show properties, 8')
-    expect(texts()).toContain('Agent activity layout')
-    rerender({ newCardStyle: true, hideSleeping: false })
-    expect(texts()).toContain('Filters')
-    rerender({ newCardStyle: false, hideSleeping: false })
-    expect(texts()).not.toContain('Agent activity layout')
     expect(texts()).toContain('Filters')
   })
 

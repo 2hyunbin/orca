@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   getWorktreeCardDetails,
-  getWorktreeCardLayout,
   getWorktreeCardModeProperties,
   getWorktreeCardModeUpdates,
   isDefaultedCompactWorktreeCardProperties,
@@ -36,35 +35,44 @@ describe('worktree card properties', () => {
 })
 
 describe('getWorktreeCardDetails', () => {
-  it('shows each chosen property, and compact classic cards leave out the host and agent rows', () => {
+  it('shows each chosen property, and compact cards leave out the host and agent rows', () => {
     const chosen = ['pr', 'host', 'inline-agents'] as const
     expect(
-      getWorktreeCardDetails(chosen, { compactCards: false, newCardStyle: false })
-    ).toMatchObject({ pr: true, host: true, inlineAgents: true, comment: false })
-    expect(
-      getWorktreeCardDetails(chosen, { compactCards: true, newCardStyle: false })
-    ).toMatchObject({ pr: true, host: false, inlineAgents: false })
-    // The new card style keeps its agent rows; compactCards is never true with it.
-    expect(
-      getWorktreeCardDetails(chosen, { compactCards: false, newCardStyle: true }).inlineAgents
-    ).toBe(true)
-  })
-})
-
-describe('getWorktreeCardLayout', () => {
-  it('puts repo identity in the title and drops the identity meta row only for compact cards', () => {
-    expect(getWorktreeCardLayout({ compactCards: false, newCardStyle: false })).toEqual({
+      getWorktreeCardDetails(chosen, { compactWorktreeCards: false, newCardStyle: false })
+    ).toMatchObject({
+      compactCards: false,
       repoInTitle: false,
-      identityMetaRow: true
+      metaRow: true,
+      pr: true,
+      host: true,
+      inlineAgents: true,
+      comment: false
     })
-    expect(getWorktreeCardLayout({ compactCards: true, newCardStyle: false })).toEqual({
+    expect(
+      getWorktreeCardDetails(chosen, { compactWorktreeCards: true, newCardStyle: false })
+    ).toMatchObject({
+      compactCards: true,
       repoInTitle: true,
-      identityMetaRow: false
+      metaRow: false,
+      pr: true,
+      host: false,
+      inlineAgents: false
     })
-    // The new card style keeps a meta row but uses the title chip for the repo.
-    expect(getWorktreeCardLayout({ compactCards: false, newCardStyle: true })).toEqual({
+  })
+
+  it('lets the new card style override the Compact layout', () => {
+    expect(
+      getWorktreeCardDetails(['host', 'inline-agents'], {
+        compactWorktreeCards: true,
+        newCardStyle: true
+      })
+    ).toMatchObject({
+      compactCards: false,
+      // The new card style keeps a meta row but uses the title chip for the repo.
       repoInTitle: true,
-      identityMetaRow: true
+      metaRow: true,
+      host: true,
+      inlineAgents: true
     })
   })
 })

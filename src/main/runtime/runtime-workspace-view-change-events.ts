@@ -5,10 +5,11 @@ import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import { ALL_WORKSPACE_VIEW_UI_FIELDS } from '../../shared/workspace-view/workspace-view-ui-fields'
 import type { RuntimeStore } from './runtime-store-contract'
 
-/** The settings behind Card layout and which card options show. */
+/** The settings a phone's workspace list mirrors: Card layout, card style and pinned placement. */
 const WORKSPACE_VIEW_SETTINGS: readonly (keyof GlobalSettings)[] = [
   'compactWorktreeCards',
-  'experimentalNewWorktreeCardStyle'
+  'experimentalNewWorktreeCardStyle',
+  'showPinnedWorktreesInGroups'
 ]
 
 function workspaceViewUiValues(ui: PersistedUIState): unknown[] {

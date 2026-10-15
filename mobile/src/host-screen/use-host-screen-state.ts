@@ -6,16 +6,10 @@ import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
 import { INITIAL_MOBILE_VIEW, type MobileViewState } from '../worktree/workspace-view-settings'
-import type { HostCardSettings } from './host-screen-reply-schema'
 import type { Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
-
-export const NO_CARD_SETTINGS: HostCardSettings = {
-  compactWorktreeCards: false,
-  newCardStyle: false
-}
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
   const [initialCache] = useState(() =>
@@ -57,8 +51,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   // The Workspace options this screen shares with the desktop; viewRef mirrors it for writes.
   const [view, setView] = useState<MobileViewState>(INITIAL_MOBILE_VIEW)
   const viewRef = useRef(view)
-  // Card layout and the card style are desktop settings, not UI state; read with the view.
-  const [cardSettings, setCardSettings] = useState<HostCardSettings>(NO_CARD_SETTINGS)
   // The desktop sidebar's Project grouping inputs; null for a desktop that serves none.
   const [servedProjectSections, setServedProjectSections] = useState<ServedProjectSections | null>(
     null
@@ -92,7 +84,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
 
   return {
     actionTarget,
-    cardSettings,
     catalogError,
     clientRef,
     confirmDelete,
@@ -121,7 +112,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     serverNotice,
     serverWorkspaces,
     setActionTarget,
-    setCardSettings,
     setCatalogError,
     setConfirmDelete,
     setConfirmRemoveHost,

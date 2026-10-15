@@ -16,10 +16,10 @@ import {
 } from '../../../src/shared/workspace-view/workspace-row-filters'
 import {
   hostCardLayoutWrite,
-  hostCardSettingsRead,
   hostViewSettingsRead,
   hostViewSettingsWrite
 } from './host-screen-operations'
+import { hostListSettingsRead } from '../transport/settings-read-operations'
 import type {
   AgentActivityDisplayMode,
   ProjectOrderBy,
@@ -32,11 +32,10 @@ import type { FilterState } from '../worktree/workspace-list-types'
 export function useHostViewSettings(args: {
   client: RpcClient | null
   connState: ConnectionState
-  hostId: string | undefined
   state: HostScreenState
 }) {
-  const { client, connState, hostId, state } = args
-  const { clientRef, setCardSettings, setView, viewRef } = state
+  const { client, connState, state } = args
+  const { clientRef, setShowPinnedInGroups, setView, viewRef } = state
 
   const localEditsRef = useRef(0)
 
@@ -48,13 +47,12 @@ export function useHostViewSettings(args: {
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
-    (patch: MobileViewPatch) => {
+    (patch: MobileViewPatch, options: { cardLayoutPreset?: boolean } = {}) => {
       localEditsRef.current += 1
       const previous = viewRef.current
-      const { _worktreeCardModeDefaulted: _writeOnly, ...fields } = patch
       const next: MobileViewState = {
         ...previous,
-        ...fields,
+        ...patch,
         filters: { ...previous.filters, ...patch.filters }
       }
       applyViewState(next)
@@ -64,7 +62,7 @@ export function useHostViewSettings(args: {
       // Send only the touched fields: the host merges partial updates, so a stale
       // mirror can no longer revert sibling settings another client just changed
       // (STA-5781; supersedes the #8873 whole-payload special case).
-      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next)
+      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next, options)
       if (Object.keys(payload).length === 0) {
         return
       }
@@ -81,42 +79,43 @@ export function useHostViewSettings(args: {
       return
     }
     const requestClient = client
-    const requestHostId = hostId
     const editsAtRequest = localEditsRef.current
     try {
-      const reply = await hostViewSettingsRead.request(requestClient)
+      // Each half applies on its own, so one failing read does not hold back the other.
+      const [uiReply, settingsReply] = await Promise.all([
+        hostViewSettingsRead.request(requestClient).catch(() => null),
+        hostListSettingsRead.request(requestClient).catch(() => null)
+      ])
+      // Why the client, not the host id: a new host always arrives with a new client.
+      if (clientRef.current !== requestClient) {
+        return
+      }
+      const hostSettings = settingsReply
+        ? hostListSettingsRead.interpret(settingsReply)
+        : { accepted: false as const }
+      if (hostSettings.accepted) {
+        setShowPinnedInGroups(hostSettings.value.showPinnedWorktreesInGroups)
+      }
       // Why skip after a local edit: this reply may predate it; the edit's own change event re-reads.
-      if (
-        clientRef.current !== requestClient ||
-        hostId !== requestHostId ||
-        localEditsRef.current !== editsAtRequest
-      ) {
+      if (localEditsRef.current !== editsAtRequest) {
         return
       }
-      const settings = hostViewSettingsRead.interpret(reply)
-      if (!settings.accepted) {
-        return
-      }
+      const uiRead = uiReply ? hostViewSettingsRead.interpret(uiReply) : null
+      const read = uiRead?.accepted ? uiRead.value : undefined
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
-      const ui = settings.value as WorkspaceViewSettings | undefined
-      if (!ui) {
-        return
+      const ui = read as WorkspaceViewSettings | undefined
+      let next = ui ? applyDesktopViewSettings(viewRef.current, ui) : viewRef.current
+      if (hostSettings.accepted) {
+        const { compactWorktreeCards, newCardStyle } = hostSettings.value
+        next = { ...next, compactWorktreeCards, newCardStyle }
       }
-      applyViewState(applyDesktopViewSettings(viewRef.current, ui))
-      // Card layout is a setting, not UI state; read after, so a refusal leaves the view applied.
-      const cardReply = await hostCardSettingsRead.request(requestClient)
-      const cardSettings = hostCardSettingsRead.interpret(cardReply)
-      if (
-        clientRef.current === requestClient &&
-        localEditsRef.current === editsAtRequest &&
-        cardSettings.accepted
-      ) {
-        setCardSettings(cardSettings.value)
+      if (next !== viewRef.current) {
+        applyViewState(next)
       }
     } catch {
       // Transient transport failure; retry on the next focus/connect.
     }
-  }, [client, connState, hostId, applyViewState])
+  }, [client, connState, applyViewState])
 
   const handleSortChange = useCallback(
     (value: MobileViewState['sortBy']) => {
@@ -184,11 +183,13 @@ export function useHostViewSettings(args: {
   const setCardLayout = useCallback(
     (layout: 'detailed' | 'compact') => {
       const updates = getWorktreeCardModeUpdates(layout === 'compact' ? 'Compact' : 'Default')
-      setCardSettings((current) => ({
-        ...current,
-        compactWorktreeCards: updates.settings.compactWorktreeCards
-      }))
-      persistViewSettings(updates.ui)
+      persistViewSettings(
+        {
+          worktreeCardProperties: updates.ui.worktreeCardProperties,
+          compactWorktreeCards: updates.settings.compactWorktreeCards
+        },
+        { cardLayoutPreset: true }
+      )
       if (client) {
         void hostCardLayoutWrite.request(client, updates.settings).catch(() => {})
       }

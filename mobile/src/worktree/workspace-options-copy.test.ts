@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   workspaceOptionsAccessibilityLabel,
   workspaceOptionsBadgeText
-} from './workspace-list-picker-options'
+} from './workspace-options-copy'
 
 describe('the Workspace options chip', () => {
   it('badges the active-filter count as the desktop does, capped at 9+', () => {

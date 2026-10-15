@@ -76,8 +76,6 @@ export function OptionPager(props: {
         // Measured while under a page too, so a change behind the page does not jump on the way out.
         onLayout={(event) => setMainHeight(event.nativeEvent.layout.height)}
         pointerEvents={pageOpen ? 'none' : 'auto'}
-        importantForAccessibility={pageOpen ? 'no-hide-descendants' : 'auto'}
-        accessibilityElementsHidden={pageOpen}
         aria-hidden={pageOpen}
       >
         {props.main}

@@ -37,7 +37,14 @@ export type WorkspaceViewSettings = {
     : Key extends 'visibleHostIds'
       ? string[] | null
       : FilterState[Key]
-} & Partial<Pick<PersistedUIState, (typeof WORKSPACE_VIEW_UI_FIELDS)[number]>>
+} & Partial<
+  Pick<
+    PersistedUIState,
+    | (typeof WORKSPACE_VIEW_UI_FIELDS)[number]
+    // Written with the card properties only: whether they are a Card layout preset.
+    | '_worktreeCardModeDefaulted'
+  >
+>
 
 export type MobileViewState = {
   groupBy: PersistedUIState['groupBy']
@@ -56,6 +63,9 @@ export type MobileViewState = {
    * first ui.get, so a new desktop's marks don't hide rows before its filter value arrives.
    */
   sharesOtherClientFilter: boolean | null
+  /** Desktop settings, not UI state: read with settings.get; Card layout writes the first. */
+  compactWorktreeCards: boolean
+  newCardStyle: boolean
 }
 
 /** What the screen shows until the desktop's own values arrive. */
@@ -68,16 +78,19 @@ export const INITIAL_MOBILE_VIEW: MobileViewState = {
   projectOrderBy: null,
   worktreeCardProperties: DEFAULT_WORKTREE_CARD_PROPERTIES,
   agentActivityDisplayMode: 'compact',
-  sharesOtherClientFilter: null
+  sharesOtherClientFilter: null,
+  compactWorktreeCards: false,
+  newCardStyle: false
 }
 
-/** An edit: the fields it sets, and for filters only the filters it touches. */
+/**
+ * An edit: the fields it sets, and for filters only the filters it touches. compactWorktreeCards
+ * is a desktop setting, not ui.set state: only setCardLayout patches it, writing settings itself.
+ */
 export type MobileViewPatch = Partial<
-  Omit<MobileViewState, 'filters' | 'sharesOtherClientFilter'>
+  Omit<MobileViewState, 'filters' | 'sharesOtherClientFilter' | 'newCardStyle'>
 > & {
   filters?: Partial<FilterState>
-  /** Write only: whether the properties are a Card layout preset (absent means hand-picked). */
-  _worktreeCardModeDefaulted?: boolean
 }
 
 const GROUP_BY_VALUES: readonly string[] = WORKSPACE_GROUP_BY_CHOICES.map((choice) => choice.id)
@@ -107,7 +120,8 @@ export function rowFiltersForView(view: MobileViewState): FilterState {
  */
 export function buildWorkspaceViewSettingsUpdate(
   patch: MobileViewPatch,
-  next: MobileViewState
+  next: MobileViewState,
+  options: { cardLayoutPreset?: boolean } = {}
 ): WorkspaceViewSettings {
   const update: WorkspaceViewSettings = {}
   if ('groupBy' in patch) {
@@ -135,7 +149,7 @@ export function buildWorkspaceViewSettingsUpdate(
   if ('worktreeCardProperties' in patch) {
     update.worktreeCardProperties = [...next.worktreeCardProperties]
     // As the desktop's own edit: a hand-picked set is no longer a Card layout preset.
-    update._worktreeCardModeDefaulted = patch._worktreeCardModeDefaulted ?? false
+    update._worktreeCardModeDefaulted = options.cardLayoutPreset === true
   }
   if ('agentActivityDisplayMode' in patch) {
     update.agentActivityDisplayMode = next.agentActivityDisplayMode
@@ -184,6 +198,8 @@ export function applyDesktopViewSettings(
     worktreeCardProperties: settings.worktreeCardProperties ?? current.worktreeCardProperties,
     agentActivityDisplayMode: settings.agentActivityDisplayMode ?? current.agentActivityDisplayMode,
     // Each ui.get is the desktop's whole state, so the field's absence means it keeps the filter.
-    sharesOtherClientFilter: settings.hideWorkspacesFromOtherDevices !== undefined
+    sharesOtherClientFilter: settings.hideWorkspacesFromOtherDevices !== undefined,
+    compactWorktreeCards: current.compactWorktreeCards,
+    newCardStyle: current.newCardStyle
   }
 }
