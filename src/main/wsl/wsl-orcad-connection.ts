@@ -5,6 +5,7 @@
  * deployment record (C7) persists what `onChange` reports.
  */
 import { errorMessage } from '../../shared/error-message'
+import { parsePairingCode, type PairingOffer } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import {
@@ -84,6 +85,7 @@ const READY: WslOrcadConnectionStatus = { state: 'ready', census: null }
 
 export type WslOrcadConnectionDependencies = {
   holder?: WslDistroHolder
+  getPairingOffer?: (environmentId: string) => PairingOffer | null
   deployAndLaunch?: (distro: string, options: WslOrcadDeployOptions) => Promise<WslOrcadLaunch>
   createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport
   listen?: (
@@ -225,12 +227,21 @@ export class WslOrcadConnectionManager {
       throw new WslOrcadConnectionSupersededError(distro)
     }
     const current = this.active.get(key)
+    const paired =
+      this.dependencies.getPairingOffer?.(environmentId) ??
+      (current?.connection.environmentId === environmentId
+        ? parsePairingCode(current.connection.pairingOffer)
+        : null)
     if (
       current &&
       current.connection.remotePort === launch.port &&
       current.connection.environmentId === environmentId
     ) {
-      return this.refreshOffer(key, current, launch, options.status ? status.ready : null)
+      const pairingOffer = await this.pairingFor(launch, current.connection.localPort, paired)
+      if (this.generation(key) !== generation) {
+        throw new WslOrcadConnectionSupersededError(distro)
+      }
+      return this.refreshOffer(key, current, launch, pairingOffer, options.status ? status.ready : null)
     }
     // orcad moved ports (or this is the first connect): the old bridge dials a dead port.
     const preferredLocalPort = current?.connection.localPort ?? options.localPort ?? 0
@@ -250,18 +261,7 @@ export class WslOrcadConnectionManager {
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      const pairingOffer = tunneledOrcadPairingCode(launch.readiness, forward.entry.localPort)
-      const identity = await (this.dependencies.verifyIdentity ?? verifyWslOrcadIdentity)(
-        pairingOffer,
-        launch.readiness
-      )
-      if (identity.verdict === 'foreign') {
-        throw new OrcadManagedIdentityError(launch.port, identity.detail)
-      }
-      if (identity.verdict === 'unreachable') {
-        // Why not fail: a server that is still starting is not a wrong server.
-        console.warn(`[wsl] Orca server in ${distro} did not answer its bridge: ${identity.detail}`)
-      }
+      const pairingOffer = await this.pairingFor(launch, forward.entry.localPort, paired)
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
@@ -289,14 +289,33 @@ export class WslOrcadConnectionManager {
     }
   }
 
+  private async pairingFor(
+    launch: Extract<WslOrcadLaunch, { outcome: 'ready' }>,
+    localPort: number,
+    paired: PairingOffer | null
+  ): Promise<string> {
+    const pairingOffer = tunneledOrcadPairingCode(launch.readiness, localPort, paired)
+    const identity = await (this.dependencies.verifyIdentity ?? verifyWslOrcadIdentity)(
+      pairingOffer,
+      launch.readiness
+    )
+    if (identity.verdict === 'foreign') {
+      throw new OrcadManagedIdentityError(launch.port, identity.detail)
+    }
+    if (identity.verdict === 'unreachable') {
+      console.warn(`[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`)
+    }
+    return pairingOffer
+  }
+
   private refreshOffer(
     key: string,
     entry: ActiveWslOrcadConnection,
     launch: Extract<WslOrcadLaunch, { outcome: 'ready' }>,
+    pairingOffer: string,
     /** Reported even when nothing changed; null stays quiet then. */
     announce: WslOrcadConnectionStatus | null
   ): WslOrcadConnection {
-    const pairingOffer = tunneledOrcadPairingCode(launch.readiness, entry.connection.localPort)
     const deferredUpdate = launch.deferredUpdate ?? null
     const changed =
       pairingOffer !== entry.connection.pairingOffer ||
