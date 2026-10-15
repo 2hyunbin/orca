@@ -60,7 +60,6 @@ async function rig() {
   const rows = new StructuredAgentSessionSubagentRows({
     journal: () => journal,
     fence: () => 1,
-    producer: () => 1,
     currentWork: (_sessionId, open) => new StructuredAgentSessionCurrentWork(open, 1),
     readChildWork: () => children,
     onWriteFailed: failed

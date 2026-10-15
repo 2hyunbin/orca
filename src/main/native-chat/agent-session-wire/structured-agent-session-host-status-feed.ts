@@ -34,8 +34,6 @@ export function createStructuredAgentSessionHostStatusFeed(args: {
   const subagentRows = new StructuredAgentSessionSubagentRows({
     journal: (sessionId) => args.sessions.get(sessionId)?.journal,
     fence: (sessionId) => structuredAgentSessionConversationFence(args.deps().store, sessionId),
-    // Read as the report lands, never when the queued write flushes.
-    producer: (sessionId) => args.sessions.get(sessionId)?.child?.fence,
     currentWork: args.currentWork,
     // The views, with the two host-only facts a saved row also keeps from their records.
     readChildWork: (sessionId) => {
@@ -69,8 +67,8 @@ export function createStructuredAgentSessionHostStatusFeed(args: {
     // field initializer, before its constructor parameters are assigned.
     statusSink: () => args.deps().statusSink,
     ...(args.onAgentStarted ? { onAgentStarted: args.onAgentStarted } : {}),
-    onChildWorkChanged: (sessionId) => {
-      subagentRows.changed(sessionId)
+    onChildWorkChanged: (sessionId, producer) => {
+      subagentRows.changed(sessionId, producer)
       args.onChildWorkChanged?.(sessionId)
     }
   })

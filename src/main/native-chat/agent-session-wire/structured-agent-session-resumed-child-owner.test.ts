@@ -64,7 +64,6 @@ it('keeps a resumed subagent and background task working when the run that creat
   const rows = new StructuredAgentSessionSubagentRows({
     journal: () => journal,
     fence: () => fence,
-    producer: () => fence,
     currentWork: (_sessionId, open) => new StructuredAgentSessionCurrentWork(open, fence),
     readChildWork: () => [subagent],
     onWriteFailed: (_sessionId, error) => {
@@ -76,7 +75,7 @@ it('keeps a resumed subagent and background task working when the run that creat
   const run = async () => {
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
     deferred.bind({ journal, fence, publish: () => {} })
-    rows.changed('session-1')
+    rows.changed('session-1', deferred.sink)
     writeClaudeBackgroundTaskRow(
       deferred.sink,
       tasks,
@@ -87,7 +86,7 @@ it('keeps a resumed subagent and background task working when the run that creat
           taskId: 'task-1',
           kind: 'command',
           label: 'Build',
-          state: 'running'
+          state: 'working'
         },
         lastSerialized: null,
         toolUseId: 'tool-1',
@@ -122,5 +121,5 @@ it('keeps a resumed subagent and background task working when the run that creat
     .snapshot()
     .items.flatMap((item) => (item.body.kind === 'message' ? item.body.blocks : []))
   expect(blocks.filter(isSubagentBlock).map((block) => block.state)).toEqual(['working'])
-  expect(blocks.filter(isBackgroundTaskBlock).map((block) => block.state)).toEqual(['running'])
+  expect(blocks.filter(isBackgroundTaskBlock).map((block) => block.state)).toEqual(['working'])
 })
