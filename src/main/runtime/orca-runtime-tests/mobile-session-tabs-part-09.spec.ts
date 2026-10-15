@@ -260,6 +260,26 @@ describe('OrcaRuntimeService', () => {
       expect(spawn.mock.calls[0]?.[0]).toMatchObject({ launchAgent: 'codex' })
     })
 
+    it('does not resume a session another pane also records', async () => {
+      const { runtimeStore, getSession, setSession } = makeParkedSessionStore('worktree-sleep')
+      const session = structuredClone(getSession())
+      const records = session.sleepingAgentSessionsByPaneKey ?? {}
+      const own = records[`host-tab:${HEADLESS_LEAF_ID}`]
+      if (own) {
+        records[`host-tab:${HEADLESS_SECOND_LEAF_ID}`] = {
+          ...own,
+          paneKey: `host-tab:${HEADLESS_SECOND_LEAF_ID}`
+        }
+      }
+      setSession(session)
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore)
+
+      await userActivate(runtime)
+
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
+    })
+
     // Why: a session id names a transcript on the machine that captured it.
     it('does not resume a record captured on another execution host', async () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {

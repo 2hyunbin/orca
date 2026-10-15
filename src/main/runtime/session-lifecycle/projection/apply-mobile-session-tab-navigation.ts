@@ -159,6 +159,18 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     if (!record) {
       return undefined
     }
+    // Why: nothing here spends the record, so a session another pane also records could be
+    // resumed twice, two writers on one transcript; leave such panes to the window's dedupe.
+    const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
+    const sharedWithAnotherPane = Object.values(records ?? {}).some(
+      (other) =>
+        other !== record &&
+        other.agent === record.agent &&
+        other.providerSession?.id === record.providerSession.id
+    )
+    if (sharedWithAnotherPane) {
+      return {}
+    }
     try {
       const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
       return this.resolveMobileSessionResumeCommand(workspace, record) ?? {}
