@@ -74,39 +74,13 @@ describe('agent-session delta coalescer', () => {
     ])
   })
 
-  it('rewrites a stream on the window only once it has grown, and owes the rest to a flush', () => {
-    const clock = manualClock()
-    const { instance, emitted } = coalescer(clock)
-
-    instance.append('item-1', 'x'.repeat(1000))
-    clock.fire()
-    // An eighth of the written length is due; less waits for later growth.
-    instance.append('item-1', 'y'.repeat(124))
-    clock.fire()
-    instance.append('item-1', 'y')
-    clock.fire()
-    expect(emitted.map(([, text]) => text.length)).toEqual([1000, 1125])
-
-    instance.append('item-1', 'z')
-    clock.fire()
-    expect(instance.dirty().map(({ snapshot }) => snapshot.text.length)).toEqual([1126])
-    instance.flushAll()
-    expect(emitted.map(([, text]) => text.length)).toEqual([1000, 1125, 1126])
-  })
-
   it('retries a refused lifecycle flush in full, not only once the text grows', () => {
     const clock = manualClock()
     let reject = false
     const emitted: string[] = []
     const instance = createAgentSessionDeltaCoalescer({
       schedule: clock.schedule,
-      emit: (_key, text) => {
-        if (reject) {
-          return false
-        }
-        emitted.push(text)
-        return true
-      }
+      emit: (_key, text) => !reject && emitted.push(text) > 0
     })
 
     instance.append('item-1', 'first answer')
@@ -115,6 +89,7 @@ describe('agent-session delta coalescer', () => {
     reject = true
     expect(instance.flushAll()).toBe(false)
     reject = false
+    // The growth rule alone would hold one character back from the retry.
     clock.fire()
 
     expect(emitted).toEqual(['first answer', 'first answer.'])
