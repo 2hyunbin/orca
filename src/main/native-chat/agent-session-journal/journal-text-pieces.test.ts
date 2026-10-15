@@ -4,8 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from '../../sqlite/sync-database'
 import { openJournalDatabase } from './journal-database'
-import { createJournalTablesSql } from './journal-database-schema'
-import { ensureJournalTextPieceSchema } from './journal-text-piece-schema'
+import { createJournalTablesSql, JOURNAL_DB_SCHEMA_VERSION } from './journal-database-schema'
 import { JournalHostDatabase } from './journal-host-database'
 import {
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
@@ -36,10 +35,8 @@ function put(row: JournalRow, hint?: AgentJournalRenderItem): void {
   host.transaction((db) => insertJournalRow(db, SESSION, row, row.ts, hint))
 }
 
-function legacyRows(): unknown[] {
-  return host.db.prepare(`SELECT seq, ts, row_json FROM journal_rows
-WHERE session_id = ? AND epoch = ? ORDER BY seq`).all(SESSION, EPOCH)
-    .map((record) => typeof record.row_json === 'string' ? JSON.parse(record.row_json) : null)
+function logicalRows(): unknown[] {
+  return readJournalRowsAfter(host.db, SESSION, EPOCH, 0).map((row) => JSON.parse(row.rowJson))
 }
 
 beforeEach(async () => {
@@ -57,7 +54,7 @@ afterEach(async () => {
 })
 
 describe('piece storage through the existing journal contract', () => {
-  it('replays interleaved text, rollback/retry, attribution and authoritative replacements for old and new readers', () => {
+  it('replays interleaved text, rollback/retry, attribution and authoritative replacements through logical reads', () => {
     const prefix = `quotes "\\\n\0 combining e\u0301 astral 😀 ${'a'.repeat(64)}`
     const writes = [item(2, `${prefix}\ud83d`), item(3, 'reasoning', 'other'),
       item(4, `${prefix}😀 continued`), item(5, 'reasoning continued', 'other')]
@@ -69,14 +66,14 @@ describe('piece storage through the existing journal contract', () => {
 WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
     const retried = item(6, `${prefix}😀 continued after retry`)
     expect(() => put(retried, hint)).toThrow('refused piece')
-    expect(legacyRows()).toHaveLength(5)
+    expect(logicalRows()).toHaveLength(5)
     host.db.exec('DROP TRIGGER refuse_piece')
     put(retried, hint)
     const attributed = { ...item(7, `${prefix}😀 continued after retry`), agentId: 'resolved-agent', attempt: 2 }
     put(attributed, hint)
     const final = item(8, 'authoritative shorter final')
     put(final)
-    const expected = legacyRows()
+    const expected = logicalRows()
     expect(expected.slice(1)).toEqual([...writes, retried, attributed, final])
     const before = replayJournal(host.db, SESSION)
     expect(before?.damage).toBeNull()
@@ -86,7 +83,7 @@ WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
     const loaded = replayJournal(host.db, SESSION)
     expect(loaded?.damage).toBeNull()
     expect(loaded ? renderJournalState(loaded.state) : null).toEqual(snapshot)
-    expect(legacyRows()).toEqual(expected)
+    expect(logicalRows()).toEqual(expected)
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 1)).toEqual(expected.slice(1))
     expect(readJournalRowsAfter(host.db, SESSION, EPOCH, 1).map((row) => JSON.parse(row.rowJson)))
       .toEqual(expected.slice(1))
@@ -123,7 +120,7 @@ WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
     for (const row of branch) {
       put(row)
     }
-    const expected = legacyRows()
+    const expected = logicalRows()
     host.close()
     host = JournalHostDatabase.open(root)
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 0)).toEqual(expected)
@@ -141,69 +138,117 @@ WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
     host.db.prepare('UPDATE journal_text_pieces SET suffix = ? WHERE seq = 388').run('damaged')
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 389, 1)).toEqual([branch[4]])
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 387, 1)).toEqual([])
-    expect(host.db.prepare('SELECT row_json FROM journal_rows WHERE seq = 390').get()?.row_json)
-      .toBe(JSON.stringify(branch[4]))
-    expect(host.db.prepare('SELECT row_json FROM journal_rows WHERE seq = 388').get()?.row_json).toBe('{')
+    expect(readJournalRowsAfter(host.db, SESSION, EPOCH, 389, 1).map((row) => JSON.parse(row.rowJson)))
+      .toEqual([branch[4]])
+    expect(readJournalRowsAfter(host.db, SESSION, EPOCH, 387, 1)[0]?.rowJson).toBe('{')
     expect(replayJournal(host.db, SESSION)?.damage?.sequence).toBe(388)
     host.db.prepare('DELETE FROM journal_text_pieces WHERE seq = 386').run()
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 389, 1)).toEqual([])
-    expect(host.db.prepare('SELECT row_json FROM journal_rows WHERE seq = 390').get()?.row_json).toBe('{')
+    expect(readJournalRowsAfter(host.db, SESSION, EPOCH, 389, 1)[0]?.rowJson).toBe('{')
     host.db.prepare('UPDATE journal_text_pieces SET suffix = ? WHERE seq = 2').run('damaged')
     expect(replayJournal(host.db, SESSION)?.damage?.sequence).toBe(2)
-    expect(host.db.prepare('SELECT row_json FROM journal_rows WHERE seq = 2').get()?.row_json)
+    expect(readJournalRowsAfter(host.db, SESSION, EPOCH, 1, 1)[0]?.rowJson)
       .toBe('{')
   })
 
-  it('allows legacy raw writes, updates and suffix reuse without mutating surviving text', () => {
+  it('reuses a deleted suffix without mutating surviving text and retires unreferenced pieces', () => {
     const prefix = 'shared prefix '.repeat(8)
     put(item(2, prefix))
     put(item(3, `${prefix}first suffix`))
     put(item(4, `${prefix}second suffix`))
-    const oldInsert = host.db.prepare('INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)')
-    const raw = item(5, `${prefix}old host replacement`)
-    oldInsert.run(SESSION, EPOCH, raw.seq, raw.ts, JSON.stringify(raw))
-    const continued = item(6, `${prefix}old host replacement continued`)
-    put(continued)
-    host.db.prepare('UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND epoch = ? AND seq = 2')
-      .run(JSON.stringify(item(2, 'updated old revision')), SESSION, EPOCH)
-    expect(legacyRows()[2]).toEqual(item(3, `${prefix}first suffix`))
-    host.db.prepare('DELETE FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq >= 4')
+    host.db.prepare('DELETE FROM journal_rows_data WHERE session_id = ? AND epoch = ? AND seq >= 4')
       .run(SESSION, EPOCH)
     const reused = item(4, `${prefix}reused sequence`)
     put(reused)
-    expect(legacyRows().at(-1)).toEqual(reused)
+    expect(logicalRows().slice(1)).toEqual([item(2, prefix), item(3, `${prefix}first suffix`), reused])
     host.close()
     host = JournalHostDatabase.open(root)
     expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 3)).toEqual([reused])
-    host.db.prepare(`DELETE FROM journal_rows WHERE session_id = ?
+    host.db.prepare(`DELETE FROM journal_rows_data WHERE session_id = ?
 AND epoch IS NOT (SELECT epoch FROM journal_sessions WHERE session_id = ?)`)
       .run(SESSION, 'unpublished-session')
     expect(host.db.prepare('SELECT COUNT(*) AS n FROM journal_text_pieces').get()?.n).toBe(0)
-    expect(host.db.pragma('user_version', { simple: true })).toBe(4)
+    expect(host.db.pragma('user_version', { simple: true })).toBe(JOURNAL_DB_SCHEMA_VERSION)
   })
 })
 
-it('migrates the old table atomically and preserves raw bytes at the old database version', () => {
+it.each(['raw', 'view'])('atomically upgrades schema 4 %s storage, rolls back before stamping and retries', (shape) => {
+  const epoch = readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 0)[0]
+  if (!epoch) throw new Error('missing fixture epoch')
   host.close()
   const path = join(root, 'legacy.db')
-  const legacy = new Database(path)
-  legacy.exec(createJournalTablesSql())
-  legacy.pragma('user_version = 4')
-  const original = JSON.stringify(item(1, 'legacy full text'))
-  legacy.prepare('INSERT INTO journal_rows VALUES (?, ?, ?, ?, ?)').run(SESSION, EPOCH, 1, 1, original)
-  const exec = legacy.exec.bind(legacy)
-  const failure = vi.spyOn(legacy, 'exec').mockImplementation((sql) => {
-    if (sql.includes('CREATE VIEW journal_rows')) {
-      throw new Error('migration interrupted')
+  const legacy = shape === 'raw' ? new Database(path) : openJournalDatabase(path).db
+  if (shape === 'raw') legacy.exec(createJournalTablesSql())
+  publishJournalSessionEpoch(legacy, { sessionId: SESSION, workspaceId: 'ws' }, EPOCH)
+  const final = item(3, 'legacy full text '.repeat(9))
+  const expected = [epoch, item(2, 'legacy full text '.repeat(8)), final]
+  for (const row of expected) {
+    if (shape === 'raw') {
+      legacy.prepare('INSERT INTO journal_rows VALUES (?, ?, ?, ?, ?)')
+        .run(SESSION, EPOCH, row.seq, row.ts, JSON.stringify(row))
+    } else {
+      insertJournalRow(legacy, SESSION, row)
     }
-    exec(sql)
-  })
-  expect(() => ensureJournalTextPieceSchema(legacy)).toThrow('migration interrupted')
-  failure.mockRestore()
-  expect(legacy.prepare("SELECT type FROM sqlite_master WHERE name = 'journal_rows'").get()?.type).toBe('table')
+  }
+  if (shape === 'view') {
+    legacy.exec(`CREATE VIEW journal_rows AS
+SELECT session_id, epoch, seq, ts, row_json FROM journal_rows_data`)
+    for (const operation of ['insert', 'update', 'delete']) {
+      legacy.exec(`CREATE TRIGGER journal_rows_compat_${operation} INSTEAD OF ${operation} ON journal_rows
+BEGIN SELECT 1; END`)
+    }
+  }
+  legacy.pragma('user_version = 4')
+  const schema = legacy.prepare('SELECT name, sql FROM sqlite_master ORDER BY name').all()
+  const table = shape === 'raw' ? 'journal_rows' : 'journal_rows_data'
+  const physical = legacy.prepare(`SELECT * FROM ${table} ORDER BY seq`).all()
+  const pieces = shape === 'raw' ? [] : legacy.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()
   legacy.close()
-  const opened = openJournalDatabase(path)
-  expect(opened.db.pragma('user_version', { simple: true })).toBe(4)
-  expect(opened.db.prepare('SELECT row_json FROM journal_rows').get()?.row_json).toBe(original)
-  opened.db.close()
+  const original = Database.prototype.pragma
+  const failure = vi.spyOn(Database.prototype, 'pragma').mockImplementation(function (
+    this: Database.Database, sql: string, options?: { simple?: boolean }
+  ) {
+    if (sql === `user_version = ${JOURNAL_DB_SCHEMA_VERSION}`) {
+      expect(this.prepare("SELECT name FROM sqlite_master WHERE name = 'journal_rows'").get()).toBeUndefined()
+      expect(this.prepare("SELECT name FROM sqlite_master WHERE name = 'journal_text_pieces'").get()).toBeDefined()
+      throw new Error('migration interrupted before stamp')
+    }
+    return original.call(this, sql, options)
+  })
+  expect(() => openJournalDatabase(path)).toThrow('migration interrupted before stamp')
+  failure.mockRestore()
+  const rolledBack = new Database(path)
+  expect(rolledBack.pragma('user_version', { simple: true })).toBe(4)
+  expect(rolledBack.prepare('SELECT name, sql FROM sqlite_master ORDER BY name').all()).toEqual(schema)
+  expect(rolledBack.prepare(`SELECT * FROM ${table} ORDER BY seq`).all()).toEqual(physical)
+  if (shape === 'view') expect(rolledBack.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()).toEqual(pieces)
+  rolledBack.close()
+  for (let open = 0; open < 2; open += 1) {
+    const { db } = openJournalDatabase(path)
+    try {
+      expect(db.pragma('user_version', { simple: true })).toBe(JOURNAL_DB_SCHEMA_VERSION)
+      expect(db.prepare(`SELECT name FROM sqlite_master
+WHERE name = 'journal_rows' OR name LIKE 'journal_rows_compat_%'`).all()).toEqual([])
+      expect(readJournalRowsAfterCursor(db, SESSION, EPOCH, 0)).toEqual(expected)
+      expect(readJournalRowsAfter(db, SESSION, EPOCH, 0).map((row) => JSON.parse(row.rowJson))).toEqual(expected)
+      const replayed = replayJournal(db, SESSION)
+      expect(replayed?.damage).toBeNull()
+      expect(replayed ? renderJournalState(replayed.state).items.at(-1)?.body : null).toEqual(final.body)
+      expect(replayed ? renderJournalState(replayed.state).cursor : null).toEqual({ epoch: EPOCH, sequence: 3 })
+      if (shape === 'raw') {
+        expect(db.prepare('SELECT row_json FROM journal_rows_data ORDER BY seq').all())
+          .toEqual(physical.map(({ row_json }) => ({ row_json })))
+      } else {
+        expect(db.prepare('SELECT * FROM journal_rows_data ORDER BY seq').all()).toEqual(physical)
+        expect(db.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()).toEqual(pieces)
+      }
+      if (open === 1) {
+        const continued = item(4, `${'legacy full text '.repeat(9)} continued`)
+        insertJournalRow(db, SESSION, continued)
+        expect(readJournalRowsAfterCursor(db, SESSION, EPOCH, 3)).toEqual([continued])
+      }
+    } finally {
+      db.close()
+    }
+  }
 })

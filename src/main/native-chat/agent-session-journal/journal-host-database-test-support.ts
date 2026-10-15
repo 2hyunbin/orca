@@ -146,7 +146,7 @@ export function insertTestJournalRowJson(
   ts = 1
 ): void {
   db.prepare(
-    'INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO journal_rows_data (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
   ).run(sessionId, liveEpoch(db, sessionId), seq, ts, rowJson)
 }
 
@@ -157,12 +157,13 @@ export function updateTestJournalRowJson(
   rowJson: string
 ): void {
   db.prepare(
-    'UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND epoch = ? AND seq = ?'
+    `UPDATE journal_rows_data SET text_generation = NULL, text_path = NULL, text_item_id = NULL, row_json = ?
+WHERE session_id = ? AND epoch = ? AND seq = ?`
   ).run(rowJson, sessionId, liveEpoch(db, sessionId), seq)
 }
 
 export function deleteTestJournalRow(db: Database.Database, sessionId: string, seq: number): void {
-  db.prepare('DELETE FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq = ?').run(
+  db.prepare('DELETE FROM journal_rows_data WHERE session_id = ? AND epoch = ? AND seq = ?').run(
     sessionId,
     liveEpoch(db, sessionId),
     seq

@@ -32,7 +32,7 @@ const db = () => openTestJournalHostDatabase(rig.root).db
 const rawPrefix = (sequence: number) =>
   db()
     .prepare(
-      'SELECT seq, row_json FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq <= ? ORDER BY seq'
+      'SELECT seq, row_json FROM journal_rows_data WHERE session_id = ? AND epoch = ? AND seq <= ? ORDER BY seq'
     )
     .all(SESSION, journal().cursor().epoch, sequence)
 
