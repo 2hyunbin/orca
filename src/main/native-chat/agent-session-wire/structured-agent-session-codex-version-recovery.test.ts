@@ -26,6 +26,7 @@ async function retainedCards() {
   }
   const { page } = result
   const cards = projectQueuedMessageCards(page.queuedMessages, page.submissions, {
+    hasPendingPrompt: false,
     queuePaused: Boolean(page.queuePause)
   })
   return { page, cards }

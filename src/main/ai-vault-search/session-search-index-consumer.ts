@@ -36,8 +36,7 @@ export const SELF_CONTAINED_TRANSCRIPT_AGENTS = {
   devin: false, // sessions.db supplies metadata.
   kimi: false, // agents/main/wire.jsonl supplies messages.
   muse: true,
-  jcode: true,
-  kiro: false // A .jsonl sidecar supplies messages.
+  jcode: true
 } satisfies Record<AiVaultAgent, boolean>
 
 /**

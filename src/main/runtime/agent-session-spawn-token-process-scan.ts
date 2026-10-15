@@ -60,7 +60,7 @@ export async function scanAgentSessionSpawnTokenProcesses(
  */
 export async function scanAgentSessionSpawnTokenEvidence(
   platform: NodeJS.Platform = process.platform,
-  variable: string = CODEX_SPAWN_TOKEN_ENV
+  variable: string = ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV
 ): Promise<AgentSessionSpawnTokenScanEvidence> {
   const processes = await scanAgentSessionSpawnTokenProcesses(platform, variable)
   return processes === null

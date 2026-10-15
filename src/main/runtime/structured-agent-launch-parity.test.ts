@@ -620,7 +620,7 @@ describe.skipIf(process.platform === 'win32')('native-chat launch parity', () =>
         structuredWorkerIdentities.register({
           handle: workerHandle,
           sessionId,
-          agent: launch.agent,
+          agent: launch.agent === 'claude' || launch.agent === 'codex' ? launch.agent : null,
           paneKey: mintStructuredWorkerPaneKey(sessionId),
           processIncarnation: structuredWorkerProcessIncarnation(sessionId),
           worktreeId: WORKSPACE_ID,
