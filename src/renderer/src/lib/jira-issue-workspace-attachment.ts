@@ -6,7 +6,10 @@ import {
 } from '../../../shared/jira-issue-url'
 import { getWorkspaceAttachments } from '../../../shared/workspace-attachments'
 import type { WorkspaceAttachment, Worktree } from '../../../shared/worktree/types'
-import type { TaskSourceContext } from '../../../shared/task-source-context'
+import {
+  haveConflictingTaskSourceAccounts,
+  type TaskSourceContext
+} from '../../../shared/task-source-context'
 
 export type JiraIssueWorkspaceAttachmentIndex = ReadonlyMap<string, readonly Worktree[]>
 export type LinkedJiraIssueRef = { key: string; siteId: string; sourceContext?: TaskSourceContext }
@@ -30,9 +33,7 @@ function sameSource(item: WorkspaceAttachment, source?: TaskSourceContext | null
   if ((stored?.hostId ?? 'local') !== source.hostId) {
     return false
   }
-  const storedAccount = stored?.accountLabel?.trim()
-  const selectedAccount = source.accountLabel?.trim()
-  return !storedAccount || !selectedAccount || storedAccount === selectedAccount
+  return !stored || !haveConflictingTaskSourceAccounts(stored, source)
 }
 
 function itemSite(item: WorkspaceAttachment) {
