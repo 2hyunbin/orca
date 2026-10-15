@@ -31,6 +31,7 @@ type CachedRuntimeConnection = {
 type CachedSharedControlConnection = {
   pairingKey: string
   connection: RemoteRuntimeSharedControlConnection
+  answeredAt: () => number | null
 }
 
 const requestConnections = new Map<string, CachedRuntimeConnection>()
@@ -173,6 +174,13 @@ export function getRemoteRuntimeSharedControlDiagnostics(
   return sharedControlConnections.get(environmentId)?.connection.getDiagnostics() ?? null
 }
 
+/** When the ready control socket last heard from its server; null while it is not ready. */
+export function getRemoteRuntimeSharedControlAnsweredAt(environmentId: string): number | null {
+  const cached = sharedControlConnections.get(environmentId)
+  // Why ready is enough: a socket reaches ready only on its own server frame, which stamps it.
+  return cached?.connection.getDiagnostics().state === 'ready' ? cached.answeredAt() : null
+}
+
 export function reconnectRemoteRuntimeSharedControlConnection(environmentId: string): void {
   sharedControlConnections.get(environmentId)?.connection.reconnectNow()
 }
@@ -210,13 +218,19 @@ function getSharedControlConnection(
     advanceRuntimeEnvironmentTransportGeneration(environmentId)
     cached?.connection.close()
     const transportGeneration = getRuntimeEnvironmentTransportGeneration(environmentId)
+    let answeredAt: number | null = null
     cached = {
       pairingKey,
+      answeredAt: () => answeredAt,
       connection: new RemoteRuntimeSharedControlConnection(pairedConnection, {
         environmentId,
         clientCapabilities: ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES,
         isManuallyDisconnected: () => isRuntimeEnvironmentManuallyDisconnected(environmentId),
         isCapabilityPaused: () => isRuntimeEnvironmentCapabilityPaused(environmentId),
+        // Why wall clock: it advances across a suspend, so a pre-sleep answer reads as stale.
+        onAnswered: () => {
+          answeredAt = Date.now()
+        },
         onDiagnosticsChanged: (diagnostics) => {
           if (getRuntimeEnvironmentTransportGeneration(environmentId) !== transportGeneration) {
             return
