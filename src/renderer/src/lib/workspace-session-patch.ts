@@ -7,11 +7,11 @@ import { normalizeBrowserHistoryEntries } from '../../../shared/workspace-sessio
 import { normalizeWorkspaceDocHistoryEntries } from '../../../shared/workspace-doc-history'
 import {
   buildActiveConnectionIdsAtShutdown,
+  buildEditorSessionData,
   buildSanitizedTabsByWorktree,
   buildTerminalSessionData,
   type WorkspaceSessionSnapshot
 } from './workspace-session'
-import { buildEditorSessionData } from './workspace-session-editor-files'
 import {
   buildPersistedBrowserPagesByWorkspace,
   buildPersistedBrowserTabsByWorktree

@@ -1,6 +1,6 @@
 import type { OpenFile } from '@/store/slices/editor'
 import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
-import { isEditorDraftBackedUp } from '@/lib/workspace-session-editor-files'
+import { getBackedUpEditorDraft } from '@/lib/editor-draft-backup'
 import { canAutoSaveOpenFile } from './editor-autosave'
 import { flushPendingEditorChange } from './editor-pending-flush'
 import { getDuplicateDirtySavePaths } from './editor-autosave-state-projections'
@@ -138,7 +138,7 @@ export function createEditorRestartSaveHandlers({
           return
         }
         const notBackedUp = dirtyFiles.filter(
-          (file) => !isEditorDraftBackedUp(file, state.editorDrafts)
+          (file) => getBackedUpEditorDraft(file, state.editorDrafts) === undefined
         )
         // Why: the dialog is awaited, so files can join meanwhile; consent covers only the files it named.
         if (notBackedUp.every((file) => confirmedLostFileIds.has(file.id))) {
