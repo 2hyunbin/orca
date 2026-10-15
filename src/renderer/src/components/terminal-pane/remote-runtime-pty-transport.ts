@@ -275,6 +275,8 @@ export function createRemoteRuntimePtyTransport(
   let sameHandleEndReuseAttachedAt: number | null = null
   let attachGeneration = 0
   let subscriptionGeneration = 0
+  // A terminal this pane just created has no history, so an empty first image there is not a gap.
+  let spawnedHandle: string | null = null
 
   function setAttachmentReady(ready: boolean): void {
     attachmentReady = ready
@@ -315,7 +317,9 @@ export function createRemoteRuntimePtyTransport(
     })
   }
 
-  const recoveryInputHold = createRemoteRuntimeRecoveryInputHold({ holdBeforeFirstConnect: true })
+  const recoveryInputHold = createRemoteRuntimeRecoveryInputHold({
+    holdBeforeFirstConnect: true
+  })
   const inputJournal = createRemoteRuntimeInputJournal({
     currentStream: sequencedInputTarget,
     // Why: a refusal that never clears would drop every keystroke behind a connected-looking pane.
@@ -1066,10 +1070,12 @@ export function createRemoteRuntimePtyTransport(
 
     if (leafId && worktreeId && !resolvePaneUnavailable) {
       try {
-        const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
-          'terminal.resolvePane',
-          { paneKey: `${hostTabId}:${leafId}`, worktreeId }
-        )
+        const resolved = await callRuntime<{
+          terminal: RuntimeTerminalResolvePane
+        }>('terminal.resolvePane', {
+          paneKey: `${hostTabId}:${leafId}`,
+          worktreeId
+        })
         const terminal = resolved.terminal
         if (
           terminal.handle === hostHandle &&
@@ -1322,10 +1328,9 @@ export function createRemoteRuntimePtyTransport(
     }
     let terminal: RuntimeTerminalResolvePane
     try {
-      const resolved = await callRuntime<{ terminal: RuntimeTerminalResolvePane }>(
-        'terminal.resolvePane',
-        { paneKey, worktreeId }
-      )
+      const resolved = await callRuntime<{
+        terminal: RuntimeTerminalResolvePane
+      }>('terminal.resolvePane', { paneKey, worktreeId })
       terminal = resolved.terminal
     } catch (error) {
       const message = runtimeTerminalErrorMessage(error)
@@ -1486,7 +1491,9 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     try {
-      await callRuntimeForEnvironment(environmentId, 'terminal.close', { terminal: targetHandle })
+      await callRuntimeForEnvironment(environmentId, 'terminal.close', {
+        terminal: targetHandle
+      })
     } catch {
       // Best-effort parity with local disconnect/kill.
     }
@@ -2371,10 +2378,13 @@ export function createRemoteRuntimePtyTransport(
           markRecoveryHealthy()
           emitRecoveryState()
           storedCallbacks.onConnect?.()
-          // Why: a recovery subscribe replays nothing when the host's push snapshot is
-          // empty (idle or exited pane), so ask for the retained buffer instead of
-          // waiting for bytes that an exited process will never send.
-          if (expectedRecoveryEpoch !== undefined && !subscriptionSnapshotHadContent) {
+          // Why: a subscribe that replayed no image (empty push, or one over the client's replay
+          // limit) leaves an idle or exited pane blank, so pull the retained buffer instead of
+          // waiting for bytes it may never send (#18464, #21208).
+          if (
+            !subscriptionSnapshotHadContent &&
+            (expectedRecoveryEpoch !== undefined || subscribedHandle !== spawnedHandle)
+          ) {
             storedCallbacks.onStreamRecovered?.()
           }
           storedCallbacks.onStatus?.('shell')
@@ -2780,7 +2790,9 @@ export function createRemoteRuntimePtyTransport(
                     agent: launchAgentToSend!,
                     providerSession: resumeProviderSessionToSend,
                     ...(launchConfigToSend?.ompResumeFilePath
-                      ? { ompResumeFilePath: launchConfigToSend.ompResumeFilePath }
+                      ? {
+                          ompResumeFilePath: launchConfigToSend.ompResumeFilePath
+                        }
                       : {}),
                     ...(agentArgsOverride !== undefined ? { agentArgs: agentArgsOverride } : {}),
                     ...(agentLaunchPreferences
@@ -2882,6 +2894,7 @@ export function createRemoteRuntimePtyTransport(
         rows: options.rows ?? 24
       }
       if (createdTerminal.isReattach !== true) {
+        spawnedHandle = handle
         onPtySpawn?.(remotePtyId)
       }
       emitRecoveryState()
