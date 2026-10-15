@@ -20,8 +20,8 @@ import type {
   SessionOptionsSurface
 } from '../../../../shared/native-chat-session-options'
 import {
+  NATIVE_CHAT_PERMISSION_MODE_ICONS,
   nativeChatPermissionModeDescription,
-  nativeChatPermissionModeIcon,
   nativeChatPermissionModeLabel,
   nativeChatPermissionPickerTitle
 } from './native-chat-permission-mode-labels'
@@ -29,7 +29,7 @@ import { runSessionOptionSurfaceCall } from './native-chat-session-option-surfac
 
 /** Icon and name; Full access reads in the warning colour wherever it is shown. */
 function ModeName(props: { mode: AgentChatPermissionMode; truncate?: boolean }): React.JSX.Element {
-  const Icon = nativeChatPermissionModeIcon(props.mode)
+  const Icon = NATIVE_CHAT_PERMISSION_MODE_ICONS[props.mode]
   const label = nativeChatPermissionModeLabel(props.mode)
   const body = (
     <>

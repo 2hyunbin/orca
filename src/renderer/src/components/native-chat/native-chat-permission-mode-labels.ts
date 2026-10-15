@@ -7,16 +7,20 @@ import {
   type AgentChatPermissionModeIconName
 } from '../../../../shared/agent-chat-permission-mode'
 
-const PERMISSION_MODE_ICONS: Record<AgentChatPermissionModeIconName, LucideIcon> = {
+const ICONS_BY_NAME: Record<AgentChatPermissionModeIconName, LucideIcon> = {
   Hand,
   FilePenLine,
   ShieldCheck,
   ShieldAlert
 }
 
-export function nativeChatPermissionModeIcon(mode: AgentChatPermissionMode): LucideIcon {
-  return PERMISSION_MODE_ICONS[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES[mode]]
-}
+// A static record, not a lookup function: render must index it, not call it.
+export const NATIVE_CHAT_PERMISSION_MODE_ICONS = {
+  ask: ICONS_BY_NAME[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES.ask],
+  'accept-edits': ICONS_BY_NAME[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES['accept-edits']],
+  auto: ICONS_BY_NAME[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES.auto],
+  'full-access': ICONS_BY_NAME[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES['full-access']]
+} as const satisfies Record<AgentChatPermissionMode, LucideIcon>
 
 export function nativeChatPermissionModeLabel(mode: AgentChatPermissionMode): string {
   switch (mode) {
