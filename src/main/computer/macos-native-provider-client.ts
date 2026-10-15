@@ -45,7 +45,9 @@ export class MacOSNativeProviderClient {
   private providerCapabilities: ComputerProviderCapabilities | null = null
   private socketListenerCleanup: (() => void) | null = null
   private socketStartGeneration = 0
-  private recycleBeforePermissionStatus = false
+  // Per provider process: true until it serves anything but handshake/status reads.
+  private statusOnlyProvider = false
+  private screenshotsMissingAtLastRead = false
   async listApps(): Promise<ComputerListAppsResult> {
     return (await this.call('listApps', {})) as ComputerListAppsResult
   }
@@ -71,13 +73,14 @@ export class MacOSNativeProviderClient {
   async permissionStatus(options: {
     fresh: boolean
   }): Promise<permissionStatusWire.MacOSProviderPermissionStatus> {
-    // Why: a Screen Recording grant may only show in a process started after it; recycle a provider only status reads used.
-    if (options.fresh || this.recycleBeforePermissionStatus) {
+    // Why: a Screen Recording grant may only show in a process started after it. Never recycle a
+    // provider that served agent work: its snapshot cache backs the agent's element indexes.
+    if (options.fresh || (this.statusOnlyProvider && this.screenshotsMissingAtLastRead)) {
       this.shutdown()
     }
     await this.ensureCapability('permissions', 'status')
     const status = permissionStatusWire.parse(await this.call('permissionStatus', {}))
-    this.recycleBeforePermissionStatus = !permissionStatusWire.isComplete(status)
+    this.screenshotsMissingAtLastRead = status.screenshots === 'not-granted'
     return status
   }
   shutdown(): void {
@@ -105,7 +108,6 @@ export class MacOSNativeProviderClient {
   }
   private async call(method: NativeRequestMethod, params: unknown): Promise<unknown> {
     await this.ensureCompatible()
-    this.recycleBeforePermissionStatus &&= method === 'permissionStatus'
     return await this.send(method, params)
   }
   private async send(method: NativeMethod, params: unknown): Promise<unknown> {
@@ -115,6 +117,7 @@ export class MacOSNativeProviderClient {
       throw new RuntimeClientError('accessibility_error', 'Orca Computer Use.app was not found')
     }
     const transport = await this.ensureSocketStarted(helperExecutablePath)
+    this.statusOnlyProvider &&= method === 'permissionStatus' || method === 'handshake'
     const token = this.socketToken
     const line = `${JSON.stringify({ id, method, params, token })}\n`
     const result = new Promise<unknown>((resolve, reject) => {
@@ -220,6 +223,7 @@ export class MacOSNativeProviderClient {
       error: (error) => this.handleTransportError(socket, error)
     })
     this.socket = socket
+    this.statusOnlyProvider = true
     return socket
   }
   private handleSocketData(socket: net.Socket, chunk: string): void {

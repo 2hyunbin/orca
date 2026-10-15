@@ -22,7 +22,3 @@ export function parse(raw: unknown): MacOSProviderPermissionStatus {
   }
   return { accessibility, screenshots }
 }
-
-export function isComplete(status: MacOSProviderPermissionStatus): boolean {
-  return status.accessibility === 'granted' && status.screenshots === 'granted'
-}

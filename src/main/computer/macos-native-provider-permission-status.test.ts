@@ -169,6 +169,28 @@ describe('MacOSNativeProviderClient.permissionStatus', () => {
     expect(spawnMock).toHaveBeenCalledTimes(3)
   })
 
+  it('never recycles a provider after agent work, however many incomplete reads follow', async () => {
+    replies.permissionStatus = { accessibility: 'granted', screenshots: 'not-granted' }
+    const client = await createClient()
+    await client.listApps()
+
+    await client.permissionStatus({ fresh: false })
+    await client.permissionStatus({ fresh: false })
+
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    expect(sockets[0]!.methods).not.toContain('terminate')
+  })
+
+  it('does not recycle when only Accessibility is missing', async () => {
+    replies.permissionStatus = { accessibility: 'not-granted', screenshots: 'granted' }
+    const client = await createClient()
+
+    await client.permissionStatus({ fresh: false })
+    await client.permissionStatus({ fresh: false })
+
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps a provider that is serving agent work', async () => {
     replies.permissionStatus = { accessibility: 'granted', screenshots: 'not-granted' }
     const client = await createClient()

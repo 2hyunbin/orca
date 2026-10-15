@@ -149,10 +149,10 @@ export function ComputerUsePane(): React.JSX.Element {
     setLoading(true)
     try {
       const result = await window.api.computerUsePermissions.getStatus()
-      recordComputerUsePermissionStatus(result)
       if (operationId !== permissionOperationSequence.current) {
         return
       }
+      recordComputerUsePermissionStatus(result)
       if (!mountedRef.current) {
         return
       }
