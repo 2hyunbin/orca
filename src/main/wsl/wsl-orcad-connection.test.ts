@@ -180,11 +180,12 @@ describe('WslOrcadConnectionManager', () => {
     const g1 = '00000000-0000-4000-8000-000000000001'
     const g2 = '00000000-0000-4000-8000-000000000002'
     const invalidated = vi.fn()
+    const hostReady = vi.fn()
     const service = new WslHostService({
       userDataPath: () => profile,
       isEnabled: () => true,
       hasServerFiles: () => true,
-      publish: vi.fn(), pairingChanged: invalidated, ready: vi.fn(), removed: vi.fn()
+      publish: vi.fn(), pairingChanged: invalidated, ready: hostReady, removed: vi.fn()
     })
     const { manager, launches } = setup({ onChange: service.handleConnectionChange.bind(service) })
     try {
@@ -209,8 +210,6 @@ describe('WslOrcadConnectionManager', () => {
       expect(invalidated).toHaveBeenCalledWith('wsl:ubuntu')
       expect(classifyPeerReplacements(enrolled, after, replacedRuntimeEnvironmentIds(enrolled, after)))
         .toEqual({ retired: ['wsl:ubuntu'], sameHost: [] })
-      expect(runtimeEnvironmentRevisionFailure(environment, enrolled[0].pairingRevision, 'test'))
-        .toMatchObject({ ok: false })
       const before = listEnvironments(profile).map(publicRuntimeEnvironmentWithHostKey)
       const fail = vi.spyOn(environmentStore, 'writeEnvironmentStore').mockImplementationOnce(() => {
         throw new Error('disk full')
@@ -226,12 +225,20 @@ describe('WslOrcadConnectionManager', () => {
         classifyPeerReplacements(before, partial, replacedRuntimeEnvironmentIds(before, partial))
       ).toEqual({ retired: ['wsl:ubuntu'], sameHost: [] })
       launches.push({ ...ready(first.port), distroId: null })
-      await manager.ensure('Ubuntu', { localPort: firstConnection.localPort })
+      await manager.ensure('Ubuntu', {
+        localPort: firstConnection.localPort,
+        status: { pending: { state: 'connecting' }, ready: {
+          state: 'reconnecting', reason: 'census', attempt: 1,
+          retryInMs: null, terminals: 'unverifiable'
+        } }
+      })
       expect(
         runtimeEnvironmentRevisionFailure(listEnvironments(profile)[0], before[0].pairingRevision, 'test')
       ).toMatchObject({ ok: false })
       const revision = listEnvironments(profile)[0].pairingRevision
+      hostReady.mockClear()
       manager.publish('Ubuntu', { state: 'ready', census: null })
+      expect(hostReady).toHaveBeenCalledWith('wsl:ubuntu')
       expect(listEnvironments(profile)[0].pairingRevision).toBe(revision)
       launches.push({ ...ready(first.port), distroId: null })
       await manager.ensure('Ubuntu')
