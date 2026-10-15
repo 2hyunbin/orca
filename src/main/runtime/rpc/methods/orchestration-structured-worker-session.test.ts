@@ -26,22 +26,32 @@ const { sealedChildEnv } = await import('../../structured-session-child-env.test
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a host stub carrying only the members the worker start reaches.
 function installHost(location = { executionHostId: 'local', wslDistro: null as string | null }) {
+  const closed: string[] = []
+  const exitObserved = { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
   const dispose = vi.fn()
   const subscribe = vi.fn(async () => dispose)
   hostRef.current = {
     setSessionTabVisibility: async () => {},
-    close: async () => {},
+    close: async (id: string) => {
+      closed.push(id)
+    },
+    hasSession: () => closed.length === 0,
     deps: {
       store: {
         getRecord: () => ({
           location,
-          lease: { runtimeFence: 2, runtimeKind: 'native', claimStatus: 'live' }
+          lease: {
+            runtimeFence: 2,
+            runtimeKind: 'native',
+            claimStatus: closed.length === 0 ? 'live' : 'released',
+            deathEvidence: closed.length === 0 ? null : exitObserved
+          }
         })
       }
     },
     subscribe
   }
-  return { subscribe, dispose }
+  return { subscribe, dispose, closed }
 }
 
 describe('structured worker session', () => {
@@ -110,11 +120,7 @@ describe('structured worker session', () => {
 
   it('forgets the identity and discards the session when the start fails', async () => {
     // A session that resolves outside the local host is not a worker this runtime can own.
-    installHost({ executionHostId: 'local', wslDistro: 'Ubuntu' })
-    const closed: string[] = []
-    ;(hostRef.current as { close: (id: string) => Promise<void> }).close = async (id) => {
-      closed.push(id)
-    }
+    const { closed } = installHost({ executionHostId: 'local', wslDistro: 'Ubuntu' })
     await expect(
       createStructuredWorkerSession({
         runtime: { ensureStructuredAgentSessionHost: async () => {} } as never,
@@ -130,11 +136,7 @@ describe('structured worker session', () => {
   })
 
   it('discards the session when the create settled UNKNOWN after attach', async () => {
-    installHost()
-    const closed: string[] = []
-    ;(hostRef.current as { close: (id: string) => Promise<void> }).close = async (id) => {
-      closed.push(id)
-    }
+    const { closed } = installHost()
     // `commit` answers this after `attach` SUCCEEDED and only the tab publish failed, so the
     // provider child is live. Reading it as "refused, nothing created" strands that child with no
     // binding, and nothing else in the runtime ever retires it.
@@ -159,11 +161,7 @@ describe('structured worker session', () => {
   })
 
   it('does not close anything when the create refusal proves nothing was created', async () => {
-    installHost()
-    const closed: string[] = []
-    ;(hostRef.current as { close: (id: string) => Promise<void> }).close = async (id) => {
-      closed.push(id)
-    }
+    const { closed } = installHost()
     createSpy.mockImplementation(async () => ({
       ok: false,
       refusal: {
@@ -214,12 +212,7 @@ describe('structured worker session', () => {
   })
 
   it('refuses a session pinned to a non-local execution host', async () => {
-    installHost()
-    ;(hostRef.current as { deps: { store: { getRecord: () => unknown } } }).deps.store.getRecord =
-      () => ({
-        location: { executionHostId: 'ssh-1', wslDistro: null },
-        lease: { runtimeFence: 2, runtimeKind: 'native', claimStatus: 'live' }
-      })
+    installHost({ executionHostId: 'ssh-1', wslDistro: null })
     await expect(
       createStructuredWorkerSession({
         runtime: { ensureStructuredAgentSessionHost: async () => {} } as never,
