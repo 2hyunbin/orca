@@ -3,12 +3,9 @@ import { useShallow } from 'zustand/react/shallow'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Tab } from '../../../../shared/tab-types'
-import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { ProjectExecutionRuntimeResolution } from '../../../../shared/project-execution-runtime'
 import { useAppStore } from '../../store'
 import { buildStatusMap } from '../right-sidebar/status-display'
-import { useDetectedAgents } from '@/hooks/useDetectedAgents'
-import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import { getConnectionIdFromState } from '@/lib/connection-context'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { isNativeChatTranscriptLocalReadable } from '@/lib/native-chat-transcript-readability'
@@ -25,24 +22,15 @@ import {
   selectTabBarAgentProjections,
   type TabBarAgentProjections
 } from './tab-agent-types-by-tab-id'
-import {
-  buildTabAgentLaunchOptions,
-  buildTabAgentLaunchOptionsFromRows,
-  orderTabLaunchAgents
-} from './tab-agent-launch-options'
-import type { TabAgentLaunchOption } from './tab-agent-launch-options'
-import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../shared/tui-agent-selection'
 import { shouldShowWindowsShellMenu } from './windows-shell-menu-visibility'
 import { createUnifiedTabLookup } from './tab-bar-item-model'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
-import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 
 const isWindows = navigator.userAgent.includes('Windows')
 export const isMacOs = navigator.userAgent.includes('Mac')
 type AppStoreState = ReturnType<typeof useAppStore.getState>
 type GitStatusEntries = AppStoreState['gitStatusByWorktree'][string]
 const EMPTY_GIT_STATUS_ENTRIES: GitStatusEntries = []
-const EMPTY_AGENT_CMD_OVERRIDES: Partial<Record<TuiAgent, string>> = {}
 const EMPTY_UNIFIED_TABS: readonly Tab[] = []
 const EMPTY_PROJECTS: AppStoreState['projects'] = []
 const EMPTY_REPOS: AppStoreState['repos'] = []
@@ -80,7 +68,6 @@ export type TabBarRuntimeModel = {
   defaultWindowsPowerShellImplementation: ReturnType<
     typeof resolveWindowsPowerShellImplementationSetting
   >
-  agentLaunchOptions: TabAgentLaunchOption[]
   windowsTerminalCapabilities: WindowsTerminalCapabilities
   showWindowsShellMenu: boolean
   projectRuntimeShellMenuMode: ReturnType<typeof getProjectRuntimeShellMenuMode>
@@ -146,26 +133,6 @@ export function useTabBarRuntimeModel({
     }
     return s.sshConnectionStates.get(worktreeConnectionId)?.remotePlatform ?? null
   })
-  const defaultAgent = useAppStore((s) => s.settings?.defaultTuiAgent)
-  const disabledTuiAgents = useAppStore(
-    (s) => s.settings?.disabledTuiAgents ?? DEFAULT_DISABLED_TUI_AGENTS
-  )
-  const agentCmdOverrides = useAppStore(
-    (s) => s.settings?.agentCmdOverrides ?? EMPTY_AGENT_CMD_OVERRIDES
-  )
-  const agentDetectionTarget = useAgentDetectionTargetForWorktree(worktreeId)
-  const { detectedIds } = useDetectedAgents(agentDetectionTarget)
-  const projectedAgentRows = useNewTabAgentMenuRows(worktreeId, detectedIds)
-  const agentLaunchOptions = useMemo(
-    () =>
-      projectedAgentRows
-        ? buildTabAgentLaunchOptionsFromRows(projectedAgentRows, agentCmdOverrides)
-        : buildTabAgentLaunchOptions(
-            orderTabLaunchAgents(defaultAgent, detectedIds ?? [], disabledTuiAgents),
-            agentCmdOverrides
-          ),
-    [agentCmdOverrides, defaultAgent, detectedIds, disabledTuiAgents, projectedAgentRows]
-  )
   const isWebClient = (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ === true
   const windowsTerminalCapabilityOwnerKey = getWindowsTerminalCapabilityOwnerKey(
     activeRuntimeEnvironmentId,
@@ -278,7 +245,6 @@ export function useTabBarRuntimeModel({
     unpinTab,
     defaultWindowsShell,
     defaultWindowsPowerShellImplementation,
-    agentLaunchOptions,
     windowsTerminalCapabilities,
     showWindowsShellMenu,
     projectRuntimeShellMenuMode,

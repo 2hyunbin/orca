@@ -239,3 +239,33 @@ describe("a new tab during startup, before this computer's runtime answered", ()
     )
   })
 })
+
+it('pins explicit surfaces through full planning without registry wait or request-field loss', () => {
+  const store = storeWithSettings(SETTINGS)
+  const delivered = vi.fn()
+  const full = {
+    ...request,
+    prompt: 'notes',
+    promptDelivery: 'submit-after-ready' as const,
+    onPromptDelivered: delivered,
+    promptKeptByCaller: true as const,
+    selectedExecutionHostId: 'runtime:selected' as const
+  }
+  for (const requestedSurface of ['chat', 'terminal'] as const) {
+    const route = routeNewTabLaunch(store, args, { ...full, requestedSurface })
+    expect(route).not.toHaveProperty('awaited')
+    if (!('plan' in route)) {
+      throw new Error('explicit action must plan synchronously')
+    }
+    expect(route.plan).toMatchObject({
+      prompt: 'notes',
+      promptDelivery: 'submit-after-ready',
+      promptKeptByCaller: true,
+      onPromptDelivered: delivered,
+      requestId: args.requestId,
+      route: requestedSurface === 'chat' ? 'structured-native-chat' : 'terminal-tui',
+      ...(requestedSurface === 'chat' ? { executionHostId: 'runtime:selected' } : {})
+    })
+  }
+  expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+})

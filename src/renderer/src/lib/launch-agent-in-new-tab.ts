@@ -1,3 +1,4 @@
+import type { AgentSessionLaunchRequest } from '@/lib/agent-session-launch-plan'
 import { useAppStore } from '@/store'
 import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import { planLaunchAgentStartupPrompt } from '@/lib/launch-agent-startup-prompt-plan'
@@ -42,6 +43,8 @@ type LaunchAgentInNewTabRequest =
     }
 
 export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
+  requestedSurface?: AgentSessionLaunchRequest['requestedSurface']
+  selectedExecutionHostId?: AgentSessionLaunchRequest['selectedExecutionHostId']
   agent: TuiAgent
   worktreeId: string
   /** Tab group the user launched from; keeps split-group launches in that pane instead of the active group. */
@@ -173,6 +176,8 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   // server included, so only a non-structured route falls through to the host-published terminal.
   const route = routeNewTabLaunch(store, args, {
     agent,
+    requestedSurface: args.requestedSurface,
+    selectedExecutionHostId: args.selectedExecutionHostId,
     workspace: { kind: workspaceKind, worktreeId },
     prompt: trimmedPrompt,
     promptDelivery: routePromptDelivery,

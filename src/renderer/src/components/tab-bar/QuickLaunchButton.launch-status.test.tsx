@@ -9,6 +9,28 @@ import type { StructuredLaunchAttempt } from '@/lib/structured-agent-session-lau
 vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: () => ({ detectedIds: ['claude', 'codex'] })
 }))
+vi.mock('./use-new-tab-agent-menu-rows', async () => {
+  const { useAppStore } = await import('@/store')
+  const { useDetectedAgents } = await import('@/hooks/useDetectedAgents')
+  const { useAgentDetectionTargetForWorktree } = await import('@/hooks/useAgentDetectionTarget')
+  const { buildNewTabAgentMenuRows } = await import('@/lib/new-tab-agent-menu-rows')
+  return {
+    useNewTabAgentMenuRows: (worktreeId: string) => {
+      const detection = useDetectedAgents(useAgentDetectionTargetForWorktree(worktreeId))
+      return {
+        detection,
+        validate: () => true,
+        rows: buildNewTabAgentMenuRows({
+          settings: useAppStore.getState().settings,
+          installedHere: detection.detectedIds,
+          detectedOnHost: detection.detectedIds,
+          chatAgents: [],
+          hostChatAnswer: () => 'no-chats'
+        })
+      }
+    }
+  }
+})
 vi.mock('@/hooks/useShortcutLabel', () => ({ useOptionalShortcutLabel: () => null }))
 vi.mock('@/store', () => {
   const state = {
@@ -191,6 +213,15 @@ describe('QuickLaunchAgentMenuItems launches', () => {
     )
     fireEvent.click(document.querySelector('[title="Launch Codex in a new terminal"]')!)
 
+    expect(launchMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        prompt: 'review notes',
+        promptDelivery: 'submit-after-ready',
+        promptKeptByCaller: true,
+        groupId: 'group-1',
+        worktreeId: WORKTREE_ID
+      })
+    )
     expect(onPromptHandedOff).toHaveBeenCalledOnce()
     await expect(onPromptHandedOff.mock.calls[0][0]).resolves.toEqual({ delivered: true })
   })
@@ -199,6 +230,7 @@ describe('QuickLaunchAgentMenuItems launches', () => {
   it('tells the notes menu once why its notes did not reach the new agent', async () => {
     launchMock.mockReturnValue({
       surface: { kind: 'host-published' },
+      structuredSettlement: Promise.resolve({ kind: 'failed', notified: false }),
       promptDeliveryResult: Promise.resolve({
         delivered: false,
         failureNotified: false,

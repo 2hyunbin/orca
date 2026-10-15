@@ -11,6 +11,7 @@ import {
   isNativeChatEnabled,
   type NativeChatDefaultSettings
 } from '../../../shared/structured-native-chat-launch-route'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { filterEnabledTuiAgents } from '../../../shared/tui-agent-selection'
 import { getAgentCatalog } from '@/lib/agent-catalog'
@@ -28,12 +29,13 @@ export type HostChatAnswer =
 
 export type ChatUnavailableReason = 'pending' | 'not-installed' | 'ssh' | 'wsl' | 'not-on-host'
 
-export type NewTabAgentMenuRow =
+export type NewTabAgentMenuRow = (
   | { kind: 'chat'; agent: TuiAgent }
   | { kind: 'chat-unavailable'; agent: TuiAgent; reason: ChatUnavailableReason }
   | { kind: 'cli'; agent: TuiAgent }
   /** Chat UI is off or the host opens no chats: the menu as it always was. */
   | { kind: 'terminal'; agent: TuiAgent }
+) & { selection?: { key: string; executionHostId: ExecutionHostId } }
 
 export type NewTabAgentMenuSettings = NativeChatDefaultSettings &
   Partial<Pick<GlobalSettings, 'defaultTuiAgent' | 'disabledTuiAgents'>>
@@ -58,29 +60,46 @@ export function buildNewTabAgentMenuRows(args: {
   /** This computer's detected agents, which pick an unchosen provider's default. */
   installedHere: readonly TuiAgent[] | null
   /** The agents detected on the workspace's machine. */
-  detectedOnHost: readonly TuiAgent[]
+  detectedOnHost: readonly TuiAgent[] | null
   /** The agents Orca can open as a chat. */
   chatAgents: readonly TuiAgent[]
+  catalogLoaded?: boolean
   hostChatAnswer: (agent: TuiAgent) => HostChatAnswer
 }): NewTabAgentMenuRow[] {
   const { settings } = args
   const defaultAgent = settings?.defaultTuiAgent
-  const installed = filterEnabledTuiAgents(args.detectedOnHost, settings?.disabledTuiAgents)
+  const installed = filterEnabledTuiAgents(args.detectedOnHost ?? [], settings?.disabledTuiAgents)
   if (!isNativeChatEnabled(settings) || args.hostChatAnswer('claude') === 'no-chats') {
     return orderAgents(defaultAgent, installed).map((agent) => ({ kind: 'terminal', agent }))
   }
   const runnable: TuiAgent[] = []
   const unavailable = new Map<TuiAgent, ChatUnavailableReason>()
-  for (const agent of filterEnabledTuiAgents(args.chatAgents, settings?.disabledTuiAgents)) {
+  const candidates = [
+    ...new Set([...args.chatAgents, ...(args.catalogLoaded === false ? installed : [])])
+  ]
+  for (const agent of filterEnabledTuiAgents(candidates, settings?.disabledTuiAgents)) {
     if (!isNativeChatProviderOn(settings, agent, args.installedHere)) {
       continue
     }
+    const defaultUnknown =
+      args.installedHere === null &&
+      agent !== 'claude' &&
+      agent !== 'codex' &&
+      settings?.nativeChatProviders?.[agent] === undefined
     const answer = args.hostChatAnswer(agent)
+    if (
+      (defaultUnknown || !args.chatAgents.includes(agent)) &&
+      answer !== 'ssh' &&
+      answer !== 'wsl'
+    ) {
+      unavailable.set(agent, 'pending')
+      continue
+    }
     if (answer === 'yes') {
       if (installed.includes(agent)) {
         runnable.push(agent)
       } else {
-        unavailable.set(agent, 'not-installed')
+        unavailable.set(agent, args.detectedOnHost === null ? 'pending' : 'not-installed')
       }
     } else if (answer === 'not-yet-known') {
       // Keep the enabled provider named while discovery is unresolved. A pending row is
@@ -99,7 +118,18 @@ export function buildNewTabAgentMenuRows(args: {
     })),
     ...orderAgents(
       defaultAgent,
-      installed.filter((agent) => !runnable.includes(agent))
+      installed.filter(
+        (agent) =>
+          !runnable.includes(agent) &&
+          !(
+            unavailable.get(agent) === 'pending' &&
+            (!args.chatAgents.includes(agent) ||
+              (args.installedHere === null &&
+                agent !== 'claude' &&
+                agent !== 'codex' &&
+                settings?.nativeChatProviders?.[agent] === undefined))
+          )
+      )
     ).map((agent) => ({ kind: 'cli' as const, agent }))
   ]
 }

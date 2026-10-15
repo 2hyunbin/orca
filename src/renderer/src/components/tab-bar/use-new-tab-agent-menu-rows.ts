@@ -1,22 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useShallow } from 'zustand/react/shallow'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
+import { isNativeChatProviderOn } from '../../../../shared/native-chat-providers'
 import { useAppStore } from '@/store'
-import type { AppState } from '@/store/types'
-import {
-  buildAgentLaunchRouteInput,
-  workspaceKindForWorktreeId,
-  type AgentLaunchRouteStore
-} from '@/lib/agent-launch-route-input'
 import {
   structuredAgentLaunchSupport,
   type AgentLaunchRoutingInput
 } from '@/lib/agent-launch-routing'
-import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
-import { askHostCreateSupport } from '@/lib/structured-agent-session-host-admission'
+import { useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
+import type { askHostCreateSupport } from '@/lib/structured-agent-session-host-admission'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { relearnHostStructuredAgents } from '@/runtime/host-structured-agents'
@@ -29,6 +22,10 @@ import {
   readLocalRuntimeCapabilitiesOrUnknown,
   subscribeLocalRuntimeCapabilitiesKnown
 } from '@/runtime/local-runtime-capabilities'
+import { useDetectedAgents } from '@/hooks/useDetectedAgents'
+import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
+import { menuFacts } from './tab-agent-menu-facts'
+import { acquireMenuHostSupport } from './menu-host-support-query'
 
 function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
   const support = structuredAgentLaunchSupport(input)
@@ -39,7 +36,6 @@ function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
     case 'runtime-capability-unknown':
       return 'not-yet-known'
     case 'agent-without-structured-session':
-      // The launch waits for a host that publishes its list and has not yet; mirror that here.
       return !input.hostStructuredAgents &&
         input.hostCapabilities?.includes(
           STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
@@ -53,7 +49,6 @@ function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
     case 'runtime-capability':
     case 'client-capability':
       return 'no-chats'
-    // Per-launch blockers a menu row never carries: it names no start directory or terminal.
     case 'custom-start-directory':
     case 'reused-terminal':
       return 'yes'
@@ -67,187 +62,165 @@ function answerFromSupport(
     return 'yes'
   }
   if (support.kind === 'declined') {
-    switch (support.reason) {
-      case 'remote':
-      case 'remote-execution-host':
-      case 'ssh':
-        return 'ssh'
-      case 'wsl':
-      case 'project-runtime':
-        return 'wsl'
-      case 'agent':
-      case 'agent-without-structured-session':
-      case 'not-installed':
-        return 'not-on-host'
-      case undefined:
-      default:
-        return 'not-on-host'
+    if (['remote', 'remote-execution-host', 'ssh'].includes(support.reason ?? '')) {
+      return 'ssh'
+    }
+    if (['wsl', 'project-runtime'].includes(support.reason ?? '')) {
+      return 'wsl'
     }
   }
-  if (support.kind === 'workspace-unresolved') {
-    return 'not-yet-known'
-  }
-  return 'not-yet-known'
+  return 'not-on-host'
 }
 
-type SupportAnswer = Awaited<ReturnType<typeof askHostCreateSupport>>
-const supportRequests = new Map<string, Promise<SupportAnswer>>()
+let selectionGeneration = 0
+export type NewTabAgentMenuModel = ReturnType<typeof useNewTabAgentMenuRows>
 
-function readHostSupport(
-  target: Parameters<typeof askHostCreateSupport>[0],
-  selector: string,
-  agent: TuiAgent
-): Promise<SupportAnswer> {
-  const key = `${target.kind}:${target.kind === 'environment' ? target.environmentId : 'local'}\u0000${selector}\u0000${agent}`
-  const existing = supportRequests.get(key)
-  if (existing) {
-    return existing
-  }
-  let timeout: number | undefined
-  const request = Promise.race([
-    askHostCreateSupport(target, selector, agent),
-    new Promise<SupportAnswer>((resolve) => {
-      timeout = window.setTimeout(
-        () =>
-          resolve({
-            kind: 'unreachable',
-            code: 'timeout',
-            message: 'timeout',
-            error: new Error('timeout')
-          }),
-        10_000
-      )
-    })
-  ]).finally(() => {
-    if (timeout !== undefined) {
-      window.clearTimeout(timeout)
-    }
-    if (supportRequests.get(key) === request) {
-      supportRequests.delete(key)
-    }
-  })
-  supportRequests.set(key, request)
-  return request
-}
-
-/** The menu rows for a workspace, decided by the same route rules its launches use; null while
- *  the workspace host's agent list has not loaded. */
-export function useNewTabAgentMenuRows(
-  worktreeId: string,
-  detectedOnHost: readonly TuiAgent[] | null
-): NewTabAgentMenuRow[] | null {
+/** One finite query set belongs to one open menu, independent of its search/static rendering. */
+export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
+  const detectionTarget = useAgentDetectionTargetForWorktree(worktreeId)
+  const detection = useDetectedAgents(open ? detectionTarget : undefined)
   useHostStructuredAgentsVersion()
   useSyncExternalStore(
     subscribeLocalRuntimeCapabilitiesKnown,
     readLocalRuntimeCapabilitiesOrUnknown,
     readLocalRuntimeCapabilitiesOrUnknown
   )
-  const store = useAppStore(
-    useShallow((state): AgentLaunchRouteStore & Pick<AppState, 'settings'> => ({
-      settings: state.settings,
-      detectedAgentIds: state.detectedAgentIds,
-      runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId,
-      worktreesByRepo: state.worktreesByRepo,
-      folderWorkspaces: state.folderWorkspaces,
-      projectGroups: state.projectGroups,
-      repos: state.repos,
-      projects: state.projects,
-      activeRepoId: state.activeRepoId,
-      activeWorktreeId: state.activeWorktreeId,
-      activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId,
-      detectedWorktreesByRepo: state.detectedWorktreesByRepo,
-      restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
-      runtimeEnvironments: state.runtimeEnvironments,
-      runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
-      removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds
-    }))
+  useAppStore((state) => menuFacts(state, worktreeId).key)
+  const reconnect = useAppStore((state) => menuFacts(state, worktreeId).reconnect)
+  const facts = menuFacts(useAppStore.getState(), worktreeId)
+  const storeKey = facts.key
+  const [refresh, setRefresh] = useState(0)
+  const token = useMemo(() => ++selectionGeneration, [open, storeKey, reconnect, refresh])
+  const activeSelection = useRef(0)
+  activeSelection.current = open ? token : 0
+  useEffect(
+    () => () => {
+      activeSelection.current = 0
+    },
+    []
   )
-  const detectedAgents = detectedOnHost ?? []
-  const workspace = useMemo(
-    () => ({ kind: workspaceKindForWorktreeId(worktreeId), worktreeId }),
-    [worktreeId]
+  const [answers, setAnswers] = useState<{ token: number; values: Map<TuiAgent, HostChatAnswer> }>(
+    () => ({ token: 0, values: new Map() })
   )
-  const inputFor = useCallback(
-    (agent: TuiAgent): AgentLaunchRoutingInput =>
-      buildAgentLaunchRouteInput(store, { agent, workspace }),
-    [store, workspace]
-  )
-  const { executionHostId } = inputFor('claude')
-  const chatAgents = useMemo(
-    () => [
-      ...new Set([
-        ...chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined),
-        ...chatProviderAgents(executionHostId, store.runtimeStatusByEnvironmentId)
-      ])
-    ],
-    [executionHostId, store.runtimeStatusByEnvironmentId]
-  )
-  const [supportAnswers, setSupportAnswers] = useState<Map<TuiAgent, HostChatAnswer>>(
-    () => new Map()
-  )
-  const generation = useRef(0)
   useEffect(() => {
-    generation.current += 1
-    const currentGeneration = generation.current
-    setSupportAnswers(new Map())
-    const target = structuredAgentSessionTargetForHost(executionHostId)
+    if (!open) {
+      return
+    }
+    let active = true
+    const current = menuFacts(useAppStore.getState(), worktreeId)
+    const state = useAppStore.getState()
+    const target = structuredAgentSessionTargetForHost(current.input.executionHostId)
     if (
-      !isNativeChatEnabled(store.settings) ||
       !target ||
-      typeof window === 'undefined' ||
-      !('api' in window)
+      !isNativeChatEnabled(state.settings) ||
+      ['no-chats', 'wsl'].includes(hostChatAnswer(current.input))
     ) {
       return
     }
-    const currentInput = inputFor('claude')
+    const enabled = (agent: TuiAgent) =>
+      !state.settings?.disabledTuiAgents?.includes(agent) &&
+      isNativeChatProviderOn(state.settings, agent, state.detectedAgentIds) &&
+      (state.detectedAgentIds !== null ||
+        agent === 'claude' ||
+        agent === 'codex' ||
+        state.settings?.nativeChatProviders?.[agent] !== undefined)
+    if (![...current.chatAgents, ...(current.inventory ?? [])].some(enabled)) {
+      return
+    }
     if (
-      currentInput.hostCapabilities?.includes(
+      !current.catalogLoaded &&
+      current.input.hostCapabilities?.includes(
         STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
-      ) &&
-      !currentInput.hostStructuredAgents
+      )
     ) {
       void relearnHostStructuredAgents(
-        executionHostId,
-        currentInput.hostCapabilities,
-        store.runtimeStatusByEnvironmentId
+        current.input.executionHostId,
+        current.input.hostCapabilities,
+        state.runtimeStatusByEnvironmentId
       )
     }
-    const selector = toRuntimeWorktreeSelector(worktreeId)
-    for (const agent of chatAgents) {
-      const input = inputFor(agent)
-      const preliminary = hostChatAnswer(input)
-      if (preliminary === 'ssh' || preliminary === 'wsl' || preliminary === 'no-chats') {
+    const releases: (() => void)[] = []
+    for (const agent of current.chatAgents) {
+      const answer = hostChatAnswer(current.inputFor(agent))
+      if (
+        !['yes', 'not-yet-known'].includes(answer) ||
+        current.refreshing ||
+        !enabled(agent) ||
+        !current.catalogLoaded ||
+        current.input.hostCapabilities === null
+      ) {
         continue
       }
-      void readHostSupport(target, selector, agent).then((support) => {
-        if (generation.current !== currentGeneration) {
+      const query = acquireMenuHostSupport(
+        `${current.key}\u0000${agent}`,
+        target,
+        toRuntimeWorktreeSelector(worktreeId),
+        agent,
+        {
+          expectedEnvironmentPairingRevision: current.pairingRevision,
+          expectedEnvironmentRuntimeId: current.runtimeId
+        }
+      )
+      releases.push(query.release)
+      void query.answer.then((support) => {
+        if (!active) {
           return
         }
-        setSupportAnswers((previous) => new Map(previous).set(agent, answerFromSupport(support)))
+        setAnswers((previous) => ({
+          token,
+          values: new Map(previous.token === token ? previous.values : []).set(
+            agent,
+            answerFromSupport(support)
+          )
+        }))
       })
     }
     return () => {
-      generation.current += 1
+      active = false
+      releases.forEach((release) => release())
     }
-  }, [
-    chatAgents,
-    executionHostId,
-    inputFor,
-    store.runtimeStatusByEnvironmentId,
-    store.settings,
-    worktreeId
-  ])
+  }, [open, storeKey, reconnect, token, refresh, worktreeId])
   const rows = buildNewTabAgentMenuRows({
-    settings: store.settings,
-    installedHere: store.detectedAgentIds ?? null,
-    detectedOnHost: detectedAgents,
-    chatAgents,
-    hostChatAnswer: (agent) =>
-      supportAnswers.get(agent) ??
-      (() => {
-        const answer = hostChatAnswer(inputFor(agent))
-        return answer === 'yes' ? 'not-yet-known' : answer
-      })()
-  })
-  return detectedOnHost ? rows : null
+    settings: useAppStore.getState().settings,
+    installedHere: useAppStore.getState().detectedAgentIds,
+    detectedOnHost: facts.inventory,
+    chatAgents: facts.chatAgents,
+    catalogLoaded: facts.catalogLoaded,
+    hostChatAnswer: (agent) => {
+      const preliminary = hostChatAnswer(facts.inputFor(agent))
+      if (!['yes', 'not-yet-known'].includes(preliminary)) {
+        return preliminary
+      }
+      return open && answers.token === token
+        ? (answers.values.get(agent) ?? 'not-yet-known')
+        : 'not-yet-known'
+    }
+  }).map((row) => ({
+    ...row,
+    ...(facts.host
+      ? {
+          selection: {
+            key: `${token}:${facts.key}`,
+            executionHostId: facts.host.id
+          }
+        }
+      : {})
+  }))
+  const validate = (row: NewTabAgentMenuRow): boolean => {
+    const current = menuFacts(useAppStore.getState(), worktreeId)
+    const valid =
+      activeSelection.current === token &&
+      open &&
+      row.kind !== 'chat-unavailable' &&
+      row.selection !== undefined &&
+      row.selection.key === `${token}:${current.key}` &&
+      current.reconnect === reconnect &&
+      rows.some((candidate) => candidate.agent === row.agent && candidate.kind === row.kind) &&
+      (row.kind === 'terminal' || current.host !== null)
+    if (!valid) {
+      setRefresh((value) => value + 1)
+    }
+    return valid
+  }
+  return { rows, validate, detection }
 }

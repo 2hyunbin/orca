@@ -28,6 +28,7 @@ function TabBarInner(props: TabBarProps): React.JSX.Element {
   const createMenu = useTabBarCreateMenuController({
     worktreeId,
     resolvedGroupId: runtime.resolvedGroupId,
+    showAgentLaunchItems: props.showAgentLaunchItems,
     terminalOnly,
     mobileEmulatorEnabled: runtime.mobileEmulatorEnabled,
     managedBrowserCreationEnabled: runtime.managedBrowserCreationEnabled,

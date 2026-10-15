@@ -48,7 +48,8 @@ export type HostCreateSupport =
 export async function askHostCreateSupport(
   target: RuntimeClientTarget,
   worktree: string,
-  agent: TuiAgent
+  agent: TuiAgent,
+  options: Parameters<typeof callStructuredAgentSession>[3] = {}
 ): Promise<HostCreateSupport> {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -56,7 +57,7 @@ export async function askHostCreateSupport(
         supported: boolean
         reason?: string
         seedOptions?: unknown
-      }>(target, 'agentSession.createSupport', { worktree, agent })
+      }>(target, 'agentSession.createSupport', { worktree, agent }, options)
       if (support.supported !== true) {
         return {
           kind: 'declined',
@@ -69,6 +70,9 @@ export async function askHostCreateSupport(
       return seedOptions ? { kind: 'admitted', seedOptions } : { kind: 'admitted' }
     } catch (error) {
       if (hasRuntimeRpcErrorCode(error, SELECTOR_NOT_RESOLVABLE_CODE)) {
+        if (options.signal?.aborted) {
+          return { kind: 'workspace-unresolved' }
+        }
         const retryDelayMs = CREATE_SUPPORT_RETRY_DELAYS_MS[attempt]
         if (retryDelayMs === undefined) {
           return { kind: 'workspace-unresolved' }
@@ -98,11 +102,7 @@ export async function admitStructuredLaunchOnHost(
 ): Promise<StructuredLaunchAdmission> {
   const asked = askHostCreateSupport(target, worktree, agent).then(
     (support): StructuredLaunchAdmission =>
-      support.kind === 'unreachable'
-        ? { kind: 'unreachable' }
-        : support.kind === 'declined'
-          ? { kind: 'declined' }
-          : support
+      support.kind === 'unreachable' ? { kind: 'unreachable' } : support
   )
   if (target.kind !== 'local') {
     return asked

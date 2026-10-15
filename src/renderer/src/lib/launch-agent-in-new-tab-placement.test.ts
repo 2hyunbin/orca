@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 
+const mockStructuredFromNewTab = vi.fn()
+vi.mock('@/lib/launch-agent-in-new-tab-structured-route', () => ({
+  launchStructuredAgentFromNewTab: mockStructuredFromNewTab
+}))
 const mockCreateTab = vi.fn()
 /** Startup commands published with the created tabs, in creation order. */
 function queuedStartups() {
@@ -85,13 +89,54 @@ vi.mock('@/components/native-chat/native-chat-session-option-cache', () => ({
   seedNativeChatAppliedSessionOptions: mockSeedNativeChatAppliedSessionOptions
 }))
 
-describe('launchAgentInNewTab terminal tab activation', () => {
+describe('launchAgentInNewTab placement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // The local runtime has answered (without structured support), so no launch waits on it.
     setLocalRuntimeCapabilitiesForTests([])
     store.settings = placementSettings()
     mockCreateTab.mockReturnValue({ id: 'tab-1' })
+  })
+
+  it('assembles an explicit notes chat with normalized text, delivery, retention and selected owner', async () => {
+    const delivered = vi.fn()
+    const delivery = Promise.resolve({ delivered: false, failureNotified: false })
+    mockStructuredFromNewTab.mockReturnValue({
+      surface: { kind: 'host-published' },
+      pasteDraftAfterLaunch: false,
+      promptDeliveryResult: delivery
+    })
+    const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
+    const result = launchAgentInNewTab({
+      requestId: 'notes-pick',
+      requestedSurface: 'chat',
+      selectedExecutionHostId: 'runtime:selected',
+      agent: 'claude',
+      worktreeId: 'wt-1',
+      groupId: 'notes-group',
+      prompt: '  review notes  ',
+      promptDelivery: 'submit-after-ready',
+      promptKeptByCaller: true,
+      onPromptDelivered: delivered,
+      launchSource: 'tab_bar_quick_launch'
+    })
+    expect(mockStructuredFromNewTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreeId: 'wt-1',
+        groupId: 'notes-group',
+        plan: expect.objectContaining({
+          requestedSurface: 'chat',
+          executionHostId: 'runtime:selected',
+          requestId: 'notes-pick',
+          prompt: 'review notes',
+          promptDelivery: 'submit-after-ready',
+          promptKeptByCaller: true,
+          onPromptDelivered: delivered
+        })
+      })
+    )
+    expect(result?.promptDeliveryResult).toBe(delivery)
+    expect(mockCreateTab).not.toHaveBeenCalled()
   })
 
   // Why: the store scopes activation to the launch's own workspace, so the floating panel launches

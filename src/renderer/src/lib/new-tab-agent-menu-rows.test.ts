@@ -76,3 +76,37 @@ describe('new tab agent menu rows', () => {
     ])
   })
 })
+
+it('distinguishes unknown inventory, catalog and local defaults from known missing/legacy facts', () => {
+  const input = {
+    settings: { experimentalNativeChat: true },
+    installedHere: null,
+    detectedOnHost: null,
+    chatAgents: ['claude', 'codex'] as const,
+    catalogLoaded: false,
+    hostChatAnswer: () => 'yes' as const
+  }
+  expect(buildNewTabAgentMenuRows(input)).toMatchObject([
+    { agent: 'claude', reason: 'pending' },
+    { agent: 'codex', reason: 'pending' }
+  ])
+  expect(buildNewTabAgentMenuRows({ ...input, detectedOnHost: ['opencode'] })).toMatchObject([
+    { agent: 'claude', reason: 'not-installed' },
+    { agent: 'codex', reason: 'not-installed' },
+    { agent: 'opencode', reason: 'pending' }
+  ])
+  expect(
+    buildNewTabAgentMenuRows({
+      ...input,
+      detectedOnHost: ['opencode'],
+      settings: { ...input.settings, nativeChatProviders: { opencode: false } }
+    })
+  ).toContainEqual({ kind: 'cli', agent: 'opencode' })
+  expect(
+    buildNewTabAgentMenuRows({
+      ...input,
+      detectedOnHost: ['claude'],
+      hostChatAnswer: () => 'no-chats'
+    })
+  ).toEqual([{ kind: 'terminal', agent: 'claude' }])
+})
