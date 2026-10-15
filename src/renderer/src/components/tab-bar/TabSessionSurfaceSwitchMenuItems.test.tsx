@@ -441,7 +441,11 @@ it('lookup deadline reports before releasing its owner, and preparation failure 
     expect(mocks.error).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
       description: 'Conversation lookup timed out.'
     })
-    mocks.launch.mockRejectedValueOnce(new Error('Preparation failed.'))
+    mocks.launch.mockRejectedValueOnce(
+      new Error(
+        "Error invoking remote method 'aiVault:prepareSessionResume': Error: Preparation failed."
+      )
+    )
     await run()
     expect(mocks.error).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
       description: 'Preparation failed.'

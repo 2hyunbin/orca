@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { useAppStore } from '@/store'
 import {
@@ -100,6 +101,7 @@ export function tabSessionSwitchPendingLabel(stage: Stage): string {
 }
 
 function notifyFailure(subject: TabSessionSelectedSource, error: unknown): void {
+  const description = readIpcErrorMessage(error)
   toast.error(
     subject.kind === 'chat'
       ? translate(
@@ -110,7 +112,7 @@ function notifyFailure(subject: TabSessionSelectedSource, error: unknown): void 
           'auto.components.right.sidebar.AiVaultPanel.resumeInChatFailed',
           'Could not resume this session in a new chat.'
         ),
-    error instanceof Error && error.message ? { description: error.message } : undefined
+    description ? { description } : undefined
   )
 }
 

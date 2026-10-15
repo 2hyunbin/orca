@@ -5,6 +5,7 @@ import { launchAiVaultSessionInNewTab } from '@/lib/launch-ai-vault-session'
 import type { AiVaultResumeStartup } from '@/lib/ai-vault-resume-command'
 import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
 import { describeAiVaultResumeFailure } from '@/lib/ai-vault-resume-refusal'
+import { readIpcErrorMessage } from '@/lib/ipc-error'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
@@ -70,7 +71,7 @@ export async function launchAiVaultSessionInTerminal({
           }
           if (outcome.status === 'failed') {
             toast.error(
-              describeFailure(outcome.message) ||
+              readIpcErrorMessage(new Error(describeFailure(outcome.message))) ||
                 translate(
                   'auto.lib.launch.agent.in.new.tab.11cce5cc77',
                   'Could not launch {{value0}} in a new terminal.',
@@ -108,7 +109,8 @@ export function notifyAiVaultSessionPreparationFailure(
   agent: AiVaultAgent,
   describeFailure: (message: string) => string = (message) => message
 ): void {
-  const described = error instanceof Error ? new Error(describeFailure(error.message)) : error
+  const message = readIpcErrorMessage(error)
+  const described = message ? new Error(describeFailure(message)) : undefined
   toast.error(describeAiVaultResumeFailure(described, agent))
 }
 
