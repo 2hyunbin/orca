@@ -364,7 +364,7 @@ describe('a pause only over cards Resume could send', () => {
 })
 
 // This predicate is pure; keeping it outside the integration suite avoids an unused rig.
-describe('a pause only over cards Resume could send', () => {
+describe('comparing queue pauses', () => {
   it('compares a pause by presence before reason, so appearing or clearing is always a change', () => {
     expect(sameQueuePause(null, {})).toBe(false)
     expect(sameQueuePause({}, null)).toBe(false)
