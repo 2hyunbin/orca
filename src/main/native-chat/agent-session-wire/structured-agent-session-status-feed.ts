@@ -320,7 +320,7 @@ export class StructuredAgentSessionStatusFeed {
     sessionId: string,
     session: StatusFeedSession,
     evidence: AgentChildWorkEvidence[],
-    producer: StructuredAgentSessionChildWorkProducer | undefined
+    producer?: StructuredAgentSessionChildWorkProducer
   ): boolean {
     try {
       this.ownership.publishChildWork(sessionId, evidence, session.params.provider)

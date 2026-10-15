@@ -13,6 +13,17 @@ export function journalItemExecutionFence(
   return state.itemExecutionOwners.get(itemId) ?? state.itemFences.get(itemId)
 }
 
+/** The item's creator and, when one said, the run executing it, each as stored. */
+export function journalItemProvenance(
+  state: Pick<JournalReducerState, 'itemFences' | 'itemExecutionOwners'>,
+  itemId: string
+): { ownerFence?: number; executionOwner?: number } {
+  return {
+    ownerFence: state.itemFences.get(itemId),
+    executionOwner: state.itemExecutionOwners.get(itemId)
+  }
+}
+
 /** An existing item keeps its owner whoever revises it: a newer run's start revises the newest saved
  *  turn. Creation states the writer's claim (an observation, carried history), else its fence. */
 export function journalItemOwnerFence(

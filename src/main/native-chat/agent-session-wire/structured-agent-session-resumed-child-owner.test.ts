@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { isBackgroundTaskBlock, isSubagentBlock } from '../../../shared/native-chat-types'
 import {
   ClaudeBackgroundTaskIdentityResolver,
@@ -100,22 +101,39 @@ it('keeps a resumed subagent and background task working when the run that creat
     deferred.close()
   }
 
+  const settleRunOne = () =>
+    settleStaleStructuredAgentSessionState({
+      journal,
+      sessionId: 'session-1',
+      fence: 2,
+      acquisitionGeneration: null,
+      deathEvidence: {
+        kind: 'exit-observed',
+        detail: 'run 1 exited',
+        observedAt: 9_000,
+        ownerFence: 1
+      },
+      below: 2
+    })
   await run()
   fence = 2
   await run()
-  await settleStaleStructuredAgentSessionState({
-    journal,
-    sessionId: 'session-1',
-    fence: 2,
-    acquisitionGeneration: null,
-    deathEvidence: {
-      kind: 'exit-observed',
-      detail: 'run 1 exited',
-      observedAt: 9_000,
-      ownerFence: 1
-    },
-    below: 2
-  })
+  await settleRunOne()
+  // A rewind rebuilds the epoch from these rows with both provenance facts, as it stores them.
+  await journal.replaceEpochItems(
+    'handle_forked',
+    2,
+    journal.snapshot().items.map((item) => {
+      const { ownerFence, executionOwner } = journal.itemProvenance(item.itemId)
+      return {
+        identity: parseAgentJournalItemKey(item.itemId)!,
+        body: journal.itemBody(item.itemId)!,
+        ownerFence: ownerFence ?? 0,
+        ...(executionOwner === undefined ? {} : { executionOwner })
+      }
+    })
+  )
+  await settleRunOne()
 
   const blocks = journal
     .snapshot()

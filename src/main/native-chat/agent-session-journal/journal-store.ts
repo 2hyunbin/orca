@@ -68,7 +68,7 @@ import type {
 import type { JournalSubmissionWriter } from './journal-submission-writer'
 import type { JournalEpochController } from './journal-epoch-controller'
 import { JournalWriteQueue } from './journal-write-queue'
-import { journalItemExecutionFence } from './journal-item-provenance'
+import { journalItemExecutionFence, journalItemProvenance } from './journal-item-provenance'
 import { createJournalStoreCollaborators } from './journal-store-collaborators'
 import type { JournalItemAppender } from './journal-item-appender'
 import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
@@ -251,6 +251,9 @@ export class AgentSessionJournal {
   /** Whose execution the item is now, while it is in the timeline: the run a reusable child's row
    *  last named (`JournalItemRow.executionOwner`), else its creator (`JournalItemRow.ownerFence`). */
   itemFence = (itemId: string): number | undefined => journalItemExecutionFence(this.state, itemId)
+
+  /** Both provenance facts as stored, for a rebuild that writes them again. */
+  itemProvenance = (itemId: string) => journalItemProvenance(this.state, itemId)
 
   /** Latest saved output at this fence, excluding client actions and recovery bookkeeping. */
   lastProviderActivityAt = (fence: number) => this.state.providerActivityAt.get(fence)

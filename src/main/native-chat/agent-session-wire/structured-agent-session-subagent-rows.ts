@@ -32,11 +32,13 @@ import {
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type {
   StructuredAgentSessionEventSink,
+  StructuredAgentSessionSinkAdmission,
   StructuredAgentSessionSinkBarrier
 } from './structured-agent-session-event-sink'
 
 const UNNAMED = 'subagent'
 const LANDED: StructuredAgentSessionSinkBarrier = { ok: true }
+const LANDED_ADMISSION: StructuredAgentSessionSinkAdmission = { accepted: true }
 const THREAD_GROUP = 'thread'
 
 /** A child's view, with the host-only facts its saved row also keeps. */
@@ -46,7 +48,7 @@ export type AgentChildWorkRowView = AgentChildWorkView &
 /** The child-bound write path of the child whose report changed the records. */
 export type StructuredAgentSessionChildWorkProducer = Pick<
   StructuredAgentSessionEventSink,
-  'appendItem' | 'written'
+  'appendItem' | 'tryAppendItem' | 'written'
 >
 
 type Row = {
@@ -141,25 +143,53 @@ export class StructuredAgentSessionSubagentRows {
           [...rows].map(([id, row]) => {
             const identity = subagentJournalItemIdentity(id)
             const body = subagentJournalBody(row.block)
-            if (!row.producer) {
-              return journal
-                .appendItem(identity, body, {
-                  fence: this.deps.fence(sessionId),
-                  turnScope: row.turnScope
-                })
-                .catch((error: unknown) => this.deps.onWriteFailed(sessionId, error))
+            if (row.producer) {
+              return this.writeThrough(sessionId, id, row, row.producer)
             }
-            row.producer.appendItem(identity, body, { turnScope: row.turnScope, executes: true })
-            return (row.producer.written?.() ?? Promise.resolve(LANDED)).then((landed) => {
-              if (!landed.ok) {
-                this.deps.onWriteFailed(sessionId, landed.error)
-              }
-            })
+            return journal
+              .appendItem(identity, body, {
+                fence: this.deps.fence(sessionId),
+                turnScope: row.turnScope
+              })
+              .catch((error: unknown) => this.deps.onWriteFailed(sessionId, error))
           })
         )
       }
     } finally {
       this.writing.delete(sessionId)
+    }
+  }
+
+  /** Through the reporting child's sink, in its order and at its fence. A write it refuses under
+   *  backpressure is queued again once what it holds has landed; any failure frees the claim. */
+  private async writeThrough(
+    sessionId: string,
+    id: string,
+    row: Row,
+    producer: StructuredAgentSessionChildWorkProducer
+  ): Promise<void> {
+    const identity = subagentJournalItemIdentity(id)
+    const body = subagentJournalBody(row.block)
+    const options = { turnScope: row.turnScope, executes: true as const }
+    const admission = producer.tryAppendItem
+      ? producer.tryAppendItem(identity, body, options)
+      : (producer.appendItem(identity, body, options), LANDED_ADMISSION)
+    const landed = await (producer.written?.() ?? Promise.resolve(LANDED))
+    if (admission.accepted && landed.ok) {
+      return
+    }
+    this.claimed.get(producer)?.delete(id)
+    if (!landed.ok) {
+      this.deps.onWriteFailed(sessionId, landed.error)
+    } else if (!admission.accepted && admission.reason === 'backpressure') {
+      const queued = this.queued.get(sessionId) ?? new Map<string, Row>()
+      // A newer report of the same subagent supersedes this one.
+      if (!queued.has(id)) {
+        queued.set(id, row)
+      }
+      this.queued.set(sessionId, queued)
+    } else if (!admission.accepted) {
+      this.deps.onWriteFailed(sessionId, new Error(`the sink refused the row: ${admission.reason}`))
     }
   }
 
