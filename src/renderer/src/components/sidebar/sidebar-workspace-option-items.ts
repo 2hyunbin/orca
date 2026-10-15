@@ -137,19 +137,10 @@ export const PROPERTY_OPTIONS = localizeChoices<ChoiceId<typeof WORKSPACE_CARD_P
     ports: () =>
       translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.b64d8bcca0', 'Ports'),
     'inline-agents': () =>
-      translate(
-        'auto.components.sidebar.SidebarWorkspaceOptionsMenu.d7084e8bc8',
-        'Agent activity'
-      ),
+      translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.d7084e8bc8', 'Agent activity'),
     host: () => translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host')
   }
 )
-
-export type WorktreeCardPropertyOption = {
-  id: string
-  properties: readonly WorktreeCardProperty[]
-  readonly label: string
-}
 
 const CARD_DISPLAY_LABELS: Record<
   ChoiceId<typeof WORKSPACE_CARD_DISPLAY_CHOICES>,
@@ -166,8 +157,7 @@ const CARD_DISPLAY_LABELS: Record<
   automation: () =>
     translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.automation', 'Automation'),
   cli: () => translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.cli', 'Orca CLI'),
-  ports: () =>
-    translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.2d74665a56', 'Ports'),
+  ports: () => translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.2d74665a56', 'Ports'),
   'inline-agents': () =>
     translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.65a9820bd1', 'Agent statuses'),
   host: () => translate('auto.components.sidebar.SidebarWorkspaceOptionsMenu.host', 'Host'),
@@ -183,12 +173,11 @@ const CARD_DISPLAY_LABELS: Record<
 /** "Card display" rows for the experimental card style. */
 export function getWorktreeCardDisplayOptions(
   hasProjectGroups: boolean
-): WorktreeCardPropertyOption[] {
-  return WORKSPACE_CARD_DISPLAY_CHOICES.map((choice) => ({
-    id: choice.id,
-    properties: choice.properties,
+): { id: WorktreeCardProperty; readonly label: string }[] {
+  return WORKSPACE_CARD_DISPLAY_CHOICES.map(({ id }) => ({
+    id,
     get label() {
-      return CARD_DISPLAY_LABELS[choice.id](hasProjectGroups)
+      return CARD_DISPLAY_LABELS[id](hasProjectGroups)
     }
   }))
 }

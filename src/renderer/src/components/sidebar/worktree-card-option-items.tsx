@@ -27,17 +27,14 @@ function boardAttr(preserveWorkspaceBoardOpen: boolean): '' | undefined {
   return preserveWorkspaceBoardOpen ? '' : undefined
 }
 
-function useToggleCardProperties(): (
-  properties: readonly WorktreeCardProperty[],
-  checked: boolean
-) => void {
+function useToggleCardProperty(): (property: WorktreeCardProperty, checked: boolean) => void {
   const worktreeCardProperties = useAppStore((s) => s.worktreeCardProperties)
   const setWorktreeCardProperties = useAppStore((s) => s.setWorktreeCardProperties)
   return useCallback(
-    (properties, checked) => {
+    (property, checked) => {
       const next = checked
-        ? [...worktreeCardProperties, ...properties]
-        : worktreeCardProperties.filter((property) => !properties.includes(property))
+        ? [...worktreeCardProperties, property]
+        : worktreeCardProperties.filter((candidate) => candidate !== property)
       setWorktreeCardProperties(next)
     },
     [setWorktreeCardProperties, worktreeCardProperties]
@@ -50,7 +47,7 @@ export function WorktreeCardDisplayMenuItem({
 }: CardMenuItemProps): React.JSX.Element {
   const worktreeCardProperties = useAppStore((s) => s.worktreeCardProperties)
   const hasProjectGroups = useAppStore((s) => s.projectGroups.length > 0)
-  const toggleProperties = useToggleCardProperties()
+  const toggleProperty = useToggleCardProperty()
   const options = useMemo(() => getWorktreeCardDisplayOptions(hasProjectGroups), [hasProjectGroups])
   return (
     <DropdownMenuSub>
@@ -69,8 +66,8 @@ export function WorktreeCardDisplayMenuItem({
         {options.map((opt) => (
           <DropdownMenuCheckboxItem
             key={opt.id}
-            checked={opt.properties.every((property) => worktreeCardProperties.includes(property))}
-            onCheckedChange={(checked) => toggleProperties(opt.properties, checked === true)}
+            checked={worktreeCardProperties.includes(opt.id)}
+            onCheckedChange={(checked) => toggleProperty(opt.id, checked === true)}
             onSelect={(e) => e.preventDefault()}
           >
             {opt.label}
@@ -133,7 +130,7 @@ export function WorktreeCardPropertiesMenuItem({
   const compact = useAppStore((s) => s.settings?.compactWorktreeCards === true)
   const agentActivityDisplayMode = useAppStore((s) => s.agentActivityDisplayMode)
   const setAgentActivityDisplayMode = useAppStore((s) => s.setAgentActivityDisplayMode)
-  const toggleProperties = useToggleCardProperties()
+  const toggleProperty = useToggleCardProperty()
   const visiblePropertyCount = PROPERTY_OPTIONS.filter((opt) =>
     worktreeCardProperties.includes(opt.id)
   ).length
@@ -166,7 +163,7 @@ export function WorktreeCardPropertiesMenuItem({
           <DropdownMenuCheckboxItem
             key={opt.id}
             checked={worktreeCardProperties.includes(opt.id)}
-            onCheckedChange={(checked) => toggleProperties([opt.id], checked === true)}
+            onCheckedChange={(checked) => toggleProperty(opt.id, checked === true)}
             onSelect={(e) => e.preventDefault()}
           >
             {opt.label}

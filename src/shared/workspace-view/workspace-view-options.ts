@@ -5,9 +5,9 @@ import type {
   WorktreeCardProperty
 } from '../ui-chrome-types'
 
-// The desktop sidebar's "Workspace options", as data. The desktop menu and the phone sheet both
-// render from this list, each through a renderer table keyed on WorkspaceViewOptionKey, so an
-// option added here fails to compile until both surfaces render it.
+// The desktop sidebar's "Workspace options", as data. Each surface renders this list through a
+// table keyed on WorkspaceViewOptionKey, so an option added here fails to compile until it renders.
+// The labels are the English copy; the desktop localizes its own, checked equal by a test.
 
 export type WorkspaceViewChoice<Id extends string> = {
   id: Id
@@ -49,8 +49,6 @@ export const WORKSPACE_CARD_LAYOUT_CHOICES = [
   { id: 'compact', label: 'Compact' }
 ] as const satisfies readonly WorkspaceViewChoice<string>[]
 
-export type WorkspaceCardLayout = (typeof WORKSPACE_CARD_LAYOUT_CHOICES)[number]['id']
-
 export const WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES = [
   { id: 'compact', label: 'Compact' },
   { id: 'full', label: 'Full list' }
@@ -71,22 +69,25 @@ export const WORKSPACE_CARD_PROPERTY_CHOICES = [
 
 /** "Card display" (the experimental card style). */
 export const WORKSPACE_CARD_DISPLAY_CHOICES = [
-  { id: 'issue', properties: ['issue'], label: 'GitHub issues' },
-  { id: 'linear-issue', properties: ['linear-issue'], label: 'Linear issues' },
-  { id: 'jira-issue', properties: ['jira-issue'], label: 'Jira issues' },
-  { id: 'comment', properties: ['comment'], label: 'Notes' },
-  { id: 'automation', properties: ['automation'], label: 'Automation' },
-  { id: 'cli', properties: ['cli'], label: 'Orca CLI' },
-  { id: 'ports', properties: ['ports'], label: 'Ports' },
-  { id: 'inline-agents', properties: ['inline-agents'], label: 'Agent statuses' },
-  { id: 'host', properties: ['host'], label: 'Host' },
-  { id: 'branch', properties: ['branch'], label: 'Branch name' }
-] as const satisfies readonly (WorkspaceViewChoice<WorktreeCardProperty> & {
-  properties: readonly WorktreeCardProperty[]
-})[]
+  { id: 'issue', label: 'GitHub issues' },
+  { id: 'linear-issue', label: 'Linear issues' },
+  { id: 'jira-issue', label: 'Jira issues' },
+  { id: 'comment', label: 'Notes' },
+  { id: 'automation', label: 'Automation' },
+  { id: 'cli', label: 'Orca CLI' },
+  { id: 'ports', label: 'Ports' },
+  { id: 'inline-agents', label: 'Agent statuses' },
+  { id: 'host', label: 'Host' },
+  { id: 'branch', label: 'Branch name' }
+] as const satisfies readonly WorkspaceViewChoice<WorktreeCardProperty>[]
 
-/** Why: project groups can hold folder workspaces, whose identity is a path, not a branch. */
-export const WORKSPACE_CARD_DISPLAY_FOLDER_BRANCH_LABEL = 'Branch / folder path'
+/** Project groups can hold folder workspaces, whose identity is a path, not a branch. */
+export function getWorkspaceCardDisplayChoiceLabel(
+  choice: (typeof WORKSPACE_CARD_DISPLAY_CHOICES)[number],
+  hasProjectGroups: boolean
+): string {
+  return choice.id === 'branch' && hasProjectGroups ? 'Branch / folder path' : choice.label
+}
 
 export type WorkspaceViewSection = 'show' | 'group' | 'arrange' | 'filters'
 
@@ -104,6 +105,7 @@ export const WORKSPACE_VIEW_OPTIONS = [
   { key: 'sortBy', section: 'arrange', label: 'Sort by' },
   { key: 'projectOrderBy', section: 'arrange', label: 'Project order' },
   { key: 'cardLayout', section: 'arrange', label: 'Card layout' },
+  // Also holds the agent activity layout choice.
   { key: 'cardProperties', section: 'arrange', label: 'Show properties' },
   { key: 'cardDisplay', section: 'arrange', label: 'Card display' },
   { key: 'hideSleepingWorkspaces', section: 'filters', label: 'Hide sleeping' },
@@ -148,7 +150,6 @@ const SHOWN: Record<WorkspaceViewOptionKey, (context: WorkspaceViewOptionContext
   projects: (context) => context.projectCount > 1,
   groupBy: () => true,
   sortBy: () => true,
-  // Why: project order only shows when grouping by project.
   projectOrderBy: (context) => context.groupBy === 'repo',
   cardLayout: (context) => !context.newCardStyle,
   cardProperties: (context) => !context.newCardStyle,
