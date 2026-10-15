@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { sidebarHasActiveFilters } from './visible-worktrees'
-import { clearSidebarFilters, type SidebarFilterSetters } from './sidebar-filter-actions'
+import {
+  clearSidebarFilters,
+  sidebarHasActiveFilters,
+  type SidebarFilterSetters
+} from './sidebar-filter-actions'
 import { isDefaultBranchWorkspace } from '../../../../shared/worktree/workspace-kinds'
 import type { Worktree } from '../../../../shared/worktree/types'
 
