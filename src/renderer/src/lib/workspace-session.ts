@@ -111,6 +111,16 @@ type _MissingSessionField = Exclude<
 >
 void (true satisfies [_MissingSessionField] extends [never] ? true : never)
 
+/** Whether a restart checkpoint carries this file's unsaved draft; the restart owner and the
+ *  session builder both decide with this, so they can't disagree about what survives. */
+export function isEditorDraftBackedUp(
+  file: OpenFile,
+  editorDrafts: Record<string, string>
+): boolean {
+  // Why: never persist a dirty draft for a read-only tab — restoring one would reintroduce writable/hot-exit state for an agent transcript.
+  return file.mode === 'edit' && file.readOnly !== true && editorDrafts[file.id] !== undefined
+}
+
 /** Build the editor-file portion of the workspace session for persistence.
  *  Only edit-mode files are saved — diffs and conflict views are transient. */
 export function buildEditorSessionData(
@@ -131,8 +141,8 @@ export function buildEditorSessionData(
   const editFileIdsByWorktree: Record<string, Set<string>> = {}
   for (const f of editFiles) {
     const arr = byWorktree[f.worktreeId] ?? (byWorktree[f.worktreeId] = [])
-    // Why: never persist a dirty draft for a read-only tab — restoring one would reintroduce writable/hot-exit state for an agent transcript.
-    const dirtyDraftContent = f.isDirty && f.readOnly !== true ? editorDrafts[f.id] : undefined
+    const dirtyDraftContent =
+      f.isDirty && isEditorDraftBackedUp(f, editorDrafts) ? editorDrafts[f.id] : undefined
     arr.push({
       filePath: f.filePath,
       relativePath: f.relativePath,

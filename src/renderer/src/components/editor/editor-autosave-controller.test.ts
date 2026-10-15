@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createStore, type StoreApi } from 'zustand/vanilla'
-import { createEditorSlice } from '@/store/slices/editor'
+import { createEditorSlice, type OpenFile } from '@/store/slices/editor'
 import type { AppState } from '@/store'
+import { ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
+import { requestEditorHotExitBackup } from '../../../../shared/editor-hot-exit-request'
+import { isRestartCancelledByUser } from '../../../../shared/app-restart-cancellation'
 import {
-  ORCA_EDITOR_PREPARE_HOT_EXIT_EVENT,
-  ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT
-} from '../../../../shared/editor-save-events'
+  answerRestartUnsavedChangesRequest,
+  getRestartUnsavedChangesFilePaths,
+  subscribeRestartUnsavedChangesRequest
+} from './restart-unsaved-changes-dialog'
 import { requestEditorFileSave, requestEditorSaveQuiesce } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
 import { registerPendingEditorFlush } from './editor-pending-flush'
@@ -84,25 +88,50 @@ async function requestDirtyFileSave(): Promise<void> {
   })
 }
 
-async function requestEditorHotExitBackup(): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    let claimed = false
-    window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_PREPARE_HOT_EXIT_EVENT, {
-        detail: {
-          claim: () => {
-            claimed = true
-          },
-          resolve,
-          reject: (message: string) => reject(new Error(message))
-        }
-      })
-    )
-
-    if (!claimed) {
-      resolve()
+// Why: the preload world hands the page a structured clone of an event's detail, and back.
+class IsolatedWorldEventTarget extends EventTarget {
+  override dispatchEvent(event: Event): boolean {
+    if (!('detail' in event)) {
+      return super.dispatchEvent(event)
     }
+    return super.dispatchEvent(
+      new CustomEvent(event.type, { detail: structuredClone(event.detail) })
+    )
+  }
+}
+
+function stubIsolatedWorldWindow(writeFile: ReturnType<typeof vi.fn>): EventTarget {
+  const eventTarget = new IsolatedWorldEventTarget()
+  vi.stubGlobal('window', {
+    addEventListener: eventTarget.addEventListener.bind(eventTarget),
+    removeEventListener: eventTarget.removeEventListener.bind(eventTarget),
+    dispatchEvent: eventTarget.dispatchEvent.bind(eventTarget),
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    api: { fs: { writeFile } }
+  } satisfies WindowStub)
+  return eventTarget
+}
+
+function openDirtyFile(
+  store: StoreApi<AppState>,
+  relativePath: string,
+  draft: string,
+  diffSource?: 'unstaged' | 'staged'
+): void {
+  const filePath = `/repo/${relativePath}`
+  const surface: Pick<OpenFile, 'mode' | 'diffSource'> = diffSource
+    ? { mode: 'diff', diffSource }
+    : { mode: 'edit' }
+  store.getState().openFile({
+    filePath,
+    relativePath,
+    worktreeId: 'wt-1',
+    language: 'typescript',
+    ...surface
   })
+  store.getState().setEditorDraft(filePath, draft)
+  store.getState().markFileDirty(filePath, true)
 }
 
 function makeSessionReadyState(): Partial<AppState> {
@@ -555,84 +584,72 @@ describe('attachEditorAutosaveController', () => {
     }
   })
 
-  it('leaves dirty editor drafts ready for the combined hot-exit checkpoint', async () => {
-    const writeFile = vi.fn().mockResolvedValue(undefined)
-    const eventTarget = new EventTarget()
-    vi.stubGlobal('window', {
-      addEventListener: eventTarget.addEventListener.bind(eventTarget),
-      removeEventListener: eventTarget.removeEventListener.bind(eventTarget),
-      dispatchEvent: eventTarget.dispatchEvent.bind(eventTarget),
-      setTimeout: globalThis.setTimeout.bind(globalThis),
-      clearTimeout: globalThis.clearTimeout.bind(globalThis),
-      api: {
-        fs: {
-          writeFile
-        }
-      }
-    } satisfies WindowStub)
-
+  it('saves what autosave can before a restart, then asks once about what the restart cannot keep', async () => {
+    // Why: b.ts stands for a save that never finishes, such as one to an unreachable SSH host.
+    const writeFile = vi
+      .fn()
+      .mockImplementation(({ filePath }: { filePath: string }) =>
+        filePath === '/repo/b.ts' ? new Promise<void>(() => undefined) : Promise.resolve()
+      )
+    const eventTarget = stubIsolatedWorldWindow(writeFile)
     const store = createEditorStore()
     store.setState(makeSessionReadyState())
-    store.getState().openFile({
-      filePath: '/repo/file.md',
-      relativePath: 'file.md',
-      worktreeId: 'wt-1',
-      language: 'markdown',
-      mode: 'edit'
-    })
-    store.getState().setEditorDraft('/repo/file.md', '')
-    store.getState().markFileDirty('/repo/file.md', true)
-
+    openDirtyFile(store, 'a.ts', 'saved before restart')
+    openDirtyFile(store, 'b.ts', 'stalled save', 'unstaged')
+    const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
     const cleanup = attachEditorAutosaveController(store)
     try {
-      await requestEditorHotExitBackup()
-      await vi.advanceTimersByTimeAsync(1000)
+      const outcome = requestEditorHotExitBackup(eventTarget, true).then(
+        () => 'restarted',
+        (error: unknown) => error
+      )
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(getRestartUnsavedChangesFilePaths()).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
 
-      expect(writeFile).not.toHaveBeenCalled()
-      expect(store.getState().openFiles[0]?.isDirty).toBe(true)
-      expect(store.getState().editorDrafts['/repo/file.md']).toBe('')
+      expect(store.getState().openFiles.find((file) => file.relativePath === 'a.ts')?.isDirty).toBe(
+        false
+      )
+      expect(getRestartUnsavedChangesFilePaths()).toEqual(['b.ts'])
+      answerRestartUnsavedChangesRequest('cancel')
+
+      expect(isRestartCancelledByUser(await outcome)).toBe(true)
+      expect(store.getState().editorDrafts['/repo/b.ts']).toBe('stalled save')
     } finally {
       cleanup()
+      unsubscribeDialog()
     }
   })
 
-  it('rejects hot exit for dirty non-edit files that cannot be restored', async () => {
-    const writeFile = vi.fn().mockResolvedValue(undefined)
-    const eventTarget = new EventTarget()
-    vi.stubGlobal('window', {
-      addEventListener: eventTarget.addEventListener.bind(eventTarget),
-      removeEventListener: eventTarget.removeEventListener.bind(eventTarget),
-      dispatchEvent: eventTarget.dispatchEvent.bind(eventTarget),
-      setTimeout: globalThis.setTimeout.bind(globalThis),
-      clearTimeout: globalThis.clearTimeout.bind(globalThis),
-      api: {
-        fs: {
-          writeFile
-        }
-      }
-    } satisfies WindowStub)
-
+  it('asks again when unsaved files join while the dialog is open; automatic restarts never ask', async () => {
+    const eventTarget = stubIsolatedWorldWindow(vi.fn().mockResolvedValue(undefined))
     const store = createEditorStore()
     store.setState(makeSessionReadyState())
-    store.getState().openFile({
-      filePath: '/repo/file.md',
-      relativePath: 'file.md',
-      worktreeId: 'wt-1',
-      language: 'markdown',
-      mode: 'diff',
-      diffSource: 'unstaged'
-    } as never)
-    store.getState().setEditorDraft('/repo/file.md', 'diff edit')
-    store.getState().markFileDirty('/repo/file.md', true)
-
+    openDirtyFile(store, 'c.ts', 'staged edit', 'staged')
+    const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
     const cleanup = attachEditorAutosaveController(store)
     try {
-      await expect(requestEditorHotExitBackup()).rejects.toThrow(
+      await expect(requestEditorHotExitBackup(eventTarget, false)).rejects.toThrow(
         'Some unsaved editor changes cannot be backed up before restart.'
       )
-      expect(writeFile).not.toHaveBeenCalled()
+      expect(getRestartUnsavedChangesFilePaths()).toBeNull()
+
+      const outcome = requestEditorHotExitBackup(eventTarget, true).then(
+        () => 'restarted',
+        (error: unknown) => error
+      )
+      await vi.advanceTimersByTimeAsync(0)
+      expect(getRestartUnsavedChangesFilePaths()).toEqual(['c.ts'])
+      openDirtyFile(store, 'd.ts', 'late edit', 'staged')
+      answerRestartUnsavedChangesRequest('restart-anyway')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(getRestartUnsavedChangesFilePaths()).toEqual(['c.ts', 'd.ts'])
+      answerRestartUnsavedChangesRequest('restart-anyway')
+      expect(await outcome).toBe('restarted')
     } finally {
       cleanup()
+      unsubscribeDialog()
     }
   })
 

@@ -13,6 +13,7 @@ import {
   isHttp2ProtocolError,
   isUpdateCardVisible
 } from './maintenance/update-card/update-card-visibility'
+import { isRestartCancelledByUser } from '../../../shared/app-restart-cancellation'
 
 export { isHttp2ProtocolError }
 
@@ -78,7 +79,9 @@ export function UpdateCard(): React.JSX.Element | null {
   useEffect(() => {
     if (status.state === 'downloaded' && hasStartedDownload.current) {
       void window.api.updater.quitAndInstall().catch((error) => {
-        setInstallError(String((error as Error)?.message ?? error))
+        if (!isRestartCancelledByUser(error)) {
+          setInstallError(error instanceof Error ? error.message : String(error))
+        }
       })
     }
   }, [status.state])
@@ -128,7 +131,9 @@ export function UpdateCard(): React.JSX.Element | null {
   }
   const handleInstallRetry = (): void => {
     void window.api.updater.quitAndInstall().catch((error) => {
-      setInstallError(String((error as Error)?.message ?? error))
+      if (!isRestartCancelledByUser(error)) {
+        setInstallError(error instanceof Error ? error.message : String(error))
+      }
     })
   }
   const handleEnableHttp1Compatibility = (): void => {
@@ -141,10 +146,13 @@ export function UpdateCard(): React.JSX.Element | null {
       .set({ electronHttp1CompatibilityMode: true })
       .then(() => window.api.app.relaunch())
       .catch((error) => {
-        const message = String((error as Error)?.message ?? error)
+        setCompatibilityRelaunching(false)
+        if (isRestartCancelledByUser(error)) {
+          return
+        }
+        const message = error instanceof Error ? error.message : String(error)
         console.error('[updates] failed to enable HTTP/1.1 compatibility:', error)
         setCompatibilitySetupError(`Could not enable compatibility mode. ${message}`)
-        setCompatibilityRelaunching(false)
       })
   }
   const errorCard = buildUpdateCardErrorModel({

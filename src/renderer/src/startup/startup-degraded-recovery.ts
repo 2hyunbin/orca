@@ -6,6 +6,7 @@ import {
   collectTerminalProviderSnapshotPtyIds,
   refreshTerminalProviderSnapshotCapabilities
 } from '../components/terminal/terminal-provider-snapshot-capability'
+import { isRestartCancelledByUser } from '../../../shared/app-restart-cancellation'
 
 type DegradedStartupRecoveryArgs = {
   error: unknown
@@ -76,7 +77,11 @@ export async function recoverFromDegradedStartup(args: DegradedStartupRecoveryAr
     action: {
       label: translate('auto.App.caea5b51b9', 'Restart now'),
       onClick: () => {
-        void window.api.app.relaunch()
+        void window.api.app.relaunch().catch((error) => {
+          if (!isRestartCancelledByUser(error)) {
+            console.error('[startup] relaunch from degraded mode failed', error)
+          }
+        })
       }
     }
   })
