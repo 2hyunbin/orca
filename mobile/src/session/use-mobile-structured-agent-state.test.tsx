@@ -210,11 +210,15 @@ describe('useMobileStructuredAgentState live feed', () => {
         page: { ...page([said(58), said(59)], false), liveCursor: cursorAt(59) }
       })
     )
-    await act(() => vi.advanceTimersByTimeAsync(100))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
 
     // The phone's bridge ends a stream past its backlog limit with an error frame.
     act(() => streams[0].frame({ type: 'error', message: 'Stream ended' }))
-    await act(() => vi.advanceTimersByTimeAsync(750))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750)
+    })
     await vi.waitFor(() => expect(streams).toHaveLength(2))
     expect(streams[1].params).toEqual({ sessionId: 'session-1', cursor: cursorAt(59) })
     act(() =>
@@ -229,7 +233,9 @@ describe('useMobileStructuredAgentState live feed', () => {
         }
       })
     )
-    await act(() => vi.advanceTimersByTimeAsync(100))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
     expect(hook.current!.state.items.map((item) => item.sequence)).toEqual([58, 59, 60, 61])
     expect(hook.current!.state.error).toBeUndefined()
 
