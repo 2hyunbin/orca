@@ -175,6 +175,7 @@ describe('a worker cannot tell which mode it is running in', () => {
     from: string
     coordinatorPaneKey: string
   }) {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mode selection reads only getSettings; all worker execution surfaces are stubbed below.
     vi.spyOn(runtime, 'requireStore').mockReturnValue({ getSettings: () => args.settings } as never)
     const runId = db.createRun({
       objective: 'mode opacity',

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { create } from 'zustand'
 import type { AppState } from '../types'
 import type { Repo } from '../../../../shared/repo-types'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../../shared/constants'
 import { readNativeDetectedAgents } from './local-detected-agent-store-state'
 import { createDetectedAgentsSlice } from './detected-agents'
 
@@ -34,14 +34,21 @@ function createTestStore(repos: Repo[]) {
     repos,
     projects: repos.map((repo) => ({
       id: repo.id,
-      repoId: repo.id,
-      localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
+      displayName: repo.displayName,
+      badgeColor: repo.badgeColor,
+      sourceRepoIds: [repo.id],
+      createdAt: 0,
+      updatedAt: 0,
+      localWindowsRuntimePreference: { kind: 'wsl' as const, distro: 'Ubuntu' }
     })),
-    settings: { localWindowsRuntimeDefault: { kind: 'windows-host' } },
+    settings: {
+      ...getDefaultSettings('/tmp'),
+      localWindowsRuntimeDefault: { kind: 'windows-host' }
+    },
     worktreesByRepo: {},
     activeRepoId: repos[0]?.id ?? null,
     activeWorktreeId: null
-  } as Partial<AppState>)
+  })
   return store
 }
 
