@@ -92,6 +92,13 @@ describe('buildWorkspaceDetailLinks', () => {
     })
   })
 
+  it('never opens a non-web link the host sends for the branch PR', () => {
+    const [pr] = buildWorkspaceDetailLinks(
+      row({ linkedPR: { number: 3, state: 'open', url: 'javascript:alert(1)' } })
+    )
+    expect(pr).toMatchObject({ label: 'PR #3', url: undefined })
+  })
+
   it('names a GitLab review an MR', () => {
     expect(buildWorkspaceDetailLinks(row({ linkedGitLabMR: 5 }))[0]).toMatchObject({
       label: 'MR !5',

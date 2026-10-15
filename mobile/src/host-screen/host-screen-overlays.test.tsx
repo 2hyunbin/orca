@@ -91,9 +91,13 @@ describe('the workspace long-press sheet', () => {
   })
 
   it('marks Pin with the pin icon, and Unpin with the crossed-out one', async () => {
-    const { sheet } = await renderSheet({})
-    const pin = sheet.props.actions.find((action: { label: string }) => action.label === 'Pin')
-    expect(pin.icon).toBe('Pin')
+    const icon = async (row: Partial<Worktree>, label: string) =>
+      (await renderSheet(row)).sheet.props.actions.find(
+        (action: { label: string }) => action.label === label
+      ).icon
+    expect(await icon({}, 'Pin')).toBe('Pin')
+    act(() => renderer?.unmount())
+    expect(await icon({ isPinned: true }, 'Unpin')).toBe('PinOff')
   })
 
   it("shows the workspace's details above its actions", async () => {

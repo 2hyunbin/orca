@@ -57,7 +57,7 @@ export function buildWorkspaceDetailLinks(row: Worktree): WorkspaceDetailLink[] 
   const pr = row.linkedPR
   const links = getWorkspaceAttachments({
     // Rows arrive unvalidated; the shared reader drops entries it cannot place.
-    linkedItems: Array.isArray(row.linkedItems) ? row.linkedItems : undefined,
+    linkedItems: row.linkedItems,
     linkedPR: pr?.number ?? null,
     linkedIssue: row.linkedIssue ?? null,
     linkedGitLabMR: row.linkedGitLabMR ?? null,

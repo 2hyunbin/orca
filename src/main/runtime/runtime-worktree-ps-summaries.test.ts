@@ -215,7 +215,8 @@ describe('buildRuntimeWorktreePsSummaries', () => {
       childWorktreeIds: [],
       lineage: null,
       lastActivityAt: 0,
-      automationProvenance: { kind: 'created-by-automation' }
+      // Blank reads as no name.
+      automationProvenance: { kind: 'created-by-automation', automationNameSnapshot: '   ' }
     } as unknown as ResolvedWorktree
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the builder reads only these store members.
     const store = {

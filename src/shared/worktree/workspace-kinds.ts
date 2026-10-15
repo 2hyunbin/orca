@@ -119,8 +119,9 @@ export function getWorkspaceRowKindFacts(
   const automationName = typeof snapshot === 'string' ? snapshot.trim() : ''
   return {
     defaultBranch: isDefaultBranchWorkspace(worktree, repo),
-    ...(isAutomationGeneratedWorkspace(worktree) ? { automationCreated: true } : {}),
-    ...(isAutomationGeneratedWorkspace(worktree) && automationName ? { automationName } : {}),
+    ...(isAutomationGeneratedWorkspace(worktree)
+      ? { automationCreated: true, ...(automationName ? { automationName } : {}) }
+      : {}),
     ...(isCliCreatedWorkspace(worktree) ? { cliCreated: true } : {}),
     ...(isDetachedHeadWorkspace(worktree) ? { detachedHead: true } : {})
   }
