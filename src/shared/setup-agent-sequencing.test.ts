@@ -329,6 +329,23 @@ describe('createSequencedSetupAgentCommands', () => {
     expect(setupPowerShell).not.toMatch(/Set-ExecutionPolicy/i)
   })
 
+  it("keeps main's gate on a cmd pane only for a command cmd cannot read as one line", () => {
+    const gate = (startupCommand: string, startupShell?: 'cmd') =>
+      createSequencedSetupAgentCommands({
+        runnerScriptPath: 'C:\\repo\\setup-runner.cmd',
+        startupCommand,
+        platform: 'windows',
+        startupShell,
+        nonce: 'budget'
+      }).startupCommand
+    for (const tooLongOrMultiLine of [`agent "${'x'.repeat(6000)}"`, 'agent "one\ntwo"']) {
+      expect(gate(tooLongOrMultiLine, 'cmd')).toBe(gate(tooLongOrMultiLine))
+    }
+    expect(gate(`agent "${'x'.repeat(4000)}"`, 'cmd')).toMatch(
+      / && %ORCA_SEQUENCED_STARTUP_COMMAND%$/
+    )
+  })
+
   it('launches a batch runner through the cmd launcher inside a Git Bash gate', () => {
     // Regression (#6896): a Git Bash terminal with a batch setup script still gets a .cmd
     // runner, and the gate must not hand that runner to bash. The gate itself stays POSIX

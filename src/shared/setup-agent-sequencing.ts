@@ -11,8 +11,11 @@ import {
 import { createNonSecureContextUuid } from './non-secure-context-uuid'
 import { quotePowerShellLiteral } from './powershell-native-argument'
 import type { AgentStartupShell } from './tui-agent-startup-shell'
+import { CMD_UTF8_SETUP_COMMAND, fitsCmdLine } from './windows-cmd-line-limit'
 
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 2 * 60 * 60
+// Why: after the gate is built the host may append ` --teammate-mode in-process` (27 chars).
+const HOST_REWRITE_RESERVE_CHARS = 32
 // Exported so the gate and its tests share one definition.
 export const SETUP_COMPLETE_MESSAGE = 'Setup finished; starting agent.'
 export const SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV = 'ORCA_SEQUENCED_STARTUP_COMMAND'
@@ -62,6 +65,12 @@ export function createSequencedSetupAgentCommands(args: {
   const waitTimeoutSeconds = args.waitTimeoutSeconds ?? DEFAULT_WAIT_TIMEOUT_SECONDS
 
   if (resolution.shell === 'windows' && !posixGateForWindowsRunner) {
+    const startupEnv = { [SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV]: args.startupCommand }
+    const waitOnly = `${buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, false)} && %${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}%`
+    const paneLine = `${CMD_UTF8_SETUP_COMMAND} & ${waitOnly}`
+    // TEMPORARY until draft routing moves long text off the cmd line: else main's gate runs it.
+    const cmdReadsCommand =
+      args.startupShell === 'cmd' && fitsCmdLine(paneLine, startupEnv, HOST_REWRITE_RESERVE_CHARS)
     return {
       setupCommand: buildWindowsSetupCommand(
         resolution.runnerScriptPathForShell,
@@ -71,13 +80,10 @@ export function createSequencedSetupAgentCommands(args: {
       // Why: a cmd-quoted command must be read by cmd, so the gate only waits and the pane runs
       // it; cmd expands the variable before parsing the line.
       // Expansion is one pass, so a %NAME% inside the command itself stays literal.
-      startupCommand:
-        args.startupShell === 'cmd'
-          ? `${buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, false)} && %${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}%`
-          : buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, true),
-      startupEnv: {
-        [SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV]: args.startupCommand
-      }
+      startupCommand: cmdReadsCommand
+        ? waitOnly
+        : buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, true),
+      startupEnv
     }
   }
 

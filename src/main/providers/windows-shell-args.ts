@@ -13,12 +13,14 @@ import {
   getPowerShellOsc133Bootstrap
 } from '../powershell-osc133-bootstrap'
 import { quoteStartupArg } from '../../shared/tui-agent-startup-shell'
+import {
+  CMD_EXE_COMMAND_LINE_MAX_CHARS,
+  CMD_UTF8_SETUP_COMMAND
+} from '../../shared/windows-cmd-line-limit'
 
-/** cmd.exe's own documented ceiling; callers that go through sshd budget below it. */
-export const CMD_EXE_COMMAND_LINE_MAX_CHARS = 8191
+export { CMD_EXE_COMMAND_LINE_MAX_CHARS }
 const STARTUP_COMMAND_TEXT_MAX_CHARS = 6000
 const POWERSHELL_ENCODED_COMMAND_ARG_MAX_CHARS = 28_000
-const CMD_UTF8_SETUP_COMMAND = 'chcp 65001 > nul'
 export const ORCA_CODEX_LAUNCH_PREFLIGHT_CMD_QUOTE_ENV = 'ORCA_CODEX_LAUNCH_PREFLIGHT_CMD_QUOTE'
 const CMD_CODEX_LAUNCH_PREFLIGHT = `if defined ORCA_CODEX_LAUNCH_PREFLIGHT call %${ORCA_CODEX_LAUNCH_PREFLIGHT_CMD_QUOTE_ENV}%%ORCA_CODEX_LAUNCH_PREFLIGHT%%${ORCA_CODEX_LAUNCH_PREFLIGHT_CMD_QUOTE_ENV}% agent hooks prepare-codex > nul 2>&1`
 // Why: Git for Windows' bash inherits the ConPTY console's OEM code page
