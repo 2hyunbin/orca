@@ -15,13 +15,27 @@ export function handOffToDesktopApp(
     platform?: NodeJS.Platform
     executablePath?: string
     reapplyActivationPolicy?: () => void
+    env?: Readonly<Record<string, string | undefined>>
   } = {}
 ): void {
   if ((options.platform ?? process.platform) !== 'darwin') {
     return
   }
+  // Why: the empty launch environment would drop these flags and start the user's real profile.
+  if (!isAutomatedLaunch(options.env ?? process.env)) {
+    launchDesktopInstance(args, options.executablePath)
+  }
+  // Why: delivering the open promotes the sidecar into the Dock; drop back out once it is handled.
+  if (options.reapplyActivationPolicy) {
+    options.reapplyActivationPolicy()
+  } else {
+    applyBackgroundActivationPolicy({ warn: console.warn })
+  }
+}
+
+function launchDesktopInstance(args: readonly string[], executablePath: string | undefined): void {
   // `Orca.app/Contents/MacOS/Orca` → `Orca.app`.
-  const bundlePath = resolve(dirname(options.executablePath ?? app.getPath('exe')), '..', '..')
+  const bundlePath = resolve(dirname(executablePath ?? app.getPath('exe')), '..', '..')
   const child = spawnProcess({
     program: '/usr/bin/open',
     args: ['-n', bundlePath, ...(args.length > 0 ? ['--args', ...args] : [])],
@@ -34,12 +48,13 @@ export function handOffToDesktopApp(
     console.warn('[window] Failed to hand activation to the desktop app', error)
   })
   child.unref()
-  // Why: delivering the open promotes the sidecar into the Dock; drop back out once it is handled.
-  if (options.reapplyActivationPolicy) {
-    options.reapplyActivationPolicy()
-  } else {
-    applyBackgroundActivationPolicy({ warn: console.warn })
-  }
+}
+
+function isAutomatedLaunch(env: Readonly<Record<string, string | undefined>>): boolean {
+  return (
+    env.ORCA_BACKGROUND_LAUNCH === '1' ||
+    Object.keys(env).some((key) => key.startsWith('ORCA_E2E_') && Boolean(env[key]))
+  )
 }
 
 /**

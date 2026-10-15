@@ -30,7 +30,11 @@ describe('handOffToDesktopApp', () => {
     const child = makeChild()
     spawnProcessMock.mockReturnValue(child)
 
-    handOffToDesktopApp([], { platform: 'darwin', reapplyActivationPolicy: vi.fn() })
+    handOffToDesktopApp([], {
+      platform: 'darwin',
+      env: {},
+      reapplyActivationPolicy: vi.fn()
+    })
 
     expect(spawnProcessMock).toHaveBeenCalledWith({
       program: '/usr/bin/open',
@@ -47,6 +51,7 @@ describe('handOffToDesktopApp', () => {
 
     handOffToDesktopApp(['orca://skills/share/abc', '/Users/me/notes.md'], {
       platform: 'darwin',
+      env: {},
       executablePath: '/Users/me/Applications/Orca.app/Contents/MacOS/Orca',
       reapplyActivationPolicy: vi.fn()
     })
@@ -64,7 +69,11 @@ describe('handOffToDesktopApp', () => {
     spawnProcessMock.mockReturnValue(makeChild())
     const reapplyActivationPolicy = vi.fn()
 
-    handOffToDesktopApp([], { platform: 'darwin', reapplyActivationPolicy })
+    handOffToDesktopApp([], {
+      platform: 'darwin',
+      env: {},
+      reapplyActivationPolicy
+    })
 
     expect(reapplyActivationPolicy).toHaveBeenCalledOnce()
     expect(reapplyActivationPolicy.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -77,11 +86,31 @@ describe('handOffToDesktopApp', () => {
     spawnProcessMock.mockReturnValue(child)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    handOffToDesktopApp([], { platform: 'darwin', reapplyActivationPolicy: vi.fn() })
+    handOffToDesktopApp([], {
+      platform: 'darwin',
+      env: {},
+      reapplyActivationPolicy: vi.fn()
+    })
     child.emit('error', new Error('spawn /usr/bin/open ENOENT'))
 
     expect(warn).toHaveBeenCalledOnce()
   })
+
+  it.each([{ ORCA_BACKGROUND_LAUNCH: '1' }, { ORCA_E2E_USER_DATA_DIR: '/tmp/e2e' }])(
+    'never launches the real desktop app from an automated sidecar (%o)',
+    (env) => {
+      const reapplyActivationPolicy = vi.fn()
+
+      handOffToDesktopApp([], {
+        platform: 'darwin',
+        env,
+        reapplyActivationPolicy
+      })
+
+      expect(spawnProcessMock).not.toHaveBeenCalled()
+      expect(reapplyActivationPolicy).toHaveBeenCalledOnce()
+    }
+  )
 
   it('does nothing off macOS', () => {
     const reapplyActivationPolicy = vi.fn()
@@ -117,7 +146,10 @@ describe('createDesktopHandoff', () => {
 
   it('launches again for a later open', async () => {
     const handOff = vi.fn()
-    const requestHandoff = createDesktopHandoff({ drainArguments: () => [], handOff })
+    const requestHandoff = createDesktopHandoff({
+      drainArguments: () => [],
+      handOff
+    })
 
     requestHandoff()
     await nextTurn()
