@@ -12,6 +12,8 @@ export type EditorBufferOwner = {
   discard?: () => void
   /** The reload that followed a discard could not read the file. */
   cancelDiscard?: () => void
+  /** False when the held content is too large for a restart backup to carry. */
+  canBackUp?: () => boolean
 }
 
 const owners = new Map<string, Set<EditorBufferOwner>>()
@@ -47,6 +49,10 @@ export function hasPendingEditorChange(fileId: string): boolean {
 
 export function getEditorBufferVersion(fileId: string): number | undefined {
   return [...(owners.get(fileId) ?? [])].find((entry) => entry.version)?.version?.()
+}
+
+export function canBackUpEditorBuffer(fileId: string): boolean {
+  return [...(owners.get(fileId) ?? [])].every((entry) => entry.canBackUp?.() !== false)
 }
 
 export function discardEditorBufferChanges(fileId: string): void {

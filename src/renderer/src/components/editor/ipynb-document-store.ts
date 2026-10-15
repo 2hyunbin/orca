@@ -5,7 +5,7 @@ import { notifyEditorBufferChanged, registerEditorBufferOwner } from './editor-b
 import { ipynbCellKey, serializeIpynbDocument, updateIpynbCodeCell } from './ipynb-cell-mutations'
 import type { NotebookOutput } from './ipynb-kernel-outputs'
 import { getSession, runningCellKey } from './ipynb-kernel-store'
-import { limitRecordedOutput } from './ipynb-output-size'
+import { exceedsBackupLimit, limitRecordedOutput } from './ipynb-output-size'
 import { isRecord, parseIpynbDocument, type IpynbDocument } from './ipynb-parse'
 
 const DRAFT_WRITE_DELAY_MS = 400
@@ -132,14 +132,18 @@ function serialize(document: IpynbDocument): string {
   }
 }
 
+/** Flushes (save, autosave, restart, close) and entering Source view need the draft; changes only keep it current. */
+type WriteReason = 'flush' | 'entering-source-view' | 'change'
+
 /** Writes the document as the file's draft; a draft it didn't write is adopted first, never overwritten. */
-function write(entry: Entry, enteringSourceView = false): void {
+function write(entry: Entry, reason: WriteReason): void {
   clearWriteTimer(entry)
+  const { editorDrafts, markdownViewMode } = useAppStore.getState()
   // Why: Source view edits the draft text itself; a save there writes exactly what the user typed.
-  if (!enteringSourceView && useAppStore.getState().markdownViewMode[entry.fileId] === 'source') {
+  if (reason !== 'entering-source-view' && markdownViewMode[entry.fileId] === 'source') {
     return
   }
-  const draft = useAppStore.getState().editorDrafts[entry.fileId]
+  const draft = editorDrafts[entry.fileId]
   if (
     draft !== undefined &&
     draft !== entry.baseText &&
@@ -151,6 +155,10 @@ function write(entry: Entry, enteringSourceView = false): void {
   if (!document || entry.version === entry.baseVersion) {
     return
   }
+  // Why: a restart doesn't back this notebook up, so only a flush pays for the whole-notebook text.
+  if (reason === 'change' && exceedsBackupLimit(document)) {
+    return
+  }
   const text = serialize(document)
   entry.baseText = text
   entry.baseVersion = entry.version
@@ -158,9 +166,9 @@ function write(entry: Entry, enteringSourceView = false): void {
   useAppStore.getState().setEditorDraft(entry.fileId, text)
 }
 
-function writeLogged(entry: Entry, enteringSourceView = false): void {
+function writeLogged(entry: Entry, reason: WriteReason): void {
   try {
-    write(entry, enteringSourceView)
+    write(entry, reason)
   } catch (error) {
     // The document keeps the change and the file stays dirty; a save reports the failure.
     console.error('[notebook] writing the draft failed', error)
@@ -200,7 +208,7 @@ export function openNotebookDocument(fileId: string, diskText: string): Notebook
   // Why: a restored unsaved draft has no saved version, so it stays dirty until saved.
   adopt(entry, text, openFile(fileId)?.isDirty !== true, [])
   entry.unregister = registerEditorBufferOwner(fileId, {
-    flush: () => write(entry),
+    flush: () => write(entry, 'flush'),
     hasChange: () => entry.view.document !== null && entry.version !== entry.baseVersion,
     version: () => entry.version,
     discard: () => {
@@ -209,7 +217,8 @@ export function openNotebookDocument(fileId: string, diskText: string): Notebook
     },
     cancelDiscard: () => {
       entry.discardPending = false
-    }
+    },
+    canBackUp: () => !entry.view.document || !exceedsBackupLimit(entry.view.document)
   })
   entries.set(fileId, entry)
   return entry.view
@@ -247,7 +256,7 @@ export function reconcileNotebookDocument(fileId: string, diskText: string): voi
   }
   if (draft !== undefined && draft !== entry.baseText) {
     if (adoptForeign(entry, draft, openFile(fileId)?.isDirty !== true)) {
-      writeLogged(entry)
+      writeLogged(entry, 'change')
     }
     return
   }
@@ -269,10 +278,10 @@ export function editNotebookDocument(
   }
   change(entry, edit(document))
   if (writeDraft === 'now') {
-    writeLogged(entry)
+    writeLogged(entry, 'change')
   } else {
     clearWriteTimer(entry)
-    entry.writeTimer = setTimeout(() => writeLogged(entry), DRAFT_WRITE_DELAY_MS)
+    entry.writeTimer = setTimeout(() => writeLogged(entry, 'change'), DRAFT_WRITE_DELAY_MS)
   }
 }
 
@@ -294,11 +303,11 @@ export function updateNotebookCellRun(
   change(entry, run.outputs ? limitRecordedOutput(document, next, key) : next)
 }
 
-/** A run finished: its outputs become part of the draft, whether or not the notebook is shown. */
+/** A run finished: its outputs become part of the draft (over the backup limit, at the next flush), shown or not. */
 export function writeNotebookDraft(fileId: string): void {
   const entry = entries.get(fileId)
   if (entry) {
-    writeLogged(entry)
+    writeLogged(entry, 'change')
   }
 }
 
@@ -336,7 +345,7 @@ useAppStore.subscribe((state, previous) => {
       const inSource = state.markdownViewMode[fileId] === 'source'
       if (inSource !== (previous.markdownViewMode[fileId] === 'source')) {
         // Why: Source view opens on the draft, and on leaving it gets the output that arrived meanwhile.
-        writeLogged(entry, inSource)
+        writeLogged(entry, inSource ? 'entering-source-view' : 'change')
       }
     }
   }

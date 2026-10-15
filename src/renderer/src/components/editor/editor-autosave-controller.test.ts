@@ -594,7 +594,10 @@ describe('attachEditorAutosaveController', () => {
     const eventTarget = stubIsolatedWorldWindow(writeFile)
     const store = createEditorStore()
     // Why: keep the worktree so the saves resolve a write target instead of failing fast.
-    store.setState({ ...makeSessionReadyState(), worktreesByRepo: store.getState().worktreesByRepo })
+    store.setState({
+      ...makeSessionReadyState(),
+      worktreesByRepo: store.getState().worktreesByRepo
+    })
     openDirtyFile(store, 'a.ts', 'saved before restart')
     openDirtyFile(store, 'b.ts', 'stalled save', 'unstaged')
     const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
@@ -629,6 +632,10 @@ describe('attachEditorAutosaveController', () => {
     openDirtyFile(store, 'c.ts', 'staged edit', 'staged')
     const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
     const cleanup = attachEditorAutosaveController(store)
+    const unregisterNotebook = registerEditorBufferOwner('/repo/d.ipynb', {
+      flush: vi.fn(),
+      canBackUp: () => false
+    })
     try {
       await expect(requestEditorHotExitBackup(eventTarget, false)).rejects.toThrow(
         'Some unsaved editor changes cannot be backed up before restart.'
@@ -641,16 +648,17 @@ describe('attachEditorAutosaveController', () => {
       )
       await vi.advanceTimersByTimeAsync(0)
       expect(getRestartUnsavedChangesFilePaths()).toEqual(['c.ts'])
-      openDirtyFile(store, 'd.ts', 'late edit', 'staged')
+      openDirtyFile(store, 'd.ipynb', 'late edit')
       answerRestartUnsavedChangesRequest('restart-anyway')
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(getRestartUnsavedChangesFilePaths()).toEqual(['c.ts', 'd.ts'])
+      expect(getRestartUnsavedChangesFilePaths()).toEqual(['c.ts', 'd.ipynb'])
       answerRestartUnsavedChangesRequest('restart-anyway')
       expect(await outcome).toBe('restarted')
     } finally {
       cleanup()
       unsubscribeDialog()
+      unregisterNotebook()
     }
   })
 

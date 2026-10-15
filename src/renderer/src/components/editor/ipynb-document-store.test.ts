@@ -37,9 +37,16 @@ vi.mock('@/runtime/runtime-file-mutation-client', () => ({
   }
 }))
 
+import { buildEditorSessionData } from '@/lib/workspace-session'
+import { flushPendingEditorChange } from './editor-buffer-owners'
 import { createEditorSaveQueue } from './editor-save-queue'
 import { reloadTabContentFromDisk } from './ExternalFileChangeBanner'
-import { openNotebookDocument, reconcileNotebookDocument } from './ipynb-document-store'
+import { updateIpynbCellSource } from './ipynb-cell-mutations'
+import {
+  editNotebookDocument,
+  openNotebookDocument,
+  reconcileNotebookDocument
+} from './ipynb-document-store'
 import { runCells, trustNotebook } from './ipynb-kernel-session'
 import {
   isNotebookTestFileDirty,
@@ -78,6 +85,13 @@ function stdout(text: string): void {
 
 function draft(): string | undefined {
   return notebookTestAppStore.getState().editorDrafts[FILE_ID]
+}
+
+function backedUpDraft(): string | undefined {
+  const { openFiles, editorDrafts } = notebookTestSaveQueueStore.getState()
+  const files = openFiles.map((file) => ({ ...file, mode: 'edit' as const }))
+  return buildEditorSessionData(files, editorDrafts, {}, {}, {}).openFilesByWorktree?.['wt-1']?.[0]
+    ?.dirtyDraftContent
 }
 
 function savedCell(text: string | undefined): Record<string, unknown> {
@@ -184,5 +198,21 @@ describe('notebook document store', () => {
       source: ['print("edited")'],
       outputs: [{ text: ['1\n', '2\n'] }]
     })
+  })
+
+  it('backs up only under 10,000 KB of output; past it, an edit writes no draft until a flush', async () => {
+    const editSource = (source: string): void =>
+      editNotebookDocument(FILE_ID, (document) => updateIpynbCellSource(document, 0, source), 'now')
+    editSource('print(2)')
+    expect(backedUpDraft()).toBe(draft())
+    await startRun()
+    stdout(`${'x'.repeat(10_000 * 1024)}\n`)
+    frame({ type: 'done', status: 'ok', execution_count: 1 })
+    editSource('print(3)')
+    expect(savedCell(draft())).toMatchObject({ source: ['print(2)'], outputs: [] })
+    expect(backedUpDraft()).toBeUndefined()
+    flushPendingEditorChange(FILE_ID)
+    expect(savedCell(draft())).toMatchObject({ source: ['print(3)'], execution_count: 1 })
+    expect(backedUpDraft()).toBeUndefined()
   })
 })
