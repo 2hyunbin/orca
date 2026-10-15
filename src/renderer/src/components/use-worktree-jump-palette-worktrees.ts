@@ -16,7 +16,6 @@ import {
   getPairedDeviceIdsByEnvironment
 } from '../../../shared/workspace-creator-visibility'
 import type { Worktree } from '../../../shared/worktree/types'
-import { getSettingsFocusedExecutionHostId } from '../../../shared/execution-host'
 import { EMPTY_SORTED_WORKTREES } from './worktree-jump-palette-model'
 import { buildWorktreeJumpPaletteDocumentIndex } from './worktree-jump-palette-document-index'
 import { buildWorktreeJumpPaletteWorktreeMaps } from './worktree-jump-palette-worktree-maps'
@@ -54,6 +53,7 @@ export function useWorktreeJumpPaletteWorktrees({
   repoByHostIdentity,
   hostOptions,
   hostFilterActive,
+  defaultHostId,
   prCache,
   hostedReviewCache,
   settings,
@@ -83,7 +83,6 @@ export function useWorktreeJumpPaletteWorktrees({
     showSleepingWorkspaces,
     unifiedTabsByWorktree
   )
-  const defaultHostId = getSettingsFocusedExecutionHostId(settings)
   const emptyQueryVisibleWorktrees = useMemo(() => {
     // Why no project or host scope: the palette ignores the sidebar's scope; filterPredicate scopes it.
     const visible = filterWorkspaceRows(
