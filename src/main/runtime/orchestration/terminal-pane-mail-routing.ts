@@ -272,11 +272,9 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     if (!assignee) {
       return null
     }
-    if (dispatch) {
-      const chat = chatDispatchMailTarget(dispatch, this._orchestrationDb)
-      if (chat !== undefined) {
-        return chat
-      }
+    const chat = dispatch ? chatDispatchMailTarget(dispatch, this._orchestrationDb) : undefined
+    if (chat !== undefined) {
+      return chat
     }
     const sessionId = this.liveStructuredWorkerSessionId(assignee)
     return sessionId ? { sessionId, dispatchId } : null

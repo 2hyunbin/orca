@@ -7,9 +7,15 @@ import { isFederationEffectUnknown, type FederationEffect } from './federation-e
 import { awaitStructuredWorkerSetupGate } from '../worker/worker-start-structured-setup-gate'
 import { deliverWorkerDispatchPreamble } from '../worker/deliver-worker-dispatch-preamble'
 import { tearDownFailedWorkerStart } from '../worker/failed-worker-start-teardown'
-import { decideAgentLaunchMode, readAgentLaunchModeSettings } from '../../../../../agent-launch/agent-launch-mode'
+import {
+  decideAgentLaunchMode,
+  readAgentLaunchModeSettings
+} from '../../../../../agent-launch/agent-launch-mode'
 import { WORKER_START_VOCABULARY } from '../../orchestration-worker-start-mode'
-import { launchFederatedWorkerAgent, type FederatedAgentPlacement } from './federated-worker-agent-launch'
+import {
+  launchFederatedWorkerAgent,
+  type FederatedAgentPlacement
+} from './federated-worker-agent-launch'
 import type { WorkerSetupReceipt } from '../worker/worker-topology'
 import {
   monitorFederatedSetup,
@@ -163,16 +169,12 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           setup,
           effects
         }
-        const attachAuthority = () => prepareFederatedAttachmentAuthority({
-          runtime,
-          db,
-          dispatchId: params.dispatchId,
-          worktreeId: worktree.id,
-          terminalHandle,
-          setup,
-          effects,
-          reusesTerminal: Boolean(params.terminal)
-        })
+        const attachAuthority = () =>
+          prepareFederatedAttachmentAuthority({
+            runtime,
+            ...setupStage,
+            reusesTerminal: Boolean(params.terminal)
+          })
         if (placed?.structuredSession) {
           attachAuthority()
         }
@@ -183,7 +185,12 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
         persistFederatedReadinessStage(setupStage)
         failedStage = 'agent_readiness'
         const wait = placed?.structuredSession
-          ? await awaitStructuredWorkerSetupGate({ runtime, setup, effects, timeoutMs: readinessTimeoutMs })
+          ? await awaitStructuredWorkerSetupGate({
+              runtime,
+              setup,
+              effects,
+              timeoutMs: readinessTimeoutMs
+            })
           : await waitForWorkerAgentReady(runtime, terminalHandle, {
               agent,
               reusesTerminal: Boolean(params.terminal),
@@ -244,11 +251,13 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           ...(params.supportsAgentSession
             ? {
                 agentSession: placed?.agentSession ?? { kind: 'terminal', handle: terminalHandle },
-                mode: placed?.mode ?? decideAgentLaunchMode({
-                  placement: { agent, terminal: terminalHandle },
-                  settings: readAgentLaunchModeSettings(runtime),
-                  vocabulary: WORKER_START_VOCABULARY
-                })
+                mode:
+                  placed?.mode ??
+                  decideAgentLaunchMode({
+                    placement: { agent, terminal: terminalHandle },
+                    settings: readAgentLaunchModeSettings(runtime),
+                    vocabulary: WORKER_START_VOCABULARY
+                  })
               }
             : {}),
           effects,

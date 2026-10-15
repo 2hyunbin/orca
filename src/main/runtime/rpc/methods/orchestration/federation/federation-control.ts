@@ -78,9 +78,7 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
           exactWorker: observation.exact,
           ...(observation.reason ? { reason: observation.reason } : {}),
           ...(observation.agentWait !== undefined ? { agentWait: observation.agentWait } : {}),
-          ...(observation.addressable === undefined
-            ? {}
-            : { addressable: observation.addressable })
+          ...(observation.addressable === undefined ? {} : { addressable: observation.addressable })
         }
       }
     }

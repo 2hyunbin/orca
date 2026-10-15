@@ -32,7 +32,12 @@ vi.mock('./orchestration/federation/federated-worker-start', () => ({
   startFederatedWorker: async () => ({
     state: 'ready',
     dispatchId: 'ctx_remote',
-    mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Receiver default.' }
+    mode: {
+      mode: 'structured',
+      preferred: 'structured',
+      reason: 'user_default',
+      detail: 'Receiver default.'
+    }
   })
 }))
 vi.mock('./orchestration-structured-worker-session', async (importOriginal) => ({

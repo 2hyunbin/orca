@@ -8,7 +8,10 @@ import {
   observeStructuredSession,
   resolveStructuredWorkerIdentity
 } from '../../../../structured-worker-authority'
-import { isStructuredWorkerHandle, type StructuredWorkerIdentity } from '../../../../structured-worker-identity'
+import {
+  isStructuredWorkerHandle,
+  type StructuredWorkerIdentity
+} from '../../../../structured-worker-identity'
 
 export function requireHomeAttachment(
   runtime: OrcaRuntimeService,

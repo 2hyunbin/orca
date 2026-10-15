@@ -33,7 +33,9 @@ function receiver() {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: placement checks only the repository kind.
   vi.spyOn(runtime, 'showRepo').mockResolvedValue({ id: 'repo', kind: 'git' } as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: existing placement reads only the workspace id.
-  vi.spyOn(runtime, 'showManagedTerminalWorkspace').mockResolvedValue({ id: 'folder:remote' } as never)
+  vi.spyOn(runtime, 'showManagedTerminalWorkspace').mockResolvedValue({
+    id: 'folder:remote'
+  } as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: launch preference reads only experimentalNativeChat.
   vi.spyOn(runtime, 'getClientSettings').mockReturnValue({ experimentalNativeChat: true } as never)
   vi.spyOn(runtime, 'getStructuredAgentSessionCreateSupport').mockResolvedValue({ supported: true })

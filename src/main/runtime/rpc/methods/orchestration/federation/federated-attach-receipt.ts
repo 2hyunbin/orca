@@ -54,7 +54,8 @@ export function parseRemoteFederatedWorkerStartReceipt(
       isAgentLaunchOutcome(value.agentSession) &&
       isAgentLaunchModeReceipt(value.mode) &&
       value.agentSession.kind !== value.mode.mode) ||
-    (value.state === 'ready' && (value.agentSession === undefined) !== (value.mode === undefined)) ||
+    (value.state === 'ready' &&
+      (value.agentSession === undefined) !== (value.mode === undefined)) ||
     (value.state === 'ready' &&
       options.supportsAgentSession &&
       (value.agentSession === undefined || value.mode === undefined))

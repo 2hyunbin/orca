@@ -74,7 +74,9 @@ export async function launchFederatedWorkerAgent(args: {
           const { repo, name } = params
           if (!repo || !name) {
             // Validation refuses this before the attachment exists; this only narrows the types.
-            throw new Error('A remote new-top-level worktree requires --name and an explicit --repo.')
+            throw new Error(
+              'A remote new-top-level worktree requires --name and an explicit --repo.'
+            )
           }
           db.recordRemoteAttachmentStage({
             dispatchId: params.dispatchId,

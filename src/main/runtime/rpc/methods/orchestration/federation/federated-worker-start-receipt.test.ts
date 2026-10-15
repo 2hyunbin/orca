@@ -108,8 +108,9 @@ describe('federated worker start receipt validation', () => {
       peerFingerprint: 'remote_peer',
       pairingRevision: 73
     })
-    const remoteCall = vi.spyOn(runtime, 'callOrchestrationWorkerServer').mockImplementation(
-      async (_environmentId, method, params) => {
+    const remoteCall = vi
+      .spyOn(runtime, 'callOrchestrationWorkerServer')
+      .mockImplementation(async (_environmentId, method, params) => {
         if (method === 'status.get') {
           return {
             capabilities: [
@@ -144,8 +145,7 @@ describe('federated worker start receipt validation', () => {
               }
             : {})
         }
-      }
-    )
+      })
 
     const result = await startFederatedWorker({
       params: { task: task.id, from: 'term_coord', on: 'remote', worktree: 'id:worktree_remote' },

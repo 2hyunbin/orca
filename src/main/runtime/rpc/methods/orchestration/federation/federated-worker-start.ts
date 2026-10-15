@@ -120,9 +120,9 @@ export async function startFederatedWorker(args: {
       : supportsControlMail
         ? ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION
         : 1
-  const supportsAgentSession = status.capabilities?.includes(
-    ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY
-  ) ?? false
+  const supportsAgentSession =
+    status.capabilities?.includes(ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY) ??
+    false
 
   const setupDecision = createsWorktree ? (params.setup ?? 'run') : 'not_applicable'
   const started = db.createStartingWorkerDispatch({

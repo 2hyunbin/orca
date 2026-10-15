@@ -43,8 +43,17 @@ describe('remote federated worker start receipt', () => {
           runtimeEpoch: 'epoch_remote',
           worktreeId: 'worktree_remote',
           terminalHandle: 'structworker_remote',
-          agentSession: { kind: 'structured', handle: 'structworker_remote', sessionId: 'session_remote' },
-          mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Chat default.' }
+          agentSession: {
+            kind: 'structured',
+            handle: 'structworker_remote',
+            sessionId: 'session_remote'
+          },
+          mode: {
+            mode: 'structured',
+            preferred: 'structured',
+            reason: 'user_default',
+            detail: 'Chat default.'
+          }
         },
         { supportsAgentSession: true }
       )
@@ -61,7 +70,12 @@ describe('remote federated worker start receipt', () => {
           worktreeId: 'worktree_remote',
           terminalHandle: 'term_remote',
           agentSession: { kind: 'structured', handle: 'other', sessionId: 'session_remote' },
-          mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Chat default.' }
+          mode: {
+            mode: 'structured',
+            preferred: 'structured',
+            reason: 'user_default',
+            detail: 'Chat default.'
+          }
         },
         { supportsAgentSession: true }
       )

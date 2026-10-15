@@ -62,7 +62,11 @@ const PARAMS = FederationAttachStartParams.parse({
   agent: 'claude'
 })
 
-function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }, supportsAgentSession = false) {
+function launch(
+  f: ReturnType<typeof fakes>,
+  worktree?: { id: string },
+  supportsAgentSession = false
+) {
   const effects: FederationEffect[] = []
   const setups: WorkerSetupReceipt[] = []
   const stagesSeen: string[] = []
@@ -219,5 +223,4 @@ describe('a federated worker through the launch executor', () => {
       }
     }
   )
-
 })
