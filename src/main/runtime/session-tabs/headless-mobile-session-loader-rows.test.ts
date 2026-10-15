@@ -189,4 +189,20 @@ describe('headless phone tabs come from the shared Loader', () => {
       load.mockRestore()
     }
   })
+
+  it('drops a legacy row repeating an SSH relay terminal with no incarnation recorded', () => {
+    const profile = LEGACY_WORKSPACE_LAYOUT_PROFILES.find(
+      (entry) => entry.name === 'legacy row repeating a tab-bar tab’s terminal'
+    )!
+    const session: WorkspaceSessionState = JSON.parse(
+      JSON.stringify(profile.build()).replaceAll('"pty-a"', '"ssh:target-1@@pty-1"')
+    )
+    const runtime = runtimeFor(session)
+    runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(undefined, { force: true })
+    expect(
+      runtime.mobileSessionTabsByWorktree
+        .get(GIT_KEY)
+        ?.tabs.flatMap((tab) => (tab.type === 'terminal' ? [tab.parentTabId] : []))
+    ).toEqual(['tab-a', 'tab-b'])
+  })
 })

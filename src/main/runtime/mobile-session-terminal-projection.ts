@@ -7,14 +7,15 @@ import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-la
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import { collectLayoutLeafIdsInOrder } from '../../shared/workspace-layout/terminal-pane-tree'
 import { isSameTerminal } from '../../shared/workspace-layout/terminal-owner-invariants'
-
-type TerminalBinding = { ptyId: string; incarnationId?: string }
 import {
   cloneTerminalLayoutSnapshot,
   collectPersistedTerminalLeafIds,
   deriveHeadlessLegacyTerminalLeafId,
   isPersistedTerminalLeafActive
 } from './mobile-session-layout-projection'
+
+/** `legacy`: the row has no tab-bar entry, so the Loader matches its terminals by id alone. */
+type TerminalBinding = { ptyId: string; incarnationId?: string; legacy: boolean }
 
 /**
  * Whether stored rows repeat a row id, or bind one terminal (as the Loader compares terminals) in
@@ -23,34 +24,47 @@ import {
 function storedTerminalsRepeat(session: WorkspaceSessionState): boolean {
   const rowIds = new Set<string>()
   const boundByPtyId = new Map<string, TerminalBinding[]>()
-  for (const row of Object.values(session.tabsByWorktree ?? {}).flat()) {
-    const layout = session.terminalLayoutsByTabId?.[row.id]
-    const paneIds = layout?.root
-      ? collectLayoutLeafIdsInOrder(layout.root)
-      : Object.keys(layout?.ptyIdsByLeafId ?? {})
-    const panes = paneIds.flatMap((leafId) => {
-      const ptyId = layout?.ptyIdsByLeafId?.[leafId]
-      const incarnationId = session.terminalPtyIncarnationsByPaneKey?.[`${row.id}:${leafId}`]
-      return ptyId ? [{ ptyId, incarnationId }] : []
-    })
-    const bindings = [
-      ...panes,
-      ...(row.ptyId && !panes.some((pane) => pane.ptyId === row.ptyId)
-        ? [{ ptyId: row.ptyId }]
-        : [])
-    ]
-    const repeats = (binding: TerminalBinding, others: readonly TerminalBinding[]) =>
-      others.some((other) => isSameTerminal(other, binding))
-    if (
-      rowIds.has(row.id) ||
-      panes.some((pane, index) => repeats(pane, panes.slice(0, index))) ||
-      bindings.some((binding) => repeats(binding, boundByPtyId.get(binding.ptyId) ?? []))
-    ) {
-      return true
-    }
-    rowIds.add(row.id)
-    for (const binding of bindings) {
-      boundByPtyId.set(binding.ptyId, [...(boundByPtyId.get(binding.ptyId) ?? []), binding])
+  for (const [key, rows] of Object.entries(session.tabsByWorktree ?? {})) {
+    const tabBarIds = new Set(
+      (session.unifiedTabs?.[key] ?? [])
+        .filter((tab) => tab.contentType === 'terminal')
+        .map((tab) => tab.entityId)
+    )
+    for (const row of rows) {
+      const legacy = !tabBarIds.has(row.id)
+      const layout = session.terminalLayoutsByTabId?.[row.id]
+      const paneIds = layout?.root
+        ? collectLayoutLeafIdsInOrder(layout.root)
+        : Object.keys(layout?.ptyIdsByLeafId ?? {})
+      const panes = paneIds.flatMap((leafId) => {
+        const ptyId = layout?.ptyIdsByLeafId?.[leafId]
+        const incarnationId = session.terminalPtyIncarnationsByPaneKey?.[`${row.id}:${leafId}`]
+        return ptyId ? [{ ptyId, incarnationId, legacy }] : []
+      })
+      const bindings = [
+        ...panes,
+        ...(row.ptyId && !panes.some((pane) => pane.ptyId === row.ptyId)
+          ? [{ ptyId: row.ptyId, legacy }]
+          : [])
+      ]
+      // Two tab-bar rows are compared by incarnation, as the Loader's pane check does.
+      const repeats = (binding: TerminalBinding, others: readonly TerminalBinding[]) =>
+        others.some(
+          (other) =>
+            other.ptyId === binding.ptyId &&
+            (other.legacy || binding.legacy || isSameTerminal(other, binding))
+        )
+      if (
+        rowIds.has(row.id) ||
+        panes.some((pane, index) => repeats(pane, panes.slice(0, index))) ||
+        bindings.some((binding) => repeats(binding, boundByPtyId.get(binding.ptyId) ?? []))
+      ) {
+        return true
+      }
+      rowIds.add(row.id)
+      for (const binding of bindings) {
+        boundByPtyId.set(binding.ptyId, [...(boundByPtyId.get(binding.ptyId) ?? []), binding])
+      }
     }
   }
   return false
