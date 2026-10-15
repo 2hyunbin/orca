@@ -98,7 +98,7 @@ it('rolls back the entire Codex exit settlement when a later row fails', async (
       }
     })
   )
-  database.db.exec(`CREATE TEMP TRIGGER reject_codex_later BEFORE INSERT ON journal_rows
+  database.db.exec(`CREATE TEMP TRIGGER reject_codex_later BEFORE INSERT ON journal_rows_data
     WHEN NEW.session_id = '${SESSION}' AND NEW.seq > ${before.cursor.sequence + 1}
     BEGIN SELECT RAISE(ABORT, 'later Codex settlement row rejected'); END`)
   const ended = {

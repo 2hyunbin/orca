@@ -210,7 +210,7 @@ describe('structured agent-session transitions', () => {
     bind()
     // Refuses only the second step's row, so the third would land in its place.
     openTestJournalHostDatabase(root).db.exec(`CREATE TEMP TRIGGER fail_second_step
-BEFORE INSERT ON main.journal_rows WHEN instr(NEW.row_json, 'refused-step') > 0
+BEFORE INSERT ON main.journal_rows_data WHEN instr(NEW.row_json, 'refused-step') > 0
 BEGIN SELECT RAISE(ABORT, 'second step refused'); END`)
     const step = (recordId: string) =>
       itemStep(() => ({ identity: identity(recordId), body: tool(recordId, 'running') }))
@@ -314,7 +314,7 @@ BEGIN SELECT RAISE(ABORT, 'second step refused'); END`)
     const before = journal.cursor().sequence
     // The settlement needs two rows; the second one's insert aborts inside the transaction.
     openTestJournalHostDatabase(root).db.exec(`CREATE TEMP TRIGGER fail_second_chunk
-BEFORE INSERT ON main.journal_rows WHEN NEW.seq = ${before + 2}
+BEFORE INSERT ON main.journal_rows_data WHEN NEW.seq = ${before + 2}
 BEGIN SELECT RAISE(ABORT, 'second chunk refused'); END`)
     sink.tryAppendTransition?.({
       lifecycle: true,

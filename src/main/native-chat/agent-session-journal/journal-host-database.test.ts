@@ -61,7 +61,7 @@ function failCommits(db: Database.Database): () => void {
 CREATE TEMP TABLE commit_probe_child (
   parent INTEGER REFERENCES commit_probe_parent (id) DEFERRABLE INITIALLY DEFERRED
 );
-CREATE TEMP TRIGGER commit_probe AFTER INSERT ON main.journal_rows
+CREATE TEMP TRIGGER commit_probe AFTER INSERT ON main.journal_rows_data
 BEGIN INSERT INTO commit_probe_child (parent) VALUES (1); END`)
   return () => db.exec('DROP TRIGGER temp.commit_probe')
 }

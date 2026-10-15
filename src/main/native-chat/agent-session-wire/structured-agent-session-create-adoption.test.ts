@@ -202,7 +202,7 @@ it.each(['adopted', 'blank'] as const)(
     const adopted = await adoptedParams('old imported history')
     const db = openTestJournalHostDatabase(rig.root).db
     db.exec(
-      `CREATE TRIGGER refuse_first BEFORE INSERT ON journal_rows WHEN NEW.row_json LIKE '%"kind":"submission"%' BEGIN SELECT RAISE(ABORT, 'simulated first write failure'); END`
+      `CREATE TRIGGER refuse_first BEFORE INSERT ON journal_rows_data WHEN NEW.row_json LIKE '%"kind":"submission"%' BEGIN SELECT RAISE(ABORT, 'simulated first write failure'); END`
     )
     expect(
       await rig.host.create(CALLER, createTestParams(first, adopted), { firstMessage: first })

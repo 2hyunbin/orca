@@ -103,6 +103,7 @@ export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
     'agent-session-journal',
   'src/main/native-chat/agent-session-journal/command-receipt-schema.ts': 'agent-session-journal',
   'src/main/native-chat/agent-session-journal/journal-database-schema.ts': 'agent-session-journal',
+  'src/main/native-chat/agent-session-journal/journal-text-piece-schema.ts': 'agent-session-journal',
   'src/main/native-chat/agent-session-journal/queued-message-schema.ts': 'agent-session-journal',
   'src/main/persistence/profile-state/profile-state-database-schema.ts': 'profile-state',
   'src/main/runtime/orchestration/db/schema/create-core-tables-sql.ts': 'orchestration',
@@ -146,6 +147,8 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
         'journal_imports',
         'journal_repairs',
         'journal_rows',
+        'journal_rows_data',
+        'journal_text_pieces',
         'journal_sessions',
         'journal_set_aside',
         'queued_messages'
