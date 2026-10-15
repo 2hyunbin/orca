@@ -52,10 +52,21 @@ export type WorkspaceOptionControl =
       Page: ComponentType<WorkspaceOptionProps>
     }
 
-// The phone cannot see the desktop's project groups, so it uses the plain label.
-const CARD_DISPLAY_CHOICES: WorkspaceViewChoice<WorktreeCardProperty>[] = phoneCardPropertyChoices(
-  WORKSPACE_CARD_DISPLAY_CHOICES
-).map((choice) => ({ id: choice.id, label: getWorkspaceCardDisplayChoiceLabel(choice, false) }))
+const CARD_PROPERTY_CHOICES = phoneCardPropertyChoices(WORKSPACE_CARD_PROPERTY_CHOICES)
+
+// Why folder rows: the desktop asks whether it has project groups, which the phone does not read;
+// the host lists folder workspaces only under a group, so their rows are that fact as it shows.
+function cardDisplayChoices(
+  controller: HostScreenController
+): WorkspaceViewChoice<WorktreeCardProperty>[] {
+  const hasProjectGroups = controller.state.worktrees.some(
+    (row) => row.workspaceKind === 'folder-workspace'
+  )
+  return phoneCardPropertyChoices(WORKSPACE_CARD_DISPLAY_CHOICES).map((choice) => ({
+    id: choice.id,
+    label: getWorkspaceCardDisplayChoiceLabel(choice, hasProjectGroups)
+  }))
+}
 
 function hostsValue({ controller, hosts }: WorkspaceOptionProps): string {
   const visible = controller.state.view.filters.visibleHostIds
@@ -211,7 +222,9 @@ function showPropertiesValue({ controller }: WorkspaceOptionProps): string {
 }
 
 function propertiesPage(
-  choices: readonly WorkspaceViewChoice<WorktreeCardProperty>[],
+  choices: (
+    controller: HostScreenController
+  ) => readonly WorkspaceViewChoice<WorktreeCardProperty>[],
   options: { value: (props: WorkspaceOptionProps) => string; withAgentLayout: boolean }
 ): Extract<WorkspaceOptionControl, { kind: 'page' }> {
   const { withAgentLayout } = options
@@ -220,7 +233,7 @@ function propertiesPage(
     value: options.value,
     Page: ({ controller }) => (
       <>
-        <CardPropertyRows controller={controller} choices={choices} />
+        <CardPropertyRows controller={controller} choices={choices(controller)} />
         {withAgentLayout && (
           <>
             <Text style={styles.filterSectionLabel}>Agent activity layout</Text>
@@ -296,12 +309,12 @@ export const WORKSPACE_OPTION_CONTROLS: Record<WorkspaceViewOptionKey, Workspace
     (controller) => (controller.state.view.compactWorktreeCards ? 'compact' : 'detailed'),
     (controller) => controller.settings.setCardLayout
   ),
-  cardProperties: propertiesPage(phoneCardPropertyChoices(WORKSPACE_CARD_PROPERTY_CHOICES), {
+  cardProperties: propertiesPage(() => CARD_PROPERTY_CHOICES, {
     value: showPropertiesValue,
     withAgentLayout: true
   }),
   // As the desktop, Card display shows no value.
-  cardDisplay: propertiesPage(CARD_DISPLAY_CHOICES, { value: () => '', withAgentLayout: false }),
+  cardDisplay: propertiesPage(cardDisplayChoices, { value: () => '', withAgentLayout: false }),
   hideSleepingWorkspaces: filterSwitch('hideSleepingWorkspaces'),
   alwaysShowDefaultBranchWorkspace: filterSwitch('alwaysShowDefaultBranchWorkspace'),
   hideDefaultBranchWorkspace: filterSwitch('hideDefaultBranchWorkspace'),

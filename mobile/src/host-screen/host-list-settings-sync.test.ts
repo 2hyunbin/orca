@@ -186,3 +186,53 @@ describe('the host list mirrors the desktop list settings', () => {
     expect(applied).toEqual([false])
   })
 })
+
+describe('Card layout from the phone', () => {
+  async function chooseCompact(settingsReply: RpcResponse) {
+    const client = new FakeSession('connected')
+    const clientRef: ClientRef = { current: client }
+    client.sendRequest.mockImplementation(async (method: string) =>
+      method === 'settings.update' ? settingsReply : reply(null)
+    )
+    const state = screenState(clientRef, [])
+    let actions: Actions | null = null
+    function Probe(): null {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook reads only the refs and setters screenState provides.
+      const hostState = state as unknown as Parameters<typeof useHostViewSettings>[0]['state']
+      actions = useHostViewSettings({ client, connState: 'connected', state: hostState })
+      return null
+    }
+    await act(async () => {
+      create(createElement(Probe))
+    })
+    await act(async () => {
+      actions!.setCardLayout('compact')
+    })
+    return {
+      view: state.viewRef.current,
+      calls: client.sendRequest.mock.calls.map(([method, params]) => ({ method, params }))
+    }
+  }
+
+  it('writes the setting first, then the matching preset once the host accepts it', async () => {
+    const { view, calls } = await chooseCompact(reply({ settings: {} }))
+    expect(calls.map(({ method }) => method)).toEqual(['settings.update', 'ui.set'])
+    expect(calls[1]?.params).toEqual({
+      worktreeCardProperties: ['status'],
+      _worktreeCardModeDefaulted: true
+    })
+    expect(view).toMatchObject({ compactWorktreeCards: true, worktreeCardProperties: ['status'] })
+  })
+
+  it('leaves the preset and the phone alone when the host refuses the setting', async () => {
+    const refused: RpcResponse = {
+      id: 'reply',
+      ok: false,
+      error: { code: 'runtime_error', message: 'refused' },
+      _meta: { runtimeId: 'runtime' }
+    }
+    const { view, calls } = await chooseCompact(refused)
+    expect(calls.map(({ method }) => method)).toEqual(['settings.update'])
+    expect(view).toBe(INITIAL_MOBILE_VIEW)
+  })
+})
