@@ -635,7 +635,7 @@ export class SshConnection {
       await this.doSsh2Connect(config, connectGeneration)
     } catch (err) {
       if (!(err instanceof Error)) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         throw err
       }
 
@@ -647,7 +647,7 @@ export class SshConnection {
       // in front of a host we just refused. Checking the generation catches it whatever the error
       // turned out to be, and leaves what connect() rejects with unchanged.
       if (!this.isCurrentConnectAttempt(connectGeneration)) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         throw err
       }
 
@@ -657,18 +657,18 @@ export class SshConnection {
       // would connect anyway whenever the disagreement is with our own store rather than
       // known_hosts. A denied key is final for this attempt.
       if (isHostKeyVerificationError(err)) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         throw err
       }
 
       // Cancellation must stop the credential and transport fallback chain.
       if (this.keyboardInteractiveCancelled) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         throw err
       }
 
       if (isSystemSshFallbackError(err)) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         try {
           // Why: on macOS, per-app network policy can block Orca's direct TCP socket while the system OpenSSH binary is still allowed.
           await this.doSystemSshProbeWithControlMasterRetry(connectGeneration, resolved)
@@ -698,7 +698,7 @@ export class SshConnection {
           keyConfig.password = this.cachedPassword
         }
         if (keyConfig.privateKey || keyConfig.password) {
-          this.respawnProxy(keyConfig, effectiveProxy)
+          this.respawnProxy(keyConfig, effectiveProxy, connectGeneration)
           try {
             await this.doSsh2Connect(keyConfig, connectGeneration)
             return
@@ -706,12 +706,12 @@ export class SshConnection {
             // Same reason as above: the retry re-runs the handshake, so it can be the attempt that
             // denies the key, and the passphrase prompt is directly below.
             if (!(keyErr instanceof Error) || isHostKeyVerificationError(keyErr)) {
-              this.killProxy()
+              this.killProxyIfCurrent(connectGeneration)
               throw keyErr
             }
             // Key fallback must honor the same cancellation boundary.
             if (this.keyboardInteractiveCancelled) {
-              this.killProxy()
+              this.killProxyIfCurrent(connectGeneration)
               throw keyErr
             }
             authError = keyErr
@@ -741,7 +741,7 @@ export class SshConnection {
 
       // Why: a Kerberos ticket may authenticate where keys did not; try the system ssh binary before falling back to interactive prompts.
       if (isGssapiSystemSshFallbackCandidate(authError, this.target, resolved)) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         try {
           await this.doSystemSshProbeWithControlMasterRetry(connectGeneration, resolved, true)
           return
@@ -755,7 +755,7 @@ export class SshConnection {
       }
 
       if (!this.callbacks.onCredentialRequest) {
-        this.killProxy()
+        this.killProxyIfCurrent(connectGeneration)
         throw authError
       }
 
@@ -789,12 +789,12 @@ export class SshConnection {
           this.cachedPassword = val
           this.signInVerified = false
           credentialRetryConfig.password = val
-          this.respawnProxy(credentialRetryConfig, effectiveProxy)
+          this.respawnProxy(credentialRetryConfig, effectiveProxy, connectGeneration)
           await this.doSsh2Connect(credentialRetryConfig, connectGeneration)
           return
         }
       }
-      this.killProxy()
+      this.killProxyIfCurrent(connectGeneration)
       throw authError
     }
   }
@@ -816,7 +816,7 @@ export class SshConnection {
     this.cachedPassphrase = val
     this.signInVerified = false
     retryConfig.passphrase = val
-    this.respawnProxy(retryConfig, effectiveProxy)
+    this.respawnProxy(retryConfig, effectiveProxy, connectGeneration)
     await this.doSsh2Connect(retryConfig, connectGeneration)
     return true
   }
@@ -1052,10 +1052,15 @@ export class SshConnection {
   // Why: ssh2 may destroy the proxy socket on auth failure, so credential retries need a fresh proxy process and Duplex stream.
   private respawnProxy(
     config: ConnectConfig,
-    proxy: ReturnType<typeof resolveEffectiveProxy> | null | undefined
+    proxy: ReturnType<typeof resolveEffectiveProxy> | null | undefined,
+    connectGeneration: number
   ): void {
     if (!proxy) {
       return
+    }
+    // Why: this.proxyProcess belongs to whichever attempt is current; a superseded one must not kill it.
+    if (!this.isCurrentConnectAttempt(connectGeneration)) {
+      throw createCancelledConnectAttemptError()
     }
     this.proxyProcess?.kill()
     const p = spawnProxyCommand(proxy, config.host!, config.port!, config.username!)
@@ -1523,6 +1528,12 @@ export class SshConnection {
     this.systemSshControlMasterDisabledForSession = false
     this.systemSshGssapiOnlyForSession = false
     this.useSystemSshTransport = false
+  }
+
+  private killProxyIfCurrent(connectGeneration: number): void {
+    if (this.isCurrentConnectAttempt(connectGeneration)) {
+      this.killProxy()
+    }
   }
 
   private killProxy(): void {
