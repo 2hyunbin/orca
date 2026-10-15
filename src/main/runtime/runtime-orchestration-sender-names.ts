@@ -3,7 +3,6 @@
 
 import type { AgentMessageSender } from '../../shared/agent-session-message-source'
 import type { ConversationNameTab } from '../../shared/agent-row-conversation-name'
-import type { AgentStatusIpcPayload, AgentType } from '../../shared/agent-status-types'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { Tab } from '../../shared/tab-types'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../shared/terminal-tab-types'
@@ -14,41 +13,16 @@ import {
 } from './orchestration/orchestration-sender-name'
 import { agentMessageSender } from './orchestration/agent-message-sender'
 import { readAgentSessionRecordStore } from './orchestration/structured-session-lineage'
-import { terminalHostConnectionMatches } from './orchestration/worker-provider-session'
+import { currentTerminalHookRow, type TerminalHookRowDeps } from './runtime-terminal-hook-row'
 
-type RuntimeSenderNameDeps = {
+type RuntimeSenderNameDeps = TerminalHookRowDeps & {
   getDb: () => OrchestrationDb | null
-  getHandleRecord: (
-    handle: string
-  ) => { worktreeId: string; tabId: string; ptyId: string | null } | undefined
-  getPtyAgents: (ptyId: string) =>
-    | {
-        launchAgent?: AgentType | null
-        foregroundAgent?: AgentType | null
-        connectionId?: string | null
-        wslDistro?: string | null
-        launchToken?: string | null
-      }
-    | undefined
-  getTerminalPaneKey: (handle: string) => string | null
   /** The workspace session this host mirrors. */
   getWorkspaceSession: (worktreeId: string) => MirroredTabs | null | undefined
   /** The person's "generate tab titles" setting, which decides whether a generated title names a tab. */
   getGeneratedTitlesEnabled: () => boolean
-  getAgentStatusSnapshotForPane: (paneKey: string) => readonly SenderHookRow[]
   getTrackedTitle: (ptyId: string) => string | null
 }
-
-type SenderHookRow = Pick<
-  AgentStatusIpcPayload,
-  | 'paneKey'
-  | 'worktreeId'
-  | 'agentType'
-  | 'providerSession'
-  | 'receivedAt'
-  | 'connectionId'
-  | 'launchToken'
->
 
 type MirroredTabs = {
   unifiedTabs?: Readonly<
@@ -106,18 +80,7 @@ export class RuntimeOrchestrationSenderNames {
       (candidate) => candidate.id === record.tabId
     )
     const paneKey = this.deps.getTerminalPaneKey(handle)
-    const status = paneKey
-      ? this.deps
-          .getAgentStatusSnapshotForPane(paneKey)
-          .filter(
-            (row) =>
-              row.paneKey === paneKey &&
-              (!row.worktreeId || row.worktreeId === record.worktreeId) &&
-              terminalHostConnectionMatches(row.connectionId, pty?.connectionId, pty?.wslDistro) &&
-              (!pty?.launchToken || row.launchToken === pty.launchToken)
-          )
-          .sort((left, right) => right.receivedAt - left.receivedAt)[0]
-      : undefined
+    const status = currentTerminalHookRow(this.deps, handle)
     const trackedTitle = record.ptyId ? this.deps.getTrackedTitle(record.ptyId) : null
     return {
       tab: tab ? { ...tab, title: tab.title ?? '', customTitle: tab.customTitle ?? null } : null,
