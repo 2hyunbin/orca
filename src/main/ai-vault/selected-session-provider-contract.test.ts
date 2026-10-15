@@ -3,6 +3,8 @@ import { mkdtemp, mkdir, writeFile, rm, chmod, lstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import {
   CLI_CONVERSATION_ADOPTING_AGENTS,
@@ -20,7 +22,9 @@ import {
   resolveSelectedSessionOnHost,
   type SelectedSessionRuntime
 } from './selected-session-resolver'
-import { structuredAgentRuntimeRegistration } from '../runtime/structured-agent-runtime-registrations'
+import { structuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-metadata'
+import { prepareLegacyTranscriptImport } from '../native-chat/agent-session-journal/journal-legacy-import'
+import { PI_CONTEXT_FIXTURES } from '../native-chat/agent-session-journal/journal-pi-context-fixtures'
 import { resolveStructuredAgentSessionAdoptionForCreate } from '../runtime/structured-agent-session-create-adoption'
 import { GROK_TRANSCRIPT_IMPORT } from '../grok/grok-transcript-import'
 import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
@@ -29,7 +33,15 @@ import SyncDatabase from '../sqlite/sync-database'
 import { writeOpenCodeSqliteDatabase } from './session-scanner-opencode-sqlite-fixture'
 
 vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => ({ deps: { store: { listRecords: () => [] } } })
+  getStructuredAgentSessionHost: () => ({
+    deps: {
+      store: {
+        getRecord: () => chatRecord,
+        listRecords: () => (chatRecord ? [chatRecord] : [])
+      }
+    },
+    journalSnapshot: async () => ({ items: [{ body: { kind: 'message', role: 'user' } }] })
+  })
 }))
 vi.mock('./selected-session-reader-client', () => ({
   readSelectedSessionInBackground: readSelectedSessionFile
@@ -58,6 +70,7 @@ let rows: AgentStatusIpcPayload[] = []
 let account: AgentSessionAccountHome
 let environment: Record<string, string>
 let workspaceCwd: string
+let chatRecord: AgentSessionRecord | null = null
 const runtime: SelectedSessionRuntime = {
   ensureStructuredAgentSessionHost: async () => {},
   getAgentProviderSessionRows: () => rows,
@@ -77,6 +90,7 @@ beforeEach(async () => {
   vi.stubEnv('ORCA_USER_DATA_PATH', join(root, 'orca-data'))
   environment = { HOME: root, USERPROFILE: root, XDG_DATA_HOME: join(root, 'data') }
   workspaceCwd = CWD
+  chatRecord = null
 })
 afterEach(async () => {
   clearGrokSessionPathLookupCacheForTests()
@@ -108,7 +122,7 @@ function source(agent: CliConversationRowAgent) {
 }
 async function admit(selected: ReturnType<typeof source>) {
   const agent = CLI_CONVERSATION_ADOPTING_AGENTS[selected.agent]
-  const importer = structuredAgentRuntimeRegistration(agent)?.transcriptImport
+  const importer = structuredAgentRuntimeMetadata(agent)?.transcriptImport
   if (!importer) {
     throw new Error('Missing importer')
   }
@@ -219,8 +233,90 @@ it.each([false, true])(
       throw new Error('Missing selected row')
     }
     expect(await admit(selected)).toEqual({ accountHome: account, transcriptPath: file })
+    const original = agentSessionRecordFixture()
+    chatRecord = {
+      ...original,
+      provider: 'opencode',
+      location: { ...original.location, workspaceId: 'workspace' },
+      accountHome: account,
+      providerHandleChain: original.providerHandleChain.map((link) => ({
+        ...link,
+        handle: { transport: 'acp', agent: 'opencode', nativeId: ID }
+      }))
+    }
+    expect(
+      await resolveSelectedSessionOnHost(
+        {
+          kind: 'chat',
+          sessionId: chatRecord.sessionId,
+          workspaceId: 'workspace'
+        },
+        runtime,
+        {}
+      )
+    ).toMatchObject({
+      status: 'ready',
+      session: {
+        agent: managed ? 'opencode2' : 'opencode',
+        sessionId: ID,
+        filePath: file,
+        cwd: CWD,
+        accountHome: account,
+        structuredSession: { sessionId: original.sessionId, workspaceId: 'workspace' }
+      }
+    })
   }
 )
+
+it('selected Pi keeps complete named identity, exact-path ambiguity and active imported context', async () => {
+  account = { variable: 'PI_CODING_AGENT_DIR', path: join(root, '.pi', 'agent') }
+  vi.stubEnv('PI_CODING_AGENT_DIR', account.path)
+  const file = join(account.path, 'sessions', 'saved-under-an-alias', `${ID}.jsonl`)
+  const fixture = PI_CONTEXT_FIXTURES[0]
+  if (!fixture) {
+    throw new Error('Missing Pi context fixture')
+  }
+  const transcript = (id = ID) =>
+    `${[{ type: 'session', version: 3, id, cwd: CWD }, ...fixture.entries]
+      .map((entry) => JSON.stringify(entry))
+      .join('\n')}\n`
+  await mkdir(dirname(file), { recursive: true })
+  await writeFile(file, transcript())
+  const selected = source('pi')
+  expect(await resolveSelectedSessionOnHost(selected, runtime, {})).toMatchObject({
+    status: 'ready',
+    session: { agent: 'pi', sessionId: ID, filePath: file, cwd: CWD }
+  })
+  const adoption = await admit(selected)
+  expect(adoption).toEqual({ accountHome: account, transcriptPath: file })
+  const imported = await prepareLegacyTranscriptImport({
+    agent: 'pi',
+    sessionId: ID,
+    options: { filePath: adoption.transcriptPath }
+  })
+  expect(
+    imported.ok &&
+      imported.items.flatMap((item) =>
+        item.body.kind === 'message'
+          ? item.body.blocks.flatMap((block) => (block.type === 'text' ? [block.text] : []))
+          : []
+      )
+  ).toEqual(fixture.texts)
+  rows = rows.map((row) => ({
+    ...row,
+    providerSession: { key: 'session_id', id: ID, transcriptPath: file }
+  }))
+  const duplicate = join(account.path, 'sessions', 'different-cwd', `${ID}.jsonl`)
+  await mkdir(dirname(duplicate), { recursive: true })
+  await writeFile(duplicate, transcript())
+  expect(await resolveSelectedSessionOnHost(selected, runtime, {})).toEqual({ status: 'missing' })
+  await expect(admit(selected)).rejects.toMatchObject({
+    refusal: { code: 'agent_session_identity_required' }
+  })
+  await rm(duplicate)
+  await writeFile(file, transcript('different-header-id'))
+  expect(await resolveSelectedSessionOnHost(selected, runtime, {})).toEqual({ status: 'missing' })
+})
 
 it.each([false, true])(
   'Grok selected resume reads saved summary authority and canonical content (long bucket=%s)',

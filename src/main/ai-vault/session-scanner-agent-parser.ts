@@ -151,7 +151,7 @@ export async function parseAgentSessionFile(
     case 'openclaw':
       return parseMessageGraphSessionFile('openclaw', candidate.file, platform, messages)
     case 'pi':
-      return parseMessageGraphSessionFile('pi', candidate.file, platform, messages)
+      return parseMessageGraphSessionFile('pi', candidate.file, platform, messages, selectedRead)
     case 'omp':
       return parseMessageGraphSessionFile('omp', candidate.file, platform, messages, selectedRead)
     case 'prime-agent':

@@ -15,6 +15,8 @@ import {
 } from '../../../shared/execution-host'
 import { readIpcErrorMessage } from './ipc-error'
 import type { AiVaultResumeCommandSession } from './ai-vault-resume-command'
+import { agentForksThroughChat } from '../../../shared/agent-resume-argv'
+import { translate } from '@/i18n/i18n'
 
 export function prepareAiVaultSessionForResume<T extends AiVaultSessionLaunchContext>(
   session: T,
@@ -82,12 +84,57 @@ function isMissingPairedResumePreparation(error: unknown): boolean {
   )
 }
 
-/** Picks the Codex home a fork of `session` runs under, the same way a resume picks it. */
-export function prepareAiVaultSessionForFork<T extends AiVaultSessionLaunchContext>(
-  session: T,
+/**
+ * The conversation "Resume in New CLI" opens. Most agents' fork command makes the copy, so this
+ * only picks the Codex home it runs under, as a resume does (`copied: false`). An agent whose chat
+ * makes the copy (`agentForksThroughChat`) has the chat's host make it here; the result is that
+ * copy, which a plain resume opens and no chat owns (`copied: true`).
+ */
+export async function prepareAiVaultSessionForFork(
+  session: AiVaultSessionLaunchContext,
   operation?: AiVaultSurfaceSwitchOperation
-): Promise<T> {
-  return prepareAiVaultSessionHome(session, true, false, operation)
+): Promise<{ session: AiVaultSessionLaunchContext; copied: boolean }> {
+  if (!agentForksThroughChat(session.agent)) {
+    return {
+      session: await prepareAiVaultSessionHome(session, true, false, operation),
+      copied: false
+    }
+  }
+  operation?.signal.throwIfAborted()
+  if (operation && !operation.isSourceOpen()) {
+    throw new Error('The source conversation is no longer available.')
+  }
+  const result = await prepareAiVaultSessionResumeRequest({
+    agent: session.agent,
+    sessionId: session.sessionId,
+    filePath: session.filePath,
+    codexHome: session.codexHome,
+    executionHostId: session.executionHostId,
+    fork: true,
+    ...(operation?.requestContext ? { requestContext: operation.requestContext } : {})
+  })
+  operation?.signal.throwIfAborted()
+  if (operation && !operation.isSourceOpen()) {
+    throw new Error('The source conversation is no longer available.')
+  }
+  if (!result.forkedSession || (session.agent === 'omp' && !result.forkedSession.filePath)) {
+    // A host that predates chat copies makes none; resuming the chat's own would be a second writer.
+    throw new Error(aiVaultCliForkHostTooOldMessage())
+  }
+  const { structuredSession: _owner, ...copy } = session
+  const { sessionId, agent, filePath } = result.forkedSession
+  return {
+    session: { ...copy, agent, sessionId, filePath: filePath ?? '', resumeCommand: '' },
+    copied: true
+  }
+}
+
+/** Only a host that predates a fork refuses or ignores it, so the failure asks for the update. */
+export function aiVaultCliForkHostTooOldMessage(): string {
+  return translate(
+    'auto.components.right.sidebar.AiVaultPanel.resumeInNewCliHostTooOld',
+    'Update Orca on the host that runs this chat to resume it in a new CLI.'
+  )
 }
 
 async function prepareAiVaultSessionHome<T extends AiVaultSessionLaunchContext>(

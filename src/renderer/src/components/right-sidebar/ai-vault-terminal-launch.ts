@@ -3,8 +3,6 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { launchAiVaultSessionInNewTab } from '@/lib/launch-ai-vault-session'
 import type { AiVaultResumeStartup } from '@/lib/ai-vault-resume-command'
-import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
-import { describeAiVaultResumeFailure } from '@/lib/ai-vault-resume-refusal'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
@@ -13,9 +11,10 @@ import type { AiVaultSessionResumeTargetState } from './ai-vault-session-resume'
 import { agentLabel } from './ai-vault-session-filters'
 import { activateAiVaultResumeWorkspace } from './ai-vault-session-resume-in-chat-launch'
 import {
-  aiVaultResumeUnsupportedMessage,
-  resolveAiVaultSessionLaunchTarget
-} from './ai-vault-session-launch-target'
+  notifyAiVaultSessionPreparationFailure,
+  notifyAiVaultSessionQueued,
+  resolveAiVaultSessionLaunchTargetOrNotify
+} from './ai-vault-session-launch-feedback'
 
 export async function launchAiVaultSessionInTerminal({
   session,
@@ -43,15 +42,6 @@ export async function launchAiVaultSessionInTerminal({
   })
   if (!targetId) {
     return
-  }
-  const showQueuedToast = (): void => {
-    toast.success(
-      translate(
-        'auto.components.right.sidebar.AiVaultPanel.agentSessionQueued',
-        '{{value0}} session queued',
-        { value0: agentLabel(session.agent) }
-      )
-    )
   }
   await prepareStartup(targetId.worktreeId)
     .then(async (startup) => {
@@ -83,7 +73,7 @@ export async function launchAiVaultSessionInTerminal({
           if (useAppStore.getState().activeWorktreeId !== targetId.worktreeId) {
             activateAiVaultResumeWorkspace(targetId.worktreeId)
           }
-          showQueuedToast()
+          notifyAiVaultSessionQueued(session.agent)
         })
         if (operation) {
           await waitForPromiseWithSignal(settlement, operation.signal)
@@ -95,41 +85,11 @@ export async function launchAiVaultSessionInTerminal({
       if (useAppStore.getState().activeWorktreeId !== targetId.worktreeId) {
         activateAiVaultResumeWorkspace(targetId.worktreeId)
       }
-      showQueuedToast()
+      notifyAiVaultSessionQueued(session.agent)
     })
     .catch((error: unknown) => {
       if (!operation?.signal.aborted) {
         notifyAiVaultSessionPreparationFailure(error, session.agent, describeFailure)
       }
     })
-}
-
-export function notifyAiVaultSessionPreparationFailure(
-  error: unknown,
-  agent: AiVaultAgent,
-  describeFailure: (message: string) => string = (message) => message
-): void {
-  const message = readIpcErrorMessage(error)
-  const described = message ? new Error(describeFailure(message)) : undefined
-  toast.error(describeAiVaultResumeFailure(described, agent))
-}
-
-export function resolveAiVaultSessionLaunchTargetOrNotify(
-  args: Parameters<typeof resolveAiVaultSessionLaunchTarget>[0]
-): Extract<ReturnType<typeof resolveAiVaultSessionLaunchTarget>, { status: 'ready' }> | null {
-  const target = resolveAiVaultSessionLaunchTarget(args)
-  if (target.status === 'missing') {
-    toast.error(
-      translate(
-        'auto.components.right.sidebar.AiVaultPanel.openWorkspaceBeforeResuming',
-        'Open a workspace before resuming a session.'
-      )
-    )
-    return null
-  }
-  if (target.status === 'unsupported') {
-    toast.error(aiVaultResumeUnsupportedMessage(target.targetStatus))
-    return null
-  }
-  return target
 }

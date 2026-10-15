@@ -138,7 +138,8 @@ describe('prepareAiVaultSessionForFork', () => {
 
     const prepared = await prepareAiVaultSessionForFork(owned)
 
-    expect(prepared.codexHome).toBe('/tmp/orca/codex-accounts/account-2/home')
+    expect(prepared.copied).toBe(false)
+    expect(prepared.session.codexHome).toBe('/tmp/orca/codex-accounts/account-2/home')
     expect(prepareSessionResume).toHaveBeenCalledWith({
       agent: 'codex',
       sessionId: owned.sessionId,
@@ -158,8 +159,23 @@ describe('prepareAiVaultSessionForFork', () => {
       structuredSession: { sessionId: 'session-1', workspaceId: 'worktree-1' }
     })
 
-    await expect(prepareAiVaultSessionForFork(owned)).resolves.toBe(owned)
+    await expect(prepareAiVaultSessionForFork(owned)).resolves.toEqual({
+      session: owned,
+      copied: false
+    })
     expect(prepareSessionResume).not.toHaveBeenCalled()
+  })
+
+  it("refuses a host that made no copy rather than resuming the chat's own conversation", async () => {
+    stubPreparation(vi.fn().mockResolvedValue({ useRealCodexHome: false }))
+    const owned = session({
+      agent: 'omp',
+      structuredSession: { sessionId: 'session-1', workspaceId: 'worktree-1' }
+    })
+
+    await expect(prepareAiVaultSessionForFork(owned)).rejects.toThrow(
+      'Update Orca on the host that runs this chat to resume it in a new CLI.'
+    )
   })
 })
 
@@ -236,24 +252,31 @@ function session(overrides: Partial<AiVaultSession> = {}): AiVaultSession {
   }
 }
 
-it('selected preparation carries the original request owner and never starts after abandonment', async () => {
-  const prepareSessionResume = vi.fn().mockResolvedValue({ useRealCodexHome: false })
-  stubPreparation(prepareSessionResume)
-  const controller = new AbortController()
-  const operation = {
-    signal: controller.signal,
-    isSourceOpen: () => !controller.signal.aborted,
-    requestContext: { requestToken: 'selected-1', expectedEnvironmentPairingRevision: 1 }
+it.each(['codex', 'opencode2'] as const)(
+  'selected %s preparation carries its owner and never starts after abandonment',
+  async (agent) => {
+    const prepareSessionResume = vi.fn().mockResolvedValue({
+      useRealCodexHome: false,
+      forkedSession: { sessionId: 'independent-copy', agent: 'opencode' }
+    })
+    stubPreparation(prepareSessionResume)
+    const controller = new AbortController()
+    const operation = {
+      signal: controller.signal,
+      isSourceOpen: () => !controller.signal.aborted,
+      requestContext: { requestToken: 'selected-1', expectedEnvironmentPairingRevision: 1 }
+    }
+    const source = session({
+      agent,
+      executionHostId: 'runtime:host-1',
+      codexHome: '/account/codex-runtime-home/home'
+    })
+    await prepareAiVaultSessionForFork(source, operation)
+    expect(prepareSessionResume).toHaveBeenCalledWith(
+      expect.objectContaining({ requestContext: operation.requestContext, fork: true })
+    )
+    controller.abort()
+    await expect(prepareAiVaultSessionForFork(source, operation)).rejects.toThrow()
+    expect(prepareSessionResume).toHaveBeenCalledOnce()
   }
-  const source = session({
-    executionHostId: 'runtime:host-1',
-    codexHome: '/account/codex-runtime-home/home'
-  })
-  await prepareAiVaultSessionForFork(source, operation)
-  expect(prepareSessionResume).toHaveBeenCalledWith(
-    expect.objectContaining({ requestContext: operation.requestContext, fork: true })
-  )
-  controller.abort()
-  await expect(prepareAiVaultSessionForFork(source, operation)).rejects.toThrow()
-  expect(prepareSessionResume).toHaveBeenCalledOnce()
-})
+)

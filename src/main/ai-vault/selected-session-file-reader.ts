@@ -6,7 +6,7 @@ import { SELECTED_TRANSCRIPT_MAX_BYTES } from '../../shared/ai-vault-selected-se
 import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 
 export type SelectedSessionFileRequest = { filePath: string; codexHome: string | null } & (
-  | { agent: 'claude' | 'codex' | 'omp' }
+  | { agent: 'claude' | 'codex' | 'omp' | 'pi' }
   | { agent: 'grok'; providerSessionId: string; accountHomePath: string }
 )
 

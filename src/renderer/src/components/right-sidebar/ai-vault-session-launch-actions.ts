@@ -1,8 +1,8 @@
 import {
-  launchAiVaultSessionInTerminal,
   notifyAiVaultSessionPreparationFailure,
   resolveAiVaultSessionLaunchTargetOrNotify
-} from './ai-vault-terminal-launch'
+} from './ai-vault-session-launch-feedback'
+import { launchAiVaultSessionInTerminal } from './ai-vault-terminal-launch'
 import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
 import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 import { useCallback, useState } from 'react'
@@ -13,7 +13,11 @@ import {
   type AiVaultResumeCommandSession,
   type AiVaultResumeStartup
 } from '@/lib/ai-vault-resume-command'
-import { buildAiVaultForkStartupForWorktree } from '@/lib/ai-vault-session-fork-startup'
+import {
+  assertAiVaultCopiedSessionLaunchAllowed,
+  buildAiVaultCopiedSessionStartupForWorktree,
+  buildAiVaultForkStartupForWorktree
+} from '@/lib/ai-vault-session-fork-startup'
 import { useAppStore } from '@/store'
 import type { AiVaultAgent, AiVaultSession } from '../../../../shared/ai-vault-types'
 import {
@@ -139,16 +143,33 @@ export function useAiVaultSessionLaunchActions({
       operation?: AiVaultSurfaceSwitchOperation
     ): Promise<void> => {
       const prepareStartup = async (worktreeId: string): Promise<AiVaultResumeStartup> => {
-        const startup = buildAiVaultForkStartupForWorktree({
+        assertAiVaultCopiedSessionLaunchAllowed({
           state: useAppStore.getState(),
           worktreeId,
-          session: await (
-            operation
-              ? prepareAiVaultSessionForFork(session, operation)
-              : prepareAiVaultSessionForFork(session)
-          ).then(dropDeletedSshResumeCwd),
-          commandOverride: agentCmdOverrides?.[session.agent]
+          session,
+          commandOverride: agentCmdOverrides?.opencode
         })
+        const prepared = await (operation
+          ? prepareAiVaultSessionForFork(session, operation)
+          : prepareAiVaultSessionForFork(session))
+        const target = await dropDeletedSshResumeCwd(prepared.session)
+        // A copy the chat's host already made is the terminal's own conversation: a plain resume.
+        const startup = prepared.copied
+          ? buildAiVaultCopiedSessionStartupForWorktree(
+              {
+                state: useAppStore.getState(),
+                worktreeId,
+                session: target,
+                commandOverride: agentCmdOverrides?.[target.agent]
+              },
+              session.agent
+            )
+          : buildAiVaultForkStartupForWorktree({
+              state: useAppStore.getState(),
+              worktreeId,
+              session: target,
+              commandOverride: agentCmdOverrides?.[session.agent]
+            })
         if (!startup) {
           throw new Error(
             translate(

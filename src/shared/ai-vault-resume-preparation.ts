@@ -1,5 +1,10 @@
 import type { AiVaultResolveSessionArgs } from './ai-vault-selected-session'
-import type { AiVaultSession } from './ai-vault-types'
+import type { AiVaultAgent, AiVaultSession } from './ai-vault-types'
+
+export type AiVaultConversationCopy = {
+  sessionId: string
+  filePath?: string
+}
 
 export type AiVaultPrepareSessionResumeArgs = Pick<
   AiVaultSession,
@@ -22,6 +27,10 @@ export type AiVaultPrepareSessionResumeResult = {
   // homes, so the owning host repins resume to the selected account's home.
   // Absent (older hosts included) means resume keeps the session's own home.
   substituteCodexHome?: string
+  /** The copy a fork made of a chat's conversation, for an agent whose chat makes it
+   *  (`agentForksThroughChat`): its id, and the agent whose CLI opens it, the chat's (an OpenCode
+   *  2.x chat lists as `opencode2` but runs `opencode`). Absent from older hosts, which make none. */
+  forkedSession?: AiVaultConversationCopy & { agent: AiVaultAgent }
 }
 
 export type AiVaultSessionResumePreparation = (

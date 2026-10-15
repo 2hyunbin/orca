@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from '../orca-runtime-close-headless-mobile-terminal-tab'
+import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from './headless-terminal-tab-close'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
@@ -39,12 +39,14 @@ export abstract class RuntimeHeadlessTabProperties extends OrcaRuntimeWithCloseH
     }
 
     const unifiedTabs = session.unifiedTabs?.[worktreeId]
-    if (unifiedTabs?.some((tab) => tab.id === tabId || tab.entityId === tabId)) {
+    // A browser row is named by its page; a window keys the tab's props by the saved tab.
+    const unifiedId = this.serveBrowserTabs.unifiedTabId(worktreeId, tabId)
+    if (unifiedTabs?.some((tab) => tab.id === unifiedId || tab.entityId === unifiedId)) {
       changed = true
       nextSession.unifiedTabs = {
         ...session.unifiedTabs,
         [worktreeId]: unifiedTabs.map((tab) =>
-          tab.id === tabId || tab.entityId === tabId
+          tab.id === unifiedId || tab.entityId === unifiedId
             ? {
                 ...tab,
                 ...(props.color !== undefined ? { color: props.color } : {}),

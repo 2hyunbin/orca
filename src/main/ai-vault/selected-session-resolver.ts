@@ -5,7 +5,7 @@ import type {
   AiVaultResolveSessionResult
 } from '../../shared/ai-vault-selected-session'
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
-import { isLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { AI_VAULT_AGENTS } from '../../shared/ai-vault-types'
 import {
@@ -14,7 +14,7 @@ import {
 } from '../../shared/ai-vault-resume-preparation'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { listStructuredProviderSessionOwnership } from '../native-chat/agent-session-wire/structured-provider-session-ownership'
-import { structuredAgentRuntimeRegistration } from '../runtime/structured-agent-runtime-registrations'
+import { structuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-metadata'
 import { agentSessionPinnedLaunchDirectory } from '../runtime/agent-session-record-launch-directory'
 import {
   resolveSelectedAccountTranscript,
@@ -53,7 +53,7 @@ export function resolveSelectedSessionOnHost(
     }
     try {
       return source.kind === 'chat'
-        ? await resolveChat(source, settings, workspacePath, owned)
+        ? await resolveChat(source, runtime, settings, workspacePath, owned)
         : await resolveCli(source, runtime, settings, owned)
     } catch (error) {
       if (
@@ -69,6 +69,7 @@ export function resolveSelectedSessionOnHost(
 
 async function resolveChat(
   source: Extract<AiVaultSelectedSessionSource, { kind: 'chat' }>,
+  runtime: SelectedSessionRuntime,
   settings: StructuredAgentTranscriptImportSettings,
   workspacePath: string,
   signal: AbortSignal
@@ -92,10 +93,11 @@ async function resolveChat(
   currentRecord()
   const snapshot = await waitForPromiseWithSignal(host.journalSnapshot(source.sessionId), signal)
   const record = currentRecord()
-  const agent = AI_VAULT_AGENTS.find((candidate) => candidate === record.provider)
+  let agent = AI_VAULT_AGENTS.find((candidate) => candidate === record.provider)
   const head = agentSessionProviderHandleChainHead(record.providerHandleChain)
-  const history = structuredAgentRuntimeRegistration(record.provider)?.sessionHistory
-  if (!agent || !history || !head || !isLegacyAgentSessionAccountHome(record.accountHome)) {
+  const registration = structuredAgentRuntimeMetadata(record.provider)
+  const history = registration?.sessionHistory
+  if (!agent || !history || !head) {
     throw new Error('This chat has no saved provider conversation to open.')
   }
   const sessionId = history.rowSessionId(head)
@@ -111,7 +113,40 @@ async function resolveChat(
   ).length
   const cwd = agentSessionPinnedLaunchDirectory(record) ?? workspacePath
   let filePath = agent === 'pi' ? head.handle.nativeId : ''
-  const codexHome = agent === 'codex' ? record.accountHome.path : null
+  const codexHome =
+    agent === 'codex' ? requireLegacyAgentSessionAccountHome(record.accountHome).path : null
+  if (record.provider === 'opencode') {
+    const importer = registration?.transcriptImport
+    if (!importer) {
+      throw new Error('Conversation import is unavailable.')
+    }
+    const { launchEnv } = await runtime.resolveStructuredAgentTranscriptImportContext(
+      record.provider,
+      source.workspaceId
+    )
+    const transcriptPath = await importer.findTranscript({
+      providerSessionId: sessionId,
+      accountHome: record.accountHome,
+      launchEnv,
+      workspaceCwd: cwd,
+      selected: { cwd, signal }
+    })
+    const row = transcriptPath
+      ? await importer.readSelectedSession({
+          providerSessionId: sessionId,
+          transcriptPath,
+          accountHome: record.accountHome,
+          workspaceCwd: cwd,
+          signal
+        })
+      : null
+    currentRecord()
+    if (!row || !transcriptPath) {
+      throw new Error('This chat has no saved provider conversation to open.')
+    }
+    agent = row.agent
+    filePath = transcriptPath
+  }
   if (
     agent === 'codex' &&
     (isLegacySharedCodexHome(codexHome) || isPerAccountManagedCodexHome(codexHome))
@@ -186,7 +221,7 @@ async function resolveCli(
   if (beforeRead) {
     return beforeRead
   }
-  const importer = structuredAgentRuntimeRegistration(agent)?.transcriptImport
+  const importer = structuredAgentRuntimeMetadata(agent)?.transcriptImport
   if (!importer) {
     throw new Error('Conversation import is unavailable.')
   }

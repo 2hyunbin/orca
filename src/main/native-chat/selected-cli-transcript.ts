@@ -7,7 +7,7 @@ import {
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import type { SelectedCliSessionSource } from '../../shared/ai-vault-selected-session'
 import type { StructuredAgentTranscriptImportSettings } from './structured-agent-cli-conversations'
-import { structuredAgentRuntimeRegistration } from '../runtime/structured-agent-runtime-registrations'
+import { structuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-metadata'
 import { resolveStructuredAgentSessionAdoption } from './structured-agent-session-history-adoption'
 import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 import { isWslUncPath } from '../../shared/wsl-paths'
@@ -63,7 +63,7 @@ export async function resolveSelectedCliTranscript(
 }
 
 export async function resolveSelectedAccountTranscript(input: SelectedAccountTranscriptInput) {
-  const importer = structuredAgentRuntimeRegistration(input.agent)?.transcriptImport
+  const importer = structuredAgentRuntimeMetadata(input.agent)?.transcriptImport
   if (!importer) {
     throw new Error('Conversation import is unavailable.')
   }

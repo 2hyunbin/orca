@@ -11,6 +11,7 @@ import {
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
+import type { StructuredAgentSessionResumeSource } from '../../shared/structured-agent-session-create'
 import { agentSessionExecutionLocationsEqual } from '../../shared/agent-session-record'
 import type { AgentSessionAttachParams } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
@@ -21,10 +22,29 @@ import {
   resolveStructuredAgentSessionAdoption,
   structuredAdoptionConflictError
 } from '../native-chat/structured-agent-session-history-adoption'
+import { structuredAgentRuntimeMetadata } from './structured-agent-runtime-metadata'
 import type {
   StructuredAgentTranscriptImport,
   StructuredAgentTranscriptImportSettings
 } from '../native-chat/structured-agent-cli-conversations'
+
+export type StructuredAgentSessionCreateIntent = {
+  envelope: { sessionId: string; clientOperationId: string }
+  worktree: string
+  agent: StructuredAgentId
+  callerKey?: string
+  resumeFrom?: StructuredAgentSessionResumeSource
+}
+
+export type StructuredAgentSessionCreateAccountResolver = (context: {
+  launchEnv: NodeJS.ProcessEnv
+  location: {
+    executionHostId: string
+    wslDistro: string | null
+    workspaceId: string
+    workspaceKind: 'folder' | 'git-worktree'
+  }
+}) => AgentSessionAccountHome | Promise<AgentSessionAccountHome>
 
 export function resolveCommittedStructuredAgentSessionAdoptionIntent(input: {
   host: StructuredAgentSessionHost | null
@@ -35,11 +55,13 @@ export function resolveCommittedStructuredAgentSessionAdoptionIntent(input: {
   location: AgentSessionExecutionLocation
   options?: Readonly<Record<string, string>>
 }): AgentSessionAttachParams | null {
+  const history = structuredAgentRuntimeMetadata(input.agent)?.sessionHistory
   const replay =
-    input.resumeFrom && input.callerKey && input.host
+    input.resumeFrom && input.callerKey && input.host && history
       ? findCommittedStructuredAgentSessionAdoptionReplay({
           agent: input.agent,
           providerSessionId: input.resumeFrom.providerSessionId,
+          rowSessionId: history.rowSessionId,
           selfSessionId: input.envelope.sessionId,
           callerKey: input.callerKey,
           operationId: input.envelope.clientOperationId,
