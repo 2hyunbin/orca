@@ -20,15 +20,20 @@ export type PaneLayoutCommand =
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
   | { type: 'setPaneRatios'; tabId: string; root: TerminalPaneLayoutNode }
 
+/** The tab-bar property commands (pin, color, custom title); `tabId` is the tab-bar tab's id. */
+export type TabPropsLayoutCommand =
+  | { type: 'renameTab'; tabId: string; kind: 'custom'; title: string | null }
+  | { type: 'setTabProps'; tabId: string; color?: string | null; isPinned?: boolean }
+
 /**
- * A pane command in a layout-owner build: main applies it first, then `apply` shows main's result.
+ * A pane or tab command in a layout-owner build: main applies it first, then `apply` shows main's result.
  * `asToday` runs instead when main cannot act on it: a paired server holds the tab (#18202), main's
  * copy lacks the workspace, tab or pane, or the call threw. `refused` on any other refusal. False
  * when a paired server owns the workspace's layout; the caller acts as today.
  */
 export function sendPaneCommandToLayoutOwner(
   worktreeId: string,
-  command: PaneLayoutCommand,
+  command: PaneLayoutCommand | TabPropsLayoutCommand,
   handlers: {
     apply: (result: LayoutCommandResult) => void
     asToday: () => void

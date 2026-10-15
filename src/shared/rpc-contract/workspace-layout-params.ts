@@ -55,6 +55,23 @@ const EqualizePanesCommand = z.object({
   tabId: OnPane.tabId
 })
 
+const OnTab = { workspace: OnPane.workspace, tabId: OnPane.tabId }
+
+/** The tab bar's rename: a title as the window stores it today; null clears it. */
+const RenameTabCommand = z.object({
+  type: z.literal('renameTab'),
+  ...OnTab,
+  kind: z.literal('custom'),
+  title: z.union([z.string(), z.null()])
+})
+
+const SetTabPropsCommand = z.object({
+  type: z.literal('setTabProps'),
+  ...OnTab,
+  color: z.union([z.string(), z.null()]).optional(),
+  isPinned: z.boolean().optional()
+})
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id, so no new id is accepted here.
@@ -66,6 +83,8 @@ export const LayoutApplyParams = z.object({
     RenamePaneCommand,
     EqualizePanesCommand,
     MovePaneCommand,
-    SetPaneRatiosCommand
+    SetPaneRatiosCommand,
+    RenameTabCommand,
+    SetTabPropsCommand
   ])
 })

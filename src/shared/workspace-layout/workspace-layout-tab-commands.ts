@@ -156,6 +156,10 @@ export function setTabProps(
     ...(command.isPinned !== undefined ? { isPinned: command.isPinned } : {}),
     ...(command.viewMode !== undefined ? { viewMode: command.viewMode } : {})
   }
+  if (command.isPinned) {
+    // A pinned tab is kept, as the tab bar's pin keeps it.
+    delete next.isPreview
+  }
   let updated = {
     ...workspace,
     tabs: workspace.tabs.map((entry) => (entry.id === tab.id ? next : entry))
