@@ -5,7 +5,7 @@ import { httpLinkActionDestinationsFor } from '@/lib/http-link-destinations'
 import {
   canOpenWorkspaceBrowserTabOnRuntime,
   canOpenWorkspaceBrowserTabOnSsh
-} from '@/lib/workspace-browser-tab-open'
+} from '@/lib/workspace-browser-owner-route'
 import { resolvePaneWslDistro } from './terminal-pane-wsl-distro'
 import {
   resolveTerminalHttpLinkSourceOwner,
