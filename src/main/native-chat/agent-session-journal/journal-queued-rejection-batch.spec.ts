@@ -14,10 +14,7 @@ import {
   type AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionJournal } from './journal-store'
-import {
-  closeTestJournalHostDatabases,
-  createTrackedJournalOpener
-} from './journal-host-database-test-support'
+import { createTrackedJournalOpener } from './journal-host-database-test-support'
 
 export function registerJournalQueuedRejectionBatchTests(): void {
   const IDENTITY: AgentSessionJournalIdentity = {
@@ -42,7 +39,7 @@ export function registerJournalQueuedRejectionBatchTests(): void {
   })
 
   afterEach(async () => {
-    await closeTestJournalHostDatabases()
+    await journals.closeAll()
     await rm(root, { recursive: true, force: true })
   })
 

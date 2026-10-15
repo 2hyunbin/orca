@@ -267,12 +267,15 @@ export function registerProfileStateMaintenanceTests(): void {
       const preference = getActiveViewPreferenceFile(dataFile)
       const preferenceBefore = readFileSync(preference)
       vi.useFakeTimers()
-      store.updateSettings({ theme: 'dark' })
-      store.updateUI({ activeView: 'settings' })
-      await vi.advanceTimersByTimeAsync(6_000)
-      expect(authority.readSerializedState()).toEqual(before)
-      expect(readFileSync(preference)).toEqual(preferenceBefore)
-      vi.useRealTimers()
+      try {
+        store.updateSettings({ theme: 'dark' })
+        store.updateUI({ activeView: 'settings' })
+        await vi.advanceTimersByTimeAsync(6_000)
+        expect(authority.readSerializedState()).toEqual(before)
+        expect(readFileSync(preference)).toEqual(preferenceBefore)
+      } finally {
+        vi.useRealTimers()
+      }
       await maintenance.resume()
       await store.flushPendingOrThrowAsync()
       expect(JSON.parse(authority.readSerializedState() ?? '{}').settings.theme).toBe('dark')
