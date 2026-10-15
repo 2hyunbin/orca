@@ -139,15 +139,6 @@ test('a managed SSH terminal link opens in the Orca Browser through the SSH host
 
     // Cmd/Ctrl-click opens a remote localhost dev-server URL straight into the Orca Browser.
     const modifierUrl = `http://localhost:${SSH_REMOTE_ONLY_PORT}/echo/modifier`
-    await page.evaluate(
-      ({ worktreeId, tabId }) => {
-        const state = window.__store!.getState()
-        state.setActiveWorktree(worktreeId)
-        state.setActiveTab(tabId)
-        state.setActiveTabType('terminal', worktreeId)
-      },
-      { worktreeId: seeded.worktreeId, tabId }
-    )
     await printLink(page, tabId, `http://localhost:${SSH_REMOTE_ONLY_PORT}`, '/echo/modifier')
     const modifierPoint = await terminalLinkPoint(page, tabId, modifierUrl)
     await page.mouse.move(modifierPoint.x, modifierPoint.y)
