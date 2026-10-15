@@ -529,4 +529,35 @@ describe('captureTerminalShutdownLayout', () => {
       ptyIdsByLeafId: { [LEAF_ID]: 'pty-1', [LEAF_ID_2]: 'pty-2' }
     })
   })
+  it('keeps the buffer and binding of a stored leaf whose pane is not mounted yet', async () => {
+    const { captureTerminalShutdownLayout } = await import('./terminal-shutdown-layout-capture')
+    const pane = {
+      id: 1,
+      leafId: LEAF_ID,
+      stablePaneId: LEAF_ID,
+      terminal: mockTerminal(1_000),
+      serializeAddon: { serialize: vi.fn(() => 'mounted scrollback') }
+    }
+
+    const layout = captureTerminalShutdownLayout({
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only the mocked pane fields.
+      manager: { getPanes: () => [pane] } as never,
+      paneTransports: new Map([[1, { getPtyId: () => 'pty-1' }]]),
+      existingLayout: {
+        root: SPLIT_ROOT,
+        activeLeafId: LEAF_ID,
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [LEAF_ID]: 'pty-1', [LEAF_ID_2]: 'pty-2' },
+        buffersByLeafId: { [LEAF_ID_2]: 'unmounted scrollback' },
+        scrollbackRefsByLeafId: { [LEAF_ID_2]: 'v1-unmounted' }
+      }
+    })
+
+    expect(layout.buffersByLeafId).toEqual({
+      [LEAF_ID]: `mounted scrollback${CURSOR_HOME}`,
+      [LEAF_ID_2]: 'unmounted scrollback'
+    })
+    expect(layout.scrollbackRefsByLeafId).toEqual({ [LEAF_ID_2]: 'v1-unmounted' })
+    expect(layout.ptyIdsByLeafId).toEqual({ [LEAF_ID]: 'pty-1', [LEAF_ID_2]: 'pty-2' })
+  })
 })

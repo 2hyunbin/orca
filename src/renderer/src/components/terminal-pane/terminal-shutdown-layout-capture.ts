@@ -3,6 +3,7 @@ import type { ManagedPane } from '@/lib/pane-manager/pane-manager'
 import type { PtyTransport } from './pty-transport-types'
 import { flushTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import { mergeCapturedLeafState } from './merge-captured-leaf-state'
+import { collectLeafIds } from './terminal-pane-layout-tree'
 import { resolveTerminalLayoutActiveLeafId } from './terminal-layout-leaf-ids'
 import { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } from '../../../../shared/terminal-scrollback-limits'
 import { serializeWithAbsoluteCursor } from '../../../../shared/terminal-serialize-absolute-cursor'
@@ -126,9 +127,18 @@ export function captureTerminalShutdownLayout({
     }
   }
 
-  const currentLeafIds = new Set(panes.map((p) => p.leafId))
+  // Why the stored tree, not the mounted panes: reconciliation can leave a stored leaf unmounted.
+  const currentLeafIds = new Set(collectLeafIds(existingLayout.root))
   const livePtyIdsByLeafId: Record<string, string> = {}
   const preservedPtyIdsByLeafId: Record<string, string> = {}
+  const mountedLeafIds = new Set<string>(panes.map((p) => p.leafId))
+  for (const leafId of currentLeafIds) {
+    const priorPtyId = existingLayout.ptyIdsByLeafId?.[leafId]
+    // Why: reconciliation inserts an unmounted leaf only while it still has its binding.
+    if (!mountedLeafIds.has(leafId) && priorPtyId) {
+      preservedPtyIdsByLeafId[leafId] = priorPtyId
+    }
+  }
   for (const pane of panes) {
     const transport = paneTransports.get(pane.id)
     const livePtyId = transport?.getPtyId() ?? null
