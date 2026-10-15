@@ -20,12 +20,11 @@ import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-crea
  */
 export function getNotificationHiddenWorkspaceIds(state: AppState): Set<string> {
   const hidden = new Set<string>()
+  if (state.settings?.notifications?.notifyHiddenWorkspaces !== false || !state.persistedUIReady) {
+    return hidden
+  }
   const sleepFree = { ...state, showSleepingWorkspaces: true }
-  if (
-    state.settings?.notifications?.notifyHiddenWorkspaces !== false ||
-    !state.persistedUIReady ||
-    !sidebarHasActiveFilters(sleepFree)
-  ) {
+  if (!sidebarHasActiveFilters(sleepFree)) {
     return hidden
   }
   const repoMap = getIndexedRepoMap(state.repos)
