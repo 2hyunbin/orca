@@ -72,13 +72,16 @@ export function SessionMetadata({
               : translate('aiVault.antigravity2ToCli', '2.0 → CLI')}
           </Badge>
         ) : null}
-        <span className="shrink-0 tabular-nums">
-          {translate(
-            'auto.components.right.sidebar.AiVaultSessionRow.messageCount',
-            '{{value0}} msgs',
-            { value0: session.messageCount }
-          )}
-        </span>
+        {/* A partial row was read from the transcript's ends: no count rather than a wrong one. */}
+        {session.contentCoverage === undefined ? (
+          <span className="shrink-0 tabular-nums">
+            {translate(
+              'auto.components.right.sidebar.AiVaultSessionRow.messageCount',
+              '{{value0}} msgs',
+              { value0: session.messageCount }
+            )}
+          </span>
+        ) : null}
         {session.subagentTranscriptCount > 0 ? (
           <>
             <span className="shrink-0 text-muted-foreground/55">·</span>

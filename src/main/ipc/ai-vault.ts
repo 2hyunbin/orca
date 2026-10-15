@@ -201,7 +201,8 @@ async function scanLocalAiVaultSessionsAsIssue(
   signal: AbortSignal | undefined
 ): Promise<AiVaultListResult> {
   try {
-    return await scanLocalAiVaultSessions(args, signal)
+    // Every caller here is this build's renderer, which hides a partial row's count.
+    return await scanLocalAiVaultSessions({ ...args, acceptPartialRows: true }, signal)
   } catch (error) {
     if (isAiVaultScanCancelledError(error)) {
       throw error

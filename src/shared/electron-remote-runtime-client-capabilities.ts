@@ -14,6 +14,7 @@ import {
 } from './protocol-version'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from './agent-session-create-capabilities'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from './agent-session-optional-model-capability'
+import { AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY } from './ai-vault-partial-rows-capability'
 
 // Electron clients can decode client-hosted page placement; becoming a page
 // host still requires the separate authenticated browser-client lease.
@@ -36,5 +37,7 @@ export const ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   // Why: only the renderer runs the retirement-proof ledger; CLI and mobile must keep full lists.
   SESSION_TABS_RETIREMENT_PROOF_DELTA_RUNTIME_CAPABILITY,
   // Only the renderer shows Deleting for a `removing` row; CLI and mobile get those rows omitted.
-  WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY
+  WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY,
+  // The Session History row hides the message count of a partial row.
+  AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY
 ] as const

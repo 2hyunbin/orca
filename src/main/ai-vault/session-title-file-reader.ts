@@ -45,7 +45,10 @@ async function readOneTitle(
         },
         codexHome: null
       },
-      process.platform
+      process.platform,
+      undefined,
+      // A title is in a transcript's opening or closing records; never read a huge file whole for it.
+      'partial-ok'
     )
     if (
       signal?.aborted ||

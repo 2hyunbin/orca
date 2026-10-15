@@ -11,7 +11,8 @@ import {
 } from '../../shared/node-bounded-json-stringify'
 import type { PersistedSessionParseCacheEntry } from './session-parse-cache-store'
 
-export const SESSION_PARSE_CACHE_SCHEMA_VERSION = 4
+// 5: rows may be partial (`contentCoverage`); an older build must not read them as exact.
+export const SESSION_PARSE_CACHE_SCHEMA_VERSION = 5
 export const SESSION_PARSE_CACHE_MAX_BYTES = 64 * 1024 * 1024
 export const SESSION_PARSE_CACHE_JSON_LIMITS = {
   structuralTokens: 1_000_000,
