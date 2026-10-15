@@ -77,7 +77,8 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
       'Installs globally (all projects) by default. Use --local to install into the current ' +
         'project instead.',
       'Targets the coding agents Orca detects on this host. Use --agent <name>[,<name>...] ' +
-        'to choose them yourself, or --agent universal for the shared directory alone.',
+        'to target agents detection missed, or --agent universal for the shared directory ' +
+        'alone. Agents Orca already installed a skill for stay targeted, so --agent only adds.',
       'Replaces an earlier Orca version of a skill. A copy with changes Orca did not make is ' +
         'reported and left alone; use --force to replace it.',
       'Never edits the skills CLI lock file (~/.agents/.skill-lock.json); it only reads it to ' +
