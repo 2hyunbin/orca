@@ -18,7 +18,7 @@ type RestartPorts = {
 
 const defer = (reason: string): OrcadRestartAdmissionResult => ({ status: 'defer', reason })
 
-/** A reservation excludes new work; only its still-current token may begin a shutdown. */
+/** New work supersedes a reservation; only its still-current token may begin a shutdown. */
 export class OrcadRestartAdmission {
   private committedToken: string | null = null
   private held: { token: string; owner: symbol; timer: ReturnType<typeof setTimeout> } | null = null
@@ -58,10 +58,10 @@ export class OrcadRestartAdmission {
       }
       const census = await this.ports.collect(activatedAt)
       if (!this.owns(token) || this.admission.pending > 0 || this.ports.hasProviders() || census.chatWork !== 0) {
-        return this.refuse(token, 'Chat work could not be proven idle.')
+        return this.refuse(token, 'Chat work could not be proven idle.', census)
       }
       if (census.inProcessSessions !== 0 || census.liveSessions === null || (!force && census.liveSessions > 0)) {
-        return this.refuse(token, 'Running terminals prevent a safe restart.')
+        return this.refuse(token, 'Running terminals prevent a safe restart.', census)
       }
       return { status: 'reserved', token, census }
     } catch {
@@ -110,9 +110,9 @@ export class OrcadRestartAdmission {
     return this.held?.token === token && this.admission.owns(this.held.owner)
   }
 
-  private refuse(token: string, reason: string): OrcadRestartAdmissionResult {
+  private refuse(token: string, reason: string, census?: OrcadTerminalCensus): OrcadRestartAdmissionResult {
     this.release(token)
-    return defer(reason)
+    return { ...defer(reason), ...(census ? { census } : {}) }
   }
 }
 

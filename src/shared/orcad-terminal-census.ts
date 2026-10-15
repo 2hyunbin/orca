@@ -20,7 +20,9 @@ export const OrcadTerminalCensusSchema = z.object({
    */
   inProcessSessions: CountSchema.optional(),
   /** Host-owned chat obligations; absent on older hosts, which cannot prove restart safety. */
-  chatWork: CountSchema.optional()
+  chatWork: CountSchema.optional(),
+  /** Client status proof; absent when the peer's restart capability could not be verified. */
+  restartAdmissionSupported: z.boolean().optional()
 })
 
 export type OrcadTerminalCensus = z.infer<typeof OrcadTerminalCensusSchema>

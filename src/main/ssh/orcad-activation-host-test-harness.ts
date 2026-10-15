@@ -11,6 +11,7 @@ import {
 } from './orcad-activation-record'
 import { isSnapshotCaptureCommand } from './orcad-snapshot-capture-command'
 import { sshCommandExitError } from './ssh-relay-exec-command'
+import type { OrcadRestartAdmissionPort } from './orcad-restart-admission-client'
 
 export const OLD = '0.1.0+aa01'
 export const NEW = '0.2.0+bb01'
@@ -120,6 +121,33 @@ export class FakeOrcadHost {
         this.record = contents
       }
     })
+  }
+
+  /** The slot's own restart admission: an idle reservation, then a commit the slot exits on. */
+  restartAdmission(version: string): OrcadRestartAdmissionPort {
+    return {
+      reserve: async () => ({
+        status: 'reserved',
+        token: `restart-${version}`,
+        census: {
+          liveSessions: 0,
+          startedSinceActivation: 0,
+          daemonProtocolVersion: 3,
+          chatWork: 0
+        }
+      }),
+      commit: async () => {
+        try {
+          return this.mutate(() => {
+            this.alive.delete(version)
+            return 'committed' as const
+          })
+        } catch {
+          return 'unknown'
+        }
+      },
+      release: async () => {}
+    }
   }
 
   /** Returns false where a stale-only takeover would answer busy. */

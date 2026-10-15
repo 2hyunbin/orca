@@ -108,7 +108,7 @@ export class StructuredAgentSessionIdleSweep {
     ).length
   }
 
-  /** The caller excludes new admission; release idle children without waiting for the cache TTL. */
+  /** Release idle children inside their session lock without waiting for the cache TTL. */
   async drainForRestart(): Promise<void> {
     await Promise.all([...this.deps.sessions.keys()].map((id) =>
       this.deps.serialize(id, async () => {
