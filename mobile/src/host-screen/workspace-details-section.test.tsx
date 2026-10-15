@@ -45,7 +45,6 @@ function render(props: Partial<WorkspaceDetailsSectionProps>) {
     renderer = create(
       createElement(WorkspaceDetailsSection, {
         links: [],
-        origin: null,
         notes: null,
         onOpenLink,
         ...props
