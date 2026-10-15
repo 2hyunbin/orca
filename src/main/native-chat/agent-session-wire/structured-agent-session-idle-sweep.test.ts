@@ -1,3 +1,4 @@
+import { orcadRestartWorkAdmission } from '../../orcad/orcad-restart-work-admission'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 // The idle sweep on a real host: what puts an agent to rest, what keeps it running, and what a
 // reader and the session lists see when it does.
@@ -81,6 +82,13 @@ describe('the idle sweep', () => {
     await rig.host.drainForRestart()
     expect(rig.host.hasLoadedProviders()).toBe(false)
     expect(rig.store.getRecord(SESSION)).not.toBeNull()
+    await vi.waitFor(() => expect(orcadRestartWorkAdmission.pending).toBe(0))
+    const reservation = orcadRestartWorkAdmission.reserve()
+    expect(reservation).not.toBeNull()
+    const sent = await rig.host.send(CALLER, restTestSend('user wins update race', fence()))
+    expect(sent.ok).toBe(true)
+    expect(orcadRestartWorkAdmission.reserved).toBe(false)
+    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
   })
 
   it('stops an idle agent and keeps the conversation, its status row and its reader (P2-07)', async () => {

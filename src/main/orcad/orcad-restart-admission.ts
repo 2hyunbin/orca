@@ -98,6 +98,14 @@ export class OrcadRestartAdmission {
     return { status: 'released' }
   }
 
+  /** Older clients already decide terminal policy; only the host can protect its chats. */
+  async restartLegacySlot(): Promise<void> {
+    const reserved = await this.reserve(0, true)
+    if (reserved.status === 'reserved' && reserved.token) {
+      this.commit(reserved.token)
+    }
+  }
+
   private owns(token: string): boolean {
     return this.held?.token === token && this.admission.owns(this.held.owner)
   }

@@ -1,4 +1,4 @@
-import { bindOrcadRestartShutdown } from './orcad-restart-admission'
+import { bindOrcadRestartShutdown, orcadRestartAdmission } from './orcad-restart-admission'
 /**
  * `orcad` — the Orca runtime served without Electron.
  *
@@ -345,12 +345,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const startup = startOrcad(options)
   const requestShutdown = installOrcadShutdownSignals(async () => (await startup).stop())
   const handle = await startup
+  bindOrcadRestartShutdown(requestShutdown)
   // Why after startup: a managed request must name the runtime and instance this run became.
   installOrcadStopRequestListeners(() => requestShutdown('stop request'), {
     installRoot: resolveOrcadInstallRoot(),
     managedStop: handle.managedStop,
-    beforeManagedStop: prepareOrcadManagedStop
+    beforeManagedStop: prepareOrcadManagedStop,
+    restartSlot: () => orcadRestartAdmission.restartLegacySlot()
   })
   bindOrcadIdleShutdown(requestShutdown)
-  bindOrcadRestartShutdown(requestShutdown)
 }
