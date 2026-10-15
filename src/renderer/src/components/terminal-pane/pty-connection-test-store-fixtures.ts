@@ -4,6 +4,7 @@ import { LEAF_1 } from './pty-connection-test-pane-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
 
 export function createInitialStoreState(getState: () => StoreState): StoreState {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture implements the store members the pane connection reads.
   return {
     activeWorktreeId: 'wt-1',
     tabsByWorktree: {
@@ -56,6 +57,9 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
     }),
     clearSleepingAgentSession: vi.fn((paneKey: string) => {
       delete getState().sleepingAgentSessionsByPaneKey[paneKey]
+    }),
+    rememberSleepingAgentSession: vi.fn((record: { paneKey: string }) => {
+      getState().sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
     }),
     registerAgentLaunchConfig: vi.fn(),
     clearAgentLaunchConfig: vi.fn(),

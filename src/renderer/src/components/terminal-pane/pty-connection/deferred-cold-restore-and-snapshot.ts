@@ -34,15 +34,40 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
     })
     return true
   }
-  session.clearSleepingRecordAfterColdRestoreSpawn = (
-    startup: ColdRestoreAgentResumeStartup | null
+  session.adoptSleepingRecordAfterColdRestoreSpawn = (
+    startup: ColdRestoreAgentResumeStartup | null,
+    resumeUnavailable: boolean
   ): void => {
-    if (startup && !startup.useLiveEntry && startup.sleepingRecordEntry) {
-      session.clearSleepingRecordProviderDuplicates(
-        useAppStore.getState(),
-        startup.sleepingRecordEntry
-      )
+    if (!startup) {
+      return
     }
+    const state = useAppStore.getState()
+    const consumed = startup.useLiveEntry ? null : startup.sleepingRecordEntry
+    if (consumed) {
+      session.clearSleepingRecordProviderDuplicates(state, consumed)
+    }
+    if (resumeUnavailable) {
+      return
+    }
+    // Why: a resumed agent may not report its session until its next turn, so this record is
+    // the pane's only resume handle if its terminal dies again before then.
+    const now = Date.now()
+    const { restoreOnTabOpenOnly: _lazyWake, ...base } = consumed?.record ?? {
+      prompt: '',
+      state: 'working' as const,
+      capturedAt: now,
+      updatedAt: now,
+      launchConfig: startup.launchConfig
+    }
+    state.rememberSleepingAgentSession({
+      ...base,
+      paneKey: session.cacheKey,
+      tabId: session.deps.tabId,
+      worktreeId: session.deps.worktreeId,
+      agent: startup.agent,
+      providerSession: startup.resumeProviderSession,
+      origin: 'live'
+    })
   }
   session.mergeStartupEnvWithPaneIdentity = (
     env: Record<string, string> | undefined
