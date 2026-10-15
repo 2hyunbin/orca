@@ -1,7 +1,6 @@
 import { useAppStore } from '@/store'
-import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { parseExecutionHostId } from '../../../../shared/execution-host'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
 /**
@@ -18,8 +17,9 @@ export function splitThroughLayoutOwner(
   },
   mount: (leafId: string | undefined) => void
 ): boolean {
-  const hostId = getExecutionHostIdForWorktree(useAppStore.getState(), split.worktreeId)
-  if (parseExecutionHostId(hostId)?.kind === 'runtime') {
+  // Why: the same owner test that mirrors a workspace's tabs from a paired server; a focused
+  // server must not claim a workspace whose row names no owner.
+  if (getExplicitRuntimeEnvironmentIdForWorktree(useAppStore.getState(), split.worktreeId)) {
     return false
   }
   const { worktreeId: workspace, ...pane } = split

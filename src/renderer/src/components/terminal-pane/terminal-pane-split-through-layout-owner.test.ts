@@ -3,13 +3,13 @@ import { splitThroughLayoutOwner } from './terminal-pane-split-through-layout-ow
 
 const mocks = vi.hoisted(() => ({
   callRuntimeRpc: vi.fn(),
-  hostId: 'local'
+  ownerEnvironmentId: null as string | null
 }))
 
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExecutionHostIdForWorktree: () => mocks.hostId
+  getExplicitRuntimeEnvironmentIdForWorktree: () => mocks.ownerEnvironmentId
 }))
 
 const SPLIT = {
@@ -22,7 +22,7 @@ const SPLIT = {
 describe('splitThroughLayoutOwner', () => {
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
-    mocks.hostId = 'local'
+    mocks.ownerEnvironmentId = null
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
@@ -70,7 +70,7 @@ describe('splitThroughLayoutOwner', () => {
   })
 
   it('leaves a paired server’s workspace to today’s split', () => {
-    mocks.hostId = 'runtime:env-1'
+    mocks.ownerEnvironmentId = 'env-1'
 
     expect(splitThroughLayoutOwner(SPLIT, vi.fn())).toBe(false)
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
