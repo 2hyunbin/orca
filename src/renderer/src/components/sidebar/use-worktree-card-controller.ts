@@ -11,6 +11,7 @@ import { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details
 import { useWorktreeCardReviewDetails } from './use-worktree-card-review-details'
 import { useWorktreeCardSecondaryDetails } from './use-worktree-card-secondary-details'
 import { useWorktreeCardWorkspaceActions } from './use-worktree-card-workspace-actions'
+import { getWorktreeCardDetails } from '../../../../shared/worktree/card-properties'
 
 export function useWorktreeCardController(props: ResolvedWorktreeCardProps) {
   const { worktree, repo } = props
@@ -35,14 +36,16 @@ export function useWorktreeCardController(props: ResolvedWorktreeCardProps) {
   })
 
   const showStatus = foundation.cardProps.includes('status')
-  const showIssue = foundation.cardProps.includes('issue')
-  const showLinearIssue = foundation.cardProps.includes('linear-issue')
-  const showJiraIssue = foundation.cardProps.includes('jira-issue')
-  const showPR = foundation.cardProps.includes('pr')
-  const showAutomation = foundation.cardProps.includes('automation')
-  const showCli = foundation.cardProps.includes('cli')
-  const showComment = foundation.cardProps.includes('comment')
-  const showPorts = foundation.cardProps.includes('ports')
+  const {
+    issue: showIssue,
+    linearIssue: showLinearIssue,
+    jiraIssue: showJiraIssue,
+    pr: showPR,
+    automation: showAutomation,
+    cli: showCli,
+    comment: showComment,
+    ports: showPorts
+  } = getWorktreeCardDetails(foundation.cardProps, foundation)
   const shouldRefreshHostedReview = foundation.newCardStyle ? showStatus : showPR
   const detailsHoverControl = useWorktreeCardDetailsHoverControl()
   const hoverDetailsOpen = detailsHoverControl.hoverOpen

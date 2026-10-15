@@ -1,5 +1,6 @@
 import React from 'react'
 import { getWorkspaceAttachments } from '../../../../shared/workspace-attachments'
+import { getWorktreeCardDetails } from '../../../../shared/worktree/card-properties'
 
 import {
   getFlushWorktreeCardPaddingLeft,
@@ -84,7 +85,8 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     showRepoIdentityInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
     !showRepoIdentityInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
-  const showHostContextBadge = !compactCards && !!hostContextLabel && cardProps.includes('host')
+  const showHostContextBadge =
+    !!hostContextLabel && getWorktreeCardDetails(cardProps, { compactCards, newCardStyle }).host
   const showDetachedHeadInMetaRow = !compactCards && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&

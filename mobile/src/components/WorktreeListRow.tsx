@@ -5,6 +5,8 @@ import type { MobileRenderableRepoIcon } from '../host-screen/host-screen-reply-
 import { triggerMediumImpact } from '../platform/haptics'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { Worktree } from '../worktree/workspace-list-types'
+import type { WorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
+import type { AgentActivityDisplayMode } from '../../../src/shared/ui-chrome-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
 import { AgentSpinner } from './AgentSpinner'
 import { HostKindIcon } from './HostKindIcon'
@@ -29,6 +31,9 @@ type Props = {
   // When the list is already grouped under this repo's section header, the row
   // omits its own repo icon+name to avoid the redundant "📁 orca" on every row.
   hideRepo?: boolean
+  /** What the desktop's shared Card layout and properties show. */
+  cardDetails: WorktreeCardDetails
+  agentActivityDisplayMode: AgentActivityDisplayMode
   status: WorktreeRollupStatus
   onPress: (item: Worktree) => void
   onLongPress?: (item: Worktree) => void
@@ -42,6 +47,8 @@ function WorktreeListRowComponent({
   repoColor,
   repoIcon,
   hideRepo = false,
+  cardDetails,
+  agentActivityDisplayMode,
   status,
   onPress,
   onLongPress,
@@ -97,7 +104,7 @@ function WorktreeListRowComponent({
           >
             {item.displayName || item.repo}
           </Text>
-          {item.linkedPR && (
+          {cardDetails.pr && item.linkedPR && (
             <View style={styles.prBadge}>
               <GitPullRequest size={10} color={prStateColor(item.linkedPR.state)} />
               <Text style={[styles.prNumber, { color: prStateColor(item.linkedPR.state) }]}>
@@ -111,11 +118,11 @@ function WorktreeListRowComponent({
             </View>
           )}
           <WorktreeMetaGlyphs
-            comment={item.comment}
-            linkedLinearIssue={item.linkedLinearIssue}
-            linkedGitLabMR={item.linkedGitLabMR}
-            linkedIssue={item.linkedIssue}
-            linkedGitLabIssue={item.linkedGitLabIssue}
+            comment={cardDetails.comment ? item.comment : null}
+            linkedLinearIssue={cardDetails.linearIssue ? item.linkedLinearIssue : null}
+            linkedGitLabMR={cardDetails.pr ? item.linkedGitLabMR : null}
+            linkedIssue={cardDetails.issue ? item.linkedIssue : null}
+            linkedGitLabIssue={cardDetails.issue ? item.linkedGitLabIssue : null}
           />
         </View>
         <View style={styles.worktreeMetaRow}>
@@ -125,7 +132,7 @@ function WorktreeListRowComponent({
               <Text style={styles.childBadgeText}>Child</Text>
             </View>
           )}
-          {item.hostContextLabel ? (
+          {cardDetails.host && item.hostContextLabel ? (
             <View
               style={[styles.childBadge, styles.hostBadge]}
               accessibilityLabel={[item.hostContextLabel, item.hostContextHealthLabel]
@@ -161,8 +168,13 @@ function WorktreeListRowComponent({
         </View>
         {/* Only agents get a secondary activity line, matching desktop. A plain
             terminal's shell-output tail is intentionally not surfaced here. */}
-        {item.agents && item.agents.length > 0 ? (
-          <WorktreeAgentList agents={item.agents} now={now} unvisited={item.unread} />
+        {cardDetails.inlineAgents && item.agents && item.agents.length > 0 ? (
+          <WorktreeAgentList
+            agents={item.agents}
+            now={now}
+            unvisited={item.unread}
+            fullList={agentActivityDisplayMode === 'full'}
+          />
         ) : null}
         {lineageChildCount > 0 && onToggleLineage ? (
           <Pressable

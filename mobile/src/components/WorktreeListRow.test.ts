@@ -13,6 +13,11 @@ import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
 import { WorktreeAgentRow } from './WorktreeAgentRow'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { WorktreeListRow } from './WorktreeListRow'
+import {
+  DEFAULT_WORKTREE_CARD_PROPERTIES,
+  getWorktreeCardDetails,
+  type WorktreeCardDetails
+} from '../../../src/shared/worktree/card-properties'
 
 const { agentSpinnerRender, agentStateDotRender } = vi.hoisted(() => ({
   agentSpinnerRender: vi.fn(),
@@ -62,7 +67,20 @@ type TestItem = Worktree & { status: NonNullable<Worktree['status']> }
 const stableRepoIcon = { type: 'emoji', emoji: 'o' } as const
 let updateSibling: Dispatch<SetStateAction<number>> = () => undefined
 
-function ListRowHarness({ item, now }: { item: TestItem; now: number }) {
+const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, {
+  compactCards: false,
+  newCardStyle: false
+})
+
+function ListRowHarness({
+  item,
+  now,
+  cardDetails = ALL_DETAILS
+}: {
+  item: TestItem
+  now: number
+  cardDetails?: WorktreeCardDetails
+}) {
   const [sibling, setSibling] = useState(0)
   updateSibling = setSibling
   const onPress = useCallback(() => undefined, [])
@@ -82,6 +100,8 @@ function ListRowHarness({ item, now }: { item: TestItem; now: number }) {
       repoColor: '#000000',
       repoIcon: stableRepoIcon,
       hideRepo: false,
+      cardDetails,
+      agentActivityDisplayMode: 'compact',
       status: item.status,
       onPress,
       onLongPress,
@@ -181,6 +201,9 @@ describe('memoized worktree rows', () => {
         now: overrides.now ?? 2_000,
         repoColor: '#000000',
         repoIcon: { type: 'emoji', emoji: 'o' },
+        // A fresh but equal details object each render, as a parent re-render makes.
+        cardDetails: { ...ALL_DETAILS },
+        agentActivityDisplayMode: 'compact',
         status: item.status,
         onPress: overrides.onPress ?? onPress
       })
@@ -323,5 +346,36 @@ describe('memoized worktree rows', () => {
     )
     expect(textNodes()).not.toContain('Local Mac')
     expect(renderer!.root.findAllByType('Monitor' as never)).toHaveLength(0)
+  })
+
+  it("leaves out the PR, host and agents the desktop's card properties turn off", async () => {
+    const item: TestItem = {
+      ...baseItem,
+      hostId: 'ssh:ssh-1',
+      hostContextLabel: 'openclaw',
+      linkedPR: { number: 7, state: 'open' }
+    }
+    const shown = () => ({
+      pr: renderer!.root.findAll((node) => String(node.type) === 'GitPullRequest').length,
+      host: renderer!.root.findAll((node) => String(node.type) === 'Server').length
+    })
+    await act(async () => {
+      renderer = create(createElement(ListRowHarness, { item, now: 2_000 }))
+    })
+    expect(shown()).toEqual({ pr: 1, host: 1 })
+
+    await act(async () =>
+      renderer!.update(
+        createElement(ListRowHarness, {
+          item,
+          now: 2_000,
+          cardDetails: getWorktreeCardDetails(['status', 'unread'], {
+            compactCards: false,
+            newCardStyle: false
+          })
+        })
+      )
+    )
+    expect(shown()).toEqual({ pr: 0, host: 0 })
   })
 })

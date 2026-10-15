@@ -47,6 +47,7 @@ vi.mock('../components/NewWorkspaceFab', () => ({ FAB_SIZE: 56 }))
 
 import { buildSections } from '../worktree/workspace-list-sections'
 import { HostWorkspaceList } from './host-workspace-list'
+import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 
 function worktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {
@@ -96,7 +97,8 @@ function listProps(worktrees: Worktree[]) {
     state: {
       actionError: '',
       setActionTarget: noop,
-      view: { groupBy: 'none' },
+      view: { ...INITIAL_MOBILE_VIEW, groupBy: 'none' },
+      cardSettings: { compactWorktreeCards: false, newCardStyle: false },
       search: '',
       showSearch: false,
       worktreesLoaded: true

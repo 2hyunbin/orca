@@ -118,3 +118,38 @@ function matchesWorktreeCardProperties(
   }
   return expected.every((property, index) => properties[index] === property)
 }
+
+/** What the shared Card layout and properties show on a workspace card; each surface draws its own. */
+export type WorktreeCardDetails = {
+  issue: boolean
+  linearIssue: boolean
+  jiraIssue: boolean
+  pr: boolean
+  automation: boolean
+  cli: boolean
+  comment: boolean
+  ports: boolean
+  /** The host badge; compact cards leave it out. */
+  host: boolean
+  /** The agent rows under a card; compact classic cards leave them out. */
+  inlineAgents: boolean
+}
+
+export function getWorktreeCardDetails(
+  cardProps: readonly WorktreeCardProperty[],
+  style: { compactCards: boolean; newCardStyle: boolean }
+): WorktreeCardDetails {
+  const shows = (property: WorktreeCardProperty) => cardProps.includes(property)
+  return {
+    issue: shows('issue'),
+    linearIssue: shows('linear-issue'),
+    jiraIssue: shows('jira-issue'),
+    pr: shows('pr'),
+    automation: shows('automation'),
+    cli: shows('cli'),
+    comment: shows('comment'),
+    ports: shows('ports'),
+    host: !style.compactCards && shows('host'),
+    inlineAgents: shows('inline-agents') && (style.newCardStyle || !style.compactCards)
+  }
+}
