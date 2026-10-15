@@ -4,7 +4,10 @@ import { isRuntimeSubscriptionReplayResponse } from '../../../../shared/runtime-
 import { useAppStore } from '../../store'
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import { recoverWebSessionTerminalOrphansBeforeApply } from '../web-session-terminal-orphan-recovery'
-import { installWindowVisibilitySubscriptionParking } from '../window-visibility-subscription-parking'
+import {
+  installWindowVisibilitySubscriptionParking,
+  type WindowVisibilitySubscriptionParking
+} from '../window-visibility-subscription-parking'
 import {
   recordReceivedWebSessionTabsSnapshot,
   shouldApplyRecoveredWebSessionTabsSnapshot
@@ -59,7 +62,7 @@ export type ActiveSubscriptionArgs = {
   visibilitySnapshotAccepted: Ref<SessionTabsSnapshotHandler<void>>
 }
 
-/** Install the selected-worktree stream, which resumes immediately on visibility changes. */
+/** Install one worktree's stream, which resumes immediately on visibility changes. */
 export function installActiveSessionTabsSubscription({
   activeWorktreeId,
   activeWorktreeRuntimeEnvironmentId,
@@ -69,7 +72,7 @@ export function installActiveSessionTabsSubscription({
   visibilitySnapshotReceipt,
   visibilitySnapshotApply,
   visibilitySnapshotAccepted
-}: ActiveSubscriptionArgs): (() => void) | undefined {
+}: ActiveSubscriptionArgs): WindowVisibilitySubscriptionParking | undefined {
   const environmentId = activeWorktreeRuntimeEnvironmentId?.trim()
   if (
     !shouldSyncRuntimeSessionTabs({
@@ -83,6 +86,8 @@ export function installActiveSessionTabsSubscription({
     return undefined
   }
   const expectedTrackingGeneration = getWebSessionTabsTrackingGeneration(environmentId)
+  // Why: a warm stream keeps running after the user switches away; only the selected one may seed.
+  const isSelected = (): boolean => useAppStore.getState().activeWorktreeId === activeWorktreeId
   let requestedInitialTerminal = false
   let requestedRespawnAfterWake = false
   let hostAffirmedWorktree = false
@@ -187,12 +192,17 @@ export function installActiveSessionTabsSubscription({
       releaseWebRuntimeInitialTerminalBootstrapOnMirrorFrame(environmentId, recovered.worktree)
     }
     try {
-      if (isCurrent() && bootstrap) {
+      if (isCurrent() && isSelected() && bootstrap) {
         // Latch claim, create, and row-conditional release live in the dispatch helper.
         if (await dispatchWebRuntimeInitialTerminalBootstrap(environmentId, activeWorktreeId)) {
           requestedInitialTerminal = true
         }
-      } else if (isCurrent() && respawn && beginWebRuntimeWakeTerminalRespawn(activeWorktreeId)) {
+      } else if (
+        isCurrent() &&
+        isSelected() &&
+        respawn &&
+        beginWebRuntimeWakeTerminalRespawn(activeWorktreeId)
+      ) {
         requestedRespawnAfterWake = true
         await createWebRuntimeSessionTerminal({
           worktreeId: activeWorktreeId,
