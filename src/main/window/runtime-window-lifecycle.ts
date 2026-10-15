@@ -53,16 +53,14 @@ export function registerRuntimeWindowLifecycle(
       worktreeId,
       setup?: CreateWorktreeResult['setup'],
       startup?: WorktreeStartupLaunch,
-      defaultTabs?: CreateWorktreeResult['defaultTabs'],
-      providesInitialSurface?: boolean
+      defaultTabs?: CreateWorktreeResult['defaultTabs']
     ) => {
       send('ui:activateWorktree', {
         repoId,
         worktreeId,
         ...(setup ? { setup } : {}),
         ...(startup ? { startup } : {}),
-        ...(defaultTabs ? { defaultTabs } : {}),
-        ...(providesInitialSurface ? { providesInitialSurface } : {})
+        ...(defaultTabs ? { defaultTabs } : {})
       })
     },
     createTerminal: (worktreeId, opts) =>

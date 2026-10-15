@@ -180,22 +180,4 @@ describe('startRuntimeLocalWorktreeTerminals default shell seeding', () => {
     expect(ports.activate).toHaveBeenCalledWith(repo.id, worktree.id, startup, setup, defaultTabs)
     expect(createTerminal).toHaveBeenCalledTimes(1)
   })
-
-  it('does not treat agent attribution alone as a promised chat on activation', async () => {
-    const { ports } = createPorts()
-    await startRuntimeLocalWorktreeTerminals({
-      request: { repoSelector: repo.id, name: 'attributed', activate: true },
-      repo,
-      worktree,
-      createdWithAgent: 'codex',
-      ports
-    })
-    expect(ports.activate).toHaveBeenCalledWith(
-      repo.id,
-      worktree.id,
-      undefined,
-      undefined,
-      undefined
-    )
-  })
 })

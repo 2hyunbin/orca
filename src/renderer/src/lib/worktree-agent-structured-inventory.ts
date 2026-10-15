@@ -7,6 +7,24 @@ export type StructuredActivationInventory = {
   ownerBySessionId: ReadonlyMap<string, { owner: 'native' }>
 }
 
+/** Whether a running host creation operation still owns this workspace's first surface. */
+export async function readWorktreeLaunchOwnsFirstSurface(worktreeId: string): Promise<boolean> {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  const response = await window.api.runtime.call({
+    method: 'session.tabs.list',
+    params: { worktree: toRuntimeWorktreeSelector(worktreeId) }
+  })
+  const snapshot: unknown = response.ok ? response.result : null
+  return (
+    typeof snapshot === 'object' &&
+    snapshot !== null &&
+    'initialSurfaceLaunch' in snapshot &&
+    Boolean(snapshot.initialSurfaceLaunch)
+  )
+}
+
 export async function readWorktreeStructuredActivationInventory(
   worktreeId: string
 ): Promise<false | StructuredActivationInventory> {

@@ -5,6 +5,7 @@ import {
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import type { RuntimeClientEvent } from '../../../../shared/runtime-client-events'
+import { readWorktreeLaunchOwnsFirstSurface } from '@/lib/worktree-agent-structured-inventory'
 import type { AppState } from '../../store/types'
 import { useAppStore } from '../../store'
 import {
@@ -182,8 +183,7 @@ export function createWorktreeEventRuntime(
       worktreeId,
       setup,
       startup,
-      defaultTabs,
-      providesInitialSurface
+      defaultTabs
     }: Extract<RuntimeClientEvent, { type: 'activateWorktree' }>,
     options: WorktreeEventActivationOptions
   ): Promise<void> => {
@@ -208,12 +208,21 @@ export function createWorktreeEventRuntime(
     const existsAfterFetch = Boolean(
       useAppStore.getState().getKnownWorktreeById(worktreeId, options.executionHostId)
     )
+    // A host-retried Setup must not get a shell beside the surface a running launch still builds.
+    const launchOwnsSurface =
+      setup !== undefined &&
+      !startup &&
+      !options.executionHostId &&
+      (await readWorktreeLaunchOwnsFirstSurface(worktreeId).catch(() => false))
+    if (options.isCurrent?.() === false) {
+      return
+    }
     // Why: use the canonical activation path so the CLI switch records a back/forward visit, or the nav buttons ignore it.
     activateAndRevealWorktree(worktreeId, {
       ...(setup ? { setup } : {}),
       ...(startup ? { startup } : {}),
       ...(defaultTabs ? { defaultTabs } : {}),
-      ...(providesInitialSurface ? { providesInitialSurface } : {}),
+      ...(launchOwnsSurface ? { providesInitialSurface: true } : {}),
       ...(!existedBeforeFetch && existsAfterFetch ? { sidebarRevealBehavior: 'auto' } : {}),
       // Why: this activation came from the host runtime stream; echoing it back can create a selection loop.
       notifyHostRuntime: false,

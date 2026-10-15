@@ -43,9 +43,10 @@ type RuntimeFolderWorktreeCreateDeps = {
     repoId: string,
     worktreeId: string,
     setup?: undefined,
-    startup?: WorktreeStartupLaunch,
-    providesInitialSurface?: boolean
+    startup?: WorktreeStartupLaunch
   ) => void
+  /** A running creation operation builds this workspace's first surface itself. */
+  launchOwnsFirstSurface?: (worktreeId: string) => boolean
 }
 
 export async function createRuntimeFolderWorktree(args: {
@@ -56,7 +57,6 @@ export async function createRuntimeFolderWorktree(args: {
   /** What a host-built startup was quoted for, or the repair error it fails with. */
   startupLaunchRuntime?: AgentLaunchRuntime | Error
   createdWithAgent?: TuiAgent
-  promisedAgentChat?: boolean
   onWorkspaceCreated?: (worktreeId: string) => void
   draftPaste?: WorktreeStartupDraftPaste
   deps: RuntimeFolderWorktreeCreateDeps
@@ -177,13 +177,13 @@ export async function createRuntimeFolderWorktree(args: {
       console.warn(`[worktree-create] ${warning}`)
     }
   }
+  const launchOwnsSurface = deps.launchOwnsFirstSurface?.(worktree.id) === true
   if (shouldActivate) {
     deps.activate(
       repo.id,
       worktree.id,
       undefined,
-      args.startup && !didSpawnStartup ? args.startup : undefined,
-      ...(args.promisedAgentChat && !args.startup ? ([true] as const) : [])
+      args.startup && !didSpawnStartup && !launchOwnsSurface ? args.startup : undefined
     )
   }
   if (
@@ -192,7 +192,7 @@ export async function createRuntimeFolderWorktree(args: {
     shouldSeedWorktreePrimaryTerminal({
       hasPrimarySurface: didSpawnStartup,
       // Background attribution-only creates have historically omitted the shell.
-      callerProvidesSurface: args.promisedAgentChat === true || args.createdWithAgent !== undefined
+      callerProvidesSurface: launchOwnsSurface || args.createdWithAgent !== undefined
     })
   ) {
     try {

@@ -23,6 +23,8 @@ import type {
 type Ports = {
   canSpawn: boolean
   provisionInBackground?: () => boolean
+  /** A running creation operation builds this workspace's first surface itself. */
+  launchOwnsFirstSurface?: (worktreeId: string) => boolean
   createTerminal: (
     selector: string,
     options: TerminalCreateOptions
@@ -38,8 +40,7 @@ type Ports = {
     startup?: WorktreeStartupLaunch,
     // Only work main tried to start and failed; the host window retries it where the user sees it.
     failedSetup?: CreateWorktreeResult['setup'],
-    failedDefaultTabs?: CreateWorktreeResult['defaultTabs'],
-    providesInitialSurface?: boolean
+    failedDefaultTabs?: CreateWorktreeResult['defaultTabs']
   ) => void
 }
 
@@ -66,13 +67,13 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
   /** What a host-built startup was quoted for, or the repair error it fails with. */
   startupLaunchRuntime?: AgentLaunchRuntime | Error
   createdWithAgent?: TuiAgent
-  promisedAgentChat?: boolean
   draftPaste?: WorktreeStartupDraftPaste
   warning?: string
   ports: Ports
 }): Promise<RuntimeLocalWorktreeTerminalStartupResult> {
   const { request, repo, worktree, setup, defaultTabs, startup, ports } = args
   const shouldActivate = request.activate === true || request.runHooks === true
+  const launchOwnsSurface = ports.launchOwnsFirstSurface?.(worktree.id) === true
   let warning = args.warning
   let didSpawnStartup = false
   let didSpawnSetup = false
@@ -138,7 +139,9 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
     const provisionInBackground = ports.provisionInBackground?.() === true
     // Why: a failed agent start hands the whole create to the window, which seeds the agent's tab
     // first and lays setup and default tabs around it; main provisioning first would leave it no tab.
-    const agentStartFailed = Boolean(sequencedStartup && ports.canSpawn && !didSpawnStartup)
+    const agentStartFailed = Boolean(
+      sequencedStartup && ports.canSpawn && !didSpawnStartup && !launchOwnsSurface
+    )
     if (agentStartFailed && !provisionInBackground) {
       ports.activate(repo.id, worktree.id, startup, setup, defaultTabs)
     } else {
@@ -162,13 +165,12 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
           }
         }
       }
+      // A failed agent start stays with the running launch, which builds the agent next.
       ports.activate(
         repo.id,
         worktree.id,
-        startup && !didSpawnStartup ? startup : undefined,
-        failedSetup,
-        undefined,
-        ...(args.promisedAgentChat && !startup ? ([true] as const) : [])
+        startup && !didSpawnStartup && !launchOwnsSurface ? startup : undefined,
+        failedSetup
       )
     }
   } else if (ports.canSpawn && (setup || defaultTabs || didSpawnStartup)) {
@@ -191,7 +193,7 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
     shouldSeedWorktreePrimaryTerminal({
       hasPrimarySurface: didSpawnStartup,
       // Preserve background create behavior for attribution-only callers.
-      callerProvidesSurface: args.promisedAgentChat === true || args.createdWithAgent !== undefined
+      callerProvidesSurface: launchOwnsSurface || args.createdWithAgent !== undefined
     })
   ) {
     try {
@@ -227,6 +229,7 @@ function provisionArgs(
   hasStartupTerminal: boolean,
   wrappedSetupCommand?: string
 ): WorktreeTerminalProvisioningArgs {
+  const launchOwnsSurface = args.ports.launchOwnsFirstSurface?.(args.worktree.id) === true
   return {
     worktreeSelector: `id:${args.worktree.id}`,
     worktreeId: args.worktree.id,
@@ -236,8 +239,8 @@ function provisionArgs(
     primaryTerminalHandle,
     hasStartupTerminal,
     ...(args.request.setupOnly !== undefined ? { setupOnly: args.request.setupOnly } : {}),
-    callerProvidesSurface: args.promisedAgentChat === true,
-    startupNeedsTerminal: args.startup !== undefined,
+    callerProvidesSurface: launchOwnsSurface,
+    startupNeedsTerminal: args.startup !== undefined && !launchOwnsSurface,
     setupCommandPlatform: setupPlatform(args.setup, 'posix'),
     observeSetupCompletion: args.request.observeSetupCompletion,
     ...(wrappedSetupCommand ? { wrappedSetupCommand } : {})

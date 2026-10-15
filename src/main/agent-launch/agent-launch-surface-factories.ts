@@ -107,7 +107,6 @@ export type AgentLaunchWorkspaceFactory = {
     create: Readonly<Record<string, unknown>>
     /** Main-internal registration at the metadata boundary, before the workspace is announced. */
     onWorkspaceCreated?: (worktreeId: string) => void
-    promisedAgentChat?: boolean
     /** Set only when the settled mode is a terminal agent: agent-first creation sequences the
      *  agent's startup command behind the setup runner, which is how a PTY launch gets its
      *  wait-for-setup gate for free. A structured launch has no startup command to sequence and

@@ -43,7 +43,6 @@ function harness(options: {
     async (args: {
       create: Record<string, unknown>
       startupAgent: string | undefined
-      promisedAgentChat?: boolean
       startupPrompt?: string
       onWorkspaceCreated?: (worktreeId: string) => void
     }) => {
@@ -178,9 +177,6 @@ describe('a structured launch that creates its own worktree', () => {
     })
     expect(result.worktreeId).toBe('wt-new')
     expect(result.receipt.mode).toBe('structured')
-    expect(h.createWorktree).toHaveBeenCalledWith(
-      expect.objectContaining({ promisedAgentChat: true })
-    )
   })
 
   it('asks the host only after the workspace exists, never before', async () => {
@@ -260,17 +256,20 @@ describe('a structured launch that creates its own worktree', () => {
     })
   })
 
+  // The chat may exist after an unknown outcome, so a shell there would sit beside it.
+  it('leaves no shell after an unknown chat creation', async () => {
+    const h = harness({
+      structuredCreateError: new AgentLaunchStructuredSessionRefusedError(
+        'agent_session_operation_unknown',
+        'unknown'
+      )
+    })
+    await expect(h.run(CREATE_INTENT)).rejects.toThrow()
+    expect(h.createRecoveryShell).not.toHaveBeenCalled()
+    expect(h.createTerminalAgent).not.toHaveBeenCalled()
+  })
+
   it.each([
-    [
-      'unknown chat creation',
-      {
-        structuredCreateError: new AgentLaunchStructuredSessionRefusedError(
-          'agent_session_operation_unknown',
-          'unknown'
-        )
-      },
-      0
-    ],
     [
       'host downgrade terminal failure',
       {
@@ -359,7 +358,6 @@ describe('a launch the user did not ask to be structured', () => {
     expect(h.calls).toEqual(['createWorktree(startupAgent=claude)'])
     expect(result.outcome).toEqual({ kind: 'terminal', handle: 'term_agent_first' })
     expect(result.receipt).toMatchObject({ mode: 'terminal', reason: 'user_default' })
-    expect(h.createWorktree.mock.calls[0]?.[0]).not.toHaveProperty('promisedAgentChat')
   })
 })
 

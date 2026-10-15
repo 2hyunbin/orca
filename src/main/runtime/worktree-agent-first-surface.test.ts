@@ -107,7 +107,6 @@ describe('host-created workspaces awaiting their agent chat', () => {
         repoSelector: 'id:repo-1',
         name: 'chat-create',
         createdWithAgent: 'claude',
-        promisedAgentChat: true,
         onWorkspaceCreated: launch.onWorkspaceCreated,
         setupDecision: 'run',
         awaitTerminalProvisioning: true,
@@ -185,5 +184,41 @@ describe('host-created workspaces awaiting their agent chat', () => {
     expect(spawn).toHaveBeenCalledOnce()
     const tabs = (await runtime.listMobileSessionTabs(`id:${result.worktreeId}`)).tabs
     expect(tabs.map((tab) => tab.title)).toEqual(['Setup'])
+  })
+
+  // The launch builds the next agent itself, so handing the failed start to the window made two.
+  it('keeps a failed first agent start with the launch instead of the window', async () => {
+    const { runtime, spawn } = chatCreateRuntime({
+      setupScriptLaunchMode: 'new-tab',
+      withDefaults: false,
+      wait: false
+    })
+    const activateWorktree = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this create reaches only these notifier hooks.
+    runtime.setNotifier({ activateWorktree, worktreesChanged: vi.fn() } as never)
+    spawn.mockRejectedValueOnce(new Error('pty unavailable'))
+    const { AGENT_LAUNCH_METHODS } = await import('./rpc/methods/agent-launch')
+    const method = AGENT_LAUNCH_METHODS.find((entry) => entry.name === 'agent.launch')
+    if (!method) {
+      throw new Error('missing agent.launch')
+    }
+    const params = method.params.parse({
+      agent: 'claude',
+      target: {
+        kind: 'create-worktree',
+        create: { repo: 'id:repo-1', name: 'chat-create', setupDecision: 'run', activate: true }
+      }
+    })
+    const result = await method.handler(params, {
+      runtime,
+      clientCapabilities: [AGENT_LAUNCH_RUNTIME_CAPABILITY]
+    })
+
+    expect(result.outcome).toMatchObject({ kind: 'terminal' })
+    expect(activateWorktree).toHaveBeenCalledOnce()
+    expect(activateWorktree.mock.calls[0]?.[3]).toBeUndefined()
+    // Failed agent, Setup, then the launch's agent; no plain shell.
+    expect(spawn).toHaveBeenCalledTimes(3)
+    expect(spawn.mock.calls.every(([args]) => Boolean(args.command))).toBe(true)
   })
 })

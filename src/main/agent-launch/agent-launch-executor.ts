@@ -102,11 +102,13 @@ export async function executeAgentLaunch(
   }
 
   const launch =
-    intent.target.kind === 'create-worktree' && preflight.mode === 'structured'
-      ? beginCreatedWorkspaceLaunch(runtime, intent.agent)
-      : undefined
+    intent.target.kind === 'existing'
+      ? undefined
+      : beginCreatedWorkspaceLaunch(runtime, intent.agent)
   let placed: Awaited<ReturnType<typeof resolveWorkspace>> | undefined
   let surfacePublished = false
+  // A chat the host could not confirm or rule out may still exist; no shell beside it.
+  let surfaceOutcomeUnknown = false
   let recoverableWorktreeId: string | undefined
   try {
     placed = await resolveWorkspace(execution, preflight, launch?.onWorkspaceCreated)
@@ -162,6 +164,7 @@ export async function executeAgentLaunch(
         !(error instanceof AgentLaunchStructuredSessionRefusedError) ||
         !isDefinitiveAgentSessionCreateRefusal(error.code)
       ) {
+        surfaceOutcomeUnknown = error instanceof AgentLaunchStructuredSessionRefusedError
         throw error
       }
       settled = downgradeAgentLaunchModeForStructuredRefusal(settled, vocabulary)
@@ -193,7 +196,7 @@ export async function executeAgentLaunch(
     }
   } catch (error) {
     const createdWorktreeId = recoverableWorktreeId ?? launch?.createdWorktreeId()
-    if (!surfacePublished && intent.target.kind !== 'existing' && createdWorktreeId) {
+    if (!surfacePublished && !surfaceOutcomeUnknown && launch && createdWorktreeId) {
       await recoverCreatedWorkspace(execution.workspaces, createdWorktreeId)
     }
     throw error
@@ -240,6 +243,7 @@ async function resolveWorkspace(
       throw new Error('agent_launch_workspace_factory_required')
     }
     const created = await workspaces.createFolderWorkspace({ create: intent.target.create })
+    onWorkspaceCreated?.(created.worktreeId)
     return { ...created, startupTerminalHandle: undefined }
   }
   const created = await workspaces.createWorktree({
@@ -248,7 +252,6 @@ async function resolveWorkspace(
     // owns the prompt for the same reason, so it re-supplies its own rather than honouring theirs.
     create: withoutReservedAgentCreateFields(intent.target.create),
     ...(onWorkspaceCreated ? { onWorkspaceCreated } : {}),
-    ...(preflight.mode === 'structured' ? { promisedAgentChat: true } : {}),
     startupAgent: preflight.mode === 'structured' ? undefined : intent.agent,
     ...createLaunchPromptInputs(execution, preflight.mode),
     ...(preflight.mode === 'structured' ? {} : terminalLaunchInputs(intent))

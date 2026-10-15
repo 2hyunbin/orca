@@ -47,8 +47,7 @@ export type RuntimeNotifier = {
     worktreeId: string,
     setup?: CreateWorktreeResult['setup'],
     startup?: WorktreeStartupLaunch,
-    defaultTabs?: CreateWorktreeResult['defaultTabs'],
-    providesInitialSurface?: boolean
+    defaultTabs?: CreateWorktreeResult['defaultTabs']
   ): void
   createTerminal(
     worktreeId: string,
