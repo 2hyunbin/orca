@@ -4,10 +4,13 @@ import type { Repo } from '../../shared/repo-types'
 const mocks = vi.hoisted(() => ({
   ensure: vi.fn(async (_distro: string) => 'wsl:ubuntu'),
   call: vi.fn(),
-  enabled: true
+  enabled: true,
+  serviceAvailable: true
 }))
 vi.mock('./wsl-host-service-instance', () => ({
-  getWslHostService: () => ({ isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call })
+  getWslHostService: () => mocks.serviceAvailable
+    ? { isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call }
+    : null
 }))
 import { assertWslProjectRoutingCaller, registerProjectOnWslHost } from './wsl-project-registration'
 import { importNestedProjectsOnWslHost } from './wsl-nested-project-import'
@@ -23,6 +26,7 @@ describe('new WSL project ownership', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
     mocks.enabled = true
+    mocks.serviceAvailable = true
     mocks.ensure.mockReset().mockResolvedValue('wsl:ubuntu')
     mocks.call.mockReset().mockResolvedValue({ repo: guest })
   })
@@ -91,6 +95,18 @@ describe('new WSL project ownership', () => {
     vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
     mocks.ensure.mockRejectedValueOnce(new Error('server install failed'))
     await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow('server install failed')
+    expect(mocks.call).not.toHaveBeenCalled()
+  })
+
+  it('refuses a new headless UNC add when both gates are on, without changing saved rows', async () => {
+    mocks.serviceAvailable = false
+    const saved = { ...guest, path: '\\\\wsl$\\Ubuntu\\home\\me\\old' }
+    const store = { getRepos: () => [saved], getSettings: () => ({ experimentalWslHosts: true }) }
+    await expect(registerProjectOnWslHost(store, { kind: 'add', path: saved.path })).resolves.toBe(saved)
+    const operation = { kind: 'add' as const, path: '\\\\wsl$\\Ubuntu\\home\\me\\new' }
+    await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow('desktop app')
+    await expect(registerProjectOnWslHost({ ...store, getSettings: () => ({ experimentalWslHosts: false }) }, operation)).resolves.toBeNull()
+    expect(mocks.ensure).not.toHaveBeenCalled()
     expect(mocks.call).not.toHaveBeenCalled()
   })
 

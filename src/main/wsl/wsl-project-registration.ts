@@ -7,11 +7,21 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
+import type { GlobalSettings } from '../../shared/global-settings-types'
 import { foldWslUncPathCaseInsensitiveParts, parseWslUncPath } from '../../shared/wsl-paths'
 import { deriveCloneRepoNameFromUrl } from '../git/repo-clone-path'
 import { getWslHostService } from './wsl-host-service-instance'
 import { wslHostsGateOpen } from './wsl-host-gate'
 import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
+
+type WslProjectRegistrationStore = {
+  getRepos(): Repo[]
+  getSettings?(): Pick<GlobalSettings, 'experimentalWslHosts'>
+}
+
+function wslProjectRoutingEnabled(store: WslProjectRegistrationStore): boolean {
+  return getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true
+}
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
@@ -33,7 +43,7 @@ const ProjectReply = z.object({
 
 /** Null keeps the existing route; a WSL result is owned and registered only by the guest. */
 export async function registerProjectOnWslHost(
-  store: { getRepos(): Repo[] },
+  store: WslProjectRegistrationStore,
   operation: WslProjectOperation,
   executionHostId?: ExecutionHostId | null
 ): Promise<Repo | null> {
@@ -45,8 +55,7 @@ export async function registerProjectOnWslHost(
     return null
   }
   const path = parseWslUncPath(operation.path)
-  const service = getWslHostService()
-  if (!path || !service?.isEnabled()) {
+  if (!path || !wslProjectRoutingEnabled(store)) {
     return null
   }
   const name =
@@ -86,7 +95,7 @@ export async function registerProjectOnWslHost(
 }
 
 export async function resolveNewWslProjectHost(
-  store: { getRepos(): Repo[] },
+  store: WslProjectRegistrationStore,
   uncPath: string,
   targetKey = foldWslUncPathCaseInsensitiveParts(uncPath.replace(/[\\/]+$/, '')),
   executionHostId?: ExecutionHostId | null
@@ -100,7 +109,7 @@ export async function resolveNewWslProjectHost(
   }
   const path = parseWslUncPath(uncPath)
   const service = getWslHostService()
-  if (!path || !service?.isEnabled()) {
+  if (!path || !wslProjectRoutingEnabled(store)) {
     return null
   }
   const existing = store.getRepos().find(
@@ -110,9 +119,15 @@ export async function resolveNewWslProjectHost(
       foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
   )
   // Existing Windows-owned state belongs to the lossless mover, never a second Add.
-  return existing
-    ? { repo: existing }
-    : { environmentId: await service.ensure(path.distro), linuxPath: path.linuxPath }
+  if (existing) {
+    return { repo: existing }
+  }
+  if (!service) {
+    throw new Error(
+      'WSL projects need the desktop app for now. Open Orca on Windows and add this project there.'
+    )
+  }
+  return { environmentId: await service.ensure(path.distro), linuxPath: path.linuxPath }
 }
 
 /** A paired client cannot address an environment saved only on this Windows desktop. */
