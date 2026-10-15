@@ -20,6 +20,7 @@ vi.mock('@orca/process-host', async (importOriginal) => ({
 }))
 
 import { BROWSER_SIDECAR_OWNER_ENV } from '../../shared/browser-sidecar-lifetime'
+import { headlessServeOzonePlatformSwitches } from '../../shared/headless-serve-ozone-platform'
 import { ElectronServeBrowserProcess } from './electron-serve-browser-process'
 
 const FAKE_SIDECAR = join(import.meta.dirname, '__fixtures__', 'fake-orcad-electron-sidecar.cjs')
@@ -196,7 +197,14 @@ describe('ElectronServeBrowserProcess start-up', () => {
     expect(spec.program).toBe(INSTALLED_EXECUTABLE)
     const args = [...(spec.args ?? [])]
     expect(args).toEqual(
-      expect.arrayContaining(['--serve', '--serve-port', '--serve-json', '--serve-no-pairing'])
+      expect.arrayContaining([
+        '--serve',
+        '--serve-port',
+        '--serve-json',
+        '--serve-no-pairing',
+        // The sidecar is a headless serve too, so on Linux it must not inherit Wayland.
+        ...headlessServeOzonePlatformSwitches(process.platform)
+      ])
     )
     const port = Number(args[args.indexOf('--serve-port') + 1])
     expect(Number.isInteger(port) && port > 0 && port < 65_536).toBe(true)
