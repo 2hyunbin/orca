@@ -37,6 +37,8 @@ import {
 import { gateAndReseedEmptyWorkspace } from './worktree-activation-gated-empty-reseed'
 import { liftSidebarFiltersHidingWorktree } from './worktree-activation-sidebar-filters'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { getWorktreeVisitTimestamp } from './worktree-visit-recency'
+import { selectWorkspaceCreationTab } from './workspace-creation-tab-selection'
 import { revealFloatingWorkspacePanel } from './floating-workspace-panel-reveal'
 
 /**
@@ -214,6 +216,11 @@ export function activateAndRevealWorktree(
       worktreeId,
       environmentId: ownerRuntimeEnvironmentId
     })
+  }
+
+  // A window that never opened this workspace has picked no tab there, so it lands on the create's agent.
+  if (getWorktreeVisitTimestamp(state.lastVisitedAtByWorktreeId, wt) === undefined) {
+    selectWorkspaceCreationTab(worktreeId, wt.createdWithAgent)
   }
 
   // Why: focus recency for Cmd+J ordering, distinct from recordWorktreeVisit/lastActivityAt; stamp before any later async step could throw. See docs/cmd-j-empty-query-ordering.md.
