@@ -29,6 +29,8 @@ import { notifyHostPermissionRefused } from '@/lib/structured-agent-session-laun
 /** What a host's "no" opens instead: the terminal the launch would have opened had it known. */
 export type StructuredLaunchTerminal = {
   opened: boolean
+  /** A scheduled host publication is not proof that an agent terminal opened. */
+  surface?: 'agent' | 'shell' | 'none' | 'scheduled'
   promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
 }
 
@@ -153,6 +155,8 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
   })
   return {
     opened: result !== null,
+    surface:
+      result === null ? 'none' : result.surface.kind === 'host-published' ? 'scheduled' : 'agent',
     ...(result?.promptDeliveryResult ? { promptDeliveryResult: result.promptDeliveryResult } : {})
   }
 }
@@ -237,7 +241,8 @@ export function beginHostAdmittedStructuredLaunch(args: {
           )
         }
         const terminal = await args.onHostDeclined(args.target)
-        if (paired && terminal.opened) {
+        const openedAgent = terminal.opened && (terminal.surface ?? 'agent') === 'agent'
+        if (paired && openedAgent) {
           notifyHostDeclined(plan.agent)
         }
         void (

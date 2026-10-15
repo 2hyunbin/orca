@@ -9,6 +9,7 @@ import type * as ConnectionOwnerResolutionModule from './connection-owner-resolu
 
 const mocks = vi.hoisted(() => ({
   getExecutionHostIdForWorktree: vi.fn(),
+  getExplicitRuntimeEnvironmentIdForWorktree: vi.fn(),
   getConnectionIdFromState: vi.fn(),
   getLocalProjectExecutionRuntimeContext: vi.fn(),
   getLocalRepoProjectExecutionRuntimeContext: vi.fn(),
@@ -83,6 +84,7 @@ function store(settings: Record<string, unknown> = STRUCTURED_SETTINGS): AgentLa
 function stageLocalStructuredHost(): void {
   vi.clearAllMocks()
   mocks.getExecutionHostIdForWorktree.mockReturnValue('local')
+  mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReturnValue(null)
   mocks.getConnectionIdFromState.mockReturnValue(null)
   mocks.getLocalProjectExecutionRuntimeContext.mockReturnValue(undefined)
   mocks.getLocalRepoProjectExecutionRuntimeContext.mockReturnValue(undefined)
@@ -353,6 +355,7 @@ describe('buildAgentLaunchRouteInput', () => {
       workspace: { kind: 'git-worktree', worktreeId: 'wt-1' }
     })
     expect(input.hostCapabilities).toBeNull()
+    expect(input.admissionHostId).toBeUndefined()
   })
 
   describe('a workspace on a paired server', () => {

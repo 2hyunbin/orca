@@ -6,7 +6,7 @@ import {
   type NativeChatDefaultSettings,
   type StructuredNativeChatBlocker
 } from '../../../shared/structured-native-chat-launch-route'
-import { parseExecutionHostId } from '../../../shared/execution-host'
+import { parseRoutableExecutionHostId } from '../../../shared/execution-host'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { WorkspaceLaunchKind } from '../../../shared/workspace-launch-kind'
 import type { NativeChatLaunchPromptDelivery } from '@/lib/native-chat-launch-prompt-delivery'
@@ -17,6 +17,8 @@ export type AgentLaunchRoutingInput = {
   agent: TuiAgent
   settings: NativeChatDefaultSettings | null | undefined
   executionHostId: string
+  /** Verified existing-workspace owner used for capability admission; never a focused fallback. */
+  admissionHostId?: string
   /** Capabilities of the target host; `null` = not yet established. */
   hostCapabilities: readonly string[] | null
   /** What this client advertises to a paired host. */
@@ -40,7 +42,7 @@ export function resolveAgentLaunchRoute(input: AgentLaunchRoutingInput): AgentLa
   const awaitingHost =
     !support.supported &&
     support.blocker === 'runtime-capability-unknown' &&
-    parseExecutionHostId(input.executionHostId)?.kind === 'runtime' &&
+    parseRoutableExecutionHostId(input.admissionHostId ?? '')?.kind === 'runtime' &&
     clientChoosesStructuredLaunches(input.clientCapabilities)
   return support.supported || awaitingHost ? 'structured-native-chat' : 'terminal-tui'
 }

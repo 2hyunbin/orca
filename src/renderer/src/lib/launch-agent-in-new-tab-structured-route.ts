@@ -56,6 +56,7 @@ export function launchStructuredAgentFromNewTab(args: {
       )
       return {
         opened: terminal !== null,
+        surface: terminal === null ? 'none' : 'agent',
         ...(terminal?.promptDeliveryResult
           ? { promptDeliveryResult: terminal.promptDeliveryResult }
           : {})

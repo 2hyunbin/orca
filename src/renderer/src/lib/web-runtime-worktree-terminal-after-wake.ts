@@ -16,7 +16,7 @@ import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-t
 import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
 import { SESSION_TABS_EMPTY_WORKTREE_ANSWER_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 
-export function ensureWebRuntimeWorktreeTerminalAfterWake(
+export async function ensureWebRuntimeWorktreeTerminalAfterWake(
   worktreeId: string,
   opts?: {
     runtimeEnvironmentId?: string | null
@@ -26,18 +26,18 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
     /** The caller knows an unlisted workspace is empty: it just created it, or the host never answers. */
     unknownHostCountIsEmpty?: boolean
   }
-): void {
+): Promise<boolean> {
   const state = useAppStore.getState()
   const worktree = state.getKnownWorktreeById(worktreeId)
   if (!worktree) {
-    return
+    return false
   }
   const runtimeEnvironmentId =
     opts && 'runtimeEnvironmentId' in opts
       ? (opts.runtimeEnvironmentId ?? null)
       : runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
   if (!runtimeEnvironmentId || !isWebRuntimeSessionActive(runtimeEnvironmentId)) {
-    return
+    return false
   }
 
   const tabs = state.tabsByWorktree[worktreeId] ?? []
@@ -50,26 +50,26 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
         (isWebTerminalSurfaceTabId(tab.id) || tabHasLivePty(state.ptyIdsByTabId, tab.id))
     )
   ) {
-    return
+    return false
   }
 
   if (!launchAgent) {
     const hasLivePty = tabs.some((tab) => tabHasLivePty(state.ptyIdsByTabId, tab.id))
     if (hasLivePty) {
-      return
+      return false
     }
 
     const hasMirroredHostTabs = tabs.some((tab) => isWebTerminalSurfaceTabId(tab.id))
     if (hasMirroredHostTabs) {
       // Why: the host session still owns these tabs — wait for the mirror to repopulate PTY handles instead of duplicating a terminal.
-      return
+      return false
     }
 
     const hostTerminalTabCount =
       getLastKnownHostTerminalTabCount(runtimeEnvironmentId, worktreeId) ??
       (opts?.unknownHostCountIsEmpty ? 0 : null)
     if (hostTerminalTabCount !== null && hostTerminalTabCount > 0) {
-      return
+      return false
     }
     if (hostTerminalTabCount === null && !opts?.startup) {
       // Why: the host has not listed this workspace yet; its first real answer seeds the terminal if
@@ -91,7 +91,7 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
         .catch((error) => {
           console.error('web runtime terminal after wake failed', worktreeId, error)
         })
-      return
+      return false
     }
 
     const { renderableTabCount } = state.reconcileWorktreeTabModel(worktreeId)
@@ -102,20 +102,20 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
           Object.hasOwn(state.tabsByWorktree, worktreeId)
         )
       ) {
-        return
+        return false
       }
     } else if (renderableTabCount === 0) {
-      return
+      return false
     }
   }
 
   if (!beginWebRuntimeWakeTerminalRespawn(worktreeId)) {
-    return
+    return false
   }
 
   const startup = opts?.startup
   // Why: sleep keeps tab rows but terminal.stop clears host PTYs, while a failed create receipt leaves a selected agent with no host surface.
-  void createWebRuntimeSessionTerminal(
+  return createWebRuntimeSessionTerminal(
     {
       worktreeId,
       environmentId: runtimeEnvironmentId,
@@ -145,6 +145,7 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
           id: `web-runtime-worktree-terminal:${runtimeEnvironmentId}:${worktreeId}`
         })
       }
+      return outcome.status === 'created'
     })
     .finally(() => {
       endWebRuntimeWakeTerminalRespawn(worktreeId)
