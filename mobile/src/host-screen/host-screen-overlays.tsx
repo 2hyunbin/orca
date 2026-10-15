@@ -8,13 +8,7 @@ import { ActionSheetContent } from '../components/ActionSheetModal'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
-import { PickerModal } from '../components/PickerModal'
 import { hostNewWorktreeSessionRoute } from '../host-route-action-state'
-import {
-  WORKSPACE_GROUP_OPTIONS as GROUP_OPTIONS,
-  WORKSPACE_SORT_OPTIONS as SORT_OPTIONS,
-  WORKSPACE_VIEW_SHARED_NOTE
-} from '../worktree/workspace-list-picker-options'
 import { isWorktreePinned } from '../worktree/workspace-list-sections'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { WorkspaceOptionsSheet } from './workspace-options-sheet'
@@ -29,7 +23,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     existingWorktreePaths,
     hostCapabilities,
     hostId,
-    settings,
     showNewWorktree,
     state
   } = controller
@@ -44,26 +37,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
 
   return (
     <>
-      <PickerModal
-        visible={state.showSortPicker}
-        title="Sort By"
-        subtitle={WORKSPACE_VIEW_SHARED_NOTE}
-        options={SORT_OPTIONS}
-        selected={state.view.sortBy}
-        onSelect={settings.handleSortChange}
-        onClose={() => state.setShowSortPicker(false)}
-      />
-
-      <PickerModal
-        visible={state.showGroupPicker}
-        title="Group By"
-        subtitle={WORKSPACE_VIEW_SHARED_NOTE}
-        options={GROUP_OPTIONS}
-        selected={state.view.groupBy}
-        onSelect={settings.handleGroupChange}
-        onClose={() => state.setShowGroupPicker(false)}
-      />
-
       <WorkspaceOptionsSheet controller={controller} />
 
       {/* Worktree long-press action sheet (inline confirm to avoid double-Modal lag) */}
