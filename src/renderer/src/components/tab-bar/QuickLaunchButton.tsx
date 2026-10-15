@@ -4,7 +4,10 @@ import { toast } from 'sonner'
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger
 } from '@/components/ui/dropdown-menu'
 import { getAgentCatalog, AgentIcon } from '@/lib/agent-catalog'
 import { useAppStore } from '@/store'
@@ -13,6 +16,7 @@ import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import { useOptionalShortcutLabel } from '@/hooks/useShortcutLabel'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { LaunchSource } from '../../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
@@ -147,14 +151,24 @@ function QuickLaunchAgentMenuItemsInner({
   }, [openSettingsPage, openSettingsTarget])
 
   const runLaunch = useCallback(
-    (agent: TuiAgent) => {
+    (agent: TuiAgent, opensTerminal = false) => {
       if (disabled) {
         return
       }
       const entry = getCatalogEntry(agent)
       const label = entry?.label ?? agent
       const result = launchAgentInNewTab({
-        requestId: newAgentLaunchRequestId(),
+        // A chat agent's CLI, picked beside its chat row, opens its terminal this once.
+        ...(opensTerminal
+          ? {
+              agentSessionLaunchPlan: adoptAgentSessionLaunchVerdict({
+                route: 'terminal-tui',
+                requestId: newAgentLaunchRequestId(),
+                agent,
+                worktreeId
+              })
+            }
+          : { requestId: newAgentLaunchRequestId() }),
         agent,
         worktreeId,
         groupId,
@@ -280,28 +294,65 @@ function QuickLaunchAgentMenuItemsInner({
         }
         const showsDefaultAgentShortcut =
           newAgentShortcut !== null && defaultAgent !== 'blank' && agent === defaultAgent
+        const cliTag = translate('auto.components.tab.bar.QuickLaunchButton.cliTag', '(CLI)')
+        const item = (
+          <DropdownMenuItem
+            variant="launch"
+            disabled={disabled}
+            onSelect={() => runLaunch(agent)}
+            title={rowTitle(row, label)}
+            className="flex-1"
+          >
+            <AgentIcon agent={agent} size={14} />
+            <span className="flex-1">
+              {label}
+              {row.kind === 'cli' ? (
+                <span className="ml-1 font-normal text-muted-foreground">{cliTag}</span>
+              ) : null}
+            </span>
+            {showsDefaultAgentShortcut ? (
+              <DropdownMenuShortcut>{newAgentShortcut}</DropdownMenuShortcut>
+            ) : null}
+          </DropdownMenuItem>
+        )
         return (
           <React.Fragment key={`${row.kind}:${agent}`}>
             {startsCliGroup ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem
-              variant="launch"
-              disabled={disabled}
-              onSelect={() => runLaunch(agent)}
-              title={rowTitle(row, label)}
-            >
-              <AgentIcon agent={agent} size={14} />
-              <span className="flex-1">
-                {label}
-                {row.kind === 'cli' ? (
-                  <span className="ml-1 font-normal text-muted-foreground">
-                    {translate('auto.components.tab.bar.QuickLaunchButton.cliTag', '(CLI)')}
-                  </span>
-                ) : null}
-              </span>
-              {showsDefaultAgentShortcut ? (
-                <DropdownMenuShortcut>{newAgentShortcut}</DropdownMenuShortcut>
-              ) : null}
-            </DropdownMenuItem>
+            {row.kind === 'chat' && detectedIds?.includes(agent) ? (
+              // The chat row opens the chat; the › beside it offers the agent's CLI instead.
+              <div className="flex items-center">
+                {item}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    disabled={disabled}
+                    aria-label={translate(
+                      'auto.components.tab.bar.QuickLaunchButton.otherWays',
+                      'Other ways to open {{value0}}',
+                      { value0: label }
+                    )}
+                  />
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      variant="launch"
+                      onSelect={() => runLaunch(agent, true)}
+                      title={translate(
+                        'auto.components.tab.bar.QuickLaunchButton.ec2adf093e',
+                        'Launch {{value0}} in a new terminal',
+                        { value0: label }
+                      )}
+                    >
+                      <AgentIcon agent={agent} size={14} />
+                      <span>
+                        {label}
+                        <span className="ml-1 font-normal text-muted-foreground">{cliTag}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </div>
+            ) : (
+              item
+            )}
           </React.Fragment>
         )
       })}

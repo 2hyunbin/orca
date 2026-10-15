@@ -3738,7 +3738,8 @@
             "chatNotInWsl": "No chat in WSL",
             "chatNotOnHost": "No chat on this host",
             "startChat": "Start a {{value0}} chat",
-            "cliTag": "(CLI)"
+            "cliTag": "(CLI)",
+            "otherWays": "Other ways to open {{value0}}"
           },
           "RecentTabSwitcher": {
             "329638ff6f": "Switch Tab",
