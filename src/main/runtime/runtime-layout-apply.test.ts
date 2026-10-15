@@ -45,6 +45,21 @@ describe('applyWindowLayoutCommand', () => {
     expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
   })
 
+  it('routes a group tree command by its workspace, with no tab to look up', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    const hostIdsFor = vi.fn(() => ['ssh:target-1' as const])
+    const ratios = {
+      type: 'setGroupRatios',
+      workspace: 'wt-1',
+      groupLayout: { type: 'leaf', groupId: 'g1' }
+    } as const
+
+    await applyWindowLayoutCommand(store, hostIdsFor, ratios)
+
+    expect(hostIdsFor).toHaveBeenCalledWith('wt-1', null)
+    expect(applyLayoutCommand).toHaveBeenCalledWith(ratios, ['ssh:target-1'])
+  })
+
   it('refuses a tab a paired server routes, touching nothing', async () => {
     const { store, applyLayoutCommand } = storeWith()
 

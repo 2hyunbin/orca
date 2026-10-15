@@ -121,6 +121,58 @@ describe('layout.apply', () => {
     ).toBe(false)
   })
 
+  it('accepts tab moves and group sizes, but no group id from the window', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const tab = { workspace: WORKTREE, tabId: 'tab-1' }
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+
+    expect(parse({ type: 'moveTab', ...tab, toGroupId: 'g1', index: 0 })?.success).toBe(true)
+    expect(parse({ type: 'moveTab', ...tab, toGroupId: 'g1', index: -1 })?.success).toBe(false)
+    expect(
+      apply?.params?.parse({
+        command: {
+          type: 'splitGroup',
+          ...tab,
+          besideGroupId: 'g1',
+          direction: 'left',
+          newGroupId: 'window-minted'
+        }
+      })
+    ).toEqual({
+      command: { type: 'splitGroup', ...tab, besideGroupId: 'g1', direction: 'left' }
+    })
+    expect(
+      parse({ type: 'splitGroup', ...tab, besideGroupId: 'g1', direction: 'center' })?.success
+    ).toBe(false)
+    const split = {
+      type: 'split',
+      direction: 'horizontal',
+      first: { type: 'leaf', groupId: 'g1' },
+      second: { type: 'leaf', groupId: 'g2' }
+    }
+    expect(
+      parse({ type: 'setGroupRatios', workspace: WORKTREE, groupLayout: { ...split, ratio: 0.3 } })
+        ?.success
+    ).toBe(true)
+    expect(
+      parse({ type: 'setGroupRatios', workspace: WORKTREE, groupLayout: { ...split, ratio: 3 } })
+        ?.success
+    ).toBe(false)
+  })
+
+  it('applies group sizes to the workspace’s routed partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const ratios = {
+      type: 'setGroupRatios',
+      workspace: WORKTREE,
+      groupLayout: { type: 'leaf', groupId: 'g1' }
+    } as const
+
+    await runtime.applyLayoutCommand(ratios)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(ratios, ['local'])
+  })
+
   it('applies to the partition that holds the tab, such as an SSH host’s', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
 
