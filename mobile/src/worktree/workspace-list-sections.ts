@@ -21,6 +21,10 @@ import {
 } from '../../../src/shared/project-section-grouping'
 import { withRepoSectionDisplayLabels } from '../../../src/shared/project-section-order'
 import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
+import {
+  filterWorkspaceRows,
+  type WorkspaceRowFactReader
+} from '../../../src/shared/workspace-view/workspace-row-filters'
 
 export type { FilterState, Section, SectionRepo, Worktree } from './workspace-list-types'
 
@@ -61,7 +65,7 @@ export function buildSectionRepoMap(
   }
   return repoMap
 }
-export { CREATE_GRACE_MS, getWorktreeStatus, sortWorktrees } from './workspace-list-ordering'
+export { getWorktreeStatus, sortWorktrees } from './workspace-list-ordering'
 
 function makeSection(
   key: string,
@@ -102,30 +106,30 @@ export function isWorktreeActive(w: Worktree): boolean {
   return false
 }
 
-function isDefaultBranchWorkspace(w: Worktree): boolean {
-  if (w.workspaceKind === 'folder-workspace') {
-    return false
-  }
+/** An older host's row says nothing about its default branch; guess the way the phone always has. */
+function guessDefaultBranchWorkspace(w: Worktree): boolean {
   if (w.isMainWorktree !== undefined) {
     return w.isMainWorktree && w.branch.trim() !== ''
   }
-  // Why: older hosts did not include isMainWorktree in worktree.ps, so keep the
-  // legacy fallback until all paired runtimes carry the desktop predicate input.
+  // Why: hosts that predate isMainWorktree in worktree.ps; main/master is the only signal.
   const branch = w.branch.replace(/^refs\/heads\//, '')
   return branch === 'main' || branch === 'master'
 }
 
-/**
- * Whether "Hide sleeping" must keep this row — the project's entry point (#8873).
- * Falls back to the branch heuristic for hosts that predate isMainWorktree; a
- * folder workspace is always its project's entry point, and isDefaultBranchWorkspace
- * rejects it by design, so it needs its own legacy arm or #8873 still reproduces.
- */
-function isSleepingSweepExempt(w: Worktree, alwaysShowDefaultBranch: boolean | undefined): boolean {
-  if (alwaysShowDefaultBranch === false) {
-    return false
-  }
-  return w.isMainWorktree ?? (w.workspaceKind === 'folder-workspace' || isDefaultBranchWorkspace(w))
+/** The facts the shared Workspace options filters read, from what the host stamped on each row. */
+const PHONE_ROW_FACTS: WorkspaceRowFactReader<Worktree> = {
+  isArchived: (w) => w.isArchived === true,
+  isFolderWorkspace: (w) => w.workspaceKind === 'folder-workspace',
+  repoId: (w) => w.repoId,
+  hostId: (w) => w.hostId ?? null,
+  isOtherClient: (w) => w.desktopOtherClient === true,
+  isDefaultBranch: (w) => w.defaultBranch ?? guessDefaultBranchWorkspace(w),
+  isAutomationCreated: (w) => w.automationCreated === true,
+  isCliCreated: (w) => w.cliCreated === true,
+  isDetachedHead: (w) => w.detachedHead === true,
+  // Why the guess: #8873's exemption must fail open on hosts that predate isMainWorktree.
+  isMainWorktree: (w) => w.isMainWorktree ?? guessDefaultBranchWorkspace(w),
+  isSleeping: (w) => !isWorktreeActive(w)
 }
 
 function orderMainWorktreeFirst(worktrees: Worktree[]): Worktree[] {
@@ -141,28 +145,18 @@ export function filterWorktrees(
   filters: FilterState,
   search: string
 ): Worktree[] {
-  let result = worktrees.filter((w) => !w.isArchived && w.desktopOtherClient !== true)
-  if (filters.hideSleeping) {
-    result = result.filter(
-      (w) => isSleepingSweepExempt(w, filters.alwaysShowDefaultBranch) || isWorktreeActive(w)
-    )
+  // Why no host scope: the rows were already scoped to the desktop's shown hosts.
+  const result = filterWorkspaceRows(worktrees, { ...filters, visibleHostIds: null }, PHONE_ROW_FACTS)
+  const q = search.trim().toLowerCase()
+  if (!q) {
+    return result
   }
-  if (filters.hideDefaultBranch) {
-    result = result.filter((w) => !isDefaultBranchWorkspace(w))
-  }
-  if (filters.filterRepoIds.size > 0) {
-    result = result.filter((w) => filters.filterRepoIds.has(w.repoId))
-  }
-  if (search.trim()) {
-    const q = search.toLowerCase()
-    result = result.filter(
-      (w) =>
-        w.displayName.toLowerCase().includes(q) ||
-        w.branch.toLowerCase().includes(q) ||
-        w.repo.toLowerCase().includes(q)
-    )
-  }
-  return result
+  return result.filter(
+    (w) =>
+      w.displayName.toLowerCase().includes(q) ||
+      w.branch.toLowerCase().includes(q) ||
+      w.repo.toLowerCase().includes(q)
+  )
 }
 
 export function isWorktreePinned(w: Worktree, localPins: Set<string>): boolean {
@@ -224,7 +218,7 @@ export function buildSections(
       .filter(
         (repo) =>
           !representedRepoIds.has(repo.id) &&
-          (filters.filterRepoIds.size === 0 || filters.filterRepoIds.has(repo.id)) &&
+          (filters.filterRepoIds.length === 0 || filters.filterRepoIds.includes(repo.id)) &&
           (!query || repo.displayName.toLowerCase().includes(query))
       )
       .map((repo) => repo.id)

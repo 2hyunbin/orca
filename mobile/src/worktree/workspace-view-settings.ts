@@ -5,19 +5,17 @@
 
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
+import type { FilterState } from './workspace-list-types'
 
 export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
 // Desktop sort adds 'manual'; mobile orders it by the desktop's drag ranks.
 export type MobileSortMode = 'smart' | 'name' | 'recent' | 'repo' | 'manual'
 
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
-export type WorkspaceViewSettings = {
+export type WorkspaceViewSettings = Partial<FilterState> & {
   groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
   sortBy?: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
-  hideSleepingWorkspaces?: boolean
-  hideDefaultBranchWorkspace?: boolean
-  alwaysShowDefaultBranchWorkspace?: boolean
-  filterRepoIds?: string[]
   collapsedGroups?: string[]
   workspaceStatuses?: WorkspaceStatusDefinition[]
   /** Read-only here: the desktop's shown hosts. */
@@ -58,20 +56,35 @@ export function sortModeFromDesktop(
   return sortBy && SORT_VALUES.includes(sortBy) ? sortBy : null
 }
 
+const FILTER_KEYS = [
+  'hideSleepingWorkspaces',
+  'alwaysShowDefaultBranchWorkspace',
+  'hideDefaultBranchWorkspace',
+  'hideAutomationGeneratedWorkspaces',
+  'hideCliCreatedWorkspaces',
+  'hideDetachedHeadWorkspaces',
+  'hideWorkspacesFromOtherDevices',
+  'filterRepoIds'
+] as const satisfies readonly (keyof FilterState)[]
+// A filter added to the shared set without a key here fails to compile.
+const FILTER_KEYS_COVER_FILTER_STATE: Record<
+  Exclude<keyof FilterState, (typeof FILTER_KEYS)[number]>,
+  never
+> = {}
+void FILTER_KEYS_COVER_FILTER_STATE
+
 /**
  * Map a user edit to the ui.set payload, carrying only the fields the edit touched.
  *
- * Why patch-only (STA-5781): the shared store is edited concurrently by desktop and
- * web clients, and this screen's mirror refreshes only on connect/focus. Echoing the
- * whole snapshot let a stale mirror revert sibling fields another client had just
- * changed; the host merges partial updates field-by-field, so sending only the
- * touched fields is lossless. This also supersedes the old #8873 special case:
- * alwaysShowDefaultBranchWorkspace has no mobile toggle, so it is simply never in a
- * patch and can no longer revert a desktop opt-out.
+ * Why patch-only (STA-5781): the shared store is edited concurrently by desktop and web clients,
+ * and this screen's mirror refreshes only on connect/focus. Echoing the whole snapshot let a stale
+ * mirror revert sibling fields another client had just changed; the host merges partial updates
+ * field-by-field, so sending only the touched fields is lossless.
  */
 export function buildWorkspaceViewSettingsUpdate(
   patch: Partial<MobileViewState>,
-  next: MobileViewState
+  next: MobileViewState,
+  previous: MobileViewState
 ): WorkspaceViewSettings {
   const update: WorkspaceViewSettings = {}
   if ('groupMode' in patch) {
@@ -80,17 +93,12 @@ export function buildWorkspaceViewSettingsUpdate(
   if ('sortMode' in patch) {
     update.sortBy = next.sortMode
   }
-  if ('hideSleeping' in patch) {
-    update.hideSleepingWorkspaces = next.hideSleeping
-  }
-  if ('hideDefaultBranch' in patch) {
-    update.hideDefaultBranchWorkspace = next.hideDefaultBranch
-  }
-  if ('alwaysShowDefaultBranch' in patch) {
-    update.alwaysShowDefaultBranchWorkspace = next.alwaysShowDefaultBranch
-  }
-  if ('filterRepoIds' in patch) {
-    update.filterRepoIds = next.filterRepoIds
+  if ('filters' in patch) {
+    for (const key of FILTER_KEYS) {
+      if (next.filters[key] !== previous.filters[key]) {
+        Object.assign(update, { [key]: next.filters[key] })
+      }
+    }
   }
   if ('collapsedGroups' in patch) {
     update.collapsedGroups = next.collapsedGroups
@@ -104,12 +112,20 @@ export function buildWorkspaceViewSettingsUpdate(
 export type MobileViewState = {
   groupMode: MobileGroupMode
   sortMode: MobileSortMode
-  hideSleeping: boolean
-  hideDefaultBranch: boolean
-  alwaysShowDefaultBranch: boolean
-  filterRepoIds: string[]
+  filters: FilterState
   collapsedGroups: string[]
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
+}
+
+export const NO_FILTERS: FilterState = {
+  hideSleepingWorkspaces: NO_WORKSPACE_ROW_FILTERS.hideSleepingWorkspaces,
+  alwaysShowDefaultBranchWorkspace: NO_WORKSPACE_ROW_FILTERS.alwaysShowDefaultBranchWorkspace,
+  hideDefaultBranchWorkspace: NO_WORKSPACE_ROW_FILTERS.hideDefaultBranchWorkspace,
+  hideAutomationGeneratedWorkspaces: NO_WORKSPACE_ROW_FILTERS.hideAutomationGeneratedWorkspaces,
+  hideCliCreatedWorkspaces: NO_WORKSPACE_ROW_FILTERS.hideCliCreatedWorkspaces,
+  hideDetachedHeadWorkspaces: NO_WORKSPACE_ROW_FILTERS.hideDetachedHeadWorkspaces,
+  hideWorkspacesFromOtherDevices: NO_WORKSPACE_ROW_FILTERS.hideWorkspacesFromOtherDevices,
+  filterRepoIds: NO_WORKSPACE_ROW_FILTERS.filterRepoIds
 }
 
 // Apply a desktop PersistedUIState onto the local view state, leaving any field
@@ -125,16 +141,17 @@ export function applyDesktopViewSettings(
   const workspaceStatuses = settings.workspaceStatuses
     ? coerceMobileWorkspaceStatuses(settings.workspaceStatuses)
     : current.workspaceStatuses
-  const next: MobileViewState = {
+  const filters: FilterState = { ...current.filters }
+  for (const key of FILTER_KEYS) {
+    if (settings[key] !== undefined) {
+      Object.assign(filters, { [key]: settings[key] })
+    }
+  }
+  return {
     groupMode: groupMode ?? current.groupMode,
     sortMode: sortMode ?? current.sortMode,
-    hideSleeping: settings.hideSleepingWorkspaces ?? current.hideSleeping,
-    hideDefaultBranch: settings.hideDefaultBranchWorkspace ?? current.hideDefaultBranch,
-    alwaysShowDefaultBranch:
-      settings.alwaysShowDefaultBranchWorkspace ?? current.alwaysShowDefaultBranch,
-    filterRepoIds: settings.filterRepoIds ?? current.filterRepoIds,
+    filters,
     collapsedGroups: settings.collapsedGroups ?? current.collapsedGroups,
     workspaceStatuses
   }
-  return next
 }

@@ -15,6 +15,19 @@ export type WorkspaceRowFilters = {
   visibleHostIds: readonly ExecutionHostId[] | null
 }
 
+/** Every filter off, the default-branch exemption on, every project and host shown. */
+export const NO_WORKSPACE_ROW_FILTERS: WorkspaceRowFilters = {
+  hideSleepingWorkspaces: false,
+  alwaysShowDefaultBranchWorkspace: true,
+  hideDefaultBranchWorkspace: false,
+  hideAutomationGeneratedWorkspaces: false,
+  hideCliCreatedWorkspaces: false,
+  hideDetachedHeadWorkspaces: false,
+  hideWorkspacesFromOtherDevices: false,
+  filterRepoIds: [],
+  visibleHostIds: null
+}
+
 /**
  * How one surface reads the facts the filters decide on from its own rows. The desktop derives
  * them from its worktrees and tabs; the phone reads what the host stamped on the rows it served,

@@ -1,8 +1,9 @@
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
+import { CREATE_GRACE_MS } from '../../../src/shared/workspace-view/workspace-row-sort'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Worktree } from './workspace-list-sections'
 import {
-  CREATE_GRACE_MS,
   NO_PROJECT_SECTION_CATALOG,
   buildSections,
   filterWorktrees,
@@ -65,7 +66,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [visible, archived],
-        { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS },
         ''
       )
     ).toEqual([visible])
@@ -88,7 +89,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [visible, retainedPtyOnly],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
         ''
       )
     ).toEqual([visible])
@@ -109,7 +110,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main, featureNamedMain],
-        { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: true },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideDefaultBranchWorkspace: true },
         ''
       )
     ).toEqual([featureNamedMain])
@@ -122,7 +123,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main, feature],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
         ''
       )
     ).toEqual([main])
@@ -139,7 +140,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [folder],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
         ''
       )
     ).toEqual([folder])
@@ -151,12 +152,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main],
-        {
-          filterRepoIds: new Set(),
-          hideSleeping: true,
-          hideDefaultBranch: false,
-          alwaysShowDefaultBranch: false
-        },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true, alwaysShowDefaultBranchWorkspace: false },
         ''
       )
     ).toEqual([])
@@ -168,7 +164,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [legacyMain],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
         ''
       )
     ).toEqual([legacyMain])
@@ -186,7 +182,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [legacyFolder],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
         ''
       )
     ).toEqual([legacyFolder])
@@ -198,7 +194,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: true },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true, hideDefaultBranchWorkspace: true },
         ''
       )
     ).toEqual([])
@@ -215,7 +211,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [folder],
-        { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: true },
+        { ...NO_WORKSPACE_ROW_FILTERS, hideDefaultBranchWorkspace: true },
         ''
       )
     ).toEqual([folder])
@@ -228,7 +224,7 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [mine, other],
-        { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+        { ...NO_WORKSPACE_ROW_FILTERS },
         ''
       )
     ).toEqual([mine])
@@ -267,7 +263,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [worktree({ worktreeId, hostId: 'local' }), worktree({ worktreeId, hostId: 'ssh:builder' })],
       'name',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'none',
       new Set()
@@ -298,7 +294,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [low, high, fallback],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),
@@ -344,7 +340,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [mobileFallbackFirst, desktopFirst],
       'smart',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),
@@ -530,7 +526,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [unrelatedActive, child, parent],
       'smart',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'repo',
       new Set(),
@@ -561,7 +557,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [child, main],
       'smart',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'repo',
       new Set(),
@@ -575,7 +571,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [worktree({ repoId: 'repo-1', repo: 'orca' })],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'repo',
       new Set(),
@@ -599,7 +595,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'none',
       new Set(),
@@ -613,11 +609,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [],
       'manual',
-      {
-        filterRepoIds: new Set(['repo-matching', 'repo-hidden']),
-        hideSleeping: false,
-        hideDefaultBranch: false
-      },
+      { ...NO_WORKSPACE_ROW_FILTERS, filterRepoIds: ['repo-matching', 'repo-hidden'] },
       'zoom',
       'repo',
       new Set(),
@@ -642,7 +634,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [sleeping],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
       '',
       'repo',
       new Set(),
@@ -672,7 +664,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [progress, review],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),
@@ -696,7 +688,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [progress],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),
@@ -725,7 +717,7 @@ describe('buildSections', () => {
         const sections = buildSections(
           [sibling, hostPinned, localPinned],
           'name',
-          { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+          { ...NO_WORKSPACE_ROW_FILTERS },
           '',
           groupMode,
           new Set(['local-pinned']),
@@ -764,7 +756,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [pinned],
       'name',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'repo',
       new Set(),
@@ -791,7 +783,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [activeSecond, inactiveFirst],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'none',
       new Set(),
@@ -822,7 +814,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [child, parent],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),
@@ -850,7 +842,7 @@ describe('buildSections', () => {
     const sections = buildSections(
       [child, parent],
       'manual',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'workspaceStatus',
       new Set(),

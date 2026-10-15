@@ -1,3 +1,4 @@
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Worktree } from './workspace-list-sections'
@@ -37,7 +38,7 @@ describe('a pinned parent with an unpinned child', () => {
     const sections = buildSections(
       [child, parent],
       'name',
-      { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+      { ...NO_WORKSPACE_ROW_FILTERS },
       '',
       'repo',
       new Set(),
@@ -85,7 +86,7 @@ it('follows a pin through a child hidden by search, like desktop', () => {
   const sections = buildSections(
     [root, middle, leaf],
     'name',
-    { filterRepoIds: new Set(), hideSleeping: false, hideDefaultBranch: false },
+    { ...NO_WORKSPACE_ROW_FILTERS },
     'alpha',
     'repo',
     new Set()
