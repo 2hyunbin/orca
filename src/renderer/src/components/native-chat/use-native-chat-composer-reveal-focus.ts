@@ -118,7 +118,10 @@ export function useNativeChatComposerRevealFocus({
       }
       // Why: a live text field is a user edit — a batch worktree-create keeps its next name
       // field open behind the pane we just revealed, and the find bar keeps its query.
-      if (shouldPreserveEditableFocus(active)) {
+      // A sibling pane's composer must yield when this pane becomes focused.
+      const editingSiblingPane =
+        active?.closest('[data-retained-pane-host]')?.contains(rootRef.current) === false
+      if (shouldPreserveEditableFocus(active) && !editingSiblingPane) {
         finish()
         return
       }

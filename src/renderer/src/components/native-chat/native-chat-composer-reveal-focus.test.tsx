@@ -209,16 +209,19 @@ describe('useNativeChatComposerRevealFocus', () => {
     expect(focusCalls).toBe(1)
   })
 
-  it('lets only the focused group claim when two panes are revealed together', () => {
+  it('hands focus from a sibling composer to the newly focused pane', () => {
     const other = document.createElement('div')
+    other.setAttribute('data-retained-pane-host', '')
     document.body.appendChild(other)
     const otherRoot = createRoot(other)
     act(() => {
       root.render(createElement(Harness, { isVisible: true, isFocusedGroup: true }))
       otherRoot.render(createElement(Harness, { isVisible: true, isFocusedGroup: false }))
     })
+    other.querySelector('textarea')?.focus()
     drainFrames()
     expect(focusCalls).toBe(1)
+    expect(container.querySelector('textarea')).toBe(document.activeElement)
     act(() => {
       otherRoot.unmount()
     })
