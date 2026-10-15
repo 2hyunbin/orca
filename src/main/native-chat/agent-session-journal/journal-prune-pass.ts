@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks'
 import type Database from '../../sqlite/sync-database'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
+import { runJournalTransaction } from './journal-database'
 import { JournalPrunePolicy } from './journal-prune-policy'
 import { parseJournalRow } from './journal-row-schema'
 import { readJournalRowsAfter, readJournalSessionEpoch } from './journal-row-table'
@@ -98,14 +99,23 @@ function shrinkSupersededPayload(
   if (Buffer.byteLength(bodyJson) >= Buffer.byteLength(JSON.stringify(parsed.row.body))) {
     return false
   }
-  // Preserve every sequence and its attribution so older hosts and cursor readers still fold it.
-  const result = db
-    .prepare(
-      `UPDATE journal_rows SET row_json = json_set(row_json, '$.body', json(?))
+  // Atomic same-key replacement reclaims leaf pages as well as overflow pages.
+  return runJournalTransaction(db, () => {
+    const removed = db
+      .prepare(
+        `DELETE FROM journal_rows
 WHERE session_id = ? AND epoch = ? AND seq = ? AND row_json = ?`
-    )
-    .run(bodyJson, sessionId, epoch, sequence, stored.rowJson)
-  return result.changes > 0
+      )
+      .run(sessionId, epoch, sequence, stored.rowJson)
+    if (removed.changes === 0) {
+      return false
+    }
+    db.prepare(
+      `INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json)
+VALUES (?, ?, ?, ?, json_set(?, '$.body', json(?)))`
+    ).run(sessionId, epoch, sequence, stored.ts, stored.rowJson, bodyJson)
+    return true
+  })
 }
 
 function compactJournalPayload(body: AgentJournalItemBody): AgentJournalItemBody {

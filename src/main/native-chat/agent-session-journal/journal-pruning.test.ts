@@ -76,7 +76,7 @@ it('drains host maintenance, stops its timer when idle and cancels it on close',
         body: {
           kind: 'message',
           role: 'assistant',
-          blocks: [{ type: 'text', text: 'x'.repeat(8_000) }]
+          blocks: [{ type: 'text', text: 'x'.repeat(2_500) }]
         }
       })
     }
