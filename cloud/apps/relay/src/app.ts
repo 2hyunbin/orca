@@ -81,6 +81,11 @@ import {
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
 import type { RelayJWKSet } from './stale-if-error-jwks.js'
 import { stagingAsiaProofMembership } from './staging-asia-proof-admission.js'
+import {
+  runInStickySlot,
+  StickySlotStatements,
+  type StickySlotSample
+} from './sticky-slot-statements.js'
 
 const RelayCellConnectionHardCapSchema = z.custom<RelayCellConnectionHardCap>(
   isRelayCellConnectionHardCap
@@ -159,6 +164,7 @@ export function createRelayApp(
     ) => void
     recordDrainReturnRetryAfter?: (seconds: number) => void
     recordAdmissionServiceMs?: (lane: 'sticky' | 'drain-return', durationMs: number) => void
+    recordStickySlot?: (sample: StickySlotSample) => void
     recordAssignmentUnavailable?: (cause: AssignmentUnavailableCause) => void
     recordRegionRequest?: (region: RelayRegion | undefined) => void
     // Step 3 shadow directory; absent unless the director polls seat feeds.
@@ -269,16 +275,23 @@ export function createRelayApp(
     return context.json({ error: 'assignments_temporarily_unavailable' }, 503)
   }
   // The slot's hold, not the request's latency: herd recovery is slots / this.
-  const timeStickySlot = (lease: { release(): void }): { release(): void } => {
+  const timeStickySlot = (
+    lease: { release(): void },
+    queueWaitMs: number
+  ): { release(): void; measure<T>(work: () => Promise<T>): Promise<T> } => {
     const startedAt = performance.now()
+    const statements = new StickySlotStatements()
     let released = false
     return {
       release: () => {
         if (released) return
         released = true
-        operations.recordAdmissionServiceMs?.('sticky', performance.now() - startedAt)
+        const holdMs = performance.now() - startedAt
+        operations.recordAdmissionServiceMs?.('sticky', holdMs)
+        operations.recordStickySlot?.({ holdMs, queueWaitMs, ...statements.close() })
         lease.release()
-      }
+      },
+      measure: (work) => runInStickySlot(statements, work)
     }
   }
   // Classified server-side from the host's own assignment row, never from a
@@ -480,8 +493,10 @@ export function createRelayApp(
     }
     let admission: { release(): void } | null = null
     let lane: AssignmentAdmissionLane = 'placement'
+    let measureAssign = <T>(work: () => Promise<T>): Promise<T> => work()
     if (body.data.reconnect) {
       let rejection: AssignmentAdmissionRejection | undefined
+      const queuedAt = performance.now()
       const stickySlot = await stickyAssignmentAdmission.acquire(claims.relayHostId, (reason) => {
         rejection = reason
       })
@@ -497,12 +512,12 @@ export function createRelayApp(
         })
         return rejectStickyAssignment(context)
       }
-      const fastLane = timeStickySlot(stickySlot)
+      const fastLane = timeStickySlot(stickySlot, performance.now() - queuedAt)
       let verified: ResolvedRelayAssignment | null = null
       try {
-        verified = await operations.assignments.resolve(identity, {
-          classifyHomeRollIsolation: true
-        })
+        verified = await fastLane.measure(() =>
+          operations.assignments.resolve(identity, { classifyHomeRollIsolation: true })
+        )
       } catch (error) {
         fastLane.release()
         operations.recordAssignmentAdmission?.('sticky-rejected')
@@ -546,6 +561,7 @@ export function createRelayApp(
       } else if (verified) {
         lane = 'sticky'
         admission = fastLane
+        measureAssign = fastLane.measure
         operations.recordAssignmentAdmission?.('sticky')
       } else {
         // An unverified hint joins the placement lane with today's semantics.
@@ -579,12 +595,14 @@ export function createRelayApp(
         assignment = current
       } else {
         // The host asked: it may leave a reserve cell the director proves dead.
-        assignment = await operations.assignments.assign(
-          identity,
-          requestedRegion,
-          requestedRegion ? targetRegion : undefined,
-          undefined,
-          { ...step5, hostRequested: true }
+        assignment = await measureAssign(() =>
+          operations.assignments.assign(
+            identity,
+            requestedRegion,
+            requestedRegion ? targetRegion : undefined,
+            undefined,
+            { ...step5, hostRequested: true }
+          )
         )
       }
       if (body.data.regionCorrection) {

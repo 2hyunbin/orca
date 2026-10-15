@@ -6,6 +6,7 @@ import type { CellInventoryHoldCounts } from './cell-inventory-hold-samples.js'
 import type { PostgresPoolPressureCounts } from './postgres-pool-pressure.js'
 import type { RelayReadinessGraceEvent, RelayReadinessObservation } from './relay-readiness.js'
 import { RELAY_FIX_LEVEL } from './relay-fix-level.js'
+import type { StickySlotSample } from './sticky-slot-statements.js'
 
 export type RelayRuntimeCounts = {
   totalConnections: number
@@ -90,6 +91,7 @@ export interface RelayRuntimeObserver {
   recordAssignmentRejectionReason?(lane: AssignmentAdmissionLane, reason: string): void
   recordDrainReturnRetryAfter?(seconds: number): void
   recordAdmissionServiceMs?(lane: 'sticky' | 'drain-return', durationMs: number): void
+  recordStickySlot?(sample: StickySlotSample): void
   recordAssignmentUnavailable?(cause: AssignmentUnavailableCause): void
   recordDatabaseLockWaitSample?(sample: DatabaseLockWaitSample): void
   recordRegionRequest?(region: RelayRegion | undefined): void
@@ -184,6 +186,11 @@ type RelayMetricDeltas = {
   drainReturnRetryAfterSecondsSum: number
   drainReturnServiceMs: number[]
   stickyServiceMs: number[]
+  stickySlotQueueWaitMs: number[]
+  stickySlotSqlMs: number[]
+  stickySlotStatements: number[]
+  stickySlotByConnection: Map<number, StickyConnectionStatements>
+  stickySlotConnectionsDropped: number
   assign503sByCause: Record<string, number>
   dbLockWaitSamples: number
   dbLockWaitersByKey: Record<string, number>
@@ -208,6 +215,18 @@ type RelayMetricDeltas = {
   hostHellosShed: number
   preAuthLatency: PreAuthLatency
 }
+
+type StickyConnectionStatements = {
+  requests: number
+  statements: number
+  maxMs: number
+  samplesMs: number[]
+}
+
+// A window sees each pooled connection the sticky lane used; a pool that keeps
+// replacing connections must not grow the line without bound.
+export const STICKY_CONNECTION_LIMIT = 64
+export const STICKY_STATEMENT_RESERVOIR_LIMIT = 1024
 
 // A host chooses how often it answers a ping, so the process-wide window is a
 // reservoir: the heap cost of a flood is capped and the percentiles stay unbiased.
@@ -254,6 +273,11 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   drainReturnRetryAfterSecondsSum: 0,
   drainReturnServiceMs: [],
   stickyServiceMs: [],
+  stickySlotQueueWaitMs: [],
+  stickySlotSqlMs: [],
+  stickySlotStatements: [],
+  stickySlotByConnection: new Map(),
+  stickySlotConnectionsDropped: 0,
   assign503sByCause: {},
   dbLockWaitSamples: 0,
   dbLockWaitersByKey: {},
@@ -390,6 +414,35 @@ export class RelayObservability implements RelayRuntimeObserver {
   recordAdmissionServiceMs(lane: 'sticky' | 'drain-return', durationMs: number): void {
     if (lane === 'sticky') this.deltas.stickyServiceMs.push(durationMs)
     else this.deltas.drainReturnServiceMs.push(durationMs)
+  }
+
+  recordStickySlot(sample: StickySlotSample): void {
+    const deltas = this.deltas
+    deltas.stickySlotQueueWaitMs.push(sample.queueWaitMs)
+    deltas.stickySlotSqlMs.push(sample.sqlMs)
+    deltas.stickySlotStatements.push(sample.statements)
+    for (const [connectionId, samplesMs] of sample.statementMsByConnection) {
+      let connection = deltas.stickySlotByConnection.get(connectionId)
+      if (!connection) {
+        if (deltas.stickySlotByConnection.size >= STICKY_CONNECTION_LIMIT) {
+          deltas.stickySlotConnectionsDropped++
+          continue
+        }
+        connection = { requests: 0, statements: 0, maxMs: 0, samplesMs: [] }
+        deltas.stickySlotByConnection.set(connectionId, connection)
+      }
+      connection.requests++
+      for (const durationMs of samplesMs) {
+        const observedBefore = connection.statements++
+        connection.maxMs = Math.max(connection.maxMs, durationMs)
+        keepInReservoir(
+          connection.samplesMs,
+          observedBefore,
+          durationMs,
+          STICKY_STATEMENT_RESERVOIR_LIMIT
+        )
+      }
+    }
   }
 
   recordAssignmentUnavailable(cause: AssignmentUnavailableCause): void {
@@ -596,6 +649,7 @@ export class RelayObservability implements RelayRuntimeObserver {
             stickyServiceMsP50: roundMs(percentile(deltas.stickyServiceMs, 0.5)),
             stickyServiceMsP99: roundMs(percentile(deltas.stickyServiceMs, 0.99))
           }),
+      ...stickySlotFields(deltas),
       assign503sByCauseDelta: deltas.assign503sByCause,
       assignNonDrain503sDelta: Object.entries(deltas.assign503sByCause)
         .filter(([cause]) => cause !== 'drain-return-deferred')
@@ -715,6 +769,38 @@ function preAuthLatencyFields(
     beforeCheck: byOutcome(latency.beforeCheck),
     db: byOutcome(latency.db),
     reserve: byOutcome(latency.reserve)
+  }
+}
+
+// What the sticky slot spent its hold on: queue wait before it, SQL inside it, and
+// per pooled connection, whether one slow connection keeps serving the lane.
+function stickySlotFields(deltas: RelayMetricDeltas): Record<string, unknown> {
+  if (deltas.stickySlotQueueWaitMs.length === 0) return {}
+  const queueWait = latencySummary(deltas.stickySlotQueueWaitMs)
+  const sql = latencySummary(deltas.stickySlotSqlMs)
+  const statements = latencySummary(deltas.stickySlotStatements)
+  const byConnection: Record<string, Record<string, number>> = {}
+  for (const [connectionId, connection] of deltas.stickySlotByConnection) {
+    const { p50, p99 } = latencySummary(connection.samplesMs)
+    byConnection[String(connectionId)] = {
+      requests: connection.requests,
+      statements: connection.statements,
+      statementMsP50: p50,
+      statementMsP99: p99,
+      statementMsMax: roundMs(connection.maxMs)
+    }
+  }
+  return {
+    stickySlotsDelta: deltas.stickySlotQueueWaitMs.length,
+    stickyQueueWaitMsP50: queueWait.p50,
+    stickyQueueWaitMsP99: queueWait.p99,
+    stickyQueueWaitMsMax: queueWait.max,
+    stickySqlMsP50: sql.p50,
+    stickySqlMsP99: sql.p99,
+    stickyStatementsP50: statements.p50,
+    stickyStatementsMax: statements.max,
+    stickySqlByConnection: byConnection,
+    stickySqlConnectionsDroppedDelta: deltas.stickySlotConnectionsDropped
   }
 }
 

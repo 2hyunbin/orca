@@ -76,6 +76,8 @@ export type RelayTransactionOptions = { reportRetries?: boolean }
 
 export interface RelayDatabase {
   readonly dialect?: 'sqlite' | 'postgres'
+  // A per-process counter for the pooled connection; only on a PostgreSQL transaction handle.
+  readonly connectionId?: number
   query(sql: string, params?: unknown[]): Promise<SqlRow[]>
   // Ahead of every queued query() for the next free connection; see
   // PostgresPoolPressure. Absent means plain query().
@@ -938,7 +940,8 @@ class PostgresTransaction implements RelayDatabase {
 
   constructor(
     protected readonly client: pg.PoolClient,
-    private readonly queryTimeout?: PostgresQueryTimeout
+    private readonly queryTimeout?: PostgresQueryTimeout,
+    readonly connectionId?: number
   ) {}
 
   get poisonedBy(): Error | undefined {
@@ -1177,6 +1180,9 @@ export class PostgresDatabase implements RelayDatabase {
   readonly dialect = 'postgres' as const
   private readonly pressure: PostgresPoolPressure
   private readonly holds = new CellInventoryHoldSamples()
+  // pg-pool hands the same client object back for the same connection.
+  private readonly connectionIds = new WeakMap<pg.PoolClient, number>()
+  private nextConnectionId = 1
 
   consumeHoldCounts(): CellInventoryHoldCounts {
     return this.holds.consumeCounts()
@@ -1258,7 +1264,11 @@ export class PostgresDatabase implements RelayDatabase {
   ): Promise<T> {
     for (let attempt = 1; attempt <= POSTGRES_TRANSACTION_ATTEMPTS; attempt++) {
       const client = await this.pressure.connect()
-      const transaction = new PostgresTransaction(client, this.queryTimeout)
+      const transaction = new PostgresTransaction(
+        client,
+        this.queryTimeout,
+        this.idOfConnection(client)
+      )
       let lostReply: Error | undefined
       try {
         await timedQuery(client, 'BEGIN', undefined, this.queryTimeout)
@@ -1320,6 +1330,15 @@ export class PostgresDatabase implements RelayDatabase {
 
   async close(): Promise<void> {
     await this.pool.end()
+  }
+
+  private idOfConnection(client: pg.PoolClient): number {
+    let id = this.connectionIds.get(client)
+    if (id === undefined) {
+      id = this.nextConnectionId++
+      this.connectionIds.set(client, id)
+    }
+    return id
   }
 
   consumePoolPressure(): PostgresPoolPressureCounts {

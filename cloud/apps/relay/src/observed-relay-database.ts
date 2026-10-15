@@ -5,16 +5,18 @@ import type {
   SqlRow
 } from './database.js'
 import { timedRelayOperation, type RelayRuntimeObserver } from './relay-observability.js'
+import { noteStickySlotStatement } from './sticky-slot-statements.js'
 
 export function observeRelayDatabase(
   database: RelayDatabase,
   observer: RelayRuntimeObserver
 ): RelayDatabase {
+  const observe = (durationMs: number, success: boolean): void => {
+    observer.recordSql(durationMs, success)
+    noteStickySlotStatement(durationMs, database.connectionId)
+  }
   const query = (sql: string, params?: unknown[]): Promise<SqlRow[]> =>
-    timedRelayOperation(
-      () => database.query(sql, params),
-      (durationMs, success) => observer.recordSql(durationMs, success)
-    )
+    timedRelayOperation(() => database.query(sql, params), observe)
   const queryLocked = (
     sql: string,
     params?: unknown[],
@@ -22,7 +24,7 @@ export function observeRelayDatabase(
   ): Promise<SqlRow[]> =>
     timedRelayOperation(
       () => database.queryLocked(sql, params, options),
-      (durationMs, success) => observer.recordSql(durationMs, success),
+      observe,
       (error) =>
         // NOWAIT contention is an intentional sweep deferral, not a SQL-health failure.
         options?.failIfUnavailable === true &&
@@ -38,19 +40,13 @@ export function observeRelayDatabase(
     ...(queryPriority
       ? {
           queryPriority: (sql: string, params?: unknown[]): Promise<SqlRow[]> =>
-            timedRelayOperation(
-              () => queryPriority(sql, params),
-              (durationMs, success) => observer.recordSql(durationMs, success)
-            )
+            timedRelayOperation(() => queryPriority(sql, params), observe)
         }
       : {}),
     ...(commitWithFinal
       ? {
           commitWithFinal: (sql: string, params?: unknown[]): Promise<boolean> =>
-            timedRelayOperation(
-              () => commitWithFinal(sql, params),
-              (durationMs, success) => observer.recordSql(durationMs, success)
-            )
+            timedRelayOperation(() => commitWithFinal(sql, params), observe)
         }
       : {}),
     transaction: async <T>(
