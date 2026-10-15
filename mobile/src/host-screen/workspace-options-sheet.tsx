@@ -24,7 +24,7 @@ import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
 import { DrillRow, OptionRowList } from './workspace-option-rows'
-import { OptionPager, useOptionPager } from './workspace-options-pager'
+import { OptionPager, useOptionPager, type OptionPagerControls } from './workspace-options-pager'
 import {
   WORKSPACE_OPTION_CONTROLS,
   type WorkspaceOptionHost,
@@ -60,18 +60,29 @@ function useWorkspaceOptionHosts(controller: HostScreenController): WorkspaceOpt
 /** The desktop sidebar's Workspace options, rendered from the shared option list. */
 export function WorkspaceOptionsSheet({ controller }: { controller: HostScreenController }) {
   const { state } = controller
+  const pager = useOptionPager<WorkspaceViewOptionKey>()
   return (
     <BottomDrawer
       visible={state.showWorkspaceOptions}
       onClose={() => state.setShowWorkspaceOptions(false)}
+      // The sheet opens on its main page next time.
+      onAfterClose={pager.forget}
+      // A page opens at the top even when the main sheet was scrolled down to its row.
+      scrollResetKey={pager.page}
     >
-      <WorkspaceOptionsContent controller={controller} />
+      <WorkspaceOptionsContent controller={controller} pager={pager} />
     </BottomDrawer>
   )
 }
 
 // Its own component so the host list is built only while the sheet is open.
-function WorkspaceOptionsContent({ controller }: { controller: HostScreenController }) {
+function WorkspaceOptionsContent({
+  controller,
+  pager
+}: {
+  controller: HostScreenController
+  pager: OptionPagerControls<WorkspaceViewOptionKey>
+}) {
   const { settings, state } = controller
   const hosts = useWorkspaceOptionHosts(controller)
   const sections = getShownWorkspaceViewSections({
@@ -86,7 +97,6 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
       state.view.sharesOtherClientFilter === true && state.serverWorkspaces.hosts.length > 0
   })
 
-  const pager = useOptionPager<WorkspaceViewOptionKey>()
   // The open option; it falls back to the main sheet once the option stops showing.
   const pageOption = sections
     .flatMap(({ options }) => options)
@@ -173,5 +183,5 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
     </>
   )
 
-  return <OptionPager slide={pager.slide} main={main} page={page} />
+  return <OptionPager pager={pager} main={main} page={page} />
 }

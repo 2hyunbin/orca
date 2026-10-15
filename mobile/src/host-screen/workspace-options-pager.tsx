@@ -40,22 +40,26 @@ export function useOptionPager<Key extends string>() {
     })
   }, [duration, slide])
 
-  return { page, open, close, forget: () => setPage(null), slide }
+  const forget = useCallback(() => setPage(null), [])
+
+  return { page, open, close, forget, slide }
 }
+
+export type OptionPagerControls<Key extends string> = ReturnType<typeof useOptionPager<Key>>
 
 /**
  * The main sheet with a page over it. The main sheet stays laid out underneath, so the drawer
  * keeps its height while a page is open and does not jump on the way in or out.
  */
 export function OptionPager(props: {
-  slide: SharedValue<number>
+  pager: { slide: SharedValue<number> }
   main: ReactNode
   /** The open page; null shows the main sheet. */
   page: ReactNode | null
 }) {
   const [width, setWidth] = useState(0)
   const [mainHeight, setMainHeight] = useState<number | null>(null)
-  const { slide } = props
+  const { slide } = props.pager
   // Why the dependency list: the page bundle has no worklet plugin, so web mappers read only it.
   const pageStyle = useAnimatedStyle(
     () => ({ transform: [{ translateX: slide.value * width }] }),
@@ -69,7 +73,8 @@ export function OptionPager(props: {
     >
       <View
         style={pageOpen && styles.underlay}
-        onLayout={pageOpen ? undefined : (event) => setMainHeight(event.nativeEvent.layout.height)}
+        // Measured while under a page too, so a change behind the page does not jump on the way out.
+        onLayout={(event) => setMainHeight(event.nativeEvent.layout.height)}
         pointerEvents={pageOpen ? 'none' : 'auto'}
         importantForAccessibility={pageOpen ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={pageOpen}
@@ -85,6 +90,6 @@ export function OptionPager(props: {
 const styles = StyleSheet.create({
   pager: { overflow: 'hidden' },
   underlay: { position: 'absolute', top: 0, left: 0, right: 0 },
-  // Opaque, so the main sheet does not show through the sliding page.
-  page: { backgroundColor: colors.bgBase }
+  // Opaque and as tall as the pager, so no part of the main sheet shows around the page.
+  page: { flexGrow: 1, backgroundColor: colors.bgBase }
 })

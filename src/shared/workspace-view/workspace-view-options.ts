@@ -84,7 +84,6 @@ export const WORKSPACE_CARD_DISPLAY_CHOICES = [
   { id: 'branch', label: 'Branch name' }
 ] as const satisfies readonly WorkspaceViewChoice<WorktreeCardProperty>[]
 
-/** Project groups can hold folder workspaces, whose identity is a path, not a branch. */
 /**
  * The Show properties row's value: "hover" under the compact layout (properties show on hover),
  * otherwise how many properties show; null when none do.
@@ -102,6 +101,7 @@ export function getWorkspaceCardPropertiesValue(
   return count > 0 ? count : null
 }
 
+/** Project groups can hold folder workspaces, whose identity is a path, not a branch. */
 export function getWorkspaceCardDisplayChoiceLabel(
   choice: (typeof WORKSPACE_CARD_DISPLAY_CHOICES)[number],
   hasProjectGroups: boolean
