@@ -105,7 +105,10 @@ describe('timing-weighted shard selection', () => {
     const report = {
       suites: [
         {
-          specs: [spec('a', 'one.spec.ts')],
+          specs: [
+            spec('a', 'one.spec.ts'),
+            spec('dedicated', 'workspace-layout-oracle-headless.spec.ts')
+          ],
           suites: [{ specs: [spec('b', 'one.spec.ts'), spec('c', 'two.spec.ts')] }]
         }
       ]
@@ -116,6 +119,7 @@ describe('timing-weighted shard selection', () => {
       'two.spec.ts'
     ])
     expect(plan.testsByFile['one.spec.ts']).toHaveLength(2)
+    expect(plan.testsByFile['workspace-layout-oracle-headless.spec.ts']).toBeUndefined()
     expect(() => discoverE2eFiles({ ...report, errors: [{}] })).toThrow('errors')
     expect(() => discoverE2eFiles({ suites: [] })).toThrow('no tests')
     expect(() =>

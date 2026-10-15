@@ -7,6 +7,7 @@ import {
   readTimingBaseline,
   writeAssignment
 } from './ci-shard-assignment.mjs'
+import { selectGeneralE2eSpecs } from './ci-e2e-job-selection.mjs'
 
 export function discoverE2eFiles(report) {
   if (report.errors?.length) {
@@ -44,7 +45,15 @@ export function discoverE2eFiles(report) {
 }
 
 export function planE2e(report, count, baseline) {
-  const testsByFile = discoverE2eFiles(report)
+  const discoveredFiles = discoverE2eFiles(report)
+  const testsByFile = Object.fromEntries(
+    selectGeneralE2eSpecs(Object.keys(discoveredFiles).map((file) => `tests/e2e/${file}`)).map(
+      (file) => {
+        const relativeFile = file.slice('tests/e2e/'.length)
+        return [relativeFile, discoveredFiles[relativeFile]]
+      }
+    )
+  )
   const timings = Object.fromEntries(
     Object.entries(baseline.timings).map(([file, duration]) => [
       file.replace(/^tests\/e2e\//, ''),
