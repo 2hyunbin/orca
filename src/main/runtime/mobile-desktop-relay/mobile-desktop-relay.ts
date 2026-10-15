@@ -11,6 +11,7 @@ import {
 import { DelegatedPhoneGrantCache } from './delegated-phone-grant-cache'
 import { localHostedBrowserPageRequest } from './hosted-browser-page-route'
 import type { MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
+import type { MobileRelayWorkDemand } from './mobile-relay-work-demand'
 import { RELAYED_STREAM_CARRIERS } from './relayed-stream-carriers'
 import {
   declareRelayedPhoneCapabilities,
@@ -37,6 +38,8 @@ type OpenedRelayLink = { socket: RemoteRuntimePassthroughSocket; hostToken: stri
 class RelayLink {
   readonly replies: RelayedPhoneReplies
   readonly opened: Promise<OpenedRelayLink>
+  demand: MobileRelayWorkDemand | null = null
+  preparing = false
 
   constructor(
     readonly environmentId: string,
@@ -112,10 +115,10 @@ export class MobileDesktopRelay {
       )
       return
     }
-    const link = this.linkFor(phone, environmentId)
+    const link = this.linkFor(phone, environmentId, request.method)
     link.replies.noteForwarded(request.id)
-    link.opened.then(
-      ({ socket, hostToken }) => {
+    Promise.all([link.opened, link.demand?.ready]).then(
+      ([{ socket, hostToken }]) => {
         // Why: a link ended while opening already answered this request; never send it late.
         if (!this.isCurrent(link)) {
           return
@@ -129,9 +132,7 @@ export class MobileDesktopRelay {
           this.endLink(link, unavailable('The server connection could not take the request.'))
         }
       },
-      () => {
-        // The open failure already answered every request queued on this link.
-      }
+      (error: unknown) => this.endLink(link, unavailable(String(error)))
     )
   }
 
@@ -174,7 +175,8 @@ export class MobileDesktopRelay {
   retireEnvironment(environmentId: string): void {
     this.grants.delete(environmentId)
     for (const link of this.links.values()) {
-      if (link.environmentId === environmentId) {
+      // Preparation owns no pairing yet; resolve takes the current identity after it finishes.
+      if (link.environmentId === environmentId && !link.preparing) {
         this.endLink(link, unavailable('The server connection was reset.'))
       }
     }
@@ -199,15 +201,18 @@ export class MobileDesktopRelay {
     }
   }
 
-  private linkFor(phone: RelayedPhone, environmentId: string): RelayLink {
+  private linkFor(phone: RelayedPhone, environmentId: string, method: string): RelayLink {
     const key = linkKey(phone.connectionId, environmentId)
     const existing = this.links.get(key)
     if (existing) {
+      existing.demand ??= this.options.hosts.acquireDemand?.(environmentId, method) ?? null
       return existing
     }
     const link = new RelayLink(environmentId, phone, this.options.allocateStreamId, (opening) =>
       this.open(opening)
     )
+    link.demand = this.options.hosts.acquireDemand?.(environmentId, method) ?? null
+    link.preparing = link.demand !== null
     link.opened.catch((error: unknown) => {
       this.endLink(
         link,
@@ -219,6 +224,13 @@ export class MobileDesktopRelay {
   }
 
   private async open(link: RelayLink): Promise<OpenedRelayLink> {
+    // Yield until linkFor has attached demand and registered the link.
+    await Promise.resolve()
+    await link.demand?.ready
+    link.preparing = false
+    if (!this.isCurrent(link)) {
+      throw unavailable('The relayed request was cancelled.')
+    }
     const { phone } = link
     const host = await this.options.hosts.resolve(link.environmentId)
     if (!host) {
@@ -246,12 +258,18 @@ export class MobileDesktopRelay {
         relayedPhoneCapabilities(phone.clientCapabilities()),
         {
           onText: (plaintext) => {
+            if (!this.isCurrent(link)) {
+              return
+            }
             const frame = link.replies.text(plaintext)
             if (frame !== null) {
               phone.reply(frame)
             }
           },
           onBinary: (bytes) => {
+            if (!this.isCurrent(link)) {
+              return
+            }
             const frame = link.replies.binary(bytes)
             if (frame) {
               phone.sendBinary(frame)
@@ -281,6 +299,7 @@ export class MobileDesktopRelay {
       return
     }
     this.links.delete(linkKey(link.phone.connectionId, link.environmentId))
+    link.demand?.release()
     link.opened.then(
       ({ socket }) => socket.close(),
       () => {}

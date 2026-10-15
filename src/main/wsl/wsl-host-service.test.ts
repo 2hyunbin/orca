@@ -280,6 +280,26 @@ describe('WslHostService', () => {
     expect(connector.connect).toHaveBeenCalledTimes(2)
   })
 
+  it('reconnects offscreen phone work only until its last connection releases demand', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    connector.connect.mockClear()
+    const releasePhone = service.acquireDemand('wsl:ubuntu')
+    const releaseTablet = service.acquireDemand('wsl:ubuntu')
+    expect(connector.connect).not.toHaveBeenCalled()
+    await service.ensureForRuntimeCall('wsl:ubuntu')
+    expect(connector.connect).toHaveBeenCalledOnce()
+    releasePhone()
+    releasePhone()
+    expect(service.hasUserVisibleWork('Ubuntu')).toBe(true)
+    releaseTablet()
+    expect(service.hasUserVisibleWork('Ubuntu')).toBe(false)
+    await connector.disconnect('Ubuntu')
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow('isn’t connected')
+  })
+
   it('refuses a connect while the experiment is off, but still removes the host', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)

@@ -107,11 +107,33 @@ function relayWithPhone(
     syncCalls,
     server,
     desktop,
+    hosts,
     setCapabilities: (next: string[]) => (capabilities = next)
   }
 }
 
 describe('MobileDesktopRelay', () => {
+  it('prepares offscreen work before binding its pairing, then retires its lease and stale frames', async () => {
+    sockets.length = 0
+    const { relay, phone, replies, hosts } = relayWithPhone()
+    const release = vi.fn()
+    const resolve = vi.spyOn(hosts, 'resolve')
+    hosts.acquireDemand = () => ({
+      // The first connect rotates credentials before a relay has taken its identity fence.
+      ready: Promise.resolve().then(() => relay.retireEnvironment('env-1')),
+      release
+    })
+    relay.forward(phone, 'env-1', { id: 'a', method: 'agentSession.subscribe' }, '{"id":"a"}')
+    expect(resolve).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(sockets[0]?.sent).toHaveLength(1))
+    relay.retireEnvironment('env-1')
+    expect(release).toHaveBeenCalledOnce()
+    const answered = replies.length
+    sockets[0]!.callbacks.onText('{"id":"a","ok":true,"result":{"stale":true}}')
+    expect(replies).toHaveLength(answered)
+    relay.dispose()
+  })
+
   it("stamps the desktop's chat default onto relayed launches only", async () => {
     sockets.length = 0
     const { relay, phone, desktop } = relayWithPhone()

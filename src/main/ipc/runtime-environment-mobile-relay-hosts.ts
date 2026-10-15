@@ -16,6 +16,9 @@ import type { SshConnectionState } from '../../shared/ssh-types'
 import { getRegisteredSshState, listRegisteredSshTargets } from '../ssh/ssh-target-registry'
 import { getRuntimeEnvironmentStatusSnapshots } from './runtime-environment-request-connections'
 import { callRuntimeEnvironment } from './runtime-environment-transport-routing'
+import { isGatedOffWslHost } from '../wsl/wsl-host-gate'
+import { getWslHostService } from '../wsl/wsl-host-service-instance'
+import { mobileRelayRequestsWork } from '../runtime/mobile-desktop-relay/mobile-relay-work-demand'
 
 const retirementListeners = new Set<(environmentId: string) => void>()
 
@@ -26,14 +29,9 @@ export function retireMobileDesktopRelayEnvironment(environmentId: string): void
   }
 }
 
-/**
- * Servers a phone may reach through this desktop. Not WSL hosts: they are this desktop's own
- * distros, connected only for work open here, so a phone must not wake or route to them.
- */
+/** Configured hosts, behind the same availability gate as the desktop. Listing never connects. */
 function listRelayableEnvironments(userDataPath: string) {
-  return listEnvironments(userDataPath).filter(
-    (environment) => !isWslHostRuntimeEnvironment(environment)
-  )
+  return listEnvironments(userDataPath).filter((environment) => !isGatedOffWslHost(environment))
 }
 
 /** The desktop's configured servers, addressed only by exact environment id. */
@@ -83,6 +81,26 @@ export function createRuntimeEnvironmentMobileRelayHosts(): MobileDesktopRelayHo
         environmentId,
         fence: relayHostFence(environment),
         pairing: getPreferredPairingOffer(environment)
+      }
+    },
+    acquireDemand: (environmentId, method) => {
+      const environment = listRelayableEnvironments(userDataPath).find(
+        (entry) => entry.id === environmentId
+      )
+      const service = getWslHostService()
+      if (
+        !environment ||
+        !isWslHostRuntimeEnvironment(environment) ||
+        !service ||
+        !mobileRelayRequestsWork(method)
+      ) {
+        return null
+      }
+      const release = service.acquireDemand(environmentId)
+      return {
+        // Prepare before taking the pairing fence: reconnect can rotate the bridge's credentials.
+        ready: Promise.resolve().then(() => service.ensureForRuntimeCall(environmentId)),
+        release
       }
     },
     call: (host, method, params, options) =>

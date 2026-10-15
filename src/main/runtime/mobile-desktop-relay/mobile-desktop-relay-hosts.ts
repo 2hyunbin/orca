@@ -4,6 +4,7 @@ import type { RuntimeEnvironmentSource } from '../../../shared/runtime-environme
 import type { RuntimeEnvironmentStatus } from '../../../shared/runtime-host-status'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import type { SshConnectionState } from '../../../shared/ssh-types'
+import type { MobileRelayWorkDemand } from './mobile-relay-work-demand'
 
 /** A configured server the desktop can relay to. */
 export type MobileDesktopRelayHost = {
@@ -46,6 +47,8 @@ export type MobileDesktopRelayHosts = {
   }
   /** Null when the id names no configured server; a phone-supplied endpoint is never used. */
   resolve: (environmentId: string) => Promise<MobileDesktopRelayHost | null>
+  /** Optional desktop-local preparation; its lease ends with the phone's relay connection. */
+  acquireDemand?: (environmentId: string, method: string) => MobileRelayWorkDemand | null
   /** A call as the desktop itself, over its own connection to the server. */
   call: (
     host: Pick<MobileDesktopRelayHost, 'environmentId'>,

@@ -1,7 +1,7 @@
 /**
  * WSL distros as hosts (WSL-via-orcad C7): add and remove them, persist what each connection
  * reports, and connect only for the user. A stopped distro boots on an explicit add or connect,
- * or while a project or terminal the user has open needs it; never for background work.
+ * or while desktop or phone work needs it; never for background discovery.
  */
 import { errorMessage } from '../../shared/error-message'
 import {
@@ -34,6 +34,7 @@ import {
 import { WslOrcadLaunchDeferredError, type WslOrcadConnection } from './wsl-orcad-connection'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import { defaultWslOrcadEnvironmentId } from './wsl-orcad-deploy'
+import { WslHostWorkDemand } from './wsl-host-work-demand'
 
 /** The WSL side the service drives: C3 holder, C5 connections, C6 liveness (or an e2e fake). */
 export type WslHostConnector = {
@@ -68,7 +69,7 @@ export class WslHostService {
   private connector: WslHostConnector | null = null
   private readonly statuses = new Map<string, WslHostStatus>()
   private readonly adding = new Map<string, Promise<WslHostAddResult>>()
-  private visible = new Set<string>()
+  private readonly demand = new WslHostWorkDemand()
   private readonly removing = new Set<string>()
 
   constructor(private readonly deps: WslHostServiceDependencies) {}
@@ -136,7 +137,7 @@ export class WslHostService {
     }
     // First: nothing may reconnect it while it is being stopped (open work, liveness, calls).
     this.removing.add(environmentId)
-    this.visible.delete(environmentId)
+    this.demand.delete(environmentId)
     const connector = this.connector
     let serverStop: WslHostServerStop = { stopped: true }
     if (connector) {
@@ -164,7 +165,7 @@ export class WslHostService {
       return
     }
     if (enabled) {
-      this.setVisibleWork([...this.visible], new Set())
+      this.setVisibleWork([...this.demand.visible], new Set())
       return
     }
     for (const record of this.records()) {
@@ -189,7 +190,7 @@ export class WslHostService {
 
   /**
    * Before a call to a WSL host: a live connection serves it; otherwise connect only for open
-   * work, and say why not instead of letting the call fail as an unreachable network server.
+   * work (including an explicit phone action), and say why not rather than dialing a dead server.
    */
   async ensureForRuntimeCall(environmentId: string): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
@@ -200,7 +201,7 @@ export class WslHostService {
     if (refusal || this.removing.has(environmentId)) {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
-    if (!this.visible.has(environmentId)) {
+    if (!this.demand.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
     await this.connector.connect(record.distro)
@@ -211,12 +212,17 @@ export class WslHostService {
     return this.adding.has(wslDistroHolderKey(distro)) || this.recordForDistro(distro) !== null
   }
 
-  setVisibleWork(environmentIds: readonly string[], previous = this.visible): void {
-    this.visible = new Set(environmentIds.filter((id) => !this.removing.has(id)))
+  /** The caller releases its work when its connection ends; acquiring alone never boots WSL. */
+  acquireDemand(environmentId: string): () => void {
+    return this.demand.acquire(environmentId)
+  }
+
+  setVisibleWork(environmentIds: readonly string[], previous = this.demand.visible): void {
+    this.demand.visible = new Set(environmentIds.filter((id) => !this.removing.has(id)))
     if (!this.connector || !this.canRun()) {
       return
     }
-    for (const environmentId of this.visible) {
+    for (const environmentId of this.demand.visible) {
       if (previous.has(environmentId)) {
         continue
       }
@@ -231,8 +237,8 @@ export class WslHostService {
 
   hasUserVisibleWork(distro: string): boolean {
     const record = this.recordForDistro(distro)
-    // Why the gate: liveness relaunches only for visible work, and none may run while off.
-    return record ? this.canRun() && this.visible.has(record.environmentId) : false
+    // Liveness follows desktop and phone demand, and none may run while the gate is off.
+    return record ? this.canRun() && this.demand.has(record.environmentId) : false
   }
 
   /** Startup: keep the holders a previous run left, without booting anything. */
