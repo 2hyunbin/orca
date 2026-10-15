@@ -121,8 +121,7 @@ export function buildAgentStatusLiveEntry(
   if (
     existing &&
     shouldSuppressInheritedTerminalStatus({
-      inheritedFromActivePane: identity.inheritedFromActivePane,
-      incomingState: payload.state
+      inheritedFromActivePane: identity.inheritedFromActivePane
     })
   ) {
     return { entry: null, reason: 'suppressed-inherited-terminal' }

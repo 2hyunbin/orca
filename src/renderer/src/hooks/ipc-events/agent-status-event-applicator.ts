@@ -210,8 +210,7 @@ export function createAgentStatusEventApplicator(args: {
     if (
       existingStatus &&
       shouldSuppressInheritedTerminalStatus({
-        inheritedFromActivePane: identity.inheritedFromActivePane,
-        incomingState: statusPayload.state
+        inheritedFromActivePane: identity.inheritedFromActivePane
       })
     ) {
       return 'dropped'
