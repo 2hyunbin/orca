@@ -22,14 +22,18 @@ export function useHostProjectSections(args: {
   const { client, connState, hostId, state } = args
   const { clientRef, setServedProjectSections } = state
   const inFlight = useRef(new WeakSet<RpcClient>())
-  const fetchedAt = useRef(0)
+  // Per client, so a reused screen for another host fetches its catalog at once.
+  const fetchedAt = useRef(new WeakMap<RpcClient, number>())
 
   return useCallback(
     async (options: { force?: boolean } = {}) => {
       if (!client || connState !== 'connected' || !hostId || inFlight.current.has(client)) {
         return
       }
-      if (!options.force && Date.now() - fetchedAt.current < PROJECT_SECTIONS_REFRESH_MS) {
+      if (
+        !options.force &&
+        Date.now() - (fetchedAt.current.get(client) ?? 0) < PROJECT_SECTIONS_REFRESH_MS
+      ) {
         return
       }
       inFlight.current.add(client)
@@ -40,7 +44,7 @@ export function useHostProjectSections(args: {
         }
         const sections = readServedProjectSections(reply)
         if (sections.kind === 'answered') {
-          fetchedAt.current = Date.now()
+          fetchedAt.current.set(client, Date.now())
           setServedProjectSections(sections.value)
         }
       } finally {
