@@ -7,36 +7,6 @@ import { computeVisibleWorktreeIds } from '@/components/sidebar/compute-visible-
 import { buildVisibleWorktreeOptionsFromState } from '@/components/sidebar/visible-worktree-options-from-state'
 import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-creator-visibility'
 
-const NO_HIDDEN_WORKSPACES: ReadonlySet<string> = new Set()
-
-/** Every state field the hidden set reads while sleeping workspaces are shown. */
-function hiddenSetInputs(state: AppState): readonly unknown[] {
-  return [
-    state.settings,
-    state.persistedUIReady,
-    state.workspaceSessionReady,
-    state.worktreesByRepo,
-    state.repos,
-    state.folderWorkspaces,
-    state.worktreeLineageById,
-    state.sortBy,
-    state.showSleepingWorkspaces,
-    state.filterRepoIds,
-    state.workspaceHostScope,
-    state.visibleWorkspaceHostIds,
-    state.hideDefaultBranchWorkspace,
-    state.hideAutomationGeneratedWorkspaces,
-    state.hideCliCreatedWorkspaces,
-    state.hideDetachedHeadWorkspaces,
-    state.hideWorkspacesFromOtherDevices,
-    state.alwaysShowDefaultBranchWorkspace,
-    state.runtimeEnvironments,
-    state.runtimeStatusByEnvironmentId
-  ]
-}
-
-let cached: { inputs: readonly unknown[]; ids: ReadonlySet<string> } | null = null
-
 /**
  * Workspaces whose attention must raise nothing — no unread, banner, sound or push — because a
  * Filters-menu switch hides them and "Notify About Hidden Workspaces" is off. Worktrees by bare
@@ -47,33 +17,18 @@ let cached: { inputs: readonly unknown[]; ids: ReadonlySet<string> } | null = nu
  * Fails open: unhydrated settings or UI state, terminals not yet reconnected (every restored
  * workspace would read as sleeping), or a workspace this store has no record of, notify.
  */
-export function getNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<string> {
-  // Why: Hide sleeping reads agent freshness against the clock, so only its absence is memoizable.
-  if (!state.showSleepingWorkspaces) {
-    return computeNotificationHiddenWorkspaceIds(state)
-  }
-  const inputs = hiddenSetInputs(state)
-  const previous = cached
-  if (previous && inputs.every((input, index) => input === previous.inputs[index])) {
-    return previous.ids
-  }
-  const ids = computeNotificationHiddenWorkspaceIds(state)
-  cached = { inputs, ids }
-  return ids
-}
-
-function computeNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<string> {
+export function getNotificationHiddenWorkspaceIds(state: AppState): Set<string> {
+  const hidden = new Set<string>()
   if (
     state.settings?.notifications?.notifyHiddenWorkspaces !== false ||
     !state.persistedUIReady ||
     !state.workspaceSessionReady ||
     !sidebarHasActiveFilters(state)
   ) {
-    return NO_HIDDEN_WORKSPACES
+    return hidden
   }
   const repoMap = getIndexedRepoMap(state.repos)
   const inputs = buildVisibleWorktreeOptionsFromState(state, repoMap)
-  const hidden = new Set<string>()
   if (inputs.hideWorkspacesFromOtherDevices) {
     for (const folder of state.folderWorkspaces) {
       if (isFolderWorkspaceFromOtherDevice(folder, inputs.pairedDeviceIdsByEnvironment)) {
@@ -96,7 +51,7 @@ function computeNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<str
       hidden.add(worktree.id)
     }
   }
-  return hidden.size > 0 ? hidden : NO_HIDDEN_WORKSPACES
+  return hidden
 }
 
 export function isWorkspaceNotificationMutedBySidebarFilters(
