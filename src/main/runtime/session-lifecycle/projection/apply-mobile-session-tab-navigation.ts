@@ -14,6 +14,11 @@ import {
   projectClientSessionTabSelection
 } from '../../client-session-tab-selection'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
+import type {
+  MobileTerminalResumeCommand,
+  OrcaRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup
+} from '../../terminal/launch/mobile-terminal-startup'
 import { runtimeWorktreeIdsEqual } from '../../runtime-worktree-path-identity'
 import {
   buildHeadlessMobileSessionTabGroups,
@@ -24,6 +29,9 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
   protected abstract emitMobileSessionTabsSnapshotToClient(
     ...args: Parameters<MobileSessionPublication['emitMobileSessionTabsSnapshotToClient']>
   ): ReturnType<MobileSessionPublication['emitMobileSessionTabsSnapshotToClient']>
+  protected abstract resolveMobileSessionResumeCommand(
+    ...args: Parameters<MobileTerminalStartup['resolveMobileSessionResumeCommand']>
+  ): ReturnType<MobileTerminalStartup['resolveMobileSessionResumeCommand']>
   protected abstract isHeadlessMobileSessionPublication(
     ...args: Parameters<MobileSessionPreservation['isHeadlessMobileSessionPublication']>
   ): ReturnType<MobileSessionPreservation['isHeadlessMobileSessionPublication']>
@@ -115,16 +123,59 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): boolean {
+    // Why: 'live'/'quit' captures describe a pane that was still running, so a reconnect
+    // must still mint its replacement PTY (#11542). Only a worktree-owned capture records
+    // a deliberate takedown the user did not ask to undo.
+    return this.getPaneSleepingAgentRecord(worktreeId, tab)?.origin === 'worktree-sleep'
+  }
+
+  /**
+   * The record the host window's cold restore would resume this pane from, if the pane owns it.
+   * Why: a running agent's worktree-sleep record is relaunched in a fresh tab by the window's
+   * worktree activation, so resuming it in the pane as well would run one transcript twice.
+   */
+  protected getPaneOwnedResumeRecord(
+    worktreeId: string,
+    tab: RuntimeMobileSessionTerminalTab
+  ): SleepingAgentSessionRecord | null {
+    const record = this.getPaneSleepingAgentRecord(worktreeId, tab)
+    if (!record) {
+      return null
+    }
+    const paneOwned =
+      record.origin === 'live' || record.origin === 'quit' || record.state === 'done'
+    return paneOwned ? record : null
+  }
+
+  /**
+   * The pane's resume launch: undefined when it owns no record, `{}` (plain shell, record kept,
+   * as the window does) when the record cannot be resumed here.
+   */
+  protected async resolvePaneOwnedResumeStartup(
+    worktreeId: string,
+    tab: RuntimeMobileSessionTerminalTab
+  ): Promise<MobileTerminalResumeCommand | Record<string, never> | undefined> {
+    const record = this.getPaneOwnedResumeRecord(worktreeId, tab)
+    if (!record) {
+      return undefined
+    }
+    try {
+      const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
+      return this.resolveMobileSessionResumeCommand(workspace, record) ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  private getPaneSleepingAgentRecord(
+    worktreeId: string,
+    tab: RuntimeMobileSessionTerminalTab
+  ): SleepingAgentSessionRecord | null {
     const record =
       this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey?.[
         makePaneKey(tab.parentTabId, tab.leafId)
       ]
-    // Why: 'live'/'quit' captures describe a pane that was still running, so a reconnect
-    // must still mint its replacement PTY (#11542). Only a worktree-owned capture records
-    // a deliberate takedown the user did not ask to undo.
-    return (
-      record?.origin === 'worktree-sleep' && runtimeWorktreeIdsEqual(record.worktreeId, worktreeId)
-    )
+    return record && runtimeWorktreeIdsEqual(record.worktreeId, worktreeId) ? record : null
   }
 
   protected shouldMaterializeHeadlessMobileSessionTab(

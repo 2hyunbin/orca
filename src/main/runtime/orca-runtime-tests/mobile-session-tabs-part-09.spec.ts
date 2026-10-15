@@ -90,6 +90,21 @@ describe('OrcaRuntimeService', () => {
       runtime.markGraphReady(TEST_WINDOW_ID)
     }
 
+    function firstSpawnArgs(spawn: ReturnType<typeof vi.fn>): {
+      command?: string
+      sessionId?: string
+    } {
+      const args: unknown = spawn.mock.calls[0]?.[0]
+      if (typeof args !== 'object' || args === null) {
+        return {}
+      }
+      const command =
+        'command' in args && typeof args.command === 'string' ? args.command : undefined
+      const sessionId =
+        'sessionId' in args && typeof args.sessionId === 'string' ? args.sessionId : undefined
+      return { command, sessionId }
+    }
+
     const userActivate = (
       runtime: OrcaRuntimeService,
       leafId?: string
@@ -188,6 +203,54 @@ describe('OrcaRuntimeService', () => {
 
       expect(spawn).toHaveBeenCalledOnce()
       expect(activated.tabs[0]).toMatchObject({ status: 'ready' })
+    })
+
+    // #27147 / #27777: the tap used to start a bare shell (or a fresh agent), which lost the
+    // conversation the host recorded for this pane. The host window resumes it; so must this.
+    it('resumes the slept agent session when a paired client opens the pane', async () => {
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
+        launchConfig: { agentArgs: '--dangerously-skip-permissions', agentEnv: {} }
+      })
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore)
+      setParkedRuntimeNotifier(runtime, vi.fn())
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only isDestroyed from the window mock.
+      electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
+      await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
+        notifyClients: false,
+        clientKind: 'runtime'
+      })
+
+      const activated = await userActivate(runtime)
+
+      expect(spawn).toHaveBeenCalledOnce()
+      const spawnArgs = firstSpawnArgs(spawn)
+      expect(spawnArgs.sessionId).toBe('persisted-pty')
+      expect(spawnArgs.command).toContain('--resume')
+      expect(spawnArgs.command).toContain('provider-session-1')
+      expect(spawnArgs.command).toContain('--dangerously-skip-permissions')
+      expect(activated.tabs[0]).toMatchObject({ status: 'ready' })
+    })
+
+    it('resumes from a live anchor when the pane was lost while its agent ran', async () => {
+      const { runtimeStore } = makeParkedSessionStore('live')
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore)
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command).toContain('provider-session-1')
+    })
+
+    // Why: a session id names a transcript on the machine that captured it.
+    it('does not resume a record captured on another execution host', async () => {
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
+        connectionId: 'ssh-elsewhere'
+      })
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore)
+
+      await userActivate(runtime)
+
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
     })
 
     // Why: manual sleep of a finished agent stamps restoreOnTabOpenOnly, which the
