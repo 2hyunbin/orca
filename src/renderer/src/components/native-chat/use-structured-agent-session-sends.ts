@@ -4,9 +4,9 @@ import type { StructuredAgentSessionAttachment } from '../../../../shared/struct
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   structuredAgentSessionQueueRequest,
-  type StructuredAgentSessionQueueDelivery,
-  type StructuredAgentSessionSendIntent
+  type StructuredAgentSessionQueueDelivery
 } from './structured-agent-session-queue-request'
+import type { NativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 import {
   sendStructuredAgentSessionMessage,
   settleStructuredAgentSessionSendsFromJournal,
@@ -90,7 +90,7 @@ export function useStructuredAgentSessionSends(args: {
     (
       text: string,
       attachments: readonly StructuredAgentSessionAttachment[] = [],
-      intent?: StructuredAgentSessionSendIntent
+      followUp?: NativeChatFollowUpDelivery
     ): boolean | 'queued' => {
       if (!text.trim() && attachments.length === 0) {
         return false
@@ -98,7 +98,7 @@ export function useStructuredAgentSessionSends(args: {
       const delivery = structuredAgentSessionQueueRequest(
         queue,
         attachments,
-        stopping ? undefined : intent
+        stopping ? undefined : followUp
       )
       const options = sendOptions?.()
       const sent = sendStructuredAgentSessionMessage({

@@ -59,7 +59,7 @@ function send(structuredTransport: NativeChatStructuredComposerTransport): (text
       setCaret: vi.fn()
     })
   )
-  return result.current
+  return (text) => void result.current(text, 'queue')
 }
 
 describe('a real user send from a structured chat pane', () => {

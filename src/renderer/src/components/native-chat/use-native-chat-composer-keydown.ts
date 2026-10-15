@@ -8,7 +8,6 @@ import {
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
 import { isMacPlatform } from './native-chat-shortcut'
 import type { NativeChatMentionFiles } from './use-native-chat-mention-files'
-import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
 import {
   isNativeChatRecallActive,
   nativeChatSentPrompts,
@@ -30,7 +29,8 @@ export type UseNativeChatComposerKeyDownArgs = {
   dispatchPickerCommand: (item: Extract<NativeChatPickerItem, { kind: 'command' }>) => void
   dismissPicker: (triggerKey: string) => void
   interrupt: () => void
-  send: (intent?: StructuredAgentSessionSendIntent) => void
+  /** `alternate`: Cmd/Ctrl+Enter, the opposite of the follow-up setting. */
+  send: (alternate: boolean) => void
   /** Cmd/Ctrl+Shift+Enter acts on the first waiting card independently of the draft. */
   steerQueued?: (() => boolean) | undefined
   setActiveSuggestion: Dispatch<SetStateAction<number>>
@@ -136,11 +136,7 @@ export function useNativeChatComposerKeyDown({
         if (!event.shiftKey) {
           event.preventDefault()
           if (!event.repeat && (draft.trim() !== '' || hasAttachments)) {
-            if (modified) {
-              send('alternate')
-            } else {
-              send()
-            }
+            send(modified)
           }
           return
         }

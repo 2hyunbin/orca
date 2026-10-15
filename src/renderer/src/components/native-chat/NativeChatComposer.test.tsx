@@ -316,7 +316,7 @@ describe('NativeChatComposer', () => {
     await act(async () => mocks.fieldProps?.onSend?.())
 
     expect(dispatchCommand).toHaveBeenCalledWith('hello')
-    expect(send).toHaveBeenCalledWith('hello', [])
+    expect(send).toHaveBeenCalledWith('hello', [], 'queue')
     expect(mocks.sendNativeChatMessage).not.toHaveBeenCalled()
     expect(mocks.setDraft).toHaveBeenCalledWith('')
   })
@@ -396,7 +396,7 @@ describe('NativeChatComposer', () => {
 
     await act(async () => mocks.fieldProps?.onSend?.())
 
-    expect(send).toHaveBeenCalledWith('', mocks.imageAttachments)
+    expect(send).toHaveBeenCalledWith('', mocks.imageAttachments, 'queue')
     expect(mocks.setDraft).toHaveBeenCalledWith('')
   })
 

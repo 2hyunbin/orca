@@ -30,6 +30,8 @@ import { useNativeChatHeldQueueComposerSend } from './use-native-chat-held-queue
 import { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { useNativeChatComposerAppMenuSelection } from './use-native-chat-composer-app-menu-selection'
 import { useNativeChatComposerSubmit } from './use-native-chat-composer-submit'
+import { useAppStore } from '../../store'
+import { resolveNativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 
 export type {
   NativeChatComposerHandle,
@@ -281,6 +283,11 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       optimisticSendOutcome,
       terminalTabId
     })
+    const queueFollowUps = useAppStore((store) => store.settings?.nativeChatQueueFollowUps)
+    const followUp = useCallback(
+      (alternate: boolean) => resolveNativeChatFollowUpDelivery({ alternate, queueFollowUps }),
+      [queueFollowUps]
+    )
     const { send, goalMode } = useNativeChatComposerSubmit({
       structuredTransport,
       draftScopeKey,
@@ -288,6 +295,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       caret,
       imageAttachments,
       disabled,
+      followUp,
       sendPty,
       sendStructured,
       setDraft,
@@ -309,9 +317,9 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const dispatchPickerCommand = useCallback(
       (command: Parameters<typeof dispatchPtyPickerCommand>[0]) =>
         structuredTransport
-          ? sendStructured(`/${command.name}`)
+          ? sendStructured(`/${command.name}`, followUp(false))
           : dispatchPtyPickerCommand(command),
-      [dispatchPtyPickerCommand, sendStructured, structuredTransport]
+      [dispatchPtyPickerCommand, followUp, sendStructured, structuredTransport]
     )
 
     const handleKeyDown = useNativeChatComposerKeyDown({

@@ -11,6 +11,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 
 import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
+import { resolveNativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 
 const QUEUEING = { capability: 'supported', enabled: true } as const
 
@@ -77,11 +78,11 @@ it.each([true, false])(
   async (enabled) => {
     mocks.call.mockImplementation(() => new Promise(() => {}))
     for (const stopping of [false, true]) {
-      for (const intent of [undefined, 'alternate'] as const) {
+      for (const alternate of [false, true]) {
         mocks.call.mockClear()
         const { result, unmount } = renderHook(() =>
           useStructuredAgentSessionSends({
-            sessionId: `session-${enabled}-${stopping}-${intent ?? 'default'}`,
+            sessionId: `session-${enabled}-${stopping}-${alternate}`,
             target: { kind: 'local' },
             fence: 1,
             submissions: [],
@@ -93,7 +94,11 @@ it.each([true, false])(
           })
         )
         act(() => {
-          result.current.send('follow up', [], intent)
+          result.current.send(
+            'follow up',
+            [],
+            resolveNativeChatFollowUpDelivery({ alternate, queueFollowUps: enabled })
+          )
         })
         await waitFor(() =>
           expect(mocks.call.mock.calls.some(([, method]) => method === 'agentSession.send')).toBe(
@@ -103,7 +108,7 @@ it.each([true, false])(
         const params = mocks.call.mock.calls.find(
           ([, method]) => method === 'agentSession.send'
         )?.[2]
-        if (stopping ? enabled : enabled !== (intent === 'alternate')) {
+        if (stopping ? enabled : enabled !== alternate) {
           expect(params).toHaveProperty('delivery', 'queue-if-active')
         } else {
           expect(params).not.toHaveProperty('delivery')

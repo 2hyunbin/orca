@@ -63,6 +63,7 @@ function harness(options: {
         caret: props.caret,
         imageAttachments: options.imageAttachments ?? [],
         disabled: false,
+        followUp: () => 'queue',
         ...calls
       }),
     { initialProps: { draft: options.draft, caret: options.caret ?? options.draft.length } }
@@ -167,10 +168,10 @@ describe('composer goal mode', () => {
     // With an objective it is the host command, and without goals it is message text.
     const withObjective = harness({ draft: '/goal ship it', threadGoal: { setObjective: vi.fn() } })
     act(() => withObjective.hook.result.current.send())
-    expect(withObjective.calls.sendStructured).toHaveBeenCalledWith('/goal ship it', [])
+    expect(withObjective.calls.sendStructured).toHaveBeenCalledWith('/goal ship it', 'queue', [])
     const withoutGoals = harness({ draft: '/goal' })
     act(() => withoutGoals.hook.result.current.send())
-    expect(withoutGoals.calls.sendStructured).toHaveBeenCalledWith('/goal', [])
+    expect(withoutGoals.calls.sendStructured).toHaveBeenCalledWith('/goal', 'queue', [])
     expect(withoutGoals.hook.result.current.goalMode.active).toBe(false)
   })
 
@@ -229,7 +230,7 @@ describe('composer goal mode', () => {
   it('sends an ordinary message outside goal mode', () => {
     const { hook, calls } = harness({ draft: 'hello', threadGoal: { setObjective: vi.fn() } })
     act(() => hook.result.current.send())
-    expect(calls.sendStructured).toHaveBeenCalledWith('hello', [])
+    expect(calls.sendStructured).toHaveBeenCalledWith('hello', 'queue', [])
   })
 
   it('leaves the PTY lane alone: every draft goes to the PTY send, and goal mode never activates', () => {

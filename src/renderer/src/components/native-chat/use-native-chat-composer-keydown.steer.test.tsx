@@ -3,10 +3,8 @@
 import { cleanup, fireEvent, render, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useNativeChatComposerKeyDown } from './use-native-chat-composer-keydown'
-import {
-  structuredAgentSessionQueueRequest,
-  type StructuredAgentSessionSendIntent
-} from './structured-agent-session-queue-request'
+import { structuredAgentSessionQueueRequest } from './structured-agent-session-queue-request'
+import { resolveNativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 
 const platform = vi.hoisted(() => ({ isMac: true }))
 vi.mock('./native-chat-shortcut', () => ({ isMacPlatform: () => platform.isMac }))
@@ -17,8 +15,12 @@ it.each([true, false])(
   (isMac) => {
     platform.isMac = isMac
     const steerQueued = vi.fn(() => true)
-    const send = vi.fn((intent?: StructuredAgentSessionSendIntent) =>
-      structuredAgentSessionQueueRequest({ capability: 'supported', enabled: queue }, [], intent)
+    const send = vi.fn((alternate: boolean) =>
+      structuredAgentSessionQueueRequest(
+        { capability: 'supported', enabled: queue },
+        [],
+        resolveNativeChatFollowUpDelivery({ alternate, queueFollowUps: queue })
+      )
     )
     let queue = true
     const hook = renderHook(

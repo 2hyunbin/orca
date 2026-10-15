@@ -17,7 +17,7 @@ import type { NativeChatComposerImageAttachment } from './NativeChatComposerFiel
 import type { NativeChatAfterStopSend } from './native-chat-composer-target'
 import type { NativeChatLocalCommandAnswer } from './use-native-chat-local-command-answer'
 import type { NativeChatRecallSource } from './native-chat-sent-prompt-history'
-import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
+import type { NativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 
 export type NativeChatComposerErrorDetail = {
   /** Error text Orca did not write, shown apart and copyable. */
@@ -46,7 +46,7 @@ export type NativeChatStructuredComposerTransport = {
   send: (
     text: string,
     attachments: readonly NativeChatComposerImageAttachment[],
-    intent?: StructuredAgentSessionSendIntent
+    delivery: NativeChatFollowUpDelivery
   ) => boolean | 'queued'
   /** A send is out: Send stays disabled, and a send returns false, until it settles. */
   sendOut?: boolean

@@ -164,7 +164,7 @@ describe('structured send racing the next IME composition', () => {
     expect(promptValue(input)).toBe('하')
 
     await act(async () => pressEnter(input))
-    expect(structured.send).toHaveBeenLastCalledWith('하', [])
+    expect(structured.send).toHaveBeenLastCalledWith('하', [], 'queue')
   })
 
   it('keeps the composed text when a mid-composition clear lands away from the caret', async () => {
@@ -198,7 +198,7 @@ describe('structured send racing the next IME composition', () => {
     changePrompt(input, '안녕')
     await act(async () => pressEnter(input))
 
-    expect(structured.send).toHaveBeenCalledWith('안녕', [])
+    expect(structured.send).toHaveBeenCalledWith('안녕', [], 'queue')
     expect(promptValue(input)).toBe('안녕')
   })
 
@@ -316,7 +316,7 @@ describe('a structured send while the chat has one out', () => {
     expect(actions.sendDisabled).toBe(true)
 
     await act(async () => pressEnter(input))
-    expect(structured.send).toHaveBeenCalledWith('next one', [])
+    expect(structured.send).toHaveBeenCalledWith('next one', [], 'queue')
     expect(promptValue(input)).toBe('next one')
 
     view.rerender(

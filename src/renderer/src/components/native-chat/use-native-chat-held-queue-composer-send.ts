@@ -13,12 +13,12 @@ import { readNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import type { NativeChatQueueHold } from './native-chat-composer-types'
 import type { NativeChatQueueResume } from './native-chat-composer-primary-action'
-import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
+import type { NativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 
 type StructuredComposerSend = (
   text: string,
-  attachments?: readonly NativeChatComposerImageAttachment[],
-  intent?: StructuredAgentSessionSendIntent
+  delivery: NativeChatFollowUpDelivery,
+  attachments?: readonly NativeChatComposerImageAttachment[]
 ) => void
 
 /** The confirmation as the dialog shows it; kept after it closes so the closing frame still reads. */
@@ -35,8 +35,8 @@ export type NativeChatQueueSendConfirm = {
 }
 
 type PendingSend = {
-  intent: StructuredAgentSessionSendIntent | undefined
   text: string
+  delivery: NativeChatFollowUpDelivery
   attachments: readonly NativeChatComposerImageAttachment[] | undefined
   /** The hold it was asked under: the question stands only while that hold does. */
   hold: NativeChatQueueHold
@@ -84,7 +84,7 @@ export function useNativeChatHeldQueueComposerSend(args: UseNativeChatStructured
   }, [sendOut])
 
   const send = useCallback<StructuredComposerSend>(
-    (text, attachments, intent) => {
+    (text, delivery, attachments) => {
       if (clearingRef.current) {
         return
       }
@@ -97,8 +97,8 @@ export function useNativeChatHeldQueueComposerSend(args: UseNativeChatStructured
           return
         }
         const asked = {
-          intent,
           text,
+          delivery,
           attachments,
           hold: queueHold,
           sentFrom: readNativeChatComposerDraft(args.draftScopeKey)
@@ -108,7 +108,7 @@ export function useNativeChatHeldQueueComposerSend(args: UseNativeChatStructured
         setOpen(true)
         return
       }
-      void sendNow(text, attachments, undefined, intent)
+      void sendNow(text, delivery, attachments)
     },
     [agent, args.draftScopeKey, queueHold, sendNow, sendOut, structuredTransport]
   )
@@ -116,7 +116,7 @@ export function useNativeChatHeldQueueComposerSend(args: UseNativeChatStructured
   const sendMessage = useCallback(() => {
     const taken = take()
     if (taken) {
-      void sendNowRef.current(taken.text, taken.attachments, taken.sentFrom, taken.intent)
+      void sendNowRef.current(taken.text, taken.delivery, taken.attachments, taken.sentFrom)
     }
   }, [take])
   const clearQueue = useCallback(() => {
@@ -130,7 +130,7 @@ export function useNativeChatHeldQueueComposerSend(args: UseNativeChatStructured
       try {
         if (await taken.hold.clear()) {
           // Text typed during the deletes stays: the message was taken from what came before.
-          await sendNowRef.current(taken.text, taken.attachments, taken.sentFrom, taken.intent)
+          await sendNowRef.current(taken.text, taken.delivery, taken.attachments, taken.sentFrom)
         }
       } finally {
         clearingRef.current = false

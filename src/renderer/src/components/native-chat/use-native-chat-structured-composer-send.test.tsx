@@ -65,7 +65,7 @@ describe('attachment guard follows what the host claims', () => {
     ['codex', '/permissions']
   ] as const)('refuses attachments on the host-claimed %s command %s', (agent, text) => {
     const { send, structuredTransport } = harness(agent)
-    send(text)
+    send(text, 'queue')
     expect(structuredTransport.onError).toHaveBeenCalledWith(
       'Remove attachments before using a chat-session command.'
     )
@@ -78,9 +78,9 @@ describe('attachment guard follows what the host claims', () => {
     ['codex', '/goal ship the fix']
   ] as const)('sends %s attachments along with the passed-through %s', async (agent, text) => {
     const { send, structuredTransport } = harness(agent)
-    send(text)
+    send(text, 'queue')
     await vi.waitFor(() =>
-      expect(structuredTransport.send).toHaveBeenCalledWith(text, [ATTACHMENT])
+      expect(structuredTransport.send).toHaveBeenCalledWith(text, [ATTACHMENT], 'queue')
     )
     expect(structuredTransport.onError).not.toHaveBeenCalledWith(
       'Remove attachments before using a chat-session command.'
@@ -90,7 +90,7 @@ describe('attachment guard follows what the host claims', () => {
   it('refuses attachments on /goal where the host sets the goal, since no message is sent', () => {
     const setObjective = vi.fn(async () => true)
     const { send, structuredTransport } = harness('codex', { setObjective })
-    send('/goal ship the fix')
+    send('/goal ship the fix', 'queue')
     expect(structuredTransport.onError).toHaveBeenCalledWith(
       'Remove attachments before using a chat-session command.'
     )
@@ -108,7 +108,7 @@ describe('an attachment still uploading', () => {
       pending: true,
       pendingName: 'notes.pdf'
     }
-    send('/review', [pending])
+    send('/review', 'queue', [pending])
     await Promise.resolve()
     expect(structuredTransport.send).not.toHaveBeenCalled()
     expect(structuredTransport.onError).not.toHaveBeenCalled()
@@ -121,20 +121,20 @@ describe('reports the sends that bring the latest into view', () => {
   it('reports a conversation command at the press, then not a message the transport refused', async () => {
     const onSubmitted = vi.fn()
     const { send, structuredTransport } = harness('claude', undefined, onSubmitted)
-    send('/compact', [])
+    send('/compact', 'queue', [])
     expect(onSubmitted).toHaveBeenCalledOnce()
 
     vi.mocked(structuredTransport.send).mockReturnValue(false)
-    send('hello', [])
+    send('hello', 'queue', [])
     await vi.waitFor(() => expect(structuredTransport.onError).toHaveBeenCalledTimes(2))
-    expect(structuredTransport.send).toHaveBeenCalledWith('hello', [])
+    expect(structuredTransport.send).toHaveBeenCalledWith('hello', [], 'queue')
     expect(onSubmitted).toHaveBeenCalledOnce()
   })
 
   it('reports nothing for a host command chat sessions do not run', async () => {
     const onSubmitted = vi.fn()
     const { send, structuredTransport } = harness('codex', undefined, onSubmitted)
-    send('/permissions', [])
+    send('/permissions', 'queue', [])
     await vi.waitFor(() =>
       expect(structuredTransport.onError).toHaveBeenCalledWith(
         expect.stringContaining('not available in chat sessions'),
@@ -153,7 +153,7 @@ describe("says a failed send in Orca's words, with the error it hit apart", () =
         "Error invoking remote method 'agentSession:send': Error: connect ECONNREFUSED /tmp/a.sock"
       )
     })
-    send('hello', [])
+    send('hello', 'queue', [])
     await vi.waitFor(() =>
       expect(structuredTransport.onError).toHaveBeenCalledWith('Your message was not sent.', {
         errorText: 'connect ECONNREFUSED /tmp/a.sock'

@@ -163,7 +163,7 @@ it('reveals a structured command at the press, before the host answers it', asyn
   })
   readerScrollAway(hook.result.current)
   hook.result.current.scrollToEnd.mockClear()
-  act(() => void hook.result.current.send('/compact'))
+  act(() => void hook.result.current.send('/compact', 'queue'))
   expect(hook.result.current.scrollToEnd).toHaveBeenCalled()
   // The answer arriving later leaves a reader who has since scrolled away.
   readerScrollAway(hook.result.current)
@@ -191,6 +191,7 @@ it('reveals a goal at the press, before the host sets it', async () => {
         caret: draft.length,
         imageAttachments: [],
         disabled: false,
+        followUp: () => 'queue',
         sendPty: vi.fn(),
         sendStructured: vi.fn(),
         setDraft: vi.fn(),
@@ -232,7 +233,7 @@ it.each(['/model', '/effort'])(
         setCaret: vi.fn()
       })
     )
-    await act(async () => hook.result.current(text))
+    await act(async () => hook.result.current(text, 'queue'))
     expect(t.send).not.toHaveBeenCalled()
     expect(onSubmitted).not.toHaveBeenCalled()
   }
@@ -369,8 +370,8 @@ it('control: a refused structured message does not reveal', async () => {
       setCaret: vi.fn()
     })
   )
-  await act(async () => hook.result.current('hello'))
-  expect(t.send).toHaveBeenCalledWith('hello', [])
+  await act(async () => hook.result.current('hello', 'queue'))
+  expect(t.send).toHaveBeenCalledWith('hello', [], 'queue')
   expect(onSubmitted).not.toHaveBeenCalled()
 })
 
@@ -448,7 +449,7 @@ it('keeps an accepted queued draft out of transcript navigation', async () => {
       setCaret: vi.fn()
     })
   )
-  await act(async () => hook.result.current('Next task'))
-  expect(t.send).toHaveBeenCalledWith('Next task', [])
+  await act(async () => hook.result.current('Next task', 'queue'))
+  expect(t.send).toHaveBeenCalledWith('Next task', [], 'queue')
   expect(onSubmitted).not.toHaveBeenCalled()
 })

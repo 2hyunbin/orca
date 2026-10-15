@@ -4,7 +4,7 @@ import { applyPickerSuggestion, type NativeChatPickerItem } from './native-chat-
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import { nativeChatImagesHoldSend } from './native-chat-image-reattach'
-import type { StructuredAgentSessionSendIntent } from './structured-agent-session-queue-request'
+import type { NativeChatFollowUpDelivery } from '../../../../shared/native-chat-follow-up-delivery'
 import {
   clearNativeChatComposerDraftIfUnchanged,
   readNativeChatComposerDraft
@@ -38,20 +38,22 @@ export function useNativeChatComposerSubmit(args: {
   caret: number
   imageAttachments: readonly NativeChatComposerImageAttachment[]
   disabled: boolean
+  /** The delivery the follow-up setting gives; `alternate` (Cmd/Ctrl+Enter) is its opposite. */
+  followUp: (alternate: boolean) => NativeChatFollowUpDelivery
   sendPty: () => void
   sendStructured: (
     text: string,
-    attachments: readonly NativeChatComposerImageAttachment[],
-    intent?: StructuredAgentSessionSendIntent
+    delivery: NativeChatFollowUpDelivery,
+    attachments: readonly NativeChatComposerImageAttachment[]
   ) => void
   setDraft: (value: string) => void
   setCaret: (caret: number) => void
 }): {
-  send: (intent?: StructuredAgentSessionSendIntent) => void
+  send: (alternate?: boolean) => void
   goalMode: NativeChatComposerGoalMode
 } {
   const { caret, disabled, draft, draftScopeKey, imageAttachments, sendPty, sendStructured } = args
-  const { setCaret, setDraft, structuredTransport } = args
+  const { followUp, setCaret, setDraft, structuredTransport } = args
   const threadGoal = structuredTransport?.threadGoal
   const [entered, setEntered] = useState(false)
   const active = entered && threadGoal !== undefined
@@ -107,7 +109,7 @@ export function useNativeChatComposerSubmit(args: {
   }, [draft, draftScopeKey, imageAttachments.length, setCaret, structuredTransport, threadGoal])
 
   const send = useCallback(
-    (intent?: StructuredAgentSessionSendIntent) => {
+    (alternate = false) => {
       if (nativeChatImagesHoldSend(imageAttachments)) {
         return
       }
@@ -124,17 +126,14 @@ export function useNativeChatComposerSubmit(args: {
       } else if (!structuredTransport) {
         sendPty()
       } else if ((draft.trim() !== '' || imageAttachments.length > 0) && !disabled) {
-        if (intent) {
-          sendStructured(draft, imageAttachments, intent)
-        } else {
-          sendStructured(draft, imageAttachments)
-        }
+        sendStructured(draft, followUp(alternate), imageAttachments)
       }
     },
     [
       active,
       disabled,
       draft,
+      followUp,
       imageAttachments,
       sendPty,
       sendStructured,

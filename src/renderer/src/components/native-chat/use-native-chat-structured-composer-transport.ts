@@ -41,7 +41,7 @@ export function useNativeChatStructuredComposerTransport(args: {
       ? (objective: string) => threadGoal.change({ kind: 'set', objective })
       : null
     return {
-      send: (text, attachments, intent) =>
+      send: (text, attachments, delivery) =>
         sendThroughLaunch(text, attachments.length > 0, () =>
           controller.send(
             text,
@@ -50,7 +50,7 @@ export function useNativeChatStructuredComposerTransport(args: {
               previewUri: path,
               ...(connectionId ? { connectionId } : {})
             })),
-            intent
+            delivery
           )
         ),
       dispatchCommand: (text: string) =>
