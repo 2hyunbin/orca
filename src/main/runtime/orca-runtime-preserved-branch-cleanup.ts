@@ -125,13 +125,6 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     return this.getAgentProviderSessionRowsForPaneFn?.(paneKey) ?? []
   }
 
-  /** Hook-proven agent presence in a coordinator's pane; null when no hook identified an owner. */
-  checkCoordinatorAgentPresence(
-    paneKey: string
-  ): Promise<'live' | 'unverifiable' | 'exited' | null> {
-    return this.checkHookAgentPresenceFn?.(paneKey) ?? Promise.resolve(null)
-  }
-
   protected readonly attestAgentHookCompatibilityAuthorityFn:
     | ((candidate: {
         paneKey: string

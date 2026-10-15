@@ -79,7 +79,7 @@ describe('run-use against a Run whose coordinator is still running', () => {
         coordinatorHandle: 'term_coord',
         coordinatorPaneKey: COORD_PANE
       }).id
-      vi.spyOn(h.runtime, 'checkCoordinatorAgentPresence').mockResolvedValue(state)
+      vi.spyOn(h.runtime, 'coordinatorAgentPresence').mockResolvedValue(state)
     }
 
     resultOf(await as(SESSION_Y, 'orchestration.runUse', { id: runId }))
@@ -130,17 +130,15 @@ describe('run-use against a Run whose coordinator is still running', () => {
       coordinatorPaneKey: COORD_PANE
     }).id
     let racers = 0
-    const probe = vi
-      .spyOn(h.runtime, 'checkCoordinatorAgentPresence')
-      .mockImplementation(async () => {
-        racers += 1
-        h.db.bindRun({
-          runId,
-          coordinatorHandle: `term_racer${racers}`,
-          coordinatorPaneKey: `tab_r:0000000${racers}-0000-4000-8000-000000000000`
-        })
-        return 'exited'
+    const probe = vi.spyOn(h.runtime, 'coordinatorAgentPresence').mockImplementation(async () => {
+      racers += 1
+      h.db.bindRun({
+        runId,
+        coordinatorHandle: `term_racer${racers}`,
+        coordinatorPaneKey: `tab_r:0000000${racers}-0000-4000-8000-000000000000`
       })
+      return 'exited'
+    })
 
     expect(await as(SESSION_Y, 'orchestration.runUse', { id: runId })).toMatchObject({
       ok: false,

@@ -85,10 +85,7 @@ async function liveCoordinatorLabel(
     const title = record.conversationName ?? defaultAgentChatLabel(record.provider)
     return `the "${title}" chat${inWorktree(record.location.workspaceId)} (${address})`
   }
-  if (
-    key.paneKey === null ||
-    (await runtime.checkCoordinatorAgentPresence(key.paneKey)) !== 'live'
-  ) {
+  if (key.paneKey === null || (await runtime.coordinatorAgentPresence(key.paneKey)) !== 'live') {
     return null
   }
   const terminal = key.terminalHandle
