@@ -39,7 +39,7 @@ function sameJournalTextPiece(left: JournalTextPiece, right: JournalTextPiece): 
 
 function reusableParent(cached: DecodedText, piece: JournalTextPiece): TextAncestor[] | null {
   const index = cached.lineage.findIndex((ancestor) => ancestor.seq === piece.parent)
-  if (index < 0 || cached.lineage.slice(index + 1).some((edge) => edge.units < piece.units)) {
+  if (index === -1 || cached.lineage.slice(index + 1).some((edge) => edge.units < piece.units)) {
     return null
   }
   return cached.lineage.slice(0, index + 1)

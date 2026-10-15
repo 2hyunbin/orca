@@ -57,7 +57,7 @@ export function encodeJournalText(
   const previous = db.prepare(`SELECT seq, text_generation, text_path FROM journal_rows_data
 WHERE session_id = ? AND epoch = ? AND text_item_id = ? AND seq < ? ORDER BY seq DESC LIMIT 1`)
     .get(sessionId, row.epoch, row.itemId, row.seq)
-  let generation = randomUUID()
+  let generation: string = randomUUID()
   let parent: number | null = null
   let units = 0
   if (typeof previous?.seq === 'number' && typeof previous.text_generation === 'string' &&

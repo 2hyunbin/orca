@@ -56,17 +56,24 @@ describe('WSL mover dispositions', () => {
 
   it('lists every SQLite table the app creates, by database', () => {
     const files = sourceFiles('src/main').filter((path) =>
-      /CREATE\s+(?:VIRTUAL\s+)?TABLE/.test(readFileSync(join(REPO_ROOT, path), 'utf8'))
+      /CREATE\s+(?:VIRTUAL\s+)?TABLE|ALTER\s+TABLE\s+\S+\s+RENAME\s+TO/.test(
+        readFileSync(join(REPO_ROOT, path), 'utf8')
+      )
     )
     expect(files.sort()).toEqual(Object.keys(SQLITE_SCHEMA_FILE_DATABASES).sort())
     const tables = new Set<string>()
     // An interpolated name is listed as its constant, e.g. `${RUNS_TABLE}`.
     const pattern =
       /CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\$\{(?:quotedIdentifier\()?([A-Z_]+)|["`']?([a-z0-9_]+))/g
+    const renamed = /ALTER\s+TABLE\s+\S+\s+RENAME\s+TO\s+["`']?([a-z0-9_]+)/g
     for (const path of files) {
       const database = SQLITE_SCHEMA_FILE_DATABASES[path]
-      for (const match of readFileSync(join(REPO_ROOT, path), 'utf8').matchAll(pattern)) {
+      const source = readFileSync(join(REPO_ROOT, path), 'utf8')
+      for (const match of source.matchAll(pattern)) {
         tables.add(`${database}.${match[1] ? `\${${match[1]}}` : match[2]}`)
+      }
+      for (const match of source.matchAll(renamed)) {
+        tables.add(`${database}.${match[1]}`)
       }
     }
     expect([...tables].sort()).toEqual(Object.keys(SQLITE_TABLE_DISPOSITIONS).sort())

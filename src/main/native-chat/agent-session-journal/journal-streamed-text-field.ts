@@ -45,7 +45,12 @@ export function replaceJournalStreamedText(row: JournalRow, path: string, text: 
   if (path === 'diff-patch' && body.kind === 'diff') {
     return { ...row, body: { ...body, patch: { ...body.patch, head: text } } }
   }
-  if (path === 'status' && body.kind === 'status' && journalStreamedText(row)?.path === 'status') {
+  if (
+    path === 'status' &&
+    body.kind === 'status' &&
+    body.failure === undefined &&
+    journalStreamedText(row)?.path === 'status'
+  ) {
     return { ...row, body: { ...body, text } }
   }
   return null
