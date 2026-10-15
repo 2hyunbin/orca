@@ -182,7 +182,7 @@ describe('Resume in New CLI launch', () => {
       if (agent === 'opencode2') {
         await renderActions().handleResumeInNewCli(chat, 'worktree-2')
         expect(mocks.buildAiVaultResumeStartupForWorktree).toHaveBeenLastCalledWith(
-          expect.objectContaining({ session: copy, agentArgs: '--standalone' })
+          expect.objectContaining({ session: copy, agentArgs: "'--standalone'" })
         )
         const controller = new AbortController()
         mocks.prepareAiVaultSessionForFork.mockImplementationOnce(async () => {
