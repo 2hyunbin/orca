@@ -25,12 +25,6 @@ enum MobileWebShellNavigationPolicy {
   /// the opener will refuse anyway.
   static let maxCancelledNavigationUrlCharacters = 4096
 
-  /// iOS 18 hands the view's own `load` a nil source frame despite the non-optional type; only a
-  /// frame-initiated navigation carries one, so nil is the shell's load, not a subframe's.
-  static func isFromSubframe(sourceFrameIsMainFrame: Bool?) -> Bool {
-    sourceFrameIsMainFrame.map { !$0 } ?? false
-  }
-
   /// The whole decision.
   ///
   /// Three rules, in this order, and the order is the design.
@@ -47,9 +41,9 @@ enum MobileWebShellNavigationPolicy {
   /// WKWebView, off-device: a sandboxed subframe navigating the top frame to the document URL
   /// arrives as `.other` with no gesture at all, and under a gesture-shaped rule that is an allow
   /// and a shell reload -- the bridge target cleared, the load state restarted, the page's state
-  /// gone. `isFromSubframe` is the second discriminator for the same reason: the same probe shows
-  /// the shell's own load arriving with source and target both the main frame, and a subframe's top
-  /// navigation arriving with the subframe as its source.
+  /// gone. The initiating frame is deliberately not an input: before iOS 18.5 WebKit reports no
+  /// source frame for the view's own `load` (WebKit c28b242), and reading it refused the shell's
+  /// own document. The one-shot flag already refuses a subframe's top navigation, as on Android.
   ///
   /// What is left for the gesture is the only thing an artifact may ask for: a foreign URL, which
   /// is refused and handed to the opener. A download is not a document load, so it takes that path
@@ -62,7 +56,6 @@ enum MobileWebShellNavigationPolicy {
   static func verdict(
     url: String?,
     isMainFrame: Bool,
-    isFromSubframe: Bool,
     isDocumentUrl: Bool,
     isShellLoad: Bool,
     hasGesture: Bool,
@@ -72,7 +65,7 @@ enum MobileWebShellNavigationPolicy {
       return .cancel
     }
     if isDocumentUrl {
-      return isShellLoad && !isFromSubframe && !isDownload ? .allow : .cancel
+      return isShellLoad && !isDownload ? .allow : .cancel
     }
     guard hasGesture, let offered = offerableUrl(url) else {
       return .cancel
