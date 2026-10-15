@@ -2,8 +2,31 @@ import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
 import type { RuntimeWorktreePsSummary } from '../../shared/runtime-types'
 import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
 import { getWorkspaceAttachments } from '../../shared/workspace-attachments'
+import type { Repo } from '../../shared/repo-types'
+import {
+  isAutomationGeneratedWorkspace,
+  isCliCreatedWorkspace,
+  isDefaultBranchWorkspace,
+  isDetachedHeadWorkspace
+} from '../../shared/workspace-view/workspace-row-kinds'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
+
+/** What a phone needs to apply the Workspace options filters the way this host's sidebar does. */
+function getWorkspaceRowKindFacts(
+  worktree: ResolvedWorktree,
+  repo: Repo | undefined
+): Pick<
+  RuntimeWorktreePsSummary,
+  'defaultBranchWorkspace' | 'automationCreated' | 'cliCreated' | 'detachedHead'
+> {
+  return {
+    defaultBranchWorkspace: isDefaultBranchWorkspace(worktree, repo),
+    ...(isAutomationGeneratedWorkspace(worktree) ? { automationCreated: true } : {}),
+    ...(isCliCreatedWorkspace(worktree) ? { cliCreated: true } : {}),
+    ...(isDetachedHeadWorkspace(worktree) ? { detachedHead: true } : {})
+  }
+}
 
 export function buildRuntimeWorktreePsSummaries(args: {
   store: RuntimeStore | null
@@ -43,6 +66,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       isArchived: worktree.isArchived,
       isMainWorktree: worktree.isMainWorktree,
       hasHostSidebarActivity: false,
+      ...getWorkspaceRowKindFacts(worktree, repo),
       ...(worktree.removalError ? { removalError: worktree.removalError } : {}),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
       ...(lineage?.worktreeInstanceId !== undefined
