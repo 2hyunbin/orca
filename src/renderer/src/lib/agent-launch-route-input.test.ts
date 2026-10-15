@@ -387,9 +387,9 @@ describe('buildAgentLaunchRouteInput', () => {
       expect(routeFor(pairedStore(CURRENT_SERVER), args)).toBe('structured-native-chat')
     })
 
-    it('treats a server that has not reported its status as unknown', () => {
+    it('leaves an unanswered server unknown and routes its launch through host admission', () => {
       expect(buildAgentLaunchRouteInput(store(), args).hostCapabilities).toBeNull()
-      expect(routeFor(store(), args)).toBe('terminal-tui')
+      expect(routeFor(store(), args)).toBe('structured-native-chat')
     })
 
     // A released server advertises structured sessions but admits them only with its own chat
