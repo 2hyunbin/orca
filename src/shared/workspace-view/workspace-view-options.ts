@@ -4,7 +4,6 @@ import type {
   ProjectOrderBy,
   WorktreeCardProperty
 } from '../ui-chrome-types'
-import { TASK_WORKTREE_CARD_PROPERTIES } from '../worktree/card-properties'
 
 // The desktop sidebar's "Workspace options", as data. The desktop menu and the phone sheet both
 // render from this list, each through a renderer table keyed on WorkspaceViewOptionKey, so an
@@ -70,36 +69,24 @@ export const WORKSPACE_CARD_PROPERTY_CHOICES = [
   { id: 'host', label: 'Host' }
 ] as const satisfies readonly WorkspaceViewChoice<WorktreeCardProperty>[]
 
-export type WorkspaceCardDisplayChoice = WorkspaceViewChoice<string> & {
+/** "Card display" (the experimental card style). */
+export const WORKSPACE_CARD_DISPLAY_CHOICES = [
+  { id: 'issue', properties: ['issue'], label: 'GitHub issues' },
+  { id: 'linear-issue', properties: ['linear-issue'], label: 'Linear issues' },
+  { id: 'jira-issue', properties: ['jira-issue'], label: 'Jira issues' },
+  { id: 'comment', properties: ['comment'], label: 'Notes' },
+  { id: 'automation', properties: ['automation'], label: 'Automation' },
+  { id: 'cli', properties: ['cli'], label: 'Orca CLI' },
+  { id: 'ports', properties: ['ports'], label: 'Ports' },
+  { id: 'inline-agents', properties: ['inline-agents'], label: 'Agent statuses' },
+  { id: 'host', properties: ['host'], label: 'Host' },
+  { id: 'branch', properties: ['branch'], label: 'Branch name' }
+] as const satisfies readonly (WorkspaceViewChoice<WorktreeCardProperty> & {
   properties: readonly WorktreeCardProperty[]
-}
+})[]
 
-/** "Card display" (the experimental card style): a row may toggle several properties at once. */
-export function getWorkspaceCardDisplayChoices(
-  hasProjectGroups: boolean
-): WorkspaceCardDisplayChoice[] {
-  return [
-    { id: 'issue', properties: ['issue'], label: 'GitHub issues' },
-    { id: 'linear-issue', properties: ['linear-issue'], label: 'Linear issues' },
-    { id: 'jira-issue', properties: ['jira-issue'], label: 'Jira issues' },
-    { id: 'comment', properties: ['comment'], label: 'Notes' },
-    { id: 'automation', properties: ['automation'], label: 'Automation' },
-    { id: 'cli', properties: ['cli'], label: 'Orca CLI' },
-    { id: 'ports', properties: ['ports'], label: 'Ports' },
-    { id: 'inline-agents', properties: ['inline-agents'], label: 'Agent statuses' },
-    { id: 'host', properties: ['host'], label: 'Host' },
-    {
-      id: 'branch',
-      properties: ['branch'],
-      // Why: project groups can hold folder workspaces, whose identity is a path, not a branch.
-      label: hasProjectGroups ? 'Branch / folder path' : 'Branch name'
-    }
-  ]
-}
-
-/** The classic card's task property row toggles every task provider together. */
-export const WORKSPACE_TASK_CARD_PROPERTIES: readonly WorktreeCardProperty[] =
-  TASK_WORKTREE_CARD_PROPERTIES
+/** Why: project groups can hold folder workspaces, whose identity is a path, not a branch. */
+export const WORKSPACE_CARD_DISPLAY_FOLDER_BRANCH_LABEL = 'Branch / folder path'
 
 export type WorkspaceViewSection = 'show' | 'group' | 'arrange' | 'filters'
 
