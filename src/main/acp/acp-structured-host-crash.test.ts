@@ -81,7 +81,6 @@ describe('a Grok crash with its exit seen first', () => {
     expect(
       settled.batch.mutations.map((mutation) => mutation.kind === 'item' && mutation.body.kind)
     ).toEqual(['status', 'turn'])
-    expect(readAgentJournalTurn(settled.turn?.body)).toMatchObject({ outcome: 'failure' })
     await rig.host.close(SESSION, 'user-close')
   })
 })

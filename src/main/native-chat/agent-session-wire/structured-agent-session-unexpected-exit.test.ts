@@ -352,6 +352,7 @@ describe('provider-exit settlement', () => {
         itemBody: () => null,
         itemFence: () => undefined,
         snapshot: () => ({ items: [] }),
+        stopMarks: { personStopDecides: () => false },
         appendLifecycleBatch: vi.fn(async () => ({ epoch: 'epoch-1', sequence: 1 })),
         submissions: () => [{ clientMessageId: 'client-1', dispatchState: 'pending' }]
       }
@@ -411,6 +412,7 @@ describe('provider-exit settlement', () => {
         snapshot: () => ({
           items: [lifecycleItem('turn-failing', 1, { state: 'running', startedAt: 1 })]
         }),
+        stopMarks: { personStopDecides: () => false },
         appendLifecycleBatch: vi.fn(async () => {
           throw new Error('journal still unavailable')
         })

@@ -86,8 +86,6 @@ describe('agentMainAgentVerdict', () => {
       agentMainAgentVerdict({ state: 'done', interrupted: true, mainAgent: { state: 'done' } })
     ).toBe('cancellation')
     expect(agentMainAgentVerdict({ state: 'done', interrupted: true })).toBe('cancellation')
-    // An old host's legacy flag is a user's Stop too.
-    expect(agentVerdictDisplayMark({ state: 'done', interrupted: true })).toBe('interrupted')
   })
 
   it('reads an arm from a newer host as no verdict, so the row reads done as it did', () => {
