@@ -11,6 +11,7 @@ import {
   WORKSPACE_PROJECT_ORDER_CHOICES,
   WORKSPACE_SORT_BY_CHOICES,
   getWorkspaceCardDisplayChoiceLabel,
+  getWorkspaceCardPropertiesValue,
   type WorkspaceViewChoice,
   type WorkspaceViewOptionKey
 } from '../../../src/shared/workspace-view/workspace-view-options'
@@ -53,14 +54,6 @@ const CARD_DISPLAY_CHOICES: WorkspaceViewChoice<WorktreeCardProperty>[] =
     id: choice.id,
     label: getWorkspaceCardDisplayChoiceLabel(choice, false)
   }))
-
-function checkedPropertyLabels(
-  controller: HostScreenController,
-  choices: readonly WorkspaceViewChoice<WorktreeCardProperty>[]
-): string[] {
-  const shown = controller.state.view.worktreeCardProperties
-  return choices.filter((choice) => shown.includes(choice.id)).map((choice) => choice.label)
-}
 
 function hostsValue({ controller, hosts }: WorkspaceOptionProps): string {
   const visible = controller.state.view.filters.visibleHostIds
@@ -206,14 +199,23 @@ function CardPropertyRows(props: {
   )
 }
 
+// As the desktop: "Hover" under Compact, otherwise how many properties show.
+function showPropertiesValue({ controller }: WorkspaceOptionProps): string {
+  const value = getWorkspaceCardPropertiesValue(
+    controller.state.view.worktreeCardProperties,
+    controller.state.cardSettings.compactWorktreeCards
+  )
+  return value === 'hover' ? 'Hover' : value === null ? '' : String(value)
+}
+
 function propertiesPage(
   choices: readonly WorkspaceViewChoice<WorktreeCardProperty>[],
-  withAgentLayout: boolean
+  options: { value: (props: WorkspaceOptionProps) => string; withAgentLayout: boolean }
 ): Extract<WorkspaceOptionControl, { kind: 'page' }> {
+  const { withAgentLayout } = options
   return {
     kind: 'page',
-    value: ({ controller }) =>
-      summarizeChecklist(checkedPropertyLabels(controller, choices), choices.length, 'All'),
+    value: options.value,
     Page: ({ controller }) => (
       <>
         <CardPropertyRows controller={controller} choices={choices} />
@@ -292,8 +294,12 @@ export const WORKSPACE_OPTION_CONTROLS: Record<WorkspaceViewOptionKey, Workspace
     (controller) => (controller.state.cardSettings.compactWorktreeCards ? 'compact' : 'detailed'),
     (controller) => controller.settings.setCardLayout
   ),
-  cardProperties: propertiesPage(WORKSPACE_CARD_PROPERTY_CHOICES, true),
-  cardDisplay: propertiesPage(CARD_DISPLAY_CHOICES, false),
+  cardProperties: propertiesPage(WORKSPACE_CARD_PROPERTY_CHOICES, {
+    value: showPropertiesValue,
+    withAgentLayout: true
+  }),
+  // As the desktop, Card display shows no value.
+  cardDisplay: propertiesPage(CARD_DISPLAY_CHOICES, { value: () => '', withAgentLayout: false }),
   hideSleepingWorkspaces: filterSwitch('hideSleepingWorkspaces'),
   alwaysShowDefaultBranchWorkspace: filterSwitch('alwaysShowDefaultBranchWorkspace'),
   hideDefaultBranchWorkspace: filterSwitch('hideDefaultBranchWorkspace'),
