@@ -6,8 +6,7 @@ import { performance } from 'node:perf_hooks'
 import { build } from 'esbuild'
 import { buildCounterbalancedSchedule } from './counterbalanced-benchmark-schedule.mjs'
 import { summarizeBenchmarkSamples } from './benchmark-sample-summary.mjs'
-import { runProcessSync } from '@orca/process-host'
-import { describeProcessFailure } from './process-failure-message.mjs'
+import { spawnSync } from 'node:child_process'
 import {
   assertFoldConservesEvidence,
   countFoldOperations,
@@ -93,16 +92,16 @@ async function load(ref) {
             }
             let source
             if (ref) {
-              const read = runProcessSync({
-                program: 'git',
-                args: ['show', `${ref}:${relative}`],
+              const read = spawnSync('git', ['show', `${ref}:${relative}`], {
                 cwd: root,
                 env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
-                timeoutMs: 30_000,
-                maxOutputBytes: 2 * 1024 * 1024
+                encoding: 'utf8',
+                timeout: 30_000,
+                maxBuffer: 2 * 1024 * 1024,
+                windowsHide: true
               })
-              if (read.code !== 0 || read.timedOut || read.outputTruncated) {
-                throw new Error(describeProcessFailure(read))
+              if (read.status !== 0 || read.error) {
+                throw new Error(`git show ${ref}:${relative} failed: ${read.error?.message ?? read.stderr}`)
               }
               source = read.stdout
             } else {
