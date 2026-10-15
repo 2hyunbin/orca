@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import {
   AlertCircle,
@@ -54,6 +54,20 @@ export function MobileNativeChatQueuedMessages({
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
   const inFlightRef = useRef(new Set<string>())
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  const scrollRef = useRef<ScrollView>(null)
+  const shownIds = useRef<ReadonlySet<string>>(new Set())
+  const revealNewest = useRef(false)
+  useLayoutEffect(() => {
+    const newest = cards?.at(-1)
+    // An empty list was loading or empty: nothing was appended to scroll to.
+    const appended =
+      shownIds.current.size > 0 && newest !== undefined && !shownIds.current.has(newest.messageId)
+    shownIds.current = new Set(cards?.map((card) => card.messageId))
+    // The list opens on the next card to send; a card the person just queued is shown instead.
+    if (appended && newest.attribution === null) {
+      revealNewest.current = true
+    }
+  }, [cards])
   if (!cards || cards.length === 0) {
     return null
   }
@@ -105,102 +119,115 @@ export function MobileNativeChatQueuedMessages({
             </Pressable>
           </View>
         ) : null}
-        {cards.map((card, index) => {
-          const busy = busyIds.has(card.messageId)
-          const returned = card.state === 'returned'
-          // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
-          // own send failed, or a returned one, is sent again.
-          const steers = !returned && !card.paused && !card.command
-          return (
-            <View
-              key={card.messageId}
-              testID="queued-card-row"
-              style={[styles.row, (pause || index > 0) && styles.divided]}
-            >
-              {card.needsAttention ? (
-                <AlertCircle size={14} color={colors.statusRed} strokeWidth={2} />
-              ) : (
-                <ListEnd size={14} color={colors.textMuted} strokeWidth={2} />
-              )}
-              <View style={styles.textColumn}>
-                {card.attribution ? (
-                  <Text style={styles.caption} numberOfLines={1}>
-                    {card.attribution}
-                  </Text>
-                ) : null}
-                <MobileQueuedCardText text={card.text} />
-                {card.caption ? (
-                  // A returned card's reason only reads whole, often at its end; a hold is one line.
-                  <Text
-                    style={[styles.caption, returned && styles.captionReturned]}
-                    numberOfLines={returned ? undefined : 1}
-                  >
-                    {card.caption}
-                  </Text>
-                ) : null}
-              </View>
-              {/* A command never steers: its Send shows only while the agent is idle. */}
-              {card.waitsForAgent ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: busy || steerHeld }}
-                  accessibilityLabel={
-                    returned
-                      ? 'Send this message again'
-                      : steers
-                        ? 'Submit without interrupting the model'
-                        : 'Send this message'
-                  }
-                  style={({ pressed }) => [
-                    styles.textAction,
-                    pressed && styles.pressed,
-                    (busy || steerHeld) && styles.disabled
-                  ]}
-                  disabled={busy || steerHeld}
-                  onPress={() => void run(card.messageId, onSend)}
-                >
-                  {steers ? (
-                    <CornerDownRight size={12} color={colors.textPrimary} strokeWidth={2} />
-                  ) : (
-                    <Send size={12} color={colors.textPrimary} strokeWidth={2} />
-                  )}
-                  <Text style={styles.actionLabel}>{steers ? 'Steer' : 'Send'}</Text>
-                </Pressable>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                accessibilityLabel="Delete this queued message"
-                style={({ pressed }) => [
-                  styles.iconAction,
-                  pressed && styles.pressed,
-                  busy && styles.disabled
-                ]}
-                disabled={busy}
-                onPress={() => void run(card.messageId, onDelete)}
+        {/* Scrolls on its own so a long queue never squeezes the transcript or the composer. */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.cards}
+          nestedScrollEnabled
+          onContentSizeChange={() => {
+            if (revealNewest.current) {
+              revealNewest.current = false
+              scrollRef.current?.scrollToEnd({ animated: false })
+            }
+          }}
+        >
+          {cards.map((card, index) => {
+            const busy = busyIds.has(card.messageId)
+            const returned = card.state === 'returned'
+            // "Steer" submits beside the running turn, the paused queue's cards too; a card whose
+            // own send failed, or a returned one, is sent again.
+            const steers = !returned && !card.paused && !card.command
+            return (
+              <View
+                key={card.messageId}
+                testID="queued-card-row"
+                style={[styles.row, (pause || index > 0) && styles.divided]}
               >
-                <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
-              </Pressable>
-              {/* The menu holds only Edit, which a command does not take. */}
-              {card.command ? null : (
+                {card.needsAttention ? (
+                  <AlertCircle size={14} color={colors.statusRed} strokeWidth={2} />
+                ) : (
+                  <ListEnd size={14} color={colors.textMuted} strokeWidth={2} />
+                )}
+                <View style={styles.textColumn}>
+                  {card.attribution ? (
+                    <Text style={styles.caption} numberOfLines={1}>
+                      {card.attribution}
+                    </Text>
+                  ) : null}
+                  <MobileQueuedCardText text={card.text} />
+                  {card.caption ? (
+                    // A returned card's reason only reads whole, often at its end; a hold is one line.
+                    <Text
+                      style={[styles.caption, returned && styles.captionReturned]}
+                      numberOfLines={returned ? undefined : 1}
+                    >
+                      {card.caption}
+                    </Text>
+                  ) : null}
+                </View>
+                {/* A command never steers: its Send shows only while the agent is idle. */}
+                {card.waitsForAgent ? null : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy || steerHeld }}
+                    accessibilityLabel={
+                      returned
+                        ? 'Send this message again'
+                        : steers
+                          ? 'Submit without interrupting the model'
+                          : 'Send this message'
+                    }
+                    style={({ pressed }) => [
+                      styles.textAction,
+                      pressed && styles.pressed,
+                      (busy || steerHeld) && styles.disabled
+                    ]}
+                    disabled={busy || steerHeld}
+                    onPress={() => void run(card.messageId, onSend)}
+                  >
+                    {steers ? (
+                      <CornerDownRight size={12} color={colors.textPrimary} strokeWidth={2} />
+                    ) : (
+                      <Send size={12} color={colors.textPrimary} strokeWidth={2} />
+                    )}
+                    <Text style={styles.actionLabel}>{steers ? 'Steer' : 'Send'}</Text>
+                  </Pressable>
+                )}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ disabled: busy }}
-                  accessibilityLabel="More actions"
+                  accessibilityLabel="Delete this queued message"
                   style={({ pressed }) => [
                     styles.iconAction,
                     pressed && styles.pressed,
                     busy && styles.disabled
                   ]}
                   disabled={busy}
-                  onPress={() => setMenuFor(card.messageId)}
+                  onPress={() => void run(card.messageId, onDelete)}
                 >
-                  <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />
+                  <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
                 </Pressable>
-              )}
-            </View>
-          )
-        })}
+                {/* The menu holds only Edit, which a command does not take. */}
+                {card.command ? null : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    accessibilityLabel="More actions"
+                    style={({ pressed }) => [
+                      styles.iconAction,
+                      pressed && styles.pressed,
+                      busy && styles.disabled
+                    ]}
+                    disabled={busy}
+                    onPress={() => setMenuFor(card.messageId)}
+                  >
+                    <MoreHorizontal size={14} color={colors.textPrimary} strokeWidth={2} />
+                  </Pressable>
+                )}
+              </View>
+            )
+          })}
+        </ScrollView>
       </View>
       <ActionSheetModal
         visible={menuCard !== undefined}
@@ -294,6 +321,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderSubtle,
     overflow: 'hidden'
+  },
+  cards: {
+    // The desktop queue's cap, about three plain rows.
+    maxHeight: 160
   },
   row: {
     minHeight: MIN_TOUCH_TARGET,
