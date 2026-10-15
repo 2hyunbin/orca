@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, realpath, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type {
-  SkillSharePreview,
-  SkillShareProgress,
-  SkillSharePublishInput,
-  SkillSharePublishOperation
+import {
+  SKILL_SHARE_NAME_TAKEN_ERROR,
+  type SkillSharePreview,
+  type SkillShareProgress,
+  type SkillSharePublishInput,
+  type SkillSharePublishOperation
 } from '../../shared/skill-sharing-contract'
 import type { SkillCloudVersion } from '../../shared/skill-cloud-contract'
 import { createSkillBundleArchive, type CreatedSkillBundle } from './skill-bundle-creation'
 import type { SkillCloudService } from './skill-cloud-service'
+import { SkillCloudRequestError } from './skill-cloud-request'
 import { readSkillInstallReceipt } from './skill-install-provenance'
 
 const PREPARATION_TTL_MS = 30 * 60 * 1000
@@ -20,6 +22,13 @@ type Preparation = {
   expiresAt: number
   controller: AbortController | null
   publishedVersion: SkillCloudVersion | null
+}
+
+// Why: the name lookup and finalize both report a held name this way.
+function shareError(error: unknown): unknown {
+  return error instanceof SkillCloudRequestError && error.code === 'skill_package_name_taken'
+    ? new Error(SKILL_SHARE_NAME_TAKEN_ERROR, { cause: error })
+    : error
 }
 
 function shareIdempotencyKey(preparationId: string): string {
@@ -66,7 +75,10 @@ export class SkillSharePreparationService {
 
   constructor(
     private readonly root: string,
-    private readonly cloud: Pick<SkillCloudService, 'createShare' | 'publishVersion'>,
+    private readonly cloud: Pick<
+      SkillCloudService,
+      'createShare' | 'findOwnedPackageId' | 'publishVersion'
+    >,
     private readonly options: {
       initializeRoot?: () => Promise<void>
       installStateDirectory?: string
@@ -124,12 +136,13 @@ export class SkillSharePreparationService {
             : source
         })
       )
+      const bundleName = input.bundleName ?? 'shared-skill'
       const created = await createSkillBundleArchive({
         sources,
-        bundleName: input.bundleName ?? 'shared-skill',
+        bundleName,
         description: input.description,
         archivePath: join(directory, 'package.tar.gz'),
-        packageId: input.packageId ?? randomUUID(),
+        packageId: input.packageId ?? (await this.packageIdForName(bundleName)),
         versionId: randomUUID()
       })
       const value: Preparation = {
@@ -142,7 +155,7 @@ export class SkillSharePreparationService {
       return preview(preparationId, value)
     } catch (error) {
       await rm(directory, { recursive: true, force: true })
-      throw error
+      throw shareError(error)
     } finally {
       this.preparingCount -= 1
     }
@@ -200,12 +213,21 @@ export class SkillSharePreparationService {
         status: 'ok',
         value: { version, share: shared.value }
       } satisfies SkillSharePublishOperation
+    } catch (error) {
+      throw shareError(error)
     } finally {
       const current = this.preparations.get(input.preparationId)
       if (current) {
         current.controller = null
       }
     }
+  }
+
+  // Why: the cloud keeps one live package per name, and the id is baked into the archive.
+  private async packageIdForName(bundleName: string): Promise<string> {
+    const owned = await this.cloud.findOwnedPackageId(bundleName, {})
+    // Why: signed out, publishing stops at sign-in before any name check.
+    return (owned.status === 'ok' && owned.value) || randomUUID()
   }
 
   cancel(preparationId: string): void {
