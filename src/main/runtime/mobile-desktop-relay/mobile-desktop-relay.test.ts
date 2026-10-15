@@ -137,6 +137,36 @@ describe('MobileDesktopRelay', () => {
     relay.dispose()
   })
 
+  it('waits for demand that joins a passive opening before resolving host identity', async () => {
+    sockets.length = 0
+    const { relay, phone, hosts } = relayWithPhone()
+    let allowPreparation!: () => void
+    const preparation = new Promise<void>((resolve) => {
+      allowPreparation = resolve
+    })
+    const release = vi.fn()
+    hosts.acquireDemand = (_environmentId, method) =>
+      method === 'agentSession.subscribe' ? { ready: preparation, release } : null
+    const resolveHost = vi.spyOn(hosts, 'resolve')
+
+    relay.forward(phone, 'env-1', { id: 'passive', method: 'terminal.list' }, '{"id":"passive"}')
+    await Promise.resolve()
+    relay.forward(
+      phone,
+      'env-1',
+      { id: 'explicit', method: 'agentSession.subscribe' },
+      '{"id":"explicit"}'
+    )
+    expect(resolveHost).not.toHaveBeenCalled()
+    expect(sockets).toHaveLength(0)
+
+    allowPreparation()
+    await vi.waitFor(() => expect(sockets[0]?.sent).toHaveLength(2))
+    expect(resolveHost).toHaveBeenCalledOnce()
+    relay.dispose()
+    expect(release).toHaveBeenCalledOnce()
+  })
+
   it("stamps the desktop's chat default onto relayed launches only", async () => {
     sockets.length = 0
     const { relay, phone, desktop } = relayWithPhone()

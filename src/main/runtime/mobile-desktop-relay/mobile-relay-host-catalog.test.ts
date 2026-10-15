@@ -255,6 +255,50 @@ describe('mobile relay host catalog', () => {
     expect(call).toHaveBeenCalledTimes(2)
   })
 
+  it('projects path-bearing saved workspaces when a stopped server has no cached inventory', async () => {
+    const { hosts } = fakeHosts([
+      { id: 'env', name: 'Box', snapshot: snapshot('env', 'unreachable') }
+    ])
+    const { catalog: hostCatalog } = catalog(hosts, new Map(), {
+      sessions: {
+        'runtime:env': {
+          tabsByWorktree: {
+            'worktree:repo-1::/workspace/app': [],
+            'folder:opaque-folder': []
+          }
+        }
+      }
+    })
+
+    await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual({
+      worktrees: [
+        expect.objectContaining({
+          worktreeId: 'repo-1::/workspace/app',
+          repoId: 'repo-1',
+          hostId: 'runtime:env',
+          repo: 'app',
+          displayName: 'app',
+          path: '/workspace/app',
+          branch: ''
+        })
+      ]
+    })
+  })
+
+  it('keeps a fresh empty inventory authoritative over saved session rows', async () => {
+    const { hosts, call, state } = fakeHosts([
+      { id: 'env', name: 'Box', snapshot: snapshot('env', 'live') }
+    ])
+    call.mockResolvedValue(psReply([]))
+    const { catalog: hostCatalog } = catalog(hosts, new Map(), {
+      sessions: { 'runtime:env': { tabsByWorktree: { 'worktree:repo-1::/workspace/app': [] } } }
+    })
+
+    await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual({ worktrees: [] })
+    state.environments = [{ id: 'env', name: 'Box', snapshot: snapshot('env', 'unreachable') }]
+    await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual({ worktrees: [] })
+  })
+
   it('omits rows mid-delete, as a phone asking the server itself would never see them', async () => {
     const { hosts, call } = fakeHosts([
       { id: 'env', name: 'Box', snapshot: snapshot('env', 'live') }

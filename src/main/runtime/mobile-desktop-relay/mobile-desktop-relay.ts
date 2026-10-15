@@ -40,7 +40,8 @@ class RelayLink {
   readonly replies: RelayedPhoneReplies
   readonly opened: Promise<OpenedRelayLink>
   demand: MobileRelayWorkDemand | null = null
-  preparing = false
+  // Opening owns the identity fence until the configured host has been resolved.
+  preparing = true
 
   constructor(
     readonly environmentId: string,
@@ -223,14 +224,15 @@ export class MobileDesktopRelay {
     const key = linkKey(phone.connectionId, environmentId)
     const existing = this.links.get(key)
     if (existing) {
-      existing.demand ??= this.options.hosts.acquireDemand?.(environmentId, method) ?? null
+      if (!existing.demand) {
+        existing.demand = this.options.hosts.acquireDemand?.(environmentId, method) ?? null
+      }
       return existing
     }
     const link = new RelayLink(environmentId, phone, this.options.allocateStreamId, (opening) =>
       this.open(opening)
     )
     link.demand = this.options.hosts.acquireDemand?.(environmentId, method) ?? null
-    link.preparing = link.demand !== null
     link.opened.catch((error: unknown) => {
       this.endLink(
         link,
@@ -244,8 +246,14 @@ export class MobileDesktopRelay {
   private async open(link: RelayLink): Promise<OpenedRelayLink> {
     // Yield until linkFor has attached demand and registered the link.
     await Promise.resolve()
-    await link.demand?.ready
-    link.preparing = false
+    let demand = link.demand
+    await demand?.ready
+    // A passive opening can gain explicit demand after the first microtask. Keep preparation
+    // unbound and await the newly acquired lease before taking the pairing identity.
+    if (link.demand !== demand) {
+      demand = link.demand
+      await demand?.ready
+    }
     if (!this.isCurrent(link)) {
       throw unavailable('The relayed request was cancelled.')
     }
@@ -254,6 +262,11 @@ export class MobileDesktopRelay {
     if (!host) {
       throw unavailable('The server is not configured on this computer.')
     }
+    if (link.demand !== demand) {
+      demand = link.demand
+      await demand?.ready
+    }
+    link.preparing = false
     const grants = await this.grants.get(host, phone.deviceId)
     if (grants.kind === 'update-needed') {
       throw unavailable('The server needs an Orca update to open its workspaces from a phone.')

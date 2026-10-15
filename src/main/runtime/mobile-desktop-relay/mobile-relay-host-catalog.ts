@@ -22,6 +22,11 @@ import {
 } from '../../../shared/workspace-creator-visibility'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getWorkspaceSessionTabActivityIds } from '../../../shared/workspace-session-tab-activity'
+import { workspaceIdsNamedByPartition } from '../../../shared/workspace-session-stranded-partition-adoption'
+import {
+  getWorktreePathBasenameFromId,
+  splitWorktreeIdForFilesystem
+} from '../../../shared/worktree/id'
 import { runtimeWorktreeIdentityKey } from '../runtime-worktree-path-identity'
 import type {
   MobileDesktopRelayHostListing,
@@ -94,7 +99,7 @@ export class MobileRelayHostCatalog {
     const { environments, statusByEnvironmentId } = this.options.hosts.list()
     const current = environments.find((environment) => environment.id === host.environmentId)
     // Why the identity read after the fetch: one answered after a re-pair stored the old server's rows.
-    if (!cached || !current || cached.fence !== fenceOf(current)) {
+    if (!current || (cached && cached.fence !== fenceOf(current))) {
       return { worktrees: null }
     }
     const desktopDeviceIds = this.options.hidesWorkspacesFromOtherDevices()
@@ -108,8 +113,12 @@ export class MobileRelayHostCatalog {
       ].map(runtimeWorktreeIdentityKey)
     )
     // Why: the desktop asks with background-removal support; a phone asking itself never sees these rows.
+    const worktrees = cached?.worktrees ?? savedSessionWorktreeRows(
+      this.options.getWorkspaceSession(toRuntimeExecutionHostId(host.environmentId)),
+      host.environmentId
+    )
     return {
-      worktrees: cached.worktrees
+      worktrees: worktrees
         .filter((row) => row.removing !== true)
         .map((row) =>
           stampDesktopSidebarView(row, host.environmentId, desktopDeviceIds, sessionActivity)
@@ -192,6 +201,41 @@ export class MobileRelayHostCatalog {
       // An unreachable server keeps its last rows.
     }
   }
+}
+
+/** Project path-bearing saved session membership when a stopped host has no fetched inventory. */
+function savedSessionWorktreeRows(
+  session: WorkspaceSessionState | null,
+  environmentId: string
+): MobileRelayServerWorktreeRow[] {
+  if (!session) {
+    return []
+  }
+  const hostId = toRuntimeExecutionHostId(environmentId)
+  return [...workspaceIdsNamedByPartition(session)].flatMap((worktreeId) => {
+    const parsed = splitWorktreeIdForFilesystem(worktreeId)
+    if (!parsed || !parsed.repoId || !parsed.worktreePath) {
+      return []
+    }
+    const displayName = getWorktreePathBasenameFromId(worktreeId) ?? parsed.repoId
+    return [
+      {
+        worktreeId,
+        repoId: parsed.repoId,
+        hostId,
+        repo: displayName,
+        displayName,
+        path: parsed.worktreePath,
+        branch: '',
+        liveTerminalCount: 0,
+        hasAttachedPty: false,
+        unread: false,
+        isPinned: false,
+        isArchived: false,
+        isMainWorktree: false
+      }
+    ]
+  })
 }
 
 function fenceOf(identity: DescribedHost['identity']): string {
