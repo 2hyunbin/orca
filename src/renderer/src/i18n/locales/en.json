@@ -3732,7 +3732,13 @@
             "e518f544b1": "No agents detected",
             "8dea9b5cdf": "No enabled agents",
             "needsServerUpdate": "Update Orca on this server to list this workspace’s agents",
-            "hostUnreachable": "Can’t reach this workspace’s host to list its agents"
+            "hostUnreachable": "Can’t reach this workspace’s host to list its agents",
+            "chatNotInstalled": "Not installed",
+            "chatNotOverSsh": "No chat over SSH",
+            "chatNotInWsl": "No chat in WSL",
+            "chatNotOnHost": "No chat on this host",
+            "startChat": "Start a {{value0}} chat",
+            "cliTag": "(CLI)"
           },
           "RecentTabSwitcher": {
             "329638ff6f": "Switch Tab",
