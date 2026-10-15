@@ -215,6 +215,49 @@ describe('bundled Orca skill install', () => {
     expect(await readFile(join(claudeCopy, 'SKILL.md'), 'utf8')).toBe('mine\n')
   })
 
+  it.each([
+    ['a narrower --agent list', ['codex']],
+    ['a detection that missed the agent', []]
+  ])(
+    'never unlinks an agent Orca already placed the skill for, given %s',
+    async (_label, later) => {
+      packages.value = [entry(OLD_TEXT, [OLD_DIGEST])]
+      const { home, input } = await fixture(null)
+      const claudeLink = join(home, '.claude', 'skills', 'test-skill')
+      await installBundledOrcaSkills(['test-skill'], input)
+      expect((await lstat(claudeLink)).isSymbolicLink()).toBe(true)
+
+      packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
+      const [result] = await installBundledOrcaSkills(['test-skill'], {
+        ...input,
+        detectedProviders: later
+      })
+
+      expect(result.status).toBe('updated')
+      expect(await readFile(join(claudeLink, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
+    }
+  )
+
+  it.runIf(process.platform !== 'win32')(
+    'plans and performs the same relink for a dangling link an earlier install made',
+    async () => {
+      packages.value = [entry(OLD_TEXT, [OLD_DIGEST])]
+      const { root, home, input } = await fixture(null)
+      const claudeLink = join(home, '.claude', 'skills', 'test-skill')
+      await installBundledOrcaSkills(['test-skill'], input)
+      // The link Orca made now points nowhere.
+      await rm(claudeLink)
+      await symlink(join(root, 'gone', 'test-skill'), claudeLink)
+
+      packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
+      const [plan] = await planBundledOrcaSkills(['test-skill'], input)
+      expect(plan.placements).toEqual([{ path: claudeLink, action: 'link' }])
+      const [result] = await installBundledOrcaSkills(['test-skill'], input)
+      expect(result.status).toBe('updated')
+      expect(await readFile(join(claudeLink, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
+    }
+  )
+
   it('reads the project lock for a workspace install', async () => {
     packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
     const { root, input } = await fixture(null)

@@ -1,5 +1,4 @@
-import { lstat, realpath } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
 import {
   bundledInstallContext,
@@ -12,6 +11,7 @@ import { nativeSkillInstallFilesystem } from './skill-install-filesystem'
 import { inspectSkillCanonicalState, type SkillCanonicalState } from './skill-install-planner'
 import { skillInstallReplacementAllowed } from './skill-install-transaction-result'
 import { resolveSkillProviderDestinations } from './skill-provider-destinations'
+import { decideSkillProviderPlacement } from './skill-placement-decision'
 
 export type BundledOrcaSkillPlacementPlan = {
   path: string
@@ -30,47 +30,30 @@ export type BundledOrcaSkillPlan = {
   willWrite: boolean
 }
 
-function normalizedPath(path: string): string {
-  const normalized = resolve(path)
-  return process.platform === 'win32' ? normalized.toLocaleLowerCase('en-US') : normalized
-}
+const PLAN_ACTION = {
+  create: 'link',
+  relink: 'link',
+  'replace-copy': 'replace',
+  keep: 'keep',
+  skip: 'skip'
+} as const
 
 async function planPlacement(
   prepared: PreparedBundledSkill,
-  destinationPath: string
-): Promise<BundledOrcaSkillPlacementPlan['action']> {
-  const stat = await lstat(destinationPath).catch(() => null)
-  if (!stat) {
-    return 'link'
-  }
-  const [resolvedDestination, resolvedCanonical] = await Promise.all([
-    realpath(destinationPath).catch(() => null),
-    realpath(prepared.canonicalPath).catch(() => prepared.canonicalPath)
-  ])
-  if (
-    resolvedDestination &&
-    normalizedPath(resolvedDestination) === normalizedPath(resolvedCanonical)
-  ) {
-    return 'keep'
-  }
-  if (stat.isSymbolicLink()) {
-    return 'skip'
-  }
-  const filesystem = prepared.request.filesystem ?? nativeSkillInstallFilesystem
-  const observed = await filesystem
-    .observeSkill(destinationPath, prepared.manifest.files)
-    .catch(() => null)
-  if (!observed) {
-    return 'skip'
-  }
-  if (observed.observedDigest === prepared.manifest.packageDigest) {
-    return 'keep'
-  }
-  const ownedDigests = [
-    ...(prepared.local.adoptableDigests ?? []),
-    ...(prepared.receipt ? [prepared.receipt.packageDigest] : [])
-  ]
-  return ownedDigests.includes(observed.observedDigest) ? 'replace' : 'skip'
+  destination: { provider: string; rootPath: string }
+): Promise<BundledOrcaSkillPlacementPlan> {
+  const path = join(destination.rootPath, prepared.entry.name)
+  const decision = await decideSkillProviderPlacement({
+    canonicalPath: prepared.canonicalPath,
+    destinationPath: path,
+    provider: destination.provider,
+    previousReceipt: prepared.receipt,
+    packageDigest: prepared.manifest.packageDigest,
+    filesystem: prepared.request.filesystem ?? nativeSkillInstallFilesystem,
+    fileModes: prepared.manifest.files,
+    adoptableDigests: prepared.local.adoptableDigests
+  })
+  return { path, action: PLAN_ACTION[decision.action] }
 }
 
 async function planBundledSkill(prepared: PreparedBundledSkill): Promise<BundledOrcaSkillPlan> {
@@ -98,10 +81,7 @@ async function planBundledSkill(prepared: PreparedBundledSkill): Promise<Bundled
       }).filter((destination) => !destination.readsCanonicalRoot)
     : []
   const placements = await Promise.all(
-    destinations.map(async (destination) => {
-      const path = join(destination.rootPath, prepared.entry.name)
-      return { path, action: await planPlacement(prepared, path) }
-    })
+    destinations.map((destination) => planPlacement(prepared, destination))
   )
   return {
     name: prepared.entry.name,

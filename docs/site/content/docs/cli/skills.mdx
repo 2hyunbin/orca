@@ -58,10 +58,10 @@ When Orca ships a newer skill package than the one installed globally, the app c
 - Keep the run in the **background**: closing the dialog does not cancel it. A status-bar segment shows progress (spinner while running, brief success check, persistent failure until you act). Click the segment to reopen the dialog.
 - Surface freshness on **Settings → Agents** for installed skills (global install rail), including **Details** when a row needs review.
 
-Manual equivalent (desktop Settings shows the same pinned form for the running build):
+Manual equivalent, run in a terminal on the same machine (`orca-ide` on Linux outside Orca's own terminals):
 
 ```bash
-npx skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill orca-cli --skill orchestration --global
+orca skills install --skill orca-cli --skill orchestration
 ```
 
 On headless hosts (SSH, containers, CI, `orca serve`) with no Settings UI, use the local CLI commands — they run the same installer as the app and do **not** need a running Orca runtime:

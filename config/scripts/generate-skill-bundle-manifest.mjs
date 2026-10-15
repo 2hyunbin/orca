@@ -315,6 +315,13 @@ export function findDroppedReleasedDigests(baseLedger, ledger) {
 function verifyLedgerKeepsBase(ledger) {
   const base = ledgerBaseCommit()
   const relativePath = path.relative(REPO_ROOT, RELEASED_DIGESTS_PATH).split(path.sep).join('/')
+  // Why fail closed on a PR: an unreadable base would otherwise let a shrink through silently.
+  if (
+    process.env.GITHUB_EVENT_NAME === 'pull_request' &&
+    (!base || tryGit(['cat-file', '-e', base]) === null)
+  ) {
+    throw new Error(`Cannot read the pull request base to check ${relativePath} only grows.`)
+  }
   const baseText = base ? tryGit(['show', `${base}:${relativePath}`]) : null
   if (baseText === null) {
     return

@@ -132,12 +132,15 @@ export async function prepareBundledSkill(
     isOrcaSkillLockSource(context.lockSources.get(entry.name) ?? null) ||
     Boolean(receipt?.packageId.startsWith(BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX))
   const adoptableDigests = owned ? entry.releasedDigests : undefined
+  // Why: the placement transaction unlinks any receipt provider it is not given, so a
+  // narrower --agent or a missed detection would remove the skill from an agent that has it.
+  const detectedProviders = [...new Set([...base.detectedProviders, ...(receipt?.providers ?? [])])]
   return {
     entry,
     manifest,
     canonicalPath,
     receipt,
-    request: { ...base, adoptableDigests },
+    request: { ...base, detectedProviders, adoptableDigests },
     local: { ...resolved, adoptableDigests }
   }
 }

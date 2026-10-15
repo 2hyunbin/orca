@@ -102,12 +102,6 @@ function installInput(flags: Map<string, string | boolean>): BundledOrcaSkillIns
   }
 }
 
-const PLACEMENT_PLAN_TEXT = {
-  link: 'would link',
-  replace: 'would replace',
-  skip: 'would leave (not installed by Orca)'
-} as const
-
 function describePlan(plan: BundledOrcaSkillPlan): string {
   if (plan.state !== 'unchanged' && !plan.replacesCanonical) {
     const kind =
@@ -115,18 +109,26 @@ function describePlan(plan: BundledOrcaSkillPlan): string {
     return `${plan.name}: would not change, ${describeSkillConflictReason(kind)} (${plan.canonicalPath})`
   }
   const steps = [
-    plan.replacesCanonical
-      ? `would ${plan.state === 'missing' ? 'install' : 'update'} ${plan.canonicalPath}`
-      : null,
+    ...(plan.replacesCanonical
+      ? [`would ${plan.state === 'missing' ? 'install' : 'update'} ${plan.canonicalPath}`]
+      : []),
     ...plan.placements.flatMap((placement) =>
-      placement.action === 'keep'
-        ? []
-        : [`${PLACEMENT_PLAN_TEXT[placement.action]} ${placement.path}`]
+      placement.action === 'link'
+        ? [`would link ${placement.path}`]
+        : placement.action === 'replace'
+          ? [`would replace ${placement.path}`]
+          : []
     )
-  ].filter((step) => step !== null)
-  return steps.length === 0 || !plan.willWrite
-    ? `${plan.name}: already up to date (${plan.canonicalPath})${steps.length ? `; ${steps.join('; ')}` : ''}`
-    : `${plan.name}: ${steps.join('; ')}`
+  ]
+  const skipped = plan.placements
+    .filter((placement) => placement.action === 'skip')
+    .map((placement) => `${plan.name}: would leave ${placement.path}, which Orca did not install`)
+  return [
+    steps.length > 0
+      ? `${plan.name}: ${steps.join('; ')}`
+      : `${plan.name}: already up to date (${plan.canonicalPath})`,
+    ...skipped
+  ].join('\n')
 }
 
 function landed(result: SkillInstallResult): boolean {
