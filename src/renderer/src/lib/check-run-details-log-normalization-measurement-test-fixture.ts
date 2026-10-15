@@ -5,7 +5,7 @@ import { resetOwnRetainedStringCopier } from '../../../shared/own-retained-strin
 import type { PRCheckRunDetails } from '../../../shared/github/check-types'
 
 type NormalizationTiming = {
-  shape: 'plain' | 'malformed' | 'multibyte'
+  inputKind: 'plain' | 'malformed' | 'multibyte'
   inputBytes: number
   jobs: number
   coldMs: number
@@ -50,10 +50,10 @@ export function measureCheckLogNormalization() {
   Reflect.deleteProperty(globalThis, 'Buffer')
   resetOwnRetainedStringCopier()
   const timings: NormalizationTiming[] = []
-  for (const shape of ['plain', 'malformed', 'multibyte'] as const) {
+  for (const inputKind of ['plain', 'malformed', 'multibyte'] as const) {
     for (const size of [16_384, 32_768, 8 * 1024 * 1024]) {
       const unit =
-        shape === 'malformed' ? '\x1b]x\x1bPx\x9dx' : shape === 'multibyte' ? '漢😀' : 'x'
+        inputKind === 'malformed' ? '\x1b]x\x1bPx\x9dx' : inputKind === 'multibyte' ? '漢😀' : 'x'
       const unitBytes = new TextEncoder().encode(unit).length
       for (const jobs of [1, 5]) {
         const raw = `${unit.repeat(Math.floor(size / unitBytes))}\r\nError: retained\r\tat file.ts:18:8\n`
@@ -72,7 +72,7 @@ export function measureCheckLogNormalization() {
         }
         samples.sort((a, b) => a - b)
         timings.push({
-          shape,
+          inputKind,
           inputBytes: new TextEncoder().encode(raw).length,
           jobs,
           coldMs,

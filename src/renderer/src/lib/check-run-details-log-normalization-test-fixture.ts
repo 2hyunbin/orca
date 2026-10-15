@@ -1,5 +1,7 @@
 import type { PRCheckJob, PRCheckRunDetails } from '../../../shared/github/check-types'
-import captured from '../../../shared/__fixtures__/check-job-log-failure-output.json'
+import { createCheckLogFixture } from '../../../../config/scripts/check-job-log-test-fixture.mjs'
+
+const captured = createCheckLogFixture()
 
 export { captured }
 

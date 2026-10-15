@@ -20,7 +20,7 @@ const measurement = z.object({
   }),
   timings: z.array(
     z.object({
-      shape: z.enum(['plain', 'malformed', 'multibyte']),
+      inputKind: z.enum(['plain', 'malformed', 'multibyte']),
       inputBytes: z.number(),
       jobs: z.number(),
       coldMs: z.number(),
