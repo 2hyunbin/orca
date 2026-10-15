@@ -30,9 +30,13 @@ import {
   subagentJournalItemIdentity
 } from '../agent-session-journal/journal-subagent-item'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
-import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import type {
+  StructuredAgentSessionEventSink,
+  StructuredAgentSessionSinkBarrier
+} from './structured-agent-session-event-sink'
 
 const UNNAMED = 'subagent'
+const LANDED: StructuredAgentSessionSinkBarrier = { ok: true }
 const THREAD_GROUP = 'thread'
 
 /** A child's view, with the host-only facts its saved row also keeps. */
@@ -146,7 +150,7 @@ export class StructuredAgentSessionSubagentRows {
                 .catch((error: unknown) => this.deps.onWriteFailed(sessionId, error))
             }
             row.producer.appendItem(identity, body, { turnScope: row.turnScope, executes: true })
-            return row.producer.written?.().then((landed) => {
+            return (row.producer.written?.() ?? Promise.resolve(LANDED)).then((landed) => {
               if (!landed.ok) {
                 this.deps.onWriteFailed(sessionId, landed.error)
               }
