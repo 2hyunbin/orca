@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./wsl-host-service-instance', () => ({
   getWslHostService: () => ({ isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call })
 }))
-import { registerProjectOnWslHost } from './wsl-project-registration'
+import { assertWslProjectRoutingCaller, registerProjectOnWslHost } from './wsl-project-registration'
+import { importNestedProjectsOnWslHost } from './wsl-nested-project-import'
 
 const guest: Repo = {
   id: 'guest-repo', path: '/home/me/repo', displayName: 'repo', kind: 'git',
@@ -91,5 +92,29 @@ describe('new WSL project ownership', () => {
     mocks.ensure.mockRejectedValueOnce(new Error('server install failed'))
     await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow('server install failed')
     expect(mocks.call).not.toHaveBeenCalled()
+  })
+
+  it('imports new nested projects on the guest while retaining saved Windows-owned rows', async () => {
+    const saved = { ...guest, path: '\\\\wsl$\\Ubuntu\\home\\me\\old' }
+    mocks.call.mockResolvedValueOnce({
+      projects: [{ path: '/home/me/new', projectId: 'new', status: 'imported' }],
+      importedCount: 1, alreadyKnownCount: 0, failedCount: 0
+    })
+    const result = await importNestedProjectsOnWslHost({ getRepos: () => [saved] }, {
+      parentPath: '\\\\wsl.localhost\\Ubuntu\\home\\me', mode: 'separate',
+      projectPaths: [saved.path, '\\\\wsl$\\Ubuntu\\home\\me\\new']
+    })
+    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'projectGroup.importNested', {
+      parentPath: '/home/me', mode: 'separate', projectPaths: ['/home/me/new']
+    })
+    expect(result).toMatchObject({
+      executionHostId: 'runtime:wsl:ubuntu', importedCount: 1, alreadyKnownCount: 1,
+      projects: [
+        { path: saved.path, projectId: saved.id, status: 'already-known' },
+        { projectId: 'new', status: 'imported' }
+      ]
+    })
+    expect(() => assertWslProjectRoutingCaller(saved.path, { kind: 'paired-device', deviceId: 'old-client' })).toThrow('Windows desktop')
+    expect(() => assertWslProjectRoutingCaller(saved.path, { kind: 'local-cli' })).not.toThrow()
   })
 })
