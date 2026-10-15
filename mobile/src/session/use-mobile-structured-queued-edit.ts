@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   AgentSessionQueuedMessage,
   AgentSessionQueuedMessageUpdateResult
@@ -50,7 +50,9 @@ export function useMobileStructuredQueuedEdit(args: {
 }) {
   const { sessionKey, sessionId, client, enabled, mutate, onSendError, onActionResolved } = args
   const clientRef = useRef({ sessionKey, client })
-  clientRef.current = { sessionKey, client }
+  useLayoutEffect(() => {
+    clientRef.current = { sessionKey, client }
+  }, [client, sessionKey])
   const active = useRef<Edit | null>(null)
   const [shown, setShown] = useState<Edit | null>(null)
   const render = useCallback((edit: Edit | null) => {
