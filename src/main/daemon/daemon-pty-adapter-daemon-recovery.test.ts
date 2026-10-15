@@ -417,10 +417,8 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
     it('does not respawn on a disconnect once the adapter has let go of its daemon', async () => {
       const respawn = vi.fn(async () => {})
       const closingAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, respawn })
-      const legacyAdapter = new DaemonPtyAdapter({ socketPath, tokenPath })
       try {
         await closingAdapter.spawn({ sessionId: 'pane-a', cols: 80, rows: 24 })
-        await legacyAdapter.spawn({ sessionId: 'pane-b', cols: 80, rows: 24 })
         await closingAdapter.disconnectOnly()
 
         await server.shutdown()
@@ -429,7 +427,6 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
         expect(respawn).not.toHaveBeenCalled()
       } finally {
         closingAdapter.dispose()
-        legacyAdapter.dispose()
       }
     })
 
