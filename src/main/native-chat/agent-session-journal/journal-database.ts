@@ -96,8 +96,7 @@ export function openJournalDatabase(dbPath: string): OpenJournalDatabase {
 
 function configureJournalPragmas(db: Database.Database, stored: number): void {
   if (stored === 0) {
-    // Only takes on an empty file, and only before WAL, so it is set now: nothing reclaims pages
-    // yet, but a later pass can free them in bounded steps rather than a full VACUUM.
+    // Existing non-incremental files stay reusable without a blocking full VACUUM.
     db.pragma('auto_vacuum = INCREMENTAL')
   }
   db.pragma('journal_mode = WAL')

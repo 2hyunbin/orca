@@ -1,7 +1,7 @@
 // Persisted journal row shapes plus read-time upcasting.
 //
-// The journal is append-only, so migration is upcasting on read and never an
-// in-place rewrite. A row whose version this build does not understand is
+// New writes append; maintenance removes redundant snapshots with gap receipts.
+// A row whose version this build does not understand is
 // UNREADABLE, not skippable: the caller fails the load as a newer Orca's chat rather
 // than render a partial timeline or compact past a row it cannot interpret.
 //
@@ -57,6 +57,8 @@ type JournalRowBase = AgentJournalProducerLinkage & {
   ts: number
   /** Set when crash reconciliation appended the row after the fact. */
   recovered?: true
+  /** The preceding retained row, written atomically with deletion of the intervening revisions. */
+  previousSequence?: number
   /** Which turn the item this row creates belongs to. Rides the base, and is not a `v` bump,
    *  for the reason linkage does. Absent on rows from hosts that predate it: the reducer
    *  derives one for them on read. */
@@ -68,6 +70,8 @@ export type JournalEpochRow = JournalRowBase & {
   kind: 'epoch'
   reason: AgentJournalEpochReason
   providerHandle: AgentSessionJournalProviderHandle
+  /** The highest deliberately removed sequence; older cursors must reload a snapshot. */
+  compactedThrough?: number
 }
 
 export const AGENT_JOURNAL_EPOCH_REASONS = [
@@ -336,7 +340,12 @@ const ROW_CONTENT_CHECK_BY_KIND: Record<
   (record: Record<string, unknown>) => AgentJournalContentVerdict
 > = {
   epoch: (record) =>
-    fieldsContent(typeof record.reason === 'string' && isPlainObject(record.providerHandle)),
+    fieldsContent(
+      typeof record.reason === 'string' &&
+        isPlainObject(record.providerHandle) &&
+        (record.compactedThrough === undefined ||
+          (Number.isSafeInteger(record.compactedThrough) && Number(record.compactedThrough) >= 1))
+    ),
   item: (record) =>
     combinedContent(
       fieldsContent(typeof record.itemId === 'string' && Number.isInteger(record.revision)),
@@ -387,7 +396,11 @@ function hasJournalRowEnvelope(record: Record<string, unknown>): boolean {
     Number.isInteger(record.seq) &&
     Number(record.seq) >= 1 &&
     Number.isInteger(record.fence) &&
-    typeof record.ts === 'number'
+    typeof record.ts === 'number' &&
+    (record.previousSequence === undefined ||
+      (Number.isSafeInteger(record.previousSequence) &&
+        Number(record.previousSequence) >= 1 &&
+        Number(record.previousSequence) < Number(record.seq) - 1))
   )
 }
 

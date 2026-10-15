@@ -14,6 +14,7 @@ import {
 } from './journal-database'
 import { journalOpenRefusalError } from './journal-open-failure'
 import { AgentSessionJournalError } from './journal-write-guards'
+import { JournalMaintenance } from './journal-maintenance'
 
 const JOURNAL_DATABASE_FILE = 'agent-session-journal.db'
 
@@ -27,6 +28,7 @@ export class JournalHostDatabase {
   readonly readOnly: boolean
   /** A failed transaction's ROLLBACK failed too, so the transaction may still be open. */
   private stranded = false
+  private readonly maintenance: JournalMaintenance | null
 
   private constructor(
     opened: OpenJournalDatabase,
@@ -35,6 +37,7 @@ export class JournalHostDatabase {
   ) {
     this.connection = opened.db
     this.readOnly = opened.readOnly
+    this.maintenance = opened.readOnly ? null : new JournalMaintenance(() => this.db)
   }
 
   static open(stateDirectory: string): JournalHostDatabase {
@@ -62,14 +65,21 @@ export class JournalHostDatabase {
 
   /** One IMMEDIATE transaction; see `runJournalTransaction`. */
   transaction<T>(run: (db: Database.Database) => T): T {
-    return runJournalTransaction(this.db, run, () => {
+    const result = runJournalTransaction(this.db, run, () => {
       this.stranded = true
     })
+    this.maintenance?.changed()
+    return result
+  }
+
+  journalAppended(sessionId: string): void {
+    this.maintenance?.appended(sessionId)
   }
 
   /** Last, after every store has drained. A close that fails keeps the handle, so the retried
    *  teardown closes this same connection. */
   close(): void {
+    this.maintenance?.close()
     this.connection?.close()
     this.connection = null
   }

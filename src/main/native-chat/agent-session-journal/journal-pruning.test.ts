@@ -1,0 +1,250 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalItemIdentity,
+  type AgentSessionJournalIdentity
+} from '../../../shared/agent-session-journal-types'
+import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { readAgentSessionHistory } from '../agent-session-wire/agent-session-history-page'
+import {
+  createTrackedJournalOpener,
+  openTestJournalHostDatabase
+} from './journal-host-database-test-support'
+import { replayJournal } from './journal-open'
+import { openJournalDatabase } from './journal-database'
+import { JournalMaintenance } from './journal-maintenance'
+import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
+import { JOURNAL_PRUNE_MAX_ROWS, JournalPrunePass } from './journal-prune-pass'
+import { renderJournalState } from './journal-reducer'
+import type { JournalRow } from './journal-row-schema'
+
+const identity: AgentSessionJournalIdentity = {
+  sessionId: 'chat',
+  workspaceId: 'folder-workspace',
+  hostId: 'host',
+  agent: 'codex',
+  providerHandle: codexProviderHandle('thread')
+}
+const item: AgentJournalItemIdentity = {
+  provider: 'codex',
+  threadId: 'thread',
+  turnId: 'turn',
+  ordinal: 1
+}
+const options = { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+const journals = createTrackedJournalOpener()
+let root: string
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'orca-pruning-'))
+})
+afterEach(async () => {
+  vi.useRealTimers()
+  await journals.closeAll()
+  await rm(root, { recursive: true, force: true })
+})
+
+it('drains host maintenance, stops its timer when idle and cancels it on close', async () => {
+  const db = openJournalDatabase(join(root, 'maintenance.db')).db
+  vi.useFakeTimers()
+  const maintenance = new JournalMaintenance(() => db)
+  try {
+    publishJournalSessionEpoch(db, identity, 'epoch')
+    insertJournalRow(db, identity.sessionId, {
+      v: 1,
+      epoch: 'epoch',
+      seq: 1,
+      fence: 1,
+      ts: 1,
+      kind: 'epoch',
+      reason: 'session_created',
+      providerHandle: { kind: 'codex', threadId: 'thread' }
+    })
+    for (let seq = 2; seq <= 100; seq++) {
+      insertJournalRow(db, identity.sessionId, {
+        v: 1,
+        epoch: 'epoch',
+        seq,
+        fence: 1,
+        ts: seq,
+        kind: 'item',
+        itemId: 'reply',
+        revision: seq,
+        body: {
+          kind: 'message',
+          role: 'assistant',
+          blocks: [{ type: 'text', text: 'x'.repeat(8_000) }]
+        }
+      })
+    }
+    await vi.runAllTimersAsync()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM journal_rows').get()?.n).toBe(3)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+    maintenance.appended(identity.sessionId)
+    expect(vi.getTimerCount()).toBe(1)
+    maintenance.close()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    maintenance.close()
+    db.close()
+  }
+})
+
+async function open() {
+  return journals.open({ identity, stateDirectory: root })
+}
+
+function prune(epoch: string): number {
+  const db = openTestJournalHostDatabase(root).db
+  const pass = new JournalPrunePass(db, identity.sessionId, epoch)
+  let removed = 0
+  for (let step = 0; step < 1_000; step++) {
+    const result = pass.step(db)
+    expect(result.scanned).toBeLessThanOrEqual(JOURNAL_PRUNE_MAX_ROWS)
+    removed += result.removed
+    if (result.done) {
+      return removed
+    }
+  }
+  throw new Error('pruning did not finish')
+}
+
+function rows(): JournalRow[] {
+  return openTestJournalHostDatabase(root)
+    .db.prepare('SELECT row_json FROM journal_rows WHERE session_id = ? ORDER BY seq')
+    .all(identity.sessionId)
+    .map((row) => JSON.parse(String(row.row_json)))
+}
+
+it('retires intermediate full snapshots, preserving replay, old-client reset and backward history', async () => {
+  const journal = await open()
+  for (let revision = 1; revision <= 80; revision++) {
+    await journal.appendItem(
+      item,
+      {
+        kind: 'message',
+        role: 'assistant',
+        state: 'running',
+        blocks: [{ type: 'text', text: 'stream '.repeat(revision) }]
+      },
+      options
+    )
+  }
+  const before = journal.snapshot()
+  expect(prune(journal.epoch)).toBe(78)
+  expect(
+    rows()
+      .filter((row) => row.kind === 'item')
+      .map((row) => row.revision)
+  ).toEqual([1, 80])
+  const loaded = replayJournal(openTestJournalHostDatabase(root).db, identity.sessionId)!
+  expect(loaded.damage).toBeNull()
+  expect(renderJournalState(loaded.state)).toEqual(before)
+  expect(journal.readSince({ epoch: journal.epoch, sequence: 20 })).toEqual({
+    ok: false,
+    reset: 'cursor_compacted'
+  })
+  expect(journal.readSince({ epoch: journal.epoch, sequence: 80 })).toMatchObject({
+    ok: true,
+    rows: [{ seq: 81 }]
+  })
+  expect(
+    readAgentSessionHistory(journal, { sessionId: identity.sessionId, direction: 'tail', limit: 1 })
+  ).toMatchObject({
+    ok: true,
+    page: { items: before.items, hasOlder: false }
+  })
+  await journal.appendItem(
+    item,
+    {
+      kind: 'message',
+      role: 'assistant',
+      state: 'completed',
+      blocks: [{ type: 'text', text: 'finished' }]
+    },
+    options
+  )
+  await journal.appendTombstone(item, { fence: 1 })
+  expect(prune(journal.epoch)).toBe(0)
+  await journal.close()
+  expect((await open()).snapshot()).toEqual(journal.snapshot())
+})
+
+it('keeps turn transitions, lifecycle receipts and intentional gaps distinct from damage', async () => {
+  const journal = await open()
+  for (let revision = 1; revision <= 5; revision++) {
+    await journal.appendItem(
+      item,
+      { kind: 'turn', turnId: 'turn', state: 'running', durationMs: revision },
+      options
+    )
+  }
+  await journal.appendItem(
+    { ...item, ordinal: 2 },
+    {
+      kind: 'message',
+      role: 'assistant',
+      blocks: [{ type: 'text', text: 'in turn' }]
+    },
+    { fence: 1, turnScope: journal.liveTurnScope() }
+  )
+  for (let revision = 1; revision <= 4; revision++) {
+    await journal.appendItem(
+      item,
+      { kind: 'turn', turnId: 'turn', state: 'completed', durationMs: revision },
+      options
+    )
+  }
+  await journal.appendStopEvent({ reason: 'user-stop', turnId: 'turn' }, 1)
+  const settlement = {
+    settlementId: 'settled',
+    fence: 1,
+    mutations: [
+      {
+        kind: 'item' as const,
+        itemId: 'host-note',
+        body: { kind: 'status' as const, text: 'settled' },
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      }
+    ]
+  }
+  await journal.appendLifecycleBatch(settlement)
+  const before = journal.snapshot()
+  expect(prune(journal.epoch)).toBe(5)
+  await journal.appendLifecycleBatch(settlement)
+  expect(journal.snapshot()).toEqual(before)
+  expect(
+    renderJournalState(
+      replayJournal(openTestJournalHostDatabase(root).db, identity.sessionId)!.state
+    )
+  ).toEqual(before)
+  const db = openTestJournalHostDatabase(root).db
+  db.prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 7').run(identity.sessionId)
+  expect(replayJournal(db, identity.sessionId)?.damage).toMatchObject({ cause: 'sequence-gap' })
+})
+
+it('validates the complete frozen prefix before deleting anything and abandons replaced epochs', async () => {
+  const journal = await open()
+  for (let revision = 1; revision <= 40; revision++) {
+    await journal.appendItem(
+      item,
+      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: String(revision) }] },
+      options
+    )
+  }
+  const db = openTestJournalHostDatabase(root).db
+  const epoch = journal.epoch
+  db.prepare('UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND seq = 40').run(
+    '{}',
+    identity.sessionId
+  )
+  expect(() => prune(epoch)).toThrow('unreadable')
+  expect(rows()).toHaveLength(41)
+  const pass = new JournalPrunePass(db, identity.sessionId, epoch)
+  await journal.rollEpoch('handle_forked', 2)
+  expect(pass.step(db)).toEqual({ done: true, removed: 0, scanned: 0 })
+})

@@ -117,3 +117,15 @@ export function deleteJournalEpochRows(
 ): void {
   db.prepare(DELETE_EPOCH).run(sessionId, epoch)
 }
+
+export function readJournalCompactionFloor(
+  db: Database.Database,
+  sessionId: string,
+  epoch: string
+): number {
+  const through = db
+    .prepare(`SELECT json_extract(row_json, '$.compactedThrough') AS through_seq
+FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq = 1`)
+    .get(sessionId, epoch)?.through_seq
+  return typeof through === 'number' ? through + 1 : 1
+}
