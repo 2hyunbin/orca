@@ -110,6 +110,7 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
       })
       if (converted.outcome === 'converted' || converted.outcome === 'refused') {
         // "Move anyway" covers one attempt; a later move, or a later delta, asks again.
+        // Kept on a throw: verifyFence re-exports with it, so a held fence could never resume.
         registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
       }
       return converted
