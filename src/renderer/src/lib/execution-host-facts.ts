@@ -8,6 +8,7 @@ import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 import { resolveLocalWindowsAgentStartupShell } from '../../../shared/windows-terminal-shell'
 import { isWslUncPath } from '../../../shared/wsl-paths'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import type { AppState } from '@/store/types'
 import { getConnectionIdFromState } from './connection-owner-resolution'
 import { getLocalProjectExecutionRuntimeContext } from './local-preflight-context'
@@ -182,4 +183,20 @@ export function resolveExecutionHostAgentStartupShell(
         projectRuntime: fact.projectRuntime
       })
     : undefined
+}
+
+/** The shell a new worktree's agent command was quoted for, read from its repo row as launchers do. */
+export function resolveWorktreeRepoAgentStartupShell(
+  state: WorktreeHostFactsState,
+  worktreeId: string
+): AgentStartupShell | undefined {
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  const rows = state.repos.filter((repo) => repo.id === repoId)
+  if (rows.length !== 1) {
+    return undefined
+  }
+  const fact = resolveRepoExecutionHostPlatform(state, rows[0], () =>
+    getLocalProjectExecutionRuntimeContext(state, worktreeId)
+  )
+  return resolveExecutionHostAgentStartupShell(fact, state.settings?.terminalWindowsShell)
 }
