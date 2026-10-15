@@ -308,6 +308,37 @@ describe('session-tabs streams across worktree switches on one host', () => {
     expect(mocks.createTerminal).not.toHaveBeenCalled()
   })
 
+  it('drops a warm stream when its host is re-paired while another host is selected', async () => {
+    await connect()
+    const streamA = latestStream(WORKTREE_A)
+    mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockImplementation((_state, worktreeId) =>
+      worktreeId === WORKTREE_B ? 'env-b' : ENV
+    )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mirror scan and revision ledger read only id, createdAt and pairingRevision.
+    const withHostB = [
+      ...useAppStore.getState().runtimeEnvironments,
+      { id: 'env-b', createdAt: 200, pairingRevision: 201 }
+    ] as PublicKnownRuntimeEnvironment[]
+    replaceRuntimeEnvironmentRevisions(withHostB)
+    await act(async () => {
+      useAppStore.setState({ runtimeEnvironments: withHostB })
+      await settle()
+    })
+    await selectWorktree(WORKTREE_B)
+    expect(streamA.unsubscribe).not.toHaveBeenCalled()
+
+    const repaired = withHostB.map((environment) =>
+      environment.id === ENV ? { ...environment, pairingRevision: REVISION + 1 } : environment
+    )
+    replaceRuntimeEnvironmentRevisions(repaired)
+    await act(async () => {
+      useAppStore.setState({ runtimeEnvironments: repaired })
+      await settle()
+    })
+
+    expect(streamA.unsubscribe).toHaveBeenCalled()
+  })
+
   it('keeps live streams when a status probe flaps without the streams ending', async () => {
     await connect()
     const before = {

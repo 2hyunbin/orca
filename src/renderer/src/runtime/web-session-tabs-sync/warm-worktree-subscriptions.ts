@@ -1,4 +1,7 @@
 import { getWindowParkVisible, subscribeWindowParkVisibility } from '@/lib/window-park-visibility'
+import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-status'
+import { useAppStore } from '../../store'
+import type { AppState } from '../../store/types'
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import type { WindowVisibilitySubscriptionParking } from '../window-visibility-subscription-parking'
 import type {
@@ -14,6 +17,25 @@ type WarmEntry = {
   identity: string
   pairingRevision: number | undefined
   subscription: WindowVisibilitySubscriptionParking
+}
+
+function streamIdentity(
+  connectionGeneration: number,
+  runtimeId: string | null,
+  pairingRevision: number | undefined
+): string {
+  return `${connectionGeneration}\u0000${runtimeId ?? ''}\u0000${pairingRevision ?? ''}`
+}
+
+/** The same identity use-web-session-tabs-sync.ts derives for the selected host. */
+function currentStreamIdentity(state: AppState, environmentId: string): string {
+  const status = state.runtimeStatusByEnvironmentId.get(environmentId)
+  const environment = state.runtimeEnvironments.find(({ id }) => id === environmentId)
+  return streamIdentity(
+    status?.connectionGeneration ?? 0,
+    lastVerifiedRuntimeStatus(status)?.runtimeId ?? null,
+    environment ? (environment.pairingRevision ?? environment.createdAt) : undefined
+  )
 }
 
 export type WarmWorktreeSessionSubscriptions = {
@@ -55,6 +77,22 @@ export function createWarmWorktreeSessionSubscriptions(
     }
   })
 
+  // Why: a re-pair, removal or new runtime session of a host that is not selected never re-runs
+  // the selection effect, so its warm streams would keep retrying a dead identity.
+  const unsubscribeStore = useAppStore.subscribe((state, previous) => {
+    if (
+      state.runtimeEnvironments === previous.runtimeEnvironments &&
+      state.runtimeStatusByEnvironmentId === previous.runtimeStatusByEnvironmentId
+    ) {
+      return
+    }
+    for (const [key, entry] of entries) {
+      if (currentStreamIdentity(state, entry.environmentId) !== entry.identity) {
+        drop(key)
+      }
+    }
+  })
+
   return {
     select: (args, runtimeId) => {
       if (!args.workspaceSessionReady) {
@@ -63,7 +101,11 @@ export function createWarmWorktreeSessionSubscriptions(
         return
       }
       const environmentId = args.activeWorktreeRuntimeEnvironmentId?.trim()
-      const identity = `${args.activeWorktreeRuntimeConnectionGeneration}\u0000${runtimeId ?? ''}\u0000${args.activeWorktreeRuntimePairingRevision ?? ''}`
+      const identity = streamIdentity(
+        args.activeWorktreeRuntimeConnectionGeneration,
+        runtimeId,
+        args.activeWorktreeRuntimePairingRevision
+      )
       for (const [key, entry] of entries) {
         // A new runtime session or re-pair invalidates every stream cut from the old one.
         if (
@@ -112,6 +154,7 @@ export function createWarmWorktreeSessionSubscriptions(
       }
     },
     dispose: () => {
+      unsubscribeStore()
       unsubscribeVisibility()
       selectedKey = null
       for (const key of entries.keys()) {
