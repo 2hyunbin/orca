@@ -8,6 +8,7 @@ import { ActiveViewPreference } from '../../active-view-preference'
 import { registerPersistedPaneKeyAlias } from '../restoring-sessions/pane-alias-normalization'
 import { normalizePersistedPaneIdentityState } from '../restoring-sessions/workspace-pane-normalization'
 import { nameEmptyPersistedTerminalLayoutRoots } from '../restoring-sessions/empty-terminal-layout-root-repair'
+import { rewriteStoredLayoutsAtStartup } from '../restoring-sessions/startup-layout-rewrite'
 import { StoreRuntimeState, type StoreRuntimeOptions } from './store-runtime-state'
 import {
   createStoreDomains,
@@ -45,6 +46,8 @@ export type StoreOptions = StoreRuntimeOptions & {
   collectUnboundPaneAlias?: (entry: ProfileStateStartupPaneAlias) => void
   /** Reuse the authority's validated startup read without retaining a cached copy. */
   initialAuthorityState?: ProfileStateAuthorityInitialState<ProfileStatePersistenceAuthority>
+  /** Persist the shared Loader's window-neutral layout repairs; only after a pre-migration backup. */
+  rewriteStoredLayouts?: boolean
 }
 
 export type PreparedProfileStateExport = {
@@ -126,6 +129,12 @@ export class Store {
     const sweptRepoIds = this.domains.repos.sweepDeregisteredRepoResidue()
     // Imported snapshots cannot own the live hook server or write their source file.
     if (!imported) {
+      const layouts = options.rewriteStoredLayouts
+        ? rewriteStoredLayoutsAtStartup(this.state)
+        : undefined
+      if (layouts && (layouts.rewritten.length > 0 || layouts.skipped.length > 0)) {
+        console.warn('[persistence] Startup layout rewrite:', layouts)
+      }
       // A committed migration whose blob install failed or was cut short is finished here; shell
       // history waits for the runtime's post-attach pass, which can see live shells.
       this.domains.orcadMigrationBlobInstalls.installPendingOrcadMigrationReceivedBlobs()
@@ -155,7 +164,8 @@ export class Store {
         normalized.changed ||
         this.runtime.loadNeedsSave ||
         adaptedProjectGroups ||
-        sweptRepoIds.length > 0
+        sweptRepoIds.length > 0 ||
+        (layouts?.rewritten.length ?? 0) > 0
       ) {
         scheduleSave(this.domains.scheduling)
       }

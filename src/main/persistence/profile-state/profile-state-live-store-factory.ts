@@ -5,6 +5,8 @@ import {
   type ProfileStateStoreFactoryResult
 } from './profile-state-store-factory'
 import { ProfileStateWorkerAuthority } from './profile-state-worker-authority'
+import { runProfileStateBackup } from './profile-state-backup-worker'
+import { ensureProfileStatePreMigrationBackup } from './profile-state-pre-migration-backup'
 
 /** Publish live state only after its exact bootstrap revision has a worker owner. */
 export async function createLiveProfileStateStore(
@@ -27,6 +29,12 @@ export async function createLiveProfileStateStore(
   )
   try {
     await authority.ready
+    // Startup rewrites saved layouts only once a copy of the profile from before them exists.
+    const backup = await ensureProfileStatePreMigrationBackup(
+      options.databaseFile,
+      options.profileId,
+      (job) => runProfileStateBackup(job, undefined, workerOptions.backupWorkerPath)
+    )
     const initialAuthorityState = initial.takeParsedState
       ? { authority, takeParsedState: () => parsed }
       : { authority, serializedState }
@@ -39,7 +47,8 @@ export async function createLiveProfileStateStore(
         initialAuthorityState: {
           ...initialAuthorityState,
           unboundPaneAliases: initial.unboundPaneAliases
-        }
+        },
+        rewriteStoredLayouts: backup === 'ready'
       })
     }
   } catch (error) {

@@ -5,12 +5,26 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toRuntimeExecutionHostId,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
 import { loadWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-load'
 import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
+import {
+  FOLDER_KEY,
+  SERVER_KEY,
+  SSH_KEY
+} from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import {
+  planStartupLayoutRewrite,
+  type StartupLayoutRewrite
+} from '../../../shared/workspace-layout/workspace-layout-startup-rewrite'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
 import {
@@ -183,4 +197,92 @@ describe('the window shows the same session before and after the shared Loader r
       [...KNOWN_DIFFERENCES, ...ACCEPTED_DIFFERENCES].filter((entry) => !names.has(entry.fixture))
     ).toEqual([])
   })
+})
+
+/** What main's startup rewrite does with each fixture; see `planStartupLayoutRewrite`. */
+const STARTUP_REWRITES: Record<string, StartupLayoutRewrite['kind']> = {
+  'local desktop (git worktree, folder workspace, all tab kinds)': 'unchanged',
+  'floating terminal': 'unchanged',
+  'relay SSH host partition': 'unchanged',
+  'remote server partition': 'unchanged',
+  'empty profile': 'unchanged',
+  'row without a tab-bar entry or a terminal': 'skipped',
+  'row without a tab-bar entry, still bound to a terminal': 'rewrite',
+  'legacy row repeating a tab-bar tab’s terminal': 'rewrite',
+  'legacy row repeating a tab-bar tab’s terminal, selected': 'rewrite',
+  // Window-neutral, but it rewrites a row terminal, which no persisted rule may do.
+  'legacy split row sharing one pane’s terminal with a tab-bar tab': 'skipped',
+  'row terminal differs from its focused pane’s': 'skipped',
+  'row with no terminal while its pane has one': 'skipped',
+  'tab listed by two groups, its tab-bar entry naming the second': 'rewrite',
+  'session from before the tab bar, with an open file': 'skipped',
+  'legacy surface tombstone on a pane still showing its terminal': 'skipped',
+  'tab-bar label differing from the row title': 'skipped'
+}
+
+/** The legacy fixtures moved into each kind of partition and workspace main rewrites. */
+const PARTITIONS: readonly { name: string; hostId: ExecutionHostId; key: string }[] = [
+  { name: 'local git worktree', hostId: LOCAL_EXECUTION_HOST_ID, key: GIT },
+  { name: 'local folder workspace', hostId: LOCAL_EXECUTION_HOST_ID, key: FOLDER_KEY },
+  { name: 'relay SSH host', hostId: toSshExecutionHostId('target-1'), key: SSH_KEY },
+  { name: 'remote server', hostId: toRuntimeExecutionHostId('env-1'), key: SERVER_KEY }
+]
+
+function moveTo(
+  session: WorkspaceSessionState,
+  key: string,
+  hostId: ExecutionHostId
+): WorkspaceSessionState {
+  const json = JSON.stringify(session)
+    .replaceAll(GIT, key)
+    .replaceAll('"executionHostId":"local"', `"executionHostId":${JSON.stringify(hostId)}`)
+  return JSON.parse(json)
+}
+
+describe('main rewrites a stored partition at startup only when the window shows the same', () => {
+  it('names a decision for every fixture', () => {
+    expect(Object.keys(STARTUP_REWRITES).sort()).toEqual(PROFILES.map((p) => p.name).sort())
+  })
+
+  it('skips every fixture whose window view differs, known or accepted', () => {
+    for (const entry of [...KNOWN_DIFFERENCES, ...ACCEPTED_DIFFERENCES]) {
+      expect(STARTUP_REWRITES[entry.fixture], entry.fixture).toBe('skipped')
+    }
+  })
+
+  const cases = PROFILES.flatMap((profile) =>
+    profile.hostId === LOCAL_EXECUTION_HOST_ID && !WORKSPACE_LAYOUT_PROFILES.includes(profile)
+      ? PARTITIONS.map((partition) => ({
+          label: `${partition.name}: ${profile.name}`,
+          name: profile.name,
+          key: partition.key,
+          hostId: partition.hostId,
+          build: () => moveTo(profile.build(), partition.key, partition.hostId)
+        }))
+      : [{ ...profile, label: profile.name, key: GIT }]
+  )
+
+  it.each(cases.map((entry) => [entry.label, entry] as const))(
+    '%s',
+    async (_label, { name, key, hostId, build }) => {
+      const stored = build()
+      const plan = planStartupLayoutRewrite(hostId, stored)
+      expect(plan.kind).toBe(STARTUP_REWRITES[name])
+      if (plan.kind !== 'rewrite') {
+        return
+      }
+      const [storedView, rewrittenView] = await Promise.all(
+        [stored, plan.session].map(async (session) =>
+          projectStartupWindowView(
+            await bootWindowFromPartitions(createTestStore(), [{ hostId, session }])
+          )
+        )
+      )
+      // The window must show the workspace at all, or an empty view hides differences.
+      expect(storedView).toHaveProperty([`${key} group 0 tabs`])
+      expect(diffStartupWindowViews(storedView, rewrittenView)).toEqual([])
+      // A second boot finds nothing to rewrite, so two racing owners write the same partition.
+      expect(planStartupLayoutRewrite(hostId, plan.session).kind).toBe('unchanged')
+    }
+  )
 })

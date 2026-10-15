@@ -8,6 +8,11 @@ import { buildProfileStateCutoverFixture } from '../profile-state-cutover-fixtur
 import type { Store } from '../loading-store/store'
 import { ProfileStateSqliteAuthority } from './profile-state-sqlite-authority'
 import { createLiveProfileStateStore } from './profile-state-live-store-factory'
+import { profileStatePreMigrationBackupPath } from './profile-state-pre-migration-backup'
+import { openProfileStateDatabaseReadOnly } from './profile-state-database'
+import { readProfileStateSnapshot } from './profile-state-documents'
+import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
+import { GIT_KEY } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import {
   profileStateJsonExportPath,
   profileStateJsonExportPaths
@@ -213,5 +218,62 @@ describe('live profile authority admission', () => {
     await expect(store.flushPendingOrThrowAsync()).rejects.toThrow('finalized')
     const reopened = await open(input)
     expect(reopened.store.getSettings().theme).toBe('light')
+  })
+})
+
+describe('startup layout rewrite', () => {
+  // A row the tab bar lost but that still names its terminal: the window adopts it, so main may.
+  function writeAdoptableProfile(input: ReturnType<typeof options>): void {
+    const state = buildProfileStateCutoverFixture(join(input.dataFile, '..'))
+    state.repos.push({
+      id: 'repo-1',
+      path: '/Users/dev/orca',
+      displayName: 'orca',
+      badgeColor: '#737373',
+      addedAt: 1
+    })
+    state.workspaceSession = LEGACY_WORKSPACE_LAYOUT_PROFILES.find(
+      (profile) => profile.name === 'row without a tab-bar entry, still bound to a terminal'
+    )!.build()
+    writeFileSync(input.dataFile, JSON.stringify(state))
+  }
+  const tabBar = (session: { unifiedTabs?: Record<string, { id: string }[]> }) =>
+    session.unifiedTabs?.[GIT_KEY]?.map((tab) => tab.id)
+
+  it('persists the rewrite only after backing up the profile as it was', async () => {
+    const input = options()
+    writeAdoptableProfile(input)
+    const { store } = await open(input)
+    expect(tabBar(store.getWorkspaceSession())).toEqual(['tab-a', 'tab-b'])
+    await store.flushPendingOrThrowAsync()
+    expect(tabBar(readState(input).workspaceSession)).toEqual(['tab-a', 'tab-b'])
+    const backup = openProfileStateDatabaseReadOnly(
+      profileStatePreMigrationBackupPath(input.databaseFile),
+      input.profileId
+    )
+    try {
+      expect(tabBar(JSON.parse(readProfileStateSnapshot(backup.db).json).workspaceSession)).toEqual(
+        ['tab-a']
+      )
+    } finally {
+      backup.db.close()
+    }
+  })
+
+  it('loads the stored layout unchanged when the backup cannot be made', async () => {
+    const input = options()
+    writeAdoptableProfile(input)
+    // A directory where the copy goes: the backup reports failure, so nothing is rewritten.
+    mkdirSync(profileStatePreMigrationBackupPath(input.databaseFile))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn')
+    const { store } = await open(input)
+    expect(tabBar(store.getWorkspaceSession())).toEqual(['tab-a'])
+    await store.flushPendingOrThrowAsync()
+    expect(tabBar(readState(input).workspaceSession)).toEqual(['tab-a'])
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Startup layout rewrite'),
+      expect.anything()
+    )
   })
 })
