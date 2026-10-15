@@ -21,7 +21,8 @@ export class SessionRowPublisher {
     this.read = read
     if (!this.started) {
       this.started = true
-      return this.flush()
+      void this.flush()
+      return
     }
     if (!this.timer && !this.flight) {
       this.timer = setTimeout(() => {
@@ -29,15 +30,13 @@ export class SessionRowPublisher {
         void this.flush()
       }, ROW_BATCH_INTERVAL_MS)
     }
-    return this.flight ?? undefined
   }
 
-  async finish(): Promise<void> {
+  finish(): void {
     this.retired = true
     this.read = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    await this.flight
   }
 
   private flush(): Promise<void> {
@@ -45,7 +44,9 @@ export class SessionRowPublisher {
     const read = this.read
     this.read = null
     if (!read || this.retired) return Promise.resolve()
-    this.flight = Promise.resolve().then(() => this.deliver(read())).catch(() => {
+    this.flight = Promise.resolve().then(() => {
+      if (!this.retired) return this.deliver(read())
+    }).catch(() => {
       // A failed preview channel must not fail the authoritative scan.
       this.retired = true
     }).finally(() => {

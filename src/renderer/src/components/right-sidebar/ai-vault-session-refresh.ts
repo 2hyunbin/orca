@@ -242,7 +242,11 @@ export function useAiVaultSessionRefresh(
         publicationGateRef.current.publish(result, (published) => {
           if (mountedRef.current && scanKey === currentScanScopeKey()) {
             completeScopeRef.current = scanKey
-            const retained = retainAiVaultFailedHostRows(published, displayedRowsRef.current.sessions)
+            const displayed = displayedRowsRef.current
+            const retained = retainAiVaultFailedHostRows(published,
+              displayed.scopeKey === scanKey
+                ? displayed.sessions.filter((row) => !deletedIdsRef.current.has(row.id))
+                : EMPTY_AI_VAULT_SESSIONS)
             setProvisional(retained ? { scopeKey: scanKey, sessions: retained } : null)
             applyScan(published, selectedLimit, (applied) => {
               conditionalSnapshotRef.current = published.fingerprint

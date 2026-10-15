@@ -16,6 +16,7 @@ vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() }
 }))
 vi.mock('../ai-vault/cached-session-list', () => ({
+  aiVaultSessionListGeneration: () => 0,
   configureAiVaultSessionSources: vi.fn(),
   resetAiVaultSessionListCacheForTests: vi.fn(),
   invalidateAiVaultSessionListCache: vi.fn(),

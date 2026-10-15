@@ -58,7 +58,7 @@ export async function parseSessionCandidates(args: {
         if (result.session && !args.signal?.aborted && args.observeRows) {
           completed.set(ordinal, result.session)
           try {
-            await args.observeRows(readRows)
+            args.observeRows(readRows)
           } catch {
             // Observers own presentation, never candidate admission.
           }

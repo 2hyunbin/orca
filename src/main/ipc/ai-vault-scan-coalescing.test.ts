@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   ipcHandle: vi.fn()
 }))
 
-vi.mock('electron', () => ({ app: { on: vi.fn() }, ipcMain: { handle: mocks.ipcHandle } }))
+vi.mock('electron', () => ({ app: { on: vi.fn() }, ipcMain: { handle: mocks.ipcHandle, on: vi.fn() } }))
 vi.mock('../ai-vault/session-scanner-service-spawn', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   scanAiVaultSessionsInService: mocks.scanAiVaultSessionsInService,
@@ -107,7 +107,7 @@ describe('Agent Session History scan coalescing', () => {
     // The local leg degrades like the SSH legs above: a rejection reaches the
     // renderer as a raw string painted over the list instead of an issue row.
     const result = await list(
-      { sender: Object.assign(new EventEmitter(), { id: 1 }) },
+      { sender: Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, send: vi.fn() }) },
       { executionHostScope: 'local', requestToken: 'scan' }
     )
     expect(result).toMatchObject({

@@ -14,6 +14,7 @@ export class AiVaultRowDelivery {
   private publisher: SessionRowPublisher | null = null
   private scanId: string | null = null
   private sequence = 0
+  private seenRows = false
   private acknowledge: (() => void) | null = null
   private closed = false
   private readonly generation = aiVaultSessionListGeneration()
@@ -37,6 +38,7 @@ export class AiVaultRowDelivery {
       this.acknowledge?.()
       void this.publisher?.finish()
       this.scanId = view.scanId
+      this.seenRows = false
       let reset = true
       this.publisher = new SessionRowPublisher(async (delta) => {
         if (!this.isCurrent() || this.scanId !== view.scanId) return
@@ -57,7 +59,8 @@ export class AiVaultRowDelivery {
         })
       })
     }
-    if (view.sessions.length === 0) return
+    if (view.sessions.length === 0 && !this.seenRows) return
+    this.seenRows ||= view.sessions.length > 0
     const rows = projectStructuredAiVaultRows(view.sessions, OPENS_EVERY_STRUCTURED_CHAT)
     void this.publisher?.observe(() => rows)
   }

@@ -62,7 +62,7 @@ async function scanReportingProgress(
   try {
     return await scanAiVaultSessions({ ...request.options, signal }, rows.observe)
   } finally {
-    await rows.finish()
+    rows.finish()
     stopProgress()
   }
 }

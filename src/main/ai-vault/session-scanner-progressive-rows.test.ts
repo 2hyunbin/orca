@@ -14,10 +14,13 @@ it('delivers a completed row before its held sibling and preserves final aliases
   const held = new Promise<void>((resolve) => { release = resolve })
   const roots = isolatedScanRoots(root)
   const extra = join(root, 'extra-codex')
+  let releaseSend!: () => void
+  const heldSend = new Promise<void>((resolve) => { releaseSend = resolve })
   const rows = new Map<string, AiVaultSession>()
   const publisher = new SessionRowPublisher(async (delta) => {
     for (const id of delta.removed) rows.delete(id)
     for (const row of delta.upserts) rows.set(row.id, row)
+    await heldSend
   })
   let scan: ReturnType<typeof scanAiVaultSessions> | undefined
   try {
@@ -59,8 +62,9 @@ it('delivers a completed row before its held sibling and preserves final aliases
     expect(streamed.sessions.filter((row) => row.sessionId === 'ready')).toHaveLength(1)
   } finally {
     release()
+    releaseSend()
     await scan?.catch(() => undefined)
-    await publisher.finish()
+    publisher.finish()
     vi.restoreAllMocks()
     await rm(root, { recursive: true, force: true })
   }

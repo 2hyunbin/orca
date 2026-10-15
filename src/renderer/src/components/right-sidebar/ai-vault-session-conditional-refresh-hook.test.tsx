@@ -209,3 +209,15 @@ it('accumulates completed-row deltas before scheduling while final metadata rema
   expect(latest?.scanResult?.scannedAt).toBe('final')
   expect(listener).toBeUndefined()
 })
+
+it('does not retain another scope as the current history when the new host leg fails', async () => {
+  await render('runtime:one', 250, ['/repo'])
+  expect(latest?.sessions).toEqual([session])
+  list.mockResolvedValueOnce({
+    sessions: [], scannedAt: 'failed',
+    issues: [{ executionHostId: 'runtime:one', agent: 'codex', kind: 'host', path: 'host', message: 'Unavailable' }]
+  })
+  await render('runtime:one', 250, ['/different-scope'])
+  expect(latest?.sessions).toEqual([])
+  expect(latest?.scanResult?.issues[0]?.kind).toBe('host')
+})

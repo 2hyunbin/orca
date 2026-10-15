@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({
   app: { on: vi.fn() },
-  ipcMain: { handle: mocks.ipcHandle }
+  ipcMain: { handle: mocks.ipcHandle, on: vi.fn() }
 }))
 
 vi.mock('../ai-vault/session-scanner-service-spawn', async (importOriginal) => ({
@@ -87,7 +87,8 @@ describe('listAiVaultSessions host routing', () => {
         includeAntigravityIdeSessions: true,
         executionHostId: 'local'
       }),
-      expect.any(AbortSignal)
+      expect.any(AbortSignal),
+      expect.any(Function)
     )
   })
 
