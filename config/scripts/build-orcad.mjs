@@ -156,13 +156,6 @@ function stageNodePty(target) {
 
 rmSync(OUT_DIR, { recursive: true, force: true })
 mkdirSync(OUT_DIR, { recursive: true })
-const layoutOwnerBuild = createRequire(import.meta.url)('../layout-owner-build.cjs')
-if (layoutOwnerBuild.isLayoutOwnerBuild()) {
-  writeFileSync(
-    join(OUT_DIR, layoutOwnerBuild.LAYOUT_OWNER_MARKER_FILENAME),
-    layoutOwnerBuild.LAYOUT_OWNER_MARKER_TEXT
-  )
-}
 writeFileSync(join(OUT_DIR, ORCAD_SERVER_TARGET_FILENAME), `${BUILD_TARGET}\n`)
 writeFileSync(
   join(OUT_DIR, ORCAD_NODE_RUNTIME_MARKER_FILENAME),

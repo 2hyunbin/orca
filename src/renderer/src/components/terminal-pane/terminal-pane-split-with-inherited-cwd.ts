@@ -6,7 +6,6 @@ import { resolveSplitCwd, type PaneCwdMap } from './resolve-split-cwd'
 import { recordCreatedTerminalPaneSplit } from './terminal-pane-split-completion'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { sendPaneCommandToLayoutOwner } from './terminal-pane-layout-owner-commands'
-import type { LayoutRefusalCode } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
 type SplitArgs = {
   worktreeId: string
@@ -40,20 +39,13 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
       { type: 'splitPane', tabId: args.tabId, leafId: args.pane.leafId, direction: args.direction },
       {
         apply: ({ leafId }) => leafId && mountMainSplit(args, ptyId, leafId),
-        asToday: () => splitLocally(args, ptyId),
-        // Why: main's copy lags the window's here (e.g. a cross-tab drop still saved by the window).
-        refused: (code) => mainLacksPane(code) && splitLocally(args, ptyId),
-        failed: () => splitLocally(args, ptyId)
+        asToday: () => splitLocally(args, ptyId)
       }
     )
   ) {
     return
   }
   splitLocally(args, ptyId)
-}
-
-function mainLacksPane(code: LayoutRefusalCode): boolean {
-  return code === 'workspace_not_found' || code === 'tab_not_found' || code === 'pane_not_found'
 }
 
 /** Mounts main's new pane, or withdraws it when its source pane or manager went meanwhile. */

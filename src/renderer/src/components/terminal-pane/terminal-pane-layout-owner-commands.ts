@@ -22,9 +22,9 @@ export type PaneLayoutCommand =
 
 /**
  * A pane command in a layout-owner build: main applies it first, then `apply` shows main's result.
- * `asToday` runs instead when main says a paired server holds the tab (#18202); `refused` on any
- * other refusal; `failed` when the call throws (main rolled its write back). False when a paired
- * server owns the workspace's layout; the caller acts as today.
+ * `asToday` runs instead when main cannot act on it: a paired server holds the tab (#18202), main's
+ * copy lacks the workspace, tab or pane, or the call threw. `refused` on any other refusal. False
+ * when a paired server owns the workspace's layout; the caller acts as today.
  */
 export function sendPaneCommandToLayoutOwner(
   worktreeId: string,
@@ -33,7 +33,6 @@ export function sendPaneCommandToLayoutOwner(
     apply: (result: LayoutCommandResult) => void
     asToday: () => void
     refused?: (code: LayoutRefusalCode) => void
-    failed?: () => void
   }
 ): boolean {
   // Why: the same owner test that mirrors a workspace's tabs from a paired server; a focused
@@ -44,22 +43,38 @@ export function sendPaneCommandToLayoutOwner(
   void callRuntimeRpc<LayoutApplyReply>({ kind: 'local' }, 'layout.apply', {
     command: { ...command, workspace: worktreeId }
   })
-    .then((reply) => {
-      if (reply.ok) {
-        handlers.apply(reply.result)
-      } else if (reply.code === 'host_not_owned') {
+    .then(
+      (reply) => {
+        if (reply.ok) {
+          handlers.apply(reply.result)
+        } else if (reply.code === 'host_not_owned' || mainLacksTarget(reply.code)) {
+          // Why lacking: main's copy lags the window's here (the window still saves its own).
+          handlers.asToday()
+        } else {
+          console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
+          handlers.refused?.(reply.code)
+        }
+      },
+      (error: unknown) => {
+        // Why as today: a thrown write is rolled back, except an indeterminate disk write, which
+        // the window's own save then overwrites.
+        console.warn(`[layout-owner] ${command.type} failed:`, errorMessage(error))
         handlers.asToday()
-      } else {
-        console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
-        handlers.refused?.(reply.code)
       }
-    })
+    )
+    // A throwing handler is not a failed call; it must not run the fallback too.
     .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : error
-      console.warn(`[layout-owner] ${command.type} failed:`, message)
-      handlers.failed?.()
+      console.warn(`[layout-owner] ${command.type} handler threw:`, errorMessage(error))
     })
   return true
+}
+
+function mainLacksTarget(code: LayoutRefusalCode): boolean {
+  return code === 'workspace_not_found' || code === 'tab_not_found' || code === 'pane_not_found'
+}
+
+function errorMessage(error: unknown): unknown {
+  return error instanceof Error ? error.message : error
 }
 
 /** Equalizes a tab's panes, then `then` runs (focus); in a layout-owner build main equalizes first. */

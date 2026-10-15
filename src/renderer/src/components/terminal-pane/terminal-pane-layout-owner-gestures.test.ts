@@ -55,8 +55,7 @@ describe('layoutOwnerPaneGestures', () => {
       {
         apply: expect.any(Function),
         asToday: expect.any(Function),
-        refused: expect.any(Function),
-        failed: expect.any(Function)
+        refused: expect.any(Function)
       }
     )
     expect(move).not.toHaveBeenCalled()
@@ -65,22 +64,44 @@ describe('layoutOwnerPaneGestures', () => {
     expect(move).toHaveBeenCalledOnce()
   })
 
-  it.each(['refused', 'failed'] as const)(
-    'moves the pane as today when main %s the move',
+  it.each(['asToday', 'refused'] as const)(
+    'moves the pane as today when main answers %s',
     (outcome) => {
       const move = vi.fn()
       gestures().takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, move)
       const handlers = mocks.send.mock.calls[0]?.[2]
 
       if (outcome === 'refused') {
-        handlers?.refused?.('pane_not_found')
+        handlers?.refused?.('same_pane')
       } else {
-        handlers?.failed?.()
+        handlers?.asToday()
       }
 
       expect(move).toHaveBeenCalledOnce()
     }
   )
+
+  it('holds divider ratios until every move in flight has settled, even one that threw', () => {
+    const view = gestures()
+    const failingMove = vi.fn(() => {
+      throw new Error('pane gone')
+    })
+    view.takePaneDrop?.({ sourcePaneId: 2, targetPaneId: 1, zone: 'left' }, failingMove)
+    view.takePaneDrop?.({ sourcePaneId: 1, targetPaneId: 2, zone: 'top' }, vi.fn())
+    view.onDividerRatiosCommitted?.()
+    const [first, second] = mocks.send.mock.calls.map(([, , on]) => on)
+
+    expect(() => first?.refused?.('pane_structure_changed')).toThrow('pane gone')
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+
+    second?.apply({})
+    expect(mocks.send).toHaveBeenCalledTimes(3)
+    expect(mocks.send).toHaveBeenLastCalledWith(
+      'worktree-1',
+      { type: 'setPaneRatios', tabId: 'tab-1', root: mocks.root },
+      { apply: expect.any(Function), asToday: expect.any(Function) }
+    )
+  })
 
   it('holds divider ratios sent during a move until the window has moved too', () => {
     const view = gestures()
