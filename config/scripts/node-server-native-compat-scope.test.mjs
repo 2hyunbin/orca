@@ -388,3 +388,17 @@ it.each([
     String(scenario.expected)
   )
 })
+
+it.each(['M', 'A', 'D'])(
+  'checks %s of the existing serializer test diagnostics against the native closure',
+  async (status) => {
+    const file = 'src/main/daemon/serialize-grid-variant-scope.ts'
+    const result = await classifyNativeCompatChanges(
+      [file],
+      collectNodeServerInputs,
+      optionsFor([[status, file]])
+    )
+    expect(result.nativeCompatibility).toBe(status !== 'M')
+  },
+  60_000
+)
