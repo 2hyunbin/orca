@@ -31,7 +31,7 @@ const SPLIT = {
 } as const
 
 function handlers() {
-  return { apply: vi.fn(), asToday: vi.fn() }
+  return { apply: vi.fn(), asToday: vi.fn(), refused: vi.fn() }
 }
 
 describe('sendPaneCommandToLayoutOwner', () => {
@@ -67,6 +67,15 @@ describe('sendPaneCommandToLayoutOwner', () => {
     await vi.waitFor(() => expect(console.warn).toHaveBeenCalled())
     expect(on.apply).not.toHaveBeenCalled()
     expect(on.asToday).not.toHaveBeenCalled()
+  })
+
+  it('hands any other refusal to the caller', async () => {
+    mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'last_pane' })
+    const on = handlers()
+
+    sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)
+
+    await vi.waitFor(() => expect(on.refused).toHaveBeenCalledWith('last_pane'))
   })
 
   it('acts as today when main says a paired server holds the tab', async () => {

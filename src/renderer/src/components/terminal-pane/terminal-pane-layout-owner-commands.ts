@@ -6,7 +6,8 @@ import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type {
   LayoutApplyReply,
-  LayoutCommandResult
+  LayoutCommandResult,
+  LayoutRefusalCode
 } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
 /** The pane commands a window sends `layout.apply`; main mints any new id. */
@@ -18,13 +19,17 @@ export type PaneLayoutCommand =
 
 /**
  * A pane command in a layout-owner build: main applies it first, then `apply` shows main's result.
- * `asToday` runs instead when main says a paired server holds the tab (#18202). False when a paired
- * server owns the workspace's layout; the caller then acts as today.
+ * `asToday` runs instead when main says a paired server holds the tab (#18202); `refused` on any
+ * other refusal. False when a paired server owns the workspace's layout; the caller acts as today.
  */
 export function sendPaneCommandToLayoutOwner(
   worktreeId: string,
   command: PaneLayoutCommand,
-  handlers: { apply: (result: LayoutCommandResult) => void; asToday: () => void }
+  handlers: {
+    apply: (result: LayoutCommandResult) => void
+    asToday: () => void
+    refused?: (code: LayoutRefusalCode) => void
+  }
 ): boolean {
   const hostId = getExecutionHostIdForWorktree(useAppStore.getState(), worktreeId)
   if (parseExecutionHostId(hostId)?.kind === 'runtime') {
@@ -40,6 +45,7 @@ export function sendPaneCommandToLayoutOwner(
         handlers.asToday()
       } else {
         console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
+        handlers.refused?.(reply.code)
       }
     })
     .catch((error: unknown) => {

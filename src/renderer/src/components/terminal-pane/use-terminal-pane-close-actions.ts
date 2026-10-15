@@ -48,6 +48,11 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       if (!manager || (committedLeafId && manager.getLeafId(paneId) !== committedLeafId)) {
         return
       }
+      // A sibling went while main answered: this pane is now the tab's last, so the tab closes.
+      if (committedLeafId && manager.getPanes().length <= 1) {
+        onCloseTab()
+        return
+      }
       const ptyId = paneTransportsRef.current.get(paneId)?.getPtyId() ?? null
       closeWebRuntimeTerminal(ptyId)
       clearSessionRestoredBannerForPane(paneId)
@@ -91,6 +96,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
     [
       clearSessionRestoredBannerForPane,
+      onCloseTab,
       syncPanePtyLayoutBinding,
       syncPanePtyLayoutBindingForLeaf,
       tabId,
@@ -117,7 +123,13 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
           { type: 'closePane', tabId, leafId },
           {
             apply: () => closePaneLocally(paneId, leafId),
-            asToday: () => closePaneLocally(paneId)
+            asToday: () => closePaneLocally(paneId),
+            // An earlier close in flight took the sibling: once it lands here too, the tab closes.
+            refused: (code) => {
+              if (code === 'last_pane' && (managerRef.current?.getPanes().length ?? 0) <= 1) {
+                onCloseTab()
+              }
+            }
           }
         )
       ) {

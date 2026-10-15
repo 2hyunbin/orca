@@ -4,14 +4,17 @@ import { preparePendingSplitClose } from './pending-split-close-test-fixture'
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: false,
   commitTerminalSurfaceClose: vi.fn(),
-  sendPaneCommandToLayoutOwner:
-    vi.fn<
-      (
-        worktreeId: string,
-        command: unknown,
-        handlers: { apply: (result: object) => void; asToday: () => void }
-      ) => boolean
-    >()
+  sendPaneCommandToLayoutOwner: vi.fn<
+    (
+      worktreeId: string,
+      command: unknown,
+      handlers: {
+        apply: (result: object) => void
+        asToday: () => void
+        refused?: (code: string) => void
+      }
+    ) => boolean
+  >()
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -58,7 +61,7 @@ it('a layout-owner build removes the pane only once main has closed it', async (
   expect(mocks.sendPaneCommandToLayoutOwner).toHaveBeenCalledWith(
     'workspace',
     { type: 'closePane', tabId: 'tab-parent', leafId: LEAF },
-    { apply: expect.any(Function), asToday: expect.any(Function) }
+    { apply: expect.any(Function), asToday: expect.any(Function), refused: expect.any(Function) }
   )
   expect(p.transports.has(1)).toBe(true)
 
@@ -77,4 +80,31 @@ it('a layout-owner build closes as today when a paired server holds the tab', as
 
   expect(mocks.commitTerminalSurfaceClose).toHaveBeenCalledOnce()
   expect(p.transports.has(1)).toBe(false)
+})
+
+it('a layout-owner build closes the tab when main refuses a second close as the last pane', async () => {
+  mocks.layoutOwnerIsMain = true
+  const p = await preparePendingSplitClose()
+  p.actions.executeClosePane(1)
+  p.actions.executeClosePane(2)
+  const [first, second] = mocks.sendPaneCommandToLayoutOwner.mock.calls.map(([, , on]) => on)
+
+  first?.apply({})
+  second?.refused?.('last_pane')
+
+  expect(p.controller.onCloseTab).toHaveBeenCalledOnce()
+})
+
+it('a layout-owner build closes the tab when main’s answer finds the pane alone', async () => {
+  mocks.layoutOwnerIsMain = true
+  const p = await preparePendingSplitClose()
+  p.actions.executeClosePane(1)
+  p.actions.executeClosePane(2)
+  const [first, second] = mocks.sendPaneCommandToLayoutOwner.mock.calls.map(([, , on]) => on)
+
+  first?.apply({})
+  second?.apply({})
+
+  expect(p.controller.onCloseTab).toHaveBeenCalledOnce()
+  expect(p.controller.managerRef.current?.getPanes()).toHaveLength(1)
 })

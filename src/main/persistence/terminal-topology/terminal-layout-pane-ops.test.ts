@@ -36,13 +36,22 @@ afterEach(() => {
   }
 })
 
-/** Fields only the legacy close writes, which no reader distinguishes from their absence. */
-const LEGACY_ONLY = new Set([
+/** What only the legacy close writes, which no reader distinguishes from its absence. */
+function legacyOnly(change: ReturnType<typeof diffStoredSession>[number]): boolean {
+  if (change.table !== 'session') {
+    return false
+  }
   // The legacy close re-derives the active tab's type; layout.apply leaves selection alone.
-  'session/session/activeTabTypeByWorktree',
-  // An empty map where none was stored.
-  'session/session/terminalSurfaceTombstonesByPaneKey'
-])
+  if (change.field === 'activeTabTypeByWorktree') {
+    return true
+  }
+  // An empty tombstone map where none was stored.
+  return (
+    change.field === 'terminalSurfaceTombstonesByPaneKey' &&
+    change.after === undefined &&
+    JSON.stringify(change.before) === '{}'
+  )
+}
 
 /**
  * Known gap, the same one the record-patch test pins: the load folds this legacy row into the
@@ -85,8 +94,8 @@ describe('layout.apply closePane against the legacy pane close', () => {
             }
             expect(dark.value.ok, label).toBe(true)
             const differences = diffStoredSession(legacy.session, dark.session ?? stored)
+              .filter((change) => !legacyOnly(change))
               .map(({ table, record, field }) => `${table}/${record}/${field}`)
-              .filter((change) => !LEGACY_ONLY.has(change))
             expect(differences, label).toEqual(FOLDED_LEGACY_ROW_CLOSES.get(tab.id) ?? [])
           }
         }
