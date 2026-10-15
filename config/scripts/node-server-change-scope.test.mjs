@@ -300,14 +300,14 @@ it.each([
   { files: ['src/renderer/src/example.ts'], deferred: true, expected: 'graph_required=true' },
   { files: ['src/renderer/src/example.ts'], deferred: false, expected: 'should_run=true' }
 ])('fails closed or requests dependencies in an uninstalled checkout: %j', (scenario) => {
+  const workflow = parse(readFileSync('.github/workflows/node-server-tests.yml', 'utf8'))
+  const sparsePaths = workflow.jobs.changes.steps[0].with['sparse-checkout'].trim().split('\n')
   const root = moduleTree(
     Object.fromEntries(
-      ['node-server-change-scope', 'node-server-test-paths', 'node-server-qualification'].map(
-        (name) => [
-          `config/scripts/${name}.mjs`,
-          readFileSync(new URL(`./${name}.mjs`, import.meta.url), 'utf8')
-        ]
-      )
+      sparsePaths.map((pattern) => {
+        const file = pattern.slice(1)
+        return [file, readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8')]
+      })
     )
   )
   const changes = join(root, 'changes')

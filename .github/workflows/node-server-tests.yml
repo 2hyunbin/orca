@@ -62,9 +62,18 @@ jobs:
       qualification: ${{ steps.scope.outputs.qualification || steps.graph.outputs.qualification }}
       runners: ${{ steps.scope.outputs.runners || steps.graph.outputs.runners }}
     steps:
+      # Defer source blobs until the detector needs the installed import graph.
       - uses: actions/checkout@v6
+        id: source
         with:
           fetch-depth: 2
+          filter: blob:none
+          sparse-checkout: |
+            /package.json
+            /config/scripts/node-server-change-scope.mjs
+            /config/scripts/node-server-test-paths.mjs
+            /config/scripts/node-server-qualification.mjs
+          sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
@@ -95,6 +104,15 @@ jobs:
           else
             echo 'should_run=true' >> "$GITHUB_OUTPUT"
           fi
+
+      # Re-authenticate before expanding promisor blobs on private repositories.
+      - name: Expand checkout for headless graph
+        if: steps.scope.outputs.graph_required == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.source.outputs.commit }}
+          fetch-depth: 2
+          persist-credentials: false
 
       - uses: ./.github/actions/prepare-headless-compiler
         id: compiler

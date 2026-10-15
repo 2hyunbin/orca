@@ -173,6 +173,40 @@ it('leaves existing dependencies alone and falls back on an absent archive', asy
   expect(readFileSync(join(root, 'node_modules', 'retained'), 'utf8')).toBe('retained')
 })
 
+it('expands the same sparse detector commit before loading local graph inputs', () => {
+  const workflow = parse(readFileSync('.github/workflows/node-server-tests.yml', 'utf8'))
+  const steps = workflow.jobs.changes.steps
+  const checkouts = steps.filter((step) => step.uses === 'actions/checkout@v6')
+  expect(checkouts).toHaveLength(2)
+  const [source, expansion] = checkouts
+  expect(source.id).toBe('source')
+  expect(source.with.filter).toBe('blob:none')
+  expect(source.with['sparse-checkout-cone-mode']).toBe(false)
+  expect(source.with['sparse-checkout'].trim().split('\n')).toEqual([
+    '/package.json',
+    '/config/scripts/node-server-change-scope.mjs',
+    '/config/scripts/node-server-test-paths.mjs',
+    '/config/scripts/node-server-qualification.mjs'
+  ])
+  for (const checkout of checkouts) {
+    expect(checkout.with['fetch-depth']).toBe(2)
+    expect(checkout.with['persist-credentials']).toBe(false)
+    expect(checkout['continue-on-error']).toBeUndefined()
+  }
+  expect(expansion.if).toBe("steps.scope.outputs.graph_required == 'true'")
+  expect(expansion.with.ref).toBe('${{ steps.source.outputs.commit }}')
+  expect(expansion.with.filter).toBeUndefined()
+  expect(expansion.with['sparse-checkout']).toBeUndefined()
+  const scope = steps.find((step) => step.id === 'scope')
+  expect(steps.indexOf(source)).toBeLessThan(steps.indexOf(scope))
+  expect(steps.indexOf(expansion)).toBeGreaterThan(steps.indexOf(scope))
+  const consumers = steps.filter((step) => step.uses?.startsWith('./') || step.id === 'graph')
+  expect(consumers.map((step) => step.id ?? step.uses)).toContain('graph')
+  for (const consumer of consumers) {
+    expect(steps.indexOf(consumer)).toBeGreaterThan(steps.indexOf(expansion))
+  }
+})
+
 it('uses exact optional restores, seeds only main and retains full dependency fallback', () => {
   const action = parse(readFileSync('.github/actions/prepare-headless-compiler/action.yml', 'utf8'))
   const steps = action.runs.steps
