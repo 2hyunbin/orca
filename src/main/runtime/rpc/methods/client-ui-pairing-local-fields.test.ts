@@ -168,6 +168,30 @@ describe('client UI RPC pairing-local field seams', () => {
       expect(runtime.updateUIState).toHaveBeenCalledWith({ hideWorkspacesFromOtherDevices: true })
     })
 
+    it('leaves the host value alone when the phone writes something else', async () => {
+      const runtime = phoneRuntime({ hideWorkspacesFromOtherDevices: true })
+      const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })
+      const response = await dispatcher.dispatch(
+        makeRequest('ui.set', { sidebarWidth: 280 }),
+        ownPhone
+      )
+      expect(runtime.updateUIState).toHaveBeenCalledWith({ sidebarWidth: 280 })
+      expect(readUi(response).hideWorkspacesFromOtherDevices).toBe(true)
+    })
+
+    it('keeps the field from a paired desktop', async () => {
+      const runtime = phoneRuntime({ hideWorkspacesFromOtherDevices: true })
+      const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })
+      const pairedDesktop = { clientKind: 'runtime' } as const
+      const read = await dispatcher.dispatch(makeRequest('ui.get'), pairedDesktop)
+      await dispatcher.dispatch(
+        makeRequest('ui.set', { hideWorkspacesFromOtherDevices: false }),
+        pairedDesktop
+      )
+      expect(Object.keys(readUi(read))).not.toContain('hideWorkspacesFromOtherDevices')
+      expect(runtime.updateUIState).toHaveBeenCalledWith({})
+    })
+
     it('keeps the field from a phone relayed for another desktop', async () => {
       const runtime = phoneRuntime({ hideWorkspacesFromOtherDevices: true })
       const dispatcher = new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS })

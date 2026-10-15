@@ -7,10 +7,11 @@ import {
 import { JiraSavedFilterMutationParam } from '../../../../shared/rpc-contract/jira-saved-filter-params'
 import {
   omitPairingLocalUiFields,
-  type PairingLocalUiField
+  type PairedUiState
 } from '../../../../shared/pairing-local-ui-fields'
 import type { PersistedUIState } from '../../../../shared/persisted-ui-state-types'
 import { defineMethod, type RpcContext } from '../core'
+import { isHostOwnPhone } from '../host-own-phone'
 import {
   NativeChatSessionOptionsMutation,
   PRBotAuthorOverrideUpdate,
@@ -23,24 +24,14 @@ import { FeatureInteractionIdParam, UiUpdate } from './client-ui-schemas'
 import { TerminalQuickCommandsUpdate } from '../../../../shared/rpc-contract/terminal-quick-command-params'
 import { AgentLaunchSettingsMutation } from '../../../../shared/rpc-contract/agent-launch-settings-params'
 
-/**
- * This host's own phone. It has no host catalog of its own and shows this host's view, so the
- * Workspace options filter it toggles is this host's value. A delegated phone belongs to another
- * desktop, and paired desktops and web clients keep their own (PAIRING_LOCAL_UI_FIELDS).
- */
-function mirrorsHostView(
-  context: Pick<RpcContext, 'clientKind' | 'pairedDeviceParentId'>
-): boolean {
-  return context.clientKind === 'mobile' && context.pairedDeviceParentId === undefined
-}
-
 function uiForCaller(
   state: PersistedUIState,
   context: Pick<RpcContext, 'clientKind' | 'pairedDeviceParentId'>
-): Omit<PersistedUIState, PairingLocalUiField> & { hideWorkspacesFromOtherDevices?: boolean } {
+): PairedUiState & Pick<PersistedUIState, 'hideWorkspacesFromOtherDevices'> {
   const ui = omitPairingLocalUiFields(state)
-  // Why always sent: its presence tells the phone this host accepts the phone's toggle.
-  return mirrorsHostView(context)
+  // Why always sent: its presence tells the phone this host shares the filter; an older host omits
+  // it, and the phone then keeps its local value.
+  return isHostOwnPhone(context)
     ? { ...ui, hideWorkspacesFromOtherDevices: state.hideWorkspacesFromOtherDevices === true }
     : ui
 }
@@ -156,11 +147,15 @@ export const CLIENT_UI_METHODS = [
     // Why the fields are dropped here rather than removed from the schema: UiUpdate is strict, so
     // an unlisted key would make the dispatcher reject an old client's ENTIRE payload.
     handler: (params, context) => {
+      const ownPhoneFilter =
+        isHostOwnPhone(context) && params.hideWorkspacesFromOtherDevices !== undefined
+          ? { hideWorkspacesFromOtherDevices: params.hideWorkspacesFromOtherDevices }
+          : {}
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: UiUpdate is checked key-for-key against PersistedUIState (ui-state-schema-parity-checks.ts); only optionality differs.
-      const updates = omitPairingLocalUiFields(params) as Partial<PersistedUIState>
-      if (mirrorsHostView(context) && params.hideWorkspacesFromOtherDevices !== undefined) {
-        updates.hideWorkspacesFromOtherDevices = params.hideWorkspacesFromOtherDevices
-      }
+      const updates = {
+        ...omitPairingLocalUiFields(params),
+        ...ownPhoneFilter
+      } as Partial<PersistedUIState>
       return { ui: uiForCaller(context.runtime.updateUIState(updates), context) }
     }
   }),
