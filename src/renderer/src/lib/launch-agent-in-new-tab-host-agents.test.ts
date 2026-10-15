@@ -61,6 +61,7 @@ const startupPlan = { launchCommand: 'opencode' } as never
 function storeWithSettings(settings: Record<string, unknown>) {
   mocks.state.current = {
     settings,
+    localDetectedAgentIdsByContext: { host: ['opencode'] },
     runtimeStatusByEnvironmentId: new Map(),
     worktreesByRepo: {},
     folderWorkspaces: []
@@ -115,6 +116,24 @@ describe('a new tab whose chat route waits on the host agent list', () => {
     expect(relaunch.mock.calls[0]?.[0]).toMatchObject({
       requestId: undefined,
       agentSessionLaunchPlan: { route: 'structured-native-chat', requestId: 'request-1' }
+    })
+  })
+
+  it('prepares native installation before freezing a cold new-tab route', async () => {
+    const store = storeWithSettings(SETTINGS)
+    mocks.state.current.localDetectedAgentIdsByContext = {}
+    mocks.state.current.ensureNativeDetectedAgents = async () => {
+      mocks.state.current.localDetectedAgentIdsByContext = { host: ['opencode'] }
+      return ['opencode']
+    }
+    const route = routeNewTabLaunch(store, args, request)
+    if (!('awaited' in route)) {
+      throw new Error('cold inventory must be prepared')
+    }
+    const result = launchOnceHostAnswered(route, args, startupPlan, fakeRelaunch())
+    await expect(result?.structuredSettlement).resolves.toEqual({
+      kind: 'structured',
+      sessionId: 'session-1'
     })
   })
 

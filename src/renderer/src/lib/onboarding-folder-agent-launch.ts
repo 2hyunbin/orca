@@ -3,7 +3,7 @@ import type { OnboardingState } from '../../../shared/onboarding-state-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
 import {
-  planAgentSessionLaunch,
+  prepareAgentSessionLaunch,
   type AgentSessionLaunchPlan
 } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
@@ -23,12 +23,12 @@ export type OnboardingFolderAgentLaunch = {
 
 /** Why: lives beside the launch, not the startup builder, because the store root imports that
  *  builder eagerly and the planner's launch graph reaches back to the store root. */
-export function resolveDismissedOnboardingFolderAgentLaunch(args: {
+export async function resolveDismissedOnboardingFolderAgentLaunch(args: {
   store: AgentLaunchRouteStore
   onboarding: OnboardingState | null
   hasExistingProject: boolean
   executionHostId: string
-}): OnboardingFolderAgentLaunch {
+}): Promise<OnboardingFolderAgentLaunch> {
   const startup = buildDismissedOnboardingFolderAgentStartup(
     args.store.settings ?? null,
     args.onboarding,
@@ -39,7 +39,7 @@ export function resolveDismissedOnboardingFolderAgentLaunch(args: {
     return { agent: null, plan: null }
   }
   // Resolved once per added folder: adding it is the one action this chat serves.
-  const plan = planAgentSessionLaunch(args.store, {
+  const plan = await prepareAgentSessionLaunch({
     requestId: newAgentLaunchRequestId(),
     agent,
     workspace: { kind: 'folder', executionHostId: args.executionHostId }

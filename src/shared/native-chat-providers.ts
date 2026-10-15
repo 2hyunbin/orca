@@ -28,7 +28,7 @@ export function normalizeNativeChatProviderChoices(value: unknown): NativeChatPr
 
 /**
  * Whether `agent` opens as a chat. `installedHere` lists this computer's detected agents; null
- * while it has not loaded, which keeps an unchosen agent on rather than flipping it once it loads.
+ * while it has not loaded; only known native installations enable other unchosen providers.
  */
 export function isNativeChatProviderOn(
   settings: Partial<NativeChatProviderSettings> | null | undefined,
@@ -39,7 +39,7 @@ export function isNativeChatProviderOn(
   if (chosen !== undefined) {
     return chosen
   }
-  return isAgentSessionHandleProvider(agent) || installedHere === null || installedHere.includes(agent)
+  return isAgentSessionHandleProvider(agent) || installedHere?.includes(agent) === true
 }
 
 export function buildNativeChatProviderUpdate(

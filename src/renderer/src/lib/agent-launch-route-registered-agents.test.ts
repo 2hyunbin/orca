@@ -75,6 +75,7 @@ function store(
 ): AgentLaunchRouteStore {
   const state = {
     settings: { ...SETTINGS, ...overrides.settings },
+    localDetectedAgentIdsByContext: { host: ['grok', 'opencode'] },
     runtimeStatusByEnvironmentId: new Map([['env-1', pairedStatus(overrides.runtimeId ?? 'rt-1')]]),
     worktreesByRepo: {},
     folderWorkspaces: []

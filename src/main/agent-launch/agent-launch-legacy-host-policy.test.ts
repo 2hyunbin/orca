@@ -7,7 +7,7 @@ import type { AgentLaunchSurfaceFactory } from './agent-launch-surface-factories
 const getStructuredAgentSessionCreateSupport = vi.fn(async () => ({ supported: true }))
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements the two runtime methods the executor reaches; the chat default is on so a terminal-only launch is proven to ignore it.
 const runtime = {
-  getClientSettings: () => ({ experimentalNativeChat: true }),
+  requireStore: () => ({ getSettings: () => ({ experimentalNativeChat: true }) }),
   getStructuredAgentSessionCreateSupport
 } as unknown as AgentLaunchExecution['runtime']
 
