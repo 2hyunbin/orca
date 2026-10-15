@@ -1,6 +1,5 @@
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { NativeChatAttachmentOwner } from './native-chat-attachment-upload'
-import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
 
 export type UseNativeChatComposerPasteArgs = {
   targetKey?: string
@@ -12,11 +11,7 @@ export type UseNativeChatComposerPasteArgs = {
   /** Resolved at paste time: a remote pane must save the clipboard image on its
    *  host, or the attached path names a file the agent cannot read. */
   resolveAttachmentOwner: () => NativeChatAttachmentOwner
-  attachResolvedPaths: (
-    paths: string[],
-    connectionId?: string | null,
-    options?: NativeChatResolvedPathOptions
-  ) => void
+  attachResolvedPaths: (paths: string[], connectionId?: string | null) => void
   /** `serverOwned`: an image the paste saved on the remote target's own server, not a client file. */
   beginPendingImageAttachment: (
     previewUrl?: string,
