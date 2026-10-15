@@ -74,7 +74,7 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
     projectCount: controller.sectionsResult.uniqueRepos.length,
     // Why the host's say-so: a host that keeps the filter to itself cannot apply the phone's value.
     mayHaveServerHosts:
-      state.view.sharesOtherClientFilter && state.serverWorkspaces.hosts.length > 0
+      state.view.sharesOtherClientFilter === true && state.serverWorkspaces.hosts.length > 0
   })
 
   return (

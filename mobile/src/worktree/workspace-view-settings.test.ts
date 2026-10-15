@@ -24,6 +24,10 @@ describe('the other-client filter on an older desktop', () => {
     expect(rowFiltersForView(base).hideWorkspacesFromOtherDevices).toBe(false)
   })
 
+  it('does not hide marked rows before the first ui.get says which kind of desktop it is', () => {
+    expect(rowFiltersForView(INITIAL_MOBILE_VIEW).hideWorkspacesFromOtherDevices).toBe(false)
+  })
+
   it('learns from each ui.get whether the desktop shares the filter', () => {
     expect(applyDesktopViewSettings(base, {}).sharesOtherClientFilter).toBe(false)
     expect(
@@ -121,7 +125,15 @@ describe('buildWorkspaceViewSettingsUpdate', () => {
     }
     expect(buildWorkspaceViewSettingsUpdate({ filters }, apply(filters))).toEqual({
       hideAutomationGeneratedWorkspaces: true,
-      visibleWorkspaceHostIds: ['local']
+      visibleWorkspaceHostIds: ['local'],
+      workspaceHostScope: 'local'
+    })
+  })
+
+  it('leaves the legacy host scope alone for a several-host list', () => {
+    const filters = { visibleHostIds: ['local' as const, 'ssh:box' as const] }
+    expect(buildWorkspaceViewSettingsUpdate({ filters }, apply(filters))).toEqual({
+      visibleWorkspaceHostIds: ['local', 'ssh:box']
     })
   })
 
@@ -139,7 +151,8 @@ describe('buildWorkspaceViewSettingsUpdate', () => {
       hideDetachedHeadWorkspaces: false,
       hideWorkspacesFromOtherDevices: false,
       filterRepoIds: [],
-      visibleWorkspaceHostIds: null
+      visibleWorkspaceHostIds: null,
+      workspaceHostScope: 'all'
     })
   })
 

@@ -60,6 +60,7 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
         'setOptimisticActiveWorktreeIdentity',
         'setPinnedIds',
         'setView',
+        'setCardSettings',
         'setRepoHostIdByRepoId',
         'setServedProjectSections',
         'setSleptIds',

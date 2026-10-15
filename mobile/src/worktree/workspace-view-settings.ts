@@ -52,9 +52,10 @@ export type MobileViewState = {
   agentActivityDisplayMode: AgentActivityDisplayMode
   /**
    * Whether the desktop shares "Hide other-client workspaces" with this phone. One that does not
-   * (before #28986) marks a row other-client only while its own filter hides it.
+   * (before #28986) marks a row other-client only while its own filter hides it. Null until the
+   * first ui.get, so a new desktop's marks don't hide rows before its filter value arrives.
    */
-  sharesOtherClientFilter: boolean
+  sharesOtherClientFilter: boolean | null
 }
 
 /** What the screen shows until the desktop's own values arrive. */
@@ -67,7 +68,7 @@ export const INITIAL_MOBILE_VIEW: MobileViewState = {
   projectOrderBy: null,
   worktreeCardProperties: DEFAULT_WORKTREE_CARD_PROPERTIES,
   agentActivityDisplayMode: 'compact',
-  sharesOtherClientFilter: false
+  sharesOtherClientFilter: null
 }
 
 /** An edit: the fields it sets, and for filters only the filters it touches. */
@@ -92,9 +93,9 @@ function isSortBy(value: string | undefined): value is PersistedUIState['sortBy'
 
 /** The filters the list applies: an older desktop's other-client marks are already its verdict. */
 export function rowFiltersForView(view: MobileViewState): FilterState {
-  return view.sharesOtherClientFilter
-    ? view.filters
-    : { ...view.filters, hideWorkspacesFromOtherDevices: true }
+  return view.sharesOtherClientFilter === false
+    ? { ...view.filters, hideWorkspacesFromOtherDevices: true }
+    : view.filters
 }
 
 /**
@@ -122,6 +123,11 @@ export function buildWorkspaceViewSettingsUpdate(
         [WORKSPACE_ROW_FILTER_UI_FIELDS[key]]: Array.isArray(value) ? [...value] : value
       })
     }
+  }
+  const hostIds = next.filters.visibleHostIds
+  // An older desktop reads its legacy scope when the list is null, so "all" must be written too.
+  if (patch.filters && 'visibleHostIds' in patch.filters && (hostIds?.length ?? 1) === 1) {
+    update.workspaceHostScope = hostIds?.[0] ?? 'all'
   }
   if ('projectOrderBy' in patch && next.projectOrderBy) {
     update.projectOrderBy = next.projectOrderBy

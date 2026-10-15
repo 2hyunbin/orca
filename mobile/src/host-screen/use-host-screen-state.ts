@@ -12,7 +12,10 @@ import type { ServedProjectSections } from '../worktree/project-sections-operati
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import { NO_SERVER_WORKSPACES, type ServerWorkspaces } from '../worktree/server-workspaces'
 
-const NO_CARD_SETTINGS: HostCardSettings = { compactWorktreeCards: false, newCardStyle: false }
+export const NO_CARD_SETTINGS: HostCardSettings = {
+  compactWorktreeCards: false,
+  newCardStyle: false
+}
 
 export function useHostScreenState(hostId: string | undefined, action: string | undefined) {
   const [initialCache] = useState(() =>

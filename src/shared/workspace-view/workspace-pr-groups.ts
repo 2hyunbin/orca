@@ -19,7 +19,10 @@ export function getPRLaneKey(prGroup: PRGroupKey): string {
   return `pr:${prGroup}`
 }
 
-/** A PR's lane from its state; no PR, or a draft, is still in progress. */
+/**
+ * A PR's lane from its state. No PR (undefined), or a draft, is still in progress; a PR whose
+ * state is unknown ('') is in review.
+ */
 export function getPRGroupKeyForState(state: string | null | undefined): PRGroupKey {
   switch (state?.toLowerCase()) {
     case undefined:

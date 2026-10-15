@@ -101,16 +101,9 @@ const RESET_SIDEBAR_FILTER: Record<
  * nothing set issues no write.
  */
 export function clearSidebarFilters(state: SidebarFilterState, store: SidebarFilterSetters): void {
-  for (const key of computeClearFilterActions(state)) {
+  for (const key of activeWorkspaceRowFilterKeys(sidebarWorkspaceRowFilters(state))) {
     RESET_SIDEBAR_FILTER[key](store)
   }
-}
-
-/** The filters Clear filters resets: the active ones. */
-export function computeClearFilterActions(
-  state: SidebarFilterState
-): (keyof WorkspaceRowFilters)[] {
-  return activeWorkspaceRowFilterKeys(sidebarWorkspaceRowFilters(state))
 }
 
 /**

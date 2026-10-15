@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { computeClearFilterActions, sidebarHasActiveFilters } from './visible-worktrees'
+import { sidebarHasActiveFilters } from './visible-worktrees'
+import { clearSidebarFilters, type SidebarFilterSetters } from './sidebar-filter-actions'
 import { isDefaultBranchWorkspace } from '../../../../shared/workspace-view/workspace-row-kinds'
 import type { Worktree } from '../../../../shared/worktree/types'
 
@@ -135,27 +136,46 @@ describe('sidebarHasActiveFilters', () => {
   })
 })
 
-describe('computeClearFilterActions', () => {
-  it('names nothing when nothing is set', () => {
-    expect(computeClearFilterActions(filterState())).toEqual([])
+// The setters Clear filters calls, in order.
+function clearedSetters(state: FilterState): string[] {
+  const called: string[] = []
+  const record = (name: string) => () => void called.push(name)
+  const store: SidebarFilterSetters = {
+    setShowSleepingWorkspaces: record('setShowSleepingWorkspaces'),
+    setAlwaysShowDefaultBranchWorkspace: record('setAlwaysShowDefaultBranchWorkspace'),
+    setHideDefaultBranchWorkspace: record('setHideDefaultBranchWorkspace'),
+    setHideAutomationGeneratedWorkspaces: record('setHideAutomationGeneratedWorkspaces'),
+    setHideCliCreatedWorkspaces: record('setHideCliCreatedWorkspaces'),
+    setHideDetachedHeadWorkspaces: record('setHideDetachedHeadWorkspaces'),
+    setHideWorkspacesFromOtherDevices: record('setHideWorkspacesFromOtherDevices'),
+    setFilterRepoIds: record('setFilterRepoIds'),
+    setVisibleWorkspaceHostIds: record('setVisibleWorkspaceHostIds')
+  }
+  clearSidebarFilters(state, store)
+  return called
+}
+
+describe('clearSidebarFilters', () => {
+  it('writes nothing when nothing is set', () => {
+    expect(clearedSetters(filterState())).toEqual([])
   })
 
   it.each([
-    [{ hideDefaultBranchWorkspace: true }, ['hideDefaultBranchWorkspace']],
-    [{ hideAutomationGeneratedWorkspaces: true }, ['hideAutomationGeneratedWorkspaces']],
-    [{ hideCliCreatedWorkspaces: true }, ['hideCliCreatedWorkspaces']],
-    [{ hideDetachedHeadWorkspaces: true }, ['hideDetachedHeadWorkspaces']],
-    [{ hideWorkspacesFromOtherDevices: true }, ['hideWorkspacesFromOtherDevices']],
-    [{ alwaysShowDefaultBranchWorkspace: false }, ['alwaysShowDefaultBranchWorkspace']],
+    [{ hideDefaultBranchWorkspace: true }, ['setHideDefaultBranchWorkspace']],
+    [{ hideAutomationGeneratedWorkspaces: true }, ['setHideAutomationGeneratedWorkspaces']],
+    [{ hideCliCreatedWorkspaces: true }, ['setHideCliCreatedWorkspaces']],
+    [{ hideDetachedHeadWorkspaces: true }, ['setHideDetachedHeadWorkspaces']],
+    [{ hideWorkspacesFromOtherDevices: true }, ['setHideWorkspacesFromOtherDevices']],
+    [{ alwaysShowDefaultBranchWorkspace: false }, ['setAlwaysShowDefaultBranchWorkspace']],
     // The legacy single-host scope narrows with no host list saved, so Clear resets it too.
-    [{ workspaceHostScope: 'ssh:host-1' as const }, ['visibleHostIds']]
-  ] as const)('names only the filter that is set (%o)', (overrides, expected) => {
-    expect(computeClearFilterActions(filterState(overrides))).toEqual(expected)
+    [{ workspaceHostScope: 'ssh:host-1' as const }, ['setVisibleWorkspaceHostIds']]
+  ] as const)('resets only the filter that is set (%o)', (overrides, expected) => {
+    expect(clearedSetters(filterState(overrides))).toEqual(expected)
   })
 
-  it('names every active filter at once, and nothing already at its default', () => {
+  it('resets every active filter at once, and nothing already at its default', () => {
     expect(
-      computeClearFilterActions(
+      clearedSetters(
         filterState({
           showSleepingWorkspaces: false,
           filterRepoIds: ['repo1', 'repo2'],
@@ -165,11 +185,11 @@ describe('computeClearFilterActions', () => {
         })
       )
     ).toEqual([
-      'hideSleepingWorkspaces',
-      'hideDefaultBranchWorkspace',
-      'hideAutomationGeneratedWorkspaces',
-      'filterRepoIds',
-      'visibleHostIds'
+      'setShowSleepingWorkspaces',
+      'setHideDefaultBranchWorkspace',
+      'setHideAutomationGeneratedWorkspaces',
+      'setFilterRepoIds',
+      'setVisibleWorkspaceHostIds'
     ])
   })
 })
