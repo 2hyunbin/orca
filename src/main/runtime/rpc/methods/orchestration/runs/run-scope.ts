@@ -12,6 +12,10 @@ import {
   type OrchestrationSessionCaller
 } from '../../../../orchestration/orchestration-caller-identity'
 import { resolveDeclaredCallerParty } from '../../../../orchestration/orchestration-party'
+import {
+  findCallerDispatchWorkingForRun,
+  workerCannotCoordinateRunError
+} from '../../../../orchestration/db/runs/run-worker-lineage'
 
 export type RunScopeParams = {
   runId?: string
@@ -153,6 +157,15 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
     )
   }
   const current = db.getCurrentRunForCoordinator(caller)
+  // Why: "bound to X, not Y" reads as a nudge to rebind; a worker naming the Run it works for
+  // has to learn where its own mail is instead.
+  const workedDispatch =
+    explicit && current?.id !== explicit.id
+      ? findCallerDispatchWorkingForRun(db, caller, explicit.id)
+      : undefined
+  if (explicit && workedDispatch) {
+    throw workerCannotCoordinateRunError(workedDispatch, explicit.id, 'act')
+  }
   if (!current) {
     if (explicit) {
       throw new OrchestrationError(

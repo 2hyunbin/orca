@@ -599,6 +599,31 @@ describe('a structured worker that names itself by session id', () => {
     }
   })
 
+  it('cannot take or read the Run it works for after making a sub-Run, and keeps its mail', async () => {
+    // The 10-14 incident: a worker made a sub-Run, `check --run <parent>` said "bound to X, not Y",
+    // and it ran run-use on the parent, unbinding its coordinator.
+    const { runId } = dispatchToWorker()
+    const as = (method: string, params: Row) =>
+      h.dispatch(orchestrationRequest(method, params, { sessionId: workerSession }))
+    resultOf(await as('orchestration.runCreate', { objective: 'sub' }))
+
+    const read = await as('orchestration.check', { run: runId, peek: true })
+    expect(read).toMatchObject({ ok: false, error: { code: 'worker_cannot_coordinate_own_run' } })
+    expect(JSON.stringify(read)).not.toContain('run-use')
+    expect(resultOf(await as('orchestration.check', { peek: true }))).toMatchObject({
+      messages: [{ subject: 'instructions' }]
+    })
+
+    expect(await as('orchestration.runUse', { id: runId })).toMatchObject({
+      ok: false,
+      error: { code: 'worker_cannot_coordinate_own_run', data: { effectsApplied: false } }
+    })
+    expect(h.db.getRunRaw(runId)).toMatchObject({
+      coordinator_handle: 'term_coord',
+      consumer_generation: 1
+    })
+  })
+
   it.each([
     ['its handle', handle],
     ['its session address', ADDRESS_Y]

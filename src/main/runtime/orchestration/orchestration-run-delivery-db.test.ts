@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LEGACY_RUN_ID, OrchestrationDb } from './db'
 import { createRootDispatch } from './db/root-dispatch-test-fixture'
+import type { DispatchCreator } from './db/dispatch-depth'
 
 describe('OrchestrationDb Run state', () => {
   let db: OrchestrationDb | undefined
@@ -17,11 +18,13 @@ describe('OrchestrationDb Run state', () => {
     return db
   }
 
+  const COORD_PANE = 'tab_coord:11111111-1111-4111-8111-111111111111'
+
   function createBoundRun(d: OrchestrationDb) {
     return d.createRun({
       objective: 'Mailbox test',
       coordinatorHandle: 'term_coord',
-      coordinatorPaneKey: 'tab_coord:11111111-1111-4111-8111-111111111111'
+      coordinatorPaneKey: COORD_PANE
     })
   }
 
@@ -223,16 +226,38 @@ describe('OrchestrationDb Run state', () => {
   })
 
   describe('lightweight Run scope', () => {
-    it('refuses a worker binding the Run it works for, leaving its coordinator bound', () => {
+    it('refuses a worker binding a Run above its own, but not a coordinator with a self-dispatch', () => {
       const d = createDb()
-      const run = createBoundRun(d)
-      createRootDispatch(d, d.createTask({ spec: 'work', runId: run.id }).id, 'term_worker')
-      const bind = { runId: run.id, coordinatorHandle: 'term_worker', coordinatorPaneKey: null }
+      const parent = createBoundRun(d)
+      const coordinator = { kind: 'terminal', handle: 'term_coord', paneKey: COORD_PANE } as const
+      const dispatchIn = (runId: string, handle: string, creator: DispatchCreator) =>
+        d.createDispatchContext({
+          taskId: d.createTask({ spec: 'work', runId }).id,
+          assigneeHandle: handle,
+          creator,
+          maxDepth: Number.MAX_SAFE_INTEGER
+        })
+      // A context-only self-dispatch is bookkeeping, so its coordinator keeps its Run.
+      dispatchIn(parent.id, 'term_coord', coordinator)
+      expect(
+        d.bindRun({
+          runId: parent.id,
+          coordinatorHandle: 'term_coord',
+          coordinatorPaneKey: COORD_PANE
+        })
+      ).toBeDefined()
+      dispatchIn(parent.id, 'term_worker', coordinator)
+      const sub = d.createRun({
+        objective: 'sub',
+        coordinatorHandle: 'term_worker',
+        coordinatorPaneKey: null
+      })
+      dispatchIn(sub.id, 'term_grand', { kind: 'terminal', handle: 'term_worker' })
 
-      expect(() => d.bindRun(bind)).toThrow(
-        expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' })
-      )
-      expect(d.getRun(run.id)?.coordinator_handle).toBe('term_coord')
+      expect(() =>
+        d.bindRun({ runId: parent.id, coordinatorHandle: 'term_grand', coordinatorPaneKey: null })
+      ).toThrow(expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' }))
+      expect(d.getRun(parent.id)?.coordinator_handle).toBe('term_coord')
     })
 
     it('binds creation to one pane and fences that pane when it creates another Run', () => {

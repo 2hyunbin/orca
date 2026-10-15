@@ -5,6 +5,10 @@ import { isEquivalentPaneKey } from '../pane-key-match'
 import type { OrchestrationDb } from '../orchestration-db'
 import type { OrcaSessionId } from '../../../../../shared/orca-session-address'
 import {
+  findCallerDispatchWorkingForRun,
+  workerCannotCoordinateRunError
+} from './run-worker-lineage'
+import {
   mailboxAddressOf,
   runBoundToCoordinator,
   runCoordinatorKey
@@ -40,20 +44,11 @@ export function bindRun(
       this.db.exec('ROLLBACK')
       return undefined
     }
-    const callerAddress = mailboxAddressOf(coordinator)
-    const workedDispatch = callerAddress
-      ? this.getActiveDispatchMailboxOwners(callerAddress).find(
-          (dispatch) => dispatch.run_id === params.runId
-        )
-      : undefined
-    // Why: a worker binding the Run it works for unbinds its real coordinator, and the worker's
-    // own mail then routes to the Run mailbox for good. Lineage is fixed by the Dispatch.
+    // Why: a worker binding a Run it works for unbinds the coordinator it reports to, and its
+    // own mail then routes to that Run's mailbox for good. Lineage is fixed by the Dispatch rows.
+    const workedDispatch = findCallerDispatchWorkingForRun(this, coordinator, params.runId)
     if (workedDispatch) {
-      throw new OrchestrationError(
-        'worker_cannot_coordinate_own_run',
-        `This caller works Dispatch ${workedDispatch.id} in Run ${params.runId}, so it cannot coordinate that Run. Report to its coordinator with orchestration send; to coordinate sub-workers, create your own Run with orchestration run-create. No effects were applied.`,
-        { effectsApplied: false }
-      )
+      throw workerCannotCoordinateRunError(workedDispatch, params.runId, 'bind')
     }
     const sameBinding = runBoundToCoordinator(run, coordinator)
     const adoption = this.getLegacyAdoption()
