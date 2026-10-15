@@ -142,7 +142,7 @@ export class RuntimeSkillCommands
         if (error instanceof Error && error.message === SKILL_SHARE_NAME_TAKEN_ERROR) {
           throw new AgentSkillSharingError(
             AGENT_SKILL_BUNDLE_NAME_TAKEN_CODE,
-            `A teammate already shares a skill bundle named "${request.bundleName}". Choose a different --bundle-name.`
+            `The skill bundle name "${request.bundleName}" is already in use. Choose a different --bundle-name.`
           )
         }
         throw error

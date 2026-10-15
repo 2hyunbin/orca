@@ -212,7 +212,7 @@ describe('agent skill sharing runtime', () => {
     expect(await operationDirectories()).toEqual([])
   })
 
-  it('tells the agent to pick another bundle name when a teammate holds it', async () => {
+  it('tells the agent to pick another bundle name when the name is in use', async () => {
     const alpha = await createSkill('alpha-id', 'alpha')
     const { runtime, publishVersion } = runtimeWithCloud({ isEnabled: () => true, nameTaken: true })
 

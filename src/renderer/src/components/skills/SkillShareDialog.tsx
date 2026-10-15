@@ -46,7 +46,7 @@ function nameTakenError(cause: unknown, name: string): string | null {
   return String(cause).includes(SKILL_SHARE_NAME_TAKEN_ERROR)
     ? translate(
         'auto.components.skills.SkillShareDialog.nameTaken',
-        'A teammate already shares a skill named “{{name}}”. Rename your skill to share it.',
+        'The skill name “{{name}}” is already in use. Rename your skill to share it.',
         { name }
       )
     : null

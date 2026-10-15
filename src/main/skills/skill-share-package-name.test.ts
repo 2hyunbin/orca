@@ -75,7 +75,7 @@ describe('skill share package id by name', () => {
     expect(lookups).toEqual([])
   })
 
-  it('fails before packaging when a teammate holds the name', async () => {
+  it('fails before packaging when the name is already in use', async () => {
     stubLookup(409, { code: 'skill_package_name_taken', message: 'taken' })
 
     await expect(

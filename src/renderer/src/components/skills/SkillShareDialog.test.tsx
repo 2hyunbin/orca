@@ -152,7 +152,7 @@ describe('SkillShareDialog', () => {
     )
   })
 
-  it('explains a bundle name a teammate already holds', async () => {
+  it('explains a skill name that is already in use', async () => {
     setup(
       [],
       false,
@@ -166,7 +166,7 @@ describe('SkillShareDialog', () => {
     )
 
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'A teammate already shares a skill named “private-skill”. Rename your skill to share it.'
+      'The skill name “private-skill” is already in use. Rename your skill to share it.'
     )
   })
 
