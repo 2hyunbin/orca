@@ -29,6 +29,7 @@ const QUICK_COMMAND_AGENT_OPTIONS = getTerminalQuickCommandAgentOptions()
 const BODY_LENGTH_COUNTER_THRESHOLD = 0.8
 
 type TerminalQuickCommandContentSectionProps = {
+  disabled: boolean
   draft: TerminalQuickCommand
   isAgentAction: boolean
   selectedAgent: TuiAgent
@@ -66,6 +67,7 @@ function getBodyRefusalLabel(belowCurrentPromptCap: boolean): string {
 }
 
 export function TerminalQuickCommandContentSection({
+  disabled,
   draft,
   isAgentAction,
   selectedAgent,
@@ -121,7 +123,7 @@ export function TerminalQuickCommandContentSection({
             </Label>
             <Select
               value={selectedAgent}
-              disabled={!isAgentAction}
+              disabled={disabled || !isAgentAction}
               onValueChange={(agent) => {
                 const nextAgent = agent as TuiAgent
                 draftMemoryRef.current = {
@@ -151,7 +153,7 @@ export function TerminalQuickCommandContentSection({
                 {QUICK_COMMAND_AGENT_OPTIONS.map((entry) => {
                   const supported = supportsTerminalAgentQuickCommand(entry.id)
                   return (
-                    <SelectItem key={entry.id} value={entry.id} disabled={!supported}>
+                    <SelectItem key={entry.id} value={entry.id} disabled={disabled || !supported}>
                       <span className="flex min-w-0 items-center gap-2">
                         <AgentIcon agent={entry.id} size={16} />
                         <span className="flex min-w-0 flex-col">

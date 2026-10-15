@@ -286,15 +286,40 @@ describe('TerminalQuickCommandDialog animation structure', () => {
     const save = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.startsWith('Save')
     )!
-    const submit = async (): Promise<void> => {
+    const submit = async (target: HTMLElement = textarea): Promise<void> => {
       await act(async () => {
-        textarea.dispatchEvent(
-          new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true })
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Enter',
+            metaKey: true,
+            bubbles: true,
+            cancelable: true
+          })
         )
       })
     }
 
+    const agentSelect = document.body.querySelector<HTMLButtonElement>('[role="combobox"]')!
+    await submit(agentSelect)
+    expect(agentSelect.getAttribute('data-state')).toBe('open')
+    expect(onSave).not.toHaveBeenCalled()
+    const codex = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (option) => option.textContent?.trim() === 'Codex'
+    )!
+    expect(textarea.closest('fieldset')?.contains(codex)).toBe(false)
+    await submit(codex)
+    expect(onSave).not.toHaveBeenCalled()
+    expect(agentSelect.textContent).toContain('Codex')
+
+    await submit(agentSelect)
     await submit()
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ agent: 'codex', prompt }))
+    expect(agentSelect.disabled).toBe(true)
+    const options = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(options.length).toBeGreaterThan(0)
+    expect(options.every((option) => option.getAttribute('aria-disabled') === 'true')).toBe(true)
+    await act(async () => options.find((option) => option.textContent?.includes('Claude'))?.click())
+    expect(agentSelect.textContent).toContain('Codex')
     expect(textarea.closest('fieldset')?.disabled).toBe(true)
     expect(cancel.disabled).toBe(true)
     expect(save.disabled).toBe(true)

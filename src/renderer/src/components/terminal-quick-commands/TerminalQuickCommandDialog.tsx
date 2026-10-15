@@ -236,6 +236,13 @@ export function TerminalQuickCommandDialog({
           className="scrollbar-sleek flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5"
           onKeyDown={(event) => {
             if (
+              event.defaultPrevented ||
+              !(event.target instanceof Node) ||
+              !event.currentTarget.contains(event.target)
+            ) {
+              return
+            }
+            if (
               isSelectAllShortcut(event) &&
               (event.target instanceof HTMLInputElement ||
                 event.target instanceof HTMLTextAreaElement)
@@ -268,6 +275,7 @@ export function TerminalQuickCommandDialog({
           </div>
 
           <TerminalQuickCommandContentSection
+            disabled={saving}
             draft={draft}
             isAgentAction={isAgentAction}
             selectedAgent={selectedAgent}
@@ -278,6 +286,7 @@ export function TerminalQuickCommandDialog({
           />
 
           <TerminalQuickCommandAdvancedSection
+            disabled={saving}
             repos={repos}
             advancedOpen={advancedOpen}
             selectedScope={selectedScope}
