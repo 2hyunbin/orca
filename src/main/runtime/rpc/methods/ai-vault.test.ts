@@ -30,6 +30,7 @@ import {
   AiVaultPrepareSessionResumeParams
 } from './ai-vault'
 import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
+import { AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY } from '../../../../shared/ai-vault-partial-rows-capability'
 import { recordStructuredAgentSessionHostInstallRefusal } from '../../structured-agent-session-host-refusal'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { installCopyingChat } from '../../../ai-vault/structured-session-ownership.test-support'
@@ -385,6 +386,21 @@ describe('aiVault.listSessions handler + shared cache', () => {
     expect(scanAiVaultSessionsInService.mock.calls[1]?.[0]?.includeAntigravityIdeSessions).not.toBe(
       true
     )
+  })
+
+  it('scans partial rows only for a client that advertises it shows them', async () => {
+    const dispatcher = makeDispatcher()
+    await dispatcher.dispatch(makeRequest('aiVault.listSessions', {}), {
+      clientKind: 'runtime',
+      clientCapabilities: [AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY]
+    })
+    await dispatcher.dispatch(makeRequest('aiVault.listSessions', {}), {
+      clientKind: 'mobile',
+      clientCapabilities: []
+    })
+    expect(scanAiVaultSessionsInService).toHaveBeenCalledTimes(2)
+    expect(scanAiVaultSessionsInService.mock.calls[0]?.[0]?.acceptPartialRows).toBe(true)
+    expect(scanAiVaultSessionsInService.mock.calls[1]?.[0]?.acceptPartialRows).not.toBe(true)
   })
 
   it('omits unchanged session bodies only for clients with the matching fingerprint', async () => {
