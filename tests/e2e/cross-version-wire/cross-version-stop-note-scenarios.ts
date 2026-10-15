@@ -111,7 +111,7 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         expect(render(state)).toEqual({ type: 'text', text: ordinary.text })
         expect(rig.journal.cursor()).toEqual(held)
       })
-      it('reopens on the newest page and loads the dependent note with a released client', async () => {
+      it('replays to a released desktop and pages a fresh snapshot back to the dependent note', async () => {
         const before = await seed()
         const held = rig.journal.cursor()
         for (const clientMessageId of ['large-a', 'large-b']) {
@@ -134,9 +134,11 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         const first = await page({ direction: 'after', cursor: held, limit: 3 })
         expect(first.hasNewer).toBe(true)
         const caughtUp = await subscribe(held)
-        let after = reduce(before, caughtUp)
-        expect(events(caughtUp)[0]).toMatchObject({ type: 'snapshot', page: { hasOlder: true } })
-        expect(after.cursor).toEqual(rig.journal.cursor())
+        expect(events(caughtUp).every((event) => event.type === 'batch')).toBe(true)
+        expect(reduce(before, caughtUp).cursor).toEqual(rig.journal.cursor())
+        const fresh = await subscribe(null)
+        let after = reduce(before, fresh)
+        expect(events(fresh)[0]).toMatchObject({ type: 'snapshot', page: { hasOlder: true } })
         while (after.hasOlder && !after.items.some((item) => item.itemId === noteId)) {
           const requestedCursor = { epoch: after.epoch!, sequence: after.items[0]!.sequence }
           const older = await page({ direction: 'before', cursor: requestedCursor })

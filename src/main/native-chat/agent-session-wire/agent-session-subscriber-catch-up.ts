@@ -104,7 +104,7 @@ export function deliverToSubscriber(
       return
     }
     // Replaying an unbounded gap blocks the host; older rows remain available on scroll.
-    if (page.hasNewer) {
+    if (page.hasNewer && subscriber.snapshotCatchUp !== false) {
       const tail = withPublishedWork(
         readAgentSessionHydrationPage(journal, subscriber.fence, reader),
         work

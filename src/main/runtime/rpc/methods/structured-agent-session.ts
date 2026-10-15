@@ -58,6 +58,7 @@ import {
   UnsubscribeParams
 } from './structured-agent-session-schemas'
 import { sendStructuredAgentSessionForClient } from './structured-agent-session-send-compatibility'
+import { AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
 
 export const STRUCTURED_AGENT_SESSION_METHODS = [
   defineMethod({
@@ -182,6 +183,11 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),
+        // Older desktops still need each missed submission to settle their local echoes.
+        snapshotCatchUp:
+          ctx.clientKind === undefined ||
+          ctx.clientKind === 'mobile' ||
+          ctx.clientCapabilities?.includes(AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY) === true,
         // Every phone's app, whatever its version, ends a stream over a frame its bridge cannot carry.
         ...(ctx.clientKind === 'mobile' ? { boundedFrames: true } : {})
       })
