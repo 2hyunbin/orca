@@ -50,32 +50,49 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
   }
 ]
 
+type AcceptedDifference = Omit<KnownDifference, 'paths'> & {
+  reason: string
+  /** Each differing view path with its stored and normalized values; absent means not shown. */
+  values: Record<string, { stored?: unknown; normalized?: unknown }>
+}
+
 /** Differences that are not bugs: the user sees the same thing, or the window is the outlier. */
-const ACCEPTED_DIFFERENCES: readonly (KnownDifference & { reason: string })[] = [
+const ACCEPTED_DIFFERENCES: readonly AcceptedDifference[] = [
   {
     fixture: 'row terminal differs from its focused pane’s',
     rule: 'row.ptyId rewrite: the Loader sets the row terminal to its focused pane’s, which changes what the tab reattaches',
     reason: 'the pane’s own terminal binding wins on mount, so the user sees the same terminal',
-    paths: [`${GIT} terminal tab-a reattaches`]
+    values: { [`${GIT} terminal tab-a reattaches`]: { stored: 'pty-stale', normalized: 'pty-a' } }
   },
   {
     fixture: 'row with no terminal while its pane has one',
     rule: 'row.ptyId rewrite: the Loader sets the row terminal to its focused pane’s, which changes what the tab reattaches',
     reason: 'the pane’s own terminal binding wins on mount, so the user sees the same terminal',
-    paths: [`${GIT} terminal tab-a reattaches`]
+    values: { [`${GIT} terminal tab-a reattaches`]: { stored: null, normalized: 'pty-a' } }
   },
   {
     fixture: 'legacy surface tombstone on a pane still showing its terminal',
     rule: 'tombstones: the Loader closes a pane a legacy surface tombstone names; the window ignores the tombstone and shows the pane',
     reason: 'the window is the outlier: main already retires panes these tombstones name',
-    paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
+    values: {
+      [`${GIT} group 0 tabs`]: { stored: ['tab-a', 'tab-b'], normalized: ['tab-a'] },
+      [`${GIT} tab tab-b`]: {
+        stored: { kind: 'terminal', shows: 'tab-b', group: 0, label: 'Terminal 2' }
+      },
+      [`${GIT} terminal tab-b phone and CLI title`]: { stored: 'Terminal 2' },
+      [`${GIT} terminal tab-b panes`]: { stored: { pane: 'pty-b' } },
+      [`${GIT} terminal tab-b focused pane`]: { stored: 'root' },
+      [`${GIT} terminal tab-b reattaches`]: { stored: 'pty-b' }
+    }
   },
   {
     fixture: 'tab-bar label differing from the row title',
     rule: 'label over title: the Loader writes the tab-bar label into the row title',
     reason:
       'the desktop tab shows the label, which is unchanged; only phones and the CLI show the row title',
-    paths: [`${GIT} terminal tab-a phone and CLI title`]
+    values: {
+      [`${GIT} terminal tab-a phone and CLI title`]: { stored: 'Terminal 1', normalized: 'vim' }
+    }
   }
 ]
 
@@ -111,13 +128,26 @@ describe('the window shows the same session before and after the shared Loader r
         }
       }
       const differences = diffStartupWindowViews(storedView, normalizedView)
-      const known = [...KNOWN_DIFFERENCES, ...ACCEPTED_DIFFERENCES].filter(
-        (entry) => entry.fixture === name
-      )
+      const known = KNOWN_DIFFERENCES.filter((entry) => entry.fixture === name)
+      const accepted = ACCEPTED_DIFFERENCES.filter((entry) => entry.fixture === name)
       expect(
         differences.map((difference) => difference.path).sort(),
         `window differences (stored vs normalized):\n${JSON.stringify(differences, null, 2)}`
-      ).toEqual(known.flatMap((entry) => entry.paths).sort())
+      ).toEqual(
+        [
+          ...known.flatMap((entry) => entry.paths),
+          ...accepted.flatMap((entry) => Object.keys(entry.values))
+        ].sort()
+      )
+      // An accepted difference stays accepted only while it shows exactly the recorded values.
+      const acceptedValues = Object.assign({}, ...accepted.map((entry) => entry.values))
+      expect(
+        Object.fromEntries(
+          differences
+            .filter((difference) => difference.path in acceptedValues)
+            .map(({ path, stored, normalized }) => [path, { stored, normalized }])
+        )
+      ).toEqual(acceptedValues)
     }
   )
 
