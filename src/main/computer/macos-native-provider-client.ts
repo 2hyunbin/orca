@@ -13,12 +13,14 @@ import {
   REQUIRED_MACOS_PROVIDER_PROTOCOL_VERSION,
   type NativeActionMethod,
   type NativeMethod,
+  type NativeRequestMethod,
   type NativeResponse,
   type PendingNativeRequest,
   writeNativeProviderLine
 } from './macos-native-provider-contract'
 import { resolveMacOSComputerUseExecutablePath } from './macos-native-provider-paths'
 import { MacOSProviderProcessOwner } from './macos-native-provider-process-reaping'
+import * as permissionStatusWire from './macos-native-provider-permission-status'
 import {
   attachMacOSNativeProviderSocketListeners,
   NativeProviderLineBuffer,
@@ -43,6 +45,7 @@ export class MacOSNativeProviderClient {
   private providerCapabilities: ComputerProviderCapabilities | null = null
   private socketListenerCleanup: (() => void) | null = null
   private socketStartGeneration = 0
+  private recycleBeforePermissionStatus = false
   async listApps(): Promise<ComputerListAppsResult> {
     return (await this.call('listApps', {})) as ComputerListAppsResult
   }
@@ -62,8 +65,20 @@ export class MacOSNativeProviderClient {
       method,
       params && typeof params === 'object' ? (params as Record<string, unknown>) : {}
     )
-    await this.ensureActionSupported(method)
+    await this.ensureCapability('actions', macOSActionCapabilityKey(method))
     return normalizeComputerActionResult((await this.call(method, params)) as ComputerActionResult)
+  }
+  async permissionStatus(options: {
+    fresh: boolean
+  }): Promise<permissionStatusWire.MacOSProviderPermissionStatus> {
+    // Why: a Screen Recording grant may only show in a process started after it; recycle a provider only status reads used.
+    if (options.fresh || this.recycleBeforePermissionStatus) {
+      this.shutdown()
+    }
+    await this.ensureCapability('permissions', 'status')
+    const status = permissionStatusWire.parse(await this.call('permissionStatus', {}))
+    this.recycleBeforePermissionStatus = !permissionStatusWire.isComplete(status)
+    return status
   }
   shutdown(): void {
     const socket = this.socket
@@ -88,10 +103,9 @@ export class MacOSNativeProviderClient {
     }
     this.releaseHelperGeneration()
   }
-  private async call(method: NativeMethod, params: unknown): Promise<unknown> {
-    if (method !== 'handshake') {
-      await this.ensureCompatible()
-    }
+  private async call(method: NativeRequestMethod, params: unknown): Promise<unknown> {
+    await this.ensureCompatible()
+    this.recycleBeforePermissionStatus &&= method === 'permissionStatus'
     return await this.send(method, params)
   }
   private async send(method: NativeMethod, params: unknown): Promise<unknown> {
@@ -165,9 +179,6 @@ export class MacOSNativeProviderClient {
       'unsupported_capability',
       `native macOS provider does not support ${String(group)}.${capability}`
     )
-  }
-  private async ensureActionSupported(method: NativeActionMethod): Promise<void> {
-    await this.ensureCapability('actions', macOSActionCapabilityKey(method))
   }
   private async ensureSocketStarted(helperExecutablePath: string): Promise<net.Socket> {
     if (this.socket && !this.socket.destroyed) {

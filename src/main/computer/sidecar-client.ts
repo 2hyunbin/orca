@@ -15,6 +15,7 @@ import { RuntimeClientError } from './runtime-client-error'
 
 type ComputerSidecarMethod =
   | 'capabilities'
+  | 'permissionStatus'
   | 'listApps'
   | 'listWindows'
   | 'getAppState'
@@ -59,6 +60,13 @@ export async function callComputerSidecarCapabilities(): Promise<ComputerProvide
   return (await getComputerSidecar().call('capabilities', {})) as ComputerProviderCapabilities
 }
 
+// Resolves to the provider's raw `{ accessibility, screenshots }` reply.
+export async function callComputerSidecarPermissionStatus(params: {
+  fresh: boolean
+}): Promise<unknown> {
+  return await getComputerSidecar().call('permissionStatus', params)
+}
+
 export async function callComputerSidecarListWindows(
   params: unknown
 ): Promise<ComputerListWindowsResult> {
@@ -74,7 +82,7 @@ export async function callComputerSidecarSnapshot(
 export async function callComputerSidecarAction(
   method: Exclude<
     ComputerSidecarMethod,
-    'capabilities' | 'listApps' | 'listWindows' | 'getAppState'
+    'capabilities' | 'permissionStatus' | 'listApps' | 'listWindows' | 'getAppState'
   >,
   params: unknown
 ): Promise<ComputerActionResult> {
