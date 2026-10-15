@@ -5,10 +5,11 @@ import type { MobileRenderableRepoIcon } from '../host-screen/host-screen-reply-
 import { triggerMediumImpact } from '../platform/haptics'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { Worktree } from '../worktree/workspace-list-types'
-import {
-  getWorktreeCardLayout,
-  type WorktreeCardDetails
+import type {
+  WorktreeCardDetails,
+  WorktreeCardLayout
 } from '../../../src/shared/worktree/card-properties'
+import { parseExecutionHostId } from '../../../src/shared/execution-host'
 import type { AgentActivityDisplayMode } from '../../../src/shared/ui-chrome-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
 import { AgentSpinner } from './AgentSpinner'
@@ -36,8 +37,8 @@ type Props = {
   hideRepo?: boolean
   /** What the desktop's shared Card layout and properties show. */
   cardDetails: WorktreeCardDetails
-  /** The desktop's card style; Compact folds the row into its title line. */
-  cardStyle: { compactCards: boolean; newCardStyle: boolean }
+  /** Where the desktop's card style puts identity; Compact folds the row into its title line. */
+  cardLayout: WorktreeCardLayout
   agentActivityDisplayMode: AgentActivityDisplayMode
   status: WorktreeRollupStatus
   onPress: (item: Worktree) => void
@@ -53,7 +54,7 @@ function WorktreeListRowComponent({
   repoIcon,
   hideRepo = false,
   cardDetails,
-  cardStyle,
+  cardLayout: layout,
   agentActivityDisplayMode,
   status,
   onPress,
@@ -65,9 +66,17 @@ function WorktreeListRowComponent({
   const metaText = isFolderWorkspace ? folderMeta : displayBranch(item.branch)
   const lineageDepth = Math.max(0, item.lineageDepth ?? 0)
   const lineageChildCount = item.lineageChildCount ?? 0
-  const layout = getWorktreeCardLayout(cardStyle)
   const showRepoChip = layout.repoInTitle && !hideRepo && !isFolderWorkspace
   const showRepoInMetaRow = !layout.repoInTitle && !hideRepo
+  const hostId = item.hostContextHostId ?? item.hostId
+  const hostAccessibilityLabel = [item.hostContextLabel, item.hostContextHealthLabel]
+    .filter(Boolean)
+    .join(', ')
+  // Why: the desktop's compact card keeps an icon-only glyph for remote projects after the host badge goes.
+  const showHostGlyph =
+    !layout.identityMetaRow &&
+    !!item.hostContextLabel &&
+    (parseExecutionHostId(hostId)?.kind ?? 'local') !== 'local'
 
   return (
     <Pressable
@@ -103,6 +112,11 @@ function WorktreeListRowComponent({
 
       <View style={styles.worktreeMain}>
         <View style={styles.worktreeNameRow}>
+          {showHostGlyph && (
+            <View accessibilityLabel={hostAccessibilityLabel}>
+              <HostKindIcon hostId={hostId} size={11} />
+            </View>
+          )}
           {showRepoChip && (
             <View style={styles.repoChip} accessibilityLabel={`Project ${item.repo}`}>
               <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />
@@ -150,11 +164,9 @@ function WorktreeListRowComponent({
             {cardDetails.host && item.hostContextLabel ? (
               <View
                 style={[styles.childBadge, styles.hostBadge]}
-                accessibilityLabel={[item.hostContextLabel, item.hostContextHealthLabel]
-                  .filter(Boolean)
-                  .join(', ')}
+                accessibilityLabel={hostAccessibilityLabel}
               >
-                <HostKindIcon hostId={item.hostContextHostId ?? item.hostId} size={10} />
+                <HostKindIcon hostId={hostId} size={10} />
                 <Text style={[styles.childBadgeText, styles.hostBadgeText]} numberOfLines={1}>
                   {item.hostContextLabel}
                 </Text>
@@ -166,9 +178,8 @@ function WorktreeListRowComponent({
                 ) : null}
               </View>
             ) : null}
-            {/* Repo glyph+name only when not already grouped under this repo;
-              MobileRepoIcon falls back to a Folder (matching desktop's default)
-              rather than a bare colored dot. */}
+            {/* Repo glyph+name only when not grouped under this repo and the title has no chip;
+                MobileRepoIcon falls back to a Folder (matching desktop's default). */}
             {showRepoInMetaRow && (
               <>
                 <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />

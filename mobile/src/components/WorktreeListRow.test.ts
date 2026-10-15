@@ -16,7 +16,9 @@ import { WorktreeListRow } from './WorktreeListRow'
 import {
   DEFAULT_WORKTREE_CARD_PROPERTIES,
   getWorktreeCardDetails,
-  type WorktreeCardDetails
+  getWorktreeCardLayout,
+  type WorktreeCardDetails,
+  type WorktreeCardLayout
 } from '../../../src/shared/worktree/card-properties'
 
 const { agentSpinnerRender, agentStateDotRender } = vi.hoisted(() => ({
@@ -68,20 +70,22 @@ const stableRepoIcon = { type: 'emoji', emoji: 'o' } as const
 let updateSibling: Dispatch<SetStateAction<number>> = () => undefined
 
 const DETAILED_STYLE = { compactCards: false, newCardStyle: false }
-const COMPACT_STYLE = { compactCards: true, newCardStyle: false }
+const DETAILED = getWorktreeCardLayout(DETAILED_STYLE)
+const COMPACT = getWorktreeCardLayout({ compactCards: true, newCardStyle: false })
+const NEW_CARD_STYLE = getWorktreeCardLayout({ compactCards: false, newCardStyle: true })
 const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, DETAILED_STYLE)
 
 function ListRowHarness({
   item,
   now,
   cardDetails = ALL_DETAILS,
-  cardStyle = DETAILED_STYLE,
+  cardLayout = DETAILED,
   hideRepo = false
 }: {
   item: TestItem
   now: number
   cardDetails?: WorktreeCardDetails
-  cardStyle?: { compactCards: boolean; newCardStyle: boolean }
+  cardLayout?: WorktreeCardLayout
   hideRepo?: boolean
 }) {
   const [sibling, setSibling] = useState(0)
@@ -104,7 +108,7 @@ function ListRowHarness({
       repoIcon: stableRepoIcon,
       hideRepo,
       cardDetails,
-      cardStyle,
+      cardLayout,
       agentActivityDisplayMode: 'compact',
       status: item.status,
       onPress,
@@ -207,7 +211,7 @@ describe('memoized worktree rows', () => {
         repoIcon: { type: 'emoji', emoji: 'o' },
         // A fresh but equal details object each render, as a parent re-render makes.
         cardDetails: { ...ALL_DETAILS },
-        cardStyle: { ...DETAILED_STYLE },
+        cardLayout: { ...DETAILED },
         agentActivityDisplayMode: 'compact',
         status: item.status,
         onPress: overrides.onPress ?? onPress
@@ -395,7 +399,7 @@ describe('memoized worktree rows', () => {
     const render = async (
       props: Partial<{
         item: TestItem
-        cardStyle: typeof DETAILED_STYLE
+        cardLayout: WorktreeCardLayout
         hideRepo: boolean
       }> = {}
     ) => {
@@ -414,14 +418,14 @@ describe('memoized worktree rows', () => {
       expect(texts()).toEqual(expect.arrayContaining(['orca', 'feature/mobile-list']))
       expect(repoChips()).toHaveLength(0)
 
-      await render({ cardStyle: COMPACT_STYLE })
+      await render({ cardLayout: COMPACT })
       expect(texts()).not.toContain('orca')
       expect(texts()).not.toContain('feature/mobile-list')
       expect(texts()).toContain('mobile-list')
       expect(repoChips()).toHaveLength(1)
     })
 
-    it('drops the host and child badges with the rest of the meta row', async () => {
+    it('drops the host and child badges with the meta row, keeping a remote host glyph', async () => {
       const item: TestItem = {
         ...baseItem,
         hostId: 'ssh:ssh-1',
@@ -431,31 +435,50 @@ describe('memoized worktree rows', () => {
       await render({ item })
       expect(texts()).toEqual(expect.arrayContaining(['openclaw', 'Child']))
 
-      await render({ item, cardStyle: COMPACT_STYLE })
+      await render({ item, cardLayout: COMPACT })
       expect(texts()).not.toContain('openclaw')
       expect(texts()).not.toContain('Child')
+      const glyphs = () => renderer!.root.findAll((node) => String(node.type) === 'Server')
+      expect(glyphs()).toHaveLength(1)
+      expect(
+        renderer!.root.findAll((node) => node.props.accessibilityLabel === 'openclaw')
+      ).toHaveLength(1)
+
+      // Local rows get no glyph, as the desktop shows none for local projects.
+      await render({ item: { ...item, hostId: 'local' }, cardLayout: COMPACT })
+      expect(glyphs()).toHaveLength(0)
+      expect(renderer!.root.findAll((node) => String(node.type) === 'Monitor')).toHaveLength(0)
     })
 
     it('leaves the chip out when the list is grouped by repo or the row is a folder', async () => {
-      await render({ cardStyle: COMPACT_STYLE, hideRepo: true })
+      await render({ cardLayout: COMPACT, hideRepo: true })
       expect(repoChips()).toHaveLength(0)
 
       await render({
-        cardStyle: COMPACT_STYLE,
+        cardLayout: COMPACT,
         item: { ...baseItem, workspaceKind: 'folder-workspace' }
       })
       expect(repoChips()).toHaveLength(0)
       expect(texts()).toContain('Folder')
     })
 
-    it('keeps the title-row PR badge', async () => {
+    it('keeps the PR badge next to the repo chip', async () => {
       await render({
-        cardStyle: COMPACT_STYLE,
+        cardLayout: COMPACT,
         item: { ...baseItem, linkedPR: { number: 7, state: 'open' } }
       })
+      expect(repoChips()).toHaveLength(1)
       expect(renderer!.root.findAll((node) => String(node.type) === 'GitPullRequest')).toHaveLength(
         1
       )
+      expect(texts()).toContain('#')
+    })
+
+    it('uses the chip under the new card style but keeps the branch line', async () => {
+      await render({ cardLayout: NEW_CARD_STYLE })
+      expect(repoChips()).toHaveLength(1)
+      expect(texts()).not.toContain('orca')
+      expect(texts()).toContain('feature/mobile-list')
     })
   })
 })

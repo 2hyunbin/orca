@@ -154,9 +154,10 @@ export function getWorktreeCardDetails(
   }
 }
 
-/** Where a workspace card puts its identity; desktop and phone draw from the same rule. */
+/** Where a workspace card puts its identity; read by the desktop card and the phone row. */
 export type WorktreeCardLayout = {
-  /** Repo identity is an icon chip in the title row instead of a name in the meta row. */
+  /** Repo identity is an icon chip in the title row instead of a name in the meta row; the new
+   *  card style retired the Compact/Detailed switch and always uses the chip. */
   repoInTitle: boolean
   /** The identity meta row (repo, host, branch or folder path, detached HEAD); compact cards drop it. */
   identityMetaRow: boolean

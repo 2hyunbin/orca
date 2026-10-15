@@ -13,7 +13,10 @@ import { getWorktreeRowIdentity } from '../worktree/worktree-host-row-identity'
 import { HostWorkspaceListStates } from '../worktree/host-workspace-list-states'
 import { getWorktreeStatus } from '../worktree/workspace-list-sections'
 import { repoColor } from '../worktree/repo-color'
-import { getWorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
+import {
+  getWorktreeCardDetails,
+  getWorktreeCardLayout
+} from '../../../src/shared/worktree/card-properties'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { buildRepoLookById } from './host-repo-looks'
 import type { HostScreenController } from './use-host-screen-controller'
@@ -54,6 +57,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
     () => getWorktreeCardDetails(state.view.worktreeCardProperties, cardStyle),
     [state.view.worktreeCardProperties, cardStyle]
   )
+  const cardLayout = useMemo(() => getWorktreeCardLayout(cardStyle), [cardStyle])
 
   return (
     <>
@@ -207,7 +211,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
               repoIcon={repoLookById.get(item.repoId)?.icon ?? null}
               hideRepo={state.view.groupBy === 'repo'}
               cardDetails={cardDetails}
-              cardStyle={cardStyle}
+              cardLayout={cardLayout}
               agentActivityDisplayMode={state.view.agentActivityDisplayMode}
               onPress={actions.openWorktreeSession}
               onLongPress={
