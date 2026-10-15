@@ -7,6 +7,7 @@ import { deriveHostCacheKey } from './host-cache-key'
 import { download, openCache, readManifest } from './mobile-web-shell-session-effects'
 import {
   createMobileWebShellRuntime,
+  DOCUMENT_LOAD_DEADLINE_MS,
   PAGE_READY_DEADLINE_MS,
   type MobileWebShellRuntime
 } from './mobile-web-shell-runtime'
@@ -215,6 +216,14 @@ export function useMobileWebShellSession(args: {
             timersRef.current.delete(cancel)
             send({ type: 'page-ready-deadline', flow })
           }, PAGE_READY_DEADLINE_MS)
+          timersRef.current.add(cancel)
+          return
+        }
+        case 'await-document-load': {
+          const cancel = runtime.setTimer(() => {
+            timersRef.current.delete(cancel)
+            send({ type: 'document-load-deadline', flow })
+          }, DOCUMENT_LOAD_DEADLINE_MS)
           timersRef.current.add(cancel)
           return
         }
