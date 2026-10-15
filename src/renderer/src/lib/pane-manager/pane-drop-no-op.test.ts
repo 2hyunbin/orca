@@ -133,6 +133,21 @@ describe('handlePaneDrop with a drop taker', () => {
     expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
   })
 
+  it('drops a taken move whose pane closed before the taker ran it', () => {
+    const panes = createVerticalSplit([1, 2, 3])
+    let move: (() => void) | undefined
+    const { callbacks, onLayoutChanged } = callbacksFor(panes, (_drop, later) => {
+      move = later
+      return true
+    })
+
+    handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
+    panes.delete(3)
+    move?.()
+
+    expect(onLayoutChanged).not.toHaveBeenCalled()
+  })
+
   it('moves at once when no taker takes the drop', () => {
     const panes = createVerticalSplit([1, 2, 3])
     const { callbacks, onLayoutChanged } = callbacksFor(panes, () => false)
