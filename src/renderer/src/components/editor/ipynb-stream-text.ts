@@ -25,7 +25,7 @@ const EMPTY_STREAM_TEXT: StreamText = {
 }
 
 // Why: weak output keys keep cursors off saved notebook data and release them with discarded outputs.
-const streamTextByOutput = new WeakMap<object, StreamText>()
+const streamTextByOutput = new WeakMap<Record<string, unknown>, StreamText>()
 
 /** Applies terminal-style `\r` rewrites (progress bars), keeping a trailing `\r` for the next chunk. */
 export function collapseCarriageReturns(text: string): string {
@@ -80,11 +80,11 @@ export function appendStreamChunk(
     : splitAtLastNewline(EMPTY_STREAM_TEXT, collapseCarriageReturns(previousText + chunk))
 }
 
-export function rememberStreamText(output: object, stream: StreamText): void {
+export function rememberStreamText(output: Record<string, unknown>, stream: StreamText): void {
   streamTextByOutput.set(output, stream)
 }
 
 /** The drawn end of a live stream output, read without touching its whole text. */
-export function liveStreamDrawnText(output: object): DrawnText | undefined {
+export function liveStreamDrawnText(output: Record<string, unknown>): DrawnText | undefined {
   return streamTextByOutput.get(output)?.drawn
 }
