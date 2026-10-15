@@ -130,10 +130,13 @@ function loadTabs(args: WorkspaceLoadArgs): { tabs: LayoutTab[]; candidates: Ord
   // A row outside the tab bar whose every terminal a tab-bar tab holds is a stale copy of it.
   const canonical = readCanonicalPtyOwners(session, key, rows)
   for (const row of rows) {
-    if (
-      !merged.has(row.id) &&
-      resolveCanonicalPtyClaim(session, row, canonical).kind !== 'subsumed'
-    ) {
+    if (merged.has(row.id)) {
+      continue
+    }
+    const claim = resolveCanonicalPtyClaim(session, row, canonical)
+    if (claim.kind === 'subsumed') {
+      args.canonicalTabIdBySubsumedTabId.set(row.id, claim.canonicalTabId)
+    } else {
       addTerminal(row, undefined)
     }
   }

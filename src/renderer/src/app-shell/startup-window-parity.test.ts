@@ -129,6 +129,19 @@ describe('the window shows the same session before and after the shared Loader r
     }
   )
 
+  it('keeps the tab-bar twin selected when a selected legacy copy is dropped', async () => {
+    const profile = PROFILES.find(
+      (entry) => entry.name === 'legacy row repeating a tab-bar tab’s terminal, selected'
+    )!
+    const view = projectStartupWindowView(
+      await bootWindowFromPartitions(createTestStore(), [
+        { hostId: profile.hostId, session: normalize(profile.hostId, profile.build()) }
+      ])
+    )
+    expect(view['active.terminal']).toBe('tab-a')
+    expect(view[`${GIT} active terminal`]).toBe('tab-a')
+  })
+
   it('lists differences only for fixtures that exist', () => {
     const names = new Set(PROFILES.map((profile) => profile.name))
     expect(KNOWN_DIFFERENCES.filter((entry) => !names.has(entry.fixture))).toEqual([])
