@@ -11,6 +11,7 @@ import {
 } from './orcad-stdio-bridge-script'
 import { OrcadStdioBridgeDecoder, type OrcadStdioBridgeSignal } from './orcad-stdio-bridge-stream'
 import { isWslOrcadHostTarget, type OrcadHostTransport } from './orcad-host-transport'
+import { isWslDistroRunning } from '../wsl-background-distro-gate'
 import type { RemoteCommandChannel } from './remote-install-transport'
 import { isWindowsRemoteHost } from './ssh-remote-platform'
 import { detectRemoteHostPlatform } from './ssh-remote-platform-detection'
@@ -51,10 +52,15 @@ export async function resolveOrcadStdioBridge(
   }
 }
 
-export function openOrcadStdioBridgeChannel(
+export async function openOrcadStdioBridgeChannel(
   conn: OrcadHostTransport,
   bridge: OrcadStdioBridge
 ): Promise<RemoteCommandChannel> {
+  const target = conn.getTarget()
+  // Passive socket reconnects must not boot WSL; the demand path starts the holder first.
+  if (isWslOrcadHostTarget(target) && !(await isWslDistroRunning(target.distro))) {
+    throw new Error(`WSL distro ${target.distro} is not confirmed running`)
+  }
   return conn.exec(bridge.command, { wrapCommand: bridge.wrapCommand })
 }
 
