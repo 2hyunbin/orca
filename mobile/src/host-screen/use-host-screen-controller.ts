@@ -22,6 +22,7 @@ import { useHostRepoMetadata, type FetchHostRepoMetadata } from './use-host-repo
 import { useHostScreenIdentity } from './use-host-screen-identity'
 import { useHostScreenState } from './use-host-screen-state'
 import { useHostViewSettings } from './use-host-view-settings'
+import { countActiveWorkspaceFilters } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
 import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
 import { useHostDisplay } from '../transport/use-host-display'
@@ -136,11 +137,24 @@ export function useHostScreenController({
     collapsedGroups: state.collapsedGroups,
     workspaceStatuses: state.workspaceStatuses
   })
+  const { uniqueRepos } = sectionsResult
+  const activeFilterCount = useMemo(
+    () =>
+      countActiveWorkspaceFilters(
+        {
+          ...state.filters,
+          visibleHostIds: state.visibleHostIds ? [...state.visibleHostIds] : null
+        },
+        uniqueRepos.map((repo) => repo.id)
+      ),
+    [state.filters, state.visibleHostIds, uniqueRepos]
+  )
   const existingWorktreePaths = useMemo(() => state.worktrees.map((w) => w.path), [state.worktrees])
   const activeWorktreeScroll = useActiveWorktreeScroll(sectionsResult.sections)
 
   return {
     actions,
+    activeFilterCount,
     activeWorktreeScroll,
     catalog,
     client,

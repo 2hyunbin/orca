@@ -13,7 +13,8 @@ export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
 export type MobileSortMode = 'smart' | 'name' | 'recent' | 'repo' | 'manual'
 
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
-export type WorkspaceViewSettings = Partial<FilterState> & {
+export type WorkspaceViewSettings = Partial<Omit<FilterState, 'filterRepoIds'>> & {
+  filterRepoIds?: string[]
   groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
   sortBy?: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
   collapsedGroups?: string[]
@@ -95,8 +96,9 @@ export function buildWorkspaceViewSettingsUpdate(
   }
   if ('filters' in patch) {
     for (const key of FILTER_KEYS) {
-      if (next.filters[key] !== previous.filters[key]) {
-        Object.assign(update, { [key]: next.filters[key] })
+      const value = next.filters[key]
+      if (value !== previous.filters[key]) {
+        Object.assign(update, { [key]: Array.isArray(value) ? [...value] : value })
       }
     }
   }

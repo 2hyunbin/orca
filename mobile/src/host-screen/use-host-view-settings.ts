@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { getMobileWorkspaceLineageGroupKey } from '../worktree/mobile-workspace-lineage'
@@ -8,6 +8,7 @@ import {
   buildWorkspaceViewSettingsUpdate,
   type MobileGroupMode,
   type MobileSortMode,
+  NO_FILTERS,
   type MobileViewState,
   type WorkspaceViewSettings
 } from '../worktree/workspace-view-settings'
@@ -15,6 +16,7 @@ import type { Worktree } from '../worktree/workspace-list-sections'
 import { readVisibleHostIds } from '../worktree/visible-host-rows'
 import { hostViewSettingsRead, hostViewSettingsWrite } from './host-screen-operations'
 import type { HostScreenState } from './use-host-screen-state'
+import type { FilterState } from '../worktree/workspace-list-types'
 
 export function useHostViewSettings(args: {
   client: RpcClient | null
@@ -43,10 +45,7 @@ export function useHostViewSettings(args: {
     viewStateRef.current = {
       groupMode,
       sortMode,
-      hideSleeping: filters.hideSleeping,
-      hideDefaultBranch: filters.hideDefaultBranch,
-      alwaysShowDefaultBranch: filters.alwaysShowDefaultBranch !== false,
-      filterRepoIds: [...filters.filterRepoIds],
+      filters,
       collapsedGroups: [...collapsedGroups],
       workspaceStatuses
     }
@@ -59,18 +58,14 @@ export function useHostViewSettings(args: {
     setSortMode(next.sortMode)
     setWorkspaceStatuses(next.workspaceStatuses)
     setCollapsedGroups(new Set(next.collapsedGroups))
-    setFilters({
-      filterRepoIds: new Set(next.filterRepoIds),
-      hideSleeping: next.hideSleeping,
-      hideDefaultBranch: next.hideDefaultBranch,
-      alwaysShowDefaultBranch: next.alwaysShowDefaultBranch
-    })
+    setFilters(next.filters)
   }, [])
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
     (patch: Partial<MobileViewState>) => {
-      const next: MobileViewState = { ...viewStateRef.current, ...patch }
+      const previous = viewStateRef.current
+      const next: MobileViewState = { ...previous, ...patch }
       applyViewState(next)
       if (!client) {
         return
@@ -78,7 +73,7 @@ export function useHostViewSettings(args: {
       // Send only the touched fields: the host merges partial updates, so a stale
       // mirror can no longer revert sibling settings another client just changed
       // (STA-5781; supersedes the #8873 whole-payload special case).
-      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next)
+      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next, previous)
       if (Object.keys(payload).length === 0) {
         return
       }
@@ -124,42 +119,29 @@ export function useHostViewSettings(args: {
     [persistViewSettings]
   )
 
-  const toggleHideSleeping = useCallback(() => {
-    persistViewSettings({ hideSleeping: !viewStateRef.current.hideSleeping })
-  }, [persistViewSettings])
-
-  const toggleHideDefaultBranch = useCallback(() => {
-    persistViewSettings({ hideDefaultBranch: !viewStateRef.current.hideDefaultBranch })
-  }, [persistViewSettings])
-
-  const toggleRepoFilter = useCallback(
-    (repoId: string) => {
-      const next = new Set(viewStateRef.current.filterRepoIds)
-      if (next.has(repoId)) {
-        next.delete(repoId)
-      } else {
-        next.add(repoId)
-      }
-      persistViewSettings({ filterRepoIds: [...next] })
+  const setFilter = useCallback(
+    <Key extends keyof FilterState>(key: Key, value: FilterState[Key]) => {
+      persistViewSettings({ filters: { ...viewStateRef.current.filters, [key]: value } })
     },
     [persistViewSettings]
   )
 
+  const toggleRepoFilter = useCallback(
+    (repoId: string) => {
+      const current = viewStateRef.current.filters.filterRepoIds
+      setFilter(
+        'filterRepoIds',
+        current.includes(repoId) ? current.filter((id) => id !== repoId) : [...current, repoId]
+      )
+    },
+    [setFilter]
+  )
+
+  // Why every filter: Clear filters on the desktop resets them all, not only the ones shown here.
   const clearFilters = useCallback(() => {
-    persistViewSettings({ hideSleeping: false, hideDefaultBranch: false, filterRepoIds: [] })
+    persistViewSettings({ filters: NO_FILTERS })
   }, [persistViewSettings])
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0
-    if (filters.hideSleeping) {
-      count++
-    }
-    if (filters.hideDefaultBranch) {
-      count++
-    }
-    count += filters.filterRepoIds.size
-    return count
-  }, [filters])
   const selectedSortLabel =
     SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? 'Recent'
 
@@ -186,15 +168,13 @@ export function useHostViewSettings(args: {
   )
 
   return {
-    activeFilterCount,
     clearFilters,
     handleGroupChange,
     handleSortChange,
     selectedSortLabel,
     syncViewSettingsFromDesktop,
     toggleCollapsed,
-    toggleHideDefaultBranch,
-    toggleHideSleeping,
+    setFilter,
     toggleRepoFilter,
     toggleWorktreeLineage
   }

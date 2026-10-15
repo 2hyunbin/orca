@@ -1,5 +1,6 @@
 import { isFolderRepo } from '../repo-kind'
 import type { Repo } from '../repo-types'
+import type { RuntimeWorktreePsSummary } from '../runtime-worktree-contracts'
 import type { Worktree } from '../worktree/types'
 import { getWorktreeBranchName, getWorktreeShortHead } from '../worktree/git-identity'
 
@@ -39,4 +40,28 @@ export function isDefaultBranchWorkspace(
   // Why: a folder project's root is its default workspace but has no branch; on a git repo an
   // empty branch means detached HEAD or an offline SSH row, which stay visible.
   return worktree.branch.trim() !== '' || (repo !== undefined && isFolderRepo(repo))
+}
+
+/** What a host stamps on each worktree.ps row, so a phone's filters match this host's sidebar. */
+export function getWorkspaceRowKindFacts(
+  worktree: Pick<
+    Worktree,
+    | 'isMainWorktree'
+    | 'ephemeralVmCheckoutMode'
+    | 'branch'
+    | 'head'
+    | 'automationProvenance'
+    | 'cliProvenance'
+  >,
+  repo: Pick<Repo, 'kind'> | undefined
+): Pick<
+  RuntimeWorktreePsSummary,
+  'defaultBranch' | 'automationCreated' | 'cliCreated' | 'detachedHead'
+> {
+  return {
+    defaultBranch: isDefaultBranchWorkspace(worktree, repo),
+    ...(isAutomationGeneratedWorkspace(worktree) ? { automationCreated: true } : {}),
+    ...(isCliCreatedWorkspace(worktree) ? { cliCreated: true } : {}),
+    ...(isDetachedHeadWorkspace(worktree) ? { detachedHead: true } : {})
+  }
 }

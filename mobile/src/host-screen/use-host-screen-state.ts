@@ -7,10 +7,11 @@ import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../worktree/mobile-workspace-statuses'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
-import type {
-  MobileGroupMode,
-  MobileSortMode,
-  MobileViewState
+import {
+  NO_FILTERS,
+  type MobileGroupMode,
+  type MobileSortMode,
+  type MobileViewState
 } from '../worktree/workspace-view-settings'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
@@ -55,12 +56,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [sortMode, setSortMode] = useState<MobileSortMode>('recent')
-  const [filters, setFilters] = useState<FilterState>({
-    filterRepoIds: new Set(),
-    hideSleeping: false,
-    hideDefaultBranch: false,
-    alwaysShowDefaultBranch: true
-  })
+  const [filters, setFilters] = useState<FilterState>(NO_FILTERS)
   const [groupMode, setGroupMode] = useState<MobileGroupMode>('repo')
   const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
     DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -104,10 +100,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const viewStateRef = useRef<MobileViewState>({
     groupMode: 'repo',
     sortMode: 'recent',
-    hideSleeping: false,
-    hideDefaultBranch: false,
-    alwaysShowDefaultBranch: true,
-    filterRepoIds: [],
+    filters: NO_FILTERS,
     collapsedGroups: [],
     workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
   })

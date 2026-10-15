@@ -70,7 +70,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
             <Text style={styles.filterModalTitle}>Filter</Text>
             <Text style={styles.filterModalSubtitle}>{WORKSPACE_VIEW_SHARED_NOTE}</Text>
           </View>
-          {settings.activeFilterCount > 0 && (
+          {controller.activeFilterCount > 0 && (
             <Pressable onPress={settings.clearFilters}>
               <Text style={styles.clearFiltersText}>Clear filters</Text>
             </Pressable>
@@ -79,14 +79,29 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
 
         <Text style={styles.filterSectionLabel}>Workspaces</Text>
         <View style={styles.filterGroup}>
-          <Pressable style={styles.filterRow} onPress={settings.toggleHideSleeping}>
+          <Pressable
+            style={styles.filterRow}
+            onPress={() =>
+              settings.setFilter('hideSleepingWorkspaces', !state.filters.hideSleepingWorkspaces)
+            }
+          >
             <Text style={styles.filterRowText}>Hide sleeping</Text>
-            {state.filters.hideSleeping && <Check size={14} color={colors.textPrimary} />}
+            {state.filters.hideSleepingWorkspaces && <Check size={14} color={colors.textPrimary} />}
           </Pressable>
           <View style={styles.filterSeparator} />
-          <Pressable style={styles.filterRow} onPress={settings.toggleHideDefaultBranch}>
+          <Pressable
+            style={styles.filterRow}
+            onPress={() =>
+              settings.setFilter(
+                'hideDefaultBranchWorkspace',
+                !state.filters.hideDefaultBranchWorkspace
+              )
+            }
+          >
             <Text style={styles.filterRowText}>Hide default branch</Text>
-            {state.filters.hideDefaultBranch && <Check size={14} color={colors.textPrimary} />}
+            {state.filters.hideDefaultBranchWorkspace && (
+              <Check size={14} color={colors.textPrimary} />
+            )}
           </Pressable>
         </View>
 
@@ -105,7 +120,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                     <Text style={styles.filterRowText} numberOfLines={1}>
                       {repo.name}
                     </Text>
-                    {state.filters.filterRepoIds.has(repo.id) && (
+                    {state.filters.filterRepoIds.includes(repo.id) && (
                       <Check size={14} color={colors.textPrimary} />
                     )}
                   </Pressable>

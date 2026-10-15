@@ -142,24 +142,24 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
               style={[
                 styles.filterChip,
                 styles.embeddedFilterChip,
-                settings.activeFilterCount > 0 && styles.filterChipActive
+                controller.activeFilterCount > 0 && styles.filterChipActive
               ]}
               onPress={() => state.setShowFilterModal(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Filter workspaces${settings.activeFilterCount > 0 ? `, ${settings.activeFilterCount} active` : ''}`}
+              accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
             >
               <Filter
                 size={12}
-                color={settings.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
+                color={controller.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.filterChipText,
-                  settings.activeFilterCount > 0 && styles.filterChipTextActive
+                  controller.activeFilterCount > 0 && styles.filterChipTextActive
                 ]}
                 numberOfLines={1}
               >
-                Filter{settings.activeFilterCount > 0 ? ` ${settings.activeFilterCount}` : ''}
+                Filter{controller.activeFilterCount > 0 ? ` ${controller.activeFilterCount}` : ''}
               </Text>
             </Pressable>
 
@@ -280,22 +280,22 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
       ) : (
         <View style={styles.toolbar}>
           <Pressable
-            style={[styles.filterChip, settings.activeFilterCount > 0 && styles.filterChipActive]}
+            style={[styles.filterChip, controller.activeFilterCount > 0 && styles.filterChipActive]}
             onPress={() => state.setShowFilterModal(true)}
             accessibilityRole="button"
-            accessibilityLabel={`Filter workspaces${settings.activeFilterCount > 0 ? `, ${settings.activeFilterCount} active` : ''}`}
+            accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
           >
             <Filter
               size={12}
-              color={settings.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
+              color={controller.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
             />
             <Text
               style={[
                 styles.filterChipText,
-                settings.activeFilterCount > 0 && styles.filterChipTextActive
+                controller.activeFilterCount > 0 && styles.filterChipTextActive
               ]}
             >
-              Filter{settings.activeFilterCount > 0 ? ` (${settings.activeFilterCount})` : ''}
+              Filter{controller.activeFilterCount > 0 ? ` (${controller.activeFilterCount})` : ''}
             </Text>
           </Pressable>
 

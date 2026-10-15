@@ -63,13 +63,9 @@ describe('filterWorktrees', () => {
     const visible = worktree({ worktreeId: 'visible' })
     const archived = worktree({ worktreeId: 'archived', isArchived: true })
 
-    expect(
-      filterWorktrees(
-        [visible, archived],
-        { ...NO_WORKSPACE_ROW_FILTERS },
-        ''
-      )
-    ).toEqual([visible])
+    expect(filterWorktrees([visible, archived], { ...NO_WORKSPACE_ROW_FILTERS }, '')).toEqual([
+      visible
+    ])
   })
 
   it('uses host sidebar activity for sleeping filtering when available', () => {
@@ -138,11 +134,7 @@ describe('filterWorktrees', () => {
     })
 
     expect(
-      filterWorktrees(
-        [folder],
-        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true },
-        ''
-      )
+      filterWorktrees([folder], { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true }, '')
     ).toEqual([folder])
   })
 
@@ -152,7 +144,11 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main],
-        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true, alwaysShowDefaultBranchWorkspace: false },
+        {
+          ...NO_WORKSPACE_ROW_FILTERS,
+          hideSleepingWorkspaces: true,
+          alwaysShowDefaultBranchWorkspace: false
+        },
         ''
       )
     ).toEqual([])
@@ -194,7 +190,11 @@ describe('filterWorktrees', () => {
     expect(
       filterWorktrees(
         [main],
-        { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true, hideDefaultBranchWorkspace: true },
+        {
+          ...NO_WORKSPACE_ROW_FILTERS,
+          hideSleepingWorkspaces: true,
+          hideDefaultBranchWorkspace: true
+        },
         ''
       )
     ).toEqual([])
@@ -217,17 +217,13 @@ describe('filterWorktrees', () => {
     ).toEqual([folder])
   })
 
-  it("drops rows the desktop's Hide other-client workspaces hides", () => {
+  it("drops other-client rows only while the desktop's Hide other-client workspaces is on", () => {
     const mine = worktree({ worktreeId: 'mine' })
     const other = worktree({ worktreeId: 'other', desktopOtherClient: true })
+    const hiding = { ...NO_WORKSPACE_ROW_FILTERS, hideWorkspacesFromOtherDevices: true }
 
-    expect(
-      filterWorktrees(
-        [mine, other],
-        { ...NO_WORKSPACE_ROW_FILTERS },
-        ''
-      )
-    ).toEqual([mine])
+    expect(filterWorktrees([mine, other], hiding, '')).toEqual([mine])
+    expect(filterWorktrees([mine, other], NO_WORKSPACE_ROW_FILTERS, '')).toEqual([mine, other])
   })
 })
 

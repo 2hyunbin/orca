@@ -35,6 +35,20 @@
         }
       }
     },
+    "18dba576d09b": {
+      "name": "filters",
+      "ordinal": 13,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
+      }
+    },
     "1a43d7f74ca0": {
       "name": "sortMode",
       "ordinal": 10,
@@ -107,6 +121,22 @@
         }
       }
     },
+    "3a54bd07d9b5": {
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": false,
+        "hideWorkspacesFromOtherDevices": false
+      },
+      "groupMode": "none",
+      "sortMode": "recent",
+      "statuses": []
+    },
     "41006b189a5c": {
       "name": "visibleHostIds",
       "ordinal": 8,
@@ -147,16 +177,6 @@
           "id": "frame-2",
           "ok": false
         }
-      }
-    },
-    "4ecad32c32b9": {
-      "name": "filters",
-      "ordinal": 13,
-      "value": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
       }
     },
     "582477c8e0af": {
@@ -244,16 +264,6 @@
             }
           }
         }
-      }
-    },
-    "77222aa7cc3b": {
-      "name": "filters",
-      "ordinal": 7,
-      "value": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
       }
     },
     "78839ac47a93": {
@@ -377,30 +387,6 @@
       "ordinal": 4,
       "value": "name"
     },
-    "ba2035345a68": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
-      },
-      "groupMode": "repo",
-      "sortMode": "name",
-      "statuses": []
-    },
-    "bbdab1a7d122": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": false
-      },
-      "groupMode": "none",
-      "sortMode": "recent",
-      "statuses": []
-    },
     "c1a16436e0dd": {
       "name": "ui.set#1",
       "ordinal": 14,
@@ -434,6 +420,36 @@
             "ok": false
           }
         }
+      }
+    },
+    "c69d19e118ff": {
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
+      },
+      "groupMode": "repo",
+      "sortMode": "name",
+      "statuses": []
+    },
+    "df87b9959d20": {
+      "name": "filters",
+      "ordinal": 7,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
       }
     },
     "e36c26c30d83": {
@@ -568,7 +584,7 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "bbdab1a7d122",
+          "state": "3a54bd07d9b5",
           "effects": []
         }
       },
@@ -582,19 +598,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -608,19 +624,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -634,19 +650,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -660,19 +676,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -686,19 +702,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -712,19 +728,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -738,19 +754,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -764,19 +780,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -790,19 +806,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -816,19 +832,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -842,19 +858,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       }

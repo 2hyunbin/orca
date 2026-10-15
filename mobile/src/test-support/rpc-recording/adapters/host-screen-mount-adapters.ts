@@ -5,13 +5,21 @@ import type { operationModuleLoader } from '../operation-module-loader'
 
 const HOST = 'host-1'
 
+const NO_FILTERS = {
+  hideSleepingWorkspaces: false,
+  alwaysShowDefaultBranchWorkspace: true,
+  hideDefaultBranchWorkspace: false,
+  hideAutomationGeneratedWorkspaces: false,
+  hideCliCreatedWorkspaces: false,
+  hideDetachedHeadWorkspaces: false,
+  hideWorkspacesFromOtherDevices: false,
+  filterRepoIds: []
+}
+
 const INITIAL_VIEW_STATE = {
   groupMode: 'none',
   sortMode: 'recent',
-  hideSleeping: false,
-  hideDefaultBranch: false,
-  alwaysShowDefaultBranch: true,
-  filterRepoIds: [],
+  filters: NO_FILTERS,
   collapsedGroups: [],
   workspaceStatuses: []
 }
@@ -31,12 +39,7 @@ export function hostScreenMountAdapters(
       const state = observableModel(context, {
         clientRef: { current: context.client },
         collapsedGroups: new Set<string>(),
-        filters: {
-          filterRepoIds: new Set<string>(),
-          hideSleeping: false,
-          hideDefaultBranch: false,
-          alwaysShowDefaultBranch: true
-        },
+        filters: NO_FILTERS,
         groupMode: 'none',
         sortMode: 'recent',
         viewStateRef: { current: { ...INITIAL_VIEW_STATE } },
@@ -64,7 +67,7 @@ export function hostScreenMountAdapters(
             return performHookAction(() => actions.handleSortChange('name'))
           }
           if (name === 'hide-sleeping') {
-            return performHookAction(() => actions.toggleHideSleeping())
+            return performHookAction(() => actions.setFilter('hideSleepingWorkspaces', true))
           }
           throw new Error(`Unknown view settings action: ${name}`)
         },

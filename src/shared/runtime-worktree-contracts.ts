@@ -100,8 +100,8 @@ export type RuntimeWorktreePsSummary = {
   automationCreated?: true
   cliCreated?: true
   detachedHead?: true
-  /** A verdict, not a fact: this host's "Hide other-client workspaces" hides the row; sent only
-   *  to its own phones, and only while that filter is on. */
+  /** This host calls the row another client's ("Hide other-client workspaces"); sent only to its
+   *  own phone, which applies the filter value it shares with this host. */
   desktopOtherClient?: true
 }
 

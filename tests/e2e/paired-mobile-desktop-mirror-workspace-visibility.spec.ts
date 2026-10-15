@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../src/shared/workspace-view/workspace-row-filters'
 import { launchPhoneMirrorTopology } from './helpers/phone-mirror-topology'
 import type { PairedMobileSocket } from './helpers/paired-mobile-client'
 import {
@@ -131,7 +132,11 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
             const serverIds = new Set(rows.map((row) => row.worktreeId))
             const phone = filterWorktrees(
               rows.map(toMobileRow),
-              { filterRepoIds: new Set(), hideSleeping, hideDefaultBranch: false },
+              {
+                ...NO_WORKSPACE_ROW_FILTERS,
+                hideSleepingWorkspaces: hideSleeping,
+                hideWorkspacesFromOtherDevices: true
+              },
               ''
             )
             shown = phone.map((row) => row.path)
@@ -151,7 +156,7 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
       return shown
     }
 
-    // Hide other-client workspaces: the server's own row goes, the desktop's and its phone's stay.
+    // The desktop marks the server's own row as another client's; the desktop's and its phone's stay.
     await desktop.page.evaluate(() =>
       window.__store!.getState().setHideWorkspacesFromOtherDevices(true)
     )

@@ -4,20 +4,24 @@
   "family": "host.view-settings",
   "namedDeltas": [],
   "values": {
-    "0f2e464f22fe": {
-      "name": "filters",
-      "ordinal": 7,
-      "value": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": false
-      }
-    },
     "16b99eacf628": {
       "name": "groupMode",
       "ordinal": 3,
       "value": "none"
+    },
+    "18dba576d09b": {
+      "name": "filters",
+      "ordinal": 13,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
+      }
     },
     "19da51d77d45": {
       "name": "ui.get#1",
@@ -60,6 +64,20 @@
       "name": "ui.set#1",
       "ordinal": 9,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
+    },
+    "23a725bb694c": {
+      "name": "filters",
+      "ordinal": 7,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": false,
+        "hideWorkspacesFromOtherDevices": false
+      }
     },
     "2f74fcfacfbd": {
       "name": "ui.get#1",
@@ -130,6 +148,22 @@
         }
       }
     },
+    "3a54bd07d9b5": {
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": false,
+        "hideWorkspacesFromOtherDevices": false
+      },
+      "groupMode": "none",
+      "sortMode": "recent",
+      "statuses": []
+    },
     "41006b189a5c": {
       "name": "visibleHostIds",
       "ordinal": 8,
@@ -172,20 +206,26 @@
         }
       }
     },
-    "4ecad32c32b9": {
-      "name": "filters",
-      "ordinal": 13,
-      "value": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
-      }
-    },
     "582477c8e0af": {
       "name": "ui.get#1",
       "ordinal": 2,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    },
+    "5f8be6786edf": {
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": false,
+        "hideWorkspacesFromOtherDevices": false
+      },
+      "groupMode": "none",
+      "sortMode": "name",
+      "statuses": []
     },
     "62f2e7e2b825": {
       "name": "workspaceStatuses",
@@ -304,16 +344,6 @@
         }
       }
     },
-    "77222aa7cc3b": {
-      "name": "filters",
-      "ordinal": 7,
-      "value": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
-      }
-    },
     "78839ac47a93": {
       "name": "collapsedGroups",
       "ordinal": 12,
@@ -398,18 +428,6 @@
         "startedAt": 0
       }
     },
-    "9d2d4e824476": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": false
-      },
-      "groupMode": "none",
-      "sortMode": "name",
-      "statuses": []
-    },
     "a6ec458add98": {
       "name": "ui.set#1",
       "ordinal": 8,
@@ -449,30 +467,6 @@
       "ordinal": 4,
       "value": "name"
     },
-    "ba2035345a68": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": true
-      },
-      "groupMode": "repo",
-      "sortMode": "name",
-      "statuses": []
-    },
-    "bbdab1a7d122": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranch": true,
-        "filterRepoIds": [],
-        "hideDefaultBranch": false,
-        "hideSleeping": false
-      },
-      "groupMode": "none",
-      "sortMode": "recent",
-      "statuses": []
-    },
     "c40ad123c151": {
       "name": "ui.get#1",
       "ordinal": 1,
@@ -508,6 +502,22 @@
         }
       }
     },
+    "c69d19e118ff": {
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
+      },
+      "groupMode": "repo",
+      "sortMode": "name",
+      "statuses": []
+    },
     "d5d6bbbd1680": {
       "name": "ui.get#1",
       "ordinal": 1,
@@ -537,6 +547,20 @@
           "id": "frame-1",
           "ok": true
         }
+      }
+    },
+    "df87b9959d20": {
+      "name": "filters",
+      "ordinal": 7,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false
       }
     },
     "eb79a9b3682a": {
@@ -634,7 +658,7 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "bbdab1a7d122",
+          "state": "3a54bd07d9b5",
           "effects": []
         }
       },
@@ -648,19 +672,19 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "ba2035345a68",
+          "state": "c69d19e118ff",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "77222aa7cc3b",
+            "df87b9959d20",
             "41006b189a5c",
             "90d41ecf43d0",
             "1a43d7f74ca0",
             "62f2e7e2b825",
             "78839ac47a93",
-            "4ecad32c32b9"
+            "18dba576d09b"
           ]
         }
       },
@@ -674,13 +698,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -694,13 +718,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -714,13 +738,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -734,13 +758,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -754,13 +778,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -774,13 +798,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -794,13 +818,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -814,13 +838,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -834,13 +858,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       },
@@ -854,13 +878,13 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "9d2d4e824476",
+          "state": "5f8be6786edf",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "0f2e464f22fe"
+            "23a725bb694c"
           ]
         }
       }

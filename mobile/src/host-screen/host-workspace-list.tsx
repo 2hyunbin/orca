@@ -114,7 +114,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
         sectionCount={sections.length}
         catalogError={state.catalogError}
         search={state.search}
-        activeFilterCount={settings.activeFilterCount}
+        activeFilterCount={controller.activeFilterCount}
       />
 
       {sections.length > 0 && (
