@@ -229,7 +229,10 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           launchedAgent: params.terminal ? null : agent
         })
         if (prompt.structuredTurnStart?.verdict === 'unobserved') {
-          throw new OrchestrationError('operation_unknown', prompt.structuredTurnStart.reason)
+          throw new OrchestrationError(
+            'operation_unknown',
+            prompt.structuredTurnStart.reason ?? 'The structured worker turn start was not observed.'
+          )
         }
         effects.push({
           kind: 'dispatch_input',
