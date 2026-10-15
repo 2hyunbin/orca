@@ -33,4 +33,38 @@ describe('remote federated worker start receipt', () => {
       })
     ).toMatchObject({ dispatchId: 'ctx_remote', state: 'outcome_unknown' })
   })
+
+  it('accepts the receiving host structured identity and mode beside the compatibility handle', () => {
+    expect(
+      parseRemoteFederatedWorkerStartReceipt(
+        {
+          dispatchId: 'ctx_remote',
+          state: 'ready',
+          runtimeEpoch: 'epoch_remote',
+          worktreeId: 'worktree_remote',
+          terminalHandle: 'structworker_remote',
+          agentSession: { kind: 'structured', handle: 'structworker_remote', sessionId: 'session_remote' },
+          mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Chat default.' }
+        },
+        { supportsAgentSession: true }
+      )
+    ).toMatchObject({ agentSession: { kind: 'structured', sessionId: 'session_remote' } })
+  })
+
+  it('rejects a capable peer that claims ready without the matching session and mode', () => {
+    expect(() =>
+      parseRemoteFederatedWorkerStartReceipt(
+        {
+          dispatchId: 'ctx_remote',
+          state: 'ready',
+          runtimeEpoch: 'epoch_remote',
+          worktreeId: 'worktree_remote',
+          terminalHandle: 'term_remote',
+          agentSession: { kind: 'structured', handle: 'other', sessionId: 'session_remote' },
+          mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Chat default.' }
+        },
+        { supportsAgentSession: true }
+      )
+    ).toThrow('invalid agent-session receipt')
+  })
 })

@@ -1,4 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { releaseStructuredWorkerSession } from '../../orchestration-structured-worker-session'
+import { structuredWorkerIdentities } from '../../../../structured-worker-identity'
+
+vi.mock('../../structured-agent-session-create', () => ({
+  createStructuredAgentSessionForWorktree: async (args: { envelope: { sessionId: string } }) => ({
+    ok: true,
+    value: { sessionId: args.envelope.sessionId, fence: 7 }
+  })
+}))
+
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { WorkerSetupReceipt } from '../worker/worker-topology'
@@ -26,7 +37,8 @@ function fakes(created: { startupTerminal?: { handle: string } } = {}) {
       ]
     })),
     createTerminal: vi.fn(async () => ({ handle: 'term_worker' })),
-    // Chat default on: federation still starts a terminal and never asks about a session.
+    // Older coordinators retain terminal launches even when this host prefers chat.
+    ensureStructuredAgentSessionHost: async () => {},
     getClientSettings: vi.fn(() => ({ experimentalNativeChat: true })),
     getStructuredAgentSessionCreateSupport: vi.fn(async () => ({ supported: true }))
   }
@@ -50,7 +62,7 @@ const PARAMS = FederationAttachStartParams.parse({
   agent: 'claude'
 })
 
-function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }) {
+function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }, supportsAgentSession = false) {
   const effects: FederationEffect[] = []
   const setups: WorkerSetupReceipt[] = []
   const stagesSeen: string[] = []
@@ -59,7 +71,7 @@ function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }) {
     runtime: f.runtime as unknown as OrcaRuntimeService,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch records only attachment stages.
     db: f.db as unknown as OrchestrationDb,
-    params: PARAMS,
+    params: { ...PARAMS, supportsAgentSession },
     agent: 'claude',
     launchPreferences: { model: 'opus' },
     ...(worktree ? { worktree } : {}),
@@ -71,12 +83,18 @@ function launch(f: ReturnType<typeof fakes>, worktree?: { id: string }) {
   return { done, effects, setups, stagesSeen }
 }
 
+afterEach(() => {
+  releaseStructuredWorkerSession('ctx_remote')
+  structuredWorkerIdentities.clear()
+  setStructuredAgentSessionHost(null)
+})
+
 describe('a federated worker through the launch executor', () => {
   it('creates the new top-level worktree agent-first with the attachment’s own records', async () => {
     const f = fakes({ startupTerminal: { handle: 'term_agent' } })
     const run = launch(f)
 
-    await expect(run.done).resolves.toEqual({
+    await expect(run.done).resolves.toMatchObject({
       worktree: { id: 'repo::remote-wt', repoId: 'repo' },
       terminalHandle: 'term_agent'
     })
@@ -156,7 +174,7 @@ describe('a federated worker through the launch executor', () => {
     const f = fakes()
     const run = launch(f, { id: 'folder:remote' })
 
-    await expect(run.done).resolves.toEqual({
+    await expect(run.done).resolves.toMatchObject({
       worktree: { id: 'folder:remote' },
       terminalHandle: 'term_worker'
     })
@@ -174,4 +192,32 @@ describe('a federated worker through the launch executor', () => {
     expect(f.runtime.getStructuredAgentSessionCreateSupport).not.toHaveBeenCalled()
     expect(run.stagesSeen).toEqual(['terminal_create', 'terminal_create'])
   })
+
+  it.each([undefined, { id: 'folder:remote' }])(
+    'uses the receiving host chat preference after resolving workspace %j',
+    async (worktree) => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worker creation reads only subscribe and the local execution location.
+      setStructuredAgentSessionHost({
+        subscribe: () => () => {},
+        deps: {
+          store: { getRecord: () => ({ location: { executionHostId: 'local', wslDistro: null } }) }
+        }
+      } as never)
+      const f = fakes()
+      const placed = await launch(f, worktree, true).done
+      expect(placed).toMatchObject({
+        mode: { mode: 'structured', reason: 'user_default' },
+        agentSession: { kind: 'structured', handle: placed.terminalHandle },
+        structuredSession: { identity: { handle: placed.terminalHandle } }
+      })
+      expect(f.runtime.createTerminal).not.toHaveBeenCalled()
+      expect(f.runtime.getStructuredAgentSessionCreateSupport).toHaveBeenCalledOnce()
+      if (!worktree) {
+        expect(f.runtime.createManagedWorktree).toHaveBeenCalledWith(
+          expect.not.objectContaining({ startupAgent: expect.anything() })
+        )
+      }
+    }
+  )
+
 })

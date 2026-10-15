@@ -1,6 +1,8 @@
 import { ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION } from '../../../../../../shared/protocol-version'
 import { importFederatedControlMessage } from '../../../../orchestration/federation-control-message'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
+import { isStructuredWorkerHandle } from '../../../../structured-worker-identity'
+import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   areFederatedLifecycleSettlementsEqual,
   publishFederatedLifecycleSettlement,
@@ -18,8 +20,21 @@ export const ORCHESTRATION_FEDERATION_RELAY_METHODS = [
     name: 'orchestration.federationPull',
     permission: 'workspace',
     params: FederationPullParams,
-    handler: (params, { runtime, authenticatedCallerFingerprint }) => {
-      requireHomeAttachment(runtime, params.dispatchId, authenticatedCallerFingerprint)
+    handler: async (params, { runtime, authenticatedCallerFingerprint }) => {
+      const attachment = requireHomeAttachment(
+        runtime,
+        params.dispatchId,
+        authenticatedCallerFingerprint
+      )
+      if (
+        attachment.terminal_handle &&
+        isStructuredWorkerHandle(attachment.terminal_handle) &&
+        !getStructuredAgentSessionHost()
+      ) {
+        await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
+        // A restored pointer may have been scanned before the lazy host was installed.
+        runtime.notifyMessageArrived(`dispatch:${params.dispatchId}`, 'status')
+      }
       return {
         dispatchId: params.dispatchId,
         runtimeEpoch: runtime.getRuntimeId(),
@@ -105,15 +120,22 @@ export const ORCHESTRATION_FEDERATION_RELAY_METHODS = [
     name: 'orchestration.federationImport',
     permission: 'workspace',
     params: FederationImportParams,
-    handler: (params, { runtime, authenticatedCallerFingerprint }) => {
+    handler: async (params, { runtime, authenticatedCallerFingerprint }) => {
       const db = runtime.getOrchestrationDb()
       const attachment = requireHomeAttachment(
         runtime,
         params.dispatchId,
         authenticatedCallerFingerprint
       )
+      const structured = Boolean(
+        attachment.terminal_handle && isStructuredWorkerHandle(attachment.terminal_handle)
+      )
+      if (structured) {
+        await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
+      }
       let cursor = attachment.to_worker_imported_sequence
       let imported = 0
+      let notified = false
       for (const item of params.items) {
         if (item.dispatch_id !== params.dispatchId || item.sequence > cursor + 1) {
           throw new OrchestrationError(
@@ -144,6 +166,7 @@ export const ORCHESTRATION_FEDERATION_RELAY_METHODS = [
             body: reply.body
           })
           runtime.notifyMessageArrived(`dispatch:${params.dispatchId}`, 'status')
+          notified = true
         } else if (item.kind === 'control_message') {
           if (
             currentAttachment.protocol_version <
@@ -162,6 +185,7 @@ export const ORCHESTRATION_FEDERATION_RELAY_METHODS = [
           imported += controlMessage.imported ? 1 : 0
           if (controlMessage.imported) {
             runtime.notifyMessageArrived(`dispatch:${params.dispatchId}`, controlMessage.type)
+            notified = true
           }
         } else {
           throw new OrchestrationError(
@@ -171,6 +195,10 @@ export const ORCHESTRATION_FEDERATION_RELAY_METHODS = [
         }
         cursor = item.sequence
         db.setRemoteWorkerImportSequence(params.dispatchId, cursor)
+      }
+      if (structured && !notified) {
+        // Restart may leave already-imported mail waiting before the structured host is installed.
+        runtime.notifyMessageArrived(`dispatch:${params.dispatchId}`, 'status')
       }
       return { dispatchId: params.dispatchId, acknowledgedThrough: cursor, imported }
     }

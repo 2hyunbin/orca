@@ -1,23 +1,11 @@
-export type FederationEffect = {
-  kind: 'worktree' | 'terminal' | 'setup' | 'dispatch_input'
-  action?: string
-  role?: string
-  id?: string
-  state?: string
-  tabId?: string
-  leafId?: string
-  requested?: string
-  effective?: string
-  source?: string
-  hookFound?: boolean
-  startupPolicy?: string
-  terminalId?: string
-}
+import type { WorkerEffect } from '../worker/worker-topology'
+
+export type FederationEffect = WorkerEffect
 
 export function appendFederationTerminalEffects(
   effects: FederationEffect[],
   terminals: { handle: string; title: string | null; tabId?: string; leafId?: string }[],
-  agentHandle: string,
+  agentHandle: string | undefined,
   setupHandle?: string
 ): void {
   for (const terminal of terminals) {

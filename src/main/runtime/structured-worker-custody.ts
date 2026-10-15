@@ -17,6 +17,7 @@ import { isOrcaSessionId } from '../../shared/orca-session-address'
 import { canonicalOrcaSessionId } from './orchestration/canonical-orca-session-id'
 import type { RunningStructuredSession } from './orchestration/structured-session-lineage'
 import type { OrchestrationDb } from './orchestration/db'
+import { potentiallyLiveRemoteAttachmentSql } from './orchestration/db/federation/remote-attachment-liveness'
 import type { WorkerDispatchState } from './orchestration/types'
 import {
   deriveWorkerTerminalListState,
@@ -132,9 +133,13 @@ export function structuredWorkerOwesWork(
     db.db
       .prepare(
         `SELECT 1 FROM dispatch_contexts
-          WHERE process_incarnation = ? AND status IN ('pending', 'dispatched') LIMIT 1`
+          WHERE process_incarnation = ? AND status IN ('pending', 'dispatched')
+         UNION ALL
+         SELECT 1 FROM remote_dispatch_attachments
+          WHERE process_incarnation = ? AND ${potentiallyLiveRemoteAttachmentSql()}
+         LIMIT 1`
       )
-      .get(incarnation) !== undefined
+      .get(incarnation, incarnation) !== undefined
   )
 }
 

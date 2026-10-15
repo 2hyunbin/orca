@@ -1,4 +1,24 @@
 import type { OrchestrationWorkerLaunchReceipt } from '../worker/worker-launch-preferences'
+import type {
+  AgentLaunchModeReceipt,
+  AgentLaunchOutcome
+} from '../../../../../../shared/agent-launch-intent'
+import type { ReadyRemoteFederatedWorkerStartReceipt } from './federated-attach-receipt'
+
+export function federatedReadySurfaceReceipt(remote: ReadyRemoteFederatedWorkerStartReceipt): {
+  agentSession: AgentLaunchOutcome
+  mode: AgentLaunchModeReceipt
+} {
+  return {
+    agentSession: remote.agentSession ?? { kind: 'terminal', handle: remote.terminalHandle },
+    mode: remote.mode ?? {
+      mode: 'terminal',
+      preferred: 'terminal',
+      reason: 'remote_execution_host',
+      detail: 'Started a terminal agent worker through the older federation contract.'
+    }
+  }
+}
 
 export type RemoteStartReceipt = {
   dispatchId: string
@@ -29,7 +49,8 @@ export function federatedUnknownReceipt(
   worker: { dispatch_id: string; state: string; stage: string; last_error: string | null },
   taskId: string,
   serverName: string,
-  launch: OrchestrationWorkerLaunchReceipt
+  launch: OrchestrationWorkerLaunchReceipt,
+  surface?: { mode?: AgentLaunchModeReceipt; agentSession?: AgentLaunchOutcome }
 ): unknown {
   return {
     taskId,
@@ -38,6 +59,8 @@ export function federatedUnknownReceipt(
     stage: worker.stage,
     server: { name: serverName },
     launch,
+    ...(surface?.mode ? { mode: surface.mode } : {}),
+    ...(surface?.agentSession ? { agentSession: surface.agentSession } : {}),
     failedStage: worker.stage,
     lastError: worker.last_error,
     effects: [],

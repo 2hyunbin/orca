@@ -53,10 +53,6 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
         )
       }
       await assertWorkerStartTaskSpecWithinPromptBudget(params.spec ?? existingTask!.spec)
-      const mode = decideWorkerStartMode({
-        params,
-        settings: readWorkerStartModeSettings(runtime)
-      })
       if (params.on && params.terminal?.startsWith(ORCA_SESSION_ADDRESS_PREFIX)) {
         // Refused here, before any remote call: an Orca session ID names a chat only on its own host.
         throw new OrchestrationError(
@@ -66,9 +62,7 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
         )
       }
       if (params.on) {
-        // A remote worker is always a terminal agent; the mode receipt rides along so the
-        // coordinator still learns why its structured default did not apply.
-        const receipt = await startFederatedWorker({
+        return startFederatedWorker({
           params,
           runtime,
           db,
@@ -77,8 +71,11 @@ export const ORCHESTRATION_WORKER_START_METHODS = [
           orchestrationMutation,
           callerSession: orchestrationCaller
         })
-        return receipt && typeof receipt === 'object' ? { ...receipt, mode } : receipt
       }
+      const mode = decideWorkerStartMode({
+        params,
+        settings: readWorkerStartModeSettings(runtime)
+      })
       return startLocalWorker({
         params: { ...params, timeoutMs: readinessTimeoutMs },
         runtime,

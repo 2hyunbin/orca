@@ -3,6 +3,12 @@ import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { parseWorkerTerminalHostScope } from '../../../../orchestration/worker-terminal-process-liveness'
 import type { RemoteDispatchAttachmentRow } from '../../../../orchestration/types'
+import {
+  holdStructuredWorker,
+  observeStructuredSession,
+  resolveStructuredWorkerIdentity
+} from '../../../../structured-worker-authority'
+import { isStructuredWorkerHandle, type StructuredWorkerIdentity } from '../../../../structured-worker-identity'
 
 export function requireHomeAttachment(
   runtime: OrcaRuntimeService,
@@ -30,11 +36,47 @@ export async function inspectRemoteAttachment(
   reason?: string
   /** Set only on a proven-exact attachment parked on a prompt that needs a human. */
   agentWait?: RuntimeTerminalInteractiveWait | null
+  addressable?: boolean
+  structured?: StructuredWorkerIdentity
 }> {
   const db = runtime.getOrchestrationDb()
   const attachment = db.getRemoteDispatchAttachment(dispatchId)
   if (!attachment?.terminal_handle) {
     return { terminal: null, exact: false, status: 'unattached' }
+  }
+  if (isStructuredWorkerHandle(attachment.terminal_handle)) {
+    const identity = resolveStructuredWorkerIdentity(attachment.terminal_handle, db)
+    if (!identity) {
+      return { terminal: null, exact: false, status: 'identity_changed' }
+    }
+    const exact = db.isRemoteAttachmentProcessCurrent({
+      dispatchId,
+      paneKey: identity.paneKey,
+      processIncarnation: identity.processIncarnation
+    })
+    if (!exact) {
+      return { terminal: null, exact: false, status: 'identity_changed' }
+    }
+    await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
+    const hold = holdStructuredWorker(identity, db)
+    if (hold.kind === 'unverifiable') {
+      return {
+        terminal: null,
+        exact: true,
+        status: 'unverifiable',
+        reason: hold.reason,
+        structured: identity
+      }
+    }
+    const observation = observeStructuredSession(hold.running.sessionId)
+    return {
+      terminal: null,
+      exact: true,
+      status: observation.status,
+      ...(observation.reason ? { reason: observation.reason } : {}),
+      addressable: hold.kind === 'held',
+      structured: identity
+    }
   }
   const terminal = await runtime.showTerminal(attachment.terminal_handle).catch(() => null)
   if (!terminal) {

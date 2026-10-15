@@ -5,10 +5,10 @@ import { mapWithConcurrency } from '../../../../../../shared/map-with-concurrenc
 import { readExactWorkerOutput } from '../worker/worker-output'
 import { describeUnconfirmedAgentStop } from '../../../../../../shared/pty-liveness-verdict'
 import { inspectRemoteAttachment, requireHomeAttachment } from './federation-attachment-observation'
-import {
-  readRemoteAttachmentArchive,
-  releaseRemoteAttachment
-} from './federated-worker-release-host'
+import { stopRemoteStructuredAttachment } from './federation-structured-stop'
+import { readRemoteStructuredOutput } from './federation-structured-output'
+import { releaseRemoteAttachment } from './federated-worker-release-host'
+import { readRemoteAttachmentArchive } from './federated-worker-release-archive'
 import {
   FederationDispatchParams,
   FederationFleetSnapshotParams,
@@ -33,7 +33,10 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
                 ? observation.status
                 : 'unverifiable',
             exactWorker: observation.exact,
-            ...(observation.reason ? { reason: observation.reason } : {})
+            ...(observation.reason ? { reason: observation.reason } : {}),
+            ...(observation.addressable === undefined
+              ? {}
+              : { addressable: observation.addressable })
           }
         }
       })
@@ -74,7 +77,10 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
           status: observation.status,
           exactWorker: observation.exact,
           ...(observation.reason ? { reason: observation.reason } : {}),
-          ...(observation.agentWait !== undefined ? { agentWait: observation.agentWait } : {})
+          ...(observation.agentWait !== undefined ? { agentWait: observation.agentWait } : {}),
+          ...(observation.addressable === undefined
+            ? {}
+            : { addressable: observation.addressable })
         }
       }
     }
@@ -147,11 +153,28 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
         }
       }
       const observation = await inspectRemoteAttachment(runtime, params.dispatchId)
-      if (!observation.exact || !observation.terminal) {
+      if (!observation.exact || (!observation.terminal && !observation.structured)) {
         throw new OrchestrationError(
           'worker_identity_changed',
           `Remote Dispatch ${params.dispatchId} no longer resolves to its exact process.`
         )
+      }
+      if (observation.structured) {
+        return readRemoteStructuredOutput({
+          runtime,
+          attachment,
+          structured: observation.structured,
+          liveness:
+            observation.status === 'live' || observation.status === 'exited'
+              ? observation.status
+              : 'unverifiable',
+          source: params.source,
+          cursor: params.cursor,
+          limit: params.limit
+        })
+      }
+      if (!observation.terminal) {
+        throw new OrchestrationError('worker_identity_changed', 'Worker terminal disappeared.')
       }
       const output = await readExactWorkerOutput({
         runtime,
@@ -206,7 +229,7 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
         }
       }
       const observation = await inspectRemoteAttachment(runtime, params.dispatchId)
-      if (!observation.exact || !observation.terminal) {
+      if (!observation.exact || (!observation.terminal && !observation.structured)) {
         const attachment = db.markRemoteAttachmentStopUnknown(
           params.dispatchId,
           `The recorded worker process is ${observation.status}; no terminal was closed.`
@@ -218,6 +241,12 @@ export const ORCHESTRATION_FEDERATION_CONTROL_METHODS = [
           processAction: 'none',
           lastError: attachment.last_error
         }
+      }
+      if (observation.structured) {
+        return stopRemoteStructuredAttachment(runtime, params.dispatchId, observation.structured)
+      }
+      if (!observation.terminal) {
+        throw new OrchestrationError('worker_identity_changed', 'Worker terminal disappeared.')
       }
       try {
         const close = await runtime.closeTerminal(observation.terminal.handle)

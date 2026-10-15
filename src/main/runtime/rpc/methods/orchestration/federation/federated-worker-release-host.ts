@@ -9,48 +9,20 @@ import {
   summarizeWorkerOutputArchive
 } from '../../../../orchestration/worker-output-archive'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
-import { readArchivedWorkerOutput } from '../worker/worker-archive-read'
 import {
   archiveSummary,
   releaseUnknownRecovery,
   type WorkerReleaseReceipt
 } from '../worker/worker-release-completion'
 import { orchestrationTimestampToMs } from '../worker/worker-output'
+import { stopStructuredWorkerForRelease } from '../worker/structured-worker-release-stop'
 import type { inspectRemoteAttachment } from './federation-attachment-observation'
+import { readRemoteAttachmentArchive } from './federated-worker-release-archive'
+import { remoteAttachmentLeaseIsCurrent } from './federated-worker-release-identity'
 import {
   classifyWorkerTerminalCloseError,
   TRANSIENT_WORKER_RELEASE_RECOVERY
 } from '../worker/worker-release-close-error'
-
-export async function readRemoteAttachmentArchive(args: {
-  runtime: OrcaRuntimeService
-  attachment: RemoteDispatchAttachmentRow
-  source?: 'auto' | 'transcript' | 'terminal'
-  cursor?: string | number
-  limit?: number
-  liveness?: 'live' | 'unverifiable' | 'exited'
-}) {
-  const archive = args.runtime
-    .getOrchestrationDb()
-    .getWorkerTerminalArchive(args.attachment.dispatch_id)
-  if (!archive || !args.attachment.terminal_handle) {
-    return null
-  }
-  return readArchivedWorkerOutput({
-    db: args.runtime.getOrchestrationDb(),
-    dispatchId: args.attachment.dispatch_id,
-    workerState: args.attachment.state,
-    resource: {
-      id: `remote-attachment:${args.attachment.dispatch_id}`,
-      terminal_handle: args.attachment.terminal_handle,
-      release_state: args.attachment.stage === 'released' ? 'released' : 'releasing'
-    },
-    source: args.source,
-    cursor: args.cursor,
-    limit: args.limit,
-    liveness: args.liveness
-  })
-}
 
 export async function releaseRemoteAttachment(args: {
   runtime: OrcaRuntimeService
@@ -105,7 +77,7 @@ export async function releaseRemoteAttachment(args: {
     }
   }
   const resource = requested.resource
-  if (!observation.exact || !observation.terminal) {
+  if (!observation.exact || (!observation.terminal && !observation.structured)) {
     if (
       args.mode === 'recovery' &&
       (observation.status === 'missing' || observation.status === 'unattached')
@@ -151,8 +123,9 @@ export async function releaseRemoteAttachment(args: {
       const captured = await captureWorkerOutputArchive({
         runtime,
         dispatchId: attachment.dispatch_id,
-        terminalHandle: observation.terminal.handle,
-        attachedAtMs: orchestrationTimestampToMs(attachment.created_at)
+        terminalHandle: resource.terminal_handle,
+        attachedAtMs: orchestrationTimestampToMs(attachment.created_at),
+        structuredWorker: observation.structured
       })
       db.storeWorkerTerminalArchive({
         dispatchId: attachment.dispatch_id,
@@ -206,6 +179,30 @@ export async function releaseRemoteAttachment(args: {
       archive: archiveSummary(retained),
       output
     }
+  }
+  if (observation.structured) {
+    const stopped = await stopStructuredWorkerForRelease({
+      structured: observation.structured,
+      dispatchId: attachment.dispatch_id,
+      resource: releasing,
+      runtime,
+      db,
+      archiveSource: releasing.archive_source,
+      archiveStatus: releasing.archive_status
+    })
+    if (stopped.state === 'released') {
+      db.recordRemoteAttachmentStage({ dispatchId: attachment.dispatch_id, stage: 'released' })
+    }
+    return {
+      ...stopped,
+      output: projectArchivedOutputLiveness(
+        output,
+        stopped.state === 'released' ? 'exited' : 'unverifiable'
+      )
+    }
+  }
+  if (!observation.terminal) {
+    throw new Error('Worker terminal disappeared after lease verification.')
   }
   // An exited worker still owns a terminal record and tab on the host; close it before
   // reporting `closed_exited_terminal`, exactly as the local release path does.
@@ -264,28 +261,6 @@ export async function releaseRemoteAttachment(args: {
     archive: archiveSummary(released),
     output: projectArchivedOutputLiveness(output, 'exited')
   }
-}
-
-function remoteAttachmentLeaseIsCurrent(
-  runtime: OrcaRuntimeService,
-  attachment: RemoteDispatchAttachmentRow,
-  observation: Awaited<ReturnType<typeof inspectRemoteAttachment>>,
-  resource: WorkerTerminalResourceRow
-): boolean {
-  const db = runtime.getOrchestrationDb()
-  return Boolean(
-    observation.exact &&
-    observation.terminal?.handle === resource.terminal_handle &&
-    attachment.terminal_handle === resource.terminal_handle &&
-    resource.owner_dispatch_id === attachment.dispatch_id &&
-    resource.ownership_state === 'owned' &&
-    db.isRemoteAttachmentProcessCurrent({
-      dispatchId: attachment.dispatch_id,
-      paneKey: runtime.getTerminalPaneKey(resource.terminal_handle),
-      processIncarnation: runtime.getTerminalProcessIncarnation(resource.terminal_handle)
-    }) &&
-    !db.workerTerminalResourceHasIdentityConflict(resource.id)
-  )
 }
 
 function retainedReason(resource: WorkerTerminalResourceRow): WorkerTerminalRetainedReason {

@@ -1,4 +1,10 @@
 import type { OrchestrationWorkerLaunchReceipt } from '../worker/worker-launch-preferences'
+import {
+  isAgentLaunchModeReceipt,
+  isAgentLaunchOutcome,
+  type AgentLaunchModeReceipt,
+  type AgentLaunchOutcome
+} from '../../../../../../shared/agent-launch-intent'
 
 export type RemoteFederatedWorkerStartReceipt = {
   dispatchId: string
@@ -6,6 +12,8 @@ export type RemoteFederatedWorkerStartReceipt = {
   runtimeEpoch?: string
   worktreeId?: string
   terminalHandle?: string
+  agentSession?: AgentLaunchOutcome
+  mode?: AgentLaunchModeReceipt
   setup?: { state: string }
   launch?: OrchestrationWorkerLaunchReceipt
   effects?: unknown[]
@@ -22,7 +30,8 @@ export type ReadyRemoteFederatedWorkerStartReceipt = RemoteFederatedWorkerStartR
 }
 
 export function parseRemoteFederatedWorkerStartReceipt(
-  value: unknown
+  value: unknown,
+  options: { supportsAgentSession?: boolean } = {}
 ): RemoteFederatedWorkerStartReceipt {
   if (!isRecord(value) || !isNonEmptyString(value.dispatchId) || !isNonEmptyString(value.state)) {
     throw new Error('The worker server returned an invalid attachment receipt.')
@@ -34,6 +43,23 @@ export function parseRemoteFederatedWorkerStartReceipt(
       !isNonEmptyString(value.terminalHandle))
   ) {
     throw new Error('The worker server returned an invalid ready receipt.')
+  }
+  if (
+    (value.agentSession !== undefined && !isAgentLaunchOutcome(value.agentSession)) ||
+    (value.mode !== undefined && !isAgentLaunchModeReceipt(value.mode)) ||
+    (value.agentSession !== undefined &&
+      isAgentLaunchOutcome(value.agentSession) &&
+      value.agentSession.handle !== value.terminalHandle) ||
+    (value.agentSession !== undefined &&
+      isAgentLaunchOutcome(value.agentSession) &&
+      isAgentLaunchModeReceipt(value.mode) &&
+      value.agentSession.kind !== value.mode.mode) ||
+    (value.state === 'ready' && (value.agentSession === undefined) !== (value.mode === undefined)) ||
+    (value.state === 'ready' &&
+      options.supportsAgentSession &&
+      (value.agentSession === undefined || value.mode === undefined))
+  ) {
+    throw new Error('The worker server returned an invalid agent-session receipt.')
   }
   return value as RemoteFederatedWorkerStartReceipt
 }

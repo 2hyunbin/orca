@@ -7,12 +7,32 @@ import {
 } from '../../../../../../shared/protocol-version'
 import type { RuntimeRpcResponse } from '../../../../../../shared/runtime-rpc-envelope'
 import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { setStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { structuredWorkerIdentities } from '../../../../structured-worker-identity'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import type { OrchestrationEnvironmentTransport } from '../../../../orchestration/environment-transport'
 import { waitForFederatedLifecycleSettlement } from '../../../../orchestration/federation-lifecycle-settlement'
 import { RpcDispatcher } from '../../../dispatcher'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { createFederationWorkerStartRequest as startRequest } from './federation-request.test-support'
+import { showFederatedWorker } from './federated-worker-show'
+
+const structuredCreates = vi.hoisted(() =>
+  vi.fn(async (sessionId: string) => ({
+    ok: true,
+    value: { sessionId, fence: 7 }
+  }))
+)
+
+vi.mock('../../structured-agent-session-create', () => ({
+  createStructuredAgentSessionForWorktree: async (args: { envelope: { sessionId: string } }) =>
+    structuredCreates(args.envelope.sessionId)
+}))
+
+vi.mock('../../orchestration-structured-worker-session', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  sendStructuredWorkerPreamble: async () => 'accepted'
+}))
 
 describe('orchestration federation lifecycle settlement', () => {
   let homeDb: OrchestrationDb
@@ -23,6 +43,7 @@ describe('orchestration federation lifecycle settlement', () => {
   let workerDispatcher: RpcDispatcher
   let workerCapabilities: string[]
   let failNextAckBeforeDelivery: boolean
+  let failNextAttachAfterAcceptance: boolean
   let ackAttempts: number
   let transport: OrchestrationEnvironmentTransport
 
@@ -34,6 +55,7 @@ describe('orchestration federation lifecycle settlement', () => {
     workerDispatcher = new RpcDispatcher({ runtime: workerRuntime, methods: ORCHESTRATION_METHODS })
     workerCapabilities = [...(workerRuntime.getStatus().capabilities ?? [])]
     failNextAckBeforeDelivery = false
+    failNextAttachAfterAcceptance = false
     ackAttempts = 0
     transport = {
       resolve: () => ({
@@ -57,7 +79,7 @@ describe('orchestration federation lifecycle settlement', () => {
           failNextAckBeforeDelivery = false
           throw new Error('connection lost before acknowledgment')
         }
-        return await workerDispatcher.dispatch({
+        const response = await workerDispatcher.dispatch({
           id: `remote_${method}`,
           authToken: 'run-home-device-token',
           method,
@@ -65,6 +87,11 @@ describe('orchestration federation lifecycle settlement', () => {
           orchestrationContractVersion: envelope?.orchestrationContractVersion,
           orchestrationRequestId: envelope?.orchestrationRequestId
         })
+        if (method === 'orchestration.federationAttachStart' && failNextAttachAfterAcceptance) {
+          failNextAttachAfterAcceptance = false
+          throw new Error('connection lost after the worker accepted the launch')
+        }
+        return response
       }
     }
     homeRuntime = new OrcaRuntimeService(null, undefined, {
@@ -82,6 +109,7 @@ describe('orchestration federation lifecycle settlement', () => {
     homeRuntime.stopOrchestrationFederationRelay()
     homeDb.close()
     workerDb.close()
+    structuredWorkerIdentities.clear()
   })
 
   function configureWorkerRuntime(): void {
@@ -223,6 +251,70 @@ describe('orchestration federation lifecycle settlement', () => {
           capability !== ORCHESTRATION_FEDERATION_CONTROL_MAIL_RUNTIME_CAPABILITY)
     )
   }
+
+  it('reconciles a structured worker after its accepted start reply is lost without launching twice', async () => {
+    structuredCreates.mockClear()
+    const record = {
+      location: { executionHostId: 'local', wslDistro: null },
+      lease: { claimStatus: 'live', runtimeFence: 7, deathEvidence: null }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the worker path reads only this fake host's record, subscription, and session presence.
+    setStructuredAgentSessionHost({
+      deps: { store: { getRecord: () => record } },
+      subscribe: async () => () => {},
+      hasSession: () => true
+    } as never)
+    vi.spyOn(workerRuntime, 'ensureStructuredAgentSessionHost').mockResolvedValue(undefined)
+    vi.spyOn(workerRuntime, 'getStructuredAgentSessionCreateSupport').mockResolvedValue({
+      supported: true
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mode decision reads only the native-chat default from this fixture.
+    vi.spyOn(workerRuntime, 'getClientSettings').mockReturnValue({
+      experimentalNativeChat: true
+    } as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the worktree factory reads only this create response in the test.
+    vi.mocked(workerRuntime.createManagedWorktree).mockResolvedValue({
+      worktree: { id: 'repo::windows-worktree', repoId: 'repo' },
+      setupReceipt: {
+        requested: 'run',
+        hookFound: false,
+        startupPolicy: 'start-immediately',
+        state: 'not_configured'
+      }
+    } as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the worktree factory needs only the empty terminal inventory.
+    vi.mocked(workerRuntime.listTerminals).mockResolvedValue({
+      terminals: [],
+      totalCount: 0,
+      truncated: false
+    } as never)
+    failNextAttachAfterAcceptance = true
+    const task = createHomeTask()
+
+    const first = await homeDispatcher.dispatch(startRequest(task.id, { agent: 'claude' }))
+    homeRuntime.stopOrchestrationFederationRelay()
+    const dispatch = homeDb.getDispatchContext(task.id)!
+    expect(first).toMatchObject({ ok: true, result: { state: 'outcome_unknown' } })
+    expect(workerDb.getRemoteDispatchAttachment(dispatch.id)).toMatchObject({
+      state: 'ready',
+      terminal_handle: expect.stringMatching(/^structworker_/)
+    })
+
+    await homeDispatcher.dispatch(startRequest(task.id, { agent: 'claude' }))
+    const shown = await showFederatedWorker({
+      runtime: homeRuntime,
+      db: homeDb,
+      dispatchId: dispatch.id,
+      dispatch,
+      federated: homeDb.getFederatedDispatch(dispatch.id)!
+    })
+    expect(shown.worker).toMatchObject({ state: 'ready' })
+    expect(homeDb.getFederatedDispatch(dispatch.id)?.remote_terminal_handle).toMatch(
+      /^structworker_/
+    )
+    expect(structuredCreates).toHaveBeenCalledTimes(1)
+    expect(workerRuntime.createManagedWorktree).toHaveBeenCalledTimes(1)
+  })
 
   it('waits for Run-home settlement when an older CLI omits the wait hint', async () => {
     const task = createHomeTask()

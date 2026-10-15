@@ -13,8 +13,12 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { observeStructuredWorker, resolveStructuredWorkerAuthority, structuredSessionCloseSettled } =
-  await import('./structured-worker-authority')
+const {
+  observeStructuredWorker,
+  resolveStructuredWorkerAuthority,
+  resolveStructuredWorkerIdentity,
+  structuredSessionCloseSettled
+} = await import('./structured-worker-authority')
 const { structuredWorkerOpenTaskTitle, structuredWorkerOwesWork, structuredWorkerOwned } =
   await import('./structured-worker-custody')
 const {
@@ -126,6 +130,44 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     db.beginWorkerStop(dispatch.id, 'epoch_home')
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
     db.settleWorkerStop(dispatch.id)
+    expect(structuredWorkerOwesWork(db, record({}))).toBe(false)
+  })
+
+  it('rehydrates a remote structured worker and keeps its child running until the attachment settles', () => {
+    const handle = mintStructuredWorkerHandle()
+    const remote = db.createRemoteDispatchAttachment({
+      runId: 'run_home',
+      dispatchId: 'ctx_remote_structured',
+      taskId: 'task_remote_structured',
+      homePeerFingerprint: 'home-peer',
+      protocolVersion: 2,
+      runtimeEpoch: 'epoch_worker',
+      mutationReceipt: {
+        callerFingerprint: 'home-peer',
+        requestId: 'start-remote-structured',
+        method: 'orchestration.federationAttachStart',
+        payloadHash: 'payload'
+      }
+    })
+    db.prepareRemoteAttachmentAuthority({
+      dispatchId: remote.dispatch_id,
+      paneKey: mintStructuredWorkerPaneKey(SESSION),
+      processIncarnation: structuredWorkerProcessIncarnation(SESSION),
+      worktreeId: 'wt_1',
+      terminalHandle: handle,
+      setupState: 'not_configured',
+      effects: [],
+      hostScope: LOCAL,
+      terminalOwnership: 'created'
+    })
+    structuredWorkerIdentities.clear()
+    expect(resolveStructuredWorkerIdentity(handle, db)?.sessionId).toBe(SESSION)
+    expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
+    db.markRemoteAttachmentReady(remote.dispatch_id)
+    expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
+    db.beginRemoteAttachmentStop(remote.dispatch_id)
+    expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
+    db.settleRemoteAttachmentStop(remote.dispatch_id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(false)
   })
 

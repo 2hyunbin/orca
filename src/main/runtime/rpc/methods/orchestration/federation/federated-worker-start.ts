@@ -5,6 +5,7 @@ import {
   ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION,
   ORCHESTRATION_FEDERATION_CONTROL_MAIL_RUNTIME_CAPABILITY,
+  ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_PROTOCOL_VERSION,
   ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY
@@ -29,6 +30,7 @@ import {
 } from './federated-attach-receipt'
 import { isWorkerStartTimeoutWithinTimerLimit } from '../../../../../../shared/orchestration-timing-budgets'
 import {
+  federatedReadySurfaceReceipt,
   federatedUnknownReceipt,
   isKnownRemoteStartFailure
 } from './federated-worker-start-receipts'
@@ -118,6 +120,9 @@ export async function startFederatedWorker(args: {
       : supportsControlMail
         ? ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION
         : 1
+  const supportsAgentSession = status.capabilities?.includes(
+    ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY
+  ) ?? false
 
   const setupDecision = createsWorktree ? (params.setup ?? 'run') : 'not_applicable'
   const started = db.createStartingWorkerDispatch({
@@ -176,6 +181,7 @@ export async function startFederatedWorker(args: {
           // remote worker cannot be mistaken for a root when it dispatches again.
           depth: started.dispatch.depth,
           protocolVersion: federationProtocolVersion,
+          ...(supportsAgentSession ? { supportsAgentSession: true } : {}),
           worktree,
           name: params.name,
           repo: params.repo,
@@ -199,7 +205,8 @@ export async function startFederatedWorker(args: {
         budgets.attachDeadlineMs,
         { orchestrationRequestId: orchestrationMutation.requestId },
         { contractVerified: true, ...pairingFence }
-      )
+      ),
+      { supportsAgentSession }
     )
     if (remote.dispatchId !== started.dispatch.id) {
       throw new OrchestrationError(
@@ -239,6 +246,7 @@ export async function startFederatedWorker(args: {
         server: { environmentId: server.environmentId, name: server.name },
         setup: remote.setup,
         launch,
+        ...federatedReadySurfaceReceipt(remote),
         timeoutMs: budgets.readinessTimeoutMs,
         effects: remote.effects ?? [],
         residualResources: remote.residualResources ?? []
@@ -250,7 +258,7 @@ export async function startFederatedWorker(args: {
         remote.failedStage ?? 'remote_attach',
         remote.lastError ?? 'The worker server reported an unknown start outcome.'
       )
-      return federatedUnknownReceipt(worker, taskForRemote.id, server.name, launch)
+      return federatedUnknownReceipt(worker, taskForRemote.id, server.name, launch, remote)
     }
     const worker = db.failWorkerStart(
       started.dispatch.id,
@@ -268,6 +276,8 @@ export async function startFederatedWorker(args: {
       lastError: worker.last_error,
       setup: remote.setup,
       launch,
+      ...(remote.mode ? { mode: remote.mode } : {}),
+      ...(remote.agentSession ? { agentSession: remote.agentSession } : {}),
       effects: remote.effects ?? [],
       residualResources: remote.residualResources ?? []
     }

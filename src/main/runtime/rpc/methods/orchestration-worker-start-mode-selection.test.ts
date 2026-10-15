@@ -29,7 +29,11 @@ vi.mock('./orchestration/worker/worker-topology', async (importOriginal) => ({
   createExistingWorktreeWorkerTerminal: () => createExistingWorktreeWorkerTerminal()
 }))
 vi.mock('./orchestration/federation/federated-worker-start', () => ({
-  startFederatedWorker: async () => ({ state: 'ready', dispatchId: 'ctx_remote' })
+  startFederatedWorker: async () => ({
+    state: 'ready',
+    dispatchId: 'ctx_remote',
+    mode: { mode: 'structured', preferred: 'structured', reason: 'user_default', detail: 'Receiver default.' }
+  })
 }))
 vi.mock('./orchestration-structured-worker-session', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -279,7 +283,7 @@ describe('worker-start honours the settings default', () => {
     expect(createStructuredWorkerSessionForWorktree).not.toHaveBeenCalled()
   })
 
-  it('tells a remote dispatch why its structured default did not apply', async () => {
+  it('reports the receiving host mode for a remote dispatch', async () => {
     const result = await startWorker(STRUCTURED_DEFAULT, {
       on: 'server-1',
       worktree: 'repo::remote'
@@ -287,7 +291,7 @@ describe('worker-start honours the settings default', () => {
 
     expect(result).toMatchObject({
       state: 'ready',
-      mode: { mode: 'terminal', preferred: 'structured', reason: 'remote_execution_host' }
+      mode: { mode: 'structured', preferred: 'structured', reason: 'user_default' }
     })
     expect(createStructuredWorkerSessionForWorktree).not.toHaveBeenCalled()
   })

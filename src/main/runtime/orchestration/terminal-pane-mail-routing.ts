@@ -266,13 +266,17 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     }
     const dispatchId = mailboxHandle.slice('dispatch:'.length)
     const dispatch = this._orchestrationDb?.getDispatchContextById?.(dispatchId)
-    const assignee = dispatch?.assignee_handle
+    const assignee =
+      dispatch?.assignee_handle ??
+      this._orchestrationDb?.getRemoteDispatchAttachment?.(dispatchId)?.terminal_handle
     if (!assignee) {
       return null
     }
-    const chat = chatDispatchMailTarget(dispatch, this._orchestrationDb)
-    if (chat !== undefined) {
-      return chat
+    if (dispatch) {
+      const chat = chatDispatchMailTarget(dispatch, this._orchestrationDb)
+      if (chat !== undefined) {
+        return chat
+      }
     }
     const sessionId = this.liveStructuredWorkerSessionId(assignee)
     return sessionId ? { sessionId, dispatchId } : null
