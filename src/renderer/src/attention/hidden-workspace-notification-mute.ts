@@ -55,6 +55,29 @@ export function getNotificationHiddenWorkspaceIds(state: AppState): Set<string> 
   return hidden
 }
 
+/** Whether any input the hidden set reads was replaced; filters it lifts are not among them. */
+export function notificationHiddenWorkspaceInputsChanged(
+  state: AppState,
+  previous: AppState
+): boolean {
+  return (
+    state.settings !== previous.settings ||
+    state.persistedUIReady !== previous.persistedUIReady ||
+    state.worktreesByRepo !== previous.worktreesByRepo ||
+    state.repos !== previous.repos ||
+    state.folderWorkspaces !== previous.folderWorkspaces ||
+    state.worktreeLineageById !== previous.worktreeLineageById ||
+    state.hideDefaultBranchWorkspace !== previous.hideDefaultBranchWorkspace ||
+    state.hideAutomationGeneratedWorkspaces !== previous.hideAutomationGeneratedWorkspaces ||
+    state.hideCliCreatedWorkspaces !== previous.hideCliCreatedWorkspaces ||
+    state.hideDetachedHeadWorkspaces !== previous.hideDetachedHeadWorkspaces ||
+    state.hideWorkspacesFromOtherDevices !== previous.hideWorkspacesFromOtherDevices ||
+    state.alwaysShowDefaultBranchWorkspace !== previous.alwaysShowDefaultBranchWorkspace ||
+    state.runtimeEnvironments !== previous.runtimeEnvironments ||
+    state.runtimeStatusByEnvironmentId !== previous.runtimeStatusByEnvironmentId
+  )
+}
+
 export function isWorkspaceNotificationMutedBySidebarFilters(
   state: AppState,
   workspaceId: string

@@ -36,7 +36,7 @@ function noPublishedProjectSectionCatalog(): MobileProjectSectionCatalog | null 
   return null
 }
 
-function noPublishedNotificationHiddenWorkspaceKeys(): readonly string[] | null {
+function noPublishedNotificationHiddenWorkspaces(): ReadonlySet<string> | null {
   return null
 }
 
@@ -69,7 +69,7 @@ export const graphState = {
   /** Last sidebar Project catalog main accepted, so the graph carries it only when it changed. */
   publishedProjectSectionCatalog: noPublishedProjectSectionCatalog(),
   /** Last notification-hidden set main accepted; null until this renderer publishes one. */
-  publishedNotificationHiddenWorkspaceKeys: noPublishedNotificationHiddenWorkspaceKeys()
+  publishedNotificationHiddenWorkspaces: noPublishedNotificationHiddenWorkspaces()
 }
 
 /** IDs occurring more than once cannot address the legacy tab-keyed runtime maps safely. */

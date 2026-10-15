@@ -9,10 +9,7 @@ import {
   setRuntimeGraphSyncEnabled
 } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
-import {
-  getNotificationHiddenWorkspaceKeysFromState,
-  sameNotificationHiddenWorkspaceKeys
-} from '../runtime/sync-runtime-graph/notification-hidden-workspace-keys'
+import { notificationHiddenWorkspaceInputsChanged } from '../attention/hidden-workspace-notification-mute'
 
 /** Keeps the mobile runtime graph republished as the store's session-visible state changes. */
 export function useRuntimeGraphSync(): void {
@@ -71,21 +68,16 @@ export function useRuntimeGraphSync(): void {
     []
   )
 
-  useEffect(() => {
-    let previousKeys = getNotificationHiddenWorkspaceKeysFromState(useAppStore.getState())
-    return useAppStore.subscribe((state) => {
-      // Why: the graph carries the notification-hidden set to main's phone push; republish on change.
-      const keys = getNotificationHiddenWorkspaceKeysFromState(state)
-      if (keys === previousKeys) {
-        return
-      }
-      const changed = !sameNotificationHiddenWorkspaceKeys(keys, previousKeys)
-      previousKeys = keys
-      if (changed) {
-        scheduleRuntimeGraphSync()
-      }
-    })
-  }, [])
+  useEffect(
+    () =>
+      useAppStore.subscribe((state, previousState) => {
+        // Why: the graph carries the notification-hidden set to main's phone push; republish on change.
+        if (notificationHiddenWorkspaceInputsChanged(state, previousState)) {
+          scheduleRuntimeGraphSync()
+        }
+      }),
+    []
+  )
 
   useEffect(() => {
     setRuntimeGraphSyncEnabled(workspaceSessionReady)

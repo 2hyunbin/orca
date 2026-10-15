@@ -16,7 +16,11 @@ vi.mock('./sync-runtime-graph/terminal-group-grid-sizes', () => ({
 
 const CLI_ID = 'repo1::/cli'
 
-function stateWith(hideCliCreatedWorkspaces: boolean, notifyHiddenWorkspaces = false) {
+function stateWith(
+  hideCliCreatedWorkspaces: boolean,
+  notifyHiddenWorkspaces = false,
+  persistedUIReady = true
+) {
   return {
     tabsByWorktree: {},
     ptyIdsByTabId: {},
@@ -42,7 +46,7 @@ function stateWith(hideCliCreatedWorkspaces: boolean, notifyHiddenWorkspaces = f
       ...getDefaultSettings('/tmp'),
       notifications: { ...getDefaultNotificationSettings(), notifyHiddenWorkspaces }
     },
-    persistedUIReady: true,
+    persistedUIReady,
     worktreesByRepo: {
       repo1: [
         makeWorktree({
@@ -85,37 +89,38 @@ afterEach(() => {
 })
 
 describe('the notification-hidden workspaces in the window graph', () => {
-  it('carries the whole set on first sync and on each change, and nothing while unchanged', async () => {
+  it('carries the whole set once loaded and on each change, and nothing while unchanged', async () => {
     const syncWindowGraph = vi
       .fn<(graph: RuntimeSyncWindowGraph) => Promise<object>>()
       .mockResolvedValue({})
     vi.useFakeTimers()
     vi.stubGlobal('window', { api: { runtime: { syncWindowGraph } } })
     vi.stubGlobal('HTMLElement', class HTMLElement {})
-    let state = stateWith(true)
+    let state = stateWith(true, false, false)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: graph sync and the hidden set read only these members of the store.
     setRuntimeGraphStoreStateGetter(() => state as unknown as AppState)
     setRuntimeGraphSyncEnabled(true)
     await flushSync()
     const published = () =>
       syncWindowGraph.mock.calls.map(([graph]) => graph.notificationHiddenWorkspaceKeys)
-    expect(published()).toEqual([[CLI_ID]])
+    // Before UI state loads, nothing is sent, so main keeps notifying rather than unhiding early.
+    expect(published()).toEqual([undefined])
+
+    state = stateWith(true)
+    scheduleRuntimeGraphSync()
+    await flushSync()
+    expect(published()).toEqual([undefined, [CLI_ID]])
 
     // Same content under new input identities is not a change.
     state = stateWith(true)
     scheduleRuntimeGraphSync()
     await flushSync()
-    expect(published()).toEqual([[CLI_ID], undefined])
+    expect(published()).toEqual([undefined, [CLI_ID], undefined])
 
     // Opting in empties the set, and the empty set is sent so main stops hiding.
     state = stateWith(true, true)
     scheduleRuntimeGraphSync()
     await flushSync()
-    expect(published()).toEqual([[CLI_ID], undefined, []])
-
-    state = stateWith(true)
-    scheduleRuntimeGraphSync()
-    await flushSync()
-    expect(published()).toEqual([[CLI_ID], undefined, [], [CLI_ID]])
+    expect(published()).toEqual([undefined, [CLI_ID], undefined, []])
   })
 })

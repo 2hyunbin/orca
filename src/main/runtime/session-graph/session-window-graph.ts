@@ -8,7 +8,6 @@ import type {
 } from '../../../shared/runtime-session-contracts'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
-import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 
 /** The runtime indexes graph tabs by bare id, so duplicate ids cannot be routed safely. */
@@ -30,12 +29,9 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
 
   /** The authoritative window's answer; with none published yet (a headless server never does), notify. */
   isNotificationHiddenWorkspace(
-    scope: Pick<AgentSessionExecutionLocation, 'workspaceId' | 'workspaceKind'>
+    scope: Pick<AgentSessionExecutionLocation, 'workspaceId'>
   ): boolean {
-    // Why: the host scopes a folder by its bare id, the renderer keys it as `folder:<id>`.
-    const key =
-      scope.workspaceKind === 'folder' ? folderWorkspaceKey(scope.workspaceId) : scope.workspaceId
-    return this.notificationHiddenWorkspaceKeys?.has(key) === true
+    return this.notificationHiddenWorkspaceKeys?.has(scope.workspaceId) === true
   }
 
   shouldRelayTerminalBrowserOpens(): boolean {

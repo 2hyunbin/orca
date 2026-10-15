@@ -22,6 +22,7 @@ import type {
   NotificationSettings
 } from '../../shared/notification-settings-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -33,8 +34,7 @@ export type StructuredAttentionMobileDeliveryDeps = {
   readNotificationSettings: () => NotificationSettings | undefined
   /** In-memory metadata only: a lookup that could wait would let the alert outlive its prompt. */
   readWorkspaceLabels: (scope: AgentSessionExecutionLocation) => StructuredAttentionWorkspaceLabels
-  /** In-memory only, like the labels: whether this desktop's renderer last published the workspace
-   *  as hidden by its Filters switches, "Notify About Hidden Workspaces" already applied. */
+  /** In-memory only, like the labels: whether this desktop's renderer last published it as hidden. */
   isWorkspaceHidden: (scope: AgentSessionExecutionLocation) => boolean
   dispatch: (event: MobileNotificationDispatchEvent) => void
   /** Withdraws a notification this host delivered; a no-op for one it never sent. */
@@ -53,7 +53,10 @@ export function readStructuredAttentionWorkspaceLabels(
   scope: AgentSessionExecutionLocation
 ): StructuredAttentionWorkspaceLabels {
   if (scope.workspaceKind === 'folder') {
-    const folder = store.getFolderWorkspaces?.().find((item) => item.id === scope.workspaceId)
+    // Why the key: a folder chat's scope carries `folder:<id>`, not the folder's bare id.
+    const folder = store
+      .getFolderWorkspaces?.()
+      .find((item) => folderWorkspaceKey(item.id) === scope.workspaceId)
     return folder ? { worktreeLabel: folder.name } : {}
   }
   const repo = store.getRepo(getRepoIdFromWorktreeId(scope.workspaceId))

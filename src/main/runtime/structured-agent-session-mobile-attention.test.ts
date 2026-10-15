@@ -183,11 +183,11 @@ describe('readStructuredAttentionWorkspaceLabels', () => {
     expect(labels).toEqual({ repoLabel: 'orca', worktreeLabel: 'feature' })
   })
 
-  it('reads a folder workspace by its own id', () => {
+  it('reads a folder workspace by the folder:<id> key a folder chat is scoped by', () => {
     const labels = readStructuredAttentionWorkspaceLabels(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the read fields are stubbed.
       store as never,
-      { ...SCOPE, workspaceId: 'folder-1', workspaceKind: 'folder' }
+      { ...SCOPE, workspaceId: 'folder:folder-1', workspaceKind: 'folder' }
     )
     expect(labels).toEqual({ worktreeLabel: 'Notes' })
   })

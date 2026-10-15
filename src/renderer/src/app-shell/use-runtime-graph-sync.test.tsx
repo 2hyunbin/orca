@@ -47,7 +47,7 @@ describe('useRuntimeGraphSync', () => {
     useAppStore.setState(initialState, true)
   })
 
-  it('republishes when the notification-hidden set changes, not on unrelated writes', () => {
+  it('republishes when an input of the notification-hidden set changes, not on unrelated writes', () => {
     const { unmount } = renderHook(() => useRuntimeGraphSync())
     act(() => {
       useAppStore.setState({ activeWorktreeId: 'repo1::/cli' })
@@ -59,11 +59,11 @@ describe('useRuntimeGraphSync', () => {
     })
     expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(1)
 
-    // A new worktree list with the same hidden rows is not a change.
+    // The sync itself drops a recomputed set whose contents did not change.
     act(() => {
       useAppStore.setState({ worktreesByRepo: { ...useAppStore.getState().worktreesByRepo } })
     })
-    expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(1)
+    expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(2)
     unmount()
   })
 })

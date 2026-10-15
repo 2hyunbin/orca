@@ -46,13 +46,12 @@ describe("the window graph's notification-hidden workspaces", () => {
         scope({ executionHostId: 'ssh:box', workspaceId: 'repo-2::/remote/feature' })
       )
     ).toBe(true)
+    // The host scopes a folder chat by the same `folder:<id>` key the renderer publishes.
     expect(
       runtime.isNotificationHiddenWorkspace(
-        scope({ workspaceId: 'notes', workspaceKind: 'folder' })
+        scope({ workspaceId: 'folder:notes', workspaceKind: 'folder' })
       )
     ).toBe(true)
-    // A folder is never matched by its bare id, nor a worktree by a folder key.
-    expect(runtime.isNotificationHiddenWorkspace(scope({ workspaceId: 'notes' }))).toBe(false)
     expect(
       runtime.isNotificationHiddenWorkspace(
         scope({ workspaceId: 'repo-1::/work/other', workspaceKind: 'git-worktree' })
