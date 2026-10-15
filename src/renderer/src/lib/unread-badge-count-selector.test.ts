@@ -65,6 +65,11 @@ function addTerminalTab(store: TestStore, worktreeId: string): string {
     tabsByWorktree: {
       ...store.getState().tabsByWorktree,
       [worktreeId]: [...tabs, makeTab({ id: unifiedTab.entityId, worktreeId })]
+    },
+    // Why: a bell needs a live terminal behind it.
+    ptyIdsByTabId: {
+      ...store.getState().ptyIdsByTabId,
+      [unifiedTab.entityId]: [`pty-${unifiedTab.entityId}`]
     }
   })
   return unifiedTab.entityId
@@ -132,6 +137,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     const chatTab = store
       .getState()
       .createUnifiedTab(BELL_WORKTREE, 'agent-session', { id: 'session-1' })
+    addTerminalTab(store, BELL_WORKTREE)
 
     raiseAttention(store, BELL_WORKTREE, chatTab.id)
 
@@ -156,6 +162,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
     store.setState({ tabsByWorktree: {} })
     expect(selectCount(store.getState())).toBe(0)
     const chat = store.getState().createUnifiedTab(key, 'agent-session', { id: 'folder-chat' })
+    addTerminalTab(store, key)
     raiseAttention(store, key, chat.id)
     expect(selectCount(store.getState())).toBe(1)
     store.setState({ folderWorkspaces: [{ ...folderWorkspace, isUnread: false }] })

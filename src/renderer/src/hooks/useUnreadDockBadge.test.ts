@@ -241,7 +241,9 @@ describe('useUnreadDockBadge', () => {
       worktreesByRepo: {
         repo: [makeWorktree({ id: 'repo::unread', repoId: 'repo', isUnread: true })]
       },
-      tabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [tab] }
+      tabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [tab] },
+      // Why: a bell needs a live terminal behind it.
+      ptyIdsByTabId: { [tab.id]: ['pty-floating'] }
     })
     const hook = renderHook(({ open }) => useUnreadDockBadge(open), {
       initialProps: { open: false }

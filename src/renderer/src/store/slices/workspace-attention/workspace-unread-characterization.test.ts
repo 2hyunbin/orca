@@ -142,6 +142,7 @@ describe('bells', () => {
 
   it('bell on a tab no workspace owns lights the workspace but no tab marker', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
+    addLiveTerminalTab(store, WS_A, 'tab-a1')
     observe(store, persists)
 
     ringBell(store, { worktreeId: WS_A, tabId: 'orphan-tab', paneKey: 'orphan-tab:leaf' })
@@ -153,6 +154,22 @@ describe('bells', () => {
         "completions -",
         "dock=1 floatingDot=false",
         "persist worktree a {"isUnread":true,"lastActivityAt":1000}",
+      ]
+    `)
+  })
+
+  it('bell from a workspace with no live terminal leaves no marker and writes no flag', () => {
+    const { store, persists } = createAttentionStore({ experimental: true })
+    observe(store, persists)
+
+    ringBell(store, { worktreeId: WS_A, tabId: 'orphan-tab', paneKey: 'orphan-tab:leaf' })
+    expect(observe(store, persists)).toMatchInlineSnapshot(`
+      [
+        "rows a@local:read:0 b@local:read:0 sortEpoch=0",
+        "tabs -",
+        "panes -",
+        "completions -",
+        "dock=0 floatingDot=false",
       ]
     `)
   })

@@ -8,8 +8,9 @@ export type AgentAttentionRequest = {
   subject: AgentAttentionSubject
   reason: AgentAttentionUnreadReason
   /**
-   * A settled turn owns the subject's attention, so its address is validated and unread is
-   * decided. A bare surface signal (a bell) only has to prove the subject is still alive.
+   * A settled turn owns the subject's attention, so its address is validated and its unread
+   * names the subject's container. A bare surface signal (a bell) only has to prove the subject
+   * is still alive, and its unread names no container.
    */
   settlesTurn: boolean
   /** Out-of-band proof the subject just produced work, used when no live session is visible. */
@@ -86,10 +87,6 @@ export function resolveAgentAttention(
     subjectKey,
     workspaceIsActive: surface.isWorkspaceActive(workspaceId)
   }
-  if (!request.settlesTurn) {
-    return { admitted: true, unread: null, delivery }
-  }
-
   const viewed =
     subjectKey === null
       ? surface.isWorkspaceViewed(workspaceId)

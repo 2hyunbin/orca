@@ -14,8 +14,8 @@ import {
   settleWorkspaceUnreadFlag
 } from './workspace-unread-flag'
 import { workspaceMarkerTabIds } from './workspace-live-markers'
-import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
-import { isWorkspaceNotificationMutedBySidebarFilters } from '@/attention/hidden-workspace-notification-mute'
+import { resolveAgentAttention } from '@/attention/agent-attention-policy'
+import { createTerminalAttentionSurface } from '@/components/terminal-pane/terminal-attention-surface'
 
 export const createWorkspaceAttentionSlice: StateCreator<
   AppState,
@@ -79,13 +79,19 @@ export const createWorkspaceAttentionSlice: StateCreator<
     unreadTerminalPanes: {},
     unreadAgentCompletionPanes: {},
     markTerminalBell: ({ worktreeId, tabId, paneKey }) => {
-      // Why: a bell on the tab on screen is already read; marking it would persist the flag
-      // true then false, and a remote owner turns each persist into an RPC.
-      if (isTabOnScreen(get(), worktreeId, tabId, 'terminal')) {
-        return
-      }
-      // Why here too: the bell's marker is written before its delayed banner reaches the attention policy.
-      if (isWorkspaceNotificationMutedBySidebarFilters(get(), worktreeId)) {
+      // Why the policy: it owns the workspace rules, and its whole-tab view check keeps a bell on
+      // screen from persisting the flag true then false (an RPC each for a remote owner).
+      const decision = resolveAgentAttention(
+        {
+          subject: { workspaceId: worktreeId, surfaceKey: paneKey },
+          reason: 'terminal-bell',
+          settlesTurn: false,
+          hasFreshActivityEvidence: false
+        },
+        createTerminalAttentionSurface(get())
+      )
+      // Why no delivery here: the banner waits on its delayed dispatch so an agent completion can win.
+      if (!decision.admitted || decision.unread === null) {
         return
       }
       markWorkspaceUnreadFlag(set, get, worktreeId)

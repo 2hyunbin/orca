@@ -181,7 +181,8 @@ describe('muted workspace attention', () => {
       tabsByWorktree: {
         [CLI_ID]: [terminalTab('tab-cli', CLI_ID)],
         [PLAIN_ID]: [terminalTab('tab-plain', PLAIN_ID)]
-      }
+      },
+      ptyIdsByTabId: { 'tab-cli': ['pty-cli'], 'tab-plain': ['pty-plain'] }
     })
     store
       .getState()

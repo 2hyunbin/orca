@@ -189,7 +189,8 @@ export function dispatchTerminalNotification(
   }
 
   applyAgentAttention(attentionDecision, {
-    unread: state.markAgentAttentionUnread,
+    // Why: markTerminalBell wrote the bell's marker at BEL time; this delayed pass only delivers.
+    unread: event.source === 'terminal-bell' ? () => {} : state.markAgentAttentionUnread,
     requestDelivery
   })
 }

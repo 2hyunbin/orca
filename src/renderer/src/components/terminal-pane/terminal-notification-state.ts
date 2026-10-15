@@ -1,6 +1,6 @@
 import type { useAppStore } from '@/store'
-import { getRepoMapFromState } from '@/store/selectors'
-import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
+// Why not '@/store/selectors': it imports the store, and the attention slice reads this module.
+import { getIndexedRepoMap, getIndexedWorktreesById } from '@/store/worktree-repo-index'
 import {
   worktreeHostMatchOptions,
   worktreeMatchesHost
@@ -201,7 +201,7 @@ function findNotificationRepo(
 ): Repo | undefined {
   // One owner for the id means the id-keyed map already names it, at no extra cost.
   if (resolveIndexedRepoOwner(state.repos, repoId).kind !== 'ambiguous') {
-    return getRepoMapFromState(state).get(repoId)
+    return getIndexedRepoMap(state.repos).get(repoId)
   }
   const owningHost = hostId ?? getResolvedExecutionHostIdForWorktree(state, worktreeId)
   if (!owningHost) {

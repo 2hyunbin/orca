@@ -136,20 +136,47 @@ describe('resolveAgentAttention', () => {
     expect(admitSurface).not.toHaveBeenCalled()
   })
 
-  it('delivers a bell without validating the surface address or writing unread', () => {
+  it('decides a bell unread by the surface on screen, without validating its address', () => {
     const admitSurface = vi.fn()
-    const isSurfaceViewed = vi.fn()
     const decision = resolveAgentAttention(
       completion({ reason: 'terminal-bell', settlesTurn: false }),
-      makeSurface({ admitSurface, isSurfaceViewed })
+      makeSurface({ admitSurface })
     )
-    expect(decision).toMatchObject({ admitted: true, unread: null })
+    expect(decision).toMatchObject({
+      admitted: true,
+      unread: {
+        workspaceId: WORKSPACE,
+        subjectKey: SUBJECT,
+        groupId: null,
+        reason: 'terminal-bell'
+      }
+    })
     expect(admitSurface).not.toHaveBeenCalled()
-    expect(isSurfaceViewed).not.toHaveBeenCalled()
-
     const sink = makeSink()
     applyAgentAttention(decision, sink)
-    expect(sink.calls).toEqual([`deliver:${WORKSPACE}:${SUBJECT}`])
+    expect(sink.calls).toEqual([
+      `unread:${WORKSPACE}:${SUBJECT}:null:terminal-bell`,
+      `deliver:${WORKSPACE}:${SUBJECT}`
+    ])
+
+    expect(
+      resolveAgentAttention(
+        completion({ reason: 'terminal-bell', settlesTurn: false }),
+        makeSurface({ isSurfaceViewed: () => true })
+      )
+    ).toMatchObject({ admitted: true, unread: null })
+  })
+
+  it('rejects a bell from a workspace that is muted or has no live session', () => {
+    const bell = completion({ reason: 'terminal-bell', settlesTurn: false })
+    expect(resolveAgentAttention(bell, makeSurface({ isWorkspaceMuted: () => true }))).toEqual({
+      admitted: false,
+      cause: 'muted-workspace'
+    })
+    expect(resolveAgentAttention(bell, makeSurface({ hasLiveSession: () => false }))).toEqual({
+      admitted: false,
+      cause: 'no-live-session'
+    })
   })
 
   it('reports in-app workspace selection to the delivery owner', () => {

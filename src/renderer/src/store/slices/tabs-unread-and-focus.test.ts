@@ -128,6 +128,8 @@ describe('TabsSlice', () => {
 
       // Seed the backing legacy terminal tab so the owner-missing guard doesn't short-circuit.
       store.setState({
+        // Why: a bell needs a live terminal behind it.
+        ptyIdsByTabId: { [tabA.entityId]: ['pty-1'] },
         tabsByWorktree: {
           [WT]: [
             {
@@ -169,6 +171,8 @@ describe('TabsSlice', () => {
       store.setState({ activeWorktreeId: WT })
       // Why: the bell's tab marker skips tabs missing from tabsByWorktree, so seed the backing legacy tab that every terminal unified tab has in production.
       store.setState({
+        // Why: a bell needs a live terminal behind it.
+        ptyIdsByTabId: { [tabA2.entityId]: ['pty-1'] },
         tabsByWorktree: {
           [WT]: [
             {
@@ -202,6 +206,8 @@ describe('TabsSlice', () => {
         activeWorktreeId: 'other-wt::/path/x',
         activeTabId: tab.entityId,
         activeTabType: 'editor',
+        // Why: a bell needs a live terminal behind it.
+        ptyIdsByTabId: { [tab.entityId]: ['pty-1'] },
         tabsByWorktree: {
           [WT]: [
             {
@@ -233,6 +239,8 @@ describe('TabsSlice', () => {
         activeTabId: 'something-else',
         activeTabType: 'terminal',
         activeWorktreeId: 'other-wt',
+        // Why: a bell needs a live terminal behind it.
+        ptyIdsByTabId: { [tab.entityId]: ['pty-1'] },
         tabsByWorktree: {
           [WT]: [
             {
@@ -265,6 +273,8 @@ describe('TabsSlice', () => {
         activeTabId: 'something-else',
         activeTabType: 'terminal',
         activeWorktreeId: 'other-wt',
+        // Why: a bell needs a live terminal behind it.
+        ptyIdsByTabId: { [agentTabId]: ['pty-1'] },
         tabsByWorktree: {
           [WT]: [
             {
