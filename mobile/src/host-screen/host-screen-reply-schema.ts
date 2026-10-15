@@ -20,11 +20,11 @@ export const WORKSPACE_SORT_BY_ARMS = hostUnionArms<PersistedUIState['sortBy']>(
   manual: true
 })
 
-export const WORKSPACE_PROJECT_ORDER_ARMS = hostUnionArms<PersistedUIState['projectOrderBy']>({
+const WORKSPACE_PROJECT_ORDER_ARMS = hostUnionArms<PersistedUIState['projectOrderBy']>({
   manual: true,
   recent: true
 })
-export const WORKSPACE_AGENT_ACTIVITY_LAYOUT_ARMS = hostUnionArms<
+const WORKSPACE_AGENT_ACTIVITY_LAYOUT_ARMS = hostUnionArms<
   NonNullable<PersistedUIState['agentActivityDisplayMode']>
 >({ compact: true, full: true })
 
