@@ -6,8 +6,10 @@ import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/work
 import {
   addWorkspace,
   emptySession,
+  GIT_KEY,
   leaf
 } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import { deriveHeadlessLegacyTerminalLeafId } from '../mobile-session-layout-projection'
 import { getDefaultSettings } from '../../../shared/constants'
 import { OrcaRuntimeService } from '../orca-runtime'
 
@@ -108,18 +110,59 @@ describe('headless phone tabs come from the shared Loader', () => {
     ])
   })
 
-  it('loads a partition once when listing every workspace', async () => {
-    let session = emptySession()
-    for (const name of ['a', 'b', 'c']) {
-      session = addWorkspace(session, `repo-1::/repos/repo-1/${name}`, [
-        {
-          id: `g-${name}`,
-          tabs: [{ id: `tab-${name}`, leaves: [[leaf(1), `ssh:target-1@@pty-${name}`]] }]
-        }
-      ])
-    }
-    const load = vi.spyOn(layoutLoad, 'loadWorkspaceLayoutWithoutReport')
-    await runtimeFor(session).listAllMobileSessionTabs()
-    expect(load).toHaveBeenCalledTimes(1)
+  it('builds a partition without a repeat from its raw rows, as before', () => {
+    // Each fixture here differs from the Loader's result in a title, a closed pane or a pane id.
+    expect(phoneView('tab-bar label differing from the row title')[0]?.panes).toEqual([
+      'tab-a pty-a Terminal 1',
+      'tab-b pty-b Terminal 2'
+    ])
+    expect(
+      phoneView('legacy surface tombstone on a pane still showing its terminal')[0]?.panes
+    ).toEqual(['tab-a pty-a Terminal 1', 'tab-b pty-b Terminal 2'])
+    const session = emptySession()
+    session.tabsByWorktree[GIT_KEY] = [
+      {
+        id: 'tab-old',
+        ptyId: 'pty-old',
+        worktreeId: GIT_KEY,
+        title: 'Terminal 1',
+        customTitle: null,
+        color: null,
+        sortOrder: 0,
+        createdAt: 1
+      }
+    ]
+    const runtime = runtimeFor(session)
+    runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(undefined, { force: true })
+    const [tab] = runtime.mobileSessionTabsByWorktree.get(GIT_KEY)?.tabs ?? []
+    expect(tab?.type === 'terminal' && tab.leafId).toBe(
+      deriveHeadlessLegacyTerminalLeafId('tab-old')
+    )
   })
+
+  it.each([false, true])(
+    'loads a partition only when it repeats a terminal, once per listing (repeat=%s)',
+    async (repeat) => {
+      let session = emptySession()
+      for (const [n, name] of ['a', 'b', 'c'].entries()) {
+        session = addWorkspace(session, `repo-1::/repos/repo-1/${name}`, [
+          {
+            id: `g-${name}`,
+            tabs: [{ id: `tab-${name}`, leaves: [[leaf(n + 1), `ssh:target-1@@pty-${name}`]] }]
+          }
+        ])
+      }
+      if (repeat) {
+        const [row] = session.tabsByWorktree['repo-1::/repos/repo-1/a']!
+        session.tabsByWorktree['repo-1::/repos/repo-1/a']!.push({ ...row!, id: 'tab-a-copy' })
+      }
+      const load = vi.spyOn(layoutLoad, 'loadWorkspaceLayoutWithoutReport')
+      try {
+        await runtimeFor(session).listAllMobileSessionTabs()
+        expect(load).toHaveBeenCalledTimes(repeat ? 1 : 0)
+      } finally {
+        load.mockRestore()
+      }
+    }
+  )
 })
