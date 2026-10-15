@@ -6,10 +6,17 @@ import {
   emitSshEvent,
   nextSshClientCreation,
   resetSshConnectionMocks,
+  spawnSystemSshCommandMock,
   ssh2Mock
 } from './ssh-connection-test-harness'
-import { createCallbacks, createTarget } from './ssh-connection-test-fixtures'
+import {
+  createCallbacks,
+  createHangingSystemCommandChannel,
+  createResolvedConfig,
+  createTarget
+} from './ssh-connection-test-fixtures'
 import { SshConnection } from './ssh-connection'
+import { resolveWithSshG } from './ssh-config-parser'
 import { SshConnectionManager } from './ssh-connection-manager'
 import { RECONNECT_BACKOFF_MS } from './ssh-connection-utils'
 
@@ -133,6 +140,29 @@ describe('SshConnection retry after wake or network return', () => {
     await created
     await vi.advanceTimersByTimeAsync(1)
     expect(conn.getState().status).toBe('connected')
+  })
+
+  it("keeps the replacement's system-SSH transport when the superseded probe closes late", async () => {
+    vi.mocked(resolveWithSshG).mockResolvedValue(createResolvedConfig())
+    const conn = new SshConnection(createTarget(), createCallbacks())
+    await conn.connect()
+    expect(conn.usesSystemSshTransport()).toBe(true)
+
+    const stale = createHangingSystemCommandChannel()
+    spawnSystemSshCommandMock.mockImplementationOnce(() => stale)
+    void conn.reconnect()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(conn.getState().status).toBe('connecting')
+
+    expect(conn.retryAfterNetworkReturn()).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(conn.getState().status).toBe('connected')
+
+    // Closing a system-SSH channel only signals the process; its close lands after the replacement.
+    stale.emit('close', null)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(conn.getState().status).toBe('connected')
+    expect(conn.usesSystemSshTransport()).toBe(true)
   })
 
   it('leaves healthy, initial, and explicitly closed connections alone', async () => {

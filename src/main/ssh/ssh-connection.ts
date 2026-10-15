@@ -674,7 +674,7 @@ export class SshConnection {
           await this.doSystemSshProbeWithControlMasterRetry(connectGeneration, resolved)
           return
         } catch {
-          this.resetSystemTransport()
+          this.resetSystemTransportIfCurrent(connectGeneration)
           throw err
         }
       }
@@ -746,7 +746,7 @@ export class SshConnection {
           await this.doSystemSshProbeWithControlMasterRetry(connectGeneration, resolved, true)
           return
         } catch {
-          this.resetSystemTransport()
+          this.resetSystemTransportIfCurrent(connectGeneration)
         }
         // Why: if a disconnect/reconnect superseded this attempt mid-probe, throw the cancellation error (not the stale authError) so connect() doesn't post auth-failed.
         if (!this.isCurrentConnectAttempt(connectGeneration)) {
@@ -866,6 +866,9 @@ export class SshConnection {
   }
 
   private async doSystemSshProbe(connectGeneration: number): Promise<void> {
+    if (!this.isCurrentConnectAttempt(connectGeneration)) {
+      throw createCancelledConnectAttemptError()
+    }
     this.useSystemSshTransport = true
     this.client = null
     this.killProxy()
@@ -943,8 +946,11 @@ export class SshConnection {
         channel.on('close', onClose)
       })
     } catch (err) {
-      this.useSystemSshTransport = false
-      this.systemSshResolvedConfig = null
+      // Why: a superseded probe closes late; its cleanup must not strip the replacement's transport.
+      if (this.isCurrentConnectAttempt(connectGeneration)) {
+        this.useSystemSshTransport = false
+        this.systemSshResolvedConfig = null
+      }
       throw err
     }
   }
@@ -954,6 +960,9 @@ export class SshConnection {
     resolved: SshResolvedConfig | null,
     gssapiOnly = false
   ): Promise<void> {
+    if (!this.isCurrentConnectAttempt(connectGeneration)) {
+      throw createCancelledConnectAttemptError()
+    }
     this.systemSshResolvedConfig = cloneResolvedConfig(resolved)
     this.systemSshControlMasterDisabledForSession = false
     this.systemSshGssapiOnlyForSession = gssapiOnly
@@ -980,7 +989,9 @@ export class SshConnection {
       try {
         await this.doSystemSshProbe(connectGeneration)
       } catch (retryErr) {
-        this.systemSshControlMasterDisabledForSession = false
+        if (this.isCurrentConnectAttempt(connectGeneration)) {
+          this.systemSshControlMasterDisabledForSession = false
+        }
         throw retryErr
       }
     }
@@ -1499,6 +1510,12 @@ export class SshConnection {
     }
     this.systemCommandChannels.clear()
     this.resetSystemTransport()
+  }
+
+  private resetSystemTransportIfCurrent(connectGeneration: number): void {
+    if (this.isCurrentConnectAttempt(connectGeneration)) {
+      this.resetSystemTransport()
+    }
   }
 
   private resetSystemTransport(): void {
