@@ -11,7 +11,10 @@ import {
   getShownWorkspaceViewSections
 } from '../../../src/shared/workspace-view/workspace-view-options'
 import { getHostContextLabel } from '../../../src/shared/worktree/host-context-labels'
-import { WORKSPACE_VIEW_SHARED_NOTE } from '../worktree/workspace-list-picker-options'
+import {
+  WORKSPACE_OPTIONS_TITLE,
+  WORKSPACE_VIEW_SHARED_NOTE
+} from '../worktree/workspace-list-picker-options'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
@@ -81,7 +84,7 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
     <>
       <View style={styles.filterModalHeader}>
         <View style={styles.filterModalHeading}>
-          <Text style={styles.filterModalTitle}>Workspace options</Text>
+          <Text style={styles.filterModalTitle}>{WORKSPACE_OPTIONS_TITLE}</Text>
           <Text style={styles.filterModalSubtitle}>{WORKSPACE_VIEW_SHARED_NOTE}</Text>
         </View>
         {controller.activeFilterCount > 0 && (

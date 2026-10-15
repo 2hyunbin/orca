@@ -1,5 +1,9 @@
 import { Pressable, Text, View } from 'react-native'
-import { workspaceGroupChipLabel } from '../worktree/workspace-list-picker-options'
+import {
+  workspaceGroupChipLabel,
+  workspaceOptionsAccessibilityLabel,
+  workspaceOptionsChipLabel
+} from '../worktree/workspace-list-picker-options'
 import {
   ChevronLeft,
   Filter,
@@ -147,7 +151,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
               ]}
               onPress={() => state.setShowWorkspaceOptions(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
+              accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
             >
               <Filter
                 size={12}
@@ -160,7 +164,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
                 ]}
                 numberOfLines={1}
               >
-                Filter{controller.activeFilterCount > 0 ? ` ${controller.activeFilterCount}` : ''}
+                {workspaceOptionsChipLabel(controller.activeFilterCount)}
               </Text>
             </Pressable>
 
@@ -278,7 +282,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             style={[styles.filterChip, controller.activeFilterCount > 0 && styles.filterChipActive]}
             onPress={() => state.setShowWorkspaceOptions(true)}
             accessibilityRole="button"
-            accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
+            accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
           >
             <Filter
               size={12}
@@ -290,7 +294,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
                 controller.activeFilterCount > 0 && styles.filterChipTextActive
               ]}
             >
-              Filter{controller.activeFilterCount > 0 ? ` (${controller.activeFilterCount})` : ''}
+              {workspaceOptionsChipLabel(controller.activeFilterCount)}
             </Text>
           </Pressable>
 

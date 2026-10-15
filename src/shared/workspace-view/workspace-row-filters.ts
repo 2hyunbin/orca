@@ -181,6 +181,11 @@ export function activeWorkspaceRowFilterKeys(
 }
 
 /** The badge count: each active filter once, projects one per selected known project. */
+/** Pluralized "N filter(s)" for an options trigger's tooltip and accessibility label. */
+export function formatActiveFilterLabel(count: number): string {
+  return `${count} ${count === 1 ? 'filter' : 'filters'}`
+}
+
 export function countActiveWorkspaceFilters(
   filters: WorkspaceRowFilters,
   knownRepoIds: readonly string[]

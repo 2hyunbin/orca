@@ -6,6 +6,24 @@ import {
   type WorkspaceSortBy,
   type WorkspaceViewChoice
 } from '../../../src/shared/workspace-view/workspace-view-options'
+import { formatActiveFilterLabel } from '../../../src/shared/workspace-view/workspace-row-filters'
+
+/** The desktop's name for the control that opens these options, and for the options themselves. */
+export const WORKSPACE_OPTIONS_TITLE = 'Workspace options'
+
+/** The chip's text: the desktop's name, with the active-filter count its badge shows. */
+export function workspaceOptionsChipLabel(activeFilterCount: number): string {
+  return activeFilterCount > 0
+    ? `${WORKSPACE_OPTIONS_TITLE} (${activeFilterCount})`
+    : WORKSPACE_OPTIONS_TITLE
+}
+
+/** The desktop trigger's accessibility label, word for word. */
+export function workspaceOptionsAccessibilityLabel(activeFilterCount: number): string {
+  return activeFilterCount > 0
+    ? `${WORKSPACE_OPTIONS_TITLE} (${formatActiveFilterLabel(activeFilterCount)} active)`
+    : WORKSPACE_OPTIONS_TITLE
+}
 
 // Why: the host may be headless, so the note can't promise a desktop sidebar.
 export const WORKSPACE_VIEW_SHARED_NOTE = 'Synced across your devices'
