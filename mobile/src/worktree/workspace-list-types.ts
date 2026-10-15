@@ -64,8 +64,8 @@ export type Worktree = {
   agents?: RuntimeWorktreeAgentRow[]
 }
 
-/** The desktop's Workspace options filters; hosts are scoped earlier (filterVisibleHostRows). */
-export type FilterState = Omit<WorkspaceRowFilters, 'visibleHostIds'>
+/** The desktop's Workspace options filters, one shared value. */
+export type FilterState = WorkspaceRowFilters
 
 /** A repo as Project sections read it: the desktop's catalog record, or one a row stands in for. */
 // repoIcon stays unread wire data until drawn (readMobileRepoIcon).

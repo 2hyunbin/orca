@@ -4,10 +4,14 @@
   "family": "host.view-settings",
   "namedDeltas": [],
   "values": {
-    "18dba576d09b": {
-      "name": "filters",
-      "ordinal": 13,
-      "value": {
+    "0078bce46c03": {
+      "name": "ui.set#1",
+      "ordinal": 14,
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
+    },
+    "02e97e94bdf2": {
+      "collapsed": [],
+      "filters": {
         "alwaysShowDefaultBranchWorkspace": true,
         "filterRepoIds": [],
         "hideAutomationGeneratedWorkspaces": false,
@@ -15,15 +19,60 @@
         "hideDefaultBranchWorkspace": false,
         "hideDetachedHeadWorkspaces": false,
         "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false
-      }
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
+      },
+      "groupMode": "repo",
+      "sortMode": "name",
+      "statuses": []
     },
-    "1a43d7f74ca0": {
+    "49b07092d960": {
       "name": "sortMode",
-      "ordinal": 10,
+      "ordinal": 9,
       "value": "name"
     },
-    "3a54bd07d9b5": {
+    "4c8dbecc905b": {
+      "name": "ui.set#1",
+      "ordinal": 13,
+      "args": [
+        {
+          "name": "method",
+          "value": "ui.set"
+        },
+        {
+          "name": "params",
+          "value": {
+            "sortBy": "name"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-2",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
+    },
+    "502a83a190c2": {
+      "name": "workspaceStatuses",
+      "ordinal": 10,
+      "value": []
+    },
+    "51bd1b75d3f1": {
       "collapsed": [],
       "filters": {
         "alwaysShowDefaultBranchWorkspace": true,
@@ -33,28 +82,19 @@
         "hideDefaultBranchWorkspace": false,
         "hideDetachedHeadWorkspaces": false,
         "hideSleepingWorkspaces": false,
-        "hideWorkspacesFromOtherDevices": false
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
       },
       "groupMode": "none",
       "sortMode": "recent",
       "statuses": []
     },
-    "41006b189a5c": {
-      "name": "visibleHostIds",
-      "ordinal": 8,
-      "value": {
-        "$rpc": "null"
-      }
-    },
     "582477c8e0af": {
       "name": "ui.get#1",
       "ordinal": 2,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
-    },
-    "62f2e7e2b825": {
-      "name": "workspaceStatuses",
-      "ordinal": 11,
-      "value": []
     },
     "641f71cd84d7": {
       "name": "collapsedGroups",
@@ -99,63 +139,31 @@
         }
       }
     },
-    "78839ac47a93": {
-      "name": "collapsedGroups",
+    "734dda8a7102": {
+      "name": "filters",
       "ordinal": 12,
-      "value": []
-    },
-    "7e42ad65a2ba": {
-      "name": "ui.set#1",
-      "ordinal": 15,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
+      }
     },
     "840c5f323f3d": {
       "name": "groupMode",
       "ordinal": 3,
       "value": "repo"
     },
-    "90d41ecf43d0": {
-      "name": "groupMode",
-      "ordinal": 9,
-      "value": "repo"
-    },
     "9270aeb7d9c6": {
       "status": "pending",
       "startedAt": 0
-    },
-    "93fd01c21582": {
-      "name": "ui.set#1",
-      "ordinal": 14,
-      "args": [
-        {
-          "name": "method",
-          "value": "ui.set"
-        },
-        {
-          "name": "params",
-          "value": {
-            "sortBy": "name"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-2",
-          "ok": true,
-          "result": {
-            "ok": true
-          }
-        }
-      }
     },
     "985caf5772e9": {
       "name": "ui.get#1",
@@ -188,23 +196,7 @@
       "ordinal": 4,
       "value": "name"
     },
-    "c69d19e118ff": {
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false
-      },
-      "groupMode": "repo",
-      "sortMode": "name",
-      "statuses": []
-    },
-    "df87b9959d20": {
+    "aac6fc68cab0": {
       "name": "filters",
       "ordinal": 7,
       "value": {
@@ -215,8 +207,21 @@
         "hideDefaultBranchWorkspace": false,
         "hideDetachedHeadWorkspaces": false,
         "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
       }
+    },
+    "b6d257a61780": {
+      "name": "groupMode",
+      "ordinal": 8,
+      "value": "repo"
+    },
+    "b7731124942f": {
+      "name": "collapsedGroups",
+      "ordinal": 11,
+      "value": []
     },
     "eb79a9b3682a": {
       "status": "fulfilled",
@@ -244,33 +249,32 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "3a54bd07d9b5",
+          "state": "51bd1b75d3f1",
           "effects": []
         }
       },
       {
         "id": "settled",
         "observation": {
-          "sender": ["651e8014c9ff", "93fd01c21582"],
-          "payloads": ["582477c8e0af", "7e42ad65a2ba"],
+          "sender": ["651e8014c9ff", "4c8dbecc905b"],
+          "payloads": ["582477c8e0af", "0078bce46c03"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "c69d19e118ff",
+          "state": "02e97e94bdf2",
           "effects": [
             "840c5f323f3d",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
-            "df87b9959d20",
-            "41006b189a5c",
-            "90d41ecf43d0",
-            "1a43d7f74ca0",
-            "62f2e7e2b825",
-            "78839ac47a93",
-            "18dba576d09b"
+            "aac6fc68cab0",
+            "b6d257a61780",
+            "49b07092d960",
+            "502a83a190c2",
+            "b7731124942f",
+            "734dda8a7102"
           ]
         }
       }

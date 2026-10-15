@@ -15,10 +15,9 @@ import {
 import type { Worktree as DesktopWorktree } from '../../../src/shared/worktree/types'
 import { filterWorktrees, type Worktree } from './workspace-list-sections'
 
-// The phone's list against the desktop sidebar's, for the same workspaces, under every combination
-// of the Workspace options filters. The desktop side reads its own worktrees with the same shared
-// predicates as desktop-workspace-row-facts.ts; the phone side reads only what the host stamps on
-// worktree.ps rows (getWorkspaceRowKindFacts, desktopOtherClient, hasHostSidebarActivity).
+// The phone's list against the desktop sidebar's for the same workspaces, under every filter
+// combination. The desktop side mirrors desktop-workspace-row-facts.ts, which mobile tests cannot
+// import (renderer aliases); the phone side reads only what a host stamps on worktree.ps rows.
 
 const repos: Repo[] = [
   { id: 'git', path: '/git', displayName: 'Git', badgeColor: '#000', addedAt: 0 },
@@ -172,7 +171,7 @@ describe('the phone shows what the desktop sidebar shows', () => {
         { ...filters, visibleHostIds: null },
         DESKTOP_FACTS
       )
-      const phone = filterWorktrees(phoneRows, filters, '')
+      const phone = filterWorktrees(phoneRows, { ...filters, visibleHostIds: null }, '')
       expect(
         phone.map((w) => w.worktreeId),
         JSON.stringify(filters)
@@ -182,11 +181,19 @@ describe('the phone shows what the desktop sidebar shows', () => {
   })
 
   it('keeps every row an older host sends, whatever kind filter is on', () => {
-    const legacy = FIXTURES.filter((w) => !w.isArchived && !w.otherClient).map((w) => {
-      const { defaultBranch, automationCreated, cliCreated, detachedHead, ...row } = served(w)
-      void [defaultBranch, automationCreated, cliCreated, detachedHead]
-      return { ...row, hasHostSidebarActivity: true }
-    })
+    const legacy: Worktree[] = FIXTURES.filter((w) => !w.isArchived && !w.otherClient).map((w) => ({
+      worktreeId: w.id,
+      repoId: w.repoId,
+      repo: w.repoId,
+      branch: w.branch,
+      displayName: w.displayName,
+      path: w.path,
+      liveTerminalCount: 1,
+      hasAttachedPty: false,
+      unread: false,
+      isPinned: false,
+      linkedPR: null
+    }))
     const kindFiltersOn = {
       hideSleepingWorkspaces: false,
       hideDefaultBranchWorkspace: false,
@@ -194,7 +201,8 @@ describe('the phone shows what the desktop sidebar shows', () => {
       hideCliCreatedWorkspaces: true,
       hideDetachedHeadWorkspaces: true,
       hideWorkspacesFromOtherDevices: true,
-      filterRepoIds: []
+      filterRepoIds: [],
+      visibleHostIds: null
     }
     expect(filterWorktrees(legacy, kindFiltersOn, '')).toHaveLength(legacy.length)
   })

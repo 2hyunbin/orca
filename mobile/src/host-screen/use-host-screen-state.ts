@@ -7,12 +7,12 @@ import { createInitialHostRouteActionState } from '../host-route-action-state'
 import type { RpcClient } from '../transport/rpc-client'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../worktree/mobile-workspace-statuses'
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
-import {
-  NO_FILTERS,
-  type MobileGroupMode,
-  type MobileSortMode,
-  type MobileViewState
+import type {
+  MobileGroupMode,
+  MobileSortMode,
+  MobileViewState
 } from '../worktree/workspace-view-settings'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
@@ -56,7 +56,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [sortMode, setSortMode] = useState<MobileSortMode>('recent')
-  const [filters, setFilters] = useState<FilterState>(NO_FILTERS)
+  const [filters, setFilters] = useState<FilterState>(NO_WORKSPACE_ROW_FILTERS)
   const [groupMode, setGroupMode] = useState<MobileGroupMode>('repo')
   const [workspaceStatuses, setWorkspaceStatuses] = useState<readonly WorkspaceStatusDefinition[]>(
     DEFAULT_MOBILE_WORKSPACE_STATUSES
@@ -78,8 +78,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [hostPlatform, setHostPlatform] = useState<NodeJS.Platform | null>(null)
   // The desktop's servers and their rows, listed through the desktop (mobileRelay.hosts.*).
   const [serverWorkspaces, setServerWorkspaces] = useState<ServerWorkspaces>(NO_SERVER_WORKSPACES)
-  // The desktop's shown hosts (ui.get visibleWorkspaceHostIds); null shows every host.
-  const [visibleHostIds, setVisibleHostIds] = useState<ReadonlySet<ExecutionHostId> | null>(null)
   // Why its own banner state: a tap on a server that needs an update says so until dismissed.
   const [serverNotice, setServerNotice] = useState<string | null>(null)
   const [showSortPicker, setShowSortPicker] = useState(false)
@@ -100,7 +98,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const viewStateRef = useRef<MobileViewState>({
     groupMode: 'repo',
     sortMode: 'recent',
-    filters: NO_FILTERS,
+    filters: NO_WORKSPACE_ROW_FILTERS,
     collapsedGroups: [],
     workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
   })
@@ -168,7 +166,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setShowSortPicker,
     setSleptIds,
     setSortMode,
-    setVisibleHostIds,
     setWorkspaceStatuses,
     setWorktrees,
     setWorktreesLoaded,
@@ -180,7 +177,6 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     sleptIds,
     sortMode,
     viewStateRef,
-    visibleHostIds,
     workspaceStatuses,
     worktreeCatalogRef,
     worktrees,

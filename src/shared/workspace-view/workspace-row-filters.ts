@@ -15,6 +15,24 @@ export type WorkspaceRowFilters = {
   visibleHostIds: readonly ExecutionHostId[] | null
 }
 
+const WORKSPACE_ROW_FILTER_KEY_SET = {
+  hideSleepingWorkspaces: true,
+  alwaysShowDefaultBranchWorkspace: true,
+  hideDefaultBranchWorkspace: true,
+  hideAutomationGeneratedWorkspaces: true,
+  hideCliCreatedWorkspaces: true,
+  hideDetachedHeadWorkspaces: true,
+  hideWorkspacesFromOtherDevices: true,
+  filterRepoIds: true,
+  visibleHostIds: true
+} as const satisfies Record<keyof WorkspaceRowFilters, true>
+
+/** Every filter's key; a filter added to WorkspaceRowFilters fails to compile until listed. */
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the keys of a literal that satisfies Record<keyof WorkspaceRowFilters, true>.
+export const WORKSPACE_ROW_FILTER_KEYS = Object.keys(
+  WORKSPACE_ROW_FILTER_KEY_SET
+) as readonly (keyof WorkspaceRowFilters)[]
+
 /** Every filter off, the default-branch exemption on, every project and host shown. */
 export const NO_WORKSPACE_ROW_FILTERS: WorkspaceRowFilters = {
   hideSleepingWorkspaces: false,

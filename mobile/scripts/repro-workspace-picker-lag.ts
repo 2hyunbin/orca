@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 import { performance } from 'node:perf_hooks'
-import { NO_FILTERS } from '../src/worktree/workspace-view-settings'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../src/shared/workspace-view/workspace-row-filters'
 import { createMockRepos, createMockWorktrees, readScenarioNumber } from './mobile-lag-scenario'
 import { areWorktreeListsEqual } from '../src/worktree/worktree-list-snapshot'
 import {
@@ -15,7 +15,7 @@ const pollCount = readScenarioNumber('MOCK_POLL_COUNT', 5)
 const now = 1_781_725_740_000
 const repos = createMockRepos(repoCount)
 const baseWorktrees = createMockWorktrees(repos, worktreeCount, now) as Worktree[]
-const filters: FilterState = NO_FILTERS
+const filters: FilterState = NO_WORKSPACE_ROW_FILTERS
 const pinnedIds = new Set<string>()
 
 function freshSnapshot(): Worktree[] {

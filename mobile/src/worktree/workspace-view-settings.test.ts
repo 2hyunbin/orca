@@ -1,3 +1,4 @@
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
 import {
@@ -6,15 +7,13 @@ import {
   groupModeFromDesktop,
   groupModeToDesktop,
   sortModeFromDesktop,
-  NO_FILTERS,
-  type MobileViewState,
-  type WorkspaceViewSettings
+  type MobileViewState
 } from './workspace-view-settings'
 
 const base: MobileViewState = {
   groupMode: 'repo',
   sortMode: 'recent',
-  filters: { ...NO_FILTERS, alwaysShowDefaultBranchWorkspace: false },
+  filters: { ...NO_WORKSPACE_ROW_FILTERS, alwaysShowDefaultBranchWorkspace: false },
   collapsedGroups: [],
   workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES
 }
@@ -66,13 +65,12 @@ describe('applyDesktopViewSettings', () => {
     expect(next.workspaceStatuses).toBe(DEFAULT_MOBILE_WORKSPACE_STATUSES)
   })
 
-  it('leaves host scope out of the view state; the screen keeps the shown hosts apart', () => {
-    const next = applyDesktopViewSettings(base, {
-      workspaceHostScope: 'runtime:devbox',
-      visibleWorkspaceHostIds: ['local']
-    } as unknown as WorkspaceViewSettings)
-
-    expect(next).toEqual(base)
+  it("reads the desktop's shown hosts into the host filter, and null as every host", () => {
+    const scoped = applyDesktopViewSettings(base, { visibleWorkspaceHostIds: ['local'] })
+    expect(scoped.filters.visibleHostIds).toEqual(['local'])
+    expect(
+      applyDesktopViewSettings(scoped, { visibleWorkspaceHostIds: null }).filters.visibleHostIds
+    ).toBeNull()
   })
 
   it('ignores an unrecognized groupBy rather than blanking the mode', () => {
@@ -82,58 +80,72 @@ describe('applyDesktopViewSettings', () => {
 })
 
 describe('buildWorkspaceViewSettingsUpdate', () => {
-  const withFilters = (filters: Partial<MobileViewState['filters']>): MobileViewState => ({
+  const apply = (filters: Partial<MobileViewState['filters']>): MobileViewState => ({
     ...base,
     filters: { ...base.filters, ...filters }
   })
 
   it('carries only the fields the patch touched (STA-5781)', () => {
-    const hidden = withFilters({ hideSleepingWorkspaces: true })
-    expect(buildWorkspaceViewSettingsUpdate({ filters: hidden.filters }, hidden, base)).toEqual({
-      hideSleepingWorkspaces: true
-    })
+    expect(
+      buildWorkspaceViewSettingsUpdate(
+        { filters: { hideSleepingWorkspaces: true } },
+        apply({ hideSleepingWorkspaces: true })
+      )
+    ).toEqual({ hideSleepingWorkspaces: true })
     expect(
       buildWorkspaceViewSettingsUpdate(
         { groupMode: 'workspaceStatus' },
-        { ...base, groupMode: 'workspaceStatus' },
-        base
+        { ...base, groupMode: 'workspaceStatus' }
       )
     ).toEqual({ groupBy: 'workspace-status' })
     expect(
       buildWorkspaceViewSettingsUpdate(
         { collapsedGroups: ['g1'] },
-        { ...base, collapsedGroups: ['g1'] },
-        base
+        { ...base, collapsedGroups: ['g1'] }
       )
     ).toEqual({ collapsedGroups: ['g1'] })
   })
 
-  it('writes each filter the phone now shares under its desktop name', () => {
-    const next = withFilters({
+  it('writes each filter under its desktop name, the host scope included', () => {
+    const filters = {
       hideAutomationGeneratedWorkspaces: true,
-      hideWorkspacesFromOtherDevices: true
-    })
-    expect(buildWorkspaceViewSettingsUpdate({ filters: next.filters }, next, base)).toEqual({
+      visibleHostIds: ['local' as const]
+    }
+    expect(buildWorkspaceViewSettingsUpdate({ filters }, apply(filters))).toEqual({
       hideAutomationGeneratedWorkspaces: true,
-      hideWorkspacesFromOtherDevices: true
+      visibleWorkspaceHostIds: ['local']
     })
   })
 
-  it('maps a reset without dragging untouched siblings along', () => {
-    const previous = withFilters({ hideSleepingWorkspaces: true, filterRepoIds: ['repo-1'] })
-    const update = buildWorkspaceViewSettingsUpdate({ filters: base.filters }, base, previous)
-    expect(update).toEqual({ hideSleepingWorkspaces: false, filterRepoIds: [] })
+  it('sends every filter a full reset names, even ones the phone already thinks are off', () => {
+    const update = buildWorkspaceViewSettingsUpdate(
+      { filters: NO_WORKSPACE_ROW_FILTERS },
+      apply(NO_WORKSPACE_ROW_FILTERS)
+    )
+    expect(update).toEqual({
+      hideSleepingWorkspaces: false,
+      alwaysShowDefaultBranchWorkspace: true,
+      hideDefaultBranchWorkspace: false,
+      hideAutomationGeneratedWorkspaces: false,
+      hideCliCreatedWorkspaces: false,
+      hideDetachedHeadWorkspaces: false,
+      hideWorkspacesFromOtherDevices: false,
+      filterRepoIds: [],
+      visibleWorkspaceHostIds: null
+    })
   })
 
   it('never invents alwaysShowDefaultBranchWorkspace for edits that leave it alone (#8873)', () => {
-    const next = withFilters({ hideSleepingWorkspaces: true })
     expect(
       'alwaysShowDefaultBranchWorkspace' in
-        buildWorkspaceViewSettingsUpdate({ filters: next.filters }, next, base)
+        buildWorkspaceViewSettingsUpdate(
+          { filters: { hideSleepingWorkspaces: true } },
+          apply({ hideSleepingWorkspaces: true })
+        )
     ).toBe(false)
   })
 
   it('returns an empty update for an empty patch', () => {
-    expect(buildWorkspaceViewSettingsUpdate({}, base, base)).toEqual({})
+    expect(buildWorkspaceViewSettingsUpdate({}, base)).toEqual({})
   })
 })

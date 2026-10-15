@@ -1,25 +1,15 @@
 import type { MountAdapter } from '../recording-scenario'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../../../src/shared/workspace-view/workspace-row-filters'
 import { hookMount, performHookAction } from '../hook-mount'
 import { observableModel, projectObservable } from '../observable-model'
 import type { operationModuleLoader } from '../operation-module-loader'
 
 const HOST = 'host-1'
 
-const NO_FILTERS = {
-  hideSleepingWorkspaces: false,
-  alwaysShowDefaultBranchWorkspace: true,
-  hideDefaultBranchWorkspace: false,
-  hideAutomationGeneratedWorkspaces: false,
-  hideCliCreatedWorkspaces: false,
-  hideDetachedHeadWorkspaces: false,
-  hideWorkspacesFromOtherDevices: false,
-  filterRepoIds: []
-}
-
 const INITIAL_VIEW_STATE = {
   groupMode: 'none',
   sortMode: 'recent',
-  filters: NO_FILTERS,
+  filters: NO_WORKSPACE_ROW_FILTERS,
   collapsedGroups: [],
   workspaceStatuses: []
 }
@@ -39,7 +29,7 @@ export function hostScreenMountAdapters(
       const state = observableModel(context, {
         clientRef: { current: context.client },
         collapsedGroups: new Set<string>(),
-        filters: NO_FILTERS,
+        filters: NO_WORKSPACE_ROW_FILTERS,
         groupMode: 'none',
         sortMode: 'recent',
         viewStateRef: { current: { ...INITIAL_VIEW_STATE } },

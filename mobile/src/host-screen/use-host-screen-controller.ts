@@ -120,9 +120,9 @@ export function useHostScreenController({
       buildProjectSectionCatalog(
         state.servedProjectSections,
         state.desktopRepos,
-        state.visibleHostIds
+        state.filters.visibleHostIds
       ),
-    [state.servedProjectSections, state.desktopRepos, state.visibleHostIds]
+    [state.servedProjectSections, state.desktopRepos, state.filters.visibleHostIds]
   )
   const sectionsResult = useWorkspaceSections({
     displayWorktrees,
@@ -135,19 +135,17 @@ export function useHostScreenController({
     projectCatalog,
     filterCatalogRepos: state.servedProjectSections?.repos ?? state.desktopRepos,
     collapsedGroups: state.collapsedGroups,
-    workspaceStatuses: state.workspaceStatuses
+    workspaceStatuses: state.workspaceStatuses,
+    repoHostIdByRepoId: state.repoHostIdByRepoId
   })
   const { uniqueRepos } = sectionsResult
   const activeFilterCount = useMemo(
     () =>
       countActiveWorkspaceFilters(
-        {
-          ...state.filters,
-          visibleHostIds: state.visibleHostIds ? [...state.visibleHostIds] : null
-        },
+        state.filters,
         uniqueRepos.map((repo) => repo.id)
       ),
-    [state.filters, state.visibleHostIds, uniqueRepos]
+    [state.filters, uniqueRepos]
   )
   const existingWorktreePaths = useMemo(() => state.worktrees.map((w) => w.path), [state.worktrees])
   const activeWorktreeScroll = useActiveWorktreeScroll(sectionsResult.sections)
