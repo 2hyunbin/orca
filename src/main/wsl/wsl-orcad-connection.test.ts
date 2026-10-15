@@ -85,7 +85,7 @@ function ready(port: number, deviceToken?: string): Extract<WslOrcadLaunch, { ou
   return {
     outcome: 'ready',
     distro: 'Ubuntu',
-    distroId: null,
+    distroId: '00000000-0000-4000-8000-000000000001',
     port,
     fullVersion: '1.0.0',
     pid: 42,
@@ -168,7 +168,7 @@ describe('WslOrcadConnectionManager', () => {
       pairedDeviceId: 'device-1'
     })
     expect(onChange.mock.calls).toEqual([
-      ['Ubuntu', null, { state: 'connecting' }],
+      ['Ubuntu', null, { state: 'connecting' }, 'status'],
       ['Ubuntu', connection, { state: 'ready', census: null }]
     ])
     expect(connection.pid).toBe(42)
@@ -180,9 +180,11 @@ describe('WslOrcadConnectionManager', () => {
     const g1 = '00000000-0000-4000-8000-000000000001'
     const g2 = '00000000-0000-4000-8000-000000000002'
     const { manager, launches } = setup({
-      onChange: (_distro, connection) => {
+      onChange: (_distro, connection, _status, publication = 'connection') => {
         const record = findWslHostDeployment(profile, 'wsl:ubuntu')
-        if (record && connection) persistWslHostConnection(profile, record, connection)
+        if (record && connection && publication === 'connection') {
+          persistWslHostConnection(profile, record, connection)
+        }
       }
     })
     try {
@@ -217,7 +219,8 @@ describe('WslOrcadConnectionManager', () => {
       fail.mockRestore()
       expect(manager.get('Ubuntu')).toBeNull()
       const partial = listEnvironments(profile).map(publicRuntimeEnvironmentWithHostKey)
-      expect(partial[0].orcadDeployment).toMatchObject({ distroId: undefined })
+      expect(partial[0].orcadDeployment).toMatchObject({ kind: 'wsl' })
+      expect(findWslHostDeployment(profile, 'wsl:ubuntu')?.distroId).toBeUndefined()
       expect(
         classifyPeerReplacements(before, partial, replacedRuntimeEnvironmentIds(before, partial))
       ).toEqual({ retired: ['wsl:ubuntu'], sameHost: [] })
@@ -226,7 +229,14 @@ describe('WslOrcadConnectionManager', () => {
       expect(
         runtimeEnvironmentRevisionFailure(listEnvironments(profile)[0], before[0].pairingRevision, 'test')
       ).toMatchObject({ ok: false })
+      const revision = listEnvironments(profile)[0].pairingRevision
+      manager.publish('Ubuntu', { state: 'ready', census: null })
+      expect(listEnvironments(profile)[0].pairingRevision).toBe(revision)
+      launches.push({ ...ready(first.port), distroId: null })
+      await manager.ensure('Ubuntu')
+      expect(listEnvironments(profile)[0].pairingRevision).toBeGreaterThan(revision ?? 0)
     } finally {
+      vi.restoreAllMocks()
       await manager.dispose()
       rmSync(profile, { recursive: true, force: true })
     }
@@ -354,7 +364,8 @@ describe('WslOrcadConnectionManager', () => {
     expect(onChange).toHaveBeenLastCalledWith(
       'Ubuntu',
       null,
-      expect.objectContaining({ state: 'failed', terminals: 'unverifiable' })
+      expect.objectContaining({ state: 'failed', terminals: 'unverifiable' }),
+      'status'
     )
     await until(() => children.live() === 0)
   })
@@ -373,14 +384,13 @@ describe('WslOrcadConnectionManager', () => {
     const census = { ...pending, reason: 'census' } as const
     await manager.ensure('Ubuntu', { status: { pending, ready: census } })
     expect(onChange.mock.calls.slice(-2)).toEqual([
-      ['Ubuntu', connection, pending],
+      ['Ubuntu', connection, pending, 'status'],
       ['Ubuntu', connection, census]
     ])
     manager.publish('Ubuntu', { state: 'ready', census: null })
-    expect(onChange).toHaveBeenLastCalledWith('Ubuntu', connection, {
-      state: 'ready',
-      census: null
-    })
+    expect(onChange).toHaveBeenLastCalledWith(
+      'Ubuntu', connection, { state: 'ready', census: null }, 'status'
+    )
   })
 
   it('drops a connect that a close overtook', async () => {
@@ -411,7 +421,7 @@ describe('WslOrcadConnectionManager', () => {
     await connection.close()
     await until(() => children.live() === 0)
     expect(manager.get('Ubuntu')).toBeNull()
-    expect(onChange).toHaveBeenLastCalledWith('Ubuntu', null, { state: 'closed' })
+    expect(onChange).toHaveBeenLastCalledWith('Ubuntu', null, { state: 'closed' }, 'status')
     await expect(dial(connection.localPort)).rejects.toThrow()
   })
 

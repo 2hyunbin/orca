@@ -95,7 +95,8 @@ export type WslOrcadConnectionDependencies = {
   onChange?: (
     distro: string,
     connection: WslOrcadConnection | null,
-    status: WslOrcadConnectionStatus
+    status: WslOrcadConnectionStatus,
+    publication?: 'connection' | 'status'
   ) => void
 }
 
@@ -137,7 +138,7 @@ export class WslOrcadConnectionManager {
     const status = options.status ?? { pending: CONNECTING, ready: READY }
     // A refresh of a live connection stays quiet; liveness recovery always reports.
     if (options.status || !this.active.has(key)) {
-      this.dependencies.onChange?.(name, this.get(name), status.pending)
+      this.dependencies.onChange?.(name, this.get(name), status.pending, 'status')
     }
     const operation = this.connect(name, key, options, status).catch((error: unknown) => {
       // Liveness owns the status of its own reconnects; a superseded connect was closed.
@@ -146,7 +147,7 @@ export class WslOrcadConnectionManager {
           state: 'failed',
           reason: errorMessage(error),
           terminals: 'unverifiable'
-        })
+        }, 'status')
       }
       throw error
     })
@@ -165,7 +166,7 @@ export class WslOrcadConnectionManager {
 
   /** Liveness reports a status change for a distro, with whatever connection it has now. */
   publish(distro: string, status: WslOrcadConnectionStatus): void {
-    this.dependencies.onChange?.(distro, this.get(distro), status)
+    this.dependencies.onChange?.(distro, this.get(distro), status, 'status')
   }
 
   list(): WslOrcadConnection[] {
@@ -182,7 +183,7 @@ export class WslOrcadConnectionManager {
     this.active.delete(key)
     await entry.forward.close()
     trackWslOrcadHostEnvironment(entry.connection, null)
-    this.dependencies.onChange?.(entry.connection.distro, null, { state: 'closed' })
+    this.dependencies.onChange?.(entry.connection.distro, null, { state: 'closed' }, 'status')
   }
 
   async dispose(): Promise<void> {
@@ -249,7 +250,7 @@ export class WslOrcadConnectionManager {
       this.active.delete(key)
       await current.forward.close()
       trackWslOrcadHostEnvironment(current.connection, null)
-      this.dependencies.onChange?.(distro, null, status.pending)
+      this.dependencies.onChange?.(distro, null, status.pending, 'status')
     }
     const forward = await this.listen(transport, {
       environmentId,
@@ -316,7 +317,7 @@ export class WslOrcadConnectionManager {
       this.active.set(key, entry)
     }
     trackWslOrcadHostEnvironment(entry.connection, entry.connection)
-    if (changed || announce) {
+    if (changed || announce || !launch.distroId) {
       await this.publishReady(entry, announce ?? READY)
     }
     return entry.connection

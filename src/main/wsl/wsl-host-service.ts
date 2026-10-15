@@ -89,13 +89,18 @@ export class WslHostService {
   handleConnectionChange(
     distro: string,
     connection: WslOrcadConnection | null,
-    status: WslOrcadConnectionStatus
+    status: WslOrcadConnectionStatus,
+    publication: 'connection' | 'status' = 'connection'
   ): void {
     const record = this.recordForDistro(distro)
     if (!record) {
       return
     }
-    if (connection && persistWslHostConnection(this.deps.userDataPath(), record, connection)) {
+    if (
+      publication === 'connection' &&
+      connection &&
+      persistWslHostConnection(this.deps.userDataPath(), record, connection)
+    ) {
       this.deps.pairingChanged(record.environmentId)
     }
     this.setStatus(record, status, connection)
