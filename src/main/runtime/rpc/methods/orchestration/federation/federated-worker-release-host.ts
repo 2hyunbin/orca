@@ -8,7 +8,7 @@ import {
   captureWorkerOutputArchive,
   summarizeWorkerOutputArchive
 } from '../../../../orchestration/worker-output-archive'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { WorkerTerminalReleaseRuntime } from '../../../../orchestration/worker-terminal-release-runtime'
 import {
   archiveSummary,
   releaseUnknownRecovery,
@@ -25,7 +25,7 @@ import {
 } from '../worker/worker-release-close-error'
 
 export async function releaseRemoteAttachment(args: {
-  runtime: OrcaRuntimeService
+  runtime: WorkerTerminalReleaseRuntime
   attachment: RemoteDispatchAttachmentRow
   observation: Awaited<ReturnType<typeof inspectRemoteAttachment>>
   mode?: 'interactive' | 'recovery'

@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { WorkerTerminalReleaseRuntime } from '../../../../orchestration/worker-terminal-release-runtime'
 import type { RemoteDispatchAttachmentRow } from '../../../../orchestration/types'
 import type { WorkerTerminalResourceRow } from '../../../../orchestration/worker-terminal-ownership'
 import { resolveStructuredWorkerIdentity } from '../../../../structured-worker-authority'
@@ -6,7 +6,7 @@ import { isStructuredWorkerHandle } from '../../../../structured-worker-identity
 import type { inspectRemoteAttachment } from './federation-attachment-observation'
 
 export function remoteAttachmentLeaseIsCurrent(
-  runtime: OrcaRuntimeService,
+  runtime: WorkerTerminalReleaseRuntime,
   attachment: RemoteDispatchAttachmentRow,
   observation: Awaited<ReturnType<typeof inspectRemoteAttachment>>,
   resource: WorkerTerminalResourceRow

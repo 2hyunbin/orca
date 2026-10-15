@@ -28,10 +28,7 @@ export type StructuredAgentSessionCloseOutcome = {
 }
 
 export type StructuredAgentSessionCloseOptions = {
-  runtime?: Pick<
-    OrcaRuntimeService,
-    'forgetStructuredSessionMail' | 'retireStructuredAgentSessionTabFromSnapshot'
-  >
+  runtime?: Pick<OrcaRuntimeService, 'retireStructuredAgentSessionTabFromSnapshot'>
   /**
    * Runs after the close is issued and BEFORE the proof is read.
    *

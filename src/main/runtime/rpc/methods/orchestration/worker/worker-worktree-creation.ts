@@ -12,6 +12,10 @@ import type { TuiAgent } from '../../../../../../shared/tui-agent'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { WorkerEffect, WorkerSetupReceipt } from './worker-topology'
+import {
+  workerWorktreeLaunchInputs,
+  type WorkerWorktreeLaunch
+} from './worker-worktree-launch-inputs'
 
 export async function createWorkerWorktree(args: {
   runtime: OrcaRuntimeService
@@ -32,12 +36,7 @@ export async function createWorkerWorktree(args: {
     from: string
   }
   agent: TuiAgent
-  /** False for a structured worker: the session is created for the worktree afterwards, so the
-   *  worktree must not be created agent-first. Setup and default tabs still run; what is skipped
-   *  is the startup agent terminal and, with it, the TUI trust write — which a structured session
-   *  does not need, since the trust preset exists so a PTY agent's menu does not eat the first
-   *  bracketed paste. The renderer's own structured worktree create skips both the same way. */
-  withAgentTerminal: boolean
+  launch: WorkerWorktreeLaunch
   launchPreferences?: AgentLaunchPreferences
   effects: WorkerEffect[]
 }): Promise<{
@@ -55,20 +54,11 @@ export async function createWorkerWorktree(args: {
     displayName: params.displayName,
     ...(params.displayName !== undefined ? { displayNameKind: 'user' as const } : {}),
     comment: params.comment,
-    // setupDecision runs setup without the legacy runHooks activation side effect.
-    runHooks: false,
-    setupDecision,
-    awaitTerminalProvisioning: true,
-    observeSetupCompletion: true,
-    createdWithAgent: args.agent,
-    ...(args.withAgentTerminal
-      ? {
-          startupAgent: args.agent,
-          startupLaunchSource: 'orchestration',
-          ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {})
-        }
-      : {}),
-    activate: false,
+    ...workerWorktreeLaunchInputs(args.launch, {
+      agent: args.agent,
+      setupDecision,
+      launchPreferences: args.launchPreferences
+    }),
     lineage: {
       parentWorktree: requestedWorktree === 'new-child' ? coordinatorWorktree.id : undefined,
       noParent: requestedWorktree === 'new-top-level',
@@ -96,7 +86,7 @@ export async function createWorkerWorktree(args: {
     startupPolicy: created.setupReceipt?.startupPolicy ?? 'start-immediately',
     state: created.setupReceipt?.state ?? 'not_configured'
   }
-  if (args.withAgentTerminal && !terminalHandle) {
+  if (args.launch.startupAgent && !terminalHandle) {
     throw new Error(created.warning ?? 'Agent-first worktree creation returned no terminal.')
   }
   const listed = await runtime.listTerminals(`id:${created.worktree.id}`, undefined, {

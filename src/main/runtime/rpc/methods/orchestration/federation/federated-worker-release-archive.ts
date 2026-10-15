@@ -1,9 +1,9 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { WorkerTerminalReleaseRuntime } from '../../../../orchestration/worker-terminal-release-runtime'
 import type { RemoteDispatchAttachmentRow } from '../../../../orchestration/types'
 import { readArchivedWorkerOutput } from '../worker/worker-archive-read'
 
 export async function readRemoteAttachmentArchive(args: {
-  runtime: OrcaRuntimeService
+  runtime: WorkerTerminalReleaseRuntime
   attachment: RemoteDispatchAttachmentRow
   source?: 'auto' | 'transcript' | 'terminal'
   cursor?: string | number

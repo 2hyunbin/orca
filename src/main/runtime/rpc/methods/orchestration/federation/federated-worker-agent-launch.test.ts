@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { releaseStructuredWorkerSession } from '../../orchestration-structured-worker-session'
 import { structuredWorkerIdentities } from '../../../../structured-worker-identity'
+import { createStructuredAgentSessionForWorktree } from '../../structured-agent-session-create'
 
 vi.mock('../../structured-agent-session-create', () => ({
-  createStructuredAgentSessionForWorktree: async (args: { envelope: { sessionId: string } }) => ({
-    ok: true,
-    value: { sessionId: args.envelope.sessionId, fence: 7 }
-  })
+  createStructuredAgentSessionForWorktree: vi.fn(
+    async (args: { envelope: { sessionId: string } }) => ({
+      ok: true,
+      value: { sessionId: args.envelope.sessionId, fence: 7 }
+    })
+  )
 }))
 
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
@@ -20,16 +23,19 @@ import { FederationAttachStartParams } from './federation-start-schema'
 function fakes(created: { startupTerminal?: { handle: string } } = {}) {
   const stages: string[] = []
   const runtime = {
-    createManagedWorktree: vi.fn(async () => ({
-      worktree: { id: 'repo::remote-wt', repoId: 'repo' },
-      setupReceipt: {
-        hookFound: true,
-        startupPolicy: 'wait-for-setup',
-        state: 'running',
-        terminalHandle: 'term_setup'
-      },
-      ...created
-    })),
+    createManagedWorktree: vi.fn(async (args: { onWorkspaceCreated?: (id: string) => void }) => {
+      args.onWorkspaceCreated?.('repo::remote-wt')
+      return {
+        worktree: { id: 'repo::remote-wt', repoId: 'repo' },
+        setupReceipt: {
+          hookFound: true,
+          startupPolicy: 'wait-for-setup',
+          state: 'running',
+          terminalHandle: 'term_setup'
+        },
+        ...created
+      }
+    }),
     listTerminals: vi.fn(async () => ({
       terminals: [
         { handle: 'term_setup', title: 'setup', tabId: 'tab_s', leafId: 'leaf_s' },
@@ -157,22 +163,20 @@ describe('a federated worker through the launch executor', () => {
     ])
   })
 
-  it('reports the created worktree’s setup before failing on a missing agent terminal', async () => {
-    const f = fakes({})
-    const run = launch(f)
-
-    await expect(run.done).rejects.toThrow('Agent-first worktree creation returned no terminal.')
-    expect(run.setups).toEqual([
-      {
-        requested: 'run',
-        effective: 'run',
-        source: 'orchestration_default',
-        hookFound: true,
-        startupPolicy: 'wait-for-setup',
-        state: 'running'
-      }
-    ])
-    expect(f.runtime.createTerminal).not.toHaveBeenCalled()
+  it('reports setup and a recovery shell when chat creation fails', async () => {
+    const f = fakes()
+    vi.mocked(createStructuredAgentSessionForWorktree).mockRejectedValueOnce(
+      new Error('create failed')
+    )
+    const run = launch(f, undefined, true, true)
+    await expect(run.done).rejects.toThrow('create failed')
+    expect(run.setups).toMatchObject([{ state: 'running', source: 'orchestration_default' }])
+    expect(f.runtime.createTerminal).toHaveBeenCalledWith('id:repo::remote-wt', {
+      surfaceOwner: false
+    })
+    expect(run.effects).toContainEqual(
+      expect.objectContaining({ role: 'recovery_shell', id: 'term_worker' })
+    )
   })
 
   it('opens a background worker-<task> terminal in an existing worktree', async () => {
@@ -220,7 +224,10 @@ describe('a federated worker through the launch executor', () => {
       expect(f.runtime.getStructuredAgentSessionCreateSupport).toHaveBeenCalledOnce()
       if (!worktree) {
         expect(f.runtime.createManagedWorktree).toHaveBeenCalledWith(
-          expect.not.objectContaining({ startupAgent: expect.anything() })
+          expect.objectContaining({
+            promisedAgentChat: true,
+            onWorkspaceCreated: expect.any(Function)
+          })
         )
       }
     }

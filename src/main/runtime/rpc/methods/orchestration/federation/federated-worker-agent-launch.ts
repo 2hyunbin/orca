@@ -3,6 +3,7 @@
 import type { AgentLaunchPreferences } from '../../../../../../shared/agent-session-host-authority'
 import type { AgentLaunchResult } from '../../../../../../shared/agent-launch-intent'
 import { tearDownFailedWorkerStart } from '../worker/failed-worker-start-teardown'
+import { workerWorktreeLaunchInputs } from '../worker/worker-worktree-launch-inputs'
 import { createStructuredWorkerSessionForWorktree } from '../worker/worker-topology'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
 import { executeAgentLaunch } from '../../../../../agent-launch/agent-launch-executor'
@@ -71,7 +72,17 @@ export async function launchFederatedWorkerAgent(args: {
       onStage: (stage) =>
         args.onStage(stage === 'worktree_create' ? 'worktree_create' : 'terminal_create'),
       workspaces: {
-        createWorktree: async ({ startupAgent }) => {
+        createRecoveryShell: async (worktreeId) => {
+          const shell = await runtime.createTerminal(`id:${worktreeId}`, { surfaceOwner: false })
+          effects.push({
+            kind: 'terminal',
+            role: 'recovery_shell',
+            action: 'created',
+            id: shell.handle,
+            tabId: shell.tabId
+          })
+        },
+        createWorktree: async (launch) => {
           const { repo, name } = params
           if (!repo || !name) {
             // Validation refuses this before the attachment exists; this only narrows the types.
@@ -91,16 +102,11 @@ export async function launchFederatedWorkerAgent(args: {
             displayName: params.displayName,
             displayNameKind: params.displayNameKind,
             comment: params.comment,
-            // setupDecision runs setup without the legacy runHooks activation side effect.
-            runHooks: false,
-            setupDecision,
-            awaitTerminalProvisioning: true,
-            observeSetupCompletion: true,
-            createdWithAgent: agent,
-            ...(startupAgent ? { startupAgent } : {}),
-            startupLaunchSource: 'orchestration',
-            ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {}),
-            activate: false,
+            ...workerWorktreeLaunchInputs(launch, {
+              agent,
+              setupDecision,
+              launchPreferences: args.launchPreferences
+            }),
             lineage: { noParent: true }
           })
           created = result.worktree
@@ -115,7 +121,7 @@ export async function launchFederatedWorkerAgent(args: {
             state: result.setupReceipt?.state ?? 'not_configured'
           }
           args.onSetup(setup)
-          if (startupAgent && !terminalHandle) {
+          if (launch.startupAgent && !terminalHandle) {
             throw new Error(result.warning ?? 'Agent-first worktree creation returned no terminal.')
           }
           const listed = await runtime.listTerminals(`id:${result.worktree.id}`, undefined, {

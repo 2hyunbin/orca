@@ -24,7 +24,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function receiver() {
+function receiver(closeFails = false) {
   const db = new OrchestrationDb(':memory:')
   databases.push(db)
   const runtime = new OrcaRuntimeService()
@@ -55,7 +55,15 @@ function receiver() {
     terminals: [{ handle: 'term_setup', title: 'setup' }]
   } as never)
   vi.spyOn(runtime, 'waitForSetupTerminalCompletion').mockResolvedValue({ exitCode: 1 })
-  const close = vi.fn(async () => {})
+  let closed = false
+  let tabId: string | null = 'worker-tab'
+  let savedTab = true
+  const close = vi.fn(async () => {
+    if (closeFails) {
+      throw new Error('provider close unproven')
+    }
+    closed = true
+  })
   const send = vi.fn(async () => ({
     ok: true,
     value: { clientMessageId: 'message', submission: { dispatchState: 'unknown' } }
@@ -63,19 +71,33 @@ function receiver() {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this receiver reads only the lease, location, subscription, send, and close methods supplied here.
   setStructuredAgentSessionHost({
     subscribe: () => () => {},
+    hasSession: () => !closed,
+    setSessionTabVisibility: async (_id: string, visible: boolean) => {
+      tabId = visible ? 'worker-tab' : null
+    },
+    notifySessionTabHidden: () => {
+      savedTab = tabId !== null
+    },
     send,
     close,
     deps: {
       store: {
         listRecords: () => [],
+        getSessionTabId: () => tabId,
         getRecord: () => ({
           location: { executionHostId: 'local', wslDistro: null },
-          lease: { runtimeFence: 7, claimStatus: 'live' }
+          lease: {
+            runtimeFence: 7,
+            claimStatus: closed ? 'released' : 'live',
+            deathEvidence: closed
+              ? { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
+              : null
+          }
         })
       }
     }
   } as never)
-  return { db, runtime, close, send }
+  return { db, runtime, close, send, tabVisible: () => tabId !== null, savedTab: () => savedTab }
 }
 
 async function attach(runtime: OrcaRuntimeService, createsWorktree: boolean) {
@@ -105,27 +127,35 @@ async function attach(runtime: OrcaRuntimeService, createsWorktree: boolean) {
 }
 
 describe('structured federation start compensation', () => {
-  it('retires the created session when setup fails before task delivery', async () => {
-    const host = receiver()
-    const result = await attach(host.runtime, true)
-    expect(result).toMatchObject({
-      state: 'failed',
-      failedStage: 'setup_wait',
-      mode: { mode: 'structured' }
-    })
-    expect(result).toHaveProperty('residualResources', [
-      expect.objectContaining({ kind: 'worktree' }),
-      expect.objectContaining({ kind: 'terminal', id: 'term_setup' })
-    ])
-    expect(host.db.getRemoteDispatchAttachment('ctx_remote')?.residual_resources).not.toContain(
-      'structworker_'
-    )
-    expect(host.send).not.toHaveBeenCalled()
-    expect(host.close).toHaveBeenCalledOnce()
-    expect(structuredWorkerIdentities.list()).toEqual([])
-    expect(host.db.getRemoteDispatchAttachment('ctx_remote')?.state).toBe('failed')
-    expect(host.db.getWorkerTerminalResourceByOwner('ctx_remote')).toBeDefined()
-  })
+  it.each([false, true])(
+    'retains an unproven close and retires a settled close after setup failure (%s)',
+    async (closeFails) => {
+      const host = receiver(closeFails)
+      const result = await attach(host.runtime, true)
+      expect(result).toMatchObject({
+        state: 'failed',
+        failedStage: 'setup_wait',
+        mode: { mode: 'structured' }
+      })
+      expect(result).toHaveProperty('residualResources', [
+        expect.objectContaining({ kind: 'worktree' }),
+        expect.objectContaining({ kind: 'terminal', id: 'term_setup' }),
+        ...(closeFails ? [expect.objectContaining({ kind: 'terminal', role: 'agent' })] : [])
+      ])
+      expect(
+        host.db
+          .getRemoteDispatchAttachment('ctx_remote')
+          ?.residual_resources.includes('structworker_')
+      ).toBe(closeFails)
+      expect(host.tabVisible()).toBe(closeFails)
+      expect(host.savedTab()).toBe(closeFails)
+      expect(host.send).not.toHaveBeenCalled()
+      expect(host.close).toHaveBeenCalledOnce()
+      expect(structuredWorkerIdentities.list()).toEqual([])
+      expect(host.db.getRemoteDispatchAttachment('ctx_remote')?.state).toBe('failed')
+      expect(host.db.getWorkerTerminalResourceByOwner('ctx_remote')).toBeDefined()
+    }
+  )
 
   it('preserves the saved session when the task acknowledgment is uncertain', async () => {
     const host = receiver()

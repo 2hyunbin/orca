@@ -26,7 +26,7 @@ import { OrchestrationError } from '../../orchestration/orchestration-error'
 import { mintAgentSessionOperationId } from '../../orchestration/structured-pointer-operation-id'
 import { structuredPointerCallerKey } from '../../orchestration/structured-mailbox-pointer-host'
 import { sendAgentTurn, type StructuredAgentTurnHost } from '../../orchestration/send-agent-turn'
-import { retireSettledStructuredWorkerTab } from '../../structured-agent-session-tab-retirement'
+import { closeStructuredAgentSessionChild } from '../../structured-agent-session-close'
 import { structuredWorkerSession } from '../../structured-worker-authority'
 import {
   mintStructuredWorkerHandle,
@@ -181,41 +181,20 @@ function structuredCreateMayHaveCommitted(
   return !created || created.ok || !isDefinitiveAgentSessionCreateRefusal(created.refusal.code)
 }
 
-/**
- * Best-effort teardown of a session created by a worker start that then failed.
- *
- * Stops the provider child, drops the DURABLE tab reference so nothing restores the chat after a
- * restart, and — only once the close came back without throwing — retires the background tab this
- * start published from the live snapshot. All three are no-ops for a session that was never
- * attached, which is why a non-definitive refusal can reach here unconditionally. A close that
- * threw leaves the tab alone: the child may still be running, and the tab is the way to reach it.
- *
- * Exported because a start can also fail AFTER `createStructuredWorkerSession` returned — on the
- * authority gate, or on the preamble turn — and that is the fourth settlement path. Dropping only
- * the hold there left one dead "Claude Chat"/"Codex Chat" tab per failed start, durably restored
- * on every subsequent app launch.
- */
+/** Retain access and residual ownership when failed-start cleanup cannot settle the chat. */
 export async function discardStructuredWorkerSession(
   sessionId: string,
   runtime: Pick<OrcaRuntimeService, 'retireStructuredAgentSessionTabFromSnapshot'>
 ): Promise<boolean> {
-  const host = getStructuredAgentSessionHost()
-  if (!host) {
-    return false
-  }
-  try {
-    await host.setSessionTabVisibility?.(sessionId, false)
-    await host.close(sessionId, 'evict')
-  } catch (error) {
+  const outcome = await closeStructuredAgentSessionChild(sessionId, { runtime })
+  if (!outcome.stopped) {
     console.warn(
       '[orchestration] failed to discard a half-started structured worker',
       sessionId,
-      error
+      outcome.reason
     )
-    return false
   }
-  retireSettledStructuredWorkerTab(sessionId, runtime)
-  return true
+  return outcome.stopped
 }
 
 /** A submission reason as a clause: host sentences end in a period, legacy markers do not. */
