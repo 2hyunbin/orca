@@ -8,14 +8,19 @@ import type {
 } from '../../../../orca-runtime'
 import {
   hasRunBindingKey,
+  mailboxAddressOf,
+  runCoordinatorKey,
   type OrchestrationCallerIdentity,
   type OrchestrationSessionCaller
 } from '../../../../orchestration/orchestration-caller-identity'
 import { resolveDeclaredCallerParty } from '../../../../orchestration/orchestration-party'
 import {
   findCallerDispatchWorkingForRun,
+  findCallerWorkerDispatches,
+  unboundWorkerMessage,
   workerCannotCoordinateRunError
 } from '../../../../orchestration/db/runs/run-worker-lineage'
+import type { OrchestrationDb } from '../../../../orchestration/db'
 
 export type RunScopeParams = {
   runId?: string
@@ -120,6 +125,31 @@ export function resolveOrchestrationCaller(
   return caller
 }
 
+const COORDINATOR_RUN_REQUIRED =
+  'No Run is bound. A coordinator creates one with `orchestration run-create`, or resumes its own with `orchestration run-use --id <run_id>`.'
+
+// Why: a worker is told where its own mail is, never to bind a Run.
+function unboundCallerError(
+  db: OrchestrationDb,
+  caller: OrchestrationCallerIdentity,
+  explicit: RunRow | undefined
+): OrchestrationError {
+  if (explicit) {
+    // Why: consumer_fenced, since a reader that lost this Run mid-check must stop, worker or not.
+    const holder = mailboxAddressOf(runCoordinatorKey(explicit))
+    return new OrchestrationError(
+      'consumer_fenced',
+      `This caller is not Run ${explicit.id}'s coordinator (${holder ? `its coordinator is ${holder}` : 'it has no coordinator'}). Nothing changed.`
+    )
+  }
+  const worked = findCallerWorkerDispatches(db, caller)[0]
+  return new OrchestrationError(
+    'run_required',
+    worked ? unboundWorkerMessage(worked) : `${COORDINATOR_RUN_REQUIRED} No effects were applied.`,
+    orchestrationSkillRecoveryData()
+  )
+}
+
 // Why: task and gate mutations must share one Run-binding rule.
 export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopeParams): RunRow {
   const db = runtime.getOrchestrationDb()
@@ -134,7 +164,7 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
   if (!params.callerTerminalHandle) {
     throw new OrchestrationError(
       'run_required',
-      'No Run is bound. Use orchestration run-create or run-use first. No effects were applied.',
+      `${COORDINATOR_RUN_REQUIRED} A worker never binds a Run: its mail arrives through plain \`orchestration check\`, and it reports with \`orchestration send\`. No effects were applied.`,
       orchestrationSkillRecoveryData()
     )
   }
@@ -167,22 +197,12 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
     throw workerCannotCoordinateRunError(workedDispatch, explicit.id, 'act')
   }
   if (!current) {
-    if (explicit) {
-      throw new OrchestrationError(
-        'consumer_fenced',
-        `This coordinator terminal is no longer bound to Run ${explicit.id}.`
-      )
-    }
-    throw new OrchestrationError(
-      'run_required',
-      'No Run is bound. Use orchestration run-create or run-use first. No effects were applied.',
-      orchestrationSkillRecoveryData()
-    )
+    throw unboundCallerError(db, caller, explicit)
   }
   if (explicit && current.id !== explicit.id) {
     throw new OrchestrationError(
       'consumer_fenced',
-      `This coordinator terminal is bound to ${current.id}, not ${explicit.id}.`
+      `This caller is bound to ${current.id}, not ${explicit.id}.`
     )
   }
   return current

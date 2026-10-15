@@ -12,7 +12,7 @@ export function requireCurrentConsumer(
   if (!run || run.legacy === 1 || run.consumer_generation !== consumerGeneration) {
     throw new OrchestrationError(
       'consumer_fenced',
-      'This mailbox consumer has been replaced. Rebind with orchestration run-use.'
+      `Run ${runId}'s coordinator binding changed, so this mailbox reader was replaced. Stop reading it; take the Run back only if the user asks (\`orchestration run-use --id ${runId} --takeover\`).`
     )
   }
   return run

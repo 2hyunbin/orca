@@ -46,7 +46,10 @@ run — and once more immediately before `worker_done`, so a redirect or a
 cancellation lands before the Task settles. `check` names its caller with
 `--terminal`, never `--from`. Stop checking after `worker_done`.
 
-If `check` returns `consumer_fenced`, this process no longer owns its Dispatch:
+Never run `run-use`. If you created your own Run, plain `check` still returns
+your Dispatch's mail; report to your coordinator with `send`.
+
+If a plain `check` (no `--run`) returns `consumer_fenced`, this process no longer owns its Dispatch:
 the Attempt was re-attached to another worker or settled without you. Stop, do
 not send `worker_done`, and do not retry the check. An empty `check` never means
 you were replaced; `consumer_fenced` is the only way you learn that.
