@@ -36,6 +36,7 @@ on:
       - 'config/scripts/mobile-release-check-scope*'
       - 'config/scripts/mobile-test-change-scope*'
       - 'config/scripts/pr-code-change-scope.mjs'
+      - 'config/scripts/pr-package-test-paths.mjs'
       - 'config/scripts/pr-layout-oracle-route.mjs'
   # Why main too: two pull requests can each pass against their own base and disagree once both
   # land, and `verify` never runs on main. The same source paths as above, less the CI inputs only
@@ -70,6 +71,7 @@ concurrency:
 
 jobs:
   verify:
+    name: Mobile verify
     if: github.event_name == 'pull_request'
     # Why ARM: 209s of this job is Vitest and nothing here needs x86: no Android SDK, emulator, gradle,
     # Hermes or Watchman, no docker, and no artifacts. The Gemfile.lock lists the generic `ruby`
