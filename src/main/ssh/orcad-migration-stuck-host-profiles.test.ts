@@ -480,6 +480,21 @@ describe('"Move anyway"', () => {
     }
     host.remoteSessionIdsByTabId = { 'runtime-tab': 'remote-1' }
     host.activeTabIdByWorktree = { [worktreeId]: 'runtime-tab' }
+    host.sleepingAgentSessionsByPaneKey = {
+      'runtime-tab:0': {
+        paneKey: 'runtime-tab:0',
+        tabId: 'runtime-tab',
+        worktreeId,
+        agent: 'codex',
+        providerSession: { key: 'session_id', id: 'session-foreign' },
+        prompt: 'Saved prompt',
+        state: 'done',
+        capturedAt: 1,
+        updatedAt: 1,
+        connectionId: TARGET.id,
+        origin: 'quit'
+      }
+    }
     host.terminalSurfaceTombstonesByPaneKey = {
       [`runtime-tab:${LEAF}`]: {
         worktreeId,
@@ -503,6 +518,7 @@ describe('"Move anyway"', () => {
     expect(session?.remoteSessionIdsByTabId?.['runtime-tab']).toBeUndefined()
     expect(session?.activeTabIdByWorktree?.[worktreeId]).not.toBe('runtime-tab')
     expect(session?.terminalSurfaceTombstonesByPaneKey ?? {}).toEqual({})
+    expect(session?.sleepingAgentSessionsByPaneKey?.['runtime-tab:0']).toBeUndefined()
   })
 
   it('drops the editor tab of a file it leaves behind', async () => {

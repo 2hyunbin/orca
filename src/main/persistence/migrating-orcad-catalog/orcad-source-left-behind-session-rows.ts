@@ -3,7 +3,6 @@ import type { TabGroup } from '../../../shared/tab-types'
 import { ORCA_BROWSER_PARTITION } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { ownedEditorFileId } from '../../../shared/workspace-session-pane-ownership'
-import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { isOrcadSourceTabHost } from './orcad-source-workspace-session-eligibility'
 import {
   orcadMigrationOwnerMatchesScope,
@@ -99,8 +98,9 @@ function withoutForeignTerminalRows(
     return {}
   }
   const keepTab = ([tabId]: [string, unknown]): boolean => !tabIds.has(tabId)
+  // Same split as worktreeIdForPaneKey, so legacy `tab:0` keys match as well as UUID leaves.
   const keepPane = ([paneKey]: [string, unknown]): boolean =>
-    !tabIds.has(parsePaneKey(paneKey)?.tabId ?? '')
+    !tabIds.has(paneKey.slice(0, Math.max(0, paneKey.lastIndexOf(':'))))
   const filtered = <T>(
     rows: Record<string, T> | undefined,
     keep: (entry: [string, T]) => boolean
