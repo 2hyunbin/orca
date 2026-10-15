@@ -88,9 +88,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
       jiraSearchPersistReadyRef.current = true
       return
     }
-    setTaskResumeState({
-      jiraQuery: appliedJiraSearch.trim()
-    })
+    setTaskResumeState({ jiraQuery: appliedJiraSearch.trim() })
   }, [appliedJiraSearch, setTaskResumeState, taskResumeApplied, jiraSearchPersistReadyRef])
   const favourite = jiraHasWorkspace ? null : jiraFavouriteFilter
   const jiraRemoteSearch = jiraHasWorkspace ? '' : (favourite?.jql ?? appliedJiraSearch)

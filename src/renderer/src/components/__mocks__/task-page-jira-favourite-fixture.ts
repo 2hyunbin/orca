@@ -1,12 +1,12 @@
 import { useMemo, useRef } from 'react'
 import { vi, type Mock } from 'vitest'
-import type { ExecutionHostId } from '../../../shared/execution-host'
-import type { JiraIssue } from '../../../shared/jira-types'
-import type { JiraSavedFilterState } from '../../../shared/jira-saved-filters'
-import type { TaskPageLinearViewStateModel } from './use-task-page-linear-view-state'
-import type { TaskPageLinearCollectionEffectsModel } from './use-task-page-linear-collection-effects'
-import { useTaskPageJiraListState } from './use-task-page-jira-list-state'
-import { useTaskPageJiraListEffects } from './use-task-page-jira-list-effects'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { JiraIssue } from '../../../../shared/jira-types'
+import type { JiraSavedFilterState } from '../../../../shared/jira-saved-filters'
+import type { TaskPageLinearViewStateModel } from '../use-task-page-linear-view-state'
+import type { TaskPageLinearCollectionEffectsModel } from '../use-task-page-linear-collection-effects'
+import { useTaskPageJiraListState } from '../use-task-page-jira-list-state'
+import { useTaskPageJiraListEffects } from '../use-task-page-jira-list-effects'
 
 const favouriteTransport: {
   catalogue: Mock

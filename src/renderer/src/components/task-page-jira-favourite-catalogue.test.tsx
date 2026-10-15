@@ -9,7 +9,7 @@ import {
   resetFavouriteTransport,
   useFavouriteTaskPage,
   type FavouriteFixtureProps
-} from './task-page-jira-favourite-test-fixture'
+} from './__mocks__/task-page-jira-favourite-fixture'
 
 afterEach(cleanup)
 beforeEach(resetFavouriteTransport)
