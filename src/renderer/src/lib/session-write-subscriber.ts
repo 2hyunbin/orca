@@ -4,6 +4,8 @@ import type { WorkspaceSessionPatch } from '../../../shared/workspace-session-st
 import { SESSION_RELEVANT_FIELDS, shouldPersistWorkspaceSession } from './workspace-session'
 import { buildWorkspaceSessionPatch } from './workspace-session-patch'
 import { createWorktreeTabBucketProjection } from './worktree-tab-bucket-projection'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { reportWindowSessionWriteActivity } from './window-session-write-activity'
 
 type SessionRelevantField = (typeof SESSION_RELEVANT_FIELDS)[number]
 type TabsByWorktree = AppState['tabsByWorktree']
@@ -124,9 +126,16 @@ export function createSessionWriteSubscriber({
   const pendingChangedFields = new Set<SessionRelevantField>()
   const terminalTabsProjection = createTerminalSessionTabsProjection()
   const unifiedTabsProjection = createUnifiedSessionTabsProjection()
+  // Switch point: layout frames wait while a write is scheduled or unacknowledged.
+  const reportActivity = (): void => {
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+    }
+  }
 
   const flushPendingWrite = (): void => {
     timer = null
+    reportActivity()
     if (disposed || writing || pendingChangedFields.size === 0) {
       return
     }
@@ -151,6 +160,7 @@ export function createSessionWriteSubscriber({
       return
     }
     writing = true
+    reportActivity()
     const settle = (failed: boolean, error?: unknown): void => {
       writing = false
       if (disposed) {
@@ -165,6 +175,7 @@ export function createSessionWriteSubscriber({
       } else if (pendingChangedFields.size > 0) {
         armFlushTimer()
       }
+      reportActivity()
     }
     try {
       const result = persist({ patch })
@@ -189,6 +200,7 @@ export function createSessionWriteSubscriber({
       clearTimeout(timer)
     }
     timer = setTimeout(flushPendingWrite, debounceMs)
+    reportActivity()
   }
 
   /**
@@ -281,5 +293,6 @@ export function createSessionWriteSubscriber({
       clearTimeout(timer)
     }
     pendingChangedFields.clear()
+    reportActivity()
   }
 }
