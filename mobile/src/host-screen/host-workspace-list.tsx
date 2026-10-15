@@ -46,13 +46,13 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
   const { rawSections, sections, repoById } = sectionsResult
   const repoLookById = useMemo(() => buildRepoLookById(repoById), [repoById])
   const { compactWorktreeCards, newCardStyle } = state.cardSettings
+  const cardStyle = useMemo(
+    () => ({ compactCards: !newCardStyle && compactWorktreeCards, newCardStyle }),
+    [compactWorktreeCards, newCardStyle]
+  )
   const cardDetails = useMemo(
-    () =>
-      getWorktreeCardDetails(state.view.worktreeCardProperties, {
-        compactCards: !newCardStyle && compactWorktreeCards,
-        newCardStyle
-      }),
-    [state.view.worktreeCardProperties, compactWorktreeCards, newCardStyle]
+    () => getWorktreeCardDetails(state.view.worktreeCardProperties, cardStyle),
+    [state.view.worktreeCardProperties, cardStyle]
   )
 
   return (
@@ -207,6 +207,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
               repoIcon={repoLookById.get(item.repoId)?.icon ?? null}
               hideRepo={state.view.groupBy === 'repo'}
               cardDetails={cardDetails}
+              cardStyle={cardStyle}
               agentActivityDisplayMode={state.view.agentActivityDisplayMode}
               onPress={actions.openWorktreeSession}
               onLongPress={

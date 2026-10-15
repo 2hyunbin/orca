@@ -5,7 +5,10 @@ import type { MobileRenderableRepoIcon } from '../host-screen/host-screen-reply-
 import { triggerMediumImpact } from '../platform/haptics'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { Worktree } from '../worktree/workspace-list-types'
-import type { WorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
+import {
+  getWorktreeCardLayout,
+  type WorktreeCardDetails
+} from '../../../src/shared/worktree/card-properties'
 import type { AgentActivityDisplayMode } from '../../../src/shared/ui-chrome-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
 import { AgentSpinner } from './AgentSpinner'
@@ -33,6 +36,8 @@ type Props = {
   hideRepo?: boolean
   /** What the desktop's shared Card layout and properties show. */
   cardDetails: WorktreeCardDetails
+  /** The desktop's card style; Compact folds the row into its title line. */
+  cardStyle: { compactCards: boolean; newCardStyle: boolean }
   agentActivityDisplayMode: AgentActivityDisplayMode
   status: WorktreeRollupStatus
   onPress: (item: Worktree) => void
@@ -48,6 +53,7 @@ function WorktreeListRowComponent({
   repoIcon,
   hideRepo = false,
   cardDetails,
+  cardStyle,
   agentActivityDisplayMode,
   status,
   onPress,
@@ -59,6 +65,9 @@ function WorktreeListRowComponent({
   const metaText = isFolderWorkspace ? folderMeta : displayBranch(item.branch)
   const lineageDepth = Math.max(0, item.lineageDepth ?? 0)
   const lineageChildCount = item.lineageChildCount ?? 0
+  const layout = getWorktreeCardLayout(cardStyle)
+  const showRepoChip = layout.repoInTitle && !hideRepo && !isFolderWorkspace
+  const showRepoInMetaRow = !layout.repoInTitle && !hideRepo
 
   return (
     <Pressable
@@ -94,6 +103,11 @@ function WorktreeListRowComponent({
 
       <View style={styles.worktreeMain}>
         <View style={styles.worktreeNameRow}>
+          {showRepoChip && (
+            <View style={styles.repoChip} accessibilityLabel={`Project ${item.repo}`}>
+              <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />
+            </View>
+          )}
           <Text
             style={[
               styles.worktreeName,
@@ -125,47 +139,49 @@ function WorktreeListRowComponent({
             linkedGitLabIssue={cardDetails.issue ? item.linkedGitLabIssue : null}
           />
         </View>
-        <View style={styles.worktreeMetaRow}>
-          {lineageDepth > 0 && (
-            <View style={styles.childBadge}>
-              <GitBranch size={10} color={colors.textMuted} />
-              <Text style={styles.childBadgeText}>Child</Text>
-            </View>
-          )}
-          {cardDetails.host && item.hostContextLabel ? (
-            <View
-              style={[styles.childBadge, styles.hostBadge]}
-              accessibilityLabel={[item.hostContextLabel, item.hostContextHealthLabel]
-                .filter(Boolean)
-                .join(', ')}
-            >
-              <HostKindIcon hostId={item.hostContextHostId ?? item.hostId} size={10} />
-              <Text style={[styles.childBadgeText, styles.hostBadgeText]} numberOfLines={1}>
-                {item.hostContextLabel}
-              </Text>
-              {/* Why separate Text: the name truncates first so the health word stays readable. */}
-              {item.hostContextHealthLabel ? (
-                <Text style={[styles.childBadgeText, styles.hostHealthText]}>
-                  {`· ${item.hostContextHealthLabel}`}
+        {layout.identityMetaRow && (
+          <View style={styles.worktreeMetaRow}>
+            {lineageDepth > 0 && (
+              <View style={styles.childBadge}>
+                <GitBranch size={10} color={colors.textMuted} />
+                <Text style={styles.childBadgeText}>Child</Text>
+              </View>
+            )}
+            {cardDetails.host && item.hostContextLabel ? (
+              <View
+                style={[styles.childBadge, styles.hostBadge]}
+                accessibilityLabel={[item.hostContextLabel, item.hostContextHealthLabel]
+                  .filter(Boolean)
+                  .join(', ')}
+              >
+                <HostKindIcon hostId={item.hostContextHostId ?? item.hostId} size={10} />
+                <Text style={[styles.childBadgeText, styles.hostBadgeText]} numberOfLines={1}>
+                  {item.hostContextLabel}
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-          {/* Repo glyph+name only when not already grouped under this repo;
+                {/* Why separate Text: the name truncates first so the health word stays readable. */}
+                {item.hostContextHealthLabel ? (
+                  <Text style={[styles.childBadgeText, styles.hostHealthText]}>
+                    {`· ${item.hostContextHealthLabel}`}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {/* Repo glyph+name only when not already grouped under this repo;
               MobileRepoIcon falls back to a Folder (matching desktop's default)
               rather than a bare colored dot. */}
-          {!hideRepo && (
-            <>
-              <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />
-              <Text style={styles.repoName} numberOfLines={1}>
-                {item.repo}
-              </Text>
-            </>
-          )}
-          <Text style={styles.branchName} numberOfLines={1}>
-            {metaText}
-          </Text>
-        </View>
+            {showRepoInMetaRow && (
+              <>
+                <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />
+                <Text style={styles.repoName} numberOfLines={1}>
+                  {item.repo}
+                </Text>
+              </>
+            )}
+            <Text style={styles.branchName} numberOfLines={1}>
+              {metaText}
+            </Text>
+          </View>
+        )}
         {/* Only agents get a secondary activity line, matching desktop. A plain
             terminal's shell-output tail is intentionally not surfaced here. */}
         {cardDetails.inlineAgents && item.agents && item.agents.length > 0 ? (
@@ -271,6 +287,17 @@ const styles = StyleSheet.create({
   prNumber: {
     fontSize: 10,
     color: colors.textSecondary
+  },
+  // Why: matches the desktop's compact repo chip, a small framed icon ahead of the title.
+  repoChip: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.bgRaised
   },
   folderBadge: {
     backgroundColor: colors.bgRaised,

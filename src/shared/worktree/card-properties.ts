@@ -153,3 +153,21 @@ export function getWorktreeCardDetails(
     inlineAgents: shows('inline-agents') && (style.newCardStyle || !style.compactCards)
   }
 }
+
+/** Where a workspace card puts its identity; desktop and phone draw from the same rule. */
+export type WorktreeCardLayout = {
+  /** Repo identity is an icon chip in the title row instead of a name in the meta row. */
+  repoInTitle: boolean
+  /** The identity meta row (repo, host, branch or folder path, detached HEAD); compact cards drop it. */
+  identityMetaRow: boolean
+}
+
+export function getWorktreeCardLayout(style: {
+  compactCards: boolean
+  newCardStyle: boolean
+}): WorktreeCardLayout {
+  return {
+    repoInTitle: style.newCardStyle || style.compactCards,
+    identityMetaRow: !style.compactCards
+  }
+}

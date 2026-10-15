@@ -1,6 +1,9 @@
 import React from 'react'
 import { getWorkspaceAttachments } from '../../../../shared/workspace-attachments'
-import { getWorktreeCardDetails } from '../../../../shared/worktree/card-properties'
+import {
+  getWorktreeCardDetails,
+  getWorktreeCardLayout
+} from '../../../../shared/worktree/card-properties'
 
 import {
   getFlushWorktreeCardPaddingLeft,
@@ -79,15 +82,17 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
 
   // Why: pinned trees mix repos, so the repo icon shows regardless of groupBy's hideRepoBadge.
   const showPinnedRepoIcon = inPinnedSection && !!repo
+  const layout = getWorktreeCardLayout({ compactCards, newCardStyle })
   // Why: new card style retired the Compact/Detailed switch; repo identity uses the compact chip, not a lower pill.
-  const showRepoIdentityInTitle = newCardStyle || compactCards
+  const showRepoIdentityInTitle = layout.repoInTitle
   const showInlineRepoBadge =
     showRepoIdentityInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
     !showRepoIdentityInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
   const showHostContextBadge =
     !!hostContextLabel && getWorktreeCardDetails(cardProps, { compactCards, newCardStyle }).host
-  const showDetachedHeadInMetaRow = !compactCards && !isFolder && detachedHeadDisplay !== null
+  const showDetachedHeadInMetaRow =
+    layout.identityMetaRow && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&
     branch.length > 0 &&
@@ -115,9 +120,9 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     cacheStartedAt != null ||
     showMetaRowDetails
   )
-  const hasMetaRow = compactCards
-    ? hasMetadataBadge || cacheStartedAt != null
-    : hasDetailedMetaRowContent
+  const hasMetaRow = layout.identityMetaRow
+    ? hasDetailedMetaRowContent
+    : hasMetadataBadge || cacheStartedAt != null
   const showHeaderActions = showTitleRowPrimary || showDeleteQuickAction
   // Why: normalize the title once so title/branch de-dupe and identity-only hover eligibility stay in sync.
   const trimmedVisibleCardTitle = visibleCardTitle.trim()

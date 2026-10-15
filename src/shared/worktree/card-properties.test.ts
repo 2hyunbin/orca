@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getWorktreeCardDetails,
+  getWorktreeCardLayout,
   getWorktreeCardModeProperties,
   getWorktreeCardModeUpdates,
   isDefaultedCompactWorktreeCardProperties,
@@ -47,5 +48,23 @@ describe('getWorktreeCardDetails', () => {
     expect(
       getWorktreeCardDetails(chosen, { compactCards: false, newCardStyle: true }).inlineAgents
     ).toBe(true)
+  })
+})
+
+describe('getWorktreeCardLayout', () => {
+  it('puts repo identity in the title and drops the identity meta row only for compact cards', () => {
+    expect(getWorktreeCardLayout({ compactCards: false, newCardStyle: false })).toEqual({
+      repoInTitle: false,
+      identityMetaRow: true
+    })
+    expect(getWorktreeCardLayout({ compactCards: true, newCardStyle: false })).toEqual({
+      repoInTitle: true,
+      identityMetaRow: false
+    })
+    // The new card style keeps a meta row but uses the title chip for the repo.
+    expect(getWorktreeCardLayout({ compactCards: false, newCardStyle: true })).toEqual({
+      repoInTitle: true,
+      identityMetaRow: true
+    })
   })
 })

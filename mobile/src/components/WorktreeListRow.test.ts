@@ -67,19 +67,22 @@ type TestItem = Worktree & { status: NonNullable<Worktree['status']> }
 const stableRepoIcon = { type: 'emoji', emoji: 'o' } as const
 let updateSibling: Dispatch<SetStateAction<number>> = () => undefined
 
-const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, {
-  compactCards: false,
-  newCardStyle: false
-})
+const DETAILED_STYLE = { compactCards: false, newCardStyle: false }
+const COMPACT_STYLE = { compactCards: true, newCardStyle: false }
+const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, DETAILED_STYLE)
 
 function ListRowHarness({
   item,
   now,
-  cardDetails = ALL_DETAILS
+  cardDetails = ALL_DETAILS,
+  cardStyle = DETAILED_STYLE,
+  hideRepo = false
 }: {
   item: TestItem
   now: number
   cardDetails?: WorktreeCardDetails
+  cardStyle?: { compactCards: boolean; newCardStyle: boolean }
+  hideRepo?: boolean
 }) {
   const [sibling, setSibling] = useState(0)
   updateSibling = setSibling
@@ -99,8 +102,9 @@ function ListRowHarness({
       now,
       repoColor: '#000000',
       repoIcon: stableRepoIcon,
-      hideRepo: false,
+      hideRepo,
       cardDetails,
+      cardStyle,
       agentActivityDisplayMode: 'compact',
       status: item.status,
       onPress,
@@ -203,6 +207,7 @@ describe('memoized worktree rows', () => {
         repoIcon: { type: 'emoji', emoji: 'o' },
         // A fresh but equal details object each render, as a parent re-render makes.
         cardDetails: { ...ALL_DETAILS },
+        cardStyle: { ...DETAILED_STYLE },
         agentActivityDisplayMode: 'compact',
         status: item.status,
         onPress: overrides.onPress ?? onPress
@@ -377,5 +382,80 @@ describe('memoized worktree rows', () => {
       )
     )
     expect(shown()).toEqual({ pr: 0, host: 0 })
+  })
+
+  describe('Compact', () => {
+    const texts = (): string[] =>
+      renderer!.root
+        .findAllByType('Text' as never)
+        .flatMap((node) => node.props.children)
+        .filter((child): child is string => typeof child === 'string')
+    const repoChips = () =>
+      renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Project orca')
+    const render = async (
+      props: Partial<{
+        item: TestItem
+        cardStyle: typeof DETAILED_STYLE
+        hideRepo: boolean
+      }> = {}
+    ) => {
+      const element = createElement(ListRowHarness, { item: baseItem, now: 2_000, ...props })
+      await act(async () => {
+        if (renderer) {
+          renderer.update(element)
+        } else {
+          renderer = create(element)
+        }
+      })
+    }
+
+    it('moves the repo into a title chip and drops the branch line, as the desktop does', async () => {
+      await render()
+      expect(texts()).toEqual(expect.arrayContaining(['orca', 'feature/mobile-list']))
+      expect(repoChips()).toHaveLength(0)
+
+      await render({ cardStyle: COMPACT_STYLE })
+      expect(texts()).not.toContain('orca')
+      expect(texts()).not.toContain('feature/mobile-list')
+      expect(texts()).toContain('mobile-list')
+      expect(repoChips()).toHaveLength(1)
+    })
+
+    it('drops the host and child badges with the rest of the meta row', async () => {
+      const item: TestItem = {
+        ...baseItem,
+        hostId: 'ssh:ssh-1',
+        hostContextLabel: 'openclaw',
+        lineageDepth: 1
+      }
+      await render({ item })
+      expect(texts()).toEqual(expect.arrayContaining(['openclaw', 'Child']))
+
+      await render({ item, cardStyle: COMPACT_STYLE })
+      expect(texts()).not.toContain('openclaw')
+      expect(texts()).not.toContain('Child')
+    })
+
+    it('leaves the chip out when the list is grouped by repo or the row is a folder', async () => {
+      await render({ cardStyle: COMPACT_STYLE, hideRepo: true })
+      expect(repoChips()).toHaveLength(0)
+
+      await render({
+        cardStyle: COMPACT_STYLE,
+        item: { ...baseItem, workspaceKind: 'folder-workspace' }
+      })
+      expect(repoChips()).toHaveLength(0)
+      expect(texts()).toContain('Folder')
+    })
+
+    it('keeps the title-row PR badge', async () => {
+      await render({
+        cardStyle: COMPACT_STYLE,
+        item: { ...baseItem, linkedPR: { number: 7, state: 'open' } }
+      })
+      expect(renderer!.root.findAll((node) => String(node.type) === 'GitPullRequest')).toHaveLength(
+        1
+      )
+    })
   })
 })
