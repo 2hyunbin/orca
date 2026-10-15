@@ -9,6 +9,8 @@ import {
 } from '../../../../shared/workspace-creator-visibility'
 import type { VisibleWorktreeOptions } from './compute-visible-worktrees'
 
+const NO_WORKTREE_IDS: ReadonlySet<string> = new Set()
+
 /**
  * Read the store into the filter inputs `computeVisibleWorktrees` decides from.
  *
@@ -26,12 +28,13 @@ export function buildVisibleWorktreeOptionsFromState(
     tabsByWorktree: state.tabsByWorktree,
     ptyIdsByTabId: state.ptyIdsByTabId,
     browserTabsByWorktree: state.browserTabsByWorktree,
-    worktreeIdsWithLiveAgent: getWorktreeIdsWithLiveAgent(
-      state.agentStatusByPaneKey,
-      state.tabsByWorktree,
-      Date.now()
-    ),
-    worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(state.unifiedTabsByWorktree),
+    // Why skipped while sleeping rows show: only the sleeping sweep reads these two scans.
+    worktreeIdsWithLiveAgent: state.showSleepingWorkspaces
+      ? NO_WORKTREE_IDS
+      : getWorktreeIdsWithLiveAgent(state.agentStatusByPaneKey, state.tabsByWorktree, Date.now()),
+    worktreeIdsWithStructuredChat: state.showSleepingWorkspaces
+      ? NO_WORKTREE_IDS
+      : getWorktreeIdsWithStructuredChat(state.unifiedTabsByWorktree),
     hideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
     hideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,
     hideCliCreatedWorkspaces: state.hideCliCreatedWorkspaces,
