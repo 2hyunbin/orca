@@ -280,6 +280,19 @@ describe('OrcaRuntimeService', () => {
       expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
     })
 
+    // Why: a resume is restore work; paused or rate-limited restore admission must see it.
+    it('declares a reconnect resume as automatic restore and a tap as a user resume', async () => {
+      const automatic = makeParkedRuntime(makeParkedSessionStore('live').runtimeStore)
+      await automaticActivate(automatic.runtime)
+      expect(automatic.spawn.mock.calls[0]?.[0]).toMatchObject({
+        spawnIntent: 'automatic-restore'
+      })
+
+      const tap = makeParkedRuntime(makeParkedSessionStore('live').runtimeStore)
+      await userActivate(tap.runtime)
+      expect(tap.spawn.mock.calls[0]?.[0]).toMatchObject({ spawnIntent: 'user-resume' })
+    })
+
     // Why: a session id names a transcript on the machine that captured it.
     it('does not resume a record captured on another execution host', async () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {

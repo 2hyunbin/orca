@@ -238,8 +238,12 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
             startupCommandDelivery: agentStartup.startupCommandDelivery,
             launchConfig: agentStartup.launchConfig,
             launchAgent: agentStartup.launchAgent ?? tab.launchAgent,
+            // Why: a resume is restore work, so the host's restore admission must see it.
             ...('resumeProviderSession' in agentStartup
-              ? { resumeProviderSession: agentStartup.resumeProviderSession }
+              ? {
+                  resumeProviderSession: agentStartup.resumeProviderSession,
+                  spawnIntent: automatic ? 'automatic-restore' : 'user-resume'
+                }
               : {}),
             launchRuntime: agentStartup.launchRuntime,
             targetGroupId,
