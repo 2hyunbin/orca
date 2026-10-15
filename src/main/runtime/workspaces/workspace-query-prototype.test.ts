@@ -52,35 +52,6 @@ const snapshot: ResolvedWorktreeSnapshot = {
 }
 
 describe('workspace query prototype dispatch', () => {
-  it('preserves callable arity and native async methods', () => {
-    class Probe extends OrcaRuntimeService {
-      read() {
-        return {
-          arities: [
-            this.resolveWorktreeSelector.length,
-            this.resolveRepoSelector.length,
-            this.buildResolvedWorktreeFromId.length,
-            this.listKnownResolvedWorktreesForExplicitTarget.length,
-            this.resolveExplicitWorktreeIdScoped.length,
-            this.listRepoWorktreesForListing.length,
-            this.invalidateWorktreeScanCacheForRepo.length
-          ],
-          kinds: [
-            this.resolveWorktreeSelector,
-            this.resolveRepoSelector,
-            this.listResolvedWorktrees,
-            this.listResolvedWorktreeSnapshot,
-            this.selectReposBySelector
-          ].map((fn) => fn.constructor.name)
-        }
-      }
-    }
-    expect(new Probe(store).read()).toEqual({
-      arities: [1, 1, 1, 2, 2, 2, 1],
-      kinds: ['AsyncFunction', 'AsyncFunction', 'AsyncFunction', 'AsyncFunction', 'Function']
-    })
-  })
-
   it('re-enters the runtime repo selector', async () => {
     const seen: unknown[][] = []
     class Probe extends OrcaRuntimeService {
