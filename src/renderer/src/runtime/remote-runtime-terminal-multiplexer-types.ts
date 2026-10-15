@@ -179,6 +179,7 @@ export type RemoteRuntimeMultiplexedTerminalState = {
   snapshotInfo: RemoteRuntimeSnapshotInfo | null
   initialSnapshotReceived: boolean
   pendingSnapshotRequest: RemoteRuntimeSnapshotRequest | null
+  subscribeSnapshot: RemoteRuntimeSubscribeSnapshotSlot | null
   // Why: Output frames carry a UTF-16 offset high-water `seq`; a jump past the
   // expected next offset means the server dropped frames under backpressure.
   // Track it so a gap triggers a self-healing snapshot resync instead of
@@ -208,10 +209,20 @@ export type RemoteRuntimeSnapshotInfo = {
   unavailable?: TerminalSnapshotUnavailableReason
   /** History rows above the screen; absent from hosts that predate the field. */
   scrollbackRows?: number
+  /** Subscribe-time scrollback request this initial image serves; absent from hosts that predate it. */
+  requestedScrollbackRows?: number
   // Why: a mid-escape tail the emulator could not serialize; the transport
   // must write it AFTER the replay reset so the next live chunk completes it
   // instead of rendering literally (#7329).
   pendingEscapeTailAnsi?: string
+}
+
+/** A subscribe that asked for a bounded authoritative image; settles null when the host did not serve it. */
+export type RemoteRuntimeSubscribeSnapshotSlot = {
+  scrollbackRows: number
+  claimed: boolean
+  outcome: Promise<RemoteRuntimeSnapshotOutcome | null>
+  settle: (outcome: RemoteRuntimeSnapshotOutcome | null) => void
 }
 
 export type RemoteRuntimeSnapshotRequest = {

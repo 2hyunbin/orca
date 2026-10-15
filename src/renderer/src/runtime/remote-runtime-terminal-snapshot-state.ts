@@ -6,7 +6,8 @@ import type {
   RemoteRuntimeSnapshotAvailability,
   RemoteRuntimeSnapshotInfo,
   RemoteRuntimeSnapshotOutcome,
-  RemoteRuntimeSnapshotRetryCause
+  RemoteRuntimeSnapshotRetryCause,
+  RemoteRuntimeSubscribeSnapshotSlot
 } from './remote-runtime-terminal-multiplexer-types'
 
 export const CONTROL_STREAM_ID = 0
@@ -91,6 +92,60 @@ export function disposeRemoteTerminalStreamState(
   clearSnapshot(stream)
   clearResyncTimer(stream)
   rejectPendingSnapshotRequest(stream, message)
+  settleSubscribeSnapshot(stream, null)
+}
+
+export function createSubscribeSnapshotSlot(
+  scrollbackRows: number
+): RemoteRuntimeSubscribeSnapshotSlot {
+  let settle: (outcome: RemoteRuntimeSnapshotOutcome | null) => void = () => {}
+  const outcome = new Promise<RemoteRuntimeSnapshotOutcome | null>((resolve) => {
+    settle = resolve
+  })
+  return { scrollbackRows, claimed: false, outcome, settle }
+}
+
+/** Settles any waiter; the slot stays readable only while an unclaimed served image is still current. */
+export function settleSubscribeSnapshot(
+  stream: RemoteRuntimeMultiplexedTerminalState,
+  outcome: RemoteRuntimeSnapshotOutcome | null
+): void {
+  const slot = stream.subscribeSnapshot
+  if (!slot) {
+    return
+  }
+  // Promise resolution is first-wins, so a later retire never rewrites a delivered outcome.
+  slot.settle(outcome)
+  if (outcome === null || slot.claimed) {
+    stream.subscribeSnapshot = null
+  }
+}
+
+/** The same image a SnapshotRequest reply resolves with, so either source restores identically. */
+export function buildSnapshotOutcome(
+  stream: RemoteRuntimeMultiplexedTerminalState,
+  data: string | null,
+  info: RemoteRuntimeSnapshotInfo | null,
+  applied: boolean
+): RemoteRuntimeSnapshotOutcome {
+  return {
+    availability: classifySnapshotAvailability(stream.snapshotOverflowed, info),
+    snapshot: applied
+      ? {
+          data: data ?? '',
+          cols: info?.cols ?? 80,
+          rows: info?.rows ?? 24,
+          seq: info?.seq,
+          source: info?.source,
+          kittyKeyboardFlags: info?.kittyKeyboardFlags,
+          alternateScreen: info?.alternateScreen,
+          terminalOwner: info?.terminalOwner,
+          pendingEscapeTailAnsi: info?.pendingEscapeTailAnsi,
+          // The host folds the normal buffer into `data` (see terminal-snapshot-publication.ts).
+          carriesNormalBuffer: true
+        }
+      : null
+  }
 }
 
 export function decodeSnapshotInfo(
@@ -109,6 +164,7 @@ export function decodeSnapshotInfo(
     alternateScreen?: unknown
     terminalOwner?: unknown
     scrollbackRows?: unknown
+    requestedScrollbackRows?: unknown
   }>(payload)
   if (!raw) {
     return null
@@ -133,6 +189,12 @@ export function decodeSnapshotInfo(
       Number.isSafeInteger(raw.scrollbackRows) &&
       raw.scrollbackRows >= 0
         ? raw.scrollbackRows
+        : undefined,
+    requestedScrollbackRows:
+      typeof raw.requestedScrollbackRows === 'number' &&
+      Number.isSafeInteger(raw.requestedScrollbackRows) &&
+      raw.requestedScrollbackRows >= 0
+        ? raw.requestedScrollbackRows
         : undefined,
     pendingEscapeTailAnsi:
       typeof raw.pendingEscapeTailAnsi === 'string' ? raw.pendingEscapeTailAnsi : undefined

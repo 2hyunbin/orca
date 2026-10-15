@@ -1,3 +1,4 @@
+import { resolveHiddenRestoreScrollbackRows } from '../terminal-hidden-restore-scrollback'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
 import { isSshSessionGoneError, recordPtyConnectDiagnostic } from './pty-connect-limits'
@@ -109,6 +110,15 @@ function connectDeferredSessionReattach(
     ...(coldRestoreStartup?.launchToken ? { launchToken: coldRestoreStartup.launchToken } : {}),
     ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
     ...(session.shouldDeclareHiddenAtSpawn() ? { initiallyHidden: true } : {}),
+    // Why: the reveal reads exactly this image (reattach-result-handler), so one snapshot serves both.
+    ...(session.mountFollowsTerminalPark &&
+    (session.runtimeEnvironmentId || isRemoteRuntimePtyId(deferredReattachSessionId))
+      ? {
+          subscribeSnapshotScrollbackRows: resolveHiddenRestoreScrollbackRows(
+            session.pane.terminal.options.scrollback
+          )
+        }
+      : {}),
     callbacks: outputCallbacks.callbacks
   })
   const isCurrentReattach = (): boolean =>

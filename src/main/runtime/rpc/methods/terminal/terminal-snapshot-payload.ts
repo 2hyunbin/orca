@@ -57,6 +57,10 @@ export function buildSnapshotFrameMeta(options: SnapshotFrameOptions): Record<st
     // Why optional: a client must read absence (an older host) as unknown, not as zero rows.
     ...(typeof options.scrollbackRows === 'number'
       ? { scrollbackRows: options.scrollbackRows }
+      : {}),
+    // Why an echo: old clients ignore it, and a new client sends its own request when it is absent.
+    ...(typeof options.requestedScrollbackRows === 'number'
+      ? { requestedScrollbackRows: options.requestedScrollbackRows }
       : {})
   }
 }

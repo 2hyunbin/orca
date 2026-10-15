@@ -1,8 +1,12 @@
 import {
   sendSnapshotFrames,
-  serializeBudgetedMobileSnapshot
+  serializeBudgetedMobileSnapshot,
+  serializeBudgetedRequestedSnapshot
 } from './terminal-snapshot-publication'
-import { getOutputAfterSnapshotSeq } from './terminal-stream-replay'
+import {
+  getOutputAfterSnapshotSeq,
+  normalizeMultiplexSnapshotScrollbackRows
+} from './terminal-stream-replay'
 import { getTerminalInputSequenceLedger } from './terminal-input-sequence-ledger'
 import {
   isMultiplexStreamAttached,
@@ -27,8 +31,28 @@ export async function publishMultiplexInitialSnapshot(
   const isMobile = stream.isMobile
   const forcedInitialSnapshotTruncated =
     process.env.ORCA_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
+  const requestedScrollbackRows = isMobile
+    ? undefined
+    : normalizeMultiplexSnapshotScrollbackRows(request.snapshotScrollbackRows)
+  let servesScrollbackRequest = false
+  // Why: the requested image is exactly what a follow-up SnapshotRequest would return; without one
+  // (or with nothing authoritative to serialize) keep the default image and let the client ask.
+  const serializeInitial = async () => {
+    if (requestedScrollbackRows !== undefined) {
+      const requested = await serializeBudgetedRequestedSnapshot(
+        runtime,
+        ptyId,
+        requestedScrollbackRows
+      )
+      servesScrollbackRequest = requested !== null
+      if (requested) {
+        return requested
+      }
+    }
+    return serializeBudgetedMobileSnapshot(runtime, ptyId)
+  }
   let read = await runtime.readTerminal(request.terminal)
-  let serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
+  let serialized = await serializeInitial()
   if (!isMultiplexStreamAttached(state, stream)) {
     return null
   }
@@ -38,7 +62,7 @@ export async function publishMultiplexInitialSnapshot(
     stream.pendingOutputBytes = 0
     stream.pendingOutputOverflowed = false
     read = await runtime.readTerminal(request.terminal)
-    serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
+    serialized = await serializeInitial()
     if (!isMultiplexStreamAttached(state, stream)) {
       return null
     }
@@ -84,6 +108,7 @@ export async function publishMultiplexInitialSnapshot(
     truncated: initialOutputOverflowed,
     truncatedByByteBudget: serialized?.truncatedByByteBudget,
     scrollbackRows: serialized?.scrollbackRows,
+    ...(servesScrollbackRequest && !initialOutputOverflowed ? { requestedScrollbackRows } : {}),
     source: serialized?.source,
     kittyKeyboardFlags: serialized?.kittyKeyboardFlags,
     alternateScreen: serialized?.alternateScreen,

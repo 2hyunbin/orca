@@ -20,6 +20,8 @@ export type SnapshotFrameOptions = {
   truncatedByByteBudget?: boolean
   /** History rows this image carries above its screen; 0 tells the client to keep its own. */
   scrollbackRows?: number
+  /** The subscribe-time scrollback request this initial image serves; absent when it does not. */
+  requestedScrollbackRows?: number
   // Why: distinguishes "I could not answer right now" from a genuinely empty buffer; omitted on success.
   unavailable?: TerminalSnapshotUnavailableReason
   source?: 'headless' | 'renderer'

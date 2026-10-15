@@ -112,6 +112,7 @@ import {
 
 const REMOTE_TERMINAL_INPUT_FLUSH_MS = 8
 const REMOTE_TERMINAL_VIEWPORT_FLUSH_MS = 33
+const REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS = 1_000
 const REMOTE_RUNTIME_MAX_PENDING_QUERY_REPLIES = 64
 const HOST_SESSION_ATTACH_POLL_MS = 150
 const HOST_SESSION_POLL_MAX_MS = 1_000
@@ -377,6 +378,8 @@ export function createRemoteRuntimePtyTransport(
   let agentSessionRequiresHostAuthorityReplay = false
   let terminalCreateUnknownOutcomeError: unknown = null
   let lastConnectOptions: Parameters<PtyTransport['connect']>[0] | null = null
+  // Consumed by the connect's first subscribe; recovery resubscribes keep the host's default image.
+  let pendingSubscribeSnapshotScrollbackRows: number | undefined
   let lastAttachOptions: Parameters<PtyTransport['attach']>[0] | null = null
   let resolvePaneUnavailable = false
   let recoveringPaneHandle: string | null = null
@@ -1797,8 +1800,14 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
+    if (claim && stream && isUnconfirmedClaim(stream, cols, rows)) {
+      // Why: a reveal's resume and its layout observer each claim the same grid one frame apart.
+      flushPendingClaimInput(stream)
+      return
+    }
     if (claim ? stream?.claimViewport(cols, rows) : stream?.resize(cols, rows)) {
       if (claim && stream) {
+        unconfirmedClaim = { stream, cols, rows, sentAt: Date.now() }
         flushPendingClaimInput(stream)
       }
       return
@@ -1812,6 +1821,28 @@ export function createRemoteRuntimePtyTransport(
       viewport: { cols, rows },
       ...(claim ? { claim: true } : {})
     }).catch(() => {})
+  }
+
+  // The host answers a claim with a fit-override event; until then a repeat of the same grid is a no-op.
+  let unconfirmedClaim: {
+    stream: RemoteRuntimeMultiplexedTerminal
+    cols: number
+    rows: number
+    sentAt: number
+  } | null = null
+  function isUnconfirmedClaim(
+    stream: RemoteRuntimeMultiplexedTerminal,
+    cols: number,
+    rows: number
+  ): boolean {
+    return (
+      unconfirmedClaim !== null &&
+      unconfirmedClaim.stream === stream &&
+      unconfirmedClaim.cols === cols &&
+      unconfirmedClaim.rows === rows &&
+      // Why bounded: a claim the host dropped must stay retryable by the next activity.
+      Date.now() - unconfirmedClaim.sentAt < REMOTE_VIEWPORT_CLAIM_CONFIRM_WINDOW_MS
+    )
   }
 
   const viewportBatcher = createRemoteRuntimeViewportBatcher(
@@ -2282,6 +2313,8 @@ export function createRemoteRuntimePtyTransport(
     let subscriptionSnapshotHadContent = false
     // Why: viewport handed to subscribe; a resize during the round-trip falls back to the refresh-only one-shot RPC, replayed through the stream below once current.
     const subscribedViewport = desiredViewport
+    const snapshotScrollbackRows = pendingSubscribeSnapshotScrollbackRows
+    pendingSubscribeSnapshotScrollbackRows = undefined
     const isCurrentSubscription = (): boolean =>
       !transportClosed &&
       generation === subscriptionGeneration &&
@@ -2298,6 +2331,7 @@ export function createRemoteRuntimePtyTransport(
       client: { id: clientId, type: 'desktop' },
       viewport: subscribedViewport ?? undefined,
       inputSessionId: inputJournal.sessionId,
+      ...(snapshotScrollbackRows !== undefined ? { snapshotScrollbackRows } : {}),
       callbacks: {
         onData: (data, meta) => {
           if (isCurrentSubscription()) {
@@ -2420,11 +2454,13 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
+          unconfirmedClaim = null
           if (isCurrentSubscription() && subscribedPtyId) {
             setFitOverride(subscribedPtyId, event.mode, event.cols, event.rows)
           }
         },
         onDriverChanged: (driver) => {
+          unconfirmedClaim = null
           if (isCurrentSubscription() && subscribedPtyId) {
             setDriverForPty(subscribedPtyId, driver)
           }
@@ -2518,6 +2554,7 @@ export function createRemoteRuntimePtyTransport(
     resetSameHandleEndReuse()
     clearPublishedHandleWait()
     lastAttachOptions = options
+    pendingSubscribeSnapshotScrollbackRows = undefined
     storedCallbacks = options.callbacks
     terminalEnded = false
     connecting = true
@@ -2677,6 +2714,7 @@ export function createRemoteRuntimePtyTransport(
     const createEnvironmentId = currentRuntimeEnvironmentId
     lastConnectOptions = options
     lastAttachOptions = null
+    pendingSubscribeSnapshotScrollbackRows = options.subscribeSnapshotScrollbackRows
     storedCallbacks = options.callbacks
     resetRecoveryReplacementPolicy()
     resetSameHandleEndReuse()
@@ -2687,6 +2725,7 @@ export function createRemoteRuntimePtyTransport(
       return
     }
 
+    let releasePrewarmedStream: (() => void) | null = null
     try {
       if (isWebTerminalSurfaceTabId(tabId ?? '')) {
         // Reattach callbacks must not publish the replacement as a fresh
@@ -2698,6 +2737,12 @@ export function createRemoteRuntimePtyTransport(
           connectLifecycleEpoch
         )
       }
+
+      // Why: every path below subscribes after its host RPCs; opening the stream alongside saves a round trip.
+      releasePrewarmedStream =
+        currentPaneRevision() === getRuntimeEnvironmentRevision(createEnvironmentId)
+          ? getRemoteRuntimeTerminalMultiplexer(createEnvironmentId).prewarm()
+          : null
 
       if (options.sessionId && !getRemoteRuntimeTerminalHandle(options.sessionId)) {
         // Why: a HUB session persists host-native PTY ids; resolve its pane handle without exposing that SSH identity as a client transport id.
@@ -2924,6 +2969,9 @@ export function createRemoteRuntimePtyTransport(
         }
       }
       return undefined
+    } finally {
+      // A subscribed stream keeps the connection; only an abandoned warm-up closes it.
+      releasePrewarmedStream?.()
     }
   }
 

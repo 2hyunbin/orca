@@ -23,7 +23,9 @@ export const TerminalMultiplexSubscribeFrame = TerminalHandle.extend({
     })
     .optional(),
   // Why: names the client's input sequence space; it survives stream replacement so replays dedupe.
-  inputSessionId: z.string().min(1).max(128).optional()
+  inputSessionId: z.string().min(1).max(128).optional(),
+  // Why: a park reveal folds its bounded authoritative image into the subscribe snapshot instead of a second request.
+  snapshotScrollbackRows: z.number().finite().optional()
 })
 
 export const TerminalMultiplexLegacyAckFrame = z
