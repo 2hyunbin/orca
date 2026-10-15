@@ -16,13 +16,13 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['orchestration', 'run-use'],
-    summary: 'Resume coordinating a Run (workers never use this)',
+    summary: 'Resume coordinating a Run',
     usage:
       'orca orchestration run-use --id <run_id> [--from <handle>] [--takeover] [--takeover-legacy] [--retry-request <id>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'from', 'takeover', 'takeover-legacy', 'retry-request'],
     identityFlagRoles: { from: 'caller' },
     notes: [
-      'Refused while another coordinator of the Run is still open; --takeover replaces it, and its unacknowledged mail is replayed to you. A caller working a Dispatch can never take over. --takeover-legacy must run in the live coordinator agent terminal it binds; it preserves existing worker assignments.'
+      'Refused while another coordinator of the Run is still open; --takeover replaces it, and its unacknowledged mail is replayed to you. A worker cannot bind its own or ancestor Run or use either takeover flag. --takeover-legacy must run in the live coordinator agent terminal it binds; it preserves existing worker assignments.'
     ]
   },
   {

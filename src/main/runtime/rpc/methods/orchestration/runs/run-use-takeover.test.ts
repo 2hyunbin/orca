@@ -45,7 +45,7 @@ describe('run-use against a Run whose coordinator is still running', () => {
       error: { code: 'run_coordinator_live', data: { effectsApplied: false } }
     })
     expect(JSON.stringify(refused)).toMatch(
-      /the \\"[^"\\]+\\" chat in tree-x \(orca_session_id:[^)]+\), which is still open/
+      /the chat in tree-x \(orca_session_id:[^)]+\), which is still open/
     )
     expect(h.db.getRunRaw(runId)).toEqual(before)
 
@@ -86,12 +86,13 @@ describe('run-use against a Run whose coordinator is still running', () => {
     expect(h.db.getRunRaw(runId)?.coordinator_orca_session_id).toBe(SESSION_Y)
   })
 
-  it('lets a worker coordinate only a Run it created, never by --takeover', async () => {
+  it('lets a worker resume a separate Run with plain run-use, never by takeover', async () => {
     const stranger = h.db.createRun({
-      objective: 'x',
-      coordinatorHandle: null,
-      coordinatorPaneKey: null
+      objective: 'predecessor sub-Run',
+      coordinatorHandle: 'term_previous',
+      coordinatorPaneKey: COORD_PANE
     })
+    const presence = vi.spyOn(h.runtime, 'coordinatorAgentPresence').mockResolvedValue('live')
     const home = h.db.createRun({
       objective: 'home',
       coordinatorHandle: null,
@@ -109,13 +110,26 @@ describe('run-use against a Run whose coordinator is still running', () => {
       await as(undefined, 'orchestration.runCreate', { objective: 's2', from: WORKER_HANDLE })
     )
 
-    // Nobody coordinates the stranger Run, so no liveness probe could have stopped this.
-    for (const takeover of [false, true]) {
-      expect(await runUse(stranger.id, takeover)).toMatchObject({
-        ok: false,
-        error: { code: 'worker_cannot_take_over_run' }
-      })
-    }
+    expect(await runUse(home.id, false)).toMatchObject({
+      ok: false,
+      error: { code: 'worker_cannot_coordinate_own_run' }
+    })
+    expect(await runUse(stranger.id, true)).toMatchObject({
+      ok: false,
+      error: { code: 'worker_cannot_take_over_run' }
+    })
+    const foreignRead = await as(undefined, 'orchestration.check', {
+      run: stranger.id,
+      terminal: WORKER_HANDLE,
+      peek: true
+    })
+    expect(foreignRead).toMatchObject({ ok: false, error: { code: 'consumer_fenced' } })
+    expect(JSON.stringify(foreignRead)).not.toContain('run-use')
+    const liveRefusal = await runUse(stranger.id, false)
+    expect(liveRefusal).toMatchObject({ ok: false, error: { code: 'run_coordinator_live' } })
+    expect(JSON.stringify(liveRefusal)).not.toContain('run-use --id')
+    presence.mockResolvedValue('exited')
+    resultOf(await runUse(stranger.id, false))
     expect(await runUse(sub, true)).toMatchObject({
       error: { code: 'worker_cannot_take_over_run' }
     })

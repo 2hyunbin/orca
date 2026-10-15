@@ -13,7 +13,6 @@ import {
   lookupOrcaAgentSession,
   structuredSessionMailReach
 } from '../../../../orchestration/structured-session-mail-address'
-import { defaultAgentChatLabel } from '../../../../../../shared/agent-session-chat-label'
 import { splitWorktreeId } from '../../../../../../shared/worktree/id'
 
 // Why: a binding that keeps moving under a probe is contention, not something to win by retrying forever.
@@ -81,9 +80,7 @@ async function liveCoordinatorLabel(
     if (reach.kind !== 'reachable') {
       return null
     }
-    const record = reach.session
-    const title = record.conversationName ?? defaultAgentChatLabel(record.provider)
-    return `the "${title}" chat${inWorktree(record.location.workspaceId)} (${address})`
+    return `the chat${inWorktree(reach.session.location.workspaceId)} (${address})`
   }
   if (key.paneKey === null || (await runtime.coordinatorAgentPresence(key.paneKey)) !== 'live') {
     return null
@@ -91,8 +88,7 @@ async function liveCoordinatorLabel(
   const terminal = key.terminalHandle
     ? await runtime.showTerminal(key.terminalHandle).catch(() => null)
     : null
-  const title = terminal?.title ? ` "${terminal.title}"` : ''
-  return `the terminal${title}${inWorktree(terminal?.worktreeId)} (${address})`
+  return `the terminal${inWorktree(terminal?.worktreeId)} (${address})`
 }
 
 function inWorktree(worktreeId: string | undefined): string {

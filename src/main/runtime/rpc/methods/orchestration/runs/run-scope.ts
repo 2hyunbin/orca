@@ -139,7 +139,7 @@ function unboundCallerError(
     return new OrchestrationError(
       'consumer_fenced',
       holder
-        ? `Stop coordinating Run ${explicit.id}; its coordinator is now ${holder}. Take it back only if the user asks. Nothing changed.`
+        ? `This caller is not bound to Run ${explicit.id}, which is bound to ${holder}. Nothing changed.`
         : `This caller does not coordinate Run ${explicit.id}, which has no coordinator now. Nothing changed.`
     )
   }
@@ -188,8 +188,7 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
     )
   }
   const current = db.getCurrentRunForCoordinator(caller)
-  // Why: "bound to X, not Y" reads as a nudge to rebind; a worker naming the Run it works for
-  // has to learn where its own mail is instead.
+  // A worker naming its own or ancestor Run needs its Dispatch mailbox, not a binding change.
   const workerRefusal =
     explicit && current?.id !== explicit.id
       ? workerRunBindingRefusal(db, caller, explicit.id, { takeover: false, bind: false })
@@ -203,7 +202,7 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
   if (explicit && current.id !== explicit.id) {
     throw new OrchestrationError(
       'consumer_fenced',
-      `This caller is bound to ${current.id}, not ${explicit.id}.`
+      `This caller is bound to Run ${current.id}, not Run ${explicit.id}. Nothing changed.`
     )
   }
   return current

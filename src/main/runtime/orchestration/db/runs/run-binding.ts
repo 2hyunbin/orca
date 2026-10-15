@@ -4,7 +4,7 @@ import { LEGACY_CONTRACT_VERSION } from '../contract-constants'
 import { isEquivalentPaneKey } from '../pane-key-match'
 import type { OrchestrationDb } from '../orchestration-db'
 import type { OrcaSessionId } from '../../../../../shared/orca-session-address'
-import { workerRunBindingRefusal } from './worker-run-binding'
+import { findCallerWorkerDispatches, workerRunBindingRefusal } from './worker-run-binding'
 import {
   mailboxAddressOf,
   runBoundToCoordinator,
@@ -132,6 +132,13 @@ export function bindRun(
     // Why: only LIVE legacy work needs the flag — settled work has no competing authority left, and
     // fencing it would strand the recovered graph behind an attestation the caller may not have.
     if (activeLegacyAssignment && !sameBinding && !provenLegacyBinding && !params.takeoverLegacy) {
+      if (findCallerWorkerDispatches(this, coordinator).length > 0) {
+        throw new OrchestrationError(
+          'consumer_fenced',
+          `Run ${params.runId} still has active legacy work and this caller cannot bind it. Nothing changed.`,
+          { effectsApplied: false }
+        )
+      }
       throw new OrchestrationError(
         'consumer_fenced',
         'This adopted Run still has live legacy work. Its attested coordinator may rebind it, or a current coordinator may explicitly use run-use --takeover-legacy.',
@@ -151,12 +158,10 @@ export function bindRun(
         )
       }
       if (probed.liveLabel !== null) {
-        // A worker that passed the worker rule is resuming its own sub-Run, which someone else now holds.
-        throw (
-          workerRunBindingRefusal(this, coordinator, params.runId, {
-            takeover: true,
-            bind: true
-          }) ?? runCoordinatorLiveError(params.runId, probed.liveLabel)
+        throw runCoordinatorLiveError(
+          params.runId,
+          probed.liveLabel,
+          findCallerWorkerDispatches(this, coordinator).length > 0
         )
       }
     }
@@ -237,10 +242,17 @@ function sameCoordinatorKey(
 }
 
 // No recoveryCommand on purpose: agents run those mechanically, and the flag must carry user intent.
-function runCoordinatorLiveError(runId: string, label: string): OrchestrationError {
+function runCoordinatorLiveError(
+  runId: string,
+  label: string,
+  worker: boolean
+): OrchestrationError {
+  const takeoverAdvice = worker
+    ? ''
+    : ` Take it over only if the user asks: orca orchestration run-use --id ${runId} --takeover replaces it, and its unacknowledged mail is replayed to you.`
   return new OrchestrationError(
     'run_coordinator_live',
-    `Run ${runId} is coordinated by ${label}, which is still open. Nothing changed. Closing it clears this. Take it over only if the user asks: orca orchestration run-use --id ${runId} --takeover replaces it, and its unacknowledged mail is replayed to you.`,
+    `Run ${runId} is coordinated by ${label}, which is still open. Nothing changed. Closing it clears this.${takeoverAdvice}`,
     { effectsApplied: false, runId, coordinator: label }
   )
 }
