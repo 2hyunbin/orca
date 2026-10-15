@@ -4,6 +4,7 @@ import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
+  changedFilters,
   groupModeFromDesktop,
   groupModeToDesktop,
   sortModeFromDesktop,
@@ -147,5 +148,21 @@ describe('buildWorkspaceViewSettingsUpdate', () => {
 
   it('returns an empty update for an empty patch', () => {
     expect(buildWorkspaceViewSettingsUpdate({}, base)).toEqual({})
+  })
+})
+
+describe('changedFilters', () => {
+  it('names only the filters that differ, so Clear never sends a field an older host lacks', () => {
+    const current = {
+      ...NO_WORKSPACE_ROW_FILTERS,
+      hideSleepingWorkspaces: true,
+      filterRepoIds: ['r1'],
+      visibleHostIds: null
+    }
+    expect(changedFilters(current, NO_WORKSPACE_ROW_FILTERS)).toEqual({
+      hideSleepingWorkspaces: false,
+      filterRepoIds: []
+    })
+    expect(changedFilters(NO_WORKSPACE_ROW_FILTERS, { ...NO_WORKSPACE_ROW_FILTERS })).toEqual({})
   })
 })

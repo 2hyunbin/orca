@@ -1,7 +1,21 @@
 import { isDeepStrictEqual } from 'node:util'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
-import { workspaceViewUiValues } from '../../shared/workspace-view/workspace-view-ui-fields'
+import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
+import { WORKSPACE_ROW_FILTER_UI_FIELDS } from '../../shared/workspace-view/workspace-row-filters'
 import type { RuntimeStore } from './runtime-store-contract'
+
+/** The UI state a phone's Workspace options re-read applies (applyDesktopViewSettings). */
+const WORKSPACE_VIEW_UI_FIELDS: readonly (keyof PersistedUIState)[] = [
+  ...Object.values(WORKSPACE_ROW_FILTER_UI_FIELDS),
+  'groupBy',
+  'sortBy',
+  'collapsedGroups',
+  'workspaceStatuses'
+]
+
+function workspaceViewUiValues(ui: PersistedUIState): unknown[] {
+  return WORKSPACE_VIEW_UI_FIELDS.map((key) => ui[key])
+}
 
 /**
  * Tells subscribed clients when the Workspace options change, so a phone re-reads the value it

@@ -1,4 +1,5 @@
 import type { ExecutionHostId } from '../execution-host'
+import type { PersistedUIState } from '../persisted-ui-state-types'
 
 /** The Workspace options filters, under their persisted names. One value, shared by every surface. */
 export type WorkspaceRowFilters = {
@@ -15,22 +16,22 @@ export type WorkspaceRowFilters = {
   visibleHostIds: readonly ExecutionHostId[] | null
 }
 
-const WORKSPACE_ROW_FILTER_KEY_SET = {
-  hideSleepingWorkspaces: true,
-  alwaysShowDefaultBranchWorkspace: true,
-  hideDefaultBranchWorkspace: true,
-  hideAutomationGeneratedWorkspaces: true,
-  hideCliCreatedWorkspaces: true,
-  hideDetachedHeadWorkspaces: true,
-  hideWorkspacesFromOtherDevices: true,
-  filterRepoIds: true,
-  visibleHostIds: true
-} as const satisfies Record<keyof WorkspaceRowFilters, true>
+/** Each filter's PersistedUIState field; a filter added to WorkspaceRowFilters fails to compile until listed. */
+export const WORKSPACE_ROW_FILTER_UI_FIELDS = {
+  hideSleepingWorkspaces: 'hideSleepingWorkspaces',
+  alwaysShowDefaultBranchWorkspace: 'alwaysShowDefaultBranchWorkspace',
+  hideDefaultBranchWorkspace: 'hideDefaultBranchWorkspace',
+  hideAutomationGeneratedWorkspaces: 'hideAutomationGeneratedWorkspaces',
+  hideCliCreatedWorkspaces: 'hideCliCreatedWorkspaces',
+  hideDetachedHeadWorkspaces: 'hideDetachedHeadWorkspaces',
+  hideWorkspacesFromOtherDevices: 'hideWorkspacesFromOtherDevices',
+  filterRepoIds: 'filterRepoIds',
+  visibleHostIds: 'visibleWorkspaceHostIds'
+} as const satisfies { [Key in keyof WorkspaceRowFilters]: keyof PersistedUIState }
 
-/** Every filter's key; a filter added to WorkspaceRowFilters fails to compile until listed. */
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the keys of a literal that satisfies Record<keyof WorkspaceRowFilters, true>.
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the keys of a literal that satisfies a mapped type over WorkspaceRowFilters.
 export const WORKSPACE_ROW_FILTER_KEYS = Object.keys(
-  WORKSPACE_ROW_FILTER_KEY_SET
+  WORKSPACE_ROW_FILTER_UI_FIELDS
 ) as readonly (keyof WorkspaceRowFilters)[]
 
 /** Every filter off, the default-branch exemption on, every project and host shown. */
