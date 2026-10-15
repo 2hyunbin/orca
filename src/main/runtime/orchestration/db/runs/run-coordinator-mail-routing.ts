@@ -18,7 +18,8 @@ export function activeDispatchOwnsAddressSql(runIdSql: string, addressSql: strin
  * A remembered address first bound while it worked an unsettled, delegated Dispatch in the same Run
  * was a worker grabbing the seat, not a spelling of the coordinator, so it never routes as one.
  * Derived from the rows, so addresses older builds remembered stop mattering without editing them.
- * julianday() because completed_at is stored in two text formats.
+ * julianday() because completed_at is stored in two text formats; whole seconds and a strict >
+ * because first_bound_at has no milliseconds, so a bind in the second a Dispatch settled is not a grab.
  */
 export function workerSeatGrabSql(aliasRow: string): string {
   return `EXISTS (
@@ -29,7 +30,7 @@ export function workerSeatGrabSql(aliasRow: string): string {
       AND NOT (grab.creator_handle IS NOT NULL AND grab.creator_handle = grab.assignee_handle)
       AND julianday(grab.created_at) <= julianday(${aliasRow}.first_bound_at)
       AND (grab.status IN ('pending', 'dispatched')
-        OR julianday(grab.completed_at) >= julianday(${aliasRow}.first_bound_at))
+        OR julianday(datetime(grab.completed_at)) > julianday(${aliasRow}.first_bound_at))
   )`
 }
 

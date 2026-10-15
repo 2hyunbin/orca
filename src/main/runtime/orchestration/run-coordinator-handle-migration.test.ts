@@ -183,7 +183,7 @@ describe('Run coordinator handle history migration', () => {
     db.rememberRunCoordinatorHandle(run.id, 'term_worker')
     db.db
       .prepare(
-        `UPDATE dispatch_contexts SET status = 'completed', completed_at = datetime('now') WHERE id = ?`
+        `UPDATE dispatch_contexts SET status = 'completed', completed_at = datetime('now', '+1 second') WHERE id = ?`
       )
       .run(dispatch.id)
 
