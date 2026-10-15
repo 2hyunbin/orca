@@ -16,13 +16,6 @@ import {
 import { OrchestrationDb } from './orchestration/db'
 import { MAILBOX_POINTER_ENTER_ATTEMPTED } from './orchestration/db/messages/mailbox-pointer-enter-state'
 
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
-
 describe('orchestration mailbox crash recovery', () => {
   afterEach(() => {
     vi.useRealTimers()

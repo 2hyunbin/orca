@@ -1,7 +1,6 @@
 import { rmSync } from 'node:fs'
 import { stubWriteSettlement } from '../providers/settled-pty-write-stub'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
-import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkBoundMailbox,
@@ -16,13 +15,6 @@ import {
   TERMINAL_HANDLE,
   temporaryDirectories
 } from './orchestration-mailbox-notification-test-harness'
-
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
 
 describe('orchestration mailbox cold-park idle continuation', () => {
   afterEach(() => {

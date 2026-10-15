@@ -19,13 +19,6 @@ import {
   MAILBOX_POINTER_WRITE_ATTEMPTED
 } from './orchestration/db/messages/mailbox-pointer-enter-state'
 
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
-
 describe('Dispatch mailbox Delivery', () => {
   afterEach(() => {
     vi.useRealTimers()

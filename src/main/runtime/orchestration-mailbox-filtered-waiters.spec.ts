@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkBoundMailbox,
@@ -13,13 +12,6 @@ import {
   TERMINAL_HANDLE
 } from './orchestration-mailbox-notification-test-harness'
 import { createRootDispatch } from './orchestration/db/root-dispatch-test-fixture'
-
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
 
 describe('orchestration mailbox filtered waiters', () => {
   afterEach(() => {

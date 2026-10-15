@@ -5,7 +5,6 @@ import {
   writeUnverifiable,
   type WriteSettlement
 } from '../../shared/pty-write-settlement'
-import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createBoundRun,
@@ -21,13 +20,6 @@ import {
   MAILBOX_POINTER_ENTER_ATTEMPTED,
   MAILBOX_POINTER_WRITE_ATTEMPTED
 } from './orchestration/db/messages/mailbox-pointer-enter-state'
-
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
 
 describe('orchestration mailbox transport settlement', () => {
   afterEach(() => {

@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
@@ -20,13 +19,6 @@ import {
   temporaryDirectories,
   WORKTREE_ID
 } from './orchestration-mailbox-notification-test-harness'
-
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
-  BrowserWindow: { fromId: vi.fn(() => null) },
-  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
-  webContents: { fromId: vi.fn(() => null) }
-}))
 
 function completionFixture(delayMs = 0, presence?: 'unverifiable') {
   const db = createDatabase('orca-codex-completion-title-')
