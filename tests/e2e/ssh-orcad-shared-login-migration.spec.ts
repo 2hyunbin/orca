@@ -51,7 +51,7 @@ function otherVersionTemplate(source: string, destination: string): string {
 }
 
 function hostRecord(host: OrcadConvertHost): { active: string | null } {
-  return JSON.parse(host.exec!('cat /root/.orca-remote/orcad-*/orcad-active.json'))
+  return JSON.parse(host.exec!('cat /root/.orca-remote/orcad-active.json'))
 }
 
 function orcadPids(host: OrcadConvertHost): string {
