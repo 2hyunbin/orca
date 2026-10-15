@@ -1,7 +1,5 @@
-import type {
-  MobileNativeChatSendChoice,
-  MobileNativeChatSendOutcome
-} from './mobile-native-chat-send'
+import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
 import type { MobileChatQuestion } from './mobile-native-chat-question'
@@ -27,7 +25,7 @@ export type StructuredMobileSession = ReturnType<typeof useMobileStructuredAgent
       images?: string[],
       deadline?: number,
       attachments?: readonly StructuredMobileSendAttachment[],
-      choice?: MobileNativeChatSendChoice
+      delivery?: NativeChatFollowUpDelivery
     ) => Promise<MobileNativeChatSendOutcome>
     cancel: () => void
     permission: MobileChatPermission | null

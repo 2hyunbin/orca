@@ -11,10 +11,8 @@ import type {
   NativeChatSettledTurns
 } from '../../../src/shared/native-chat-turn-status'
 import type { NativeChatTurnJournal } from '../../../src/shared/native-chat-turn-membership'
-import type {
-  MobileNativeChatSendChoice,
-  MobileNativeChatSendOutcome
-} from './mobile-native-chat-send'
+import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 import type { MobileNativeChatCommandRefusalCauses } from './use-mobile-native-chat-send-error'
 import type { MobileStructuredQueuedMessageControls } from './use-mobile-structured-queued-message-controls'
 import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
@@ -107,7 +105,7 @@ export type MobileNativeChatController = {
       path: string
       previewUri: string
     }[],
-    choice?: MobileNativeChatSendChoice
+    delivery?: NativeChatFollowUpDelivery
   ) => Promise<MobileNativeChatSendOutcome>
   /** Launch-context text still parked on the agent's TUI input line, or null.
    *  Image sends read it to size their leading clear (one Ctrl+U per line). */

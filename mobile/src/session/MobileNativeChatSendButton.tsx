@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from 'react-native'
 import { ArrowUp, ListPlus } from 'lucide-react-native'
 import { ActionSheetModal } from '../components/ActionSheetModal'
 import { colors } from '../theme/mobile-theme'
-import type { MobileNativeChatSendChoice } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 
 export function MobileNativeChatSendButton({
   canSend,
@@ -12,17 +12,17 @@ export function MobileNativeChatSendButton({
 }: {
   canSend: boolean
   offersChoice: boolean
-  onSend: (choice?: MobileNativeChatSendChoice) => Promise<void>
+  onSend: (delivery?: NativeChatFollowUpDelivery) => Promise<void>
 }): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const longPressed = useRef(false)
   if (menuOpen && (!canSend || !offersChoice)) {
     setMenuOpen(false)
   }
-  const choose = (choice: MobileNativeChatSendChoice): void => {
+  const choose = (delivery: NativeChatFollowUpDelivery): void => {
     setMenuOpen(false)
     if (canSend && offersChoice) {
-      void onSend(choice)
+      void onSend(delivery)
     }
   }
   return (

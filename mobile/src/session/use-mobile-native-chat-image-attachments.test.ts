@@ -54,6 +54,7 @@ type Hook = ReturnType<typeof useMobileNativeChatImageAttachments>
 
 const SCOPE_A = 'h\0w\0tab-a'
 const SCOPE_B = 'h\0w\0tab-b'
+const TEXT_ONLY_SEND = [undefined, expect.any(Number), undefined, undefined]
 
 function baseArgs(overrides: Partial<HookArgs> & Pick<HookArgs, 'client'>): HookArgs {
   return {
@@ -312,7 +313,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     await act(async () => {
       await hook!.sendNativeChat('just text')
     })
-    expect(baseSend).toHaveBeenCalledWith('just text', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenCalledWith('just text', ...TEXT_ONLY_SEND)
     expect(client.calls).toHaveLength(0)
   })
 
@@ -399,7 +400,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     await act(async () => {
       await hook!.sendNativeChat('hi')
     })
-    expect(baseSend).toHaveBeenCalledWith('hi', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenCalledWith('hi', ...TEXT_ONLY_SEND)
     expect(client.calls.some((c) => c.method === 'terminal.send')).toBe(false)
 
     // Back on the original tab the chip is still pending.
@@ -588,7 +589,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     // Failed attempt's clear + rejected paste, then the healing clear.
     expect(sendCalls).toHaveLength(3)
     expect(sendCalls[2]?.params).toMatchObject({ text: '\x15', enter: false })
-    expect(baseSend).toHaveBeenCalledWith('hi again', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenCalledWith('hi again', ...TEXT_ONLY_SEND)
   })
 
   it('heals before the next text-only send when an image submit delivery is unknown (#10228)', async () => {

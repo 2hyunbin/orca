@@ -61,7 +61,13 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
 
       await expect(sendWithOutcome('/review')).resolves.toBe(outcome)
 
-      expect(sendStructured).toHaveBeenCalledWith('/review')
+      expect(sendStructured).toHaveBeenCalledWith(
+        '/review',
+        undefined,
+        undefined,
+        undefined,
+        undefined
+      )
       expect(restoreRejectedDraft).not.toHaveBeenCalled()
     }
   )

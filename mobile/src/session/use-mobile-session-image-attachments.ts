@@ -1,10 +1,8 @@
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import type { MobileImageSource } from './mobile-image-source-picker'
-import type {
-  MobileNativeChatSendChoice,
-  MobileNativeChatSendOutcome
-} from './mobile-native-chat-send'
+import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 import { useMobileImageAttachment } from './use-mobile-image-attachment'
 import {
   useMobileNativeChatImageAttachments,
@@ -39,7 +37,7 @@ type Args = {
       path: string
       previewUri: string
     }[],
-    choice?: MobileNativeChatSendChoice
+    delivery?: NativeChatFollowUpDelivery
   ) => Promise<MobileNativeChatSendOutcome>
   /** Structured agent sessions do not have a terminal paste path. */
   readonly structuredNativeChat: boolean

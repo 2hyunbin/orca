@@ -109,7 +109,7 @@ describe('MobileNativeChatComposer', () => {
 
     // Verbatim: the send seam trims for the wire, so a rejected send can hand
     // back the draft byte-for-byte (#14819).
-    expect(onSend).toHaveBeenCalledWith(' hello ')
+    expect(onSend).toHaveBeenCalledWith(' hello ', undefined)
     expect(onChangeText).not.toHaveBeenCalled()
   })
 
@@ -322,7 +322,7 @@ describe('MobileNativeChatComposer', () => {
 
     await act(async () => sendButton().props.onPress())
 
-    expect(onSend).toHaveBeenCalledWith(' hello ')
+    expect(onSend).toHaveBeenCalledWith(' hello ', undefined)
     expect(onChangeText).not.toHaveBeenCalled()
   })
 

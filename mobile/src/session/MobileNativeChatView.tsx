@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { MobileNativeChatSendChoice } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 import { useNativeChatAcceptedAction } from './use-native-chat-action-outcomes'
 import {
   ActivityIndicator,
@@ -91,7 +91,7 @@ type Props = ComposerTrayProps & {
   hasMore?: boolean
   loadingEarlier?: boolean
   onLoadEarlier?: () => void
-  onSend: (text: string, choice?: MobileNativeChatSendChoice) => Promise<boolean>
+  onSend: (text: string, delivery?: NativeChatFollowUpDelivery) => Promise<boolean>
   sendChoiceSupported?: boolean
   /** Route identity used to fence accepted sends that settle after a tab/view switch. */
   sendSurfaceId: string

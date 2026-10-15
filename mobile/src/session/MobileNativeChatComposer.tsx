@@ -36,7 +36,7 @@ import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import { getMobileNativeChatCommands } from './mobile-native-chat-send-classification'
 import { keepHeldPressThroughLongPress } from './held-press-long-press'
 import { MobileNativeChatSendButton } from './MobileNativeChatSendButton'
-import type { MobileNativeChatSendChoice } from './mobile-native-chat-send'
+import type { NativeChatFollowUpDelivery } from '../../../src/shared/native-chat-follow-up-delivery'
 
 const NO_FILE_PATHS: string[] = []
 const NO_ATTACHMENTS: PendingNativeChatImage[] = []
@@ -48,7 +48,7 @@ type Props = {
   /** Controlled composer text — owned by the parent so dictation can write to it. */
   value: string
   onChangeText: (text: string) => void
-  onSend: (text: string, choice?: MobileNativeChatSendChoice) => Promise<boolean>
+  onSend: (text: string, delivery?: NativeChatFollowUpDelivery) => Promise<boolean>
   sendChoiceEnabled?: boolean
   /** Changes whenever the route focuses a different chat composer surface. */
   sendSurfaceId: string
@@ -196,7 +196,7 @@ export function MobileNativeChatComposer({
     setPendingSelection({ start: nextCursor, end: nextCursor })
   }
 
-  const handleSend = async (choice?: MobileNativeChatSendChoice): Promise<void> => {
+  const handleSend = async (delivery?: NativeChatFollowUpDelivery): Promise<void> => {
     if (!canSend || sendingRef.current) {
       return
     }
@@ -208,7 +208,7 @@ export function MobileNativeChatComposer({
     try {
       // Raw, not trimmed: the send seam owns the wire trim, and a rejection has
       // to hand the user back exactly what they typed (#14819).
-      const accepted = choice === undefined ? await onSend(value) : await onSend(value, choice)
+      const accepted = await onSend(value, delivery)
       if (
         accepted &&
         mountedRef.current &&
