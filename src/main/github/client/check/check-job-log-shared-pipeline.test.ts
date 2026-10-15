@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as excerpt from '../../../../shared/check-job-log-excerpt'
 import * as extraction from '../../../../shared/check-job-log-tail-slice'
 import { TERMINAL_CONTROL_CHARACTER_PATTERN } from '../../../../shared/ansi-escape-sequences'
-import failureFixture from '../../../../shared/__fixtures__/check-job-log-failure-output.json'
+import { createCheckLogFixture } from '../../../../../config/scripts/check-job-log-test-fixture.mjs'
 import {
   completeFakeSpawn,
   createFakeSpawnedChild
@@ -14,6 +14,11 @@ import parserFixture from './__fixtures__/gh-api-unknown-escape-flag.json'
 
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }))
 vi.mock('node:child_process', async (original) => ({ ...(await original()), spawn: spawnMock }))
+const failureFixture = {
+  ...createCheckLogFixture(),
+  escapeRefusalStderr:
+    'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway'
+}
 const children: ChildProcess[] = []
 let raw = ''
 let stderr = ''
