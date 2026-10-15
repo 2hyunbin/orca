@@ -56,10 +56,6 @@ import {
   withoutHiddenHosts
 } from './runtime-visible-catalog'
 import { claudeCliFlagSupport } from '../claude/claude-cli-flag-support'
-import {
-  createNativeChatVisualsWorkspaceVerdicts,
-  readNativeChatVisualsWorkspaceCatalogs
-} from './native-chat-visuals-workspace-verdict'
 
 export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVisibleReadProbe {
   async getWorktreePs(
@@ -241,11 +237,7 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
       // Wired only here, so a test runtime never runs a real `claude --version`.
       claudeCliFlags: claudeCliFlagSupport,
       nativeChatVisuals: {
-        isEnabled: () => this.requireStore().getSettings().nativeChatInlineVisuals !== false,
-        // Chats and their visuals are shared by every profile; each profile keeps its own catalog.
-        workspaceVerdicts: createNativeChatVisualsWorkspaceVerdicts(() =>
-          this.store ? readNativeChatVisualsWorkspaceCatalogs(this.store) : null
-        )
+        isEnabled: () => this.requireStore().getSettings().nativeChatInlineVisuals !== false
       },
       resolveShellEnvironmentPolicy: () =>
         nativeChatShellEnvironmentPolicy(this.requireStore().getSettings()),
