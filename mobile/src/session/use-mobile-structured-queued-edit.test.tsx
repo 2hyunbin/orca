@@ -179,25 +179,26 @@ describe('mobile in-place queued Edit', () => {
     expect(append).not.toHaveBeenCalled()
   })
 
-  it('keeps stale and unconfirmed edits in the editor without copying them', async () => {
+  it('hands a stale Save to the composer and reopens on the newer text; keeps an unconfirmed one', async () => {
     const message = queuedDraft({ messageId: 'draft-1' })
     await mount(message)
-    sendRequest.mockImplementation(async (method) =>
-      method === 'agentSession.queuedMessageUpdate'
-        ? mutationOk({ status: 'changed', messageId: 'draft-1' })
-        : ok({ status: 'held' })
-    )
+    const newer = queuedMessageWithEditedText(message.body, 'edited elsewhere')!
+    sendRequest.mockImplementation(async (method) => {
+      if (method !== 'agentSession.queuedMessageUpdate') {
+        return ok({ status: 'held' })
+      }
+      listener?.(batchEvent([{ ...message, body: newer }]))
+      return mutationOk({ status: 'changed', messageId: 'draft-1' })
+    })
     act(() => hook!.queued.editor!.change('my text'))
     await act(async () => {
       expect(await hook!.queued.editor!.save()).toBe(false)
     })
-    expect(hook!.queued.editor?.text).toBe('my text')
-    expect(error).toHaveBeenCalledWith('This message changed while you were editing.')
-    expect(append).not.toHaveBeenCalled()
-    act(() => hook!.queued.editor!.cancel())
-    await act(async () => {
-      await hook!.queued.edit!('draft-1')
-    })
+    expect(append).toHaveBeenCalledWith('my text')
+    expect(error).toHaveBeenCalledWith(
+      'This message changed while you were editing. Your edit is in the chat box.'
+    )
+    expect(hook!.queued.editor).toMatchObject({ messageId: 'draft-1', text: 'edited elsewhere' })
     act(() => hook!.queued.editor!.change('saved text'))
     const body = queuedMessageWithEditedText(message.body, 'saved text')!
     sendRequest.mockImplementation(async (method) => {
@@ -213,7 +214,7 @@ describe('mobile in-place queued Edit', () => {
     expect(hook!.queued.editor?.text).toBe('saved text')
     expect(hook!.queued.cards[0]?.text).toBe('saved text')
     expect(error).toHaveBeenCalledTimes(1)
-    expect(append).not.toHaveBeenCalled()
+    expect(append).toHaveBeenCalledTimes(1)
   })
 
   it('abandons unsaved typing and releases the hold when changing chats', async () => {

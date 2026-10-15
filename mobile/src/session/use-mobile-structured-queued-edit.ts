@@ -45,6 +45,7 @@ export function useMobileStructuredQueuedEdit(args: {
   messages: readonly AgentSessionQueuedMessage[] | null
   cards: readonly MobileQueuedMessageCard[]
   mutate: MobileStructuredAgentMutate
+  appendComposerText: ((text: string) => boolean) | undefined
   onSendError: (text: string) => void
   onActionResolved?: () => void
 }) {
@@ -54,6 +55,8 @@ export function useMobileStructuredQueuedEdit(args: {
     clientRef.current = { sessionKey, client }
   }, [client, sessionKey])
   const active = useRef<Edit | null>(null)
+  /** Save answered `changed`: the editor reopens on the newer text once the card shows it. */
+  const reopen = useRef<{ scope: string; messageId: string; stale: string } | null>(null)
   const [shown, setShown] = useState<Edit | null>(null)
   const render = useCallback((edit: Edit | null) => {
     active.current = edit
@@ -69,6 +72,7 @@ export function useMobileStructuredQueuedEdit(args: {
     return () => {
       const edit = active.current
       active.current = null
+      reopen.current = null
       setShown(null)
       edit?.lease.end()
     }
@@ -76,6 +80,7 @@ export function useMobileStructuredQueuedEdit(args: {
 
   const begin = useCallback(
     async (messageId: string): Promise<boolean> => {
+      reopen.current = null
       if (active.current || !enabled || !client || !sessionId) {
         return false
       }
@@ -157,6 +162,14 @@ export function useMobileStructuredQueuedEdit(args: {
         close()
         return false
       }
+      // Someone else's edit landed first: the typing goes to the chat box, and the editor
+      // opens again on the newer text.
+      if (result.value.status === 'changed' && args.appendComposerText?.(edit.text)) {
+        onSendError('This message changed while you were editing. Your edit is in the chat box.')
+        reopen.current = { scope: edit.scope, messageId: edit.messageId, stale: edit.fingerprint }
+        close()
+        return false
+      }
       onSendError(
         result.value.status === 'changed'
           ? 'This message changed while you were editing.'
@@ -165,21 +178,27 @@ export function useMobileStructuredQueuedEdit(args: {
     }
     render(edit)
     return false
-  }, [close, mutate, onActionResolved, onSendError, render, sessionId])
+  }, [args.appendComposerText, close, mutate, onActionResolved, onSendError, render, sessionId])
 
   useEffect(() => {
     const edit = active.current
-    if (
-      !edit ||
-      edit.scope !== sessionKey ||
-      args.messages === null ||
-      (args.messages.some((message) => message.messageId === edit.messageId) &&
-        args.cards.some((card) => card.messageId === edit.messageId))
-    ) {
+    const listed = (messageId: string): boolean =>
+      args.messages?.some((message) => message.messageId === messageId) === true &&
+      args.cards.some((card) => card.messageId === messageId)
+    if (edit && edit.scope === sessionKey && args.messages !== null && !listed(edit.messageId)) {
+      close()
+    }
+    const pending = reopen.current
+    if (!pending || active.current || args.messages === null || !sessionId) {
       return
     }
-    close()
-  }, [args.cards, args.messages, close, sessionKey, shown])
+    const message = args.messages.find((entry) => entry.messageId === pending.messageId)
+    if (pending.scope !== sessionKey || !message || !listed(pending.messageId)) {
+      reopen.current = null
+    } else if (agentSessionSendBodyFingerprint(sessionId, message.body) !== pending.stale) {
+      void begin(pending.messageId)
+    }
+  }, [args.cards, args.messages, begin, close, sessionId, sessionKey, shown])
 
   const editor: MobileQueuedMessageInlineEditor | undefined =
     shown?.scope === sessionKey

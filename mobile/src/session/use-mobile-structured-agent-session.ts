@@ -56,7 +56,7 @@ export function useMobileStructuredAgentSession(args: {
   /** Capability facts from the shared runtime status probe; null follows the legacy wire. */
   hostSupport: StructuredAgentSessionHostSupport | null
   agent: string | null
-  /** The active pane's live composer for older-host Edit's copy-first fallback. */
+  /** The active pane's live composer; Edit copies a card's text through it. */
   appendComposerText?: (text: string) => boolean
   onSendError: MobileNativeChatSendErrorReporter
   /** Called on any accepted queued-card action; retires the route's failure banner. */
