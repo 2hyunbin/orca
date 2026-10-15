@@ -1,16 +1,9 @@
-import type { JiraSite, JiraViewer } from '../../../shared/jira-types'
-
-/** Display label for a Jira connection; identity is the host plus providerIdentity.siteId. */
+/** Display label for a Jira login; its identity is the host plus providerIdentity.siteId. */
 export function getJiraAccountLabel(
   account:
-    | Partial<Pick<JiraSite, 'email' | 'displayName' | 'siteUrl'>>
-    | JiraViewer
+    | { email?: string | null; displayName?: string | null; siteUrl?: string | null }
     | null
     | undefined
 ): string | null {
-  if (!account) {
-    return null
-  }
-  const siteUrl = 'siteUrl' in account ? account.siteUrl : null
-  return account.email?.trim() || account.displayName?.trim() || siteUrl?.trim() || null
+  return account?.email?.trim() || account?.displayName?.trim() || account?.siteUrl?.trim() || null
 }

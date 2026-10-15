@@ -112,13 +112,16 @@ describe('Jira workspace attachment identity', () => {
   it('rejects another execution host or Jira account but allows other repo contexts', () => {
     const workspace = linked('same-key')
     expect(matches([workspace], issue, { ...source, hostId: 'runtime:cloud' })).toEqual([])
-    // Another login on the same site has its own siteId.
+    // Another login on the same site has its own siteId, and its issues carry it.
+    const otherSite: JiraSite = { ...site, id: 'site-a2', accountId: 'other-user' }
     const otherLogin: TaskSourceContext = {
       ...source,
-      providerIdentity: { provider: 'jira', siteId: 'site-a2', siteUrl: site.siteUrl }
+      providerIdentity: { provider: 'jira', siteId: otherSite.id, siteUrl: site.siteUrl }
     }
-    expect(matches([workspace], issue, otherLogin)).toEqual([])
-    expect(collectLinkedJiraIssueRefs([workspace], [site], 'all', otherLogin)).toEqual([])
+    expect(matches([workspace], { ...issue, siteId: otherSite.id }, otherLogin)).toEqual([])
+    expect(
+      collectLinkedJiraIssueRefs([workspace], [site, otherSite], otherSite.id, otherLogin)
+    ).toEqual([])
     expect(
       matches([workspace], issue, { ...source, projectId: 'other-repo-project', repoId: 'other' })
     ).toEqual([workspace])
