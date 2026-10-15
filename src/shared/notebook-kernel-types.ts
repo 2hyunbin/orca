@@ -42,11 +42,14 @@ export type KernelEndFrame =
 /** What a running kernel reports, in order, for the one execution in flight. */
 export type KernelFrame = KernelOutputFrame | KernelEndFrame
 
-/** What main sends a renderer: output frames in batches; `done`/`exit` alone, after the batch before them. */
-export type KernelIpcFrame = { type: 'outputs'; outputs: KernelOutputFrame[] } | KernelEndFrame
+/** What main sends a renderer, in producer order. */
+export type KernelIpcFrame =
+  | { type: 'outputs'; outputs: KernelOutputFrame[] }
+  | KernelEndFrame
+  | { type: 'stopped' }
 
 export type CreateVenvResult =
   | { ok: true; environment: PythonEnvironment }
   | { ok: false; detail: string }
 
-export type KernelFrameEvent = { filePath: string; frame: KernelIpcFrame }
+export type KernelFrameEvent = { filePath: string; producerId: string; frame: KernelIpcFrame }

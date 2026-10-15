@@ -60,30 +60,15 @@ export function createFrameReader(onFrame: (frame: BridgeFrame) => void): (text:
   return (text) => parser.feed(text)
 }
 
-/** Joins a stream chunk onto the previous one when the renderer would append it to the same output. */
-function mergeStream(
-  previous: KernelOutputFrame | undefined,
-  frame: KernelOutputFrame
-): KernelOutputFrame | null {
-  if (previous?.type !== 'stream' || frame.type !== 'stream') {
-    return null
-  }
-  const { name, text } = previous.content
-  const next = frame.content
-  return typeof name === 'string' &&
-    name === next.name &&
-    typeof text === 'string' &&
-    typeof next.text === 'string'
-    ? { type: 'stream', content: { ...previous.content, text: text + next.text } }
-    : null
-}
-
 /**
  * Sends output frames in batches, each 10 ms after its first frame, so a chatty cell costs one IPC
- * and one renderer update per batch. `done` and `exit` send the pending batch, then go on their own.
+ * and one renderer update per batch. Frames retain their original boundaries so the renderer's
+ * output reducer keeps its existing carriage-return semantics. `done` and `exit` send the pending
+ * batch, then go on their own.
  */
 export function createFrameBatcher(send: (frame: KernelIpcFrame) => void): {
   add: (frame: KernelFrame) => void
+  flush: () => void
   drop: () => void
 } {
   let outputs: KernelOutputFrame[] = []
@@ -102,19 +87,13 @@ export function createFrameBatcher(send: (frame: KernelIpcFrame) => void): {
     }
   }
   return {
-    drop,
     add: (frame) => {
       if (frame.type === 'done' || frame.type === 'exit') {
         flush()
         send(frame)
         return
       }
-      const merged = mergeStream(outputs.at(-1), frame)
-      if (merged) {
-        outputs[outputs.length - 1] = merged
-      } else {
-        outputs.push(frame)
-      }
+      outputs.push(frame)
       if (timer === undefined) {
         startedAt = Date.now()
         timer = setTimeout(flush, OUTPUT_BATCH_MS)
@@ -122,7 +101,9 @@ export function createFrameBatcher(send: (frame: KernelIpcFrame) => void): {
         // Why: one long stdout read holds the timer back, so an overdue batch goes now.
         flush()
       }
-    }
+    },
+    flush,
+    drop
   }
 }
 
@@ -131,7 +112,7 @@ export type NotebookKernel = {
   execute: (code: string) => void
   interrupt: () => void
   /** Closing stdin is the bridge's shutdown signal; the force-kill covers a wedged bridge. */
-  shutdown: () => void
+  shutdown: (drain?: boolean) => void
 }
 
 export function startNotebookKernel({
@@ -202,13 +183,24 @@ export function startNotebookKernel({
     kernel: {
       execute: (code) => send({ op: 'execute', code }),
       interrupt: () => send({ op: 'interrupt' }),
-      shutdown: () => {
+      shutdown: (drain = false) => {
         stopping = true
-        batcher.drop()
-        child.stdin.end()
-        const forceKill = setTimeout(() => void forceTerminateProcessTree(child), SHUTDOWN_GRACE_MS)
-        forceKill.unref()
-        void exited.then(() => clearTimeout(forceKill))
+        try {
+          if (drain) {
+            batcher.flush()
+            onFrame({ type: 'stopped' })
+          } else {
+            batcher.drop()
+          }
+        } finally {
+          child.stdin.end()
+          const forceKill = setTimeout(
+            () => void forceTerminateProcessTree(child),
+            SHUTDOWN_GRACE_MS
+          )
+          forceKill.unref()
+          void exited.then(() => clearTimeout(forceKill))
+        }
       }
     }
   }

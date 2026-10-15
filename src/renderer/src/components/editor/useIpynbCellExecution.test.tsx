@@ -102,7 +102,8 @@ describe('notebook cell execution', () => {
     )
     expect(notebookApi.startKernel).toHaveBeenCalledWith({
       filePath: '/repo/trust.ipynb',
-      python: '/repo/.venv/bin/python'
+      python: '/repo/.venv/bin/python',
+      producerId: expect.any(String)
     })
   })
 
@@ -159,6 +160,7 @@ async function finishHiddenRuns(filePath: string, count: number): Promise<void> 
   for (let index = 0; index < count; index += 1) {
     frameListener.current({
       filePath,
+      producerId: notebookApi.startKernel.mock.lastCall?.[0].producerId,
       frame: {
         type: 'outputs',
         outputs: [
@@ -176,6 +178,7 @@ async function finishHiddenRuns(filePath: string, count: number): Promise<void> 
     })
     frameListener.current({
       filePath,
+      producerId: notebookApi.startKernel.mock.lastCall?.[0].producerId,
       frame: { type: 'done', status: 'ok', execution_count: index + 1 }
     })
   }

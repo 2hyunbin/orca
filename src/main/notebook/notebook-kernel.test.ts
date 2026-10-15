@@ -200,14 +200,14 @@ describe('createFrameBatcher', () => {
     content: { name: 'stdout', text }
   })
 
-  it('sends output 10 ms after its first frame, merging adjacent same-name streams, before done', () => {
+  it('sends distinct raw frames in timed batches before done', () => {
     vi.useFakeTimers()
     try {
       const sent: KernelIpcFrame[] = []
       const { add, drop } = createFrameBatcher((frame) => sent.push(frame))
       const stderr: KernelFrame = { type: 'stream', content: { name: 'stderr', text: 'warn' } }
       const clear: KernelFrame = { type: 'clear_output', content: { wait: false } }
-      for (const frame of [stdout('a\r'), stdout('b\n'), stderr, clear, stdout('c')]) {
+      for (const frame of [stdout('abc\r\r'), stdout('\n'), stderr, clear, stdout('c')]) {
         add(frame)
       }
       vi.advanceTimersByTime(9)
@@ -223,8 +223,8 @@ describe('createFrameBatcher', () => {
       drop()
       vi.runAllTimers()
       expect(sent).toEqual([
-        { type: 'outputs', outputs: [stdout('a\rb\n'), stderr, clear, stdout('c')] },
-        { type: 'outputs', outputs: [stdout('de')] },
+        { type: 'outputs', outputs: [stdout('abc\r\r'), stdout('\n'), stderr, clear, stdout('c')] },
+        { type: 'outputs', outputs: [stdout('d'), stdout('e')] },
         { type: 'outputs', outputs: [stdout('f')] },
         { type: 'done', status: 'ok', execution_count: 1 }
       ])
