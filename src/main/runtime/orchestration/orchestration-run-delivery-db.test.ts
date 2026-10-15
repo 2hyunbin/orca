@@ -226,7 +226,7 @@ describe('OrchestrationDb Run state', () => {
   })
 
   describe('lightweight Run scope', () => {
-    it('refuses a worker binding a Run above its own, but not a coordinator with a self-dispatch', () => {
+    it('refuses a worker binding a Run it did not create, but not a coordinator with a self-dispatch', () => {
       const d = createDb()
       const parent = createBoundRun(d)
       const coordinator = { kind: 'terminal', handle: 'term_coord', paneKey: COORD_PANE } as const
@@ -256,7 +256,7 @@ describe('OrchestrationDb Run state', () => {
 
       expect(() =>
         d.bindRun({ runId: parent.id, coordinatorHandle: 'term_grand', coordinatorPaneKey: null })
-      ).toThrow(expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' }))
+      ).toThrow(expect.objectContaining({ code: 'worker_cannot_take_over_run' }))
       expect(d.getRun(parent.id)?.coordinator_handle).toBe('term_coord')
     })
 

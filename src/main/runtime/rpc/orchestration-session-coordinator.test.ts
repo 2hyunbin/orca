@@ -251,7 +251,7 @@ describe('a structured chat coordinates through the same verbs as a terminal', (
       ok: false,
       error: {
         code: 'consumer_fenced',
-        message: `This caller is not Run ${runId}'s coordinator (its coordinator is ${ADDRESS_Y}). Nothing changed.`
+        message: `Stop coordinating Run ${runId}; its coordinator is now ${ADDRESS_Y}. Take it back only if the user asks. Nothing changed.`
       }
     })
     expect(await as(SESSION_X, 'orchestration.runCurrent', {})).toMatchObject({ run: null })

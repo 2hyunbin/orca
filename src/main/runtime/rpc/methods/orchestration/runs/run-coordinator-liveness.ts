@@ -1,6 +1,10 @@
 import type { OrchestrationDb } from '../../../../orchestration/db'
+import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { RunRow } from '../../../../orchestration/types'
 import {
+  mailboxAddressOf,
+  runBoundToCoordinator,
   runCoordinatorKey,
   type OrchestrationCoordinatorKey
 } from '../../../../orchestration/orchestration-caller-identity'
@@ -9,35 +13,93 @@ import {
   lookupOrcaAgentSession,
   structuredSessionMailReach
 } from '../../../../orchestration/structured-session-mail-address'
+import { defaultAgentChatLabel } from '../../../../../../shared/agent-session-chat-label'
+import { splitWorktreeId } from '../../../../../../shared/worktree/id'
+
+// Why: a binding that keeps moving under a probe is contention, not something to win by retrying forever.
+const PROBE_ATTEMPTS = 3
+
+type BindParams = Parameters<OrchestrationDb['bindRun']>[0]
 
 /**
- * The Run's current coordinator when there is positive evidence it is still running; else null.
- * Only proof counts: a closed chat, an exited or unhooked terminal, another host, or anything that
- * cannot be checked reads as not live, so a restart handoff never needs a flag.
+ * Probe the Run's coordinator, then bind with what was probed so bindRun can refuse a live one.
+ * When the binding moved between probe and transaction, probe again; after a few tries the refusal
+ * stands and says to retry, so a bind never displaces a coordinator nobody probed.
  */
-export async function provenLiveRunCoordinator(
+export async function bindAfterProbe(
   runtime: OrcaRuntimeService,
   db: OrchestrationDb,
-  runId: string
-): Promise<OrchestrationCoordinatorKey | null> {
-  const run = db.getRunRaw(runId)
-  if (!run || run.legacy === 1) {
-    return null
+  params: () => Omit<BindParams, 'probed'>
+): Promise<RunRow | undefined> {
+  for (let attempt = 1; ; attempt++) {
+    const bind = params()
+    const target = db.getRunRaw(bind.runId)
+    const caller = {
+      terminalHandle: bind.coordinatorHandle,
+      paneKey: bind.coordinatorPaneKey,
+      orcaSessionId: bind.coordinatorOrcaSessionId ?? null
+    }
+    const coordinator = target ? runCoordinatorKey(target) : null
+    const liveLabel =
+      coordinator && target && !runBoundToCoordinator(target, caller)
+        ? await liveCoordinatorLabel(runtime, db, coordinator)
+        : null
+    try {
+      return db.bindRun({ ...bind, ...(coordinator ? { probed: { coordinator, liveLabel } } : {}) })
+    } catch (error) {
+      if (
+        attempt >= PROBE_ATTEMPTS ||
+        !(error instanceof OrchestrationError) ||
+        error.code !== 'run_binding_changed'
+      ) {
+        throw error
+      }
+    }
   }
-  const key = runCoordinatorKey(run)
+}
+
+/**
+ * How a user recognizes the coordinator, when there is positive evidence it is still open; else null.
+ * Only proof counts: a closed chat, an exited or unhooked terminal agent, another host, or anything
+ * that cannot be checked reads as not open, so a restart handoff never needs a flag.
+ */
+async function liveCoordinatorLabel(
+  runtime: OrcaRuntimeService,
+  db: OrchestrationDb,
+  key: OrchestrationCoordinatorKey
+): Promise<string | null> {
+  const address = mailboxAddressOf(key)
   if (key.orcaSessionId !== null) {
     // Why: the record store opens lazily, as for a send naming a session.
     await runtime.ensureStructuredAgentSessionHost().catch(() => undefined)
     const store = readAgentSessionRecordStore()
     const found = store ? lookupOrcaAgentSession(store, key.orcaSessionId) : null
-    return store &&
-      found?.kind === 'found' &&
-      structuredSessionMailReach(store, found.record, db).kind === 'reachable'
-      ? key
-      : null
+    if (!store || found?.kind !== 'found') {
+      return null
+    }
+    const reach = structuredSessionMailReach(store, found.record, db)
+    if (reach.kind !== 'reachable') {
+      return null
+    }
+    const record = reach.session
+    const title = record.conversationName ?? defaultAgentChatLabel(record.provider)
+    return `the "${title}" chat${inWorktree(record.location.workspaceId)} (${address})`
   }
-  if (key.paneKey !== null) {
-    return (await runtime.checkCoordinatorAgentPresence(key.paneKey)) === 'live' ? key : null
+  if (
+    key.paneKey === null ||
+    (await runtime.checkCoordinatorAgentPresence(key.paneKey)) !== 'live'
+  ) {
+    return null
   }
-  return null
+  const terminal = key.terminalHandle
+    ? await runtime.showTerminal(key.terminalHandle).catch(() => null)
+    : null
+  const title = terminal?.title ? ` "${terminal.title}"` : ''
+  return `the terminal${title}${inWorktree(terminal?.worktreeId)} (${address})`
+}
+
+function inWorktree(worktreeId: string | undefined): string {
+  const path = worktreeId ? splitWorktreeId(worktreeId)?.worktreePath : undefined
+  const name = path?.split(/[\\/]/).filter(Boolean).at(-1)
+  return name ? ` in ${name}` : ''
 }

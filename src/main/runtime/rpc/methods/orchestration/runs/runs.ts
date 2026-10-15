@@ -3,11 +3,8 @@ import { OrchestrationError } from '../../../../orchestration/orchestration-erro
 import { assertCallerHandleMatchesEvidence, resolveOrchestrationCaller } from './run-scope'
 import { exposeRun } from './run-receipt'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
-import {
-  runBoundToCoordinator,
-  type OrchestrationCallerIdentity
-} from '../../../../orchestration/orchestration-caller-identity'
-import { provenLiveRunCoordinator } from './run-coordinator-liveness'
+import type { OrchestrationCallerIdentity } from '../../../../orchestration/orchestration-caller-identity'
+import { bindAfterProbe } from './run-coordinator-liveness'
 import { currentDispatchAssigneeRun } from '../messaging/recipient-routing'
 import {
   RunCreateParams,
@@ -93,22 +90,15 @@ export const ORCHESTRATION_RUN_METHODS = [
       assertCallerHandleMatchesEvidence(runtime, params.from, orchestrationCompatibilityEvidence)
       const db = runtime.getOrchestrationDb()
       const priorRun = db.getCurrentRunForCoordinator(caller)
-      const target = db.getRunRaw(params.id)
-      // Why: liveness probes are async, so they run here; bindRun enforces the answer in its transaction.
-      const provenLiveCoordinator =
-        target && !runBoundToCoordinator(target, caller)
-          ? await provenLiveRunCoordinator(runtime, db, params.id)
-          : null
-      const run = db.bindRun({
+      const run = await bindAfterProbe(runtime, db, () => ({
         runId: params.id,
         coordinatorHandle: caller.terminalHandle,
         coordinatorPaneKey: caller.paneKey,
         coordinatorOrcaSessionId: caller.orcaSessionId,
         takeoverLegacy: params.takeoverLegacy,
         takeover: params.takeover,
-        provenLiveCoordinator,
         legacyCoordinatorAuthority
-      })
+      }))
       if (!run) {
         throw new OrchestrationError(
           'run_not_found',

@@ -4,12 +4,7 @@ import { LEGACY_CONTRACT_VERSION } from '../contract-constants'
 import { isEquivalentPaneKey } from '../pane-key-match'
 import type { OrchestrationDb } from '../orchestration-db'
 import type { OrcaSessionId } from '../../../../../shared/orca-session-address'
-import {
-  findCallerDispatchWorkingForRun,
-  findCallerWorkerDispatches,
-  workerCannotCoordinateRunError,
-  workerCannotTakeOverRunError
-} from './run-worker-lineage'
+import { findCallerWorkerDispatches, workerRunBindingRefusal } from './worker-run-binding'
 import {
   mailboxAddressOf,
   runBoundToCoordinator,
@@ -26,10 +21,13 @@ export function bindRun(
     /** The coordinator's bare Orca session id when it is a structured session; see orca-session-address. */
     coordinatorOrcaSessionId?: OrcaSessionId | null
     takeoverLegacy?: boolean
-    /** The user asked to replace a coordinator that is still running. */
+    /** The user asked to replace a coordinator that is still open. */
     takeover?: boolean
-    /** The coordinator the RPC layer proved live just before this call; enforced only if the Run is still bound to it. */
-    provenLiveCoordinator?: OrchestrationCoordinatorKey | null
+    /**
+     * What the RPC layer saw just before this call: the Run's coordinator then, and how a user
+     * recognizes it when it was proven open. A binding that moved since is refused, never bound blindly.
+     */
+    probed?: { coordinator: OrchestrationCoordinatorKey; liveLabel: string | null }
     legacyCoordinatorAuthority?: {
       runId: string
       principalId: string | null
@@ -51,20 +49,18 @@ export function bindRun(
       this.db.exec('ROLLBACK')
       return undefined
     }
-    // Why: a worker binding a Run it works for unbinds the coordinator it reports to, and its
-    // own mail then routes to that Run's mailbox for good. Lineage is fixed by the Dispatch rows.
-    const workedDispatch = findCallerDispatchWorkingForRun(this, coordinator, params.runId)
-    if (workedDispatch) {
-      throw workerCannotCoordinateRunError(workedDispatch, params.runId, 'bind')
-    }
-    const explicitTakeover = params.takeover === true || params.takeoverLegacy === true
-    const takeoverByWorker = explicitTakeover
-      ? findCallerWorkerDispatches(this, coordinator)[0]
-      : undefined
-    if (takeoverByWorker) {
-      throw workerCannotTakeOverRunError(takeoverByWorker, params.runId)
-    }
     const sameBinding = runBoundToCoordinator(run, coordinator)
+    const explicitTakeover = params.takeover === true || params.takeoverLegacy === true
+    // Why: before the legacy gate, so a worker never sees its --takeover-legacy recovery command.
+    const workerRefusal = sameBinding
+      ? null
+      : workerRunBindingRefusal(this, coordinator, params.runId, {
+          takeover: explicitTakeover,
+          bind: true
+        })
+    if (workerRefusal) {
+      throw workerRefusal
+    }
     const adoption = this.getLegacyAdoption()
     const adoptedRun = adoption?.adopted_run_id === params.runId
     const legacyAuthority = params.legacyCoordinatorAuthority
@@ -145,17 +141,22 @@ export function bindRun(
         }
       )
     }
-    if (
-      params.provenLiveCoordinator &&
-      !sameBinding &&
-      !provenLegacyBinding &&
-      !explicitTakeover &&
-      runBoundToCoordinator(run, params.provenLiveCoordinator)
-    ) {
-      const worker = findCallerWorkerDispatches(this, coordinator)[0]
-      throw worker
-        ? workerCannotTakeOverRunError(worker, params.runId)
-        : runCoordinatorLiveError(params.runId, params.provenLiveCoordinator)
+    const probed = params.probed
+    if (probed && !sameBinding && !provenLegacyBinding && !explicitTakeover) {
+      if (!sameCoordinatorKey(runCoordinatorKey(run), probed.coordinator)) {
+        throw new OrchestrationError(
+          'run_binding_changed',
+          `Run ${params.runId}'s coordinator changed while this command ran. Nothing changed; run the same command again.`,
+          { effectsApplied: false, retryable: true }
+        )
+      }
+      if (probed.liveLabel !== null) {
+        // A worker passed the worker rule, so this is its own sub-Run that someone else now holds.
+        const worker = findCallerWorkerDispatches(this, coordinator)[0]
+        throw worker
+          ? workerRunBindingRefusal(this, coordinator, params.runId, { takeover: true, bind: true })
+          : runCoordinatorLiveError(params.runId, probed.liveLabel)
+      }
     }
     this.unbindOtherRunsForCoordinator(coordinator, params.runId)
     // The mailbox address of the coordinator being replaced and of the one binding now.
@@ -222,16 +223,23 @@ export function bindRun(
   return this.getRun(params.runId)
 }
 
+function sameCoordinatorKey(
+  a: OrchestrationCoordinatorKey,
+  b: OrchestrationCoordinatorKey
+): boolean {
+  return (
+    a.terminalHandle === b.terminalHandle &&
+    a.paneKey === b.paneKey &&
+    a.orcaSessionId === b.orcaSessionId
+  )
+}
+
 // No recoveryCommand on purpose: agents run those mechanically, and the flag must carry user intent.
-function runCoordinatorLiveError(
-  runId: string,
-  live: OrchestrationCoordinatorKey
-): OrchestrationError {
-  const holder = mailboxAddressOf(live) ?? 'another coordinator'
+function runCoordinatorLiveError(runId: string, label: string): OrchestrationError {
   return new OrchestrationError(
     'run_coordinator_live',
-    `Run ${runId} is coordinated by ${holder}, which is still running. Nothing changed. Take it over only if the user asked you to: orca orchestration run-use --id ${runId} --takeover. That fences ${holder}; its unacknowledged mail is replayed to you.`,
-    { effectsApplied: false, runId, coordinator: holder }
+    `Run ${runId} is coordinated by ${label}, which is still open. Nothing changed. Closing it clears this. Take it over only if the user asks: orca orchestration run-use --id ${runId} --takeover replaces it, and its unacknowledged mail is replayed to you.`,
+    { effectsApplied: false, runId, coordinator: label }
   )
 }
 

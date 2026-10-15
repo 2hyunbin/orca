@@ -39,10 +39,14 @@ describe('run-use against a Run whose coordinator is still running', () => {
     const runId = await chatRun()
     const before = h.db.getRunRaw(runId)
 
-    expect(await as(SESSION_Y, 'orchestration.runUse', { id: runId })).toMatchObject({
+    const refused = await as(SESSION_Y, 'orchestration.runUse', { id: runId })
+    expect(refused).toMatchObject({
       ok: false,
       error: { code: 'run_coordinator_live', data: { effectsApplied: false } }
     })
+    expect(JSON.stringify(refused)).toMatch(
+      /the \\"[^"\\]+\\" chat in tree-x \(orca_session_id:[^)]+\), which is still open/
+    )
     expect(h.db.getRunRaw(runId)).toEqual(before)
 
     resultOf(await as(SESSION_Y, 'orchestration.runUse', { id: runId, takeover: true }))
@@ -82,20 +86,67 @@ describe('run-use against a Run whose coordinator is still running', () => {
     expect(h.db.getRunRaw(runId)?.coordinator_orca_session_id).toBe(SESSION_Y)
   })
 
-  it('never lets a worker take over, with or without the flag', async () => {
-    const runId = await chatRun()
+  it('lets a worker coordinate only a Run it created, never by --takeover', async () => {
+    const stranger = h.db.createRun({
+      objective: 'x',
+      coordinatorHandle: null,
+      coordinatorPaneKey: null
+    })
     const home = h.db.createRun({
       objective: 'home',
       coordinatorHandle: null,
       coordinatorPaneKey: null
     })
     createRootDispatch(h.db, h.db.createTask({ spec: 'w', runId: home.id }).id, WORKER_HANDLE)
+    const runUse = (id: string, takeover: boolean) =>
+      as(undefined, 'orchestration.runUse', { id, from: WORKER_HANDLE, takeover })
+    const sub = idOf(
+      resultOf(
+        await as(undefined, 'orchestration.runCreate', { objective: 's', from: WORKER_HANDLE })
+      ).run
+    )
+    resultOf(
+      await as(undefined, 'orchestration.runCreate', { objective: 's2', from: WORKER_HANDLE })
+    )
 
+    // Nobody coordinates the stranger Run, so no liveness probe could have stopped this.
     for (const takeover of [false, true]) {
-      expect(
-        await as(undefined, 'orchestration.runUse', { id: runId, from: WORKER_HANDLE, takeover })
-      ).toMatchObject({ ok: false, error: { code: 'worker_cannot_take_over_run' } })
+      expect(await runUse(stranger.id, takeover)).toMatchObject({
+        ok: false,
+        error: { code: 'worker_cannot_take_over_run' }
+      })
     }
-    expect(h.db.getRunRaw(runId)?.coordinator_orca_session_id).toBe(SESSION_X)
+    expect(await runUse(sub, true)).toMatchObject({
+      error: { code: 'worker_cannot_take_over_run' }
+    })
+    resultOf(await runUse(sub, false))
+    resultOf(await runUse(sub, true))
+  })
+
+  it('re-probes when the binding moves under it, then refuses rather than bind blindly', async () => {
+    const runId = h.db.createRun({
+      objective: 'o',
+      coordinatorHandle: 'term_coord',
+      coordinatorPaneKey: COORD_PANE
+    }).id
+    let racers = 0
+    const probe = vi
+      .spyOn(h.runtime, 'checkCoordinatorAgentPresence')
+      .mockImplementation(async () => {
+        racers += 1
+        h.db.bindRun({
+          runId,
+          coordinatorHandle: `term_racer${racers}`,
+          coordinatorPaneKey: `tab_r:0000000${racers}-0000-4000-8000-000000000000`
+        })
+        return 'exited'
+      })
+
+    expect(await as(SESSION_Y, 'orchestration.runUse', { id: runId })).toMatchObject({
+      ok: false,
+      error: { code: 'run_binding_changed', data: { effectsApplied: false, retryable: true } }
+    })
+    expect(probe).toHaveBeenCalledTimes(3)
+    expect(h.db.getRunRaw(runId)?.coordinator_handle).toBe('term_racer3')
   })
 })

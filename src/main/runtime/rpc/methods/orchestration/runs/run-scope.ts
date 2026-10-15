@@ -15,11 +15,10 @@ import {
 } from '../../../../orchestration/orchestration-caller-identity'
 import { resolveDeclaredCallerParty } from '../../../../orchestration/orchestration-party'
 import {
-  findCallerDispatchWorkingForRun,
   findCallerWorkerDispatches,
   unboundWorkerMessage,
-  workerCannotCoordinateRunError
-} from '../../../../orchestration/db/runs/run-worker-lineage'
+  workerRunBindingRefusal
+} from '../../../../orchestration/db/runs/worker-run-binding'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 
 export type RunScopeParams = {
@@ -139,7 +138,9 @@ function unboundCallerError(
     const holder = mailboxAddressOf(runCoordinatorKey(explicit))
     return new OrchestrationError(
       'consumer_fenced',
-      `This caller is not Run ${explicit.id}'s coordinator (${holder ? `its coordinator is ${holder}` : 'it has no coordinator'}). Nothing changed.`
+      holder
+        ? `Stop coordinating Run ${explicit.id}; its coordinator is now ${holder}. Take it back only if the user asks. Nothing changed.`
+        : `This caller does not coordinate Run ${explicit.id}, which has no coordinator now. Nothing changed.`
     )
   }
   const worked = findCallerWorkerDispatches(db, caller)[0]
@@ -189,12 +190,12 @@ export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopePar
   const current = db.getCurrentRunForCoordinator(caller)
   // Why: "bound to X, not Y" reads as a nudge to rebind; a worker naming the Run it works for
   // has to learn where its own mail is instead.
-  const workedDispatch =
+  const workerRefusal =
     explicit && current?.id !== explicit.id
-      ? findCallerDispatchWorkingForRun(db, caller, explicit.id)
-      : undefined
-  if (explicit && workedDispatch) {
-    throw workerCannotCoordinateRunError(workedDispatch, explicit.id, 'act')
+      ? workerRunBindingRefusal(db, caller, explicit.id, { takeover: false, bind: false })
+      : null
+  if (workerRefusal) {
+    throw workerRefusal
   }
   if (!current) {
     throw unboundCallerError(db, caller, explicit)
