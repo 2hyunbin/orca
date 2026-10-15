@@ -41,6 +41,7 @@ function fakeGroupLeader(stopMs: number | null): FakeGroupLeader {
     signalCode: null,
     group: {
       pgid: 4242,
+      exited: Promise.resolve(),
       stop: vi.fn(async () => {
         if (stopMs === null) {
           await new Promise((resolve) => setTimeout(resolve, PROVIDER_GROUP_MAX_STOP_MS))

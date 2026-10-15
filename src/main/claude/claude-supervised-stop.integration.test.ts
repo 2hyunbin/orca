@@ -180,7 +180,8 @@ describe.runIf(process.platform !== 'win32')('Claude as the leader of its own PO
     // Claude's own SIGTERM reap ran at once, not after the stdin-end grace.
     expect(Date.now() - startedAt).toBeLessThan(PROVIDER_STDIN_END_GRACE_MS)
     expect(existsSync(marker)).toBe(true)
-    await expect(exit).resolves.toEqual({ code: null, signal: 'SIGTERM', processless: false })
+    // Claude's own exit, not a wrapper's: its SIGTERM handler exits 143.
+    await expect(exit).resolves.toEqual({ code: 143, signal: null, processless: false })
     expect(alive(pids.claude)).toBe(false)
     expect(alive(pids.tool)).toBe(false)
   })

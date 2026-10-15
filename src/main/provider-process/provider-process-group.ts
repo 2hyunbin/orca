@@ -1,4 +1,3 @@
-import { ChildProcess } from 'node:child_process'
 import type { ChildProcessHandle } from '@orca/process-host/process-spec'
 import { resolveProviderChildEnv, type ProviderProcessLaunch } from './provider-process-launch'
 import {
@@ -43,7 +42,10 @@ export type ProviderProcessGroup = {
 
 const GROUP_POLL_MS = 25
 
-type GroupChild = Pick<ChildProcessHandle, 'pid' | 'stdin' | 'exitCode' | 'signalCode' | 'once'>
+type GroupChild = Pick<
+  ChildProcessHandle,
+  'pid' | 'spawnfile' | 'stdin' | 'exitCode' | 'signalCode' | 'once'
+>
 
 function groupExists(pgid: number): boolean {
   try {
@@ -95,12 +97,7 @@ export function adoptProviderProcessGroup(
   const pgid = child.pid
   // Only a process this one spawned (spawn sets `spawnfile`), never a bare pid or a stand-in: a
   // group signal reaches every member of the group.
-  if (
-    !(child instanceof ChildProcess) ||
-    typeof child.spawnfile !== 'string' ||
-    pgid === undefined ||
-    pgid <= 1
-  ) {
+  if (typeof child.spawnfile !== 'string' || pgid === undefined || pgid <= 1) {
     return null
   }
   const lifetime = options.lifetime ?? 'session'
