@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
+import type { sendPaneCommandToLayoutOwner } from './terminal-pane-layout-owner-commands'
 
 const mocks = vi.hoisted(() => ({
   root: {
@@ -10,13 +11,7 @@ const mocks = vi.hoisted(() => ({
     first: { type: 'leaf', leafId: 'leaf-1' },
     second: { type: 'leaf', leafId: 'leaf-2' }
   },
-  send: vi.fn<
-    (
-      worktreeId: string,
-      command: unknown,
-      handlers: { apply: (result: object) => void; asToday: () => void }
-    ) => boolean
-  >()
+  send: vi.fn<typeof sendPaneCommandToLayoutOwner>()
 }))
 
 vi.mock('./terminal-pane-layout-owner-commands', () => ({
