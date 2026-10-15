@@ -330,6 +330,16 @@ describe('the slices built from layout frames match the window restored from dis
     expect(titleOf(buildLayoutFrameSlices(input))).toEqual({ row: 'pane 2', label: 'pane 2' })
   })
 
+  it('restores a browser tab from a frame without its creation time, as the tab-bar tab’s', () => {
+    const input = frameInput('local', localDesktopSession())
+    const browser = input.layouts[GIT]!.browserTabs[0]!
+    delete browser.createdAt
+    const entry = input.layouts[GIT]!.tabs.find((tab) => tab.entityId === browser.id)!
+    expect(buildLayoutFrameSlices(input).browserTabsByWorktree[GIT]![0]!.createdAt).toBe(
+      entry.createdAt
+    )
+  })
+
   it('lists differences only for fixtures that exist', () => {
     const names = new Set(PROFILES.map((profile) => profile.name))
     expect(SLICE_DIFFERENCES.filter((entry) => !names.has(entry.fixture))).toEqual([])

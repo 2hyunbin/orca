@@ -72,7 +72,8 @@ export type PublishedEditorFile = Pick<
   | 'externalSshTargetId'
 >
 
-export type PublishedBrowserTab = LayoutBrowserTab
+/** `createdAt` is optional on the wire: a host from before it was published omits it. */
+export type PublishedBrowserTab = Omit<LayoutBrowserTab, 'createdAt'> & { createdAt?: number }
 
 /** Addressed by its workspace key alone; which partition owns it stays the host's routing. */
 export type PublishedWorkspaceLayout = {
@@ -152,8 +153,13 @@ export function publishWorkspaceLayout(
     })),
     browserTabs: (workspace.browserTabs ?? []).map((tab) => ({
       id: tab.id,
-      createdAt: tab.createdAt,
-      ...pickStoredFields(tab, ['label', 'sessionProfileId', 'sessionPartition', 'pageIds'])
+      ...pickStoredFields(tab, [
+        'createdAt',
+        'label',
+        'sessionProfileId',
+        'sessionPartition',
+        'pageIds'
+      ])
     }))
   }
 }

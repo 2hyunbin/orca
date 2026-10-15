@@ -67,7 +67,15 @@ export function workspaceLayoutFromPublished(published: PublishedWorkspaceLayout
     groups: published.groups.map((group) => ({ id: group.id, tabOrder: [...group.tabIds] })),
     ...(published.groupLayout ? { groupLayout: published.groupLayout } : {}),
     editorFiles: published.editorFiles.map((file) => ({ ...file })),
-    browserTabs: published.browserTabs.map((tab) => ({ ...tab })),
+    browserTabs: published.browserTabs.map((tab) => ({
+      ...tab,
+      // A frame without it: the tab-bar tab showing this browser tab was created with it.
+      createdAt:
+        tab.createdAt ??
+        published.tabs.find((entry) => entry.kind === 'browser' && entry.entityId === tab.id)
+          ?.createdAt ??
+        0
+    })),
     leaves
   }
 }
