@@ -158,11 +158,14 @@ describe('bells', () => {
     `)
   })
 
-  it('bell from a workspace with no live terminal leaves no marker and writes no flag', () => {
+  it('bell from a tab with no live terminal leaves no tab marker and writes no flag', () => {
     const { store, persists } = createAttentionStore({ experimental: true })
+    const target = addLiveTerminalTab(store, WS_A, 'tab-a1')
+    // The tab stays in tabsByWorktree; only its PTY is gone.
+    store.setState({ ptyIdsByTabId: {} })
     observe(store, persists)
 
-    ringBell(store, { worktreeId: WS_A, tabId: 'orphan-tab', paneKey: 'orphan-tab:leaf' })
+    ringBell(store, target)
     expect(observe(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
