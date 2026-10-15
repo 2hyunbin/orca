@@ -67,4 +67,12 @@ describe('new tab agent menu rows', () => {
       rows({ detectedOnHost: ['claude', 'codex'], settings: { disabledTuiAgents: ['codex'] } })
     ).toEqual([{ kind: 'chat', agent: 'claude' }])
   })
+
+  it('keeps unresolved enabled chat support visible as a pending row', () => {
+    expect(rows({ detectedOnHost: ['claude'], answer: () => 'not-yet-known' })).toEqual([
+      { kind: 'chat-unavailable', agent: 'claude', reason: 'pending' },
+      { kind: 'chat-unavailable', agent: 'codex', reason: 'pending' },
+      { kind: 'cli', agent: 'claude' }
+    ])
+  })
 })
