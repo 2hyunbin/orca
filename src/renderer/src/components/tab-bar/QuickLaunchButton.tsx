@@ -20,6 +20,7 @@ import { newAgentPromptOutcome } from '@/lib/new-agent-prompt-outcome'
 import { activeAgentNotesSendFailureMessage } from '@/lib/active-agent-note-send-result'
 import type { ChatUnavailableReason, NewTabAgentMenuRow } from '@/lib/new-tab-agent-menu-rows'
 import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
+import { explicitAgentLaunchPlan, rejectExplicitChat } from './tab-agent-launch-action'
 
 export type QuickLaunchAgentMenuItemsProps = {
   worktreeId: string
@@ -52,10 +53,21 @@ function getCatalogEntry(agent: TuiAgent): { id: TuiAgent; label: string } | nul
 
 function chatUnavailableLabel(reason: ChatUnavailableReason): string {
   switch (reason) {
+    case 'pending':
+      return translate(
+        'auto.components.tab.bar.QuickLaunchButton.chatLoading',
+        'Checking chat support…'
+      )
     case 'not-installed':
-      return translate('auto.components.tab.bar.QuickLaunchButton.chatNotInstalled', 'Not installed')
+      return translate(
+        'auto.components.tab.bar.QuickLaunchButton.chatNotInstalled',
+        'Not installed'
+      )
     case 'ssh':
-      return translate('auto.components.tab.bar.QuickLaunchButton.chatNotOverSsh', 'No chat over SSH')
+      return translate(
+        'auto.components.tab.bar.QuickLaunchButton.chatNotOverSsh',
+        'No chat over SSH'
+      )
     case 'wsl':
       return translate('auto.components.tab.bar.QuickLaunchButton.chatNotInWsl', 'No chat in WSL')
     case 'not-on-host':
@@ -68,9 +80,13 @@ function chatUnavailableLabel(reason: ChatUnavailableReason): string {
 
 function rowTitle(row: NewTabAgentMenuRow, label: string): string {
   if (row.kind === 'chat') {
-    return translate('auto.components.tab.bar.QuickLaunchButton.startChat', 'Start a {{value0}} chat', {
-      value0: label
-    })
+    return translate(
+      'auto.components.tab.bar.QuickLaunchButton.startChat',
+      'Start a {{value0}} chat',
+      {
+        value0: label
+      }
+    )
   }
   return translate(
     'auto.components.tab.bar.QuickLaunchButton.ec2adf093e',
@@ -147,14 +163,24 @@ function QuickLaunchAgentMenuItemsInner({
   }, [openSettingsPage, openSettingsTarget])
 
   const runLaunch = useCallback(
-    (agent: TuiAgent) => {
+    (row: NewTabAgentMenuRow) => {
       if (disabled) {
         return
       }
+      const { agent } = row
       const entry = getCatalogEntry(agent)
       const label = entry?.label ?? agent
       const result = launchAgentInNewTab({
-        requestId: newAgentLaunchRequestId(),
+        ...(row.kind === 'chat' || row.kind === 'cli'
+          ? {
+              agentSessionLaunchPlan: explicitAgentLaunchPlan(
+                row.kind === 'chat' ? 'chat' : 'cli',
+                agent,
+                worktreeId,
+                newAgentLaunchRequestId()
+              )
+            }
+          : { requestId: newAgentLaunchRequestId() }),
         agent,
         worktreeId,
         groupId,
@@ -163,7 +189,12 @@ function QuickLaunchAgentMenuItemsInner({
         ...(launchSource !== undefined ? { launchSource } : {}),
         ...(onPromptDelivered !== undefined ? { onPromptDelivered } : {}),
         // Notes keep their text until it goes out, so the new chat's composer never gets a copy.
-        ...(onPromptHandedOff ? { promptKeptByCaller: true as const } : {})
+        ...(onPromptHandedOff ? { promptKeptByCaller: true as const } : {}),
+        ...(row.kind === 'chat'
+          ? {
+              onStructuredHostDeclined: () => rejectExplicitChat(label)
+            }
+          : {})
       })
       if (!result) {
         toast.error(
@@ -196,6 +227,18 @@ function QuickLaunchAgentMenuItemsInner({
         })
       }
       if (result.surface.kind !== 'local-terminal') {
+        if (row.kind === 'chat' && result.structuredSettlement) {
+          void result.structuredSettlement.then((settlement) => {
+            if (settlement.kind === 'failed' && !settlement.notified) {
+              toast.error(
+                translate(
+                  'auto.components.tab.bar.QuickLaunchButton.chatUnavailableAfterSelection',
+                  `Couldn't start a ${label} chat.`
+                )
+              )
+            }
+          })
+        }
         return
       }
       onFocusTerminal(result.surface.tabId)
@@ -286,7 +329,7 @@ function QuickLaunchAgentMenuItemsInner({
             <DropdownMenuItem
               variant="launch"
               disabled={disabled}
-              onSelect={() => runLaunch(agent)}
+              onSelect={() => runLaunch(row)}
               title={rowTitle(row, label)}
             >
               <AgentIcon agent={agent} size={14} />

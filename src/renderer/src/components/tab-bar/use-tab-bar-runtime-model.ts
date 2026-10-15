@@ -25,12 +25,17 @@ import {
   selectTabBarAgentProjections,
   type TabBarAgentProjections
 } from './tab-agent-types-by-tab-id'
-import { buildTabAgentLaunchOptions, orderTabLaunchAgents } from './tab-agent-launch-options'
+import {
+  buildTabAgentLaunchOptions,
+  buildTabAgentLaunchOptionsFromRows,
+  orderTabLaunchAgents
+} from './tab-agent-launch-options'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { DEFAULT_DISABLED_TUI_AGENTS } from '../../../../shared/tui-agent-selection'
 import { shouldShowWindowsShellMenu } from './windows-shell-menu-visibility'
 import { createUnifiedTabLookup } from './tab-bar-item-model'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 
 const isWindows = navigator.userAgent.includes('Windows')
 export const isMacOs = navigator.userAgent.includes('Mac')
@@ -150,13 +155,16 @@ export function useTabBarRuntimeModel({
   )
   const agentDetectionTarget = useAgentDetectionTargetForWorktree(worktreeId)
   const { detectedIds } = useDetectedAgents(agentDetectionTarget)
+  const projectedAgentRows = useNewTabAgentMenuRows(worktreeId, detectedIds)
   const agentLaunchOptions = useMemo(
     () =>
-      buildTabAgentLaunchOptions(
-        orderTabLaunchAgents(defaultAgent, detectedIds ?? [], disabledTuiAgents),
-        agentCmdOverrides
-      ),
-    [agentCmdOverrides, defaultAgent, detectedIds, disabledTuiAgents]
+      projectedAgentRows
+        ? buildTabAgentLaunchOptionsFromRows(projectedAgentRows, agentCmdOverrides)
+        : buildTabAgentLaunchOptions(
+            orderTabLaunchAgents(defaultAgent, detectedIds ?? [], disabledTuiAgents),
+            agentCmdOverrides
+          ),
+    [agentCmdOverrides, defaultAgent, detectedIds, disabledTuiAgents, projectedAgentRows]
   )
   const isWebClient = (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ === true
   const windowsTerminalCapabilityOwnerKey = getWindowsTerminalCapabilityOwnerKey(

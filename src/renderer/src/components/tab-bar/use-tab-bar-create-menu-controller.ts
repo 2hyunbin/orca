@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { TuiAgent } from '../../../../shared/tui-agent'
 import { translate } from '@/i18n/i18n'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import {
@@ -11,8 +10,9 @@ import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
+import { explicitAgentLaunchPlan, rejectExplicitChat } from './tab-agent-launch-action'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
-import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
+import { selectTabCreateMenuOption } from './tab-create-menu-selection'
 import {
   buildWindowsShellMenuEntries,
   type WindowsShellMenuEntry
@@ -21,10 +21,8 @@ import type {
   getProjectRuntimeShellMenuMode,
   resolveWindowsPowerShellImplementationSetting
 } from './use-tab-bar-runtime-model'
-
 const NEW_TAB_MENU_TERMINAL_FOCUS_RETRY_MS = 50
 const NEW_TAB_MENU_TERMINAL_FOCUS_TIMEOUT_MS = 5000
-
 export type TabBarCreateMenuController = {
   newTabMenuOpen: boolean
   setNewTabMenuOpen: (open: boolean) => void
@@ -32,7 +30,7 @@ export type TabBarCreateMenuController = {
   createMenuOptions: TabCreateMenuOption[]
   windowsShellEntries: WindowsShellMenuEntry[] | undefined
   handleSelectCreateMenuOption: (option: TabCreateMenuOption) => void
-  launchAgentFromNewTabEntry: (agent: TuiAgent) => void
+  launchAgentFromNewTabEntry: (option: TabAgentLaunchOption) => void
   runPendingNewTabMenuFocusAfterClose: () => void
   clearPendingNewTabMenuFocusOnUnmount: (node: HTMLDivElement | null) => void
   queueNewActiveTerminalFocusAfterNewTabMenuClose: () => void
@@ -40,7 +38,6 @@ export type TabBarCreateMenuController = {
   queueFocusAfterNewTabMenuClose: (focus: () => void) => void
   showStaticCreateMenuItems: boolean
 }
-
 export function useTabBarCreateMenuController({
   worktreeId,
   resolvedGroupId,
@@ -54,7 +51,6 @@ export function useTabBarCreateMenuController({
   defaultWindowsShell,
   defaultWindowsPowerShellImplementation,
   windowsTerminalCapabilities,
-  agentLaunchOptions,
   onNewTerminalTab,
   onNewTerminalWithShell,
   onNewBrowserTab,
@@ -76,7 +72,6 @@ export function useTabBarCreateMenuController({
     typeof resolveWindowsPowerShellImplementationSetting
   >
   windowsTerminalCapabilities: WindowsTerminalCapabilities
-  agentLaunchOptions: TabAgentLaunchOption[]
   onNewTerminalTab: () => void
   onNewTerminalWithShell?: (shell: string) => void
   onNewBrowserTab: () => void
@@ -187,48 +182,41 @@ export function useTabBarCreateMenuController({
       workspaceHasSimulatorTab
     ]
   )
-  const handleSelectCreateMenuOption = (option: TabCreateMenuOption): void => {
-    switch (option.kind) {
-      case 'new-terminal':
-        queueNewActiveTerminalFocusAfterNewTabMenuClose()
-        onNewTerminalTab()
-        break
-      case 'new-terminal-shell':
-        if (!onNewTerminalWithShell || !option.shell) {
-          break
-        }
-        queueNewActiveTerminalFocusAfterNewTabMenuClose()
-        onNewTerminalWithShell(
-          resolveWindowsShellLaunchTarget(
-            option.shell,
-            defaultWindowsPowerShellImplementation,
-            windowsTerminalCapabilities.pwshAvailable
-          )
-        )
-        break
-      case 'new-browser':
-        onNewBrowserTab()
-        break
-      case 'new-markdown':
-        onNewFileTab?.()
-        break
-      case 'open-markdown':
-        onOpenFileTab?.()
-        break
-      case 'new-simulator':
-      case 'go-to-simulator':
-        onNewSimulatorTab?.()
-        break
-    }
-  }
-  const launchAgentFromNewTabEntry = (agent: TuiAgent): void => {
-    const option = agentLaunchOptions.find((candidate) => candidate.agent === agent)
+  const handleSelectCreateMenuOption = (option: TabCreateMenuOption): void =>
+    selectTabCreateMenuOption({
+      option,
+      queueTerminalFocus: queueNewActiveTerminalFocusAfterNewTabMenuClose,
+      onNewTerminalTab,
+      onNewTerminalWithShell,
+      onNewBrowserTab,
+      onNewSimulatorTab,
+      onNewFileTab,
+      onOpenFileTab,
+      defaultWindowsPowerShellImplementation,
+      windowsTerminalCapabilities
+    })
+  const launchAgentFromNewTabEntry = (option: TabAgentLaunchOption): void => {
+    const agent = option.agent
     const result = launchAgentInNewTab({
-      requestId: newAgentLaunchRequestId(),
+      ...(option.surface === 'chat' || option.surface === 'cli'
+        ? {
+            agentSessionLaunchPlan: explicitAgentLaunchPlan(
+              option.surface === 'chat' ? 'chat' : 'cli',
+              agent,
+              worktreeId,
+              newAgentLaunchRequestId()
+            )
+          }
+        : { requestId: newAgentLaunchRequestId() }),
       agent,
       worktreeId,
       groupId: resolvedGroupId,
-      launchSource: 'tab_bar_quick_launch'
+      launchSource: 'tab_bar_quick_launch',
+      ...(option.surface === 'chat'
+        ? {
+            onStructuredHostDeclined: () => rejectExplicitChat(option.label)
+          }
+        : {})
     })
     if (!result) {
       toast.error(
@@ -274,7 +262,6 @@ export function useTabBarCreateMenuController({
     }
   }
   const clearPendingNewTabMenuFocusOnUnmount = clearPendingNewTabMenuFocusOnUnmountRef.current
-
   useEffect(() => {
     if (!newTabMenuOpen) {
       return
@@ -283,13 +270,11 @@ export function useTabBarCreateMenuController({
     window.addEventListener('blur', dismiss)
     return () => window.removeEventListener('blur', dismiss)
   }, [newTabMenuOpen])
-
   useEffect(() => {
     if (!newTabMenuOpen) {
       setCreateMenuQuery('')
     }
   }, [newTabMenuOpen])
-
   return {
     newTabMenuOpen,
     setNewTabMenuOpen,

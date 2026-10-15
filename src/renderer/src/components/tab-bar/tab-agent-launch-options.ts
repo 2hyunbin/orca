@@ -2,11 +2,16 @@ import { getAgentCatalog } from '@/lib/agent-catalog'
 import { filterEnabledTuiAgents } from '../../../../shared/tui-agent-selection'
 import { normalizeMatchQuery, tokenizeMatchValue } from './query-token-match'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { NewTabAgentMenuRow } from '@/lib/new-tab-agent-menu-rows'
 
 export type TabAgentLaunchOption = {
   agent: TuiAgent
   aliases: readonly string[]
   label: string
+  /** The projected action keeps search selection bound to the displayed surface. */
+  surface?: 'chat' | 'cli' | 'terminal'
+  disabled?: boolean
+  id?: string
 }
 
 function normalizeAgentAlias(value: string): string {
@@ -38,7 +43,8 @@ export function orderTabLaunchAgents(
 
 export function buildTabAgentLaunchOptions(
   agents: readonly TuiAgent[],
-  commandOverrides: Partial<Record<TuiAgent, string>> = {}
+  commandOverrides: Partial<Record<TuiAgent, string>> = {},
+  rows?: readonly NewTabAgentMenuRow[]
 ): TabAgentLaunchOption[] {
   return agents.map((agent) => {
     const entry = getCatalogEntry(agent)
@@ -58,7 +64,48 @@ export function buildTabAgentLaunchOptions(
       aliases.add(normalizeAgentAlias(commandOverride))
       aliases.add(compactAgentAlias(commandOverride))
     }
-    return { agent, aliases: [...aliases], label }
+    const row = rows?.find((candidate) => candidate.agent === agent)
+    return {
+      agent,
+      aliases: [...aliases],
+      label,
+      ...(row && row.kind !== 'chat-unavailable' ? { surface: row.kind } : {}),
+      ...(row?.kind === 'chat-unavailable' ? { surface: 'chat' as const, disabled: true } : {}),
+      ...(row ? { id: `${row.kind}:${agent}` } : {})
+    }
+  })
+}
+
+export function buildTabAgentLaunchOptionsFromRows(
+  rows: readonly NewTabAgentMenuRow[],
+  commandOverrides: Partial<Record<TuiAgent, string>> = {}
+): TabAgentLaunchOption[] {
+  return rows.map((row) => {
+    const entry = getCatalogEntry(row.agent)
+    const label = entry?.label ?? row.agent
+    const aliases = new Set<string>([
+      normalizeAgentAlias(row.agent),
+      normalizeAgentAlias(label),
+      compactAgentAlias(row.agent),
+      compactAgentAlias(label)
+    ])
+    if (entry?.cmd) {
+      aliases.add(normalizeAgentAlias(entry.cmd))
+      aliases.add(compactAgentAlias(entry.cmd))
+    }
+    const commandOverride = commandOverrides[row.agent]?.trim()
+    if (commandOverride) {
+      aliases.add(normalizeAgentAlias(commandOverride))
+      aliases.add(compactAgentAlias(commandOverride))
+    }
+    return {
+      agent: row.agent,
+      aliases: [...aliases],
+      label,
+      surface: row.kind === 'chat-unavailable' ? 'chat' : row.kind,
+      ...(row.kind === 'chat-unavailable' ? { disabled: true } : {}),
+      id: `${row.kind}:${row.agent}`
+    }
   })
 }
 

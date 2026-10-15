@@ -18,7 +18,7 @@ import { getAgentCatalog } from '@/lib/agent-catalog'
 /** What the workspace's machine says about opening an agent as a chat, installation aside. */
 export type HostChatAnswer =
   | 'yes'
-  /** Still loading; the launch itself waits for the answer, so the row is not disabled. */
+  /** Still loading; an unresolved answer must not promise a chat surface. */
   | 'not-yet-known'
   | 'ssh'
   | 'wsl'
@@ -26,7 +26,7 @@ export type HostChatAnswer =
   /** An older paired server that opens no chats for this client. */
   | 'no-chats'
 
-export type ChatUnavailableReason = 'not-installed' | 'ssh' | 'wsl' | 'not-on-host'
+export type ChatUnavailableReason = 'pending' | 'not-installed' | 'ssh' | 'wsl' | 'not-on-host'
 
 export type NewTabAgentMenuRow =
   | { kind: 'chat'; agent: TuiAgent }
@@ -76,12 +76,16 @@ export function buildNewTabAgentMenuRows(args: {
       continue
     }
     const answer = args.hostChatAnswer(agent)
-    if (answer === 'yes' || answer === 'not-yet-known') {
+    if (answer === 'yes') {
       if (installed.includes(agent)) {
         runnable.push(agent)
       } else {
         unavailable.set(agent, 'not-installed')
       }
+    } else if (answer === 'not-yet-known') {
+      // Keep the enabled provider named while discovery is unresolved. A pending row is
+      // represented by the existing unavailable surface until host admission answers.
+      unavailable.set(agent, 'pending')
     } else {
       unavailable.set(agent, answer === 'no-chats' ? 'not-on-host' : answer)
     }
