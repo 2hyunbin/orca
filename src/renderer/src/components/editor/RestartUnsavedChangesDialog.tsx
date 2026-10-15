@@ -45,7 +45,7 @@ export function RestartUnsavedChangesDialog(): React.JSX.Element {
             )}
           </DialogDescription>
         </DialogHeader>
-        <ul className="max-h-40 space-y-1 overflow-y-auto font-mono text-xs">
+        <ul className="scrollbar-sleek max-h-40 space-y-1 overflow-y-auto font-mono text-xs">
           {(filePaths ?? []).map((filePath) => (
             <li key={filePath} className="truncate" title={filePath}>
               {filePath}

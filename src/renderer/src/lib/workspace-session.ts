@@ -10,6 +10,7 @@ import { normalizeWorkspaceDocHistoryEntries } from '../../../shared/workspace-d
 import type { AppState } from '../store'
 import type { OpenFile } from '../store/slices/editor'
 import { buildPersistedUnifiedTabSessionData } from './workspace-session-unified-tabs'
+import { isEditorDraftBackedUp } from './editor-draft-backup'
 import { buildLastVisitedAtByWorktreeId } from './workspace-session-focus-recency'
 import { buildSleepingAgentSessionData } from './workspace-session-sleeping-agents'
 import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnect-targets'
@@ -110,16 +111,6 @@ type _MissingSessionField = Exclude<
   (typeof SESSION_RELEVANT_FIELDS)[number]
 >
 void (true satisfies [_MissingSessionField] extends [never] ? true : never)
-
-/** Whether a restart checkpoint carries this file's unsaved draft; the restart owner and the
- *  session builder both decide with this, so they can't disagree about what survives. */
-export function isEditorDraftBackedUp(
-  file: OpenFile,
-  editorDrafts: Record<string, string>
-): boolean {
-  // Why: never persist a dirty draft for a read-only tab — restoring one would reintroduce writable/hot-exit state for an agent transcript.
-  return file.mode === 'edit' && file.readOnly !== true && editorDrafts[file.id] !== undefined
-}
 
 /** Build the editor-file portion of the workspace session for persistence.
  *  Only edit-mode files are saved — diffs and conflict views are transient. */
