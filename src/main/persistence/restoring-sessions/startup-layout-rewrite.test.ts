@@ -77,4 +77,17 @@ describe('rewriteStoredLayoutsAtStartup', () => {
     expect(rewriteStoredLayoutsAtStartup(persisted).rewritten).toEqual([LOCAL_EXECUTION_HOST_ID])
     expect(rewriteStoredLayoutsAtStartup(persisted)).toEqual({ rewritten: [], skipped: [] })
   })
+
+  it('keeps a partition the Loader cannot read as stored', () => {
+    const persisted = state()
+    const unreadable = fixture(ADOPTABLE, SSH)
+    for (const groups of Object.values(unreadable.tabGroups ?? {})) {
+      Object.assign(groups[0]!, { tabOrder: null })
+    }
+    persisted.workspaceSessionsByHostId = { [SSH]: unreadable }
+    const before = structuredClone(unreadable)
+    const { skipped } = rewriteStoredLayoutsAtStartup(persisted)
+    expect(skipped).toEqual([{ hostId: SSH, reason: expect.stringMatching(/^loader threw/) }])
+    expect(persisted.workspaceSessionsByHostId[SSH]).toEqual(before)
+  })
 })

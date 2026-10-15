@@ -20,7 +20,13 @@ export type StartupLayoutRewriteSummary = {
 export function rewriteStoredLayoutsAtStartup(state: PersistedState): StartupLayoutRewriteSummary {
   const summary: StartupLayoutRewriteSummary = { rewritten: [], skipped: [] }
   const rewrite = (hostId: ExecutionHostId, session: WorkspaceSessionState) => {
-    const plan = planStartupLayoutRewrite(hostId, session)
+    let plan: ReturnType<typeof planStartupLayoutRewrite>
+    try {
+      plan = planStartupLayoutRewrite(hostId, session)
+    } catch (error) {
+      // Data the Loader cannot read loads as today, where the window tolerates it.
+      plan = { kind: 'skipped', reason: `loader threw: ${String(error)}` }
+    }
     if (plan.kind === 'skipped') {
       summary.skipped.push({ hostId, reason: plan.reason })
     } else if (plan.kind === 'rewrite') {
@@ -34,12 +40,12 @@ export function rewriteStoredLayoutsAtStartup(state: PersistedState): StartupLay
     state.workspaceSession = local
   }
   // A fenced host's partition is migration source; changing it marks the move as stale.
-  const store = {
+  const sshTargets = {
     getSshTarget: (id: string) => state.sshTargets.find((target) => target.id === id)
   }
   for (const [key, session] of Object.entries(state.workspaceSessionsByHostId ?? {})) {
     const hostId = normalizeExecutionHostId(key)
-    if (!session || !hostId || isFrozenOrcadSourceSessionPartition(store, hostId)) {
+    if (!session || !hostId || isFrozenOrcadSourceSessionPartition(sshTargets, hostId)) {
       continue
     }
     const next = rewrite(hostId, session)

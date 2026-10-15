@@ -53,6 +53,9 @@ function mintedLeafReason(
   return minted === undefined ? undefined : 'mints a pane id'
 }
 
+/** Tables whose records are keyed `workspace|id`; the rest are keyed by their own id. */
+const WORKSPACE_TABLES = new Set(['row', 'terminalEntry', 'entry', 'group', 'file', 'browser'])
+
 /** `workspace|id` → [workspace, id]; workspace keys may contain `|`, ids do not. */
 function splitRecord(record: string): [string, string] {
   const at = record.lastIndexOf('|')
@@ -66,7 +69,7 @@ function rowTerminals(row: TerminalTab, layout: TerminalLayoutSnapshot | undefin
   ]
 }
 
-/** Edits a list only by adding `added` and removing `removed`, keeping the rest in order. */
+/** Edits a duplicate-free list only by adding and removing ids, keeping the rest in order. */
 function membershipOnly(
   before: readonly string[],
   after: readonly string[],
@@ -75,6 +78,8 @@ function membershipOnly(
 ): boolean {
   const kept = before.filter((id) => after.includes(id))
   return (
+    new Set(before).size === before.length &&
+    new Set(after).size === after.length &&
     before.every((id) => after.includes(id) || canRemove(id)) &&
     after.every((id) => before.includes(id) || canAdd(id)) &&
     after.filter((id) => before.includes(id)).every((id, index) => kept[index] === id)
@@ -122,11 +127,14 @@ function unexplainedChange(
   const adoptionIsNeutral = (key: string, value: unknown): boolean => {
     const entry = asRecord(value)
     const row = stored.tabsByWorktree?.[key]?.find((candidate) => candidate.id === entry.entityId)
-    // The window adopts only a row that names its terminal; a ghost row gets no tab.
+    const groups = stored.tabGroups?.[key] ?? []
+    // The window adopts only a row that names its terminal (a ghost row gets no tab), and into
+    // its active group, which is the Loader's first group only when there is one.
     return (
       entry.id === entry.entityId &&
       Boolean(row?.ptyId) &&
-      (stored.tabGroups?.[key] ?? []).some((group) => group.id === entry.groupId)
+      groups.length === 1 &&
+      groups[0]?.id === entry.groupId
     )
   }
   const dropIsNeutral = (key: string, tabId: string): boolean => {
@@ -150,7 +158,7 @@ function unexplainedChange(
 
   for (const change of changes) {
     const { table, field, before, after } = change
-    const [key, id] = splitRecord(change.record)
+    const [key, id] = WORKSPACE_TABLES.has(table) ? splitRecord(change.record) : ['', change.record]
     const neutral = (() => {
       if (table === 'terminalEntry' && field === '*' && before === undefined) {
         return adoptionIsNeutral(key, after)
@@ -159,7 +167,7 @@ function unexplainedChange(
         return dropIsNeutral(key, id)
       }
       if (table === 'layout' && field === '*' && after === undefined) {
-        return droppedAnywhere.has(change.record)
+        return droppedAnywhere.has(id)
       }
       const [beforeIds, afterIds] = [asIds(before), asIds(after)]
       if (field === '$order' && beforeIds && afterIds && (table === 'entry' || table === 'row')) {

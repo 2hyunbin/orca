@@ -17,7 +17,10 @@ import { loadWorkspaceLayout } from '../../../shared/workspace-layout/workspace-
 import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
 import {
+  addWorkspace,
+  emptySession,
   FOLDER_KEY,
+  leaf,
   SERVER_KEY,
   SSH_KEY
 } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
@@ -261,6 +264,34 @@ describe('main rewrites a stored partition at startup only when the window shows
         }))
       : [{ ...profile, label: profile.name, key: GIT }]
   )
+
+  // The Loader adopts into the first group; the window into the active one.
+  it('skips adopting a row into a workspace with two groups', async () => {
+    const stored = addWorkspace(emptySession(), GIT, [
+      {
+        id: 'g1',
+        tabs: [
+          { id: 'tab-a', leaves: [[leaf(1), 'pty-a']] },
+          { id: 'tab-b', leaves: [[leaf(2), 'pty-b']] }
+        ]
+      },
+      { id: 'g2', tabs: [{ id: 'tab-c', leaves: [[leaf(3), 'pty-c']] }] }
+    ])
+    stored.unifiedTabs![GIT] = stored.unifiedTabs![GIT]!.filter((tab) => tab.id !== 'tab-b')
+    stored.tabGroups![GIT]![0]!.tabOrder = ['tab-a']
+    stored.activeGroupIdByWorktree = { [GIT]: 'g2' }
+    expect(planStartupLayoutRewrite(LOCAL_EXECUTION_HOST_ID, stored).kind).toBe('skipped')
+    const [storedView, normalizedView] = await Promise.all(
+      [stored, normalize(LOCAL_EXECUTION_HOST_ID, stored)].map(async (session) =>
+        projectStartupWindowView(
+          await bootWindowFromPartitions(createTestStore(), [
+            { hostId: LOCAL_EXECUTION_HOST_ID, session }
+          ])
+        )
+      )
+    )
+    expect(diffStartupWindowViews(storedView, normalizedView)).not.toEqual([])
+  })
 
   it.each(cases.map((entry) => [entry.label, entry] as const))(
     '%s',
