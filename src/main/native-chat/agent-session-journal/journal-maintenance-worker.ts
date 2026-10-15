@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { clearTimeout, setTimeout } from 'node:timers'
+import { setTimeout as delay } from 'node:timers/promises'
 import { Worker } from 'node:worker_threads'
 import {
   currentWorkerEntryLayout,
@@ -17,7 +17,7 @@ function workerPath(): string {
 /** SQLite commits and page relocation must never execute on the host's interaction thread. */
 export class JournalMaintenanceWorker {
   private worker: Worker | null = null
-  private timer: ReturnType<typeof setTimeout> | null = null
+  private wakeController: AbortController | null = null
   private closed = false
 
   constructor(private readonly dbPath: string) {
@@ -42,25 +42,25 @@ export class JournalMaintenanceWorker {
 
   close(): void {
     this.closed = true
-    if (this.timer) {
-      clearTimeout(this.timer)
-    }
-    this.timer = null
+    this.wakeController?.abort()
+    this.wakeController = null
     // Close after the current bounded transaction; termination can interrupt SQLite teardown.
     this.worker?.postMessage({ close: true })
     this.worker = null
   }
 
   private wake(): void {
-    if (this.closed || this.timer) {
+    if (this.closed || this.wakeController) {
       return
     }
-    this.timer = setTimeout(() => {
-      this.timer = null
-      if (this.closed) {
-        return
-      }
-      try {
+    const controller = new AbortController()
+    this.wakeController = controller
+    void delay(30_000, undefined, { ref: false, signal: controller.signal })
+      .then(() => {
+        this.wakeController = null
+        if (this.closed) {
+          return
+        }
         const worker = new Worker(workerPath(), {
           workerData: this.dbPath,
           execArgv: []
@@ -73,10 +73,12 @@ export class JournalMaintenanceWorker {
           }
         })
         worker.unref()
-      } catch (error) {
-        console.warn('[journal-maintenance] unavailable:', error)
-      }
-    }, 30_000)
-    this.timer.unref()
+      })
+      .catch((error) => {
+        this.wakeController = null
+        if (!controller.signal.aborted) {
+          console.warn('[journal-maintenance] unavailable:', error)
+        }
+      })
   }
 }
