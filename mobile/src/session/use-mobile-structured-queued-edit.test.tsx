@@ -338,7 +338,9 @@ describe('mobile in-place queued Edit', () => {
     await act(async () =>
       renderer?.update(createElement(Harness, { connected: false, transport: null }))
     )
-    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
     expect(hook!.queued.editor?.text).toBe(text)
     const reconnectedRequest = vi.fn<RpcClient['sendRequest']>(async (method, params) =>
       method === 'agentSession.queuedMessageEditHold'
@@ -350,7 +352,9 @@ describe('mobile in-place queued Edit', () => {
         createElement(Harness, { transport: { ...client, sendRequest: reconnectedRequest } })
       )
     )
-    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
     expect(hook!.queued.editor?.text).toBe(text)
     expect(
       reconnectedRequest.mock.calls
