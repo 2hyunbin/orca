@@ -1,10 +1,10 @@
 // How a chat turn that was handed orchestration mail ended, as the mailbox reads it. Derived on
 // every read from the turn record and the host's current-work projection, never stored.
 //   running: the turn is still the live generation's running turn; it has the mail in hand.
-//   ended: it finished (whatever the provider's verdict). The agent decided with the mail in hand.
+//   ended: it finished. The agent decided with the mail in hand.
 //   stopped: a person's Stop or close ended it (`cancellation`). Nothing offers its mail again.
 //   cut-restart / cut: it ended with nobody asking, through an Orca runtime this one replaced, or
-//     otherwise (provider death, eviction, a context clear, a send that superseded it).
+//     otherwise (provider death or error, eviction, a context clear, a send that superseded it).
 //   unknown: no record, or its owner may still be running out of this host's sight.
 
 import type {
@@ -25,6 +25,7 @@ export type StructuredHeldTurnEnd =
   | 'unknown'
 
 export type StructuredHeldTurnReader = {
+  sessionId: string
   /** How the turn whose record is item `turnItemId` ended. */
   end: (turnItemId: string) => StructuredHeldTurnEnd
   /** The mail notice that opened the newest turn, with how that turn ended; null for any other. */
@@ -33,6 +34,7 @@ export type StructuredHeldTurnReader = {
 
 function heldTurnEnd(
   work: StructuredAgentSessionCurrentWork,
+  journal: Pick<AgentSessionJournal, 'stopMarks'>,
   item: AgentJournalRenderItem | null
 ): StructuredHeldTurnEnd {
   const turn = item ? readAgentJournalTurn(item.body) : null
@@ -44,14 +46,18 @@ function heldTurnEnd(
     if (work.isCurrentItem(item.itemId)) {
       return 'running'
     }
-    return work.diedTurn()?.item.itemId === item.itemId
-      ? cut
-      : work.ownerUnverifiableFor(item.itemId)
-        ? 'unknown'
-        : cut
+    // Its end not yet written: a person's Stop that decides it (a refused interrupt kills the
+    // child before the cancellation lands) is theirs; an owner out of sight decides nothing.
+    if (journal.stopMarks.personStopDecides(turn.turnId)) {
+      return 'stopped'
+    }
+    // As the current-work projection reads it: a death it saw first, then an unseen owner.
+    const died = work.diedTurn()?.item.itemId === item.itemId
+    return !died && work.ownerUnverifiableFor(item.itemId) ? 'unknown' : cut
   }
+  // A provider error ended it before it could act on the mail: cut, under the same bound.
   if (turn.state === 'completed') {
-    return 'ended'
+    return turn.outcome === 'failure' ? cut : 'ended'
   }
   return turn.outcome === 'cancellation' ? 'stopped' : cut
 }
@@ -69,21 +75,23 @@ export async function readStructuredHeldTurns(
 ): Promise<StructuredHeldTurnReader | null> {
   const { journal } = await conversation(sessionId)
   const work = currentWork(sessionId)
-  return work ? structuredHeldTurnReader(journal, work) : null
+  return work ? structuredHeldTurnReader(sessionId, journal, work) : null
 }
 
 function structuredHeldTurnReader(
-  journal: Pick<AgentSessionJournal, 'item' | 'itemByKey' | 'newestTurnItem'>,
+  sessionId: string,
+  journal: Pick<AgentSessionJournal, 'item' | 'itemByKey' | 'newestTurnItem' | 'stopMarks'>,
   work: StructuredAgentSessionCurrentWork
 ): StructuredHeldTurnReader {
   return {
-    end: (turnItemId) => heldTurnEnd(work, journal.item(turnItemId)),
+    sessionId,
+    end: (turnItemId) => heldTurnEnd(work, journal, journal.item(turnItemId)),
     newestTurnNotice: () => {
       const item = journal.newestTurnItem()
       const opener = readAgentJournalTurn(item?.body)?.userItemId
       const body = opener ? journal.itemByKey(opener)?.body : undefined
       const notice = mailNotice(body?.kind === 'message' ? body : null)
-      return notice ? { end: heldTurnEnd(work, item), notice } : null
+      return notice ? { end: heldTurnEnd(work, journal, item), notice } : null
     }
   }
 }

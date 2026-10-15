@@ -11,7 +11,8 @@ export function queuedMessageEditableText(body: AgentJournalMessageItem): string
 }
 
 /** The body with its text replaced by one block at the first text block's place; attachments,
- *  sender, kind and send mode stay. Null when the result would not be a sendable draft. */
+ *  sender, kind and send mode stay, but an Orca mail notice stops being one: the edited text is the
+ *  person's to send. Null when the result would not be a sendable draft. */
 export function queuedMessageWithEditedText(
   body: AgentJournalMessageItem,
   text: string
@@ -40,5 +41,7 @@ export function queuedMessageWithEditedText(
   if (!placed) {
     blocks.unshift({ type: 'text', text })
   }
-  return { ...body, blocks }
+  return body.from?.orchestration
+    ? { ...body, blocks, from: { ...body.from, orchestration: null } }
+    : { ...body, blocks }
 }

@@ -26,7 +26,7 @@ export async function checkRunMailbox(args: {
   handle: string
   paneKey: string | undefined
   callerSession: OrchestrationSessionCaller | undefined
-  holder?: DeliveryHolder | null
+  holder?: () => DeliveryHolder | null
   typeFilter: MessageType[] | undefined
   signal: AbortSignal | undefined
   legacyCoordinatorRunId: string | undefined
@@ -143,7 +143,7 @@ export async function checkRunMailbox(args: {
       runId: run.id,
       consumerGeneration: generation,
       wakeTypes,
-      holder: args.holder ?? undefined
+      holder: args.holder?.() ?? undefined
     })
   let peeked = params.peek ? readPeek() : []
   if (params.peek && peeked.length > 0) {

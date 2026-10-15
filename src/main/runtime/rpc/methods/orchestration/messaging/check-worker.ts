@@ -30,7 +30,7 @@ export async function checkWorkerMailbox(args: {
   revalidateConsumer?: () => void
   deferDelivery?: () => boolean
   recordMutationReceipt?: (receipt: unknown) => void
-  holder?: DeliveryHolder | null
+  holder?: () => DeliveryHolder | null
 }) {
   const {
     params,
@@ -206,7 +206,7 @@ export async function checkWorkerMailbox(args: {
         consumerGeneration: workerMailbox.generation,
         consumerSource: activeDispatch ? 'dispatch' : 'attachment',
         wakeTypes,
-        holder: args.holder ?? undefined
+        holder: args.holder?.() ?? undefined
       })
     } catch (error) {
       throw asDispatchFence(error)
