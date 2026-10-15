@@ -1,7 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import type Database from '../../sqlite/sync-database'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
-import { runJournalTransaction } from './journal-database'
 import { JournalPrunePolicy } from './journal-prune-policy'
 import { parseJournalRow } from './journal-row-schema'
 import { readJournalRowsAfter, readJournalSessionEpoch } from './journal-row-table'
@@ -44,48 +43,41 @@ WHERE session_id = ? AND epoch = ?`
     let compacted = 0
     let bytes = 0
     let done = false
-    const run = (): void => {
-      while (scanned < JOURNAL_PRUNE_MAX_ROWS && bytes < MAX_PASS_BYTES) {
-        const stored = readJournalRowsAfter(db, this.sessionId, this.epoch, this.after, 1)[0]
-        if (!stored || stored.seq > this.upper) {
-          if (this.validating) {
-            this.validating = false
-            this.after = 0
-          } else {
-            done = true
-          }
-          break
-        }
-        const parsed = parseJournalRow(stored.rowJson)
-        if (!parsed.ok || parsed.row.seq !== stored.seq || parsed.row.epoch !== this.epoch) {
-          throw new Error('journal pruning refused an unreadable row')
-        }
-        const row = parsed.row
+    while (scanned < JOURNAL_PRUNE_MAX_ROWS && bytes < MAX_PASS_BYTES) {
+      const stored = readJournalRowsAfter(db, this.sessionId, this.epoch, this.after, 1)[0]
+      if (!stored || stored.seq > this.upper) {
         if (this.validating) {
-          if ((this.after === 0 && row.kind !== 'epoch') || row.seq !== this.after + 1) {
-            throw new Error('journal pruning refused a sequence gap')
-          }
+          this.validating = false
+          this.after = 0
         } else {
-          const obsolete = this.policy.observe(row, stored.ts)
-          if (
-            obsolete !== null &&
-            shrinkSupersededPayload(db, this.sessionId, this.epoch, obsolete)
-          ) {
-            compacted++
-          }
+          done = true
         }
-        this.after = stored.seq
-        bytes += Buffer.byteLength(stored.rowJson, 'utf8')
-        scanned++
-        if (performance.now() - started >= PASS_BUDGET_MS) {
-          break
+        break
+      }
+      const parsed = parseJournalRow(stored.rowJson)
+      if (!parsed.ok || parsed.row.seq !== stored.seq || parsed.row.epoch !== this.epoch) {
+        throw new Error('journal pruning refused an unreadable row')
+      }
+      const row = parsed.row
+      if (this.validating) {
+        if ((this.after === 0 && row.kind !== 'epoch') || row.seq !== this.after + 1) {
+          throw new Error('journal pruning refused a sequence gap')
+        }
+      } else {
+        const obsolete = this.policy.observe(row, stored.ts)
+        if (
+          obsolete !== null &&
+          shrinkSupersededPayload(db, this.sessionId, this.epoch, obsolete)
+        ) {
+          compacted++
         }
       }
-    }
-    if (this.validating) {
-      run()
-    } else {
-      runJournalTransaction(db, run)
+      this.after = stored.seq
+      bytes += Buffer.byteLength(stored.rowJson, 'utf8')
+      scanned++
+      if (compacted > 0 || performance.now() - started >= PASS_BUDGET_MS) {
+        break
+      }
     }
     return { done, compacted, scanned }
   }
@@ -107,11 +99,13 @@ function shrinkSupersededPayload(
     return false
   }
   // Preserve every sequence and its attribution so older hosts and cursor readers still fold it.
-  db.prepare(
-    `UPDATE journal_rows SET row_json = json_set(row_json, '$.body', json(?))
-WHERE session_id = ? AND epoch = ? AND seq = ?`
-  ).run(bodyJson, sessionId, epoch, sequence)
-  return true
+  const result = db
+    .prepare(
+      `UPDATE journal_rows SET row_json = json_set(row_json, '$.body', json(?))
+WHERE session_id = ? AND epoch = ? AND seq = ? AND row_json = ?`
+    )
+    .run(bodyJson, sessionId, epoch, sequence, stored.rowJson)
+  return result.changes > 0
 }
 
 function compactJournalPayload(body: AgentJournalItemBody): AgentJournalItemBody {

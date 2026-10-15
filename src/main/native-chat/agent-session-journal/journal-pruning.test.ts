@@ -192,7 +192,13 @@ it('keeps turn transitions, lifecycle receipts and genuine sequence damage', asy
   for (let revision = 1; revision <= 5; revision++) {
     await journal.appendItem(
       item,
-      { kind: 'turn', turnId: 'turn', state: 'running', durationMs: revision },
+      {
+        kind: 'turn',
+        turnId: 'turn',
+        state: 'running',
+        durationMs: revision,
+        contextUsage: { window: { tokens: 1000, capturedAt: revision } }
+      },
       options
     )
   }
@@ -203,7 +209,7 @@ it('keeps turn transitions, lifecycle receipts and genuine sequence damage', asy
       role: 'assistant',
       blocks: [{ type: 'text', text: 'in turn' }]
     },
-    { fence: 1, turnScope: journal.liveTurnScope() }
+    { fence: 1, turnScope: { kind: 'turn', turnItemId: journal.snapshot().items[0].itemId } }
   )
   for (let revision = 1; revision <= 4; revision++) {
     await journal.appendItem(
@@ -212,7 +218,8 @@ it('keeps turn transitions, lifecycle receipts and genuine sequence damage', asy
         kind: 'turn',
         turnId: 'turn',
         state: 'completed',
-        durationMs: revision
+        durationMs: revision,
+        contextUsage: { window: { tokens: 1000, capturedAt: revision } }
       },
       options
     )
@@ -232,7 +239,7 @@ it('keeps turn transitions, lifecycle receipts and genuine sequence damage', asy
   }
   await journal.appendLifecycleBatch(settlement)
   const before = journal.snapshot()
-  expect(prune(journal.epoch)).toBe(0)
+  expect(prune(journal.epoch)).toBe(5)
   await journal.appendLifecycleBatch(settlement)
   expect(journal.snapshot()).toEqual(before)
   expect(
