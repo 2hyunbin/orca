@@ -61,6 +61,7 @@ export function useNewTabAgentMenuRows(
   useHostStructuredAgentsVersion()
   useSyncExternalStore(
     subscribeLocalRuntimeCapabilitiesKnown,
+    readLocalRuntimeCapabilitiesOrUnknown,
     readLocalRuntimeCapabilitiesOrUnknown
   )
   const store = useAppStore(
