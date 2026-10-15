@@ -88,7 +88,8 @@ export type AgentLaunchSurface =
 
 export type LaunchAgentInNewTabResult = {
   surface: AgentLaunchSurface
-  startupPlan: AgentStartupPlan
+  /** Present only when this client planned a terminal command. */
+  startupPlan?: AgentStartupPlan
   pasteDraftAfterLaunch: boolean
   promptDeliveryResult?: Promise<{ delivered: boolean; failureNotified: boolean }>
   /** Structured route only: what the launch did once it settled. The call stays synchronous. */
@@ -109,7 +110,7 @@ export function shouldQueueTerminalFocusAfterMenuClose(
  * prompt into the launch command; followup-path agents launch empty and get a
  * post-ready draft paste. Callers can override via `promptDelivery`.
  *
- * Returns `null` when no startup plan can be built (e.g. a whitespace-only prompt).
+ * Returns `null` when a terminal launch cannot build its startup command.
  */
 function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
   const {
@@ -130,6 +131,47 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     activate
   } = args
   const store = useAppStore.getState()
+  const trimmedPrompt = prompt?.trim() ?? ''
+  const hasPrompt = trimmedPrompt.length > 0
+  const isFollowupPath = TUI_AGENT_CONFIG[agent].promptInjectionMode === 'stdin-after-start'
+  const workspaceKind = workspaceKindForWorktreeId(worktreeId)
+  // Why: a followup-path agent gets its prompt pasted unsubmitted after start, so route it as a draft.
+  const routePromptDelivery =
+    hasPrompt && isFollowupPath && promptDelivery === 'auto-submit' ? 'draft' : promptDelivery
+  // Why first: a structured chat is created on whichever runtime owns the workspace, a paired
+  // server included, so only a non-structured route falls through to the host-published terminal.
+  const route = routeNewTabLaunch(store, args, {
+    agent,
+    workspace: { kind: workspaceKind, worktreeId },
+    prompt: trimmedPrompt,
+    promptDelivery: routePromptDelivery,
+    tuiCustomization: { cwd: initialCwd },
+    onPromptDelivered,
+    ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
+  })
+  if ('awaited' in route) {
+    return launchOnceHostAnswered(route, args, launchAgentInNewTabInternal)
+  }
+  const { plan } = route
+  if (plan?.route === 'structured-native-chat') {
+    const structured = launchStructuredAgentFromNewTab({
+      plan,
+      worktreeId,
+      ...(groupId ? { groupId } : {}),
+      ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
+      ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
+      // The host's "no" opens this same launch as a terminal, with the caller's arguments.
+      openTerminal: (terminalPlan) =>
+        launchAgentInNewTabInternal({
+          ...args,
+          beforeSurfaceOpen: undefined,
+          requestId: undefined,
+          agentSessionLaunchPlan: terminalPlan
+        })
+    })
+    return structured
+  }
+
   const executionContext = resolveAgentLaunchExecutionContext(store, { worktreeId, launchPlatform })
   if (!executionContext) {
     return null
@@ -141,13 +183,6 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       ? agentArgs
       : resolveTuiAgentLaunchArgs(agent, store.settings?.agentDefaultArgs)
   const agentEnv = resolveTuiAgentLaunchEnv(agent, store.settings?.agentDefaultEnv)
-  const trimmedPrompt = prompt?.trim() ?? ''
-  const hasPrompt = trimmedPrompt.length > 0
-  const isFollowupPath = TUI_AGENT_CONFIG[agent].promptInjectionMode === 'stdin-after-start'
-  const workspaceKind = workspaceKindForWorktreeId(worktreeId)
-  // Why: a followup-path agent gets its prompt pasted unsubmitted after start, so route it as a draft.
-  const routePromptDelivery =
-    hasPrompt && isFollowupPath && promptDelivery === 'auto-submit' ? 'draft' : promptDelivery
   const startupPlanBase = {
     agent,
     cmdOverrides,
@@ -167,40 +202,6 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
 
   if (!startupPlan) {
     return null
-  }
-
-  // Why first: a structured chat is created on whichever runtime owns the workspace, a paired
-  // server included, so only a non-structured route falls through to the host-published terminal.
-  const route = routeNewTabLaunch(store, args, {
-    agent,
-    workspace: { kind: workspaceKind, worktreeId },
-    prompt: trimmedPrompt,
-    promptDelivery: routePromptDelivery,
-    tuiCustomization: { cwd: initialCwd },
-    onPromptDelivered,
-    ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
-  })
-  if ('awaited' in route) {
-    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTabInternal)
-  }
-  const { plan } = route
-  if (plan?.route === 'structured-native-chat') {
-    const structured = launchStructuredAgentFromNewTab({
-      plan,
-      worktreeId,
-      ...(groupId ? { groupId } : {}),
-      ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
-      ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
-      // The host's "no" opens this same launch as a terminal, with the caller's arguments.
-      openTerminal: (terminalPlan) =>
-        launchAgentInNewTabInternal({
-          ...args,
-          beforeSurfaceOpen: undefined,
-          requestId: undefined,
-          agentSessionLaunchPlan: terminalPlan
-        })
-    })
-    return structured && { ...structured, startupPlan }
   }
 
   const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(store, worktreeId)
