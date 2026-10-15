@@ -1,7 +1,8 @@
 import { Children, type ReactNode } from 'react'
-import { Pressable, Switch, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { Check, ChevronRight } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
+import { MobileSwitch } from '../components/MobileSwitch'
 import type { WorkspaceViewChoice } from '../../../src/shared/workspace-view/workspace-view-options'
 import { hostScreenStyles as styles } from './host-screen-styles'
 export function CheckRow(props: {
@@ -92,12 +93,10 @@ export function SwitchRow(props: {
       <Text style={styles.filterRowText} numberOfLines={1}>
         {props.label}
       </Text>
-      <Switch
+      <MobileSwitch
         value={props.value}
         onValueChange={props.onChange}
         accessibilityLabel={props.label}
-        trackColor={{ false: colors.bgRaised, true: colors.textSecondary }}
-        thumbColor={colors.textPrimary}
       />
     </View>
   )
