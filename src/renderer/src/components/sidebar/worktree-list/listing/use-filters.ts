@@ -13,7 +13,7 @@ import {
   isCliCreatedWorkspace,
   isDefaultBranchWorkspace,
   isDetachedHeadWorkspace
-} from '../../../../../../shared/workspace-view/workspace-row-kinds'
+} from '../../../../../../shared/worktree/workspace-kinds'
 import { isSleepingSweepExempt } from '../../../../../../shared/workspace-view/workspace-row-filters'
 import { getFolderWorkspaceExecutionHostIdForRows } from './host-filtering'
 import {

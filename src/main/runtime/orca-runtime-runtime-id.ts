@@ -98,10 +98,10 @@ export class OrcaRuntimeWithRuntimeId {
 
   protected tabs = new Map<string, RuntimeSyncedTab>()
 
-  protected mobileSessionTabsByWorktree = new Map<string, RuntimeMobileSessionTabsSnapshot>()
+  mobileSessionTabsByWorktree = new Map<string, RuntimeMobileSessionTabsSnapshot>()
 
   /** Single host writer for mobile session snapshots; versions are total-order stamps. */
-  protected storeMobileSessionSnapshot(
+  storeMobileSessionSnapshot(
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot
   ): RuntimeMobileSessionTabsSnapshot {
@@ -289,7 +289,7 @@ export class OrcaRuntimeWithRuntimeId {
   // ptyId keeps active TUI redraws independent of the total open terminal count.
   protected leavesByPtyId = new Map<string, RuntimeLeafRecord[]>()
 
-  protected handles = new Map<string, TerminalHandleRecord>()
+  handles = new Map<string, TerminalHandleRecord>()
 
   protected handleByLeafKey = new Map<string, string>()
 
