@@ -209,7 +209,7 @@ describe('launchWorkItemDirect', () => {
       seedNativeChatLaunchPrompt: mocks.seedNativeChatLaunchPrompt,
       seedNativeChatLaunchDraft: mocks.seedNativeChatLaunchDraft,
       markNativeChatLaunchPromptFailed: mocks.markNativeChatLaunchPromptFailed
-    } as typeof mocks.store
+    }
     // @ts-expect-error -- test shim
     globalThis.window = { api: mockApi }
   })
