@@ -1,4 +1,5 @@
 import type { BrowserWorkspace } from '../../../shared/browser-workspace-types'
+import type { TabGroup } from '../../../shared/tab-types'
 import { ORCA_BROWSER_PARTITION } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { ownedEditorFileId } from '../../../shared/workspace-session-pane-ownership'
@@ -25,20 +26,62 @@ export function withoutLeftBehindSessionRows(
   if (isolated.size === 0 && hiddenFiles.size === 0) {
     return session
   }
-  const next = structuredClone(session)
-  if (isolated.size > 0) {
-    dropBrowserWorkspaces(next, isolated)
-  }
-  for (const [ownerKey, filePaths] of hiddenFiles) {
-    next.openFilesByWorktree![ownerKey] = next.openFilesByWorktree![ownerKey].filter(
-      (file) => !filePaths.has(file.filePath)
+  const keepsFile = (ownerKey: string, filePath: string): boolean =>
+    !hiddenFiles.get(ownerKey)?.has(filePath)
+  const droppedTabIds = new Set(
+    Object.values(session.unifiedTabs ?? {})
+      .flat()
+      .filter((tab) => tab.contentType === 'browser' && isolated.has(tab.entityId))
+      .map((tab) => tab.id)
+  )
+  // Built as a new object: this is an export copy, never a write to the saved layout.
+  return structuredClone({
+    ...session,
+    browserTabsByWorktree: mapRows(session.browserTabsByWorktree, (_key, workspaces) =>
+      workspaces.filter((workspace) => !isolated.has(workspace.id))
+    ),
+    browserPagesByWorkspace: Object.fromEntries(
+      Object.entries(session.browserPagesByWorkspace ?? {}).filter(([id]) => !isolated.has(id))
+    ),
+    activeBrowserTabIdByWorktree: Object.fromEntries(
+      Object.entries(session.activeBrowserTabIdByWorktree ?? {}).filter(
+        ([, id]) => !isolated.has(id ?? '')
+      )
+    ),
+    unifiedTabs: mapRows(session.unifiedTabs, (_key, tabs) =>
+      tabs.filter((tab) => !droppedTabIds.has(tab.id))
+    ),
+    tabGroups: mapRows(session.tabGroups, (_key, groups) =>
+      groups.map((group) => withoutTabs(group, droppedTabIds))
+    ),
+    openFilesByWorktree: mapRows(session.openFilesByWorktree, (ownerKey, files) =>
+      files.filter((file) => keepsFile(ownerKey, file.filePath))
+    ),
+    activeFileIdByWorktree: Object.fromEntries(
+      Object.entries(session.activeFileIdByWorktree ?? {}).filter(
+        ([ownerKey, fileId]) => !fileId || keepsFile(ownerKey, fileId)
+      )
     )
-    const active = next.activeFileIdByWorktree?.[ownerKey]
-    if (active && filePaths.has(active)) {
-      delete next.activeFileIdByWorktree![ownerKey]
-    }
-  }
-  return next
+  })
+}
+
+function mapRows<T>(
+  rows: Record<string, T[]> | undefined,
+  map: (ownerKey: string, row: T[]) => T[]
+): Record<string, T[]> | undefined {
+  return rows
+    ? Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, map(key, row)]))
+    : rows
+}
+
+function withoutTabs(group: TabGroup, tabIds: ReadonlySet<string>): TabGroup {
+  const tabOrder = group.tabOrder.filter((id) => !tabIds.has(id))
+  const recentTabIds = group.recentTabIds?.filter((id) => !tabIds.has(id))
+  const activeTabId =
+    group.activeTabId && tabIds.has(group.activeTabId)
+      ? (recentTabIds?.at(-1) ?? tabOrder[0] ?? null)
+      : group.activeTabId
+  return { ...group, tabOrder, ...(recentTabIds ? { recentTabIds } : {}), activeTabId }
 }
 
 /** Whether a partition is some Orca profile's shared browser default rather than a session profile. */
@@ -51,50 +94,17 @@ export function isOrcaProfileBrowserDefaultPartition(partition: string): boolean
   )
 }
 
-/** A tab switched back to Default keeps the default partition, which carries over as it is. */
+/**
+ * Isolated or imported login profiles are this desktop's alone and the server stores none, so the
+ * tab stays behind rather than reopen on the shared profile. A tab switched back to Default keeps
+ * the default partition and moves as usual.
+ */
 function usesSessionProfile(workspace: BrowserWorkspace): boolean {
   const { sessionProfileId, sessionPartition } = workspace
   return (
     (sessionProfileId ? sessionProfileId !== 'default' : false) ||
     (sessionPartition ? !isOrcaProfileBrowserDefaultPartition(sessionPartition) : false)
   )
-}
-
-/**
- * Isolated-profile browser tabs. Their profile is this desktop's alone and the server stores none,
- * so carrying the tab would reopen it in the shared profile; leaving it keeps the isolation.
- */
-function dropBrowserWorkspaces(session: WorkspaceSessionState, workspaceIds: Set<string>): void {
-  for (const [ownerKey, workspaces] of Object.entries(session.browserTabsByWorktree ?? {})) {
-    session.browserTabsByWorktree![ownerKey] = workspaces.filter(
-      (workspace) => !workspaceIds.has(workspace.id)
-    )
-    if (workspaceIds.has(session.activeBrowserTabIdByWorktree?.[ownerKey] ?? '')) {
-      delete session.activeBrowserTabIdByWorktree![ownerKey]
-    }
-  }
-  for (const workspaceId of workspaceIds) {
-    delete session.browserPagesByWorkspace?.[workspaceId]
-  }
-  const droppedTabIds = new Set<string>()
-  for (const [ownerKey, tabs] of Object.entries(session.unifiedTabs ?? {})) {
-    session.unifiedTabs![ownerKey] = tabs.filter((tab) => {
-      const dropped = tab.contentType === 'browser' && workspaceIds.has(tab.entityId)
-      if (dropped) {
-        droppedTabIds.add(tab.id)
-      }
-      return !dropped
-    })
-  }
-  for (const groups of Object.values(session.tabGroups ?? {})) {
-    for (const group of groups) {
-      group.tabOrder = group.tabOrder.filter((id) => !droppedTabIds.has(id))
-      group.recentTabIds = group.recentTabIds?.filter((id) => !droppedTabIds.has(id))
-      if (group.activeTabId && droppedTabIds.has(group.activeTabId)) {
-        group.activeTabId = group.recentTabIds?.at(-1) ?? group.tabOrder[0] ?? null
-      }
-    }
-  }
 }
 
 /**
