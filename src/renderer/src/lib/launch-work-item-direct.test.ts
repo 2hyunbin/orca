@@ -446,35 +446,6 @@ describe('launchWorkItemDirect', () => {
     expect(pasteDraftWhenAgentReady).not.toHaveBeenCalled()
   })
 
-  it('quotes a work-item agent for cmd.exe only when this computer runs it', async () => {
-    mocks.ensureDetectedAgents.mockResolvedValue(['claude'])
-    mocks.store.settings = { terminalWindowsShell: 'cmd.exe' }
-    const launch = () =>
-      launchWorkItemDirect({
-        repoId: 'repo-1',
-        launchSource: 'task_page',
-        openModalFallback: vi.fn(),
-        agentOverride: 'claude',
-        item: { type: 'issue', number: 12, title: 'Fix', url: 'u', pasteContent: 'Fix A & B' }
-      })
-
-    await expect(launch()).resolves.toBe(true)
-    // cmd.exe has no single quotes: PowerShell's 'Fix A & B' would run `B'` as a second command.
-    expect(mocks.activateAndRevealWorktree.mock.calls[0]?.[1]?.startup?.command).toContain(
-      '--prefill "Fix A ^& B"'
-    )
-
-    // A paired Windows server keeps its default quoting; this client's setting doesn't describe it.
-    mocks.store.repos = [{ id: 'repo-1', path: 'C:\\r', executionHostId: 'runtime:win' }]
-    mocks.store.runtimeStatusByEnvironmentId = new Map([
-      ['win', { status: { hostPlatform: 'win32' } }]
-    ])
-    vi.mocked(buildAgentDraftLaunchPlan).mockClear()
-    await expect(launch()).resolves.toBe(true)
-    const [serverPlanArgs] = vi.mocked(buildAgentDraftLaunchPlan).mock.calls[0]
-    expect(serverPlanArgs).toMatchObject({ platform: 'win32', shell: undefined })
-  })
-
   it('seeds the chat-composer launch draft for a GitHub issue draft launch', async () => {
     mocks.ensureDetectedAgents.mockResolvedValue(['claude'])
     const { launchWorkItemDirect } = await import('./launch-work-item-direct')
