@@ -27,4 +27,48 @@ describe('a moved shell history that waited on live shells', () => {
     runtime.onPtyExit('pty-2', 0)
     expect(installDeferred.mock.calls[1][1].worktreeHasLiveShells('repo-1::/srv/app')).toBe(false)
   })
+
+  it('is installed once the runtime attached, counting daemon shells that outlived a restart', async () => {
+    const installPending = vi.fn()
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      installPendingOrcadMigrationReceivedBlobs: installPending
+    })
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      listProcesses: vi.fn(async () => [
+        { id: 'daemon-pty', cwd: '/srv/app', title: 'zsh', worktreeId: 'repo-1::/srv/app' }
+      ])
+    })
+
+    await runtime.installPendingOrcadMigrationShellHistory()
+
+    const [options] = installPending.mock.calls[0]
+    expect(options.worktreeHasLiveShells('repo-1::/srv/app')).toBe(true)
+    expect(options.worktreeHasLiveShells('repo-1::/srv/other')).toBe(false)
+  })
+
+  it('waits when the terminal inventory does not answer', async () => {
+    const installPending = vi.fn()
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      installPendingOrcadMigrationReceivedBlobs: installPending
+    })
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      listProcesses: vi.fn(async () => {
+        throw new Error('daemon unreachable')
+      })
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await runtime.installPendingOrcadMigrationShellHistory()
+
+    expect(installPending).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
 })

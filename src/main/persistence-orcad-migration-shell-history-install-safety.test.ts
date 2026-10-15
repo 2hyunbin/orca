@@ -20,6 +20,7 @@ import {
   encodedHistories,
   hostHistory,
   hostHistoryDirectory,
+  noLiveShells,
   receivedPath,
   stage
 } from './persistence-orcad-migration-shell-history-fixture'
@@ -101,7 +102,7 @@ describe('installing moved shell history safely', () => {
     const { input, key, bytes } = await stageZsh(store, ZSH)
     store.commitStagedOrcadMigrationCatalog(input)
     await store.flushPendingOrThrowAsync()
-    store.installOrcadMigrationReceivedBlobs(input)
+    store.installOrcadMigrationReceivedBlobs(input, { worktreeHasLiveShells: noLiveShells })
     const directory = hostHistoryDirectory(DORMANT_WORKTREE_ID)
     expect(readHistoryMeta(directory)).toMatchObject({
       worktreeId: DORMANT_WORKTREE_ID,
@@ -112,7 +113,9 @@ describe('installing moved shell history safely', () => {
     writeFileSync(join(directory, 'zsh_history'), ': 9:0;newest\n')
     writeFileSync(receivedPath(input, key), bytes)
     // A pane shell that changed since must not install it into the other file either.
-    createStore({ paneShellPath: () => '/bin/bash' })
+    createStore({ paneShellPath: () => '/bin/bash' }).installPendingOrcadMigrationReceivedBlobs({
+      worktreeHasLiveShells: noLiveShells
+    })
 
     expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBe(': 9:0;newest\n')
     expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
@@ -124,7 +127,7 @@ describe('installing moved shell history safely', () => {
     const { input } = await stageZsh(store, ': 1:0;no newline')
     store.commitStagedOrcadMigrationCatalog(input)
     await store.flushPendingOrThrowAsync()
-    store.installOrcadMigrationReceivedBlobs(input)
+    store.installOrcadMigrationReceivedBlobs(input, { worktreeHasLiveShells: noLiveShells })
 
     expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBe(': 1:0;no newline\n')
   })
@@ -143,7 +146,7 @@ describe('installing moved shell history safely', () => {
 
       store.commitStagedOrcadMigrationCatalog(input)
       await store.flushPendingOrThrowAsync()
-      store.installOrcadMigrationReceivedBlobs(input)
+      store.installOrcadMigrationReceivedBlobs(input, { worktreeHasLiveShells: noLiveShells })
 
       expect(lstatSync(link).isSymbolicLink()).toBe(true)
       expect(readFileSync(target, 'utf8')).toBe(`${ZSH}: 2:0;host\n`)

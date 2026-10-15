@@ -84,10 +84,14 @@ export function hostHistory(worktreeId: string, file: string): string | null {
   return existsSync(path) ? readFileSync(path, 'utf8') : null
 }
 
+/** A runtime's live-shell check on a host where no shell runs. */
+export const noLiveShells = (): boolean => false
+
 export async function commitDurably(store: Store, input: OrcadMigrationManifest): Promise<string> {
   const result = await commitStagedOrcadMigrationCatalogDurably({
     store,
     manifest: input,
+    worktreeHasLiveShells: noLiveShells,
     onDurableCommit: () => {}
   })
   return result.state

@@ -102,6 +102,28 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
     })
   }
 
+  /**
+   * The moved shell history store load left waiting, installed once this runtime can see the
+   * host's shells. An unanswered inventory leaves it for the next catalog-state query.
+   */
+  async installPendingOrcadMigrationShellHistory(): Promise<void> {
+    const store = this.store
+    if (!store?.installPendingOrcadMigrationReceivedBlobs) {
+      return
+    }
+    // Daemon shells that outlived a restart count as live only once the inventory recorded them.
+    if (
+      this.ptyController?.listProcesses &&
+      !(await this.refreshPtyWorktreeRecordsWithControllerInventory([]))
+    ) {
+      console.warn('[orcad-migration] shell history waits: the terminal inventory did not answer')
+      return
+    }
+    store.installPendingOrcadMigrationReceivedBlobs({
+      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells
+    })
+  }
+
   // The last shell of a worktree exiting releases a moved history that waited on it.
   override onPtyExit(
     ...args: Parameters<OrcaRuntimeWithResolveWaiter['onPtyExit']>

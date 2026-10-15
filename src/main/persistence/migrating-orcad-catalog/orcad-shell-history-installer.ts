@@ -73,8 +73,8 @@ export type OrcadShellHistoryInstall = {
   historyRoot: string
   /** The shell binary a new pane on this host would actually run; see `resolveNewPaneShellPath`. */
   paneShellPath: () => string
-  /** True while a shell runs in the worktree; absent when no live shell is known. */
-  worktreeHasLiveShells?: (worktreeId: string) => boolean
+  /** True while a shell runs in the worktree. */
+  worktreeHasLiveShells: (worktreeId: string) => boolean
   /** Worktrees whose install waits for their live shells to exit. */
   deferredWorktreeIds: Set<string>
   now: number
@@ -145,7 +145,7 @@ function installOne(install: OrcadShellHistoryInstall, key: string): void {
     removeReceived(path)
     return
   }
-  if (install.worktreeHasLiveShells?.(moved.worktreeId)) {
+  if (install.worktreeHasLiveShells(moved.worktreeId)) {
     install.deferredWorktreeIds.add(moved.worktreeId)
     return
   }

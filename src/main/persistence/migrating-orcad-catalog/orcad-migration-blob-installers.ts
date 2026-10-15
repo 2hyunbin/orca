@@ -80,7 +80,10 @@ export type OrcadMigrationBlobInstall = {
   shellHistoryRoot: string
   /** The shell binary a new pane on this host would actually run. */
   paneShellPath: () => string
-  /** True while a shell runs in the worktree; absent when no live shell is known. */
+  /**
+   * The runtime's live-shell check. Without it (store load, before a runtime attached) shell
+   * history waits: a shell that outlived a restart would overwrite whatever lands under it.
+   */
   worktreeHasLiveShells?: (worktreeId: string) => boolean
   /** Worktrees whose history install waits for their live shells to exit. */
   deferredShellHistoryWorktreeIds: Set<string>
@@ -92,7 +95,8 @@ export type OrcadMigrationBlobInstall = {
 /**
  * Idempotent: a blob already installed is only deleted, and the hint store remembers installed
  * migrations so a retry never revives a hint a pane already took. A write failure keeps the blob
- * for the next retry: a commit retry, a catalog-state query, or the next store load.
+ * for the next retry: a commit retry, a catalog-state query, the runtime's post-attach pass, or
+ * (for restore hints) the next store load.
  */
 export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobInstall): void {
   let firstError: unknown = null
@@ -110,6 +114,9 @@ export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobIn
 }
 
 function installShellHistory(install: OrcadMigrationBlobInstall): void {
+  if (!install.worktreeHasLiveShells) {
+    return
+  }
   installOrcadMigrationShellHistory({
     migration: install.migration,
     root: install.root,

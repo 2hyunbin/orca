@@ -16,6 +16,7 @@ import {
   encodedHistories as encodeFrom,
   hostHistory,
   hostHistoryDirectory,
+  noLiveShells,
   rawBlob,
   receivedPath,
   stage,
@@ -170,7 +171,7 @@ describe('orcad migration shell history through the store', () => {
     expect(existsSync(receivedPath(input, blob.descriptor.key))).toBe(false)
   })
 
-  it('retries a failed install on the next store load and on a catalog-state query', async () => {
+  it('retries a failed install on a catalog-state query, not at store load', async () => {
     const input = manifest()
     const store = bashHostStore()
     const blobs = await encodedHistories([
@@ -198,12 +199,21 @@ describe('orcad migration shell history through the store', () => {
     error.mockRestore()
 
     rmSync(hostHistoryDirectory(DORMANT_WORKTREE_ID))
-    expect(getOrcadMigrationCatalogState({ store, manifest: input }).state).toBe('committed')
+    // Store load cannot see live shells, so history waits for a runtime-driven retry.
+    bashHostStore()
+    expect(existsSync(receivedPath(input, pendingKey))).toBe(true)
+    expect(
+      getOrcadMigrationCatalogState({
+        store,
+        manifest: input,
+        worktreeHasLiveShells: noLiveShells
+      }).state
+    ).toBe('committed')
     expect(existsSync(receivedPath(input, pendingKey))).toBe(false)
     expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBe(ZSH)
   })
 
-  it('retries a pending install when the store loads', async () => {
+  it('leaves history to the post-attach pass at store load, which still waits on live shells', async () => {
     const input = manifest()
     const store = bashHostStore()
     const blobs = await encodedHistories([
@@ -214,7 +224,14 @@ describe('orcad migration shell history through the store', () => {
     await store.flushPendingOrThrowAsync()
     expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
 
-    bashHostStore()
+    const reloaded = bashHostStore()
+    expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
+    expect(existsSync(receivedPath(input, blobs[0].descriptor.key))).toBe(true)
+
+    reloaded.installPendingOrcadMigrationReceivedBlobs({ worktreeHasLiveShells: () => true })
+    expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
+
+    reloaded.installPendingOrcadMigrationReceivedBlobs({ worktreeHasLiveShells: noLiveShells })
     expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBe(BASH)
     expect(existsSync(receivedPath(input, blobs[0].descriptor.key))).toBe(false)
   })
