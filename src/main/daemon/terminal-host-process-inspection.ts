@@ -84,18 +84,16 @@ export async function inspectTerminalHostProcess(args: {
   let childProcessEvidence: PtyChildProcessVerdict | undefined = session.processNameIsSpawnFile
     ? 'unverifiable'
     : undefined
-  if (session.processNameIsSpawnFile && process.platform === 'win32' && incarnationMatches) {
-    foregroundProcess = await session.confirmForegroundProcess()
-    childProcessEvidence = session.inspectChildProcesses()
-  }
   let evidence: RemoteForegroundEvidence
   if (!incarnationMatches) {
     evidence = unverifiableEvidence(args, session, 'incarnation_mismatch')
   } else if (process.platform === 'win32') {
-    // Why no process-table read: Windows evidence is unverifiable whatever `ps` returns,
-    // and a `ps` from Git's or MSYS2's tools on PATH would flash a console window.
+    if (session.processNameIsSpawnFile) {
+      foregroundProcess = await session.confirmForegroundProcess()
+      childProcessEvidence = session.inspectChildProcesses()
+    }
+    // Unverifiable whatever `ps` says, and an MSYS `ps.exe` on PATH would flash a console.
     evidence = unverifiableEvidence(args, session, 'windows_ssh_foreground_unavailable')
-    clearSteadyStateAnchor(session)
   } else {
     try {
       const snapshot = await getStrictProcessTableSnapshotWithAge()

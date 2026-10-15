@@ -94,7 +94,7 @@ describe.each(['linux', 'darwin'] as const)('daemon ordinary foreground on %s', 
 describe('daemon ordinary foreground on win32', () => {
   it('keeps the running name without starting a ps process-table read', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    expect(await inspect('vim', 'vim 300')).toMatchObject({
+    expect(await inspect('vim', null)).toMatchObject({
       foregroundProcess: 'vim',
       hasChildProcesses: true,
       foregroundProcessEvidence: {
