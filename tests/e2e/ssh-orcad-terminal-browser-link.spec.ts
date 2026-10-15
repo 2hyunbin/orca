@@ -71,6 +71,36 @@ function browserTabUrls(page: Page, worktreeId: string): Promise<string[]> {
   )
 }
 
+function browserTabIdForUrl(page: Page, worktreeId: string, url: string): Promise<string | null> {
+  return page.evaluate(
+    ({ id, url }) =>
+      (window.__store?.getState().browserTabsByWorktree[id] ?? []).find((tab) => tab.url === url)
+        ?.id ?? null,
+    { id: worktreeId, url }
+  )
+}
+
+/** The opened page must be the visible browser surface and render the host's response. */
+async function expectRenderedLink(page: Page, worktreeId: string, url: string): Promise<void> {
+  await expect.poll(() => browserTabIdForUrl(page, worktreeId, url)).not.toBeNull()
+  const tabId = await browserTabIdForUrl(page, worktreeId, url)
+  const webview = page.locator(`[data-browser-overlay-tab-id="${tabId}"] webview`)
+  await expect(webview).toBeVisible({ timeout: 30_000 })
+  await expect
+    .poll(
+      () =>
+        webview.evaluate(async (guest: Electron.WebviewTag) => {
+          try {
+            return await guest.executeJavaScript('document.querySelector("#marker")?.textContent')
+          } catch {
+            return null
+          }
+        }),
+      { timeout: 60_000, message: 'the opened page never rendered the host response' }
+    )
+    .toMatch(/^cookie:/)
+}
+
 test('a managed SSH terminal link opens in the Orca Browser through the SSH host', async (// oxlint-disable-next-line no-empty-pattern -- Owns app launch.
 {}, testInfo) => {
   test.setTimeout(5 * 60_000)
@@ -136,6 +166,7 @@ test('a managed SSH terminal link opens in the Orca Browser through the SSH host
         message: 'the Orca Browser page never reached the SSH host'
       })
       .toContain('/echo/popover')
+    await expectRenderedLink(page, seeded.worktreeId, popoverUrl)
 
     // Cmd/Ctrl-click opens a remote localhost dev-server URL straight into the Orca Browser.
     const modifierUrl = `http://localhost:${SSH_REMOTE_ONLY_PORT}/echo/modifier`
@@ -154,6 +185,7 @@ test('a managed SSH terminal link opens in the Orca Browser through the SSH host
         message: 'the Cmd/Ctrl-clicked localhost link never reached the SSH host'
       })
       .toContain('/echo/modifier')
+    await expectRenderedLink(page, seeded.worktreeId, modifierUrl)
     await page.screenshot({ path: testInfo.outputPath('managed-terminal-link-opened.png') })
   } finally {
     try {
