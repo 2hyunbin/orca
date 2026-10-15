@@ -28,6 +28,7 @@ import {
   sidecarEnrichesWithoutReparse
 } from './session-scanner-sidecar-enrichment'
 import {
+  readPartialTranscript,
   readResumableTranscript,
   readWholeTranscript,
   requestWholeTranscriptRead,
@@ -106,6 +107,7 @@ export function createSessionParseStats(): SessionParseStats {
     reused: 0,
     incremental: 0,
     fullParses: 0,
+    partialReads: 0,
     earlyStopped: 0,
     bytesRead: 0
   }
@@ -138,7 +140,12 @@ export async function parseAgentSessionFileCached(
 }
 
 /**
- * What a caller other than the session list needs out of this parse.
+ * What the caller needs out of this parse. Absent: the session list's own read,
+ * which needs the whole file covered.
+ *
+ * `partial-ok`: a large transcript may be read as its first and last bytes
+ * (see readPartialTranscript), and such a row is reused. For a list whose client
+ * shows those rows without counts.
  *
  * `any`: some bytes must be read. A cursor already at the file's current stat
  * is dropped so the reader opens it; one that is merely behind is left alone,
@@ -152,7 +159,7 @@ export async function parseAgentSessionFileCached(
  * list parse can store its entry in between and the forced read silently
  * degrades to a reuse.
  */
-export type SessionParseReadRequirement = 'any' | 'whole'
+export type SessionParseReadRequirement = 'partial-ok' | 'any' | 'whole'
 
 /**
  * True when this cursor already sits at the transcript's current stat, so a
@@ -160,12 +167,14 @@ export type SessionParseReadRequirement = 'any' | 'whole'
  */
 function sessionParseCacheCoversTranscript(
   candidate: SessionFileCandidate,
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform,
+  requireRead: SessionParseReadRequirement | undefined
 ): boolean {
   const { file } = candidate
   const entry = getSessionParseCacheEntry(file.path)
   return (
     entry !== undefined &&
+    (requireRead === 'partial-ok' || entry.session?.contentCoverage === undefined) &&
     entry.platform === platform &&
     entry.mtimeMs === file.mtimeMs &&
     (entry.sizeBytes === null || file.sizeBytes === undefined || entry.sizeBytes === file.sizeBytes)
@@ -182,13 +191,13 @@ async function parseCachedInLane(
   const { file } = candidate
   if (
     requireRead === 'whole' ||
-    (requireRead === 'any' && sessionParseCacheCoversTranscript(candidate, platform))
+    (requireRead === 'any' && sessionParseCacheCoversTranscript(candidate, platform, requireRead))
   ) {
     requestWholeTranscriptRead(file.path)
   }
   const entry = getSessionParseCacheEntry(file.path)
 
-  if (entry !== undefined && sessionParseCacheCoversTranscript(candidate, platform)) {
+  if (entry !== undefined && sessionParseCacheCoversTranscript(candidate, platform, requireRead)) {
     if (sidecarUnchanged(entry.sidecar, file.sidecar)) {
       return reuseCachedSession(candidate, entry, stats)
     }
@@ -216,14 +225,15 @@ async function parseCachedInLane(
 
   const stateFactory = resumableStateFactoryFor(candidate)
   if (stateFactory) {
-    const read = await readResumableTranscript({
-      candidate,
-      platform,
-      resume: entry?.platform === platform ? entry.resume : null,
-      stateFactory,
-      stats,
-      signal
-    })
+    const resume =
+      entry?.platform === platform && (requireRead === 'partial-ok' || !entry.resume?.partial)
+        ? entry.resume
+        : null
+    const read =
+      (resume === null && requireRead === 'partial-ok'
+        ? await readPartialTranscript({ candidate, platform, stateFactory, stats, signal })
+        : null) ??
+      (await readResumableTranscript({ candidate, platform, resume, stateFactory, stats, signal }))
     const enriched = await enrichSessionFromSidecar(candidate, read.session, platform, signal)
     storeSessionParseCacheEntry(file.path, {
       mtimeMs: file.mtimeMs,

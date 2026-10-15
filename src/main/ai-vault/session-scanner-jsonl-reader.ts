@@ -27,6 +27,10 @@ type JsonlReadResult = {
 export async function consumeCompleteJsonlLines(args: {
   path: string
   start: number
+  /** Stop once a line ends at or past this byte: the line crossing it is finished, not cut. */
+  stopAt?: number
+  /** `start` may fall mid-record: drop bytes through the first newline at or after `start`. */
+  startsMidLine?: boolean
   onLine: (line: string) => void
   onLineBytes?: (line: Buffer) => void
   shouldStop?: () => boolean
@@ -43,6 +47,8 @@ export async function consumeCompleteJsonlLines(args: {
   }
   let consumedThrough = args.start
   let bytesRead = 0
+  // Until the first newline, a mid-file start is inside a record we never saw begin.
+  let seekingLineStart = args.startsMidLine === true
   // A piece list avoids O(record^2) copying when one record spans many chunks.
   let remainderParts: Buffer[] = []
   let remainderLength = 0
@@ -63,6 +69,17 @@ export async function consumeCompleteJsonlLines(args: {
     const chunkEnd = chunkStart + chunk.length
     let lineStart = 0
     let newlineIndex = chunk.indexOf(NEWLINE_BYTE, lineStart)
+    if (seekingLineStart) {
+      if (newlineIndex === -1) {
+        consumedThrough = chunkEnd
+        chunkStart = chunkEnd
+        continue
+      }
+      seekingLineStart = false
+      consumedThrough = chunkStart + newlineIndex + 1
+      lineStart = newlineIndex + 1
+      newlineIndex = chunk.indexOf(NEWLINE_BYTE, lineStart)
+    }
     while (newlineIndex !== -1) {
       const newlineOffset = chunkStart + newlineIndex
       const recordLength = newlineOffset - consumedThrough
@@ -89,7 +106,7 @@ export async function consumeCompleteJsonlLines(args: {
       }
       consumedThrough = newlineOffset + 1
       lineStart = newlineIndex + 1
-      if (args.shouldStop?.()) {
+      if (args.shouldStop?.() || (args.stopAt !== undefined && consumedThrough >= args.stopAt)) {
         stopped = true
         break
       }

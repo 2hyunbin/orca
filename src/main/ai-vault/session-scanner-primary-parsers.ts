@@ -18,6 +18,7 @@ import {
   accumulatorSessionIdentity,
   addPreviewContent,
   createAccumulator,
+  skipAccumulatorToTail,
   finalizeSession,
   sessionIdFromFileName,
   updateLatestLocation,
@@ -209,6 +210,15 @@ function claudeResumeStateFromParseState(
 ): ResumableSessionParseState {
   return {
     consumeLine: (line) => consumeClaudeSessionLine(state, line),
+    // Without a real prompt in the head the fallback title would come from a
+    // late prompt, and an empty session would be judged from a partial read.
+    skipToTail: () => {
+      if (state.firstUserTitle === null) {
+        return false
+      }
+      skipAccumulatorToTail(state.accumulator)
+      return true
+    },
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () => claudeResumeStateFromParseState(cloneClaudeSessionParseState(state)),
     touchFile: (file) => {

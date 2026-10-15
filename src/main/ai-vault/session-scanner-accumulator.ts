@@ -60,6 +60,7 @@ export function createAccumulator(args: {
     totalTokens: 0,
     previewMessages: [],
     previewMessagesTruncated: false,
+    partial: false,
     firstUserPrompt: null,
     lastUserPrompt: null,
     queuedMessageCount: 0,
@@ -89,6 +90,19 @@ export function accumulatorSessionIdentity(
     createdAt: accumulator.createdAt,
     updatedAt: accumulator.updatedAt
   }
+}
+
+/**
+ * The gap of a partial read: the middle of the file is never seen. Counts keep
+ * what the head saw and the tail adds; the rolling preview and latest prompt are
+ * dropped so the tail alone fills them, rather than splicing opening messages
+ * onto closing ones or calling an early prompt the latest.
+ */
+export function skipAccumulatorToTail(accumulator: SessionAccumulator): void {
+  accumulator.partial = true
+  accumulator.previewMessages = []
+  accumulator.previewMessagesTruncated = true
+  accumulator.lastUserPrompt = null
 }
 
 export function cloneSessionAccumulator(accumulator: SessionAccumulator): SessionAccumulator {
@@ -161,6 +175,7 @@ export function finalizeSession(
     totalTokens: accumulator.totalTokens,
     previewMessages: accumulator.previewMessages,
     ...(accumulator.previewMessagesTruncated ? { previewMessagesTruncated: true } : {}),
+    ...(accumulator.partial ? { contentCoverage: 'partial' } : {}),
     ...(accumulator.antigravityOpeningPrompt
       ? { antigravityOpeningPrompt: accumulator.antigravityOpeningPrompt }
       : {}),

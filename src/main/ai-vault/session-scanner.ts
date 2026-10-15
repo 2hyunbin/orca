@@ -18,6 +18,7 @@ import { ensureSessionParseCacheLoaded } from './session-parse-cache-persistence
 import {
   createSessionParseStats,
   parseAgentSessionFileCached,
+  type SessionParseReadRequirement,
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import { recordSessionScanIssue } from './session-scan-issues'
@@ -81,6 +82,9 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
         const executionHostId = options.executionHostId ?? LOCAL_EXECUTION_HOST_ID
         const issues: AiVaultScanIssue[] = []
         const parseStats = createSessionParseStats()
+        const requireRead: SessionParseReadRequirement | undefined = options.acceptPartialRows
+          ? 'partial-ok'
+          : undefined
         const antigravityWorkspaceResolver = createAntigravityWorkspaceResolver((path) =>
           readLocalAntigravityHistory(path, options.signal)
         )
@@ -100,6 +104,7 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
           executionHostId,
           issues,
           parseStats,
+          requireRead,
           signal: options.signal,
           antigravityWorkspaceResolver
         })
@@ -117,6 +122,7 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
           executionHostId,
           issues,
           parseStats,
+          requireRead,
           signal: options.signal
         })
         // Scope discovery can return without parsing anything, so an abort landing
@@ -135,6 +141,7 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
         span.setAttribute('reused', parseStats.reused)
         span.setAttribute('incremental', parseStats.incremental)
         span.setAttribute('fullParses', parseStats.fullParses)
+        span.setAttribute('partialReads', parseStats.partialReads)
         span.setAttribute('earlyStopped', parseStats.earlyStopped)
         span.setAttribute('bytesRead', parseStats.bytesRead)
         span.setAttribute('issues', issues.length)
@@ -186,6 +193,7 @@ async function scanInScopeSessions(args: {
   executionHostId: ExecutionHostId
   issues: AiVaultScanIssue[]
   parseStats: SessionParseStats
+  requireRead?: SessionParseReadRequirement
   signal?: AbortSignal
 }): Promise<AiVaultSession[]> {
   if (args.scopePaths.length === 0) {
@@ -215,6 +223,7 @@ async function scanInScopeSessions(args: {
     executionHostId: args.executionHostId,
     issues: args.issues,
     parseStats: args.parseStats,
+    requireRead: args.requireRead,
     signal: args.signal
   })
 }
@@ -226,6 +235,7 @@ async function parseSessionCandidates(args: {
   executionHostId: ExecutionHostId
   issues: AiVaultScanIssue[]
   parseStats: SessionParseStats
+  requireRead?: SessionParseReadRequirement
   signal?: AbortSignal
   antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
 }): Promise<AiVaultSession[]> {
@@ -245,14 +255,14 @@ async function parseSessionCandidates(args: {
     const batch = args.candidates.slice(index, index + batchSize)
     const results = await Promise.all(
       batch.map((candidate) =>
-        parseSessionCandidate(
-          candidate,
-          args.platform,
-          args.executionHostId,
-          args.parseStats,
-          args.antigravityWorkspaceResolver,
-          args.signal
-        )
+        parseSessionCandidate(candidate, {
+          platform: args.platform,
+          executionHostId: args.executionHostId,
+          parseStats: args.parseStats,
+          requireRead: args.requireRead,
+          antigravityWorkspaceResolver: args.antigravityWorkspaceResolver,
+          signal: args.signal
+        })
       )
     )
     // An abort can land while a batch settles: a read it cut short is not that
@@ -276,19 +286,23 @@ async function parseSessionCandidates(args: {
 
 async function parseSessionCandidate(
   candidate: SessionFileCandidate,
-  platform: NodeJS.Platform,
-  executionHostId: ExecutionHostId,
-  parseStats: SessionParseStats,
-  antigravityWorkspaceResolver?: AntigravityWorkspaceResolver,
-  signal?: AbortSignal
+  args: {
+    platform: NodeJS.Platform
+    executionHostId: ExecutionHostId
+    parseStats: SessionParseStats
+    requireRead?: SessionParseReadRequirement
+    antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
+    signal?: AbortSignal
+  }
 ): Promise<SessionParseResult> {
+  const { platform, executionHostId, antigravityWorkspaceResolver } = args
   try {
     let session = await parseAgentSessionFileCached(
       candidate,
       platform,
-      parseStats,
-      undefined,
-      signal
+      args.parseStats,
+      args.requireRead,
+      args.signal
     )
     if (session && candidate.antigravityHistoryPath && antigravityWorkspaceResolver) {
       session = await antigravityWorkspaceResolver.enrich(session, candidate.antigravityHistoryPath)

@@ -90,7 +90,9 @@ export async function listAiVaultSessions(
   // Scope paths change the result set, so they must be part of the cache key.
   const key = JSON.stringify({
     scopePaths: [...new Set(args?.scopePaths ?? [])].sort(),
-    includeAntigravityIdeSessions: args?.includeAntigravityIdeSessions === true
+    includeAntigravityIdeSessions: args?.includeAntigravityIdeSessions === true,
+    // A whole-only caller must never be served partial rows from this cache.
+    acceptPartialRows: args?.acceptPartialRows === true
   })
   const depth = requestedAiVaultSessionDepth(args)
   const scanKey = JSON.stringify({ key, depth })
@@ -123,6 +125,7 @@ export async function listAiVaultSessions(
           limit: args?.limit,
           unlimited: args?.unlimited,
           scopePaths: args?.scopePaths,
+          acceptPartialRows: args?.acceptPartialRows,
           ...(await localAiVaultScanRoots())
         },
         scanSignal

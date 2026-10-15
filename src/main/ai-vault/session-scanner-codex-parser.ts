@@ -7,6 +7,7 @@ import {
   accumulatorSessionIdentity,
   cloneSessionAccumulator,
   createAccumulator,
+  skipAccumulatorToTail,
   finalizeSession,
   sessionIdFromFileName,
   updateTimeline
@@ -275,6 +276,14 @@ function codexResumeStateFromParseState(
       }
     },
     shouldStop: () => state.nonUserOrigin !== null,
+    // The title is first-wins: once the head set it, the tail cannot change it.
+    skipToTail: () => {
+      if (state.titleSource === null || state.accumulator.messageCount === 0) {
+        return false
+      }
+      skipAccumulatorToTail(state.accumulator)
+      return true
+    },
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () =>
       codexResumeStateFromParseState(cloneCodexParseState(state), codexHome, titleReader),

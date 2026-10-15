@@ -62,6 +62,8 @@ const aiVaultSessionSchema = z.object({
   totalTokens: z.number(),
   previewMessages: z.array(sessionPreviewMessageSchema),
   previewMessagesTruncated: z.boolean().optional(),
+  // Any string: a value a newer host adds must not fail its whole result here.
+  contentCoverage: z.string().optional(),
   firstUserPrompt: z.string().nullable().optional(),
   lastUserPrompt: z.string().nullable().optional(),
   queuedMessageCount: z.number().default(0),

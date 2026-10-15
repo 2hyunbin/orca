@@ -33,6 +33,7 @@ import {
   AiVaultPrepareSessionResumeParams,
   AiVaultSessionTitlesParams
 } from '../../../../shared/rpc-contract/ai-vault-params'
+import { AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY } from '../../../../shared/ai-vault-partial-rows-capability'
 export { AiVaultListSessionsParams, AiVaultPrepareSessionResumeParams, AiVaultSessionTitlesParams }
 
 export const AI_VAULT_METHODS = [
@@ -100,7 +101,9 @@ export const AI_VAULT_METHODS = [
           unlimited: params.unlimited,
           force: params.force,
           scopePaths: params.scopePaths,
-          includeAntigravityIdeSessions: params.includeAntigravityIdeSessions
+          includeAntigravityIdeSessions: params.includeAntigravityIdeSessions,
+          acceptPartialRows:
+            clientCapabilities?.includes(AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY) === true
         })
       } catch (error) {
         if (error instanceof Error) {

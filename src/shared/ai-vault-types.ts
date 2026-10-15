@@ -120,6 +120,12 @@ export type AiVaultSession = {
   /** Older messages fell out of the newest-N window: the earliest preview turn
    * is NOT the opening ask, so first-prompt consumers must not scan it. */
   previewMessagesTruncated?: boolean
+  /**
+   * Present when the row was built from the start and end of the transcript only:
+   * `messageCount` and `totalTokens` cover just those parts, and the preview and
+   * `lastUserPrompt` only the end. Hosts write `'partial'`; treat any value as partial.
+   */
+  contentCoverage?: string
   /** Bounded opening-prompt identity for Antigravity history joins; never a rolling preview. */
   antigravityOpeningPrompt?: { hash: string; timestamp: string | null }
   /**
@@ -228,6 +234,11 @@ export type AiVaultListArgs = {
   // Active workspace/project paths. The global result is recency-capped, so these
   // guarantee a scoped view still surfaces its own (possibly older) sessions.
   scopePaths?: readonly string[]
+  /**
+   * Set by the host from the caller's capability, never sent over the wire: rows
+   * may be built from a transcript's first and last bytes (`contentCoverage`).
+   */
+  acceptPartialRows?: boolean
   executionHostScope?: ExecutionHostScope
   requestToken?: string
 }
