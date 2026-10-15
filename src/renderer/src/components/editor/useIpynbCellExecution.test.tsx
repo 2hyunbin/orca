@@ -25,12 +25,12 @@ vi.mock('@/lib/connection-context', () => ({ getConnectionId: getConnectionIdMoc
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 vi.mock('@/store', async () => ({
-  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+  useAppStore: (await import('./ipynb-app-store-test-fixture')).notebookTestAppStore
 }))
 
 import { useIpynbCellExecution } from './useIpynbCellExecution'
 import { getNotebookDocumentView, openNotebookDocument } from './ipynb-document-store'
-import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-app-store-test-fixture'
 
 function notebookContent(withIds: boolean): string {
   return JSON.stringify({

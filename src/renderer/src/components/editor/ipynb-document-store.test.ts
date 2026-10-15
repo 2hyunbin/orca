@@ -20,7 +20,7 @@ const { notebookApi, frameListener, disk } = vi.hoisted(() => {
 })
 
 vi.mock('@/store', async () => ({
-  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+  useAppStore: (await import('./ipynb-app-store-test-fixture')).notebookTestAppStore
 }))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
@@ -46,7 +46,7 @@ import {
   notebookTestAppStore,
   notebookTestSaveQueueStore,
   openNotebookTestFile
-} from './ipynb-test-app-store'
+} from './ipynb-app-store-test-fixture'
 
 const FILE_ID = 'nb'
 const FILE_PATH = '/repo/nb.ipynb'

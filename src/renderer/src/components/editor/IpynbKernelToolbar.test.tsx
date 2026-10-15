@@ -101,7 +101,7 @@ describe('ipykernel setup dialog', () => {
     setEnvironment(FILE, venv)
     updateSession(FILE, () => ({
       setup: { base: venv, offer: 'install', phase: 'idle', error: null },
-      queue: [{ key: 'a', code: 'x' }]
+      queue: [{ key: 'a', code: 'x', fileId: FILE }]
     }))
     render(
       <TooltipProvider>

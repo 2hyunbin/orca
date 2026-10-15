@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IpynbCellSource } from './IpynbCellEditor'
 import { parseIpynb, parseIpynbDocumentView } from './ipynb-parse'
-import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-app-store-test-fixture'
 import {
   getIpynbCellKey,
   useIpynbDocument,
@@ -27,7 +27,7 @@ vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
 }))
 vi.mock('@/store', async () => ({
-  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+  useAppStore: (await import('./ipynb-app-store-test-fixture')).notebookTestAppStore
 }))
 vi.mock('@/hooks/use-document-dark-theme', () => ({ useDocumentDarkTheme: () => true }))
 vi.mock('./MonacoCodeExcerpt', () => ({ useMonacoColorizedLines: () => [] }))

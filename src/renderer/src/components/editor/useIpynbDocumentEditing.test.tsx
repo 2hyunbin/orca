@@ -3,11 +3,11 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPendingEditorChange } from './editor-buffer-owners'
 import { parseIpynb, parseIpynbDocumentView } from './ipynb-parse'
-import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-app-store-test-fixture'
 import { useIpynbDocument, useIpynbDocumentEditing } from './useIpynbDocumentEditing'
 
 vi.mock('@/store', async () => ({
-  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+  useAppStore: (await import('./ipynb-app-store-test-fixture')).notebookTestAppStore
 }))
 
 function notebookContent(firstSource = 'a', secondSource = 'b'): string {
