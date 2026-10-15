@@ -107,6 +107,24 @@ export function withdrawPane(
   )
 }
 
+/** A client's layout command (`layout.apply`), applied to the stored partition. */
+export function applyLayout(
+  hostId: ExecutionHostId,
+  command: LayoutCommand,
+  context: TerminalTopologyCommitContext
+): () => DurableProfileStateMutation<LayoutApplyOutcome> {
+  return traced(
+    'apply_layout',
+    () =>
+      commitPaneChange(
+        hostId,
+        applyCommandToSession(hostId, context.getSession(hostId), command),
+        context
+      ),
+    (outcome) => (outcome.ok ? undefined : outcome.code)
+  )
+}
+
 /**
  * A client's layout command (`layout.apply`), applied to each partition holding its tab, routed
  * partition first: that partition's outcome is the reply, and its refusal writes nothing.
