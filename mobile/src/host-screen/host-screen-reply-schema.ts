@@ -20,6 +20,14 @@ export const WORKSPACE_SORT_BY_ARMS = hostUnionArms<PersistedUIState['sortBy']>(
   manual: true
 })
 
+export const WORKSPACE_PROJECT_ORDER_ARMS = hostUnionArms<PersistedUIState['projectOrderBy']>({
+  manual: true,
+  recent: true
+})
+export const WORKSPACE_AGENT_ACTIVITY_LAYOUT_ARMS = hostUnionArms<
+  NonNullable<PersistedUIState['agentActivityDisplayMode']>
+>({ compact: true, full: true })
+
 // One branch per RepoIcon arm; `satisfies` over the mapped union fails tsc on a missing or stale arm.
 const repoIconBranches = {
   lucide: z.looseObject({ type: z.literal('lucide'), name: z.string() }),
@@ -157,6 +165,24 @@ export const hostViewSettingsSchema = z
       sortBy: salvagedOptional('sortBy', z.enum(WORKSPACE_SORT_BY_ARMS)),
       hideSleepingWorkspaces: salvagedOptional('hideSleepingWorkspaces', z.boolean()),
       hideDefaultBranchWorkspace: salvagedOptional('hideDefaultBranchWorkspace', z.boolean()),
+      hideAutomationGeneratedWorkspaces: salvagedOptional(
+        'hideAutomationGeneratedWorkspaces',
+        z.boolean()
+      ),
+      hideCliCreatedWorkspaces: salvagedOptional('hideCliCreatedWorkspaces', z.boolean()),
+      hideDetachedHeadWorkspaces: salvagedOptional('hideDetachedHeadWorkspaces', z.boolean()),
+      // Sent only to this host's own phone (client-ui.ts); absent means the host keeps it local.
+      hideWorkspacesFromOtherDevices: salvagedOptional(
+        'hideWorkspacesFromOtherDevices',
+        z.boolean()
+      ),
+      projectOrderBy: salvagedOptional('projectOrderBy', z.enum(WORKSPACE_PROJECT_ORDER_ARMS)),
+      // Kept as strings: a property a newer desktop adds is carried back unchanged on write.
+      worktreeCardProperties: salvagedOptional('worktreeCardProperties', z.array(z.string())),
+      agentActivityDisplayMode: salvagedOptional(
+        'agentActivityDisplayMode',
+        z.enum(WORKSPACE_AGENT_ACTIVITY_LAYOUT_ARMS)
+      ),
       alwaysShowDefaultBranchWorkspace: salvagedOptional(
         'alwaysShowDefaultBranchWorkspace',
         z.boolean()
