@@ -139,8 +139,7 @@ function compactJournalPayload(body: AgentJournalItemBody): AgentJournalItemBody
   if (body.kind === 'status' && body.turnLifecycle) {
     return {
       ...body,
-      turnLifecycle: { ...body.turnLifecycle, contextUsage: undefined },
-      providerFrame: undefined
+      turnLifecycle: { ...body.turnLifecycle, contextUsage: undefined }
     }
   }
   return body
