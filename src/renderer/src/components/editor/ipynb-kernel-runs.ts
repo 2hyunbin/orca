@@ -1,6 +1,7 @@
+import { toast } from 'sonner'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
 import { updateNotebookCellRun, writeNotebookDraft } from './ipynb-document-store'
-import { applyKernelOutput, type NotebookOutput } from './ipynb-kernel-outputs'
+import { applyKernelOutput, noticeOutput, type NotebookOutput } from './ipynb-kernel-outputs'
 import {
   getSession,
   runningCellKey,
@@ -74,6 +75,33 @@ export function applyOutputFrames(
     updateSession(filePath, ({ runs }) => ({
       runs: { ...runs, [key]: { ...(runs[key] ?? run), clearOnNextOutput } }
     }))
+  }
+}
+
+/** Reports a failure in the first queued cell (a toast when nothing was queued) and drops the queue. */
+export function failQueue(filePath: string, message: string, detail = ''): void {
+  const [head] = getSession(filePath).queue
+  if (!head) {
+    toast.error(message, { description: detail.slice(-500) })
+  }
+  updateSession(filePath, ({ runs }) => ({
+    status: 'off',
+    queue: [],
+    setup: null,
+    runs: head
+      ? {
+          ...runs,
+          [head.key]: { ...startRun(head.fileId), finishedAt: Date.now() }
+        }
+      : runs
+  }))
+  if (head) {
+    const notice = noticeOutput(message + fenced(detail))
+    updateNotebookCellRun(head.fileId, head.key, {
+      outputs: () => [notice],
+      executionCount: null
+    })
+    writeNotebookDraft(head.fileId)
   }
 }
 

@@ -1,4 +1,3 @@
-import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type {
@@ -9,7 +8,7 @@ import type {
 } from '../../../../shared/notebook-kernel-types'
 import { updateNotebookCellRun, writeNotebookDraft } from './ipynb-document-store'
 import { noticeOutput } from './ipynb-kernel-outputs'
-import { applyOutputFrames, endRun, fenced, startRun } from './ipynb-kernel-runs'
+import { applyOutputFrames, endRun, failQueue, fenced, startRun } from './ipynb-kernel-runs'
 import {
   getSession,
   runningCellKey,
@@ -22,33 +21,6 @@ import {
 
 const INTERRUPT_STALL_MS = 10_000
 const sessionLifetimes = new Map<string, symbol>()
-
-/** Reports a failure in the first queued cell (a toast when nothing was queued) and drops the queue. */
-function failQueue(filePath: string, message: string, detail = ''): void {
-  const [head] = getSession(filePath).queue
-  if (!head) {
-    toast.error(message, { description: detail.slice(-500) })
-  }
-  updateSession(filePath, ({ runs }) => ({
-    status: 'off',
-    queue: [],
-    setup: null,
-    runs: head
-      ? {
-          ...runs,
-          [head.key]: { ...startRun(head.fileId), finishedAt: Date.now() }
-        }
-      : runs
-  }))
-  if (head) {
-    const notice = noticeOutput(message + fenced(detail))
-    updateNotebookCellRun(head.fileId, head.key, {
-      outputs: () => [notice],
-      executionCount: null
-    })
-    writeNotebookDraft(head.fileId)
-  }
-}
 
 function pump(filePath: string): void {
   const session = getSession(filePath)
