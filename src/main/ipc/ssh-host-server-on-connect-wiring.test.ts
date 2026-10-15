@@ -131,6 +131,15 @@ describe('connect-time server decision against the real profile', () => {
     expect(mocks.convert).toHaveBeenCalledTimes(1)
   })
 
+  it('spends a "Move anyway" consent on a conversion that throws', async () => {
+    store.updateSshTarget(TARGET.id, { managedServerLeaveBehind: { confirmedAt: 'now' } })
+    mocks.convert.mockRejectedValue(new Error('orcad_migration_commit_not_proven'))
+    await expect(hostServerOnConnectDeps(userDataPath).convert(target(), null)).rejects.toThrow(
+      'orcad_migration_commit_not_proven'
+    )
+    expect(target().managedServerLeaveBehind).toBeUndefined()
+  })
+
   it('drops progress from a decision whose connect was cancelled', () => {
     const deps = hostServerOnConnectDeps(userDataPath)
     deps.progress(target(), 'deploying')
