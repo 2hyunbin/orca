@@ -77,4 +77,77 @@ describe('buildRuntimeWorktreePsSummaries', () => {
 
     expect(summary?.removalError).toBe('Operation not permitted')
   })
+
+  it('sends the Workspace options row facts the sidebar reads', () => {
+    const row = (id: string, fields: Record<string, unknown>) =>
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the builder reads only these fields for a git row.
+      ({
+        id,
+        repoId: 'repo-1',
+        path: `/workspace/${id}`,
+        branch: 'feature',
+        head: 'abc1234',
+        isArchived: false,
+        isMainWorktree: false,
+        parentWorktreeId: null,
+        childWorktreeIds: [],
+        lineage: null,
+        lastActivityAt: 0,
+        ...fields
+      }) as unknown as ResolvedWorktree
+    const worktrees = [
+      row('main', { isMainWorktree: true, branch: 'refs/heads/main' }),
+      row('automation', { automationProvenance: { kind: 'created-by-automation' } }),
+      row('cli', { cliProvenance: { kind: 'created-by-cli', createdAt: 0 } }),
+      row('detached', { branch: '' }),
+      row('folder-root', { repoId: 'folder-repo', isMainWorktree: true, branch: '', head: '' })
+    ]
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the builder reads only these store members.
+    const store = {
+      getRepos: () => [
+        { id: 'repo-1', path: '/r', displayName: 'Repo', badgeColor: '#000', addedAt: 0 },
+        {
+          id: 'folder-repo',
+          path: '/f',
+          displayName: 'Folder',
+          badgeColor: '#000',
+          addedAt: 0,
+          kind: 'folder'
+        }
+      ],
+      getWorktreeMeta: () => undefined,
+      getAllWorktreeMeta: () => ({}),
+      getFolderWorkspaces: () => [],
+      getProjectGroups: () => []
+    } as unknown as RuntimeStore
+
+    const summaries = buildRuntimeWorktreePsSummaries({
+      store,
+      resolvedWorktrees: worktrees,
+      platformByRepoId: new Map()
+    })
+    const facts = (id: string) => {
+      const summary = summaries.get(id)
+      return {
+        defaultBranchWorkspace: summary?.defaultBranchWorkspace,
+        automationCreated: summary?.automationCreated,
+        cliCreated: summary?.cliCreated,
+        detachedHead: summary?.detachedHead
+      }
+    }
+    const none = { automationCreated: undefined, cliCreated: undefined, detachedHead: undefined }
+    expect(facts('main')).toEqual({ ...none, defaultBranchWorkspace: true })
+    expect(facts('automation')).toEqual({
+      ...none,
+      defaultBranchWorkspace: false,
+      automationCreated: true
+    })
+    expect(facts('cli')).toEqual({ ...none, defaultBranchWorkspace: false, cliCreated: true })
+    expect(facts('detached')).toEqual({
+      ...none,
+      defaultBranchWorkspace: false,
+      detachedHead: true
+    })
+    expect(facts('folder-root')).toEqual({ ...none, defaultBranchWorkspace: true })
+  })
 })
