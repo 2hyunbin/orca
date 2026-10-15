@@ -1,0 +1,198 @@
+import type { PersistedUIState } from '../persisted-ui-state-types'
+import type {
+  AgentActivityDisplayMode,
+  ProjectOrderBy,
+  WorktreeCardProperty
+} from '../ui-chrome-types'
+import { TASK_WORKTREE_CARD_PROPERTIES } from '../worktree/card-properties'
+
+// The desktop sidebar's "Workspace options", as data. The desktop menu and the phone sheet both
+// render from this list, each through a renderer table keyed on WorkspaceViewOptionKey, so an
+// option added here fails to compile until both surfaces render it.
+
+export type WorkspaceViewChoice<Id extends string> = {
+  id: Id
+  label: string
+  description?: string
+}
+
+export const WORKSPACE_GROUP_BY_CHOICES = [
+  { id: 'none', label: 'None' },
+  { id: 'workspace-status', label: 'Status' },
+  { id: 'pr-status', label: 'PR' },
+  { id: 'repo', label: 'Project' }
+] as const satisfies readonly WorkspaceViewChoice<PersistedUIState['groupBy']>[]
+
+export const WORKSPACE_SORT_BY_CHOICES = [
+  { id: 'name', label: 'Name' },
+  {
+    id: 'smart',
+    label: 'Agent Activity',
+    description: 'Agents that need attention, then most recent activity.'
+  },
+  { id: 'recent', label: 'Recent' },
+  { id: 'repo', label: 'Project' },
+  {
+    id: 'manual',
+    label: 'Manual',
+    description: 'Drag workspaces to arrange them within each group.'
+  }
+] as const satisfies readonly WorkspaceViewChoice<PersistedUIState['sortBy']>[]
+
+export const WORKSPACE_PROJECT_ORDER_CHOICES = [
+  { id: 'manual', label: 'Manual', description: 'Drag projects to arrange them' },
+  { id: 'recent', label: 'Recent', description: 'Most recent workspace activity' }
+] as const satisfies readonly WorkspaceViewChoice<ProjectOrderBy>[]
+
+/** Card layout is the `compactWorktreeCards` setting, not UI state. */
+export const WORKSPACE_CARD_LAYOUT_CHOICES = [
+  { id: 'detailed', label: 'Detailed' },
+  { id: 'compact', label: 'Compact' }
+] as const satisfies readonly WorkspaceViewChoice<string>[]
+
+export type WorkspaceCardLayout = (typeof WORKSPACE_CARD_LAYOUT_CHOICES)[number]['id']
+
+export const WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES = [
+  { id: 'compact', label: 'Compact' },
+  { id: 'full', label: 'Full list' }
+] as const satisfies readonly WorkspaceViewChoice<AgentActivityDisplayMode>[]
+
+/** "Show properties": one card property per row. */
+export const WORKSPACE_CARD_PROPERTY_CHOICES = [
+  { id: 'issue', label: 'GitHub ticket' },
+  { id: 'linear-issue', label: 'Linear issue' },
+  { id: 'jira-issue', label: 'Jira issue' },
+  { id: 'pr', label: 'PR/MR link' },
+  { id: 'automation', label: 'Automation' },
+  { id: 'comment', label: 'Notes' },
+  { id: 'ports', label: 'Ports' },
+  { id: 'inline-agents', label: 'Agent activity' },
+  { id: 'host', label: 'Host' }
+] as const satisfies readonly WorkspaceViewChoice<WorktreeCardProperty>[]
+
+export type WorkspaceCardDisplayChoice = WorkspaceViewChoice<string> & {
+  properties: readonly WorktreeCardProperty[]
+}
+
+/** "Card display" (the experimental card style): a row may toggle several properties at once. */
+export function getWorkspaceCardDisplayChoices(
+  hasProjectGroups: boolean
+): WorkspaceCardDisplayChoice[] {
+  return [
+    { id: 'issue', properties: ['issue'], label: 'GitHub issues' },
+    { id: 'linear-issue', properties: ['linear-issue'], label: 'Linear issues' },
+    { id: 'jira-issue', properties: ['jira-issue'], label: 'Jira issues' },
+    { id: 'comment', properties: ['comment'], label: 'Notes' },
+    { id: 'automation', properties: ['automation'], label: 'Automation' },
+    { id: 'cli', properties: ['cli'], label: 'Orca CLI' },
+    { id: 'ports', properties: ['ports'], label: 'Ports' },
+    { id: 'inline-agents', properties: ['inline-agents'], label: 'Agent statuses' },
+    { id: 'host', properties: ['host'], label: 'Host' },
+    {
+      id: 'branch',
+      properties: ['branch'],
+      // Why: project groups can hold folder workspaces, whose identity is a path, not a branch.
+      label: hasProjectGroups ? 'Branch / folder path' : 'Branch name'
+    }
+  ]
+}
+
+/** The classic card's task property row toggles every task provider together. */
+export const WORKSPACE_TASK_CARD_PROPERTIES: readonly WorktreeCardProperty[] =
+  TASK_WORKTREE_CARD_PROPERTIES
+
+export type WorkspaceViewSection = 'show' | 'group' | 'arrange' | 'filters'
+
+export const WORKSPACE_VIEW_SECTION_LABELS: Record<WorkspaceViewSection, string | null> = {
+  show: 'Show',
+  group: 'Group by',
+  arrange: null,
+  filters: 'Filters'
+}
+
+export const WORKSPACE_VIEW_OPTIONS = [
+  { key: 'hosts', section: 'show', label: 'Hosts' },
+  { key: 'projects', section: 'show', label: 'Projects' },
+  { key: 'groupBy', section: 'group', label: 'Group by' },
+  { key: 'sortBy', section: 'arrange', label: 'Sort by' },
+  { key: 'projectOrderBy', section: 'arrange', label: 'Project order' },
+  { key: 'cardLayout', section: 'arrange', label: 'Card layout' },
+  { key: 'cardProperties', section: 'arrange', label: 'Show properties' },
+  { key: 'cardDisplay', section: 'arrange', label: 'Card display' },
+  { key: 'hideSleepingWorkspaces', section: 'filters', label: 'Hide sleeping' },
+  {
+    key: 'alwaysShowDefaultBranchWorkspace',
+    section: 'filters',
+    label: 'Except default branch'
+  },
+  { key: 'hideDefaultBranchWorkspace', section: 'filters', label: 'Hide default branch' },
+  {
+    key: 'hideAutomationGeneratedWorkspaces',
+    section: 'filters',
+    label: 'Hide automation-created'
+  },
+  { key: 'hideCliCreatedWorkspaces', section: 'filters', label: 'Hide CLI-created' },
+  {
+    key: 'hideWorkspacesFromOtherDevices',
+    section: 'filters',
+    label: 'Hide other-client workspaces'
+  },
+  { key: 'hideDetachedHeadWorkspaces', section: 'filters', label: 'Hide detached HEAD' }
+] as const satisfies readonly { key: string; section: WorkspaceViewSection; label: string }[]
+
+export type WorkspaceViewOption = (typeof WORKSPACE_VIEW_OPTIONS)[number]
+export type WorkspaceViewOptionKey = WorkspaceViewOption['key']
+
+/** What decides which options a surface shows right now. */
+export type WorkspaceViewOptionContext = {
+  groupBy: PersistedUIState['groupBy']
+  hideSleepingWorkspaces: boolean
+  hideWorkspacesFromOtherDevices: boolean
+  newCardStyle: boolean
+  /** Any host besides this machine; the host picker has nothing to choose otherwise. */
+  hasRemoteHosts: boolean
+  projectCount: number
+  /** Paired servers exist, or might: other-client workspaces only come from shared servers. */
+  mayHaveServerHosts: boolean
+}
+
+const SHOWN: Record<WorkspaceViewOptionKey, (context: WorkspaceViewOptionContext) => boolean> = {
+  hosts: (context) => context.hasRemoteHosts,
+  projects: (context) => context.projectCount > 1,
+  groupBy: () => true,
+  sortBy: () => true,
+  // Why: project order only shows when grouping by project.
+  projectOrderBy: (context) => context.groupBy === 'repo',
+  cardLayout: (context) => !context.newCardStyle,
+  cardProperties: (context) => !context.newCardStyle,
+  cardDisplay: (context) => context.newCardStyle,
+  hideSleepingWorkspaces: () => true,
+  // Why: the exemption only bites while sleeping workspaces are being swept.
+  alwaysShowDefaultBranchWorkspace: (context) => context.hideSleepingWorkspaces,
+  hideDefaultBranchWorkspace: () => true,
+  hideAutomationGeneratedWorkspaces: () => true,
+  hideCliCreatedWorkspaces: () => true,
+  // Why the current value: an active filter must stay reachable to turn it off.
+  hideWorkspacesFromOtherDevices: (context) =>
+    context.mayHaveServerHosts || context.hideWorkspacesFromOtherDevices,
+  hideDetachedHeadWorkspaces: () => true
+}
+
+/** The options a surface renders now, grouped by section in menu order; empty sections are dropped. */
+export function getShownWorkspaceViewSections(
+  context: WorkspaceViewOptionContext
+): { section: WorkspaceViewSection; options: WorkspaceViewOption[] }[] {
+  const sections: { section: WorkspaceViewSection; options: WorkspaceViewOption[] }[] = []
+  for (const option of WORKSPACE_VIEW_OPTIONS) {
+    if (!SHOWN[option.key](context)) {
+      continue
+    }
+    const last = sections.at(-1)
+    if (last?.section === option.section) {
+      last.options.push(option)
+    } else {
+      sections.push({ section: option.section, options: [option] })
+    }
+  }
+  return sections
+}
