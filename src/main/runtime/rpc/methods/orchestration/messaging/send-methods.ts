@@ -28,7 +28,10 @@ import { sendGroupMessage } from './send-group'
 import { sendFederatedControlMail } from './send-control-mail'
 import { orchestrationCallerIdentity } from '../runs/run-scope'
 import { assertLifecycleCallerIsNotAnotherParty } from './lifecycle-caller-fence'
-import { observeRunCoordinator } from '../../../../orchestration/run-coordinator-observation'
+import {
+  observeRunCoordinator,
+  runTakesCoordinator
+} from '../../../../orchestration/run-coordinator-observation'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 
@@ -39,7 +42,7 @@ async function runCoordinatorUnreachableWarning(
   to: string
 ): Promise<SendRecipientWarning | null> {
   const run = to.startsWith('run:') ? db.getRun(to.slice('run:'.length)) : undefined
-  if (!run || run.legacy === 1) {
+  if (!run || !runTakesCoordinator(run)) {
     return null
   }
   const coordinator = await observeRunCoordinator(runtime, db, run)
@@ -47,13 +50,16 @@ async function runCoordinatorUnreachableWarning(
   if (coordinator && coordinator.status !== 'exited') {
     return null
   }
+  // Printed after `Sent msg_...`, so it names the Run; observed reasons are whole sentences.
+  const address = coordinator?.address ? ` ${coordinator.address}` : ''
+  const reason = coordinator?.reason ? ` ${coordinator.reason}` : ''
   const who = coordinator
-    ? `Its coordinator ${coordinator.address} is ${coordinator.status}${coordinator.reason ? ` (${coordinator.reason})` : ''}`
-    : 'No coordinator is bound to it'
+    ? `Run ${run.id}'s coordinator${address} has exited.${reason}`
+    : `Run ${run.id} has no coordinator bound.`
   return {
     code: 'recipient_unreachable',
     recipient: to,
-    message: `${who}, so this waits unread in ${to}. Tell the user rather than sending it to someone else.`
+    message: `${who} This message waits unread in ${to}. Tell the user rather than sending it to someone else.`
   }
 }
 

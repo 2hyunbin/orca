@@ -3,6 +3,7 @@ import type { RpcContext } from '../../../core'
 import { createOrchestrationRpcHarness } from '../rpc-test-harness'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../../../shared/protocol-version'
 
 describe('orchestration RPC methods', () => {
   const h = createOrchestrationRpcHarness()
@@ -97,6 +98,28 @@ describe('orchestration RPC methods', () => {
       await expect(
         call('orchestration.runUse', { id: 'run_legacy_local', from: 'term_new' })
       ).rejects.toMatchObject({ code: 'run_not_found' })
+    })
+
+    it('does not tell a worker on a federated host that its Run has no coordinator', async () => {
+      setup(false)
+      db.createRemoteDispatchAttachment({
+        runId: 'run_home',
+        dispatchId: 'dispatch_remote',
+        taskId: 'task_remote',
+        homePeerFingerprint: 'home-peer',
+        protocolVersion: ORCHESTRATION_CONTRACT_VERSION,
+        runtimeEpoch: 'epoch-1',
+        mutationReceipt: {
+          callerFingerprint: 'home-peer',
+          requestId: 'request_remote',
+          method: 'orchestration.federationAttachStart',
+          payloadHash: 'hash_remote'
+        }
+      })
+
+      expect(await call('orchestration.runShow', { id: 'run_home' })).toMatchObject({
+        coordinator: { status: 'unverifiable', reason: 'The Run is coordinated from another host.' }
+      })
     })
 
     it('requires an explicit binding before task mutation', async () => {

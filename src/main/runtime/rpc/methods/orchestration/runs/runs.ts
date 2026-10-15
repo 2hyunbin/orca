@@ -2,7 +2,10 @@ import { defineMethod } from '../../../core'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { assertCallerHandleMatchesEvidence, resolveOrchestrationCaller } from './run-scope'
 import { exposeRun } from './run-receipt'
-import { observeRunCoordinator } from '../../../../orchestration/run-coordinator-observation'
+import {
+  observeRunCoordinator,
+  runTakesCoordinator
+} from '../../../../orchestration/run-coordinator-observation'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import type { OrchestrationCallerIdentity } from '../../../../orchestration/orchestration-caller-identity'
 import { currentDispatchAssigneeRun } from '../messaging/recipient-routing'
@@ -147,8 +150,11 @@ export const ORCHESTRATION_RUN_METHODS = [
       if (!run) {
         throw new OrchestrationError('run_not_found', `Run ${params.id} was not found.`)
       }
-      // Additive: a worker reads whether its coordinator can take mail, not a null handle.
-      return { run: exposeRun(run), coordinator: await observeRunCoordinator(runtime, db, run) }
+      // Additive: a worker reads whether its coordinator can take mail, not a null handle. Absent,
+      // as from an older runtime, for a Run that never takes one; null means none is bound yet.
+      return runTakesCoordinator(run)
+        ? { run: exposeRun(run), coordinator: await observeRunCoordinator(runtime, db, run) }
+        : { run: exposeRun(run) }
     }
   })
 ]

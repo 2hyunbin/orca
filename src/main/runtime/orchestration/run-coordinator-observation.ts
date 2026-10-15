@@ -9,15 +9,21 @@ import type { OrcaRuntimeService } from '../orca-runtime'
 import { resolveStructuredWorkerIdentity } from '../structured-worker-authority'
 import { observeChatAssignee } from './chat-assignee'
 import type { OrchestrationDb } from './db'
+import { UNBOUND_RUN_ID } from './db/contract-constants'
 import { handleLessCoordinatorSessionId } from './structured-session-mail-target'
 import type { RunRow } from './types'
 
 export type RunCoordinatorObservation = {
-  /** The address mail to this coordinator is queued under. */
-  address: string
+  /** Where mail to this coordinator is queued; absent when another host coordinates. */
+  address?: string
   /** A chat at rest is `live`: the mail that reaches it starts its agent. */
   status: 'live' | 'exited' | 'unverifiable'
   reason?: string
+}
+
+/** The legacy Run is inspect-only, and the unbound one files mail between terminals in no Run. */
+export function runTakesCoordinator(run: Pick<RunRow, 'id' | 'legacy'>): boolean {
+  return run.legacy !== 1 && run.id !== UNBOUND_RUN_ID
 }
 
 /** Null when no coordinator is bound: mail waits in the Run mailbox until one runs run-use. */
@@ -29,6 +35,10 @@ export async function observeRunCoordinator(
   db: OrchestrationDb,
   run: RunRow
 ): Promise<RunCoordinatorObservation | null> {
+  // A worker host's stub of a federated Run: the coordinator is bound, and observable, on its home.
+  if (run.home_database !== 'this_database') {
+    return { status: 'unverifiable', reason: 'The Run is coordinated from another host.' }
+  }
   const handle = run.coordinator_handle
   const sessionId =
     handleLessCoordinatorSessionId(run) ??
@@ -48,10 +58,11 @@ export async function observeRunCoordinator(
   }
   const verdict = runtime.getTerminalLivenessVerdict(handle)
   if (!verdict) {
+    // Also the answer for a healthy terminal before the first inventory sweep observes it.
     return {
       address: handle,
       status: 'unverifiable',
-      reason: 'This host has no record of the terminal.'
+      reason: 'No liveness observation of the terminal yet.'
     }
   }
   return {
