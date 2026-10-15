@@ -69,6 +69,20 @@ function fence(): number {
 }
 
 describe('the idle sweep', () => {
+  it('keeps owed background work on update and releases an idle provider without the cache wait', async () => {
+    await foundRestTestChat(rig)
+    rig.host.collaboratorsForTests().lifetime.idleSweep.dispose()
+    rig.sink.readChildWork.mockReturnValue([childView('update-child', 'agent', 'working')])
+    expect(rig.host.restartWorkCount()).toBeGreaterThan(0)
+    await rig.host.drainForRestart()
+    expect(rig.adapter.closeSession).not.toHaveBeenCalled()
+    rig.sink.readChildWork.mockReturnValue([])
+    expect(rig.host.restartWorkCount()).toBe(0)
+    await rig.host.drainForRestart()
+    expect(rig.host.hasLoadedProviders()).toBe(false)
+    expect(rig.store.getRecord(SESSION)).not.toBeNull()
+  })
+
   it('stops an idle agent and keeps the conversation, its status row and its reader (P2-07)', async () => {
     await foundRestTestChat(rig)
     const reader = collectSubscriber()

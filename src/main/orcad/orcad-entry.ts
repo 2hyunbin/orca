@@ -1,3 +1,4 @@
+import { bindOrcadRestartShutdown } from './orcad-restart-admission'
 /**
  * `orcad` — the Orca runtime served without Electron.
  *
@@ -351,4 +352,5 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     beforeManagedStop: prepareOrcadManagedStop
   })
   bindOrcadIdleShutdown(requestShutdown)
+  bindOrcadRestartShutdown(requestShutdown)
 }

@@ -1,3 +1,5 @@
+import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
+import { structuredAgentSessionRestartRefusal } from './structured-agent-session-restart-admission'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
@@ -21,6 +23,8 @@ import {
   pinnedAgentSessionLaunchEnv
 } from './structured-agent-session-launch-env'
 import {
+  adapterSupportsCreate,
+  knownAgentIds,
   adapterSupportsCreateIfDeclared,
   hostCanStartRecord
 } from './structured-agent-session-provider-support'
@@ -64,6 +68,10 @@ async function foundConversation(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionCreateOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
+  const updating = structuredAgentSessionRestartRefusal()
+  if (updating) {
+    return updating
+  }
   const { deps } = context
   const { store } = deps
   const sessionId = params.envelope.sessionId
@@ -273,6 +281,10 @@ export function structuredAgentSessionEntryDelegates(
   context: () => StructuredAgentSessionAttachContext
 ) {
   return {
+    supportsCreate: (location: AgentSessionExecutionLocation, agent: string) =>
+      adapterSupportsCreate(context().deps.adapter, location, agent),
+    agentDefinitions: () => context().deps.agents.definitions(),
+    knownAgentIds: () => knownAgentIds(context().deps),
     attach: (
       caller: StructuredAgentSessionCaller,
       params: AgentSessionAttachParams,
