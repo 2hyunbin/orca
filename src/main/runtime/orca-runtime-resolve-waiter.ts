@@ -4,7 +4,7 @@ import type { RuntimeTerminalWait } from '../../shared/runtime-terminal-contract
 import type { BrowserWindow } from 'electron'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 
-export class OrcaRuntimeWithResolveWaiter extends OrcaRuntimeWithDeliverPendingMessages {
+export abstract class OrcaRuntimeWithResolveWaiter extends OrcaRuntimeWithDeliverPendingMessages {
   protected resolveWaiter(waiter: TerminalWaiter, result: RuntimeTerminalWait): void {
     this.terminalWaiters.resolve(waiter, result)
   }
