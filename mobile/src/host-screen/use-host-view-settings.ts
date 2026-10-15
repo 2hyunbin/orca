@@ -32,10 +32,9 @@ import type { FilterState } from '../worktree/workspace-list-types'
 export function useHostViewSettings(args: {
   client: RpcClient | null
   connState: ConnectionState
-  hostId: string | undefined
   state: HostScreenState
 }) {
-  const { client, connState, hostId, state } = args
+  const { client, connState, state } = args
   const { clientRef, setShowPinnedInGroups, setView, viewRef } = state
 
   const localEditsRef = useRef(0)
@@ -80,7 +79,6 @@ export function useHostViewSettings(args: {
       return
     }
     const requestClient = client
-    const requestHostId = hostId
     const editsAtRequest = localEditsRef.current
     try {
       // Each half applies on its own, so one failing read does not hold back the other.
@@ -88,7 +86,8 @@ export function useHostViewSettings(args: {
         hostViewSettingsRead.request(requestClient).catch(() => null),
         hostListSettingsRead.request(requestClient).catch(() => null)
       ])
-      if (clientRef.current !== requestClient || hostId !== requestHostId) {
+      // Why the client, not the host id: a new host always arrives with a new client.
+      if (clientRef.current !== requestClient) {
         return
       }
       const hostSettings = settingsReply
@@ -101,8 +100,8 @@ export function useHostViewSettings(args: {
       if (localEditsRef.current !== editsAtRequest) {
         return
       }
-      const settings = uiReply ? hostViewSettingsRead.interpret(uiReply) : null
-      const read = settings?.accepted ? settings.value : undefined
+      const uiRead = uiReply ? hostViewSettingsRead.interpret(uiReply) : null
+      const read = uiRead?.accepted ? uiRead.value : undefined
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
       const ui = read as WorkspaceViewSettings | undefined
       let next = ui ? applyDesktopViewSettings(viewRef.current, ui) : viewRef.current
@@ -116,7 +115,7 @@ export function useHostViewSettings(args: {
     } catch {
       // Transient transport failure; retry on the next focus/connect.
     }
-  }, [client, connState, hostId, applyViewState])
+  }, [client, connState, applyViewState])
 
   const handleSortChange = useCallback(
     (value: MobileViewState['sortBy']) => {
