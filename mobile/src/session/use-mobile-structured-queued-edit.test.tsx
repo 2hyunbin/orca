@@ -213,6 +213,12 @@ describe('mobile in-place queued Edit', () => {
     })
     expect(hook!.queued.editor?.text).toBe('saved text')
     expect(hook!.queued.cards[0]?.text).toBe('saved text')
+    const retry = sendRequest.mock.calls.findLast(
+      ([method]) => method === 'agentSession.queuedMessageUpdate'
+    )
+    expect(fieldsOf(retry?.[1]).expectedBodyFingerprint).toBe(
+      agentSessionSendBodyFingerprint(SESSION_ID, newer)
+    )
     expect(error).toHaveBeenCalledTimes(1)
     expect(append).toHaveBeenCalledTimes(1)
   })

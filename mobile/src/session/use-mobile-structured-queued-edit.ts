@@ -140,6 +140,10 @@ export function useMobileStructuredQueuedEdit(args: {
     if (!edit || edit.saving || !sessionId || !queuedMessageWithEditedText(edit.body, edit.text)) {
       return false
     }
+    if (edit.text === queuedMessageEditableText(edit.body)) {
+      close()
+      return true
+    }
     edit.saving = true
     render(edit)
     const result = await mutate<AgentSessionQueuedMessageUpdateResult>(
@@ -148,7 +152,8 @@ export function useMobileStructuredQueuedEdit(args: {
       { messageId: edit.messageId, expectedBodyFingerprint: edit.fingerprint, text: edit.text },
       () => isOpen(active, edit)
     )
-    if (!isOpen(active, edit)) {
+    // A reply landing mid chat switch belongs to the chat being left.
+    if (!isOpen(active, edit) || clientRef.current.sessionKey !== edit.scope) {
       return false
     }
     edit.saving = false
@@ -164,8 +169,13 @@ export function useMobileStructuredQueuedEdit(args: {
       }
       // Someone else's edit landed first: the typing goes to the chat box, and the editor
       // opens again on the newer text.
-      if (result.value.status === 'changed' && args.appendComposerText?.(edit.text)) {
-        onSendError('This message changed while you were editing. Your edit is in the chat box.')
+      const typed = edit.text.trim() !== ''
+      if (result.value.status === 'changed' && (!typed || args.appendComposerText?.(edit.text))) {
+        onSendError(
+          typed
+            ? 'This message changed while you were editing. Your edit is in the chat box.'
+            : 'This message changed while you were editing.'
+        )
         reopen.current = { scope: edit.scope, messageId: edit.messageId, stale: edit.fingerprint }
         close()
         return false

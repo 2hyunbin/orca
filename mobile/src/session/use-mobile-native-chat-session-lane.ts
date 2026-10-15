@@ -34,7 +34,7 @@ export function useMobileNativeChatSessionLane({
   sessionId: string | null
   sourceIdentity: Parameters<typeof useMobileNativeChatSession>[0]['sourceIdentity']
   hostSupport: StructuredAgentSessionHostSupport | null
-  /** The active pane's live composer for older-host queued Edit's copy-first fallback.
+  /** The active pane's live composer; a queued card's Edit copies through it.
    *  A ref because the drafts (and their append) mount after this lane. */
   appendComposerTextRef: { readonly current: (text: string) => boolean }
   enabled: boolean
