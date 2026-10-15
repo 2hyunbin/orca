@@ -48,6 +48,7 @@ export type RuntimeClientEvent =
       setup?: WorktreeSetupLaunch
       startup?: WorktreeStartupLaunch
       defaultTabs?: WorktreeDefaultTabsLaunch
+      providesInitialSurface?: boolean
       /** Absent on older hosts; clients must not infer navigation intent from a broadcast. */
       navigation?: RuntimeNavigationTarget
     }
@@ -77,7 +78,8 @@ export function toRuntimeActivateWorktreeEvent(
   setup?: CreateWorktreeResult['setup'],
   startup?: WorktreeStartupLaunch,
   defaultTabs?: CreateWorktreeResult['defaultTabs'],
-  navigation?: RuntimeNavigationTarget
+  navigation?: RuntimeNavigationTarget,
+  providesInitialSurface?: boolean
 ): RuntimeActivateWorktreeEvent {
   return {
     type: 'activateWorktree',
@@ -86,6 +88,7 @@ export function toRuntimeActivateWorktreeEvent(
     ...(navigation ? { navigation } : {}),
     ...(setup ? { setup } : {}),
     ...(startup ? { startup } : {}),
-    ...(defaultTabs ? { defaultTabs } : {})
+    ...(defaultTabs ? { defaultTabs } : {}),
+    ...(providesInitialSurface ? { providesInitialSurface } : {})
   }
 }
