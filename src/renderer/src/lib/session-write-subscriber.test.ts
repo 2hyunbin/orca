@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore, type AppState } from '@/store'
 import {
+  notifyEditorBufferPolicyChanged,
+  registerEditorBufferOwner
+} from '@/components/editor/editor-buffer-owners'
+import {
   createSessionWriteSubscriber,
   type WorkspaceSessionWrite
 } from './session-write-subscriber'
@@ -118,6 +122,56 @@ describe('createSessionWriteSubscriber', () => {
 
     unsubStoreTicks()
     cleanup()
+  })
+
+  it('re-patches a dirty draft on a policy transition without resetting an armed write', () => {
+    const file = {
+      id: '/repo/book.ipynb',
+      filePath: '/repo/book.ipynb',
+      relativePath: 'book.ipynb',
+      worktreeId: 'wt-1',
+      language: 'notebook',
+      mode: 'edit' as const,
+      isDirty: true
+    }
+    const text = '{"cells":[]}'
+    let eligible = true
+    const unregister = registerEditorBufferOwner(file.id, {
+      flush: () => {},
+      canBackUp: () => eligible
+    })
+    useAppStore.setState({
+      openFiles: [file],
+      editorDrafts: { [file.id]: text },
+      workspaceSessionReady: true,
+      hydrationSucceeded: true
+    })
+    const persist = vi.fn<(payload: WorkspaceSessionWrite) => void>()
+    const cleanup = createSessionWriteSubscriber({ store: useAppStore, persist })
+    vi.advanceTimersByTime(200)
+    expect(
+      persist.mock.lastCall?.[0].patch.openFilesByWorktree?.['wt-1']?.[0]?.dirtyDraftContent
+    ).toBe(text)
+    persist.mockClear()
+
+    eligible = false
+    notifyEditorBufferPolicyChanged()
+    vi.advanceTimersByTime(100)
+    notifyEditorBufferPolicyChanged()
+    vi.advanceTimersByTime(60)
+    expect(persist).toHaveBeenCalledTimes(1)
+    expect(
+      persist.mock.lastCall?.[0].patch.openFilesByWorktree?.['wt-1']?.[0]?.dirtyDraftContent
+    ).toBeUndefined()
+
+    eligible = true
+    notifyEditorBufferPolicyChanged()
+    vi.advanceTimersByTime(200)
+    expect(
+      persist.mock.lastCall?.[0].patch.openFilesByWorktree?.['wt-1']?.[0]?.dirtyDraftContent
+    ).toBe(text)
+    cleanup()
+    unregister()
   })
 
   it('re-checks the hydration gate when a pending debounce fires', () => {

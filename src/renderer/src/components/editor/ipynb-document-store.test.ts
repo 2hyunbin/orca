@@ -44,6 +44,7 @@ import { reloadTabContentFromDisk } from './ExternalFileChangeBanner'
 import { updateIpynbCellSource } from './ipynb-cell-mutations'
 import {
   editNotebookDocument,
+  getNotebookDocumentView,
   openNotebookDocument,
   reconcileNotebookDocument
 } from './ipynb-document-store'
@@ -175,7 +176,7 @@ describe('notebook document store', () => {
     expect(isNotebookTestFileDirty(FILE_ID)).toBe(true)
   })
 
-  it('never writes over Source view text; saving there writes it exactly, output follows on leaving', async () => {
+  it('saves Source text exactly and does not restore output deliberately removed there', async () => {
     const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
     await startRun()
     stdout('1\n')
@@ -191,13 +192,58 @@ describe('notebook document store', () => {
     setEditorDraft(FILE_ID, typed)
     await save()
     expect(disk.files.get(FILE_PATH)).toBe(typed)
-    expect(isNotebookTestFileDirty(FILE_ID)).toBe(true)
+    expect(isNotebookTestFileDirty(FILE_ID)).toBe(false)
+
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(getNotebookDocumentView(FILE_ID)?.document?.cells[0]).toMatchObject({
+      source: ['print("edited")'],
+      outputs: []
+    })
+  })
+
+  it('keeps newer live output when Source changes only code and retains normalized output', async () => {
+    const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
+    await startRun()
+    stdout('one\n')
+    setMarkdownViewMode(FILE_ID, 'source')
+    const source = JSON.parse(draft() ?? '{}')
+    source.cells[0].source = ['print("edited")']
+    setEditorDraft(FILE_ID, JSON.stringify(source))
+    stdout('two\n')
+    frame({ type: 'done', status: 'ok', execution_count: 1 })
 
     setMarkdownViewMode(FILE_ID, 'rich')
     expect(savedCell(draft())).toMatchObject({
       source: ['print("edited")'],
-      outputs: [{ text: ['1\n', '2\n'] }]
+      outputs: [{ text: ['one\n', 'two\n'] }]
     })
+  })
+
+  it('classifies exact Source text with or without a retained document and preserves malformed text', () => {
+    const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
+    const large = JSON.parse(notebookText('print(1)'))
+    large.cells[0].outputs = [
+      { output_type: 'stream', name: 'stdout', text: ['x'.repeat(10_000 * 1024 + 1)] }
+    ]
+    setMarkdownViewMode(FILE_ID, 'source')
+    setEditorDraft(FILE_ID, JSON.stringify(large))
+    notebookTestAppStore.getState().markFileDirty(FILE_ID, true)
+    expect(backedUpDraft()).toBeUndefined()
+
+    setEditorDraft(FILE_ID, notebookText('print(2)'))
+    expect(backedUpDraft()).toBe(draft())
+    setEditorDraft(FILE_ID, '{"cells": [')
+    expect(backedUpDraft()).toBe('{"cells": [')
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(backedUpDraft()).toBe('{"cells": [')
+
+    notebookTestAppStore.setState({ openFiles: [] })
+    openNotebookTestFile(FILE_ID, FILE_PATH)
+    notebookTestAppStore.getState().setEditorDraft(FILE_ID, JSON.stringify(large))
+    notebookTestAppStore.getState().markFileDirty(FILE_ID, true)
+    expect(backedUpDraft()).toBeUndefined()
+    notebookTestAppStore.getState().setEditorDraft(FILE_ID, '{"cells": [')
+    expect(backedUpDraft()).toBe('{"cells": [')
   })
 
   it('backs up only under 10,000 KB of output; past it, an edit writes no draft until a flush', async () => {
@@ -214,5 +260,9 @@ describe('notebook document store', () => {
     flushPendingEditorChange(FILE_ID)
     expect(savedCell(draft())).toMatchObject({ source: ['print(3)'], execution_count: 1 })
     expect(backedUpDraft()).toBeUndefined()
+
+    await startRun()
+    expect(savedCell(draft())).toMatchObject({ source: ['print(3)'], outputs: [] })
+    expect(backedUpDraft()).toBe(draft())
   })
 })

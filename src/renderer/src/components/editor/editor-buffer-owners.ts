@@ -13,11 +13,12 @@ export type EditorBufferOwner = {
   /** The reload that followed a discard could not read the file. */
   cancelDiscard?: () => void
   /** False when the held content is too large for a restart backup to carry. */
-  canBackUp?: () => boolean
+  canBackUp?: (candidate: string) => boolean | undefined
 }
 
 const owners = new Map<string, Set<EditorBufferOwner>>()
 const changeListeners = new Set<(fileId: string) => void>()
+const policyListeners = new Set<() => void>()
 
 export function registerEditorBufferOwner(fileId: string, owner: EditorBufferOwner): () => void {
   const entry = { ...owner }
@@ -51,8 +52,20 @@ export function getEditorBufferVersion(fileId: string): number | undefined {
   return [...(owners.get(fileId) ?? [])].find((entry) => entry.version)?.version?.()
 }
 
-export function canBackUpEditorBuffer(fileId: string): boolean {
-  return [...(owners.get(fileId) ?? [])].every((entry) => entry.canBackUp?.() !== false)
+export function canBackUpEditorBuffer(fileId: string, candidate: string): boolean | undefined {
+  const answers = [...(owners.get(fileId) ?? [])].map((entry) => entry.canBackUp?.(candidate))
+  return answers.includes(false) ? false : answers.includes(true) || undefined
+}
+
+export function notifyEditorBufferPolicyChanged(): void {
+  for (const listener of policyListeners) {
+    listener()
+  }
+}
+
+export function subscribeEditorBufferPolicyChanges(listener: () => void): () => void {
+  policyListeners.add(listener)
+  return () => policyListeners.delete(listener)
 }
 
 export function discardEditorBufferChanges(fileId: string): void {

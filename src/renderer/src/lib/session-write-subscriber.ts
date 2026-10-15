@@ -1,4 +1,5 @@
 import type { AppState } from '../store'
+import { subscribeEditorBufferPolicyChanges } from '@/components/editor/editor-buffer-owners'
 import { isDecorativeAgentTitleFrameChange } from '../../../shared/agent-decorative-title-signature'
 import type { WorkspaceSessionPatch } from '../../../shared/workspace-session-state-types'
 import { SESSION_RELEVANT_FIELDS, shouldPersistWorkspaceSession } from './workspace-session'
@@ -273,10 +274,17 @@ export function createSessionWriteSubscriber({
   // that incidental wake-up is not guaranteed; seed from the current state instead.
   evaluateSessionState(store.getState())
   const unsub = store.subscribe(evaluateSessionState)
+  const unsubPolicy = subscribeEditorBufferPolicyChanges(() => {
+    pendingChangedFields.add('editorDrafts')
+    if (timer === null) {
+      armFlushTimer()
+    }
+  })
 
   return () => {
     disposed = true
     unsub()
+    unsubPolicy()
     if (timer !== null) {
       clearTimeout(timer)
     }

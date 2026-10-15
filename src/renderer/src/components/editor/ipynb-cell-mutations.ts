@@ -29,7 +29,7 @@ export function ipynbCellKey(cell: unknown, index: number): string {
   return `${index}:${isRecord(cell) ? String(cell.cell_type) : ''}`
 }
 
-function storedOutput(output: unknown): unknown {
+export function storedOutput(output: unknown): unknown {
   if (!isRecord(output)) {
     return output
   }
