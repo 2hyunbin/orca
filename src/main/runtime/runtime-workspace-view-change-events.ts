@@ -33,11 +33,7 @@ function workspaceViewUiValues(ui: PersistedUIState): unknown[] {
  * would otherwise trigger a re-read on every frame.
  */
 export function publishWorkspaceViewChanges(
-  store:
-    | (Pick<RuntimeStore, 'getUI' | 'onUIChanged'> & {
-        onSettingsChanged?: (listener: (updates: Partial<GlobalSettings>) => void) => unknown
-      })
-    | null,
+  store: Pick<RuntimeStore, 'getUI' | 'onUIChanged' | 'onSettingsChanged'> | null,
   emit: (event: RuntimeClientEvent) => void
 ): void {
   if (!store?.getUI || !store.onUIChanged) {

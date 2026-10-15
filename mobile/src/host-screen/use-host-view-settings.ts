@@ -100,12 +100,13 @@ export function useHostViewSettings(args: {
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
-    ({ _worktreeCardModeDefaulted, ...patch }: MobileViewPatch) => {
+    (patch: MobileViewPatch) => {
       localEditsRef.current += 1
       const previous = viewStateRef.current
+      const { _worktreeCardModeDefaulted: _writeOnly, ...fields } = patch
       const next: MobileViewState = {
         ...previous,
-        ...patch,
+        ...fields,
         filters: { ...previous.filters, ...patch.filters }
       }
       applyViewState(next)
@@ -115,10 +116,7 @@ export function useHostViewSettings(args: {
       // Send only the touched fields: the host merges partial updates, so a stale
       // mirror can no longer revert sibling settings another client just changed
       // (STA-5781; supersedes the #8873 whole-payload special case).
-      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(
-        { ...patch, _worktreeCardModeDefaulted },
-        next
-      )
+      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next)
       if (Object.keys(payload).length === 0) {
         return
       }

@@ -223,9 +223,8 @@ export type HostCardSettings = z.output<typeof hostCardSettingsSchema>
  * The host-list writes whose reply body no call site reads.
  *
  * The `ui.set` patch, the card layout `settings.update`, the pin write, the row delete and the
- * activate ping are all decided by the
- * acceptance verdict alone — the pin write never interprets its reply at all, and the delete reads
- * `accepted` and nothing else.
+ * activate ping are all decided by the acceptance verdict alone — the pin write never interprets its
+ * reply at all, and the delete reads `accepted` and nothing else.
  *
  * `worktree.activate` is the one whose payload a *second* consumer looks at, and it is
  * deliberately left opaque: headlessActivationNeedsHostRenderer is a total guard over `unknown`
