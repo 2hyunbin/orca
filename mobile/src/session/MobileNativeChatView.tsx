@@ -322,9 +322,8 @@ export function MobileNativeChatView({
   )
 
   const history = useMobileNativeChatPageHistory(turns.listMessages, renderItem)
-  const listHeader = history.withHistory(
-    mobileNativeChatListHeader(hasMore, loadingEarlier, loadEarlier)
-  )
+  const earlierControl = mobileNativeChatListHeader(hasMore, loadingEarlier, loadEarlier)
+  const listHeader = history.withHistory(earlierControl)
 
   const liveStatus = turns.liveLine ? (
     <MobileNativeChatLiveLine
@@ -366,11 +365,10 @@ export function MobileNativeChatView({
       ) : (
         <GestureHandlerRootView style={styles.listWrap}>
           <MobileNativeChatScrollHold
-            headKey={turns.listMessages[0]?.id}
+            {...{ headKey: turns.listMessages[0]?.id, listRef }}
             header={listHeader !== null}
-            loadEarlier={hasMore === true}
+            loadEarlier={earlierControl !== null}
             footer={listFooter !== null}
-            listRef={listRef}
           />
           <GestureDetector gesture={pinchGesture}>
             <FlatList
