@@ -1,5 +1,5 @@
 import type Database from '../../sqlite/sync-database'
-import { runJournalTransaction } from './journal-database'
+import { runJournalTransaction } from './journal-transaction'
 
 /** The five-column view lets older hosts read full rows and keep writing ordinary JSON. */
 export function ensureJournalTextPieceSchema(db: Database.Database): void {
