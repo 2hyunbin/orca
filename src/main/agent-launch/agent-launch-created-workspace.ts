@@ -1,19 +1,24 @@
 import { randomUUID } from 'node:crypto'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
+import type { AgentLaunchExecution } from './agent-launch-execution'
 import type { AgentLaunchWorkspaceFactory } from './agent-launch-surface-factories'
 
 export type InitialSurfaceLaunch = NonNullable<
   RuntimeMobileSessionTabsResult['initialSurfaceLaunch']
 >
 
-// Keyed by runtime so the fact lives exactly as long as the creation operation that owns it.
-const liveLaunches = new WeakMap<object, Map<string, InitialSurfaceLaunch>>()
+type AgentLaunchRuntimeOwner = Pick<
+  AgentLaunchExecution['runtime'],
+  'getStructuredAgentSessionCreateSupport'
+>
+
+const liveLaunches = new WeakMap<AgentLaunchRuntimeOwner, Map<string, InitialSurfaceLaunch>>()
 
 /** The creation operation owns the new workspace's first surface (chat, agent terminal or folder
  *  agent) from registration until it publishes that surface or fails. */
 export function beginCreatedWorkspaceLaunch(
-  runtime: object,
+  runtime: AgentLaunchRuntimeOwner,
   agent: TuiAgent
 ): {
   onWorkspaceCreated: (worktreeId: string) => void
@@ -50,7 +55,7 @@ export function beginCreatedWorkspaceLaunch(
 }
 
 export function readCreatedWorkspaceLaunch(
-  runtime: object,
+  runtime: AgentLaunchRuntimeOwner,
   worktreeId: string
 ): InitialSurfaceLaunch | undefined {
   return liveLaunches.get(runtime)?.get(worktreeId)
