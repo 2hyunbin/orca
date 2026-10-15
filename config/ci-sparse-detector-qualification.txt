@@ -1,0 +1,1 @@
+Temporary unmerged input for hosted sparse-checkout expansion qualification.
