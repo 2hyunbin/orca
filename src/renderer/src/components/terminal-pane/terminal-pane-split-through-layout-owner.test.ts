@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { splitThroughLayoutOwner } from './terminal-pane-split-through-layout-owner'
 
-const mocks = vi.hoisted(() => ({
-  callRuntimeRpc: vi.fn(),
-  ownerEnvironmentId: null as string | null
-}))
+const mocks = vi.hoisted(
+  (): { callRuntimeRpc: ReturnType<typeof vi.fn>; ownerEnvironmentId: string | null } => ({
+    callRuntimeRpc: vi.fn(),
+    ownerEnvironmentId: null
+  })
+)
 
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
