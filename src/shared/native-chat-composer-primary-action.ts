@@ -1,5 +1,5 @@
 // The composer's one primary button. A held queue's Resume takes Send's place only while nothing
-// is typed or attached, so a typed message always offers Send.
+// is typed or attached, so a typed message always offers Send. Desktop and phone share it.
 
 export type NativeChatComposerPrimaryAction = 'stop' | 'resume' | 'send'
 
@@ -11,8 +11,10 @@ export function nativeChatComposerPrimaryAction(input: {
   composerEmpty: boolean
   /** The host holds a card Resume would send. */
   queueHeld: boolean
+  /** No Enter key sends here (the phone), so a typed message keeps Send while the agent works. */
+  sendsWhileWorking?: boolean
 }): NativeChatComposerPrimaryAction {
-  if (input.isWorking) {
+  if (input.isWorking && !(input.sendsWhileWorking === true && !input.composerEmpty)) {
     return 'stop'
   }
   return input.composerEmpty && input.queueHeld ? 'resume' : 'send'

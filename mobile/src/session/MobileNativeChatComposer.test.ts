@@ -149,6 +149,37 @@ describe('MobileNativeChatComposer', () => {
     expect(onSend).toHaveBeenCalledWith(' /clear is prose ')
   })
 
+  // The phone has no Enter key: Stop takes the round button only while there is nothing to send.
+  it('turns the round button into Stop while the agent works and nothing is typed', async () => {
+    const onStop = vi.fn()
+    const composer = (value: string, stopping = false) =>
+      createElement(MobileNativeChatComposer, {
+        value,
+        onChangeText: vi.fn(),
+        onSend: vi.fn().mockResolvedValue(true),
+        sendSurfaceId: 'tab-a',
+        getSendCompletionGeneration: getCurrentSendCompletionGeneration,
+        stop: { onStop, stopping }
+      })
+    const labelled = (label: string) =>
+      renderer!.root.findAll(
+        (node) => node.type === 'Pressable' && node.props.accessibilityLabel === label
+      )
+    await act(async () => {
+      renderer = create(composer(''))
+    })
+    expect(labelled('Send message')).toHaveLength(0)
+    act(() => labelled('Stop the agent')[0]!.props.onPress())
+    expect(onStop).toHaveBeenCalledTimes(1)
+
+    await act(async () => renderer!.update(composer('steer this')))
+    expect(labelled('Stop the agent')).toHaveLength(0)
+    expect(labelled('Send message')[0]!.props.disabled).toBe(false)
+
+    await act(async () => renderer!.update(composer('', true)))
+    expect(labelled('Stopping…')[0]!.props.disabled).toBe(true)
+  })
+
   it('locks the option pickers while a composer send is in flight', async () => {
     // The reverse of the test below. The host spaces a send's body and its Enter
     // ~500ms apart, so an apply tapped inside that window would be submitted as

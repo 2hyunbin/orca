@@ -12,7 +12,7 @@ import { NativeChatComposerGoalChip } from './NativeChatComposerGoalChip'
 import { NativeChatContextUsageRing } from './NativeChatContextUsageRing'
 import type { NativeChatContextUsageSummary } from './native-chat-context-usage-summary'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
-import type { NativeChatComposerPrimaryAction } from './native-chat-composer-primary-action'
+import type { NativeChatComposerPrimaryAction } from '../../../../shared/native-chat-composer-primary-action'
 
 export type NativeChatComposerActionsProps = {
   attachDisabled: boolean

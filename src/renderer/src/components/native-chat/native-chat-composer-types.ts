@@ -1,4 +1,4 @@
-import type { NativeChatQueueResume } from './native-chat-composer-primary-action'
+import type { NativeChatQueueResume } from '../../../../shared/native-chat-composer-primary-action'
 import type { NativeChatComposerNotice } from './native-chat-composer-notice'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { StructuredAgentContextUsage } from '../../../../shared/structured-agent-session-context-usage'

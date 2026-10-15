@@ -20,7 +20,7 @@ import {
 import {
   nativeChatComposerPrimaryAction,
   type NativeChatComposerPrimaryAction
-} from '../../../renderer/src/components/native-chat/native-chat-composer-primary-action'
+} from '../../../shared/native-chat-composer-primary-action'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
   readQueuePublication,

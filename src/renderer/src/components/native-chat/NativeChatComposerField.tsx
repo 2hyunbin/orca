@@ -24,7 +24,7 @@ import type { NativeChatOptionPickerRequest } from './native-chat-composer-types
 import {
   nativeChatComposerPrimaryButton,
   type NativeChatQueueResume
-} from './native-chat-composer-primary-action'
+} from '../../../../shared/native-chat-composer-primary-action'
 import { NativeChatImageAttachmentPreview } from './NativeChatImageAttachmentPreview'
 import { NativeChatQueueSendConfirmDialog } from './NativeChatQueueSendConfirmDialog'
 import type { NativeChatQueueSendConfirm } from './use-native-chat-held-queue-composer-send'

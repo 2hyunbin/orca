@@ -19,16 +19,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm
   },
-  stopButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs
-  },
-  stopLabel: {
-    color: colors.statusRed,
-    fontSize: typography.metaSize,
-    fontWeight: '700'
-  },
   sendError: {
     alignItems: 'center',
     paddingHorizontal: spacing.md,

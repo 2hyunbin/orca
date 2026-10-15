@@ -8,7 +8,21 @@ describe('the composer primary action', () => {
     { isWorking: false, composerEmpty: true, queueHeld: false, action: 'send' },
     { isWorking: false, composerEmpty: false, queueHeld: false, action: 'send' },
     { isWorking: true, composerEmpty: true, queueHeld: true, action: 'stop' },
-    { isWorking: true, composerEmpty: false, queueHeld: false, action: 'stop' }
+    { isWorking: true, composerEmpty: false, queueHeld: false, action: 'stop' },
+    {
+      isWorking: true,
+      composerEmpty: true,
+      queueHeld: false,
+      sendsWhileWorking: true,
+      action: 'stop'
+    },
+    {
+      isWorking: true,
+      composerEmpty: false,
+      queueHeld: false,
+      sendsWhileWorking: true,
+      action: 'send'
+    }
   ])(
     'working $isWorking, empty $composerEmpty, held $queueHeld: $action',
     ({ action, ...input }) => {

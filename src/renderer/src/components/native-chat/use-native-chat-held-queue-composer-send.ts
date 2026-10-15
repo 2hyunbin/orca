@@ -12,7 +12,7 @@ import type { NativeChatComposerImageAttachment } from './NativeChatComposerFiel
 import { readNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import type { NativeChatQueueHold } from './native-chat-composer-types'
-import type { NativeChatQueueResume } from './native-chat-composer-primary-action'
+import type { NativeChatQueueResume } from '../../../../shared/native-chat-composer-primary-action'
 
 type StructuredComposerSend = (
   text: string,

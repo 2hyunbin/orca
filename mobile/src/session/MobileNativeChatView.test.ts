@@ -165,10 +165,7 @@ describe('MobileNativeChatView', () => {
         stopRequestInFlight: true
       }
     })
-    const stop = renderer!.root.find(
-      (node) => node.type === 'Pressable' && node.props.accessibilityLabel === 'Stopping…'
-    )
-    expect(stop.props.disabled).toBe(true)
+    expect(composer().props.stop).toMatchObject({ stopping: true })
   })
 
   it.each([
@@ -196,23 +193,18 @@ describe('MobileNativeChatView', () => {
       canStop: true,
       turnIndicator: { thinking: false, activityText: null, stopping: true }
     })
-    const stop = renderer!.root.find(
-      (node) => node.type === 'Pressable' && node.props.accessibilityLabel === 'Stop the agent'
-    )
-    expect(stop.props.disabled).toBe(false)
+    expect(composer().props.stop).toMatchObject({ stopping: false })
   })
 
   /** Ids of the rows the list is currently rendering. */
   it('keeps Stop hidden during a structured dispatch until a provider turn can be cancelled', async () => {
     const props = { structuredActivityUi: true, agentWorking: true, canStop: false }
     await render(props)
-    const stops = () =>
-      renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Stop the agent')
-    expect(stops()).toHaveLength(0)
+    expect(composer().props.stop).toBeNull()
     await update({ ...props, canStop: true })
-    expect(stops()).toHaveLength(1)
+    expect(composer().props.stop).not.toBeNull()
     await update({ agentWorking: true })
-    expect(stops()).toHaveLength(1)
+    expect(composer().props.stop).not.toBeNull()
   })
 
   function listIds(): string[] {
@@ -293,7 +285,6 @@ describe('MobileNativeChatView', () => {
     expect(composers()).toHaveLength(0)
     expect(lists()).toHaveLength(0)
     expect(banners()).toHaveLength(0)
-    expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Stop the agent' })).toHaveLength(0)
 
     // A failure that can clear keeps the transcript and the composer.
     await update({ ...failure, error: "Orca couldn't open this chat's history right now." })
