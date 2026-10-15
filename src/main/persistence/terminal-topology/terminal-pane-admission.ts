@@ -7,6 +7,7 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import { locatePane } from '../../../shared/workspace-layout/workspace-layout-command-steps'
 import type {
   CommandOf,
+  LayoutApplyOutcome,
   LayoutCommand,
   LayoutRefusalCode
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
@@ -39,7 +40,8 @@ export function admitPaneToSession(
   if (workspace && locatePane(workspace, paneKeyOf(admission.tabId, leafId))) {
     return { value: 'exists', session: null }
   }
-  return applyToSession(loaded, admission, 'admitted')
+  const change = applyToSession(loaded, admission)
+  return { ...change, value: change.value.ok ? 'admitted' : change.value.code }
 }
 
 export function withdrawPaneFromSession(
@@ -47,20 +49,32 @@ export function withdrawPaneFromSession(
   session: WorkspaceSessionState,
   pane: CommandOf<'closePane'>
 ): PaneLayoutChange<LayoutRefusalCode | null> {
-  return applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), pane, null)
+  const change = applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), pane)
+  return { ...change, value: change.value.ok ? null : change.value.code }
 }
 
-function applyToSession<T>(
+/** A client's layout command (`layout.apply`), with main minting every new id. */
+export function applyCommandToSession(
+  hostId: ExecutionHostId,
+  session: WorkspaceSessionState,
+  command: LayoutCommand
+): PaneLayoutChange<LayoutApplyOutcome> {
+  return applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), command)
+}
+
+function applyToSession(
   loaded: LoadedWorkspaceLayout,
-  command: LayoutCommand,
-  committed: T
-): PaneLayoutChange<T | LayoutRefusalCode> {
+  command: LayoutCommand
+): PaneLayoutChange<LayoutApplyOutcome> {
   const applied = applyLayoutCommand(loaded.layout, command, {
     mintId: randomUUID,
     mintLeafId: randomUUID,
     now: Date.now
   })
   return applied.ok
-    ? { value: committed, session: saveWorkspaceLayout({ ...loaded, layout: applied.model }) }
-    : { value: applied.code, session: null }
+    ? {
+        value: { ok: true, result: applied.result },
+        session: saveWorkspaceLayout({ ...loaded, layout: applied.model })
+      }
+    : { value: { ok: false, code: applied.code }, session: null }
 }
