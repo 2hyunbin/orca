@@ -178,7 +178,7 @@ export async function getAiVaultWslHomeDirs(): Promise<string[]> {
 // file is never rediscovered — this only guards the cached RESULT.
 export function invalidateAiVaultSessionListCache(): void {
   cacheGeneration++
-  scanCoordinator.invalidate()
+  scanCoordinator.retirePublications()
   cachedList = null
 }
 

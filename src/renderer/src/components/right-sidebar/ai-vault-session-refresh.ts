@@ -88,9 +88,9 @@ export function useAiVaultSessionRefresh(
   const { scan, applyScan } = useAppliedAiVaultScan()
   const scanResult = scan?.result ?? null
   const [provisional, setProvisional] = useState<{
-    scopeKey: string; sessions: readonly AiVaultSession[]
+    presentationKey: string; sessions: readonly AiVaultSession[]
   } | null>(null)
-  const completeScopeRef = useRef<string | null>(null)
+  const completePresentationRef = useRef<string | null>(null)
   const deletedIdsRef = useRef(new Set<string>())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -108,13 +108,14 @@ export function useAiVaultSessionRefresh(
   const mountedRef = useRef(true)
   const publicationGateRef = useRef<AiVaultSessionPublicationGate>(undefined!)
   publicationGateRef.current ??= new AiVaultSessionPublicationGate()
-  const scanScopeKey = `${aiVaultSessionResultCacheKey(executionHostScope, scopePaths)}\n${sessionLimit}`
-  const sessions = provisional?.scopeKey === scanScopeKey
+  const presentationKey = aiVaultSessionResultCacheKey(executionHostScope, scopePaths)
+  const scanScopeKey = `${presentationKey}\n${sessionLimit}`
+  const sessions = provisional?.presentationKey === presentationKey
     ? provisional.sessions
     : scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
-  const displayedRowsRef = useRef<{ scopeKey: string | null; sessions: readonly AiVaultSession[] }>({ scopeKey: null, sessions })
+  const displayedRowsRef = useRef<{ presentationKey: string | null; sessions: readonly AiVaultSession[] }>({ presentationKey: null, sessions })
   displayedRowsRef.current = {
-    scopeKey: provisional?.scopeKey === scanScopeKey ? scanScopeKey : completeScopeRef.current,
+    presentationKey: provisional?.presentationKey === presentationKey ? presentationKey : completePresentationRef.current,
     sessions
   }
   const scopePathsRef = useRef<readonly string[]>(scopePaths)
@@ -152,7 +153,8 @@ export function useAiVaultSessionRefresh(
         lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: cachedResult.scannedAt }
         setError(null)
         publicationGateRef.current.publish(cachedResult, (published) => {
-          completeScopeRef.current = scanKey
+          if (scanKey !== currentScanScopeKey()) return
+          completePresentationRef.current = baseKey
           setProvisional(null)
           applyScan(published, selectedLimit, (applied) => {
             conditionalSnapshotRef.current = published.fingerprint
@@ -198,12 +200,12 @@ export function useAiVaultSessionRefresh(
       const displayed = displayedRowsRef.current
       const stopRows = observeAiVaultProvisionalRows({
         requestToken,
-        baseline: displayed.scopeKey === scanKey ? displayed.sessions : EMPTY_AI_VAULT_SESSIONS,
+        baseline: displayed.presentationKey === baseKey ? displayed.sessions : EMPTY_AI_VAULT_SESSIONS,
         deleted: deletedIdsRef.current,
         gate: publicationGateRef.current,
         isCurrent: () => mountedRef.current && refreshIdRef.current === refreshId &&
           scanKey === currentScanScopeKey(),
-        apply: (sessions) => setProvisional({ scopeKey: scanKey, sessions })
+        apply: (sessions) => setProvisional({ presentationKey: baseKey, sessions })
       })
       try {
         const previous = conditionalSnapshotRef.current
@@ -240,14 +242,14 @@ export function useAiVaultSessionRefresh(
         lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: result.scannedAt }
         cacheAiVaultSessionList(request, result, { replaceHostEntries: args.force === true })
         publicationGateRef.current.publish(result, (published) => {
-          if (mountedRef.current && scanKey === currentScanScopeKey()) {
-            completeScopeRef.current = scanKey
+          if (mountedRef.current && refreshIdRef.current === refreshId && scanKey === currentScanScopeKey()) {
+            completePresentationRef.current = baseKey
             const displayed = displayedRowsRef.current
             const retained = retainAiVaultFailedHostRows(published,
-              displayed.scopeKey === scanKey
+              displayed.presentationKey === baseKey
                 ? displayed.sessions.filter((row) => !deletedIdsRef.current.has(row.id))
                 : EMPTY_AI_VAULT_SESSIONS)
-            setProvisional(retained ? { scopeKey: scanKey, sessions: retained } : null)
+            setProvisional(retained ? { presentationKey: baseKey, sessions: retained } : null)
             applyScan(published, selectedLimit, (applied) => {
               conditionalSnapshotRef.current = published.fingerprint
                 ? { scopeKey: scanKey, fingerprint: published.fingerprint, result: applied }
@@ -405,9 +407,12 @@ export function useAiVaultSessionRefresh(
     publicationGateRef.current.cancel()
     refreshIdRef.current++
     const displayed = displayedRowsRef.current
-    setProvisional({ scopeKey: currentScanScopeKey(), sessions: displayed.sessions.filter((row) => row.id !== session.id) })
+    const presentationKey = aiVaultSessionResultCacheKey(executionHostScopeRef.current, scopePathsRef.current)
+    setProvisional({ presentationKey,
+      sessions: displayed.presentationKey === presentationKey
+        ? displayed.sessions.filter((row) => row.id !== session.id) : EMPTY_AI_VAULT_SESSIONS })
     conditionalSnapshotRef.current = null
-  }, [currentScanScopeKey])
+  }, [])
 
   return { error, loading, refresh, onDeleted, scanResult, sessions, loadedSessionLimit: scan?.limit ?? null }
 }

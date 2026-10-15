@@ -181,12 +181,12 @@ it('attaches a coherent current snapshot and rejects publications from retired g
   const revision = views.at(-1)
   publishers[0]!({ upserts: [], removed: ['stale'] })
   expect(views.at(-1)).toBe(revision)
-  coordinator.invalidate()
+  coordinator.retirePublications()
   const count = views.length
   publishers[1]!({ upserts: [], removed: [] })
   expect(views).toHaveLength(count)
-  await expect(first).rejects.toMatchObject({ name: 'AbortError' })
-  await expect(second).rejects.toMatchObject({ name: 'AbortError' })
-  await expect(forced).rejects.toMatchObject({ name: 'AbortError' })
   for (const finish of finishers) finish()
+  await expect(Promise.all([first, second, forced])).resolves.toEqual([
+    EMPTY_RESULT, EMPTY_RESULT, EMPTY_RESULT
+  ])
 })

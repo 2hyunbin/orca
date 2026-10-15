@@ -109,7 +109,9 @@ async function listAiVaultSessions(
   // coalescing has to survive them — the coordinator hands all same-key callers
   // one scan and only aborts it once every one of them has cancelled.
   return scanCoordinator.run({
-    key: JSON.stringify({ key, depth, afterFingerprint }),
+    key: JSON.stringify({ key, depth, afterFingerprint,
+      localGeneration: executionHostScope === LOCAL_EXECUTION_HOST_ID || executionHostScope === 'all'
+        ? aiVaultSessionListGeneration() : undefined }),
     force: args?.force,
     signal: options.signal,
     onRows: options.onRows,
@@ -271,10 +273,12 @@ export function registerAiVaultHandlers(options: AiVaultHandlerOptions = {}): vo
         ? args.requestToken
         : undefined
     const controller = listCancellations.begin(event, requestToken)
+    const generation = aiVaultSessionListGeneration()
     const delivery = requestToken ? new AiVaultRowDelivery(event.sender, requestToken, controller?.signal) : null
     try {
       await handlerOptions.ensureStructuredSessionOwnership?.()
       const result = await listAiVaultSessions(args, { signal: controller?.signal, onRows: delivery?.observe })
+      if (generation !== aiVaultSessionListGeneration()) return cancelledAiVaultListResult()
       return projectStructuredAiVaultSessions(result, OPENS_EVERY_STRUCTURED_CHAT)
     } catch (error) {
       // Why: superseding a scan is normal control flow, but Electron logs every

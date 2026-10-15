@@ -63,7 +63,7 @@ export class AiVaultRowDelivery {
     if (view.kind === 'snapshot') {
       this.rows.clear()
       for (const row of view.sessions) this.rows.set(row.id, row)
-      if (this.rows.size === 0 && this.sequence === 0) return
+      if (this.rows.size === 0) return
     } else {
       for (const id of view.delta.removed) this.rows.delete(id)
       for (const row of view.delta.upserts) this.rows.set(row.id, row)

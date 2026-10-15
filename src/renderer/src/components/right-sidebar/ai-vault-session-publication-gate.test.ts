@@ -49,7 +49,7 @@ describe('AiVaultSessionPublicationGate', () => {
     expect(apply).toHaveBeenCalledWith(SECOND)
   })
 
-  it('publishes by one second even when input never becomes quiet', () => {
+  it('publishes by one second even while input and streamed values keep arriving', () => {
     const apply = vi.fn()
     const gate = new AiVaultSessionPublicationGate()
     markInputQuietSchedulerInput()
@@ -58,10 +58,12 @@ describe('AiVaultSessionPublicationGate', () => {
     for (let elapsed = 90; elapsed < 1_000; elapsed += 90) {
       vi.advanceTimersByTime(90)
       markInputQuietSchedulerInput()
+      gate.publish(SECOND, apply)
     }
     vi.advanceTimersByTime(10)
 
-    expect(apply).toHaveBeenCalledWith(FIRST)
+    expect(apply).toHaveBeenCalledOnce()
+    expect(apply).toHaveBeenCalledWith(SECOND)
   })
 
   it('cancels a pending publication on scope change or unmount', () => {

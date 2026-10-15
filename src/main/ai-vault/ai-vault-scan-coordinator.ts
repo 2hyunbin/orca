@@ -59,8 +59,9 @@ export class AiVaultScanCoordinator {
     return this.attach(args.key, entry, args.signal, args.onRows)
   }
 
-  invalidate(): void {
-    for (const entry of this.entries.values()) entry.controller.abort()
+  retirePublications(): void {
+    for (const entry of this.entries.values()) entry.observers.clear()
+    // Existing unary waiters still own their work; future callers start a fresh generation.
     this.entries.clear()
   }
 
@@ -83,7 +84,8 @@ export class AiVaultScanCoordinator {
           throw scanCancellationError()
         }
         return start(controller.signal, (delta) => {
-          if (entry.settled || controller.signal.aborted || this.entries.get(key) !== entry) return
+          if (entry.settled || controller.signal.aborted || this.entries.get(key) !== entry ||
+            (delta.upserts.length === 0 && delta.removed.length === 0)) return
           for (const id of delta.removed) entry.rows.delete(id)
           for (const row of delta.upserts) entry.rows.set(row.id, row)
           entry.revision++

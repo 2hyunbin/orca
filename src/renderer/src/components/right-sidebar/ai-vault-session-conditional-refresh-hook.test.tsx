@@ -180,8 +180,7 @@ it('accumulates completed-row deltas before scheduling while final metadata rema
   const complete = latest?.scanResult
   let finish!: (result: AiVaultListResult) => void
   list.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
-  let refreshing: Promise<void> | undefined
-  act(() => { refreshing = latest?.refresh({ force: true }) })
+  await render('local', 500)
   const args = list.mock.calls.at(-1)?.[0]
   if (!args || typeof args !== 'object' || !('requestToken' in args) || typeof args.requestToken !== 'string') {
     throw new Error('Missing request identity')
@@ -203,10 +202,11 @@ it('accumulates completed-row deltas before scheduling while final metadata rema
   expect(latest?.scanResult).toBe(complete)
   expect(latest?.loadedSessionLimit).toBe(250)
   const final = { sessions: [third], issues: [], scannedAt: 'final' }
-  await act(async () => { finish(final); await refreshing })
+  await act(async () => { finish(final) })
   await settle()
   expect(latest?.sessions).toEqual([third])
   expect(latest?.scanResult?.scannedAt).toBe('final')
+  expect(latest?.loadedSessionLimit).toBe(500)
   expect(listener).toBeUndefined()
 })
 
