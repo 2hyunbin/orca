@@ -32,13 +32,13 @@ export function RestartUnsavedChangesDialog(): React.JSX.Element {
     >
       <DialogContent className="max-w-md sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="text-sm">
+          <DialogTitle>
             {translate(
               'auto.components.editor.RestartUnsavedChangesDialog.title',
               'Restart Without Unsaved Changes?'
             )}
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogDescription>
             {translate(
               'auto.components.editor.RestartUnsavedChangesDialog.body',
               "These files have unsaved changes that can't be kept across a restart. Save them first, or restart without those changes."
@@ -52,7 +52,7 @@ export function RestartUnsavedChangesDialog(): React.JSX.Element {
             </li>
           ))}
         </ul>
-        <DialogFooter className="gap-2">
+        <DialogFooter>
           <Button
             type="button"
             variant="outline"
