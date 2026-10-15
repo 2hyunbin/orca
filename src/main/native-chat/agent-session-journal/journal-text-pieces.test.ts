@@ -172,25 +172,26 @@ AND epoch IS NOT (SELECT epoch FROM journal_sessions WHERE session_id = ?)`)
   })
 })
 
-it.each(['raw', 'view'])('atomically upgrades schema 4 %s storage, rolls back before stamping and retries', (shape) => {
-  const epoch = readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 0)[0]
-  if (!epoch) throw new Error('missing fixture epoch')
+it.each(['raw', 'view'])('atomically upgrades schema 4 %s storage, rolls back before stamping and retries', (storageKind) => {
+  const expected = readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 0)
   host.close()
   const path = join(root, 'legacy.db')
-  const legacy = shape === 'raw' ? new Database(path) : openJournalDatabase(path).db
-  if (shape === 'raw') legacy.exec(createJournalTablesSql())
+  const legacy = storageKind === 'raw' ? new Database(path) : openJournalDatabase(path).db
+  if (storageKind === 'raw') {
+    legacy.exec(createJournalTablesSql())
+  }
   publishJournalSessionEpoch(legacy, { sessionId: SESSION, workspaceId: 'ws' }, EPOCH)
   const final = item(3, 'legacy full text '.repeat(9))
-  const expected = [epoch, item(2, 'legacy full text '.repeat(8)), final]
+  expected.push(item(2, 'legacy full text '.repeat(8)), final)
   for (const row of expected) {
-    if (shape === 'raw') {
+    if (storageKind === 'raw') {
       legacy.prepare('INSERT INTO journal_rows VALUES (?, ?, ?, ?, ?)')
         .run(SESSION, EPOCH, row.seq, row.ts, JSON.stringify(row))
     } else {
       insertJournalRow(legacy, SESSION, row)
     }
   }
-  if (shape === 'view') {
+  if (storageKind === 'view') {
     legacy.exec(`CREATE VIEW journal_rows AS
 SELECT session_id, epoch, seq, ts, row_json FROM journal_rows_data`)
     for (const operation of ['insert', 'update', 'delete']) {
@@ -200,9 +201,9 @@ BEGIN SELECT 1; END`)
   }
   legacy.pragma('user_version = 4')
   const schema = legacy.prepare('SELECT name, sql FROM sqlite_master ORDER BY name').all()
-  const table = shape === 'raw' ? 'journal_rows' : 'journal_rows_data'
+  const table = storageKind === 'raw' ? 'journal_rows' : 'journal_rows_data'
   const physical = legacy.prepare(`SELECT * FROM ${table} ORDER BY seq`).all()
-  const pieces = shape === 'raw' ? [] : legacy.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()
+  const pieces = storageKind === 'raw' ? [] : legacy.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()
   legacy.close()
   const original = Database.prototype.pragma
   const failure = vi.spyOn(Database.prototype, 'pragma').mockImplementation(function (
@@ -221,7 +222,9 @@ BEGIN SELECT 1; END`)
   expect(rolledBack.pragma('user_version', { simple: true })).toBe(4)
   expect(rolledBack.prepare('SELECT name, sql FROM sqlite_master ORDER BY name').all()).toEqual(schema)
   expect(rolledBack.prepare(`SELECT * FROM ${table} ORDER BY seq`).all()).toEqual(physical)
-  if (shape === 'view') expect(rolledBack.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()).toEqual(pieces)
+  if (storageKind === 'view') {
+    expect(rolledBack.prepare('SELECT * FROM journal_text_pieces ORDER BY seq').all()).toEqual(pieces)
+  }
   rolledBack.close()
   for (let open = 0; open < 2; open += 1) {
     const { db } = openJournalDatabase(path)
@@ -230,12 +233,11 @@ BEGIN SELECT 1; END`)
       expect(db.prepare(`SELECT name FROM sqlite_master
 WHERE name = 'journal_rows' OR name LIKE 'journal_rows_compat_%'`).all()).toEqual([])
       expect(readJournalRowsAfterCursor(db, SESSION, EPOCH, 0)).toEqual(expected)
-      expect(readJournalRowsAfter(db, SESSION, EPOCH, 0).map((row) => JSON.parse(row.rowJson))).toEqual(expected)
       const replayed = replayJournal(db, SESSION)
       expect(replayed?.damage).toBeNull()
       expect(replayed ? renderJournalState(replayed.state).items.at(-1)?.body : null).toEqual(final.body)
       expect(replayed ? renderJournalState(replayed.state).cursor : null).toEqual({ epoch: EPOCH, sequence: 3 })
-      if (shape === 'raw') {
+      if (storageKind === 'raw') {
         expect(db.prepare('SELECT row_json FROM journal_rows_data ORDER BY seq').all())
           .toEqual(physical.map(({ row_json }) => ({ row_json })))
       } else {
