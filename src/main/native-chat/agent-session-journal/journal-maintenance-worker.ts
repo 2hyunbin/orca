@@ -41,7 +41,9 @@ export class JournalMaintenanceWorker {
 
   close(): void {
     this.closed = true
-    if (this.timer) clearTimeout(this.timer)
+    if (this.timer) {
+      clearTimeout(this.timer)
+    }
     this.timer = null
     // Close after the current bounded transaction; termination can interrupt SQLite teardown.
     this.worker?.postMessage({ close: true })
@@ -49,10 +51,14 @@ export class JournalMaintenanceWorker {
   }
 
   private wake(): void {
-    if (this.closed || this.timer) return
+    if (this.closed || this.timer) {
+      return
+    }
     this.timer = setTimeout(() => {
       this.timer = null
-      if (this.closed) return
+      if (this.closed) {
+        return
+      }
       try {
         const worker = new Worker(workerPath(), {
           workerData: this.dbPath,
@@ -61,7 +67,9 @@ export class JournalMaintenanceWorker {
         this.worker = worker
         worker.on('error', (error) => console.warn('[journal-maintenance] worker failed:', error))
         worker.once('exit', () => {
-          if (this.worker === worker) this.worker = null
+          if (this.worker === worker) {
+            this.worker = null
+          }
         })
         worker.unref()
       } catch (error) {

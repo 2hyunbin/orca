@@ -195,10 +195,7 @@ export type SmokeTimings = {
   killGraceMs: number
 }
 
-const DEFAULT_SMOKE_TIMINGS: SmokeTimings = {
-  timeoutMs: 15_000,
-  killGraceMs: 2_000
-}
+const DEFAULT_SMOKE_TIMINGS: SmokeTimings = { timeoutMs: 15_000, killGraceMs: 2_000 }
 
 // Bound the wait for stderr to flush after exit; a grandchild inheriting stdio
 // can hold the pipes open long after the child is gone.
@@ -217,9 +214,7 @@ type SmokeResult = {
 // build forever. Escalate to SIGKILL instead.
 function runDaemonEntry(entryPath: string, timings: SmokeTimings): Promise<SmokeResult> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [entryPath], {
-      stdio: ['ignore', 'ignore', 'pipe']
-    })
+    const child = spawn(process.execPath, [entryPath], { stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
     let timedOut = false
     let settled = false
