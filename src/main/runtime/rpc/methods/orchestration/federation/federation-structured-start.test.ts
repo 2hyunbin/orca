@@ -67,6 +67,7 @@ function receiver() {
     close,
     deps: {
       store: {
+        listRecords: () => [],
         getRecord: () => ({
           location: { executionHostId: 'local', wslDistro: null },
           lease: { runtimeFence: 7, claimStatus: 'live' }

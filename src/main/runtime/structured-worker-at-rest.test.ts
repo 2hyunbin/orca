@@ -61,7 +61,7 @@ function running(current: AgentSessionRecord): RunningStructuredSession {
 
 function installHost(current: AgentSessionRecord | null, tabs: string[]) {
   const host = {
-    deps: { store: { getRecord: () => current } },
+    deps: { store: { getRecord: () => current, listRecords: () => (current ? [current] : []) } },
     hasSession: () => false,
     getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: tabs }),
     setSessionTabVisibility: vi.fn(async (_id: string, visible: boolean) => {

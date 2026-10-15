@@ -56,7 +56,7 @@ it('reconciles an accepted structured worker after losing its launch reply witho
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worker identity and observation read only record, subscribe, and hasSession here.
   setStructuredAgentSessionHost({
-    deps: { store: { getRecord: () => record } },
+    deps: { store: { getRecord: () => record, listRecords: () => [] } },
     subscribe: async () => () => {},
     hasSession: () => true
   } as never)
