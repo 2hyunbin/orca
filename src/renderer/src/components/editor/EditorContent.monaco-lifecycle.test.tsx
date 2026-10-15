@@ -309,7 +309,7 @@ describe('EditorContent Monaco lifecycle boundary', () => {
       filePath: notebook.filePath,
       worktreeId: notebook.worktreeId,
       scrollCacheKey: `${notebook.filePath}::same-pane:notebook`,
-      onContentChange: notebookProps.handleContentChange,
+      diskContent: '{"cells": []}',
       onSave: notebookProps.handleSave
     })
   })
