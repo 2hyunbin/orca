@@ -219,7 +219,6 @@ export function useTabBarCreateMenuController({
       case 'new-simulator':
       case 'go-to-simulator':
         onNewSimulatorTab?.()
-        break
     }
   }
   const launchAgentFromNewTabEntry = (agent: TuiAgent): void => {
