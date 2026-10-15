@@ -17,6 +17,9 @@
  * records; every other surface says "chat session" / "terminal agent".
  */
 
+import { detectInstalledAgentsWithShellPathHydration } from '../preflight/agent-detection'
+import { isTuiAgent } from '../../shared/tui-agent-config'
+import { isAgentSessionHandleProvider } from '../../shared/agent-session-provider-handle'
 import { requestsCwdOutsideWorkspaceRoot } from '../../shared/terminal-startup-cwd'
 import type {
   AgentLaunchMode,
@@ -27,6 +30,7 @@ import { RUNTIME_CAPABILITIES } from '../../shared/protocol-version'
 import { STRUCTURED_AGENT_RUNTIME_REGISTRATIONS } from '../runtime/structured-agent-runtime-registrations'
 import {
   isNativeChatDefaultFor,
+  isNativeChatEnabled,
   resolveStructuredNativeChatSupport,
   type NativeChatDefaultSettings,
   type StructuredNativeChatBlocker
@@ -138,7 +142,6 @@ export function decideAgentLaunchMode(args: {
   const vocabulary = args.vocabulary ?? DEFAULT_LAUNCH_VOCABULARY
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an unrecognized agent name is handled rather than trusted; the registered-agent check rejects it and the launch downgrades to a terminal.
   const agent = placement.agent as TuiAgent
-  // The agent runs on this host, so a provider the user never chose is on.
   if (args.terminalOnly || !isNativeChatDefaultFor(settings, agent, null)) {
     return {
       mode: 'terminal',
@@ -266,18 +269,39 @@ export function warnStructuredLaunchDowngrade(
   }
 }
 
-/** The store can be missing on a runtime that never opened one; that reads as no preference.
- *  A relaying desktop's stamped `nativeChatDefault` stands in for this host's own chat setting. */
-export function readAgentLaunchModeSettings(
-  runtime: Pick<OrcaRuntimeService, 'getClientSettings'>,
+/** Read private saved choices; a desktop stamp already resolved the preference for this agent. */
+export async function readAgentLaunchModeSettings(
+  runtime: { requireStore(): { getSettings(): AgentLaunchModeSettings | null } },
+  agent: string,
   nativeChatDefault?: boolean
-): AgentLaunchModeSettings | null {
+): Promise<AgentLaunchModeSettings | null> {
   if (nativeChatDefault !== undefined) {
-    return { experimentalNativeChat: nativeChatDefault }
+    return {
+      experimentalNativeChat: nativeChatDefault,
+      ...(isTuiAgent(agent) ? { nativeChatProviders: { [agent]: nativeChatDefault } } : {})
+    }
   }
   try {
-    return runtime.getClientSettings()
-  } catch {
+    const settings = runtime.requireStore().getSettings()
+    if (
+      !settings ||
+      !isTuiAgent(agent) ||
+      !isNativeChatEnabled(settings) ||
+      settings.nativeChatProviders?.[agent] !== undefined ||
+      isAgentSessionHandleProvider(agent)
+    ) {
+      return settings
+    }
+    const installed = await detectInstalledAgentsWithShellPathHydration(undefined)
+    return {
+      ...settings,
+      nativeChatProviders: {
+        ...settings.nativeChatProviders,
+        [agent]: isNativeChatDefaultFor(settings, agent, installed.filter(isTuiAgent))
+      }
+    }
+  } catch (error) {
+    console.warn('[agent-launch] could not resolve chat preference', error)
     return null
   }
 }

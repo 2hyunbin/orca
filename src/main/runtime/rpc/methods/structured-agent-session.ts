@@ -87,7 +87,7 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     permission: 'workspace',
     params: CreateSupportParams,
     handler: async (params, ctx) => {
-      requireStructuredCreateSupportAdmission(ctx, params.agent)
+      await requireStructuredCreateSupportAdmission(ctx, params.agent)
       const support = await ctx.runtime.getStructuredAgentSessionCreateSupport(
         params.worktree,
         params.agent

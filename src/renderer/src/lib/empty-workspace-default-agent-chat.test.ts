@@ -31,6 +31,8 @@ const initialAppStoreState = useAppStore.getState()
 function seedSettings(settings: Partial<GlobalSettings>): void {
   useAppStore.setState({
     detectedAgentIds: ['claude', 'codex'],
+    localDetectedAgentIdsByContext: { host: ['claude', 'codex'] },
+    ensureNativeDetectedAgents: vi.fn(async () => ['claude', 'codex']),
     settings: {
       ...getDefaultSettings('/tmp'),
       experimentalNativeChat: true,

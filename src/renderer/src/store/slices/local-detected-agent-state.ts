@@ -2,10 +2,8 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import {
-  getLocalAgentPreflightContext,
-  localPreflightContextKey
-} from '@/lib/local-preflight-context'
+import { getLocalAgentPreflightContext } from '@/lib/local-preflight-context'
+import { localAgentInventoryContextKey } from '@/lib/local-preflight-context-key'
 import * as contextEviction from './local-agent-context-eviction'
 import { getLegacyLoadingPatch, getSupersededDetectPatch } from './local-agent-legacy-loading'
 import { createEmptyLocalDetectedAgentState } from './local-detected-agent-store-state'
@@ -22,13 +20,17 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
   let legacyRefreshContextKey: string | null = null
   let localDetectionGeneration = 0
 
-  return {
+  const actions = {
     ...createEmptyLocalDetectedAgentState(),
 
-    ensureDetectedAgents: (worktreeId) => {
-      const isFloating = worktreeId === FLOATING_TERMINAL_WORKTREE_ID
-      const context = getLocalAgentPreflightContext(get(), undefined, undefined, worktreeId)
-      const contextKey = localPreflightContextKey(context)
+    ensureNativeDetectedAgents: (): Promise<TuiAgent[]> =>
+      actions.ensureDetectedAgents(undefined, true),
+    ensureDetectedAgents: (worktreeId?: string | null, nativeHost = false): Promise<TuiAgent[]> => {
+      const isFloating = nativeHost || worktreeId === FLOATING_TERMINAL_WORKTREE_ID
+      const context = nativeHost
+        ? undefined
+        : getLocalAgentPreflightContext(get(), undefined, undefined, worktreeId)
+      const contextKey = localAgentInventoryContextKey(context)
       const existing = get().localDetectedAgentIdsByContext[contextKey]
       const inflightRefresh = refreshPromises.get(contextKey)
       if (inflightRefresh) {
@@ -143,10 +145,10 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
       return pending
     },
 
-    refreshDetectedAgents: (worktreeId) => {
+    refreshDetectedAgents: (worktreeId?: string | null) => {
       const isFloating = worktreeId === FLOATING_TERMINAL_WORKTREE_ID
       const context = getLocalAgentPreflightContext(get(), undefined, undefined, worktreeId)
-      const contextKey = localPreflightContextKey(context)
+      const contextKey = localAgentInventoryContextKey(context)
       const cached = get().localDetectedAgentIdsByContext[contextKey]
       const hadUsableCache = cached != null && !failedDetectContextKeys.has(contextKey)
       const requestGeneration = localDetectionGeneration
@@ -261,7 +263,7 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
       return pending
     },
 
-    clearLocalDetectedAgentContextsForProjects: (projectIds) => {
+    clearLocalDetectedAgentContextsForProjects: (projectIds: readonly string[]) => {
       const eviction = contextEviction.getLocalAgentContextEviction({
         projectIds,
         state: get(),
@@ -299,4 +301,5 @@ export const createLocalDetectedAgentState: LocalDetectedAgentStateCreator = (se
       set(createEmptyLocalDetectedAgentState())
     }
   }
+  return actions
 }

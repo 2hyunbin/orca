@@ -80,8 +80,9 @@ function harness(options: {
     return options.terminalPromptDelivered ?? true
   })
   const runtime = {
-    getClientSettings: () =>
-      options.settings === undefined ? STRUCTURED_PREFERENCE : options.settings,
+    requireStore: () => ({
+      getSettings: () => (options.settings === undefined ? STRUCTURED_PREFERENCE : options.settings)
+    }),
     getStructuredAgentSessionCreateSupport
   }
   return {

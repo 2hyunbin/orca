@@ -10,10 +10,16 @@ import { translate } from '@/i18n/i18n'
 import { AgentIcon, getAgentCatalog, getAgentLabel } from '@/lib/agent-catalog'
 import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
 import { useAppStore } from '../../store'
+import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
+import { createAgentSettingsUpdateQueue } from './agent-availability-settings'
 import { Card, CardContent } from '../ui/card'
 import { SearchableSetting } from './SearchableSetting'
 import { SettingsSubsectionHeader, SettingsSwitch } from './SettingsFormControls'
 import { getChatProvidersSearchEntry } from './chat-providers-search'
+
+const enqueueProviderUpdate = createAgentSettingsUpdateQueue()
+
+const BUILT_IN_CHAT_AGENTS: readonly TuiAgent[] = ['claude', 'codex']
 
 function ProviderStatus({
   agent,
@@ -64,14 +70,19 @@ export function NativeChatProvidersSetting({
   forceVisible = false
 }: {
   settings: GlobalSettings
-  updateSettings: (updates: Partial<GlobalSettings>) => void
+  updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
   forceVisible?: boolean
 }): React.JSX.Element | null {
   const entry = getChatProvidersSearchEntry()
   useHostStructuredAgentsVersion()
   const agents = chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined)
-  // The list launches route on; the tab bar and Settings → Agents keep it loaded.
-  const detectedIds = useAppStore((state) => state.detectedAgentIds) ?? null
+  const detectedIds = useAppStore(readNativeDetectedAgents)
+  const visibleAgents = agents.filter(
+    (agent) =>
+      detectedIds !== null ||
+      BUILT_IN_CHAT_AGENTS.includes(agent) ||
+      settings.nativeChatProviders?.[agent] !== undefined
+  )
   return (
     <SearchableSetting
       {...entry}
@@ -83,11 +94,10 @@ export function NativeChatProvidersSetting({
       <Card>
         <CardContent>
           <div className="divide-y divide-border/40">
-            {agents.map((agent) => {
+            {visibleAgents.map((agent) => {
               const label = getAgentLabel(agent)
               const enabledInAgents = isTuiAgentEnabled(agent, settings.disabledTuiAgents)
-              const on =
-                enabledInAgents && isNativeChatProviderOn(settings, agent, detectedIds)
+              const on = isNativeChatProviderOn(settings, agent, detectedIds)
               return (
                 <div key={agent} className="flex items-center gap-3 py-3">
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
@@ -112,14 +122,21 @@ export function NativeChatProvidersSetting({
                       { value0: label }
                     )}
                     onChange={() =>
-                      // Built from the latest settings, so two quick toggles both land.
-                      updateSettings(
-                        buildNativeChatProviderUpdate(
-                          useAppStore.getState().settings ?? settings,
-                          agent,
-                          !on
-                        )
-                      )
+                      enqueueProviderUpdate({
+                        getSettings: () => useAppStore.getState().settings,
+                        fallbackSettings: settings,
+                        updateSettings,
+                        buildUpdate: (latest) =>
+                          buildNativeChatProviderUpdate(
+                            latest,
+                            agent,
+                            !isNativeChatProviderOn(
+                              latest,
+                              agent,
+                              readNativeDetectedAgents(useAppStore.getState())
+                            )
+                          )
+                      })
                     }
                   />
                 </div>

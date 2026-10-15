@@ -1,3 +1,4 @@
+import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { ComposerModel } from './composer-model'
 
 type QuickCreationExecutionInput = Pick<
@@ -35,7 +36,6 @@ type QuickCreationExecutionInput = Pick<
 import { useCallback } from 'react'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
-import { useAppStore } from '@/store'
 import { settleComposerSubmit } from '@/lib/composer-submit-cancellation'
 import { runBackgroundWorktreeCreation } from '@/lib/worktree-creation-flow'
 import { translate } from '@/i18n/i18n'
@@ -43,7 +43,7 @@ import { resolveQuickCreateLinkedWorkItemPrompt } from '@/lib/linked-work-item-c
 import { buildQuickComposerStartup } from './quick-startup-plan'
 import { buildQuickCreationRequest, type QuickSubmitOptions } from './quick-creation-request'
 import type { PendingSmartGitHubSubmitResolution } from './source-selection-decisions'
-import { resolveAgentSessionLaunchRoute } from '@/lib/agent-session-launch-plan'
+import { prepareAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 
 export function useQuickCreationExecution(input: QuickCreationExecutionInput) {
   const {
@@ -175,18 +175,21 @@ export function useQuickCreationExecution(input: QuickCreationExecutionInput) {
       const promptDelivery = quickDraftPrompt ? 'draft' : 'auto-submit'
       // Why: the verdict is persisted on the request as data and re-entered once the worktree exists.
       const agentLaunchRoute = agent
-        ? resolveAgentSessionLaunchRoute(useAppStore.getState(), {
-            agent,
-            workspace: {
-              kind: selectedRepoIsGit ? 'git-worktree' : 'folder',
-              repoId,
-              executionHostId: ephemeralVmRecipe
-                ? 'runtime:pending-ephemeral-vm'
-                : (workspaceRunContext?.hostId ?? selectedRepoExecutionHostId ?? undefined)
-            },
-            prompt: quickDraftPrompt ?? quickPrompt,
-            promptDelivery
-          })
+        ? (
+            await prepareAgentSessionLaunch({
+              agent,
+              workspace: {
+                kind: selectedRepoIsGit ? 'git-worktree' : 'folder',
+                repoId,
+                executionHostId: ephemeralVmRecipe
+                  ? 'runtime:pending-ephemeral-vm'
+                  : (workspaceRunContext?.hostId ?? selectedRepoExecutionHostId ?? undefined)
+              },
+              prompt: quickDraftPrompt ?? quickPrompt,
+              requestId: newAgentLaunchRequestId(),
+              promptDelivery
+            })
+          ).route
         : 'terminal-tui'
       const structuredLaunch = agentLaunchRoute === 'structured-native-chat'
 

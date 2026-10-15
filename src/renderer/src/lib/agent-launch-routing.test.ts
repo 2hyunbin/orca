@@ -91,6 +91,7 @@ describe('new agent launch routing', () => {
     expect(
       route({
         agent: 'grok',
+        installedHere: ['grok'],
         hostCapabilities: [
           STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
           STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY

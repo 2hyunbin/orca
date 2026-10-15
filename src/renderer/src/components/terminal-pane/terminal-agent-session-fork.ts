@@ -15,7 +15,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { translate } from '@/i18n/i18n'
-import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
+import { prepareAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 
 type ForkAgentSessionFromPaneArgs = {
@@ -230,7 +230,7 @@ export async function startAgentSessionFork(fork: PreparedAgentSessionFork): Pro
     activateAndRevealWorktree(forkWorktreeId, { sidebarRevealBehavior: 'auto' })
     return copyAgentSessionForkContext(fork)
   }
-  const agentSessionLaunchPlan = planAgentSessionLaunch(useAppStore.getState(), {
+  const agentSessionLaunchPlan = await prepareAgentSessionLaunch({
     requestId: newAgentLaunchRequestId(),
     agent: fork.agent,
     workspace: { kind: 'git-worktree', worktreeId: forkWorktreeId },

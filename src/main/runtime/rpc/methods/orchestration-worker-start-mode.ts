@@ -76,7 +76,8 @@ export function downgradeWorkerStartModeForHost(
 }
 
 export function readWorkerStartModeSettings(
-  runtime: Pick<OrcaRuntimeService, 'getClientSettings'>
-): AgentLaunchModeSettings | null {
-  return readAgentLaunchModeSettings(runtime)
+  runtime: Parameters<typeof readAgentLaunchModeSettings>[0],
+  agent: string
+): Promise<AgentLaunchModeSettings | null> {
+  return readAgentLaunchModeSettings(runtime, agent)
 }

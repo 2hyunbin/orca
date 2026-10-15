@@ -51,11 +51,14 @@ export function requireStructuredAgentAudience(ctx: RpcContext, agent: string): 
  * `agentSession.createSupport` alone also reads the host setting, for a client that leaves the
  * launch mode to the host; it gets the refusal it got before, which it reads as "open a terminal".
  */
-export function requireStructuredCreateSupportAdmission(ctx: RpcContext, agent?: string): void {
+export async function requireStructuredCreateSupportAdmission(
+  ctx: RpcContext,
+  agent?: string
+): Promise<void> {
   requireStructuredAgentAudience(ctx, agent ?? '')
   if (
     createSupportFollowsHostSetting(ctx) &&
-    !isStructuredNativeChatDefaultFor(ctx.runtime, agent ?? '')
+    !(await isStructuredNativeChatDefaultFor(ctx.runtime, agent ?? ''))
   ) {
     throw agentSessionRefusalError('structured_agent_session_unsupported', {
       reason: 'clientCapabilityMissing'

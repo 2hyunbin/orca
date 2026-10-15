@@ -27,7 +27,7 @@ export function ChatSettingsSection({
   isMounted
 }: {
   settings: GlobalSettings
-  updateSettings: (updates: Partial<GlobalSettings>) => void
+  updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
   writeSourceControlAiSettings: (patch: SourceControlAiSettingsPatch) => Promise<void>
   onChatPromptDirtyChange?: (dirty: boolean) => void
   chatPromptDiscardSignal?: number
@@ -74,11 +74,13 @@ export function ChatSettingsSection({
               </Card>
             </section>
           ) : null}
-          <NativeChatProvidersSetting
-            settings={settings}
-            updateSettings={updateSettings}
-            forceVisible={matchesSettingsSearch(query, [{ title }])}
-          />
+          {showDesktopOnlySettings ? (
+            <NativeChatProvidersSetting
+              settings={settings}
+              updateSettings={updateSettings}
+              forceVisible={matchesSettingsSearch(query, [{ title }])}
+            />
+          ) : null}
           {showDesktopOnlySettings ? (
             <NativeChatInlineVisualsSetting
               settings={settings}
