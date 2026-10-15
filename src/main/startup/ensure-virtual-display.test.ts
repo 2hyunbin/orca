@@ -9,7 +9,7 @@ const { spawnMock, existsSyncMock, readFileSyncMock, rmSyncMock, statSyncMock, a
     statSyncMock: vi.fn(),
     appMock: {
       disableHardwareAcceleration: vi.fn(),
-      commandLine: { appendSwitch: vi.fn(), getSwitchValue: vi.fn() },
+      commandLine: { appendSwitch: vi.fn(), getSwitchValue: vi.fn(), removeSwitch: vi.fn() },
       once: vi.fn()
     }
   }))
@@ -62,6 +62,7 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
     statSyncMock.mockReset()
     appMock.disableHardwareAcceleration.mockReset()
     appMock.commandLine.appendSwitch.mockReset()
+    appMock.commandLine.removeSwitch.mockReset()
     appMock.commandLine.getSwitchValue.mockReset().mockReturnValue('')
     appMock.once.mockReset()
     delete process.env.DISPLAY

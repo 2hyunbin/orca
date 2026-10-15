@@ -26,6 +26,21 @@ function configureHeadlessServeChromiumFlags(): void {
   // Why: externally managed displays are commonly Xvfb too; a GPU-process fork can trap before serve readiness.
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
+  pinOzonePlatformToX11()
+}
+
+// Why: Electron resolves its platform hint into --ozone-platform before main runs, so an inherited
+// XDG_SESSION_TYPE=wayland selects Wayland even when serve's only display is Xvfb, and Chromium
+// exits in platform init (#25400). Serve's offscreen windows need X11 anyway; an explicit
+// --ozone-platform on argv still wins (a --ozone-platform-hint is only a preference).
+function pinOzonePlatformToX11(): void {
+  if (
+    process.argv.some((arg) => arg === '--ozone-platform' || arg.startsWith('--ozone-platform='))
+  ) {
+    return
+  }
+  app.commandLine.removeSwitch('ozone-platform')
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
 }
 
 function xvfbSocketPath(displayNumber: number): string {
