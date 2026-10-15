@@ -593,7 +593,8 @@ describe('attachEditorAutosaveController', () => {
       )
     const eventTarget = stubIsolatedWorldWindow(writeFile)
     const store = createEditorStore()
-    store.setState(makeSessionReadyState())
+    // Why: keep the worktree so the saves resolve a write target instead of failing fast.
+    store.setState({ ...makeSessionReadyState(), worktreesByRepo: store.getState().worktreesByRepo })
     openDirtyFile(store, 'a.ts', 'saved before restart')
     openDirtyFile(store, 'b.ts', 'stalled save', 'unstaged')
     const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
