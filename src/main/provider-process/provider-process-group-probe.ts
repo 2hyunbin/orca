@@ -2,7 +2,9 @@ import type { AgentSessionOwnerProbe } from '../../shared/agent-session-lease-ad
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 
 export function probeProviderProcessGroup(pgid: number): DescendantTreeVerdict {
-  if (!Number.isSafeInteger(pgid) || pgid <= 1) return 'unverifiable'
+  if (!Number.isSafeInteger(pgid) || pgid <= 1) {
+    return 'unverifiable'
+  }
   try {
     process.kill(-pgid, 0)
     return 'live'

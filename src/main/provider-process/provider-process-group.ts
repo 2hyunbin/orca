@@ -104,23 +104,24 @@ export function adoptProviderProcessGroup(
   }
   const lifetime = options.lifetime ?? 'session'
   const gate = providerExecGate(child, command)
-  const release = watchProviderGroup(pgid, ownerDeathStop(options), gate.ready, gate.failed)
+  let release = (): void => {}
   let rootExited = child.exitCode !== null || child.signalCode !== null
   let terminated = false
   let stopping: Promise<boolean> | null = null
   const alive = (): boolean => groupExists(pgid)
   const gone = (): boolean => !alive()
-  const reap = async (): Promise<boolean> => {
-    if (alive()) {
-      signalGroup(pgid, 'SIGKILL')
-    }
-    const reaped = await waitUntil(gone, PROVIDER_GROUP_REAP_TIMEOUT_MS)
-    if (reaped) {
+  let terminalReap: Promise<boolean> | null = null
+  const reap = (): Promise<boolean> => {
+    terminalReap ??= (async () => {
+      if (alive()) {
+        signalGroup(pgid, 'SIGKILL')
+      }
+      const reaped = await waitUntil(gone, PROVIDER_GROUP_REAP_TIMEOUT_MS)
       release()
-    }
-    return reaped
+      return reaped
+    })()
+    return terminalReap
   }
-  let selfExitReap: Promise<boolean> | null = null
   let resolveRootExit = (): void => {}
   const rootExit = new Promise<void>((resolve) => {
     resolveRootExit = resolve
@@ -129,7 +130,7 @@ export function adoptProviderProcessGroup(
     rootExited = true
     // A provider that leaves before any SIGTERM takes the rest of its group with it.
     if (!terminated) {
-      selfExitReap ??= reap()
+      void reap()
     }
     resolveRootExit()
   }
@@ -139,7 +140,7 @@ export function adoptProviderProcessGroup(
     child.once('exit', onRootExit)
   }
   const exited = rootExit.then(async () => {
-    return (await (selfExitReap ?? stopping)) ?? !groupExists(pgid)
+    return (await (terminalReap ?? stopping)) ?? !groupExists(pgid)
   })
   const runStop = async (closeRequest: ProviderCloseRequest): Promise<boolean> => {
     try {
@@ -151,8 +152,8 @@ export function adoptProviderProcessGroup(
     if (lifetime === 'session' && closeRequest === 'stdin-end' && !rootExited) {
       await waitForProcessExitUntil(rootExit, PROVIDER_STDIN_END_GRACE_MS)
     }
-    if (selfExitReap) {
-      return selfExitReap
+    if (terminalReap) {
+      return terminalReap
     }
     terminated = true
     signalGroup(pgid, 'SIGTERM')
@@ -162,12 +163,23 @@ export function adoptProviderProcessGroup(
       : waitUntil(gone, PROVIDER_SIGTERM_GRACE_MS))
     return reap()
   }
+  const failed = (error: Error): void => {
+    // An active stop retains the launch's authority through its bounded grace.
+    if (stopping || (!rootExited && child.exitCode === null && child.signalCode === null)) {
+      void reap()
+    }
+    gate.failed(error)
+  }
+  release = watchProviderGroup(pgid, ownerDeathStop(options), () => {
+    if (!terminalReap && !gate.ready()) {
+      failed(new Error('Provider launch gate is unavailable'))
+    }
+  }, failed)
   return {
     pgid,
     exited,
     stop(closeRequest = options.closeRequest ?? 'stdin-end-and-sigterm') {
-      stopping ??= runStop(closeRequest)
-      return stopping
+      return terminalReap ?? (stopping ??= runStop(closeRequest))
     }
   }
 }

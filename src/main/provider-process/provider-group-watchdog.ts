@@ -129,11 +129,15 @@ type Watchdog = { child: ChildProcessHandle; groups: Map<number, WatchedGroup> }
 let watchdog: Watchdog | null = null
 
 function failWatchdog(current: Watchdog, error: Error): void {
-  if (watchdog !== current) return
+  if (watchdog !== current) {
+    return
+  }
   watchdog = null
   current.child.stdin?.destroy()
   for (const group of current.groups.values()) {
-    if (group.timer) clearTimeout(group.timer)
+    if (group.timer) {
+      clearTimeout(group.timer)
+    }
     group.failed(error)
   }
   current.groups.clear()
@@ -169,11 +173,15 @@ function startWatchdog(): Watchdog {
         group.ready()
       }
     }
-    if (pending.length > 64) fail(new Error('Invalid provider cleanup acknowledgement'))
+    if (pending.length > 64) {
+      fail(new Error('Invalid provider cleanup acknowledgement'))
+    }
   })
   child.unref()
   for (const pipe of [child.stdin, child.stdout]) {
-    if (pipe instanceof Socket) pipe.unref()
+    if (pipe instanceof Socket) {
+      pipe.unref()
+    }
   }
   if (child.pid === undefined || !child.stdin || !child.stdout) {
     queueMicrotask(() => fail(new Error('Provider cleanup watcher could not start')))
@@ -197,13 +205,21 @@ export function watchProviderGroup(
   }
   const group: WatchedGroup = { ready, failed, timer: null }
   current.groups.set(pgid, group)
-  group.timer = setTimeout(
-    () => failWatchdog(current, new Error('Provider cleanup watcher did not acknowledge launch')),
-    REGISTRATION_TIMEOUT_MS
-  )
-  current.child.stdin?.write(`+ ${pgid} ${stop}\n`)
-  return () => {
-    if (group.timer) clearTimeout(group.timer)
-    if (current.groups.delete(pgid)) current.child.stdin?.write(`- ${pgid}\n`)
+  const release = (): void => {
+    if (group.timer) {
+      clearTimeout(group.timer)
+    }
+    group.timer = null
+    if (current.groups.get(pgid) === group) {
+      current.groups.delete(pgid)
+      current.child.stdin?.write(`- ${pgid}\n`)
+    }
   }
+  group.timer = setTimeout(() => {
+    group.timer = null
+    group.failed(new Error('Provider cleanup watcher did not acknowledge launch'))
+    release()
+  }, REGISTRATION_TIMEOUT_MS)
+  current.child.stdin?.write(`+ ${pgid} ${stop}\n`)
+  return release
 }

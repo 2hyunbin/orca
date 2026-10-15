@@ -82,9 +82,10 @@ export async function runAgentModelCatalogListing(
   const stderrDetail = (): string => managed.stderrTail().trim().slice(0, STDERR_DETAIL_MAX_CHARS)
   let timer: ReturnType<typeof setTimeout> | undefined
   let onAbort = (): void => {}
-  let completed = false
+  let text = ''
+  let cleanupConfirmed = false
   try {
-    return await new Promise<string>((resolve, reject) => {
+    text = await new Promise<string>((resolve, reject) => {
       const fail = (message: string, reason: AgentModelCatalogProbeFailure): void =>
         reject(
           new AgentModelCatalogProbeError(
@@ -117,7 +118,6 @@ export async function runAgentModelCatalogListing(
         if (managed.executableMissing) {
           fail(`${launch.command} could not start: executable not found`, 'spawn')
         } else if (code === 0) {
-          completed = true
           resolve(output.text())
         } else {
           const detail = stderrDetail()
@@ -137,10 +137,12 @@ export async function runAgentModelCatalogListing(
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', onAbort)
     const result = await managed.close()
-    if (completed && managed.supervised && (result.root !== 'exited' || result.tree !== 'exited')) {
-      throw new AgentModelCatalogProbeError(`${launch.command} listing cleanup could not be confirmed`, 'exit')
-    }
+    cleanupConfirmed = result.root === 'exited' && result.tree === 'exited'
   }
+  if (managed.supervised && !cleanupConfirmed) {
+    throw new AgentModelCatalogProbeError(`${launch.command} listing cleanup could not be confirmed`, 'exit')
+  }
+  return text
 }
 
 function throwIfStopped(signal: AbortSignal | undefined, label: string): void {

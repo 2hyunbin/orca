@@ -52,15 +52,20 @@ describe.runIf(process.platform !== 'win32')('provider group watchdog', () => {
     const pids = await rig.readPids()
     const launch = providerGroupWatchdogLaunch()
     const watcher = spawnProcess({ program: launch.command, args: launch.args, env: launch.env, detached: true })
-    if (watcher.pid) extraPids.push(watcher.pid)
+    if (watcher.pid) {
+      extraPids.push(watcher.pid)
+    }
     // Reader closure deterministically makes the pending registration's ACK fail with EPIPE.
     watcher.stdout.destroy()
     watcher.stdin.on('error', () => {})
     watcher.stdin.end(`+ ${pids.provider} stop\n`)
     expect(await waitFor(() => !alive(pids.provider) && !alive(pids.grandchild), PROVIDER_GROUP_MAX_STOP_MS + 1_000)).toBe(true)
     await new Promise<void>((resolve) => {
-      if (provider.exitCode !== null || provider.signalCode !== null) resolve()
-      else provider.once('exit', () => resolve())
+      if (provider.exitCode !== null || provider.signalCode !== null) {
+        resolve()
+      } else {
+        provider.once('exit', () => resolve())
+      }
     })
   })
 

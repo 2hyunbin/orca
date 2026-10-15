@@ -14,25 +14,25 @@ exec "$@"
 `
 
 export function providerExecGate(
-  child: Pick<ChildProcessHandle, 'stdio' | 'kill' | 'emit' | 'listenerCount'>,
+  child: Pick<ChildProcessHandle, 'stdio' | 'emit' | 'listenerCount'>,
   command: string
 ): {
-  ready(): void
+  ready(): boolean
   failed(error: Error): void
 } {
   const gate = child.stdio[3]
   const fail = (error: Error): void => {
     gate?.destroy()
-    try {
-      child.kill('SIGKILL')
-    } catch {
-      // It may already have exited without executing the provider.
-    }
-    if (child.listenerCount('error') > 0) child.emit('error', error)
+    // All registered groups are contained before arbitrary consumer listeners run.
+    queueMicrotask(() => {
+      if (child.listenerCount('error') > 0) {
+        child.emit('error', error)
+      }
+    })
   }
   if (!(gate instanceof Duplex)) {
     return {
-      ready: () => fail(new Error('Provider launch gate is unavailable')),
+      ready: () => false,
       failed: fail
     }
   }
@@ -46,5 +46,11 @@ export function providerExecGate(
       }))
     }
   })
-  return { ready: () => gate.write('exec\n'), failed: fail }
+  return {
+    ready: () => {
+      gate.write('exec\n')
+      return true
+    },
+    failed: fail
+  }
 }

@@ -512,7 +512,9 @@ function childOf(capture: { spec: ProcessSpec; envToDelete: readonly string[] })
   const { spec } = capture
   const gated = spec.program === '/bin/sh' && spec.args?.[1] === PROVIDER_EXEC_GATE_SCRIPT
   const command = gated ? spec.args?.[3] : spec.program
-  if (!command) throw new Error('Provider launch has no executable')
+  if (!command) {
+    throw new Error('Provider launch has no executable')
+  }
   return {
     command: normalized(command),
     args: (gated ? spec.args?.slice(4) ?? [] : spec.args ?? []).map(normalized),

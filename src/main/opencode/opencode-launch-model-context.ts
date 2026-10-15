@@ -241,8 +241,7 @@ async function stopPreflightGroup(
   const { root, tree } = await stopSupervisedChildProcess(child, group, {
     site: OPENCODE_PREFLIGHT_KILL_SITE
   })
-  // Joins the stop the close ran, or the reap of a server that had already exited.
-  if (root !== 'exited' || tree !== null || !(await group.stop())) {
+  if (root !== 'exited' || tree !== 'exited') {
     return false
   }
   return withTimeout(closed, GROUP_PIPE_CLOSE_MS, false)

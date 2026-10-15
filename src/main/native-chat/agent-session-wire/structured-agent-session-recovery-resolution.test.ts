@@ -164,7 +164,9 @@ describe('structured session recovery resolution', () => {
     await latch(store)
     let groupAlive = true
     const kill = vi.spyOn(process, 'kill').mockImplementation((pid) => {
-      if (pid === -4242 && groupAlive) return true
+      if (pid === -4242 && groupAlive) {
+        return true
+      }
       throw Object.assign(new Error('gone'), { code: 'ESRCH' })
     })
     const stopOwnerProcess = vi.fn()
