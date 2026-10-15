@@ -187,7 +187,9 @@ describe('a structured send in the open chat', () => {
       }
       const id = await send('sent before background streaming')
       if (!snapshotFirst) {
-        expect(shown()).toEqual([[agentJournalSubmissionKey(id), 'sent before background streaming']])
+        expect(shown()).toEqual([
+          [agentJournalSubmissionKey(id), 'sent before background streaming']
+        ])
         act(() => listener?.(snapshot))
       }
       expect(shown()).toEqual([[agentJournalSubmissionKey('newest'), 'newest reply']])
