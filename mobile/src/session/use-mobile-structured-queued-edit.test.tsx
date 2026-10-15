@@ -195,7 +195,9 @@ describe('mobile in-place queued Edit', () => {
     expect(error).toHaveBeenCalledWith('This message changed while you were editing.')
     expect(append).not.toHaveBeenCalled()
     act(() => hook!.queued.editor!.cancel())
-    await act(async () => hook!.queued.edit!('draft-1'))
+    await act(async () => {
+      await hook!.queued.edit!('draft-1')
+    })
     act(() => hook!.queued.editor!.change('saved text'))
     const body = queuedMessageWithEditedText(message.body, 'saved text')!
     sendRequest.mockImplementation(async (method) => {
@@ -381,7 +383,9 @@ describe('mobile in-place queued Edit', () => {
               mutationOk({ status: 'updated', messageId: message.messageId, fingerprint: 'new' })
             )
     )
-    await act(async () => hook!.queued.edit!(message.messageId))
+    await act(async () => {
+      await hook!.queued.edit!(message.messageId)
+    })
     act(() => hook!.queued.editor!.change('saved without hold reply'))
     await act(async () => {
       expect(await hook!.queued.editor!.save()).toBe(true)
