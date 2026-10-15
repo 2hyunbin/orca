@@ -21,6 +21,9 @@ import {
 } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
 import { publishWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
 import {
+  addWorkspace,
+  emptySession,
+  FOLDER_KEY,
   GIT_KEY,
   leaf
 } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
@@ -92,10 +95,36 @@ function filesOfOtherHosts(): WorkspaceSessionState {
   return session
 }
 
+/** Groups with no selected tab: one beside a terminal, one in a workspace without terminals. */
+function groupsWithoutSelection(): WorkspaceSessionState {
+  const session = addWorkspace(emptySession(), GIT_KEY, [
+    { id: 'group-t', activeTabId: null, tabs: [{ id: 'tab-a', leaves: [[leaf(1), 'pty-a']] }] }
+  ])
+  addWorkspace(session, FOLDER_KEY, [
+    {
+      id: 'group-e',
+      activeTabId: null,
+      tabs: [{ id: 'editor-1', entityId: '/notes/todo.md', kind: 'editor' }]
+    }
+  ])
+  session.openFilesByWorktree = {
+    [FOLDER_KEY]: [
+      {
+        filePath: '/notes/todo.md',
+        relativePath: 'todo.md',
+        worktreeId: FOLDER_KEY,
+        language: 'markdown'
+      }
+    ]
+  }
+  return session
+}
+
 const PROFILES: readonly WorkspaceLayoutProfile[] = [
   ...WORKSPACE_LAYOUT_PROFILES,
   ...LEGACY_WORKSPACE_LAYOUT_PROFILES,
-  { name: 'editor files other hosts own', hostId: 'local', build: filesOfOtherHosts }
+  { name: 'editor files other hosts own', hostId: 'local', build: filesOfOtherHosts },
+  { name: 'groups with no selected tab', hostId: 'local', build: groupsWithoutSelection }
 ]
 
 /** What main publishes for a stored partition, and what the Loader keeps beside the layout. */
@@ -272,11 +301,17 @@ describe('the slices built from layout frames match the window restored from dis
       }
     }
     expect(hosts).toEqual(new Set(['local', 'ssh', 'runtime']))
-    const otherHosts = await restoreAndApply(PROFILES.at(-1)!)
+    const otherHosts = await restoreAndApply(PROFILES.at(-2)!)
     expect(otherHosts.applied.markdownFrontmatterVisible).toEqual({
       [`editor:${encodeURIComponent(GIT)}:env-1:${encodeURIComponent('/srv/app/main.go')}`]: false
     })
     expect(Object.keys(local.applied.groupsByWorktree)).toContain('folder:notes-1')
+  })
+
+  it('selects a group’s first tab when the view selects none, with or without terminals', async () => {
+    const { applied } = await restoreAndApply(PROFILES.at(-1)!)
+    expect(applied.groupsByWorktree[GIT_KEY]![0]!.activeTabId).toBe('tab-a')
+    expect(applied.groupsByWorktree[FOLDER_KEY]![0]!.activeTabId).toBe('editor-1')
   })
 
   it('titles a terminal tab from the live title of the pane this view focuses', () => {

@@ -99,19 +99,15 @@ function stampExecutionHosts(
   )
 }
 
-/**
- * A group shows the view's tab, else its first: the startup reconcile's pick, which today runs
- * only for workspaces with terminal rows.
- */
+/** A group shows the view's tab, else its first, as the startup reconcile picks today. */
 function withShownTabs(
-  groupsByWorktree: AppState['groupsByWorktree'],
-  terminalWorkspaceKeys: ReadonlySet<string>
+  groupsByWorktree: AppState['groupsByWorktree']
 ): AppState['groupsByWorktree'] {
   return Object.fromEntries(
     Object.entries(groupsByWorktree).map(([key, groups]) => [
       key,
       groups.map((group) =>
-        group.activeTabId === null && group.tabOrder.length > 0 && terminalWorkspaceKeys.has(key)
+        group.activeTabId === null && group.tabOrder.length > 0
           ? { ...group, activeTabId: group.tabOrder[0]! }
           : group
       )
@@ -180,10 +176,7 @@ export function buildLayoutFrameSlices({
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
-    groupsByWorktree: withShownTabs(
-      editorTabs.groupsByWorktree,
-      new Set(Object.keys(rows.tabsByWorktree))
-    ),
+    groupsByWorktree: withShownTabs(editorTabs.groupsByWorktree),
     openFiles: editor.state.openFiles,
     editorDrafts: editor.state.editorDrafts,
     markdownFrontmatterVisible: editor.state.markdownFrontmatterVisible,

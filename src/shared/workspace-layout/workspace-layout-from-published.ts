@@ -86,6 +86,9 @@ export function workspaceLayoutModelFromPublished(
       Object.entries(layouts).map(([key, layout]) => [key, workspaceLayoutFromPublished(layout)])
     ),
     records: {},
-    legacy: { terminalRowOwners: {} }
+    // Today's window saves a row list for every workspace it shows, empty or not.
+    legacy: {
+      terminalRowOwners: Object.fromEntries(Object.keys(layouts).map((key) => [key, true]))
+    }
   }
 }
