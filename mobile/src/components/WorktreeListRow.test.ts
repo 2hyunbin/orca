@@ -19,9 +19,10 @@ import {
   type WorktreeCardDetails
 } from '../../../src/shared/worktree/card-properties'
 
-const { agentSpinnerRender, agentStateDotRender } = vi.hoisted(() => ({
+const { agentSpinnerRender, agentStateDotRender, metaGlyphsRender } = vi.hoisted(() => ({
   agentSpinnerRender: vi.fn(),
-  agentStateDotRender: vi.fn()
+  agentStateDotRender: vi.fn(),
+  metaGlyphsRender: vi.fn()
 }))
 
 vi.mock('react-native', () => ({
@@ -59,7 +60,10 @@ vi.mock('./MobileRepoIcon', () => ({ MobileRepoIcon: () => null }))
 vi.mock('./WorktreeAgentList', () => ({ WorktreeAgentList: () => null }))
 vi.mock('./WorktreeMetaGlyphs', () => ({
   prStateColor: () => '#000000',
-  WorktreeMetaGlyphs: () => null
+  WorktreeMetaGlyphs: (props: unknown) => {
+    metaGlyphsRender(props)
+    return null
+  }
 }))
 
 type TestItem = Worktree & { status: NonNullable<Worktree['status']> }
@@ -152,6 +156,7 @@ describe('memoized worktree rows', () => {
   beforeEach(() => {
     agentSpinnerRender.mockClear()
     agentStateDotRender.mockClear()
+    metaGlyphsRender.mockClear()
   })
 
   afterEach(() => {
@@ -377,5 +382,52 @@ describe('memoized worktree rows', () => {
       )
     )
     expect(shown()).toEqual({ pr: 0, host: 0 })
+  })
+
+  it('passes the Jira, automation and CLI facts the card properties show', async () => {
+    const item: TestItem = {
+      ...baseItem,
+      automationCreated: true,
+      cliCreated: true,
+      linkedItems: [{ provider: 'jira', type: 'issue', number: 12, jiraIdentifier: 'ORCA-12' }]
+    }
+    const lastGlyphs = () => metaGlyphsRender.mock.lastCall?.[0]
+    await act(async () => {
+      renderer = create(createElement(ListRowHarness, { item, now: 2_000 }))
+    })
+    expect(lastGlyphs()).toMatchObject({
+      linkedJiraIssue: true,
+      automationCreated: true,
+      cliCreated: true
+    })
+
+    await act(async () =>
+      renderer!.update(
+        createElement(ListRowHarness, {
+          item,
+          now: 2_000,
+          cardDetails: getWorktreeCardDetails(['status', 'unread'], {
+            compactCards: false,
+            newCardStyle: false
+          })
+        })
+      )
+    )
+    expect(lastGlyphs()).toMatchObject({
+      linkedJiraIssue: false,
+      automationCreated: false,
+      cliCreated: false
+    })
+  })
+
+  it('shows none of them for a row from a host that sends none of the facts', async () => {
+    await act(async () => {
+      renderer = create(createElement(ListRowHarness, { item: baseItem, now: 2_000 }))
+    })
+    expect(metaGlyphsRender.mock.lastCall?.[0]).toMatchObject({
+      linkedJiraIssue: false,
+      automationCreated: false,
+      cliCreated: false
+    })
   })
 })

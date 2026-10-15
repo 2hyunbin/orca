@@ -1,6 +1,7 @@
-import { CircleDot, GitMerge, StickyNote } from 'lucide-react-native'
+import { CalendarClock, CircleDot, GitMerge, SquareTerminal, StickyNote } from 'lucide-react-native'
 import { StyleSheet, Text, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
+import { TaskProviderLogo } from './TaskProviderLogo'
 import { prStateToken } from './pr-state-token'
 import { statusColor } from './pr-sidebar/pr-sidebar-status-color'
 
@@ -17,9 +18,12 @@ type Props = {
   linkedGitLabMR?: number | null
   linkedIssue?: number | null
   linkedGitLabIssue?: number | null
+  linkedJiraIssue?: boolean
+  automationCreated?: boolean
+  cliCreated?: boolean
 }
 
-// Presence glyphs for linked notes / Linear / GitLab MR / issue, matching the
+// Presence glyphs for notes / automation / CLI / issue / Linear / Jira / GitLab MR, matching the
 // desktop WorktreeCardMetaBadges row. Mobile shows presence only; the full
 // detail (title/state/labels) is a follow-up detail sheet.
 export function WorktreeMetaGlyphs({
@@ -27,20 +31,34 @@ export function WorktreeMetaGlyphs({
   linkedLinearIssue,
   linkedGitLabMR,
   linkedIssue,
-  linkedGitLabIssue
+  linkedGitLabIssue,
+  linkedJiraIssue = false,
+  automationCreated = false,
+  cliCreated = false
 }: Props) {
   const hasNotes = (comment ?? '').trim().length > 0
   const hasLinear = Boolean(linkedLinearIssue)
   const hasGitLabMR = linkedGitLabMR != null
   const hasIssue = linkedIssue != null || linkedGitLabIssue != null
-  if (!hasNotes && !hasLinear && !hasGitLabMR && !hasIssue) {
+  if (
+    !hasNotes &&
+    !hasLinear &&
+    !hasGitLabMR &&
+    !hasIssue &&
+    !linkedJiraIssue &&
+    !automationCreated &&
+    !cliCreated
+  ) {
     return null
   }
   return (
     <View style={styles.metaGlyphs}>
       {hasNotes && <StickyNote size={11} color={colors.textMuted} />}
+      {automationCreated && <CalendarClock size={11} color={colors.textMuted} />}
+      {cliCreated && <SquareTerminal size={11} color={colors.textMuted} />}
       {hasIssue && <CircleDot size={11} color={colors.textMuted} />}
       {hasLinear && <Text style={styles.linearGlyph}>L</Text>}
+      {linkedJiraIssue && <TaskProviderLogo provider="jira" size={10} color={colors.textMuted} />}
       {hasGitLabMR && <GitMerge size={11} color={colors.textMuted} />}
     </View>
   )

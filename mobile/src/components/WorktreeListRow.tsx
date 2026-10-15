@@ -8,6 +8,7 @@ import type { Worktree } from '../worktree/workspace-list-types'
 import type { WorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
 import type { AgentActivityDisplayMode } from '../../../src/shared/ui-chrome-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
+import { hasLinkedJiraIssue } from '../worktree/worktree-linked-jira-issue'
 import { AgentSpinner } from './AgentSpinner'
 import { HostKindIcon } from './HostKindIcon'
 import { MobileRepoIcon } from './MobileRepoIcon'
@@ -123,6 +124,9 @@ function WorktreeListRowComponent({
             linkedGitLabMR={cardDetails.pr ? item.linkedGitLabMR : null}
             linkedIssue={cardDetails.issue ? item.linkedIssue : null}
             linkedGitLabIssue={cardDetails.issue ? item.linkedGitLabIssue : null}
+            linkedJiraIssue={cardDetails.jiraIssue && hasLinkedJiraIssue(item.linkedItems)}
+            automationCreated={cardDetails.automation && item.automationCreated === true}
+            cliCreated={cardDetails.cli && item.cliCreated === true}
           />
         </View>
         <View style={styles.worktreeMetaRow}>
