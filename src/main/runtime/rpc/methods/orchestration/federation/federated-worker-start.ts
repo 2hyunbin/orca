@@ -3,14 +3,11 @@ import { isTuiAgent } from '../../../../../../shared/tui-agent-config'
 import type { RuntimeStatus } from '../../../../../../shared/runtime-types'
 import {
   ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY,
-  ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION,
-  ORCHESTRATION_FEDERATION_CONTROL_MAIL_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY,
-  ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_PROTOCOL_VERSION,
-  ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
 } from '../../../../../../shared/protocol-version'
+import { resolveFederationProtocolVersion } from '../../../../../../shared/orchestration-runtime-capabilities'
 import { isNativeChatEnabled } from '../../../../../../shared/structured-native-chat-launch-route'
 import { readAgentLaunchModeSettings } from '../../../../../agent-launch/agent-launch-mode'
 import { orchestrationMigrationData } from '../../../../../../shared/orchestration-rpc-contract'
@@ -113,16 +110,7 @@ export async function startFederatedWorker(args: {
     capabilities: status.capabilities,
     serverName: server.name
   })
-  const supportsControlMail = status.capabilities?.includes(
-    ORCHESTRATION_FEDERATION_CONTROL_MAIL_RUNTIME_CAPABILITY
-  )
-  const federationProtocolVersion =
-    supportsControlMail &&
-    status.capabilities?.includes(ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_RUNTIME_CAPABILITY)
-      ? ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_PROTOCOL_VERSION
-      : supportsControlMail
-        ? ORCHESTRATION_FEDERATION_CONTROL_MAIL_PROTOCOL_VERSION
-        : 1
+  const federationProtocolVersion = resolveFederationProtocolVersion(status.capabilities)
   const supportsAgentSession =
     status.capabilities?.includes(ORCHESTRATION_FEDERATION_AGENT_SESSION_RUNTIME_CAPABILITY) ??
     false
