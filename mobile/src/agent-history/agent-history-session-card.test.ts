@@ -50,7 +50,7 @@ describe('buildMobileAgentHistoryCard', () => {
     expect(card.isCurrentWorktree).toBe(true)
   })
 
-  it('shows no message count for a row read from its transcript\'s ends', () => {
+  it("shows no message count for a row read from its transcript's ends", () => {
     const card = buildMobileAgentHistoryCard(session({ contentCoverage: 'partial' }), null, NOW)
     expect(card.messageCount).toBeNull()
   })
