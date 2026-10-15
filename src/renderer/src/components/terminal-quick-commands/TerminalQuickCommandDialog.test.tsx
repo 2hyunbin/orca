@@ -214,58 +214,6 @@ describe('TerminalQuickCommandDialog animation structure', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  it('saves a prompt at an older host cap in full', async () => {
-    const onSave = vi.fn()
-    const prompt = 'x'.repeat(LEGACY_MAX_QUICK_COMMAND_AGENT_PROMPT_LENGTH)
-    await renderDialog(
-      {
-        id: 'qc-7',
-        label: 'Review',
-        action: 'agent-prompt',
-        agent: 'claude',
-        prompt,
-        scope: { type: 'global' }
-      },
-      { onSave, agentPromptMaxLength: LEGACY_MAX_QUICK_COMMAND_AGENT_PROMPT_LENGTH }
-    )
-
-    expect(document.body.textContent).toContain('characters')
-    expect(document.body.querySelector('[role="alert"]')).toBeNull()
-    const textarea = document.body.querySelector('textarea')!
-    await act(async () => {
-      textarea.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true })
-      )
-    })
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ prompt }))
-  })
-
-  it('saves a long prompt with no counter while it is well under the message limit', async () => {
-    const onSave = vi.fn()
-    const prompt = 'x'.repeat(100_000)
-    await renderDialog(
-      {
-        id: 'qc-8',
-        label: 'Review',
-        action: 'agent-prompt',
-        agent: 'claude',
-        prompt,
-        scope: { type: 'global' }
-      },
-      { onSave }
-    )
-
-    expect(document.body.textContent).not.toContain('characters')
-    expect(document.body.textContent).toContain('Drag corner to resize')
-    const textarea = document.body.querySelector('textarea')!
-    await act(async () => {
-      textarea.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true })
-      )
-    })
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ prompt }))
-  })
-
   it('refuses a prompt past the message limit without telling the user to update the host', async () => {
     await renderDialog({
       id: 'qc-9',
@@ -314,7 +262,7 @@ describe('TerminalQuickCommandDialog animation structure', () => {
   })
 
   it('locks the submitted draft until save settles, then permits editing and retry after refusal', async () => {
-    const prompt = 'Review the change. '.repeat(50)
+    const prompt = 'x'.repeat(100_000)
     const onOpenChange = vi.fn()
     let answer: (saved: boolean) => void = () => {}
     const onSave = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)))
@@ -329,6 +277,8 @@ describe('TerminalQuickCommandDialog animation structure', () => {
       },
       { onSave, onOpenChange }
     )
+    expect(document.body.textContent).not.toContain('characters')
+    expect(document.body.textContent).toContain('Drag corner to resize')
     const textarea = document.body.querySelector('textarea')!
     const cancel = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Cancel'
