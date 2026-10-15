@@ -4,15 +4,18 @@ import { runProfileStateBackup } from './profile-state-backup-worker'
 /** `ready`: the copy exists, so a migration may rewrite saved data. `failed`: do not migrate. */
 export type ProfileStatePreMigrationBackup = 'ready' | 'failed'
 
-/** Outside the `.backup.` namespace, so the hourly rotation never prunes it. Deleted in phase F. */
+/**
+ * Outside the `.backup.` namespace, so the hourly rotation never prunes it. Delete it, and any
+ * `.tmp` a crash mid-copy left, when the boot-time layout migration is retired.
+ */
 export function profileStatePreMigrationBackupPath(databaseFile: string): string {
   return `${databaseFile}.pre-migration.db`
 }
 
 /**
  * Copy the profile once, before the first boot-time rewrite of saved data; later boots find the
- * copy and keep it, so it stays the pre-migration state. Call with the profile's runtime admission
- * held and before any rewrite of this boot reaches disk.
+ * copy and keep it, so it stays the pre-migration state. Call from the profile's single live owner
+ * (the instance lock keeps desktop and orcad apart), before any rewrite of this boot reaches disk.
  */
 export async function ensureProfileStatePreMigrationBackup(
   databaseFile: string,
