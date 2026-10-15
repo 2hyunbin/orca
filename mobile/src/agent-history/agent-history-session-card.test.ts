@@ -50,6 +50,11 @@ describe('buildMobileAgentHistoryCard', () => {
     expect(card.isCurrentWorktree).toBe(true)
   })
 
+  it('shows no message count for a row read from its transcript\'s ends', () => {
+    const card = buildMobileAgentHistoryCard(session({ contentCoverage: 'partial' }), null, NOW)
+    expect(card.messageCount).toBeNull()
+  })
+
   it('omits the current-worktree badge when cwd is outside the active worktree', () => {
     const card = buildMobileAgentHistoryCard(session(), '/Users/ada/other', NOW)
     expect(card.isCurrentWorktree).toBe(false)

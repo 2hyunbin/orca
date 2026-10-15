@@ -10,7 +10,8 @@ export type MobileAgentHistoryCard = {
   agentLabel: string
   title: string
   lastMessage: string
-  messageCount: number
+  // Null when the row was read from its transcript's ends, so the count is unknown.
+  messageCount: number | null
   timeAgo: string
   isCurrentWorktree: boolean
 }
@@ -46,7 +47,7 @@ export function buildMobileAgentHistoryCard(
     agentLabel: aiVaultAgentLabel(session.agent),
     title: session.title || 'Untitled session',
     lastMessage: latestTurn?.text.trim() ?? '',
-    messageCount: session.messageCount,
+    messageCount: session.contentCoverage === undefined ? session.messageCount : null,
     timeAgo: Number.isFinite(updatedAtMs) ? formatTimeAgo(updatedAtMs, now) : '',
     isCurrentWorktree: isSessionInActiveWorktree(session, activeWorktreePath)
   }

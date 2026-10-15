@@ -14,6 +14,7 @@ import {
   AGENT_LAUNCH_UNSTARTED_TAB_CLIENT_CAPABILITY
 } from '../../../src/shared/agent-launch-runtime-capability'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../src/shared/agent-session-optional-model-capability'
+import { AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY } from '../../../src/shared/ai-vault-partial-rows-capability'
 import { remoteRuntimeClientCapabilities } from '../../../src/shared/remote-runtime-client-capabilities'
 
 export const MOBILE_RUNTIME_CLIENT_CAPABILITIES = remoteRuntimeClientCapabilities([
@@ -37,7 +38,9 @@ export const MOBILE_RUNTIME_CLIENT_CAPABILITIES = remoteRuntimeClientCapabilitie
   // Reads a listed launch tab with no terminal yet as not started, so the host may show it early.
   AGENT_LAUNCH_UNSTARTED_TAB_CLIENT_CAPABILITY,
   // Reads `agent_launch_tab_closed` (a user closed its tab, which stopped it) as a definite answer.
-  AGENT_LAUNCH_TAB_CLOSED_CLIENT_CAPABILITY
+  AGENT_LAUNCH_TAB_CLOSED_CLIENT_CAPABILITY,
+  // The history card hides the message count of a row read from its transcript's ends.
+  AI_VAULT_PARTIAL_ROWS_CLIENT_CAPABILITY
 ])
 
 export const MOBILE_RUNTIME_CLIENT_CAPABILITY_UPDATE_METHOD =
