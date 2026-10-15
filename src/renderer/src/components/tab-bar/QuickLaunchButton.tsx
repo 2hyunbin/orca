@@ -269,14 +269,10 @@ function QuickLaunchAgentMenuItemsInner({
         const startsCliGroup = row.kind === 'cli' && index > 0 && rows[index - 1]?.kind !== 'cli'
         if (row.kind === 'chat-unavailable') {
           return (
-            <DropdownMenuItem
-              key={`${row.kind}:${agent}`}
-              disabled
-              className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium"
-            >
+            <DropdownMenuItem key={`${row.kind}:${agent}`} variant="launch" disabled>
               <AgentIcon agent={agent} size={14} />
               <span className="flex-1">{label}</span>
-              <span className="text-[11px] font-normal text-muted-foreground">
+              <span className="font-normal text-muted-foreground">
                 {chatUnavailableLabel(row.reason)}
               </span>
             </DropdownMenuItem>
@@ -288,9 +284,9 @@ function QuickLaunchAgentMenuItemsInner({
           <React.Fragment key={`${row.kind}:${agent}`}>
             {startsCliGroup ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem
+              variant="launch"
               disabled={disabled}
               onSelect={() => runLaunch(agent)}
-              className="gap-2 rounded-[7px] px-2 py-1.5 text-[12px] leading-5 font-medium"
               title={rowTitle(row, label)}
             >
               <AgentIcon agent={agent} size={14} />
