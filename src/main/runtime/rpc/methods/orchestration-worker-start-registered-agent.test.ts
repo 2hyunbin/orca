@@ -53,6 +53,15 @@ describe('a worker for a registered native-chat agent', () => {
     })
   })
 
+  it('starts a terminal worker for an agent whose chat provider the user turned off', () => {
+    expect(
+      decideWorkerStartMode({
+        params: { agent: 'grok' },
+        settings: { ...STRUCTURED_PREFERENCE, nativeChatProviders: { grok: false } }
+      })
+    ).toMatchObject({ mode: 'terminal', reason: 'user_default' })
+  })
+
   it('starts an agent with no native chat as a terminal worker', () => {
     expect(
       decideWorkerStartMode({ params: { agent: 'gemini' }, settings: STRUCTURED_PREFERENCE })

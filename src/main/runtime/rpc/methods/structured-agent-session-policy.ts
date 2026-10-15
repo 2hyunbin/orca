@@ -7,7 +7,11 @@ import {
   type RuntimeCapability
 } from '../../../../shared/protocol-version'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../../shared/agent-session-optional-model-capability'
-import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
+import {
+  isNativeChatDefaultFor,
+  isNativeChatEnabled
+} from '../../../../shared/structured-native-chat-launch-route'
+import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import type { RpcContext } from '../core'
@@ -113,12 +117,17 @@ export function createSupportFollowsHostSetting(
   )
 }
 
-/** An unreadable settings store reads as off, the default. */
-export function isStructuredNativeChatEnabled(
-  runtime: Pick<OrcaRuntimeService, 'getClientSettings'>
+/** Whether this host's own settings open `agent` as a chat. An unreadable settings store reads
+ *  as off, the default; the agent runs here, so an unchosen provider is on. */
+export function isStructuredNativeChatDefaultFor(
+  runtime: Pick<OrcaRuntimeService, 'getClientSettings'>,
+  agent: string
 ): boolean {
   try {
-    return isNativeChatEnabled(runtime.getClientSettings())
+    const settings = runtime.getClientSettings()
+    return isTuiAgent(agent)
+      ? isNativeChatDefaultFor(settings, agent, null)
+      : isNativeChatEnabled(settings)
   } catch {
     return false
   }

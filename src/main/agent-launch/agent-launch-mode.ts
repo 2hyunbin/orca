@@ -26,7 +26,7 @@ import type {
 import { RUNTIME_CAPABILITIES } from '../../shared/protocol-version'
 import { STRUCTURED_AGENT_RUNTIME_REGISTRATIONS } from '../runtime/structured-agent-runtime-registrations'
 import {
-  isNativeChatEnabled,
+  isNativeChatDefaultFor,
   resolveStructuredNativeChatSupport,
   type NativeChatDefaultSettings,
   type StructuredNativeChatBlocker
@@ -136,7 +136,10 @@ export function decideAgentLaunchMode(args: {
 }): AgentLaunchModeReceipt {
   const { placement, settings } = args
   const vocabulary = args.vocabulary ?? DEFAULT_LAUNCH_VOCABULARY
-  if (args.terminalOnly || !isNativeChatEnabled(settings)) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an unrecognized agent name is handled rather than trusted; the registered-agent check rejects it and the launch downgrades to a terminal.
+  const agent = placement.agent as TuiAgent
+  // The agent runs on this host, so a provider the user never chose is on.
+  if (args.terminalOnly || !isNativeChatDefaultFor(settings, agent, null)) {
     return {
       mode: 'terminal',
       preferred: 'terminal',
@@ -149,8 +152,6 @@ export function decideAgentLaunchMode(args: {
   if (placement.on) {
     return downgraded('remote_execution_host', vocabulary)
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an unrecognized agent name is handled rather than trusted; the registered-agent check rejects it and the launch downgrades to a terminal.
-  const agent = placement.agent as TuiAgent
   const support = resolveStructuredNativeChatSupport({
     agent,
     executionHostId: 'local',

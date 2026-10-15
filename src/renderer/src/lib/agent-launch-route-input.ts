@@ -52,6 +52,8 @@ export type AgentLaunchRouteStore = {
    *  in the intersection so these lookups resolve to the full records. */
   worktreesByRepo?: AppState['worktreesByRepo']
   folderWorkspaces?: AppState['folderWorkspaces']
+  /** This computer's detected agents, for chat provider defaults. */
+  detectedAgentIds?: AppState['detectedAgentIds']
 } & Parameters<typeof getExecutionHostIdForWorktree>[0] &
   Parameters<typeof getLocalProjectExecutionRuntimeContext>[0] &
   Parameters<typeof getConnectionIdFromState>[0]
@@ -146,6 +148,7 @@ export function buildAgentLaunchRouteInput(
   return {
     agent,
     settings: store.settings,
+    installedHere: store.detectedAgentIds ?? null,
     executionHostId,
     hostCapabilities: owner === null ? null : resolveHostCapabilities(store, executionHostId),
     ...(parseExecutionHostId(executionHostId)?.kind === 'runtime'

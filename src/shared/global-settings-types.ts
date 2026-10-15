@@ -240,6 +240,9 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   nativeChatSessionOptions?: PersistedNativeChatSessionOptions
   /** New Claude and Codex chats' permission mode; seeded once from Agent Permissions. */
   nativeChatPermissionMode?: AgentChatPermissionMode
+  /** Agents the user turned on or off as chat providers. Unlisted: Claude and Codex on, others
+   *  on when installed on this computer (`shared/native-chat-providers.ts`). */
+  nativeChatProviders?: Partial<Record<TuiAgent, boolean>>
   /** Extra launcher rows for the worktree "Open in" submenu. VS Code is always shown first. */
   openInApplications?: OpenInApplication[]
   /** Deprecated: migration/backward-compat only. Use PersistedUIState.rightSidebarOpen. */
