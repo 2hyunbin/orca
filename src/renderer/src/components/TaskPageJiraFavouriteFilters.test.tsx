@@ -39,3 +39,32 @@ it('keeps duplicate names independently searchable and selectable by keyboard', 
   await act(async () => fireEvent.keyDown(input, { key: 'Enter' }))
   await waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(second))
 })
+
+it('offers refresh and clear if a selected favourite’s host becomes unsupported', () => {
+  const retry = vi.fn()
+  const clear = vi.fn()
+  const model = {
+    jiraFavouriteFiltersEnabled: true,
+    jiraFavouriteFilters: [],
+    jiraFavouriteFilter: favourite,
+    jiraFavouriteFiltersLoading: false,
+    jiraFavouriteFiltersPending: false,
+    jiraFavouriteFiltersUnsupported: true,
+    jiraFavouriteFiltersTruncated: false,
+    jiraFavouriteFiltersError: null,
+    retryJiraFavouriteFilters: retry,
+    loadJiraFavouriteFilters: vi.fn(),
+    applyJiraFavouriteFilter: vi.fn(),
+    clearJiraFavouriteFilter: clear,
+    jiraSavedFiltersLoading: false,
+    jiraSavedFiltersPending: false,
+    jiraSavedFiltersReady: true
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This focused surface test supplies every field read by the favourite picker.
+  render(<TaskPageJiraFavouriteFilters model={model as unknown as TaskPageComposerActionsModel} />)
+  fireEvent.click(screen.getByRole('button', { name: `Jira favourites: ${favourite.name}` }))
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+  expect(retry).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Clear Jira favourite' }))
+  expect(clear).toHaveBeenCalledTimes(1)
+})

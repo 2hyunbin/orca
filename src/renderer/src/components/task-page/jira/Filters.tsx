@@ -115,7 +115,7 @@ export function TaskPageJiraFilters({
           </Button>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <TaskPageJiraFavouriteFilters model={model} />
+          <TaskPageJiraFavouriteFilters key={model.jiraTaskSourceScopeKey} model={model} />
           <TaskPageJiraSavedFilters
             filters={jiraSavedFilters}
             activeFilterId={jiraActiveSavedFilterId}

@@ -92,6 +92,18 @@ export function TaskPageJiraFavouriteFilters({
             <Button variant="outline" size="xs" onClick={retry}>
               {translate('jira.favourites.refresh', 'Refresh')}
             </Button>
+            {active ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  clear()
+                  setOpen(false)
+                }}
+              >
+                {translate('jira.favourites.clear', 'Clear Jira favourite')}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
