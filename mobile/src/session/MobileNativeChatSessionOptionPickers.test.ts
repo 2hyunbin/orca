@@ -304,7 +304,8 @@ describe('MobileNativeChatSessionOptionPickers', () => {
     // Icon only: a spelled-out mode pushed the model pill under Mic and Send.
     const permissionPill = renderer!.root.find(
       (node) =>
-        node.type === 'Pressable' && node.props.accessibilityLabel === 'Permissions, Ask for approval'
+        node.type === 'Pressable' &&
+        node.props.accessibilityLabel === 'Permissions, Ask for approval'
     )
     expect(permissionPill.findAllByType('Hand')).toHaveLength(1)
     expect(permissionPill.findAllByType('Text')).toEqual([])
