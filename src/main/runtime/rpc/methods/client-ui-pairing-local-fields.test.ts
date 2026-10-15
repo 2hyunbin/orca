@@ -1,5 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { getDefaultUIState } from '../../../../shared/constants'
 import { PAIRING_LOCAL_UI_FIELDS } from '../../../../shared/pairing-local-ui-fields'
 import type { OrcaRuntimeService } from '../../orca-runtime'
@@ -137,9 +138,12 @@ describe('client UI RPC pairing-local field seams', () => {
     }
     const ownPhone = { clientKind: 'mobile' } as const
     const delegatedPhone = { clientKind: 'mobile', pairedDeviceParentId: 'other-desktop' } as const
+    const UiGetReply = z.object({
+      ok: z.literal(true),
+      result: z.object({ ui: z.record(z.string(), z.unknown()) })
+    })
     function readUi(response: unknown): Record<string, unknown> {
-      expect(response).toMatchObject({ ok: true })
-      return Object(Reflect.get(Object(Reflect.get(Object(response), 'result')), 'ui'))
+      return UiGetReply.parse(response).result.ui
     }
 
     it('reads the host value, and false when the host never set it', async () => {

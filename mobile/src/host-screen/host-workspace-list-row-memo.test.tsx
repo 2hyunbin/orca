@@ -46,6 +46,7 @@ vi.mock('../components/MobileSearchField', () => ({}))
 vi.mock('../components/NewWorkspaceFab', () => ({ FAB_SIZE: 56 }))
 
 import { buildSections } from '../worktree/workspace-list-sections'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { HostWorkspaceList } from './host-workspace-list'
 import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 
@@ -74,12 +75,7 @@ const stable = { ref: { current: null }, repoById: new Map() }
 function listProps(worktrees: Worktree[]) {
   // Each poll re-parses the payload, so rows are fresh objects even when nothing changed.
   const polled: Worktree[] = JSON.parse(JSON.stringify(worktrees))
-  const filters = {
-    filterRepoIds: new Set<string>(),
-    hideSleeping: false,
-    hideDefaultBranch: false
-  }
-  const sections = buildSections(polled, 'name', filters, '', 'none', new Set())
+  const sections = buildSections(polled, 'name', NO_WORKSPACE_ROW_FILTERS, '', 'none', new Set())
   const controller = {
     actions: { openWorktreeSession: noop, openNewWorktreeModal: noop },
     activeWorktreeScroll: { sectionListRef: stable.ref, onScrollToIndexFailed: noop },
