@@ -13,7 +13,8 @@ type Row = {
   getBoundingClientRect: () => { top: number; bottom: number }
 }
 
-/** Whether the update under test is in the document yet. */
+/** Whether the update under test is in the document yet: from the scroller's second read on, the
+ *  first being the snapshot taken before it. */
 let landed = false
 
 /** A row 100 tall whose top is `before` until the update lands, then `after`. */
@@ -37,7 +38,13 @@ function scrollerOver(headerRows: Row[], listRows: Row[], scrollTop = 40) {
     getBoundingClientRect: () => ({ top: 0, bottom: 600 }),
     firstElementChild: row(-40, -40, [row(-40, -40, headerRows), ...listRows])
   }
-  return { node, listRef: { current: { getScrollableNode: () => node } } }
+  let reads = 0
+  const getScrollableNode = () => {
+    landed = reads > 0
+    reads += 1
+    return node
+  }
+  return { node, listRef: { current: { getScrollableNode } } }
 }
 
 describe('MobileNativeChatScrollHold', () => {
@@ -52,7 +59,6 @@ describe('MobileNativeChatScrollHold', () => {
     await act(async () => {
       const element = createElement(MobileNativeChatScrollHold, props)
       if (renderer) {
-        landed = true
         renderer.update(element)
       } else {
         renderer = create(element)
