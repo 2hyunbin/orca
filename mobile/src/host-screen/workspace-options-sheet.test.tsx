@@ -175,6 +175,9 @@ describe('the phone Workspace options sheet', () => {
     expect(shown).not.toContain('Card layout')
     expect(shown).not.toContain('Show properties')
     expect(shown).not.toContain('Except default branch')
+    press('Card display')
+    expect(texts()).toContain('Orca CLI')
+    expect(texts()).not.toContain('Ports')
   })
 
   it('opens an option page from its row, stays there after a pick, and goes back', () => {
@@ -190,7 +193,7 @@ describe('the phone Workspace options sheet', () => {
 
   it('does not reopen a page whose option stopped showing and then came back', () => {
     render({ newCardStyle: false, hideSleeping: false })
-    press('Show properties, 9')
+    press('Show properties, 8')
     expect(texts()).toContain('Agent activity layout')
     rerender({ newCardStyle: true, hideSleeping: false })
     expect(texts()).toContain('Filters')
@@ -221,9 +224,11 @@ describe('the phone Workspace options sheet', () => {
     press('docs')
     expect(settings.toggleRepoFilter).toHaveBeenCalledWith('r2')
     back()
-    press('Show properties, 9')
-    press('Ports')
-    expect(settings.toggleCardProperty).toHaveBeenCalledWith('ports')
+    press('Show properties, 8')
+    // Ports is the desktop's own; the phone leaves it out.
+    expect(texts()).not.toContain('Ports')
+    press('Automation')
+    expect(settings.toggleCardProperty).toHaveBeenCalledWith('automation')
     press('Full list')
     expect(settings.setAgentActivityDisplayMode).toHaveBeenCalledWith('full')
   })
