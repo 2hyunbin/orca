@@ -161,7 +161,7 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
       if (!parsedHost) {
         throw new Error(`Unsupported host: ${args.hostId}`)
       }
-      const hosted = await setupProjectOnWslHost(store, args)
+      const hosted = await setupProjectOnWslHost(store, { ...args, hostId: parsedHost.id })
       if (hosted) {
         notifyReposChanged(mainWindow)
         return hosted
