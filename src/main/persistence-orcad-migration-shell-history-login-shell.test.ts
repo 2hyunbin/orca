@@ -17,15 +17,24 @@ import {
 } from './persistence-orcad-migration-shell-history-fixture'
 import { createStore, testState } from './persistence-test-harness'
 
-const { missingShells } = vi.hoisted(() => ({ missingShells: new Set<string>() }))
+const { missingShells, presentShells } = vi.hoisted(() => ({
+  missingShells: new Set<string>(),
+  presentShells: new Set<string>()
+}))
 
-// Lets one case hide shells from the real pane resolution; every other path is the real fs.
+// Lets cases hide or provide shells for the real pane resolution; every other path is the real fs.
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFs>()
   return {
     ...actual,
     existsSync: (path: Parameters<typeof actual.existsSync>[0]) =>
-      !missingShells.has(String(path)) && actual.existsSync(path)
+      presentShells.has(String(path)) ||
+      (!missingShells.has(String(path)) && actual.existsSync(path)),
+    accessSync: (...args: Parameters<typeof actual.accessSync>) => {
+      if (!presentShells.has(String(args[0]))) {
+        actual.accessSync(...args)
+      }
+    }
   }
 })
 
@@ -43,9 +52,16 @@ vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 let desktopHistory: string
 
 // The WSL bridge's lone `bash_history`, written by whatever the distro's login shell is.
-async function moveLoneBridgeHistory(content: string, paneShellPath?: () => string): Promise<void> {
+async function moveLoneBridgeHistory(
+  content: string,
+  paneShellPath?: () => string,
+  terminalDefaultShell?: string
+): Promise<void> {
   const input = manifest()
   const store = createStore(paneShellPath ? { paneShellPath } : {})
+  if (terminalDefaultShell) {
+    store.updateSettings({ terminalDefaultShell })
+  }
   stage(
     store,
     input,
@@ -67,6 +83,7 @@ describe('moved WSL history lands under the shell a host pane runs', () => {
     rmSync(desktopHistory, { recursive: true, force: true })
     rmSync(getHistoryRoot(), { recursive: true, force: true })
     missingShells.clear()
+    presentShells.clear()
     vi.unstubAllEnvs()
   })
 
@@ -108,6 +125,18 @@ describe('moved WSL history lands under the shell a host pane runs', () => {
 
       expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBe(BASH)
       expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBeNull()
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    "the host's default-shell setting wins over SHELL, as it does for a new pane",
+    async () => {
+      vi.stubEnv('SHELL', '/bin/bash')
+      presentShells.add('/usr/bin/zsh')
+      await moveLoneBridgeHistory(ZSH, undefined, '/usr/bin/zsh')
+
+      expect(hostHistory(DORMANT_WORKTREE_ID, 'zsh_history')).toBe(ZSH)
+      expect(hostHistory(DORMANT_WORKTREE_ID, 'bash_history')).toBeNull()
     }
   )
 

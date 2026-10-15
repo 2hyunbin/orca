@@ -55,6 +55,7 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
       manifest,
       signal: options.signal,
       expectedBlobs: options.expectedBlobs,
+      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells,
       onDurableCommit: () => {
         this.invalidateResolvedWorktreeCache()
         this.notifyReposChanged()
@@ -96,9 +97,32 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
   getOrcadMigrationCatalogState(manifest: OrcadMigrationManifest): OrcadMigrationCatalogState {
     return getOrcadMigrationCatalogState({
       store: this.requireMigrationStore('getOrcadMigrationCatalogState'),
-      manifest
+      manifest,
+      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells
     })
   }
+
+  // The last shell of a worktree exiting releases a moved history that waited on it.
+  override onPtyExit(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['onPtyExit']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['onPtyExit']> {
+    const worktreeId = this.ptysById.get(args[0])?.worktreeId
+    const result = super.onPtyExit(...args)
+    // The store checks its deferred set first, so an exit in any other worktree costs one lookup.
+    if (worktreeId) {
+      try {
+        this.store?.installDeferredOrcadMigrationShellHistory?.(worktreeId, {
+          worktreeHasLiveShells: this.migrationWorktreeHasLiveShells
+        })
+      } catch (error) {
+        console.error('[orcad-migration] installing deferred shell history failed:', error)
+      }
+    }
+    return result
+  }
+
+  private readonly migrationWorktreeHasLiveShells = (worktreeId: string): boolean =>
+    this.getLivePtyIdsForWorktree(worktreeId).size > 0
 
   // The capability check covers the captured Store, not a different virtual return.
   private requireMigrationStore(...methods: MigrationStoreKey[]): RuntimeStore {

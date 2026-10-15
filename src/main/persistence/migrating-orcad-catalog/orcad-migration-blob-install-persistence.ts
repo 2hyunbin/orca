@@ -9,10 +9,18 @@ import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-fil
 
 type OrcadMigrationBlobInstallRuntime = Pick<
   StoreRuntimeState,
-  'state' | 'orcadMigrationBlobRoot' | 'orcadTerminalRestoreHints' | 'paneShellPath'
+  | 'state'
+  | 'orcadMigrationBlobRoot'
+  | 'orcadTerminalRestoreHints'
+  | 'paneShellPath'
+  | 'deferredShellHistoryWorktreeIds'
 >
 
 type ClockOptions = { now?: () => Date }
+type InstallOptions = ClockOptions & {
+  /** The runtime's live-shell check; a moved history waits while a shell runs in its worktree. */
+  worktreeHasLiveShells?: (worktreeId: string) => boolean
+}
 
 const orcadMigrationBlobInstallContext = Symbol('OrcadMigrationBlobInstallPersistence')
 type OrcadMigrationBlobInstallContext = {
@@ -34,7 +42,7 @@ export class OrcadMigrationBlobInstallPersistence {
    */
   installOrcadMigrationReceivedBlobs(
     manifest: OrcadMigrationManifest,
-    options: ClockOptions = {}
+    options: InstallOptions = {}
   ): void {
     const receipt = findOrcadMigrationImportReceipt(
       this[orcadMigrationBlobInstallContext].runtime.state,
@@ -47,7 +55,7 @@ export class OrcadMigrationBlobInstallPersistence {
   }
 
   /** Finishes installs a crash or failed write left behind; every receipt on disk is durable. */
-  installPendingOrcadMigrationReceivedBlobs(options: ClockOptions = {}): void {
+  installPendingOrcadMigrationReceivedBlobs(options: InstallOptions = {}): void {
     const { runtime } = this[orcadMigrationBlobInstallContext]
     for (const receipt of [
       ...(runtime.state.orcadMigrationImportReceipts ?? []),
@@ -61,6 +69,17 @@ export class OrcadMigrationBlobInstallPersistence {
           error
         )
       }
+    }
+  }
+
+  /** Retries a history install that waited on this worktree's shells; a no-op for any other. */
+  installDeferredOrcadMigrationShellHistory(
+    worktreeId: string,
+    options: InstallOptions = {}
+  ): void {
+    const { runtime } = this[orcadMigrationBlobInstallContext]
+    if (runtime.deferredShellHistoryWorktreeIds.has(worktreeId)) {
+      this.installPendingOrcadMigrationReceivedBlobs(options)
     }
   }
 
@@ -89,14 +108,16 @@ export class OrcadMigrationBlobInstallPersistence {
 function installCommitted(
   runtime: OrcadMigrationBlobInstallRuntime,
   migration: OrcadMigrationRequestIdentity,
-  options: ClockOptions
+  options: InstallOptions
 ): void {
   installOrcadMigrationReceivedBlobs({
     migration,
     root: runtime.orcadMigrationBlobRoot,
     terminalRestoreHints: runtime.orcadTerminalRestoreHints,
     shellHistoryRoot: getHistoryRoot(),
-    paneShellPath: runtime.paneShellPath,
+    paneShellPath: () => runtime.paneShellPath(runtime.state.settings?.terminalDefaultShell),
+    worktreeHasLiveShells: options.worktreeHasLiveShells,
+    deferredShellHistoryWorktreeIds: runtime.deferredShellHistoryWorktreeIds,
     paneWorktreeId: (paneKey) => findPaneWorktreeId(runtime.state, paneKey),
     now: clock(options)
   })

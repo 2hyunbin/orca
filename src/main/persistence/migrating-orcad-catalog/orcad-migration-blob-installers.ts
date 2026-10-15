@@ -80,6 +80,10 @@ export type OrcadMigrationBlobInstall = {
   shellHistoryRoot: string
   /** The shell binary a new pane on this host would actually run. */
   paneShellPath: () => string
+  /** True while a shell runs in the worktree; absent when no live shell is known. */
+  worktreeHasLiveShells?: (worktreeId: string) => boolean
+  /** Worktrees whose history install waits for their live shells to exit. */
+  deferredShellHistoryWorktreeIds: Set<string>
   /** The worktree that owns the pane on this host, or null when the pane is not here. */
   paneWorktreeId: (paneKey: string) => string | null
   now: number
@@ -111,6 +115,8 @@ function installShellHistory(install: OrcadMigrationBlobInstall): void {
     root: install.root,
     historyRoot: install.shellHistoryRoot,
     paneShellPath: install.paneShellPath,
+    worktreeHasLiveShells: install.worktreeHasLiveShells,
+    deferredWorktreeIds: install.deferredShellHistoryWorktreeIds,
     now: install.now
   })
 }

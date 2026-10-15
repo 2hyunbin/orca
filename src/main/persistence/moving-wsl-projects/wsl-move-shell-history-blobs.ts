@@ -42,12 +42,17 @@ export type WslMoveShellHistoryBlobs = {
   source: OrcadMigrationBlobSource
 }
 
-type ShellHistoryFile = {
+type DesktopHistoryFile = { path: string; fileBytes: number }
+
+/** A blob's bytes in order: the header, then one or more desktop history files. */
+type ShellHistorySegment = { bytes: Buffer } | DesktopHistoryFile
+
+type ShellHistoryBlob = {
   descriptor: OrcadMigrationBlobDescriptor
-  header: Buffer
-  path: string
-  fileBytes: number
+  segments: ShellHistorySegment[]
 }
+
+const NEWLINE = 0x0a
 
 /**
  * Missing and empty files send nothing. A file over the per-blob cap blocks the move: history is
@@ -58,115 +63,189 @@ export async function buildWslMoveShellHistoryBlobs(
   request: WslMoveShellHistoryRequest
 ): Promise<WslMoveShellHistoryBlobs> {
   const root = request.historyRoot ?? getHistoryRootWsl(request.distro)
-  const files: ShellHistoryFile[] = []
-  for (const worktree of request.worktrees) {
-    const directory = join(root, hashWorktreeId(worktree.sourceWorktreeId))
+  const blobs: ShellHistoryBlob[] = []
+  for (const [destinationWorktreeId, sourceWorktreeIds] of groupByDestination(request.worktrees)) {
     let zshSent = false
     for (const shell of ORCAD_MIGRATION_SHELL_HISTORY_SHELLS) {
-      const path = join(directory, shellHistoryFileName(shell))
-      const fileBytes = await regularFileSize(path)
-      if (fileBytes === 0) {
+      const files = await desktopHistoryFiles(root, sourceWorktreeIds, shellHistoryFileName(shell))
+      if (files.length === 0) {
         continue
       }
-      const key = orcadMigrationShellHistoryKey(worktree.destinationWorktreeId, shell)
+      const key = orcadMigrationShellHistoryKey(destinationWorktreeId, shell)
       // zsh is listed first, so a bash file without a zsh sibling is known here.
-      const header = encodeOrcadMigrationShellHistoryHeader(worktree.destinationWorktreeId, {
+      const header = encodeOrcadMigrationShellHistoryHeader(destinationWorktreeId, {
         loginShell: shell === 'bash' && !zshSent
       })
       zshSent ||= shell === 'zsh'
-      const byteLength = header.length + fileBytes
+      const segments = await joinHistories(header, files)
+      const byteLength = segments.reduce((total, segment) => total + segmentBytes(segment), 0)
+      // A move blocker rather than a truncation: dropping old commands would silently lose them.
       if (byteLength > MAX_ORCAD_MIGRATION_SHELL_HISTORY_BYTES) {
-        throw new Error(`orcad_migration_shell_history_too_large:${key}`)
+        throw new Error(
+          `orcad_migration_shell_history_too_large:${key}: the ${shell} history of ${destinationWorktreeId} is ${byteLength} bytes, over the ${MAX_ORCAD_MIGRATION_SHELL_HISTORY_BYTES}-byte limit`
+        )
       }
-      files.push({
+      blobs.push({
         descriptor: {
           blobKind: 'shell-history',
           key,
-          sha256: await digestFile(header, path, fileBytes),
+          sha256: await digestSegments(segments),
           byteLength
         },
-        header,
-        path,
-        fileBytes
+        segments
       })
     }
   }
-  const descriptors = files.map((file) => file.descriptor)
+  const descriptors = blobs.map((blob) => blob.descriptor)
   assertOrcadMigrationBlobSet(descriptors)
   const byIdentity = new Map(
-    files.map((file) => [orcadMigrationBlobIdentity(file.descriptor), file])
+    blobs.map((blob) => [orcadMigrationBlobIdentity(blob.descriptor), blob])
   )
   return {
     descriptors,
     source: {
       readChunk: async (requested, offset, maxBytes) => {
-        const file = byIdentity.get(orcadMigrationBlobIdentity(requested))
-        if (!file || !sameOrcadMigrationBlob(requested, file.descriptor)) {
+        const blob = byIdentity.get(orcadMigrationBlobIdentity(requested))
+        if (!blob || !sameOrcadMigrationBlob(requested, blob.descriptor)) {
           throw new Error(`orcad_migration_source_blob_changed:${requested.blobKind}`)
         }
-        return readShellHistoryChunk(file, offset, maxBytes)
+        return readSegments(blob, offset, maxBytes)
       }
     }
   }
 }
 
-// 0 for a missing file or anything that is not a regular file.
-async function regularFileSize(path: string): Promise<number> {
+// The `\\wsl$\` and `\\wsl.localhost\` ids of one worktree rewrite to the same host id.
+function groupByDestination(
+  worktrees: readonly WslMoveShellHistoryWorktree[]
+): Map<string, string[]> {
+  const groups = new Map<string, string[]>()
+  for (const worktree of worktrees) {
+    const sources = groups.get(worktree.destinationWorktreeId) ?? []
+    if (!sources.includes(worktree.sourceWorktreeId)) {
+      sources.push(worktree.sourceWorktreeId)
+    }
+    groups.set(worktree.destinationWorktreeId, sources)
+  }
+  return groups
+}
+
+// Oldest first, so the newest commands end up last, where shells read them back from.
+async function desktopHistoryFiles(
+  root: string,
+  sourceWorktreeIds: readonly string[],
+  fileName: string
+): Promise<DesktopHistoryFile[]> {
+  const found: (DesktopHistoryFile & { mtimeMs: number })[] = []
+  for (const sourceWorktreeId of sourceWorktreeIds) {
+    const path = join(root, hashWorktreeId(sourceWorktreeId), fileName)
+    const info = await regularFile(path)
+    if (info && info.size > 0) {
+      found.push({ path, fileBytes: info.size, mtimeMs: info.mtimeMs })
+    }
+  }
+  return found
+    .sort((a, b) => a.mtimeMs - b.mtimeMs)
+    .map(({ path, fileBytes }) => ({ path, fileBytes }))
+}
+
+// Without a newline between them, one file's last command would run into the next file's first.
+async function joinHistories(
+  header: Buffer,
+  files: readonly DesktopHistoryFile[]
+): Promise<ShellHistorySegment[]> {
+  const segments: ShellHistorySegment[] = [{ bytes: header }]
+  for (const [index, file] of files.entries()) {
+    segments.push(file)
+    if (index < files.length - 1 && (await lastByte(file)) !== NEWLINE) {
+      segments.push({ bytes: Buffer.from('\n') })
+    }
+  }
+  return segments
+}
+
+async function lastByte(file: DesktopHistoryFile): Promise<number | undefined> {
+  const [byte] = await readFileRange(file, file.fileBytes - 1, file.fileBytes)
+  return byte
+}
+
+function segmentBytes(segment: ShellHistorySegment): number {
+  return 'bytes' in segment ? segment.bytes.length : segment.fileBytes
+}
+
+// Null for a missing file or anything that is not a regular file.
+async function regularFile(path: string): Promise<{ size: number; mtimeMs: number } | null> {
   try {
     const info = await stat(path)
-    return info.isFile() ? info.size : 0
+    return info.isFile() ? { size: info.size, mtimeMs: info.mtimeMs } : null
   } catch {
-    return 0
+    return null
   }
 }
 
-async function digestFile(header: Buffer, path: string, fileBytes: number): Promise<string> {
-  const hash = createHash('sha256').update(header)
-  let read = 0
-  // `end` pins the digest to the size the descriptor declares even if the file grows meanwhile.
-  for await (const chunk of createReadStream(path, {
-    start: 0,
-    end: fileBytes - 1
-  })) {
-    if (!Buffer.isBuffer(chunk)) {
-      throw new Error('orcad_migration_shell_history_read_failed')
+async function digestSegments(segments: readonly ShellHistorySegment[]): Promise<string> {
+  const hash = createHash('sha256')
+  for (const segment of segments) {
+    if ('bytes' in segment) {
+      hash.update(segment.bytes)
+      continue
     }
-    hash.update(chunk)
-    read += chunk.length
-  }
-  if (read !== fileBytes) {
-    throw new Error('orcad_migration_source_blob_changed:shell-history')
+    let read = 0
+    // `end` pins the digest to the size the descriptor declares even if the file grows meanwhile.
+    for await (const chunk of createReadStream(segment.path, {
+      start: 0,
+      end: segment.fileBytes - 1
+    })) {
+      if (!Buffer.isBuffer(chunk)) {
+        throw new Error('orcad_migration_shell_history_read_failed')
+      }
+      hash.update(chunk)
+      read += chunk.length
+    }
+    if (read !== segment.fileBytes) {
+      throw new Error('orcad_migration_source_blob_changed:shell-history')
+    }
   }
   return hash.digest('hex')
 }
 
-async function readShellHistoryChunk(
-  file: ShellHistoryFile,
+async function readSegments(
+  blob: ShellHistoryBlob,
   offset: number,
   maxBytes: number
 ): Promise<Buffer> {
-  const end = Math.min(offset + maxBytes, file.descriptor.byteLength)
+  const end = Math.min(offset + maxBytes, blob.descriptor.byteLength)
   const parts: Buffer[] = []
-  if (offset < file.header.length) {
-    parts.push(file.header.subarray(offset, Math.min(end, file.header.length)))
-  }
-  const fileStart = Math.max(offset - file.header.length, 0)
-  const fileEnd = end - file.header.length
-  if (fileEnd > fileStart) {
-    const handle = await open(file.path, 'r')
-    try {
-      if ((await handle.stat()).size !== file.fileBytes) {
-        throw new Error('orcad_migration_source_blob_changed:shell-history')
-      }
-      const buffer = Buffer.alloc(fileEnd - fileStart)
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, fileStart)
-      if (bytesRead !== buffer.length) {
-        throw new Error('orcad_migration_source_blob_changed:shell-history')
-      }
-      parts.push(buffer)
-    } finally {
-      await handle.close()
+  let segmentStart = 0
+  for (const segment of blob.segments) {
+    const size = segmentBytes(segment)
+    const from = Math.max(offset - segmentStart, 0)
+    const to = Math.min(end - segmentStart, size)
+    if (to > from) {
+      parts.push(
+        'bytes' in segment
+          ? segment.bytes.subarray(from, to)
+          : await readFileRange(segment, from, to)
+      )
     }
+    segmentStart += size
   }
   return Buffer.concat(parts)
+}
+
+async function readFileRange(file: DesktopHistoryFile, from: number, to: number): Promise<Buffer> {
+  const handle = await open(file.path, 'r')
+  try {
+    if ((await handle.stat()).size !== file.fileBytes) {
+      throw new Error('orcad_migration_source_blob_changed:shell-history')
+    }
+    const buffer = Buffer.alloc(to - from)
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, from)
+    if (bytesRead !== buffer.length) {
+      throw new Error('orcad_migration_source_blob_changed:shell-history')
+    }
+    return buffer
+  } finally {
+    await handle.close()
+  }
 }

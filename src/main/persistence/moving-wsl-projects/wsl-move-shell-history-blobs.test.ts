@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   rmSync,
   truncateSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -135,6 +136,29 @@ describe('WSL move shell history blobs', () => {
     await expect(build()).rejects.toThrow(
       `orcad_migration_shell_history_too_large:${hashWorktreeId(DESTINATION_ID)}-bash`
     )
+  })
+
+  it('merges the \\\\wsl$ and \\\\wsl.localhost histories of one worktree oldest first', async () => {
+    const legacyId = SOURCE_ID.replace('wsl.localhost', 'wsl$')
+    const legacy = writeHistory(legacyId, 'bash_history', 'old one\nold two')
+    const current = writeHistory(SOURCE_ID, 'bash_history', 'new one\n')
+    utimesSync(legacy, 1_000, 1_000)
+    utimesSync(current, 2_000, 2_000)
+
+    // The newer id is listed first; the merge still puts its commands last.
+    const blobs = await build([
+      { sourceWorktreeId: SOURCE_ID, destinationWorktreeId: DESTINATION_ID },
+      { sourceWorktreeId: legacyId, destinationWorktreeId: DESTINATION_ID }
+    ])
+
+    expect(blobs.descriptors.map((descriptor) => descriptor.key)).toEqual([
+      `${hashWorktreeId(DESTINATION_ID)}-bash`
+    ])
+    const [descriptor] = blobs.descriptors
+    const bytes = await readAll(blobs, descriptor, 5)
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(descriptor.sha256)
+    const header = parseOrcadMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
+    expect(bytes.subarray(header.byteLength).toString('utf8')).toBe('old one\nold two\nnew one\n')
   })
 
   it('refuses a read once the file changed after its digest was taken', async () => {
