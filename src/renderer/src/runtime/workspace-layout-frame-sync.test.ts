@@ -28,11 +28,12 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
 })
 
-const stream = vi.hoisted(() => ({
-  onFrame: null as null | ((frame: WorkspaceLayoutChangeFrame) => void),
-  onStatus: null as null | ((status: { state: string }) => void),
-  close: vi.fn()
-}))
+type StreamDouble = {
+  onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null
+  onStatus: ((status: { state: string }) => void) | null
+  close: () => void
+}
+const stream = vi.hoisted((): StreamDouble => ({ onFrame: null, onStatus: null, close: () => {} }))
 vi.mock('./runtime-layout-client', () => ({
   subscribeRuntimeLayout: (
     _target: unknown,

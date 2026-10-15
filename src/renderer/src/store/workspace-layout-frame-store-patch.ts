@@ -72,7 +72,7 @@ function mergeTerminalRow(existing: TerminalTab | undefined, built: TerminalTab)
 
 /** Each built record, or the store's when equal; the store's array when every record is. */
 function mergeById<T extends { id: string }>(
-  existing: readonly T[] | undefined,
+  existing: T[] | undefined,
   built: readonly T[] | undefined,
   merge: (existing: T | undefined, built: T) => T = (current, next) =>
     current && same(current, next) ? current : next
@@ -85,7 +85,7 @@ function mergeById<T extends { id: string }>(
   return existing &&
     existing.length === merged.length &&
     merged.every((record, index) => record === existing[index])
-    ? (existing as T[])
+    ? existing
     : merged
 }
 
