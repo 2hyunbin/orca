@@ -17,9 +17,17 @@ vi.mock('../runtime/sync-runtime-graph', () => ({
   setRuntimeGraphSyncEnabled: vi.fn()
 }))
 
+import { graphState } from '../runtime/sync-runtime-graph/graph-state'
 import { useRuntimeGraphSync } from './use-runtime-graph-sync'
 
 const initialState = useAppStore.getState()
+const CLI_ID = 'repo1::/cli'
+const SECOND_CLI = makeWorktree({
+  id: 'repo1::/cli-2',
+  repoId: 'repo1',
+  path: '/cli-2',
+  cliProvenance: { kind: 'created-by-cli', createdAt: 0 }
+})
 
 describe('useRuntimeGraphSync', () => {
   beforeEach(() => {
@@ -34,8 +42,9 @@ describe('useRuntimeGraphSync', () => {
       worktreesByRepo: {
         repo1: [
           makeWorktree({
-            id: 'repo1::/cli',
+            id: CLI_ID,
             repoId: 'repo1',
+            path: '/cli',
             cliProvenance: { kind: 'created-by-cli', createdAt: 0 }
           })
         ]
@@ -44,13 +53,14 @@ describe('useRuntimeGraphSync', () => {
   })
 
   afterEach(() => {
+    graphState.publishedNotificationHiddenWorkspaces = null
     useAppStore.setState(initialState, true)
   })
 
-  it('republishes when an input of the notification-hidden set changes, not on unrelated writes', () => {
+  it('republishes when the notification-hidden contents change, not when only inputs are replaced', () => {
     const { unmount } = renderHook(() => useRuntimeGraphSync())
     act(() => {
-      useAppStore.setState({ activeWorktreeId: 'repo1::/cli' })
+      useAppStore.setState({ activeWorktreeId: CLI_ID })
     })
     expect(mocks.scheduleRuntimeGraphSync).not.toHaveBeenCalled()
 
@@ -58,10 +68,20 @@ describe('useRuntimeGraphSync', () => {
       useAppStore.setState({ hideCliCreatedWorkspaces: true })
     })
     expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(1)
+    // What the scheduled sync would record once main accepts it.
+    graphState.publishedNotificationHiddenWorkspaces = new Set([CLI_ID])
 
-    // The sync itself drops a recomputed set whose contents did not change.
+    // A replaced worktree list with the same hidden rows schedules nothing.
     act(() => {
       useAppStore.setState({ worktreesByRepo: { ...useAppStore.getState().worktreesByRepo } })
+    })
+    expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(1)
+
+    // A second CLI-created workspace changes the contents.
+    act(() => {
+      useAppStore.setState({
+        worktreesByRepo: { repo1: [...useAppStore.getState().worktreesByRepo.repo1, SECOND_CLI] }
+      })
     })
     expect(mocks.scheduleRuntimeGraphSync).toHaveBeenCalledTimes(2)
     unmount()

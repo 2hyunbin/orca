@@ -19,7 +19,7 @@ import { isWebOnlyMirroredTerminalTab } from './mobile-session-surfaces'
 import { resolveRuntimeTerminalTitle } from './sync-projections'
 import { measureTerminalGroupGridSizes } from './terminal-group-grid-sizes'
 import { getProjectSectionCatalogFromState } from './project-section-catalog'
-import { getNotificationHiddenWorkspaceIds } from '@/attention/hidden-workspace-notification-mute'
+import { changedNotificationHiddenWorkspaces } from './notification-hidden-workspace-publication'
 import {
   collectAmbiguousTerminalTabIds,
   graphState,
@@ -63,15 +63,7 @@ export async function syncRuntimeGraph(): Promise<void> {
   const publication = partitionMobileSessionPublication(mobileSessionTabs)
   const gridSizes = measureTerminalGroupGridSizes(state.settings?.terminalFontSize ?? 14)
   const projectSectionCatalog = getProjectSectionCatalogFromState(state)
-  // Why wait for settings and UI state: an empty set published before they load would unhide everything.
-  const hiddenWorkspaces =
-    state.persistedUIReady && state.settings ? getNotificationHiddenWorkspaceIds(state) : null
-  const published = graphState.publishedNotificationHiddenWorkspaces
-  const hiddenWorkspacesChanged =
-    hiddenWorkspaces !== null &&
-    (published === null ||
-      published.size !== hiddenWorkspaces.size ||
-      [...hiddenWorkspaces].some((key) => !published.has(key)))
+  const changedHiddenWorkspaces = changedNotificationHiddenWorkspaces(state)
   const graph: RuntimeRendererSyncWindowGraph = {
     tabs: [],
     leaves: [],
@@ -85,7 +77,9 @@ export async function syncRuntimeGraph(): Promise<void> {
     ...(projectSectionCatalog && projectSectionCatalog !== graphState.publishedProjectSectionCatalog
       ? { projectSectionCatalog }
       : {}),
-    ...(hiddenWorkspacesChanged ? { notificationHiddenWorkspaceKeys: [...hiddenWorkspaces] } : {})
+    ...(changedHiddenWorkspaces
+      ? { notificationHiddenWorkspaceKeys: [...changedHiddenWorkspaces] }
+      : {})
   }
 
   for (const [registrationKey, registeredTab] of mountedTerminalTabEntries()) {
@@ -216,8 +210,8 @@ export async function syncRuntimeGraph(): Promise<void> {
     graphState.publishedTerminalGroupGridSizesKey = JSON.stringify(gridSizes ?? null)
     graphState.publishedProjectSectionCatalog =
       projectSectionCatalog ?? graphState.publishedProjectSectionCatalog
-    if (hiddenWorkspacesChanged) {
-      graphState.publishedNotificationHiddenWorkspaces = hiddenWorkspaces
+    if (changedHiddenWorkspaces) {
+      graphState.publishedNotificationHiddenWorkspaces = changedHiddenWorkspaces
     }
     commitMobileSessionPublication(mobileSessionTabs, result?.mobileSessionResyncWorktrees)
     const currentState = graphState.getStoreState()

@@ -10,6 +10,7 @@ import {
 } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
 import { notificationHiddenWorkspaceInputsChanged } from '../attention/hidden-workspace-notification-mute'
+import { changedNotificationHiddenWorkspaces } from '../runtime/sync-runtime-graph/notification-hidden-workspace-publication'
 
 /** Keeps the mobile runtime graph republished as the store's session-visible state changes. */
 export function useRuntimeGraphSync(): void {
@@ -71,8 +72,12 @@ export function useRuntimeGraphSync(): void {
   useEffect(
     () =>
       useAppStore.subscribe((state, previousState) => {
-        // Why: the graph carries the notification-hidden set to main's phone push; republish on change.
-        if (notificationHiddenWorkspaceInputsChanged(state, previousState)) {
+        // Why: the graph carries the notification-hidden set to main's phone push; republish only
+        // when its contents change, since its inputs (worktreesByRepo) are replaced on every bump.
+        if (
+          notificationHiddenWorkspaceInputsChanged(state, previousState) &&
+          changedNotificationHiddenWorkspaces(state)
+        ) {
           scheduleRuntimeGraphSync()
         }
       }),
