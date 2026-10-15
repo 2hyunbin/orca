@@ -96,6 +96,10 @@ export type RuntimeSkillCommandSurface = {
     signal?: AbortSignal,
     onProgress?: (progress: SkillBundleInstallProgress) => void
   ): Promise<SkillBundleInstallResult>
+  installBundledOrcaSkills(
+    names: readonly string[],
+    signal?: AbortSignal
+  ): Promise<SkillInstallResult[]>
   getSharedSkillInstallProgress(operationId: string): SkillBundleInstallProgress | null
   cancelSharedSkillInstall(operationId: string): boolean
   previewSharedSkillInstallRequest(

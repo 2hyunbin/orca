@@ -4,9 +4,8 @@ import {
   type SkillInstallationTopology
 } from '../../shared/skill-freshness'
 
-// Why: `skills add` rewrites the skill in every agent folder it targets with an rm-then-copy.
-// Through a link out of tree that deletes someone else's files (#22897); into a read-only or
-// dangling placement it fails half-way. Any such home placement keeps the name skipped.
+// Why: writing through a link out of tree touches someone else's files (#22897), and a
+// read-only or dangling placement fails half-way. Any such home placement keeps the name skipped.
 const UNWRITABLE_HOME_TOPOLOGIES: ReadonlySet<SkillInstallationTopology> = new Set([
   'external-link',
   'broken-link',
@@ -14,7 +13,7 @@ const UNWRITABLE_HOME_TOPOLOGIES: ReadonlySet<SkillInstallationTopology> = new S
 ])
 
 /**
- * Names the pinned install can safely bring to this build's version.
+ * Names the bundled install can safely bring to this build's version.
  *
  * Ownership is deliberately not consulted: whether to preselect a copy someone else
  * installed is presentation policy. Copies the command never writes (project skills,

@@ -37,9 +37,13 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
     inventorySkillFreshness({ repos: store.getRepos() })
 
   const runner = new SkillUpdateRunner({
-    sourceCommit: ORCA_BUILD_COMMIT,
-    // Why: per-skill outcomes come from re-hashing what is actually on disk, not
-    // from scraping stdout.
+    installSkills: async (names, signal) => {
+      if (!runtime) {
+        throw new Error('Skill installs are unavailable in this process.')
+      }
+      return runtime.installBundledOrcaSkills(names, signal)
+    },
+    // Why: per-skill outcomes come from re-hashing what is actually on disk.
     rescanOutdatedNames: async (names) => {
       // Why: the run just rewrote skill packages on this host. Clients that never
       // send `refresh` (older builds) would otherwise read a pre-run scan.

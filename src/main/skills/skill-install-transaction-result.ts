@@ -62,6 +62,13 @@ export function skillInstallReplacementAllowed(
   if (state.kind === 'missing' || state.kind === 'clean-update') {
     return input.conflictResolution !== 'cancel'
   }
+  if (
+    (state.kind === 'modified' || state.kind === 'unowned') &&
+    state.digest !== undefined &&
+    input.adoptableDigests?.includes(state.digest)
+  ) {
+    return input.conflictResolution !== 'cancel'
+  }
   return (
     (state.kind === 'modified' || state.kind === 'unowned') &&
     input.conflictResolution === 'replace-and-discard-local'

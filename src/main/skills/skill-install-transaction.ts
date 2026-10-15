@@ -55,6 +55,8 @@ export type LocalSkillInstallInput = {
   expectedVersionId?: string
   sourceBundleDigest?: string
   conflictResolution?: 'replace-unmodified' | 'replace-and-discard-local' | 'cancel'
+  /** Digests of copies the caller owns by other evidence; replaced like a clean update. */
+  adoptableDigests?: readonly string[]
   filesystem?: SkillInstallFilesystem
   wslDistro?: string
   signal?: AbortSignal

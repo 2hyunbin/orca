@@ -6,6 +6,9 @@ import { renameSkillPathWithWindowsRetry } from './skill-filesystem-retry'
 import type { SkillInstalledFileMode } from './skill-install-filesystem'
 import { nativeSkillInstallFilesystem } from './skill-install-filesystem'
 
+// Why `_`: cloud package ids are UUIDs, so this prefix can never name a shared package.
+export const BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX = 'orca_bundled_'
+
 export type SkillInstallReceiptV1 = {
   schemaVersion: 1
   packageId: string
@@ -100,7 +103,8 @@ export async function listManagedSkillInstalls(
       const parsed = await readFile(join(receiptsDirectory, entry.name), 'utf8')
         .then((value): unknown => JSON.parse(value))
         .catch(() => null)
-      if (!isReceipt(parsed)) {
+      // Why: Orca's own skills are not shared packages; listing them would offer cloud actions.
+      if (!isReceipt(parsed) || parsed.packageId.startsWith(BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX)) {
         return null
       }
       const observed = options?.observeReceipt

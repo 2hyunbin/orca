@@ -49,6 +49,7 @@ async function createGeneratorSandbox() {
   return {
     generate: (...args) => execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' }),
     read: (name) => readFile(path.join(root, 'resources', 'skills', name), 'utf8'),
+    readRepoFile: (name) => readFile(path.join(root, ...name.split('/')), 'utf8'),
     editSkill: (body) => writeFile(path.join(skillRoot, 'SKILL.md'), body)
   }
 }
@@ -120,6 +121,29 @@ describe('skill bundle manifest generator', () => {
 
     await sandbox.editSkill('changed\n')
     expect(() => sandbox.generate()).toThrow()
+  })
+
+  it('keeps every shipped digest in the ledger and embeds the current bytes', async () => {
+    const sandbox = await createGeneratorSandbox()
+    sandbox.generate('--write')
+    const [first] = JSON.parse(await sandbox.read('released-digests.json')).skills.demo
+
+    await sandbox.editSkill('changed\r\n')
+    sandbox.generate('--write')
+    const manifest = JSON.parse(await sandbox.read('current-manifest.json'))
+    expect(JSON.parse(await sandbox.read('released-digests.json'))).toEqual({
+      schemaVersion: 1,
+      skills: { demo: [first, manifest.skills[0].packageDigest] }
+    })
+    const embedded = await sandbox.readRepoFile('src/shared/bundled-orca-skill-packages.ts')
+    expect(embedded).toContain(
+      JSON.stringify({
+        name: 'demo',
+        files: [{ path: 'SKILL.md', text: 'changed\n' }],
+        releasedDigests: [first, manifest.skills[0].packageDigest]
+      })
+    )
+    expect(() => sandbox.generate()).not.toThrow()
   })
 
   it.runIf(process.platform !== 'win32')(

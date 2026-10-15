@@ -1,9 +1,11 @@
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { detectInstalledAgentsWithShellPathHydration } from '../preflight/agent-detection'
 import { executeSkillInstallRequest } from '../skills/skill-install-request-service'
 import { executeSkillBundleInstallRequest } from '../skills/skill-bundle-install-request-service'
 import { SkillUploadSessionService } from '../skills/skill-upload-session-service'
 import { SKILL_UPLOAD_STAGING_ROOT_NAME } from '../skills/skill-upload-staging-ownership'
+import { installBundledOrcaSkills } from '../skills/bundled-orca-skill-install'
 import type {
   SkillBundleInstallProgress,
   SkillBundleInstallRequest,
@@ -163,6 +165,25 @@ export class RuntimeSkillInstallCommands {
       }
       this.progress.delete(request.operationId)
     }
+  }
+  // Why this host's global homes only: they are what the freshness inventory scans.
+  async installBundledOrcaSkills(
+    names: readonly string[],
+    signal?: AbortSignal
+  ): Promise<SkillInstallResult[]> {
+    await this.host.skillTransactionRecovery
+    const homeDirectory = homedir()
+    const runtimeId = this.host.getRuntimeId()
+    return installBundledOrcaSkills(names, {
+      scope: 'global',
+      homeDirectory,
+      orcaStateDirectory: this.userDataPath(),
+      detectedProviders: await detectInstalledAgentsWithShellPathHydration(),
+      providerRootOverrides: await this.roots({ scope: 'global', homeDirectory }),
+      hostIdentity: runtimeId,
+      destinationIdentity: `global:${runtimeId}`,
+      signal
+    })
   }
   getSharedSkillInstallProgress(operationId: string) {
     return this.progress.get(operationId) ?? null

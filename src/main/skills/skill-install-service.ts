@@ -74,6 +74,7 @@ export function skillInstallLocalInput(input: SkillInstallServiceInput): LocalSk
     expectedVersionId: input.expectedVersionId,
     sourceBundleDigest: input.sourceBundleDigest,
     conflictResolution: input.conflictResolution,
+    adoptableDigests: input.adoptableDigests,
     filesystem: input.filesystem,
     wslDistro: input.wslDistro,
     signal: input.signal

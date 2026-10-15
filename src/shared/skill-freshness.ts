@@ -37,7 +37,7 @@ export type SkillInstallationTopology =
   | 'plugin-cache'
 
 // Why: eligibility and the explanation copy must agree on which placements the
-// pinned install rail rewrites; a drifted copy would blame a phantom sibling.
+// bundled install rewrites; a drifted copy would blame a phantom sibling.
 export const SUPPORTED_GLOBAL_SKILL_TOPOLOGIES: ReadonlySet<SkillInstallationTopology> = new Set([
   'canonical-copy',
   'provider-alias'
@@ -161,7 +161,7 @@ export function isSkillScanIssueTruncatingScan(issue: SkillFreshnessScanIssue): 
 export type SkillFreshnessInventory = {
   schemaVersion: 1
   installations: SkillFreshnessInstallation[]
-  /** Outdated names the pinned install can safely rewrite, whoever installed them. */
+  /** Outdated names the bundled install may rewrite; a copy with local edits stays put. */
   eligibleUpdateNames: string[]
   scanIssues: SkillFreshnessScanIssue[]
   scannedAt: number
@@ -177,14 +177,12 @@ export function canonicalizeSkillUpdateNames(names: readonly string[]): string[]
   return canonicalNames.length > 0 ? canonicalNames : null
 }
 
-// Why: `skills add` has no --json, so the run reports one indeterminate phase.
-// Per-skill outcomes come from re-scanning the inventory after exit, never from
-// parsing stdout.
+// Why one indeterminate phase: per-skill outcomes come from re-scanning the inventory after
+// the run, which is what the dialog reports on.
 export type SkillUpdateRun =
   | { state: 'idle' }
-  // `stopping` covers the window between Stop and the process tree actually
-  // dying — the run is still `running` (that is what blocks a second writer),
-  // but the Stop affordance has already been spent.
+  // `stopping` covers the window between Stop and the install actually settling — the run is
+  // still `running` (that is what blocks a second writer), but Stop has already been spent.
   | { state: 'running'; names: string[]; startedAt: number; output: string; stopping?: boolean }
   | { state: 'success'; names: string[]; finishedAt: number; output: string }
   | {
@@ -199,4 +197,4 @@ export type SkillUpdateRun =
 
 export type SkillUpdateStartResult =
   | { started: true }
-  | { started: false; reason: 'already-running' | 'invalid-names' | 'unsafe-command-path' }
+  | { started: false; reason: 'already-running' | 'invalid-names' }
