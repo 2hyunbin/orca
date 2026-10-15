@@ -237,7 +237,7 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
             env: agentStartup.env,
             startupCommandDelivery: agentStartup.startupCommandDelivery,
             launchConfig: agentStartup.launchConfig,
-            launchAgent: tab.launchAgent ?? agentStartup.launchAgent,
+            launchAgent: agentStartup.launchAgent ?? tab.launchAgent,
             ...('resumeProviderSession' in agentStartup
               ? { resumeProviderSession: agentStartup.resumeProviderSession }
               : {}),

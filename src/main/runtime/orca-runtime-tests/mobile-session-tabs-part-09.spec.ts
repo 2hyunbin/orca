@@ -240,6 +240,26 @@ describe('OrcaRuntimeService', () => {
       expect(firstSpawnArgs(spawn).command).toContain('provider-session-1')
     })
 
+    // Why: Codex resume routing keys off the launch agent, so it must name the resumed agent.
+    it('labels the spawn with the recorded agent, not the agent the tab first launched', async () => {
+      const { runtimeStore, getSession, setSession } = makeParkedSessionStore('worktree-sleep', {
+        agent: 'codex',
+        providerSession: { key: 'session_id', id: 'codex-session-1' }
+      })
+      const session = structuredClone(getSession())
+      const tab = session.tabsByWorktree[TEST_WORKTREE_ID]?.[0]
+      if (tab) {
+        tab.launchAgent = 'claude'
+      }
+      setSession(session)
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore)
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command).toContain('codex-session-1')
+      expect(spawn.mock.calls[0]?.[0]).toMatchObject({ launchAgent: 'codex' })
+    })
+
     // Why: a session id names a transcript on the machine that captured it.
     it('does not resume a record captured on another execution host', async () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
