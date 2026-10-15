@@ -250,8 +250,8 @@ export async function openProviderTimelineRig(
   if (!sink) {
     throw new Error('the deferred sink offers transitions')
   }
-  // The coalescing window elapses before every read, so all text streamed so far is written,
-  // unless a test overrides `schedule` to drive the window itself.
+  // The coalescing window elapses before every read, so text that grew enough is written, unless
+  // a test overrides `schedule` to drive the window itself; `flush` writes the rest.
   const windows = new Set<() => void>()
   const elapse = () => {
     // Only the windows open now: a flush the sink refused schedules another for the next read.
