@@ -9579,7 +9579,6 @@
               "614c756ab1": "导入浏览器 Cookie",
               "cee44fb442": "自动化",
               "a57c2172dc": "智能体浏览器",
-              "6ea88e5206": "恩克斯",
               "f5b8fdddf5": "orca-cli",
               "e5a784bc54": "安装",
               "9d97446873": "智能体",
@@ -9835,7 +9834,6 @@
             "f89a94773c": "更新",
             "79ff46776e": "检查应用程序更新并安装较新的 Orca 版本。",
             "e15af4eb64": "检查更新",
-            "6382fe9724": "恩克斯",
             "baa263d6d8": "智能体",
             "bda108e66c": "技能",
             "244e3fb4c8": "安装 Orca 技能，以便智能体知道如何使用 Orca CLI。",
@@ -14199,9 +14197,9 @@
           "yoloPermissionsDescription": "智能体会在不询问的情况下运行命令和编辑文件，部分智能体还会绕过沙箱。仅在你信任的项目中使用。"
         },
         "FeatureSetupInlineTerminal": {
-          "789b59936e": "按 Enter 运行命令并在询问时确认 npx。您也可以稍后在“设置”中进行设置。",
           "47fc6cc6dc": "技能设置命令",
-          "c767ab7061": "技能设置"
+          "c767ab7061": "技能设置",
+          "pressEnterToRun": "按 Enter 运行命令。您也可以稍后在“设置”中进行设置。"
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear、GitLab、Bitbucket、Azure DevOps、Gitea 和 Jira 位于“设置”>“集成”中。",

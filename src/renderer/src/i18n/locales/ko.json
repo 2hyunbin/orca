@@ -9579,7 +9579,6 @@
               "614c756ab1": "브라우저 쿠키 가져오기",
               "cee44fb442": "오토메이션",
               "a57c2172dc": "agent-browser",
-              "6ea88e5206": "npx",
               "f5b8fdddf5": "orca-cli",
               "e5a784bc54": "설치",
               "9d97446873": "에이전트",
@@ -9835,7 +9834,6 @@
             "f89a94773c": "업데이트",
             "79ff46776e": "앱 업데이트를 확인하고 최신 Orca 버전을 설치하세요.",
             "e15af4eb64": "업데이트 확인",
-            "6382fe9724": "npx",
             "baa263d6d8": "에이전트",
             "bda108e66c": "스킬",
             "244e3fb4c8": "agents가 Orca CLI를 사용하도록 Orca 스킬을 설치하세요.",
@@ -14199,9 +14197,9 @@
           "yoloPermissionsDescription": "agents가 묻지 않고 명령을 실행하고 파일을 편집하며, 일부는 샌드박스도 우회합니다. 신뢰할 수 있는 프로젝트에서만 사용하세요."
         },
         "FeatureSetupInlineTerminal": {
-          "789b59936e": "Enter를 눌러 명령을 실행하고 요청 시 npx를 확인합니다. 나중에 설정에서 설정할 수도 있습니다.",
           "47fc6cc6dc": "스킬 설정 명령어",
-          "c767ab7061": "스킬 설정"
+          "c767ab7061": "스킬 설정",
+          "pressEnterToRun": "Enter를 눌러 명령을 실행합니다. 나중에 설정에서 설정할 수도 있습니다."
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea 및 Jira는 설정 > 연동에 있습니다.",

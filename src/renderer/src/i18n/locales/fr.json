@@ -9744,7 +9744,6 @@
               "614c756ab1": "Importer les cookies du navigateur",
               "cee44fb442": "automatisation",
               "a57c2172dc": "agent-browser",
-              "6ea88e5206": "npx",
               "f5b8fdddf5": "orca-cli",
               "e5a784bc54": "installer",
               "9d97446873": "agent",
@@ -10000,7 +9999,6 @@
             "f89a94773c": "mise à jour",
             "79ff46776e": "Recherche les mises à jour de l'application et installe une version plus récente d'Orca.",
             "e15af4eb64": "Rechercher des mises à jour",
-            "6382fe9724": "npx",
             "baa263d6d8": "agents",
             "bda108e66c": "skill",
             "244e3fb4c8": "Installer le skill Orca pour que les agents sachent utiliser la CLI Orca.",
@@ -14307,9 +14305,9 @@
           "yoloPermissionsDescription": "Les agents exécutent des commandes et modifient des fichiers sans demander, et certains contournent aussi leur sandbox. À utiliser uniquement dans des projets de confiance."
         },
         "FeatureSetupInlineTerminal": {
-          "789b59936e": "Appuyez sur Entrée pour exécuter la commande et confirmez npx si demandé. Vous pouvez aussi configurer cela plus tard dans les paramètres.",
           "47fc6cc6dc": "Commande de configuration du skill",
-          "c767ab7061": "Configuration du skill"
+          "c767ab7061": "Configuration du skill",
+          "pressEnterToRun": "Appuyez sur Entrée pour exécuter la commande. Vous pouvez aussi configurer cela plus tard dans les paramètres."
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea et Jira se trouvent dans Paramètres > Intégrations.",

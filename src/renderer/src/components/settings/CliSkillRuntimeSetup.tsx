@@ -10,6 +10,8 @@ import {
 import { buildWslLoginShellCommand } from '../../../../shared/wsl-login-shell-command'
 import { isWslShellName } from '../../../../shared/local-windows-terminal-runtime'
 import { resolveWindowsShellStartupFamily } from '../../../../shared/windows-terminal-shell'
+import { getOrcaCliCommandNameForPlatform } from '../../../../shared/orca-cli-command-name'
+import { ORCA_SKILL_COMMAND_EXECUTABLE } from '../../../../shared/agent-feature-install-commands'
 import { getProjectAgentSkillTerminalShellOverride } from '@/lib/project-skill-runtime'
 import { useAppStore } from '@/store'
 import { toast } from 'sonner'
@@ -77,28 +79,34 @@ export function getWslCliDistroRequest(
     : undefined
 }
 
+/**
+ * Points an `orca skills ...` command at the CLI name the target runtime registers: Linux
+ * and WSL install it as `orca-ide` because a bare `orca` there is the GNOME screen reader.
+ */
 export function buildSkillCommandForRuntime(
   command: string,
   runtime?: LocalAgentRuntime,
   currentPlatform = getSkillCommandPlatform()
 ): string {
-  const resolvedRuntime = runtime ?? LOCAL_HOST_AGENT_RUNTIME
-  if (resolvedRuntime.runtime !== 'wsl') {
-    return wrapWindowsSkillCommandWithNpxPrerequisite(command, currentPlatform, 'copied-command')
+  const prefix = `${ORCA_SKILL_COMMAND_EXECUTABLE} `
+  if (!command.startsWith(prefix)) {
+    return command
   }
-  return command
+  const targetsLinux =
+    (runtime ?? LOCAL_HOST_AGENT_RUNTIME).runtime === 'wsl' ||
+    // Why: a focused remote runtime runs the command on a host whose platform this client
+    // does not know; its Orca terminals resolve a bare `orca`.
+    (currentPlatform === 'linux' && !isRemoteRuntimeEnvironmentFocused())
+  if (!targetsLinux) {
+    return command
+  }
+  return `${getOrcaCliCommandNameForPlatform('linux')} ${command.slice(prefix.length)}`
 }
 
 /**
- * Where a built skill command is going: the user's clipboard (their own shell)
- * or the setup terminal Orca spawns itself.
- */
-type SkillCommandTarget = 'copied-command' | 'orca-setup-terminal'
-
-/**
- * Adapts a copied skill command for Orca's inline setup terminal auto-paste.
- * Host Windows installs may gain an npx preflight; WSL-targeted PowerShell wrappers
- * must become bash-native because the daemon forces wsl.exe for WSL worktrees.
+ * Adapts a copied skill command for Orca's inline setup terminal auto-paste. WSL-targeted
+ * PowerShell wrappers must become bash-native because the daemon forces wsl.exe for WSL
+ * worktrees.
  */
 export function buildSkillSetupTerminalCommand(
   copiedCommand: string,
@@ -119,11 +127,7 @@ export function buildSkillSetupTerminalCommand(
   if (runtime?.runtime === 'wsl' && currentPlatform === 'win32') {
     return buildPowerShellWslSkillCommand(copiedCommand, runtime)
   }
-  return wrapWindowsSkillCommandWithNpxPrerequisite(
-    copiedCommand,
-    currentPlatform,
-    'orca-setup-terminal'
-  )
+  return copiedCommand
 }
 
 function buildPowerShellWslSkillCommand(command: string, runtime: LocalAgentRuntime): string {
@@ -181,45 +185,10 @@ function isSetupTerminalForcedToPowerShell(terminalShellOverride: string | undef
   )
 }
 
-function wrapWindowsSkillCommandWithNpxPrerequisite(
-  command: string,
-  currentPlatform: NodeJS.Platform,
-  target: SkillCommandTarget
-): string {
-  const trimmedCommand = command.trim()
-  if (
-    currentPlatform !== 'win32' ||
-    // Why: skill setup terminals spawn on the focused runtime environment, so a
-    // Windows client must not hand a cmd.exe command to a remote host.
-    isRemoteRuntimeEnvironmentFocused() ||
-    // Why: the copied command lands in the user's configured shell, and MSYS
-    // shells rewrite cmd.exe's leading /d /s /c switches into drive paths,
-    // starting an interactive cmd session instead of running the payload.
-    (target === 'copied-command' && isPosixFamilyWindowsShellConfigured()) ||
-    !/^npx\s+skills(?:@[\w.-]+)?\s+add\b/i.test(trimmedCommand)
-  ) {
-    return command
-  }
-
-  const missingNpxGuidance =
-    'echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1'
-  // Why: cmd.exe is one shell-neutral boundary for PowerShell and Command
-  // Prompt, and it resolves the bare name through PATHEXT for both the
-  // preflight and the executed command, so shims such as npx.exe still count.
-  return `cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 (${missingNpxGuidance}) else (${trimmedCommand})"`
-}
-
-function isPosixFamilyWindowsShellConfigured(): boolean {
-  return ['posix', 'unix'].includes(
-    resolveWindowsShellStartupFamily(useAppStore.getState().settings?.terminalWindowsShell)
-  )
-}
-
 function isRemoteRuntimeEnvironmentFocused(): boolean {
   // Why: the terminal router also weighs how many environments are saved, but
   // that slice has no subscriber here. Read only the focused id, which every
-  // caller re-renders on: it over-skips rather than ever handing a cmd.exe
-  // command to a remote shell.
+  // caller re-renders on.
   return Boolean(useAppStore.getState().settings?.activeRuntimeEnvironmentId?.trim())
 }
 

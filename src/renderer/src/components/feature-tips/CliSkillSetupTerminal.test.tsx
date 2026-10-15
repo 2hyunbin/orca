@@ -56,7 +56,6 @@ describe('CliSkillSetupTerminal', () => {
       </TooltipProvider>
     )
 
-    expect(mocks.terminalCommand).toMatch(/^cmd\.exe \/d \/s \/c /)
-    expect(mocks.terminalCommand).not.toContain('wsl.exe')
+    expect(mocks.terminalCommand).toBe('orca skills install --skill orca-cli --skill orchestration')
   })
 })

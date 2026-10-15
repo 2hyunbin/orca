@@ -11,10 +11,8 @@ import { useAppStore } from '../../store'
 import { OrchestrationPane } from './OrchestrationPane'
 import { getOrchestrationPaneSearchEntries } from './orchestration-search'
 import { matchesSettingsSearch } from './settings-search'
-import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
 
-const INSTALL_COMMAND = `npx skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${ORCA_BUILD_COMMIT} --skill orchestration --global`
-const WINDOWS_INSTALL_COMMAND = `cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 (echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1) else (npx skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${ORCA_BUILD_COMMIT} --skill orchestration --global)"`
+const INSTALL_COMMAND = 'orca skills install --skill orchestration'
 
 const mocks = vi.hoisted(() => ({
   dialogProps: [] as Record<string, unknown>[],
@@ -256,9 +254,7 @@ describe('OrchestrationPane', () => {
   it('passes the install command, which also updates, without a manual-copy path', async () => {
     const rendered = await renderPane()
 
-    expect(mocks.panelProps.at(-1)).toEqual(
-      expect.objectContaining({ command: WINDOWS_INSTALL_COMMAND })
-    )
+    expect(mocks.panelProps.at(-1)).toEqual(expect.objectContaining({ command: INSTALL_COMMAND }))
     expect(mocks.panelProps.at(-1)?.installedCommand).toBeUndefined()
 
     expect(rendered.textContent).not.toContain('Prefer your own terminal?')
@@ -292,10 +288,10 @@ describe('OrchestrationPane', () => {
 
     expect(mocks.dialogProps.at(-1)).toEqual(
       expect.objectContaining({
-        command: WINDOWS_INSTALL_COMMAND,
+        command: INSTALL_COMMAND,
         open: true
       })
     )
-    expect(rendered.textContent).toContain(WINDOWS_INSTALL_COMMAND)
+    expect(rendered.textContent).toContain(INSTALL_COMMAND)
   })
 })

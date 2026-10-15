@@ -46,8 +46,8 @@ export function EphemeralVmsPane(): React.JSX.Element {
     }
   }, [])
 
-  // Why: an absent runtime still resolves to the local host, which is what the
-  // seven sibling panes rely on to reach the Windows npx preflight.
+  // Why: an absent runtime still resolves to the local host, so the command still gets the
+  // host's CLI name.
   const installCommand = activeSkillRuntime.installDisabledReason
     ? EPHEMERAL_VMS_SKILL_INSTALL_COMMAND
     : buildSkillCommandForRuntime(

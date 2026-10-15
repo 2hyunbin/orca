@@ -89,8 +89,8 @@ export function FeatureSetupInlineTerminal({
         'Skill setup command'
       )}
       description={translate(
-        'auto.components.onboarding.FeatureSetupInlineTerminal.789b59936e',
-        'Press Enter to run the command and confirm npx if asked. You can also set this up later in Settings.'
+        'auto.components.onboarding.FeatureSetupInlineTerminal.pressEnterToRun',
+        'Press Enter to run the command. You can also set this up later in Settings.'
       )}
       terminalHeightPx={180}
       terminalTopMarginPx={16}

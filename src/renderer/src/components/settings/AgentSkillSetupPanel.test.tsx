@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { TooltipProvider } from '../ui/tooltip'
 
-const INSTALL_COMMAND = 'npx skills add https://github.com/stablyai/orca --skill orca-cli --global'
-const UPDATE_COMMAND = 'npx skills update orca-cli --global'
+const INSTALL_COMMAND = 'orca skills install --skill orca-cli'
+const UPDATE_COMMAND = 'orca skills update --skill orca-cli'
 
 const mocks = vi.hoisted(() => ({
   clipboardWrite: vi.fn(),
@@ -508,8 +508,7 @@ describe('AgentSkillSetupPanel', () => {
     const retryCommand = mocks.terminalProps
       .at(-1)
       ?.prepareCommandForShell?.(INSTALL_COMMAND, 'powershell.exe')
-    expect(retryCommand).toMatch(/^cmd\.exe \/d \/s \/c /)
-    expect(retryCommand).not.toContain('wsl.exe')
+    expect(retryCommand).toBe(INSTALL_COMMAND)
   })
 
   it('falls back to the install command for installed callers without installedCommand', async () => {

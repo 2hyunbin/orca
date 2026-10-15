@@ -1,5 +1,5 @@
 import {
-  buildAgentFeatureSkillInstallCommand as buildPinnedSkillInstallCommand,
+  buildOrcaSkillCommand,
   COMPUTER_USE_SKILL_NAME,
   EPHEMERAL_VMS_SKILL_NAME,
   ORCA_CLI_SKILL_NAME,
@@ -17,9 +17,9 @@ export {
   ORCHESTRATION_SKILL_NAME
 } from '../../../shared/agent-feature-install-commands'
 
-/** The interactive install, pinned to this build; also the update, since `add` re-copies. */
+/** `orca skills install`; buildSkillCommandForRuntime picks the executable for the runtime. */
 export function buildAgentFeatureSkillInstallCommand(skillNames: readonly string[]): string {
-  return buildPinnedSkillInstallCommand(skillNames, { sourceCommit: ORCA_BUILD_COMMIT })
+  return buildOrcaSkillCommand('install', skillNames)
 }
 
 export const ORCA_CLI_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([

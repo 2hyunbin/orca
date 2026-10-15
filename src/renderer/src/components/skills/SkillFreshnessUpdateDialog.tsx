@@ -9,7 +9,8 @@ import {
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
-import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
+import { buildOrcaSkillCommand } from '../../../../shared/agent-feature-install-commands'
+import { buildSkillCommandForRuntime } from '@/components/settings/CliSkillRuntimeSetup'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,7 +61,7 @@ function RunLog({ output }: { output: string }): React.JSX.Element | null {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 min-w-0">
-        {/* Displayed verbatim, never parsed — `skills add` has no --json. */}
+        {/* Displayed verbatim, never parsed: per-skill outcomes come from the re-scan. */}
         <pre className="scrollbar-sleek max-h-40 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
           {output.trim()}
         </pre>
@@ -183,7 +184,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     // Clipboard writes reject on a denied permission or an unfocused document;
     // without this the button just never flips to "Copied".
     void navigator.clipboard
-      .writeText(buildAgentFeatureSkillInstallCommand(names))
+      .writeText(buildSkillCommandForRuntime(buildOrcaSkillCommand('update', names)))
       .then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
@@ -385,8 +386,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
 
         <DialogFooter className="sm:justify-between">
           {isRunning ? (
-            // The terminal used to be the escape hatch for a stalled update;
-            // without it a wedged npx would leave restarting Orca as the only way out.
+            // Why: a stalled install would otherwise leave restarting Orca as the only way out.
             <Button
               type="button"
               variant="ghost"

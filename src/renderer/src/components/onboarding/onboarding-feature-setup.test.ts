@@ -26,7 +26,7 @@ import {
   type OnboardingFeatureSetupSelection
 } from './onboarding-feature-setup'
 import { getOnboardingFeatureSetupAgentRuntime } from './onboarding-feature-setup-runtime'
-import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
+import { buildSkillCommandForRuntime } from '../settings/CliSkillRuntimeSetup'
 
 const ALL_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
   ORCA_CLI_SKILL_NAME,
@@ -37,6 +37,11 @@ const ALL_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
 const ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
   ORCHESTRATION_SKILL_NAME
 ])
+// Why: what the clipboard gets is the command with this host's CLI name.
+const HOST_ALL_SKILL_INSTALL_COMMAND = buildSkillCommandForRuntime(ALL_SKILL_INSTALL_COMMAND)
+const HOST_ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND = buildSkillCommandForRuntime(
+  ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND
+)
 
 const GRANTED_COMPUTER_USE_STATUS: ComputerUsePermissionStatusResult = {
   platform: 'darwin',
@@ -109,9 +114,9 @@ describe('onboarding feature setup runner', () => {
       linearTickets: true
     })
 
-    expect(text).toBe(ALL_SKILL_INSTALL_COMMAND)
-    expect(text).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${ORCA_BUILD_COMMIT} --skill orca-cli --skill computer-use --skill orchestration --skill orca-linear --global`
+    expect(text).toBe(HOST_ALL_SKILL_INSTALL_COMMAND)
+    expect(ALL_SKILL_INSTALL_COMMAND).toBe(
+      'orca skills install --skill orca-cli --skill computer-use --skill orchestration --skill orca-linear'
     )
   })
 
@@ -121,7 +126,7 @@ describe('onboarding feature setup runner', () => {
       { runtime: 'wsl', wslDistro: 'Ubuntu', label: 'WSL Ubuntu' }
     )
 
-    expect(text).toBe(ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND)
+    expect(text).toBe('orca-ide skills install --skill orchestration')
   })
 
   it('leaves the copied command bare for a host runtime', () => {
@@ -130,7 +135,7 @@ describe('onboarding feature setup runner', () => {
       { runtime: 'host', label: 'Windows' }
     )
 
-    expect(text).toBe(ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND)
+    expect(text).toBe(HOST_ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND)
   })
 
   it('falls back to the host when the selected runtime needs repair', () => {
@@ -154,7 +159,7 @@ describe('onboarding feature setup runner', () => {
       }
     )
 
-    expect(deps.clipboardWrites).toEqual([ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND])
+    expect(deps.clipboardWrites).toEqual([HOST_ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND])
   })
 
   it('builds privacy-safe telemetry payloads for selected feature setup items', () => {
@@ -228,7 +233,7 @@ describe('onboarding feature setup runner', () => {
     expect(deps.storage.get(ORCHESTRATION_ENABLED_STORAGE_KEY)).toBe('1')
     expect(deps.removeStorageItem).toHaveBeenCalledWith(ORCHESTRATION_SETUP_DISMISSED_STORAGE_KEY)
     expect(deps.notifyOrchestrationStateChanged).toHaveBeenCalledTimes(1)
-    expect(deps.clipboardWrites).toEqual([ALL_SKILL_INSTALL_COMMAND])
+    expect(deps.clipboardWrites).toEqual([HOST_ALL_SKILL_INSTALL_COMMAND])
   })
 
   it('installs WSL skills without checking or changing CLI registration', async () => {
@@ -260,7 +265,7 @@ describe('onboarding feature setup runner', () => {
     expect(deps.openComputerUsePermissionSetup).not.toHaveBeenCalled()
     expect(deps.storage.get(BROWSER_USE_ENABLED_STORAGE_KEY)).toBe('0')
     expect(deps.storage.get(ORCHESTRATION_ENABLED_STORAGE_KEY)).toBe('1')
-    expect(deps.clipboardWrites).toEqual([ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND])
+    expect(deps.clipboardWrites).toEqual([HOST_ORCHESTRATION_ONLY_SKILL_INSTALL_COMMAND])
   })
 
   it('clears feature markers when no setup items are selected', async () => {
