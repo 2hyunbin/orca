@@ -7,14 +7,17 @@ import { waitForPtyShellEcho } from './terminal-pty-readiness'
 
 type NotificationDispatch = { source?: string; worktreeId?: string }
 
-// Why Reflect: the log lives on the main process's global, which has no typed slot for it.
+declare global {
+  var __hiddenWorkspaceDispatchLog: NotificationDispatch[] | undefined
+}
+
 async function installNotificationDispatchSpy(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ ipcMain }) => {
-    if (Array.isArray(Reflect.get(globalThis, '__hiddenWorkspaceDispatchLog'))) {
+    if (globalThis.__hiddenWorkspaceDispatchLog) {
       return
     }
     const log: NotificationDispatch[] = []
-    Reflect.set(globalThis, '__hiddenWorkspaceDispatchLog', log)
+    globalThis.__hiddenWorkspaceDispatchLog = log
     ipcMain.removeHandler('notifications:dispatch')
     ipcMain.handle('notifications:dispatch', (_event: unknown, args: NotificationDispatch) => {
       log.push(args)
@@ -25,13 +28,8 @@ async function installNotificationDispatchSpy(app: ElectronApplication): Promise
 
 async function bellRequests(app: ElectronApplication, worktreeId: string): Promise<number> {
   return app.evaluate((_electron, id) => {
-    const log: unknown = Reflect.get(globalThis, '__hiddenWorkspaceDispatchLog')
-    if (!Array.isArray(log)) {
-      return 0
-    }
-    return log.filter(
-      (dispatch: NotificationDispatch) =>
-        dispatch.source === 'terminal-bell' && dispatch.worktreeId === id
+    return (globalThis.__hiddenWorkspaceDispatchLog ?? []).filter(
+      (dispatch) => dispatch.source === 'terminal-bell' && dispatch.worktreeId === id
     ).length
   }, worktreeId)
 }
