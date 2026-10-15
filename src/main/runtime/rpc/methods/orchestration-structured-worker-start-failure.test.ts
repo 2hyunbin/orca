@@ -55,6 +55,8 @@ const WORKTREE = 'wt_1'
 function installHost() {
   const closed: string[] = []
   const visibility: [string, boolean][] = []
+  const exitObserved = { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this partial host supplies every member read during failed-start cleanup.
   setStructuredAgentSessionHost({
     setSessionTabVisibility: async (sessionId: string, visible: boolean) => {
       visibility.push([sessionId, visible])
@@ -73,10 +75,7 @@ function installHost() {
           lease: {
             runtimeKind: 'native',
             claimStatus: closed.length === 0 ? 'live' : 'released',
-            deathEvidence:
-              closed.length === 0
-                ? null
-                : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
+            deathEvidence: closed.length === 0 ? null : exitObserved,
             runtimeFence: 1
           }
         })
