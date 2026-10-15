@@ -23,7 +23,7 @@ type Props = {
   cliCreated?: boolean
 }
 
-// Presence glyphs for notes / automation / CLI / issue / Linear / Jira / GitLab MR, matching the
+// Presence glyphs for notes / automation / CLI / issue / Jira / Linear / GitLab MR, matching the
 // desktop WorktreeCardMetaBadges row. Mobile shows presence only; the full
 // detail (title/state/labels) is a follow-up detail sheet.
 export function WorktreeMetaGlyphs({
@@ -57,8 +57,8 @@ export function WorktreeMetaGlyphs({
       {automationCreated && <CalendarClock size={11} color={colors.textMuted} />}
       {cliCreated && <SquareTerminal size={11} color={colors.textMuted} />}
       {hasIssue && <CircleDot size={11} color={colors.textMuted} />}
-      {hasLinear && <Text style={styles.linearGlyph}>L</Text>}
       {linkedJiraIssue && <TaskProviderLogo provider="jira" size={10} color={colors.textMuted} />}
+      {hasLinear && <Text style={styles.linearGlyph}>L</Text>}
       {hasGitLabMR && <GitMerge size={11} color={colors.textMuted} />}
     </View>
   )

@@ -16,7 +16,6 @@ vi.mock('lucide-react-native', () => ({
 }))
 vi.mock('./TaskProviderLogo', () => ({ TaskProviderLogo: 'TaskProviderLogo' }))
 
-import { hasLinkedJiraIssue } from '../worktree/worktree-linked-jira-issue'
 import { WorktreeMetaGlyphs } from './WorktreeMetaGlyphs'
 
 let renderer: ReactTestRenderer | null = null
@@ -42,8 +41,15 @@ function glyphs(props: Parameters<typeof WorktreeMetaGlyphs>[0]): string[] {
 describe('WorktreeMetaGlyphs', () => {
   it('draws the automation, CLI and Jira glyphs in the desktop order', () => {
     expect(
-      glyphs({ comment: 'note', automationCreated: true, cliCreated: true, linkedJiraIssue: true })
-    ).toEqual(['StickyNote', 'CalendarClock', 'SquareTerminal', 'logo:jira'])
+      glyphs({
+        comment: 'note',
+        automationCreated: true,
+        cliCreated: true,
+        linkedIssue: 3,
+        linkedJiraIssue: true,
+        linkedLinearIssue: 'ENG-1'
+      })
+    ).toEqual(['StickyNote', 'CalendarClock', 'SquareTerminal', 'CircleDot', 'logo:jira', 'Text'])
   })
 
   it('draws nothing when the row has none of them', () => {
@@ -51,17 +57,5 @@ describe('WorktreeMetaGlyphs', () => {
       renderer = create(createElement(WorktreeMetaGlyphs, {}))
     })
     expect(renderer!.toJSON()).toBeNull()
-  })
-})
-
-describe('hasLinkedJiraIssue', () => {
-  it('finds a linked Jira issue and ignores everything else', () => {
-    expect(hasLinkedJiraIssue([{ provider: 'jira', type: 'issue', number: 1 }])).toBe(true)
-    expect(hasLinkedJiraIssue([{ provider: 'linear', type: 'issue', number: 1 }])).toBe(false)
-    expect(hasLinkedJiraIssue([{ provider: 'jira', type: 'pr', number: 1 }])).toBe(false)
-    // Older hosts omit the list; a malformed one must not throw.
-    expect(hasLinkedJiraIssue(undefined)).toBe(false)
-    expect(hasLinkedJiraIssue('jira')).toBe(false)
-    expect(hasLinkedJiraIssue([null, 3])).toBe(false)
   })
 })
