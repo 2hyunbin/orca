@@ -3,6 +3,7 @@ import type { RuntimeWorktreePsSummary } from '../../shared/runtime-types'
 import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
 import { getWorkspaceAttachments } from '../../shared/workspace-attachments'
 import type { Repo } from '../../shared/repo-types'
+import type { Worktree } from '../../shared/worktree/types'
 import {
   isAutomationGeneratedWorkspace,
   isCliCreatedWorkspace,
@@ -12,16 +13,16 @@ import {
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 
-/** What a phone needs to apply the Workspace options filters the way this host's sidebar does. */
+/** So a phone's Workspace options filters match this host's sidebar. */
 function getWorkspaceRowKindFacts(
-  worktree: ResolvedWorktree,
+  worktree: Worktree,
   repo: Repo | undefined
 ): Pick<
   RuntimeWorktreePsSummary,
-  'defaultBranchWorkspace' | 'automationCreated' | 'cliCreated' | 'detachedHead'
+  'defaultBranch' | 'automationCreated' | 'cliCreated' | 'detachedHead'
 > {
   return {
-    defaultBranchWorkspace: isDefaultBranchWorkspace(worktree, repo),
+    defaultBranch: isDefaultBranchWorkspace(worktree, repo),
     ...(isAutomationGeneratedWorkspace(worktree) ? { automationCreated: true } : {}),
     ...(isCliCreatedWorkspace(worktree) ? { cliCreated: true } : {}),
     ...(isDetachedHeadWorkspace(worktree) ? { detachedHead: true } : {})
@@ -122,6 +123,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       isArchived: worktree.isArchived,
       isMainWorktree: worktree.isMainWorktree,
       hasHostSidebarActivity: false,
+      ...getWorkspaceRowKindFacts(worktree, undefined),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
       parentWorktreeId: null,
       childWorktreeIds: [],

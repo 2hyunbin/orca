@@ -97,9 +97,11 @@ describe('buildRuntimeWorktreePsSummaries', () => {
       }) as unknown as ResolvedWorktree
     const worktrees = [
       row('main', { isMainWorktree: true, branch: 'refs/heads/main' }),
+      // The phone's own guess calls both of these default-branch rows; the host says not.
+      row('main-detached', { isMainWorktree: true, branch: '' }),
+      row('provisioned', { isMainWorktree: true, ephemeralVmCheckoutMode: 'provisioned-root' }),
       row('automation', { automationProvenance: { kind: 'created-by-automation' } }),
       row('cli', { cliProvenance: { kind: 'created-by-cli', createdAt: 0 } }),
-      row('detached', { branch: '' }),
       row('folder-root', { repoId: 'folder-repo', isMainWorktree: true, branch: '', head: '' })
     ]
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the builder reads only these store members.
@@ -126,28 +128,19 @@ describe('buildRuntimeWorktreePsSummaries', () => {
       resolvedWorktrees: worktrees,
       platformByRepoId: new Map()
     })
-    const facts = (id: string) => {
-      const summary = summaries.get(id)
-      return {
-        defaultBranchWorkspace: summary?.defaultBranchWorkspace,
-        automationCreated: summary?.automationCreated,
-        cliCreated: summary?.cliCreated,
-        detachedHead: summary?.detachedHead
-      }
-    }
-    const none = { automationCreated: undefined, cliCreated: undefined, detachedHead: undefined }
-    expect(facts('main')).toEqual({ ...none, defaultBranchWorkspace: true })
-    expect(facts('automation')).toEqual({
-      ...none,
-      defaultBranchWorkspace: false,
-      automationCreated: true
-    })
-    expect(facts('cli')).toEqual({ ...none, defaultBranchWorkspace: false, cliCreated: true })
-    expect(facts('detached')).toEqual({
-      ...none,
-      defaultBranchWorkspace: false,
-      detachedHead: true
-    })
-    expect(facts('folder-root')).toEqual({ ...none, defaultBranchWorkspace: true })
+    const summary = (id: string) => summaries.get(id)
+
+    expect(summary('main')?.defaultBranch).toBe(true)
+    expect(summary('folder-root')?.defaultBranch).toBe(true)
+    expect(summary('main-detached')?.defaultBranch).toBe(false)
+    expect(summary('main-detached')?.detachedHead).toBe(true)
+    expect(summary('provisioned')?.defaultBranch).toBe(false)
+    expect(summary('automation')?.automationCreated).toBe(true)
+    expect(summary('cli')?.cliCreated).toBe(true)
+    // Kind facts go on the wire only when true.
+    expect(summary('main')).not.toHaveProperty('automationCreated')
+    expect(summary('main')).not.toHaveProperty('cliCreated')
+    expect(summary('main')).not.toHaveProperty('detachedHead')
+    expect(summary('folder-root')).not.toHaveProperty('detachedHead')
   })
 })
