@@ -95,7 +95,8 @@ export function useStructuredAgentSession(args: {
     sessionId,
     target,
     isVisible,
-    enabled: transportEnabled
+    enabled: transportEnabled,
+    agentName: structuredAgentLabel(agent)
   })
   const commandPending = useRef(false)
   const legacyLaunchStop = useStructuredLegacyLaunchStop(sessionId)
@@ -141,7 +142,7 @@ export function useStructuredAgentSession(args: {
     hostStopping,
     mutate
   })
-  const prompts = pendingStructuredSessionPrompts(transportState.journalItems)
+  const prompts = pendingStructuredSessionPrompts(transportState)
   const promptsUnanswerableHere = pendingPromptsAllUnanswerableHere(prompts)
   // A send after a command the queue will run goes behind it, even with follow-ups off.
   // A host's queue waits on any pending prompt, and nothing here can settle one this build cannot
@@ -260,6 +261,8 @@ export function useStructuredAgentSession(args: {
     journalItems: transcriptItems,
     /** The host's newest turn record, which places a live turn whose record is not loaded. */
     latestTurn: transportState.latestTurn,
+    /** The host's prompts still waiting on the person and its working answer. */
+    hostWork: transportState.hostWork,
     subagentRoster: transportState.subagentRoster,
     messages,
     status: transportEnabled ? state.status : 'ready',
