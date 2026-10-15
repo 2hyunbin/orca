@@ -79,6 +79,7 @@ function answerFromSupport(
       case 'agent-without-structured-session':
       case 'not-installed':
         return 'not-on-host'
+      case undefined:
       default:
         return 'not-on-host'
     }
