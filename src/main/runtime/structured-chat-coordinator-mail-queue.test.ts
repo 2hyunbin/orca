@@ -11,6 +11,9 @@ import { idOf } from './rpc/orchestration-session-caller-test-fixture'
 import {
   COORDINATOR,
   WORKER_2_PANE,
+  codex,
+  connectionFor,
+  restartOrca,
   WAIT,
   call,
   coordinatorRunAndTask,
@@ -137,25 +140,75 @@ describe("a busy chat's orchestration pointer waits in its queue", () => {
     expect(await queuedCardTexts()).toEqual([])
   })
 
-  // Rule A's busy case: a batch held by the running turn holds no notice back. At the turn's end
-  // the card whose mail that batch took is withdrawn, and the newer report's card is sent.
-  it('queues a card per report while a held batch is open, and sends only the one still owed', async () => {
+  // The live 10-15 sequence: reports queued as cards through a long busy turn, then that turn's
+  // `check` read them, and each card went out as a turn with nothing to read. A held batch holds no
+  // notice back either (rule A). Only a card whose mail is still owed may start a turn.
+  it('sends only the mail cards still owed when the queue reaches them', async () => {
     const chat = await openChat(COORDINATOR)
-    const { runId, taskId } = await coordinatorRunAndTask()
-    const second = await secondTask()
+    const { runId } = await coordinatorRunAndTask()
     const endTurn = await runningUserTurn(chat)
-    await finishWorker(taskId)
-    await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(1), WAIT)
-    expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
-      count: 1
-    })
-    await finishWorker(second, { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
-    await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(2), WAIT)
+    for (const subject of ['one', 'two', 'three', 'held', 'new']) {
+      const cards = (await queuedCardTexts()).length
+      await call('orchestration.send', { from: 'term_worker', to: `run:${runId}`, subject })
+      await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(cards + 1), WAIT)
+      if (subject === 'three' || subject === 'held') {
+        const fetched = await call('orchestration.check', {}, { sessionId: COORDINATOR })
+        expect(fetched).toMatchObject({ count: subject === 'held' ? 1 : 3 })
+        if (subject === 'three') {
+          await call('orchestration.check', { ack: fetched.deliveryId }, { sessionId: COORDINATOR })
+        }
+      }
+    }
 
     await endTurn()
     await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+    await idleEdgesSettled()
+    expect(chat.turns).toHaveLength(2)
     expect(turnText(chat.turns[1]!)).toBe(ptyPointer(`run:${runId}`))
-    expect(queuedRows().map((row) => row.state)).toEqual(['withdrawn', 'dispatched'])
+    expect(queuedRows().map((row) => row.state)).toEqual([
+      'withdrawn',
+      'withdrawn',
+      'withdrawn',
+      'withdrawn',
+      'dispatched'
+    ])
+  })
+
+  // A card queued before Orca quit waits behind the restart's pause; once a turn lifts it, the card
+  // is judged then, so mail read before the quit starts nothing.
+  it('withdraws after a restart a card whose mail was read before Orca quit', async () => {
+    const chat = await openChat(COORDINATOR)
+    const { runId } = await coordinatorRunAndTask()
+    await runningUserTurn(chat)
+    const report = (subject: string) =>
+      call('orchestration.send', { from: 'term_worker', to: `run:${runId}`, subject })
+    await report('read before the quit')
+    await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(1), WAIT)
+    const read = await call('orchestration.check', {}, { sessionId: COORDINATOR })
+    await call('orchestration.check', { ack: read.deliveryId }, { sessionId: COORDINATOR })
+    const before = codex.connections.length
+
+    await restartOrca()
+    await report('after the restart')
+    await vi.waitFor(() => expect(codex.connections.length).toBe(before + 1), WAIT)
+    const relaunched = connectionFor(COORDINATOR)
+    await vi.waitFor(() => expect(relaunched.turns).toHaveLength(1), WAIT)
+    const notify = (method: string, params: unknown) =>
+      relaunched.handlers.onNotification?.(method, params)
+    notify('turn/started', { turn: { id: 'turn-2' } })
+    notify('item/completed', {
+      item: {
+        type: 'userMessage',
+        id: 'echo-turn-2',
+        clientId: relaunched.turns[0]!.clientUserMessageId,
+        content: [{ type: 'text', text: 'pointer' }]
+      }
+    })
+    notify('turn/completed', { turn: { id: 'turn-2' } })
+    await host.flushStreamedEvents(COORDINATOR)
+    await vi.waitFor(async () => expect(await queuedCardTexts()).toEqual([]), WAIT)
+    await idleEdgesSettled()
+    expect(relaunched.turns).toHaveLength(1)
   })
 
   // Rule: mail is a message from another agent. Stop holds its card like any queued card; mail
