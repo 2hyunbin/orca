@@ -27,7 +27,7 @@ import {
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
-  toRuntimeExecutionHostId
+  type ExecutionHostId
 } from '../../../shared/execution-host'
 import type { TerminalTabTitleUpdate } from '@/store/slices/terminal-tab-title-batch'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
@@ -48,7 +48,7 @@ export type WorkspaceLayoutFrameSync = {
 }
 
 /** Where the view read-back routes workspaces a rebuild does not show. */
-const OTHER_WORKSPACES = toRuntimeExecutionHostId('frame-sync-other-workspaces')
+const OTHER_WORKSPACES: ExecutionHostId = 'runtime:frame-sync-other-workspaces'
 
 const structureJsonByLayout = new WeakMap<PublishedWorkspaceLayout, string>()
 
