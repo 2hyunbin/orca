@@ -37,8 +37,10 @@ type Runner = (
   env: NodeJS.ProcessEnv
 ) => { code: number | null; timedOut: boolean; stdout: string }
 
+// Why 1.5 s: at most four calls run before the daemon is ready, inside the launcher's 10 s wait;
+// a timed-out call turns terminal scopes off and the daemon serves with terminals in its scope.
 const defaultRunner: Runner = (program, args, env) =>
-  runProcessSync({ program, args, env, timeoutMs: 5_000 })
+  runProcessSync({ program, args, env, timeoutMs: 1_500 })
 
 /** What the Linux wrap needs at spawn time; never reported, only used. */
 export type TerminalScopeRuntime = {

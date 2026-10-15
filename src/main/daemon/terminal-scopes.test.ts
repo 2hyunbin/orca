@@ -168,6 +168,25 @@ describe('resolveTerminalScopes', () => {
     ])
   })
 
+  it('stays off, leaving terminals in the daemon scope, when a wedged manager times out', () => {
+    const run = vi.fn((program: string, _args: string[]) => ({
+      code: 1,
+      timedOut: program !== 'systemctl',
+      stdout: ''
+    }))
+    expect(resolveTerminalScopes(linuxInput({ ...fakeManager(), run })).scopes).toEqual({
+      off: 'slice_unavailable'
+    })
+    run.mockImplementation((program: string) => ({
+      code: program === 'busctl' ? 0 : 1,
+      timedOut: program !== 'busctl',
+      stdout: ''
+    }))
+    expect(resolveTerminalScopes(linuxInput({ ...fakeManager(), run })).scopes).toEqual({
+      off: 'slice_unavailable'
+    })
+  })
+
   it('puts the process ceiling on each terminal scope once the kernel shows it', () => {
     const env = { [PTY_PROCESS_CEILING_ENV]: '2048' }
     const resolved = resolveTerminalScopes(linuxInput(fakeManager({ pidsMax: '2048\n' }), { env }))
