@@ -626,7 +626,7 @@ describe('links from a managed server reached over SSH', () => {
     remotePort: 41001
   }
 
-  it('opens the link in an SSH-routed desktop tab', async () => {
+  it('opens the link in an SSH-routed desktop tab the runtime workspace still owns', async () => {
     mocks.state = sshDeployedRuntimeState(sshDeployment)
 
     expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'orcad-env')).toBe(
@@ -644,7 +644,7 @@ describe('links from a managed server reached over SSH', () => {
       'http://localhost:3000/',
       expect.objectContaining({
         browserRuntimeEnvironmentId: null,
-        executionHostId: LOCAL_EXECUTION_HOST_ID
+        executionHostId: toRuntimeExecutionHostId('orcad-env')
       })
     )
     expect(mocks.createRemote).not.toHaveBeenCalled()

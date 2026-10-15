@@ -167,14 +167,17 @@ function createClientBrowserTab(
   state: AppState,
   request: OpenWorkspaceBrowserTabRequest,
   hostId: ExecutionHostId,
-  presentation: { error: string; title: string }
+  presentation: { error: string; title: string },
+  // Why: a desktop-hosted page in a runtime workspace stays owned by that runtime, or the
+  // unified tab is disowned from its worktree (palette and activation skip it).
+  ownerHostId: ExecutionHostId = hostId
 ): void {
   try {
     state.createBrowserTab(request.workspaceId, request.url, {
       activate: request.focusOnCreate !== false,
       browserRuntimeEnvironmentId: null,
       focusAddressBar: false,
-      executionHostId: hostId,
+      executionHostId: ownerHostId,
       sessionProfileId:
         state.defaultBrowserSessionProfileIdByHostId[hostId] ??
         state.defaultBrowserSessionProfileId,
@@ -279,7 +282,9 @@ export async function openWorkspaceBrowserTab(
     availability.provider === 'local-client'
   ) {
     const localHostId = host && host.kind !== 'runtime' ? host.id : LOCAL_EXECUTION_HOST_ID
-    createClientBrowserTab(state, request, localHostId, presentation)
+    const ownerHostId =
+      host?.kind === 'runtime' && route.executionHostId ? route.executionHostId : localHostId
+    createClientBrowserTab(state, request, localHostId, presentation, ownerHostId)
     return
   }
   let created = false
