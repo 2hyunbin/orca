@@ -1,17 +1,23 @@
 import { connect, type Server, type Socket } from 'node:net'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkOrcadStdioBridge, openOrcadStdioBridgeChannel } from '../ssh/orcad-stdio-bridge'
+import {
+  checkOrcadStdioBridge,
+  openOrcadStdioBridgeChannel,
+  resolveOrcadStdioBridge
+} from '../ssh/orcad-stdio-bridge'
 import { ORCAD_STDIO_BRIDGE_MAX_CHANNELS } from '../ssh/orcad-stdio-bridge-listener'
 import { startEchoServer } from '../ssh/orcad-stdio-bridge-test-channel'
 import type { StartedPortForward } from '../ssh/ssh-port-forward-provider'
-import { fakeWslBridgeChildren, posixOrcadStdioBridge } from './wsl-orcad-bridge-test-child'
+import { fakeWslBridgeChildren } from './wsl-orcad-bridge-test-child'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { listenWslOrcadStdioBridge } from './wsl-orcad-stdio-bridge'
 
 const running = vi.hoisted(() => vi.fn(async () => true))
 vi.mock('../wsl-background-distro-gate', () => ({ isWslDistroRunning: running }))
 
-beforeEach(() => running.mockResolvedValue(true))
+beforeEach(() => {
+  running.mockResolvedValue(true)
+})
 
 let echo: { server: Server; port: number }
 const started: StartedPortForward[] = []
@@ -42,7 +48,7 @@ async function startBridge(remotePort = echo.port) {
     transport,
     { environmentId: 'wsl:ubuntu', remotePort, localPort: 0, label: 'Ubuntu' },
     {
-      resolveBridge: async (_conn, port) => posixOrcadStdioBridge(port),
+      resolveBridge: resolveOrcadStdioBridge,
       checkBridge: checkOrcadStdioBridge,
       openChannel: openOrcadStdioBridgeChannel
     }
