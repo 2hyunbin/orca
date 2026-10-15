@@ -128,7 +128,8 @@ export class SessionSnapshotOperations {
     }
     scheduleSave(
       scheduling,
-      hostId === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId']
+      hostId === LOCAL_EXECUTION_HOST_ID ? ['workspaceSession'] : ['workspaceSessionsByHostId'],
+      hostId
     )
   }
 

@@ -5,7 +5,7 @@ import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { sidebarHasActiveFilters } from '@/components/sidebar/sidebar-filter-actions'
 import { computeVisibleWorktreeIds } from '@/components/sidebar/compute-visible-worktrees'
 import { buildVisibleWorktreeOptionsFromState } from '@/components/sidebar/visible-worktree-options-from-state'
-import { isFolderWorkspaceFromOtherDevice } from '@/components/sidebar/workspace-creator-visibility'
+import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-creator-visibility'
 
 /**
  * Whether attention from this workspace must raise nothing — no unread, banner, sound or push —

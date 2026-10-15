@@ -3,8 +3,8 @@
 //
 // WHY NOT "HIDE SLEEPING": main sees the persisted switches and its in-memory workspace records,
 // not the renderer's live tabs, so sleeping is left to the renderer; a local chat that raises
-// attention is live anyway. Rows here are this host's own, so "Hide other-client" needs no
-// paired-device map: any known creator other than the host is another client.
+// attention is live anyway. Rows here are this host's own (no runtime owner environment), so the
+// shared other-client rule needs no paired-device map; this host's own phones record it as creator.
 //
 // FAILS OPEN: no persisted UI, no record of the workspace, or a hidden parent with a shown lineage
 // child (the sidebar keeps it above that child) all notify.
@@ -12,10 +12,13 @@ import type { AgentSessionExecutionLocation } from '../../shared/agent-session-r
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { Worktree } from '../../shared/worktree/types'
 import {
-  isCreatedByAnotherClient,
   isHiddenByWorkspaceKindSwitch,
   type WorkspaceKindSwitches
 } from '../../shared/worktree/workspace-kinds'
+import {
+  EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
+  isWorkspaceOwnedBySomeoneElse
+} from '../../shared/workspace-creator-visibility'
 import type { RuntimeStore } from './runtime-store-contract'
 
 export type HiddenWorkspaceAttentionDeps = {
@@ -47,7 +50,9 @@ export function isStructuredAttentionWorkspaceHidden(
     // Folder rows answer only the other-client switch, as in the sidebar.
     const folder = deps.store.getFolderWorkspaces?.().find((item) => item.id === workspaceId)
     return (
-      hideOtherClients && folder !== undefined && isCreatedByAnotherClient(folder.creatorProvenance)
+      hideOtherClients &&
+      folder !== undefined &&
+      isWorkspaceOwnedBySomeoneElse(folder, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)
     )
   }
   const lineage = Object.values(deps.store.getAllWorktreeLineage?.() ?? {})
@@ -59,7 +64,10 @@ export function isStructuredAttentionWorkspaceHidden(
     }
     if (
       hideOtherClients &&
-      isCreatedByAnotherClient(listed?.creatorProvenance ?? meta?.creatorProvenance)
+      isWorkspaceOwnedBySomeoneElse(
+        { creatorProvenance: listed?.creatorProvenance ?? meta?.creatorProvenance },
+        EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT
+      )
     ) {
       return true
     }

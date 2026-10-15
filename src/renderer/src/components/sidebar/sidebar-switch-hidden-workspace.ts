@@ -3,7 +3,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { isHiddenByWorkspaceKindSwitch } from '../../../../shared/worktree/workspace-kinds'
 import { isInactiveWorkspace } from '@/lib/worktree-activity-state'
 import { isSleepingSweepExemptWorkspace } from './visible-worktree-kinds'
-import { isWorkspaceFromOtherDevice } from './workspace-creator-visibility'
+import { isWorkspaceOwnedBySomeoneElse } from '../../../../shared/workspace-creator-visibility'
 import type { VisibleWorktreeOptions } from './compute-visible-worktrees'
 
 /** The Filters-menu switches; the search box, project and host filters are not among them. */
@@ -32,7 +32,7 @@ export function isHiddenBySidebarSwitch(
 ): boolean {
   if (
     inputs.hideWorkspacesFromOtherDevices &&
-    isWorkspaceFromOtherDevice(worktree, inputs.pairedDeviceIdsByEnvironment)
+    isWorkspaceOwnedBySomeoneElse(worktree, inputs.pairedDeviceIdsByEnvironment)
   ) {
     return true
   }

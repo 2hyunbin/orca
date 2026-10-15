@@ -17,7 +17,8 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { isTabOnScreen, isWorkspaceOnScreen } from '@/hooks/agent-auto-ack-targets'
 import { isWorkspaceNotificationMutedBySidebarFilters } from '@/attention/hidden-workspace-notification-mute'
-import { isStructuredTab, type StructuredTab } from './structured-agent-session-tabs'
+import type { StructuredTab } from './structured-agent-session-tabs'
+import { isStructuredTab } from '../../../../shared/structured-agent-session-tab'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
 
