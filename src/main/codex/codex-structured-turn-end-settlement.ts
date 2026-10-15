@@ -151,12 +151,9 @@ function notePromptHookReason(
     )?.text
   const text =
     entryText('feedback', 'stop') ?? entryText('error') ?? entryText('warning') ?? run.statusMessage
-  if (typeof text === 'string' && text.trim()) {
-    session.dispatchEchoes.notePromptHookReason(
-      session.threadId,
-      turnId,
-      providerDiagnostic(text, 'person')
-    )
+  const detail = typeof text === 'string' ? providerDiagnostic(text, 'person') : undefined
+  if (detail) {
+    session.dispatchEchoes.notePromptHookReason(session.threadId, turnId, detail)
   }
 }
 
