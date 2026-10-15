@@ -1,7 +1,7 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { agentSessionLeaseAdmitsWriter } from '../../shared/agent-session-lease-adjudication'
 import { defaultAgentChatLabel } from '../../shared/agent-session-chat-label'
-import type { AiVaultListResult } from '../../shared/ai-vault-types'
+import type { AiVaultListResult, AiVaultSession } from '../../shared/ai-vault-types'
 import { historyRowShowsChatName } from '../../shared/structured-chat-row-name'
 import type { AiVaultSearchResponse } from '../../shared/ai-vault-search-types'
 import type { AiVaultPrepareSessionResumeArgs } from '../../shared/ai-vault-resume-preparation'
@@ -33,24 +33,24 @@ export function projectStructuredAiVaultSessions(
   result: AiVaultListResult,
   opensChat: StructuredChatOpener
 ): AiVaultListResult {
-  const owner = ownershipLookup()
-  if (!owner) {
-    return result
-  }
-  const sessions = result.sessions.flatMap((session) => {
-    const ownership = session.executionHostId === LOCAL_EXECUTION_HOST_ID ? owner(session) : null
-    if (!ownership) {
-      return [session]
-    }
-    if (!opensChat(ownership.provider)) {
-      return []
-    }
-    return [{ ...session, ...ownedRow(session.agent, ownership) }]
-  })
+  const sessions = projectStructuredAiVaultRows(result.sessions, opensChat)
   return sessions.length === result.sessions.length &&
     sessions.every((row, index) => row === result.sessions[index])
-    ? result
-    : { ...result, sessions }
+    ? result : { ...result, sessions }
+}
+
+export function projectStructuredAiVaultRows(
+  rows: readonly AiVaultSession[],
+  opensChat: StructuredChatOpener
+): AiVaultSession[] {
+  const owner = ownershipLookup()
+  if (!owner) return [...rows]
+  return rows.flatMap((session) => {
+    const ownership = session.executionHostId === LOCAL_EXECUTION_HOST_ID ? owner(session) : null
+    if (!ownership) return [session]
+    if (!opensChat(ownership.provider)) return []
+    return [{ ...session, ...ownedRow(session.agent, ownership) }]
+  })
 }
 
 /** Indexed hits name and own a native chat exactly as list rows do; only this host's index can.

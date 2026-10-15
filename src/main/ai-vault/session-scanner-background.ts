@@ -1,3 +1,4 @@
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultListResult, AiVaultSubagentListResult } from '../../shared/ai-vault-types'
 import type {
   AiVaultSessionTitleRequest,
@@ -29,9 +30,10 @@ export function clearAiVaultBackgroundRestartCircuit(): void {
 
 export function scanAiVaultSessionsInBackground(
   options: AiVaultServiceScanOptions,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onRows?: (delta: AiVaultRowDelta) => void
 ): Promise<AiVaultListResult> {
-  return scanAiVaultSessionsInService(options, signal)
+  return scanAiVaultSessionsInService(options, signal, onRows)
 }
 
 export function resolveAiVaultSessionTitlesInBackground(

@@ -1,3 +1,4 @@
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultListResult, AiVaultSubagentListResult } from '../../shared/ai-vault-types'
 import type {
   AiVaultSessionTitle,
@@ -130,6 +131,7 @@ export type AiVaultServiceChildMessage =
   | { type: 'invalidated'; generation: number }
   // `units` only grows within one scan; the parent re-arms that scan's deadline on an advance.
   | { type: 'progress'; id: number; units: number }
+  | { type: 'rows'; id: number; delta: AiVaultRowDelta }
 
 /** Everything but the two bulk reads is interactive: a search must not queue behind a scan. */
 export function aiVaultServiceLane(operation: AiVaultServiceOperation): AiVaultServiceLane {
@@ -164,6 +166,12 @@ export function isAiVaultServiceChildMessage(value: unknown): value is AiVaultSe
   }
   if (message.type === 'invalidated') {
     return Number.isSafeInteger(message.generation)
+  }
+  if (message.type === 'rows') {
+    const delta = message.delta
+    return Number.isSafeInteger(message.id) && typeof delta === 'object' && delta !== null &&
+      'upserts' in delta && Array.isArray(delta.upserts) &&
+      'removed' in delta && Array.isArray(delta.removed)
   }
   if (message.type === 'progress') {
     return (

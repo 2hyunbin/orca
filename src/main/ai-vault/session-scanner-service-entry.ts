@@ -1,3 +1,4 @@
+import { SessionRowPublisher } from './session-row-publisher'
 import { requestSessionSearchRoots } from './session-scanner-service-root-request'
 import { trackAiVaultScanProgress } from './ai-vault-scan-progress'
 import type { AiVaultSessionTitle } from '../../shared/ai-vault-session-title'
@@ -54,9 +55,14 @@ async function scanReportingProgress(
   const stopProgress = trackAiVaultScanProgress(signal, (units) =>
     send({ type: 'progress', id: request.id, units })
   )
+  const rows = new SessionRowPublisher((delta) => new Promise<void>((resolve) => {
+    if (!process.connected || signal.aborted) return resolve()
+    process.send?.({ type: 'rows', id: request.id, delta }, () => resolve())
+  }))
   try {
-    return await scanAiVaultSessions({ ...request.options, signal })
+    return await scanAiVaultSessions({ ...request.options, signal }, rows.observe)
   } finally {
+    await rows.finish()
     stopProgress()
   }
 }

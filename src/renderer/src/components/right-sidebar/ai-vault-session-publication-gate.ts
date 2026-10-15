@@ -1,5 +1,4 @@
 import { startTransition } from 'react'
-import type { AiVaultListResult } from '../../../../shared/ai-vault-types'
 import { hasInputBeenQuietFor, scheduleAfterInputQuiet } from '@/lib/input-quiet-scheduler'
 
 const AI_VAULT_PUBLICATION_QUIET_MS = 100
@@ -9,7 +8,7 @@ export class AiVaultSessionPublicationGate {
   private generation = 0
   private cancelPending: (() => void) | null = null
 
-  publish(result: AiVaultListResult, apply: (result: AiVaultListResult) => void): void {
+  publish<T>(result: T, apply: (result: T) => void): void {
     this.cancel()
     const generation = this.generation
     if (hasInputBeenQuietFor(AI_VAULT_PUBLICATION_QUIET_MS)) {

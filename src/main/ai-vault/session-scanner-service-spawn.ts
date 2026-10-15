@@ -1,3 +1,4 @@
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import { localAiVaultScanRoots } from './cached-session-list'
 import type { SessionSearchHostScope } from '../ai-vault-search/session-search-service'
 import { fork, type ChildProcess } from 'node:child_process'
@@ -62,13 +63,14 @@ function getSharedClient(): AiVaultScannerServiceClient {
 
 export function scanAiVaultSessionsInService(
   options: AiVaultServiceScanOptions,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onRows?: (delta: AiVaultRowDelta) => void
 ): Promise<AiVaultListResult> {
   return withSpan('aiVault.scan.service', async (span) => {
     const value = await getSharedClient().request<{
       result: AiVaultListResult
       durationMs: number
-    }>({ type: 'request', operation: 'scan', options }, signal)
+    }>({ type: 'request', operation: 'scan', options }, signal, onRows)
     span.setAttribute('serviceDurationMs', value.durationMs)
     span.setAttribute('sessions', value.result.sessions.length)
     return value.result

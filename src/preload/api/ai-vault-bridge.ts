@@ -1,3 +1,4 @@
+import type { AiVaultRowsEvent } from '../../shared/ai-vault-scan-rows'
 import { createSessionSearchClient } from '../../shared/ai-vault-search-client'
 import type { AiVaultSearchRequest, AiVaultSearchStatus } from '../../shared/ai-vault-search-types'
 import type { ExecutionHostId, ExecutionHostScope } from '../../shared/execution-host'
@@ -40,6 +41,17 @@ export const aiVaultApi = {
     ipcRenderer.invoke('aiVault:setSearchEnabled', executionHostId, enabled),
   clearSearchIndex: (): Promise<void> => ipcRenderer.invoke('aiVault:clearSearchIndex'),
   listSessions: (args?: AiVaultListArgs) => ipcRenderer.invoke('aiVault:listSessions', args),
+  onScanRows: (callback: (event: AiVaultRowsEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: AiVaultRowsEvent): void => {
+      try { callback(event) } finally {
+        ipcRenderer.send('aiVault:rowsAcknowledged', {
+          requestToken: event.requestToken, sequence: event.sequence
+        })
+      }
+    }
+    ipcRenderer.on('aiVault:rows', listener)
+    return () => ipcRenderer.removeListener('aiVault:rows', listener)
+  },
   resolveSessionTitles: (args: AiVaultSessionTitlesArgs) =>
     ipcRenderer.invoke('aiVault:resolveSessionTitles', args),
   cancelListSessions: (args: { requestToken: string }): Promise<void> =>

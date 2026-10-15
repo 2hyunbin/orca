@@ -124,6 +124,7 @@ export default function AiVaultPanel(): React.JSX.Element {
     error,
     loading,
     refresh,
+    onDeleted,
     scanResult,
     sessions: history,
     loadedSessionLimit
@@ -215,7 +216,10 @@ export default function AiVaultPanel(): React.JSX.Element {
     })
   }, [])
 
-  const requestDelete = useAiVaultSessionDeleteAction({ refresh, onDeleted: search.onDeleted })
+  const requestDelete = useAiVaultSessionDeleteAction({ refresh, onDeleted: (session) => {
+    onDeleted(session)
+    search.onDeleted(session)
+  } })
 
   return (
     <div className="@container/ai-vault flex h-full min-h-0 flex-col bg-sidebar">

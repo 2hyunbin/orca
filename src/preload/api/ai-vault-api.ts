@@ -1,3 +1,4 @@
+import type { AiVaultRowsEvent } from '../../shared/ai-vault-scan-rows'
 import type {
   AiVaultSearchRequest,
   AiVaultSearchResponse,
@@ -45,6 +46,7 @@ export type AiVaultApi = {
   /** Deletes and rebuilds this desktop's local search index. */
   clearSearchIndex: () => Promise<void>
   listSessions: (args?: AiVaultListArgs) => Promise<AiVaultListResult>
+  onScanRows?: (callback: (event: AiVaultRowsEvent) => void) => () => void
   resolveSessionTitles: (args: AiVaultSessionTitlesArgs) => Promise<AiVaultSessionTitlesResult>
   cancelListSessions: (args: { requestToken: string }) => Promise<void>
   prepareSessionResume: (

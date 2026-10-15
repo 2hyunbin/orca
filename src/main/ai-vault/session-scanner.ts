@@ -1,4 +1,5 @@
-import { candidateFileTime } from './antigravity-transcript-candidates'
+import { parseSessionCandidates } from './session-candidate-parser'
+import type { AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
 import type {
   AiVaultListResult,
   AiVaultScanIssue,
@@ -7,23 +8,18 @@ import type {
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import { withSpan } from '../observability/tracer'
 import { sessionSortTime } from './session-scanner-accumulator'
-import { ScannedSessionCollection, dedupeScannedSessions } from './session-root-dedup'
+import { dedupeScannedSessions } from './session-root-dedup'
 import {
   createAntigravityWorkspaceResolver,
-  readLocalAntigravityHistory,
-  type AntigravityWorkspaceResolver
+  readLocalAntigravityHistory
 } from './session-scanner-antigravity-history'
 import { sessionCandidatesFromDiscoveries } from './session-scanner-candidates'
 import { ensureSessionParseCacheLoaded } from './session-parse-cache-persistence'
 import {
   createSessionParseStats,
-  parseAgentSessionFileCached,
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import { recordSessionScanIssue } from './session-scan-issues'
-import { getSessionParseCacheEntry } from './session-parse-cache-store'
-import { describeSkippedTranscriptRecords } from './session-transcript-record-budget'
-import { canStopParsingSessions } from './session-scan-cutoff'
 import { discoverInScopeCwdBucketFiles } from './session-scanner-scope-discovery'
 import {
   CLAUDE_CWD_BUCKET_LAYOUT,
@@ -35,16 +31,14 @@ import { cursorChatMetaRefusals, withCursorChatMetaScan } from './session-scanne
 import type {
   AiVaultScanOptions,
   SessionFileCandidate,
-  SessionFileDiscovery,
-  SessionParseResult
+  SessionFileDiscovery
 } from './session-scanner-types'
-import { clampPositiveInteger, errorMessage } from './session-scanner-values'
+import { clampPositiveInteger } from './session-scanner-values'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import { DEFAULT_AI_VAULT_SCAN_LIMIT } from '../../shared/ai-vault-session-depth'
 import { withDevinSessionsDbScan } from './session-scanner-devin-db'
 import { withOpenCodeSqliteScanScope } from './session-scanner-opencode-sqlite-scan-scope'
 
-const SESSION_PARSE_CONCURRENCY = 8
 const SESSION_PARSE_CANDIDATE_MULTIPLIER = 2
 
 /**
@@ -57,12 +51,16 @@ const SESSION_PARSE_CANDIDATE_MULTIPLIER = 2
  * @returns The list of sessions, scan issues, and a timestamp.
  */
 export async function scanAiVaultSessions(
-  options: AiVaultScanOptions = {}
+  options: AiVaultScanOptions = {},
+  observeRows?: AiVaultRowObserver
 ): Promise<AiVaultListResult> {
-  return withOpenCodeSqliteScanScope(() => scanAiVaultSessionStores(options))
+  return withOpenCodeSqliteScanScope(() => scanAiVaultSessionStores(options, observeRows))
 }
 
-async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<AiVaultListResult> {
+async function scanAiVaultSessionStores(
+  options: AiVaultScanOptions,
+  observeRows?: AiVaultRowObserver
+): Promise<AiVaultListResult> {
   // The span makes scan cost visible in the local trace file: STA-1278-style
   // "one core pegged" reports need to show whether transcript scanning is the
   // subsystem burning CPU, and how much of each scan the cache absorbed.
@@ -101,7 +99,10 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
           issues,
           parseStats,
           signal: options.signal,
-          antigravityWorkspaceResolver
+          antigravityWorkspaceResolver,
+          observeRows: observeRows
+            ? (read) => observeRows(() => [...read()].sort((a, b) => sessionSortTime(b) - sessionSortTime(a)).slice(0, limit))
+            : undefined
         })
 
         const cappedSessions = dedupeScannedSessions(parsedSessions)
@@ -117,7 +118,10 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
           executionHostId,
           issues,
           parseStats,
-          signal: options.signal
+          signal: options.signal,
+          observeRows: observeRows
+            ? (read) => observeRows(() => mergeSessions(cappedSessions, [...read()]))
+            : undefined
         })
         // Scope discovery can return without parsing anything, so an abort landing
         // here would otherwise persist and return a cancelled scan as complete.
@@ -187,6 +191,7 @@ async function scanInScopeSessions(args: {
   issues: AiVaultScanIssue[]
   parseStats: SessionParseStats
   signal?: AbortSignal
+  observeRows?: AiVaultRowObserver
 }): Promise<AiVaultSession[]> {
   if (args.scopePaths.length === 0) {
     return []
@@ -215,131 +220,8 @@ async function scanInScopeSessions(args: {
     executionHostId: args.executionHostId,
     issues: args.issues,
     parseStats: args.parseStats,
-    signal: args.signal
+    signal: args.signal,
+    observeRows: args.observeRows
   })
 }
 
-async function parseSessionCandidates(args: {
-  candidates: SessionFileCandidate[]
-  limit: number
-  platform: NodeJS.Platform
-  executionHostId: ExecutionHostId
-  issues: AiVaultScanIssue[]
-  parseStats: SessionParseStats
-  signal?: AbortSignal
-  antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
-}): Promise<AiVaultSession[]> {
-  const sessions = new ScannedSessionCollection()
-
-  for (let index = 0; index < args.candidates.length;) {
-    throwIfAiVaultScanCancelled(args.signal)
-    if (
-      canStopParsingSessions(sessions, args.limit, candidateFileTime(args.candidates[index]?.file))
-    ) {
-      break
-    }
-
-    const remaining = args.candidates.length - index
-    const needed = Math.max(args.limit - sessions.size, 1)
-    const batchSize = Math.min(SESSION_PARSE_CONCURRENCY, needed, remaining)
-    const batch = args.candidates.slice(index, index + batchSize)
-    const results = await Promise.all(
-      batch.map((candidate) =>
-        parseSessionCandidate(
-          candidate,
-          args.platform,
-          args.executionHostId,
-          args.parseStats,
-          args.antigravityWorkspaceResolver,
-          args.signal
-        )
-      )
-    )
-    // An abort can land while a batch settles: a read it cut short is not that
-    // file's issue, and a partial parse must never be cached or returned.
-    throwIfAiVaultScanCancelled(args.signal)
-
-    for (const result of results) {
-      if (result.issue) {
-        recordSessionScanIssue(args.issues, result.issue)
-      }
-      if (result.session) {
-        sessions.add(result.session)
-      }
-    }
-
-    index += batchSize
-  }
-
-  return [...sessions.values()]
-}
-
-async function parseSessionCandidate(
-  candidate: SessionFileCandidate,
-  platform: NodeJS.Platform,
-  executionHostId: ExecutionHostId,
-  parseStats: SessionParseStats,
-  antigravityWorkspaceResolver?: AntigravityWorkspaceResolver,
-  signal?: AbortSignal
-): Promise<SessionParseResult> {
-  try {
-    let session = await parseAgentSessionFileCached(
-      candidate,
-      platform,
-      parseStats,
-      undefined,
-      signal
-    )
-    if (session && candidate.antigravityHistoryPath && antigravityWorkspaceResolver) {
-      session = await antigravityWorkspaceResolver.enrich(session, candidate.antigravityHistoryPath)
-    }
-    return {
-      session: session ? withSessionExecutionHost(session, executionHostId) : null,
-      issue: skippedRecordIssue(candidate, executionHostId)
-    }
-  } catch (err) {
-    return {
-      session: null,
-      issue: {
-        executionHostId,
-        agent: candidate.agent,
-        path: candidate.file.path,
-        message: errorMessage(err)
-      }
-    }
-  }
-}
-
-// The session still listed, but part of it did not: report the loss as a notice
-// so the panel does not count it as a skipped transcript file.
-function skippedRecordIssue(
-  candidate: SessionFileCandidate,
-  executionHostId: ExecutionHostId
-): AiVaultScanIssue | null {
-  const skipped = getSessionParseCacheEntry(candidate.file.path)?.resume?.skippedRecords
-  const message = skipped ? describeSkippedTranscriptRecords(skipped) : null
-  if (message === null) {
-    return null
-  }
-  return {
-    executionHostId,
-    agent: candidate.agent,
-    kind: 'notice',
-    path: candidate.file.path,
-    message
-  }
-}
-
-function withSessionExecutionHost(
-  session: AiVaultSession,
-  executionHostId: ExecutionHostId
-): AiVaultSession {
-  if (session.executionHostId === executionHostId) {
-    return session
-  }
-  return {
-    ...session,
-    executionHostId,
-    id: `${executionHostId}:${session.agent}:${session.sessionId}:${session.filePath}`
-  }
-}

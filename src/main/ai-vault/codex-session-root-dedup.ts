@@ -1,3 +1,4 @@
+export { codexSessionAliasKey } from '../../shared/ai-vault-session-alias'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
@@ -223,16 +224,6 @@ export async function dedupeCodexRolloutCopyAliases<T>(
   return candidates.filter((candidate) => !aliasesToDrop.has(candidate))
 }
 
-export function codexSessionAliasKey(session: AiVaultSession): string | null {
-  if (session.agent !== 'codex') {
-    return null
-  }
-  const fileName = lastPathSegment(session.filePath)
-  if (!CODEX_ROLLOUT_FILE_NAME_PATTERN.test(fileName)) {
-    return null
-  }
-  return `${session.executionHostId}\0${codexPathExecutionNamespace(session.filePath)}\0${session.sessionId}\0${fileName}`
-}
 
 export function codexSessionAliasBeats(candidate: AiVaultSession, best: AiVaultSession): boolean {
   const candidateRank = codexSessionRootRank(candidate.codexHome)

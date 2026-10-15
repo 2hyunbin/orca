@@ -1,3 +1,4 @@
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { SessionSearchScanRoots } from '../ai-vault-search/session-search-scan-roots'
 import type { ChildProcess } from 'node:child_process'
 import { createAiVaultScanCancelledError } from './ai-vault-scan-cancellation'
@@ -279,6 +280,7 @@ export function rejectAiVaultServiceCall(call: AiVaultServicePendingCall, error:
 }
 
 export type AiVaultServicePendingCall = {
+  onRows?: (delta: AiVaultRowDelta) => void
   request: AiVaultServiceRequest
   lane: AiVaultServiceLane
   signal?: AbortSignal

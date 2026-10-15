@@ -1,3 +1,4 @@
+import type { AiVaultScanRows } from '../../shared/ai-vault-scan-rows'
 import { join } from 'node:path'
 import { claudeProfileHistoryDirs } from '../claude-accounts/claude-profile-installed-router'
 import {
@@ -85,7 +86,7 @@ export function configuredAdditionalCodexHomePaths(): readonly string[] {
 
 export async function listAiVaultSessions(
   args?: AiVaultListArgs,
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; onRows?: (view: AiVaultScanRows) => void } = {}
 ): Promise<AiVaultListResult> {
   // Scope paths change the result set, so they must be part of the cache key.
   const key = JSON.stringify({
@@ -116,7 +117,8 @@ export async function listAiVaultSessions(
     key: scanKey,
     force: args?.force,
     signal: options.signal,
-    start: async (scanSignal) => {
+    onRows: options.onRows,
+    start: async (scanSignal, publish) => {
       const result = await scanAiVaultSessionsInBackground(
         {
           includeAntigravityIdeSessions: args?.includeAntigravityIdeSessions,
@@ -125,7 +127,8 @@ export async function listAiVaultSessions(
           scopePaths: args?.scopePaths,
           ...(await localAiVaultScanRoots())
         },
-        scanSignal
+        scanSignal,
+        (delta) => { if (startGeneration === cacheGeneration) publish(delta) }
       )
       // A delete (or other invalidation) landed while this scan was running:
       // its result predates the delete, so caching it would resurrect the
@@ -175,6 +178,7 @@ export async function getAiVaultWslHomeDirs(): Promise<string[]> {
 // file is never rediscovered — this only guards the cached RESULT.
 export function invalidateAiVaultSessionListCache(): void {
   cacheGeneration++
+  scanCoordinator.invalidate()
   cachedList = null
 }
 
@@ -184,4 +188,8 @@ export function resetAiVaultSessionListCacheForTests(): void {
   scanCoordinator = new AiVaultScanCoordinator()
   sources = {}
   resetAiVaultScannerBackgroundForTests()
+}
+
+export function aiVaultSessionListGeneration(): number {
+  return cacheGeneration
 }

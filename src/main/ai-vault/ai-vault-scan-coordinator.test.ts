@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { AiVaultSession } from '../../shared/ai-vault-types'
+import type { AiVaultRowDelta, AiVaultScanRows } from '../../shared/ai-vault-scan-rows'
 import { AiVaultScanCoordinator } from './ai-vault-scan-coordinator'
 
 const EMPTY_RESULT = { sessions: [], issues: [], scannedAt: '2026-07-27T00:00:00.000Z' }
@@ -145,4 +147,44 @@ describe('AiVaultScanCoordinator', () => {
     expect(start).toHaveBeenCalledTimes(2)
     expect(signals[0]?.aborted).toBe(true)
   })
+})
+
+it('attaches a coherent current snapshot and rejects publications from retired generations', async () => {
+  const coordinator = new AiVaultScanCoordinator()
+  const views: AiVaultScanRows[] = []
+  const publishers: ((delta: AiVaultRowDelta) => void)[] = []
+  const finishers: (() => void)[] = []
+  const start = (_signal: AbortSignal, publish: (delta: AiVaultRowDelta) => void) => {
+    publishers.push(publish)
+    return new Promise<typeof EMPTY_RESULT>((resolve) => { finishers.push(() => resolve(EMPTY_RESULT)) })
+  }
+  const row: AiVaultSession = {
+    id: 'local:codex:one:/one.jsonl', executionHostId: 'local', agent: 'codex', sessionId: 'one',
+    title: 'One', filePath: '/one.jsonl', codexHome: null, cwd: '/repo', branch: null, model: null,
+    createdAt: null, updatedAt: null, modifiedAt: '2026-01-01', messageCount: 1, totalTokens: 0,
+    previewMessages: [], queuedMessageCount: 0, subagentTranscriptCount: 0,
+    resumeCommand: 'codex resume one', subagent: null
+  }
+  const first = coordinator.run({ key: 'scope', start, onRows: (view) => views.push(view) })
+  await Promise.resolve()
+  publishers[0]!({ upserts: [row], removed: [] })
+  const late: AiVaultScanRows[] = []
+  const second = coordinator.run({ key: 'scope', start, onRows: (view) => late.push(view) })
+  expect(late[0]).toEqual(views.at(-1))
+  expect(late[0]?.sessions).toEqual([row])
+  publishers[0]!({ upserts: [{ ...row, title: 'Updated' }], removed: [] })
+  expect(late.at(-1)?.sessions[0]?.title).toBe('Updated')
+  const forced = coordinator.run({ key: 'scope', force: true, start })
+  await Promise.resolve()
+  const revision = views.at(-1)
+  publishers[0]!({ upserts: [], removed: ['stale'] })
+  expect(views.at(-1)).toBe(revision)
+  coordinator.invalidate()
+  const count = views.length
+  publishers[1]!({ upserts: [], removed: [] })
+  expect(views).toHaveLength(count)
+  await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+  await expect(second).rejects.toMatchObject({ name: 'AbortError' })
+  await expect(forced).rejects.toMatchObject({ name: 'AbortError' })
+  for (const finish of finishers) finish()
 })

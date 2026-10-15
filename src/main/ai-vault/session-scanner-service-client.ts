@@ -1,3 +1,4 @@
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { ChildProcess } from 'node:child_process'
 import { createAiVaultScanCancelledError } from './ai-vault-scan-cancellation'
 import {
@@ -48,7 +49,7 @@ export class AiVaultScannerServiceClient {
 
   constructor(private readonly options: AiVaultServiceClientOptions) {}
 
-  request<T>(body: AiVaultServiceRequestBody, signal?: AbortSignal): Promise<T> {
+  request<T>(body: AiVaultServiceRequestBody, signal?: AbortSignal, onRows?: (delta: AiVaultRowDelta) => void): Promise<T> {
     if (this.disposed) {
       return Promise.reject(new Error('AI Vault service client was disposed.'))
     }
@@ -68,6 +69,7 @@ export class AiVaultScannerServiceClient {
         reject,
         (aborted) => this.cancel(aborted)
       )
+      call.onRows = onRows
       this.queue.push(call)
       this.idleRetirement.clear()
       this.pump()
@@ -248,6 +250,10 @@ export class AiVaultScannerServiceClient {
     }
     const call = [...this.active.values()].find((entry) => entry.request.id === message.id)
     if (!call) {
+      return
+    }
+    if (message.type === 'rows') {
+      if (!call.cancelled) call.onRows?.(message.delta)
       return
     }
     if (message.type === 'progress') {

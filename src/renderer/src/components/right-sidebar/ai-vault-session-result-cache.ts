@@ -72,6 +72,10 @@ export function cacheAiVaultSessionResult(args: {
   }
 }
 
-export function resetAiVaultSessionResultCacheForTest(): void {
+export function invalidateAiVaultSessionResultCache(): void {
   cachedSessionResults.clear()
+}
+
+export function resetAiVaultSessionResultCacheForTest(): void {
+  invalidateAiVaultSessionResultCache()
 }
