@@ -52,8 +52,6 @@ import { computeOrcadFullVersion } from './orcad-artifact-version.mjs'
 import { NODE_RUNTIME_ASSETS, NODE_RUNTIME_PIN } from '../../src/shared/node-runtime-pin.ts'
 import { findSlotProblems, readManifest } from './orcad-prebuild-slot-contents.mjs'
 import { orcadAgentBrowserNativeName } from '../../src/shared/orcad-agent-browser-name.ts'
-import { runProcessSync } from '@orca/process-host'
-import { describeProcessFailure } from './process-failure-message.mjs'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 const OUT_DIR = process.env.ORCAD_OUT_DIR
@@ -316,14 +314,17 @@ if (graphErrors.length > 0) {
     )
     process.exitCode = 1
   }
-  const providerSmoke = runProcessSync({
-    program: process.execPath,
-    args: [SERVER_OUT_FILE, '--orcad-structured-provider-load-check'],
-    timeoutMs: 60_000
-  })
-  if (providerSmoke.code !== 0 || providerSmoke.timedOut || providerSmoke.outputTruncated) {
+  const providerSmoke = spawnSync(
+    process.execPath,
+    [SERVER_OUT_FILE, '--orcad-structured-provider-load-check'],
+    { encoding: 'utf8', timeout: 60_000 }
+  )
+  if (providerSmoke.error || providerSmoke.signal || providerSmoke.status !== 0) {
     console.error(
-      `[build-orcad] the packaged structured provider failed to load.\n${describeProcessFailure(providerSmoke)}`
+      `[build-orcad] the packaged structured provider failed to load.\n` +
+        `status=${providerSmoke.status ?? 'none'} signal=${providerSmoke.signal ?? 'none'} ` +
+        `error=${providerSmoke.error?.message ?? 'none'}\n` +
+        `${providerSmoke.stdout ?? ''}${providerSmoke.stderr ?? ''}`.slice(0, 2000)
     )
     process.exitCode = 1
   }

@@ -1,10 +1,10 @@
 import { build } from 'esbuild'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { buildOrcadEntry, ORCAD_COMMONJS_MODULE_OPTIONS } from './orcad-entry-build.mjs'
-import { runProcessSync } from '@orca/process-host'
 
 const directory = mkdtempSync(join(tmpdir(), 'orca-structured-provider-build-'))
 const bundle = join(directory, 'orcad-server.js')
@@ -18,14 +18,13 @@ afterAll(() => {
 })
 
 it('loads the structured Claude SDK through the packaged server under plain Node', () => {
-  const loaded = runProcessSync({
-    program: process.execPath,
-    args: [bundle, '--orcad-structured-provider-load-check'],
+  const loaded = spawnSync(process.execPath, [bundle, '--orcad-structured-provider-load-check'], {
     cwd: directory,
     env: { ORCA_BACKGROUND_LAUNCH: '1' },
-    timeoutMs: 30_000
+    encoding: 'utf8',
+    timeout: 30_000
   })
-  expect(loaded.code, loaded.stderr.slice(-2_000)).toBe(0)
+  expect(loaded.status, loaded.stderr.slice(-2_000)).toBe(0)
 }, 40_000)
 
 it('resolves bundle-relative requires after deployment to a path with URL-special characters', async () => {
@@ -50,14 +49,13 @@ it('resolves bundle-relative requires after deployment to a path with URL-specia
   writeFileSync(join(buildDirectory, 'asset.cjs'), 'module.exports = "deployed asset"')
   const deployedDirectory = join(directory, 'deployed # 100%')
   renameSync(buildDirectory, deployedDirectory)
-  const loaded = runProcessSync({
-    program: process.execPath,
-    args: [join(deployedDirectory, 'entry.cjs')],
+  const loaded = spawnSync(process.execPath, [join(deployedDirectory, 'entry.cjs')], {
     cwd: directory,
     env: { ORCA_BACKGROUND_LAUNCH: '1' },
-    timeoutMs: 30_000
+    encoding: 'utf8',
+    timeout: 30_000
   })
-  expect(loaded.code, loaded.stderr).toBe(0)
+  expect(loaded.status, loaded.stderr).toBe(0)
   expect(loaded.stdout.trim()).toBe('deployed asset')
 })
 
