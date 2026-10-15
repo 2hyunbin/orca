@@ -173,7 +173,9 @@ describe('a structured send in the open chat', () => {
     async (snapshotFirst) => {
       await mount()
       const snapshot = journal([userRow('newest', 'newest reply', 401)], [])
-      if (snapshot.type !== 'snapshot') throw new Error('Expected snapshot')
+      if (snapshot.type !== 'snapshot') {
+        throw new Error('Expected snapshot')
+      }
       snapshot.page.liveCursor = { epoch: 'epoch-1', sequence: 401 }
       snapshot.page.window.nextCursor = snapshot.page.liveCursor
       snapshot.page.hasOlder = true
