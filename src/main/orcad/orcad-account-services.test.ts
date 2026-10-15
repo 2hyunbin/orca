@@ -8,7 +8,7 @@ import { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { eraseRpcMethods, isStreamingMethod } from '../runtime/rpc/core'
 import { ACCOUNT_METHODS } from '../runtime/rpc/methods/accounts'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
-import { installOrcadAccountServices } from './orcad-account-services'
+import { createOrcadAccountServices } from './orcad-account-services'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
 
 const directories: string[] = []
@@ -62,18 +62,32 @@ function createRuntime(): { runtime: OrcaRuntimeService; store: Store } {
   return { runtime: new OrcaRuntimeService(store), store }
 }
 
+const CLIENT_HOME = '/home/user/.local/share/orca/codex-accounts/client-account/home'
+
+function create(store: Store, isWslHost: boolean): ReturnType<typeof createOrcadAccountServices> {
+  // Stands in for orcadCodexAccountHomes: only CLIENT_HOME is a client-owned account home.
+  const clientHome = (launchEnv?: NodeJS.ProcessEnv): string | null =>
+    launchEnv?.CODEX_HOME === CLIENT_HOME ? CLIENT_HOME : null
+  return createOrcadAccountServices({
+    store,
+    setClaudeStatusLineListener: vi.fn(),
+    registerCleanup: (cleanup) => cleanups.push(cleanup),
+    clientCodexHomes: {
+      selectLaunchHome: async (_target, launchEnv) => clientHome(launchEnv),
+      readLaunchHome: clientHome
+    },
+    isWslHost: () => isWslHost
+  })
+}
+
 function install(
   runtime: OrcaRuntimeService,
   store: Store,
   isWslHost: boolean
-): ReturnType<typeof installOrcadAccountServices> {
-  return installOrcadAccountServices({
-    runtime,
-    store,
-    setClaudeStatusLineListener: vi.fn(),
-    registerCleanup: (cleanup) => cleanups.push(cleanup),
-    isWslHost: () => isWslHost
-  })
+): ReturnType<typeof createOrcadAccountServices> {
+  const services = create(store, isWslHost)
+  services?.attachToRuntime(runtime)
+  return services
 }
 
 async function call(runtime: OrcaRuntimeService, name: string, params: unknown): Promise<unknown> {
@@ -102,6 +116,23 @@ describe('orcad account services', () => {
         activeAccountId: null
       }
     )
+  })
+
+  it("resolves structured Codex launches to a client-sent home, else this host's selection", async () => {
+    const { store } = createRuntime()
+    const services = create(store, false)
+    if (!services) {
+      throw new Error('expected account services on a non-WSL host')
+    }
+    const { prepareCodexStructuredLaunch, resolveCodexStructuredLaunchHome } = services.runtimeDeps
+    const clientEnv = { CODEX_HOME: CLIENT_HOME }
+
+    await expect(prepareCodexStructuredLaunch({ launchEnv: clientEnv })).resolves.toBe(CLIENT_HOME)
+    expect(resolveCodexStructuredLaunchHome({ launchEnv: clientEnv })).toBe(CLIENT_HOME)
+    // The system default selected here: null is the real ~/.codex, not an ambient CODEX_HOME.
+    await expect(prepareCodexStructuredLaunch({ launchEnv: {} })).resolves.toBeNull()
+    expect(resolveCodexStructuredLaunchHome({ launchEnv: {} })).toBeNull()
+    expect(services.listCodexSessionHomes()).toEqual(expect.any(Array))
   })
 
   it('leaves a WSL host to the desktop that owns its accounts', async () => {

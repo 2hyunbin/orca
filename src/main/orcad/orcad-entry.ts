@@ -199,8 +199,23 @@ async function startOrcadRuntime(
     registerCleanup
   )
 
+  // Why before the runtime: its structured Codex resolvers are constructor deps.
+  const { createOrcadAccountServices } = await import('./orcad-account-services')
+  const accountLaunch = createOrcadAccountServices({
+    store: profileStore,
+    setClaudeStatusLineListener: (listener) =>
+      agentHookServer.setClaudeStatusLineListener(listener),
+    registerCleanup,
+    clientCodexHomes: codexAccountHomes
+  })
+
   const runtime = new OrcaRuntimeService(profileStore, undefined, {
-    getAdditionalAiVaultCodexHomePaths: codexAccountHomes.listSessionHomes,
+    getAdditionalAiVaultCodexHomePaths: () => [
+      ...codexAccountHomes.listSessionHomes(),
+      ...(accountLaunch?.listCodexSessionHomes() ?? [])
+    ],
+    // Why absent on a WSL host: a resolver overrides the desktop-pushed CODEX_HOME.
+    ...accountLaunch?.runtimeDeps,
     // Why here too: orcad serves `worktree.ps` and `agentSession.*`; unwired it lists no agents.
     ...agentHookRuntimeDeps(agentHookServer, observedPaneIdentities, () =>
       profileStore.getSettings()
@@ -227,14 +242,7 @@ async function startOrcadRuntime(
     }
   })
 
-  const { installOrcadAccountServices } = await import('./orcad-account-services')
-  const accountLaunch = installOrcadAccountServices({
-    runtime,
-    store: profileStore,
-    setClaudeStatusLineListener: (listener) =>
-      agentHookServer.setClaudeStatusLineListener(listener),
-    registerCleanup
-  })
+  accountLaunch?.attachToRuntime(runtime)
 
   // Why before any launch: a desktop that owns this host's accounts pushed them on an earlier run.
   const { restoreOrcadHostAccountLaunchEnv } = await import('./orcad-host-account-launch-env-store')

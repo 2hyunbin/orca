@@ -57,7 +57,7 @@ vi.mock('./orcad-app-paths', () => ({
   resolveUserDataPath: () => state.root
 }))
 // The fake store has no account settings; orcad-account-services.test.ts covers the real services.
-vi.mock('./orcad-account-services', () => ({ installOrcadAccountServices: () => null }))
+vi.mock('./orcad-account-services', () => ({ createOrcadAccountServices: () => null }))
 vi.mock('./orcad-browser-provider', () => ({ resolveOrcadBrowserProvider: state.browserProvider }))
 vi.mock('./orcad-instance-lock', () => ({
   acquireOrcadInstanceLock: () => ({
