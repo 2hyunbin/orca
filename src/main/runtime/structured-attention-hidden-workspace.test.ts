@@ -45,8 +45,9 @@ function deps(options: {
   ui?: Partial<PersistedState['ui']> | null
   resolved?: Worktree[] | null
   meta?: Partial<WorktreeMeta>
+  metaById?: Record<string, Partial<WorktreeMeta>>
   folders?: FolderWorkspace[]
-  lineage?: Record<string, Pick<WorktreeLineage, 'parentWorktreeId'>>
+  lineage?: Record<string, Pick<WorktreeLineage, 'worktreeId' | 'parentWorktreeId'>>
 }): HiddenWorkspaceAttentionDeps {
   return {
     store: {
@@ -54,8 +55,8 @@ function deps(options: {
       getUI: () => (options.ui === null ? undefined : options.ui) as PersistedState['ui'],
       getRepo: () => undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only provenance fields of this partial meta.
-      getWorktreeMeta: () => options.meta as WorktreeMeta | undefined,
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only parentWorktreeId.
+      getWorktreeMeta: (id) => (options.metaById?.[id] ?? options.meta) as WorktreeMeta | undefined,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only worktreeId and parentWorktreeId.
       getAllWorktreeLineage: () => (options.lineage ?? {}) as Record<string, WorktreeLineage>,
       getFolderWorkspaces: () => options.folders ?? []
     },
@@ -120,7 +121,7 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
     )
   })
 
-  it('fails open without persisted UI, a workspace record, or for a folder or lineage parent', () => {
+  it('fails open without persisted UI, a workspace record, or for a folder or shown lineage parent', () => {
     const on = { hideCliCreatedWorkspaces: true }
     expect(isStructuredAttentionWorkspaceHidden(deps({ ui: null, meta: CLI_META }), SCOPE)).toBe(
       false
@@ -136,10 +137,30 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
     ).toBe(false)
     expect(
       isStructuredAttentionWorkspaceHidden(
-        deps({ ui: on, meta: CLI_META, lineage: { child: { parentWorktreeId: WORKSPACE_ID } } }),
+        deps({
+          ui: on,
+          resolved: null,
+          meta: CLI_META,
+          metaById: { child: {} },
+          lineage: { child: { worktreeId: 'child', parentWorktreeId: WORKSPACE_ID } }
+        }),
         SCOPE
       )
     ).toBe(false)
+  })
+
+  it('hides a lineage parent whose children are all hidden too', () => {
+    expect(
+      isStructuredAttentionWorkspaceHidden(
+        deps({
+          ui: { hideCliCreatedWorkspaces: true },
+          resolved: null,
+          meta: CLI_META,
+          lineage: { child: { worktreeId: 'child', parentWorktreeId: WORKSPACE_ID } }
+        }),
+        SCOPE
+      )
+    ).toBe(true)
   })
 
   it('hides another client’s worktree or folder workspace under Hide other-client workspaces', () => {

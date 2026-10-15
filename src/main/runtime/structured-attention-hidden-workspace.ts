@@ -6,8 +6,8 @@
 // attention is live anyway. Rows here are this host's own, so "Hide other-client" needs no
 // paired-device map: any known creator other than the host is another client.
 //
-// FAILS OPEN: no persisted UI, no record of the workspace, or a workspace with a lineage child (the
-// sidebar shows a hidden parent above a visible child) all notify.
+// FAILS OPEN: no persisted UI, no record of the workspace, or a hidden parent with a shown lineage
+// child (the sidebar keeps it above that child) all notify.
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { Worktree } from '../../shared/worktree/types'
@@ -50,32 +50,43 @@ export function isStructuredAttentionWorkspaceHidden(
       hideOtherClients && folder !== undefined && isCreatedByAnotherClient(folder.creatorProvenance)
     )
   }
-  const lineage = deps.store.getAllWorktreeLineage?.() ?? {}
-  if (Object.values(lineage).some((entry) => entry.parentWorktreeId === workspaceId)) {
-    return false
+  const lineage = Object.values(deps.store.getAllWorktreeLineage?.() ?? {})
+  const isRowHidden = (id: string): boolean => {
+    const listed = deps.resolvedWorktrees?.find((worktree) => worktree.id === id)
+    const meta = deps.store.getWorktreeMeta(id)
+    if (!listed && !meta) {
+      return false
+    }
+    if (
+      hideOtherClients &&
+      isCreatedByAnotherClient(listed?.creatorProvenance ?? meta?.creatorProvenance)
+    ) {
+      return true
+    }
+    // Without a Git listing, no branch or HEAD is known, so only the provenance switches can apply.
+    const kind = listed ?? {
+      isMainWorktree: false,
+      branch: '',
+      head: '',
+      automationProvenance: meta?.automationProvenance,
+      cliProvenance: meta?.cliProvenance
+    }
+    return isHiddenByWorkspaceKindSwitch(
+      kind,
+      deps.store.getRepo(getRepoIdFromWorktreeId(id)),
+      switches
+    )
   }
-  const listed = deps.resolvedWorktrees?.find((worktree) => worktree.id === workspaceId)
-  const meta = deps.store.getWorktreeMeta(workspaceId)
-  if (!listed && !meta) {
-    return false
+  const seen = new Set<string>()
+  const isShown = (id: string): boolean => {
+    if (seen.has(id)) {
+      return false
+    }
+    seen.add(id)
+    return (
+      !isRowHidden(id) ||
+      lineage.some((entry) => entry.parentWorktreeId === id && isShown(entry.worktreeId))
+    )
   }
-  if (
-    hideOtherClients &&
-    isCreatedByAnotherClient(listed?.creatorProvenance ?? meta?.creatorProvenance)
-  ) {
-    return true
-  }
-  // Without a Git listing, no branch or HEAD is known, so only the provenance switches can apply.
-  const kind = listed ?? {
-    isMainWorktree: false,
-    branch: '',
-    head: '',
-    automationProvenance: meta?.automationProvenance,
-    cliProvenance: meta?.cliProvenance
-  }
-  return isHiddenByWorkspaceKindSwitch(
-    kind,
-    deps.store.getRepo(getRepoIdFromWorktreeId(workspaceId)),
-    switches
-  )
+  return !isShown(workspaceId)
 }
