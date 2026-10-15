@@ -93,7 +93,10 @@ function isMissingPairedResumePreparation(error: unknown): boolean {
 export async function prepareAiVaultSessionForFork(
   session: AiVaultSessionLaunchContext,
   operation?: AiVaultSurfaceSwitchOperation
-): Promise<{ session: AiVaultSessionLaunchContext; copied: boolean }> {
+): Promise<{
+  session: AiVaultSessionLaunchContext & AiVaultResumeCommandSession
+  copied: boolean
+}> {
   if (!agentForksThroughChat(session.agent)) {
     return {
       session: await prepareAiVaultSessionHome(session, true, false, operation),
