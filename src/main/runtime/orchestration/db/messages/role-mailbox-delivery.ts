@@ -105,6 +105,13 @@ export function getOrCreateMailboxDelivery(
         params.consumerGeneration,
         JSON.stringify(messages.map((message) => message.id))
       )
+    // Handed out is delivered: no notice points at fetched mail again unless its holder is cut.
+    this.db
+      .prepare(
+        `UPDATE messages SET delivered_at = COALESCE(delivered_at, datetime('now'))
+         WHERE id IN (SELECT value FROM json_each(?))`
+      )
+      .run(JSON.stringify(messages.map((message) => message.id)))
     if (params.holder) {
       stampDeliveryHolder(this, deliveryId, params.holder)
     }

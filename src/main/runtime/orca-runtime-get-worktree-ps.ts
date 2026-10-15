@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { queuedCardOwed } from './orchestration/delivery-holder'
+import { structuredHostMailDeps } from './orchestration/delivery-holder'
 import { resolveStructuredCodexAccountKind } from './structured-agent-account-home'
 import { collectRuntimeWorktreeAgentSources } from './runtime-worktree-agent-sources'
 import { OrcaRuntimeWithStartTuiIdleVisibleReadProbe } from './terminal/wait/terminal-wait-visible-probe'
@@ -297,12 +297,10 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
       // its agent running. No database answers no.
       hasOpenDispatch: (record) =>
         structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record),
-      queuedCardOwed: (body) =>
-        queuedCardOwed(
-          this.getOrchestrationDbIfAvailable?.() ?? null,
-          body,
-          this.deliveryHolderReader
-        )
+      ...structuredHostMailDeps(
+        () => this.getOrchestrationDbIfAvailable?.() ?? null,
+        this.deliveryHolderReader
+      )
     })
   }
 }

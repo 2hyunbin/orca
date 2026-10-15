@@ -50,11 +50,12 @@ const VERSIONED_POST_V6_COLUMNS = [
   { version: 42, table: 'dispatch_contexts', column: 'creator_orca_session_id' },
   { version: 44, table: 'deliveries', column: 'holder_session_id' },
   { version: 44, table: 'deliveries', column: 'holder_turn_item_id' },
-  { version: 44, table: 'deliveries', column: 'holder_terminal_handle' },
+  { version: 44, table: 'deliveries', column: 'holder_pane_key' },
   { version: 44, table: 'deliveries', column: 'holder_process_incarnation' },
   { version: 44, table: 'deliveries', column: 'holder_agent_session_id' },
   { version: 44, table: 'deliveries', column: 'holder_agent_turn_started_at' },
-  { version: 44, table: 'messages', column: 'reoffered_by_runtime' }
+  { version: 44, table: 'messages', column: 'reoffered_by_runtime' },
+  { version: 44, table: 'messages', column: 'reoffered_after_cut' }
 ] as const
 
 // Why: v34 shipped without these two, so a v34 stamp proves nothing about them; v35 repairs both

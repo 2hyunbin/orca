@@ -104,7 +104,8 @@ export function submitOrchestrationMailboxPointer<TWaiter extends OrchestrationM
             deps.getDb(),
             input.mailboxHandle,
             input.messages,
-            deps.getMessageWaiters(input.mailboxHandle)
+            deps.getMessageWaiters(input.mailboxHandle),
+            input.flight.batchAtStaging
           )
         ) {
           releaseWithoutRedrive = true

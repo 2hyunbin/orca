@@ -90,6 +90,9 @@ export function createRuntime(
     isWsl?: boolean
     getAgentStatusSnapshot?: () => AgentStatusIpcPayload[]
     checkHookAgentPresence?: (paneKey: string) => Promise<'live' | 'unverifiable' | 'exited' | null>
+    /** The pane's process and the handle this launch minted for it (a restart can change both). */
+    incarnationId?: string
+    handle?: string
   } = {}
 ): MailboxNotificationHarness {
   const runtime = new OrcaRuntimeService(null, undefined, {
@@ -115,12 +118,12 @@ export function createRuntime(
     {
       tabId: TAB_ID,
       leafId: LEAF_ID,
-      incarnationId: 'mailbox-incarnation',
+      incarnationId: options.incarnationId ?? 'mailbox-incarnation',
       agentLaunchAuthority: { launchToken: LAUNCH_TOKEN, launchAgent: 'codex' }
     },
     options.isWsl
   )
-  runtime.registerPreAllocatedHandleForPty(PTY_ID, TERMINAL_HANDLE)
+  runtime.registerPreAllocatedHandleForPty(PTY_ID, options.handle ?? TERMINAL_HANDLE)
   runtime.attachWindow(1)
   runtime.syncWindowGraph(1, {
     tabs: [

@@ -241,7 +241,7 @@ export type QueuedMessageDrainDeps = {
   /** The consumed submission is ordinary #22821 work from here on. */
   wakeDelivery: (sessionId: string) => void
   /** `StructuredAgentSessionHostDeps.queuedCardOwed`. */
-  cardOwed?: (body: AgentJournalMessageItem) => Promise<boolean>
+  cardOwed?: (sessionId: string, body: AgentJournalMessageItem) => Promise<boolean>
   logger: StructuredAgentSessionLogger
 }
 
@@ -330,7 +330,7 @@ export class StructuredAgentSessionQueuedMessageDrain {
       return
     }
     // A notice whose mail was read or fetched while it waited would start a turn with nothing to do.
-    if ((await this.deps.cardOwed?.(next.body)) === false) {
+    if ((await this.deps.cardOwed?.(sessionId, next.body)) === false) {
       await journal.queuedMessages.withdraw({
         messageIds: [next.messageId],
         settledByOp: `host:spent-card:${next.messageId}`

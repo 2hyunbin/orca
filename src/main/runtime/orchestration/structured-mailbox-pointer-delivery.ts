@@ -28,6 +28,7 @@ import { structuredMailSource } from './structured-mail-source'
 import {
   reofferCutNotice,
   settleClaimedDelivery,
+  settleReadsChatTurns,
   type DeliveryHolderReader
 } from './delivery-holder'
 import type { SenderNameResolver } from './agent-message-sender'
@@ -183,14 +184,17 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     let contextKey: string | undefined
     try {
       // Held mail never holds the notice back: a busy chat queues it as a card, like any message.
-      const excludeDeliveryId = await settleClaimedDelivery(db, mailboxHandle, this.deps.holders)
-      await reofferCutNotice(db, mailboxHandle, target.sessionId, this.deps.holders)
+      const { holders } = this.deps
+      const turns = settleReadsChatTurns(db, mailboxHandle)
+        ? await holders.sessionTurns(target.sessionId).catch(() => null)
+        : null
+      settleClaimedDelivery(db, mailboxHandle, holders, turns)
+      reofferCutNotice(db, mailboxHandle, turns, holders.runtimeId())
       const unread = selectOrchestrationPointerBatch({
         db,
         mailboxHandle,
         waiters: this.deps.getMessageWaiters(mailboxHandle),
-        reservedTypes,
-        excludeDeliveryId
+        reservedTypes
       })
       if (unread.length === 0) {
         return

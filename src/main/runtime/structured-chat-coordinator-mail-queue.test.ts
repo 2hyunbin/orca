@@ -137,21 +137,25 @@ describe("a busy chat's orchestration pointer waits in its queue", () => {
     expect(await queuedCardTexts()).toEqual([])
   })
 
-  it("withdraws the card once the chat's own `check` took its mail, when the turn ends", async () => {
+  // Rule A's busy case: a batch held by the running turn holds no notice back. At the turn's end
+  // the card whose mail that batch took is withdrawn, and the newer report's card is sent.
+  it('queues a card per report while a held batch is open, and sends only the one still owed', async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
+    const second = await secondTask()
     const endTurn = await runningUserTurn(chat)
     await finishWorker(taskId)
     await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(1), WAIT)
-    const [mail] = db.getAllMessages(`run:${runId}`)
     expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
-      count: 1,
-      messages: [{ id: mail!.id }]
+      count: 1
     })
+    await finishWorker(second, { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+    await vi.waitFor(async () => expect(await queuedCardTexts()).toHaveLength(2), WAIT)
+
     await endTurn()
-    await vi.waitFor(async () => expect(await queuedCardTexts()).toEqual([]), WAIT)
-    await idleEdgesSettled()
-    expect(chat.turns).toHaveLength(1)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+    expect(turnText(chat.turns[1]!)).toBe(ptyPointer(`run:${runId}`))
+    expect(queuedRows().map((row) => row.state)).toEqual(['withdrawn', 'dispatched'])
   })
 
   // Rule: mail is a message from another agent. Stop holds its card like any queued card; mail

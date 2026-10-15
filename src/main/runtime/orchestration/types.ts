@@ -71,7 +71,7 @@ export type DeliveryRow = {
   /** Who holds it; see `delivery-holder.ts`. Absent on a database before v44. */
   holder_session_id?: string | null
   holder_turn_item_id?: string | null
-  holder_terminal_handle?: string | null
+  holder_pane_key?: string | null
   holder_process_incarnation?: string | null
   holder_agent_session_id?: string | null
   holder_agent_turn_started_at?: number | null
@@ -264,6 +264,7 @@ export type MessageRow = {
   pointer_pty_id?: string | null
   pointer_process_incarnation?: string | null
   reoffered_by_runtime?: string | null
+  reoffered_after_cut?: number | null
 }
 
 export type TaskRow = {

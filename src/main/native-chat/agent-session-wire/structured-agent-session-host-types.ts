@@ -160,7 +160,7 @@ export type StructuredAgentSessionHostDeps = {
   hasOpenDispatch?: (record: AgentSessionRecord) => boolean
   /** Whether a waiting card still owes its send when the queue reaches it: a mail notice whose
    *  every message was read or fetched owes none and is withdrawn. Absent answers yes. */
-  queuedCardOwed?: (body: AgentJournalMessageItem) => Promise<boolean>
+  queuedCardOwed?: (sessionId: string, body: AgentJournalMessageItem) => Promise<boolean>
   /** A chat tab left the screen: closed, or its workspace removed. Advisory; a throw is logged. */
   onSessionTabHidden?: (sessionId: string) => void
   /** Where every failure the host carries on past is reported. Required: a host without one would

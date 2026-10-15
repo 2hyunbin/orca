@@ -46,19 +46,22 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
     ptyId,
     processIncarnation: expectedTarget.processIncarnation
   }
+  const batchAtStaging = db?.getOutstandingMailboxDelivery?.(args.mailboxHandle)?.id
   if (
     !db ||
     shouldReleaseOrchestrationPointer(
       db,
       args.mailboxHandle,
       args.messages,
-      args.deps.getMessageWaiters(args.mailboxHandle)
+      args.deps.getMessageWaiters(args.mailboxHandle),
+      batchAtStaging
     )
   ) {
     return
   }
   const flight = args.state.beginFlight(ptyId)
   flight.processIncarnation = expectedTarget.processIncarnation
+  flight.batchAtStaging = batchAtStaging
   flight.stagedMessageIds = args.messages.map((message) => message.id)
   try {
     if (
@@ -139,7 +142,8 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
         db,
         args.mailboxHandle,
         args.messages,
-        args.deps.getMessageWaiters(args.mailboxHandle)
+        args.deps.getMessageWaiters(args.mailboxHandle),
+        flight.batchAtStaging
       )
     ) {
       if (args.state.clearWatermark(args.mailboxHandle, args.newestSequence, ptyId)) {

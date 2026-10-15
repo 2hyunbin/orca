@@ -40,7 +40,8 @@ export function wireStructuredAgentSessionQueuedMessages(
     currentWork: (sessionId) =>
       hostStructuredAgentSessionCurrentWork({ store: context().deps.store, sessions }, sessionId),
     wakeDelivery: (sessionId) => context().wakeDelivery(sessionId),
-    cardOwed: (body) => context().deps.queuedCardOwed?.(body) ?? Promise.resolve(true),
+    cardOwed: (sessionId, body) =>
+      context().deps.queuedCardOwed?.(sessionId, body) ?? Promise.resolve(true),
     // Read lazily, like the rest of this wiring: the host's deps are not assigned yet.
     logger: deferredStructuredAgentSessionLogger(() => context().deps.logger)
   })

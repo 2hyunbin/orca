@@ -93,8 +93,6 @@ export function getUndeliveredUnreadMessages(
   types?: MessageType[],
   options?: {
     excludeTypes?: readonly string[]
-    /** A batch whose holder has it in hand: its members are not new mail. */
-    excludeDeliveryId?: string
     limit?: number
   }
 ): MessageRow[] {
@@ -113,13 +111,6 @@ export function getUndeliveredUnreadMessages(
   if (options?.excludeTypes?.length) {
     conditions.push(`type NOT IN (${options.excludeTypes.map(() => '?').join(',')})`)
     params.push(...options.excludeTypes)
-  }
-  if (options?.excludeDeliveryId) {
-    conditions.push(
-      `id NOT IN (SELECT member.value FROM deliveries AS held, json_each(held.message_ids) AS member
-        WHERE held.id = ?)`
-    )
-    params.push(options.excludeDeliveryId)
   }
   const limitSql = options?.limit === undefined ? '' : ' LIMIT ?'
   if (options?.limit !== undefined) {

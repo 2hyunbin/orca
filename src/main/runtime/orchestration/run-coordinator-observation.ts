@@ -30,7 +30,9 @@ export function runTakesCoordinator(run: Pick<RunRow, 'id' | 'legacy'>): boolean
 export async function observeRunCoordinator(
   runtime: Pick<
     OrcaRuntimeService,
-    'ensureStructuredAgentSessionHost' | 'getTerminalLivenessVerdict'
+    | 'ensureStructuredAgentSessionHost'
+    | 'getTerminalLivenessVerdict'
+    | 'getTerminalHandleForPaneKey'
   >,
   db: OrchestrationDb,
   run: RunRow
@@ -53,20 +55,25 @@ export async function observeRunCoordinator(
       ...(observed.status === 'live' ? {} : { reason: observed.reason })
     }
   }
-  if (!handle) {
+  // A terminal's pane outlives the launch that minted the bound handle.
+  const terminal =
+    (run.coordinator_pane_key
+      ? runtime.getTerminalHandleForPaneKey(run.coordinator_pane_key)
+      : null) ?? handle
+  if (!terminal) {
     return null
   }
-  const verdict = runtime.getTerminalLivenessVerdict(handle)
+  const verdict = runtime.getTerminalLivenessVerdict(terminal)
   if (!verdict) {
     // Also the answer for a healthy terminal before the first inventory sweep observes it.
     return {
-      address: handle,
+      address: terminal,
       status: 'unverifiable',
       reason: 'No liveness observation of the terminal yet.'
     }
   }
   return {
-    address: handle,
+    address: terminal,
     status: verdict.status,
     ...(verdict.status === 'unverifiable' ? { reason: verdict.reason } : {})
   }

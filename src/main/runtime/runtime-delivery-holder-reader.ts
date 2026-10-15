@@ -13,15 +13,16 @@ import {
 type TerminalHolder = Extract<DeliveryHolder, { kind: 'terminal' }>
 
 /**
- * A terminal agent's turn, read off its PTY and its hooks. A new PTY process, or a new conversation
- * in the same shell (the agent restarted, or `/clear`), cut the turn that held the mail; an agent
- * without hooks shows nothing past its PTY.
+ * A terminal agent's turn, read off its pane's PTY and its hooks. A new PTY process cut the turn
+ * that held the mail. A new conversation in the same shell (`/clear`, a fresh agent, a restart)
+ * proves nothing about how the held turn ended, since the hook row keeps only the current one, so
+ * it reads unknown rather than re-feed handled mail. An agent without hooks shows nothing past its PTY.
  */
 export function terminalHolderTurnEnd(
   holder: TerminalHolder,
   live: { incarnation: string | null; row: TerminalHookRow | undefined }
 ): HolderTurnEnd {
-  // A handle this runtime does not know (re-minted after a restart) proves nothing about the PTY.
+  // A pane with no terminal yet (not restored, or closed) proves nothing about its PTY.
   if (live.incarnation === null) {
     return 'unknown'
   }
@@ -29,10 +30,11 @@ export function terminalHolderTurnEnd(
     return 'cut'
   }
   const conversation = live.row?.providerSession?.id
-  if (holder.agentSessionId && conversation && conversation !== holder.agentSessionId) {
-    return 'cut'
-  }
-  if (holder.agentTurnStartedAt === null || !live.row) {
+  if (
+    holder.agentTurnStartedAt === null ||
+    !live.row ||
+    (holder.agentSessionId && conversation && conversation !== holder.agentSessionId)
+  ) {
     return 'unknown'
   }
   if (live.row.turnStartedAt !== holder.agentTurnStartedAt) {
@@ -44,36 +46,35 @@ export function terminalHolderTurnEnd(
   }
   return main.outcome === 'cancellation'
     ? 'stopped'
-    : main.outcome === 'interruption'
+    : main.outcome === 'interruption' || main.outcome === 'failure'
       ? 'cut'
       : 'ended'
 }
 
-/** What a `check` from this terminal records. Null without a PTY. */
-function terminalDeliveryHolder(
-  deps: TerminalHookRowDeps & { getTerminalProcessIncarnation: (handle: string) => string | null },
-  handle: string
-): TerminalHolder | null {
+type TerminalAgentFacts = TerminalHookRowDeps & {
+  getTerminalProcessIncarnation: (handle: string) => string | null
+  getTerminalHandleForPaneKey: (paneKey: string) => string | null
+  getRuntimeId: () => string
+}
+
+/** What a `check` from this terminal records. Null without a pane or a PTY. */
+function terminalDeliveryHolder(deps: TerminalAgentFacts, handle: string): TerminalHolder | null {
+  const paneKey = deps.getTerminalPaneKey(handle)
   const incarnation = deps.getTerminalProcessIncarnation(handle)
-  if (!incarnation) {
+  if (!paneKey || !incarnation) {
     return null
   }
   const row = currentTerminalHookRow(deps, handle)
   return {
     kind: 'terminal',
-    handle,
+    paneKey,
     processIncarnation: incarnation,
     agentSessionId: row?.providerSession?.id ?? null,
     agentTurnStartedAt: row?.turnStartedAt ?? null
   }
 }
 
-export function createDeliveryHolderReader(
-  deps: TerminalHookRowDeps & {
-    getTerminalProcessIncarnation: (handle: string) => string | null
-    getRuntimeId: () => string
-  }
-): DeliveryHolderReader {
+export function createDeliveryHolderReader(deps: TerminalAgentFacts): DeliveryHolderReader {
   return {
     holderOf: ({ sessionId, handle }) => {
       if (!sessionId) {
@@ -84,11 +85,14 @@ export function createDeliveryHolderReader(
     },
     sessionTurns: async (sessionId) =>
       (await getStructuredAgentSessionHost()?.heldTurns(sessionId)) ?? null,
-    terminalTurnEnd: (holder) =>
-      terminalHolderTurnEnd(holder, {
-        incarnation: deps.getTerminalProcessIncarnation(holder.handle),
-        row: currentTerminalHookRow(deps, holder.handle)
-      }),
+    terminalTurnEnd: (holder) => {
+      // The pane's handle this launch: the one the holder ran under may be from an earlier launch.
+      const handle = deps.getTerminalHandleForPaneKey(holder.paneKey)
+      return terminalHolderTurnEnd(holder, {
+        incarnation: handle ? deps.getTerminalProcessIncarnation(handle) : null,
+        row: handle ? currentTerminalHookRow(deps, handle) : undefined
+      })
+    },
     runtimeId: deps.getRuntimeId
   }
 }

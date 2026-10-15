@@ -8,6 +8,8 @@ export type OrchestrationMailboxDeliveryFlight = {
   idleObservedWhileDeferred: boolean
   /** The incarnation that staged this flight, so retirement can name the rows it owns. */
   processIncarnation?: string
+  /** The mailbox's outstanding batch when this flight staged: only a later one takes its mail. */
+  batchAtStaging?: string
 }
 
 export type ParkedOrchestrationMailboxDelivery = {

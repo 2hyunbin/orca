@@ -5,12 +5,13 @@ import type { OrchestrationDb } from '../orchestration-db'
 const DELIVERY_HOLDER_COLUMNS = [
   ['deliveries', 'holder_session_id', 'TEXT'],
   ['deliveries', 'holder_turn_item_id', 'TEXT'],
-  ['deliveries', 'holder_terminal_handle', 'TEXT'],
+  ['deliveries', 'holder_pane_key', 'TEXT'],
   ['deliveries', 'holder_process_incarnation', 'TEXT'],
   ['deliveries', 'holder_agent_session_id', 'TEXT'],
   ['deliveries', 'holder_agent_turn_started_at', 'INTEGER'],
-  // The Orca runtime that last offered a message again after its holder's turn was cut.
-  ['messages', 'reoffered_by_runtime', 'TEXT']
+  // A message's two re-offer budgets: once per Orca launch after a restart, once in all otherwise.
+  ['messages', 'reoffered_by_runtime', 'TEXT'],
+  ['messages', 'reoffered_after_cut', 'INTEGER']
 ] as const
 
 /**

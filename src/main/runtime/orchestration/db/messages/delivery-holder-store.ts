@@ -3,14 +3,15 @@ import type { OrchestrationDb } from '../orchestration-db'
 
 /**
  * Who holds a batch `check` handed out: the turn that fetched it. A structured session's turn is
- * its journal turn record; a terminal agent's is its PTY process and the turn its hooks report.
+ * its journal turn record; a terminal agent's is its pane's PTY process and the turn its hooks
+ * report. A pane, not a terminal handle: a handle is minted per Orca launch, a pane outlives it.
  * Written only when the fetching turn is known, so a holder always names a turn.
  */
 export type DeliveryHolder =
   | { kind: 'session'; sessionId: string; turnItemId: string }
   | {
       kind: 'terminal'
-      handle: string
+      paneKey: string
       processIncarnation: string
       /** The agent conversation its hooks report; null for an agent without hooks. */
       agentSessionId: string | null
@@ -21,8 +22,13 @@ export type DeliveryHolder =
 export type DeliveryReofferArm = 'restart' | 'cut'
 
 const HOLDER_ASSIGNMENTS = `holder_session_id = ?, holder_turn_item_id = ?,
-  holder_terminal_handle = ?, holder_process_incarnation = ?,
+  holder_pane_key = ?, holder_process_incarnation = ?,
   holder_agent_session_id = ?, holder_agent_turn_started_at = ?`
+
+/** `id` is a member of batch `?` (none for ''): the one way "in that batch" is asked. */
+export const MEMBER_OF_DELIVERY_SQL = `id IN (
+  SELECT member.value FROM deliveries AS batch, json_each(batch.message_ids) AS member
+  WHERE batch.id = ?)`
 
 function holderValues(holder: DeliveryHolder | null): (string | number | null)[] {
   if (!holder) {
@@ -33,7 +39,7 @@ function holderValues(holder: DeliveryHolder | null): (string | number | null)[]
     : [
         null,
         null,
-        holder.handle,
+        holder.paneKey,
         holder.processIncarnation,
         holder.agentSessionId,
         holder.agentTurnStartedAt
@@ -48,10 +54,10 @@ export function deliveryHolderOf(row: DeliveryRow): DeliveryHolder | null {
       turnItemId: row.holder_turn_item_id
     }
   }
-  if (row.holder_terminal_handle && row.holder_process_incarnation) {
+  if (row.holder_pane_key && row.holder_process_incarnation) {
     return {
       kind: 'terminal',
-      handle: row.holder_terminal_handle,
+      paneKey: row.holder_pane_key,
       processIncarnation: row.holder_process_incarnation,
       agentSessionId: row.holder_agent_session_id ?? null,
       agentTurnStartedAt: row.holder_agent_turn_started_at ?? null
@@ -71,22 +77,18 @@ export function stampDeliveryHolder(
     .run(...holderValues(holder), deliveryId)
 }
 
-/** The mailbox's outstanding batch, when it records the turn that holds it ("claimed"). */
-export function getClaimedMailboxDelivery(
+/** The mailbox's outstanding batch, holder or not (at most one per mailbox). */
+export function getOutstandingMailboxDelivery(
   this: OrchestrationDb,
   mailboxHandle: string
 ): DeliveryRow | undefined {
-  const held = this.db
-    .prepare(
-      `SELECT id FROM outstanding_deliveries
-       WHERE mailbox_handle = ?
-         AND (holder_turn_item_id IS NOT NULL OR holder_process_incarnation IS NOT NULL)
-       LIMIT 1`
-    )
+  const row = this.db
+    .prepare('SELECT id FROM outstanding_deliveries WHERE mailbox_handle = ? LIMIT 1')
     .get(mailboxHandle)
-  return typeof held?.id === 'string' ? this.getDeliveryRaw(held.id) : undefined
+  return typeof row?.id === 'string' ? this.getDeliveryRaw(row.id) : undefined
 }
 
+/** Mailboxes whose outstanding batch records its holder ("claimed"): a launch settles them. */
 export function getClaimedDeliveryMailboxHandles(this: OrchestrationDb): string[] {
   return this.db
     .prepare(
@@ -100,21 +102,22 @@ export function getClaimedDeliveryMailboxHandles(this: OrchestrationDb): string[
 }
 
 /**
- * A message is offered again at most once per Orca runtime for a restart, and at most once in all
- * for any other cut, so a provider that dies on every start is not restarted forever.
+ * Two budgets per message: once per Orca launch after a restart, and once in all after any other
+ * cut, so neither spends the other and a provider that dies on every start is not restarted forever.
  */
-const REOFFER_ALLOWED = `(reoffered_by_runtime IS NULL
-  OR (? = 'restart' AND reoffered_by_runtime != ?))`
-
-const OUTSIDE_CLAIMED_DELIVERY = `NOT EXISTS (
-  SELECT 1 FROM outstanding_deliveries AS held, json_each(held.message_ids) AS member
-  WHERE held.mailbox_handle = messages.to_handle AND member.value = messages.id
-    AND (held.holder_turn_item_id IS NOT NULL OR held.holder_process_incarnation IS NOT NULL)
-)`
+function reofferBudget(arm: DeliveryReofferArm, runtimeId: string) {
+  return arm === 'restart'
+    ? {
+        spend: 'reoffered_by_runtime = ?',
+        allowed: '(reoffered_by_runtime IS NULL OR reoffered_by_runtime != ?)',
+        params: [runtimeId]
+      }
+    : { spend: 'reoffered_after_cut = 1', allowed: 'reoffered_after_cut IS NULL', params: [] }
+}
 
 /**
- * Re-arms `messageIds` for one more pointer: unread, already pointed, and in no held batch. Returns
- * how many it re-armed.
+ * Re-arms `messageIds` for one more pointer: unread, already pointed, outside the batch
+ * `outsideDeliveryId`, and within the arm's budget. Returns how many it re-armed.
  */
 export function reofferMailboxMessages(
   this: OrchestrationDb,
@@ -124,23 +127,25 @@ export function reofferMailboxMessages(
     messageIdsJson: string
     arm: DeliveryReofferArm
     runtimeId: string
+    outsideDeliveryId?: string
   }
 ): number {
+  const budget = reofferBudget(params.arm, params.runtimeId)
   return Number(
     this.db
       .prepare(
-        `UPDATE messages SET delivered_at = NULL, reoffered_by_runtime = ?
+        `UPDATE messages SET delivered_at = NULL, ${budget.spend}
          WHERE to_handle = ? AND read = 0 AND delivered_at IS NOT NULL
            AND delivery_contract = 'current_delivery'
            AND id IN (SELECT value FROM json_each(?))
-           AND ${REOFFER_ALLOWED} AND ${OUTSIDE_CLAIMED_DELIVERY}`
+           AND ${budget.allowed} AND NOT ${MEMBER_OF_DELIVERY_SQL}`
       )
       .run(
-        params.runtimeId,
+        ...budget.params,
         params.mailboxHandle,
         params.messageIdsJson,
-        params.arm,
-        params.runtimeId
+        ...budget.params,
+        params.outsideDeliveryId ?? ''
       ).changes
   )
 }
@@ -185,17 +190,22 @@ export function releaseCutDelivery(
   }
 }
 
-/** Unread mail a notice pointed at that no claimed batch holds: a cut notice turn may leave it. */
-export function hasPointedUnfetchedMail(this: OrchestrationDb, mailboxHandle: string): boolean {
+/** Unread mail a notice pointed at, outside the batch `outsideDeliveryId`: a cut notice turn may
+ *  leave it. */
+export function hasPointedUnfetchedMail(
+  this: OrchestrationDb,
+  mailboxHandle: string,
+  outsideDeliveryId: string | undefined
+): boolean {
   return Boolean(
     this.db
       .prepare(
         `SELECT 1 FROM messages
          WHERE to_handle = ? AND read = 0 AND delivered_at IS NOT NULL
-           AND delivery_contract = 'current_delivery' AND ${OUTSIDE_CLAIMED_DELIVERY}
+           AND delivery_contract = 'current_delivery' AND NOT ${MEMBER_OF_DELIVERY_SQL}
          LIMIT 1`
       )
-      .get(mailboxHandle)
+      .get(mailboxHandle, outsideDeliveryId ?? '')
   )
 }
 
@@ -213,17 +223,14 @@ export function getPointerOwedMessageIds(
     .prepare(
       `SELECT id FROM messages INDEXED BY idx_messages_id
        WHERE to_handle = ? AND read = 0 AND id IN (SELECT value FROM json_each(?))
-         AND id NOT IN (
-           SELECT member.value FROM deliveries AS held, json_each(held.message_ids) AS member
-           WHERE held.id = ?
-         )`
+         AND NOT ${MEMBER_OF_DELIVERY_SQL}`
     )
     .all(mailboxHandle, JSON.stringify(messageIds), excludeDeliveryId ?? '')
     .flatMap((row) => (typeof row.id === 'string' ? [row.id] : []))
 }
 
 export type DeliveryHolderStoreMethods = {
-  getClaimedMailboxDelivery: typeof getClaimedMailboxDelivery
+  getOutstandingMailboxDelivery: typeof getOutstandingMailboxDelivery
   getClaimedDeliveryMailboxHandles: typeof getClaimedDeliveryMailboxHandles
   reofferMailboxMessages: typeof reofferMailboxMessages
   releaseCutDelivery: typeof releaseCutDelivery
@@ -233,7 +240,7 @@ export type DeliveryHolderStoreMethods = {
 
 export function attachDeliveryHolderStore(ctor: { prototype: object }): void {
   Object.assign(ctor.prototype, {
-    getClaimedMailboxDelivery,
+    getOutstandingMailboxDelivery,
     getClaimedDeliveryMailboxHandles,
     reofferMailboxMessages,
     releaseCutDelivery,
