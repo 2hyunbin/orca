@@ -121,15 +121,22 @@ function equalizeWeight(
 }
 
 /** Same-axis panes get equal shares, so three side by side become thirds, as the window does. */
+/** A ratio this close to an even split is saved as none, as the desktop window saves it. */
+export const SPLIT_RATIO_TOLERANCE = 0.005
+
 export function equalizeLayout(node: TerminalPaneLayoutNode): TerminalPaneLayoutNode {
   if (node.type === 'leaf') {
     return node
   }
   const first = equalizeWeight(node.first, node.direction)
   const second = equalizeWeight(node.second, node.direction)
+  const { ratio: _ratio, ...split } = node
+  const ratio = first / (first + second)
   return {
-    ...node,
-    ratio: first / (first + second),
+    ...split,
+    ...(Math.abs(ratio - 0.5) > SPLIT_RATIO_TOLERANCE
+      ? { ratio: Math.round(ratio * 1000) / 1000 }
+      : {}),
     first: equalizeLayout(node.first),
     second: equalizeLayout(node.second)
   }

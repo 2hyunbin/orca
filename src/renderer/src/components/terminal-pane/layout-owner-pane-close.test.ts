@@ -1,0 +1,80 @@
+import { beforeEach, expect, it, vi } from 'vitest'
+import { preparePendingSplitClose } from './pending-split-close-test-fixture'
+
+const mocks = vi.hoisted(() => ({
+  layoutOwnerIsMain: false,
+  commitTerminalSurfaceClose: vi.fn(),
+  sendPaneCommandToLayoutOwner:
+    vi.fn<
+      (
+        worktreeId: string,
+        command: unknown,
+        handlers: { apply: (result: object) => void; asToday: () => void }
+      ) => boolean
+    >()
+}))
+
+vi.mock('../../../../shared/layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return mocks.layoutOwnerIsMain
+  }
+}))
+vi.mock('./terminal-pane-layout-owner-commands', () => ({
+  sendPaneCommandToLayoutOwner: mocks.sendPaneCommandToLayoutOwner
+}))
+vi.mock('@/store/terminals/terminal-surface-close-intent', () => ({
+  commitTerminalSurfaceClose: mocks.commitTerminalSurfaceClose
+}))
+
+const LEAF = '11111111-1111-4111-8111-111111111111'
+
+beforeEach(() => {
+  mocks.layoutOwnerIsMain = false
+  mocks.commitTerminalSurfaceClose.mockReset()
+  mocks.sendPaneCommandToLayoutOwner.mockReset()
+  mocks.sendPaneCommandToLayoutOwner.mockReturnValue(true)
+})
+
+it('a window-owned build closes the pane at once and reports it to main', async () => {
+  const p = await preparePendingSplitClose()
+
+  p.actions.executeClosePane(1)
+
+  expect(mocks.sendPaneCommandToLayoutOwner).not.toHaveBeenCalled()
+  expect(mocks.commitTerminalSurfaceClose).toHaveBeenCalledWith('workspace', {
+    kind: 'pane',
+    tabId: 'tab-parent',
+    leafId: LEAF
+  })
+  expect(p.transports.has(1)).toBe(false)
+})
+
+it('a layout-owner build removes the pane only once main has closed it', async () => {
+  mocks.layoutOwnerIsMain = true
+  const p = await preparePendingSplitClose()
+
+  p.actions.executeClosePane(1)
+
+  expect(mocks.sendPaneCommandToLayoutOwner).toHaveBeenCalledWith(
+    'workspace',
+    { type: 'closePane', tabId: 'tab-parent', leafId: LEAF },
+    { apply: expect.any(Function), asToday: expect.any(Function) }
+  )
+  expect(p.transports.has(1)).toBe(true)
+
+  mocks.sendPaneCommandToLayoutOwner.mock.calls[0]?.[2].apply({})
+
+  expect(p.transports.has(1)).toBe(false)
+  expect(mocks.commitTerminalSurfaceClose).not.toHaveBeenCalled()
+})
+
+it('a layout-owner build closes as today when a paired server holds the tab', async () => {
+  mocks.layoutOwnerIsMain = true
+  const p = await preparePendingSplitClose()
+
+  p.actions.executeClosePane(1)
+  mocks.sendPaneCommandToLayoutOwner.mock.calls[0]?.[2].asToday()
+
+  expect(mocks.commitTerminalSurfaceClose).toHaveBeenCalledOnce()
+  expect(p.transports.has(1)).toBe(false)
+})
