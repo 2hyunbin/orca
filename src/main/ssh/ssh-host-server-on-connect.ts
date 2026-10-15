@@ -15,6 +15,7 @@ import type {
 } from '../../shared/orcad-managed-runtime'
 import type {
   SshManagedServerRelayReason,
+  SshManagedServerLinkedProject,
   SshManagedServerServingNote,
   SshManagedServerUpdateNote,
   SshTarget
@@ -49,6 +50,7 @@ export type HostServerOnConnectResult =
       environmentId: string
       update?: SshManagedServerUpdateNote
       serving?: SshManagedServerServingNote
+      linked?: SshManagedServerLinkedProject[]
       /** Another desktop's update held the host; recheck until it clears. Never published. */
       fenceHeld?: true
     }
@@ -280,7 +282,11 @@ async function afterConversion(
 ): Promise<HostServerOnConnectResult> {
   switch (result.outcome) {
     case 'converted':
-      return { route: 'managed', environmentId: result.environment.id }
+      return {
+        route: 'managed',
+        environmentId: result.environment.id,
+        ...(result.linkedProjects ? { linked: result.linkedProjects } : {})
+      }
     case 'deferred':
       return deferred(target, deps, result, false)
     case 'refused':

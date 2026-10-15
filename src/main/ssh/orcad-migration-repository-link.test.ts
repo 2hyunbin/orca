@@ -14,7 +14,10 @@ import { Store } from '../persistence/loading-store/store'
 import type { OrcadMigrationDestinationCatalog } from './orcad-migration-cutover-coordinator'
 import { listOrcadMigrationSourceCutovers } from './orcad-migration-cutover-journal'
 import { planOrcadDeltaMove } from './orcad-migration-delta-plan'
-import { repositoriesHeldByServer } from './orcad-migration-repository-link'
+import {
+  linkedOrcadMigrationProjects,
+  repositoriesHeldByServer
+} from './orcad-migration-repository-link'
 import { reconcileManagedOrcadSshTargets, visibleRepos } from './orcad-retained-source'
 import { SshConnectionStore } from './ssh-connection-store'
 
@@ -180,6 +183,20 @@ describe('moving onto a server another desktop already added the same project to
     expect(visibleRepos(store, () => userDataPath)).toEqual([])
   })
 
+  it('tells the connect which projects it linked', async () => {
+    otherDesktopAddsSameCheckout()
+    await expect(convert()).resolves.toMatchObject({
+      outcome: 'converted',
+      linkedProjects: [{ path: '/root/migrepo', automations: 0 }]
+    })
+  })
+
+  it('says nothing was linked when the server held none of the projects', async () => {
+    const result = await convert()
+    expect(result.outcome).toBe('converted')
+    expect(result).not.toHaveProperty('linkedProjects')
+  })
+
   it('leaves the linked project’s saved state to the server, moving only the rest', async () => {
     otherDesktopAddsSameCheckout()
     store.setWorktreeMeta('desktop-repo::/root/migrepo', { comment: 'from this desktop' })
@@ -213,6 +230,21 @@ describe('moving onto a server another desktop already added the same project to
       )
       expect(serverRepoIds()).toEqual(['server-repo'])
       expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.linkedRepositoryIds).toBeUndefined()
+    })
+
+    it.each([
+      ['no project', undefined],
+      ['a project this desktop removed', 'removed-repo::/root/old']
+    ])('refuses a terminal in %s without blaming the linked project', async (_case, worktreeId) => {
+      otherDesktopAddsSameCheckout()
+      const { worktreeId: _omit, ...unowned } = lease('')
+      vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([
+        worktreeId ? { ...unowned, worktreeId } : unowned
+      ])
+      await expect(convert(true, 'unverifiable')).rejects.toThrow(
+        'orcad_migration_linked_project_unowned_terminals:/root/migrepo'
+      )
+      expect(serverRepoIds()).toEqual(['server-repo'])
     })
 
     it('still links when the terminal runs in a project that moves', async () => {
@@ -269,6 +301,32 @@ describe('moving onto a server another desktop already added the same project to
     store.updateRepo('desktop-only', { displayName: 'Renamed' })
     await expect(convert()).rejects.toThrow('orcad_migration_source_changed')
     expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.linkedRepositoryIds).toBeUndefined()
+  })
+})
+
+describe('what a linked project leaves behind', () => {
+  it('counts this desktop’s automations on each linked project only', () => {
+    const runIn = (repoId: string) => ({
+      kind: 'workspace-run' as const,
+      projectId: repoId,
+      hostId: 'local' as const,
+      projectHostSetupId: repoId,
+      repoId,
+      path: '/'
+    })
+    const fake = {
+      getRepos: () => [repo('linked', '/root/app'), repo('moved', '/root/tool')],
+      listAutomations: () => [
+        { projectId: 'linked' },
+        { projectId: 'linked', runContext: runIn('moved') },
+        { projectId: 'moved' },
+        { projectId: 'other', runContext: runIn('linked') }
+      ]
+    }
+    expect(linkedOrcadMigrationProjects(fake, { linkedRepositoryIds: ['linked'] })).toEqual([
+      { path: '/root/app', automations: 2 }
+    ])
+    expect(linkedOrcadMigrationProjects(fake, {})).toEqual([])
   })
 })
 
