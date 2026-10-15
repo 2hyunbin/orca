@@ -2,7 +2,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 export type { SidebarFilterState } from './visible-worktree-kinds'
-export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
+export { sidebarHasActiveFilters } from './sidebar-filter-actions'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   getVisibleWorkspaceHostIdSet,

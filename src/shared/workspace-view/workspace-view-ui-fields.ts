@@ -7,7 +7,7 @@ export const WORKSPACE_VIEW_UI_FIELDS = [
   'sortBy',
   'collapsedGroups',
   'workspaceStatuses',
-  // Read only: the legacy host scope stands in when no host list is saved.
+  // The legacy host scope: read when no host list is saved, written with a null or one-host list.
   'workspaceHostScope'
 ] as const satisfies readonly (keyof PersistedUIState)[]
 
