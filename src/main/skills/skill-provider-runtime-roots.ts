@@ -23,8 +23,9 @@ const WSL_PROVIDER_HOMES_PROBE = buildWslCapturedLoginShellCommand(
 type HomePathApi = Pick<typeof posix, 'dirname' | 'isAbsolute' | 'relative' | 'sep'>
 
 /**
- * Like Kiro's documented rule: the filesystem root, the user home and its
- * ancestors fall back to the default, since `<home>/skills` there is unrelated.
+ * Kiro documents ignoring a `KIRO_HOME` at the filesystem root, the user home or
+ * an ancestor of it; Orca applies that rule to every `homeEnv` on purpose, since
+ * `<home>/skills` there would be an unrelated folder.
  */
 function isUsableProviderHome(candidate: string, userHome: string, pathApi: HomePathApi): boolean {
   if (pathApi.dirname(candidate) === candidate) {
@@ -135,7 +136,8 @@ async function probeWslProviderHomes(distro: string): Promise<string | null> {
   return WSL_PROVIDER_HOMES_PROBE.readStdout(result.stdout)
 }
 
-function wslProviderHome(value: string, userHome: string): string | null {
+/** A clean absolute guest path, or null. */
+function cleanWslPath(value: string): string | null {
   const candidate = value.trim()
   if (
     !candidate ||
@@ -149,8 +151,7 @@ function wslProviderHome(value: string, userHome: string): string | null {
   ) {
     return null
   }
-  const home = posix.resolve(candidate)
-  return isUsableProviderHome(home, posix.resolve('/', userHome), posix) ? home : null
+  return posix.resolve(candidate)
 }
 
 /** Every table `homeEnv` as the WSL login shell sees it, read in one probe. */
@@ -164,11 +165,16 @@ export async function resolveWslSkillProviderRoots(
     if (fields.length !== PROVIDER_HOME_ENVS.length + 2) {
       return {}
     }
-    const [userHome, ...values] = fields
+    const [rawUserHome, ...values] = fields
+    // Without the guest home the root/home/ancestor guard cannot run.
+    const userHome = cleanWslPath(rawUserHome)
+    if (!userHome) {
+      return {}
+    }
     const roots: SkillProviderRootOverrides = {}
     PROVIDER_HOME_ENVS.forEach(({ id }, index) => {
-      const home = wslProviderHome(values[index], userHome)
-      if (home) {
+      const home = cleanWslPath(values[index])
+      if (home && isUsableProviderHome(home, userHome, posix)) {
         roots[id] = toWindowsWslPath(`${home}/skills`, distro)
       }
     })

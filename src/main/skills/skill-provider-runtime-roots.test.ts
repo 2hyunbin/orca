@@ -161,6 +161,15 @@ describe('skill provider runtime roots', () => {
         wslHomes({ GROK_HOME: '/srv/grok' }).slice(0, -1)
       )
     ).resolves.toEqual({})
+    // An empty or relative guest $HOME disables the home guard, so nothing is trusted.
+    for (const home of ['', 'home/dev']) {
+      await expect(
+        resolveWslSkillProviderRoots('Ubuntu', async () =>
+          wslHomes({ GROK_HOME: '/srv/grok' }, home)
+        ),
+        home
+      ).resolves.toEqual({})
+    }
     // A lost fence.
     await expect(resolveWslSkillProviderRoots('Ubuntu', async () => null)).resolves.toEqual({})
     await expect(
