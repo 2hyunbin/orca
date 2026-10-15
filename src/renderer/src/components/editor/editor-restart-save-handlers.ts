@@ -1,6 +1,6 @@
 import type { OpenFile } from '@/store/slices/editor'
 import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
-import { isEditorDraftBackedUp } from '@/lib/editor-draft-backup'
+import { isEditorDraftBackedUp } from '@/lib/workspace-session-editor-files'
 import { canAutoSaveOpenFile } from './editor-autosave'
 import { flushPendingEditorChange } from './editor-pending-flush'
 import { getDuplicateDirtySavePaths } from './editor-autosave-state-projections'
