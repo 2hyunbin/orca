@@ -6,6 +6,9 @@ import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import { collectLayoutLeafIdsInOrder } from '../../shared/workspace-layout/terminal-pane-tree'
+import { isSameTerminal } from '../../shared/workspace-layout/terminal-owner-invariants'
+
+type TerminalBinding = { ptyId: string; incarnationId?: string }
 import {
   cloneTerminalLayoutSnapshot,
   collectPersistedTerminalLeafIds,
@@ -14,35 +17,48 @@ import {
 } from './mobile-session-layout-projection'
 
 /**
- * Whether stored rows repeat a row id or bind one terminal in two mounted panes. Exists only to
- * skip the Loader's cost: a partition without either is built from its raw rows, as before.
+ * Whether stored rows repeat a row id, or bind one terminal (as the Loader compares terminals) in
+ * two rows or two of a row's mounted panes. Exists only to skip the Loader's cost.
  */
 function storedTerminalsRepeat(session: WorkspaceSessionState): boolean {
   const rowIds = new Set<string>()
-  const bound = new Set<string>()
+  const boundByPtyId = new Map<string, TerminalBinding[]>()
   for (const row of Object.values(session.tabsByWorktree ?? {}).flat()) {
     const layout = session.terminalLayoutsByTabId?.[row.id]
     const paneIds = layout?.root
       ? collectLayoutLeafIdsInOrder(layout.root)
       : Object.keys(layout?.ptyIdsByLeafId ?? {})
-    const panePtyIds = paneIds.flatMap((leafId) => layout?.ptyIdsByLeafId?.[leafId] ?? [])
-    const ptyIds = new Set([...panePtyIds, ...(row.ptyId ? [row.ptyId] : [])])
+    const panes = paneIds.flatMap((leafId) => {
+      const ptyId = layout?.ptyIdsByLeafId?.[leafId]
+      const incarnationId = session.terminalPtyIncarnationsByPaneKey?.[`${row.id}:${leafId}`]
+      return ptyId ? [{ ptyId, incarnationId }] : []
+    })
+    const bindings = [
+      ...panes,
+      ...(row.ptyId && !panes.some((pane) => pane.ptyId === row.ptyId)
+        ? [{ ptyId: row.ptyId }]
+        : [])
+    ]
+    const repeats = (binding: TerminalBinding, others: readonly TerminalBinding[]) =>
+      others.some((other) => isSameTerminal(other, binding))
     if (
       rowIds.has(row.id) ||
-      new Set(panePtyIds).size !== panePtyIds.length ||
-      [...ptyIds].some((ptyId) => bound.has(ptyId))
+      panes.some((pane, index) => repeats(pane, panes.slice(0, index))) ||
+      bindings.some((binding) => repeats(binding, boundByPtyId.get(binding.ptyId) ?? []))
     ) {
       return true
     }
     rowIds.add(row.id)
-    ptyIds.forEach((ptyId) => bound.add(ptyId))
+    for (const binding of bindings) {
+      boundByPtyId.set(binding.ptyId, [...(boundByPtyId.get(binding.ptyId) ?? []), binding])
+    }
   }
   return false
 }
 
 /**
- * A partition that repeats a row or terminal, as the shared Loader resolves it: which rows are
- * tabs, and which pane shows a terminal another already holds, as the window shows it. `cache`
+ * The partition the phone is built from: the stored rows unchanged, or for a partition that
+ * repeats a row or terminal, the shared Loader's result whole, as the window shows it. `cache`
  * lives for one caller loop. It ignores `hostId`, which only stamps tab-bar entries and never
  * changes which rows or panes survive.
  */

@@ -110,7 +110,7 @@ describe('headless phone tabs come from the shared Loader', () => {
     ])
   })
 
-  it('builds a partition without a repeat from its raw rows, as before', () => {
+  it('builds a partition without a repeat from the stored rows unchanged', () => {
     // Each fixture here differs from the Loader's result in a title, a closed pane or a pane id.
     expect(phoneView('tab-bar label differing from the row title')[0]?.panes).toEqual([
       'tab-a pty-a Terminal 1',
@@ -165,4 +165,28 @@ describe('headless phone tabs come from the shared Loader', () => {
       }
     }
   )
+
+  it('does not count a relay terminal id reused by a later incarnation as a repeat', async () => {
+    const key = 'repo-1::/repos/repo-1/a'
+    const session = addWorkspace(emptySession(), key, [
+      {
+        id: 'g-a',
+        tabs: [
+          { id: 'tab-a', leaves: [[leaf(1), 'ssh:target-1@@pty-1']] },
+          { id: 'tab-b', leaves: [[leaf(2), 'ssh:target-1@@pty-1']] }
+        ]
+      }
+    ])
+    session.terminalPtyIncarnationsByPaneKey = {
+      [`tab-a:${leaf(1)}`]: 'incarnation-1',
+      [`tab-b:${leaf(2)}`]: 'incarnation-2'
+    }
+    const load = vi.spyOn(layoutLoad, 'loadWorkspaceLayoutWithoutReport')
+    try {
+      await runtimeFor(session).listAllMobileSessionTabs()
+      expect(load).not.toHaveBeenCalled()
+    } finally {
+      load.mockRestore()
+    }
+  })
 })
