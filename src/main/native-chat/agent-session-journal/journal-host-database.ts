@@ -1,5 +1,5 @@
 // The host's one chat journal database: every structured chat on this state directory, in one
-// file. The host owns the foreground connection and one background maintenance worker.
+// file. Foreground writes and sliced maintenance share the host's one connection.
 //
 // A chat's store owns no connection. It goes through this object, so there is nothing per chat to
 // open, close, retry or leak, and the connection closes exactly once, last, at host teardown.
@@ -14,7 +14,7 @@ import {
 } from './journal-database'
 import { journalOpenRefusalError } from './journal-open-failure'
 import { AgentSessionJournalError } from './journal-write-guards'
-import { JournalMaintenanceWorker } from './journal-maintenance-worker'
+import { JournalMaintenance } from './journal-maintenance'
 
 const JOURNAL_DATABASE_FILE = 'agent-session-journal.db'
 
@@ -28,7 +28,7 @@ export class JournalHostDatabase {
   readonly readOnly: boolean
   /** A failed transaction's ROLLBACK failed too, so the transaction may still be open. */
   private stranded = false
-  private readonly maintenance: JournalMaintenanceWorker | null
+  private readonly maintenance: JournalMaintenance | null
 
   private constructor(
     opened: OpenJournalDatabase,
@@ -39,7 +39,7 @@ export class JournalHostDatabase {
     this.readOnly = opened.readOnly
     this.maintenance = opened.readOnly
       ? null
-      : new JournalMaintenanceWorker(journalDatabasePath(stateDirectory))
+      : new JournalMaintenance(() => this.db)
   }
 
   static open(stateDirectory: string): JournalHostDatabase {

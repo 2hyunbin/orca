@@ -100,6 +100,37 @@ async function open() {
   return journals.open({ identity, stateDirectory: root })
 }
 
+it('finishes host cleanup while foreground appends share the same connection', async () => {
+  vi.useFakeTimers()
+  const journal = await open()
+  const body = {
+    kind: 'message' as const,
+    role: 'assistant' as const,
+    blocks: [{ type: 'text' as const, text: 'stream '.repeat(400) }]
+  }
+  for (let revision = 1; revision <= 40; revision++) {
+    await journal.appendItem(item, body, options)
+  }
+  await vi.advanceTimersByTimeAsync(30_060)
+  for (let ordinal = 2; ordinal <= 11; ordinal++) {
+    await journal.appendItem({ ...item, ordinal }, body, options)
+    await vi.advanceTimersByTimeAsync(20)
+  }
+  const before = journal.snapshot()
+  await vi.runAllTimersAsync()
+  expect(
+    rows().filter(
+      (row) => row.kind === 'item' && row.body.kind === 'message' && row.body.blocks.length === 0
+    )
+  ).toHaveLength(38)
+  expect(
+    renderJournalState(
+      replayJournal(openTestJournalHostDatabase(root).db, identity.sessionId)!.state
+    )
+  ).toEqual(before)
+  expect(vi.getTimerCount()).toBe(0)
+})
+
 function prune(epoch: string): number {
   const db = openTestJournalHostDatabase(root).db
   const pass = new JournalPrunePass(db, identity.sessionId, epoch)

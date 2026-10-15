@@ -1,5 +1,5 @@
 import type Database from '../../sqlite/sync-database'
-import { JOURNAL_BUSY_TIMEOUT_MS, journalPragmaNumber } from './journal-database'
+import { journalPragmaNumber } from './journal-database'
 import { JournalPrunePass } from './journal-prune-pass'
 
 const QUIET_DELAY_MS = 30_000
@@ -84,21 +84,15 @@ export class JournalMaintenance {
   }
 
   private step(db: Database.Database): void {
-    // Maintenance never waits for a competing writer on the interaction thread.
-    db.pragma('busy_timeout = 0')
-    try {
-      if (this.current === null) {
-        this.current = this.nextSession(db)
+    if (this.current === null) {
+      this.current = this.nextSession(db)
+    }
+    if (this.current !== null) {
+      if (this.current.step(db).done) {
+        this.current = null
       }
-      if (this.current !== null) {
-        if (this.current.step(db).done) {
-          this.current = null
-        }
-      } else if (this.vacuumPending) {
-        this.vacuumPending = this.reclaim(db)
-      }
-    } finally {
-      db.pragma(`busy_timeout = ${JOURNAL_BUSY_TIMEOUT_MS}`)
+    } else if (this.vacuumPending) {
+      this.vacuumPending = this.reclaim(db)
     }
   }
 
