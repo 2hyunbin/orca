@@ -305,7 +305,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
       clientNavigationId,
       scope?.type === 'folder'
         ? this.store?.getFolderWorkspace?.(scope.folderWorkspaceId)?.createdWithAgent
-        : this.store?.getWorktreeMeta(result.worktree)?.createdWithAgent
+        : this.store?.getWorktreeMeta?.(result.worktree)?.createdWithAgent
     )
   }
 
