@@ -57,7 +57,8 @@ export type TerminalScopeRuntime = {
 export type TerminalScopeResolution = {
   ceiling: PtyProcessCeilingState
   /** Off says why terminals share the daemon's cgroup, for the daemon log. */
-  scopes: { on: TerminalScopeRuntime } | { off: PtyProcessCeilingOffReason }
+  /** `timedOut` is log-only: a busy user manager, not one that refused. */
+  scopes: { on: TerminalScopeRuntime } | { off: PtyProcessCeilingOffReason; timedOut?: true }
 }
 
 export function parsePtyProcessCeiling(
@@ -115,9 +116,9 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
     reason:
       parsed.kind === 'off' ? 'disabled' : parsed.kind === 'invalid' ? 'invalid_limit' : reason
   })
-  const off = (reason: PtyProcessCeilingOffReason): TerminalScopeResolution => ({
+  const off = (reason: PtyProcessCeilingOffReason, timedOut = false): TerminalScopeResolution => ({
     ceiling: ceilingOff(reason),
-    scopes: { off: reason }
+    scopes: timedOut ? { off: reason, timedOut } : { off: reason }
   })
   if (input.platform === 'win32') {
     return {
@@ -178,8 +179,9 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
       managerEnv
     )
     if (created.code !== 0 || created.timedOut) {
-      return off('slice_unavailable')
+      return off('slice_unavailable', created.timedOut)
     }
+    let probeTimedOut = false
     // Why probe, not parse a version: some systemd releases reject OOMPolicy on scopes, and an
     // unknown property fails the whole start, which would fail every terminal.
     const base = ['TimeoutStopSec=5s', ...(limit !== null ? [`TasksMax=${limit}`] : [])]
@@ -202,6 +204,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
       )
       const [cgroupLine, pidsMax] = probe.stdout.trim().split('\n')
       if (probe.code !== 0 || probe.timedOut || !cgroupLine?.startsWith('0::/')) {
+        probeTimedOut ||= probe.timedOut
         continue
       }
       const sliceControlGroup = dirname(cgroupLine.slice('0::'.length))
@@ -232,7 +235,7 @@ export function resolveTerminalScopes(input: ResolveInput): TerminalScopeResolut
       }
     }
     run('systemctl', ['--user', '--no-block', 'stop', slice], managerEnv)
-    return off('slice_unavailable')
+    return off('slice_unavailable', probeTimedOut)
   } catch {
     return off('slice_unavailable')
   }

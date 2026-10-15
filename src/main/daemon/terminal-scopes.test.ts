@@ -168,14 +168,15 @@ describe('resolveTerminalScopes', () => {
     ])
   })
 
-  it('stays off, leaving terminals in the daemon scope, when a wedged manager times out', () => {
+  it('stays off, marking a timeout for the log, when a wedged manager does not answer', () => {
     const run = vi.fn((program: string, _args: string[]) => ({
       code: 1,
       timedOut: program !== 'systemctl',
       stdout: ''
     }))
     expect(resolveTerminalScopes(linuxInput({ ...fakeManager(), run })).scopes).toEqual({
-      off: 'slice_unavailable'
+      off: 'slice_unavailable',
+      timedOut: true
     })
     run.mockImplementation((program: string) => ({
       code: program === 'busctl' ? 0 : 1,
@@ -183,7 +184,8 @@ describe('resolveTerminalScopes', () => {
       stdout: ''
     }))
     expect(resolveTerminalScopes(linuxInput({ ...fakeManager(), run })).scopes).toEqual({
-      off: 'slice_unavailable'
+      off: 'slice_unavailable',
+      timedOut: true
     })
   })
 
