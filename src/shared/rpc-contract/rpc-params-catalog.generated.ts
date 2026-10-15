@@ -505,7 +505,14 @@ import {
   DictationStart,
   SpeechModelAction
 } from './speech-params'
-import { RepoAddRemote, SshBrowseDir, SshTarget, SshTargetAdd, SshTargetUpdate } from './ssh-params'
+import {
+  RepoAddRemote,
+  SshBrowseDir,
+  SshConnect,
+  SshTarget,
+  SshTargetAdd,
+  SshTargetUpdate
+} from './ssh-params'
 import { ContinueInterruptedParams } from './structured-agent-session-continue-params'
 import {
   AcknowledgeAttentionParams,
@@ -1236,7 +1243,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'speech.models.list': null,
   'ssh.addTarget': SshTargetAdd,
   'ssh.browseDir': SshBrowseDir,
-  'ssh.connect': SshTarget,
+  'ssh.connect': SshConnect,
   'ssh.getState': SshTarget,
   'ssh.listEditableTargets': null,
   'ssh.listRemovedTargetLabels': null,

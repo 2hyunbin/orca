@@ -251,7 +251,15 @@ describe('Mobile CI tool preflight routing', () => {
   it('keeps root shard execution enabled for callers that do not opt out', () => {
     expect(unit.on.workflow_call.inputs.run_shards.default).toBe(true)
     expect(evaluate(unit.jobs.test.if, { inputs: { run_shards: true } })).toBe(true)
-    expect(unit.jobs.relay_integration.if).toBeUndefined()
+    const relayDefault = unit.on.workflow_call.inputs.run_relay_integration.default
+    expect(relayDefault).toBe(true)
+    expect(
+      evaluate(unit.jobs.relay_integration.if, { inputs: { run_relay_integration: relayDefault } })
+    ).toBe(true)
+    expect(
+      evaluate(unit.jobs.relay_integration.if, { inputs: { run_relay_integration: false } })
+    ).toBe(false)
+    expect(workflow.jobs.test.with.run_relay_integration).toBeUndefined()
     expect(unit.jobs.relay_integration.needs).toBeUndefined()
   })
 

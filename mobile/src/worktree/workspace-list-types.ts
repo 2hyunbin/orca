@@ -29,6 +29,8 @@ export type Worktree = {
   isArchived?: boolean
   isMainWorktree?: boolean
   hasHostSidebarActivity?: boolean
+  /** The paired desktop's "Hide other-client workspaces" hides this row. */
+  desktopOtherClient?: true
   worktreeInstanceId?: string
   lineageWorktreeInstanceId?: string
   parentWorktreeInstanceId?: string
