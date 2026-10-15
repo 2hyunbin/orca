@@ -4,7 +4,7 @@ import {
   isSleepingSweepExemptionNarrowingList,
   sidebarHasActiveFilters
 } from './visible-worktrees'
-import { isDefaultBranchWorkspace } from './default-branch-workspace'
+import { isDefaultBranchWorkspace } from '../../../../shared/workspace-view/workspace-row-kinds'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 const gitRepo = { kind: 'git' } as const

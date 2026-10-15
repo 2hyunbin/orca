@@ -15,7 +15,7 @@ import {
   getWorktreeExecutionHostId,
   getSettingsFocusedExecutionHostId
 } from '../../../../../../shared/execution-host'
-import { isDefaultBranchWorkspace } from '../../default-branch-workspace'
+import { isDefaultBranchWorkspace } from '../../../../../../shared/workspace-view/workspace-row-kinds'
 import { getFolderWorkspaceExecutionHostIdForRows } from './host-filtering'
 import {
   getPairedDeviceIdsByEnvironment,
