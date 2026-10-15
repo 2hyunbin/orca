@@ -103,7 +103,8 @@ describe('Run binding during Dispatch checks', () => {
           runId: run.id,
           messages: [{ subject: 'after bind' }]
         })
-        if (phase === 'recovering') {
+        // runUse awaits the target coordinator's liveness first, so its check has parked by then.
+        if (phase === 'recovering' && method === 'runCreate') {
           expect(wait).not.toHaveBeenCalled()
         }
       }
