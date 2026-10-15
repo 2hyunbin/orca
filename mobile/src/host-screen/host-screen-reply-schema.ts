@@ -150,7 +150,7 @@ export const hostPlatformSchema = z
  * sets that degrade to absent for the same reason: every read is a lookup that already fell back to
  * the current mode for an arm it could not map, so nothing is withheld that the reply granted.
  *
- * `workspaceStatuses` keeps its rows opaque — coerceMobileWorkspaceStatuses only counts them — but
+ * `workspaceStatuses` keeps its rows opaque — withDefaultWorkspaceStatuses only counts them — but
  * the container is checked, because main handed a non-array straight into the status catalog and
  * every group lookup then read `.find` off a string.
  *

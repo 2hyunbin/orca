@@ -1,15 +1,20 @@
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import {
-  DEFAULT_MOBILE_WORKSPACE_STATUSES,
-  coerceMobileWorkspaceStatuses,
-  getMobileWorkspaceStatus,
-  getMobileWorkspaceStatusGroupKey
-} from './mobile-workspace-statuses'
+  DEFAULT_WORKSPACE_STATUSES,
+  getWorkspaceStatus,
+  getWorkspaceStatusGroupKey,
+  withDefaultWorkspaceStatuses
+} from '../../../src/shared/workspace-statuses'
 import {
   applyMobileWorkspaceLineage,
   getMobileWorkspaceLineageChildren
 } from './mobile-workspace-lineage'
-import { getPRGroupKey, PR_GROUP_LABELS, PR_GROUP_ORDER } from './workspace-pr-status-groups'
+import {
+  getPRGroupKeyForState,
+  getPRLaneKey,
+  PR_GROUP_LABELS,
+  PR_GROUP_ORDER
+} from '../../../src/shared/workspace-view/workspace-pr-groups'
 import type { FilterState, Section, SectionRepo, Worktree } from './workspace-list-types'
 import type {
   WorkspaceGroupBy,
@@ -199,7 +204,7 @@ export function buildSections(
   groupMode: WorkspaceGroupBy,
   pinnedIds: Set<string>,
   projectCatalog: ProjectSectionCatalog = NO_PROJECT_SECTION_CATALOG,
-  workspaceStatuses: readonly WorkspaceStatusDefinition[] = DEFAULT_MOBILE_WORKSPACE_STATUSES,
+  workspaceStatuses: readonly WorkspaceStatusDefinition[] = DEFAULT_WORKSPACE_STATUSES,
   collapsedGroups: ReadonlySet<string> = new Set(),
   showPinnedInGroups = false,
   repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId> = new Map()
@@ -252,10 +257,10 @@ export function buildSections(
       )
     }
   } else if (groupMode === 'workspace-status') {
-    const renderableWorkspaceStatuses = coerceMobileWorkspaceStatuses(workspaceStatuses)
+    const renderableWorkspaceStatuses = withDefaultWorkspaceStatuses(workspaceStatuses)
     const byStatus = new Map<string, Worktree[]>()
     for (const w of canonicalGroupWorktrees) {
-      const key = getMobileWorkspaceStatus(w, renderableWorkspaceStatuses)
+      const key = getWorkspaceStatus(w, renderableWorkspaceStatuses)
       const list = byStatus.get(key)
       if (list) {
         list.push(w)
@@ -267,19 +272,14 @@ export function buildSections(
       const items = byStatus.get(status.id)
       if (items && items.length > 0) {
         sections.push(
-          makeSection(
-            getMobileWorkspaceStatusGroupKey(status.id),
-            status.label,
-            items,
-            collapsedGroups
-          )
+          makeSection(getWorkspaceStatusGroupKey(status.id), status.label, items, collapsedGroups)
         )
       }
     }
   } else if (groupMode === 'pr-status') {
     const byGroup = new Map<string, Worktree[]>()
     for (const w of canonicalGroupWorktrees) {
-      const key = getPRGroupKey(w)
+      const key = getPRGroupKeyForState(w.linkedPR?.state)
       const list = byGroup.get(key)
       if (list) {
         list.push(w)
@@ -291,7 +291,7 @@ export function buildSections(
       const items = byGroup.get(groupKey)
       if (items && items.length > 0) {
         sections.push(
-          makeSection(`pr:${groupKey}`, PR_GROUP_LABELS[groupKey], items, collapsedGroups)
+          makeSection(getPRLaneKey(groupKey), PR_GROUP_LABELS[groupKey], items, collapsedGroups)
         )
       }
     }

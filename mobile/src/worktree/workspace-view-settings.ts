@@ -5,9 +5,9 @@
 
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import {
-  coerceMobileWorkspaceStatuses,
-  DEFAULT_MOBILE_WORKSPACE_STATUSES
-} from './mobile-workspace-statuses'
+  withDefaultWorkspaceStatuses,
+  DEFAULT_WORKSPACE_STATUSES
+} from '../../../src/shared/workspace-statuses'
 import {
   NO_WORKSPACE_ROW_FILTERS,
   WORKSPACE_ROW_FILTER_KEYS,
@@ -52,7 +52,7 @@ export const INITIAL_MOBILE_VIEW: MobileViewState = {
   sortBy: 'recent',
   filters: NO_WORKSPACE_ROW_FILTERS,
   collapsedGroups: [],
-  workspaceStatuses: DEFAULT_MOBILE_WORKSPACE_STATUSES,
+  workspaceStatuses: DEFAULT_WORKSPACE_STATUSES,
   sharesOtherClientFilter: false
 }
 
@@ -125,7 +125,7 @@ export function applyDesktopViewSettings(
   // Why: a partially hydrated desktop settings payload may carry an empty
   // status catalog; mobile must keep renderable groups instead of hiding rows.
   const workspaceStatuses = settings.workspaceStatuses
-    ? coerceMobileWorkspaceStatuses(settings.workspaceStatuses)
+    ? withDefaultWorkspaceStatuses(settings.workspaceStatuses)
     : current.workspaceStatuses
   const filters: FilterState = { ...current.filters }
   for (const key of WORKSPACE_ROW_FILTER_KEYS) {

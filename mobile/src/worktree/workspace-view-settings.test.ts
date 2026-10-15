@@ -1,6 +1,6 @@
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
+import { DEFAULT_WORKSPACE_STATUSES } from '../../../src/shared/workspace-statuses'
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
@@ -55,7 +55,7 @@ describe('applyDesktopViewSettings', () => {
   it('keeps renderable workspace statuses when desktop sends an empty catalog', () => {
     const next = applyDesktopViewSettings(base, { workspaceStatuses: [] })
 
-    expect(next.workspaceStatuses).toBe(DEFAULT_MOBILE_WORKSPACE_STATUSES)
+    expect(next.workspaceStatuses).toBe(DEFAULT_WORKSPACE_STATUSES)
   })
 
   it("falls back to the desktop's legacy host scope when no host list is saved", () => {

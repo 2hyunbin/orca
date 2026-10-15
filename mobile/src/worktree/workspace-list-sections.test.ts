@@ -10,7 +10,7 @@ import {
   getWorktreeStatus,
   sortWorktrees
 } from './workspace-list-sections'
-import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
+import { DEFAULT_WORKSPACE_STATUSES } from '../../../src/shared/workspace-statuses'
 import { getMobileWorkspaceLineageGroupKey } from './mobile-workspace-lineage'
 
 function worktree(overrides: Partial<Worktree> = {}): Worktree {
@@ -295,7 +295,7 @@ describe('buildSections', () => {
       'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections[0]?.data.map((worktree) => worktree.worktreeId)).toEqual([
@@ -341,7 +341,7 @@ describe('buildSections', () => {
       'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections.flatMap((section) => section.data.map((item) => item.worktreeId))).toEqual([
@@ -527,7 +527,7 @@ describe('buildSections', () => {
       'repo',
       new Set(),
       catalogOf([['orca', 'repo-1']]),
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections[0]?.data.map((item) => item.worktreeId)).toEqual(['parent', 'child', 'active'])
@@ -645,6 +645,26 @@ describe('buildSections', () => {
     ])
   })
 
+  it("groups by PR into the desktop's lanes, order and labels", () => {
+    const sections = buildSections(
+      [
+        worktree({ worktreeId: 'none', linkedPR: null }),
+        worktree({ worktreeId: 'open', linkedPR: { number: 1, state: 'open' } }),
+        worktree({ worktreeId: 'merged', linkedPR: { number: 2, state: 'merged' } })
+      ],
+      'name',
+      { ...NO_WORKSPACE_ROW_FILTERS },
+      '',
+      'pr-status',
+      new Set()
+    )
+    expect(sections.map((section) => ({ key: section.key, title: section.title }))).toEqual([
+      { key: 'pr:done', title: 'Done' },
+      { key: 'pr:in-review', title: 'In review' },
+      { key: 'pr:in-progress', title: 'In progress' }
+    ])
+  })
+
   it('groups by desktop workspace status labels and order', () => {
     const review = worktree({
       worktreeId: 'review',
@@ -665,12 +685,13 @@ describe('buildSections', () => {
       'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections.map((section) => ({ key: section.key, title: section.title }))).toEqual([
-      { key: 'workspace-status:in-review', title: 'In review' },
-      { key: 'workspace-status:in-progress', title: 'In progress' }
+      // The desktop's default catalog order.
+      { key: 'workspace-status:in-progress', title: 'In progress' },
+      { key: 'workspace-status:in-review', title: 'In review' }
     ])
   })
 
@@ -718,7 +739,7 @@ describe('buildSections', () => {
           groupMode,
           new Set(['local-pinned']),
           NO_PROJECT_SECTION_CATALOG,
-          DEFAULT_MOBILE_WORKSPACE_STATUSES,
+          DEFAULT_WORKSPACE_STATUSES,
           new Set(),
           showPinnedInGroups
         )
@@ -784,7 +805,7 @@ describe('buildSections', () => {
       'none',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections.map((section) => section.key)).toEqual(['all'])
@@ -815,7 +836,7 @@ describe('buildSections', () => {
       'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES
+      DEFAULT_WORKSPACE_STATUSES
     )
 
     expect(sections[0]?.data.map((worktree) => worktree.worktreeId)).toEqual(['parent', 'child'])
@@ -843,7 +864,7 @@ describe('buildSections', () => {
       'workspace-status',
       new Set(),
       NO_PROJECT_SECTION_CATALOG,
-      DEFAULT_MOBILE_WORKSPACE_STATUSES,
+      DEFAULT_WORKSPACE_STATUSES,
       new Set([getMobileWorkspaceLineageGroupKey(parent)])
     )
 
