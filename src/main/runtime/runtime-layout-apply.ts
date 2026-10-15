@@ -11,7 +11,7 @@ export type WindowLayoutCommand = LayoutCommand & { tabId: string }
 
 /**
  * `layout.apply`: the window's command on the partitions holding its tab, routed partition first.
- * A pane close is the user's: main supplies what the window cannot know (the pane's incarnation).
+ * A pane close is the user's: main marks it so, and the window cannot.
  */
 export async function applyWindowLayoutCommand(
   store: RuntimeStore,
@@ -32,13 +32,9 @@ export async function applyWindowLayoutCommand(
   const { workspace, tabId, leafId } = command
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).
   markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
-  // Why read now: a restart that lands before the queued write must refuse the close.
-  const incarnationId = store.getWorkspaceSession?.(hostIds[0])?.terminalPtyIncarnationsByPaneKey?.[
-    `${tabId}:${leafId}`
-  ]
   // Why every holder: a legacy relay reattach can leave one tab in two partitions.
   return store.applyLayoutCommand(
-    { ...command, userPaneClose: incarnationId ? { incarnationId } : {} },
+    { ...command, userPaneClose: true },
     hostIds.filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
   )
 }

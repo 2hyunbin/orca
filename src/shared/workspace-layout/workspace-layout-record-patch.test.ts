@@ -71,7 +71,7 @@ function commandsFor(model: WorkspaceLayoutModel): LayoutCommand[] {
           workspace,
           tabId: tab.id,
           leafId: second,
-          userPaneClose: {}
+          userPaneClose: true
         })
         commands.push({ type: 'equalizePanes', workspace, tabId: tab.id })
       }

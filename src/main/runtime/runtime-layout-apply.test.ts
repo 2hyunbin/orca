@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { applyWindowLayoutCommand } from './runtime-layout-apply'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -10,29 +9,25 @@ vi.mock('../agent-launch/agent-launch-pane-attachment', () => ({
 
 const CLOSE = { type: 'closePane', workspace: 'wt-1', tabId: 'tab-1', leafId: 'leaf-1' } as const
 
-function storeWith(incarnations: Record<string, string> = {}) {
+function storeWith() {
   const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
-  const session: Partial<WorkspaceSessionState> = { terminalPtyIncarnationsByPaneKey: incarnations }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these two store methods.
-  const store = {
-    applyLayoutCommand,
-    getWorkspaceSession: () => session
-  } as unknown as RuntimeStore
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only applyLayoutCommand.
+  const store = { applyLayoutCommand } as unknown as RuntimeStore
   return { store, applyLayoutCommand }
 }
 
 describe('applyWindowLayoutCommand', () => {
   beforeEach(() => mocks.markAgentLaunchesClosedByUser.mockReset())
 
-  it('closes a pane as the user’s close: in every local or SSH holder, fenced on its incarnation', async () => {
-    const { store, applyLayoutCommand } = storeWith({ 'tab-1:leaf-1': 'incarnation-1' })
+  it('closes a pane as the user’s close, in every local or SSH holder', async () => {
+    const { store, applyLayoutCommand } = storeWith()
 
     await applyWindowLayoutCommand(store, () => ['local', 'runtime:env-1', 'ssh:target-1'], CLOSE)
 
-    expect(applyLayoutCommand).toHaveBeenCalledWith(
-      { ...CLOSE, userPaneClose: { incarnationId: 'incarnation-1' } },
-      ['local', 'ssh:target-1']
-    )
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...CLOSE, userPaneClose: true }, [
+      'local',
+      'ssh:target-1'
+    ])
     expect(mocks.markAgentLaunchesClosedByUser).toHaveBeenCalledWith('wt-1', {
       kind: 'pane',
       tabId: 'tab-1',
