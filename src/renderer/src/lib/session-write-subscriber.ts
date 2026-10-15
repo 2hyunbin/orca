@@ -181,6 +181,7 @@ export function createSessionWriteSubscriber({
       } else if (pendingChangedFields.size > 0) {
         armFlushTimer()
       }
+      // A failed write stays owed, so structure frames wait for the next store wake's resend.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
         reportWindowSessionWriteActivity(owesWrite())
       }

@@ -47,7 +47,7 @@ export type WorkspaceLayoutFrameSync = {
   close: () => void
 }
 
-/** Where the view read-back routes workspaces a rebuild does not show. */
+/** A bucket, not a host: the view read-back routes the workspaces a rebuild skips here. */
 const OTHER_WORKSPACES: ExecutionHostId = 'runtime:frame-sync-other-workspaces'
 
 const structureJsonByLayout = new WeakMap<PublishedWorkspaceLayout, string>()
