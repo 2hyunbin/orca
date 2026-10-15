@@ -103,10 +103,11 @@ export async function resolveNewWslProjectHost(
   if (!path || !service?.isEnabled()) {
     return null
   }
-  const existing = store.getRepos().find((repo) =>
-    targetKey !== null &&
-    getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
-    foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
+  const existing = store.getRepos().find(
+    (repo) =>
+      targetKey !== null &&
+      getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
+      foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === targetKey
   )
   // Existing Windows-owned state belongs to the lossless mover, never a second Add.
   return existing
@@ -117,14 +118,22 @@ export async function resolveNewWslProjectHost(
 /** A paired client cannot address an environment saved only on this Windows desktop. */
 export function assertWslProjectRoutingCaller(path: string, caller?: RpcCallerIdentity): void {
   if (
-    process.platform === 'win32' && parseWslUncPath(path) && wslHostsGateOpen() &&
-    getWslHostService()?.isEnabled() && caller?.kind !== 'local-cli' && caller?.kind !== 'desktop'
+    process.platform === 'win32' &&
+    parseWslUncPath(path) &&
+    wslHostsGateOpen() &&
+    getWslHostService()?.isEnabled() &&
+    caller?.kind !== 'local-cli' &&
+    caller?.kind !== 'desktop'
   ) {
     throw new Error('Add this WSL project from the Windows desktop, then open it on its WSL host.')
   }
 }
 
-export function callWslProjectHost(environmentId: string, method: string, params: unknown): Promise<unknown> {
+export function callWslProjectHost(
+  environmentId: string,
+  method: string,
+  params: unknown
+): Promise<unknown> {
   const service = getWslHostService()
   if (!service) {
     throw new Error('WSL hosts are not available on this computer.')

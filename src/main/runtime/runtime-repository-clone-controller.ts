@@ -43,17 +43,17 @@ export class RuntimeRepositoryCloneController {
     destination: string,
     executionHostId?: ExecutionHostId | null
   ): Promise<Repo> {
-    if (!this.deps.getStore()) {
+    const store = this.deps.getStore()
+    if (!store) {
       throw new Error('runtime_unavailable')
     }
-    const store = this.deps.getStore()
-    if (store) {
-      const hosted = await registerProjectOnWslHost(
-        store, { kind: 'clone', path: destination.trim(), url: url.trim() }, executionHostId
-      )
-      if (hosted) {
-        return hosted
-      }
+    const hosted = await registerProjectOnWslHost(
+      store,
+      { kind: 'clone', path: destination.trim(), url: url.trim() },
+      executionHostId
+    )
+    if (hosted) {
+      return hosted
     }
     const trimmedUrl = url.trim()
     const trimmedDestination = destination.trim()
