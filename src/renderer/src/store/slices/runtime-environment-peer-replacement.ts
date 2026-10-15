@@ -63,8 +63,8 @@ export type SameHostPairingRotation = { id: string; fromRevision: number; toRevi
 /**
  * `retired`: ids that now name a different machine, whose workspaces and tabs are retired. A managed
  * server re-pairs on every update and is the same machine while the host's key digest, which its
- * pairing handshake proves, is unchanged under the same SSH target or WSL distro registration. A registration
- * alone is no proof (a reinstall or a target that resolves elsewhere keeps it), so a re-pair whose
+ * pairing handshake proves, is unchanged under the same SSH target or WSL distro registration.
+ * A registration alone is no proof (a reinstall or a target that resolves elsewhere keeps it), so a re-pair whose
  * key is not known yet is decided later, once a catalog carries it, rather than purged on a guess.
  * `sameHost`: re-pairs proven to be the same machine, with the pairing they continue. Re-pairs in
  * neither list are still unresolved.
