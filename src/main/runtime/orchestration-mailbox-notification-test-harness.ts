@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../shared/protocol-version'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
+import type { RuntimeConstructionDependencies } from './construction/runtime-construction-dependencies'
 import type Database from '../sqlite/sync-database'
 import { OrcaRuntimeService } from './orca-runtime'
 import { OrchestrationDb } from './orchestration/db'
@@ -90,6 +91,7 @@ export function createRuntime(
     isWsl?: boolean
     getAgentStatusSnapshot?: () => AgentStatusIpcPayload[]
     checkHookAgentPresence?: (paneKey: string) => Promise<'live' | 'unverifiable' | 'exited' | null>
+    getEndedOpenAgentTurnForPane?: RuntimeConstructionDependencies['getEndedOpenAgentTurnForPane']
     /** The pane's process and the handle this launch minted for it (a restart can change both). */
     incarnationId?: string
     handle?: string
@@ -97,6 +99,7 @@ export function createRuntime(
 ): MailboxNotificationHarness {
   const runtime = new OrcaRuntimeService(null, undefined, {
     getAgentStatusSnapshot: options.getAgentStatusSnapshot,
+    getEndedOpenAgentTurnForPane: options.getEndedOpenAgentTurnForPane,
     checkHookAgentPresence: options.checkHookAgentPresence,
     attestAgentHookCompatibilityAuthority: ({ paneKey }) =>
       paneKey === PANE_KEY || paneKey.startsWith(`${SECOND_TAB_ID}:`)

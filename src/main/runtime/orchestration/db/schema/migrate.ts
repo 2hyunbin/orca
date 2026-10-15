@@ -14,11 +14,12 @@ import { migrateV40 } from './migrate-v40'
 import { DERIVED_DELIVERY_SCHEMA_SQL, migrateV41 } from './migrate-v41'
 import { migrateV42 } from './migrate-v42'
 import { migrateV43 } from './migrate-v43'
-import { migrateV44 } from './migrate-v44'
+import { migrateV44, repairV44HandOffColumns } from './migrate-v44'
 
 // Why: CREATE TABLE IF NOT EXISTS won't alter existing DBs; migrate in a txn that bumps user_version only on success (atomic all-or-nothing).
 export function migrate(this: OrchestrationDb): void {
   const storedVersion = this.db.pragma('user_version', { simple: true }) as number
+  repairV44HandOffColumns.call(this, storedVersion)
   const current = resolveOrchestrationMigrationStartVersion(this.db, storedVersion, SCHEMA_VERSION)
   if (current >= SCHEMA_VERSION) {
     return

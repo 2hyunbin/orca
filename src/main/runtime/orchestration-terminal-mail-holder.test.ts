@@ -5,6 +5,7 @@ import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
+import type { AgentEndedOpenTurn } from '../agent-hooks/server/server-ended-open-turns'
 import { OrchestrationDb } from './orchestration/db'
 import {
   checkBoundMailbox,
@@ -26,11 +27,15 @@ vi.mock('electron', () => ({
 }))
 
 /** The hook server's row for the pane: one agent conversation and the turn it is on. */
-function hookRow(conversation: string, turnStartedAt: number | undefined): AgentStatusIpcPayload {
+function hookRow(
+  conversation: string,
+  turnStartedAt: number | undefined,
+  state: 'working' | 'done' = 'done'
+): AgentStatusIpcPayload {
   return {
     paneKey: PANE_KEY,
     agentType: 'codex',
-    state: 'done',
+    state,
     prompt: '',
     connectionId: null,
     launchToken: LAUNCH_TOKEN,
@@ -38,7 +43,10 @@ function hookRow(conversation: string, turnStartedAt: number | undefined): Agent
     receivedAt: Date.now(),
     stateStartedAt: Date.now(),
     ...(turnStartedAt === undefined ? {} : { turnStartedAt }),
-    mainAgent: { state: 'done', outcome: 'success', stateStartedAt: Date.now() }
+    mainAgent:
+      state === 'done'
+        ? { state, outcome: 'success', stateStartedAt: Date.now() }
+        : { state, stateStartedAt: Date.now() }
   }
 }
 
@@ -84,6 +92,48 @@ describe('a terminal coordinator holding a fetched batch', () => {
     expect(
       await checkBoundMailbox(second.runtime, { terminal: 'term_after_restart' })
     ).toMatchObject({ deliveryId: batch.deliveryId, replayed: true })
+    db.close()
+  })
+
+  it('offers again what a turn held when its agent died mid-turn and was resumed in the shell', async () => {
+    vi.useFakeTimers()
+    const db = createDatabase('orca-terminal-mail-resume-')
+    const rows = [hookRow('conversation-1', undefined)]
+    let ended: AgentEndedOpenTurn | null = null
+    const { runtime, write } = createRuntime(db, {
+      getAgentStatusSnapshot: () => rows,
+      getEndedOpenAgentTurnForPane: () => ended
+    })
+    const run = createBoundRun(db, 'Terminal resume Run')
+    db.insertMessage({ from: 'term_worker', to: `run:${run.id}`, subject: 'Final', runId: run.id })
+    await driveToLiveIdle(runtime)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(pointerCount(write)).toBe(1)
+
+    // The notice opened a turn, and the agent process ended in it before it ran `check`; `--resume`
+    // brings the same conversation back to its prompt. The notice is typed once more.
+    const noticeTurn = Date.now()
+    ended = { conversationId: 'conversation-1', turnStartedAt: noticeTurn }
+    rows.splice(0, 1, hookRow('conversation-1', noticeTurn))
+    await driveToLiveIdle(runtime)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(pointerCount(write)).toBe(2)
+
+    // The resumed agent's next turn fetched the mail and died the same way: its batch is let go,
+    // and the mail, offered once already after a cut, waits for the next `check` to replay it.
+    const checkTurn = Date.now()
+    rows.splice(0, 1, hookRow('conversation-1', checkTurn, 'working'))
+    const batch = await checkBoundMailbox(runtime)
+    ended = { conversationId: 'conversation-1', turnStartedAt: checkTurn }
+    rows.splice(0, 1, hookRow('conversation-1', checkTurn))
+    await driveToLiveIdle(runtime)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(pointerCount(write)).toBe(2)
+    expect(db.getDeliveryRaw(batch.deliveryId ?? '')?.holder).toBeNull()
+    expect(await checkBoundMailbox(runtime)).toMatchObject({
+      deliveryId: batch.deliveryId,
+      replayed: true
+    })
     db.close()
   })
 })

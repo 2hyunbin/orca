@@ -13,6 +13,7 @@ import type {
   OrchestrationMailboxPointerState
 } from './mailbox-pointer-state'
 import type { WriteSettlement } from '../../../shared/pty-write-settlement'
+import type { HandOffRef } from './db/messages/delivery-holder-store'
 
 type PointerSubmitDependencies<TWaiter extends OrchestrationMessageWaiter> = {
   mailboxOwner: OrchestrationMailboxOwner
@@ -152,7 +153,14 @@ export function submitOrchestrationMailboxPointer<TWaiter extends OrchestrationM
           }
         } else if (submitted || releaseWithoutRedrive) {
           try {
-            deps.getDb()?.settleMailboxPointerEnter(messageIds, reservationTarget, [expectedPhase])
+            const phases = [expectedPhase]
+            const db = deps.getDb()
+            if (submitted) {
+              const notice = terminalNoticeRef(input.leaf, reservationTarget.processIncarnation)
+              db?.settleMailboxPointerEnter(messageIds, reservationTarget, phases, notice)
+            } else {
+              db?.settleMailboxPointerEnter(messageIds, reservationTarget, phases)
+            }
           } catch {
             // A surviving pending row is revalidated against live agent state after restart.
           }
@@ -172,4 +180,15 @@ export function submitOrchestrationMailboxPointer<TWaiter extends OrchestrationM
         deps.redrive(input.mailboxHandle, clearAndRedrive)
       }
     })
+}
+
+/** The turn a submitted notice reached is the agent's first from now (delivery-holder-store.ts). */
+function terminalNoticeRef(leaf: OrchestrationMailboxLeaf, processIncarnation: string): string {
+  const ref: HandOffRef = {
+    kind: 'terminal-notice',
+    paneKey: `${leaf.tabId}:${leaf.leafId}`,
+    processIncarnation,
+    typedAt: Date.now()
+  }
+  return JSON.stringify(ref)
 }

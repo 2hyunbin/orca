@@ -117,7 +117,9 @@ export function settleMailboxPointerEnter(
   this: OrchestrationDb,
   ids: string[],
   target: MailboxPointerReservationTarget,
-  expectedPhases: readonly number[]
+  expectedPhases: readonly number[],
+  /** The notice's hand-off reference (delivery-holder-store.ts), when its Enter landed. */
+  pointedBy: string | null = null
 ): void {
   if (expectedPhases.length === 0) {
     return
@@ -126,11 +128,11 @@ export function settleMailboxPointerEnter(
     sql: `UPDATE messages
           SET delivered_at = COALESCE(delivered_at, datetime('now')),
               pointer_enter_pending = 0, pointer_pty_id = NULL,
-              pointer_process_incarnation = NULL
+              pointer_process_incarnation = NULL, pointed_by = ?
           WHERE pointer_pty_id = ? AND pointer_process_incarnation = ?
             AND pointer_enter_pending IN (${expectedPhases.map(() => '?').join(',')})
             AND id IN (${placeholders})`,
-    leadingParams: [target.ptyId, target.processIncarnation, ...expectedPhases]
+    leadingParams: [pointedBy, target.ptyId, target.processIncarnation, ...expectedPhases]
   }))
 }
 

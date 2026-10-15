@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS messages (
   pointer_enter_pending INTEGER NOT NULL DEFAULT 0,
   pointer_pty_id TEXT,
   pointer_process_incarnation TEXT,
+  pointed_by    TEXT,
   reoffered_by_runtime TEXT,
   reoffered_after_cut INTEGER
 );
@@ -100,12 +101,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
     CHECK(status IN ('outstanding', 'acknowledged', 'fenced')),
   created_at            TEXT NOT NULL DEFAULT (datetime('now')),
   acknowledged_at       TEXT,
-  holder_session_id     TEXT,
-  holder_turn_item_id   TEXT,
-  holder_pane_key       TEXT,
-  holder_process_incarnation TEXT,
-  holder_agent_session_id TEXT,
-  holder_agent_turn_started_at INTEGER
+  holder        TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_deliveries_run_created

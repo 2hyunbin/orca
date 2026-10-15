@@ -1,69 +1,64 @@
+import { z } from 'zod'
 import type { DeliveryRow } from '../../types'
 import type { OrchestrationDb } from '../orchestration-db'
 
 /**
- * Who holds a batch `check` handed out: the turn that fetched it. A structured session's turn is
- * its journal turn record; a terminal agent's is its pane's PTY process and the turn its hooks
- * report. A pane, not a terminal handle: a handle is minted per Orca launch, a pane outlives it.
- * Written only when the fetching turn is known, so a holder always names a turn.
+ * The turn a hand-off reached, stored as JSON on the hand-off (`deliveries.holder` for a batch
+ * `check` fetched, `messages.pointed_by` for a notice typed into a terminal) and parsed only here.
+ * - session: a structured session's journal turn record that fetched the batch.
+ * - terminal: the pane, its PTY process and the hook-reported turn that fetched the batch. A pane,
+ *   not a terminal handle: a handle is minted per Orca launch, a pane outlives it.
+ * - terminal-notice: a notice typed into the pane at `typedAt`; the agent's first turn from then
+ *   took it.
+ * Written only when the turn is known, so a reference always names one.
  */
-export type DeliveryHolder =
-  | { kind: 'session'; sessionId: string; turnItemId: string }
-  | {
-      kind: 'terminal'
-      paneKey: string
-      processIncarnation: string
-      /** The agent conversation its hooks report; null for an agent without hooks. */
-      agentSessionId: string | null
-      agentTurnStartedAt: number | null
-    }
+const handOffRefSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('session'), sessionId: z.string(), turnItemId: z.string() }),
+  z.object({
+    kind: z.literal('terminal'),
+    paneKey: z.string(),
+    processIncarnation: z.string(),
+    /** The agent conversation its hooks report; null for an agent without hooks. */
+    agentSessionId: z.string().nullable(),
+    agentTurnStartedAt: z.number().nullable()
+  }),
+  z.object({
+    kind: z.literal('terminal-notice'),
+    paneKey: z.string(),
+    processIncarnation: z.string(),
+    typedAt: z.number()
+  })
+])
+
+export type HandOffRef = z.infer<typeof handOffRefSchema>
+/** What a batch `check` hands out records: never a typed notice. */
+export type DeliveryHolder = Exclude<HandOffRef, { kind: 'terminal-notice' }>
+export type TerminalHandOffRef = Extract<HandOffRef, { kind: 'terminal' | 'terminal-notice' }>
 
 /** How a cut holder's turn ended: Orca's restart, or anything else (provider death, eviction). */
 export type DeliveryReofferArm = 'restart' | 'cut'
-
-const HOLDER_ASSIGNMENTS = `holder_session_id = ?, holder_turn_item_id = ?,
-  holder_pane_key = ?, holder_process_incarnation = ?,
-  holder_agent_session_id = ?, holder_agent_turn_started_at = ?`
 
 /** `id` is a member of batch `?` (none for ''): the one way "in that batch" is asked. */
 export const MEMBER_OF_DELIVERY_SQL = `id IN (
   SELECT member.value FROM deliveries AS batch, json_each(batch.message_ids) AS member
   WHERE batch.id = ?)`
 
-function holderValues(holder: DeliveryHolder | null): (string | number | null)[] {
-  if (!holder) {
-    return [null, null, null, null, null, null]
+/** Null for anything unreadable: no reference, as on every row before v44. */
+export function parseHandOffRef(text: string | null | undefined): HandOffRef | null {
+  if (!text) {
+    return null
   }
-  return holder.kind === 'session'
-    ? [holder.sessionId, holder.turnItemId, null, null, null, null]
-    : [
-        null,
-        null,
-        holder.paneKey,
-        holder.processIncarnation,
-        holder.agentSessionId,
-        holder.agentTurnStartedAt
-      ]
+  try {
+    const parsed = handOffRefSchema.safeParse(JSON.parse(text))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
 }
 
 export function deliveryHolderOf(row: DeliveryRow): DeliveryHolder | null {
-  if (row.holder_session_id && row.holder_turn_item_id) {
-    return {
-      kind: 'session',
-      sessionId: row.holder_session_id,
-      turnItemId: row.holder_turn_item_id
-    }
-  }
-  if (row.holder_pane_key && row.holder_process_incarnation) {
-    return {
-      kind: 'terminal',
-      paneKey: row.holder_pane_key,
-      processIncarnation: row.holder_process_incarnation,
-      agentSessionId: row.holder_agent_session_id ?? null,
-      agentTurnStartedAt: row.holder_agent_turn_started_at ?? null
-    }
-  }
-  return null
+  const ref = parseHandOffRef(row.holder)
+  return ref && ref.kind !== 'terminal-notice' ? ref : null
 }
 
 /** Inside the caller's transaction: a replay re-stamps the turn that now holds the batch. */
@@ -73,8 +68,8 @@ export function stampDeliveryHolder(
   holder: DeliveryHolder
 ): void {
   db.db
-    .prepare(`UPDATE deliveries SET ${HOLDER_ASSIGNMENTS} WHERE id = ?`)
-    .run(...holderValues(holder), deliveryId)
+    .prepare('UPDATE deliveries SET holder = ? WHERE id = ?')
+    .run(JSON.stringify(holder), deliveryId)
 }
 
 /** The mailbox's outstanding batch, holder or not (at most one per mailbox). */
@@ -91,10 +86,7 @@ export function getOutstandingMailboxDelivery(
 /** Mailboxes whose outstanding batch records its holder ("claimed"): a launch settles them. */
 export function getClaimedDeliveryMailboxHandles(this: OrchestrationDb): string[] {
   return this.db
-    .prepare(
-      `SELECT DISTINCT mailbox_handle FROM outstanding_deliveries
-       WHERE holder_turn_item_id IS NOT NULL OR holder_process_incarnation IS NOT NULL`
-    )
+    .prepare('SELECT DISTINCT mailbox_handle FROM outstanding_deliveries WHERE holder IS NOT NULL')
     .all()
     .flatMap((row) =>
       typeof row.mailbox_handle === 'string' && row.mailbox_handle ? [row.mailbox_handle] : []
@@ -134,7 +126,7 @@ export function reofferMailboxMessages(
   return Number(
     this.db
       .prepare(
-        `UPDATE messages SET delivered_at = NULL, ${budget.spend}
+        `UPDATE messages SET delivered_at = NULL, pointed_by = NULL, ${budget.spend}
          WHERE to_handle = ? AND read = 0 AND delivered_at IS NOT NULL
            AND delivery_contract = 'current_delivery'
            AND id IN (SELECT value FROM json_each(?))
@@ -163,18 +155,10 @@ export function releaseCutDelivery(
   try {
     const released = this.db
       .prepare(
-        `UPDATE deliveries SET ${HOLDER_ASSIGNMENTS}
-         WHERE id = ? AND status = 'outstanding'
-           AND holder_turn_item_id IS ? AND holder_process_incarnation IS ?
-           AND holder_agent_turn_started_at IS ?`
+        `UPDATE deliveries SET holder = NULL
+         WHERE id = ? AND status = 'outstanding' AND holder IS ?`
       )
-      .run(
-        ...holderValues(null),
-        delivery.id,
-        delivery.holder_turn_item_id ?? null,
-        delivery.holder_process_incarnation ?? null,
-        delivery.holder_agent_turn_started_at ?? null
-      ).changes
+      .run(delivery.id, delivery.holder ?? null).changes
     if (released > 0) {
       this.reofferMailboxMessages({
         mailboxHandle: delivery.mailbox_handle ?? '',
@@ -209,6 +193,28 @@ export function hasPointedUnfetchedMail(
   )
 }
 
+/** Unread mail typed into a terminal and not fetched since, by the notice that carried it. */
+export function getPointedNoticeMessages(
+  this: OrchestrationDb,
+  mailboxHandle: string,
+  outsideDeliveryId: string | undefined
+): Map<string, string[]> {
+  const byNotice = new Map<string, string[]>()
+  const rows = this.db
+    .prepare(
+      `SELECT id, pointed_by FROM messages
+       WHERE to_handle = ? AND read = 0 AND delivered_at IS NOT NULL AND pointed_by IS NOT NULL
+         AND NOT ${MEMBER_OF_DELIVERY_SQL}`
+    )
+    .all(mailboxHandle, outsideDeliveryId ?? '')
+  for (const row of rows) {
+    if (typeof row.id === 'string' && typeof row.pointed_by === 'string') {
+      byNotice.set(row.pointed_by, [...(byNotice.get(row.pointed_by) ?? []), row.id])
+    }
+  }
+  return byNotice
+}
+
 /** Which of `messageIds` a pointer still owes: unread, and not in the batch `excludeDeliveryId`. */
 export function getPointerOwedMessageIds(
   this: OrchestrationDb,
@@ -236,6 +242,7 @@ export type DeliveryHolderStoreMethods = {
   releaseCutDelivery: typeof releaseCutDelivery
   getPointerOwedMessageIds: typeof getPointerOwedMessageIds
   hasPointedUnfetchedMail: typeof hasPointedUnfetchedMail
+  getPointedNoticeMessages: typeof getPointedNoticeMessages
 }
 
 export function attachDeliveryHolderStore(ctor: { prototype: object }): void {
@@ -245,6 +252,7 @@ export function attachDeliveryHolderStore(ctor: { prototype: object }): void {
     reofferMailboxMessages,
     releaseCutDelivery,
     getPointerOwedMessageIds,
-    hasPointedUnfetchedMail
+    hasPointedUnfetchedMail,
+    getPointedNoticeMessages
   })
 }

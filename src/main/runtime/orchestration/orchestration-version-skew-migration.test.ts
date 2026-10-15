@@ -443,6 +443,27 @@ describe('OrchestrationDb version-skew migration', () => {
     ).toContain('pointer_enter_pending')
   })
 
+  // A development build stamped 44 with earlier hand-off columns; the next open adds the current ones
+  // in place, without replaying the chain.
+  it('repairs a v44 database missing its hand-off columns', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'orca-db-version-skew-v44-'))
+    const dbPath = join(tempDir, 'orchestration.db')
+    db = new OrchestrationDb(dbPath)
+    db.close()
+    db = undefined
+
+    const raw = new Database(dbPath)
+    raw.exec(
+      'ALTER TABLE messages DROP COLUMN pointed_by; ALTER TABLE messages DROP COLUMN reoffered_after_cut;'
+    )
+    raw.close()
+
+    db = new OrchestrationDb(dbPath)
+    expect(db.hasColumn('messages', 'pointed_by')).toBe(true)
+    expect(db.hasColumn('messages', 'reoffered_after_cut')).toBe(true)
+    expect(db.db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION)
+  })
+
   it('indexes pending pointer Enters on the predicate their query uses', () => {
     db = new OrchestrationDb(':memory:')
     const index = db.db

@@ -244,6 +244,8 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
       [],
     getTerminalProcessIncarnation: (handle: string) => this.getTerminalProcessIncarnation(handle),
     getTerminalHandleForPaneKey: (paneKey: string) => this.getTerminalHandleForPaneKey(paneKey),
+    getEndedOpenAgentTurn: (paneKey: string) =>
+      this.getEndedOpenAgentTurnForPaneFn?.(paneKey) ?? null,
     getRuntimeId: () => this.runtimeId
   }
 

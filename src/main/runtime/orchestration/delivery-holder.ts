@@ -14,8 +14,10 @@ import type { OrchestrationDb } from './db'
 import type { DeliveryRow } from './types'
 import {
   deliveryHolderOf,
+  parseHandOffRef,
   type DeliveryHolder,
-  type DeliveryReofferArm
+  type DeliveryReofferArm,
+  type TerminalHandOffRef
 } from './db/messages/delivery-holder-store'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
@@ -30,7 +32,7 @@ export type DeliveryHolderReader = {
   holderOf: (caller: { sessionId: string | null; handle: string }) => DeliveryHolder | null
   /** Null when the chat cannot be read now. */
   sessionTurns: (sessionId: string) => Promise<SessionHeldTurns | null>
-  terminalTurnEnd: (holder: Extract<DeliveryHolder, { kind: 'terminal' }>) => HolderTurnEnd
+  terminalTurnEnd: (ref: TerminalHandOffRef) => HolderTurnEnd
   runtimeId: () => string
 }
 
@@ -83,12 +85,37 @@ export function settleClaimedDelivery(
   }
 }
 
+/** A notice typed into a terminal whose turn was cut before it fetched the mail: that mail is
+ *  offered once more. The terminal lane's companion to `settleClaimedDelivery`. */
+export function settleTerminalNotices(
+  db: OrchestrationDb,
+  mailboxHandle: string,
+  reader: DeliveryHolderReader
+): void {
+  const outsideDeliveryId = db.getOutstandingMailboxDelivery?.(mailboxHandle)?.id
+  for (const [pointedBy, ids] of db.getPointedNoticeMessages?.(mailboxHandle, outsideDeliveryId) ??
+    []) {
+    const ref = parseHandOffRef(pointedBy)
+    const end = ref && ref.kind !== 'session' ? reader.terminalTurnEnd(ref) : null
+    const arm = end ? reofferArm(end) : null
+    if (arm) {
+      db.reofferMailboxMessages({
+        mailboxHandle,
+        messageIdsJson: JSON.stringify(ids),
+        arm,
+        runtimeId: reader.runtimeId(),
+        outsideDeliveryId
+      })
+    }
+  }
+}
+
 /** Whether settling this mailbox reads a chat's turns: a chat holds its batch, or mail a notice
  *  pointed at is still unread outside it. Two indexed reads, so an idle chat is not opened for none. */
 export function settleReadsChatTurns(db: OrchestrationDb, mailboxHandle: string): boolean {
   const outstanding = db.getOutstandingMailboxDelivery?.(mailboxHandle)
   return (
-    Boolean(outstanding?.holder_session_id) ||
+    (outstanding ? deliveryHolderOf(outstanding)?.kind === 'session' : false) ||
     Boolean(db.hasPointedUnfetchedMail?.(mailboxHandle, outstanding?.id))
   )
 }
