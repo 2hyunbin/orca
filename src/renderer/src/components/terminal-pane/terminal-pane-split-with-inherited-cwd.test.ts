@@ -37,19 +37,15 @@ vi.mock('./terminal-pane-split-completion', () => ({
 }))
 
 function makeManager(splitPane: ReturnType<typeof vi.fn>): PaneManager {
-  const mounted = new Set<string>()
-  const manager = {
-    splitPane: (...args: [number, string, { leafId?: string }?]) => {
-      const created = splitPane(...args)
-      if (created && args[2]?.leafId) {
-        mounted.add(args[2].leafId)
-      }
-      return created
-    },
-    getNumericIdForLeaf: (leafId: string) => (mounted.has(leafId) ? 2 : null)
-  }
+  // A pane counts as mounted once a split that placed it returned a pane.
+  const getNumericIdForLeaf = (leafId: string): number | null =>
+    splitPane.mock.calls.some(
+      (call, index) => call[2]?.leafId === leafId && splitPane.mock.results[index]?.value
+    )
+      ? 2
+      : null
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the split reads only splitPane and getNumericIdForLeaf.
-  return manager as unknown as PaneManager
+  return { splitPane, getNumericIdForLeaf } as unknown as PaneManager
 }
 
 describe('splitTerminalPaneWithInheritedCwd', () => {
