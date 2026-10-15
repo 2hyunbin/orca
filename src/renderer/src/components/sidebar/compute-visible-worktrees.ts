@@ -2,15 +2,12 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import {
-  ALL_EXECUTION_HOSTS_SCOPE,
-  type ExecutionHostId,
-  type ExecutionHostScope
-} from '../../../../shared/execution-host'
+import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import { filterWorkspaceRows } from '../../../../shared/workspace-view/workspace-row-filters'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
+import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
 import {
   getCyclicProjectedWorktreeLineageIds,
@@ -56,22 +53,9 @@ export function computeVisibleWorktrees(
   // every other valid ancestor can bypass filters so children never orphan.
   const lineageAncestorById = getLineageAncestorIndex(worktreesByRepo)
 
-  const visibleHostIds =
-    opts.visibleWorkspaceHostIds ??
-    (opts.workspaceHostScope === ALL_EXECUTION_HOSTS_SCOPE ? null : [opts.workspaceHostScope])
   all = filterWorkspaceRows(
     all,
-    {
-      hideSleepingWorkspaces: !opts.showSleepingWorkspaces,
-      alwaysShowDefaultBranchWorkspace: opts.alwaysShowDefaultBranchWorkspace,
-      hideDefaultBranchWorkspace: opts.hideDefaultBranchWorkspace,
-      hideAutomationGeneratedWorkspaces: opts.hideAutomationGeneratedWorkspaces,
-      hideCliCreatedWorkspaces: opts.hideCliCreatedWorkspaces,
-      hideDetachedHeadWorkspaces: opts.hideDetachedHeadWorkspaces,
-      hideWorkspacesFromOtherDevices: opts.hideWorkspacesFromOtherDevices,
-      filterRepoIds: opts.filterRepoIds,
-      visibleHostIds
-    },
+    sidebarWorkspaceRowFilters(opts),
     buildDesktopWorkspaceRowFactReader(opts)
   )
 

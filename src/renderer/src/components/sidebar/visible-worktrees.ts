@@ -5,8 +5,7 @@ export {
   type VisibleWorktreeOptions
 } from './compute-visible-worktrees'
 import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
-export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
-export type { ClearFilterActions } from './sidebar-filter-actions'
+export { sidebarHasActiveFilters } from './sidebar-filter-actions'
 import {
   getVisibleWorkspaceHostIdSet,
   worktreeMatchesVisibleHost

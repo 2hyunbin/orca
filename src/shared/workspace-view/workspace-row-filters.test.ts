@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  activeWorkspaceRowFilterKeys,
+  countActiveWorkspaceFilters,
   filterWorkspaceRows,
+  NO_WORKSPACE_ROW_FILTERS,
   type WorkspaceRowFactReader,
   type WorkspaceRowFilters
 } from './workspace-row-filters'
@@ -77,5 +80,44 @@ describe('buildWorkspaceRowComparator', () => {
       compareSmart: () => 0
     })
     expect(['d', 'a', 'b', 'c'].sort(compare)).toEqual(['c', 'b', 'a', 'd'])
+  })
+})
+
+describe('active filters', () => {
+  it('names every filter away from its default, which is what Clear resets', () => {
+    expect(activeWorkspaceRowFilterKeys(NO_WORKSPACE_ROW_FILTERS)).toEqual([])
+    // An absent exemption means on.
+    expect(
+      activeWorkspaceRowFilterKeys({
+        ...NO_WORKSPACE_ROW_FILTERS,
+        alwaysShowDefaultBranchWorkspace: undefined
+      })
+    ).toEqual([])
+    expect(
+      activeWorkspaceRowFilterKeys({
+        ...NO_WORKSPACE_ROW_FILTERS,
+        alwaysShowDefaultBranchWorkspace: false,
+        hideWorkspacesFromOtherDevices: true,
+        visibleHostIds: ['local']
+      })
+    ).toEqual([
+      'alwaysShowDefaultBranchWorkspace',
+      'hideWorkspacesFromOtherDevices',
+      'visibleHostIds'
+    ])
+  })
+
+  it('counts the exemption only while sleeping workspaces are swept, and known projects one each', () => {
+    const exemptionOff = { ...NO_WORKSPACE_ROW_FILTERS, alwaysShowDefaultBranchWorkspace: false }
+    expect(countActiveWorkspaceFilters(exemptionOff, [])).toBe(0)
+    expect(countActiveWorkspaceFilters({ ...exemptionOff, hideSleepingWorkspaces: true }, [])).toBe(
+      2
+    )
+    expect(
+      countActiveWorkspaceFilters({ ...NO_WORKSPACE_ROW_FILTERS, filterRepoIds: ['a', 'gone'] }, [
+        'a',
+        'b'
+      ])
+    ).toBe(1)
   })
 })

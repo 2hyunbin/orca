@@ -1,5 +1,6 @@
 import { isFolderRepo } from '../repo-kind'
 import type { Repo } from '../repo-types'
+import type { RuntimeWorktreePsSummary } from '../runtime-worktree-contracts'
 import { getWorktreeGitIdentityDisplay } from './git-identity-display'
 import type { Worktree } from './types'
 
@@ -103,4 +104,20 @@ export function isHiddenByWorkspaceKindSwitch(
   switches: WorkspaceKindSwitches
 ): boolean {
   return isHiddenByKindSwitch(switches, (kind) => KIND_PREDICATES[kind](worktree, repo))
+}
+
+/** What a host stamps on each worktree.ps row, so a phone's filters match this host's sidebar. */
+export function getWorkspaceRowKindFacts(
+  worktree: WorkspaceKindFields,
+  repo: Pick<Repo, 'kind'> | undefined
+): Pick<
+  RuntimeWorktreePsSummary,
+  'defaultBranch' | 'automationCreated' | 'cliCreated' | 'detachedHead'
+> {
+  return {
+    defaultBranch: isDefaultBranchWorkspace(worktree, repo),
+    ...(isAutomationGeneratedWorkspace(worktree) ? { automationCreated: true } : {}),
+    ...(isCliCreatedWorkspace(worktree) ? { cliCreated: true } : {}),
+    ...(isDetachedHeadWorkspace(worktree) ? { detachedHead: true } : {})
+  }
 }

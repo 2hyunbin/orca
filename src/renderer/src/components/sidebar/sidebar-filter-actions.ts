@@ -1,9 +1,11 @@
 import {
-  ALL_EXECUTION_HOSTS_SCOPE,
-  type ExecutionHostId,
-  type ExecutionHostScope
-} from '../../../../shared/execution-host'
-import { DEFAULT_SHOW_SLEEPING_WORKSPACES } from '../../../../shared/constants'
+  activeWorkspaceRowFilterKeys,
+  NO_WORKSPACE_ROW_FILTERS,
+  type WorkspaceRowFilters
+} from '../../../../shared/workspace-view/workspace-row-filters'
+import { resolveVisibleWorkspaceHostIds } from '../../../../shared/workspace-view/workspace-host-visibility'
+import type { AppState } from '../../store/types'
+import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 
 /**
  * Whether the sidebar is currently filtered, and what "clear filters" should undo.
@@ -27,68 +29,95 @@ export type SidebarFilterState = {
   workspaceHostScope?: ExecutionHostScope
 }
 
-/**
- * Whether at least one sidebar filter is active — drives the "Clear Filters"
- * escape hatch in the empty-state message.
- *
- * Why include hideDefaultBranchWorkspace here: without it, a user whose only
- * worktree is the default-branch row and who toggles hide-on would see the
- * "No workspaces found" message with no in-sidebar recovery path.
- */
-export function sidebarHasActiveFilters(state: SidebarFilterState): boolean {
-  return (
-    state.showSleepingWorkspaces !== DEFAULT_SHOW_SLEEPING_WORKSPACES ||
-    state.filterRepoIds.length > 0 ||
-    state.hideDefaultBranchWorkspace ||
-    state.hideAutomationGeneratedWorkspaces ||
-    state.hideCliCreatedWorkspaces ||
-    state.hideDetachedHeadWorkspaces ||
-    state.hideWorkspacesFromOtherDevices ||
-    // Why: turning this off is the only way to narrow the list below the
-    // default, so Clear Filters must be able to undo it like any other filter.
-    state.alwaysShowDefaultBranchWorkspace === false ||
-    state.visibleWorkspaceHostIds != null ||
-    (state.workspaceHostScope != null && state.workspaceHostScope !== ALL_EXECUTION_HOSTS_SCOPE)
-  )
-}
-
-/** Describes which mutators the Clear Filters button must invoke, separated
- *  from the mutators themselves so the decision logic is testable. */
-export type ClearFilterActions = {
-  resetShowSleepingWorkspaces: boolean
-  resetFilterRepoIds: boolean
-  resetHideDefaultBranchWorkspace: boolean
-  resetHideAutomationGeneratedWorkspaces: boolean
-  resetHideCliCreatedWorkspaces: boolean
-  resetHideDetachedHeadWorkspaces: boolean
-  resetHideWorkspacesFromOtherDevices: boolean
-  resetAlwaysShowDefaultBranchWorkspace: boolean
-  resetVisibleWorkspaceHostIds: boolean
-}
-
-/**
- * Determines which sidebar filters the Clear Filters button needs to reset.
- * Returning an explicit action plan (rather than just calling the setters)
- * keeps the pure decision separate from the impure mutations, so tests can
- * verify the logic without mounting the component.
- *
- * Why reset only the ones that are set: keeps Clear Filters from churning
- * UI state (and the debounced ui.set write-back) on every click when the
- * flag was already off.
- */
-export function computeClearFilterActions(state: SidebarFilterState): ClearFilterActions {
+/** The sidebar's store fields as the shared Workspace options filters. */
+export function sidebarWorkspaceRowFilters(state: SidebarFilterState): WorkspaceRowFilters {
   return {
-    resetShowSleepingWorkspaces: state.showSleepingWorkspaces !== DEFAULT_SHOW_SLEEPING_WORKSPACES,
-    resetFilterRepoIds: state.filterRepoIds.length > 0,
-    resetHideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
-    resetHideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,
-    resetHideCliCreatedWorkspaces: state.hideCliCreatedWorkspaces,
-    resetHideDetachedHeadWorkspaces: state.hideDetachedHeadWorkspaces,
-    resetHideWorkspacesFromOtherDevices: state.hideWorkspacesFromOtherDevices,
-    resetAlwaysShowDefaultBranchWorkspace: state.alwaysShowDefaultBranchWorkspace === false,
-    resetVisibleWorkspaceHostIds:
-      state.visibleWorkspaceHostIds != null ||
-      (state.workspaceHostScope != null && state.workspaceHostScope !== ALL_EXECUTION_HOSTS_SCOPE)
+    hideSleepingWorkspaces: !state.showSleepingWorkspaces,
+    alwaysShowDefaultBranchWorkspace: state.alwaysShowDefaultBranchWorkspace,
+    hideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
+    hideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,
+    hideCliCreatedWorkspaces: state.hideCliCreatedWorkspaces,
+    hideDetachedHeadWorkspaces: state.hideDetachedHeadWorkspaces,
+    hideWorkspacesFromOtherDevices: state.hideWorkspacesFromOtherDevices,
+    filterRepoIds: state.filterRepoIds,
+    visibleHostIds: resolveVisibleWorkspaceHostIds(
+      state.visibleWorkspaceHostIds,
+      state.workspaceHostScope
+    )
+  }
+}
+
+/** The store fields behind the sidebar filters, for a shallow-compared subscription. */
+export function selectSidebarFilterState(
+  state: AppState
+): Pick<AppState, keyof SidebarFilterState> {
+  return {
+    showSleepingWorkspaces: state.showSleepingWorkspaces,
+    filterRepoIds: state.filterRepoIds,
+    hideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
+    hideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,
+    hideCliCreatedWorkspaces: state.hideCliCreatedWorkspaces,
+    hideDetachedHeadWorkspaces: state.hideDetachedHeadWorkspaces,
+    hideWorkspacesFromOtherDevices: state.hideWorkspacesFromOtherDevices,
+    alwaysShowDefaultBranchWorkspace: state.alwaysShowDefaultBranchWorkspace,
+    visibleWorkspaceHostIds: state.visibleWorkspaceHostIds,
+    workspaceHostScope: state.workspaceHostScope
+  }
+}
+
+export function sidebarHasActiveFilters(state: SidebarFilterState): boolean {
+  return activeWorkspaceRowFilterKeys(sidebarWorkspaceRowFilters(state)).length > 0
+}
+
+export type SidebarFilterSetters = Pick<
+  AppState,
+  | 'setShowSleepingWorkspaces'
+  | 'setAlwaysShowDefaultBranchWorkspace'
+  | 'setHideDefaultBranchWorkspace'
+  | 'setHideAutomationGeneratedWorkspaces'
+  | 'setHideCliCreatedWorkspaces'
+  | 'setHideDetachedHeadWorkspaces'
+  | 'setHideWorkspacesFromOtherDevices'
+  | 'setFilterRepoIds'
+  | 'setVisibleWorkspaceHostIds'
+>
+
+/** How each shared filter returns to its default; a new filter fails to compile until listed. */
+const RESET_SIDEBAR_FILTER: Record<
+  keyof WorkspaceRowFilters,
+  (store: SidebarFilterSetters) => void
+> = {
+  hideSleepingWorkspaces: (store) =>
+    store.setShowSleepingWorkspaces(!NO_WORKSPACE_ROW_FILTERS.hideSleepingWorkspaces),
+  alwaysShowDefaultBranchWorkspace: (store) =>
+    store.setAlwaysShowDefaultBranchWorkspace(
+      NO_WORKSPACE_ROW_FILTERS.alwaysShowDefaultBranchWorkspace !== false
+    ),
+  hideDefaultBranchWorkspace: (store) =>
+    store.setHideDefaultBranchWorkspace(NO_WORKSPACE_ROW_FILTERS.hideDefaultBranchWorkspace),
+  hideAutomationGeneratedWorkspaces: (store) =>
+    store.setHideAutomationGeneratedWorkspaces(
+      NO_WORKSPACE_ROW_FILTERS.hideAutomationGeneratedWorkspaces
+    ),
+  hideCliCreatedWorkspaces: (store) =>
+    store.setHideCliCreatedWorkspaces(NO_WORKSPACE_ROW_FILTERS.hideCliCreatedWorkspaces),
+  hideDetachedHeadWorkspaces: (store) =>
+    store.setHideDetachedHeadWorkspaces(NO_WORKSPACE_ROW_FILTERS.hideDetachedHeadWorkspaces),
+  hideWorkspacesFromOtherDevices: (store) =>
+    store.setHideWorkspacesFromOtherDevices(
+      NO_WORKSPACE_ROW_FILTERS.hideWorkspacesFromOtherDevices
+    ),
+  filterRepoIds: (store) => store.setFilterRepoIds([...NO_WORKSPACE_ROW_FILTERS.filterRepoIds]),
+  visibleHostIds: (store) => store.setVisibleWorkspaceHostIds(null)
+}
+
+/**
+ * Clear filters: resets every active filter to its default, and only those, so a click with
+ * nothing set issues no write.
+ */
+export function clearSidebarFilters(state: SidebarFilterState, store: SidebarFilterSetters): void {
+  for (const key of activeWorkspaceRowFilterKeys(sidebarWorkspaceRowFilters(state))) {
+    RESET_SIDEBAR_FILTER[key](store)
   }
 }
 
