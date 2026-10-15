@@ -3,15 +3,14 @@ import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-o
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 import { readWorkspaceOriginDetails, type WorkspaceOriginDetails } from './workspace-details-model'
 
-// The long-press details' read of who made the workspace. A skip when refused: a host that will
-// not answer leaves the section at what the row's flags already say.
+// A skip when refused: a host that will not answer leaves the heading at what the row's flags say.
 
 const originSchema: z.ZodType<WorkspaceOriginDetails | null, unknown> = z
   .object({ worktree: z.unknown() })
   .transform((value) => readWorkspaceOriginDetails(value.worktree))
   .catch(null)
 
-/** Who made the workspace: the automation and run, or whether an agent ran `orca worktree create`. */
+/** The name of the automation that created the workspace. */
 export const workspaceOriginRead = bindDeferredRpcOperation(
   defineRpcOperation({
     name: 'worktree.origin-or-skip',

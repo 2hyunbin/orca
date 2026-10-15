@@ -15,15 +15,10 @@ export type WorkspaceDetailExtras = {
   origin?: WorkspaceOriginDetails | null
 }
 
-async function readReview(
-  client: RpcOperationSender,
-  worktreeId: string,
-  branch: string,
-  linkedGitHubPR: number | null
-) {
+async function readReview(client: RpcOperationSender, worktreeId: string, branch: string) {
   const outcome = await fetchHostedReviewForBranch(client, worktreeId, {
     branch,
-    linkedGitHubPR,
+    // As the PR sidebar asks: by branch, so a stale cached number cannot pin an old PR.
     active: false
   })
   return outcome.ok ? outcome.result : null
@@ -38,9 +33,9 @@ async function readOrigin(client: RpcOperationSender, selector: string) {
 
 /**
  * One workspace's details the row does not carry, read once when its long-press sheet opens and
- * only for sections the row says exist: the branch review's title and checks, and the automation that created it.
- * Each read is independent, so a slow or refused one leaves only its own section
- * at what the row says. `client` is the workspace's own host (the server for a server's row).
+ * only for what the row says exists: the branch review's title and checks, and the name of the
+ * automation that created it. Each read is independent, so a slow or refused one leaves only its
+ * own part at what the row says. `client` is the workspace's own host (a server's, for its rows).
  */
 export function useWorkspaceDetailExtras(
   row: Worktree | null,
@@ -50,7 +45,6 @@ export function useWorkspaceDetailExtras(
   // Primitives, so a list refresh that replaces the row object does not read again.
   const worktreeId = row?.worktreeId ?? null
   const branch = row?.branch.replace(/^refs\/heads\//, '') ?? ''
-  const linkedGitHubPR = row?.linkedPR?.number ?? null
   const readsReview =
     row !== null &&
     row.workspaceKind !== 'folder-workspace' &&
@@ -87,11 +81,9 @@ export function useWorkspaceDetailExtras(
     () =>
       read(
         'review',
-        client && readsReview && worktreeId
-          ? () => readReview(client, worktreeId, branch, linkedGitHubPR)
-          : null
+        client && readsReview && worktreeId ? () => readReview(client, worktreeId, branch) : null
       ),
-    [worktreeId, client, branch, linkedGitHubPR, readsReview]
+    [worktreeId, client, branch, readsReview]
   )
   useEffect(
     () => read('origin', client && readsOrigin ? () => readOrigin(client, selector) : null),
@@ -102,5 +94,7 @@ export function useWorkspaceDetailExtras(
     setExtras(null)
   }
 
-  return extras && extras.key === worktreeId ? extras.value : {}
+  const value = extras && extras.key === worktreeId ? extras.value : {}
+  // A refresh that drops the row's review drops the answer read for it too.
+  return readsReview ? value : { ...value, review: undefined }
 }

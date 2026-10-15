@@ -108,7 +108,7 @@ describe('the long-press details reads', () => {
     // A one-off read must not take the host's active-branch slot from the open session.
     expect(params('hostedReview.forBranch')).toMatchObject({
       branch: 'feat/x',
-      linkedGitHubPR: 12,
+      linkedGitHubPR: null,
       active: false
     })
     expect(params('worktree.show')).toEqual({ worktree: 'id:repo::/src/app' })

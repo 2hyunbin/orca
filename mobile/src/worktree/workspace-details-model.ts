@@ -74,9 +74,9 @@ function isReviewOf(link: WorkspaceDetailLink, review: HostedReviewInfo): boolea
   return (
     link.type !== 'issue' &&
     link.provider === review.provider &&
+    // The branch lookup is already scoped to the row's repo, so provider and number suffice.
     link.label ===
-      referenceLabel({ provider: link.provider, type: link.type, number: review.number }) &&
-    (!link.url || !review.url || link.url === review.url)
+      referenceLabel({ provider: link.provider, type: link.type, number: review.number })
   )
 }
 
@@ -138,7 +138,7 @@ export function buildWorkspaceOrigin(
   row: Worktree,
   details?: WorkspaceOriginDetails | null
 ): WorkspaceOrigin | null {
-  if (row.automationCreated || details?.automationName) {
+  if (row.automationCreated) {
     return details?.automationName
       ? { kind: 'automation', name: details.automationName }
       : { kind: 'automation' }
