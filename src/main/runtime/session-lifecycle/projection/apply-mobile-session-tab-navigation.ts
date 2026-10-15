@@ -168,7 +168,11 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
         other.agent === record.agent &&
         other.providerSession?.id === record.providerSession.id
     )
-    if (sharedWithAnotherPane || this.isProviderSessionLiveInAnotherPane(record)) {
+    if (
+      sharedWithAnotherPane ||
+      this.isProviderSessionLiveInAnotherPane(record) ||
+      this.hookStoreNamesAnotherSessionForPane(record)
+    ) {
       return {}
     }
     try {
@@ -199,6 +203,15 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
       }
     }
     return false
+  }
+
+  /** The pane moved on to another conversation after the record was saved; the hook store is authoritative. */
+  private hookStoreNamesAnotherSessionForPane(record: SleepingAgentSessionRecord): boolean {
+    return (this.getAgentProviderSessionRowsForPaneFn?.(record.paneKey) ?? []).some(
+      (row) =>
+        row.providerSession?.id !== undefined &&
+        row.providerSession.id !== record.providerSession.id
+    )
   }
 
   private getPaneSleepingAgentRecord(

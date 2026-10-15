@@ -348,6 +348,26 @@ describe('OrcaRuntimeService', () => {
       expect(firstSpawnArgs(spawn).command).toContain('provider-session-1')
     })
 
+    it('does not resume a record older than the pane conversation the hook store names', async () => {
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
+        deps: {
+          getAgentProviderSessionRowsForPane: (paneKey) =>
+            paneKey === `host-tab:${HEADLESS_LEAF_ID}`
+              ? [
+                  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only providerSession.
+                  { paneKey, providerSession: { key: 'session_id', id: 'newer-session' } } as never
+                ]
+              : []
+        }
+      })
+
+      await userActivate(runtime)
+
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
+    })
+
     // Why: a session id names a transcript on the machine that captured it.
     it('does not resume a record captured on another execution host', async () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {
