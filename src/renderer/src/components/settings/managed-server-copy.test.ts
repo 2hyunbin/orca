@@ -29,6 +29,20 @@ describe('managed server blocker copy', () => {
 })
 
 describe('managed server action refusals', () => {
+  it.each([
+    ['orcad_update_chat_work_running', 'then choose Update or reconnect to retry'],
+    ['orcad_update_chat_work_unverifiable', 'confirm whether chats'],
+    ['orcad_update_restart_not_reserved', 'prepare a safe restart'],
+    [
+      'orcad_update_legacy_host',
+      'Force update will stop any running chat; continue it after the update'
+    ]
+  ])('explains the chat update refusal %s before generic verdict copy', (code, instruction) => {
+    expect(
+      managedServerOutcomeLabel({ outcome: 'deferred', code, verdict: 'unverifiable' })
+    ).toContain(instruction)
+  })
+
   it('explains the active-server guard before interpreting its live verdict as terminals', () => {
     expect(
       managedServerOutcomeLabel({

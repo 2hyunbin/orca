@@ -28,7 +28,10 @@ it('serializes new work against restart reservation and commits only the current
   const interrupted = await restart.reserve(0)
   expect(interrupted.status).toBe('reserved')
   await work.admit(async () => {})
-  expect(restart.commit(interrupted.token ?? '').status).toBe('defer')
+  expect(restart.commit(interrupted.token ?? '')).toMatchObject({
+    status: 'defer',
+    reason: 'New work superseded the restart reservation. Retry the update when chats finish.'
+  })
   const reservation = await restart.reserve(0)
   expect(restart.commit('stale').status).toBe('defer')
   expect(shutdown).not.toHaveBeenCalled()
@@ -56,7 +59,10 @@ it('defers owed work even when forced and bounds idle provider drain and reserva
   pending.resolve()
   const reservation = await restart.reserve(0)
   await vi.advanceTimersByTimeAsync(30_000)
-  expect(restart.commit(reservation.token ?? '').status).toBe('defer')
+  expect(restart.commit(reservation.token ?? '')).toMatchObject({
+    status: 'defer',
+    reason: 'The restart reservation is no longer valid. Retry the update.'
+  })
   expect(shutdown).not.toHaveBeenCalled()
   await work.admit(async () => {})
 })

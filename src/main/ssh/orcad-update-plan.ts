@@ -94,7 +94,7 @@ export function planOrcadUpdate(input: OrcadUpdatePlanInput): OrcadUpdateDecisio
       code: 'orcad_update_chat_work_running',
       reason:
         `${chatWork} chat${chatWork === 1 ? ' has' : 's have'} work still owed on this host. ` +
-        'The server keeps serving and updates once that work settles.'
+        'The server keeps serving. Once the chats finish, choose Update or reconnect to retry.'
     }
   }
   return terminals

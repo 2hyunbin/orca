@@ -154,7 +154,12 @@ export function WslHostsSection({
                         disabled={connectingId !== null}
                         onClick={() => void connect(environment.id, true)}
                       >
-                        {translate('auto.components.settings.wslHosts.forceUpdate', 'Force update')}
+                        {deferred.code === 'orcad_update_legacy_host'
+                          ? translate(
+                              'auto.components.settings.wslHosts.forceUpdateStopChats',
+                              'Force update and stop chats'
+                            )
+                          : translate('auto.components.settings.wslHosts.forceUpdate', 'Force update')}
                       </Button>
                     ) : null}
                   </>

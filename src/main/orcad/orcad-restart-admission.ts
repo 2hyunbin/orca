@@ -74,7 +74,11 @@ export class OrcadRestartAdmission {
       return { status: 'committed' }
     }
     if (!this.owns(token)) {
-      return defer('The restart reservation expired. Retry the update.')
+      return defer(
+        this.held?.token === token
+          ? 'New work superseded the restart reservation. Retry the update when chats finish.'
+          : 'The restart reservation is no longer valid. Retry the update.'
+      )
     }
     const shutdown = this.ports.shutdown()
     if (!shutdown || this.admission.pending > 0 || this.ports.hasProviders() || this.ports.chatWork() > 0 || !this.held || !this.admission.closeForShutdown(this.held.owner)) {
