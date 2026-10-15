@@ -7,6 +7,8 @@ import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/typ
 import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import type { FilterState } from './workspace-list-types'
+import type { AgentActivityDisplayMode, ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
+import { DEFAULT_WORKTREE_CARD_PROPERTIES } from '../../../src/shared/worktree/card-properties'
 
 export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
 // Desktop sort adds 'manual'; mobile orders it by the desktop's drag ranks.
@@ -17,9 +19,13 @@ export type WorkspaceViewSettings = Partial<Omit<FilterState, 'filterRepoIds'>> 
   filterRepoIds?: string[]
   groupBy?: 'none' | 'workspace-status' | 'repo' | 'pr-status'
   sortBy?: 'name' | 'smart' | 'recent' | 'repo' | 'manual'
+  projectOrderBy?: ProjectOrderBy
+  worktreeCardProperties?: string[]
+  _worktreeCardModeDefaulted?: boolean
+  agentActivityDisplayMode?: AgentActivityDisplayMode
   collapsedGroups?: string[]
   workspaceStatuses?: WorkspaceStatusDefinition[]
-  /** Read-only here: the desktop's shown hosts. */
+  /** The desktop's shown hosts; null shows every host. */
   visibleWorkspaceHostIds?: string[] | null
 }
 
@@ -102,6 +108,15 @@ export function buildWorkspaceViewSettingsUpdate(
       }
     }
   }
+  if ('projectOrderBy' in patch) {
+    update.projectOrderBy = next.projectOrderBy
+  }
+  if ('worktreeCardProperties' in patch) {
+    update.worktreeCardProperties = [...next.worktreeCardProperties]
+  }
+  if ('agentActivityDisplayMode' in patch) {
+    update.agentActivityDisplayMode = next.agentActivityDisplayMode
+  }
   if ('collapsedGroups' in patch) {
     update.collapsedGroups = next.collapsedGroups
   }
@@ -115,8 +130,22 @@ export type MobileViewState = {
   groupMode: MobileGroupMode
   sortMode: MobileSortMode
   filters: FilterState
+  projectOrderBy: ProjectOrderBy
+  /** Strings: a property a newer desktop adds is carried back unchanged. */
+  worktreeCardProperties: readonly string[]
+  agentActivityDisplayMode: AgentActivityDisplayMode
   collapsedGroups: string[]
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
+}
+
+/** The desktop's defaults, until its own values arrive. */
+export const DEFAULT_CARD_VIEW: Pick<
+  MobileViewState,
+  'projectOrderBy' | 'worktreeCardProperties' | 'agentActivityDisplayMode'
+> = {
+  projectOrderBy: 'manual',
+  worktreeCardProperties: DEFAULT_WORKTREE_CARD_PROPERTIES,
+  agentActivityDisplayMode: 'compact'
 }
 
 export const NO_FILTERS: FilterState = {
@@ -153,6 +182,9 @@ export function applyDesktopViewSettings(
     groupMode: groupMode ?? current.groupMode,
     sortMode: sortMode ?? current.sortMode,
     filters,
+    projectOrderBy: settings.projectOrderBy ?? current.projectOrderBy,
+    worktreeCardProperties: settings.worktreeCardProperties ?? current.worktreeCardProperties,
+    agentActivityDisplayMode: settings.agentActivityDisplayMode ?? current.agentActivityDisplayMode,
     collapsedGroups: settings.collapsedGroups ?? current.collapsedGroups,
     workspaceStatuses
   }
