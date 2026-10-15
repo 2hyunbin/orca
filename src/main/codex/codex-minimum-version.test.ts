@@ -91,6 +91,7 @@ describe('Codex structured launch version admission', () => {
     const opening = openCodexAppServerConnection(
       { command: 'codex.exe', args: ['app-server'] },
       {},
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the connection only uses the fake's pid, pipes, kill and events.
       (() => child) as unknown as typeof spawnProcess
     ).catch((error: unknown) => error)
     child.emit(
