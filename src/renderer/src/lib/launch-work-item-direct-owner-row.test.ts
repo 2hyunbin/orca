@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => {
     checkRuntimeHooks: vi.fn(),
     callRuntimeRpc: vi.fn(),
     ensureHooksConfirmed: vi.fn(),
+    activateAndRevealWorktree: vi.fn(),
     store
   }
 })
@@ -21,6 +22,13 @@ vi.mock('@/lib/connection-context', () => ({ getConnectionId: () => null }))
 vi.mock('@/runtime/runtime-hooks-client', () => ({ checkRuntimeHooks: mocks.checkRuntimeHooks }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/lib/telemetry', () => ({ track: vi.fn(), tuiAgentToAgentKind: (a: string) => a }))
+vi.mock('@/lib/worktree-activation', () => ({
+  activateAndRevealWorktree: mocks.activateAndRevealWorktree
+}))
+vi.mock('@/lib/new-workspace', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  CLIENT_PLATFORM: 'win32'
+}))
 
 import { launchWorkItemDirect } from './launch-work-item-direct'
 
@@ -87,6 +95,34 @@ describe('launchWorkItemDirect owner row', () => {
     )
     expect(mocks.resolvePrBase).not.toHaveBeenCalled()
     expect(mocks.createWorktree.mock.calls[0]?.at(-1)).toEqual({ executionHostId: 'runtime:env-b' })
+  })
+
+  it('quotes the agent for this computer cmd.exe only when the owner row runs locally', async () => {
+    mocks.store.settings = { terminalWindowsShell: 'cmd.exe' }
+    mocks.createWorktree.mockResolvedValue({ worktree: { id: 'wt', path: 'C:\\r-wt' } })
+    mocks.activateAndRevealWorktree.mockReturnValue({ primaryTabId: null })
+    Object.assign(mocks.store, {
+      ensureDetectedAgents: vi.fn().mockResolvedValue(['claude']),
+      updateWorktreeMeta: vi.fn().mockResolvedValue(undefined),
+      setSidebarOpen: vi.fn(),
+      runtimeStatusByEnvironmentId: new Map([['win', { status: { hostPlatform: 'win32' } }]])
+    })
+    const launchCommand = async (executionHostId: string) => {
+      mocks.store.repos = [{ id: 'repo-1', path: 'C:\\r', addedAt: 1, executionHostId }]
+      await launchWorkItemDirect({
+        repoId: 'repo-1',
+        launchSource: 'task_page',
+        openModalFallback: vi.fn(),
+        agentOverride: 'claude',
+        item: { type: 'issue', number: 1, title: 'Fix', url: 'u', pasteContent: 'Fix A & B' }
+      })
+      return mocks.activateAndRevealWorktree.mock.calls.at(-1)?.[1]?.startup?.command
+    }
+
+    // cmd.exe has no single quotes: PowerShell's 'Fix A & B' would run `B'` as a second command.
+    expect(await launchCommand('local')).toContain('--prefill "Fix A ^& B"')
+    // This client's shell setting doesn't describe a paired server's shell, so it keeps today's quoting.
+    expect(await launchCommand('runtime:win')).toContain("--prefill 'Fix A & B'")
   })
 
   it('asks the user instead of tie-breaking by focus when two hosts share the repo id', async () => {
