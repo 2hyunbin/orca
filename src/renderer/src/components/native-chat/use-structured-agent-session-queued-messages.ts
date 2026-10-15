@@ -35,7 +35,8 @@ export type StructuredAgentSessionQueuedMessagesController = {
   /** The host queues sends. Without it a card can still show — a message the host kept unsent —
    *  but queueing settings and the steer chord would do nothing. */
   queueCapable: boolean
-  /** No card is still sending or has its own action in flight, so Clear all would take every one. */
+  /** No card is still sending or has its own action in flight: Clear all waits those out
+   *  rather than clear fewer cards than it shows. */
   clearCapable: boolean
   /** Why the queue holds cards Resume would send: the header row above them. A string reason: a
    *  newer host may name one this build does not know. */
@@ -201,7 +202,6 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   )
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
-  // Clear all waits out a card's own action rather than skip the card, so it never clears less.
   const clearCapable = !cards.some(
     (card) => card.hold === 'sending' || inFlight.has(card.messageId)
   )
