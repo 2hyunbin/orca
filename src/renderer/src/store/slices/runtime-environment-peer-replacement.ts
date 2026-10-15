@@ -33,7 +33,17 @@ function sameRegistration(
   before: CatalogEnvironment | undefined,
   after: CatalogEnvironment | undefined
 ): boolean {
-  // Why SSH only: a WSL deployment takes the stricter re-pair path until its host identity lands.
+  const leftDeployment = before?.orcadDeployment
+  const rightDeployment = after?.orcadDeployment
+  if (leftDeployment?.kind === 'wsl' || rightDeployment?.kind === 'wsl') {
+    // A distro name can be reused after import; only its registration identifies the install.
+    return Boolean(
+      leftDeployment?.kind === 'wsl' &&
+      rightDeployment?.kind === 'wsl' &&
+      leftDeployment.distroId &&
+      leftDeployment.distroId === rightDeployment.distroId
+    )
+  }
   const left = before && getOrcadSshDeployment(before)
   const right = after && getOrcadSshDeployment(after)
   return Boolean(
@@ -53,7 +63,7 @@ export type SameHostPairingRotation = { id: string; fromRevision: number; toRevi
 /**
  * `retired`: ids that now name a different machine, whose workspaces and tabs are retired. A managed
  * server re-pairs on every update and is the same machine while the host's key digest, which its
- * pairing handshake proves, is unchanged under the same SSH target registration. A registration
+ * pairing handshake proves, is unchanged under the same SSH target or WSL distro registration. A registration
  * alone is no proof (a reinstall or a target that resolves elsewhere keeps it), so a re-pair whose
  * key is not known yet is decided later, once a catalog carries it, rather than purged on a guess.
  * `sameHost`: re-pairs proven to be the same machine, with the pairing they continue. Re-pairs in
