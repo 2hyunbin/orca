@@ -180,6 +180,39 @@ describe('MobileNativeChatComposer', () => {
     expect(labelled('Stopping…')[0]!.props.disabled).toBe(true)
   })
 
+  // Touch has no click count: a quick second tap of Send must not land on the Stop it became.
+  it('ignores a Stop tap that arrives right after Send turned into Stop', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const onStop = vi.fn()
+    const composer = (value: string) =>
+      createElement(MobileNativeChatComposer, {
+        value,
+        onChangeText: vi.fn(),
+        onSend: vi.fn().mockResolvedValue(true),
+        sendSurfaceId: 'tab-a',
+        getSendCompletionGeneration: getCurrentSendCompletionGeneration,
+        stop: { onStop, stopping: false }
+      })
+    await act(async () => {
+      renderer = create(composer('steer this'))
+    })
+    await act(async () => sendButton().props.onPress())
+    await act(async () => renderer!.update(composer('')))
+    const stopButton = () =>
+      renderer!.root.find(
+        (node) => node.type === 'Pressable' && node.props.accessibilityLabel === 'Stop the agent'
+      )
+
+    now.mockReturnValue(1_200)
+    act(() => stopButton().props.onPress())
+    expect(onStop).not.toHaveBeenCalled()
+
+    now.mockReturnValue(1_500)
+    act(() => stopButton().props.onPress())
+    expect(onStop).toHaveBeenCalledTimes(1)
+    now.mockRestore()
+  })
+
   it('locks the option pickers while a composer send is in flight', async () => {
     // The reverse of the test below. The host spaces a send's body and its Enter
     // ~500ms apart, so an apply tapped inside that window would be submitted as
