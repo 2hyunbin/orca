@@ -45,7 +45,7 @@ describe('NotificationsPane hidden workspaces row', () => {
     expect(view.getByText(LABEL)).toBeTruthy()
     expect(
       view.getByText(
-        "When off, workspaces hidden by a Hide switch in the sidebar's Filters menu show no unread dot and send no notifications to this computer or your phone."
+        "When off, workspaces hidden by a Hide switch in the sidebar's Filters menu, other than Hide sleeping, show no unread dot and send no notifications to this computer or your phone."
       )
     ).toBeTruthy()
     expect(toggle.getAttribute('aria-checked')).toBe('false')

@@ -151,11 +151,13 @@ function setNotifyHiddenWorkspaces(notifyHiddenWorkspaces: boolean): void {
   })
 }
 
+/** The old predicate minus Hide sleeping and its terminals-reconnected gate (decision C). */
 function expectSetMatchesLegacy(): void {
   const state = store.getState()
   const hidden = getNotificationHiddenWorkspaceIds(state)
+  const sleepFree = { ...state, showSleepingWorkspaces: true, workspaceSessionReady: true }
   for (const id of queries) {
-    expect({ id, muted: hidden.has(id) }).toEqual({ id, muted: legacyMuted(state, id) })
+    expect({ id, muted: hidden.has(id) }).toEqual({ id, muted: legacyMuted(sleepFree, id) })
   }
   // A second read is the memoized answer and must not differ.
   expect(getNotificationHiddenWorkspaceIds(store.getState())).toEqual(hidden)
@@ -206,9 +208,10 @@ describe('getNotificationHiddenWorkspaceIds matches the per-workspace predicate 
     }
   })
 
-  it('with Hide sleeping, with and without a live terminal', () => {
+  it('ignores Hide sleeping, with and without a live terminal', () => {
     store.setState({ showSleepingWorkspaces: false })
     expectSetMatchesLegacy()
+    expect(getNotificationHiddenWorkspaceIds(store.getState()).size).toBe(0)
     store.setState({
       tabsByWorktree: {
         'repo1::/plain': [

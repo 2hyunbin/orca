@@ -191,7 +191,7 @@ export function NotificationsPane({
         )}
         description={translate(
           'auto.components.settings.NotificationsPane.e4b5e909ff',
-          "When off, workspaces hidden by a Hide switch in the sidebar's Filters menu show no unread dot and send no notifications to this computer or your phone."
+          "When off, workspaces hidden by a Hide switch in the sidebar's Filters menu, other than Hide sleeping, show no unread dot and send no notifications to this computer or your phone."
         )}
         checked={notificationSettings.notifyHiddenWorkspaces}
         onToggle={() =>

@@ -70,12 +70,23 @@ describe('isWorkspaceNotificationMutedBySidebarFilters', () => {
     expect(muted(CLI_ID)).toBe(false)
   })
 
-  it('fails open until terminals reconnect, when Hide sleeping would read restored work as asleep', () => {
+  it('never mutes for Hide sleeping, even before terminals reconnect; other switches still mute', () => {
     store.setState({ hideCliCreatedWorkspaces: false, showSleepingWorkspaces: false })
-    store.setState({ workspaceSessionReady: false })
     expect(muted(PLAIN_ID)).toBe(false)
-    store.setState({ workspaceSessionReady: true })
-    expect(muted(PLAIN_ID)).toBe(true)
+    expect(
+      resolveAgentAttention(
+        {
+          subject: { workspaceId: PLAIN_ID },
+          reason: 'agent-completion',
+          settlesTurn: true,
+          hasFreshActivityEvidence: true
+        },
+        createTerminalAttentionSurface(store.getState())
+      ).admitted
+    ).toBe(true)
+    store.setState({ workspaceSessionReady: false, hideCliCreatedWorkspaces: true })
+    expect(muted(PLAIN_ID)).toBe(false)
+    expect(muted(CLI_ID)).toBe(true)
   })
 
   it('keeps notifying for a hidden parent the sidebar shows above a visible child', () => {

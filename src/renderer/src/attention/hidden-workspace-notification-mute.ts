@@ -9,12 +9,11 @@ import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-crea
 
 const NO_HIDDEN_WORKSPACES: ReadonlySet<string> = new Set()
 
-/** Every state field the hidden set reads while sleeping workspaces are shown. */
+/** Every state field the hidden set reads; none is time-dependent, so the memo is exact. */
 function hiddenSetInputs(state: AppState): readonly unknown[] {
   return [
     state.settings,
     state.persistedUIReady,
-    state.workspaceSessionReady,
     state.worktreesByRepo,
     state.repos,
     state.folderWorkspaces,
@@ -44,14 +43,11 @@ let cached: { inputs: readonly unknown[]; ids: ReadonlySet<string> } | null = nu
  *
  * Asks the sidebar pipeline itself with the project and host filters lifted, so lineage parents
  * and same-id rows on other hosts notify exactly when the sidebar would show them.
- * Fails open: unhydrated settings or UI state, terminals not yet reconnected (every restored
- * workspace would read as sleeping), or a workspace this store has no record of, notify.
+ * Hide sleeping is lifted too: an alerting workspace is awake, so it could only silence alerts
+ * whose activity this renderer cannot see (a chat with no tab, a just-exited agent).
+ * Fails open: unhydrated settings or UI state, or a workspace this store has no record of, notify.
  */
 export function getNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<string> {
-  // Why: Hide sleeping reads agent freshness against the clock, so only its absence is memoizable.
-  if (!state.showSleepingWorkspaces) {
-    return computeNotificationHiddenWorkspaceIds(state)
-  }
   const inputs = hiddenSetInputs(state)
   const previous = cached
   if (previous && inputs.every((input, index) => input === previous.inputs[index])) {
@@ -66,7 +62,6 @@ function computeNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<str
   if (
     state.settings?.notifications?.notifyHiddenWorkspaces !== false ||
     !state.persistedUIReady ||
-    !state.workspaceSessionReady ||
     !sidebarHasActiveFilters(state)
   ) {
     return NO_HIDDEN_WORKSPACES
@@ -86,6 +81,7 @@ function computeNotificationHiddenWorkspaceIds(state: AppState): ReadonlySet<str
   const visibleIds = new Set(
     computeVisibleWorktreeIds(state.worktreesByRepo, [], {
       ...inputs,
+      showSleepingWorkspaces: true,
       filterRepoIds: [],
       workspaceHostScope: ALL_EXECUTION_HOSTS_SCOPE,
       visibleWorkspaceHostIds: null
