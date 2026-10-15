@@ -1,9 +1,9 @@
 import { getWindowParkVisible, subscribeWindowParkVisibility } from '@/lib/window-park-visibility'
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import type { WindowVisibilitySubscriptionParking } from '../window-visibility-subscription-parking'
-import {
-  installActiveSessionTabsSubscription,
-  type ActiveSubscriptionArgs
+import type {
+  ActiveSubscriptionArgs,
+  installActiveSessionTabsSubscription
 } from './active-session-subscription'
 
 // Why 3: the selected worktree plus the two it is most often toggled with stay warm.
@@ -28,7 +28,9 @@ export type WarmWorktreeSessionSubscriptions = {
  * Per-worktree `session.tabs.subscribe` streams, kept warm across worktree switches. Reinstalling
  * on every switch cost a subscribe round trip and a snapshot re-apply per switch on SSH hosts.
  */
-export function createWarmWorktreeSessionSubscriptions(): WarmWorktreeSessionSubscriptions {
+export function createWarmWorktreeSessionSubscriptions(
+  install: typeof installActiveSessionTabsSubscription
+): WarmWorktreeSessionSubscriptions {
   // Map order is recency: the last entry is the selected worktree's stream.
   const entries = new Map<string, WarmEntry>()
   let selectedKey: string | null = null
@@ -84,7 +86,7 @@ export function createWarmWorktreeSessionSubscriptions(): WarmWorktreeSessionSub
         entries.delete(key)
         entries.set(key, warm)
       } else {
-        const subscription = installActiveSessionTabsSubscription(args)
+        const subscription = install(args)
         if (!subscription) {
           return
         }

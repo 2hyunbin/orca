@@ -9,6 +9,7 @@ import {
   installGlobalSessionTabsSubscriptions,
   type GlobalSubscriptionRefs
 } from './global-session-subscription'
+import { installActiveSessionTabsSubscription } from './active-session-subscription'
 import {
   createWarmWorktreeSessionSubscriptions,
   type WarmWorktreeSessionSubscriptions
@@ -125,7 +126,9 @@ export function useWebSessionTabsSync(): void {
   }, [resubscribeSignal])
 
   useEffect(() => {
-    const subscriptions = createWarmWorktreeSessionSubscriptions()
+    const subscriptions = createWarmWorktreeSessionSubscriptions(
+      installActiveSessionTabsSubscription
+    )
     worktreeSubscriptionsRef.current = subscriptions
     return () => {
       worktreeSubscriptionsRef.current = null
