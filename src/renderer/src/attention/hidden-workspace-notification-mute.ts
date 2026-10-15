@@ -4,6 +4,7 @@ import { ALL_EXECUTION_HOSTS_SCOPE } from '../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { sidebarHasActiveFilters } from '@/components/sidebar/sidebar-filter-actions'
 import { computeVisibleWorktreeIds } from '@/components/sidebar/compute-visible-worktrees'
+import { isHiddenBySidebarSwitch } from '@/components/sidebar/sidebar-switch-hidden-workspace'
 import { buildVisibleWorktreeOptionsFromState } from '@/components/sidebar/visible-worktree-options-from-state'
 import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-creator-visibility'
 
@@ -39,11 +40,25 @@ export function isWorkspaceNotificationMutedBySidebarFilters(
       isFolderWorkspaceFromOtherDevice(folder, inputs.pairedDeviceIdsByEnvironment)
     )
   }
-  const known = getIndexedAllWorktrees(state.worktreesByRepo).some(
+  const matches = getIndexedAllWorktrees(state.worktreesByRepo).filter(
     (worktree) => worktree.id === workspaceId && !worktree.isArchived
   )
-  if (!known) {
+  // Why these shortcuts: the full pass below only adds lineage parents, so a row the switches show
+  // is visible, and a hidden row no lineage record names as a parent cannot be shown above a child.
+  if (
+    matches.length === 0 ||
+    matches.some(
+      (worktree) => !isHiddenBySidebarSwitch(worktree, repoMap.get(worktree.repoId), inputs)
+    )
+  ) {
     return false
+  }
+  if (
+    !Object.values(state.worktreeLineageById).some(
+      (lineage) => lineage.parentWorktreeId === workspaceId
+    )
+  ) {
+    return true
   }
   const visibleIds = computeVisibleWorktreeIds(state.worktreesByRepo, [], {
     ...inputs,
