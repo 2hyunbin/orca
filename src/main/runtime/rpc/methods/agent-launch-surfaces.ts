@@ -13,6 +13,11 @@
  * decision, carried in as `startupPrompt` or asked for through `deliverTerminalPrompt`.
  */
 
+import {
+  AgentSessionPreSpawnError,
+  AgentSessionAcquisitionRootExitObservedError,
+  AgentSessionAcquisitionExitProvenError
+} from '../../../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { randomUUID } from 'node:crypto'
 import { narrowStructuredLaunchSeedOptions } from '../../../../shared/native-chat-session-option-defaults'
 import { createStructuredAgentSessionOperationId } from '../../../../shared/structured-agent-session-mutation'
@@ -55,9 +60,18 @@ export function agentLaunchSurfaceFactory(
   // close can both land after admission.
   view: AgentLaunchView = { early: null, presentation: undefined }
 ): AgentLaunchSurfaceFactory {
+  let structuredAbsence: unknown
+  const provesStructuredAbsence = (error: unknown): boolean =>
+    error instanceof AgentSessionPreSpawnError ||
+    error instanceof AgentSessionAcquisitionRootExitObservedError ||
+    error instanceof AgentSessionAcquisitionExitProvenError
   const movesHostWindow = agentLaunchMovesHostWindow(context)
   const { early: earlyTab, presentation } = view
   return {
+    failureProvesSurfaceAbsent: (error, kind) =>
+      kind === 'terminal'
+        ? terminalSpawn.failedBeforeDispatch(error)
+        : structuredAbsence !== undefined && error === structuredAbsence,
     createStructuredSession: async ({
       worktreeId,
       agent,
@@ -65,10 +79,15 @@ export function agentLaunchSurfaceFactory(
       sessionId: requested,
       tabId
     }) => {
+      structuredAbsence = undefined
+      let acquisitionFailure: unknown
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
       const seeded = narrowStructuredLaunchSeedOptions(options)
       const created = await createStructuredAgentSessionForWorktree({
         runtime: context.runtime,
+        onAcquisitionFailed: (error) => {
+          acquisitionFailure = error
+        },
         ensureHost: async () => {
           await context.runtime.ensureStructuredAgentSessionHost()
           return requireInstalledHost()
@@ -93,6 +112,11 @@ export function agentLaunchSurfaceFactory(
         activate:
           !callerPresentsSurface &&
           (presentation === undefined || (presentation === 'focused' && movesHostWindow))
+      }).catch((error: unknown) => {
+        if (error === acquisitionFailure && provesStructuredAbsence(error)) {
+          structuredAbsence = error
+        }
+        throw error
       })
       if (!created.ok) {
         // The caller named this session, so a taken id is its answer, not an opaque refusal; and not
@@ -100,10 +124,14 @@ export function agentLaunchSurfaceFactory(
         if (requested && created.refusal.code === 'agent_session_conflict') {
           throw new AgentLaunchSessionAlreadyExistsError()
         }
-        throw new AgentLaunchStructuredSessionRefusedError(
+        const error = new AgentLaunchStructuredSessionRefusedError(
           created.refusal.code,
           created.refusal.message
         )
+        if (provesStructuredAbsence(acquisitionFailure)) {
+          structuredAbsence = error
+        }
+        throw error
       }
       return {
         sessionId: created.value.sessionId,
@@ -137,6 +165,9 @@ export function agentLaunchSurfaceFactory(
       const launchPreferences = toAgentLaunchPreferences(options)
       let promptRodeLaunchCommand = false
       const hasEarlyTab = earlyTab !== null
+      if (paneKey) {
+        terminalSpawn.onPaneAcquisition('unverifiable')
+      }
       if (earlyTab?.closedByUser()) {
         // The user closed its tab while it waited: nothing is spawned, and that is the answer.
         terminalSpawn.rethrow(new AgentLaunchTabClosedError())
@@ -176,6 +207,7 @@ export function agentLaunchSurfaceFactory(
                   : agentLaunchTabViewerRule(context, presentation)
             }
           : {}),
+        onPaneAcquisition: terminalSpawn.onPaneAcquisition,
         onPtySpawnDispatched: terminalSpawn.onPtySpawnDispatched
       })
       const terminal = await created.catch(terminalSpawn.rethrow)
