@@ -192,6 +192,7 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/structured-agent-session-held-signal.test.ts',
   'src/main/runtime/structured-agent-session-host-refusal.test.ts',
   'src/main/runtime/structured-agent-session-install-failure.test.ts',
+  'src/main/runtime/structured-agent-session-install-reservation.test.ts',
   'src/main/runtime/structured-agent-session-legacy-send-behind-command.test.ts',
   'src/main/runtime/structured-agent-session-mobile-restore.test.ts',
   'src/main/runtime/structured-agent-session-runtime-exit.test.ts',
