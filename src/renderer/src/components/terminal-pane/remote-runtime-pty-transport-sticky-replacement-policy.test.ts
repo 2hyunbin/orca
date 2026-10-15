@@ -9,6 +9,7 @@ import {
   readyHostSessionInventoryResponse,
   type MultiplexSubscriptionCallbacks
 } from './remote-runtime-pty-transport-test-harness'
+import { REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS } from './remote-runtime-pty-recovery-state'
 
 // These transport fixtures never read abandoned-launch ownership from the app store.
 const appStore = vi.hoisted(() => ({
@@ -119,7 +120,7 @@ describe('createRemoteRuntimePtyTransport', () => {
     }
   })
 
-  it('never parks a still-ready handle after repeated same-handle stream-end flaps', async () => {
+  it('paces same-handle stream-end flaps, then latches Reconnect once the ladder is spent', async () => {
     vi.useFakeTimers()
     try {
       resolvedPaneHandle = 'terminal-flapping'
@@ -157,6 +158,14 @@ describe('createRemoteRuntimePtyTransport', () => {
         emitSnapshot(latestSubscribePayload().streamId, `same handle ${cycle + 1}`)
         expect(transport.isConnected()).toBe(true)
       }
+      // Why: an endless flap resets the deadline on every reattach, so it must stop pacing and fence the handle.
+      subscriptionCallbacks?.onResponse({
+        ok: true,
+        result: { type: 'end', streamId: latestSubscribePayload().streamId, code: 0 }
+      })
+      await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 16_000)
+      expect(subscribedTerminalHandles()).toHaveLength(9)
+      expect(transport.getRecoveryState?.().phase).toBe('disconnected')
       expect(transport.getPtyId()).toBe('remote:env-1@@terminal-flapping')
       expect(onPtyExit).not.toHaveBeenCalled()
       transport.destroy?.()

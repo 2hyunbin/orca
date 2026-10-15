@@ -121,7 +121,7 @@ const HOST_SESSION_SAME_HANDLE_END_REUSE_LIMIT = 2
 // a flap, which is unrelated to how long auto-recovery keeps retrying. Only an end soon after the
 // reattach is a flap; a pane revealed again later must not pay the flap backoff (#27178).
 const HOST_SESSION_SAME_HANDLE_END_REUSE_WINDOW_MS = 10_000
-// Why: a flapping handle the host still reports ready is reattached ever more slowly, never parked.
+// Why: a flapping handle the host still reports ready is reattached ever more slowly before it is fenced.
 const HOST_SESSION_SAME_HANDLE_FLAP_DELAYS_MS = [
   1_000, 2_000, 4_000, 8_000, 15_000, 30_000
 ] as const
@@ -410,7 +410,9 @@ export function createRemoteRuntimePtyTransport(
     sameHandleEndReuseAttachedAt = Date.now()
   }
   // Why: an end proves only attachment loss, so a flap is paced, not parked — parking waited out the whole deadline (#27178).
-  const sameHandleEndFlapDelayMs = (targetHandle: string): number => {
+  // null once the ladder is spent: each reattach resets the recovery deadline, so an endless flap must fall back to the
+  // replacement wait, whose deadline latches Reconnect.
+  const sameHandleEndFlapDelayMs = (targetHandle: string): number | null => {
     if (
       sameHandleEndReuseHandle !== targetHandle ||
       sameHandleEndReuseAttachedAt === null ||
@@ -420,11 +422,7 @@ export function createRemoteRuntimePtyTransport(
       return 0
     }
     const flaps = sameHandleEndReuseCount - HOST_SESSION_SAME_HANDLE_END_REUSE_LIMIT
-    return flaps < 0
-      ? 0
-      : HOST_SESSION_SAME_HANDLE_FLAP_DELAYS_MS[
-          Math.min(flaps, HOST_SESSION_SAME_HANDLE_FLAP_DELAYS_MS.length - 1)
-        ]
+    return flaps < 0 ? 0 : (HOST_SESSION_SAME_HANDLE_FLAP_DELAYS_MS[flaps] ?? null)
   }
   // Why: an unanswered send can still come back terminal_handle_stale, so its handle is not yet safe to reuse.
   const terminalSendsInFlight = new Map<string, number>()
@@ -2429,7 +2427,9 @@ export function createRemoteRuntimePtyTransport(
             clearPendingViewportClaim()
             // Why: a legacy bare end or waiter failure proves only attachment loss; reuse the same handle, pacing flaps.
             const flapDelayMs = sameHandleEndFlapDelayMs(subscribedHandle)
-            if (flapDelayMs > 0) {
+            if (flapDelayMs === null) {
+              scheduleResubscribeAfterTransportClose('require-replacement')
+            } else if (flapDelayMs > 0) {
               scheduleResubscribeAfterBackoff('prefer-replacement', flapDelayMs)
             } else {
               scheduleResubscribeAfterTransportClose('prefer-replacement')
