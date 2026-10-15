@@ -180,7 +180,6 @@ describe('MobileNativeChatComposer', () => {
     expect(labelled('Stopping…')[0]!.props.disabled).toBe(true)
   })
 
-  // Touch has no click count: a quick second tap of Send must not land on the Stop it became.
   it('ignores a Stop tap that arrives right after Send turned into Stop', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const onStop = vi.fn()
@@ -198,17 +197,13 @@ describe('MobileNativeChatComposer', () => {
     })
     await act(async () => sendButton().props.onPress())
     await act(async () => renderer!.update(composer('')))
-    const stopButton = () =>
-      renderer!.root.find(
-        (node) => node.type === 'Pressable' && node.props.accessibilityLabel === 'Stop the agent'
-      )
-
-    now.mockReturnValue(1_200)
-    act(() => stopButton().props.onPress())
+    const pressStop = (at: number) => {
+      now.mockReturnValue(at)
+      act(() => renderer!.root.findByProps({ accessibilityLabel: 'Stop the agent' }).props.onPress())
+    }
+    pressStop(1_200)
     expect(onStop).not.toHaveBeenCalled()
-
-    now.mockReturnValue(1_500)
-    act(() => stopButton().props.onPress())
+    pressStop(1_500)
     expect(onStop).toHaveBeenCalledTimes(1)
     now.mockRestore()
   })
