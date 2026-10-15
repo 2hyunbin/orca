@@ -10,8 +10,12 @@ const B = 'repo-1::/repos/b'
 const C = 'repo-1::/repos/c'
 const D = 'repo-1::/repos/d'
 
-/** Per worktree: each terminal pane in order as `tab terminal title`, and the selected tab. */
-export type PhoneLayoutView = Record<string, { panes: string[]; active: string | null }>
+/** Per worktree: each terminal pane in order as `tab terminal title`, the selected tab, and each
+ * tab group's tabs and selected tab. */
+export type PhoneLayoutView = Record<
+  string,
+  { panes: string[]; active: string | null; groups: { tabs: string[]; active: string | null }[] }
+>
 
 export type HeadlessPhoneLayoutCase = {
   name: string
@@ -128,24 +132,42 @@ function sshRelayDuplicateSession(): WorkspaceSessionState {
   return JSON.parse(JSON.stringify(session).replaceAll('"pty-a"', '"ssh:target-1@@pty-1"'))
 }
 
+const oneGroup = (tabs: string[], active: string) => [{ tabs, active }]
 const duplicate = {
   main: {
     panes: ['tab-a pty-a Terminal 1', 'tab-b pty-b Terminal 2', 'tab-legacy pty-a Terminal 3'],
-    active: 'tab-a'
+    active: 'tab-a',
+    groups: oneGroup(['tab-a', 'tab-b', 'tab-legacy'], 'tab-a')
   },
-  desktop: { panes: ['tab-a pty-a Terminal 1', 'tab-b pty-b Terminal 2'], active: 'tab-a' }
+  desktop: {
+    panes: ['tab-a pty-a Terminal 1', 'tab-b pty-b Terminal 2'],
+    active: 'tab-a',
+    groups: oneGroup(['tab-a', 'tab-b'], 'tab-a')
+  }
 }
-const tabBarPair = (first: string, second: string) => ({
-  panes: [`${first} Terminal 1`, `${second} Terminal 2`],
-  active: first.split(' ')[0]!
-})
-const single = (pane: string) => ({ panes: [`${pane} Terminal 1`], active: pane.split(' ')[0]! })
+const tabBarPair = (first: string, second: string) => {
+  const [firstTab, secondTab] = [first.split(' ')[0]!, second.split(' ')[0]!]
+  return {
+    panes: [`${first} Terminal 1`, `${second} Terminal 2`],
+    active: firstTab,
+    groups: oneGroup([firstTab, secondTab], firstTab)
+  }
+}
+const single = (pane: string) => {
+  const tab = pane.split(' ')[0]!
+  return { panes: [`${pane} Terminal 1`], active: tab, groups: oneGroup([tab], tab) }
+}
 const vimTab = single('tab-e pty-e')
 const layoutless = {
   main: single('tab-old pty-old'),
   // The window binds a layoutless row's terminal when its pane mounts, not at startup.
-  desktop: { panes: ['tab-old (no layout yet) Terminal 1'], active: null }
+  desktop: {
+    panes: ['tab-old (no layout yet) Terminal 1'],
+    active: null,
+    groups: oneGroup(['tab-old'], 'tab-old')
+  }
 }
+const splitRowGroups = oneGroup(['tab-a', 'tab-b', 'tab-legacy'], 'tab-a')
 
 export const HEADLESS_PHONE_LAYOUT_CASES: readonly HeadlessPhoneLayoutCase[] = [
   {
@@ -158,7 +180,13 @@ export const HEADLESS_PHONE_LAYOUT_CASES: readonly HeadlessPhoneLayoutCase[] = [
   {
     name: 'legacy row repeating a tab-bar tab’s terminal, selected',
     build: () => legacyFixture('legacy row repeating a tab-bar tab’s terminal, selected'),
-    main: { [GIT_KEY]: { ...duplicate.main, active: 'tab-legacy' } },
+    main: {
+      [GIT_KEY]: {
+        ...duplicate.main,
+        active: 'tab-legacy',
+        groups: oneGroup(['tab-a', 'tab-b', 'tab-legacy'], 'tab-legacy')
+      }
+    },
     desktop: { [GIT_KEY]: duplicate.desktop },
     phoneFollowsDesktop: [GIT_KEY]
   },
@@ -167,14 +195,14 @@ export const HEADLESS_PHONE_LAYOUT_CASES: readonly HeadlessPhoneLayoutCase[] = [
     build: sshRelayDuplicateSession,
     main: {
       [GIT_KEY]: {
-        panes: duplicate.main.panes.map((pane) => pane.replace('pty-a', 'ssh:target-1@@pty-1')),
-        active: 'tab-a'
+        ...duplicate.main,
+        panes: duplicate.main.panes.map((pane) => pane.replace('pty-a', 'ssh:target-1@@pty-1'))
       }
     },
     desktop: {
       [GIT_KEY]: {
-        panes: duplicate.desktop.panes.map((pane) => pane.replace('pty-a', 'ssh:target-1@@pty-1')),
-        active: 'tab-a'
+        ...duplicate.desktop,
+        panes: duplicate.desktop.panes.map((pane) => pane.replace('pty-a', 'ssh:target-1@@pty-1'))
       }
     },
     phoneFollowsDesktop: [GIT_KEY]
@@ -191,7 +219,8 @@ export const HEADLESS_PHONE_LAYOUT_CASES: readonly HeadlessPhoneLayoutCase[] = [
           'tab-legacy pty-a Terminal 3',
           'tab-legacy pty-c Terminal 3'
         ],
-        active: 'tab-a'
+        active: 'tab-a',
+        groups: splitRowGroups
       }
     },
     desktop: {
@@ -202,7 +231,8 @@ export const HEADLESS_PHONE_LAYOUT_CASES: readonly HeadlessPhoneLayoutCase[] = [
           'tab-legacy - Terminal 3',
           'tab-legacy pty-c Terminal 3'
         ],
-        active: 'tab-a'
+        active: 'tab-a',
+        groups: splitRowGroups
       }
     },
     phoneFollowsDesktop: []

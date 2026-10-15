@@ -50,7 +50,11 @@ function phoneView(session: WorkspaceSessionState): PhoneLayoutView {
       panes: snapshot.tabs.flatMap((tab) =>
         tab.type === 'terminal' ? [`${tab.parentTabId} ${tab.ptyId ?? '-'} ${tab.title}`] : []
       ),
-      active: snapshot.activeTabId?.split('::')[0] ?? null
+      active: snapshot.activeTabId?.split('::')[0] ?? null,
+      groups: (snapshot.tabGroups ?? []).map((group) => ({
+        tabs: group.tabOrder,
+        active: group.activeTabId
+      }))
     }
   }
   return view

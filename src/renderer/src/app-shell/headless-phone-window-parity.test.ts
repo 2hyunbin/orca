@@ -55,7 +55,16 @@ function windowView(view: Record<string, unknown>, worktreeIds: string[]): Phone
         : terminals.map((ptyId) => `${tabId} ${ptyId ?? '-'} ${title}`)
     })
     const active = view[`${worktreeId} active terminal`]
-    result[worktreeId] = { panes, active: typeof active === 'string' ? active : null }
+    const groups = Object.keys(view)
+      .filter((key) => key.startsWith(`${worktreeId} group `) && key.endsWith(' tabs'))
+      .map((key) => {
+        const groupActive = view[key.replace(/ tabs$/, ' active tab')]
+        return {
+          tabs: Array.isArray(view[key]) ? view[key].map(String) : [],
+          active: typeof groupActive === 'string' ? groupActive : null
+        }
+      })
+    result[worktreeId] = { panes, active: typeof active === 'string' ? active : null, groups }
   }
   return result
 }
