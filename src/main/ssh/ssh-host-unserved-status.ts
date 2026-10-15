@@ -13,7 +13,8 @@ export function unservedServerStatus(
     reason: decision.reason,
     ...(decision.detail ? { detail: decision.detail } : {}),
     ...(decision.terminals !== undefined ? { terminals: decision.terminals } : {}),
-    ...(decision.terminalsElsewhere ? { terminalsElsewhere: true } : {})
+    ...(decision.terminalsElsewhere ? { terminalsElsewhere: true } : {}),
+    ...(decision.canLeaveBehind ? { canLeaveBehind: true } : {})
   }
 }
 

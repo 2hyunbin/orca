@@ -12673,6 +12673,13 @@
           "cancel": "Annuler",
           "confirm": "Conserver la version du serveur"
         },
+        "moveAnyway": {
+          "action": "Déplacer quand même…",
+          "title": "Déplacer cet hôte quand même",
+          "description": "Orca déplace cet hôte vers son serveur géré sans les éléments enregistrés ci-dessous. Ils restent dans les réglages enregistrés de cet ordinateur et ne sont pas supprimés : une version antérieure d’Orca les conserve. Ils n’apparaîtront pas sur le serveur géré.",
+          "cancel": "Annuler",
+          "confirm": "Déplacer quand même"
+        },
         "ZcodeCliSetupSection": {
           "title": "Utiliser GLM avec ZCode",
           "description": "Connectez-vous pour utiliser GLM comme agent de codage. La clé API de quota ci-dessus ne fait que surveiller l'utilisation ; ZCode gère sa propre connexion et le choix du modèle.",

@@ -43,6 +43,15 @@ export type OrcadMigrationSourceDormantInspection = {
   blockedCounts: Record<TransferredDormantKind, number>
   /** What blocks the saved tabs and panes, each with the way to clear it. */
   blockedSessionItems: string[]
+  /** What a confirmed "Move anyway" leaves in this desktop's retained profile. */
+  leftBehindItems: string[]
+}
+
+/** The user confirmed "Move anyway" for this host: what can't move stays on this desktop. */
+export function orcadMigrationLeavesBehind(state: PersistedState, targetId: string): boolean {
+  return state.sshTargets.some(
+    (target) => target.id === targetId && target.managedServerLeaveBehind !== undefined
+  )
 }
 
 export function collectOrcadMigrationSourceDormantState(
@@ -156,11 +165,13 @@ export function collectOrcadMigrationSourceDormantState(
         : []
     })
     .sort((left, right) => compareKeys(left.repoId, right.repoId))
+  const leaveBehind = orcadMigrationLeavesBehind(state, scope.targetId)
   const workspaceSession = collectOrcadMigrationSourceWorkspaceSession(
     state,
     source,
     catalog,
-    storage
+    storage,
+    leaveBehind
   )
   const blockedSessionItems = [...workspaceSession.blockedItems]
   const automationState = collectOrcadMigrationSourceAutomationState(state, source, catalog)
@@ -178,6 +189,21 @@ export function collectOrcadMigrationSourceDormantState(
     ...Array.from({ length: clientState.blockedCount }, () => 'a browser page close saved twice')
   )
   blockedCounts['workspace-session'] = blockedSessionItems.length
+  const leftBehindItems = [...workspaceSession.leftBehindItems]
+  if (leaveBehind) {
+    // Every row a count names is already out of the payload; left behind, it no longer blocks.
+    // Saved port forwards never block a move, and duplicate ports stay a refusal the server makes.
+    for (const kind of ORCAD_MIGRATION_TRANSFERRED_DORMANT_KINDS.filter(
+      (entry) => entry !== 'saved-port-forward'
+    )) {
+      if (blockedCounts[kind] > 0 && kind !== 'workspace-session') {
+        leftBehindItems.push(`${blockedCounts[kind]} saved ${kind} record(s)`)
+      }
+      blockedCounts[kind] = 0
+    }
+    leftBehindItems.push(...blockedSessionItems)
+    blockedSessionItems.length = 0
+  }
   return {
     payload: {
       version: 1,
@@ -206,7 +232,8 @@ export function collectOrcadMigrationSourceDormantState(
       ...(clientState.payload ? { clientState: clientState.payload } : {})
     },
     blockedCounts,
-    blockedSessionItems
+    blockedSessionItems,
+    leftBehindItems
   }
 }
 

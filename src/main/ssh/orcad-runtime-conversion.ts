@@ -33,6 +33,7 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { CensusHostRelayTerminals } from './orcad-migration-terminal-gate'
 import { createManagedOrcadEnvironment } from './orcad-runtime-deployment'
 import { createSshRelayMigrationSource } from './orcad-migration-ssh-relay-source'
+import { onlyLeavableOrcadMigrationBlockers } from './ssh-target-orcad-preflight'
 import { retainOrcadMigrationSource } from './orcad-migration-source-retention'
 import {
   linkedOrcadMigrationCutoverPort,
@@ -207,7 +208,12 @@ async function fenceOrResume(
       )
     )
   }
-  return refuse(result.verdict, result.code, result.reason)
+  return {
+    ...refuse(result.verdict, result.code, result.reason),
+    ...(result.blockers && onlyLeavableOrcadMigrationBlockers(result.blockers)
+      ? { canLeaveBehind: true }
+      : {})
+  }
 }
 
 function requireJournaledCutover(

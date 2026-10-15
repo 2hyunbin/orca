@@ -12804,6 +12804,13 @@
           "cancel": "Cancel",
           "confirm": "Keep the server’s version"
         },
+        "moveAnyway": {
+          "action": "Move anyway…",
+          "title": "Move this host anyway",
+          "description": "Orca moves this host to its managed server without the saved items below. They stay in this computer’s saved settings and are not deleted, so an older version of Orca still has them. They won’t appear on the managed server.",
+          "cancel": "Cancel",
+          "confirm": "Move anyway"
+        },
         "NotificationHostToggles": {
           "offCount": "{{count}} off",
           "machines": "Machines",

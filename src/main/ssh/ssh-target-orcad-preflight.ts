@@ -72,6 +72,17 @@ export function preflightOrcadMigrationExport(
   }
 }
 
+/** Only saved state blocks: a confirmed "Move anyway" may leave it on this desktop. */
+export function onlyLeavableOrcadMigrationBlockers(
+  blockers: readonly OrcadMigrationBlocker[]
+): boolean {
+  const blocking = blockers.filter(isBlockingOrcadMigrationBlocker)
+  return (
+    blocking.length > 0 &&
+    blocking.every((blocker) => blocker.code === 'orcad_migration_dependent_state')
+  )
+}
+
 // Exported catalog rows and saved port forwards (which stay with the source) do not block.
 export function isBlockingOrcadMigrationBlocker(blocker: OrcadMigrationBlocker): boolean {
   return (

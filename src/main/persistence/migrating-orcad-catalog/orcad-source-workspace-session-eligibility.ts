@@ -135,7 +135,10 @@ export function projectDormantSessionFocus(
 }
 
 /** Older builds stamped 'local' on tabs created in an SSH worktree; its owner key proves the host. */
-function isOrcadSourceTabHost(executionHostId: string, scope: OrcadMigrationSourceScope): boolean {
+export function isOrcadSourceTabHost(
+  executionHostId: string,
+  scope: OrcadMigrationSourceScope
+): boolean {
   return executionHostId === scope.hostId || executionHostId === LOCAL_EXECUTION_HOST_ID
 }
 

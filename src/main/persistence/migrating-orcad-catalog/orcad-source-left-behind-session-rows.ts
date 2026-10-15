@@ -3,6 +3,7 @@ import type { TabGroup } from '../../../shared/tab-types'
 import { ORCA_BROWSER_PARTITION } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { ownedEditorFileId } from '../../../shared/workspace-session-pane-ownership'
+import { isOrcadSourceTabHost } from './orcad-source-workspace-session-eligibility'
 import {
   orcadMigrationOwnerMatchesScope,
   type OrcadMigrationSourceScope
@@ -14,7 +15,9 @@ import {
  */
 export function withoutLeftBehindSessionRows(
   session: WorkspaceSessionState,
-  scope: OrcadMigrationSourceScope
+  scope: OrcadMigrationSourceScope,
+  /** "Move anyway": also every host-bound file, drafts included, and tabs another host runs. */
+  leaveBehind = false
 ): WorkspaceSessionState {
   const owns = (ownerKey: string): boolean => orcadMigrationOwnerMatchesScope(ownerKey, scope)
   const isolated = new Set(
@@ -22,18 +25,34 @@ export function withoutLeftBehindSessionRows(
       owns(ownerKey) ? workspaces.filter(usesSessionProfile).map((workspace) => workspace.id) : []
     )
   )
-  const hiddenFiles = hiddenHostBoundFiles(session, owns)
-  if (isolated.size === 0 && hiddenFiles.size === 0) {
+  const hiddenFiles = hiddenHostBoundFiles(session, owns, leaveBehind)
+  const foreignTabIds = new Set(
+    leaveBehind
+      ? Object.entries(session.unifiedTabs ?? {}).flatMap(([ownerKey, tabs]) =>
+          owns(ownerKey)
+            ? tabs
+                .filter(
+                  (tab) =>
+                    tab.executionHostId !== undefined &&
+                    !isOrcadSourceTabHost(tab.executionHostId, scope)
+                )
+                .map((tab) => tab.id)
+            : []
+        )
+      : []
+  )
+  if (isolated.size === 0 && hiddenFiles.size === 0 && foreignTabIds.size === 0) {
     return session
   }
   const keepsFile = (ownerKey: string, filePath: string): boolean =>
     !hiddenFiles.get(ownerKey)?.has(filePath)
-  const droppedTabIds = new Set(
-    Object.values(session.unifiedTabs ?? {})
+  const droppedTabIds = new Set([
+    ...foreignTabIds,
+    ...Object.values(session.unifiedTabs ?? {})
       .flat()
       .filter((tab) => tab.contentType === 'browser' && isolated.has(tab.entityId))
       .map((tab) => tab.id)
-  )
+  ])
   // Built as a new object: this is an export copy, never a write to the saved layout.
   return structuredClone({
     ...session,
@@ -113,11 +132,12 @@ function usesSessionProfile(workspace: BrowserWorkspace): boolean {
  */
 function hiddenHostBoundFiles(
   session: WorkspaceSessionState,
-  owns: (ownerKey: string) => boolean
+  owns: (ownerKey: string) => boolean,
+  leaveBehind: boolean
 ): Map<string, Set<string>> {
   const hidden = new Map<string, Set<string>>()
   // Without the unified model, hydration shows every saved file as a tab.
-  if (!session.unifiedTabs || !session.tabGroups) {
+  if (!leaveBehind && (!session.unifiedTabs || !session.tabGroups)) {
     return hidden
   }
   for (const [ownerKey, files] of Object.entries(session.openFilesByWorktree ?? {})) {
@@ -125,14 +145,14 @@ function hiddenHostBoundFiles(
       continue
     }
     const shown = new Set(
-      (session.unifiedTabs[ownerKey] ?? []).flatMap((tab) => [tab.id, tab.entityId])
+      (session.unifiedTabs?.[ownerKey] ?? []).flatMap((tab) => [tab.id, tab.entityId])
     )
     for (const file of files) {
       const hostBound = file.externalSshTargetId !== undefined || Boolean(file.runtimeEnvironmentId)
       const visible =
         shown.has(file.filePath) ||
         shown.has(ownedEditorFileId(file.filePath, ownerKey, file.runtimeEnvironmentId))
-      if (hostBound && file.dirtyDraftContent === undefined && !visible) {
+      if (hostBound && (leaveBehind || (file.dirtyDraftContent === undefined && !visible))) {
         hidden.set(ownerKey, (hidden.get(ownerKey) ?? new Set()).add(file.filePath))
       }
     }

@@ -98,7 +98,7 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
       if (hostProof?.bridged) {
         await startLegacyRelayBridge(target.id)
       }
-      return convertSshTargetToManagedOrcad(userDataPath, {
+      const converted = await convertSshTargetToManagedOrcad(userDataPath, {
         sshTargetId: target.id,
         name: managedOrcadServerName(target),
         // The connect's own census already answered; a conversion before any session reuses it.
@@ -108,6 +108,11 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
         destinationFor: orcadMigrationDestinationFor,
         serverRepositoriesFor: orcadServerRepositoriesFor
       })
+      if (converted.outcome === 'converted') {
+        // "Move anyway" covered this move only; a later move asks again.
+        registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
+      }
+      return converted
     },
     abandonDeploy: async (target) => {
       const environmentId =

@@ -78,6 +78,9 @@ export function admitSshManagedServerStatus(value: unknown): {
       ...(isNonNegativeSafeInteger(terminals) ? { terminals } : {}),
       ...('terminalsElsewhere' in value && value.terminalsElsewhere === true
         ? { terminalsElsewhere: true }
+        : {}),
+      ...('canLeaveBehind' in value && value.canLeaveBehind === true
+        ? { canLeaveBehind: true }
         : {})
     }
   }

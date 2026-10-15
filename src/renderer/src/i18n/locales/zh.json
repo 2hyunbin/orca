@@ -12579,6 +12579,13 @@
           "cancel": "取消",
           "confirm": "保留服务器的版本"
         },
+        "moveAnyway": {
+          "action": "仍要迁移…",
+          "title": "仍要迁移此主机",
+          "description": "Orca 会将此主机迁移到其受管服务器，但不包含下列已保存的项目。它们会保留在这台电脑的已保存设置中，不会被删除，因此旧版本的 Orca 仍然可以使用它们。它们不会出现在受管服务器上。",
+          "cancel": "取消",
+          "confirm": "仍要迁移"
+        },
         "SettingsHostScopePicker": {
           "label": "主机",
           "unavailable": "{{value0}}（不可用）",
