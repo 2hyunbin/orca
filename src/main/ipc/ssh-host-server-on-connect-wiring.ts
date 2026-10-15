@@ -98,29 +98,19 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
       if (hostProof?.bridged) {
         await startLegacyRelayBridge(target.id)
       }
-      // "Move anyway" covers one attempt; a later move, or a later delta, asks again.
-      const clearLeaveBehind = (): void => {
-        registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
-      }
-      let converted: Awaited<ReturnType<typeof convertSshTargetToManagedOrcad>>
-      try {
-        converted = await convertSshTargetToManagedOrcad(userDataPath, {
-          sshTargetId: target.id,
-          name: managedOrcadServerName(target),
-          // The connect's own census already answered; a conversion before any session reuses it.
-          censusHost: (host) =>
-            hostProof ? Promise.resolve(hostProof) : censusHostRelayTerminalsFor(host)(),
-          // Why no releaseDirectSession: a disconnect here would cancel the connect that asked for it.
-          destinationFor: orcadMigrationDestinationFor,
-          serverRepositoriesFor: orcadServerRepositoriesFor
-        })
-      } catch (error) {
-        // A resumed fence replays its journal, never the export, so the consent isn't needed again.
-        clearLeaveBehind()
-        throw error
-      }
+      const converted = await convertSshTargetToManagedOrcad(userDataPath, {
+        sshTargetId: target.id,
+        name: managedOrcadServerName(target),
+        // The connect's own census already answered; a conversion before any session reuses it.
+        censusHost: (host) =>
+          hostProof ? Promise.resolve(hostProof) : censusHostRelayTerminalsFor(host)(),
+        // Why no releaseDirectSession: a disconnect here would cancel the connect that asked for it.
+        destinationFor: orcadMigrationDestinationFor,
+        serverRepositoriesFor: orcadServerRepositoriesFor
+      })
       if (converted.outcome === 'converted' || converted.outcome === 'refused') {
-        clearLeaveBehind()
+        // "Move anyway" covers one attempt; a later move, or a later delta, asks again.
+        registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
       }
       return converted
     },
