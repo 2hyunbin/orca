@@ -100,6 +100,6 @@ async function liveCoordinatorLabel(
 
 function inWorktree(worktreeId: string | undefined): string {
   const path = worktreeId ? splitWorktreeId(worktreeId)?.worktreePath : undefined
-  const name = path?.split(/[\\/]/).filter(Boolean).at(-1)
+  const name = path?.split(/[\\/]/).findLast(Boolean)
   return name ? ` in ${name}` : ''
 }
