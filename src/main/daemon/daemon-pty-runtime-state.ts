@@ -160,7 +160,7 @@ export abstract class DaemonPtyRuntimeState {
   ): void
   protected abstract clearSessionAwaitingDaemonRecovery(sessionId: string): void
   protected abstract stopCheckpointTimerIfIdle(): void
-  protected abstract reconnectAfterWriteFailure(): void
+  protected abstract onDaemonDisconnected(): void
 
   protected clearExitedSessionState(
     sessionId: string,
@@ -229,17 +229,7 @@ export abstract class DaemonPtyRuntimeState {
       this.protocolVersion >= SNAPSHOT_SERIALIZER_FIDELITY_DAEMON_PROTOCOL_VERSION
     this.supportsStartupIngress = supportsPtyStartupIngress(this.protocolVersion)
     this.client.onDisconnected(() => {
-      if (!this.respawnAdoptionClosed) {
-        this.writeRecoveryAttempted = false
-        for (const id of this.activeSessionIds) {
-          this.sessionsAwaitingDaemonRecovery.add(id)
-        }
-        // Why not wait for a write: a dead daemon freezes every pane until one is typed into.
-        // Recovery reconnects first and respawns only a daemon that is proven gone.
-        if (this.activeSessionIds.size > 0) {
-          this.reconnectAfterWriteFailure()
-        }
-      }
+      this.onDaemonDisconnected()
       for (const id of this.pausedProducerSessionIds) {
         this.producerResumesOwedOnReconnect.add(id)
       }

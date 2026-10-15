@@ -45,7 +45,16 @@ export abstract class DaemonPtyDaemonRecovery extends DaemonPtyCheckpointPersist
     }
   }
 
-  protected reconnectAfterWriteFailure(): void {
+  // Why not wait for a write: a dead daemon freezes every pane until one is typed into.
+  protected onDaemonDisconnected(): void {
+    this.writeRecoveryAttempted = false
+    if (this.activeSessionIds.size > 0) {
+      this.startDaemonRecovery()
+    }
+  }
+
+  /** Reconnects, and respawns only a daemon that is proven gone; every active pane remounts. */
+  protected startDaemonRecovery(): void {
     if (
       this.writeRecoveryPromise ||
       this.writeRecoveryAttempted ||

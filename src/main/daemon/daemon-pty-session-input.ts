@@ -44,7 +44,7 @@ export abstract class DaemonPtySessionInput extends DaemonPtySessionSpawn {
       (this.sessionsAwaitingDaemonRecovery.has(id) || !this.client.isConnected())
     ) {
       this.sessionsAwaitingDaemonRecovery.add(id)
-      this.reconnectAfterWriteFailure()
+      this.startDaemonRecovery()
       throw new PtyWriteUnavailableError(`Daemon PTY "${id}" is awaiting recovery`)
     }
     return recoverable
@@ -60,7 +60,7 @@ export abstract class DaemonPtySessionInput extends DaemonPtySessionSpawn {
 
   protected armWriteRecovery(id: string): void {
     this.sessionsAwaitingDaemonRecovery.add(id)
-    this.reconnectAfterWriteFailure()
+    this.startDaemonRecovery()
   }
 
   resize(id: string, cols: number, rows: number): void {

@@ -73,7 +73,7 @@ export abstract class DaemonPtySpawnRequest extends DaemonPtyRuntimeState {
     sessionId: string,
     operation: () => Promise<T>
   ): Promise<T>
-  protected abstract reconnectAfterWriteFailure(): void
+  protected abstract startDaemonRecovery(): void
   protected abstract checkpointSessions(
     sessionIds: Iterable<string>,
     opts?: { final?: boolean; teardown?: boolean }

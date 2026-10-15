@@ -397,6 +397,65 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
       }
     })
 
+    it('does not respawn on a disconnect while no session is active', async () => {
+      const respawn = vi.fn(async () => {})
+      const idleAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, respawn })
+      try {
+        const client = (idleAdapter as unknown as { client: DaemonClient }).client
+        await idleAdapter.listProcesses()
+
+        await server.shutdown()
+        await waitFor(() => !client.isConnected())
+        await new Promise((r) => setTimeout(r, 50))
+
+        expect(respawn).not.toHaveBeenCalled()
+      } finally {
+        idleAdapter.dispose()
+      }
+    })
+
+    it('does not respawn on a disconnect once the adapter has let go of its daemon', async () => {
+      const respawn = vi.fn(async () => {})
+      const closingAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, respawn })
+      const legacyAdapter = new DaemonPtyAdapter({ socketPath, tokenPath })
+      try {
+        await closingAdapter.spawn({ sessionId: 'pane-a', cols: 80, rows: 24 })
+        await legacyAdapter.spawn({ sessionId: 'pane-b', cols: 80, rows: 24 })
+        await closingAdapter.disconnectOnly()
+
+        await server.shutdown()
+        await new Promise((r) => setTimeout(r, 50))
+
+        expect(respawn).not.toHaveBeenCalled()
+      } finally {
+        closingAdapter.dispose()
+        legacyAdapter.dispose()
+      }
+    })
+
+    it('starts one recovery per daemon death even when the respawn fails', async () => {
+      const respawn = vi.fn(async () => {
+        throw new Error('daemon unavailable')
+      })
+      const healingAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, respawn })
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const { id } = await healingAdapter.spawn({ cols: 80, rows: 24 })
+
+        await server.shutdown()
+        await waitFor(() => respawn.mock.calls.length === 1)
+        for (let i = 0; i < 20; i += 1) {
+          expect(() => healingAdapter.write(id, 'typed')).toThrow(PtyWriteUnavailableError)
+        }
+        await new Promise((r) => setTimeout(r, 50))
+
+        expect(respawn).toHaveBeenCalledTimes(1)
+      } finally {
+        warn.mockRestore()
+        healingAdapter.dispose()
+      }
+    })
+
     it('reconnects without a respawn when only the socket drops, so the pane reattaches', async () => {
       const respawn = vi.fn(async () => {})
       const healingAdapter = new DaemonPtyAdapter({ socketPath, tokenPath, respawn })
