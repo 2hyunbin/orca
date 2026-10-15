@@ -1,3 +1,5 @@
+import type { TuiAgent } from './tui-agent'
+
 export type NativeChatAppearanceSettings = {
   /** Chat text size in px, 12–20; absent = 14. */
   fontSize?: number
@@ -15,6 +17,9 @@ export type NativeChatGlobalSettings = {
   nativeChatAppearance?: NativeChatAppearanceSettings
   /** Off keeps chats unnamed without running a naming agent. Absent means on. */
   nativeChatAutoName?: boolean
+  /** Agents the user turned on or off as chat providers. Unlisted: Claude and Codex on, others
+   *  on when installed on this computer (`shared/native-chat-providers.ts`). */
+  nativeChatProviders?: Partial<Record<TuiAgent, boolean>>
 }
 
 export const DEFAULT_NATIVE_CHAT_FONT_SIZE = 14
