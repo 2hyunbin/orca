@@ -6,7 +6,7 @@ import {
   isSleepingSweepExemptWorkspace
 } from '@/components/sidebar/visible-worktrees'
 import { getStructuredChatWorktreeIds } from '@/components/sidebar/visible-worktree-activity-inputs'
-import { isDefaultBranchWorkspace } from '@/components/sidebar/default-branch-workspace'
+import { isDefaultBranchWorkspace } from '../../../shared/worktree/workspace-kinds'
 import { sortWorktreesSmart } from '@/components/sidebar/smart-sort'
 import { buildWorktreeChecksReviewIndex } from '@/components/cmd-j/worktree-checks-review-index'
 import { getLiveAgentStatusByWorktreeId, isInactiveWorkspace } from '@/lib/worktree-activity-state'
@@ -19,8 +19,8 @@ import { buildPaletteWorktreeIndex, resolvePaletteWorktree } from '@/lib/palette
 import {
   EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
   getPairedDeviceIdsByEnvironment,
-  isWorkspaceFromOtherDevice
-} from '@/components/sidebar/workspace-creator-visibility'
+  isWorkspaceOwnedBySomeoneElse
+} from '../../../shared/workspace-creator-visibility'
 import type { Worktree } from '../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { EMPTY_SORTED_WORKTREES } from './worktree-jump-palette-model'
@@ -100,7 +100,7 @@ export function useWorktreeJumpPaletteWorktrees({
         }
         if (
           hideWorkspacesFromOtherDevices &&
-          isWorkspaceFromOtherDevice(worktree, pairedDeviceIdsByEnvironment)
+          isWorkspaceOwnedBySomeoneElse(worktree, pairedDeviceIdsByEnvironment)
         ) {
           return false
         }
