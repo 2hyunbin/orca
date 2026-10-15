@@ -386,8 +386,9 @@ describe('MobileNativeChatQueuedMessages', () => {
     it("puts the pause row first in the cards' box, divided from the first card", async () => {
       const mounted = await mountPaused({ pause: { reason: 'stopped' } })
       const pauseRow = mounted.root.findByProps({ testID: 'queued-pause-row' })
-      const rowIds = pauseRow.parent!.children.flatMap((child) =>
-        typeof child === 'string' ? [] : [child.props.testID]
+      const scroll = pauseRow.parent!.find((child) => String(child.type) === 'ScrollView')
+      const rowIds = [pauseRow, ...scroll.findAllByProps({ testID: 'queued-card-row' })].map(
+        (row) => row.props.testID
       )
       expect(rowIds).toEqual(['queued-pause-row', 'queued-card-row'])
       expect(nodeTypes(pauseRow)).toEqual(expect.arrayContaining(['Pause', 'Play']))
