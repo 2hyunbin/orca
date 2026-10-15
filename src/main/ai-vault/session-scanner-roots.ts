@@ -25,9 +25,8 @@ export const AGENT_SESSION_HOME_SEGMENTS = {
 export type SessionHomeAgent = keyof typeof AGENT_SESSION_HOME_SEGMENTS
 
 /**
- * This host's Claude projects roots, user config-dir first. Account homes are
- * supplied separately; an inherited account selection is not a user override.
- * The default stays listed for history from before the override was set.
+ * Prefer the user's home; retain the default and inherited execution store
+ * so existing history and indexed paths stay reachable.
  */
 export function claudeProjectsHostDirs(): string[] {
   const defaultHome = join(homedir(), '.claude')
@@ -36,7 +35,8 @@ export function claudeProjectsHostDirs(): string[] {
       resolveAbsoluteDirOverride(readUserClaudeConfigDirOverride(process.env), defaultHome),
       'projects'
     ),
-    join(defaultHome, 'projects')
+    join(defaultHome, 'projects'),
+    join(resolveAbsoluteDirOverride(process.env.CLAUDE_CONFIG_DIR, defaultHome), 'projects')
   ])
 }
 

@@ -39,8 +39,8 @@ describe('claude session roots', () => {
     const custom = join(homedir(), 'custom-claude')
     const defaultProjects = join(homedir(), '.claude', 'projects')
     for (const [config, user, expected] of [
-      [account, undefined, [defaultProjects]],
-      [account, custom, [join(custom, 'projects'), defaultProjects]],
+      [account, undefined, [defaultProjects, join(account, 'projects')]],
+      [account, custom, [join(custom, 'projects'), defaultProjects, join(account, 'projects')]],
       [custom, undefined, [join(custom, 'projects'), defaultProjects]],
       ['relative-home', undefined, [defaultProjects]]
     ] as const) {
