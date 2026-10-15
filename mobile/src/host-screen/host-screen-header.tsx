@@ -48,7 +48,6 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           onPress={actions.leaveHost}
           accessibilityRole="button"
           accessibilityLabel="Back to hosts"
-          hitSlop={8}
         >
           <ChevronLeft size={22} color={colors.textPrimary} />
         </Pressable>
@@ -114,7 +113,6 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             disabled={connState !== 'connected'}
             accessibilityRole="button"
             accessibilityLabel="Floating Workspace"
-            hitSlop={8}
           >
             <SquareTerminal
               size={18}
@@ -275,18 +273,24 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
       ) : (
         <View style={styles.toolbar}>
           <Pressable
-            style={[styles.filterChip, controller.activeFilterCount > 0 && styles.filterChipActive]}
+            style={[
+              styles.filterChip,
+              styles.toolbarChip,
+              controller.activeFilterCount > 0 && styles.filterChipActive
+            ]}
+            hitSlop={{ top: 6, bottom: 6 }}
             onPress={() => state.setShowFilterModal(true)}
             accessibilityRole="button"
             accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
           >
             <Filter
-              size={12}
+              size={14}
               color={controller.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
             />
             <Text
               style={[
                 styles.filterChipText,
+                styles.toolbarChipText,
                 controller.activeFilterCount > 0 && styles.filterChipTextActive
               ]}
             >
@@ -295,25 +299,27 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           </Pressable>
 
           <Pressable
-            style={styles.modeButton}
+            style={[styles.modeButton, styles.toolbarModeButton]}
+            hitSlop={{ top: 6, bottom: 6 }}
             onPress={() => state.setShowSortPicker(true)}
             accessibilityRole="button"
             accessibilityLabel={`Sort by ${settings.selectedSortLabel}`}
           >
             <SlidersHorizontal size={14} color={colors.textSecondary} />
-            <Text style={styles.sortLabel} numberOfLines={1}>
+            <Text style={[styles.sortLabel, styles.toolbarChipText]} numberOfLines={1}>
               {settings.selectedSortLabel}
             </Text>
           </Pressable>
 
           <Pressable
-            style={styles.modeButton}
+            style={[styles.modeButton, styles.toolbarModeButton]}
+            hitSlop={{ top: 6, bottom: 6 }}
             onPress={() => state.setShowGroupPicker(true)}
             accessibilityRole="button"
             accessibilityLabel="Group workspaces"
           >
             <Layers size={14} color={colors.textSecondary} />
-            <Text style={styles.sortLabel} numberOfLines={1}>
+            <Text style={[styles.sortLabel, styles.toolbarChipText]} numberOfLines={1}>
               {workspaceGroupChipLabel(state.view.groupBy)}
             </Text>
           </Pressable>
@@ -321,7 +327,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
           <View style={styles.toolbarSpacer} />
 
           <Pressable
-            style={styles.searchToggle}
+            style={styles.toolbarIconButton}
             onPress={() =>
               actions.navigateFromHostList(`/h/${encodeURIComponent(hostId)}/accounts`)
             }
@@ -330,34 +336,34 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             accessibilityLabel="Accounts"
           >
             <UserCircle
-              size={16}
+              size={18}
               color={connState === 'connected' ? colors.textSecondary : colors.textMuted}
             />
           </Pressable>
 
           <Pressable
-            style={styles.searchToggle}
+            style={styles.toolbarIconButton}
             onPress={() => actions.navigateFromHostList(`/h/${encodeURIComponent(hostId)}/tasks`)}
             disabled={connState !== 'connected'}
             accessibilityRole="button"
             accessibilityLabel="Tasks"
           >
             <List
-              size={16}
+              size={18}
               color={connState === 'connected' ? colors.textSecondary : colors.textMuted}
             />
           </Pressable>
 
           <Pressable
-            style={styles.searchToggle}
+            style={styles.toolbarIconButton}
             onPress={() => state.setShowSearch((s) => !s)}
             accessibilityRole="button"
             accessibilityLabel={state.showSearch ? 'Close search' : 'Search workspaces'}
           >
             {state.showSearch ? (
-              <X size={16} color={colors.textSecondary} />
+              <X size={18} color={colors.textSecondary} />
             ) : (
-              <Search size={16} color={colors.textSecondary} />
+              <Search size={18} color={colors.textSecondary} />
             )}
           </Pressable>
         </View>

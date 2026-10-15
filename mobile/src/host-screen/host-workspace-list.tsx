@@ -156,12 +156,12 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                 onPress={() => settings.toggleCollapsed(section.key)}
               >
                 {isCollapsed ? (
-                  <ChevronRight size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                  <ChevronRight size={14} color={colors.textMuted} style={styles.sectionIcon} />
                 ) : (
-                  <ChevronDown size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                  <ChevronDown size={14} color={colors.textMuted} style={styles.sectionIcon} />
                 )}
                 {section.icon === 'pin' && (
-                  <Pin size={12} color={colors.textMuted} style={styles.sectionIcon} />
+                  <Pin size={14} color={colors.textMuted} style={styles.sectionIcon} />
                 )}
                 {state.view.groupBy === 'repo' ? (
                   <View style={styles.sectionRepoIcon}>

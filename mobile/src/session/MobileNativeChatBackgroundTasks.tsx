@@ -34,7 +34,7 @@ import {
 } from '../../../src/shared/background-task-roster'
 import { AGENT_WORKING_COLOR, AgentStateDot } from '../components/AgentStateDot'
 import { useNow } from '../hooks/use-now'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { MIN_TOUCH_TARGET, colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
 import {
   useMobileBackgroundTaskStops,
@@ -267,8 +267,6 @@ function MobileNativeChatBackgroundTasksImpl({
 export const MobileNativeChatBackgroundTasks = memo(MobileNativeChatBackgroundTasksImpl)
 
 // hitSlop requests 44pt hit rects; compact native parent bounds still limit their reach.
-const MIN_TOUCH_TARGET = 44
-
 const styles = StyleSheet.create({
   list: {
     marginHorizontal: spacing.lg,

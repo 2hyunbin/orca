@@ -12,7 +12,7 @@ import {
   Trash2
 } from 'lucide-react-native'
 import { ActionSheetModal } from '../components/ActionSheetModal'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { MIN_TOUCH_TARGET, colors, radii, spacing, typography } from '../theme/mobile-theme'
 import {
   mobileQueuePauseLabel,
   type MobileQueuedMessageCard
@@ -279,10 +279,8 @@ function MobileQueuedCardText({ text }: { text: string }): React.JSX.Element {
   )
 }
 
-// Every action touches as a 44pt target (platform floor) inside its row: Android drops touches
+// Every action touches as a 44pt target inside its row: Android drops touches
 // outside the parent, so the row is at least that tall and nothing overhangs it.
-const MIN_TOUCH_TARGET = 44
-
 const styles = StyleSheet.create({
   list: {
     marginHorizontal: spacing.lg,

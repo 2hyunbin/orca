@@ -65,6 +65,9 @@ export const radii = {
   camera: 8
 } as const
 
+// Platform minimum touch size (iOS 44pt). Android ignores touch slop outside the parent, so rows must be this tall too.
+export const MIN_TOUCH_TARGET = 44
+
 export const typography = {
   titleSize: 18,
   bodySize: 14,

@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native'
-import { colors, spacing, typography } from '../theme/mobile-theme'
+import { MIN_TOUCH_TARGET, colors, spacing, typography } from '../theme/mobile-theme'
 
 export const hostScreenSecondaryStyles = StyleSheet.create({
   errorText: {
@@ -12,9 +12,8 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs
+    minHeight: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.lg
   },
   sectionIcon: {
     marginRight: spacing.xs
@@ -23,14 +22,14 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
     marginRight: spacing.xs
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: typography.metaSize,
     fontWeight: '600',
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5
   },
   sectionCount: {
-    fontSize: 11,
+    fontSize: typography.metaSize,
     color: colors.textMuted,
     marginLeft: spacing.xs
   },
