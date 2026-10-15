@@ -8,6 +8,7 @@ import type {
 } from '../../../src/shared/agent-session-wire'
 import { AGENT_SESSION_HISTORY_MAX_LIMIT } from '../../../src/shared/agent-session-wire'
 import { structuredAgentSessionHolderId } from '../../../src/shared/structured-agent-session-holder'
+import { startStructuredAgentSessionLiveRead } from '../../../src/shared/structured-agent-session-live-read'
 import {
   EMPTY_STRUCTURED_AGENT_SESSION,
   oldestStructuredAgentSessionCursor,
@@ -19,8 +20,13 @@ import type { RpcClient } from '../transport/rpc-client'
 import {
   agentSessionReadFailureRefusal,
   agentSessionReadFailureText,
+  agentSessionReadRefusalText,
   callAgentSession
 } from './mobile-structured-agent-session-rpc'
+import {
+  subscribeAppForeground,
+  subscribeTranscriptAfterHold
+} from './mobile-structured-agent-session-live-feed'
 import {
   reduceMobileQueuePause,
   reduceMobileQueuedMessageFeed,
@@ -36,41 +42,6 @@ const MAX_RETAINED_SESSION_STATES = 32
 const OLDER_PAGE_ANCHOR_ATTEMPTS = 3
 /** Bounds the pages one Load-earlier reads past that hold only subagent rows. */
 const OLDER_PAGES_PER_LOAD = 8
-
-/**
- * Opens the transcript stream once the hold settles, either way: a refused hold is an older host
- * saying it could not start the agent — which the next send does — never a reason to hide the
- * transcript. Returns what ends the stream, opened or not yet. Outside the effect so its cleanup
- * rule can see the stream is owned.
- */
-function openTranscriptAfterHold(
-  client: RpcClient,
-  sessionId: string,
-  held: Promise<unknown>,
-  onFrame: (raw: unknown) => void
-): () => void {
-  let ended = false
-  let close = (): void => {}
-  void held
-    .catch(() => undefined)
-    .then(() => {
-      if (!ended) {
-        close = client.subscribe('agentSession.subscribe', { sessionId }, onFrame)
-      }
-    })
-  return () => {
-    ended = true
-    close()
-  }
-}
-
-function isSubscribeEvent(value: unknown): value is AgentSessionSubscribeEvent {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const type = (value as { type?: unknown }).type
-  return type === 'snapshot' || type === 'batch' || type === 'reset' || type === 'end'
-}
 
 export function useMobileStructuredAgentState(args: {
   client: RpcClient | null
@@ -198,18 +169,36 @@ export function useMobileStructuredAgentState(args: {
       sessionId,
       holderId
     })
-    const endStream = openTranscriptAfterHold(client, sessionId, held, (raw) => {
-      if (typeof raw === 'object' && raw !== null && 'type' in raw && raw.type === 'error') {
-        applyReadFailure(raw)
-        return
-      }
-      if (isSubscribeEvent(raw)) {
-        apply({ type: 'event', event: raw })
-        applyQueued(raw)
-      }
+    let ended = false
+    const read = startStructuredAgentSessionLiveRead({
+      applyEvent: (event, options) => {
+        apply({ type: 'event', event, ...options })
+        applyQueued(event)
+      },
+      applyError: (message, refusal) => {
+        // As on desktop: a loaded transcript stays as it is while the read reopens; a refusal is shown.
+        if (stateRef.current.epoch !== null && refusal === undefined) {
+          return
+        }
+        apply(
+          refusal
+            ? { type: 'error', message: agentSessionReadRefusalText(refusal), refusal }
+            : { type: 'error', message }
+        )
+      },
+      getCursor: () => stateRef.current.cursor,
+      onContactLost: () => {},
+      onHistoryReadInvalidated: () => {
+        streamGenerationRef.current += 1
+        setLoadingOlder(false)
+      },
+      sessionId,
+      subscribe: subscribeTranscriptAfterHold(client, held, () => ended),
+      subscribeRetryNow: subscribeAppForeground
     })
     return () => {
-      endStream()
+      ended = true
+      read.dispose()
       void held
         .then(() =>
           callAgentSession(
@@ -225,7 +214,7 @@ export function useMobileStructuredAgentState(args: {
         )
         .catch(() => undefined)
     }
-  }, [apply, applyQueued, applyReadFailure, client, connected, enabled, sessionId, sessionKey])
+  }, [apply, applyQueued, client, connected, enabled, sessionId, sessionKey])
 
   const loadEarlier = useCallback(() => {
     const current = stateRef.current
