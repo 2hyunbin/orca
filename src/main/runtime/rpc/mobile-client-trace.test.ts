@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MobileWebBundleManifest } from '../../../shared/mobile-web-bundle/manifest-contract'
 import {
+  type MobileClientMethodKind,
   MOBILE_CLIENT_FIRST_CALL_LINE_CAP,
   MOBILE_CLIENT_PENDING_LINE_CAP,
   MOBILE_CLIENT_PENDING_REPORT_MS,
@@ -45,7 +46,9 @@ function harness() {
   }
 }
 
-const notStreaming = (): boolean => false
+const notStreaming = (): MobileClientMethodKind => 'unary'
+const streaming = (): MobileClientMethodKind => 'streaming'
+const unregistered = (): MobileClientMethodKind => undefined
 
 afterEach(() => {
   vi.useRealTimers()
@@ -70,7 +73,7 @@ describe('MobileClientTraceRegistry', () => {
     ])
   })
 
-  it('caps first-call lines per connection and never logs params', () => {
+  it('caps first-call lines per connection', () => {
     const h = harness()
     h.connect()
     for (let i = 0; i < MOBILE_CLIENT_FIRST_CALL_LINE_CAP + 10; i++) {
@@ -81,15 +84,45 @@ describe('MobileClientTraceRegistry', () => {
     expect(h.lines.at(-1)).toBe(
       `c:012345 first call lines capped at ${MOBILE_CLIENT_FIRST_CALL_LINE_CAP}`
     )
-    h.registry.traceReply('0123456789abcdef', '/Users/me/secret path', notStreaming, () => {})
-    expect(h.lines.join('\n')).not.toContain('/Users')
   })
 
-  it('replaces a malformed method name instead of logging it', () => {
+  it('logs an unregistered method name as <unknown>, never the client string', () => {
     const h = harness()
     h.connect()
-    h.registry.traceReply('0123456789abcdef', 'C:\\repo token=abc', notStreaming, () => {})
-    expect(h.lines.at(-1)).toBe('c:012345 first call <invalid> +0ms')
+    h.registry.traceReply('0123456789abcdef', 'C:\\repo token=abc', unregistered, () => {})
+    h.registry.traceReply('0123456789abcdef', '/Users/me/secret', unregistered, () => {})
+    expect(h.lines.slice(1)).toEqual(['c:012345 first call <unknown> +0ms'])
+  })
+
+  it('logs methods again after a manifest read, marked, and counts requests since the bundle', () => {
+    const h = harness()
+    const trace = h.connect()
+    const call = (method: string) =>
+      h.registry.traceReply('0123456789abcdef', method, notStreaming, () => {})('{}')
+    const manifest = manifestOf([{ path: 'a.js', byteLength: 10 }])
+    call('status.get')
+    trace.bundleManifestRead(manifest)
+    call('mobileWeb.bundle.range')
+    call('status.get')
+    trace.bundleWindowRead(manifest, 'a.js', 0, 10)
+    call('status.get')
+    call('worktree.list')
+    h.registry.closed('0123456789abcdef', 1000)
+    expect(h.lines.filter((line) => !line.startsWith('c:012345 bundle '))).toEqual([
+      'c:012345 connected transport=relay auth=ok +0ms',
+      'c:012345 first call status.get +0ms',
+      'c:012345 first call after bundle status.get +0ms',
+      'c:012345 first call after bundle status.get +0ms',
+      'c:012345 first call after bundle worktree.list +0ms',
+      'c:012345 closed code=1000 by=relay after=0ms requests=5 requests_since_bundle=3'
+    ])
+  })
+
+  it('attributes a clean close on a direct socket to the client', () => {
+    const h = harness()
+    h.registry.open('0123456789abcdef', 'direct').authenticated('mobile', 'device-1')
+    h.registry.closed('0123456789abcdef', 1001)
+    expect(h.lines.at(-1)).toBe('c:012345 closed code=1001 by=client after=0ms requests=0')
   })
 
   it('reports a request unanswered after 10s once, then its late answer', () => {
@@ -115,12 +148,7 @@ describe('MobileClientTraceRegistry', () => {
   it('never reports streaming calls as pending, and caps pending lines', () => {
     const h = harness()
     const trace = h.connect()
-    h.registry.traceReply(
-      '0123456789abcdef',
-      'terminal.subscribe',
-      () => true,
-      () => {}
-    )
+    h.registry.traceReply('0123456789abcdef', 'terminal.subscribe', streaming, () => {})
     for (let i = 0; i < MOBILE_CLIENT_PENDING_LINE_CAP + 3; i++) {
       h.registry.traceReply('0123456789abcdef', 'files.read', notStreaming, () => {})
     }
@@ -131,6 +159,22 @@ describe('MobileClientTraceRegistry', () => {
       MOBILE_CLIENT_PENDING_LINE_CAP
     )
     h.registry.closed('0123456789abcdef', 1000)
+  })
+
+  it('writes "answered" only for a request whose pending line was written', () => {
+    const h = harness()
+    const trace = h.connect()
+    const replies = Array.from({ length: MOBILE_CLIENT_PENDING_LINE_CAP + 1 }, () =>
+      h.registry.traceReply('0123456789abcdef', 'files.read', notStreaming, () => {})
+    )
+    h.advance(MOBILE_CLIENT_PENDING_REPORT_MS)
+    trace.sweepPending()
+    for (const reply of replies) {
+      reply('{}')
+    }
+    expect(h.lines.filter((line) => line.includes('answered files.read'))).toHaveLength(
+      MOBILE_CLIENT_PENDING_LINE_CAP
+    )
   })
 
   it('reports the manifest, first asset, and "fully served" once every asset is read', () => {
@@ -192,9 +236,11 @@ describe('MobileClientTraceRegistry', () => {
     ])
   })
 
-  it('does not trace runtime-scoped clients', () => {
+  it('does not trace runtime-scoped clients, even when the host later closes them', () => {
     const h = harness()
-    h.registry.open('0123456789abcdef', 'direct').authenticated('runtime', 'host-1')
+    const trace = h.registry.open('0123456789abcdef', 'direct')
+    trace.authenticated('runtime', 'host-1')
+    trace.hostClosing(1013, 'Outbound reply buffer overflow')
     h.registry.traceReply('0123456789abcdef', 'status.get', notStreaming, () => {})
     h.registry.closed('0123456789abcdef', 1000)
     expect(h.lines).toEqual([])

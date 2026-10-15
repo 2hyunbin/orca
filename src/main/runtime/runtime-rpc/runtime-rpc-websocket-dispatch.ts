@@ -133,7 +133,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     reply = mobileClientTraces.traceReply(
       authenticatedSocket?.connectionId,
       request.method,
-      (method) => this.dispatcher.isStreamingMethodName(method),
+      (method) => this.dispatcher.methodKind(method),
       reply
     )
 
