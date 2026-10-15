@@ -1,7 +1,7 @@
 import { performance } from 'node:perf_hooks'
 import type Database from '../../sqlite/sync-database'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
-import { runJournalTransaction } from './journal-database'
+import type { JournalTransaction } from './journal-database'
 import { JournalPrunePolicy } from './journal-prune-policy'
 import { parseJournalRow } from './journal-row-schema'
 import { readJournalRowsAfter, readJournalSessionEpoch } from './journal-row-table'
@@ -31,7 +31,7 @@ WHERE session_id = ? AND epoch = ?`
     this.upper = typeof upper === 'number' ? upper : 0
   }
 
-  step(db: Database.Database): {
+  step(db: Database.Database, transaction: JournalTransaction): {
     done: boolean
     compacted: number
     scanned: number
@@ -68,7 +68,7 @@ WHERE session_id = ? AND epoch = ?`
         const obsolete = this.policy.observe(row, stored.ts)
         if (
           obsolete !== null &&
-          shrinkSupersededPayload(db, this.sessionId, this.epoch, obsolete)
+          shrinkSupersededPayload(db, this.sessionId, this.epoch, obsolete, transaction)
         ) {
           compacted++
         }
@@ -88,7 +88,8 @@ function shrinkSupersededPayload(
   db: Database.Database,
   sessionId: string,
   epoch: string,
-  sequence: number
+  sequence: number,
+  transaction: JournalTransaction
 ): boolean {
   const stored = readJournalRowsAfter(db, sessionId, epoch, sequence - 1, 1)[0]
   const parsed = stored && parseJournalRow(stored.rowJson)
@@ -100,7 +101,7 @@ function shrinkSupersededPayload(
     return false
   }
   // Atomic same-key replacement reclaims leaf pages as well as overflow pages.
-  return runJournalTransaction(db, () => {
+  return transaction((db) => {
     const removed = db
       .prepare(
         `DELETE FROM journal_rows

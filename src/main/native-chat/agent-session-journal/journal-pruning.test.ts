@@ -14,7 +14,7 @@ import {
   openTestJournalHostDatabase
 } from './journal-host-database-test-support'
 import { replayJournal } from './journal-open'
-import { openJournalDatabase } from './journal-database'
+import { openJournalDatabase, runJournalTransaction } from './journal-database'
 import { JournalMaintenance } from './journal-maintenance'
 import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
 import { JOURNAL_PRUNE_MAX_ROWS, JournalPrunePass } from './journal-prune-pass'
@@ -50,7 +50,10 @@ afterEach(async () => {
 it('drains host maintenance, stops its timer when idle and cancels it on close', async () => {
   const db = openJournalDatabase(join(root, 'maintenance.db')).db
   vi.useFakeTimers()
-  const maintenance = new JournalMaintenance(() => db)
+  const maintenance = new JournalMaintenance(
+    () => db,
+    (run) => runJournalTransaction(db, run)
+  )
   try {
     publishJournalSessionEpoch(db, identity, 'epoch')
     insertJournalRow(db, identity.sessionId, {
@@ -132,11 +135,12 @@ it('finishes host cleanup while foreground appends share the same connection', a
 })
 
 function prune(epoch: string): number {
-  const db = openTestJournalHostDatabase(root).db
+  const database = openTestJournalHostDatabase(root)
+  const db = database.db
   const pass = new JournalPrunePass(db, identity.sessionId, epoch)
   let removed = 0
   for (let step = 0; step < 1_000; step++) {
-    const result = pass.step(db)
+    const result = pass.step(db, (run) => database.transaction(run))
     expect(result.scanned).toBeLessThanOrEqual(JOURNAL_PRUNE_MAX_ROWS)
     removed += result.compacted
     if (result.done) {
@@ -310,5 +314,9 @@ it('validates the complete frozen prefix before shrinking anything and abandons 
   expect(rows()).toHaveLength(41)
   const pass = new JournalPrunePass(db, identity.sessionId, epoch)
   await journal.rollEpoch('handle_forked', 2)
-  expect(pass.step(db)).toEqual({ done: true, compacted: 0, scanned: 0 })
+  expect(pass.step(db, (run) => openTestJournalHostDatabase(root).transaction(run))).toEqual({
+    done: true,
+    compacted: 0,
+    scanned: 0
+  })
 })

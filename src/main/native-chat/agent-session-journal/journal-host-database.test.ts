@@ -79,6 +79,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   await journals.closeAll()
   await rm(root, { recursive: true, force: true })
@@ -214,6 +215,53 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       other.appendItem(item(1), text('served'), { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE })
     ).resolves.toBeDefined()
     expect(readTestJournalRows(connection, OTHER.sessionId, other.epoch)).not.toHaveLength(0)
+  })
+
+  it('recovers another chat after maintenance COMMIT and ROLLBACK both fail', async () => {
+    vi.useFakeTimers()
+    const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+    const other = await journals.open({ identity: OTHER, stateDirectory: root })
+    for (let revision = 1; revision <= 3; revision++) {
+      await journal.appendItem(item(1), text(`revision ${revision}`), {
+        fence: 1,
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      })
+    }
+    const database = openTestJournalHostDatabase(root)
+    const connection = database.db
+    const before = readTestJournalRows(connection, IDENTITY.sessionId, journal.epoch)
+    const exec = connection.exec.bind(connection)
+    let rollbackFails = true
+    vi.spyOn(connection, 'exec').mockImplementation((sql) => {
+      if (sql === 'ROLLBACK' && rollbackFails) {
+        throw Object.assign(new Error('disk I/O error'), { code: 'ERR_SQLITE_ERROR', errcode: 10 })
+      }
+      exec(sql)
+    })
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const stopFailing = failCommits(connection)
+
+    await vi.runAllTimersAsync()
+    expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
+    expect(connection.isTransaction).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+    await expect(
+      other.appendItem(item(1), text('refused'), {
+        fence: 1,
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      })
+    ).rejects.toMatchObject({
+      refusal: { details: { reason: 'journalUnavailable' } }
+    })
+
+    rollbackFails = false
+    expect(database.db.isTransaction).toBe(false)
+    stopFailing()
+    expect(readTestJournalRows(connection, IDENTITY.sessionId, journal.epoch)).toEqual(before)
+    await expect(
+      other.appendItem(item(1), text('served'), { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+    ).resolves.toBeDefined()
+    expect(other.snapshot().items.map((entry) => entry.body)).toEqual([text('served')])
   })
 
   it('refuses a transaction body that awaits', () => {

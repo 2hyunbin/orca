@@ -1,5 +1,5 @@
 import type Database from '../../sqlite/sync-database'
-import { journalPragmaNumber } from './journal-database'
+import { journalPragmaNumber, type JournalTransaction } from './journal-database'
 import { JournalPrunePass } from './journal-prune-pass'
 
 const QUIET_DELAY_MS = 30_000
@@ -18,6 +18,7 @@ export class JournalMaintenance {
 
   constructor(
     private readonly database: () => Database.Database,
+    private readonly transaction: JournalTransaction,
     initialDelayMs = QUIET_DELAY_MS
   ) {
     this.schedule(initialDelayMs)
@@ -88,7 +89,7 @@ export class JournalMaintenance {
       this.current = this.nextSession(db)
     }
     if (this.current !== null) {
-      if (this.current.step(db).done) {
+      if (this.current.step(db, this.transaction).done) {
         this.current = null
       }
     } else if (this.vacuumPending) {

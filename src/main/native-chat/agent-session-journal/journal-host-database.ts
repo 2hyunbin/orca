@@ -39,7 +39,10 @@ export class JournalHostDatabase {
     this.readOnly = opened.readOnly
     this.maintenance = opened.readOnly
       ? null
-      : new JournalMaintenance(() => this.db)
+      : new JournalMaintenance(
+          () => this.db,
+          (run) => this.runTransaction(run)
+        )
   }
 
   static open(stateDirectory: string): JournalHostDatabase {
@@ -67,11 +70,15 @@ export class JournalHostDatabase {
 
   /** One IMMEDIATE transaction; see `runJournalTransaction`. */
   transaction<T>(run: (db: Database.Database) => T): T {
-    const result = runJournalTransaction(this.db, run, () => {
-      this.stranded = true
-    })
+    const result = this.runTransaction(run)
     this.maintenance?.changed()
     return result
+  }
+
+  private runTransaction<T>(run: (db: Database.Database) => T): T {
+    return runJournalTransaction(this.db, run, () => {
+      this.stranded = true
+    })
   }
 
   journalAppended(sessionId: string): void {

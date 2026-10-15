@@ -29,6 +29,8 @@ export type OpenJournalDatabase = {
   readOnly: boolean
 }
 
+export type JournalTransaction = <T>(run: (db: Database.Database) => T) => T
+
 export function journalPragmaNumber(db: Database.Database, name: string): number {
   return Number(db.pragma(name, { simple: true }) ?? 0)
 }
