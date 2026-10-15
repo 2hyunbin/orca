@@ -7,6 +7,9 @@
 // tried again by the next change after its batch settles, so nothing here holds an obligation of
 // its own. What a lost write leaves saying `working` the journal's reopen pass settles as
 // unverifiable.
+//
+// A row also names the child process whose report it copies (`JournalItemRow.executionOwner`),
+// captured when that report arrives, so a subagent a later run resumes is that run's work.
 
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
@@ -26,6 +29,7 @@ import {
   subagentJournalItemIdentity
 } from '../agent-session-journal/journal-subagent-item'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 
 const UNNAMED = 'subagent'
 const THREAD_GROUP = 'thread'
@@ -34,11 +38,17 @@ const THREAD_GROUP = 'thread'
 export type AgentChildWorkRowView = AgentChildWorkView &
   Pick<AgentChildWorkInput, 'outcomeBasis' | 'residency'>
 
-type Row = { block: NativeChatSubagentBlock; turnScope: AgentJournalTurnScope }
+type Row = {
+  block: NativeChatSubagentBlock
+  turnScope: AgentJournalTurnScope
+  executionOwner: number | undefined
+}
 
 export type StructuredAgentSessionSubagentRowsDeps = {
   journal: (sessionId: string) => AgentSessionJournal | undefined
   fence: (sessionId: string) => number
+  /** The fence of the live child whose report changed the records; absent, a row keeps its owner. */
+  producer: (sessionId: string) => number | undefined
   /** The host's read of what runs, whose turn a first row joins. */
   currentWork: (
     sessionId: string,
@@ -64,6 +74,7 @@ export class StructuredAgentSessionSubagentRows {
       return
     }
     const queued = this.queued.get(sessionId) ?? new Map<string, Row>()
+    const executionOwner = this.deps.producer(sessionId)
     const providerIds = new Map(children.map((child) => [child.id, child.providerId]))
     // The strip's rule: a child that finished while work it started runs is still running.
     const running = new Set(structuredRunningChildWork(children).map((child) => child.id))
@@ -85,8 +96,18 @@ export class StructuredAgentSessionSubagentRows {
       const parentId =
         child.parentChildWorkId === undefined ? undefined : providerIds.get(child.parentChildWorkId)
       const block = subagentRowBlock(child, id, parentId, saved, turnScope, running.has(child.id))
-      if (!saved || rowText(saved) !== rowText(block)) {
-        queued.set(id, { block, turnScope })
+      // A running subagent another child now reports is that child's, even when its row reads the same.
+      const owner = pending
+        ? pending.executionOwner
+        : journal.itemFence(agentJournalItemKey(subagentJournalItemIdentity(id)))
+      const moved =
+        running.has(child.id) && executionOwner !== undefined && owner !== executionOwner
+      if (!saved || moved || rowText(saved) !== rowText(block)) {
+        queued.set(id, {
+          block,
+          turnScope,
+          executionOwner: executionOwner ?? pending?.executionOwner
+        })
       }
     }
     if (queued.size > 0) {
@@ -113,7 +134,8 @@ export class StructuredAgentSessionSubagentRows {
             journal
               .appendItem(subagentJournalItemIdentity(id), subagentJournalBody(row.block), {
                 fence: this.deps.fence(sessionId),
-                turnScope: row.turnScope
+                turnScope: row.turnScope,
+                ...(row.executionOwner === undefined ? {} : { executionOwner: row.executionOwner })
               })
               .catch((error: unknown) => this.deps.onWriteFailed(sessionId, error))
           )

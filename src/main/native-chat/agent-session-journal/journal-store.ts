@@ -68,6 +68,7 @@ import type {
 import type { JournalSubmissionWriter } from './journal-submission-writer'
 import type { JournalEpochController } from './journal-epoch-controller'
 import { JournalWriteQueue } from './journal-write-queue'
+import { journalItemExecutionFence } from './journal-item-provenance'
 import { createJournalStoreCollaborators } from './journal-store-collaborators'
 import type { JournalItemAppender } from './journal-item-appender'
 import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
@@ -247,8 +248,9 @@ export class AgentSessionJournal {
   /** Includes revisions and completion tombstones, whose timestamps disappear from render items. */
   lastActivityAt = (): number => this.state.lastActivityAt
 
-  /** The item's execution provenance (`JournalItemRow.ownerFence`), while it is in the timeline. */
-  itemFence = (itemId: string): number | undefined => this.state.itemFences.get(itemId)
+  /** Whose execution the item is now, while it is in the timeline: the run a reusable child's row
+   *  last named (`JournalItemRow.executionOwner`), else its creator (`JournalItemRow.ownerFence`). */
+  itemFence = (itemId: string): number | undefined => journalItemExecutionFence(this.state, itemId)
 
   /** Latest saved output at this fence, excluding client actions and recovery bookkeeping. */
   lastProviderActivityAt = (fence: number) => this.state.providerActivityAt.get(fence)

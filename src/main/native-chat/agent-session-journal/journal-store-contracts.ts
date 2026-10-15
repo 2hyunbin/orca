@@ -67,6 +67,9 @@ export type JournalItemAppendOptions = AgentJournalRowAttribution & {
   /** The generation whose execution produced the item: set by a provider's observation, and by
    *  nothing else. Host bookkeeping leaves it out and keeps the item's (`journalItemOwnerFence`). */
   ownerFence?: number
+  /** A reusable child's write: the fence of the child process that produced it
+   *  (`JournalItemRow.executionOwner`). */
+  executionOwner?: number
   observedAt?: number
   recovered?: true
 }
