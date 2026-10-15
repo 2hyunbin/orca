@@ -187,10 +187,11 @@ type RelayMetricDeltas = {
   drainReturnServiceMs: number[]
   stickyServiceMs: number[]
   stickySlotQueueWaitMs: number[]
+  stickySlotPoolWaitMs: number[]
   stickySlotSqlMs: number[]
   stickySlotStatements: number[]
   stickySlotByConnection: Map<number, StickyConnectionStatements>
-  stickySlotConnectionsDropped: number
+  stickySlotConnectionSamplesDropped: number
   assign503sByCause: Record<string, number>
   dbLockWaitSamples: number
   dbLockWaitersByKey: Record<string, number>
@@ -274,10 +275,11 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   drainReturnServiceMs: [],
   stickyServiceMs: [],
   stickySlotQueueWaitMs: [],
+  stickySlotPoolWaitMs: [],
   stickySlotSqlMs: [],
   stickySlotStatements: [],
   stickySlotByConnection: new Map(),
-  stickySlotConnectionsDropped: 0,
+  stickySlotConnectionSamplesDropped: 0,
   assign503sByCause: {},
   dbLockWaitSamples: 0,
   dbLockWaitersByKey: {},
@@ -419,13 +421,14 @@ export class RelayObservability implements RelayRuntimeObserver {
   recordStickySlot(sample: StickySlotSample): void {
     const deltas = this.deltas
     deltas.stickySlotQueueWaitMs.push(sample.queueWaitMs)
+    deltas.stickySlotPoolWaitMs.push(sample.poolWaitMs)
     deltas.stickySlotSqlMs.push(sample.sqlMs)
     deltas.stickySlotStatements.push(sample.statements)
     for (const [connectionId, samplesMs] of sample.statementMsByConnection) {
       let connection = deltas.stickySlotByConnection.get(connectionId)
       if (!connection) {
         if (deltas.stickySlotByConnection.size >= STICKY_CONNECTION_LIMIT) {
-          deltas.stickySlotConnectionsDropped++
+          deltas.stickySlotConnectionSamplesDropped++
           continue
         }
         connection = { requests: 0, statements: 0, maxMs: 0, samplesMs: [] }
@@ -772,11 +775,12 @@ function preAuthLatencyFields(
   }
 }
 
-// What the sticky slot spent its hold on: queue wait before it, SQL inside it, and
-// per pooled connection, whether one slow connection keeps serving the lane.
+// What the sticky slot spent its hold on: the queue before it, then pool waits and
+// round trips inside it; per connection, whether one slow connection keeps serving it.
 function stickySlotFields(deltas: RelayMetricDeltas): Record<string, unknown> {
   if (deltas.stickySlotQueueWaitMs.length === 0) return {}
   const queueWait = latencySummary(deltas.stickySlotQueueWaitMs)
+  const poolWait = latencySummary(deltas.stickySlotPoolWaitMs)
   const sql = latencySummary(deltas.stickySlotSqlMs)
   const statements = latencySummary(deltas.stickySlotStatements)
   const byConnection: Record<string, Record<string, number>> = {}
@@ -795,12 +799,15 @@ function stickySlotFields(deltas: RelayMetricDeltas): Record<string, unknown> {
     stickyQueueWaitMsP50: queueWait.p50,
     stickyQueueWaitMsP99: queueWait.p99,
     stickyQueueWaitMsMax: queueWait.max,
+    stickyPoolWaitMsP50: poolWait.p50,
+    stickyPoolWaitMsP99: poolWait.p99,
     stickySqlMsP50: sql.p50,
     stickySqlMsP99: sql.p99,
     stickyStatementsP50: statements.p50,
     stickyStatementsMax: statements.max,
     stickySqlByConnection: byConnection,
-    stickySqlConnectionsDroppedDelta: deltas.stickySlotConnectionsDropped
+    // One per request whose connection found the window's table full.
+    stickySqlConnectionSamplesDroppedDelta: deltas.stickySlotConnectionSamplesDropped
   }
 }
 

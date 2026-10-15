@@ -293,8 +293,8 @@ describe('relay observability', () => {
     )
     for (let ms = 1; ms <= 100; ms++) {
       observability.recordStickySlot({
-        holdMs: ms,
         queueWaitMs: ms * 20,
+        poolWaitMs: ms,
         sqlMs: ms * 2,
         statements: 14,
         // The slow connection serves every other request.
@@ -309,6 +309,8 @@ describe('relay observability', () => {
       stickyQueueWaitMsP50: 1_000,
       stickyQueueWaitMsP99: 1_980,
       stickyQueueWaitMsMax: 2_000,
+      stickyPoolWaitMsP50: 50,
+      stickyPoolWaitMsP99: 99,
       stickySqlMsP50: 100,
       stickySqlMsP99: 198,
       stickyStatementsP50: 14,
@@ -323,7 +325,7 @@ describe('relay observability', () => {
         },
         '2': { requests: 50, statements: 100, statementMsP50: 5, statementMsP99: 6 }
       },
-      stickySqlConnectionsDroppedDelta: 0
+      stickySqlConnectionSamplesDroppedDelta: 0
     })
     expect(entries[1]).not.toHaveProperty('stickySlotsDelta')
     expect(entries[1]).not.toHaveProperty('stickySqlByConnection')
@@ -337,8 +339,8 @@ describe('relay observability', () => {
     )
     for (let id = 1; id <= STICKY_CONNECTION_LIMIT + 3; id++) {
       observability.recordStickySlot({
-        holdMs: 1,
         queueWaitMs: 0,
+        poolWaitMs: 0,
         sqlMs: 1,
         statements: 1,
         statementMsByConnection: new Map([[id, [1]]])
@@ -349,7 +351,7 @@ describe('relay observability', () => {
     expect(Object.keys(entries[0]?.stickySqlByConnection as object)).toHaveLength(
       STICKY_CONNECTION_LIMIT
     )
-    expect(entries[0]).toMatchObject({ stickySqlConnectionsDroppedDelta: 3 })
+    expect(entries[0]).toMatchObject({ stickySqlConnectionSamplesDroppedDelta: 3 })
   })
 
   it('sums lock waiters per role and table over the samples taken', () => {

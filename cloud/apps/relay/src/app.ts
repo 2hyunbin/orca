@@ -286,10 +286,12 @@ export function createRelayApp(
       release: () => {
         if (released) return
         released = true
-        const holdMs = performance.now() - startedAt
-        operations.recordAdmissionServiceMs?.('sticky', holdMs)
-        operations.recordStickySlot?.({ holdMs, queueWaitMs, ...statements.close() })
-        lease.release()
+        try {
+          operations.recordAdmissionServiceMs?.('sticky', performance.now() - startedAt)
+          operations.recordStickySlot?.({ queueWaitMs, ...statements.close() })
+        } finally {
+          lease.release()
+        }
       },
       measure: (work) => runInStickySlot(statements, work)
     }
@@ -493,7 +495,8 @@ export function createRelayApp(
     }
     let admission: { release(): void } | null = null
     let lane: AssignmentAdmissionLane = 'placement'
-    let measureAssign = <T>(work: () => Promise<T>): Promise<T> => work()
+    // Charges the sticky slot's SQL to its request; any other lane runs work as is.
+    let measureHeld = <T>(work: () => Promise<T>): Promise<T> => work()
     if (body.data.reconnect) {
       let rejection: AssignmentAdmissionRejection | undefined
       const queuedAt = performance.now()
@@ -561,7 +564,7 @@ export function createRelayApp(
       } else if (verified) {
         lane = 'sticky'
         admission = fastLane
-        measureAssign = fastLane.measure
+        measureHeld = fastLane.measure
         operations.recordAssignmentAdmission?.('sticky')
       } else {
         // An unverified hint joins the placement lane with today's semantics.
@@ -590,12 +593,12 @@ export function createRelayApp(
     let regionCorrection: RegionCorrectionResponse | undefined
     try {
       if (body.data.regionCorrection?.action === 'report') {
-        const current = await operations.assignments.resolve(identity)
+        const current = await measureHeld(() => operations.assignments.resolve(identity))
         if (!current) return context.json({ error: 'assignment_not_found' }, 409)
         assignment = current
       } else {
         // The host asked: it may leave a reserve cell the director proves dead.
-        assignment = await measureAssign(() =>
+        assignment = await measureHeld(() =>
           operations.assignments.assign(
             identity,
             requestedRegion,
@@ -607,10 +610,10 @@ export function createRelayApp(
       }
       if (body.data.regionCorrection) {
         try {
-          regionCorrection = await operations.assignments.exchangeRegionCorrection(
-            identity,
-            body.data.regionCorrection,
-            assignment.assignmentEpoch
+          const correction = body.data.regionCorrection
+          const epoch = assignment.assignmentEpoch
+          regionCorrection = await measureHeld(() =>
+            operations.assignments.exchangeRegionCorrection(identity, correction, epoch)
           )
         } catch (error) {
           if (body.data.regionCorrection.action === 'report') throw error

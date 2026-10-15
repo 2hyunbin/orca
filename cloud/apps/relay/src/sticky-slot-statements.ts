@@ -1,35 +1,42 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 export type StickySlotSample = {
-  holdMs: number
   queueWaitMs: number
+  // Waiting for a pooled connection, apart from the statements run on one.
+  poolWaitMs: number
   sqlMs: number
   statements: number
-  // Transaction statements only: a pooled autocommit query never exposes its connection.
   statementMsByConnection: ReadonlyMap<number, readonly number[]>
 }
 
-// SQL run while one request holds the sticky slot. Closed at release, so work the
-// request left running cannot be charged to it afterwards.
+type StickySlotStatementTotals = Omit<StickySlotSample, 'queueWaitMs'>
+
+// PostgreSQL round trips made while one request holds the sticky slot. Closed at
+// release, so work the request left running cannot be charged to it afterwards.
 export class StickySlotStatements {
   private closed = false
+  private poolWaitMs = 0
   private sqlMs = 0
   private statements = 0
   private readonly statementMsByConnection = new Map<number, number[]>()
 
-  note(durationMs: number, connectionId: number | undefined): void {
+  notePoolWait(durationMs: number): void {
+    if (!this.closed) this.poolWaitMs += durationMs
+  }
+
+  noteStatement(durationMs: number, connectionId: number): void {
     if (this.closed) return
     this.statements++
     this.sqlMs += durationMs
-    if (connectionId === undefined) return
     const samples = this.statementMsByConnection.get(connectionId)
     if (samples) samples.push(durationMs)
     else this.statementMsByConnection.set(connectionId, [durationMs])
   }
 
-  close(): Pick<StickySlotSample, 'sqlMs' | 'statements' | 'statementMsByConnection'> {
+  close(): StickySlotStatementTotals {
     this.closed = true
     return {
+      poolWaitMs: this.poolWaitMs,
       sqlMs: this.sqlMs,
       statements: this.statements,
       statementMsByConnection: this.statementMsByConnection
@@ -46,9 +53,10 @@ export function runInStickySlot<T>(
   return activeStickySlot.run(statements, work)
 }
 
-export function noteStickySlotStatement(
-  durationMs: number,
-  connectionId: number | undefined
-): void {
-  activeStickySlot.getStore()?.note(durationMs, connectionId)
+export function noteStickySlotPoolWait(durationMs: number): void {
+  activeStickySlot.getStore()?.notePoolWait(durationMs)
+}
+
+export function noteStickySlotStatement(durationMs: number, connectionId: number): void {
+  activeStickySlot.getStore()?.noteStatement(durationMs, connectionId)
 }
