@@ -37,16 +37,31 @@ const LAST_TICK = DRAIN + TERM + ticks(PROVIDER_GROUP_REAP_TIMEOUT_MS)
  */
 export const PROVIDER_GROUP_WATCHDOG_SCRIPT = `
 groups=' '
+procfs=
+[ -r /proc/self/stat ] && procfs=1
+# Sets st to the process's start time, or empty when it is gone; procfs needs no fork.
+started() {
+  st=
+  if [ -n "$procfs" ]; then
+    read -r st 2>/dev/null < /proc/$1/stat || return 0
+    st=\${st##*) }
+    set -- $st
+    st=\${20}
+  else
+    st=$(ps -o lstart= -p $1 2>/dev/null)
+  fi
+}
 add() {
   case "$groups" in *" $1 "*) ;; *) groups="$groups$1 " ;; esac
-  eval "mode_$1=\\$2; start_$1=\\$(ps -o lstart= -p $1 2>/dev/null)"
+  started $1
+  eval "mode_$1=\\$2; start_$1=\\$st"
 }
 remove() {
   case "$groups" in *" $1 "*) groups="\${groups%% $1 *} \${groups#* $1 }" ;; esac
 }
 ours() {
-  now=$(ps -o lstart= -p $1 2>/dev/null)
-  eval "[ -z \\"\\$now\\" ] || [ \\"\\$now\\" = \\"\\$start_$1\\" ]"
+  started $1
+  eval "[ -z \\"\\$st\\" ] || [ \\"\\$st\\" = \\"\\$start_$1\\" ]"
 }
 alive() { kill -s 0 -- -$1 2>/dev/null; }
 leader() { kill -s 0 $1 2>/dev/null; }
