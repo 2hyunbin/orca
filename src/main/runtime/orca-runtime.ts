@@ -1,4 +1,6 @@
+import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
+import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
@@ -31,6 +33,7 @@ import type {
 } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 
+// oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
@@ -92,6 +95,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     // module registers the generation bump at load; a headless host never loads it.
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
+    publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */
@@ -191,11 +195,15 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     return peekOpenedAgentSessionRecordStore()
   }
 }
+// Linear installs these methods on the final runtime prototype below.
+// oxlint-disable-next-line typescript/consistent-type-definitions -- SAFETY: This merge models the installed Linear API.
+interface OrcaRuntimeService extends RuntimeLinearCommandSurface {}
+
 type OrcaRuntimeServiceExport = RuntimeCommandSurfaceHost<OrcaRuntimeService>
-const OrcaRuntimeServiceExport = OrcaRuntimeService as unknown as {
+const OrcaRuntimeServiceExport: {
   new (...args: ConstructorParameters<typeof OrcaRuntimeService>): OrcaRuntimeServiceExport
   readonly prototype: OrcaRuntimeServiceExport
-}
+} = OrcaRuntimeService
 export { OrcaRuntimeServiceExport as OrcaRuntimeService }
 installRuntimeLinearCommandSurface(OrcaRuntimeServiceExport.prototype)
 
