@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeClearFilterActions, sidebarHasActiveFilters } from './visible-worktrees'
 import { isSleepingSweepExemptionNarrowingList } from '../../../../shared/workspace-view/workspace-row-filters'
-import { isDefaultBranchWorkspace } from '../../../../shared/workspace-view/workspace-row-kinds'
+import { isDefaultBranchWorkspace } from '../../../../shared/worktree/workspace-kinds'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 const gitRepo = { kind: 'git' } as const
