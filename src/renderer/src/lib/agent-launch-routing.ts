@@ -1,10 +1,12 @@
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import {
+  clientChoosesStructuredLaunches,
   isNativeChatDefaultFor,
   resolveStructuredNativeChatSupport,
   type NativeChatDefaultSettings,
   type StructuredNativeChatBlocker
 } from '../../../shared/structured-native-chat-launch-route'
+import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { WorkspaceLaunchKind } from '../../../shared/workspace-launch-kind'
 import type { NativeChatLaunchPromptDelivery } from '@/lib/native-chat-launch-prompt-delivery'
@@ -30,10 +32,17 @@ export type AgentLaunchRoutingInput = {
 }
 
 export function resolveAgentLaunchRoute(input: AgentLaunchRoutingInput): AgentLaunchRoute {
-  return isNativeChatDefaultFor(input.settings, input.agent) &&
-    structuredAgentLaunchSupported(input)
-    ? 'structured-native-chat'
-    : 'terminal-tui'
+  if (!isNativeChatDefaultFor(input.settings, input.agent)) {
+    return 'terminal-tui'
+  }
+  const support = structuredAgentLaunchSupport(input)
+  // The existing host admission waits for its answer before opening either surface.
+  const awaitingHost =
+    !support.supported &&
+    support.blocker === 'runtime-capability-unknown' &&
+    parseExecutionHostId(input.executionHostId)?.kind === 'runtime' &&
+    clientChoosesStructuredLaunches(input.clientCapabilities)
+  return support.supported || awaitingHost ? 'structured-native-chat' : 'terminal-tui'
 }
 
 // Explicit chat requests (resume history in a new chat) do not depend on the Chat UI switch.

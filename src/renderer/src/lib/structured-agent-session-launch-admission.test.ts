@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as LaunchAgentInNewTabModule from './launch-agent-in-new-tab'
 
 const mocks = vi.hoisted(() => ({
   createSupport: vi.fn(),
@@ -82,6 +83,46 @@ beforeEach(() => {
 })
 
 describe('a structured chat launch on a paired server', () => {
+  it('opens the requested chat before renderer host status has hydrated', async () => {
+    let answer!: (support: { supported: boolean }) => void
+    mocks.createSupport.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    useAppStore.setState({
+      settings: { ...INITIAL_SETTINGS!, experimentalNativeChat: true },
+      activeWorkspaceExecutionHostId: 'runtime:server-1',
+      runtimeStatusByEnvironmentId: new Map()
+    })
+    const { launchAgentInNewTab } = await vi.importActual<typeof LaunchAgentInNewTabModule>(
+      './launch-agent-in-new-tab'
+    )
+
+    const launch = launchAgentInNewTab({
+      requestId: 'before-host-status',
+      agent: 'claude',
+      worktreeId: WORKTREE
+    })
+
+    expect(launch?.surface).toEqual({ kind: 'host-published' })
+    expectNoChatCommitted()
+    expect(mocks.createSupport).toHaveBeenCalledOnce()
+    answer({ supported: true })
+    await vi.waitFor(() =>
+      expect(useAppStore.getState().unifiedTabsByWorktree[WORKTREE]).toEqual([
+        expect.objectContaining({
+          contentType: 'agent-session',
+          executionHostId: 'runtime:server-1'
+        })
+      ])
+    )
+    expect(useAppStore.getState().runtimeStatusByEnvironmentId.size).toBe(0)
+    expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    const { cancelStructuredAgentLaunch } = await import('./structured-agent-session-launch')
+    cancelStructuredAgentLaunch(
+      WORKTREE,
+      useAppStore.getState().unifiedTabsByWorktree[WORKTREE]![0]!.entityId
+    )
+  })
+
   it('opens only the terminal when the server declines, keeping the workspace selected', async () => {
     mocks.createSupport.mockResolvedValue({ supported: false, reason: 'wsl' })
     const onHostDeclined = vi.fn(() => ({
