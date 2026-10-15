@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Platform, Pressable, RefreshControl, SectionList, Text, View } from 'react-native'
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react-native'
 import { AuthFailedBanner } from '../components/AuthFailedBanner'
@@ -13,6 +14,7 @@ import { HostWorkspaceListStates } from '../worktree/host-workspace-list-states'
 import { getWorktreeStatus } from '../worktree/workspace-list-sections'
 import { repoColor } from '../worktree/repo-color'
 import { hostScreenStyles as styles } from './host-screen-styles'
+import { buildRepoLookById } from './host-repo-looks'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostWorkspaceList({ controller }: { controller: HostScreenController }) {
@@ -40,7 +42,8 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
     settings,
     state
   } = controller
-  const { rawSections, sections, uniqueRepoColors } = sectionsResult
+  const { rawSections, sections, repoById } = sectionsResult
+  const repoLookById = useMemo(() => buildRepoLookById(repoById), [repoById])
 
   return (
     <>
@@ -140,10 +143,11 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
             const isCollapsed = state.collapsedGroups.has(section.key)
             const rawSection = rawSections.find((s) => s.key === section.key)
             const count = rawSection?.data.length ?? 0
-            const repoSectionColor =
-              state.groupMode === 'repo' ? uniqueRepoColors.get(section.title) : null
-            const repoSectionIcon =
-              state.groupMode === 'repo' ? state.repoIconsByName.get(section.title) : null
+            // Why: the desktop's header draws its anchor repo's colour and icon.
+            const repoSectionLook =
+              state.groupMode === 'repo' && section.repo ? repoLookById.get(section.repo.id) : null
+            const repoSectionColor = repoSectionLook?.color ?? null
+            const repoSectionIcon = repoSectionLook?.icon ?? null
             return (
               <Pressable
                 style={styles.sectionHeader}
@@ -187,8 +191,8 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
               isReadOnly={isReadOnly}
               now={now}
               status={getWorktreeStatus(item)}
-              repoColor={uniqueRepoColors.get(item.repo) ?? repoColor(item.repo)}
-              repoIcon={state.repoIconsByName.get(item.repo) ?? null}
+              repoColor={repoLookById.get(item.repoId)?.color ?? repoColor(item.repo)}
+              repoIcon={repoLookById.get(item.repoId)?.icon ?? null}
               hideRepo={state.groupMode === 'repo'}
               onPress={actions.openWorktreeSession}
               onLongPress={

@@ -8814,7 +8814,6 @@
           "6e6480a7df": "terminal의 프로그램(Zellij, tmux, Neovim, fzf, Grok, SSH)이 시스템 클립보드에 복사할 수 있게 합니다.",
           "3338dcf8c1": "TUI 클립보드 쓰기 허용(OSC 52)",
           "69c64a479c": "Zellij, tmux, Neovim, fzf 및 Grok이 PTY(SSH 포함)를 통해 시스템 클립보드에 복사하도록 합니다.",
-          "4729c645fc": "터미널에서 선택한 내용을 클립보드에 자동으로 복사합니다.",
           "902f5dee1f": "선택 시 복사",
           "9129b7e805": "터미널 패널 위에 마우스를 올리면 클릭하지 않고도 활성화됩니다.",
           "8eefeaa3da": "마우스를 따라 포커스 이동",
@@ -10644,7 +10643,6 @@
               "664789b73a": "자동",
               "c38c18be15": "선택",
               "797fdfe4ca": "선택",
-              "603818e8d8": "터미널 선택 영역이 만들어지는 즉시 자동으로 클립보드에 복사합니다.",
               "3bdc84f059": "선택 시 복사",
               "zellij": "젤리즈",
               "grok": "그로크"
@@ -19023,7 +19021,8 @@
     "settings": {
       "TerminalInteraction": {
         "copyTrimsGutter": "복사 시 여백 자르기",
-        "copyTrimsGutterDescription": "복사한 텍스트에서 에이전트 출력의 왼쪽 여백을 제거합니다. 선택한 모든 줄에 공통된 들여쓰기만 제거됩니다."
+        "copyTrimsGutterDescription": "복사한 텍스트에서 에이전트 출력의 왼쪽 여백을 제거합니다. 선택한 모든 줄에 공통된 들여쓰기만 제거됩니다.",
+        "copyOnSelectDescription": "터미널이나 채팅에서 선택한 내용을 클립보드에 자동으로 복사합니다."
       },
       "terminal": {
         "clipboard": {
@@ -19033,7 +19032,10 @@
             "margin": "여유",
             "leading": "선행",
             "whitespace": "공백",
-            "spaces": "공백"
+            "spaces": "공백",
+            "copyOnSelectDescription": "터미널이나 채팅에서 텍스트를 선택하는 즉시 자동으로 클립보드에 복사합니다.",
+            "highlight": "강조",
+            "chat": "채팅"
           }
         }
       },

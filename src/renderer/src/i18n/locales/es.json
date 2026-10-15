@@ -8829,7 +8829,6 @@
           "6e6480a7df": "Permite que los programas del terminal (Zellij, tmux, Neovim, fzf, Grok, SSH) copien al portapapeles del sistema.",
           "3338dcf8c1": "Permitir escrituras en el portapapeles TUI (OSC 52)",
           "69c64a479c": "Permite que Zellij, tmux, Neovim, fzf y Grok copien al portapapeles del sistema a través de PTY (incluso por SSH).",
-          "4729c645fc": "Copia automáticamente las selecciones del terminal al portapapeles.",
           "902f5dee1f": "Copiar al seleccionar",
           "9129b7e805": "Al pasar el cursor sobre un panel de terminal, se activa sin necesidad de hacer clic.",
           "8eefeaa3da": "El foco sigue al ratón",
@@ -10659,7 +10658,6 @@
               "664789b73a": "auto",
               "c38c18be15": "selección",
               "797fdfe4ca": "seleccionar",
-              "603818e8d8": "Copia automáticamente las selecciones del terminal al portapapeles en cuanto se hace una selección.",
               "3bdc84f059": "Copiar al seleccionar",
               "zellij": "zellij",
               "grok": "asimilar"
@@ -18987,7 +18985,8 @@
       },
       "TerminalInteraction": {
         "copyTrimsGutter": "Recortar margen al copiar",
-        "copyTrimsGutterDescription": "Elimina el margen izquierdo tras el que se dibuja la salida del agente, para que el texto copiado no quede indentado. Solo se quita la indentación que comparten todas las líneas seleccionadas."
+        "copyTrimsGutterDescription": "Elimina el margen izquierdo tras el que se dibuja la salida del agente, para que el texto copiado no quede indentado. Solo se quita la indentación que comparten todas las líneas seleccionadas.",
+        "copyOnSelectDescription": "Copia automáticamente al portapapeles el texto que selecciones en un terminal o un chat."
       },
       "terminal": {
         "clipboard": {
@@ -18997,7 +18996,10 @@
             "margin": "margen",
             "leading": "inicial",
             "whitespace": "espacios en blanco",
-            "spaces": "espacios"
+            "spaces": "espacios",
+            "copyOnSelectDescription": "Copia automáticamente al portapapeles el texto que selecciones en un terminal o un chat en cuanto se hace la selección.",
+            "highlight": "resaltar",
+            "chat": "chat"
           }
         }
       }

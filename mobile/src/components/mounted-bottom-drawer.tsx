@@ -16,7 +16,10 @@ import { resolveBottomDrawerFillHeight } from './bottom-drawer-fill-height'
 import { resolveBottomDrawerKeyboardInset } from './bottom-drawer-keyboard-inset'
 import { BOTTOM_DRAWER_HIDE_DURATION_MS } from './bottom-drawer-constants'
 import { bottomDrawerStyles as styles } from './bottom-drawer-styles'
-import { useInsideBottomDrawerModalHost } from './bottom-drawer-modal-host'
+import {
+  useBottomDrawerModalHost,
+  useBottomDrawerModalHostBackClaim
+} from './bottom-drawer-modal-host-scope'
 import { useResponsiveLayout } from '../layout/responsive-layout'
 import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import { useBackClaim } from '../navigation/use-back-claim'
@@ -73,7 +76,7 @@ export function MountedBottomDrawer({
   // center it horizontally. Vertical bottom-anchoring (and all the drag/keyboard
   // transforms below) is unchanged, so phone behavior stays identical.
   const { isWideLayout, modalMaxWidth } = useResponsiveLayout()
-  const insideModalHost = useInsideBottomDrawerModalHost()
+  const insideModalHost = useBottomDrawerModalHost() !== null
   const fillHeight = fillAvailable
     ? resolveBottomDrawerFillHeight({
         screenHeight,
@@ -202,6 +205,7 @@ export function MountedBottomDrawer({
         }
       : null
   )
+  useBottomDrawerModalHostBackClaim(visible && interactive ? dismiss : null)
 
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollOffsetY.value = Math.max(event.contentOffset.y, 0)

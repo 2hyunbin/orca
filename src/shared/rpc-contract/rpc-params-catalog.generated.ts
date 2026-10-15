@@ -1077,6 +1077,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'markdown.saveTab': SaveMarkdownTab,
   'mobileRelay.hosts.list': null,
   'mobileRelay.hosts.worktrees': MobileRelayHostWorktreesParamsSchema,
+  'mobileRelay.projectSections': null,
   'mobileWeb.bundle.chunk': MobileWebBundleChunkParamsSchema,
   'mobileWeb.bundle.manifest': null,
   'mobileWeb.bundle.range': MobileWebBundleChunkParamsSchema,

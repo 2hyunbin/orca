@@ -48,11 +48,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
   },
   {
-    fixture: 'legacy row repeating a tab-bar tab’s terminal',
-    rule: 'duplicate tab: the window drops a legacy row whose terminal a tab-bar tab holds; the Loader keeps it as a tab with an unbound pane',
-    paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-legacy`, ...terminal('tab-legacy')]
-  },
-  {
     fixture: 'row terminal differs from its focused pane’s',
     rule: 'row.ptyId rewrite: the Loader sets the row terminal to its focused pane’s, which changes what the tab reattaches',
     paths: [`${GIT} terminal tab-a reattaches`]
@@ -133,6 +128,19 @@ describe('the window shows the same session before and after the shared Loader r
       ).toEqual(known.flatMap((entry) => entry.paths).sort())
     }
   )
+
+  it('keeps the tab-bar twin selected when a selected legacy copy is dropped', async () => {
+    const profile = PROFILES.find(
+      (entry) => entry.name === 'legacy row repeating a tab-bar tab’s terminal, selected'
+    )!
+    const view = projectStartupWindowView(
+      await bootWindowFromPartitions(createTestStore(), [
+        { hostId: profile.hostId, session: normalize(profile.hostId, profile.build()) }
+      ])
+    )
+    expect(view['active.terminal']).toBe('tab-a')
+    expect(view[`${GIT} active terminal`]).toBe('tab-a')
+  })
 
   it('lists differences only for fixtures that exist', () => {
     const names = new Set(PROFILES.map((profile) => profile.name))

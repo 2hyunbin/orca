@@ -247,6 +247,27 @@ describe('NativeChatStructuredSession', () => {
     act(() => useAppStore.getState().clearNativeChatLaunchDraft(draft.tabId))
   })
 
+  it('focuses the chat on a click outside its controls and sends typing there to the composer', () => {
+    const { container } = render(
+      <NativeChatStructuredSession
+        isVisible
+        isFocusedGroup
+        tabId="structured-tab-1"
+        sessionId="session-1"
+        target={{ kind: 'local' }}
+        agent="claude"
+      />
+    )
+    const root = container.querySelector('[data-native-chat-root]')
+    if (!(root instanceof HTMLElement)) {
+      throw new Error('chat root missing')
+    }
+    fireEvent.pointerDown(root, { button: 0 })
+    expect(document.activeElement).toBe(root)
+
+    expect(fireEvent.keyDown(root, { key: 'h' })).toBe(false)
+  })
+
   it('wires remote structured file links through the host-aware native chat opener', () => {
     render(
       <NativeChatStructuredSession

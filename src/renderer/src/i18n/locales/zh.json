@@ -8814,7 +8814,6 @@
           "6e6480a7df": "让终端中的程序（Zellij、tmux、Neovim、fzf、Grok、SSH）复制到系统剪贴板。",
           "3338dcf8c1": "允许 TUI 剪贴板写入 (OSC 52)",
           "69c64a479c": "让 Zellij、tmux、Neovim、fzf 和 Grok 通过 PTY（包括通过 SSH）复制到系统剪贴板。",
-          "4729c645fc": "自动将终端选择复制到剪贴板。",
           "902f5dee1f": "选择时复制",
           "9129b7e805": "将鼠标悬停在终端窗格上即可将其激活，无需单击。",
           "8eefeaa3da": "焦点跟随鼠标",
@@ -10644,7 +10643,6 @@
               "664789b73a": "自动",
               "c38c18be15": "选择",
               "797fdfe4ca": "选择",
-              "603818e8d8": "一旦做出选择，就会自动将终端选择复制到剪贴板。",
               "3bdc84f059": "选择时复制",
               "zellij": "泽利杰",
               "grok": "格罗克"
@@ -19023,7 +19021,8 @@
     "settings": {
       "TerminalInteraction": {
         "copyTrimsGutter": "修剪副本上的装订线",
-        "copyTrimsGutterDescription": "将左侧装订线智能体输出绘制在后面，因此复制的文本不会缩进。仅删除每个选定行共享的缩进。"
+        "copyTrimsGutterDescription": "将左侧装订线智能体输出绘制在后面，因此复制的文本不会缩进。仅删除每个选定行共享的缩进。",
+        "copyOnSelectDescription": "自动将在终端或聊天中选择的文本复制到剪贴板。"
       },
       "terminal": {
         "clipboard": {
@@ -19033,7 +19032,10 @@
             "margin": "利润",
             "leading": "领导",
             "whitespace": "空白",
-            "spaces": "空间"
+            "spaces": "空间",
+            "copyOnSelectDescription": "在终端或聊天中选择文本后，立即自动将其复制到剪贴板。",
+            "highlight": "高亮",
+            "chat": "聊天"
           }
         }
       },

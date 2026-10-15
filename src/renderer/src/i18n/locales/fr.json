@@ -8979,7 +8979,6 @@
           "6e6480a7df": "Permet aux programmes du terminal (Zellij, tmux, Neovim, fzf, Grok, SSH) de copier vers le presse-papiers système.",
           "3338dcf8c1": "Autoriser les écritures presse-papiers des TUI (OSC 52)",
           "69c64a479c": "Permet à Zellij, tmux, Neovim, fzf et Grok de copier vers le presse-papiers système via le PTY (y compris via SSH).",
-          "4729c645fc": "Copier automatiquement les sélections du terminal vers le presse-papiers.",
           "902f5dee1f": "Copie à la sélection",
           "9129b7e805": "Survoler un volet de terminal l'active sans avoir à cliquer.",
           "8eefeaa3da": "Le focus suit la souris",
@@ -10806,7 +10805,6 @@
               "664789b73a": "auto",
               "c38c18be15": "sélection",
               "797fdfe4ca": "sélectionner",
-              "603818e8d8": "Copiez automatiquement les sélections du terminal vers le presse-papiers dès qu'une sélection est faite.",
               "3bdc84f059": "Copie à la sélection",
               "zellij": "zellige",
               "grok": "grok"
@@ -19127,7 +19125,8 @@
     "settings": {
       "TerminalInteraction": {
         "copyTrimsGutter": "Couper la gouttière lors de la copie",
-        "copyTrimsGutterDescription": "Déposez la sortie de l'agent de gouttière gauche qui est peinte derrière, donc le texte copié n'est pas en retrait. Seul le retrait de chaque partage de ligne sélectionnée est supprimé."
+        "copyTrimsGutterDescription": "Déposez la sortie de l'agent de gouttière gauche qui est peinte derrière, donc le texte copié n'est pas en retrait. Seul le retrait de chaque partage de ligne sélectionnée est supprimé.",
+        "copyOnSelectDescription": "Copier automatiquement vers le presse-papiers le texte sélectionné dans un terminal ou un chat."
       },
       "terminal": {
         "clipboard": {
@@ -19137,7 +19136,10 @@
             "margin": "marge",
             "leading": "menant",
             "whitespace": "espace",
-            "spaces": "espaces"
+            "spaces": "espaces",
+            "copyOnSelectDescription": "Copiez automatiquement vers le presse-papiers le texte sélectionné dans un terminal ou un chat dès que la sélection est faite.",
+            "highlight": "surligner",
+            "chat": "chat"
           }
         }
       },
