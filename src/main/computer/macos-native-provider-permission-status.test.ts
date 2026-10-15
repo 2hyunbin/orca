@@ -81,6 +81,7 @@ describe('MacOSNativeProviderClient.permissionStatus', () => {
   let replies: Replies
 
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval'] })
     sockets.length = 0
     replies = {
       handshake: capabilities(true),
@@ -96,6 +97,7 @@ describe('MacOSNativeProviderClient.permissionStatus', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.resetAllMocks()
   })
 
@@ -153,6 +155,18 @@ describe('MacOSNativeProviderClient.permissionStatus', () => {
     await client.permissionStatus({ fresh: false })
 
     expect(spawnMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('restarts at most once per status read and never on its own', async () => {
+    replies.permissionStatus = { accessibility: 'granted', screenshots: 'not-granted' }
+    const client = await createClient()
+    for (let read = 0; read < 3; read++) {
+      await client.permissionStatus({ fresh: false })
+    }
+    expect(spawnMock).toHaveBeenCalledTimes(3)
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(spawnMock).toHaveBeenCalledTimes(3)
   })
 
   it('keeps a provider that is serving agent work', async () => {

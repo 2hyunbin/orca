@@ -156,7 +156,7 @@ describe('openComputerUsePermissions', () => {
     expect(
       vi.mocked(spawn).mock.calls.filter(([program]) => program === '/usr/bin/open')
     ).toHaveLength(1)
-    expect(callPermissionStatusMock).toHaveBeenCalledWith({ fresh: false })
+    expect(callPermissionStatusMock).toHaveBeenCalledWith(false)
   })
 
   it('launches a targeted permission helper flow', async () => {
@@ -276,7 +276,7 @@ describe('openComputerUsePermissions', () => {
       throughChokepoint
     )
     // Why: the provider read before the reset holds the old grant; the answer must come from a new one.
-    expect(callPermissionStatusMock.mock.calls).toEqual([[{ fresh: false }], [{ fresh: true }]])
+    expect(callPermissionStatusMock.mock.calls).toEqual([[false], [true]])
     expect(spawn).not.toHaveBeenCalledWith('/usr/bin/open', expect.anything(), expect.anything())
     // Why: a sync reset would hold main's event loop for both children.
     expect(spawnSync).not.toHaveBeenCalledWith(

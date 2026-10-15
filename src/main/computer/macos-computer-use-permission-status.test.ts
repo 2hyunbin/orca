@@ -68,7 +68,7 @@ describe('getComputerUsePermissionStatus', () => {
         { id: 'screenshots', status: 'not-granted' }
       ]
     })
-    expect(callPermissionStatusMock).toHaveBeenCalledWith({ fresh: false })
+    expect(callPermissionStatusMock).toHaveBeenCalledWith(false)
     // Why: LaunchServices probe launches wedged app launches system-wide (#29146).
     expect(spawn).not.toHaveBeenCalled()
     expect(spawnSync).not.toHaveBeenCalled()
@@ -109,7 +109,7 @@ describe('getComputerUsePermissionStatus', () => {
     })
     await expect(after).resolves.toBe(await fresh)
     await expect(before).resolves.not.toBe(await fresh)
-    expect(callPermissionStatusMock.mock.calls).toEqual([[{ fresh: false }], [{ fresh: true }]])
+    expect(callPermissionStatusMock.mock.calls).toEqual([[false], [true]])
   })
 
   it('does not report a grant when the provider read fails', async () => {

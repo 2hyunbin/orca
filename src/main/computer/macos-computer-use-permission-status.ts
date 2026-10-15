@@ -70,7 +70,7 @@ async function readComputerUsePermissionStatus(
   let raw: unknown
   try {
     // Why the provider: it is spawned directly (no LaunchServices) and its own grants are what actions use.
-    raw = await callComputerSidecarPermissionStatus({ fresh })
+    raw = await callComputerSidecarPermissionStatus(fresh)
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'unsupported_capability') {
       return createUnavailablePermissionStatus(
