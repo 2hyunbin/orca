@@ -1,3 +1,5 @@
+import type { TuiAgent } from './tui-agent'
+
 /**
  * Agents Orca can place an installed skill for.
  *
@@ -5,7 +7,7 @@
  * that scope, so it needs no placement of its own. Ids match the detection ids
  * in `tui-agent-config.ts` so a detected agent maps straight to a destination.
  */
-export type SkillInstallProviderId =
+export type SkillInstallProviderId = OrcaAgentIds<
   | 'codex'
   | 'claude'
   | 'cursor'
@@ -17,18 +19,20 @@ export type SkillInstallProviderId =
   | 'aug'
   | 'muse'
   | 'zcode'
+>
+
+// Fails to compile when a provider id is not an Orca agent id.
+type OrcaAgentIds<T extends TuiAgent> = T
 
 export type SkillInstallProviderDefinition = {
   id: SkillInstallProviderId
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
-  /** Names the source in skill listings (`<name> home`); defaults to displayName. */
+  /** Skill source label is `<shortName ?? displayName> home`. */
   shortName?: string
-  /** Env var that relocates the agent's home; global skills then live in `<home>/skills`. */
+  /** Env var relocating the agent's home (skills in `<home>/skills`); the WSL probe is still Grok-only. */
   homeEnv?: string
-  /** Discovery-only user folder for an agent whose installs go to the canonical root. */
-  globalDiscoverySegments?: readonly string[]
 }
 
 export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] = [
@@ -93,14 +97,12 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
     globalSegments: ['.augment', 'skills'],
     workspaceSegments: ['.augment', 'skills']
   },
-  // Why: Muse reads the canonical .agents/skills root at both scopes, plus user
-  // skills under XDG config home.
+  // Why: Muse reads the canonical .agents/skills root at both scopes.
   {
     id: 'muse',
     displayName: 'Muse',
     globalSegments: null,
-    workspaceSegments: null,
-    globalDiscoverySegments: ['.config', 'muse', 'skills']
+    workspaceSegments: null
   },
   // Why: ZCode loads user skills from `~/.zcode/skills`; project skills come from the
   // canonical `.agents/skills` root the shared repo source already covers.

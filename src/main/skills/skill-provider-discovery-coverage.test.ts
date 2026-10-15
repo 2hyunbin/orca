@@ -1,7 +1,6 @@
 import { join, posix, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
-import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import { buildSkillDiscoverySources } from './skill-discovery-sources'
 import { resolveEnvironmentSkillProviderRoots } from './skill-provider-runtime-roots'
 
@@ -18,21 +17,13 @@ function discover(providerRootOverrides = {}) {
 }
 
 describe('skill install provider table drives discovery', () => {
-  it('uses only Orca agent detection ids', () => {
-    const unknown = SKILL_INSTALL_PROVIDERS.map((provider) => provider.id).filter(
-      (id) => !(id in TUI_AGENT_CONFIG)
-    )
-    expect(unknown).toEqual([])
-  })
-
   it('lists every provider install folder at each scope it has one', () => {
     const sources = discover()
     for (const provider of SKILL_INSTALL_PROVIDERS) {
-      const globalSegments = provider.globalSegments ?? provider.globalDiscoverySegments
-      if (globalSegments) {
+      if (provider.globalSegments) {
         expect(sources, provider.id).toContainEqual(
           expect.objectContaining({
-            path: posix.join(HOME, ...globalSegments),
+            path: posix.join(HOME, ...provider.globalSegments),
             sourceKind: 'home',
             owner: provider.id
           })
@@ -71,33 +62,5 @@ describe('skill install provider table drives discovery', () => {
         )?.path
       ).toBe(overrides[provider.id])
     }
-  })
-
-  it('keeps the scan order discovery had before the table drove it', () => {
-    // Why: the first root scanned names a skill reached through a symlink from two roots.
-    const homeIds = discover()
-      .filter((source) => source.sourceKind !== 'repo')
-      .map((source) => source.id)
-    expect(homeIds.slice(0, 12)).toEqual([
-      'home-codex',
-      'home-agents',
-      'home-claude',
-      'codex-plugin-cache',
-      'home-grok',
-      'home-opencode',
-      'home-pi',
-      'home-omp',
-      'home-hermes',
-      'home-prime-agent',
-      'home-gemini',
-      'home-antigravity'
-    ])
-    expect(homeIds.slice(12)).toEqual(
-      SKILL_INSTALL_PROVIDERS.filter(
-        (provider) =>
-          (provider.globalSegments || provider.globalDiscoverySegments) &&
-          !['claude', 'grok', 'gemini'].includes(provider.id)
-      ).map((provider) => `home-${provider.id}`)
-    )
   })
 })

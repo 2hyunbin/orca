@@ -39,16 +39,10 @@ function source(
   return { id, label, path, sourceKind, providers, owner }
 }
 
-// Why: Codex and Claude have their own SkillProvider tags; every other agent
-// shares the agent-skills one.
+// Why: Claude has its own SkillProvider tag; every other agent shares agent-skills.
 function skillProvidersFor(id: SkillInstallProviderId): SkillProvider[] {
-  return id === 'codex' || id === 'claude' ? [id] : ['agent-skills']
+  return id === 'claude' ? ['claude'] : ['agent-skills']
 }
-
-// Why: when a symlink reaches one skill from two roots, the first root scanned
-// names it. These agents keep the scan slot they had before the provider table
-// drove discovery; the rest follow in table order after the one-off roots.
-const SCAN_ORDER_PINNED_PROVIDERS: ReadonlySet<string> = new Set(['claude', 'grok', 'gemini'])
 
 function providerHomeSources(
   home: string,
@@ -56,20 +50,14 @@ function providerHomeSources(
   overrides: SkillProviderRootOverrides
 ): SkillScanRoot[] {
   return SKILL_INSTALL_PROVIDERS.flatMap((provider) => {
-    const path = provider.globalSegments
-      ? (overrides[provider.id] ?? pathApi.join(home, ...provider.globalSegments))
-      : provider.globalDiscoverySegments
-        ? pathApi.join(home, ...provider.globalDiscoverySegments)
-        : null
-    if (!path) {
+    if (!provider.globalSegments) {
       return []
     }
-    const label = `${provider.shortName ?? provider.displayName} home`
     return [
       source(
         `home-${provider.id}`,
-        label,
-        path,
+        `${provider.shortName ?? provider.displayName} home`,
+        overrides[provider.id] ?? pathApi.join(home, ...provider.globalSegments),
         'home',
         skillProvidersFor(provider.id),
         provider.id
@@ -123,9 +111,6 @@ export function buildSkillDiscoverySources(
   const hermesSkillsRoot = args.pathApi
     ? pathApi.join(home, '.hermes', 'skills')
     : (resolveEnvironmentHermesSkillsRoot() ?? resolveDefaultHermesSkillsRoot({ homeDir: home }))
-  const providerHomes = providerHomeSources(home, pathApi, providerRootOverrides)
-  const pinnedHome = (id: SkillInstallProviderId) =>
-    providerHomes.filter((root) => root.owner === id)
   const roots: SkillScanRoot[] = [
     // Why: Codex reads `.agents/skills` today; this legacy home still holds older installs.
     source(
@@ -144,7 +129,9 @@ export function buildSkillDiscoverySources(
       ['agent-skills'],
       null
     ),
-    ...pinnedHome('claude'),
+    // Why: `npx skills add --global` writes into each agent's own home skills
+    // directory, so coverage misses them unless we scan every provider root.
+    ...providerHomeSources(home, pathApi, providerRootOverrides),
     source(
       'codex-plugin-cache',
       'Codex plugin cache',
@@ -153,9 +140,6 @@ export function buildSkillDiscoverySources(
       ['codex', 'agent-skills'],
       'codex'
     ),
-    // Why: `npx skills add --global` writes into each agent's own home skills
-    // directory, so coverage misses them unless we scan every provider root.
-    ...pinnedHome('grok'),
     source(
       'home-opencode',
       'OpenCode home',
@@ -189,7 +173,6 @@ export function buildSkillDiscoverySources(
       ['agent-skills'],
       'prime-agent'
     ),
-    ...pinnedHome('gemini'),
     source(
       'home-antigravity',
       'Antigravity home',
@@ -198,8 +181,14 @@ export function buildSkillDiscoverySources(
       ['agent-skills'],
       'antigravity'
     ),
-    ...providerHomes.filter(
-      (root) => root.owner === null || !SCAN_ORDER_PINNED_PROVIDERS.has(root.owner)
+    // Why: Muse installs to `.agents/skills` but also reads XDG config home.
+    source(
+      'home-muse',
+      'Muse home',
+      pathApi.join(home, '.config', 'muse', 'skills'),
+      'home',
+      ['agent-skills'],
+      'muse'
     )
   ]
 
