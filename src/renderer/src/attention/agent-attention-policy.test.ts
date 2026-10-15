@@ -136,35 +136,20 @@ describe('resolveAgentAttention', () => {
     expect(admitSurface).not.toHaveBeenCalled()
   })
 
-  it('decides a bell unread by the surface on screen, without validating its address', () => {
+  it('delivers a bell without validating the surface address or writing unread', () => {
     const admitSurface = vi.fn()
+    const isSurfaceViewed = vi.fn()
     const decision = resolveAgentAttention(
       completion({ reason: 'terminal-bell', settlesTurn: false }),
-      makeSurface({ admitSurface })
+      makeSurface({ admitSurface, isSurfaceViewed })
     )
-    expect(decision).toMatchObject({
-      admitted: true,
-      unread: {
-        workspaceId: WORKSPACE,
-        subjectKey: SUBJECT,
-        groupId: null,
-        reason: 'terminal-bell'
-      }
-    })
+    expect(decision).toMatchObject({ admitted: true, unread: null })
     expect(admitSurface).not.toHaveBeenCalled()
+    expect(isSurfaceViewed).not.toHaveBeenCalled()
+
     const sink = makeSink()
     applyAgentAttention(decision, sink)
-    expect(sink.calls).toEqual([
-      `unread:${WORKSPACE}:${SUBJECT}:null:terminal-bell`,
-      `deliver:${WORKSPACE}:${SUBJECT}`
-    ])
-
-    expect(
-      resolveAgentAttention(
-        completion({ reason: 'terminal-bell', settlesTurn: false }),
-        makeSurface({ isSurfaceViewed: () => true })
-      )
-    ).toMatchObject({ admitted: true, unread: null })
+    expect(sink.calls).toEqual([`deliver:${WORKSPACE}:${SUBJECT}`])
   })
 
   it('rejects a bell from a workspace that is muted or has no live session', () => {
