@@ -23,7 +23,7 @@ vi.mock('../components/NewWorktreeModalController', () => ({
   NewWorktreeModalController: 'NewWorktreeModalController'
 }))
 vi.mock('./workspace-options-sheet', () => ({ WorkspaceOptionsSheet: 'WorkspaceOptionsSheet' }))
-vi.mock('./workspace-action-details', () => ({ WorkspaceActionDetails: 'WorkspaceActionDetails' }))
+vi.mock('./workspace-details-sheet', () => ({ WorkspaceDetailsSheet: 'WorkspaceDetailsSheet' }))
 
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
@@ -67,9 +67,8 @@ async function renderSheet(row: Partial<Worktree>) {
     )
   })
   return {
-    client: controller.client,
     sheet: renderer!.root.find((node) => String(node.type) === 'ActionSheetContent'),
-    details: renderer!.root.find((node) => String(node.type) === 'WorkspaceActionDetails')
+    details: renderer!.root.find((node) => String(node.type) === 'WorkspaceDetailsSheet')
   }
 }
 
@@ -97,24 +96,8 @@ describe('the workspace long-press sheet', () => {
     expect(pin.icon).toBe('Pin')
   })
 
-  it("shows the workspace's details above its actions, read from the desktop for its own", async () => {
-    const { client, details } = await renderSheet({ comment: 'Check iPad' })
+  it("shows the workspace's details above its actions", async () => {
+    const { details } = await renderSheet({ comment: 'Check iPad' })
     expect(details.props.row).toMatchObject({ worktreeId: 'wt', comment: 'Check iPad' })
-    expect(details.props.client).toBe(client)
-  })
-
-  it("asks a server's workspace's details of that server, not the desktop", async () => {
-    const { client, details } = await renderSheet({ worktreeId: 'vm-wt', hostId: 'runtime:vm' })
-    expect(details.props.client).not.toBe(client)
-    expect(details.props.client).not.toBeNull()
-  })
-
-  it('gives a folder workspace its details only, since the actions act on worktrees', async () => {
-    const { sheet, details } = await renderSheet({
-      worktreeId: 'folder:f1',
-      workspaceKind: 'folder-workspace'
-    })
-    expect(sheet.props.actions).toEqual([])
-    expect(details.props.row).toMatchObject({ worktreeId: 'folder:f1' })
   })
 })

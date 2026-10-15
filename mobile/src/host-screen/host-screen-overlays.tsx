@@ -12,7 +12,7 @@ import { hostNewWorktreeSessionRoute } from '../host-route-action-state'
 import { isWorktreePinned } from '../worktree/workspace-list-sections'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { WorkspaceOptionsSheet } from './workspace-options-sheet'
-import { WorkspaceActionDetails } from './workspace-action-details'
+import { WorkspaceDetailsSheet } from './workspace-details-sheet'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostScreenOverlays({ controller }: { controller: HostScreenController }) {
@@ -89,8 +89,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         ) : (
           <ActionSheetContent
             actions={
-              // A folder's sheet is its details only: Sleep, Pin, Delete and Source Control act on worktrees.
-              actionTarget && actionTarget.workspaceKind !== 'folder-workspace'
+              actionTarget
                 ? [
                     ...buildWorktreeNavigationActions({
                       hostId,
@@ -132,15 +131,15 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                 : []
             }
           >
-            <WorkspaceActionDetails
-              row={actionTarget}
-              // The workspace's own host answers for it: the server for a server's row.
-              client={actionServer.server ? actionServer.server.client : client}
-              onOpenLink={(url) => {
-                openExternalLink(url)
-                state.setActionTarget(null)
-              }}
-            />
+            {actionTarget ? (
+              <WorkspaceDetailsSheet
+                row={actionTarget}
+                onOpenLink={(url) => {
+                  openExternalLink(url)
+                  state.setActionTarget(null)
+                }}
+              />
+            ) : null}
           </ActionSheetContent>
         )}
       </BottomDrawer>

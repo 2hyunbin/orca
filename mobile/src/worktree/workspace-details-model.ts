@@ -1,18 +1,18 @@
 import type { CheckStatus } from '../../../src/shared/github/pull-request-types'
-import type { HostedReviewInfo } from '../../../src/shared/hosted-review'
 import { getWorkspaceAttachmentKey } from '../../../src/shared/workspace-attachment-normalization'
-import { getWorkspaceAttachments } from '../../../src/shared/workspace-attachments'
+import {
+  getWorkspaceAttachments,
+  workspaceAttachmentReferenceLabel
+} from '../../../src/shared/workspace-attachments'
 import type { WorkspaceAttachment } from '../../../src/shared/worktree/types'
 import type { Worktree } from './workspace-list-types'
-
-type LinkProvider = WorkspaceAttachment['provider']
-type LinkType = WorkspaceAttachment['type']
 
 /** A linked review or task as the long-press details list shows it. */
 export type WorkspaceDetailLink = {
   key: string
-  provider: LinkProvider
-  type: LinkType
+  provider: WorkspaceAttachment['provider']
+  type: WorkspaceAttachment['type']
+  number: number
   /** `PR #12`, `MR !3`, `Issue #4`, or the tracker's own key (`ENG-12`). */
   label: string
   title?: string
@@ -25,17 +25,6 @@ export type WorkspaceDetailLink = {
 /** Who made the workspace, as the desktop hover card's Automation / Orca CLI sections say. */
 export type WorkspaceOrigin = { kind: 'automation'; name?: string } | { kind: 'cli' }
 
-/** What `worktree.show` adds to the row's `automationCreated` flag: the automation's name. */
-export type WorkspaceOriginDetails = { automationName?: string }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function isPositiveNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-}
-
 function optionalText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
@@ -46,113 +35,59 @@ function webUrl(value: unknown): string | undefined {
   return url && /^https?:\/\//i.test(url) ? url : undefined
 }
 
-function referenceLabel(item: WorkspaceAttachment): string {
-  if (item.provider === 'linear' || item.provider === 'jira') {
-    const key = item.identifier ?? item.linearIdentifier ?? item.jiraIdentifier
-    if (key) {
-      return key
-    }
-  }
-  if (item.type === 'mr') {
-    return `MR !${item.number}`
-  }
-  return item.type === 'pr' ? `PR #${item.number}` : `Issue #${item.number}`
-}
-
 function toDetailLink(item: WorkspaceAttachment): WorkspaceDetailLink {
   return {
     key: getWorkspaceAttachmentKey(item),
     provider: item.provider,
     type: item.type,
-    label: referenceLabel(item),
+    number: item.number,
+    label: workspaceAttachmentReferenceLabel(item),
     title: optionalText(item.title),
     url: webUrl(item.url)
   }
 }
 
-function isReviewOf(link: WorkspaceDetailLink, review: HostedReviewInfo): boolean {
-  return (
-    link.type !== 'issue' &&
-    link.provider === review.provider &&
-    // The branch lookup is already scoped to the row's repo, so provider and number suffice.
-    link.label ===
-      referenceLabel({ provider: link.provider, type: link.type, number: review.number })
-  )
-}
-
 /**
- * Every review and task linked to the row, read the way the desktop hover card reads them
- * (getWorkspaceAttachments: the host's list, then the singular fields older hosts send), plus the
- * branch's discovered PR, which is never an attachment. `review` is the host's live lookup for the
- * branch, which brings the title, link and checks. Reviews come first, as the desktop's list does.
+ * Every review and task linked to the row, read the way the desktop hover card reads them: the
+ * host's `linkedItems`, then the singular fields older hosts send. The branch's PR is the row's
+ * `linkedPR`, so it carries the same state as the row's badge, and the title, link and checks
+ * when the host sends them. Reviews come first, as in the desktop's list.
  */
-export function buildWorkspaceDetailLinks(
-  row: Worktree,
-  review?: HostedReviewInfo | null
-): WorkspaceDetailLink[] {
+export function buildWorkspaceDetailLinks(row: Worktree): WorkspaceDetailLink[] {
+  const pr = row.linkedPR
   const links = getWorkspaceAttachments({
     // Rows arrive unvalidated; the shared reader drops entries it cannot place.
     linkedItems: Array.isArray(row.linkedItems) ? row.linkedItems : undefined,
-    linkedPR: isPositiveNumber(row.linkedPR?.number) ? row.linkedPR.number : null,
+    linkedPR: pr?.number ?? null,
     linkedIssue: row.linkedIssue ?? null,
     linkedGitLabMR: row.linkedGitLabMR ?? null,
     linkedGitLabIssue: row.linkedGitLabIssue ?? null,
     linkedLinearIssue: optionalText(row.linkedLinearIssue) ?? null
-  }).map(toDetailLink)
-  const branchPR = links.find(
-    (link) =>
-      link.provider === 'github' &&
-      link.type === 'pr' &&
-      link.label === `PR #${row.linkedPR?.number}`
-  )
-  if (branchPR && row.linkedPR) {
-    branchPR.state = row.linkedPR.state
-  }
-  const provider = review?.provider
-  if (review && provider && provider !== 'unsupported' && isPositiveNumber(review.number)) {
-    const known = links.find((link) => isReviewOf(link, review))
-    const live: WorkspaceDetailLink = {
-      ...(known ??
-        toDetailLink({
-          provider,
-          type: provider === 'gitlab' ? 'mr' : 'pr',
-          number: review.number
-        })),
-      title: optionalText(review.title) ?? known?.title,
-      url: webUrl(review.url) ?? known?.url,
-      state: optionalText(review.state) ?? known?.state,
-      checks: review.status
-    }
-    if (known) {
-      links[links.indexOf(known)] = live
-    } else {
-      links.unshift(live)
-    }
-  }
+  }).map((item): WorkspaceDetailLink => {
+    const link = toDetailLink(item)
+    const isBranchPR =
+      pr && link.provider === 'github' && link.type === 'pr' && link.number === pr.number
+    return isBranchPR
+      ? {
+          ...link,
+          title: optionalText(pr.title) ?? link.title,
+          url: webUrl(pr.url) ?? link.url,
+          state: pr.state,
+          checks: pr.checksStatus
+        }
+      : link
+  })
   // Stable: the host's own order holds within reviews and within tasks.
   return links.sort((a, b) => Number(a.type === 'issue') - Number(b.type === 'issue'))
 }
 
-/** The row's origin, the automation named once `worktree.show` answers. */
-export function buildWorkspaceOrigin(
-  row: Worktree,
-  details?: WorkspaceOriginDetails | null
-): WorkspaceOrigin | null {
+export function buildWorkspaceOrigin(row: Worktree): WorkspaceOrigin | null {
   if (row.automationCreated) {
-    return details?.automationName
-      ? { kind: 'automation', name: details.automationName }
-      : { kind: 'automation' }
+    // Older hosts send only the flag, so the name is optional.
+    const name = optionalText(row.automationName)
+    return name ? { kind: 'automation', name } : { kind: 'automation' }
   }
   return row.cliCreated ? { kind: 'cli' } : null
-}
-
-/** The automation `worktree.show` names on the record, or null when it names none. */
-export function readWorkspaceOriginDetails(worktree: unknown): WorkspaceOriginDetails | null {
-  const automationName =
-    isRecord(worktree) && isRecord(worktree.automationProvenance)
-      ? optionalText(worktree.automationProvenance.automationNameSnapshot)
-      : undefined
-  return automationName ? { automationName } : null
 }
 
 export function workspaceNotes(row: Pick<Worktree, 'comment'>): string | null {

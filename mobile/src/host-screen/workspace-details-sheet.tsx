@@ -16,7 +16,15 @@ import { prStateColor } from '../components/WorktreeMetaGlyphs'
 import { hostScreenStyles } from './host-screen-styles'
 import { OptionRowList } from './workspace-option-rows'
 import { TaskProviderLogo } from '../components/TaskProviderLogo'
-import type { WorkspaceDetailLink, WorkspaceOrigin } from '../worktree/workspace-details-model'
+import { getWorktreeGitIdentityDisplay } from '../../../src/shared/worktree/git-identity-display'
+import {
+  buildWorkspaceDetailLinks,
+  buildWorkspaceOrigin,
+  workspaceNotes,
+  type WorkspaceDetailLink,
+  type WorkspaceOrigin
+} from '../worktree/workspace-details-model'
+import type { Worktree } from '../worktree/workspace-list-types'
 
 // The action rows' icon and gap, so both groups share one text column.
 const ICON_SIZE = 16
@@ -43,33 +51,55 @@ const CHECK_LABELS: Record<string, string> = {
   pending: 'Checks: Pending'
 }
 
-/** The sheet's heading: the workspace, its branch, and, quietly, who created it. */
-export function WorkspaceDetailsHeader(props: {
-  name: string
-  branch?: string | null
-  origin: WorkspaceOrigin | null
-}) {
-  const { name, branch, origin } = props
+/**
+ * The long-press sheet's top, the phone's take on the desktop sidebar card's hover card: the
+ * workspace, its branch and who created it, then its linked reviews and tasks (tap to open) and
+ * notes. Everything comes from the row; the group is left out when there is nothing in it.
+ */
+export function WorkspaceDetailsSheet(props: { row: Worktree; onOpenLink: (url: string) => void }) {
+  const { row, onOpenLink } = props
+  const identity = getWorktreeGitIdentityDisplay({ branch: row.branch })
+  const origin = buildWorkspaceOrigin(row)
   const OriginIcon = origin?.kind === 'automation' ? CalendarClock : SquareTerminal
-  return (
-    <View style={styles.header}>
-      <Text style={styles.heading} numberOfLines={1}>
-        {name}
-      </Text>
-      {branch ? (
-        <Text style={styles.branch} numberOfLines={1}>
-          {branch}
+  const notes = workspaceNotes(row)
+  const rows: ReactNode[] = buildWorkspaceDetailLinks(row).map((item) => (
+    <LinkRow key={item.key} item={item} onOpen={onOpenLink} />
+  ))
+  if (notes) {
+    rows.push(
+      <DetailRow key="notes" icon={<StickyNote size={ICON_SIZE} color={colors.textSecondary} />}>
+        <Text style={styles.notes} selectable>
+          {notes}
         </Text>
-      ) : null}
-      {origin ? (
-        <View style={styles.origin} testID="workspace-origin">
-          <OriginIcon size={12} color={colors.textMuted} style={styles.originIcon} />
-          <Text style={styles.originText} numberOfLines={2}>
-            {originLabel(origin)}
+      </DetailRow>
+    )
+  }
+  return (
+    <>
+      <View style={styles.header}>
+        <Text style={styles.heading} numberOfLines={1}>
+          {row.displayName || row.repo}
+        </Text>
+        {identity?.kind === 'branch' ? (
+          <Text style={styles.branch} numberOfLines={1}>
+            {identity.branchName}
           </Text>
+        ) : null}
+        {origin ? (
+          <View style={styles.origin} testID="workspace-origin">
+            <OriginIcon size={12} color={colors.textMuted} style={styles.originIcon} />
+            <Text style={styles.originText} numberOfLines={2}>
+              {originLabel(origin)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      {rows.length > 0 && (
+        <View testID="workspace-details" style={hostScreenStyles.filterGroup}>
+          <OptionRowList>{rows}</OptionRowList>
         </View>
-      ) : null}
-    </View>
+      )}
+    </>
   )
 }
 
@@ -78,41 +108,6 @@ function originLabel(origin: WorkspaceOrigin): string {
     return 'Created from Orca CLI'
   }
   return origin.name ? `Created by automation \u201c${origin.name}\u201d` : 'Created by automation'
-}
-
-export type WorkspaceDetailsSectionProps = {
-  links: readonly WorkspaceDetailLink[]
-  notes: string | null
-  onOpenLink: (url: string) => void
-  /** Shown when nothing else is, for a sheet that has no actions to fall back on. */
-  emptyText?: string
-}
-
-/**
- * The long-press sheet's details, the phone's take on the desktop sidebar card's hover card:
- * linked reviews and tasks (tap to open) and the workspace's notes. Who created it is the
- * header's. Nothing is drawn for a workspace with neither.
- */
-export function WorkspaceDetailsSection(props: WorkspaceDetailsSectionProps) {
-  const { links, notes, onOpenLink, emptyText } = props
-  const rows: ReactNode[] = [
-    ...links.map((item) => <LinkRow key={item.key} item={item} onOpen={onOpenLink} />),
-    notes ? (
-      <DetailRow key="notes" icon={<StickyNote size={ICON_SIZE} color={colors.textSecondary} />}>
-        <Text style={styles.notes} selectable>
-          {notes}
-        </Text>
-      </DetailRow>
-    ) : null
-  ].filter(Boolean)
-  if (rows.length === 0) {
-    return emptyText ? <Text style={styles.empty}>{emptyText}</Text> : null
-  }
-  return (
-    <View testID="workspace-details" style={hostScreenStyles.filterGroup}>
-      <OptionRowList>{rows}</OptionRowList>
-    </View>
-  )
 }
 
 function DetailRow(props: {
@@ -273,11 +268,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: colors.textSecondary
-  },
-  empty: {
-    fontSize: typography.metaSize,
-    color: colors.textMuted,
-    paddingHorizontal: spacing.xs,
-    paddingBottom: spacing.md
   }
 })

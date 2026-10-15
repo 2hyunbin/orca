@@ -60,55 +60,53 @@ export function ActionSheetContent({ title, message, children, actions, onClose 
 
       {children}
 
-      {actions.length > 0 && (
-        <View style={styles.actionGroup}>
-          {actions.map((action, i) => {
-            const Icon = iconForAction(action.label, action.destructive, action.icon)
-            const customIcon = action.renderIcon?.()
-            return (
-              <View key={action.label}>
-                {i > 0 && <View style={styles.separator} />}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.action,
-                    action.disabled && styles.actionDisabled,
-                    pressed && !action.disabled && !action.loading && styles.actionPressed
-                  ]}
-                  disabled={action.disabled || action.loading}
-                  onPress={() => {
-                    action.onPress()
-                    if (!action.skipAutoClose && onClose) {
-                      onClose()
-                    }
-                  }}
-                >
-                  {customIcon ?? (
-                    <Icon
-                      size={16}
-                      color={action.destructive ? colors.statusRed : colors.textSecondary}
-                    />
-                  )}
-                  <View style={styles.actionTextBlock}>
-                    <Text
-                      style={[
-                        styles.actionText,
-                        action.destructive && styles.actionTextDestructive,
-                        action.disabled && styles.actionTextDisabled
-                      ]}
-                    >
-                      {action.label}
-                    </Text>
-                    {action.hint ? <Text style={styles.actionHint}>{action.hint}</Text> : null}
-                  </View>
-                  {action.loading ? (
-                    <ActivityIndicator size="small" color={colors.textSecondary} />
-                  ) : null}
-                </Pressable>
-              </View>
-            )
-          })}
-        </View>
-      )}
+      <View style={styles.actionGroup}>
+        {actions.map((action, i) => {
+          const Icon = iconForAction(action.label, action.destructive, action.icon)
+          const customIcon = action.renderIcon?.()
+          return (
+            <View key={action.label}>
+              {i > 0 && <View style={styles.separator} />}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.action,
+                  action.disabled && styles.actionDisabled,
+                  pressed && !action.disabled && !action.loading && styles.actionPressed
+                ]}
+                disabled={action.disabled || action.loading}
+                onPress={() => {
+                  action.onPress()
+                  if (!action.skipAutoClose && onClose) {
+                    onClose()
+                  }
+                }}
+              >
+                {customIcon ?? (
+                  <Icon
+                    size={16}
+                    color={action.destructive ? colors.statusRed : colors.textSecondary}
+                  />
+                )}
+                <View style={styles.actionTextBlock}>
+                  <Text
+                    style={[
+                      styles.actionText,
+                      action.destructive && styles.actionTextDestructive,
+                      action.disabled && styles.actionTextDisabled
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                  {action.hint ? <Text style={styles.actionHint}>{action.hint}</Text> : null}
+                </View>
+                {action.loading ? (
+                  <ActivityIndicator size="small" color={colors.textSecondary} />
+                ) : null}
+              </Pressable>
+            </View>
+          )
+        })}
+      </View>
     </>
   )
 }

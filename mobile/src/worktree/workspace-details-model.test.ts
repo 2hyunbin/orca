@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { HostedReviewInfo } from '../../../src/shared/hosted-review'
 import type { Worktree } from './workspace-list-types'
 import {
   buildWorkspaceDetailLinks,
   buildWorkspaceOrigin,
-  readWorkspaceOriginDetails,
   workspaceNotes
 } from './workspace-details-model'
 
@@ -21,20 +19,6 @@ function row(overrides: Partial<Worktree> = {}): Worktree {
     unread: false,
     isPinned: false,
     linkedPR: null,
-    ...overrides
-  }
-}
-
-function review(overrides: Partial<HostedReviewInfo> = {}): HostedReviewInfo {
-  return {
-    provider: 'github',
-    number: 12,
-    title: 'Search keyboard',
-    state: 'open',
-    url: 'https://github.com/o/r/pull/12',
-    status: 'success',
-    updatedAt: '',
-    mergeable: 'MERGEABLE',
     ...overrides
   }
 }
@@ -82,14 +66,25 @@ describe('buildWorkspaceDetailLinks', () => {
     expect(links[0]).toMatchObject({ label: 'Issue #4', title: 'Bug' })
   })
 
-  it("fills the row's PR in from the host's live branch review", () => {
-    const [pr] = buildWorkspaceDetailLinks(
-      row({ linkedPR: { number: 12, state: 'unknown' } }),
-      review({ state: 'merged', status: 'failure' })
+  it("carries the row's PR state, title, link and checks onto its entry, matched by number", () => {
+    const [pr, other] = buildWorkspaceDetailLinks(
+      row({
+        linkedItems: [{ provider: 'github', type: 'pr', number: 9, title: 'Older linked PR' }],
+        linkedPR: {
+          number: 12,
+          state: 'merged',
+          title: 'Search keyboard',
+          url: 'https://github.com/o/r/pull/12',
+          checksStatus: 'failure'
+        }
+      })
     )
 
-    expect(pr).toMatchObject({
+    expect(pr).toMatchObject({ label: 'PR #9', title: 'Older linked PR' })
+    expect(pr).not.toHaveProperty('state')
+    expect(other).toMatchObject({
       label: 'PR #12',
+      number: 12,
       title: 'Search keyboard',
       url: 'https://github.com/o/r/pull/12',
       state: 'merged',
@@ -98,12 +93,10 @@ describe('buildWorkspaceDetailLinks', () => {
   })
 
   it('names a GitLab review an MR', () => {
-    const [mr] = buildWorkspaceDetailLinks(
-      row({ linkedGitLabMR: 5 }),
-      review({ provider: 'gitlab', number: 5 })
-    )
-
-    expect(mr).toMatchObject({ label: 'MR !5', title: 'Search keyboard' })
+    expect(buildWorkspaceDetailLinks(row({ linkedGitLabMR: 5 }))[0]).toMatchObject({
+      label: 'MR !5',
+      number: 5
+    })
   })
 
   it('drops attachments this build cannot place and never opens a non-web link', () => {
@@ -144,26 +137,13 @@ describe('buildWorkspaceDetailLinks', () => {
 })
 
 describe('workspace origin', () => {
-  it('names the automation once worktree.show answers', () => {
-    const details = readWorkspaceOriginDetails({
-      automationProvenance: {
-        automationNameSnapshot: 'Nightly deps',
-        automationRunTitleSnapshot: 'Run 3'
-      }
-    })
-
-    expect(buildWorkspaceOrigin(row({ automationCreated: true }), details)).toEqual({
-      kind: 'automation',
-      name: 'Nightly deps'
-    })
-  })
-
-  it("says only what the row's flag says until then, or when the record names nothing", () => {
+  it('names the automation the host names, and says only that one made it on an older host', () => {
+    expect(
+      buildWorkspaceOrigin(row({ automationCreated: true, automationName: ' Nightly deps ' }))
+    ).toEqual({ kind: 'automation', name: 'Nightly deps' })
     expect(buildWorkspaceOrigin(row({ automationCreated: true }))).toEqual({ kind: 'automation' })
     expect(buildWorkspaceOrigin(row({ cliCreated: true }))).toEqual({ kind: 'cli' })
     expect(buildWorkspaceOrigin(row())).toBeNull()
-    expect(readWorkspaceOriginDetails({ cliProvenance: {} })).toBeNull()
-    expect(readWorkspaceOriginDetails(null)).toBeNull()
   })
 })
 

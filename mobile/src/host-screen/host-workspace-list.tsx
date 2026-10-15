@@ -214,7 +214,9 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
               cardLayout={cardLayout}
               agentActivityDisplayMode={state.view.agentActivityDisplayMode}
               onPress={actions.openWorktreeSession}
-              onLongPress={state.setActionTarget}
+              onLongPress={
+                item.workspaceKind === 'folder-workspace' ? undefined : state.setActionTarget
+              }
               onToggleLineage={settings.toggleWorktreeLineage}
             />
           )}

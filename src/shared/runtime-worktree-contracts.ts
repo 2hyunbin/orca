@@ -1,5 +1,6 @@
 import type { AgentStatusState, AgentType, AgentWorkingMode } from './agent-status-types'
 import type { AgentMainAgentStatus } from './main-agent-status'
+import type { CheckStatus } from './github/pull-request-types'
 import type { BaseRefSearchResult, Repo } from './repo-types'
 import type { CreateWorktreeResult, RemoveWorktreeResult } from './worktree/create-types'
 import type {
@@ -67,7 +68,15 @@ export type RuntimeWorktreePsSummary = {
   createdAt?: number
   creatorProvenance?: Worktree['creatorProvenance']
   linkedIssue: number | null
-  linkedPR: { number: number; state: string } | null
+  /** The branch's PR from the host's GitHub cache (else the linked number, state `unknown`).
+   *  Title, url and checks are optional: older hosts send number and state only. */
+  linkedPR: {
+    number: number
+    state: string
+    title?: string
+    url?: string
+    checksStatus?: CheckStatus
+  } | null
   linkedLinearIssue: string | null
   linkedGitLabMR: number | null
   linkedGitLabIssue: number | null
@@ -98,6 +107,8 @@ export type RuntimeWorktreePsSummary = {
    *  guess. The others are sent only when true; absent reads "not that kind", so the row shows. */
   defaultBranch?: boolean
   automationCreated?: true
+  /** The automation's name when it made the row; older hosts send only `automationCreated`. */
+  automationName?: string
   cliCreated?: true
   detachedHead?: true
   /** This host calls the row another client's ("Hide other-client workspaces"); sent only to its
