@@ -45,6 +45,21 @@ describe('session write activity in a layout-owner build', () => {
     expect(isWindowSessionWriteBusy()).toBe(false)
   })
 
+  it('is busy before the window may save, and after a failed write until it resends', async () => {
+    const persist = vi.fn(() => Promise.reject(new Error('main unavailable')))
+    dispose = createSessionWriteSubscriber({
+      store: useAppStore,
+      persist,
+      onPersistError: () => {}
+    })
+    expect(isWindowSessionWriteBusy()).toBe(true)
+    useAppStore.setState({ workspaceSessionReady: true, hydrationSucceeded: true })
+    await vi.advanceTimersByTimeAsync(200)
+    expect(persist).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(isWindowSessionWriteBusy()).toBe(true)
+  })
+
   it('is idle once disposed', () => {
     dispose = createSessionWriteSubscriber({ store: useAppStore, persist: vi.fn() })
     useAppStore.setState({ workspaceSessionReady: true, hydrationSucceeded: true })

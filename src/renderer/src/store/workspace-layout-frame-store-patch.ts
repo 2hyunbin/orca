@@ -189,29 +189,50 @@ export function buildLayoutFrameStorePatch(
   }
 
   const keySet = new Set(keys)
-  const otherFiles = state.openFiles.filter((file) => !keySet.has(file.worktreeId))
-  const ownFiles = state.openFiles.filter((file) => keySet.has(file.worktreeId))
   // An open file's editor state is this window's; a frame decides only which files are open.
-  const files = mergeById(ownFiles, built.openFiles, (existing, next) => existing ?? next)
-  if (files && files !== ownFiles) {
-    patch.openFiles = [...otherFiles, ...files]
+  const builtFileIds = new Set(built.openFiles.map((file) => file.id))
+  const heldFileIds = new Set(state.openFiles.map((file) => file.id))
+  const files = [
+    ...state.openFiles.filter((file) => !keySet.has(file.worktreeId) || builtFileIds.has(file.id)),
+    ...built.openFiles.filter((file) => !heldFileIds.has(file.id))
+  ]
+  if (
+    files.length !== state.openFiles.length ||
+    files.some((file, index) => file !== state.openFiles[index])
+  ) {
+    patch.openFiles = files
   }
 
-  // Pages and handles are this window's; a frame only brings those of a tab it has not seen.
-  const addMissing = <T>(current: Record<string, T>, incoming: Record<string, T>) => {
-    const missing = Object.entries(incoming).filter(([id]) => !(id in current))
-    return missing.length > 0 ? { ...current, ...Object.fromEntries(missing) } : null
-  }
-  const pages = addMissing(state.browserPagesByWorkspace, built.browserPagesByWorkspace)
-  if (pages) {
-    patch.browserPagesByWorkspace = pages
-  }
-  const handles = addMissing(
-    state.remoteBrowserPageHandlesByPageId,
-    built.remoteBrowserPageHandlesByPageId
+  // Pages and handles are this window's: a frame brings those of a tab it has not seen and drops
+  // those of a tab main closed.
+  const builtBrowserTabIds = new Set(
+    keys.flatMap((key) => (built.browserTabsByWorktree[key] ?? []).map((tab) => tab.id))
   )
-  if (handles) {
-    patch.remoteBrowserPageHandlesByPageId = handles
+  const closedBrowserTabIds = keys
+    .flatMap((key) => state.browserTabsByWorktree[key] ?? [])
+    .map((tab) => tab.id)
+    .filter((id) => !builtBrowserTabIds.has(id))
+  const closedPageIds = new Set(
+    closedBrowserTabIds.flatMap((id) =>
+      (state.browserPagesByWorkspace[id] ?? []).map((page) => page.id)
+    )
+  )
+  const pages = { ...state.browserPagesByWorkspace }
+  for (const id of closedBrowserTabIds) {
+    delete pages[id]
+  }
+  const handles = Object.fromEntries(
+    Object.entries(state.remoteBrowserPageHandlesByPageId).filter(([id]) => !closedPageIds.has(id))
+  )
+  const addedPages = Object.entries(built.browserPagesByWorkspace).filter(([id]) => !(id in pages))
+  const addedHandles = Object.entries(built.remoteBrowserPageHandlesByPageId).filter(
+    ([id]) => !(id in handles)
+  )
+  if (closedBrowserTabIds.length > 0 || addedPages.length > 0) {
+    patch.browserPagesByWorkspace = { ...pages, ...Object.fromEntries(addedPages) }
+  }
+  if (closedPageIds.size > 0 || addedHandles.length > 0) {
+    patch.remoteBrowserPageHandlesByPageId = { ...handles, ...Object.fromEntries(addedHandles) }
   }
   return patch
 }

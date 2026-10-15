@@ -17,10 +17,18 @@ import { buildLayoutFrameStorePatch } from '@/store/workspace-layout-frame-store
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { buildHostIdByWorktreeId } from '@/lib/workspace-session-host-persistence'
 import {
+  splitWorkspaceSessionByHost,
+  type HostIdByWorktreeId
+} from '@/lib/workspace-session-host-split'
+import {
   isWindowSessionWriteBusy,
   onWindowSessionWriteIdle
 } from '@/lib/window-session-write-activity'
-import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
+  toRuntimeExecutionHostId
+} from '../../../shared/execution-host'
 import type { TerminalTabTitleUpdate } from '@/store/slices/terminal-tab-title-batch'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
@@ -34,11 +42,24 @@ type FrameSyncStore = {
 }
 
 export type WorkspaceLayoutFrameSync = {
-  /** True once the first snapshot arrived; false when the stream ended before one. */
-  firstSnapshot: Promise<boolean>
   /** Shows every workspace the frames own once the snapshot is in, then keeps them current. */
   start: () => void
   close: () => void
+}
+
+/** Where the view read-back routes workspaces a rebuild does not show. */
+const OTHER_WORKSPACES = toRuntimeExecutionHostId('frame-sync-other-workspaces')
+
+const structureJsonByLayout = new WeakMap<PublishedWorkspaceLayout, string>()
+
+/** A frame's JSON without live titles, kept per frame: title frames arrive at spinner rate. */
+function structureJson(layout: PublishedWorkspaceLayout): string {
+  let json = structureJsonByLayout.get(layout)
+  if (json === undefined) {
+    json = withoutLiveTitles(layout)
+    structureJsonByLayout.set(layout, json)
+  }
+  return json
 }
 
 function withoutLiveTitles(layout: PublishedWorkspaceLayout): string {
@@ -92,16 +113,16 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
   let live = false
   let snapshotReceived = false
   let flushQueued = false
-  let resolveFirstSnapshot: (received: boolean) => void = () => {}
-  const firstSnapshot = new Promise<boolean>((resolve) => {
-    resolveFirstSnapshot = resolve
-  })
 
   const rebuild = (state: AppState, keys: string[]): void => {
     // The view and content facts are this window's: read them back out of what it saves.
+    const rebuilt = new Set(keys)
+    const own = splitWorkspaceSessionByHost(buildWorkspaceSessionPayload(state), (key) =>
+      rebuilt.has(key) ? LOCAL_EXECUTION_HOST_ID : OTHER_WORKSPACES
+    )[LOCAL_EXECUTION_HOST_ID]!
     const { facts, desktopView } = loadWorkspaceLayoutWithoutReport(
       LOCAL_EXECUTION_HOST_ID,
-      buildWorkspaceSessionPayload(state),
+      own,
       nameBasedLoadContext()
     )
     const built = buildLayoutFrameSlices({
@@ -121,24 +142,24 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       return
     }
     const state = store.getState()
-    const hostIdOf = buildHostIdByWorktreeId(state)
+    let hostIdOf: HostIdByWorktreeId | null = null
+    const ownedByPairedServer = (key: string): boolean => {
+      hostIdOf ??= buildHostIdByWorktreeId(state)
+      return parseExecutionHostId(hostIdOf(key))?.kind === 'runtime'
+    }
     const busy = isWindowSessionWriteBusy()
     const nextShown: Record<string, PublishedWorkspaceLayout> = {}
     const structural: string[] = []
     const titleUpdates: TerminalTabTitleUpdate[] = []
     for (const [key, layout] of Object.entries(cache)) {
       const previous = shown[key]
-      if (
-        layout === previous ||
-        parseExecutionHostId(hostIdOf(key))?.kind === 'runtime' ||
-        !holdsWorkspace(state, key)
-      ) {
+      if (layout === previous || !holdsWorkspace(state, key) || ownedByPairedServer(key)) {
         if (previous) {
           nextShown[key] = previous
         }
         continue
       }
-      if (previous && withoutLiveTitles(previous) === withoutLiveTitles(layout)) {
+      if (previous && structureJson(previous) === structureJson(layout)) {
         titleUpdates.push(
           ...liveTitleUpdates(
             previous,
@@ -182,27 +203,24 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       if (frame.type === 'snapshot') {
         snapshotReceived = true
         live = started
-        resolveFirstSnapshot(true)
       }
       scheduleFlush()
     },
     (status) => {
-      if (status.state !== 'connecting' && status.state !== 'live') {
-        resolveFirstSnapshot(false)
-        if (status.state !== 'closed') {
-          console.warn('[layout-owner] layout stream stopped:', status)
-        }
+      if (status.state === 'lost' || status.state === 'refused') {
+        console.warn('[layout-owner] layout stream stopped:', status)
       }
     }
   )
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
 
   return {
-    firstSnapshot,
     start: () => {
       started = true
       // Before its snapshot, the snapshot starts it; a stream that ends first leaves restore's.
       live = snapshotReceived
+      // A re-run restore rebuilt the slices, so every workspace is shown again.
+      shown = {}
       flush()
     },
     close: () => {

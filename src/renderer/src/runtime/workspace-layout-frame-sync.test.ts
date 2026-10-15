@@ -97,7 +97,6 @@ async function bootWithFrames(hostId: ExecutionHostId, session: WorkspaceSession
   const sync = openWorkspaceLayoutFrameSync(store)
   const layouts = published(hostId, session)
   stream.onFrame!(snapshot(layouts))
-  expect(await sync.firstSnapshot).toBe(true)
   return { store, sync, layouts }
 }
 
@@ -126,7 +125,6 @@ describe('the window drawn from layout frames', () => {
     const before = store.getState()
     const sync = openWorkspaceLayoutFrameSync(store)
     stream.onFrame!(snapshot(published(profile.hostId, profile.build())))
-    await sync.firstSnapshot
     sync.start()
     const after = store.getState()
     expect(SLICES.filter((slice) => after[slice] !== before[slice])).toEqual([])
@@ -221,10 +219,15 @@ describe('the window drawn from layout frames', () => {
     sync.close()
   })
 
-  it('reports no snapshot when the stream ends first', async () => {
-    const sync = openWorkspaceLayoutFrameSync(createTestStore())
+  it('leaves restore in place when the stream ends before its snapshot', async () => {
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: localDesktopSession() }])
+    const before = store.getState()
+    const sync = openWorkspaceLayoutFrameSync(store)
+    sync.start()
     stream.onStatus!({ state: 'refused' })
-    expect(await sync.firstSnapshot).toBe(false)
+    await flushMicrotasks()
+    expect(SLICES.filter((slice) => store.getState()[slice] !== before[slice])).toEqual([])
     sync.close()
   })
 
