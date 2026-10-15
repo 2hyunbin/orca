@@ -619,7 +619,9 @@ describe('attachEditorAutosaveController', () => {
           (error: unknown) => error
         )
         // Isolate restart's admitted work from independent ordinary autosave after the wait.
-        store.setState({ settings: { ...store.getState().settings, editorAutoSave: false } })
+        store.setState(({ settings }) => ({
+          settings: settings && { ...settings, editorAutoSave: false }
+        }))
         await vi.advanceTimersByTimeAsync(4_000)
         if (finishesInBudget) {
           releaseOldWrite()
