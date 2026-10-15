@@ -253,12 +253,17 @@ function buildWindowsStartupCommand(
     // relief had been attempted. `-ErrorAction Stop` is what routes a non-terminating
     // failure into the catch at all. Still never throws: a diagnostic is worth a line of
     // stderr, but not the startup this gate exists to run.
-    "$orcaProgress = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'",
-    'try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction Stop } ' +
-      'catch { [Console]::Error.WriteLine("Orca: could not relax the execution policy for this " + ' +
-      '"session (" + $_.FullyQualifiedErrorId + "). A startup command that runs a .ps1 " + ' +
-      '"may be blocked.") }',
-    '$ProgressPreference = $orcaProgress',
+    // A wait-only gate runs nothing user-authored, so it skips the relief and stays short.
+    ...(runStartup
+      ? [
+          "$orcaProgress = $ProgressPreference; $ProgressPreference = 'SilentlyContinue'",
+          'try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction Stop } ' +
+            'catch { [Console]::Error.WriteLine("Orca: could not relax the execution policy for this " + ' +
+            '"session (" + $_.FullyQualifiedErrorId + "). A startup command that runs a .ps1 " + ' +
+            '"may be blocked.") }',
+          '$ProgressPreference = $orcaProgress'
+        ]
+      : []),
     `$marker = ${quotePowerShellLiteral(markerPath)}`,
     'if ([string]::IsNullOrWhiteSpace($marker)) {',
     '  [Console]::Error.WriteLine("Missing setup marker path.")',
