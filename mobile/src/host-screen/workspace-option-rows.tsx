@@ -80,7 +80,7 @@ export function ChoiceRows<Id extends string>(props: {
   )
 }
 
-/** A filter switch, as the desktop's switch rows. */
+/** A filter switch, as the desktop's switch rows; only the switch takes the tap (one write on web). */
 export function SwitchRow(props: {
   label: string
   value: boolean
@@ -88,24 +88,18 @@ export function SwitchRow(props: {
   indent?: boolean
 }) {
   return (
-    <Pressable
-      style={[styles.filterRow, props.indent && styles.optionRowIndented]}
-      onPress={() => props.onChange(!props.value)}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: props.value }}
-      accessibilityLabel={props.label}
-    >
+    <View style={[styles.filterRow, props.indent && styles.optionRowIndented]}>
       <Text style={styles.filterRowText} numberOfLines={1}>
         {props.label}
       </Text>
       <Switch
         value={props.value}
         onValueChange={props.onChange}
+        accessibilityLabel={props.label}
         trackColor={{ false: colors.bgRaised, true: colors.textSecondary }}
         thumbColor={colors.textPrimary}
-        importantForAccessibility="no"
       />
-    </Pressable>
+    </View>
   )
 }
 

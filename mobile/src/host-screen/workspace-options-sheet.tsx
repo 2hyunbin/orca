@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { ChevronLeft } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
@@ -90,6 +90,10 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
   const pageOption = sections
     .flatMap(({ options }) => options)
     .find((option) => option.key === page)
+  if (page !== null && !pageOption) {
+    // Forget it, so the page does not reopen by itself if the option shows again.
+    setPage(null)
+  }
   const pageControl = pageOption ? WORKSPACE_OPTION_CONTROLS[pageOption.key] : null
   // Back from a page returns to the main sheet; the drawer's own claim closes it from there.
   useBackClaim(
@@ -135,29 +139,30 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
 
       {sections.map(({ section, options }) => {
         const sectionLabel = WORKSPACE_VIEW_SECTION_LABELS[section]
-        const rows = (framed: boolean) =>
-          options.flatMap((option) => {
-            const control = WORKSPACE_OPTION_CONTROLS[option.key]
-            const props: WorkspaceOptionProps = { controller, hosts, label: option.label }
-            if (control.kind === 'page') {
-              return framed
-                ? [
-                    <DrillRow
-                      key={option.key}
-                      label={option.label}
-                      value={control.value(props)}
-                      onPress={() => setPage(option.key)}
-                    />
-                  ]
-                : []
-            }
-            return control.framed === framed ? [<control.Row key={option.key} {...props} />] : []
-          })
-        const framedRows = rows(true)
+        // Inline unframed rows sit above the section's card; every other row goes in the card.
+        const bareRows: ReactNode[] = []
+        const framedRows: ReactNode[] = []
+        for (const option of options) {
+          const control = WORKSPACE_OPTION_CONTROLS[option.key]
+          const props: WorkspaceOptionProps = { controller, hosts, label: option.label }
+          if (control.kind === 'page') {
+            framedRows.push(
+              <DrillRow
+                key={option.key}
+                label={option.label}
+                value={control.value(props)}
+                onPress={() => setPage(option.key)}
+              />
+            )
+          } else {
+            const target = control.framed ? framedRows : bareRows
+            target.push(<control.Row key={option.key} {...props} />)
+          }
+        }
         return (
           <View key={section} testID={`workspace-option-section-${section}`}>
             {sectionLabel && <Text style={styles.filterSectionLabel}>{sectionLabel}</Text>}
-            {rows(false)}
+            {bareRows}
             {framedRows.length > 0 && (
               <View style={styles.filterGroup}>
                 <OptionRowList>{framedRows}</OptionRowList>

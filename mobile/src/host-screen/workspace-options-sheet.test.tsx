@@ -29,7 +29,7 @@ afterEach(() => {
   renderer = null
 })
 
-function render(options: { newCardStyle: boolean; hideSleeping: boolean }) {
+function buildController(options: { newCardStyle: boolean; hideSleeping: boolean }) {
   const settings = {
     clearFilters: vi.fn(),
     handleGroupChange: vi.fn(),
@@ -69,17 +69,30 @@ function render(options: { newCardStyle: boolean; hideSleeping: boolean }) {
       showWorkspaceOptions: true
     }
   }
+  return { controller, settings }
+}
+
+type SheetOptions = { newCardStyle: boolean; hideSleeping: boolean }
+
+function sheet(options: SheetOptions, settings?: ReturnType<typeof buildController>['settings']) {
+  const built = buildController(options)
+  const controller = settings ? { ...built.controller, settings } : built.controller
+  return createElement(WorkspaceOptionsSheet, {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sheet reads only these members.
+    controller: controller as unknown as Parameters<typeof WorkspaceOptionsSheet>[0]['controller']
+  })
+}
+
+function render(options: SheetOptions) {
+  const { settings } = buildController(options)
   act(() => {
-    renderer = create(
-      createElement(WorkspaceOptionsSheet, {
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sheet reads only these members.
-        controller: controller as unknown as Parameters<
-          typeof WorkspaceOptionsSheet
-        >[0]['controller']
-      })
-    )
+    renderer = create(sheet(options, settings))
   })
   return settings
+}
+
+function rerender(options: SheetOptions) {
+  act(() => renderer!.update(sheet(options)))
 }
 
 const texts = () =>
@@ -98,6 +111,15 @@ const press = (label: string) => {
 }
 
 const back = () => press('Back to Workspace options')
+
+/** Flips the filter switch whose accessibility label is `label`. */
+const flip = (label: string, value: boolean) => {
+  act(() => {
+    renderer!.root
+      .find((node) => String(node.type) === 'Switch' && node.props.accessibilityLabel === label)
+      .props.onValueChange(value)
+  })
+}
 
 describe('the phone Workspace options sheet', () => {
   it('shows the classic card options as rows with their values, and filters as switches', () => {
@@ -150,9 +172,20 @@ describe('the phone Workspace options sheet', () => {
     expect(texts()).toContain('Filters')
   })
 
+  it('does not reopen a page whose option stopped showing and then came back', () => {
+    render({ newCardStyle: false, hideSleeping: false })
+    press('Show properties, All')
+    expect(texts()).toContain('Agent activity layout')
+    rerender({ newCardStyle: true, hideSleeping: false })
+    expect(texts()).toContain('Filters')
+    rerender({ newCardStyle: false, hideSleeping: false })
+    expect(texts()).not.toContain('Agent activity layout')
+    expect(texts()).toContain('Filters')
+  })
+
   it('writes each control to the shared value it names', () => {
     const settings = render({ newCardStyle: false, hideSleeping: false })
-    press('Hide CLI-created')
+    flip('Hide CLI-created', true)
     expect(settings.setFilter).toHaveBeenCalledWith('hideCliCreatedWorkspaces', true)
     press('PR')
     expect(settings.handleGroupChange).toHaveBeenCalledWith('pr-status')

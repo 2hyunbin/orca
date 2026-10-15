@@ -96,21 +96,6 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
     backgroundColor: colors.borderSubtle,
     marginHorizontal: spacing.md
   },
-  optionHeading: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    paddingHorizontal: spacing.xs
-  },
-  optionSubheading: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: colors.textMuted,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.md + 2
-  },
   optionRowLabel: {
     flex: 1
   },
