@@ -202,8 +202,7 @@ jobs:
   preflight:
     name: static analysis and typecheck
     needs: [code_paths]
-    # Temporary negative qualification fixture; restore before merge.
-    if: ${{ false }}
+    if: needs.code_paths.outputs.static_analysis == 'true' || needs.code_paths.outputs.typecheck == 'true'
     # Why ARM: measured 128s against 172s on ubuntu-latest, with every compute step faster --
     # type-aware 24s->15s, anti-slop 28->19s, localization extraction 67->46s, the orcad smoke
     # 39->14s. Both lint engines ship linux-arm64 and the Bun target follows process.arch, so
