@@ -1,9 +1,14 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ManagedPaneInternal } from './pane-manager-types'
-import { isPaneDropNoOp } from './pane-drag-reorder'
+import {
+  createDragReorderState,
+  handlePaneDrop,
+  isPaneDropNoOp,
+  type DragReorderCallbacks
+} from './pane-drag-reorder'
 import type { TerminalLeafId } from '../../../../shared/stable-pane-id'
 
 function makeLeafId(id: number): TerminalLeafId {
@@ -78,5 +83,62 @@ describe('isPaneDropNoOp', () => {
     const panes = createVerticalSplit([1, 2])
     expect(isPaneDropNoOp(2, 1, 'left', panes)).toBe(false)
     expect(isPaneDropNoOp(1, 2, 'right', panes)).toBe(false)
+  })
+})
+
+describe('handlePaneDrop with a drop taker', () => {
+  function callbacksFor(
+    panes: Map<number, ManagedPaneInternal>,
+    takePaneDrop?: DragReorderCallbacks['takePaneDrop']
+  ) {
+    const root = panes.get(1)!.container.parentElement!
+    const onLayoutChanged = vi.fn()
+    const callbacks: DragReorderCallbacks = {
+      getPanes: () => panes,
+      getRoot: () => root,
+      getStyleOptions: () => ({}),
+      isDestroyed: () => false,
+      safeFit: vi.fn(),
+      applyPaneOpacity: vi.fn(),
+      applyDividerStyles: vi.fn(),
+      refitPanesUnder: vi.fn(),
+      onLayoutChanged,
+      ...(takePaneDrop ? { takePaneDrop } : {})
+    }
+    return { callbacks, onLayoutChanged }
+  }
+
+  it('never offers a drop that changes nothing', () => {
+    const panes = createVerticalSplit([1, 2])
+    const takePaneDrop = vi.fn(() => true)
+    const { callbacks } = callbacksFor(panes, takePaneDrop)
+
+    handlePaneDrop(2, 1, 'right', createDragReorderState(), callbacks)
+
+    expect(takePaneDrop).not.toHaveBeenCalled()
+  })
+
+  it('moves a taken drop only when the taker runs the move', () => {
+    const panes = createVerticalSplit([1, 2, 3])
+    let move: (() => void) | undefined
+    const { callbacks, onLayoutChanged } = callbacksFor(panes, (_drop, later) => {
+      move = later
+      return true
+    })
+
+    handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
+    expect(onLayoutChanged).not.toHaveBeenCalled()
+
+    move?.()
+    expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
+  })
+
+  it('moves at once when no taker takes the drop', () => {
+    const panes = createVerticalSplit([1, 2, 3])
+    const { callbacks, onLayoutChanged } = callbacksFor(panes, () => false)
+
+    handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
+
+    expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
   })
 })
