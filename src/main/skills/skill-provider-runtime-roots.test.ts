@@ -9,11 +9,16 @@ import {
   withClaudeSkillProviderRoot
 } from './skill-provider-runtime-roots'
 
-// The probe prints each table `homeEnv` in table order, each NUL-terminated.
-function wslHomes(values: Record<string, string>): string {
-  return SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
-    provider.homeEnv ? [`${values[provider.homeEnv] ?? ''}\0`] : []
-  ).join('')
+// The probe prints `$HOME` then each table `homeEnv` in table order, each NUL-terminated.
+function wslHomes(values: Record<string, string>, home = '/home/dev'): string {
+  return [
+    home,
+    ...SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
+      provider.homeEnv ? [values[provider.homeEnv] ?? ''] : []
+    )
+  ]
+    .map((value) => `${value}\0`)
+    .join('')
 }
 
 describe('skill provider runtime roots', () => {
@@ -40,6 +45,23 @@ describe('skill provider runtime roots', () => {
     const managedClaudeRoot = resolve('/managed/claude')
     expect(withClaudeSkillProviderRoot(roots, managedClaudeRoot)).toEqual({
       claude: join(managedClaudeRoot, 'skills')
+    })
+  })
+
+  it('falls back to the default folder for a home at the root, the user home or above it', () => {
+    const userHome = resolve('/home/dev')
+    for (const unusable of [resolve('/'), resolve('/home'), userHome]) {
+      expect(
+        resolveEnvironmentSkillProviderRoots(
+          { GROK_HOME: unusable, KIRO_HOME: unusable },
+          userHome
+        ),
+        unusable
+      ).toEqual({})
+    }
+    const inside = join(userHome, 'profiles', 'kiro')
+    expect(resolveEnvironmentSkillProviderRoots({ KIRO_HOME: inside }, userHome)).toEqual({
+      kiro: join(inside, 'skills')
     })
   })
 
@@ -119,18 +141,28 @@ describe('skill provider runtime roots', () => {
     ).resolves.toEqual({ grok: '\\\\wsl.localhost\\Ubuntu-24.04\\srv\\grok\\skills' })
   })
 
-  it('ignores unsafe, clipped or missing WSL home values', async () => {
+  it('ignores unsafe, unusable, incomplete or missing WSL home values', async () => {
+    for (const value of ['../grok', '/srv/a\tb', '/', '/home', '/home/dev', '/home/dev/']) {
+      await expect(
+        resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: value })),
+        value
+      ).resolves.toEqual({})
+    }
     await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: '../grok' }))
-    ).resolves.toEqual({})
+      resolveWslSkillProviderRoots('Ubuntu', async () =>
+        wslHomes({ GROK_HOME: '/home/dev/profiles/grok' })
+      )
+    ).resolves.toEqual({
+      grok: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\profiles\\grok\\skills'
+    })
+    // No final terminator: the payload is incomplete, so nothing in it is trusted.
     await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: '/srv/a\tb' }))
+      resolveWslSkillProviderRoots('Ubuntu', async () =>
+        wslHomes({ GROK_HOME: '/srv/grok' }).slice(0, -1)
+      )
     ).resolves.toEqual({})
-    // `head` clipped the output inside the value, so it has no terminator.
-    const homes = wslHomes({ GROK_HOME: '/srv/grok' })
-    await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () => homes.slice(0, homes.indexOf('/grok')))
-    ).resolves.toEqual({})
+    // A lost fence.
+    await expect(resolveWslSkillProviderRoots('Ubuntu', async () => null)).resolves.toEqual({})
     await expect(
       resolveWslSkillProviderRoots('Ubuntu', async () => {
         throw new Error('probe failed')
