@@ -65,7 +65,10 @@ function reopenNotebook(): void {
 function finishFreshCell(): void {
   emitFrame({
     filePath: FILE,
-    frame: { type: 'stream', content: { name: 'stdout', text: 'fresh output\n' } }
+    frame: {
+      type: 'outputs',
+      outputs: [{ type: 'stream', content: { name: 'stdout', text: 'fresh output\n' } }]
+    }
   })
   emitFrame({
     filePath: FILE,

@@ -39,10 +39,14 @@ Object.defineProperty(globalThis, 'window', {
 })
 
 const session = await import('./ipynb-kernel-session')
-const { getCellRun, getSession } = await import('./ipynb-kernel-store')
+const { getCellRun, getSession, store } = await import('./ipynb-kernel-store')
 
 function frame(value: KernelFrame): void {
-  emitFrame({ filePath: FILE, frame: value })
+  emitFrame({
+    filePath: FILE,
+    frame:
+      value.type === 'done' || value.type === 'exit' ? value : { type: 'outputs', outputs: [value] }
+  })
 }
 
 beforeEach(() => {
@@ -126,6 +130,30 @@ describe('notebook kernel session', () => {
     expect(notebookApi.execute).toHaveBeenCalledTimes(2)
     expect(getCellRun(FILE, 'c')).toBeUndefined()
     expect(getCellRun(FILE, 'b')?.finishedAt).not.toBeNull()
+  })
+
+  it('applies a batch of outputs as one store update', async () => {
+    await session.runCells(FILE, [{ key: 'a', code: 'x' }], '/proj')
+    const updates = vi.fn()
+    const unsubscribe = store.subscribe(updates)
+    emitFrame({
+      filePath: FILE,
+      frame: {
+        type: 'outputs',
+        outputs: [
+          { type: 'stream', content: { name: 'stdout', text: 'a\n' } },
+          { type: 'display_data', content: { data: { 'text/plain': '1' } } },
+          { type: 'stream', content: { name: 'stdout', text: 'b\n' } }
+        ]
+      }
+    })
+    unsubscribe()
+    expect(updates).toHaveBeenCalledOnce()
+    expect(getCellRun(FILE, 'a')?.outputs).toMatchObject([
+      { output_type: 'stream', text: 'a\n' },
+      { output_type: 'display_data', data: { 'text/plain': '1' } },
+      { output_type: 'stream', text: 'b\n' }
+    ])
   })
 
   it('reports a dead kernel in the running cell and drops the queue', async () => {

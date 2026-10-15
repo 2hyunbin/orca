@@ -7,7 +7,7 @@ import type {
   KernelStartResult,
   PythonEnvironment
 } from '../../../../shared/notebook-kernel-types'
-import { applyKernelOutput } from './ipynb-kernel-outputs'
+import { applyKernelOutputs } from './ipynb-kernel-outputs'
 import { fenced, noticeOutput, startRun, stopRuns } from './ipynb-kernel-runs'
 import {
   getSession,
@@ -317,8 +317,9 @@ function handleFrame({ filePath, frame }: KernelFrameEvent): void {
     pump(filePath)
     return
   }
+  // Why one update per batch: each store update redraws the running cell's outputs.
   updateSession(filePath, ({ runs }) => ({
-    runs: { ...runs, [key]: applyKernelOutput(runs[key], frame.type, frame.content) }
+    runs: { ...runs, [key]: applyKernelOutputs(runs[key], frame.outputs) }
   }))
 }
 

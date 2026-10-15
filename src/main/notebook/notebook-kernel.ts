@@ -5,11 +5,14 @@ import { createNdjsonParser } from '../../shared/main-process-ndjson-framer'
 import {
   KERNEL_OUTPUT_TYPES,
   type KernelFrame,
+  type KernelIpcFrame,
+  type KernelOutputFrame,
   type KernelStartResult
 } from '../../shared/notebook-kernel-types'
 
 const STDERR_TAIL_CHARS = 4000
 const SHUTDOWN_GRACE_MS = 5000
+const OUTPUT_BATCH_MS = 10
 
 type BridgeFrame = KernelFrame | { type: 'ready' } | { type: 'missing'; externallyManaged: boolean }
 
@@ -57,6 +60,72 @@ export function createFrameReader(onFrame: (frame: BridgeFrame) => void): (text:
   return (text) => parser.feed(text)
 }
 
+/** Joins a stream chunk onto the previous one when the renderer would append it to the same output. */
+function mergeStream(
+  previous: KernelOutputFrame | undefined,
+  frame: KernelOutputFrame
+): KernelOutputFrame | null {
+  if (previous?.type !== 'stream' || frame.type !== 'stream') {
+    return null
+  }
+  const { name, text } = previous.content
+  const next = frame.content
+  return typeof name === 'string' &&
+    name === next.name &&
+    typeof text === 'string' &&
+    typeof next.text === 'string'
+    ? { type: 'stream', content: { ...previous.content, text: text + next.text } }
+    : null
+}
+
+/**
+ * Sends output frames in batches, each 10 ms after its first frame, so a chatty cell costs one IPC
+ * and one renderer update per batch. `done` and `exit` send the pending batch, then go on their own.
+ */
+export function createFrameBatcher(send: (frame: KernelIpcFrame) => void): {
+  add: (frame: KernelFrame) => void
+  drop: () => void
+} {
+  let outputs: KernelOutputFrame[] = []
+  let startedAt = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const drop = (): void => {
+    clearTimeout(timer)
+    timer = undefined
+    outputs = []
+  }
+  const flush = (): void => {
+    const batch = outputs
+    drop()
+    if (batch.length > 0) {
+      send({ type: 'outputs', outputs: batch })
+    }
+  }
+  return {
+    drop,
+    add: (frame) => {
+      if (frame.type === 'done' || frame.type === 'exit') {
+        flush()
+        send(frame)
+        return
+      }
+      const merged = mergeStream(outputs.at(-1), frame)
+      if (merged) {
+        outputs[outputs.length - 1] = merged
+      } else {
+        outputs.push(frame)
+      }
+      if (timer === undefined) {
+        startedAt = Date.now()
+        timer = setTimeout(flush, OUTPUT_BATCH_MS)
+      } else if (Date.now() - startedAt > OUTPUT_BATCH_MS) {
+        // Why: one long stdout read holds the timer back, so an overdue batch goes now.
+        flush()
+      }
+    }
+  }
+}
+
 export type NotebookKernel = {
   /** Only one execution may be in flight; send the next after its `done` frame. */
   execute: (code: string) => void
@@ -72,7 +141,7 @@ export function startNotebookKernel({
 }: {
   python: string
   cwd: string
-  onFrame: (frame: KernelFrame) => void
+  onFrame: (frame: KernelIpcFrame) => void
 }): { kernel: NotebookKernel; ready: Promise<KernelStartResult>; exited: Promise<void> } {
   const child = spawnProcess({
     program: python,
@@ -88,6 +157,7 @@ export function startNotebookKernel({
   let started = false
   let stopping = false
   let stderrTail = ''
+  const batcher = createFrameBatcher(onFrame)
 
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
@@ -110,7 +180,7 @@ export function startNotebookKernel({
       } else if (frame.type === 'missing') {
         settle({ status: 'missing-ipykernel', externallyManaged: frame.externallyManaged })
       } else if (!stopping) {
-        onFrame(frame)
+        batcher.add(frame)
       }
     })
   )
@@ -119,7 +189,7 @@ export function startNotebookKernel({
     const detail = stderrTail.trim()
     settle({ status: 'failed', detail: detail || `Python exited with code ${code}.` })
     if (started && !stopping) {
-      onFrame({ type: 'exit', detail })
+      batcher.add({ type: 'exit', detail })
     }
   })
 
@@ -134,6 +204,7 @@ export function startNotebookKernel({
       interrupt: () => send({ op: 'interrupt' }),
       shutdown: () => {
         stopping = true
+        batcher.drop()
         child.stdin.end()
         const forceKill = setTimeout(() => void forceTerminateProcessTree(child), SHUTDOWN_GRACE_MS)
         forceKill.unref()

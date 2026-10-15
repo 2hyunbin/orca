@@ -32,15 +32,21 @@ export const KERNEL_OUTPUT_TYPES = [
 ] as const
 export type KernelOutputType = (typeof KERNEL_OUTPUT_TYPES)[number]
 
-/** What a running kernel reports, in order, for the one execution in flight. */
-export type KernelFrame =
-  | { type: KernelOutputType; content: Record<string, unknown> }
+export type KernelOutputFrame = { type: KernelOutputType; content: Record<string, unknown> }
+
+export type KernelEndFrame =
   | { type: 'done'; status: string; execution_count: number | null }
   /** The kernel is gone; `detail` is the tail of its stderr. */
   | { type: 'exit'; detail: string }
+
+/** What a running kernel reports, in order, for the one execution in flight. */
+export type KernelFrame = KernelOutputFrame | KernelEndFrame
+
+/** What main sends a renderer: output frames in batches; `done`/`exit` alone, after the batch before them. */
+export type KernelIpcFrame = { type: 'outputs'; outputs: KernelOutputFrame[] } | KernelEndFrame
 
 export type CreateVenvResult =
   | { ok: true; environment: PythonEnvironment }
   | { ok: false; detail: string }
 
-export type KernelFrameEvent = { filePath: string; frame: KernelFrame }
+export type KernelFrameEvent = { filePath: string; frame: KernelIpcFrame }
