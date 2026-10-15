@@ -128,10 +128,10 @@ export function WslHostsSection({
                         'Update to {{version}} deferred.',
                         { version: deferred.candidateVersion }
                       )}{' '}
-                      {managedServerOutcomeLabel({
-                        outcome: 'deferred',
-                        code: deferred.code
-                      })}
+                      {managedServerOutcomeLabel(
+                        { outcome: 'deferred', code: deferred.code },
+                        deferred.forceable === true
+                      )}
                     </p>
                   ) : null}
                 </div>
@@ -159,7 +159,10 @@ export function WslHostsSection({
                               'auto.components.settings.wslHosts.forceUpdateStopChats',
                               'Force update and stop chats'
                             )
-                          : translate('auto.components.settings.wslHosts.forceUpdate', 'Force update')}
+                          : translate(
+                              'auto.components.settings.wslHosts.forceUpdate',
+                              'Force update'
+                            )}
                       </Button>
                     ) : null}
                   </>

@@ -134,6 +134,13 @@ const MIGRATION_CODES = new Set([
   'orcad_rollback_crosses_migration'
 ])
 
+function forceUpdateWarning(): string {
+  return translate(
+    'auto.components.settings.managedServers.outcome.legacyHost',
+    'On older servers that cannot check for running chats, Force update stops any running chat. Finish chats first; you can continue an interrupted chat after the update.'
+  )
+}
+
 function chatUpdateOutcomeLabel(code: string): string | null {
   switch (code) {
     case 'orcad_update_chat_work_running':
@@ -152,17 +159,13 @@ function chatUpdateOutcomeLabel(code: string): string | null {
         'The server couldn’t prepare a safe restart. Choose Update or reconnect to retry.'
       )
     case 'orcad_update_legacy_host':
-      return translate(
-        'auto.components.settings.managedServers.outcome.legacyHost',
-        'This older server cannot check for running chats. Finish chats before choosing Force update. Force update will stop any running chat; continue it after the update.'
-      )
+      return forceUpdateWarning()
     default:
       return null
   }
 }
 
-/** The one localized line for a managed-server action that did not go through. */
-export function managedServerOutcomeLabel(result: {
+function managedServerOutcomeSummary(result: {
   outcome: string
   code?: string
   verdict?: string
@@ -206,4 +209,15 @@ export function managedServerOutcomeLabel(result: {
     'auto.components.settings.managedServers.outcome.failed',
     'Orca couldn’t finish this on the server. Try again.'
   )
+}
+
+/** The one localized line for a managed-server action that did not go through. */
+export function managedServerOutcomeLabel(
+  result: Parameters<typeof managedServerOutcomeSummary>[0],
+  offersForce = false
+): string {
+  const summary = managedServerOutcomeSummary(result)
+  return offersForce && result.code !== 'orcad_update_legacy_host'
+    ? `${summary} ${forceUpdateWarning()}`
+    : summary
 }

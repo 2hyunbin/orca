@@ -33,10 +33,7 @@ describe('managed server action refusals', () => {
     ['orcad_update_chat_work_running', 'then choose Update or reconnect to retry'],
     ['orcad_update_chat_work_unverifiable', 'confirm whether chats'],
     ['orcad_update_restart_not_reserved', 'prepare a safe restart'],
-    [
-      'orcad_update_legacy_host',
-      'Force update will stop any running chat; continue it after the update'
-    ]
+    ['orcad_update_legacy_host', 'you can continue an interrupted chat after the update']
   ])('explains the chat update refusal %s before generic verdict copy', (code, instruction) => {
     expect(
       managedServerOutcomeLabel({ outcome: 'deferred', code, verdict: 'unverifiable' })
@@ -63,6 +60,13 @@ describe('managed server action refusals', () => {
     expect(managedServerOutcomeLabel(result)).toBe(
       'Not done: terminals on this server are still running. Close them and try again.'
     )
+  })
+
+  it.each(['terminals_running', 'legacy_host'])('warns once for Force: %s', (suffix) => {
+    const code = `orcad_update_${suffix}`
+    const label = managedServerOutcomeLabel({ outcome: 'deferred', code }, true)
+    expect(label.split('On older servers that cannot check for running chats')).toHaveLength(2)
+    expect(label).toContain('you can continue an interrupted chat after the update.')
   })
 
   it('keeps an unanswered census unverifiable', () => {

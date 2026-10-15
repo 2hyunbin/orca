@@ -202,17 +202,12 @@ export async function activateInstalledOrcad(
 
   // Only after the journal is durable: from the commit on, the incumbent may already be exiting.
   if (restart) {
-    const ended = await commitIncumbentRestart(
-      options,
-      restart.incumbent,
-      lock,
-      restart
-    )
+    const ended = await commitIncumbentRestart(options, restart.incumbent, lock, restart)
     if (ended.outcome === 'refused') {
       return notActivated(
         'orcad_update_restart_not_reserved',
         `New work started on orcad ${restart.incumbent.version} before it could restart, so ` +
-          'it kept serving. The update runs once that work settles.'
+          'it kept serving. Once that work finishes, retry the update or reconnect.'
       )
     }
     if (ended.outcome === 'unconfirmed') {
