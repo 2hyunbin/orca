@@ -129,9 +129,6 @@ export function buildSkillDiscoverySources(
       ['agent-skills'],
       null
     ),
-    // Why: `npx skills add --global` writes into each agent's own home skills
-    // directory, so coverage misses them unless we scan every provider root.
-    ...providerHomeSources(home, pathApi, providerRootOverrides),
     source(
       'codex-plugin-cache',
       'Codex plugin cache',
@@ -140,6 +137,9 @@ export function buildSkillDiscoverySources(
       ['codex', 'agent-skills'],
       'codex'
     ),
+    // Why: `npx skills add --global` writes into each agent's own home skills
+    // directory, so coverage misses them unless we scan every provider root.
+    ...providerHomeSources(home, pathApi, providerRootOverrides),
     source(
       'home-opencode',
       'OpenCode home',

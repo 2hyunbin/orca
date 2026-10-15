@@ -4,28 +4,11 @@ import type { TuiAgent } from './tui-agent'
  * Agents Orca can place an installed skill for.
  *
  * `null` segments mean the agent reads the canonical `.agents/skills` root at
- * that scope, so it needs no placement of its own. Ids match the detection ids
- * in `tui-agent-config.ts` so a detected agent maps straight to a destination.
+ * that scope, so it needs no placement of its own. Ids are Orca agent ids so a
+ * detected agent maps straight to a destination.
  */
-export type SkillInstallProviderId = OrcaAgentIds<
-  | 'codex'
-  | 'claude'
-  | 'cursor'
-  | 'gemini'
-  | 'droid'
-  | 'continue'
-  | 'trae'
-  | 'grok'
-  | 'aug'
-  | 'muse'
-  | 'zcode'
->
-
-// Fails to compile when a provider id is not an Orca agent id.
-type OrcaAgentIds<T extends TuiAgent> = T
-
-export type SkillInstallProviderDefinition = {
-  id: SkillInstallProviderId
+export type SkillInstallProviderDefinition<Id extends TuiAgent = SkillInstallProviderId> = {
+  id: Id
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
@@ -35,7 +18,7 @@ export type SkillInstallProviderDefinition = {
   homeEnv?: string
 }
 
-export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] = [
+const PROVIDER_TABLE = [
   // Why: Codex reads the canonical .agents/skills root at both scopes.
   {
     id: 'codex',
@@ -112,7 +95,11 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
     globalSegments: ['.zcode', 'skills'],
     workspaceSegments: null
   }
-]
+] as const satisfies readonly SkillInstallProviderDefinition<TuiAgent>[]
+
+export type SkillInstallProviderId = (typeof PROVIDER_TABLE)[number]['id']
+
+export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] = PROVIDER_TABLE
 
 const PROVIDERS_BY_ID = new Map(SKILL_INSTALL_PROVIDERS.map((provider) => [provider.id, provider]))
 
