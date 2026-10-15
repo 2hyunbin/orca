@@ -31,7 +31,7 @@ type MigrationStoreKey =
   | 'flushPendingOrThrowAsync'
 
 /** The destination half of a dormant catalog migration; every mutation is flushed before it answers. */
-export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaiter {
+export abstract class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaiter {
   async stageOrcadMigrationCatalog(
     manifest: OrcadMigrationManifest,
     options: { signal?: AbortSignal } = {}

@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithWaitForLeafPtyId as WaitForLeafPtyIdMethods } from '../orca-runtime-wait-for-leaf-pty-id'
-import { OrcaRuntimeWithWaitForMobileTerminalSurface } from '../orca-runtime-wait-for-mobile-terminal-surface'
+import type { OrcaRuntimeWithWaitForLeafPtyId as WaitForLeafPtyIdMethods } from '../terminal/view/renderer-terminal-snapshot'
+import { OrcaRuntimeWithWaitForMobileTerminalSurface } from '../terminal/view/mobile-terminal-surface'
 import { runtimeWorktreeIdsEqual } from '../runtime-worktree-path-identity'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
@@ -134,7 +134,7 @@ export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobile
     }
   }
 
-  protected waitForTerminalHandle(tabId: string, timeoutMs = 10_000): Promise<string> {
+  waitForTerminalHandle(tabId: string, timeoutMs = 10_000): Promise<string> {
     const existing = this.resolveHandleForTab(tabId)
     if (existing) {
       return Promise.resolve(existing)

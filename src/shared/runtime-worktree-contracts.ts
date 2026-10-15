@@ -93,7 +93,7 @@ export type RuntimeWorktreePsSummary = {
   removing?: true
   /** See `GitWorktreeInfo.removalError`. */
   removalError?: string
-  /** Workspace options row facts, from the host's own predicates (workspace-row-kinds). Older hosts
+  /** Workspace options row facts, from the host's own predicates (workspace-kinds). Older hosts
    *  send none. `defaultBranch` is always sent by newer hosts; absent, a reader keeps its own
    *  guess. The others are sent only when true; absent reads "not that kind", so the row shows. */
   defaultBranch?: boolean
