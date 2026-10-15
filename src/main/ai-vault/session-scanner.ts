@@ -248,4 +248,3 @@ async function scanInScopeSessions(args: {
     observeRows: args.observeRows
   })
 }
-
