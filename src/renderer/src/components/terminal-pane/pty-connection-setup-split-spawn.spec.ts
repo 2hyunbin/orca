@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks, ptyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks, ptyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushAsyncTicks, createDeferred } from './pty-connection-test-async'
 import { createRect, createMeasuredElement } from './pty-connection-test-dom'

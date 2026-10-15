@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushAsyncTicks, createDeferred } from './pty-connection-test-async'
 import {
@@ -10,10 +10,6 @@ import {
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
 import { createInitialStoreState } from './pty-connection-test-store-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
-import {
-  pendingSpawnByPaneKey,
-  pendingSpawnGenerationByPaneKey
-} from './pty-connection/pty-connect-limits'
 import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
@@ -50,6 +46,8 @@ export function registerPtyConnectionPendingSpawnTests(): void {
     })
 
     afterEach(async () => {
+      const { pendingSpawnByPaneKey, pendingSpawnGenerationByPaneKey } =
+        await import('./pty-connection/pty-connect-limits')
       pendingSpawnByPaneKey.clear()
       pendingSpawnGenerationByPaneKey.clear()
       await restoreTerminalTestGlobals()
@@ -76,6 +74,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
 
     it('does not hold a successor behind a canceled spawn serializer declaration', async () => {
       const { connectPanePty } = await import('./pty-connection')
+      const { pendingSpawnByPaneKey } = await import('./pty-connection/pty-connect-limits')
       const declaration = createDeferred<number>()
       const spawn = createDeferred<null>()
       const transport = createMockTransport()
@@ -96,6 +95,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
         createDeps() as never
       )
       await flushAsyncTicks(12)
+      expect(pendingSpawnByPaneKey.size).toBe(1)
       binding.dispose()
       spawn.resolve(null)
       await flushAsyncTicks(12)

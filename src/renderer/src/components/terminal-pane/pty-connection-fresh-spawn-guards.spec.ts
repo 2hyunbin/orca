@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { flushAsyncTicks } from './pty-connection-test-async'

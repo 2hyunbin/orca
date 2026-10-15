@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RESET_TERMINAL_CURSOR_STYLE } from '../../../../shared/terminal-mode-reset-profiles'
 import { makePaneKey } from '../../../../shared/stable-pane-id'

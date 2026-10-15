@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TERMINAL_PASTE_DIRECT_MAX_BYTES } from './terminal-paste-limits'
 import { makePaneKey } from '../../../../shared/stable-pane-id'

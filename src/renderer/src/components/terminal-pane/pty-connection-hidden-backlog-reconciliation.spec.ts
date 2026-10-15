@@ -1,4 +1,4 @@
-import { bindPtyConnectionTestMocks } from './pty-connection-test-mocks'
+import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_DA1_RESPONSE } from './terminal-capability-replies'
 import { flushAsyncTicks, createDeferred } from './pty-connection-test-async'
