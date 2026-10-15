@@ -1,4 +1,4 @@
-export type { SidebarFilterState } from './visible-worktree-kinds'
+export type { SidebarFilterState } from './sidebar-filter-actions'
 export {
   computeVisibleWorktreeIds,
   computeVisibleWorktrees,
