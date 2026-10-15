@@ -155,11 +155,9 @@ export function adoptProviderProcessGroup(
     terminated = true
     signalGroup(pgid, 'SIGTERM')
     // A one-shot's helpers die with it once it has exited; a session's keep the grace to clean up.
-    if (lifetime === 'one-shot') {
-      await waitForProcessExitUntil(rootExit, PROVIDER_SIGTERM_GRACE_MS)
-    } else {
-      await waitUntil(gone, PROVIDER_SIGTERM_GRACE_MS)
-    }
+    await (lifetime === 'one-shot'
+      ? waitForProcessExitUntil(rootExit, PROVIDER_SIGTERM_GRACE_MS)
+      : waitUntil(gone, PROVIDER_SIGTERM_GRACE_MS))
     return reap()
   }
   return {
