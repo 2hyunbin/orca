@@ -99,7 +99,7 @@ function failRestart(filePath: string, lifetime: SessionLifetime): void {
   toast.error(
     translate(
       'auto.components.editor.IpynbViewer.kernelRestartFailed',
-      'The kernel could not restart. Run a cell to try again.'
+      'The kernel could not restart. Run all to try again.'
     ),
     { description: pending.failure?.slice(-500) }
   )

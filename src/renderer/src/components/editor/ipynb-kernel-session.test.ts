@@ -249,7 +249,7 @@ describe('notebook kernel session', () => {
           queue: [{ key: 'b', code: 'new' }]
         })
         expect(toast.error).toHaveBeenCalledWith(
-          'The kernel could not restart. Run a cell to try again.',
+          'The kernel could not restart. Run all to try again.',
           { description: rejected ? 'transport unavailable' : undefined }
         )
         emitFrame({ filePath: FILE, producerId, frame: { type: 'stopped' } })
@@ -440,10 +440,7 @@ describe('notebook kernel session', () => {
     for (const listener of appStoreListeners) {
       listener({ openFiles: [] }, { openFiles: openFiles.current })
     }
-    expect(notebookApi.shutdownKernel).toHaveBeenCalledWith({
-      filePath: FILE,
-      producerId: expect.any(String)
-    })
+    expect(notebookApi.shutdownKernel).toHaveBeenCalledWith({ filePath: FILE })
     expect(getCellRun(FILE, 'a')).toBeUndefined()
   })
 
