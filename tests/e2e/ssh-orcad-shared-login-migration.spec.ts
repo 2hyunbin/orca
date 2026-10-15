@@ -15,7 +15,7 @@ import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { createRestartSession } from './helpers/orca-restart'
-import { managedServer, serverCall } from './helpers/orcad-convert-flow'
+import { managedServer, reconnect, serverCall } from './helpers/orcad-convert-flow'
 import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
 import { startOrcadConvertHost, type OrcadConvertHost } from './helpers/orcad-convert-host'
 import { callEnvironment } from './helpers/paired-host-terminal'
@@ -126,6 +126,7 @@ test('a relay-era desktop joins the server another version runs for the same log
     const b = await desktopB.launch()
     app = b.app
     await waitForSessionReady(b.page)
+    const connected = await reconnect(b.page, seeded.targetId)
     await expect
       .poll(
         async () => {
@@ -134,7 +135,7 @@ test('a relay-era desktop joins the server another version runs for the same log
             desktopB.userDataDir,
             seeded.targetId
           )
-          return JSON.stringify({ server, phase: journal?.phase ?? null })
+          return JSON.stringify({ server, phase: journal?.phase ?? null, connected })
         },
         { timeout: 10 * 60_000 }
       )
