@@ -1,4 +1,3 @@
-import type { AiVaultSession } from '../../shared/ai-vault-types'
 import type { IpcMainEvent, WebContents } from 'electron'
 import type { AiVaultRowsEvent, AiVaultScanRows } from '../../shared/ai-vault-scan-rows'
 import { aiVaultSessionListGeneration } from '../ai-vault/cached-session-list'
@@ -15,16 +14,17 @@ export class AiVaultRowDelivery {
   private publisher: SessionRowPublisher | null = null
   private scanId: string | null = null
   private sequence = 0
-  private readonly rows = new Map<string, AiVaultSession>()
   private acknowledge: (() => void) | null = null
   private closed = false
-  private readonly generation = aiVaultSessionListGeneration()
+  private readonly generation: number | undefined
 
   constructor(
     private readonly sender: WebContents,
     private readonly requestToken: string,
-    private readonly signal?: AbortSignal
+    private readonly signal?: AbortSignal,
+    includesLocal = true
   ) {
+    this.generation = includesLocal ? aiVaultSessionListGeneration() : undefined
     const requests = deliveries.get(sender) ?? new Map<string, AiVaultRowDelivery>()
     requests.get(requestToken)?.dispose()
     requests.set(requestToken, this)
@@ -39,7 +39,6 @@ export class AiVaultRowDelivery {
       this.acknowledge?.()
       void this.publisher?.finish()
       this.scanId = view.scanId
-      this.rows.clear()
       let reset = true
       this.publisher = new SessionRowPublisher(async (delta) => {
         if (!this.isCurrent() || this.scanId !== view.scanId) return
@@ -58,18 +57,10 @@ export class AiVaultRowDelivery {
           }
           this.sender.send('aiVault:rows', event)
         })
-      })
+      }, (rows) => projectStructuredAiVaultRows(rows, OPENS_EVERY_STRUCTURED_CHAT))
     }
-    if (view.kind === 'snapshot') {
-      this.rows.clear()
-      for (const row of view.sessions) this.rows.set(row.id, row)
-      if (this.rows.size === 0) return
-    } else {
-      for (const id of view.delta.removed) this.rows.delete(id)
-      for (const row of view.delta.upserts) this.rows.set(row.id, row)
-    }
-    this.publisher?.observe(() =>
-      projectStructuredAiVaultRows([...this.rows.values()], OPENS_EVERY_STRUCTURED_CHAT))
+    this.publisher?.observe(view.kind === 'snapshot'
+      ? { upserts: [...view.sessions], removed: [] } : view.delta)
   }
 
   ack(sequence: number): void {
@@ -90,7 +81,7 @@ export class AiVaultRowDelivery {
 
   private isCurrent(): boolean {
     if (this.closed) return false
-    if (this.sender.isDestroyed() || this.signal?.aborted || this.generation !== aiVaultSessionListGeneration()) {
+    if (this.sender.isDestroyed() || this.signal?.aborted || (this.generation !== undefined && this.generation !== aiVaultSessionListGeneration())) {
       this.dispose()
       return false
     }

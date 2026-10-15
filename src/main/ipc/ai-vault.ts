@@ -273,12 +273,15 @@ export function registerAiVaultHandlers(options: AiVaultHandlerOptions = {}): vo
         ? args.requestToken
         : undefined
     const controller = listCancellations.begin(event, requestToken)
-    const generation = aiVaultSessionListGeneration()
-    const delivery = requestToken ? new AiVaultRowDelivery(event.sender, requestToken, controller?.signal) : null
+    const hostScope = requestedExecutionHostScope(args?.executionHostScope)
+    const includesLocal = hostScope === LOCAL_EXECUTION_HOST_ID || hostScope === 'all'
+    const generation = includesLocal ? aiVaultSessionListGeneration() : undefined
+    const delivery = requestToken
+      ? new AiVaultRowDelivery(event.sender, requestToken, controller?.signal, includesLocal) : null
     try {
       await handlerOptions.ensureStructuredSessionOwnership?.()
       const result = await listAiVaultSessions(args, { signal: controller?.signal, onRows: delivery?.observe })
-      if (generation !== aiVaultSessionListGeneration()) return cancelledAiVaultListResult()
+      if (generation !== undefined && generation !== aiVaultSessionListGeneration()) return cancelledAiVaultListResult()
       return projectStructuredAiVaultSessions(result, OPENS_EVERY_STRUCTURED_CHAT)
     } catch (error) {
       // Why: superseding a scan is normal control flow, but Electron logs every

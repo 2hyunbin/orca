@@ -6,7 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AiVaultSearchHit } from '../../../../shared/ai-vault-search-types'
+import { aiVaultDisplayedSessionKey } from './ai-vault-displayed-session-key'
 import { AiVaultVirtualRow } from './AiVaultVirtualRow'
+
+vi.mock('./AiVaultSessionDetails', () => ({
+  SessionInlineDetails: ({ session }: { session: AiVaultSession }) => <span>details:{session.id}</span>
+}))
 
 const cliSession: AiVaultSession = {
   id: 'local:codex:session-1:/tmp/session-1.jsonl',
@@ -35,11 +40,13 @@ afterEach(() => {
   cleanup()
 })
 
-function renderSession(session: AiVaultSession, blocked = false, searchHit?: AiVaultSearchHit) {
+function renderSession(session: AiVaultSession, blocked = false, searchHit?: AiVaultSearchHit,
+  expanded: ReadonlySet<string> = new Set()) {
   const buildResumeStartup = vi.fn(() => ({ command: session.resumeCommand }))
   const onCopyResume = vi.fn()
   const onResume = vi.fn()
   const onResumeInNewCli = vi.fn()
+  const onToggleSessionDetails = vi.fn()
   render(
     <TooltipProvider>
       <AiVaultVirtualRow
@@ -49,7 +56,7 @@ function renderSession(session: AiVaultSession, blocked = false, searchHit?: AiV
         activeStickyHeaderIndex={null}
         measureElement={vi.fn()}
         collapsedGroups={new Set()}
-        expandedSessionIds={new Set()}
+        expandedSessionIds={expanded}
         vaultScope="all"
         searchHits={searchHit ? new Map([[session.id, searchHit]]) : undefined}
         buildResumeStartup={buildResumeStartup}
@@ -68,7 +75,7 @@ function renderSession(session: AiVaultSession, blocked = false, searchHit?: AiV
         })}
         getSessionResumeInChat={() => ({ available: false, reason: 'already-structured' })}
         onToggleGroup={vi.fn()}
-        onToggleSessionDetails={vi.fn()}
+        onToggleSessionDetails={onToggleSessionDetails}
         onJumpToOriginalPane={vi.fn()}
         onJumpToWorktree={vi.fn()}
         onResume={onResume}
@@ -85,7 +92,7 @@ function renderSession(session: AiVaultSession, blocked = false, searchHit?: AiV
       />
     </TooltipProvider>
   )
-  return { buildResumeStartup, onCopyResume, onResume, onResumeInNewCli }
+  return { buildResumeStartup, onCopyResume, onResume, onResumeInNewCli, onToggleSessionDetails }
 }
 
 describe('AiVaultVirtualRow resume command actions', () => {
@@ -207,4 +214,24 @@ describe('AiVaultVirtualRow Resume in New CLI', () => {
     await screen.findByRole('menu')
     expect(screen.queryByRole('menuitem', { name: 'Resume in New CLI' })).toBeNull()
   })
+})
+
+it('keeps same-alias search hits independent and History expansion on the winning alias', () => {
+  const first = { ...cliSession, agent: 'devin' as const, id: 'first', title: 'First', filePath: '/cli/agent_logs/a.jsonl' }
+  const second = { ...first, id: 'second', title: 'Second', filePath: '/cli/sessions/b.jsonl' }
+  const hit: AiVaultSearchHit = { agent: 'devin', sessionId: first.sessionId, title: '', cwd: '/repo',
+    branch: null, updatedAt: null, messageCount: 1, score: 1, source: { presence: 'present' }, evidence: null }
+  expect(aiVaultDisplayedSessionKey(first, true)).not.toBe(aiVaultDisplayedSessionKey(second, true))
+  const a = renderSession(first, false, hit, new Set([first.id]))
+  const b = renderSession(second, false, hit, new Set([first.id]))
+  expect(screen.getByText('details:first')).toBeTruthy()
+  expect(screen.queryByText('details:second')).toBeNull()
+  fireEvent.click(screen.getByText('First'))
+  fireEvent.click(screen.getByText('Second'))
+  expect(a.onToggleSessionDetails).toHaveBeenCalledWith(first.id)
+  expect(b.onToggleSessionDetails).toHaveBeenCalledWith(second.id)
+  cleanup()
+  expect(aiVaultDisplayedSessionKey(first, false)).toBe(aiVaultDisplayedSessionKey(second, false))
+  renderSession(second, false, undefined, new Set([aiVaultDisplayedSessionKey(first, false)]))
+  expect(screen.getByText('details:second')).toBeTruthy()
 })

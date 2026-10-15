@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type * as SessionDedup from './session-root-dedup'
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 
 const fixture = vi.hoisted((): { sessions: AiVaultSession[]; visits: number } => ({
@@ -25,7 +26,12 @@ vi.mock('./session-scanner-parse-cache', () => ({
     earlyStopped: 0,
     bytesRead: 0
   }),
-  parseAgentSessionFileCached: async (candidate: { session: AiVaultSession }) => candidate.session
+  parseAgentSessionFileCached: async (candidate: { session: AiVaultSession }) => {
+    if (Number(candidate.session.sessionId) % 4000 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 260))
+    }
+    return candidate.session
+  }
 }))
 vi.mock('./session-root-dedup', async (original) => {
   const actual = await original<typeof SessionDedup>()
@@ -94,7 +100,12 @@ it('load-all processes deduplication linearly and retains late canonical aliases
   const expected = dedupeScannedSessions(fixture.sessions)
   fixture.visits = 0
   const started = performance.now()
-  const result = await scan(true)
+  let publications = 0
+  const projection = vi.spyOn(ScannedSessionCollection.prototype, 'previewRows')
+  const result = await scanAiVaultSessions({ unlimited: true }, () => { publications++ })
+  expect(publications).toBeGreaterThan(1)
+  expect(projection).not.toHaveBeenCalled()
+  projection.mockRestore()
   process.stdout.write(
     `${JSON.stringify({ candidates: fixture.sessions.length, scanMs: performance.now() - started, dedupVisits: fixture.visits })}\n`
   )
@@ -118,6 +129,17 @@ it('capped scans still fill the unique-session budget', async () => {
   expect(new Set(result.sessions.map((row) => row.sessionId)).size).toBe(10)
 })
 
+it('finite preview evicts a completed older row while a newer sibling remains pending', async () => {
+  fixture.sessions = [0, 1, 4000, 8000].map((id, index) => ({
+    ...session(id), modifiedAt: `2026-01-0${index + 1}T00:00:00.000Z`
+  }))
+  const changes: AiVaultRowDelta[] = []
+  const result = await scanAiVaultSessions({ limit: 2 }, (delta) => { changes.push(delta) })
+  expect(changes.some((delta) => delta.removed.includes('0'))).toBe(true)
+  expect(changes.some((delta) => delta.upserts.some((row) => row.id === '4000'))).toBe(true)
+  expect(result.sessions.map((row) => row.id)).toEqual(['8000', '4000'])
+})
+
 it('incremental canonical selection preserves winner occurrence order, ties and repeated references', () => {
   const collection = new ScannedSessionCollection()
   const same = session(0)
@@ -133,6 +155,13 @@ it('incremental canonical selection preserves winner occurrence order, ties and 
     { ...same, filePath: '/fixture/rollout-0-fork.jsonl', modifiedAt: 'invalid' },
     session(1)
   ]
+  const batch = [variants[7]!, variants[5]!, variants[0]!]
+  expect([...collection.previewWinners([batch[2]!]).values()]).toEqual([batch[2]])
+  expect([...collection.previewWinners([batch[0]!, batch[2]!]).values()]).toEqual([batch[0]])
+  const preview = collection.previewRows(batch)
+  for (const row of batch) collection.add(row)
+  expect([...collection.values()]).toEqual(preview)
+  rows.push(...batch)
   let seed = 42
   for (let index = 0; index < 2000; index++) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0

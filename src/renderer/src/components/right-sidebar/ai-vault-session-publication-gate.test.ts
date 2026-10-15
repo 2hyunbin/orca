@@ -53,17 +53,36 @@ describe('AiVaultSessionPublicationGate', () => {
     const apply = vi.fn()
     const gate = new AiVaultSessionPublicationGate()
     markInputQuietSchedulerInput()
-    gate.publish(FIRST, apply)
+    gate.publishProvisional(() => apply(FIRST))
 
     for (let elapsed = 90; elapsed < 1_000; elapsed += 90) {
       vi.advanceTimersByTime(90)
       markInputQuietSchedulerInput()
-      gate.publish(SECOND, apply)
+      gate.publishProvisional(() => apply(SECOND))
     }
     vi.advanceTimersByTime(10)
 
     expect(apply).toHaveBeenCalledOnce()
     expect(apply).toHaveBeenCalledWith(SECOND)
+  })
+
+  it('accumulates quiet frames on cadence and lets the final supersede queued previews', () => {
+    const apply = vi.fn()
+    const gate = new AiVaultSessionPublicationGate()
+    gate.publishProvisional(() => apply(FIRST))
+    expect(apply).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(apply).toHaveBeenCalledOnce()
+    for (let frame = 0; frame < 30; frame++) gate.publishProvisional(() => apply(SECOND))
+    vi.advanceTimersByTime(200)
+    expect(apply).toHaveBeenCalledOnce()
+    vi.advanceTimersByTime(51)
+    expect(apply).toHaveBeenCalledTimes(2)
+    gate.publishProvisional(() => apply(FIRST))
+    gate.publish(SECOND, apply)
+    vi.advanceTimersByTime(1_000)
+    expect(apply).toHaveBeenCalledTimes(3)
+    expect(apply).toHaveBeenLastCalledWith(SECOND)
   })
 
   it('cancels a pending publication on scope change or unmount', () => {

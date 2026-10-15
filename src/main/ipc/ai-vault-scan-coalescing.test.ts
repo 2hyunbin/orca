@@ -1,3 +1,4 @@
+import { invalidateAiVaultSessionListCache } from '../ai-vault/cached-session-list'
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AiVaultListResult } from '../../shared/ai-vault-types'
@@ -98,6 +99,24 @@ describe('Agent Session History scan coalescing', () => {
     resolveScan?.(EMPTY_RESULT)
     await expect(second).resolves.toEqual(EMPTY_RESULT)
   })
+
+  it.each(['local', 'all', 'runtime:remote-server'] as const)(
+    'local invalidation retires only desktop requests containing local data: %s', async (scope) => {
+      registerRuntimeHost()
+      let release!: (result: AiVaultListResult) => void
+      const scan = scope === 'runtime:remote-server'
+        ? mocks.scanRuntimeAiVaultSessions : mocks.scanAiVaultSessionsInService
+      scan.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+      const response = ipcHandler('aiVault:listSessions')({ sender: Object.assign(new EventEmitter(), {
+        id: 1, isDestroyed: () => false, send: vi.fn()
+      }) }, { executionHostScope: scope, requestToken: 'delete-fence' })
+      await vi.waitFor(() => expect(release).toBeDefined())
+      invalidateAiVaultSessionListCache()
+      release(EMPTY_RESULT)
+      expect(await response).toMatchObject(scope === 'runtime:remote-server'
+        ? { scannedAt: EMPTY_RESULT.scannedAt } : { cancelled: true })
+    }
+  )
 
   it('reports a failed local scan as a host issue rather than rejecting', async () => {
     mocks.scanAiVaultSessionsInService.mockRejectedValue(new Error('transcript root is unreadable'))

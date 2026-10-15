@@ -1,5 +1,6 @@
+import { SessionRowPublisher } from './session-row-publisher'
 import { parseSessionCandidates } from './session-candidate-parser'
-import type { AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
+import type { AiVaultRowDelta, AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
 import type {
   AiVaultListResult,
   AiVaultScanIssue,
@@ -54,12 +55,17 @@ export async function scanAiVaultSessions(
   options: AiVaultScanOptions = {},
   observeRows?: AiVaultRowObserver
 ): Promise<AiVaultListResult> {
-  return withOpenCodeSqliteScanScope(() => scanAiVaultSessionStores(options, observeRows))
+  const publisher = observeRows ? new SessionRowPublisher(observeRows) : undefined
+  try {
+    return await withOpenCodeSqliteScanScope(() => scanAiVaultSessionStores(options, publisher))
+  } finally {
+    publisher?.finish()
+  }
 }
 
 async function scanAiVaultSessionStores(
   options: AiVaultScanOptions,
-  observeRows?: AiVaultRowObserver
+  publisher?: SessionRowPublisher
 ): Promise<AiVaultListResult> {
   // The span makes scan cost visible in the local trace file: STA-1278-style
   // "one core pegged" reports need to show whether transcript scanning is the
@@ -91,6 +97,7 @@ async function scanAiVaultSessionStores(
 
         const candidates = await sessionCandidatesFromDiscoveries(discoveries, options)
 
+        let selected = new Map<string, AiVaultSession>()
         const parsedSessions = await parseSessionCandidates({
           candidates: candidates.slice(0, limit * SESSION_PARSE_CANDIDATE_MULTIPLIER),
           limit,
@@ -100,15 +107,31 @@ async function scanAiVaultSessionStores(
           parseStats,
           signal: options.signal,
           antigravityWorkspaceResolver,
-          observeRows: observeRows
-            ? (read) => observeRows(() => [...read()].sort((a, b) => sessionSortTime(b) - sessionSortTime(a)).slice(0, limit))
-            : undefined
+          observeRows: publisher ? (delta, readFiniteRows) => {
+            if (!delta.upserts.length && !delta.removed.length) return
+            if (options.unlimited) {
+              publisher.observe(delta)
+              return
+            }
+            // Global candidates are bounded to 2 * limit; select once per source drain.
+            publisher.selectFinite(() => {
+              const current = new Map(readFiniteRows()
+                .sort((a, b) => sessionSortTime(b) - sessionSortTime(a))
+                .slice(0, limit).map((row) => [row.id, row]))
+              const changes: AiVaultRowDelta = { upserts: [], removed: [] }
+              for (const id of selected.keys()) if (!current.has(id)) changes.removed.push(id)
+              for (const [id, row] of current) if (selected.get(id) !== row) changes.upserts.push(row)
+              selected = current
+              return changes
+            })
+          } : undefined
         })
 
         const cappedSessions = dedupeScannedSessions(parsedSessions)
           .sort((left, right) => sessionSortTime(right) - sessionSortTime(left))
           .slice(0, limit)
 
+        const globalIds = new Set(cappedSessions.map((row) => row.id))
         const scopeSessions = await scanInScopeSessions({
           discoveries,
           scopePaths: options.scopePaths ?? [],
@@ -119,9 +142,10 @@ async function scanAiVaultSessionStores(
           issues,
           parseStats,
           signal: options.signal,
-          observeRows: observeRows
-            ? (read) => observeRows(() => mergeSessions(cappedSessions, [...read()]))
-            : undefined
+          observeRows: publisher ? (delta) => publisher.observe({
+            upserts: delta.upserts,
+            removed: delta.removed.filter((id) => !globalIds.has(id))
+          }) : undefined
         })
         // Scope discovery can return without parsing anything, so an abort landing
         // here would otherwise persist and return a cancelled scan as complete.

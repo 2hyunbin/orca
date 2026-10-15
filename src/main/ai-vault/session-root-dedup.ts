@@ -78,6 +78,35 @@ export class ScannedSessionCollection {
     return this.sessions.values()
   }
 
+  winner(session: AiVaultSession): AiVaultSession | undefined {
+    const key = sessionAliasKey(session)
+    if (!key) return undefined
+    const bucket = this.winnersBySessionId.get(session.sessionId)
+    if (bucket instanceof Map) return bucket.get(key)?.session
+    return bucket && sessionAliasKey(bucket.session) === key ? bucket.session : undefined
+  }
+
+  /** Replay only the completed batch slots, in candidate order. */
+  previewWinners(completed: readonly AiVaultSession[]): Map<string, AiVaultSession> {
+    const winners = new Map<string, AiVaultSession>()
+    for (const row of completed) {
+      const key = sessionAliasKey(row) ?? row.id
+      const best = winners.get(key) ?? this.winner(row)
+      winners.set(key, !best || sessionAliasBeats(row, best) ? row : best)
+    }
+    return winners
+  }
+
+  /** Finite-depth selection only: retain authoritative occurrence order. */
+  previewRows(completed: readonly AiVaultSession[]): AiVaultSession[] {
+    const winners = this.previewWinners(completed)
+    const retained = (row: AiVaultSession): boolean => {
+      const key = sessionAliasKey(row)
+      return !key || !winners.has(key) || winners.get(key) === row
+    }
+    return [...this.values()].filter(retained).concat(completed.filter(retained))
+  }
+
   add(session: AiVaultSession): void {
     const key = sessionAliasKey(session)
     const index = this.nextIndex++

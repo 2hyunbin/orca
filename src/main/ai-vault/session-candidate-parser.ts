@@ -1,8 +1,8 @@
 import { candidateFileTime } from './antigravity-transcript-candidates'
-import type { AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
+import type { AiVaultRowDelta } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { ScannedSessionCollection, dedupeScannedSessions } from './session-root-dedup'
+import { ScannedSessionCollection } from './session-root-dedup'
 import type { AntigravityWorkspaceResolver } from './session-scanner-antigravity-history'
 import { parseAgentSessionFileCached, type SessionParseStats } from './session-scanner-parse-cache'
 import { getSessionParseCacheEntry } from './session-parse-cache-store'
@@ -24,14 +24,13 @@ export async function parseSessionCandidates(args: {
   parseStats: SessionParseStats
   signal?: AbortSignal
   antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
-  observeRows?: AiVaultRowObserver
+  observeRows?: (delta: AiVaultRowDelta, readFiniteRows: () => AiVaultSession[]) => void
 }): Promise<AiVaultSession[]> {
   const sessions = new ScannedSessionCollection()
   const completed = new Map<number, AiVaultSession>()
-  const readRows = (): AiVaultSession[] => dedupeScannedSessions([
-    ...sessions.values(),
-    ...[...completed.entries()].sort(([a], [b]) => a - b).map(([, row]) => row)
-  ])
+  const completedRows = (): AiVaultSession[] => [...completed.entries()]
+    .sort(([a], [b]) => a - b).map(([, row]) => row)
+  const advertised = new Map<string, AiVaultSession>()
 
   for (let index = 0; index < args.candidates.length;) {
     throwIfAiVaultScanCancelled(args.signal)
@@ -58,7 +57,16 @@ export async function parseSessionCandidates(args: {
         if (result.session && !args.signal?.aborted && args.observeRows) {
           completed.set(ordinal, result.session)
           try {
-            args.observeRows(readRows)
+            const winners = sessions.previewWinners(completedRows())
+            const delta: AiVaultRowDelta = { upserts: [], removed: [] }
+            for (const [key, winner] of winners) {
+              const previous = advertised.get(key) ?? sessions.winner(winner)
+              if (previous === winner) continue
+              if (previous && previous.id !== winner.id) delta.removed.push(previous.id)
+              delta.upserts.push(winner)
+            }
+            for (const [key, winner] of winners) advertised.set(key, winner)
+            args.observeRows(delta, () => sessions.previewRows(completedRows()))
           } catch {
             // Observers own presentation, never candidate admission.
           }
@@ -71,6 +79,7 @@ export async function parseSessionCandidates(args: {
     throwIfAiVaultScanCancelled(args.signal)
 
     completed.clear()
+    advertised.clear()
     for (const result of results) {
       if (result.issue) {
         recordSessionScanIssue(args.issues, result.issue)

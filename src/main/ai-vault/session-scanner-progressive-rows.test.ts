@@ -7,7 +7,7 @@ import { expect, it, vi } from 'vitest'
 import { scanAiVaultSessions } from './session-scanner'
 import * as parseCache from './session-scanner-parse-cache'
 import { isolatedScanRoots, jsonLines } from './session-scanner-test-fixtures'
-import { SessionRowPublisher } from './session-row-publisher'
+import type { AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 
 it('delivers a completed row before its held sibling and preserves final aliases and scoped rows', async () => {
@@ -25,15 +25,15 @@ it('delivers a completed row before its held sibling and preserves final aliases
     init: () => ({ sessionParseCache: null, sessionSearch: null })
   })
   let requestId = 0
-  const publisher = new SessionRowPublisher(async (delta) => {
+  const onRows: AiVaultRowObserver = async (delta) => {
     child.emit('message', { type: 'rows', id: requestId, delta })
     await heldSend
-  })
+  }
   let scan: ReturnType<typeof scanAiVaultSessions> | undefined
   try {
     for (const dir of [roots.codexSessionsDir, extra]) {
       await mkdir(dir, { recursive: true })
-      for (const [id, day] of [['ready', 3], ['held', 2]] as const) {
+      for (const [id, day] of [['held', 3], ['ready', 2]] as const) {
         const path = join(dir, `rollout-${id}.jsonl`)
         const time = new Date(`2026-10-0${day}T00:00:00.000Z`)
         await writeFile(path, jsonLines([
@@ -66,7 +66,7 @@ it('delivers a completed row before its held sibling and preserves final aliases
     readyAiVaultServiceChild(child)
     await Promise.resolve()
     requestId = aiVaultServiceRequestId(child, 'scan')
-    scan = scanAiVaultSessions(options, publisher.observe)
+    scan = scanAiVaultSessions(options, onRows)
     await vi.waitFor(() => expect([...rows.values()].map((row) => row.sessionId)).toContain('ready'))
     expect([...rows.values()].map((row) => row.sessionId)).not.toContain('held')
     release()
@@ -77,13 +77,12 @@ it('delivers a completed row before its held sibling and preserves final aliases
     spy.mockRestore()
     const ordinary = await scanAiVaultSessions(options)
     expect(streamed.sessions).toEqual(ordinary.sessions)
-    expect(streamed.sessions.map((row) => row.sessionId)).toEqual(['ready', 'held', 'old'])
+    expect(streamed.sessions.map((row) => row.sessionId)).toEqual(['held', 'ready', 'old'])
     expect(streamed.sessions.filter((row) => row.sessionId === 'ready')).toHaveLength(1)
   } finally {
     release()
     releaseSend()
     await scan?.catch(() => undefined)
-    publisher.finish()
     client.dispose()
     vi.restoreAllMocks()
     await rm(root, { recursive: true, force: true })

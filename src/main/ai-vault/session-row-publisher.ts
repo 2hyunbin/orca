@@ -1,96 +1,119 @@
-import { structuralValuesEqual } from '../../shared/structural-value-equality'
 import type { AiVaultRowDelta, AiVaultRowObserver } from '../../shared/ai-vault-scan-rows'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 
 const ROW_BATCH_BYTES = 128 * 1024
 const ROW_BATCH_INTERVAL_MS = 250
 
-/** One in-flight frame; newer observations replace pending work, never append to a queue. */
+/** One in-flight frame; each physical ID retains only its latest pending change. */
 export class SessionRowPublisher {
-  private read: (() => readonly AiVaultSession[]) | null = null
-  private readonly sent = new Map<string, AiVaultSession>()
+  private pending = new Map<string, AiVaultSession | null>()
+  private prepare: (() => AiVaultRowDelta) | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private flight: Promise<void> | null = null
   private retired = false
   private started = false
 
-  constructor(private readonly send: (delta: AiVaultRowDelta) => Promise<void>) {}
+  constructor(
+    private readonly send: AiVaultRowObserver,
+    private readonly project: (rows: AiVaultSession[]) => AiVaultSession[] = (rows) => rows
+  ) {}
 
-  readonly observe: AiVaultRowObserver = (read) => {
+  readonly observe = (delta: AiVaultRowDelta): void => {
     if (this.retired) return
-    this.read = read
-    if (!this.started) {
-      this.started = true
-      void this.flush()
-      return
-    }
-    if (!this.timer && !this.flight) {
-      this.timer = setTimeout(() => {
-        this.timer = null
-        void this.flush()
-      }, ROW_BATCH_INTERVAL_MS)
-    }
+    this.accumulate(delta)
+    if (this.pending.size) this.schedule()
+  }
+
+  selectFinite(prepare: () => AiVaultRowDelta): void {
+    if (this.retired) return
+    this.prepare = prepare
+    this.schedule()
   }
 
   finish(): void {
     this.retired = true
-    this.read = null
+    this.pending.clear()
+    this.prepare = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
   }
 
+  private accumulate(delta: AiVaultRowDelta): void {
+    for (const id of delta.removed) this.pending.set(id, null)
+    for (const row of delta.upserts) this.pending.set(row.id, row)
+  }
+
+  private schedule(): void {
+    if (this.timer || this.flight) return
+    if (!this.started) {
+      void this.flush()
+      return
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null
+      void this.flush()
+    }, ROW_BATCH_INTERVAL_MS)
+  }
+
   private flush(): Promise<void> {
-    if (this.flight) return this.flight
-    const read = this.read
-    this.read = null
-    if (!read || this.retired) return Promise.resolve()
-    this.flight = Promise.resolve().then(() => {
-      if (!this.retired) return this.deliver(read())
+    if (this.flight || this.retired) return this.flight ?? Promise.resolve()
+    this.flight = Promise.resolve().then(async () => {
+      if (this.retired) return
+      const prepare = this.prepare
+      this.prepare = null
+      const next = this.pending
+      this.pending = new Map()
+      if (prepare) {
+        this.accumulate(prepare())
+        for (const [id, row] of next) this.pending.set(id, row)
+      } else {
+        this.pending = next
+      }
+      const batch = this.pending
+      this.pending = new Map()
+      const upserts: AiVaultSession[] = []
+      const removed: string[] = []
+      for (const [id, row] of batch) {
+        if (row) upserts.push(row)
+        else removed.push(id)
+      }
+      await this.deliver({ upserts: this.project(upserts), removed })
     }).catch(() => {
-      // A failed preview channel must not fail the authoritative scan.
-      this.retired = true
+      // Preview failure never fails or delays the authoritative scan.
+      this.finish()
     }).finally(() => {
       this.flight = null
-      if (this.read && !this.retired && !this.timer) {
-        this.timer = setTimeout(() => {
-          this.timer = null
-          void this.flush()
-        }, ROW_BATCH_INTERVAL_MS)
-      }
+      if (!this.retired && (this.prepare || this.pending.size)) this.schedule()
     })
     return this.flight
   }
 
-  private async deliver(rows: readonly AiVaultSession[]): Promise<void> {
-    const current = new Map(rows.map((row) => [row.id, row]))
+  private async deliver(changes: AiVaultRowDelta): Promise<void> {
     let delta: AiVaultRowDelta = { upserts: [], removed: [] }
     let bytes = 0
     const flush = async (): Promise<void> => {
       if (!this.retired && (delta.upserts.length || delta.removed.length)) {
+        this.started = true
         await this.send(delta)
       }
       delta = { upserts: [], removed: [] }
       bytes = 0
     }
-    for (const id of this.sent.keys()) {
+    for (const id of changes.removed) {
       if (this.retired) return
-      if (current.has(id)) continue
       const size = Buffer.byteLength(JSON.stringify(id)) + 1
       if (bytes + size > ROW_BATCH_BYTES) await flush()
       delta.removed.push(id)
       bytes += size
-      this.sent.delete(id)
     }
-    for (const row of current.values()) {
+    for (const row of changes.upserts) {
       if (this.retired) return
-      if (structuralValuesEqual(this.sent.get(row.id), row)) continue
       const size = Buffer.byteLength(JSON.stringify(row)) + 1
       // Oversized previews still arrive in the ordinary final response.
       if (size > ROW_BATCH_BYTES) continue
       if (bytes + size > ROW_BATCH_BYTES) await flush()
       delta.upserts.push(row)
       bytes += size
-      this.sent.set(row.id, row)
     }
     await flush()
   }

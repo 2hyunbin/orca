@@ -21,4 +21,4 @@ export type AiVaultRowsEvent = AiVaultRowDelta & {
   reset: boolean
 }
 
-export type AiVaultRowObserver = (read: () => readonly AiVaultSession[]) => void
+export type AiVaultRowObserver = (delta: AiVaultRowDelta) => void | Promise<void>

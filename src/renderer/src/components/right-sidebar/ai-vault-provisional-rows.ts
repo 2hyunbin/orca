@@ -83,7 +83,7 @@ export function observeAiVaultProvisionalRows(args: {
   const unsubscribe = window.api.aiVault.onScanRows?.((event) => {
     if (!observing || event.requestToken !== args.requestToken || !args.isCurrent()) return
     if (!preview.accept(event)) return
-    args.gate.publish(undefined, () => {
+    args.gate.publishProvisional(() => {
       if (!observing || !args.isCurrent()) return
       rows = preview.snapshot(rows)
       args.apply(rows)
