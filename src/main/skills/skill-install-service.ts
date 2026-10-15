@@ -91,6 +91,7 @@ function placementTransaction(input: SkillInstallServiceInput, request: LocalSki
     providerRootOverrides: input.providerRootOverrides,
     filesystem: input.filesystem,
     wslDistro: input.wslDistro,
+    adoptableDigests: input.adoptableDigests,
     signal: input.signal
   })
 }

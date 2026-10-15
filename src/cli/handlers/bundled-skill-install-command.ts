@@ -201,7 +201,13 @@ export function createSkillMutationHandler(verb: SkillMutationVerb): CommandHand
       return
     }
 
-    const results = await installBundledOrcaSkills(skillNames, input)
+    // Why: post-install discovery logs a diagnostic through console.info, and stdout is this
+    // command's own output (JSON with --json).
+    const info = console.info
+    console.info = (...args: unknown[]) => console.error(...args)
+    const results = await installBundledOrcaSkills(skillNames, input).finally(() => {
+      console.info = info
+    })
     const failed = results.some((result) => !landed(result))
     if (failed) {
       process.exitCode = 1

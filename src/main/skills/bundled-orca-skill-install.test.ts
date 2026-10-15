@@ -181,6 +181,39 @@ describe('bundled Orca skill install', () => {
     }
   )
 
+  it('replaces the real folder a single-agent skills CLI install left in an agent home', async () => {
+    packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
+    const { home, canonical, input, lockBytes, initialLock } = await fixture({
+      'test-skill': { source: 'stablyai/orca' }
+    })
+    const claudeCopy = join(home, '.claude', 'skills', 'test-skill')
+    await placeCopy(claudeCopy, OLD_TEXT)
+
+    const [result] = await installBundledOrcaSkills(['test-skill'], input)
+
+    expect(result.status).toBe('installed')
+    expect(await readFile(join(canonical, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
+    expect(await readFile(join(claudeCopy, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
+    expect(await lockBytes()).toEqual(initialLock)
+
+    // The adopted copy is Orca's now, so the next release replaces it like any other.
+    packages.value = [entry(OLD_TEXT, [OLD_DIGEST, NEW_DIGEST, 'f'.repeat(64)])]
+    expect((await installBundledOrcaSkills(['test-skill'], input))[0].status).toBe('updated')
+    expect(await readFile(join(claudeCopy, 'SKILL.md'), 'utf8')).toBe(OLD_TEXT)
+  })
+
+  it('leaves an edited agent-home copy alone and reports the install as partial', async () => {
+    packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
+    const { home, input } = await fixture({ 'test-skill': { source: 'stablyai/orca' } })
+    const claudeCopy = join(home, '.claude', 'skills', 'test-skill')
+    await placeCopy(claudeCopy, 'mine\n')
+
+    const [result] = await installBundledOrcaSkills(['test-skill'], input)
+
+    expect(result.status).toBe('partial')
+    expect(await readFile(join(claudeCopy, 'SKILL.md'), 'utf8')).toBe('mine\n')
+  })
+
   it('reads the project lock for a workspace install', async () => {
     packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
     const { root, input } = await fixture(null)
