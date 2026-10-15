@@ -108,7 +108,6 @@ export function applyJournalRow(
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
   if (row.kind === 'epoch') {
-    state.oldestSequence = Math.max(state.oldestSequence, (row.compactedThrough ?? 0) + 1)
     return
   }
   state.lastActivityAt = Math.max(state.lastActivityAt, row.ts)

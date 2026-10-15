@@ -280,7 +280,7 @@ export class AgentSessionJournal {
 
   readSince(cursor: AgentJournalCursor, limit?: number): JournalReadSince {
     const { sessionId } = this.identity
-    const rowsAfter = journalRowsAfterReader(this.database.db, sessionId, this.state, limit)
+    const rowsAfter = journalRowsAfterReader(this.database.db, sessionId, this.state.epoch, limit)
     return readJournalSince({ state: this.state, rowsAfter }, cursor, () => this.cursor())
   }
 

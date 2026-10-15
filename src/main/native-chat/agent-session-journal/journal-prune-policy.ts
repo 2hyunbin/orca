@@ -1,83 +1,84 @@
-import { agentJournalLinkageFields } from '../../../shared/agent-session-journal-producer'
-import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
-import type { JournalItemRow, JournalRow } from './journal-row-schema'
+import { agentJournalLinkageFields } from "../../../shared/agent-session-journal-producer";
+import { readAgentJournalTurn } from "../../../shared/agent-session-turn-record";
+import type { JournalItemRow, JournalRow } from "./journal-row-schema";
 
 type Candidate = {
-  seq: number
-  revision: number
-  signature: string
-  removable: boolean
-  savedAt: number
-  observedAt: number
-}
+  seq: number;
+  revision: number;
+  signature: string;
+  removable: boolean;
+  savedAt: number;
+  observedAt: number;
+};
 
 /** Keep creation and both sides of semantic transitions; only full snapshot rewrites retire. */
 export class JournalPrunePolicy {
-  private readonly candidates = new Map<string, Candidate>()
+  private readonly candidates = new Map<string, Candidate>();
 
   observe(row: JournalRow, savedAt: number): number | null {
-    if (row.kind === 'lifecycle-batch') {
+    if (row.kind === "lifecycle-batch") {
       for (const mutation of row.mutations) {
-        this.candidates.delete(mutation.itemId)
+        this.candidates.delete(mutation.itemId);
       }
-      return null
+      return null;
     }
-    if (row.kind === 'tombstone') {
-      this.candidates.delete(row.itemId)
-      return null
+    if (row.kind === "tombstone") {
+      this.candidates.delete(row.itemId);
+      return null;
     }
-    if (row.kind !== 'item') {
-      return null
+    if (row.kind !== "item") {
+      return null;
     }
     if (!this.candidates.has(row.itemId) && this.candidates.size >= 16_384) {
-      return null
+      return null;
     }
-    const signature = pruneSignature(row)
+    const signature = pruneSignature(row);
     if (signature === null) {
-      this.candidates.delete(row.itemId)
-      return null
+      this.candidates.delete(row.itemId);
+      return null;
     }
-    const previous = this.candidates.get(row.itemId)
+    const previous = this.candidates.get(row.itemId);
     if (previous && row.revision <= previous.revision) {
-      return null
+      return null;
     }
-    const same = previous?.signature === signature
+    const same = previous?.signature === signature;
     this.candidates.set(row.itemId, {
       seq: row.seq,
       revision: row.revision,
       signature,
       removable: same,
       savedAt,
-      observedAt: row.ts
-    })
+      observedAt: row.ts,
+    });
     return previous?.removable &&
       same &&
       previous.savedAt <= savedAt &&
       previous.observedAt <= row.ts
       ? previous.seq
-      : null
+      : null;
   }
 }
 
 function pruneSignature(row: JournalItemRow): string | null {
-  const { body } = row
-  const turn = readAgentJournalTurn(body)
+  const { body } = row;
+  const turn = readAgentJournalTurn(body);
   // Echo fingerprints, prompts, context clears and stop notes have effects beyond their body.
   if (
-    (body.kind === 'message' && body.role === 'user') ||
-    (!['message', 'tool-call', 'diff', 'turn'].includes(body.kind) && turn === null)
+    (body.kind === "message" && body.role === "user") ||
+    (!["message", "tool-call", "diff", "turn"].includes(body.kind) &&
+      turn === null)
   ) {
-    return null
+    return null;
   }
   return JSON.stringify([
     body.kind,
-    body.kind === 'message' ? [body.role, body.state] : null,
-    body.kind === 'tool-call' ? [body.state, body.endedAs] : null,
+    body.kind === "message" ? [body.role, body.state] : null,
+    body.kind === "tool-call" ? [body.state, body.endedAs] : null,
     turn ? [turn.turnId, turn.state] : null,
     row.fence,
     row.ownerFence,
     row.recovered,
     row.turnScope,
-    agentJournalLinkageFields(row)
-  ])
+    agentJournalLinkageFields(row),
+  ]);
 }

@@ -3,7 +3,7 @@
 //
 // There is no snapshot to anchor to and no superseded-epoch rows to drop — a
 // roll deletes them in the same transaction that publishes the new epoch. A row
-// this build cannot parse, an unreceipted gap, or a first row that is not the epoch's is
+// this build cannot parse, a gap, or a first row that is not the epoch's is
 // damage, and a row a newer Orca wrote is one this build cannot place: the load
 // names either and the open fails on it. Nothing is deleted.
 
@@ -15,14 +15,12 @@ import {
 } from './journal-reducer'
 import {
   iterateJournalEpochRows,
-  readJournalCompactionFloor,
   readJournalRowsAfter,
   readJournalSessionEpoch
 } from './journal-row-table'
 import { parseJournalRow, type JournalRow } from './journal-row-schema'
-import type { JournalCursorRange } from './journal-cursor'
 
-/** Compaction always retains the epoch anchor. */
+/** Every epoch row is sequence 1, and no compaction moves that floor. */
 const FIRST_JOURNAL_SEQUENCE = 1
 
 /** Where a journal stops being one this build can read as written. */
@@ -90,18 +88,12 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
       return true
     }
     const row = parsed.row
-    if (
-      row.seq !== expectedSequence &&
-      (expectedSequence === FIRST_JOURNAL_SEQUENCE || row.previousSequence !== expectedSequence - 1)
-    ) {
+    if (row.seq !== expectedSequence) {
       const cause = expectedSequence === FIRST_JOURNAL_SEQUENCE ? 'no-epoch-row' : 'sequence-gap'
       damage = { sequence: expectedSequence, cause }
       return true
     }
-    expectedSequence = row.seq + 1
-    if (row.previousSequence !== undefined) {
-      state.oldestSequence = Math.max(state.oldestSequence, row.seq)
-    }
+    expectedSequence += 1
     if (row.seq === FIRST_JOURNAL_SEQUENCE && row.kind !== 'epoch') {
       damage = { sequence: row.seq, cause: 'no-epoch-row' }
       return true
@@ -111,6 +103,7 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
     return true
   }
   const finish = (): JournalLoad => {
+    state.oldestSequence = FIRST_JOURNAL_SEQUENCE
     // An epoch with no rows at all holds nothing to lose: the open founds a fresh one over it.
     const found =
       damage ??
@@ -126,14 +119,9 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
 export function journalRowsAfterReader(
   db: Database.Database,
   sessionId: string,
-  state: JournalCursorRange,
+  epoch: string,
   limit?: number
 ): (afterSequence: number) => JournalRow[] {
-  const { epoch } = state
-  state.oldestSequence = Math.max(
-    state.oldestSequence,
-    readJournalCompactionFloor(db, sessionId, epoch)
-  )
   return (afterSequence) => readJournalRowsAfterCursor(db, sessionId, epoch, afterSequence, limit)
 }
 
