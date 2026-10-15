@@ -93,6 +93,18 @@ export function structuredSessionAddressTarget(
   return sessionId ? structuredSessionMailTarget(sessionId, db) : null
 }
 
+export function structuredWorkerMailboxDispatchId(
+  handle: string,
+  paneKey: string,
+  db: OrchestrationDb | null | undefined
+): string | null {
+  return (
+    db?.findActiveDispatchForAssignee?.(handle, paneKey)?.id ??
+    db?.findActiveRemoteAttachmentForPane?.(paneKey)?.dispatch_id ??
+    null
+  )
+}
+
 /**
  * Every mailbox a session reads for itself: the Runs it coordinates, its own direct mail and its
  * active Dispatch, a worker's or a chat's; a `/clear` successor reads its root's. Re-derived from the database
@@ -113,6 +125,10 @@ export function structuredSessionOwnedMailboxes(sessionId: string, db: Orchestra
   const dispatch = db.findActiveDispatchForAssignee(party.address, party.paneKey ?? undefined)
   if (dispatch) {
     mailboxes.push(`dispatch:${dispatch.id}`)
+  }
+  const remote = party.paneKey ? db.findActiveRemoteAttachmentForPane(party.paneKey) : undefined
+  if (remote) {
+    mailboxes.push(`dispatch:${remote.dispatch_id}`)
   }
   return mailboxes
 }

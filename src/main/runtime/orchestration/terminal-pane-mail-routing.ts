@@ -17,6 +17,7 @@ import {
   handleLessCoordinatorSessionId,
   structuredSessionAddressTarget,
   structuredSessionMailTarget,
+  structuredWorkerMailboxDispatchId,
   structuredSessionIdleEdgeMailboxes
 } from './structured-session-mail-target'
 import { exitedChatDispatchesForSession } from './chat-assignee'
@@ -326,8 +327,7 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     if (!authority) {
       return null
     }
-    const dispatchId =
-      db?.findActiveDispatchForAssignee?.(handle, authority.identity.paneKey)?.id ?? null
+    const dispatchId = structuredWorkerMailboxDispatchId(handle, authority.identity.paneKey, db)
     return { sessionId: authority.running.sessionId, dispatchId }
   }
 

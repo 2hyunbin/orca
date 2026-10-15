@@ -31,6 +31,8 @@ const { listAddressableStructuredWorkers } =
   await import('./orchestration/structured-worker-group-addressing')
 const { closeStructuredAgentSessionChild } = await import('./structured-agent-session-close')
 const { resolveGroupAddress } = await import('./orchestration/groups')
+const { structuredSessionOwnedMailboxes } =
+  await import('./orchestration/structured-session-mail-target')
 const { createRestTestRig, foundRestTestChat, IDLE_MS, REST_TEST_SESSION, sweepTicks } =
   await import('../native-chat/agent-session-wire/structured-agent-session-rest-test-rig')
 
@@ -162,6 +164,8 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     })
     structuredWorkerIdentities.clear()
     expect(resolveStructuredWorkerIdentity(handle, db)?.sessionId).toBe(SESSION)
+    installHost(record({}), [SESSION])
+    expect(structuredSessionOwnedMailboxes(SESSION, db)).toContain(`dispatch:${remote.dispatch_id}`)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
     db.markRemoteAttachmentReady(remote.dispatch_id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
@@ -169,6 +173,9 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
     db.settleRemoteAttachmentStop(remote.dispatch_id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(false)
+    expect(structuredSessionOwnedMailboxes(SESSION, db)).not.toContain(
+      `dispatch:${remote.dispatch_id}`
+    )
   })
 
   it('names the worker after the task it still owes, and nothing once that settles', () => {
