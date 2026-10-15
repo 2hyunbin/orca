@@ -16,6 +16,21 @@ vi.mock('lucide-react-native', () => ({
   ChevronRight: 'ChevronRight'
 }))
 vi.mock('../navigation/use-back-claim', () => ({ useBackClaim: () => {} }))
+vi.mock('../platform/use-reduced-motion', () => ({ useReducedMotionEnabled: () => false }))
+// The slide settles at once, so a back press unmounts the page in the same act.
+vi.mock('react-native-reanimated', () => ({
+  default: { View: 'AnimatedView' },
+  runOnJS:
+    <Args extends unknown[]>(fn: (...args: Args) => void) =>
+    (...args: Args) =>
+      fn(...args),
+  useAnimatedStyle: () => ({}),
+  useSharedValue: (value: number) => ({ value }),
+  withTiming: (to: number, _config: unknown, done?: (finished: boolean) => void) => {
+    done?.(true)
+    return to
+  }
+}))
 vi.mock('../components/BottomDrawer', () => ({ BottomDrawer: 'BottomDrawer' }))
 vi.mock('../components/MobileSearchField', () => ({ MobileSearchField: 'MobileSearchField' }))
 
@@ -175,7 +190,7 @@ describe('the phone Workspace options sheet', () => {
 
   it('does not reopen a page whose option stopped showing and then came back', () => {
     render({ newCardStyle: false, hideSleeping: false })
-    press('Show properties, All')
+    press('Show properties, 9')
     expect(texts()).toContain('Agent activity layout')
     rerender({ newCardStyle: true, hideSleeping: false })
     expect(texts()).toContain('Filters')
@@ -206,7 +221,7 @@ describe('the phone Workspace options sheet', () => {
     press('docs')
     expect(settings.toggleRepoFilter).toHaveBeenCalledWith('r2')
     back()
-    press('Show properties, All')
+    press('Show properties, 9')
     press('Ports')
     expect(settings.toggleCardProperty).toHaveBeenCalledWith('ports')
     press('Full list')
