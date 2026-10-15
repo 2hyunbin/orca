@@ -268,9 +268,25 @@ describe('which server an SSH host runs on connect', () => {
     })
     const result = await resolveHostServerOnConnect(target, d)
     expect(result).toMatchObject({ route: 'unserved', reason: 'refused' })
-    expect(result.route === 'unserved' ? result.detail : '').toContain(
-      'started in /root/my repo are still running'
-    )
+    const detail = result.route === 'unserved' ? result.detail : ''
+    expect(detail).toContain('started in /root/my repo are still running')
+    expect(detail).toContain('remove that project from this desktop and connect again')
+    warn.mockRestore()
+  })
+
+  it('never pins a relay terminal of unknown project on the linked one, and offers the way out', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const d = deps({
+      convert: async () => {
+        throw new Error('orcad_migration_linked_project_unowned_terminals:/root/my repo')
+      }
+    })
+    const result = await resolveHostServerOnConnect(target, d)
+    expect(result).toMatchObject({ route: 'unserved', reason: 'refused' })
+    const detail = result.route === 'unserved' ? result.detail : ''
+    expect(detail).toContain('can’t tell which project it belongs to')
+    expect(detail).not.toContain('started in /root/my repo')
+    expect(detail).toContain('copy of /root/my repo, remove that project from this desktop')
     warn.mockRestore()
   })
 

@@ -6,6 +6,7 @@ const CONFLICT =
   /orcad_migration_(repository_path|repository_id|project_group_id|folder_workspace_id|dormant_id|dormant_focus|client_state|close_intent_destination|snapshot_destination)_conflict(?::(.+))?/
 
 const LINKED_PROJECT_TERMINALS = /orcad_migration_linked_project_terminals:(.+)/
+const UNOWNED_TERMINALS = /orcad_migration_linked_project_unowned_terminals:(.+)/
 
 /** Null for anything that is not such a conflict, including a transient staged claim. */
 export function orcadMigrationConflictGuidance(error: unknown): string | null {
@@ -15,7 +16,17 @@ export function orcadMigrationConflictGuidance(error: unknown): string | null {
     return (
       `Terminals an older version of Orca started in ${terminals[1]} are still running, and this ` +
       'host’s managed server already has that project from another Orca desktop. Close those ' +
-      'terminals in that version of Orca or end them on the host, then reconnect.'
+      'terminals in that version of Orca or end them on the host, then reconnect, or remove that ' +
+      'project from this desktop and connect again.'
+    )
+  }
+  const unowned = UNOWNED_TERMINALS.exec(message)
+  if (unowned) {
+    return (
+      'A terminal an older version of Orca started on this host is still running, and Orca can’t ' +
+      'tell which project it belongs to. Close it in that version of Orca or end it on the host, ' +
+      `then reconnect. Or, to use this host’s managed server’s copy of ${unowned[1]}, remove that ` +
+      'project from this desktop and connect again.'
     )
   }
   const match = CONFLICT.exec(message)

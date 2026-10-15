@@ -7,9 +7,12 @@
  * Linking rewrites the journal under the same migration id, and only after the server proves it
  * holds nothing of the earlier manifest, so no row ever lands twice.
  */
+import { getAutomationRunRepoId } from '../../shared/automation-run-identity'
+import type { Automation } from '../../shared/automations-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
+import type { SshManagedServerLinkedProject } from '../../shared/ssh-types'
 import { splitWorktreeId } from '../../shared/worktree/id'
 import type { Store } from '../persistence'
 import {
@@ -84,23 +87,48 @@ function assertNoRelayTerminalsIn(
   linked: readonly string[]
 ): void {
   const bridged = new Set(cutover.bridgedPtyIds ?? [])
-  const running = store
+  const owners = store
     .getSshRemotePtyLeases(cutover.sshTargetId)
     .filter((lease) => bridged.has(lease.ptyId) && lease.state !== 'terminated')
+    .map((lease) => (lease.worktreeId ? splitWorktreeId(lease.worktreeId)?.repoId : undefined))
+  if (owners.length === 0) {
+    return
+  }
   const { repositories, folderWorkspaces } = cutover.manifest.payload
-  const moving = new Set([...repositories, ...folderWorkspaces].map((row) => row.id))
-  const blocked = repositories.find(
-    (repo) =>
-      linked.includes(repo.id) &&
-      running.some((lease) => {
-        const owner = lease.worktreeId ? splitWorktreeId(lease.worktreeId)?.repoId : undefined
-        // A lease whose project can't be told may belong to this one, so it holds the link too.
-        return owner === repo.id || owner === undefined || !moving.has(owner)
-      })
-  )
+  const linkedRepos = repositories.filter((repo) => linked.includes(repo.id))
+  const blocked = linkedRepos.find((repo) => owners.includes(repo.id))
   if (blocked) {
     throw new Error(`orcad_migration_linked_project_terminals:${blocked.path}`)
   }
+  const moving = new Set([...repositories, ...folderWorkspaces].map((row) => row.id))
+  // A lease whose project can't be told, or isn't moving, may be one a link would strand.
+  if (owners.some((owner) => owner === undefined || !moving.has(owner))) {
+    throw new Error(
+      `orcad_migration_linked_project_unowned_terminals:${linkedRepos.map((repo) => repo.path).join(', ')}`
+    )
+  }
+}
+
+/** What each linked project leaves behind on this desktop, so the connect can say so. */
+export function linkedOrcadMigrationProjects(
+  store: {
+    getRepos(): OrcadServerRepository[]
+    listAutomations(): Pick<Automation, 'projectId' | 'runContext'>[]
+  },
+  cutover: Pick<OrcadMigrationSourceCutover, 'linkedRepositoryIds'>
+): SshManagedServerLinkedProject[] {
+  const linked = new Set(cutover.linkedRepositoryIds ?? [])
+  if (linked.size === 0) {
+    return []
+  }
+  const automations = store.listAutomations()
+  return store
+    .getRepos()
+    .filter((repo) => linked.has(repo.id))
+    .map((repo) => ({
+      path: repo.path,
+      automations: automations.filter((entry) => getAutomationRunRepoId(entry) === repo.id).length
+    }))
 }
 
 /** Returns the cutover to commit: the same one, or one re-journaled without the linked projects. */
