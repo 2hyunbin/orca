@@ -2,6 +2,7 @@ import type { RuntimeRpcResponse } from '../../../../shared/runtime-rpc-envelope
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { isRuntimeSubscriptionReplayResponse } from '../../../../shared/runtime-subscription-replay'
 import { useAppStore } from '../../store'
+import { getExplicitRuntimeEnvironmentIdForWorktree } from '../../lib/worktree-runtime-owner'
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import { recoverWebSessionTerminalOrphansBeforeApply } from '../web-session-terminal-orphan-recovery'
 import {
@@ -86,8 +87,15 @@ export function installActiveSessionTabsSubscription({
     return undefined
   }
   const expectedTrackingGeneration = getWebSessionTabsTrackingGeneration(environmentId)
-  // Why: a warm stream keeps running after the user switches away; only the selected one may seed.
-  const isSelected = (): boolean => useAppStore.getState().activeWorktreeId === activeWorktreeId
+  // Why: a warm stream keeps running after the user switches away; only the selected worktree on
+  // this host may seed (one worktree id can exist on two hosts).
+  const isSelected = (): boolean => {
+    const state = useAppStore.getState()
+    return (
+      state.activeWorktreeId === activeWorktreeId &&
+      getExplicitRuntimeEnvironmentIdForWorktree(state, activeWorktreeId)?.trim() === environmentId
+    )
+  }
   let requestedInitialTerminal = false
   let requestedRespawnAfterWake = false
   let hostAffirmedWorktree = false

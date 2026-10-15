@@ -287,6 +287,27 @@ describe('session-tabs streams across worktree switches on one host', () => {
     expect(mocks.createTerminal).not.toHaveBeenCalled()
   })
 
+  it('does not seed a terminal on the old host after the same worktree moves to another host', async () => {
+    await connect()
+    const streamA = latestStream(WORKTREE_A)
+    mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReturnValue('env-b')
+    await act(async () => {
+      useAppStore.setState({ runtimeEnvironments: [...useAppStore.getState().runtimeEnvironments] })
+      await settle()
+    })
+
+    await publish(streamA, {
+      type: 'snapshot',
+      ...terminalSnapshot(WORKTREE_A, 1),
+      activeGroupId: null,
+      activeTabId: null,
+      activeTabType: null,
+      tabs: []
+    })
+
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+  })
+
   it('keeps live streams when a status probe flaps without the streams ending', async () => {
     await connect()
     const before = {
