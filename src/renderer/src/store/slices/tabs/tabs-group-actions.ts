@@ -7,6 +7,7 @@ import {
   collapseGroupLayout,
   replaceLeaf
 } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
+import { workspaceRootGroupId } from '../../../../../shared/workspace-layout/workspace-layout-minted-ids'
 import { ownsGlobalSelection } from '../../global-selection-owner'
 
 export function createTabsGroupActions(
@@ -23,7 +24,7 @@ export function createTabsGroupActions(
         return get().activeGroupIdByWorktree[worktreeId] ?? existingGroups[0].id
       }
 
-      const groupId = createBrowserUuid()
+      const groupId = workspaceRootGroupId(worktreeId)
       set((state) => ({
         // Why: a zero-tab worktree still needs a canonical root group so new tabs and splits land in a deterministic place.
         groupsByWorktree: {
