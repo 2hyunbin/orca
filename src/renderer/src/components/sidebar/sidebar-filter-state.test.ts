@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  computeClearFilterActions,
-  isSleepingSweepExemptionNarrowingList,
-  sidebarHasActiveFilters
-} from './visible-worktrees'
+import { computeClearFilterActions, sidebarHasActiveFilters } from './sidebar-filter-actions'
+import { isSleepingSweepExemptionNarrowingList } from './visible-worktree-kinds'
 import { isDefaultBranchWorkspace } from '../../../../shared/worktree/workspace-kinds'
 import type { Worktree } from '../../../../shared/worktree/types'
 
