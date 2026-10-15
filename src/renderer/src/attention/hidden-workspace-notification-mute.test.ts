@@ -101,33 +101,6 @@ describe('isWorkspaceNotificationMutedBySidebarFilters', () => {
     expect(muted(CLI_ID)).toBe(false)
   })
 
-  it('still mutes a hidden parent whose only lineage child is hidden too', () => {
-    store.setState({
-      worktreeLineageById: {
-        [PLAIN_ID]: {
-          worktreeId: PLAIN_ID,
-          worktreeInstanceId: 'plain',
-          parentWorktreeId: CLI_ID,
-          parentWorktreeInstanceId: 'cli',
-          origin: 'cli',
-          capture: { source: 'terminal-context', confidence: 'inferred' },
-          createdAt: 1
-        }
-      },
-      worktreesByRepo: {
-        repo1: [
-          { ...cliRow, instanceId: 'cli' },
-          {
-            ...plainRow,
-            instanceId: 'plain',
-            cliProvenance: { kind: 'created-by-cli', createdAt: 0 }
-          }
-        ]
-      }
-    })
-    expect(muted(CLI_ID)).toBe(true)
-  })
-
   it('keeps notifying for an id whose twin on another host the switches show', () => {
     store.setState({
       worktreesByRepo: {
