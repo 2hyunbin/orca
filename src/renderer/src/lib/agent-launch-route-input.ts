@@ -148,10 +148,9 @@ export function buildAgentLaunchRouteInput(
     : undefined
   const executionHostId = owner ?? resolveExecutionHostId(store, workspace)
   const parsedOwner = owner ? parseRoutableExecutionHostId(owner) : null
-  const explicitRuntimeEnvironmentId =
-    workspace.worktreeId && typeof getExplicitRuntimeEnvironmentIdForWorktree === 'function'
-      ? getExplicitRuntimeEnvironmentIdForWorktree(store, workspace.worktreeId)
-      : null
+  const explicitRuntimeEnvironmentId = workspace.worktreeId
+    ? getExplicitRuntimeEnvironmentIdForWorktree(store, workspace.worktreeId)
+    : null
   const admissionHostId =
     parsedOwner?.kind === 'runtime'
       ? parsedOwner.environmentId === explicitRuntimeEnvironmentId

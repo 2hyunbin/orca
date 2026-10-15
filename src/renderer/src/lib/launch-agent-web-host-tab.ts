@@ -85,7 +85,7 @@ export function launchAgentInWebHostTab(args: {
   }: {
     outcome: Awaited<ReturnType<typeof createWebRuntimeSessionTerminal>>
     promptDelivered: boolean
-  }): { delivered: boolean; failureNotified: boolean } => {
+  }): { delivered: boolean; failureNotified: boolean; surfaceOpened: boolean } => {
     if (outcome.status === 'failed') {
       toast.error(
         outcome.message ||
@@ -95,13 +95,13 @@ export function launchAgentInWebHostTab(args: {
             { value0: agent }
           )
       )
-      return { delivered: false, failureNotified: true }
+      return { delivered: false, failureNotified: true, surfaceOpened: false }
     }
     useAppStore.getState().setActiveTabType('terminal', worktreeId)
     if (hasPrompt && promptDelivered) {
       onPromptDelivered?.()
     }
-    return { delivered: promptDelivered, failureNotified: false }
+    return { delivered: promptDelivered, failureNotified: false, surfaceOpened: true }
   }
 
   if (pastePromptAfterReady !== null) {

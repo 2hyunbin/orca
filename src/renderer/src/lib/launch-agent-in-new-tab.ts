@@ -100,6 +100,8 @@ export type LaunchAgentInNewTabResult = {
   startupPlan?: AgentStartupPlan
   pasteDraftAfterLaunch: boolean
   promptDeliveryResult?: Promise<{ delivered: boolean; failureNotified: boolean }>
+  /** Resolves after a host terminal creation receipt, when this was host-published. */
+  surfaceReady?: Promise<'agent' | 'none'>
   /** Structured route only: what the launch did once it settled. The call stays synchronous. */
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
 } | null
@@ -246,6 +248,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       surface: { kind: 'host-published' },
       startupPlan,
       pasteDraftAfterLaunch: pasteDraftAfterLaunch !== null,
+      surfaceReady: webHostDelivery.then((result) => (result.surfaceOpened ? 'agent' : 'none')),
       ...(pasteDraftAfterLaunch !== null && promptDelivery === 'submit-after-ready'
         ? { promptDeliveryResult: webHostDelivery }
         : {})

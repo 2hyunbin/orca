@@ -153,10 +153,15 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
       worktreeId: args.worktreeId
     })
   })
+  const surface =
+    result === null
+      ? 'none'
+      : result.surface.kind === 'host-published'
+        ? await (result.surfaceReady ?? Promise.resolve<'none'>('none'))
+        : 'agent'
   return {
-    opened: result !== null,
-    surface:
-      result === null ? 'none' : result.surface.kind === 'host-published' ? 'scheduled' : 'agent',
+    opened: surface === 'agent' || surface === 'shell',
+    surface,
     ...(result?.promptDeliveryResult ? { promptDeliveryResult: result.promptDeliveryResult } : {})
   }
 }

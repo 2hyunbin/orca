@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExecutionHostIdForWorktree: mocks.getExecutionHostIdForWorktree
+  getExecutionHostIdForWorktree: mocks.getExecutionHostIdForWorktree,
+  getExplicitRuntimeEnvironmentIdForWorktree: mocks.getExplicitRuntimeEnvironmentIdForWorktree
 }))
 // Why the partial mock: only the worktree-owner answer is staged here; the repo fallback must be
 // the real resolver, since it is what this suite pins.

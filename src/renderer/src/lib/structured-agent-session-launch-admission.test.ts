@@ -494,3 +494,15 @@ it('keeps explicit refusal owned by admission and keeps an opened chat failure o
     }
   }
 })
+
+it('does not report an agent notice when a declined fallback opens a shell', async () => {
+  mocks.createSupport.mockResolvedValue({ supported: false, reason: 'wsl' })
+  const launch = beginStructuredAgentSessionProvisionalLaunch({
+    plan: pairedPlan(),
+    hooks: {},
+    onHostDeclined: () => ({ opened: true, surface: 'shell' })
+  })
+
+  await expect(launch?.settlement).resolves.toEqual({ kind: 'terminal' })
+  expect(mocks.toastInfo).not.toHaveBeenCalled()
+})
