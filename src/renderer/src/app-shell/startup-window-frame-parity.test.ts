@@ -87,6 +87,8 @@ function filesOfOtherHosts(): WorkspaceSessionState {
       ...owner
     })
   }
+  // Keyed by file id, which restore rekeys for the server's file.
+  session.markdownFrontmatterVisible = { '/srv/app/main.go': false }
   return session
 }
 
@@ -270,6 +272,10 @@ describe('the slices built from layout frames match the window restored from dis
       }
     }
     expect(hosts).toEqual(new Set(['local', 'ssh', 'runtime']))
+    const otherHosts = await restoreAndApply(PROFILES.at(-1)!)
+    expect(otherHosts.applied.markdownFrontmatterVisible).toEqual({
+      [`editor:${encodeURIComponent(GIT)}:env-1:${encodeURIComponent('/srv/app/main.go')}`]: false
+    })
     expect(Object.keys(local.applied.groupsByWorktree)).toContain('folder:notes-1')
   })
 

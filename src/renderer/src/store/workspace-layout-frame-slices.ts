@@ -4,6 +4,8 @@
 // Serializer and slices from the window's own restore builders, so a frame shows what the same
 // session restored from disk shows. Global selection (active workspace and tab) stays the view's;
 // a remote server's workspaces stay the mirror's, so the caller passes only the ones frames own.
+// Frames do not carry sleeping agent records, closed-tab records, default-tab marks or what a tab
+// reattaches at startup; those stay main's records and today's restore until the switch moves them.
 
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type {
@@ -44,9 +46,11 @@ export type LayoutFrameSlices = Pick<
   | 'layoutByWorktree'
   | 'openFiles'
   | 'editorDrafts'
+  | 'markdownFrontmatterVisible'
   | 'activeFileIdByWorktree'
   | 'browserTabsByWorktree'
   | 'browserPagesByWorkspace'
+  | 'remoteBrowserPageHandlesByPageId'
   | 'activeBrowserTabIdByWorktree'
   | 'activeTabTypeByWorktree'
 >
@@ -95,15 +99,19 @@ function stampExecutionHosts(
   )
 }
 
-/** A group shows the view's tab, else its first, as the startup reconcile picks today. */
+/**
+ * A group shows the view's tab, else its first: the startup reconcile's pick, which today runs
+ * only for workspaces with terminal rows.
+ */
 function withShownTabs(
-  groupsByWorktree: AppState['groupsByWorktree']
+  groupsByWorktree: AppState['groupsByWorktree'],
+  terminalWorkspaceKeys: ReadonlySet<string>
 ): AppState['groupsByWorktree'] {
   return Object.fromEntries(
     Object.entries(groupsByWorktree).map(([key, groups]) => [
       key,
       groups.map((group) =>
-        group.activeTabId === null && group.tabOrder.length > 0
+        group.activeTabId === null && group.tabOrder.length > 0 && terminalWorkspaceKeys.has(key)
           ? { ...group, activeTabId: group.tabOrder[0]! }
           : group
       )
@@ -172,12 +180,17 @@ export function buildLayoutFrameSlices({
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
-    groupsByWorktree: withShownTabs(editorTabs.groupsByWorktree),
+    groupsByWorktree: withShownTabs(
+      editorTabs.groupsByWorktree,
+      new Set(Object.keys(rows.tabsByWorktree))
+    ),
     openFiles: editor.state.openFiles,
     editorDrafts: editor.state.editorDrafts,
+    markdownFrontmatterVisible: editor.state.markdownFrontmatterVisible,
     activeFileIdByWorktree: editor.state.activeFileIdByWorktree,
     browserTabsByWorktree: browser.browserTabsByWorktree,
     browserPagesByWorkspace: browser.browserPagesByWorkspace,
+    remoteBrowserPageHandlesByPageId: browser.remoteBrowserPageHandlesByPageId,
     activeBrowserTabIdByWorktree: browser.activeBrowserTabIdByWorktree,
     activeTabTypeByWorktree: browser.activeTabTypeByWorktree
   }
