@@ -450,7 +450,12 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(clearAll().props.disabled).toBe(true)
       expect(clearAll().props.accessibilityState).toEqual({ disabled: true })
       expect(flatStyle(clearAll().props.style({ pressed: false })).opacity).toBe(0.5)
-      expect([resume(), ...steers()].map((b) => b.props.disabled)).toEqual([false, false, false, true])
+      expect([resume(), ...steers()].map((b) => b.props.disabled)).toEqual([
+        false,
+        false,
+        false,
+        true
+      ])
       await act(async () => clearAll().props.onPress())
       expect(onClearAll).not.toHaveBeenCalled()
       await act(async () => sending.resolve(false))
@@ -458,9 +463,9 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(onClearAll).not.toHaveBeenCalled()
       await act(async () => clearAll().props.onPress())
       expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b', 'c'])
-      expect([clearAll(), resume(), ...steers(), ...deletes()].map((b) => b.props.disabled)).toEqual(
-        [true, true, true, true, true, true, true, true]
-      )
+      expect(
+        [clearAll(), resume(), ...steers(), ...deletes()].map((b) => b.props.disabled)
+      ).toEqual([true, true, true, true, true, true, true, true])
       await act(async () => {
         resume().props.onPress()
         steers()[0]!.props.onPress()
@@ -486,7 +491,9 @@ describe('MobileNativeChatQueuedMessages', () => {
         onResume: vi.fn(() => answer.promise)
       })
       await act(async () => resumeButton(mounted).props.onPress())
-      const clearAll = mounted.root.findByProps({ accessibilityLabel: 'Delete every queued message' })
+      const clearAll = mounted.root.findByProps({
+        accessibilityLabel: 'Delete every queued message'
+      })
       expect(clearAll.props.disabled).toBe(true)
       await act(async () => clearAll.props.onPress())
       expect(onClearAll).not.toHaveBeenCalled()
