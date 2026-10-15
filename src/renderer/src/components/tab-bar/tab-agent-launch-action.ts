@@ -23,8 +23,9 @@ export function explicitAgentLaunchPlan(
 export function rejectExplicitChat(label: string): StructuredLaunchTerminal {
   toast.error(
     translate(
-      'auto.components.tab.bar.TabBar.chatUnavailableAfterSelection',
-      `Couldn't start a ${label} chat.`
+      'auto.components.tab.bar.QuickLaunchButton.chatUnavailableAfterSelection',
+      "Couldn't start a {{value0}} chat.",
+      { value0: label }
     )
   )
   return { opened: false }

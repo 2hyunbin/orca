@@ -233,7 +233,8 @@ function QuickLaunchAgentMenuItemsInner({
               toast.error(
                 translate(
                   'auto.components.tab.bar.QuickLaunchButton.chatUnavailableAfterSelection',
-                  `Couldn't start a ${label} chat.`
+                  "Couldn't start a {{value0}} chat.",
+                  { value0: label }
                 )
               )
             }

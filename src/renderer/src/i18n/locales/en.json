@@ -3737,6 +3737,8 @@
             "chatNotOverSsh": "No chat over SSH",
             "chatNotInWsl": "No chat in WSL",
             "chatNotOnHost": "No chat on this host",
+            "chatLoading": "Checking chat support…",
+            "chatUnavailableAfterSelection": "Couldn't start a {{value0}} chat.",
             "startChat": "Start a {{value0}} chat",
             "cliTag": "(CLI)"
           },
