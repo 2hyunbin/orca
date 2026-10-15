@@ -45,14 +45,10 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
   } = controller
   const { rawSections, sections, repoById } = sectionsResult
   const repoLookById = useMemo(() => buildRepoLookById(repoById), [repoById])
-  const { compactWorktreeCards, newCardStyle } = state.cardSettings
+  const { worktreeCardProperties, compactWorktreeCards, newCardStyle } = state.view
   const cardDetails = useMemo(
-    () =>
-      getWorktreeCardDetails(state.view.worktreeCardProperties, {
-        compactCards: !newCardStyle && compactWorktreeCards,
-        newCardStyle
-      }),
-    [state.view.worktreeCardProperties, compactWorktreeCards, newCardStyle]
+    () => getWorktreeCardDetails(worktreeCardProperties, { compactWorktreeCards, newCardStyle }),
+    [worktreeCardProperties, compactWorktreeCards, newCardStyle]
   )
 
   return (

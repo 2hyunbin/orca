@@ -168,6 +168,7 @@ export function useHostScreenController({
     activeWorktreeScroll,
     catalog,
     collapsedGroups,
+    // Resolved: the desktop's value once read; the served catalog's (or the default) before.
     projectOrderBy: projectCatalog.projectOrderBy,
     client,
     connState,

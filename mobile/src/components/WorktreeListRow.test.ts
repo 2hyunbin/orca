@@ -72,7 +72,7 @@ const stableRepoIcon = { type: 'emoji', emoji: 'o' } as const
 let updateSibling: Dispatch<SetStateAction<number>> = () => undefined
 
 const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, {
-  compactCards: false,
+  compactWorktreeCards: false,
   newCardStyle: false
 })
 
@@ -375,7 +375,7 @@ describe('memoized worktree rows', () => {
           item,
           now: 2_000,
           cardDetails: getWorktreeCardDetails(['status', 'unread'], {
-            compactCards: false,
+            compactWorktreeCards: false,
             newCardStyle: false
           })
         })
@@ -391,15 +391,11 @@ describe('memoized worktree rows', () => {
       cliCreated: true,
       linkedItems: [{ provider: 'jira', type: 'issue', number: 12, jiraIdentifier: 'ORCA-12' }]
     }
-    const lastGlyphs = () => metaGlyphsRender.mock.lastCall?.[0]
+    const lastPresence = () => metaGlyphsRender.mock.lastCall?.[0].presence
     await act(async () => {
       renderer = create(createElement(ListRowHarness, { item, now: 2_000 }))
     })
-    expect(lastGlyphs()).toMatchObject({
-      linkedJiraIssue: true,
-      automationCreated: true,
-      cliCreated: true
-    })
+    expect(lastPresence()).toMatchObject({ jira: true, automation: true, cli: true })
 
     await act(async () =>
       renderer!.update(
@@ -407,27 +403,12 @@ describe('memoized worktree rows', () => {
           item,
           now: 2_000,
           cardDetails: getWorktreeCardDetails(['status', 'unread'], {
-            compactCards: false,
+            compactWorktreeCards: false,
             newCardStyle: false
           })
         })
       )
     )
-    expect(lastGlyphs()).toMatchObject({
-      linkedJiraIssue: false,
-      automationCreated: false,
-      cliCreated: false
-    })
-  })
-
-  it('shows none of them for a row from a host that sends none of the facts', async () => {
-    await act(async () => {
-      renderer = create(createElement(ListRowHarness, { item: baseItem, now: 2_000 }))
-    })
-    expect(metaGlyphsRender.mock.lastCall?.[0]).toMatchObject({
-      linkedJiraIssue: false,
-      automationCreated: false,
-      cliCreated: false
-    })
+    expect(lastPresence()).toMatchObject({ jira: false, automation: false, cli: false })
   })
 })

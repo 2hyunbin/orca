@@ -1,7 +1,6 @@
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
 import {
-  hostCardSettingsSchema,
   hostPlatformSchema,
   hostRepoCatalogSchema,
   hostScreenUnreadReplySchema,
@@ -74,17 +73,6 @@ export const hostViewSettingsWrite = bindDeferredRpcOperation(
     acceptance: 'success-result-or-skip',
     barrier: 'after-caller-barrier',
     read: rpcResultVariant('ui-view-settings-written', hostScreenUnreadReplySchema)
-  })
-)
-
-/** Card layout lives in settings, not UI state; read with the view settings. */
-export const hostCardSettingsRead = bindDeferredRpcOperation(
-  defineRpcOperation({
-    name: 'settings.host-card-settings-or-skip',
-    method: 'settings.get',
-    acceptance: 'success-result-or-skip',
-    barrier: 'after-caller-barrier',
-    read: rpcResultVariant('card-settings', hostCardSettingsSchema)
   })
 )
 

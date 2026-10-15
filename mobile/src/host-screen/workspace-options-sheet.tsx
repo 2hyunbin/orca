@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { ChevronLeft } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
@@ -18,7 +18,7 @@ import { getHostContextLabel } from '../../../src/shared/worktree/host-context-l
 import {
   WORKSPACE_OPTIONS_TITLE,
   WORKSPACE_VIEW_SHARED_NOTE
-} from '../worktree/workspace-list-picker-options'
+} from '../worktree/workspace-options-copy'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
@@ -89,7 +89,7 @@ function WorkspaceOptionsContent({
     groupBy: state.view.groupBy,
     hideSleepingWorkspaces: state.view.filters.hideSleepingWorkspaces,
     hideWorkspacesFromOtherDevices: state.view.filters.hideWorkspacesFromOtherDevices,
-    newCardStyle: state.cardSettings.newCardStyle,
+    newCardStyle: state.view.newCardStyle,
     hasRemoteHosts: hosts.some((host) => parseExecutionHostId(host.id)?.kind !== 'local'),
     projectCount: controller.sectionsResult.uniqueRepos.length,
     // Why the host's say-so: a host that keeps the filter to itself cannot apply the phone's value.
@@ -101,14 +101,6 @@ function WorkspaceOptionsContent({
   const pageOption = sections
     .flatMap(({ options }) => options)
     .find((option) => option.key === pager.page)
-  // Forget it, so the page does not reopen by itself if the option shows again.
-  const pageGone = pager.page !== null && !pageOption
-  const { forget } = pager
-  useEffect(() => {
-    if (pageGone) {
-      forget()
-    }
-  }, [pageGone, forget])
   const pageControl = pageOption ? WORKSPACE_OPTION_CONTROLS[pageOption.key] : null
   // Back from a page returns to the main sheet; the drawer's own claim closes it from there.
   useBackClaim(

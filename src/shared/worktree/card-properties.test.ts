@@ -35,17 +35,28 @@ describe('worktree card properties', () => {
 })
 
 describe('getWorktreeCardDetails', () => {
-  it('shows each chosen property, and compact classic cards leave out the host and agent rows', () => {
+  it('shows each chosen property, and compact cards leave out the host and agent rows', () => {
     const chosen = ['pr', 'host', 'inline-agents'] as const
     expect(
-      getWorktreeCardDetails(chosen, { compactCards: false, newCardStyle: false })
-    ).toMatchObject({ pr: true, host: true, inlineAgents: true, comment: false })
+      getWorktreeCardDetails(chosen, { compactWorktreeCards: false, newCardStyle: false })
+    ).toMatchObject({
+      compactCards: false,
+      pr: true,
+      host: true,
+      inlineAgents: true,
+      comment: false
+    })
     expect(
-      getWorktreeCardDetails(chosen, { compactCards: true, newCardStyle: false })
-    ).toMatchObject({ pr: true, host: false, inlineAgents: false })
-    // The new card style keeps its agent rows; compactCards is never true with it.
+      getWorktreeCardDetails(chosen, { compactWorktreeCards: true, newCardStyle: false })
+    ).toMatchObject({ compactCards: true, pr: true, host: false, inlineAgents: false })
+  })
+
+  it('lets the new card style override the Compact layout', () => {
     expect(
-      getWorktreeCardDetails(chosen, { compactCards: false, newCardStyle: true }).inlineAgents
-    ).toBe(true)
+      getWorktreeCardDetails(['host', 'inline-agents'], {
+        compactWorktreeCards: true,
+        newCardStyle: true
+      })
+    ).toMatchObject({ compactCards: false, host: true, inlineAgents: true })
   })
 })

@@ -26,10 +26,11 @@ import type { RpcClient } from '../transport/rpc-client'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcResponse } from '../transport/types'
 import { useHostScreenIdentity } from './use-host-screen-identity'
-import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
+import { useHostViewSettings } from './use-host-view-settings'
+import { INITIAL_MOBILE_VIEW, type MobileViewState } from '../worktree/workspace-view-settings'
 
-function settingsReply(settings: unknown): RpcResponse {
-  return { id: 'reply', ok: true, result: { settings }, _meta: { runtimeId: 'runtime' } }
+function reply(result: unknown): RpcResponse {
+  return { id: 'reply', ok: true, result, _meta: { runtimeId: 'runtime' } }
 }
 
 const noop = () => {}
@@ -37,17 +38,17 @@ const noop = () => {}
 type ClientRef = { current: RpcClient | null }
 
 function screenState(clientRef: ClientRef, applied: boolean[]) {
+  const viewRef = { current: INITIAL_MOBILE_VIEW }
   return {
     clientRef,
-    fetchWorktreesInFlightRef: { current: false },
-    newWorktreeModalVisibleRef: { current: false },
+    viewRef,
     repoMetadataFetchedAtRef: { current: 0 },
-    worktreeCatalogRef: { current: null },
-    viewRef: { current: null },
+    setView: (view: MobileViewState) => {
+      viewRef.current = view
+    },
     setShowPinnedInGroups: (show: boolean) => applied.push(show),
     ...Object.fromEntries(
       [
-        'setActionError',
         'setCatalogError',
         'setDesktopRepos',
         'setError',
@@ -57,13 +58,9 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
         'setHostPlatform',
         'setHostStoredDescriptor',
         'setLastKnownWorktrees',
-        'setOptimisticActiveWorktreeIdentity',
         'setPinnedIds',
-        'setView',
-        'setCardSettings',
         'setRepoHostIdByRepoId',
         'setServedProjectSections',
-        'setSleptIds',
         'setWorktrees',
         'setWorktreesLoaded'
       ].map((setter) => [setter, noop])
@@ -71,53 +68,73 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
   }
 }
 
-// Mounting the embedded catalog runs its refresh, which issues the placement read.
-async function refreshWith(
-  reply: Promise<RpcResponse>,
+// One view sync: ui.get and settings.get go out together, each answered by `answer`.
+async function syncWith(
+  settings: unknown,
   onSent: (clientRef: ClientRef) => void = noop
-): Promise<boolean[]> {
+): Promise<{ applied: boolean[]; view: MobileViewState; methods: string[] }> {
   const client = new FakeSession('connected')
   const clientRef: ClientRef = { current: client }
-  client.sendRequest.mockImplementation(() => {
+  client.sendRequest.mockImplementation(async (method: string) => {
     onSent(clientRef)
-    return reply
+    return method === 'settings.get' ? reply({ settings }) : reply({ ui: { groupBy: 'none' } })
   })
   const applied: boolean[] = []
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mount-time refresh reads clientRef and setShowPinnedInGroups; the other members are inert stubs.
-  const args = {
-    client,
-    connState: 'connected',
-    embedded: true,
-    fetchRepoMetadata: async () => {},
-    hostId: 'host-1',
-    state: screenState(clientRef, applied),
-    syncViewSettingsFromDesktop: async () => {}
-  } as unknown as Parameters<typeof useHostWorktreeCatalog>[0]
+  const state = screenState(clientRef, applied)
+  let sync: () => Promise<void> = async () => {}
   function Probe(): null {
-    useHostWorktreeCatalog(args)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the view sync reads only the refs and setters screenState provides.
+    const hostState = state as unknown as Parameters<typeof useHostViewSettings>[0]['state']
+    sync = useHostViewSettings({
+      client,
+      connState: 'connected',
+      hostId: 'host-1',
+      state: hostState
+    }).syncViewSettingsFromDesktop
     return null
   }
   await act(async () => {
     create(createElement(Probe))
-    await reply.catch(noop)
   })
-  expect(client.sendRequest.mock.calls.map(([method]) => method)).toEqual(['settings.get'])
-  return applied
+  await act(async () => {
+    await sync()
+  })
+  return {
+    applied,
+    view: state.viewRef.current,
+    methods: client.sendRequest.mock.calls.map(([method]) => String(method)).sort()
+  }
 }
 
-describe('the host list mirrors the desktop pinned-placement setting', () => {
-  it('applies the setting the host reports on refresh, absent reading as off', async () => {
-    const on = settingsReply({ showPinnedWorktreesInGroups: true })
-    expect(await refreshWith(Promise.resolve(on))).toEqual([true])
-    expect(await refreshWith(Promise.resolve(settingsReply({})))).toEqual([false])
+describe('the host list mirrors the desktop list settings', () => {
+  it('reads them with one settings.get beside ui.get, absent reading as off', async () => {
+    const on = await syncWith({
+      showPinnedWorktreesInGroups: true,
+      compactWorktreeCards: true,
+      experimentalNewWorktreeCardStyle: true
+    })
+    expect(on.methods).toEqual(['settings.get', 'ui.get'])
+    expect(on.applied).toEqual([true])
+    expect(on.view).toMatchObject({
+      groupBy: 'none',
+      compactWorktreeCards: true,
+      newCardStyle: true
+    })
+    const off = await syncWith({})
+    expect(off.applied).toEqual([false])
+    expect(off.view).toMatchObject({ compactWorktreeCards: false, newCardStyle: false })
   })
 
   it('drops a reply that lands after the screen moved to another client', async () => {
-    const on = settingsReply({ showPinnedWorktreesInGroups: true })
     const moveOn = (clientRef: ClientRef) => {
       clientRef.current = new FakeSession('connected')
     }
-    expect(await refreshWith(Promise.resolve(on), moveOn)).toEqual([])
+    const moved = await syncWith(
+      { showPinnedWorktreesInGroups: true, compactWorktreeCards: true },
+      moveOn
+    )
+    expect(moved.applied).toEqual([])
+    expect(moved.view).toBe(INITIAL_MOBILE_VIEW)
   })
 
   it('resets to off when the screen is reused for another host', async () => {

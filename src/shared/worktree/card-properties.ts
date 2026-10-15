@@ -121,6 +121,8 @@ function matchesWorktreeCardProperties(
 
 /** What the shared Card layout and properties show on a workspace card; each surface draws its own. */
 export type WorktreeCardDetails = {
+  /** The Compact layout as it applies: the new card style overrides it. */
+  compactCards: boolean
   issue: boolean
   linearIssue: boolean
   jiraIssue: boolean
@@ -131,16 +133,19 @@ export type WorktreeCardDetails = {
   ports: boolean
   /** The host badge; compact cards leave it out. */
   host: boolean
-  /** The agent rows under a card; compact classic cards leave them out. */
+  /** The agent rows under a card; compact cards leave them out. */
   inlineAgents: boolean
 }
 
+/** Reads the desktop's raw settings, so no caller resolves the layout on its own. */
 export function getWorktreeCardDetails(
   cardProps: readonly WorktreeCardProperty[],
-  style: { compactCards: boolean; newCardStyle: boolean }
+  settings: { compactWorktreeCards: boolean; newCardStyle: boolean }
 ): WorktreeCardDetails {
+  const compactCards = !settings.newCardStyle && settings.compactWorktreeCards
   const shows = (property: WorktreeCardProperty) => cardProps.includes(property)
   return {
+    compactCards,
     issue: shows('issue'),
     linearIssue: shows('linear-issue'),
     jiraIssue: shows('jira-issue'),
@@ -149,7 +154,7 @@ export function getWorktreeCardDetails(
     cli: shows('cli'),
     comment: shows('comment'),
     ports: shows('ports'),
-    host: !style.compactCards && shows('host'),
-    inlineAgents: shows('inline-agents') && (style.newCardStyle || !style.compactCards)
+    host: !compactCards && shows('host'),
+    inlineAgents: !compactCards && shows('inline-agents')
   }
 }

@@ -189,6 +189,11 @@ export function formatActiveFilterLabel(count: number): string {
   return `${count} ${count === 1 ? 'filter' : 'filters'}`
 }
 
+/** The active-filter count as an options trigger's corner badge shows it. */
+export function formatActiveFilterBadge(count: number): string {
+  return count > 9 ? '9+' : String(count)
+}
+
 export function countActiveWorkspaceFilters(
   filters: WorkspaceRowFilters,
   knownRepoIds: readonly string[]

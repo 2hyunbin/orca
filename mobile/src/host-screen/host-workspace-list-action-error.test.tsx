@@ -70,7 +70,6 @@ function listWith(fields: { actionError: string; setActionError: (value: string)
       catalogError: null,
       collapsedGroups: new Set(),
       view: { ...INITIAL_MOBILE_VIEW, groupBy: 'none' },
-      cardSettings: { compactWorktreeCards: false, newCardStyle: false },
       search: '',
       showSearch: false,
       worktreesLoaded: true

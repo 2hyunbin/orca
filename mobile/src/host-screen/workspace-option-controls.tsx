@@ -205,7 +205,7 @@ function CardPropertyRows(props: {
 function showPropertiesValue({ controller }: WorkspaceOptionProps): string {
   const value = getWorkspaceCardPropertiesValue(
     withoutPhoneHiddenProperties(controller.state.view.worktreeCardProperties),
-    controller.state.cardSettings.compactWorktreeCards
+    controller.state.view.compactWorktreeCards
   )
   return value === 'hover' ? 'Hover' : value === null ? '' : String(value)
 }
@@ -293,7 +293,7 @@ export const WORKSPACE_OPTION_CONTROLS: Record<WorkspaceViewOptionKey, Workspace
   ),
   cardLayout: choicePage(
     WORKSPACE_CARD_LAYOUT_CHOICES,
-    (controller) => (controller.state.cardSettings.compactWorktreeCards ? 'compact' : 'detailed'),
+    (controller) => (controller.state.view.compactWorktreeCards ? 'compact' : 'detailed'),
     (controller) => controller.settings.setCardLayout
   ),
   cardProperties: propertiesPage(phoneCardPropertyChoices(WORKSPACE_CARD_PROPERTY_CHOICES), {

@@ -46,7 +46,7 @@ export function CheckRow(props: {
 }
 
 /** Rows inside one option's card, a hairline between each. */
-export function OptionRowList({ children }: { children: ReactNode[] }) {
+export function OptionRowList({ children }: { children: ReactNode }) {
   // Children.map keys each result by its child's own key.
   return (
     <>

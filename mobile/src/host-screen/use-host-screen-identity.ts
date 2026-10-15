@@ -4,7 +4,7 @@ import { loadPinnedIds } from '../storage/preferences'
 import { loadHosts, updateLastConnected } from '../transport/host-store'
 import type { RpcClient } from '../transport/rpc-client'
 import type { Worktree } from '../worktree/workspace-list-sections'
-import { NO_CARD_SETTINGS, type HostScreenState } from './use-host-screen-state'
+import type { HostScreenState } from './use-host-screen-state'
 import { INITIAL_MOBILE_VIEW } from '../worktree/workspace-view-settings'
 
 export function useHostScreenIdentity(args: {
@@ -29,7 +29,6 @@ export function useHostScreenIdentity(args: {
     setPinnedIds,
     setRepoHostIdByRepoId,
     setView,
-    setCardSettings,
     viewRef,
     setShowPinnedInGroups,
     setWorktrees,
@@ -67,7 +66,6 @@ export function useHostScreenIdentity(args: {
     // Another desktop's Workspace options must not stand in until this one's are read.
     viewRef.current = INITIAL_MOBILE_VIEW
     setView(INITIAL_MOBILE_VIEW)
-    setCardSettings(NO_CARD_SETTINGS)
     setHostLabelById(new Map())
     setServedProjectSections(null)
     setDesktopRepos([])
