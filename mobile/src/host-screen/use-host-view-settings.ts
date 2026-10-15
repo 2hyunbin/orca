@@ -180,19 +180,30 @@ export function useHostViewSettings(args: {
   )
 
   // Why both halves: a layout is a preset, so the desktop also resets the shown properties.
+  // Why the setting first: a host that refuses it must not be left with the other layout's preset.
   const setCardLayout = useCallback(
     (layout: 'detailed' | 'compact') => {
-      const updates = getWorktreeCardModeUpdates(layout === 'compact' ? 'Compact' : 'Default')
-      persistViewSettings(
-        {
-          worktreeCardProperties: updates.ui.worktreeCardProperties,
-          compactWorktreeCards: updates.settings.compactWorktreeCards
-        },
-        { cardLayoutPreset: true }
-      )
-      if (client) {
-        void hostCardLayoutWrite.request(client, updates.settings).catch(() => {})
+      if (!client) {
+        return
       }
+      const updates = getWorktreeCardModeUpdates(layout === 'compact' ? 'Compact' : 'Default')
+      void (async () => {
+        try {
+          const reply = await hostCardLayoutWrite.request(client, updates.settings)
+          if (!hostCardLayoutWrite.interpret(reply).accepted || clientRef.current !== client) {
+            return
+          }
+        } catch {
+          return
+        }
+        persistViewSettings(
+          {
+            worktreeCardProperties: updates.ui.worktreeCardProperties,
+            compactWorktreeCards: updates.settings.compactWorktreeCards
+          },
+          { cardLayoutPreset: true }
+        )
+      })()
     },
     [client, persistViewSettings]
   )
