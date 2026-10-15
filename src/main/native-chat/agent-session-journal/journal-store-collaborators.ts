@@ -113,6 +113,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     highestFence: () => host.state().highestFence,
     nextSequence: () => host.state().lastSequence + 1,
     commit: host.commit,
+    currentItem: (itemId) => host.state().items.get(itemId),
     // Every rejection is a dispatch row through this one writer; the draft
     // returned-transition rides it so no path can bypass the hook.
     inTransaction: (db, row) => queuedMessages.onRowInTransaction(db, row),

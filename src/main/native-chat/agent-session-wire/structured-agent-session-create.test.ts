@@ -361,13 +361,13 @@ it('admits Stop with the create-returned fence after acquisition advances it and
   }
 })
 
-it.each(['journal_rows', 'agent_session_operations'])(
+it.each(['journal_rows_data', 'agent_session_operations'])(
   'rolls back all create state when %s refuses its write',
   async (table) => {
     const first = firstMessage()
     const params = createTestParams(first)
     const db = openTestJournalHostDatabase(rig.root).db
-    const when = table === 'journal_rows' ? `WHEN NEW.row_json LIKE '%"kind":"submission"%'` : ''
+    const when = table === 'journal_rows_data' ? `WHEN NEW.row_json LIKE '%"kind":"submission"%'` : ''
     db.exec(
       `CREATE TRIGGER refuse_create BEFORE INSERT ON ${table} ${when} BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END`
     )
@@ -396,7 +396,7 @@ it.each(['journal_rows', 'agent_session_operations'])(
 it('answers a journal founding failure as a refusal before publishing any create state', async () => {
   const db = openTestJournalHostDatabase(rig.root).db
   db.exec(
-    `CREATE TRIGGER refuse_epoch BEFORE INSERT ON journal_rows WHEN NEW.row_json LIKE '%"kind":"epoch"%' BEGIN SELECT RAISE(ABORT, 'simulated journal open failure'); END`
+    `CREATE TRIGGER refuse_epoch BEFORE INSERT ON journal_rows_data WHEN NEW.row_json LIKE '%"kind":"epoch"%' BEGIN SELECT RAISE(ABORT, 'simulated journal open failure'); END`
   )
   const first = firstMessage()
   expect(

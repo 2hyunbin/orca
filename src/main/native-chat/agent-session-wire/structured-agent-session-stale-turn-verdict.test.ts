@@ -686,7 +686,7 @@ describe('stale session state on a cold acquire', () => {
       const database = openTestJournalHostDatabase(root)
       const cursor = journal.cursor()
       database.db.exec(`CREATE TEMP TRIGGER reject_later_stale_settlement
-        BEFORE INSERT ON journal_rows
+        BEFORE INSERT ON journal_rows_data
         WHEN NEW.session_id = 'session-1' AND NEW.seq > ${cursor.sequence + 1}
           AND json_extract(NEW.row_json, '$.recovered') = 1
         BEGIN SELECT RAISE(ABORT, 'disk full'); END`)

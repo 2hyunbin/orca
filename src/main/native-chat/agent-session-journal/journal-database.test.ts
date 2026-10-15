@@ -78,7 +78,8 @@ describe('the host journal database open', () => {
         expect.arrayContaining([
           'journal_imports',
           'journal_repairs',
-          'journal_rows',
+          'journal_rows_data',
+          'journal_text_pieces',
           'journal_sessions',
           'journal_set_aside'
         ])

@@ -14,6 +14,7 @@ import {
 } from './journal-database'
 import { journalOpenRefusalError } from './journal-open-failure'
 import { AgentSessionJournalError } from './journal-write-guards'
+import { withJournalTextTransaction } from './journal-text-pieces'
 
 const JOURNAL_DATABASE_FILE = 'agent-session-journal.db'
 
@@ -62,9 +63,12 @@ export class JournalHostDatabase {
 
   /** One IMMEDIATE transaction; see `runJournalTransaction`. */
   transaction<T>(run: (db: Database.Database) => T): T {
-    return runJournalTransaction(this.db, run, () => {
-      this.stranded = true
-    })
+    const db = this.db
+    return withJournalTextTransaction(db, () =>
+      runJournalTransaction(db, run, () => {
+        this.stranded = true
+      })
+    )
   }
 
   /** Last, after every store has drained. A close that fails keeps the handle, so the retried

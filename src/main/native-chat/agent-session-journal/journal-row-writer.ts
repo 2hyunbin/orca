@@ -1,7 +1,10 @@
 import type Database from '../../sqlite/sync-database'
 import { insertJournalRow } from './journal-row-table'
 import type { JournalHostDatabase } from './journal-host-database'
-import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalCursor,
+  AgentJournalRenderItem
+} from '../../../shared/agent-session-journal-types'
 import type { JournalRow } from './journal-row-schema'
 import { assertJournalFence, assertJournalWritable } from './journal-write-guards'
 import type { JournalWriteBody } from './journal-write-queue'
@@ -52,6 +55,7 @@ export type JournalRowWriterDeps = {
   highestFence: () => number
   nextSequence: () => number
   commit: (rows: readonly JournalRow[], savedAt: number) => void
+  currentItem?: (itemId: string) => AgentJournalRenderItem | undefined
   /** Standing hook run for EVERY appended row — the queued-draft returned
    *  transition rides here so no rejection path can bypass it. Bookkeeping: it
    *  runs in its own savepoint, so its failure is reported and never vetoes the row. */
@@ -78,7 +82,10 @@ export class JournalRowWriter {
       try {
         // One INSERT: the chat's epoch pointer moves only when the epoch does.
         this.deps.database().transaction((db) => {
-          insertJournalRow(db, this.deps.sessionId, row, savedAt)
+          insertJournalRow(
+            db, this.deps.sessionId, row, savedAt,
+            row.kind === 'item' ? this.deps.currentItem?.(row.itemId) : undefined
+          )
           hook?.(db, row)
           receipt?.write(db, row)
           this.runBookkeeping(db, row)
@@ -126,7 +133,10 @@ export class JournalRowWriter {
     try {
       this.deps.database().transaction((db) => {
         for (const row of rows) {
-          insertJournalRow(db, this.deps.sessionId, row, ts)
+          insertJournalRow(
+            db, this.deps.sessionId, row, ts,
+            row.kind === 'item' ? this.deps.currentItem?.(row.itemId) : undefined
+          )
           this.runBookkeeping(db, row)
         }
         receipt?.write(db, receiptRow?.(rows))

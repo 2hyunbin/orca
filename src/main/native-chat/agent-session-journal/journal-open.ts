@@ -14,11 +14,12 @@ import {
   type JournalReducerState
 } from './journal-reducer'
 import {
-  iterateJournalEpochRows,
-  readJournalRowsAfter,
+  iterateJournalPhysicalRows,
+  readJournalPhysicalRowsAfter,
   readJournalSessionEpoch
 } from './journal-row-table'
-import { parseJournalRow, type JournalRow } from './journal-row-schema'
+import { parseJournalRow, type JournalRow, type JournalRowParse } from './journal-row-schema'
+import { JournalTextPieceReader } from './journal-text-piece-reader'
 
 /** Every epoch row is sequence 1, and no compaction moves that floor. */
 const FIRST_JOURNAL_SEQUENCE = 1
@@ -46,8 +47,9 @@ export function replayJournal(db: Database.Database, sessionId: string): Journal
     return null
   }
   const fold = startJournalRowFold({ sessionId, epoch })
-  for (const entry of iterateJournalEpochRows(db, sessionId, epoch)) {
-    if (!fold.add(entry)) {
+  const reader = new JournalTextPieceReader(db)
+  for (const entry of iterateJournalPhysicalRows(db, sessionId, epoch)) {
+    if (!fold.addParsed(entry, reader.decode(sessionId, epoch, entry))) {
       break
     }
   }
@@ -58,6 +60,7 @@ export function replayJournal(db: Database.Database, sessionId: string): Journal
 export function startJournalRowFold(input: { sessionId: string; epoch: string }): {
   /** False once the fold has stopped: the rest of the rows are not read. */
   add: (entry: { seq: number; rowJson: string; ts?: number }) => boolean
+  addParsed: (entry: { seq: number; ts?: number }, parsed: JournalRowParse) => boolean
   finish: () => JournalLoad
 } {
   const state = createJournalReducerState(input.sessionId, input.epoch)
@@ -67,9 +70,8 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
   let newer: { sequence: number } | null = null
   let empty = true
 
-  const add = (entry: { seq: number; rowJson: string; ts?: number }): boolean => {
+  const addParsed = (entry: { seq: number; ts?: number }, parsed: JournalRowParse): boolean => {
     empty = false
-    const parsed = parseJournalRow(entry.rowJson)
     if (!parsed.ok && parsed.unreadable) {
       newer = { sequence: entry.seq }
       return false
@@ -112,7 +114,11 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
         : { sequence: FIRST_JOURNAL_SEQUENCE, cause: 'no-epoch-row' as const })
     return { state, newer, damage: newer ? null : found }
   }
-  return { add, finish }
+  return {
+    add: (entry) => addParsed(entry, parseJournalRow(entry.rowJson)),
+    addParsed,
+    finish
+  }
 }
 
 /** `readJournalRowsAfterCursor` over one epoch, for a reader that supplies only the sequence. */
@@ -135,8 +141,9 @@ export function readJournalRowsAfterCursor(
   limit?: number
 ): JournalRow[] {
   const rows: JournalRow[] = []
-  for (const stored of readJournalRowsAfter(db, sessionId, epoch, afterSequence, limit)) {
-    const parsed = parseJournalRow(stored.rowJson)
+  const reader = new JournalTextPieceReader(db)
+  for (const stored of readJournalPhysicalRowsAfter(db, sessionId, epoch, afterSequence, limit)) {
+    const parsed = reader.decode(sessionId, epoch, stored)
     if (!parsed.ok) {
       break
     }
