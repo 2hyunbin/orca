@@ -313,7 +313,7 @@ describe('TerminalQuickCommandDialog animation structure', () => {
     expect(after?.textContent).not.toMatch(/\d/)
   })
 
-  it('stays open with the text intact when the host refuses the save', async () => {
+  it('locks the submitted draft until save settles, then permits editing and retry after refusal', async () => {
     const prompt = 'Review the change. '.repeat(50)
     const onOpenChange = vi.fn()
     let answer: (saved: boolean) => void = () => {}
@@ -330,6 +330,12 @@ describe('TerminalQuickCommandDialog animation structure', () => {
       { onSave, onOpenChange }
     )
     const textarea = document.body.querySelector('textarea')!
+    const cancel = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Cancel'
+    )!
+    const save = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.startsWith('Save')
+    )!
     const submit = async (): Promise<void> => {
       await act(async () => {
         textarea.dispatchEvent(
@@ -339,13 +345,37 @@ describe('TerminalQuickCommandDialog animation structure', () => {
     }
 
     await submit()
+    expect(textarea.closest('fieldset')?.disabled).toBe(true)
+    expect(cancel.disabled).toBe(true)
+    expect(save.disabled).toBe(true)
+    await act(async () => {
+      cancel.click()
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      )
+    })
+    await submit()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).not.toHaveBeenCalled()
+
     await act(async () => answer(false))
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
     expect(document.body.querySelector('textarea')?.value).toBe(prompt)
+    expect(textarea.closest('fieldset')?.disabled).toBe(false)
+    expect(cancel.disabled).toBe(false)
+    expect(save.disabled).toBe(false)
+
+    const updatedPrompt = `${prompt}Keep this later edit.`
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!
+    await act(async () => {
+      setValue.call(textarea, updatedPrompt)
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    })
 
     await submit()
     await act(async () => answer(true))
     expect(onSave).toHaveBeenCalledTimes(2)
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: updatedPrompt }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

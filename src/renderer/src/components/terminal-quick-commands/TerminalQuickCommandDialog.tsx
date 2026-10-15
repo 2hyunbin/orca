@@ -81,6 +81,7 @@ export function TerminalQuickCommandDialog({
   const [draft, setDraft] = useState<TerminalQuickCommand>(command)
   const wasOpenRef = useRef(open)
   const savingRef = useRef(false)
+  const [saving, setSaving] = useState(false)
   const syncedCommandRef = useRef(command)
   const draftMemoryRef = useRef<ReturnType<typeof createTerminalQuickCommandDialogDraftMemory>>(
     undefined!
@@ -177,16 +178,25 @@ export function TerminalQuickCommandDialog({
       return
     }
     savingRef.current = true
+    setSaving(true)
     try {
       if (await onSave(next)) {
         onOpenChange(false)
       }
     } finally {
       savingRef.current = false
+      setSaving(false)
+    }
+  }
+
+  const changeOpen = (nextOpen: boolean): void => {
+    if (!savingRef.current) {
+      onOpenChange(nextOpen)
     }
   }
 
   const canSave =
+    !saving &&
     draft.label.trim().length > 0 &&
     !bodyTooLong &&
     (isAgentAction
@@ -195,7 +205,7 @@ export function TerminalQuickCommandDialog({
   const submitShortcutLabel = getScreenSubmitShortcutLabel()
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       {/* Why: fixed large width so Terminal ↔ Agent content swaps never reflow the shell. */}
       <DialogContent
         className="flex max-h-[min(90vh,52rem)] w-full max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
@@ -221,8 +231,9 @@ export function TerminalQuickCommandDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          className="scrollbar-sleek flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5"
+        <fieldset
+          disabled={saving}
+          className="scrollbar-sleek flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5"
           onKeyDown={(event) => {
             if (
               isSelectAllShortcut(event) &&
@@ -277,12 +288,13 @@ export function TerminalQuickCommandDialog({
             setAdvancedOpen={setAdvancedOpen}
             setDraft={setDraft}
           />
-        </div>
+        </fieldset>
 
         <TerminalQuickCommandDialogFooter
           canSave={canSave}
+          saving={saving}
           submitShortcutLabel={submitShortcutLabel}
-          onCancel={() => onOpenChange(false)}
+          onCancel={() => changeOpen(false)}
           onSave={() => void saveDraft()}
         />
       </DialogContent>
