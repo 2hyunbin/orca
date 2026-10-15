@@ -3,6 +3,10 @@ name: Windows typecheck parity
 on:
   pull_request:
     paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'src/packages/process-host/package.json'
       - 'config/.bun-version'
       - 'config/tsconfig*.json'
       - 'src/packages/process-host/tsconfig*.json'
