@@ -1,7 +1,7 @@
 import type { ArtifactWriteRequest } from '../../../../../shared/artifacts'
 import {
-  getConnectionExecutionHostId,
-  toRuntimeExecutionHostId
+  toRuntimeExecutionHostId,
+  toSshExecutionHostId
 } from '../../../../../shared/execution-host'
 import type { DocPreviewGrantOwner } from '../../../../../preload/api/doc-preview-api'
 import { ArtifactPublishButton } from '@/components/artifacts/ArtifactPublishButton'
@@ -18,7 +18,7 @@ import { readRuntimeFilePreview } from '@/runtime/runtime-file-read-client'
 export function docPreviewGrantFileOwner(owner: DocPreviewGrantOwner): FileArtifactOwner {
   return owner.kind === 'ssh'
     ? {
-        executionHostId: getConnectionExecutionHostId(owner.connectionId),
+        executionHostId: toSshExecutionHostId(owner.connectionId),
         runtimeEnvironmentId: null
       }
     : {

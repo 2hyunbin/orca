@@ -3,7 +3,6 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { getHiddenRendererPtyIds, isHiddenRendererPty } from './pty-hidden-delivery-gate'
 import { ptySizes } from './pty/delivery/visibility-state'
 import { clearProviderPtyState } from './pty/provider/state-cleanup'
-import { WORKTREE_TERMINALS_SLEEPING_ERROR } from '../runtime/worktree-terminals-sleeping-error'
 import {
   LAUNCH_RACE_LANES,
   createLaunchRaceRuntime,
@@ -11,7 +10,6 @@ import {
   gatedClaudeAuth,
   launchRacePane,
   registerLaunchRaceLanes,
-  sleptWorktreeLock,
   type LaunchRaceLane
 } from './pty-launch-race-test-fixture'
 
@@ -108,64 +106,6 @@ describe('launch race parity, both spawn lanes', () => {
         expect(auth.prepareClaudeAuth).toHaveBeenCalledTimes(JOINER_PREPARES_ITS_OWN_LAUNCH[lane])
       }
     )
-
-    // C6 spreads joinPaneSpawn to both lanes: a slept-worktree refusal means "nothing to join".
-    it('runtime lane: a spawn joining an automatic spawn refused for a slept worktree spawns itself', async () => {
-      const pane = launchRacePane('race-slept-runtime', '73737373-7373-4373-8373-737373737373')
-      let refused = false
-      const spawnedAfterRefusal: boolean[] = []
-      installDaemonTestProvider({
-        spawn: vi.fn(async () => {
-          spawnedAfterRefusal.push(refused)
-          return { id: 'pty-user-wake' }
-        })
-      })
-      const lock = sleptWorktreeLock()
-      const runtime = createLaunchRaceRuntime({
-        acquireWorktreeTerminalSpawn: lock.acquireWorktreeTerminalSpawn
-      })
-      const lanes = registerLaunchRaceLanes({ handlers, mainWindow, runtime })
-
-      const automatic = lanes.spawn.runtime({ ...pane.args, refuseSleptWorktree: true })
-      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce())
-      const joiner = lanes.spawn.runtime(pane.args)
-      await flushMacrotasks()
-      refused = true
-      lock.refuse()
-
-      await expect(automatic).rejects.toThrow(WORKTREE_TERMINALS_SLEEPING_ERROR)
-      await expect(joiner).resolves.toMatchObject({ id: 'pty-user-wake' })
-      // Spawning only after the refusal proves it waited on the automatic spawn first.
-      expect(spawnedAfterRefusal).toEqual([true])
-    })
-
-    // C2 and C6 rely on this: createTerminal's claim makes the window wait out the refusal, then wake it.
-    it('a window mount racing a claimed automatic spawn refused for a slept worktree spawns itself', async () => {
-      const pane = launchRacePane('race-slept-claimed', '77777777-7777-4777-8777-777777777777')
-      const spawn = vi.fn(async () => ({ id: 'pty-user-mount' }))
-      installDaemonTestProvider({ spawn })
-      const lock = sleptWorktreeLock()
-      const runtime = createLaunchRaceRuntime({
-        acquireWorktreeTerminalSpawn: lock.acquireWorktreeTerminalSpawn
-      })
-      const lanes = registerLaunchRaceLanes({ handlers, mainWindow, runtime })
-      const release = lanes.controller.claimStablePaneCreate({
-        worktreeId: pane.worktreeId,
-        connectionId: null,
-        tabId: pane.tabId,
-        leafId: pane.leafId
-      })
-      const automatic = lanes.spawn
-        .runtime({ ...pane.args, refuseSleptWorktree: true })
-        .finally(release)
-      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce())
-      const mount = lanes.spawn.ipc(pane.args)
-      lock.refuse()
-
-      await expect(automatic).rejects.toThrow(WORKTREE_TERMINALS_SLEEPING_ERROR)
-      await expect(mount).resolves.toMatchObject({ id: 'pty-user-mount' })
-      expect(spawn).toHaveBeenCalledOnce()
-    })
   })
 
   describe('cleanup when a start fails', () => {

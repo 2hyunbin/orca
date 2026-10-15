@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { lstat, opendir, realpath } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { PI_CWD_BUCKET_LAYOUT } from '../ai-vault/session-cwd-bucket-layouts'
-import { SESSION_FILE_ID_LAYOUTS } from '../native-chat/session-file-id-layouts'
 
 async function canonicalPath(path: string): Promise<string> {
   return realpath(path).catch(() => resolve(path))
@@ -75,9 +74,10 @@ export async function findOmpSessionByCwd(input: {
         ) {
           continue
         }
-        const file = join(dirPath, entry.name)
-        if (SESSION_FILE_ID_LAYOUTS.omp.fileMatchesId(file, sessionId)) {
-          return file
+        // `<ISO stamp>_<id>.jsonl`, the same match as resolveOmpSessionFile.
+        const name = basename(entry.name, extname(entry.name))
+        if (name === sessionId || name.endsWith(`_${sessionId}`)) {
+          return join(dirPath, entry.name)
         }
       }
     } catch {

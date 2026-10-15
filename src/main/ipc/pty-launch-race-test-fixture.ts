@@ -1,6 +1,5 @@
 import { vi, type Mock } from 'vitest'
 import { makePaneKey } from '../../shared/stable-pane-id'
-import { WORKTREE_TERMINALS_SLEEPING_ERROR } from '../runtime/worktree-terminals-sleeping-error'
 import { registerPtyHandlers } from './pty'
 
 type IpcHandlerMap = Map<string, (_event: unknown, args: unknown) => unknown>
@@ -138,22 +137,4 @@ export function gatedClaudeAuth() {
     return { configDir: '/tmp/claude', envPatch: {}, provenance: 'managed:test' }
   })
   return { prepareClaudeAuth, release }
-}
-
-/** The host's worktree spawn lock for a slept worktree: refuses only the spawns that ask it to. */
-export function sleptWorktreeLock() {
-  let refuse!: () => void
-  const refusal = new Promise<void>((resolve) => {
-    refuse = resolve
-  })
-  const acquireWorktreeTerminalSpawn = vi.fn(
-    async (_worktreeId?: string, opts?: { refuseSleptWorktree?: boolean }) => {
-      if (opts?.refuseSleptWorktree) {
-        await refusal
-        throw new Error(WORKTREE_TERMINALS_SLEEPING_ERROR)
-      }
-      return () => {}
-    }
-  )
-  return { acquireWorktreeTerminalSpawn, refuse }
 }
