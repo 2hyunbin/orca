@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { MobileGroupMode, MobileSortMode } from './workspace-view-settings'
 import {
   buildSectionRepoMap,
@@ -25,6 +26,8 @@ export function useWorkspaceSections(args: {
   filterCatalogRepos: readonly SectionRepo[]
   collapsedGroups: Set<string>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
+  /** Each repo's host, for rows that predate their own hostId. */
+  repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
 }): {
   sections: Section[]
   rawSections: Section[]
@@ -43,7 +46,8 @@ export function useWorkspaceSections(args: {
     projectCatalog,
     filterCatalogRepos,
     collapsedGroups,
-    workspaceStatuses
+    workspaceStatuses,
+    repoHostIdByRepoId
   } = args
 
   const uniqueRepos = useMemo(
@@ -68,9 +72,11 @@ export function useWorkspaceSections(args: {
         projectCatalog,
         workspaceStatuses,
         collapsedGroups,
-        showPinnedInGroups
+        showPinnedInGroups,
+        repoHostIdByRepoId
       ),
     [
+      repoHostIdByRepoId,
       displayWorktrees,
       sortMode,
       filters,

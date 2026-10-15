@@ -14,6 +14,8 @@ import type { FilterState, Section, SectionRepo, Worktree } from './workspace-li
 import type { MobileGroupMode, MobileSortMode } from './workspace-view-settings'
 import { sortWorktrees } from './workspace-list-ordering'
 import { getWorktreeRowIdentity } from './worktree-host-row-identity'
+import { resolveWorktreeHostId } from './worktree-host-context-labels'
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import {
   buildProjectGroupingIndex,
   buildProjectSections,
@@ -117,19 +119,23 @@ function guessDefaultBranchWorkspace(w: Worktree): boolean {
 }
 
 /** The facts the shared Workspace options filters read, from what the host stamped on each row. */
-const PHONE_ROW_FACTS: WorkspaceRowFactReader<Worktree> = {
-  isArchived: (w) => w.isArchived === true,
-  isFolderWorkspace: (w) => w.workspaceKind === 'folder-workspace',
-  repoId: (w) => w.repoId,
-  hostId: (w) => w.hostId ?? null,
-  isOtherClient: (w) => w.desktopOtherClient === true,
-  isDefaultBranch: (w) => w.defaultBranch ?? guessDefaultBranchWorkspace(w),
-  isAutomationCreated: (w) => w.automationCreated === true,
-  isCliCreated: (w) => w.cliCreated === true,
-  isDetachedHead: (w) => w.detachedHead === true,
-  // Why the guess: #8873's exemption must fail open on hosts that predate isMainWorktree.
-  isMainWorktree: (w) => w.isMainWorktree ?? guessDefaultBranchWorkspace(w),
-  isSleeping: (w) => !isWorktreeActive(w)
+function phoneRowFacts(
+  repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
+): WorkspaceRowFactReader<Worktree> {
+  return {
+    isArchived: (w) => w.isArchived === true,
+    isFolderWorkspace: (w) => w.workspaceKind === 'folder-workspace',
+    repoId: (w) => w.repoId,
+    hostId: (w) => resolveWorktreeHostId(w, repoHostIdByRepoId),
+    isOtherClient: (w) => w.desktopOtherClient === true,
+    isDefaultBranch: (w) => w.defaultBranch ?? guessDefaultBranchWorkspace(w),
+    isAutomationCreated: (w) => w.automationCreated === true,
+    isCliCreated: (w) => w.cliCreated === true,
+    isDetachedHead: (w) => w.detachedHead === true,
+    // Why the guess: #8873's exemption must fail open on hosts that predate isMainWorktree.
+    isMainWorktree: (w) => w.isMainWorktree ?? guessDefaultBranchWorkspace(w),
+    isSleeping: (w) => !isWorktreeActive(w)
+  }
 }
 
 function orderMainWorktreeFirst(worktrees: Worktree[]): Worktree[] {
@@ -143,10 +149,10 @@ function orderMainWorktreeFirst(worktrees: Worktree[]): Worktree[] {
 export function filterWorktrees(
   worktrees: Worktree[],
   filters: FilterState,
-  search: string
+  search: string,
+  repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId> = new Map()
 ): Worktree[] {
-  // Why no host scope: the rows were already scoped to the desktop's shown hosts.
-  const result = filterWorkspaceRows(worktrees, { ...filters, visibleHostIds: null }, PHONE_ROW_FACTS)
+  const result = filterWorkspaceRows(worktrees, filters, phoneRowFacts(repoHostIdByRepoId))
   const q = search.trim().toLowerCase()
   if (!q) {
     return result
@@ -192,9 +198,10 @@ export function buildSections(
   projectCatalog: ProjectSectionCatalog = NO_PROJECT_SECTION_CATALOG,
   workspaceStatuses: readonly WorkspaceStatusDefinition[] = DEFAULT_MOBILE_WORKSPACE_STATUSES,
   collapsedGroups: ReadonlySet<string> = new Set(),
-  showPinnedInGroups = false
+  showPinnedInGroups = false,
+  repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId> = new Map()
 ): Section[] {
-  const filtered = filterWorktrees(worktrees, filters, search)
+  const filtered = filterWorktrees(worktrees, filters, search, repoHostIdByRepoId)
   const sorted = sortWorktrees(filtered, sortMode)
 
   const pinnedIdentities = getPinnedSectionIdentities(worktrees, sorted, pinnedIds)

@@ -8,15 +8,19 @@ import {
   buildWorkspaceViewSettingsUpdate,
   type MobileGroupMode,
   type MobileSortMode,
-  NO_FILTERS,
+  type MobileViewPatch,
   type MobileViewState,
   type WorkspaceViewSettings
 } from '../worktree/workspace-view-settings'
 import type { Worktree } from '../worktree/workspace-list-sections'
-import { readVisibleHostIds } from '../worktree/visible-host-rows'
+import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { hostViewSettingsRead, hostViewSettingsWrite } from './host-screen-operations'
 import type { HostScreenState } from './use-host-screen-state'
 import type { FilterState } from '../worktree/workspace-list-types'
+
+type BooleanFilterKey = {
+  [Key in keyof FilterState]-?: FilterState[Key] extends boolean | undefined ? Key : never
+}[keyof FilterState]
 
 export function useHostViewSettings(args: {
   client: RpcClient | null
@@ -34,7 +38,6 @@ export function useHostViewSettings(args: {
     setFilters,
     setGroupMode,
     setSortMode,
-    setVisibleHostIds,
     setWorkspaceStatuses,
     sortMode,
     viewStateRef,
@@ -63,9 +66,13 @@ export function useHostViewSettings(args: {
 
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
-    (patch: Partial<MobileViewState>) => {
+    (patch: MobileViewPatch) => {
       const previous = viewStateRef.current
-      const next: MobileViewState = { ...previous, ...patch }
+      const next: MobileViewState = {
+        ...previous,
+        ...patch,
+        filters: { ...previous.filters, ...patch.filters }
+      }
       applyViewState(next)
       if (!client) {
         return
@@ -73,7 +80,7 @@ export function useHostViewSettings(args: {
       // Send only the touched fields: the host merges partial updates, so a stale
       // mirror can no longer revert sibling settings another client just changed
       // (STA-5781; supersedes the #8873 whole-payload special case).
-      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next, previous)
+      const payload: WorkspaceViewSettings = buildWorkspaceViewSettingsUpdate(patch, next)
       if (Object.keys(payload).length === 0) {
         return
       }
@@ -106,7 +113,6 @@ export function useHostViewSettings(args: {
         return
       }
       applyViewState(applyDesktopViewSettings(viewStateRef.current, ui))
-      setVisibleHostIds(readVisibleHostIds(ui.visibleWorkspaceHostIds))
     } catch {
       // Transient transport failure; retry on the next focus/connect.
     }
@@ -121,7 +127,14 @@ export function useHostViewSettings(args: {
 
   const setFilter = useCallback(
     <Key extends keyof FilterState>(key: Key, value: FilterState[Key]) => {
-      persistViewSettings({ filters: { ...viewStateRef.current.filters, [key]: value } })
+      persistViewSettings({ filters: { [key]: value } })
+    },
+    [persistViewSettings]
+  )
+
+  const toggleFilter = useCallback(
+    (key: BooleanFilterKey) => {
+      persistViewSettings({ filters: { [key]: !viewStateRef.current.filters[key] } })
     },
     [persistViewSettings]
   )
@@ -139,7 +152,7 @@ export function useHostViewSettings(args: {
 
   // Why every filter: Clear filters on the desktop resets them all, not only the ones shown here.
   const clearFilters = useCallback(() => {
-    persistViewSettings({ filters: NO_FILTERS })
+    persistViewSettings({ filters: NO_WORKSPACE_ROW_FILTERS })
   }, [persistViewSettings])
 
   const selectedSortLabel =
@@ -175,6 +188,7 @@ export function useHostViewSettings(args: {
     syncViewSettingsFromDesktop,
     toggleCollapsed,
     setFilter,
+    toggleFilter,
     toggleRepoFilter,
     toggleWorktreeLineage
   }

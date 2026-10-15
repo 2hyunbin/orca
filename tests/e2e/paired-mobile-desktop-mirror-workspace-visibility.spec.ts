@@ -157,9 +157,6 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
     }
 
     // The desktop marks the server's own row as another client's; the desktop's and its phone's stay.
-    await desktop.page.evaluate(() =>
-      window.__store!.getState().setHideWorkspacesFromOtherDevices(true)
-    )
     await expect
       .poll(
         async () => {
@@ -173,6 +170,10 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
         { timeout: 60_000 }
       )
       .toEqual([true, false, false])
+    // The marks are facts, so they were there before the filter; the phone applies the value.
+    await desktop.page.evaluate(() =>
+      window.__store!.getState().setHideWorkspacesFromOtherDevices(true)
+    )
     const shown = await expectPhoneMatchesSidebar(false)
     expect(shown.map((row) => path.basename(row))).toEqual(
       expect.arrayContaining(['from-desktop', 'from-phone'])

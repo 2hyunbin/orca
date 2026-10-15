@@ -81,9 +81,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         <View style={styles.filterGroup}>
           <Pressable
             style={styles.filterRow}
-            onPress={() =>
-              settings.setFilter('hideSleepingWorkspaces', !state.filters.hideSleepingWorkspaces)
-            }
+            onPress={() => settings.toggleFilter('hideSleepingWorkspaces')}
           >
             <Text style={styles.filterRowText}>Hide sleeping</Text>
             {state.filters.hideSleepingWorkspaces && <Check size={14} color={colors.textPrimary} />}
@@ -91,12 +89,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
           <View style={styles.filterSeparator} />
           <Pressable
             style={styles.filterRow}
-            onPress={() =>
-              settings.setFilter(
-                'hideDefaultBranchWorkspace',
-                !state.filters.hideDefaultBranchWorkspace
-              )
-            }
+            onPress={() => settings.toggleFilter('hideDefaultBranchWorkspace')}
           >
             <Text style={styles.filterRowText}>Hide default branch</Text>
             {state.filters.hideDefaultBranchWorkspace && (

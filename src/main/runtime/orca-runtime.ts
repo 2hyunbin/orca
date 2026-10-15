@@ -1,4 +1,5 @@
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
+import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
@@ -88,6 +89,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     // module registers the generation bump at load; a headless host never loads it.
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
+    publishWorkspaceViewChanges(this.store, (event) => this.emitClientEvent(event))
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */

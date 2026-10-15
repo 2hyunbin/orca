@@ -71,6 +71,7 @@ export type RuntimeStore = {
   withdrawTerminalPane?: Store['withdrawTerminalPane']
   getSshRemotePtyLeases?: Store['getSshRemotePtyLeases']
   getUI?: Store['getUI']
+  onUIChanged?: Store['onUIChanged']
   updateUI?: Store['updateUI']
   recordFeatureInteraction?: Store['recordFeatureInteraction']
   listAutomations?: Store['listAutomations']

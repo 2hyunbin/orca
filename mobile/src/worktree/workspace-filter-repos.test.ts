@@ -57,11 +57,9 @@ describe('the repo filter', () => {
     const rows = [row('a', 'local-orca', 'local'), row('b', 'm4-orca', 'runtime:m4air')]
 
     expect(
-      filterWorktrees(
-        rows,
-        { ...NO_WORKSPACE_ROW_FILTERS, filterRepoIds: ['m4-orca'] },
-        ''
-      ).map((w) => w.worktreeId)
+      filterWorktrees(rows, { ...NO_WORKSPACE_ROW_FILTERS, filterRepoIds: ['m4-orca'] }, '').map(
+        (w) => w.worktreeId
+      )
     ).toEqual(['b'])
   })
 })
