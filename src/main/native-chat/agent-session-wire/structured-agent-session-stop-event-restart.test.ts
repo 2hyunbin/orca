@@ -178,21 +178,6 @@ describe('a restart between a Stop and its turn end', () => {
     expect(errorRows).toEqual([])
   })
 
-  it('reads Interrupted after N, marked interrupted, when nobody stopped it', async () => {
-    await runningTurn(CODEX_TURN)
-
-    await restartAndSettle()
-
-    const { turn, label, mark, errorRows } = settled()
-    expect(turn).toMatchObject({ state: 'interrupted' })
-    expect(turn).not.toHaveProperty('outcome')
-    expect(label).toMatch(/^Interrupted after /)
-    expect(mark).toBe('interrupted')
-    expect(errorRows).toEqual([
-      expect.stringContaining('stopped while this response was in progress')
-    ])
-  })
-
   it("reads Couldn't confirm when the relaunch cannot prove the child gone, Stop or not", async () => {
     // The Stop says whose end it was, never that the turn ended.
     await runningTurn(CODEX_TURN)

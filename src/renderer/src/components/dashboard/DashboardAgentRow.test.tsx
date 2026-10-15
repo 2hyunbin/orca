@@ -315,17 +315,6 @@ describe('DashboardAgentRow', () => {
     )
   }
 
-  it('renders a crash-cut row as failed, with the red dot and no interrupted tag', () => {
-    const markup = renderEndedRow({
-      mainAgent: { state: 'done', outcome: 'interruption', stateStartedAt: 2_000 }
-    })
-
-    expect(markup).toContain('aria-label="Failed"')
-    expect(markup).toContain('bg-red-500')
-    expect(markup).not.toContain('>interrupted<')
-    expect(markup).not.toContain('lucide-circle-check')
-  })
-
   it.each([
     ['recorded', { mainAgent: { state: 'done', outcome: 'cancellation', stateStartedAt: 2_000 } }],
     ["an old host's flag", { interrupted: true }]

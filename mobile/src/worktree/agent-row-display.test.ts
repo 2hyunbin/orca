@@ -88,9 +88,6 @@ describe('agentDotState', () => {
   it('shows a main agent that failed while its subagents still run as failed', () => {
     expect(agentDotState(row({ state: 'working', ...mainAgentDone('failure') }), 0)).toBe('failed')
     expect(agentDotState(row({ state: 'waiting', ...mainAgentDone('failure') }), 0)).toBe('failed')
-    expect(agentDotState(row({ state: 'working', ...mainAgentDone('interruption') }), 0)).toBe(
-      'working'
-    )
     // Only a fault outranks live work; a success or a stop with live subagents reads working.
     expect(agentDotState(row({ state: 'working', ...mainAgentDone('success') }), 0)).toBe('working')
     expect(

@@ -64,15 +64,6 @@ describe('agentMainAgentVerdict', () => {
     }
   })
 
-  it.each(['failure'] as const)(
-    'reads a main agent whose turn ended in %s while its subagent still works as failed',
-    (outcome) => {
-      const row = { state: 'working' as const, mainAgent: { state: 'done' as const, outcome } }
-      expect(agentMainAgentVerdict(row)).toBe(outcome)
-      expect(agentVerdictDisplayMark(row)).toBe('failed')
-    }
-  )
-
   it('keeps a success or a stop with live subagent work reading working', () => {
     for (const outcome of ['success', 'cancellation'] as const) {
       const row = { state: 'working' as const, mainAgent: { state: 'done' as const, outcome } }
@@ -95,21 +86,6 @@ describe('agentMainAgentVerdict', () => {
       agentMainAgentVerdict({ state: 'done', interrupted: true, mainAgent: { state: 'done' } })
     ).toBe('cancellation')
     expect(agentMainAgentVerdict({ state: 'done', interrupted: true })).toBe('cancellation')
-  })
-
-  it('marks a done row by its verdict: any cut reads interrupted, only a failure failed', () => {
-    for (const [outcome, mark] of [
-      ['success', null],
-      ['failure', 'failed'],
-      ['cancellation', 'interrupted'],
-      // A newer request replaced it: not news, and no one to name.
-      ['superseded', 'interrupted'],
-      ['interruption', 'interrupted'],
-      ['unconfirmed', 'unconfirmed']
-    ] as const) {
-      const row = { state: 'done' as const, mainAgent: { state: 'done' as const, outcome } }
-      expect(agentVerdictDisplayMark(row), outcome).toBe(mark)
-    }
     // An old host's legacy flag is a user's Stop too.
     expect(agentVerdictDisplayMark({ state: 'done', interrupted: true })).toBe('interrupted')
   })

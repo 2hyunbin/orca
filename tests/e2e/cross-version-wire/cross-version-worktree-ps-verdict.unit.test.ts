@@ -213,7 +213,7 @@ describe('cross-version worktree ps verdict', () => {
       'failed-done': 'failed',
       'failed-working': 'failed',
       stopped: 'interrupted',
-      'crash-cut': 'failed',
+      'crash-cut': 'interrupted',
       unproven: 'unconfirmed',
       replaced: 'interrupted'
     })
