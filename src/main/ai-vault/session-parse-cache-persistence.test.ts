@@ -182,7 +182,7 @@ describe('session parse cache persistence', () => {
     expect(stats.reused).toBe(0)
   })
 
-  it('ignores a cache file with a mismatched schemaVersion', async () => {
+  it.each([5, 999])('ignores a cache file with old or mismatched schemaVersion %s', async (schemaVersion) => {
     const root = await makeTempDir()
     const cacheFile = join(root, 'session-parse-cache.json')
     initSessionParseCachePersistence({ filePath: cacheFile, appVersion: APP_VERSION })
@@ -190,7 +190,7 @@ describe('session parse cache persistence', () => {
     await parseAndPersist(transcript)
 
     const persisted = JSON.parse(await readFile(cacheFile, 'utf-8'))
-    persisted.schemaVersion = 999
+    persisted.schemaVersion = schemaVersion
     await writeFile(cacheFile, JSON.stringify(persisted))
 
     simulateRestart(cacheFile)

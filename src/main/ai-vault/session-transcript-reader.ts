@@ -20,7 +20,7 @@ const NEWLINE_BYTE = 0x0a
 export type TranscriptReadStats = {
   incremental: number
   fullParses: number
-  // Large transcripts read as their first and last bytes only.
+  // Large transcripts decoded for lists without publishing full content.
   partialReads: number
   // Transcripts the parser already excluded (Codex workers), re-listed after a
   // write and dismissed without reading. Counted apart from `incremental` so a
@@ -62,6 +62,7 @@ export async function readResumableTranscript(args: {
   candidate: SessionFileCandidate
   platform: NodeJS.Platform
   resume: SessionParseResumePoint | null
+  listOnly?: boolean
   stateFactory: (messages: TranscriptMessageChannel) => ResumableSessionParseState
   stats?: TranscriptReadStats
   signal?: AbortSignal
@@ -83,8 +84,11 @@ export async function readResumableTranscript(args: {
   const channel = canResume ? resume.channel : new TranscriptMessageChannel()
   const state = canResume ? resume.state.clone() : args.stateFactory(channel)
   const startOffset = canResume ? resume.byteOffset : 0
-  // A consumer must never fold a gapped read, so appends to a partial fold stay unpublished.
-  const partial = canResume && resume.partial === true
+  // List projections omit full content, so neither cold reads nor appends may publish.
+  const partial = canResume ? resume.partial === true : args.listOnly === true
+  if (partial) {
+    state.selectListContent?.()
+  }
   // Mirrors the reader's entry guard so a dismissed transcript is not reported
   // as an incremental parse that read nothing.
   const stoppedBeforeRead = state.shouldStop?.() === true
@@ -93,6 +97,8 @@ export async function readResumableTranscript(args: {
       args.stats.earlyStopped++
     } else if (canResume) {
       args.stats.incremental++
+    } else if (partial) {
+      args.stats.partialReads++
     } else {
       args.stats.fullParses++
     }
@@ -112,10 +118,10 @@ export async function readResumableTranscript(args: {
     const readResult = await consumeCompleteJsonlLines({
       path: file.path,
       start: startOffset,
-      onLine: (line) => state.consumeLine(line),
+      onLine: (line) => state.consumeLine(line, args.signal),
       // Bound: the optional hooks are declared as methods, so a parser written
       // with method syntax must not lose `this` on the way into the reader.
-      onLineBytes: state.consumeLineBytes?.bind(state),
+      onLineBytes: partial ? undefined : state.consumeLineBytes?.bind(state),
       shouldStop: state.shouldStop?.bind(state),
       signal: args.signal
     })
@@ -133,7 +139,11 @@ export async function readResumableTranscript(args: {
     if (readResult.trailingPartialLine !== null) {
       const partialLine = readResult.trailingPartialLine
       displayState = state.clone()
-      channel.mute(() => displayState.consumeLine(partialLine))
+      if (partial) {
+        await displayState.consumeLine(partialLine, args.signal)
+      } else {
+        channel.mute(() => displayState.consumeLine(partialLine))
+      }
     }
 
     const session = await displayState.finalize(args.platform)
@@ -166,20 +176,9 @@ export async function readResumableTranscript(args: {
   }
 }
 
-// Large enough for Codex, whose first prompt follows ~80-125 KB of session setup.
-export const PARTIAL_READ_HEAD_BYTES = 256 * 1024
-export const PARTIAL_READ_TAIL_BYTES = 64 * 1024
+export const LIST_ONLY_MIN_BYTES = 320 * 1024
 
-/**
- * Read only the first and last bytes of a large append-only transcript, for a
- * caller that accepts a row whose counts cover just those parts. The same fold
- * a whole read uses consumes the head, is told about the gap, then consumes the
- * tail. Null means "read it whole": the file is small, the parser cannot take a
- * gap, the head lacks what the row needs, or the tail did not reach a newer
- * timestamp (so the row's last-active time would be wrong).
- *
- * Nothing is published: a consumer must never fold a read with a hole in it.
- */
+/** Full-span list reduction, without assembling or publishing unused content. */
 export async function readPartialTranscript(args: {
   candidate: SessionFileCandidate
   platform: NodeJS.Platform
@@ -187,75 +186,12 @@ export async function readPartialTranscript(args: {
   stats?: TranscriptReadStats
   signal?: AbortSignal
 }): Promise<ResumableTranscriptRead | null> {
-  const { file } = args.candidate
-  const size = file.sizeBytes
-  if (size === undefined || size <= PARTIAL_READ_HEAD_BYTES + PARTIAL_READ_TAIL_BYTES) {
+  const { file, agent } = args.candidate
+  if (file.sizeBytes === undefined || file.sizeBytes <= LIST_ONLY_MIN_BYTES ||
+      (agent !== 'claude' && agent !== 'codex')) {
     return null
   }
-  const channel = new TranscriptMessageChannel()
-  const state = args.stateFactory(channel)
-  if (!state.skipToTail) {
-    return null
-  }
-  const fold = {
-    onLine: (line: string) => state.consumeLine(line),
-    onLineBytes: state.consumeLineBytes?.bind(state),
-    shouldStop: state.shouldStop?.bind(state),
-    signal: args.signal
-  }
-  const head = await consumeCompleteJsonlLines({
-    path: file.path,
-    start: 0,
-    stopAt: PARTIAL_READ_HEAD_BYTES,
-    ...fold
-  })
-  addBytesRead(args.stats, head.bytesRead)
-  // An excluded transcript (a Codex worker) stops on its first line; the whole
-  // read stops there too, and publishes the exclusion as it does today.
-  if (state.shouldStop?.() === true || !state.skipToTail()) {
-    return null
-  }
-  const headUpdatedAt = state.identity?.()?.updatedAt ?? null
-  const tailStart = Math.max(head.consumedThrough, size - PARTIAL_READ_TAIL_BYTES)
-  const tail = await consumeCompleteJsonlLines({
-    path: file.path,
-    start: tailStart,
-    startsMidLine: tailStart > head.consumedThrough,
-    ...fold
-  })
-  addBytesRead(args.stats, tail.bytesRead)
-  const tailUpdatedAt = state.identity?.()?.updatedAt ?? null
-  if (tailUpdatedAt === null || tailUpdatedAt === headUpdatedAt) {
-    return null
-  }
-  state.touchFile(file)
-  // Same display-only trailing line as a resumed read: shown, not folded.
-  let displayState = state
-  if (tail.trailingPartialLine !== null) {
-    displayState = state.clone()
-    displayState.consumeLine(tail.trailingPartialLine)
-  }
-  if (args.stats) {
-    args.stats.partialReads++
-  }
-  return {
-    session: await displayState.finalize(args.platform),
-    resume: {
-      state,
-      byteOffset: tail.consumedThrough,
-      mtimeMs: file.mtimeMs,
-      sizeBytes: size,
-      channel,
-      skippedRecords: mergeSkippedTranscriptRecords(head.skippedRecords, tail.skippedRecords),
-      partial: true
-    }
-  }
-}
-
-function addBytesRead(stats: TranscriptReadStats | undefined, bytes: number): void {
-  if (stats) {
-    stats.bytesRead += bytes
-  }
+  return readResumableTranscript({ ...args, resume: null, listOnly: true })
 }
 
 /**

@@ -23,7 +23,7 @@ import {
   updateLatestLocation,
   updateTimeline
 } from './session-scanner-accumulator'
-import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
+import { decodeSessionListRecord } from './session-list-record-decoder'
 import { countSubagentTranscripts } from './session-scanner-subagent-transcripts'
 import {
   asRecord,
@@ -80,12 +80,17 @@ export function cloneClaudeSessionParseState(
 }
 
 export function consumeClaudeSessionLine(state: ClaudeSessionParseState, line: string): void {
-  const { accumulator } = state
   const record = parseJsonObject(line)
-  if (!record) {
-    return
+  if (record) {
+    consumeClaudeSessionRecord(state, record)
   }
+}
 
+function consumeClaudeSessionRecord(
+  state: ClaudeSessionParseState,
+  record: Record<string, unknown>
+): void {
+  const { accumulator } = state
   if (typeof record.sessionId === 'string' && record.sessionId.trim()) {
     accumulator.sessionId = record.sessionId.trim()
   }
@@ -209,15 +214,18 @@ function claudeResumeStateFromParseState(
   state: ClaudeSessionParseState
 ): ResumableSessionParseState {
   return {
-    consumeLine: (line) => consumeClaudeSessionLine(state, line),
-    // Without a real prompt in the head the fallback title would come from a
-    // late prompt, and an empty session would be judged from a partial read.
-    skipToTail: () => {
-      if (state.firstUserTitle === null) {
-        return false
+    consumeLine: (line, signal) => {
+      if (!state.accumulator.partial) {
+        return consumeClaudeSessionLine(state, line)
       }
-      skipAccumulatorToTail(state.accumulator)
-      return true
+      return decodeSessionListRecord('claude', line, signal).then((record) => {
+        if (record) {
+          consumeClaudeSessionRecord(state, record)
+        }
+      })
+    },
+    selectListContent: () => {
+      state.accumulator.partial = true
     },
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () => claudeResumeStateFromParseState(cloneClaudeSessionParseState(state)),

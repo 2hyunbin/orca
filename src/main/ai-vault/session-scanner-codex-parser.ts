@@ -11,7 +11,7 @@ import {
   sessionIdFromFileName,
   updateTimeline
 } from './session-scanner-accumulator'
-import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
+import { decodeSessionListRecord } from './session-list-record-decoder'
 import {
   consumeCodexCompletedMessage,
   consumeCodexLegacyEventMessage,
@@ -113,9 +113,15 @@ function consumeCodexRecordLine(state: CodexSessionParseState, line: string): vo
     return
   }
   const record = parseJsonObject(line)
-  if (!record) {
-    return
+  if (record) {
+    consumeCodexRecord(state, record)
   }
+}
+
+function consumeCodexRecord(
+  state: CodexSessionParseState,
+  record: Record<string, unknown>
+): void {
   const { accumulator } = state
 
   updateTimeline(accumulator, extractString(record.timestamp))
@@ -263,7 +269,19 @@ function codexResumeStateFromParseState(
   titleReader: (sessionId: string) => Promise<string | null>
 ): ResumableSessionParseState {
   return {
-    consumeLine: (line) => consumeCodexRecordLine(state, line),
+    consumeLine: (line, signal) => {
+      if (!state.accumulator.partial) {
+        return consumeCodexRecordLine(state, line)
+      }
+      if (state.nonUserOrigin) {
+        return
+      }
+      return decodeSessionListRecord('codex', line, signal).then((record) => {
+        if (record) {
+          consumeCodexRecord(state, record)
+        }
+      })
+    },
     consumeLineBytes: (line) => {
       const timelineOnlyRecord = readCodexTimelineOnlyRecord(
         line,
@@ -276,13 +294,8 @@ function codexResumeStateFromParseState(
       }
     },
     shouldStop: () => state.nonUserOrigin !== null,
-    // The title is first-wins: once the head set it, the tail cannot change it.
-    skipToTail: () => {
-      if (state.titleSource === null || state.accumulator.messageCount === 0) {
-        return false
-      }
-      skipAccumulatorToTail(state.accumulator)
-      return true
+    selectListContent: () => {
+      state.accumulator.partial = true
     },
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () =>

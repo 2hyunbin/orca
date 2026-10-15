@@ -5,7 +5,8 @@ import { none } from 'stream-chain/defs.js'
 /** Bounds token batches while preserving caller-owned UTF-8 decoding. */
 export function createJsonTokenReader(
   consume: (token: Token) => void,
-  batchCodeUnits = 64 * 1024
+  batchCodeUnits = 64 * 1024,
+  unpackedValues = false
 ): {
   write: (text: string) => void
   end: () => void
@@ -13,7 +14,14 @@ export function createJsonTokenReader(
   if (!Number.isSafeInteger(batchCodeUnits) || batchCodeUnits < 1) {
     throw new RangeError('JSON token batch size must be a positive safe integer')
   }
-  const parse = exec(parser({ streamValues: false }))
+  const parse = exec(
+    parser({
+      streamValues: unpackedValues,
+      packValues: !unpackedValues,
+      streamKeys: false,
+      packKeys: true
+    })
+  )
   function run(input: string | typeof none): void {
     let consumerFailed = false
     try {

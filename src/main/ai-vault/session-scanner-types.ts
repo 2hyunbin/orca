@@ -118,16 +118,14 @@ export type ResumableParseFinalizeOptions = {
 // lines; `clone` must deep-copy anything `consumeLine` mutates so a failed
 // read or a display-only trailing line can never corrupt the cached fold.
 export type ResumableSessionParseState = {
-  consumeLine(line: string): void
+  consumeLine(line: string, signal?: AbortSignal): void | Promise<void>
   // Optional zero-copy path for parsers that can reject irrelevant records
   // from a bounded byte prefix before decoding a potentially huge JSONL line.
   consumeLineBytes?(line: Buffer): void
   // Lets a parser terminate an excluded transcript without draining the file.
   shouldStop?(): boolean
-  // Called between the head and the tail of a partial read. False refuses the
-  // gap (the head lacks what the row needs) and the reader reads whole; parsers
-  // without it are never read partially.
-  skipToTail?(): boolean
+  // Select only list inputs; full transcript consumers must remain unopened.
+  selectListContent?(): void
   // What the fold knows about the session right now, for a consumer that has to
   // commit before the read ends (see TranscriptSessionIdentity).
   identity?(): TranscriptSessionIdentity | null

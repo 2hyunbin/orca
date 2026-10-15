@@ -47,8 +47,9 @@ async function readOneTitle(
       },
       process.platform,
       undefined,
-      // A title is in a transcript's opening or closing records; never read a huge file whole for it.
-      'partial-ok'
+      // List decoding visits every record, including names changed mid-session.
+      'partial-ok',
+      signal
     )
     if (
       signal?.aborted ||

@@ -31,7 +31,7 @@ export async function consumeCompleteJsonlLines(args: {
   stopAt?: number
   /** `start` may fall mid-record: drop bytes through the first newline at or after `start`. */
   startsMidLine?: boolean
-  onLine: (line: string) => void
+  onLine: (line: string) => void | Promise<void>
   onLineBytes?: (line: Buffer) => void
   shouldStop?: () => boolean
   signal?: AbortSignal
@@ -101,7 +101,10 @@ export async function consumeCompleteJsonlLines(args: {
         if (args.onLineBytes) {
           args.onLineBytes(line.subarray(0, lineEnd))
         } else {
-          args.onLine(line.toString('utf-8', 0, lineEnd))
+          const pending = args.onLine(line.toString('utf-8', 0, lineEnd))
+          if (pending) {
+            await pending
+          }
         }
       }
       consumedThrough = newlineOffset + 1
