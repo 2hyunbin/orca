@@ -3,6 +3,7 @@ import type { TabGroup } from '../../../shared/tab-types'
 import { ORCA_BROWSER_PARTITION } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { ownedEditorFileId } from '../../../shared/workspace-session-pane-ownership'
+import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { isOrcadSourceTabHost } from './orcad-source-workspace-session-eligibility'
 import {
   orcadMigrationOwnerMatchesScope,
@@ -28,20 +29,21 @@ export function withoutLeftBehindSessionRows(
     )
   )
   const hiddenFiles = hiddenHostBoundFiles(session, owns, leaveBehind, options.leaveDrafts)
-  const foreignTabIds = new Set(
-    leaveBehind
-      ? Object.entries(session.unifiedTabs ?? {}).flatMap(([ownerKey, tabs]) =>
-          owns(ownerKey)
-            ? tabs
-                .filter(
-                  (tab) =>
-                    tab.executionHostId !== undefined &&
-                    !isOrcadSourceTabHost(tab.executionHostId, scope)
-                )
-                .map((tab) => tab.id)
-            : []
-        )
-      : []
+  const foreignTabs = leaveBehind
+    ? Object.entries(session.unifiedTabs ?? {}).flatMap(([ownerKey, tabs]) =>
+        owns(ownerKey)
+          ? tabs.filter(
+              (tab) =>
+                tab.executionHostId !== undefined &&
+                !isOrcadSourceTabHost(tab.executionHostId, scope)
+            )
+          : []
+      )
+    : []
+  const foreignTabIds = new Set(foreignTabs.map((tab) => tab.id))
+  // Why both ids: the legacy terminal rows and their layouts are keyed by the terminal's entity id.
+  const foreignTerminalIds = new Set(
+    foreignTabs.filter((tab) => tab.contentType === 'terminal').flatMap((t) => [t.id, t.entityId])
   )
   if (isolated.size === 0 && hiddenFiles.size === 0 && foreignTabIds.size === 0) {
     return session
@@ -82,8 +84,46 @@ export function withoutLeftBehindSessionRows(
       Object.entries(session.activeFileIdByWorktree ?? {}).filter(
         ([ownerKey, fileId]) => !fileId || keepsFile(ownerKey, fileId)
       )
-    )
+    ),
+    ...withoutForeignTerminalRows(session, foreignTerminalIds)
   })
+}
+
+/** The legacy terminal model still hydrates these, so a skipped tab must leave them too. */
+function withoutForeignTerminalRows(
+  session: WorkspaceSessionState,
+  tabIds: ReadonlySet<string>
+): Partial<WorkspaceSessionState> {
+  if (tabIds.size === 0) {
+    return {}
+  }
+  const keepTab = ([tabId]: [string, unknown]): boolean => !tabIds.has(tabId)
+  const keepPane = ([paneKey]: [string, unknown]): boolean =>
+    !tabIds.has(parsePaneKey(paneKey)?.tabId ?? '')
+  const filtered = <T>(
+    rows: Record<string, T> | undefined,
+    keep: (entry: [string, T]) => boolean
+  ): Record<string, T> | undefined =>
+    rows ? Object.fromEntries(Object.entries(rows).filter(keep)) : rows
+  return {
+    tabsByWorktree: Object.fromEntries(
+      Object.entries(session.tabsByWorktree).map(([ownerKey, tabs]) => [
+        ownerKey,
+        tabs.filter((tab) => !tabIds.has(tab.id))
+      ])
+    ),
+    terminalLayoutsByTabId: Object.fromEntries(
+      Object.entries(session.terminalLayoutsByTabId).filter(keepTab)
+    ),
+    activeTabIdByWorktree: filtered(
+      session.activeTabIdByWorktree,
+      ([, tabId]) => !tabIds.has(tabId ?? '')
+    ),
+    remoteSessionIdsByTabId: filtered(session.remoteSessionIdsByTabId, keepTab),
+    localOnlyScrollbackByTabId: filtered(session.localOnlyScrollbackByTabId, keepTab),
+    sleepingAgentSessionsByPaneKey: filtered(session.sleepingAgentSessionsByPaneKey, keepPane),
+    terminalPtyIncarnationsByPaneKey: filtered(session.terminalPtyIncarnationsByPaneKey, keepPane)
+  }
 }
 
 function mapRows<T>(

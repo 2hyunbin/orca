@@ -9,7 +9,10 @@ import type { SshRemotePtyLease, SshTarget } from '../../shared/ssh-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
 import { Store } from '../persistence/loading-store/store'
-import { fenceOrcadMigrationSource } from './orcad-migration-source-fence'
+import {
+  fenceOrcadMigrationSource,
+  ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS
+} from './orcad-migration-source-fence'
 import {
   assessOrcadMigrationTerminals,
   retireProvenExitedLeases,
@@ -19,6 +22,7 @@ import { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import { listOrcadMigrationSourceCutovers } from './orcad-migration-cutover-journal'
 import { onlyLeavableOrcadMigrationBlockers } from './ssh-target-orcad-preflight'
+import { allowsDirectSshRelay } from './ssh-connection-store'
 
 // Relay-era profiles as the reporters' builds left them, loaded by the real Store and taken through
 // the conversion's source steps: terminal proof, lease retirement, then the fence and its preflight.
@@ -440,5 +444,49 @@ describe('"Move anyway"', () => {
         terminalProof: { verdict: 'live', ptyIds: ['pty-1'], reason: 'still running' }
       })
     ).resolves.toMatchObject({ outcome: 'refused', code: 'orcad_migration_terminals' })
+  })
+
+  it('refuses while relay terminals may still run, says why, and keeps the host connectable', async () => {
+    const loaded = load(savedStateOnly())
+    confirmed(loaded)
+    const result = await connectMove(loaded, { verdict: 'live', count: 1 })
+    expect(result).toMatchObject({
+      outcome: 'refused',
+      code: ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS,
+      reason: expect.stringContaining('every terminal on this host closed first')
+    })
+    const target = loaded.store.getSshTarget(TARGET.id)!
+    expect(getManagedOrcadFenceEnvironmentId(target)).toBeNull()
+    expect(listOrcadMigrationSourceCutovers(loaded.userDataPath)).toEqual([])
+    expect(allowsDirectSshRelay(target)).toBe(true)
+  })
+
+  it('drops a skipped foreign terminal from the legacy rows too', async () => {
+    const state = savedStateOnly()
+    const host = state.workspaceSessionsByHostId![HOST]!
+    host.tabsByWorktree[worktreeId]!.push({
+      ...host.tabsByWorktree[worktreeId]![0]!,
+      id: 'runtime-tab',
+      sortOrder: 1
+    })
+    host.terminalLayoutsByTabId['runtime-tab'] = {
+      root: { type: 'leaf', leafId: LEAF },
+      activeLeafId: LEAF,
+      expandedLeafId: null
+    }
+    host.remoteSessionIdsByTabId = { 'runtime-tab': 'remote-1' }
+    host.activeTabIdByWorktree = { [worktreeId]: 'runtime-tab' }
+    const loaded = load(state)
+    confirmed(loaded)
+    const result = await connectMove(loaded)
+    expect(result).toMatchObject({ outcome: 'fenced' })
+    if (!('cutover' in result)) {
+      return
+    }
+    const session = result.cutover.manifest.payload.dormantState?.workspaceSession
+    expect(session?.tabsByWorktree[worktreeId]?.map((tab) => tab.id)).toEqual(['tab-1'])
+    expect(Object.keys(session?.terminalLayoutsByTabId ?? {})).not.toContain('runtime-tab')
+    expect(session?.remoteSessionIdsByTabId?.['runtime-tab']).toBeUndefined()
+    expect(session?.activeTabIdByWorktree?.[worktreeId]).not.toBe('runtime-tab')
   })
 })
