@@ -69,15 +69,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     ]
   },
   {
-    fixture: 'session from before the tab bar, with an open file',
-    rule: 'old sessions: the window builds tabs from rows and open files; the Loader builds them from rows only, losing editor tabs',
-    paths: [
-      `${GIT} group 0 tabs`,
-      `${GIT} group 0 active tab`,
-      `${GIT} tab /Users/dev/orca/src/app.ts`
-    ]
-  },
-  {
     fixture: 'legacy surface tombstone on a pane still showing its terminal',
     rule: 'tombstones: the Loader closes a pane a legacy surface tombstone names; the window ignores the tombstone and shows the pane',
     paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
@@ -140,6 +131,19 @@ describe('the window shows the same session before and after the shared Loader r
     )
     expect(view['active.terminal']).toBe('tab-a')
     expect(view[`${GIT} active terminal`]).toBe('tab-a')
+  })
+
+  it('restores the terminals of a session from before the tab bar, dropping its file tabs', async () => {
+    const profile = PROFILES.find(
+      (entry) => entry.name === 'session from before the tab bar, with an open file'
+    )!
+    const view = projectStartupWindowView(
+      await bootWindowFromPartitions(createTestStore(), [
+        { hostId: profile.hostId, session: profile.build() }
+      ])
+    )
+    expect(view[`${GIT} group 0 tabs`]).toEqual(['tab-a', 'tab-b'])
+    expect(view).not.toHaveProperty([`${GIT} tab /Users/dev/orca/src/app.ts`])
   })
 
   it('lists differences only for fixtures that exist', () => {
