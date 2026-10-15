@@ -16,6 +16,7 @@ import { encodeRunListCursor, decodeRunListCursor } from '../run-list-cursor'
 import type { RunListPage } from '../run-list-page'
 import type { OrchestrationDb } from '../orchestration-db'
 import { RUN_COLUMN_LIST } from '../row-column-lists'
+import { workerSeatGrabSql } from './run-coordinator-mail-routing'
 
 export type LegacyAdoptedMailboxOwner = {
   runId: string
@@ -63,7 +64,7 @@ export function getRunMailboxOwnerIdsForHandle(
         `SELECT coordinator.run_id
          FROM run_coordinator_handles AS coordinator
          JOIN runs ON runs.id = coordinator.run_id AND runs.legacy = 0
-         WHERE coordinator.terminal_handle = ?
+         WHERE coordinator.terminal_handle = ? AND NOT ${workerSeatGrabSql('coordinator')}
          ORDER BY coordinator.run_id`
       )
       .all(terminalHandle) as { run_id: string }[]
