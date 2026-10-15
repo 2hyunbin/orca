@@ -18,7 +18,7 @@ const environment = { id: 'env-1' } as never
 
 /** The journal and registration a conversion leaves, as the connect's collaborators see them. */
 function fencedHost(phase: 'source-fenced' | 'destination-staged', registered: boolean) {
-  const host = { phase: phase as string | null, registered }
+  const host: { phase: string | null; registered: boolean } = { phase, registered }
   return {
     host,
     deps: (overrides: Parameters<typeof hostServerDepsStub>[0] = {}) =>
