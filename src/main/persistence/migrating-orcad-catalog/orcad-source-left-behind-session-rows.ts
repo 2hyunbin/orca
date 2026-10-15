@@ -55,7 +55,8 @@ export function withoutLeftBehindSessionRows(
     ...Object.values(session.unifiedTabs ?? {})
       .flat()
       .filter((tab) => tab.contentType === 'browser' && isolated.has(tab.entityId))
-      .map((tab) => tab.id)
+      .map((tab) => tab.id),
+    ...hiddenFileTabIds(session, hiddenFiles)
   ])
   // Built as a new object: this is an export copy, never a write to the saved layout.
   return structuredClone({
@@ -124,6 +125,34 @@ function withoutForeignTerminalRows(
     sleepingAgentSessionsByPaneKey: filtered(session.sleepingAgentSessionsByPaneKey, keepPane),
     terminalPtyIncarnationsByPaneKey: filtered(session.terminalPtyIncarnationsByPaneKey, keepPane)
   }
+}
+
+/** Tabs that show a dropped file: kept, they would open as a blank pane on the server. */
+function hiddenFileTabIds(
+  session: WorkspaceSessionState,
+  hiddenFiles: ReadonlyMap<string, ReadonlySet<string>>
+): string[] {
+  return Object.entries(session.unifiedTabs ?? {}).flatMap(([ownerKey, tabs]) => {
+    const hidden = hiddenFiles.get(ownerKey)
+    if (!hidden) {
+      return []
+    }
+    const fileIds = new Set(
+      (session.openFilesByWorktree?.[ownerKey] ?? []).flatMap((file) =>
+        hidden.has(file.filePath)
+          ? [file.filePath, ownedEditorFileId(file.filePath, ownerKey, file.runtimeEnvironmentId)]
+          : []
+      )
+    )
+    return tabs
+      .filter(
+        (tab) =>
+          tab.contentType !== 'terminal' &&
+          tab.contentType !== 'browser' &&
+          (fileIds.has(tab.id) || fileIds.has(tab.entityId))
+      )
+      .map((tab) => tab.id)
+  })
 }
 
 function mapRows<T>(

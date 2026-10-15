@@ -21,7 +21,11 @@ import {
 import { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import { listOrcadMigrationSourceCutovers } from './orcad-migration-cutover-journal'
-import { onlyLeavableOrcadMigrationBlockers } from './ssh-target-orcad-preflight'
+import {
+  leaveBehindClearsOrcadMigrationBlockers,
+  onlyLeavableOrcadMigrationBlockers
+} from './ssh-target-orcad-preflight'
+import { ownedEditorFileId } from '../../shared/workspace-session-pane-ownership'
 import { allowsDirectSshRelay } from './ssh-connection-store'
 
 // Relay-era profiles as the reporters' builds left them, loaded by the real Store and taken through
@@ -488,5 +492,49 @@ describe('"Move anyway"', () => {
     expect(Object.keys(session?.terminalLayoutsByTabId ?? {})).not.toContain('runtime-tab')
     expect(session?.remoteSessionIdsByTabId?.['runtime-tab']).toBeUndefined()
     expect(session?.activeTabIdByWorktree?.[worktreeId]).not.toBe('runtime-tab')
+  })
+
+  it('drops the editor tab of a file it leaves behind', async () => {
+    const state = savedStateOnly()
+    const host = state.workspaceSessionsByHostId![HOST]!
+    const editorId = ownedEditorFileId('/etc/hosts', worktreeId, undefined)
+    host.unifiedTabs![worktreeId]!.push({
+      id: editorId,
+      entityId: editorId,
+      groupId: 'group-tab-1',
+      worktreeId,
+      contentType: 'editor',
+      label: 'hosts',
+      customLabel: null,
+      color: null,
+      sortOrder: 2,
+      createdAt: 1
+    })
+    host.tabGroups![worktreeId]![0]!.tabOrder.push(editorId)
+    const loaded = load(state)
+    confirmed(loaded)
+    const result = await connectMove(loaded)
+    expect(result).toMatchObject({ outcome: 'fenced' })
+    if (!('cutover' in result)) {
+      return
+    }
+    const session = result.cutover.manifest.payload.dormantState?.workspaceSession
+    expect(session?.unifiedTabs?.[worktreeId]?.map((tab) => tab.id)).toEqual(['tab-1'])
+    expect(session?.tabGroups?.[worktreeId]?.[0]?.tabOrder).toEqual(['tab-1'])
+  })
+
+  it('is offered only when leaving saved state behind would clear the refusal', () => {
+    expect(leaveBehindClearsOrcadMigrationBlockers(load(savedStateOnly()).store, TARGET.id)).toBe(
+      true
+    )
+    const state = savedStateOnly()
+    const host = state.workspaceSessionsByHostId![HOST]!
+    // A draft only this desktop's session holds can't stay behind, so the offer would dead-end.
+    state.workspaceSession.openFilesByWorktree = structuredClone(host.openFilesByWorktree)
+    host.openFilesByWorktree = {}
+    delete state.workspaceSession.tabsByWorktree[worktreeId]
+    const loaded = load(state)
+    expect(leaveBehindClearsOrcadMigrationBlockers(loaded.store, TARGET.id)).toBe(false)
+    expect(loaded.store.getSshTarget(TARGET.id)?.managedServerLeaveBehind).toBeUndefined()
   })
 })

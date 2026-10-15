@@ -72,6 +72,22 @@ export function preflightOrcadMigrationExport(
   }
 }
 
+/** Whether a confirmed "Move anyway" would export: what it can't leave (desktop drafts) still refuses. */
+export function leaveBehindClearsOrcadMigrationBlockers(
+  store: OrcadMigrationPreflightStore & Pick<Store, 'createOrcadMigrationLeaveBehindView'>,
+  targetId: string
+): boolean {
+  const view = store.createOrcadMigrationLeaveBehindView(targetId)
+  return preflightOrcadMigrationExport(
+    {
+      ...view,
+      getSshTarget: (id) => store.getSshTarget(id),
+      getSshRemotePtyLeases: (id) => store.getSshRemotePtyLeases(id)
+    },
+    targetId
+  ).claimable
+}
+
 /** Only saved state blocks: a confirmed "Move anyway" may leave it on this desktop. */
 export function onlyLeavableOrcadMigrationBlockers(
   blockers: readonly OrcadMigrationBlocker[]

@@ -33,7 +33,10 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { CensusHostRelayTerminals } from './orcad-migration-terminal-gate'
 import { createManagedOrcadEnvironment } from './orcad-runtime-deployment'
 import { createSshRelayMigrationSource } from './orcad-migration-ssh-relay-source'
-import { onlyLeavableOrcadMigrationBlockers } from './ssh-target-orcad-preflight'
+import {
+  leaveBehindClearsOrcadMigrationBlockers,
+  onlyLeavableOrcadMigrationBlockers
+} from './ssh-target-orcad-preflight'
 import { ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON } from './orcad-migration-source-fence'
 import { retainOrcadMigrationSource } from './orcad-migration-source-retention'
 import {
@@ -224,7 +227,10 @@ async function fenceOrResume(
   }
   return {
     ...refuse(result.verdict, result.code, result.reason),
-    ...(leavable ? { canLeaveBehind: true } : {})
+    // Why previewed: an offer the confirmed export would refuse again is a dead end.
+    ...(leavable && leaveBehindClearsOrcadMigrationBlockers(store, target.id)
+      ? { canLeaveBehind: true }
+      : {})
   }
 }
 
