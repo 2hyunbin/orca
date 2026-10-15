@@ -282,7 +282,8 @@ async function startOrcadRuntime(
       (accountLaunch ? accountLaunch.prepareCodexHome(target, launchEnv, context) : null),
     () => profileStore.getSettings(),
     accountLaunch?.prepareClaudeAuth,
-    profileStore
+    profileStore,
+    accountLaunch?.prepareCodexSessionResume
   )
 
   // Why: same post-registration reconciliation `--serve` performs. Skipping it leaves

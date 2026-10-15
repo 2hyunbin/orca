@@ -135,6 +135,24 @@ describe('orcad account services', () => {
     expect(services.listCodexSessionHomes()).toEqual(expect.any(Array))
   })
 
+  it('prepares automatic Codex resumes on this host, but not for a client-sent home', async () => {
+    const { store } = createRuntime()
+    const services = create(store, false)
+    if (!services) {
+      throw new Error('expected account services on a non-WSL host')
+    }
+    const resume = (launchEnv: NodeJS.ProcessEnv) =>
+      services.prepareCodexSessionResume({
+        providerSession: { key: 'session_id', id: '019a0000-0000-7000-8000-000000000000' },
+        target: { runtime: 'host' },
+        launchEnv
+      })
+
+    await expect(resume({ CODEX_HOME: CLIENT_HOME })).resolves.toBeNull()
+    // No trusted home records the session, so the pane starts fresh instead of resuming blind.
+    await expect(resume({})).resolves.toMatchObject({ outcome: 'fresh' })
+  })
+
   it('leaves a WSL host to the desktop that owns its accounts', async () => {
     const { runtime, store } = createRuntime()
     expect(install(runtime, store, true)).toBeNull()

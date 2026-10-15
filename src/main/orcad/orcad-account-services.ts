@@ -4,11 +4,22 @@
  */
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
-import type { GetSelectedCodexHomePath, PrepareClaudeAuth } from '../ipc/pty/host-env/types'
+import type {
+  GetSelectedCodexHomePath,
+  PrepareClaudeAuth,
+  PrepareCodexSessionResume
+} from '../ipc/pty/host-env/types'
+import type {
+  AiVaultPrepareSessionResumeArgs,
+  AiVaultPrepareSessionResumeResult
+} from '../../shared/ai-vault-resume-preparation'
 import type { ClaudeStatusLineRateLimits } from '../../shared/claude-statusline-rate-limits'
 import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
 import { createProviderAccountServices } from '../provider-account-services'
 import { createCodexRuntimeHomeLaunchPreparation } from '../codex/codex-runtime-home-launch-preparation'
+import { createCodexSessionResumeLaunchPreparation } from '../codex/codex-session-resume-launch-preparation'
+import { prepareCodexAiVaultSessionResume } from '../codex/codex-ai-vault-session-resume'
+import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source-home'
 import { resolveHostAgentBaseEnvironment } from '../runtime/structured-agent-shell-environment'
 import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
@@ -18,11 +29,16 @@ type StructuredLaunchInput = { launchEnv: NodeJS.ProcessEnv }
 export type OrcadAccountServices = {
   prepareCodexHome: ReturnType<typeof createCodexRuntimeHomeLaunchPreparation>
   prepareClaudeAuth: PrepareClaudeAuth
+  /** Pins an automatic resume to the account home its session was recorded in. */
+  prepareCodexSessionResume: PrepareCodexSessionResume
   /** Runtime constructor deps: structured chats and catalog reads follow this host's Codex selection. */
   runtimeDeps: {
     prepareCodexStructuredLaunch: (input: StructuredLaunchInput) => Promise<string | null>
     resolveCodexStructuredLaunchHome: (input: StructuredLaunchInput) => string | null
     prepareCodexCatalogProbeHome: (homePath: string) => void
+    prepareAiVaultSessionResume: (
+      args: AiVaultPrepareSessionResumeArgs
+    ) => Promise<AiVaultPrepareSessionResumeResult>
   }
   /** The managed Codex homes this host's launches write sessions into. */
   listCodexSessionHomes: () => string[]
@@ -69,9 +85,18 @@ export function createOrcadAccountServices(args: {
   })
   const prepareClaudeAuth: PrepareClaudeAuth = (target) =>
     services.claudeRuntimeAuth.prepareForClaudeLaunch(target)
+  const resumeLaunch = createCodexSessionResumeLaunchPreparation({
+    getRuntimeHome: () => codexRuntimeHome,
+    getSettings: () => store.getSettings()
+  })
   return {
     prepareCodexHome,
     prepareClaudeAuth,
+    // Why skip a client-sent home: its sessions live there, outside this host's trusted homes.
+    prepareCodexSessionResume: async (resumeArgs) =>
+      clientCodexHomes.readLaunchHome(resumeArgs.launchEnv)
+        ? null
+        : resumeLaunch.prepareCodexSessionResumeForLaunch(resumeArgs),
     runtimeDeps: {
       prepareCodexStructuredLaunch: async ({ launchEnv }) =>
         (await clientCodexHomes.selectLaunchHome(undefined, launchEnv)) ??
@@ -83,7 +108,13 @@ export function createOrcadAccountServices(args: {
         codexRuntimeHome.prepareHostCodexHomeForReadOnlyAppServer(
           homePath,
           resolveTuiAgentLaunchEnv('codex', store.getSettings().agentDefaultEnv)
-        )
+        ),
+      prepareAiVaultSessionResume: (resumeArgs) =>
+        prepareCodexAiVaultSessionResume(resumeArgs, {
+          runtimeHome: codexRuntimeHome,
+          systemCodexHomePath: resolveHostCodexSessionSourceHome(store.getSettings()),
+          preparePinnedLaunchHome: (home) => resumeLaunch.prepareCodexPinnedLaunchHome(home)
+        })
     },
     listCodexSessionHomes: () => codexRuntimeHome.getHostCodexHomePathsForSessionDiscovery(),
     attachToRuntime: (runtime) => {
