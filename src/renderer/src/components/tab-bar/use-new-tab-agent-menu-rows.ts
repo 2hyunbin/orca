@@ -45,8 +45,10 @@ function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
     case 'runtime-capability':
     case 'client-capability':
       return 'no-chats'
-    default:
-      return 'not-on-host'
+    // Per-launch blockers a menu row never carries: it names no start directory or terminal.
+    case 'custom-start-directory':
+    case 'reused-terminal':
+      return 'yes'
   }
 }
 
