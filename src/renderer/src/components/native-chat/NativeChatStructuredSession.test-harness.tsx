@@ -1,4 +1,3 @@
-import { act } from '@testing-library/react'
 import { useImperativeHandle } from 'react'
 import { vi } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
@@ -48,12 +47,6 @@ export function DeliveryNoticesMock({
 
 export function useProbeClock(): void {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-}
-
-export async function advanceProbeClock(milliseconds: number): Promise<void> {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(milliseconds)
-  })
 }
 
 export function seededEntry(
@@ -156,6 +149,7 @@ export function createStructuredSessionMocks() {
     monitoringBackgroundTasks: false,
     showBackgroundTasks: false,
     isWorking: false,
+    sendOut: false,
     turnId: null as string | null,
     // Unset: Stop follows the turn, as against an older host.
     canStop: nullable<boolean>(),
@@ -168,6 +162,7 @@ export function createStructuredSessionMocks() {
     threadGoal: nullable<StructuredAgentSessionThreadGoal>(),
     stopBackgroundTask: vi.fn<StopBackgroundTaskSpy>(),
     hasOlder: false,
+    readCurrent: false,
     loadingOlder: false,
     olderHistoryGeneration: 0,
     loadOlder: vi.fn<() => Promise<NativeChatOlderPageResult>>(),
@@ -217,6 +212,7 @@ export function createStructuredSessionMocks() {
             error: null,
             readRefusal: mocks.readRefusal,
             hasOlder: mocks.hasOlder,
+            readCurrent: mocks.readCurrent,
             loadingOlder: mocks.loadingOlder,
             olderHistoryGeneration: mocks.olderHistoryGeneration,
             loadOlder: mocks.loadOlder,
@@ -225,6 +221,7 @@ export function createStructuredSessionMocks() {
             submissions: mocks.submissions,
             send: mocks.send,
             isWorking: mocks.isWorking,
+            sendOut: mocks.sendOut,
             backgroundTasks: {
               show: mocks.showBackgroundTasks || mocks.monitoringBackgroundTasks,
               isMonitoring: mocks.monitoringBackgroundTasks,
@@ -391,6 +388,7 @@ export function createStructuredSessionMocks() {
     mocks.monitoringBackgroundTasks = false
     mocks.showBackgroundTasks = false
     mocks.isWorking = false
+    mocks.sendOut = false
     mocks.turnId = null
     mocks.canStop = null
     mocks.stopPressed = false
@@ -402,6 +400,7 @@ export function createStructuredSessionMocks() {
     mocks.settledBackgroundTasks = []
     mocks.threadGoal = null
     mocks.hasOlder = false
+    mocks.readCurrent = false
     mocks.loadingOlder = false
     mocks.olderHistoryGeneration = 0
     mocks.loadOlder.mockReset()

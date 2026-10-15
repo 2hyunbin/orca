@@ -39,6 +39,7 @@ export type StructuredAgentSessionAttachContext = {
     sessionId: string,
     child: StructuredAgentSessionProviderChildIdentity
   ) => void
+  generationEnded?: StructuredAgentSessionLifetimeContext['generationEnded']
   /** Joining a stop's close ends the child's record through the one exit handler. */
   endExitedChild: StructuredAgentSessionLifetimeContext['endExitedChild']
   wakeDelivery?: StructuredAgentSessionLifetimeContext['wakeDelivery']

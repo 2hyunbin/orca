@@ -67,7 +67,6 @@ export function useStructuredAgentSessionOptions(args: {
   // Published but not attached: the launch no longer holds picks and there is no fence to send one.
   const acceptsPicks = !transportEnabled || fence !== null
   const optionCatalog = useMemo(() => structuredAgentSessionSeedCatalog(agent), [agent])
-  const identity = `${agent}:${sessionId}`
   const {
     optionView,
     takesSendOptions,
@@ -82,7 +81,7 @@ export function useStructuredAgentSessionOptions(args: {
   } = useStructuredAgentSessionOptionState({
     agent,
     optionCatalog,
-    identity,
+    identity: `${agent}:${sessionId}`,
     fence,
     sessionId,
     target,
@@ -304,6 +303,8 @@ export function useStructuredAgentSessionOptions(args: {
     conversationCommands: support?.commands ?? [],
     /** Absent unless this host and session can change the goal. */
     threadGoal: support?.threadGoal,
+    /** A goal only the agent's own `/goal` changes; absent from a host that predates it. */
+    reportedThreadGoal: support?.reportedThreadGoal,
     /** Absent from a host that predates it or a session that writes no context facts. */
     contextUsage: support?.contextUsage,
     /** Absent from a host that predates it, and until the options read answers. */

@@ -17,6 +17,7 @@ import type { StructuredAgentSessionStopEnding } from './structured-agent-sessio
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
+import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import type {
   StructuredAgentSessionCaller,
   StructuredAgentSessionHostDeps,
@@ -90,6 +91,11 @@ export function runStructuredAgentSessionMutation<TValue>(
     envelope,
     plan,
     journal: () => context.sessions.get(envelope.sessionId)?.journal,
+    currentWork: () =>
+      hostStructuredAgentSessionCurrentWork(
+        { store: context.deps.store, sessions: context.sessions },
+        envelope.sessionId
+      ),
     prepareSession,
     publish: (journal) => context.publish(envelope.sessionId, journal),
     wakeDelivery: (sessionId) => context.wakeDelivery(sessionId),

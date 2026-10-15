@@ -10,7 +10,7 @@ import {
 } from '../native-chat/structured-agent-session-create-support'
 import { isAgentSessionPreSpawnError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { resolveAgainAfterRefreshOnMissingProgram } from '../native-chat/structured-agent-command-resolution'
-import { structuredAgentRuntimeRegistration } from './structured-agent-runtime-registrations'
+import { structuredAgentRuntimeMetadata } from './structured-agent-runtime-metadata'
 import {
   refreshHostAgentBaseEnvironmentAfterMiss,
   resolveHostAgentBaseEnvironment
@@ -36,7 +36,7 @@ export async function structuredAgentSupportsLaunch(
   worktreeSelector: string,
   runtime: LaunchSupportRuntime
 ): Promise<boolean> {
-  const check = structuredAgentRuntimeRegistration(agent)?.launchCheck
+  const check = structuredAgentRuntimeMetadata(agent)?.launchCheck
   if (!check) {
     return true
   }
@@ -53,10 +53,7 @@ export async function structuredAgentSupportsLaunch(
     launch = await resolveAgainAfterRefreshOnMissingProgram(
       async () =>
         check.resolveLaunch(
-          {
-            ...(await resolveHostAgentBaseEnvironment(settings)),
-            ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
-          },
+          await resolveHostStructuredAgentLaunchEnvironment(agent, settings),
           settings
         ),
       refreshHostAgentBaseEnvironmentAfterMiss,
@@ -72,6 +69,17 @@ export async function structuredAgentSupportsLaunch(
   return check.supportsVersion({ ...launch, cwd: await cwd() })
 }
 
+/** The environment a new local chat launch starts from, before its account binding. */
+export async function resolveHostStructuredAgentLaunchEnvironment(
+  agent: string,
+  settings: LaunchEnvironmentSettings
+): Promise<Record<string, string>> {
+  return {
+    ...(await resolveHostAgentBaseEnvironment(settings)),
+    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
+  }
+}
+
 /** `agentSession.createSupport` on this host: every refusal it can know before spawning. The
  *  agent's location rule and installed-agent check from its registration, without installing the
  *  host. A refusal logs which check said no. */
@@ -83,7 +91,7 @@ export async function resolveHostStructuredAgentCreateSupport(input: {
 }): Promise<StructuredAgentSessionCreateSupport> {
   const { agent, location } = input
   const supportsLocation =
-    structuredAgentRuntimeRegistration(agent)?.supportsLocation(location) ?? false
+    structuredAgentRuntimeMetadata(agent)?.supportsLocation(location) ?? false
   const supportsLaunch =
     supportsLocation &&
     (await structuredAgentSupportsLaunch(agent, input.worktreeSelector, input.runtime))
