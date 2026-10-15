@@ -98,7 +98,8 @@ function applyToSession(
 
 /**
  * A window's create names its own ids: the same create again (a tab main wrote first, then drew
- * from its frame) finds its pane and changes nothing; any other holder of the id refuses it.
+ * from its frame) finds its pane and changes nothing; another tab in this partition holding the
+ * id refuses it.
  */
 function takenTabId(
   layout: WorkspaceLayoutModel,

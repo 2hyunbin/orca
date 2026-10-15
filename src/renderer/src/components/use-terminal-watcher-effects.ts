@@ -249,21 +249,20 @@ export function useTerminalWatcherEffects(controller: TerminalWatcherController)
         activeWorktreeId
       )
       if (shouldAutoCreateInitialTerminal(renderableTabCount, activeWorktreeHasTerminalState)) {
-        // Why: tag this never-visited-worktree tab so its PTY spawn doesn't count as activity and reshuffle the sidebar (explicit New Tab still bumps).
-        const create = (ids?: { tabId: string; leafId: string }): void => {
-          createTab(activeWorktreeId, undefined, undefined, {
-            pendingActivationSpawn: true,
-            ...(ids ? { id: ids.tabId, initialLeafId: ids.leafId } : {})
-          })
-        }
         // Switch point: main decides whether the workspace gets its first tab.
         if (
           ORCA_LAYOUT_OWNER_IS_MAIN &&
-          createInitialTerminalThroughLayoutOwner(useAppStore.getState, activeWorktreeId, create)
+          createInitialTerminalThroughLayoutOwner(useAppStore.getState, activeWorktreeId, (ids) =>
+            createTab(activeWorktreeId, undefined, undefined, {
+              pendingActivationSpawn: true,
+              ...(ids ? { id: ids.tabId, initialLeafId: ids.leafId } : {})
+            })
+          )
         ) {
           return
         }
-        create()
+        // Why: tag this never-visited-worktree tab so its PTY spawn doesn't count as activity and reshuffle the sidebar (explicit New Tab still bumps).
+        createTab(activeWorktreeId, undefined, undefined, { pendingActivationSpawn: true })
       }
     })
     return () => {

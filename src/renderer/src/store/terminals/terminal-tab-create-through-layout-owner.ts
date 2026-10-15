@@ -14,13 +14,15 @@ import type {
 } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../types'
 
-/** What the window's `createTab` drew, as main's create command. */
+/** What the window's `createTab` just drew, as main's create command. */
 export function terminalTabCreateCommand(
-  tab: TerminalTab,
-  leafId: string,
-  groupId: string | undefined,
-  viewMode: 'terminal' | 'chat' | undefined
+  state: AppState,
+  tab: TerminalTab
 ): CommandOf<'createTerminalTab'> & { tabId: string; leafId: string } {
+  const root = state.terminalLayoutsByTabId[tab.id]?.root
+  const entry = state.unifiedTabsByWorktree[tab.worktreeId]?.find(
+    (candidate) => candidate.entityId === tab.id && candidate.contentType === 'terminal'
+  )
   const creation = {
     defaultTitle: tab.defaultTitle ?? tab.title,
     ...(tab.shellOverride ? { shellOverride: tab.shellOverride } : {}),
@@ -32,9 +34,12 @@ export function terminalTabCreateCommand(
     type: 'createTerminalTab',
     workspace: tab.worktreeId,
     tabId: tab.id,
-    leafId,
-    ...(groupId ? { groupId } : {}),
-    ...(viewMode ? { viewMode } : {}),
+    // createTab always lays out a single first pane.
+    leafId: root?.type === 'leaf' ? root.leafId : '',
+    // A group main lacks (the workspace's first, or a split made with the tab) falls back to
+    // main's own placement until the window's save names it.
+    ...(entry ? { groupId: entry.groupId } : {}),
+    ...(entry?.viewMode ? { viewMode: entry.viewMode } : {}),
     creation
   }
 }
@@ -71,8 +76,9 @@ export function recordCreatedTerminalTabInLayoutOwner(
  * A workspace's first terminal on activation (F23). Main creates it only into a workspace its copy
  * holds no tab of, so this window and the runtime asking at once still make one tab. The window
  * draws main's answer itself, under main's ids; frames wait meanwhile so they cannot draw it first
- * without the window's own facts. False when a paired server owns the workspace's layout.
- * `create` with no ids opens the terminal as today: main holds no partition for the workspace.
+ * without the window's own facts (main gets its shell and cwd with the window's next save). False
+ * when a paired server owns the workspace's layout. `create` with no ids opens the terminal as
+ * today: main holds no partition for the workspace.
  */
 export function createInitialTerminalThroughLayoutOwner(
   getState: () => AppState,
@@ -84,6 +90,12 @@ export function createInitialTerminalThroughLayoutOwner(
   }
   const tabId = createBrowserUuid()
   const leafId = createBrowserUuid()
+  // Today's create runs only while the workspace is still the one shown, as it did before the await.
+  const createAsToday = (): void => {
+    if (getState().activeWorktreeId === worktreeId) {
+      create()
+    }
+  }
   const release = holdLayoutFramesForWindowCommand()
   void callRuntimeRpc<LayoutApplyReply>({ kind: 'local' }, 'layout.apply', {
     command: {
@@ -102,7 +114,7 @@ export function createInitialTerminalThroughLayoutOwner(
             create({ tabId, leafId })
           }
         } else if (reply.code === 'host_not_owned') {
-          create()
+          createAsToday()
         } else {
           console.warn('[layout-owner] initial createTerminalTab refused:', reply.code)
         }
@@ -113,7 +125,7 @@ export function createInitialTerminalThroughLayoutOwner(
           '[layout-owner] initial createTerminalTab failed:',
           error instanceof Error ? error.message : error
         )
-        create()
+        createAsToday()
       }
     )
     .catch((error: unknown) => {

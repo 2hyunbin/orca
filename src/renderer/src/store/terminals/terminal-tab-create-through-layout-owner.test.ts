@@ -21,9 +21,10 @@ vi.mock('@/lib/worktree-runtime-owner', () => ({
 
 const WORKTREE = 'repo1::/path/wt'
 
-function stateWith(tabIds: string[] = []): AppState {
+function stateWith(tabIds: string[] = [], activeWorktreeId = WORKTREE): AppState {
   const store = createTestStore()
   store.setState({
+    activeWorktreeId,
     tabsByWorktree: { [WORKTREE]: tabIds.map((id) => makeTab({ id, worktreeId: WORKTREE })) }
   })
   return store.getState()
@@ -101,6 +102,17 @@ describe('createInitialTerminalThroughLayoutOwner', () => {
     await settle()
     expect(failed.create).toHaveBeenCalledWith()
     expect(isWindowSessionWriteBusy()).toBe(false)
+  })
+
+  it('opens nothing as today once the user has left the workspace', async () => {
+    let state = stateWith()
+    const { create } = start(() => state)
+
+    state = stateWith([], 'repo1::/path/other')
+    mocks.reply?.({ ok: false, code: 'host_not_owned' })
+    await settle()
+
+    expect(create).not.toHaveBeenCalled()
   })
 
   it('leaves a paired server’s workspace to the caller', () => {

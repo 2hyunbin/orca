@@ -40,8 +40,8 @@ const LEAF = '11111111-1111-4111-8111-111111111111'
 
 type Listener = (payload: Record<string, unknown>) => void
 
-/** A CLI-created terminal: main wrote its tab, and its layout frame drew it before the reveal. */
-function setup() {
+/** A CLI-created terminal: main wrote its tab; its layout frame drew it before the reveal or not. */
+function setup(frameDrewTab = true) {
   const listeners = new Map<string, Listener>()
   const replyTerminalCreate = vi.fn()
   const ui = new Proxy(
@@ -65,10 +65,20 @@ function setup() {
     worktreesByRepo: {
       repo1: [makeWorktree({ id: WORKTREE, repoId: 'repo1', path: '/repo1/main' })]
     },
-    tabsByWorktree: { [WORKTREE]: [makeTab({ id: TAB, worktreeId: WORKTREE, ptyId: null })] },
-    terminalLayoutsByTabId: {
-      [TAB]: { root: { type: 'leaf', leafId: LEAF }, activeLeafId: LEAF, expandedLeafId: null }
-    }
+    ...(frameDrewTab
+      ? {
+          tabsByWorktree: {
+            [WORKTREE]: [makeTab({ id: TAB, worktreeId: WORKTREE, ptyId: null })]
+          },
+          terminalLayoutsByTabId: {
+            [TAB]: {
+              root: { type: 'leaf', leafId: LEAF },
+              activeLeafId: LEAF,
+              expandedLeafId: null
+            }
+          }
+        }
+      : {})
   })
   registerTerminalPresentationIpcBridge([])
   const reveal = () =>
@@ -86,6 +96,7 @@ function setup() {
 
 beforeEach(() => {
   vi.unstubAllGlobals()
+  mocks.callRuntimeRpc.mockClear()
 })
 
 // Main writes a CLI or phone terminal's tab before revealing it, so in a layout-owner build its
@@ -104,5 +115,19 @@ describe('revealing a terminal main created, in a layout-owner build', () => {
       expect.objectContaining({ requestId: 'request-1', tabId: TAB })
     )
     expect(replyTerminalCreate.mock.calls[0]?.[0]).not.toHaveProperty('error')
+  })
+
+  it('before its frame, draws the tab under main’s ids so main finds the create already done', () => {
+    const { store, reveal } = setup(false)
+
+    reveal()
+
+    expect(store.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([TAB])
+    expect(store.getState().terminalLayoutsByTabId[TAB]?.ptyIdsByLeafId).toEqual({
+      [LEAF]: 'pty-1'
+    })
+    expect(mocks.callRuntimeRpc).toHaveBeenCalledWith({ kind: 'local' }, 'layout.apply', {
+      command: expect.objectContaining({ type: 'createTerminalTab', tabId: TAB, leafId: LEAF })
+    })
   })
 })

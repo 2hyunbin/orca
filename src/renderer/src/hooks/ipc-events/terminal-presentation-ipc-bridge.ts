@@ -11,6 +11,7 @@ import { tryMakePaneKey } from './agent-status-routing'
 import { wasAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
 import { revealWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import { useAppStore } from '../../store'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   activateExistingLeafInLayout,
   addSplitLeafToLayout,
@@ -110,7 +111,9 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
                     : {}),
                   ...(cwd ? { startupCwd: cwd } : {}),
                   // Why: CLI-spawned PTYs bake the pane key into env; adopt the same tab id so hook-event attribution keeps working.
-                  ...(tabId !== undefined ? { id: tabId } : {})
+                  ...(tabId !== undefined ? { id: tabId } : {}),
+                  // Switch point: main's pane too, so this create matches the tab main already wrote.
+                  ...(ORCA_LAYOUT_OWNER_IS_MAIN && leafId ? { initialLeafId: leafId } : {})
                 })
               : store.createTab(
                   worktreeId,

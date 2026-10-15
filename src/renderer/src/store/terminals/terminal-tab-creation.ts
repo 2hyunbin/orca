@@ -52,7 +52,6 @@ export function createTerminalTabCreationActions(
   return {
     createTab: (worktreeId, targetGroupId, shellOverride, options) => {
       let tab!: TerminalTab
-      let placed!: { leafId: string; groupId: string }
       const split = options?.split
       const splitGroupId = split ? createBrowserUuid() : undefined
       set((current) => {
@@ -221,7 +220,6 @@ export function createTerminalTabCreationActions(
           cleanedTargetGroup.activeTabId && !orphanTerminalIds.has(cleanedTargetGroup.activeTabId)
             ? cleanedTargetGroup.activeTabId
             : null
-        placed = { leafId: initialLeafId, groupId: group.id }
         const nextActiveTabIdForWorktree = shouldActivate
           ? tab.id
           : (cleanedActiveTabIdForWorktree ?? cleanedGroupActiveTabId ?? tab.id)
@@ -286,10 +284,7 @@ export function createTerminalTabCreationActions(
       })
       // Switch point: main writes the tab under these ids before any later command names it.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        recordCreatedTerminalTabInLayoutOwner(
-          get(),
-          terminalTabCreateCommand(tab, placed.leafId, placed.groupId, options?.viewMode)
-        )
+        recordCreatedTerminalTabInLayoutOwner(get(), terminalTabCreateCommand(get(), tab))
       }
       if (options?.initialPtyId) {
         // Why: a tab born with a live PTY (CLI/runtime create) wakes the workspace like any other bind.
