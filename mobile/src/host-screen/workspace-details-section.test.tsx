@@ -112,7 +112,9 @@ describe('the long-press details section', () => {
 
     expect(texts(root)).toEqual(['ENG-7', 'Linear'])
     expect(root.findAll((node) => node.props.accessibilityRole === 'link')).toEqual([])
-    expect(root.findByType('TaskProviderLogo' as never).props.provider).toBe('linear')
+    expect(root.find((node) => String(node.type) === 'TaskProviderLogo').props.provider).toBe(
+      'linear'
+    )
   })
 
   it('shows the automation, CLI origin and notes in the desktop order', () => {

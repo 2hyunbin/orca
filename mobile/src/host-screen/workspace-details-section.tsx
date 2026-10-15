@@ -143,20 +143,19 @@ function DetailRow(props: {
 
 function ReviewIcon({ item }: { item: WorkspaceDetailLink }) {
   const color = prStateColor(item.state ?? '')
-  switch (item.state) {
-    case 'merged':
-      return <GitMerge size={ICON_SIZE} color={color} />
-    case 'closed':
-      return <GitPullRequestClosed size={ICON_SIZE} color={color} />
-    case 'draft':
-      return <GitPullRequestDraft size={ICON_SIZE} color={color} />
-    default:
-      return item.type === 'mr' ? (
-        <GitMerge size={ICON_SIZE} color={color} />
-      ) : (
-        <GitPullRequest size={ICON_SIZE} color={color} />
-      )
+  if (
+    item.state === 'merged' ||
+    (item.type === 'mr' && item.state !== 'closed' && item.state !== 'draft')
+  ) {
+    return <GitMerge size={ICON_SIZE} color={color} />
   }
+  if (item.state === 'closed') {
+    return <GitPullRequestClosed size={ICON_SIZE} color={color} />
+  }
+  if (item.state === 'draft') {
+    return <GitPullRequestDraft size={ICON_SIZE} color={color} />
+  }
+  return <GitPullRequest size={ICON_SIZE} color={color} />
 }
 
 function LinkIcon({ item }: { item: WorkspaceDetailLink }) {

@@ -116,11 +116,9 @@ export function useWorkspaceDetailExtras(
     [worktreeId, client]
   )
   // A reopened sheet reads afresh rather than showing the last open's ports.
-  useEffect(() => {
-    if (!worktreeId) {
-      setExtras(null)
-    }
-  }, [worktreeId])
+  if (!worktreeId && extras) {
+    setExtras(null)
+  }
 
   return extras && extras.key === worktreeId ? extras.value : {}
 }
