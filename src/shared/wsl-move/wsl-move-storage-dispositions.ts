@@ -146,7 +146,7 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
         'agent_session_attachment_sweeps',
         'journal_imports',
         'journal_repairs',
-        'journal_rows',
+        'journal_rows', // Released migration source; schema 5 uses journal_rows_data.
         'journal_rows_data',
         'journal_text_pieces',
         'journal_sessions',

@@ -88,7 +88,7 @@ export function registerJournalUnknownRowKindTests(): void {
     await journals.closeAll()
     const { db } = openTestJournalHostDatabase(root)
     edit((seq, json) => {
-      db.prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = ?').run(
+      db.prepare('DELETE FROM journal_rows_data WHERE session_id = ? AND seq = ?').run(
         IDENTITY.sessionId,
         seq
       )

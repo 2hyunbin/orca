@@ -196,7 +196,7 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
         database.transaction((db) =>
           db
             .prepare(
-              'INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
+              'INSERT INTO journal_rows_data (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
             )
             .run('unknown', 'epoch-unknown', 1, 1, '{}')
         )

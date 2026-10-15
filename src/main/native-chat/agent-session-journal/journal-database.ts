@@ -29,7 +29,7 @@ const JOURNAL_SYNCHRONOUS = 'FULL'
 
 export type OpenJournalDatabase = {
   db: Database.Database
-  /** A newer `user_version` was met: this build reads and never writes. */
+  /** A newer `user_version` was met: public chat opens refuse it without replay or writes. */
   readOnly: boolean
 }
 
@@ -82,7 +82,6 @@ export function openJournalDatabase(dbPath: string): OpenJournalDatabase {
     }
     configureJournalPragmas(probe, stored)
     migrateJournalSchema(probe, stored)
-    ensureJournalTextPieceSchema(probe)
     // Outside `migrateJournalSchema` on purpose: its early return skips a db
     // already at the current version, and this table must exist at EVERY
     // writable open with no `user_version` bump (see `ensureQueuedMessagesTable`).
@@ -126,10 +125,16 @@ function migrateJournalSchema(db: Database.Database, stored: number): void {
     return
   }
   runJournalTransaction(db, () => {
-    if (stored === 0) {
+    if (
+      stored === 0 &&
+      !db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journal_rows_data'")
+        .get()
+    ) {
       db.exec(createJournalTablesSql())
     }
     db.exec(createAgentSessionRecordTablesSql())
+    ensureJournalTextPieceSchema(db)
     db.pragma(`user_version = ${JOURNAL_DB_SCHEMA_VERSION}`)
   })
 }

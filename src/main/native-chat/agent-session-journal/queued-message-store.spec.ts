@@ -123,7 +123,7 @@ export function registerQueuedMessageStoreTests(): void {
   })
 
   describe('draft rows', () => {
-    it('creates the table at open without bumping user_version, so an old build stays writable', async () => {
+    it('creates the queue table at the current schema version', async () => {
       const journal = await open()
       await queueDraft(journal, 'draft-1')
       await journal.close()
@@ -350,7 +350,7 @@ export function registerQueuedMessageStoreTests(): void {
       // primary key inside the transaction, after the draft was transitioned.
       const db = new Database(journalDatabasePath(root))
       db.prepare(
-        'INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO journal_rows_data (session_id, epoch, seq, ts, row_json) VALUES (?, ?, ?, ?, ?)'
       ).run(IDENTITY.sessionId, cursor.epoch, cursor.sequence + 1, tick(), '{}')
       db.close()
       await expect(consumeDraft(journal, 'draft-1')).rejects.toThrow()

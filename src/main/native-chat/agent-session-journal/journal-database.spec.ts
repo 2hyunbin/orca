@@ -99,7 +99,7 @@ export function registerJournalDatabaseTests(): void {
       }
     })
 
-    // T5: a newer build's database opens read-only, its rows readable, and is left byte-identical.
+    // The protective handle leaves newer databases unchanged; public chat opens refuse them.
     it('opens a newer user_version read-only without touching the file', async () => {
       const seeded = openJournalDatabase(dbPath).db
       publishJournalSessionEpoch(seeded, SESSION, 'epoch-1')
@@ -211,10 +211,10 @@ export function registerJournalDatabaseTests(): void {
         expect(
           inspected
             .prepare(
-              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'journal_rows'"
+              "SELECT name FROM sqlite_master WHERE name IN ('journal_rows', 'journal_rows_data', 'journal_text_pieces')"
             )
-            .get()
-        ).toBeUndefined()
+            .all()
+        ).toEqual([])
       } finally {
         inspected.close()
       }

@@ -71,7 +71,7 @@ export function registerCommandReceiptTransactionTests(): void {
   })
 
   function storedRows() {
-    return database.db.prepare('SELECT seq FROM journal_rows ORDER BY seq').all()
+    return database.db.prepare('SELECT seq FROM journal_rows_data ORDER BY seq').all()
   }
 
   function readReceipt() {
@@ -181,7 +181,7 @@ export function registerCommandReceiptTransactionTests(): void {
         mintEpoch: () => 'epoch-2',
         onPublished: () => undefined
       })
-      expect(database.db.prepare('SELECT epoch FROM journal_rows').all()).toEqual([
+      expect(database.db.prepare('SELECT epoch FROM journal_rows_data').all()).toEqual([
         { epoch: 'epoch-2' }
       ])
       expect(readReceipt()).toEqual({ verdict: 'readable', receipt })

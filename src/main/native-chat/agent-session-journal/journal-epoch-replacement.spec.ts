@@ -50,7 +50,7 @@ export function registerJournalEpochReplacementTests(): void {
   function storedRows(sessionId: string, epoch: string): number {
     return Number(
       database.db
-        .prepare('SELECT count(*) AS total FROM journal_rows WHERE session_id = ? AND epoch = ?')
+        .prepare('SELECT count(*) AS total FROM journal_rows_data WHERE session_id = ? AND epoch = ?')
         .get(sessionId, epoch)?.total
     )
   }
