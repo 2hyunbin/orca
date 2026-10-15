@@ -28,7 +28,8 @@ describe('buildProjectSectionCatalog', () => {
     const served: ServedProjectSections = {
       repos: [repo('r1'), repo('r1', 'runtime:m4air')],
       projects: [],
-      setups: []
+      setups: [],
+      projectOrderBy: 'manual'
     }
     const catalog = buildProjectSectionCatalog(
       served,
