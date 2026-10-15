@@ -472,11 +472,12 @@ describe('connectPanePty', () => {
         })
       })
     )
-    // Why: the pane keeps its record exactly as captured; it stays the pane's resume handle.
-    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toEqual(
-      expect.objectContaining({ paneKey, state: 'working', capturedAt: 1 })
-    )
-    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).not.toHaveProperty('origin')
+    // Why: an originless record reads as hibernation, so the running pane gets a pane-owned one.
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+      paneKey,
+      origin: 'quit',
+      providerSession: { id: 'codex-session-1', transcriptPath }
+    })
   })
 
   it('resumes a silent agent again when its terminal dies a second time before its next turn', async () => {
@@ -579,6 +580,26 @@ describe('connectPanePty', () => {
     await connectRestoredPane('lost-pty')
 
     expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBeUndefined()
+    // The new session's launch registration is not collateral.
+    expect(mockStoreState.agentLaunchConfigByPaneKey[PANE_KEY]).toBeDefined()
+  })
+
+  it('replaces a worktree-sleep record with a pane-owned one after an in-place resume', async () => {
+    // Why: a hibernation record on a running pane would let an empty reattach retire it.
+    setRestoredPaneState({
+      agentStatusByPaneKey: {},
+      sleepingAgentSessionsByPaneKey: {
+        [PANE_KEY]: codexRecord({ state: 'done', origin: 'worktree-sleep' })
+      }
+    })
+    queueColdRestoreTransport('lost-pty')
+    await connectRestoredPane('lost-pty')
+
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toMatchObject({
+      origin: 'quit',
+      providerSession: { id: 'codex-session-1' }
+    })
+    expect(mockStoreState.agentLaunchConfigByPaneKey[PANE_KEY]).toBeDefined()
   })
 
   it('marks the pane as freshly started when main declined an unverifiable resume', async () => {

@@ -63,6 +63,13 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
     rememberSleepingAgentSession: vi.fn((record: { paneKey: string }) => {
       getState().sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
     }),
+    setPaneResumeRecord: vi.fn((paneKey: string, record: unknown) => {
+      if (record) {
+        getState().sleepingAgentSessionsByPaneKey[paneKey] = record
+      } else {
+        delete getState().sleepingAgentSessionsByPaneKey[paneKey]
+      }
+    }),
     registerAgentLaunchConfig: vi.fn(
       (paneKey: string, launchConfig: unknown, identity?: { agentType?: string }) => {
         getState().agentLaunchConfigByPaneKey[paneKey] = { launchConfig, identity }

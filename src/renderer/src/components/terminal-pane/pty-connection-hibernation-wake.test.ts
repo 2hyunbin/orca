@@ -530,8 +530,13 @@ describe('connectPanePty', () => {
 
     deferredSpawn.resolve('pty-resumed')
     await flushAsyncTicks()
-    // The resumed pane keeps its record as its resume handle.
-    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeDefined()
+    // The hibernation record is consumed; the running pane keeps a pane-owned resume handle.
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+      origin: 'quit',
+      state: 'done',
+      providerSession: { key: 'session_id', id: 'sess-hibernated-inflight' }
+    })
+    expect(binding.wakeHibernatedAgentIfArmed()).toBeNull()
   })
 
   it('re-arms the exact hibernation target after a replacement spawn fails', async () => {

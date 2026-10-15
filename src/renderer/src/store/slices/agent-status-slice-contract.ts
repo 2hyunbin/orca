@@ -155,6 +155,8 @@ export type AgentStatusSlice = {
   clearSleepingAgentSession: (paneKey: string) => void
   /** Keeps a resume handle for a pane whose restore the host deferred; never replaces a record. */
   rememberSleepingAgentSession: (record: SleepingAgentSessionRecord) => void
+  /** Sets or removes one pane's resume record; its launch registration is left alone. */
+  setPaneResumeRecord: (paneKey: string, record: SleepingAgentSessionRecord | null) => void
   clearSleepingAgentSessionsByPaneKey: (paneKeys: readonly string[]) => void
   clearSleepingAgentSessionsByWorktree: (worktreeId: string) => void
   pruneSleepingAgentSessions: (validWorktreeIds: Set<string>) => void

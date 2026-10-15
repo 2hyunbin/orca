@@ -239,8 +239,11 @@ describe('connectPanePty', () => {
       expect(deps.clearTabPtyId).toHaveBeenCalledWith('tab-1', 'restored-session')
       expect(deps.syncPanePtyLayoutBinding).not.toHaveBeenCalledWith(2, 'restored-session')
       expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'fresh-resume-pty')
-      // The resumed pane keeps its record as its resume handle.
-      expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeDefined()
+      // The worktree-sleep record is consumed; the running pane keeps a pane-owned resume handle.
+      expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+        origin: 'quit',
+        providerSession: { key: 'session_id', id: 'codex-session-1' }
+      })
       expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(paneKey, 1)
     } finally {
       globalThis.setTimeout = originalSetTimeout

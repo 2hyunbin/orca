@@ -51,14 +51,19 @@ function keptRecord(fields: Partial<SleepingAgentSessionRecord>): SleepingAgentS
 }
 
 describe('activation sweep over a record kept by an in-place resume', () => {
+  // Why the last two rows: the keep path replaces hibernation-origin records, but one that
+  // survives on a running pane must still not launch a second resume.
   it.each([
-    ['a quit capture', keptRecord({ origin: 'quit' })],
-    ['a mid-turn live checkpoint', keptRecord({ origin: 'live', state: 'working' })],
+    ['a quit capture', keptRecord({ origin: 'quit' }), true],
+    ['a mid-turn live checkpoint', keptRecord({ origin: 'live', state: 'working' }), true],
     [
       'the record a silent resume leaves',
-      keptRecord({ origin: 'quit', restoreOnTabOpenOnly: true })
-    ]
-  ])('does not launch a second resume for %s', (_label, record) => {
+      keptRecord({ origin: 'quit', restoreOnTabOpenOnly: true }),
+      true
+    ],
+    ['a worktree-sleep record', keptRecord({ origin: 'worktree-sleep' }), true],
+    ['an originless record', keptRecord({}), false]
+  ])('does not launch a second resume for %s', (_label, record, keptAfterSweep) => {
     seedResumedPane(record)
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
@@ -66,6 +71,6 @@ describe('activation sweep over a record kept by an in-place resume', () => {
     const state = useAppStore.getState()
     expect(launched).toBe(0)
     expect(state.tabsByWorktree['wt-1']).toHaveLength(1)
-    expect(state.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBe(record)
+    expect(state.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBe(keptAfterSweep ? record : undefined)
   })
 })

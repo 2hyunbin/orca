@@ -35,8 +35,8 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
     })
     return true
   }
-  // Why the pane keeps its record: a resumed agent may not report its session until its next
-  // turn, so the record is the only resume handle if this terminal dies again before then.
+  // Why the pane keeps a record: a resumed agent may not report its session until its next turn,
+  // so the record is the only resume handle if this terminal dies again before then.
   session.keepResumeRecordAfterColdRestore = (
     startup: ColdRestoreAgentResumeStartup | null
   ): void => {
@@ -51,9 +51,15 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
         session.cacheKey
       )
     }
+    const own = useAppStore.getState().sleepingAgentSessionsByPaneKey[session.cacheKey]
+    // Why: quit and live records already name a pane that owns its session; any other origin
+    // reads as a hibernated pane, which would retire this live PTY or arm a second wake.
+    if (own?.origin === 'quit' || own?.origin === 'live') {
+      return
+    }
     const record = paneResumeRecord(session, startup)
     if (record) {
-      useAppStore.getState().rememberSleepingAgentSession(record)
+      state.setPaneResumeRecord(session.cacheKey, record)
     }
   }
   // Why: main started a new session instead, so the old one is no longer this pane's to resume.
@@ -62,9 +68,14 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
   ): void => {
     const state = useAppStore.getState()
     if (startup && !startup.useLiveEntry && startup.sleepingRecordEntry) {
-      session.clearSleepingRecordProviderDuplicates(state, startup.sleepingRecordEntry)
+      session.clearSleepingRecordProviderDuplicates(
+        state,
+        startup.sleepingRecordEntry,
+        session.cacheKey
+      )
     }
-    state.clearSleepingAgentSession(session.cacheKey)
+    // Why the record only: the launch registration now belongs to the new session.
+    state.setPaneResumeRecord(session.cacheKey, null)
   }
   session.mergeStartupEnvWithPaneIdentity = (
     env: Record<string, string> | undefined

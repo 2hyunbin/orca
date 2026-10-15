@@ -22,6 +22,7 @@ export function createAgentStatusRecoveryActions(
   | 'captureAllSleepingAgentSessions'
   | 'clearSleepingAgentSession'
   | 'rememberSleepingAgentSession'
+  | 'setPaneResumeRecord'
   | 'clearSleepingAgentSessionsByPaneKey'
   | 'clearSleepingAgentSessionsByWorktree'
   | 'pruneSleepingAgentSessions'
@@ -119,6 +120,20 @@ export function createAgentStatusRecoveryActions(
               }
             }
       )
+    },
+    setPaneResumeRecord: (paneKey, record) => {
+      set((s) => {
+        if (s.sleepingAgentSessionsByPaneKey[paneKey] === (record ?? undefined)) {
+          return s
+        }
+        const next = { ...s.sleepingAgentSessionsByPaneKey }
+        if (record) {
+          next[paneKey] = record
+        } else {
+          delete next[paneKey]
+        }
+        return { sleepingAgentSessionsByPaneKey: next }
+      })
     },
     clearSleepingAgentSessionsByPaneKey,
 
