@@ -473,13 +473,17 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
     if #available(iOS 14.5, *) {
       isDownload = navigationAction.shouldPerformDownload
     }
+    // Optional on purpose: iOS 18 delivers nil here for the view's own `load`.
+    let sourceFrame: WKFrameInfo? = navigationAction.sourceFrame
     // `.linkActivated` is WebKit's own answer to "did a human start this". It decides only what may
     // be offered to the opener; nothing is allowed on the strength of it, because a subframe can
     // navigate the top frame with no gesture reported at all.
     let verdict = MobileWebShellNavigationPolicy.verdict(
       url: navigationAction.request.url?.absoluteString,
       isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
-      isFromSubframe: !navigationAction.sourceFrame.isMainFrame,
+      isFromSubframe: MobileWebShellNavigationPolicy.isFromSubframe(
+        sourceFrameIsMainFrame: sourceFrame?.isMainFrame
+      ),
       isDocumentUrl: isDocumentUrl(navigationAction.request.url),
       isShellLoad: loadState.isShellLoad,
       hasGesture: navigationAction.navigationType == .linkActivated,

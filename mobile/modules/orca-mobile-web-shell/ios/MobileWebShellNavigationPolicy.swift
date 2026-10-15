@@ -25,6 +25,12 @@ enum MobileWebShellNavigationPolicy {
   /// the opener will refuse anyway.
   static let maxCancelledNavigationUrlCharacters = 4096
 
+  /// iOS 18 hands the view's own `load` a nil source frame despite the non-optional type; only a
+  /// frame-initiated navigation carries one, so nil is the shell's load, not a subframe's.
+  static func isFromSubframe(sourceFrameIsMainFrame: Bool?) -> Bool {
+    sourceFrameIsMainFrame.map { !$0 } ?? false
+  }
+
   /// The whole decision.
   ///
   /// Three rules, in this order, and the order is the design.

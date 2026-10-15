@@ -596,6 +596,19 @@ import Foundation
     precondition(
       verdict(document, isFromSubframe: true, isDocumentUrl: true, isDownload: true) == .cancel
     )
+    // iOS 18 reports no source frame for the shell's own `load`; that must still be allowed.
+    precondition(MobileWebShellNavigationPolicy.isFromSubframe(sourceFrameIsMainFrame: nil) == false)
+    precondition(MobileWebShellNavigationPolicy.isFromSubframe(sourceFrameIsMainFrame: true) == false)
+    precondition(MobileWebShellNavigationPolicy.isFromSubframe(sourceFrameIsMainFrame: false) == true)
+    precondition(
+      verdict(
+        document,
+        isFromSubframe: MobileWebShellNavigationPolicy.isFromSubframe(sourceFrameIsMainFrame: nil),
+        isDocumentUrl: true,
+        isShellLoad: true,
+        hasGesture: false
+      ) == .allow
+    )
     // A subframe is the sealed preview loading itself, which is not the user leaving the app.
     precondition(verdict(isMainFrame: false) == .cancel)
     precondition(verdict(isMainFrame: false, hasGesture: false) == .cancel)
