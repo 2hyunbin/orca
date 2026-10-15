@@ -16,6 +16,8 @@ const holdUnconfirmedSend = vi.fn()
 const viewMode = { isTabChatView: (_tabId: string) => true }
 const sessionState = { messages: [] as unknown[], status: 'ready', transcriptLoading: false }
 const structuredSendWithOutcome = vi.fn()
+// The bridge passes every optional send argument, present or not.
+const NO_SEND_EXTRAS = [undefined, undefined, undefined, undefined]
 const structuredCancel = vi.fn()
 const structuredCancelPrompt = vi.fn(async () => true)
 const structuredRespondPermission = vi.fn(async () => true)
@@ -351,7 +353,7 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     })
 
     expect(accepted).toBe(true)
-    expect(structuredSendWithOutcome).toHaveBeenCalledWith('look')
+    expect(structuredSendWithOutcome).toHaveBeenCalledWith('look', ...NO_SEND_EXTRAS)
     expect(sendWithOutcome).not.toHaveBeenCalled()
     expect(clientStub.sendRequest).not.toHaveBeenCalled()
   })
@@ -363,7 +365,7 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     await act(async () => {
       await controller!.handleNativeChatSend('/review')
     })
-    expect(structuredSendWithOutcome).toHaveBeenCalledWith('/review')
+    expect(structuredSendWithOutcome).toHaveBeenCalledWith('/review', ...NO_SEND_EXTRAS)
     // The structured session draws it; the drafts' text-matched echo is the terminal lane's.
     expect(acceptSend).not.toHaveBeenCalled()
     expect(restoreRejectedDraft).not.toHaveBeenCalled()

@@ -627,7 +627,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     expect(sendCalls).toHaveLength(3)
     expect(sendCalls[2]?.params).toMatchObject({ text: '\x15', enter: false })
     expect(baseSend).toHaveBeenNthCalledWith(1, 'pic', ['file:///a.jpg'], expect.any(Number))
-    expect(baseSend).toHaveBeenNthCalledWith(2, 'later message', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenNthCalledWith(2, 'later message', ...TEXT_ONLY_SEND)
   })
 
   it('still heals after the session screen unmounts and remounts (#10228)', async () => {
@@ -663,7 +663,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     const sendCalls = client.calls.filter((c) => c.method === 'terminal.send')
     expect(sendCalls).toHaveLength(3)
     expect(sendCalls[2]?.params).toMatchObject({ terminal: 'term-1', text: '\x15', enter: false })
-    expect(baseSend).toHaveBeenNthCalledWith(2, 'later message', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenNthCalledWith(2, 'later message', ...TEXT_ONLY_SEND)
   })
 
   it('does not heal after an unknown text-only send (nothing was pasted first)', async () => {
@@ -723,7 +723,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     expect(sendCalls[2]?.params).toMatchObject({ text: '\x15', enter: false })
     expect(sendCalls[3]?.params).toMatchObject({ text: '\x15', enter: false })
     expect(baseSend).toHaveBeenNthCalledWith(1, 'hi', ['file:///a.jpg'], expect.any(Number))
-    expect(baseSend).toHaveBeenNthCalledWith(2, 'hi again', undefined, expect.any(Number))
+    expect(baseSend).toHaveBeenNthCalledWith(2, 'hi again', ...TEXT_ONLY_SEND)
   })
 
   it('does not reroute text when the active terminal changes during a healing clear', async () => {

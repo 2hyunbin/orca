@@ -151,7 +151,7 @@ describe('MobileNativeChatComposer', () => {
       button().props.onPressIn()
       await button().props.onPress()
     })
-    expect(onSend).toHaveBeenLastCalledWith('correction')
+    expect(onSend).toHaveBeenLastCalledWith('correction', undefined)
   })
 
   it('keeps host commands on plain Send while offering the choice for pass-through commands', async () => {
@@ -171,7 +171,7 @@ describe('MobileNativeChatComposer', () => {
     const button = () => renderer!.root.findByProps({ accessibilityLabel: 'Send message' })
     expect(button().props.onLongPress).toBeUndefined()
     await act(async () => button().props.onPress())
-    expect(onSend).toHaveBeenCalledWith('/compact')
+    expect(onSend).toHaveBeenCalledWith('/compact', undefined)
     expect(renderer!.root.findAllByType('BottomDrawer')).toHaveLength(0)
 
     await act(async () => {
@@ -219,7 +219,7 @@ describe('MobileNativeChatComposer', () => {
       )
     })
     await act(async () => sendButton().props.onPress())
-    expect(onSend).toHaveBeenCalledWith(' /clear is prose ')
+    expect(onSend).toHaveBeenCalledWith(' /clear is prose ', undefined)
   })
 
   it('locks the option pickers while a composer send is in flight', async () => {
@@ -423,7 +423,7 @@ describe('MobileNativeChatComposer', () => {
     })
     expect(sendButton().props).toMatchObject({ disabled: false })
     await act(async () => sendButton().props.onPress())
-    expect(onSend).toHaveBeenCalledWith('')
+    expect(onSend).toHaveBeenCalledWith('', undefined)
   })
 
   it('moves the caret to the insert point after an autocomplete pick, then releases control', async () => {
