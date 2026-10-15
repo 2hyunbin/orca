@@ -806,7 +806,7 @@ function stickySlotFields(deltas: RelayMetricDeltas): Record<string, unknown> {
     stickyStatementsP50: statements.p50,
     stickyStatementsMax: statements.max,
     stickySqlByConnection: byConnection,
-    // One per request whose connection found the window's table full.
+    // One per request-connection pair that found the window's table full.
     stickySqlConnectionSamplesDroppedDelta: deltas.stickySlotConnectionSamplesDropped
   }
 }
