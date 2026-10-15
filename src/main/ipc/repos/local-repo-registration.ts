@@ -10,7 +10,7 @@ import {
   getGitRepoRootAsync,
   getRepoName
 } from '../../git/repo'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
@@ -26,7 +26,10 @@ export async function addLocalRepoFromPath(
     kind: 'add', path, repoKind, displayName
   })
   if (hosted) {
-    return { repo: hosted, alreadyExisted: store.getRepos().some((repo) => repo.id === hosted.id) }
+    return {
+      repo: hosted,
+      alreadyExisted: getRepoExecutionHostId(hosted) === LOCAL_EXECUTION_HOST_ID
+    }
   }
   if (repoKind === 'git') {
     await awaitWindowsHostGitEnvironmentReady({ cwd: path })

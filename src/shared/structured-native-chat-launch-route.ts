@@ -68,7 +68,7 @@ export function isNativeChatEnabled(
   return settings?.experimentalNativeChat === true
 }
 
-function clientChoosesStructuredLaunches(capabilities: readonly string[] | undefined): boolean {
+export function clientChoosesStructuredLaunches(capabilities: readonly string[] | undefined): boolean {
   return (
     capabilities?.includes(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY) === true &&
     capabilities.includes(STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY)
@@ -87,10 +87,6 @@ export function resolveStructuredNativeChatSupport(
   if (input.reusesTerminal === true) {
     return { supported: false, blocker: 'reused-terminal' }
   }
-  const builtInAgent = isAgentSessionHandleProvider(input.agent)
-  if (!builtInAgent && !input.hostStructuredAgents?.includes(input.agent)) {
-    return { supported: false, blocker: 'agent-without-structured-session' }
-  }
   if (input.startsOutsideWorkspaceRoot === true) {
     return { supported: false, blocker: 'custom-start-directory' }
   }
@@ -100,6 +96,10 @@ export function resolveStructuredNativeChatSupport(
   }
   if (input.hostCapabilities === null) {
     return { supported: false, blocker: 'runtime-capability-unknown' }
+  }
+  const builtInAgent = isAgentSessionHandleProvider(input.agent)
+  if (!builtInAgent && !input.hostStructuredAgents?.includes(input.agent)) {
+    return { supported: false, blocker: 'agent-without-structured-session' }
   }
   if (
     !input.hostCapabilities.includes(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY) ||

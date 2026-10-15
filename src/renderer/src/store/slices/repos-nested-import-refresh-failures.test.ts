@@ -68,7 +68,7 @@ describe('nested import partial catalog refresh failures', () => {
           runtimeEnvironmentId: null,
           mode: 'group'
         })
-      ).resolves.toEqual(result)
+      ).resolves.toEqual({ ...result, executionHostId: 'local' })
     } finally {
       errorSpy.mockRestore()
     }

@@ -8,7 +8,7 @@ import type { AddRepoDialogStep } from './add-repo-dialog-types'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { upsertAddedRepoWithProjectHostSetup } from './add-repo-store-upsert'
-import { resolveAddRepoRuntimeTarget, worktreeRefreshOptions } from './add-repo-runtime-owner'
+import { addedRepoRefreshOptions, resolveAddRepoRuntimeTarget } from './add-repo-runtime-owner'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 
 export function useAddRepoCloneFlow({
@@ -153,7 +153,7 @@ export function useAddRepoCloneFlow({
       if (!isCurrent()) {
         return
       }
-      const { repo: ownedRepo } = upsertAddedRepoWithProjectHostSetup(repo, {
+      const { repo: ownedRepo } = await upsertAddedRepoWithProjectHostSetup(repo, {
         runtimeEnvironmentId: activeRuntimeEnvironmentId
       })
       toast.success(
@@ -162,7 +162,7 @@ export function useAddRepoCloneFlow({
       )
       // Why: once the repo exists, a transient non-authoritative refresh
       // should fall through to project reveal instead of leaving the add flow open.
-      const ownerOptions = worktreeRefreshOptions(activeRuntimeEnvironmentId)
+      const ownerOptions = addedRepoRefreshOptions(ownedRepo)
       await fetchWorktrees(ownedRepo.id, ownerOptions)
       if (!isCurrent()) {
         return

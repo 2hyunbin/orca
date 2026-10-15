@@ -21,6 +21,7 @@ import {
   assertProjectHostSetupMutationRuntimeCapabilities,
   getProjectSetupRuntimeTarget
 } from './project-host-routing'
+import { awaitRepoOwnerHostKnown } from '../repos/repo-owner-host-readiness'
 
 export function createProjectHostSetupActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -84,6 +85,7 @@ export function createProjectHostSetupActions(
             projectHostSetups: nextSetups
           }
         })
+        await awaitRepoOwnerHostKnown(get, repo)
         toast.success(translate('auto.store.slices.repos.8bb3ad7935', 'Project added'), {
           description: repo.displayName
         })
@@ -277,10 +279,14 @@ export function createProjectHostSetupActions(
                   { timeoutMs: 10 * 60_000 }
                 )
               ).repo
+        // Why the clone's own owner: this app clones a WSL destination on its distro's server, and
+        // the returned path is that host's, so the setup must be linked there too.
+        const cloned = adoptFromEndpoint(target, { kind: 'repo', row: repo })
+        await awaitRepoOwnerHostKnown(get, cloned)
         return await get().setupProjectExistingFolder({
           projectId: args.projectId,
-          hostId: args.hostId,
-          path: repo.path,
+          hostId: getRepoExecutionHostId(cloned),
+          path: cloned.path,
           kind: 'git',
           displayName: args.displayName,
           setupMethod: 'cloned'

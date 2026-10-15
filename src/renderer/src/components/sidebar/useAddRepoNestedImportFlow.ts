@@ -16,7 +16,7 @@ import type {
 } from '../../../../shared/project-group-types'
 import type { WorktreeFetchOptions } from '@/store/slices/worktree-helpers'
 import { translate } from '@/i18n/i18n'
-import { worktreeRefreshOptions } from './add-repo-runtime-owner'
+import { addedRepoRefreshOptions, worktreeRefreshOptions } from './add-repo-runtime-owner'
 import { completeNestedFolderOpen } from './complete-nested-folder-open'
 import { defaultProjectGroupNameForPath } from './add-repo-dialog-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
@@ -178,8 +178,10 @@ export function useAddRepoNestedImportFlow({
           }
           return
         }
-        const completionOwner = nestedConnectionId === null ? nestedRuntimeEnvironmentId : undefined
-        const completionOwnerOptions = worktreeRefreshOptions(completionOwner, nestedConnectionId)
+        // Why the answer's owner: a local import of a WSL folder lands on its distro's server.
+        const completionOwnerOptions = nestedConnectionId
+          ? worktreeRefreshOptions(undefined, nestedConnectionId)
+          : addedRepoRefreshOptions({ executionHostId: result.executionHostId })
         for (const projectId of importedRepoIds) {
           await fetchWorktrees(projectId, completionOwnerOptions)
         }

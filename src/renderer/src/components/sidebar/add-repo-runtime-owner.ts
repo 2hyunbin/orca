@@ -1,4 +1,5 @@
 import {
+  getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
@@ -34,6 +35,14 @@ export function worktreeRefreshOptions(
     requireAuthoritative: true,
     ...(executionHostId ? { executionHostId } : {})
   }
+}
+
+/** Refreshes after an add follow the returned row's owner, which need not be the picked host. */
+export function addedRepoRefreshOptions(repo: {
+  executionHostId?: string | null
+  connectionId?: string | null
+}): { requireAuthoritative: true; executionHostId: ExecutionHostId } {
+  return { requireAuthoritative: true, executionHostId: getRepoExecutionHostId(repo) }
 }
 
 /** The host the Add Project dialog picked; no picked server means this app. */
