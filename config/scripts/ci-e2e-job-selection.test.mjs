@@ -44,7 +44,6 @@ it.each([
 
 it.each([
   'src/renderer/src/lib/workspace-browser-tab-open.ts',
-  'src/renderer/src/lib/workspace-browser-owner-route.ts',
   'src/renderer/src/lib/http-link-destinations.ts',
   'src/renderer/src/components/terminal-pane/terminal-http-link-source-owner.ts'
 ])('routes the managed terminal link oracle from %s', (path) => {

@@ -1,4 +1,3 @@
-import { translate } from '@/i18n/i18n'
 import { createWebRuntimeSessionBrowserTab } from '@/runtime/web-runtime-browser-creation'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -7,7 +6,9 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
-import { SEARCH_ENGINE_LABELS, type SearchEngine } from '../../../shared/browser-url'
+import type { SearchEngine } from '../../../shared/browser-url'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
+import { BROWSER_SCREENCAST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import type { BrowserClientHostPlacementPreference } from '../../../shared/browser-client-host-placement'
 import {
   getClientCreationActionPolicy,
@@ -15,10 +16,12 @@ import {
 } from './client-creation-action-policy'
 import { resolveWorktreeOperationRoute } from './worktree-operation-route'
 import {
-  isExpectedRuntimeBrowserRoute,
-  isExpectedSshBrowserRoute,
-  isSshDeploymentClientBrowserRoute
-} from './workspace-browser-owner-route'
+  intentPresentation,
+  openFailure,
+  validateTarget
+} from './workspace-browser-tab-presentation'
+import { getExecutionHostIdForWorktree } from './worktree-runtime-owner'
+import { resolveSshWorkspaceBrowserRouteEligibility } from './ssh-workspace-browser-route-eligibility'
 
 export type WorkspaceBrowserTabIntent = { kind: 'url' } | { kind: 'search'; engine: SearchEngine }
 
@@ -39,68 +42,125 @@ export type OpenWorkspaceBrowserTabRequest = {
   placementPreference?: BrowserClientHostPlacementPreference
 }
 
-// Why: concurrent URL tabs are indistinguishable under a shared "Open URL"
-// label until the page title loads; the query string stays out so a typed URL
-// does not park credentials or tokens in persisted tab state.
-function urlTabTitle(url: string): string | null {
-  try {
-    // host, not hostname: localhost:3000 and localhost:5173 are different tabs.
-    const parsed = new URL(url)
-    return `${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}`
-  } catch {
-    return null
-  }
-}
-
-function intentPresentation(
-  intent: WorkspaceBrowserTabIntent,
-  url: string
-): {
-  error: string
-  title: string
-} {
-  if (intent.kind === 'url') {
-    return {
-      error: translate('auto.lib.workspace.browser.tab.open.urlFailed', 'Unable to open URL.'),
-      title:
-        urlTabTitle(url) ??
-        translate('auto.components.tab.bar.TabBarCreateEntry.7cdf8ee0c8', 'Open URL')
-    }
-  }
-  const engine = SEARCH_ENGINE_LABELS[intent.engine]
-  return {
-    error: translate(
-      'auto.lib.workspace.browser.tab.open.searchFailed',
-      'Unable to search with {{value0}}.',
-      { value0: engine }
-    ),
-    title: translate(
-      'auto.components.tab.bar.TabBarCreateEntry.searchProvider',
-      'Search {{value0}}',
-      { value0: engine }
-    )
-  }
-}
-
-// Why: the UI string stays friendly and query-free, but the diagnosable reason
-// rides along as `cause` so a failed open is not indistinguishable in logs.
-function openFailure(message: string, reason: string, cause?: unknown): Error {
-  // Why: callers only surface `message`, so log the reason here or a failed open
-  // leaves no trace at all. The reason alone — never `cause` — keeps the typed
-  // URL and search query out of the console.
-  console.warn(`[workspace-browser-tab-open] ${reason}`)
-  return new Error(message, {
-    cause: new Error(reason, cause === undefined ? undefined : { cause })
-  })
-}
-
-function validateTarget(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.hostname
-  } catch {
+function isExpectedRuntimeBrowserRoute(
+  state: AppState,
+  availability: ClientCreationActionAvailability,
+  route: ReturnType<typeof resolveWorktreeOperationRoute>,
+  workspaceId: string,
+  expectedRuntimeEnvironmentId: string
+): boolean {
+  if (availability.state !== 'enabled' || workspaceId === FLOATING_TERMINAL_WORKTREE_ID || !route) {
     return false
   }
+  const expectedEnvironmentId = expectedRuntimeEnvironmentId.trim()
+  const environmentId = route.runtimeEnvironmentId?.trim() || null
+  const capabilities =
+    state.runtimeStatusByEnvironmentId?.get(expectedEnvironmentId)?.status?.capabilities
+  if (
+    environmentId !== expectedEnvironmentId ||
+    !capabilities?.includes(BROWSER_SCREENCAST_RUNTIME_CAPABILITY)
+  ) {
+    return false
+  }
+  const host = parseExecutionHostId(route.executionHostId)
+  return (
+    !route.executionHostId ||
+    Boolean(host && (host.kind !== 'runtime' || host.environmentId === environmentId))
+  )
+}
+
+// Why: a managed server reached over SSH has no browser of its own, so its links open on this
+// desktop, whose page the SSH-routed browser gate sends through that host (as new tabs do).
+function isSshDeploymentClientBrowserRoute(
+  state: AppState,
+  availability: ClientCreationActionAvailability,
+  route: ReturnType<typeof resolveWorktreeOperationRoute>,
+  workspaceId: string,
+  expectedRuntimeEnvironmentId: string
+): boolean {
+  if (
+    availability.state !== 'enabled' ||
+    availability.provider !== 'local-client' ||
+    workspaceId === FLOATING_TERMINAL_WORKTREE_ID ||
+    !route
+  ) {
+    return false
+  }
+  const expectedEnvironmentId = expectedRuntimeEnvironmentId.trim()
+  const host = parseExecutionHostId(route.executionHostId)
+  const eligibility = resolveSshWorkspaceBrowserRouteEligibility(
+    route.executionHostId,
+    state.settings,
+    state.runtimeEnvironments
+  )
+  return (
+    Boolean(expectedEnvironmentId) &&
+    route.runtimeEnvironmentId?.trim() === expectedEnvironmentId &&
+    host?.kind === 'runtime' &&
+    host.environmentId === expectedEnvironmentId &&
+    eligibility?.eligible === true
+  )
+}
+
+export function canOpenWorkspaceBrowserTabOnRuntime(
+  state: AppState,
+  workspaceId: string,
+  expectedRuntimeEnvironmentId: string
+): boolean {
+  const availability = getClientCreationActionPolicy(state, workspaceId)['managed-browser']
+  const route = resolveWorktreeOperationRoute(state, workspaceId)
+  return (
+    isExpectedRuntimeBrowserRoute(
+      state,
+      availability,
+      route,
+      workspaceId,
+      expectedRuntimeEnvironmentId
+    ) ||
+    isSshDeploymentClientBrowserRoute(
+      state,
+      availability,
+      route,
+      workspaceId,
+      expectedRuntimeEnvironmentId
+    )
+  )
+}
+
+function isExpectedSshBrowserRoute(
+  state: AppState,
+  availability: ClientCreationActionAvailability,
+  route: ReturnType<typeof resolveWorktreeOperationRoute>,
+  workspaceId: string,
+  expectedSshConnectionId: string
+): boolean {
+  if (availability.state !== 'enabled' || workspaceId === FLOATING_TERMINAL_WORKTREE_ID || !route) {
+    return false
+  }
+  const expectedTargetId = expectedSshConnectionId.trim()
+  const eligibility = resolveSshWorkspaceBrowserRouteEligibility(
+    getExecutionHostIdForWorktree(state, workspaceId),
+    state.settings
+  )
+  const host = parseExecutionHostId(route.executionHostId)
+  return (
+    Boolean(expectedTargetId) &&
+    route.runtimeEnvironmentId === null &&
+    eligibility?.eligible === true &&
+    eligibility.targetId === expectedTargetId &&
+    host?.kind === 'ssh' &&
+    host.targetId === expectedTargetId
+  )
+}
+
+export function canOpenWorkspaceBrowserTabOnSsh(
+  state: AppState,
+  workspaceId: string,
+  expectedSshConnectionId: string
+): boolean {
+  const availability = getClientCreationActionPolicy(state, workspaceId)['managed-browser']
+  const route = resolveWorktreeOperationRoute(state, workspaceId)
+  return isExpectedSshBrowserRoute(state, availability, route, workspaceId, expectedSshConnectionId)
 }
 
 function createClientBrowserTab(

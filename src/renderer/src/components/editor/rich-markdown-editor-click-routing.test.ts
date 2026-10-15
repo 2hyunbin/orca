@@ -25,7 +25,7 @@ const routing = vi.hoisted((): RoutingState => ({
   canOpenOwnedBrowser: true
 }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => routing } }))
-vi.mock('@/lib/workspace-browser-owner-route', () => ({
+vi.mock('@/lib/workspace-browser-tab-open', () => ({
   canOpenWorkspaceBrowserTabOnRuntime: () => routing.canOpenOwnedBrowser,
   canOpenWorkspaceBrowserTabOnSsh: () => routing.canOpenOwnedBrowser
 }))
