@@ -15661,7 +15661,9 @@
           "earlierOutputHidden": "La sortie précédente est masquée.",
           "moreOutputsHidden": "{{count}} autres sorties sont masquées.",
           "moreOutputsHidden_one": "{{count}} autre sortie est masquée.",
-          "moreOutputsHidden_other": "{{count}} autres sorties sont masquées."
+          "moreOutputsHidden_other": "{{count}} autres sorties sont masquées.",
+          "outputLimitReached": "La sortie de cette cellule a atteint la taille maximale ; la suite n'a pas été conservée.",
+          "tooLargeToSave": "Ce notebook est trop volumineux pour être enregistré."
         },
         "MarkdownPreview": {
           "e4683f70c4": "Annuler",

@@ -28,6 +28,13 @@ export type IpynbCell = {
   outputs: IpynbOutput[]
 }
 
+/** An open notebook; a change replaces `cells` and the cells it touches, never mutating them. */
+export type IpynbDocument = {
+  /** The nbformat root; its `cells` is only a placeholder keeping the key's position on save. */
+  root: Record<string, unknown>
+  cells: readonly unknown[]
+}
+
 export type ParsedIpynb = {
   language: string
   cells: IpynbCell[]
@@ -210,22 +217,53 @@ function parseCell(rawCell: unknown, fallbackLanguage: string): IpynbCell | null
   }
 }
 
-export function parseIpynb(content: string): ParsedIpynb {
-  const parsed = JSON.parse(content) as unknown
+// Why: a change replaces only the cells it touches, so the others keep their parse.
+const parsedCells = new WeakMap<
+  Record<string, unknown>,
+  { language: string; cell: IpynbCell | null }
+>()
+
+function parseCellOnce(rawCell: unknown, language: string): IpynbCell | null {
+  if (!isRecord(rawCell)) {
+    return null
+  }
+  const cached = parsedCells.get(rawCell)
+  if (cached?.language === language) {
+    return cached.cell
+  }
+  const cell = parseCell(rawCell, language)
+  parsedCells.set(rawCell, { language, cell })
+  return cell
+}
+
+const parsedDocuments = new WeakMap<IpynbDocument, ParsedIpynb>()
+
+/** What the viewer draws for an open notebook document. */
+export function parseIpynbDocumentView(document: IpynbDocument): ParsedIpynb {
+  const cached = parsedDocuments.get(document)
+  if (cached) {
+    return cached
+  }
+  const language = getPreferredLanguage(document.root)
+  const cells = document.cells
+    .map((cell) => parseCellOnce(cell, language))
+    .filter((cell): cell is IpynbCell => cell !== null)
+  const parsed = { language, cells }
+  parsedDocuments.set(document, parsed)
+  return parsed
+}
+
+export function parseIpynbDocument(content: string): IpynbDocument {
+  const parsed: unknown = JSON.parse(content)
   if (!isRecord(parsed)) {
     throw new Error('Notebook root must be a JSON object')
   }
   if (!Array.isArray(parsed.cells)) {
     throw new Error('Notebook is missing a cells array')
   }
+  return { root: { ...parsed, cells: [] }, cells: parsed.cells }
+}
 
-  const language = getPreferredLanguage(parsed)
-  const cells = parsed.cells
-    .map((cell) => parseCell(cell, language))
-    .filter((cell): cell is IpynbCell => cell !== null)
-
-  return {
-    language,
-    cells
-  }
+export function parseIpynb(content: string): ParsedIpynb {
+  return parseIpynbDocumentView(parseIpynbDocument(content))
 }

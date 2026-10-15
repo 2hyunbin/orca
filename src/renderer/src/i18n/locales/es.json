@@ -15553,7 +15553,9 @@
           "earlierOutputHidden": "La salida anterior está oculta.",
           "moreOutputsHidden": "Hay {{count}} salidas más ocultas.",
           "moreOutputsHidden_one": "Hay {{count}} salida más oculta.",
-          "moreOutputsHidden_other": "Hay {{count}} salidas más ocultas."
+          "moreOutputsHidden_other": "Hay {{count}} salidas más ocultas.",
+          "outputLimitReached": "La salida de esta celda alcanzó el límite de tamaño; la salida posterior no se guardó.",
+          "tooLargeToSave": "Este notebook es demasiado grande para guardarlo."
         },
         "MarkdownPreview": {
           "e4683f70c4": "Cancelar",

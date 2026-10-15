@@ -8,7 +8,7 @@ import {
 } from '../../../../shared/editor-save-events'
 import { requestEditorFileSave, requestEditorSaveQuiesce } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
-import { registerPendingEditorFlush } from './editor-pending-flush'
+import { registerEditorBufferOwner } from './editor-buffer-owners'
 import { __clearSelfWriteRegistryForTests, hasRecentSelfWrite } from './editor-self-write-registry'
 import {
   createCompatibleRuntimeStatusResponseIfNeeded,
@@ -446,8 +446,8 @@ describe('attachEditorAutosaveController', () => {
     })
     store.getState().markFileDirty('/repo/file.md', true)
 
-    const unregisterFlush = registerPendingEditorFlush('/repo/file.md', () => {
-      store.getState().setEditorDraft('/repo/file.md', 'pending rich edit')
+    const unregisterFlush = registerEditorBufferOwner('/repo/file.md', {
+      flush: () => store.getState().setEditorDraft('/repo/file.md', 'pending rich edit')
     })
     const cleanup = attachEditorAutosaveController(store)
     try {
@@ -714,10 +714,12 @@ describe('attachEditorAutosaveController', () => {
     store.getState().markFileDirty('/repo/file.md', true)
 
     const drafts = ['after quiesce', 'after save']
-    const unregisterFlush = registerPendingEditorFlush('/repo/file.md', () => {
-      const nextDraft = drafts.shift()
-      if (nextDraft) {
-        store.getState().setEditorDraft('/repo/file.md', nextDraft)
+    const unregisterFlush = registerEditorBufferOwner('/repo/file.md', {
+      flush: () => {
+        const nextDraft = drafts.shift()
+        if (nextDraft) {
+          store.getState().setEditorDraft('/repo/file.md', nextDraft)
+        }
       }
     })
     const cleanup = attachEditorAutosaveController(store)

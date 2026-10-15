@@ -1,29 +1,38 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MutableRefObject
-} from 'react'
-import { registerPendingEditorFlush } from './editor-pending-flush'
+import { useCallback, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react'
+import { useAppStore } from '@/store'
 import {
   deleteIpynbCell,
   insertIpynbCell,
   moveIpynbCell,
   updateIpynbCellKind,
-  updateIpynbCellSources
+  updateIpynbCellSource
 } from './ipynb-cell-mutations'
-import type { IpynbCell, IpynbCellKind, ParsedIpynb } from './ipynb-parse'
+import {
+  editNotebookDocument,
+  getNotebookDocumentView,
+  openNotebookDocument,
+  reconcileNotebookDocument,
+  subscribeNotebookDocument,
+  type NotebookDocumentView
+} from './ipynb-document-store'
+import type { IpynbCell, IpynbCellKind, IpynbDocument } from './ipynb-parse'
 
-const NOTEBOOK_SOURCE_COMMIT_DELAY_MS = 400
+const NO_DOCUMENT: NotebookDocumentView = { document: null, error: null }
 
 export function getIpynbCellKey(cell: IpynbCell, index: number): string {
   return cell.id ?? `${index}:${cell.kind}`
 }
 
-export function hasIpynbSourceDraft(drafts: Record<string, string>, key: string): boolean {
-  return Object.hasOwn(drafts, key)
+/** The open notebook's document; it takes in the draft or disk text when others change them. */
+export function useIpynbDocument(fileId: string, diskText: string): NotebookDocumentView {
+  const draft = useAppStore((state) => state.editorDrafts[fileId])
+  openNotebookDocument(fileId, diskText)
+  const view = useSyncExternalStore(
+    useCallback((listener: () => void) => subscribeNotebookDocument(fileId, listener), [fileId]),
+    () => getNotebookDocumentView(fileId) ?? NO_DOCUMENT
+  )
+  useEffect(() => reconcileNotebookDocument(fileId, diskText), [diskText, draft, fileId])
+  return view
 }
 
 function cancelStructuralFrames(frameIds: MutableRefObject<number[]>): void {
@@ -52,166 +61,67 @@ function requestStructuralFrame(
 }
 
 type UseIpynbDocumentEditingArgs = {
-  content: string
   fileId: string
-  notebook: ParsedIpynb | null
-  onContentChange: (content: string) => void
-  onDirtyStateHint: (dirty: boolean) => void
+  language: string
   onDeactivateEditor: () => void
 }
 
 export function useIpynbDocumentEditing({
-  content,
   fileId,
-  notebook,
-  onContentChange,
-  onDirtyStateHint,
+  language,
   onDeactivateEditor
 }: UseIpynbDocumentEditingArgs) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [sourceDrafts, setSourceDrafts] = useState<Record<string, string>>({})
-  const sourceDraftsRef = useRef(sourceDrafts)
-  const contentRef = useRef(content)
-  const notebookRef = useRef(notebook)
-  const onContentChangeRef = useRef(onContentChange)
-  const onDirtyStateHintRef = useRef(onDirtyStateHint)
-  const sourceCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const structuralFrameIdsRef = useRef<number[]>([])
-  useLayoutEffect(() => {
-    contentRef.current = content
-    notebookRef.current = notebook
-    onContentChangeRef.current = onContentChange
-    onDirtyStateHintRef.current = onDirtyStateHint
-  }, [content, notebook, onContentChange, onDirtyStateHint])
 
-  const materializeSourceDrafts = useCallback((): string => {
-    const latestNotebook = notebookRef.current
-    const drafts = sourceDraftsRef.current
-    if (!latestNotebook || Object.keys(drafts).length === 0) {
-      return contentRef.current
-    }
-    const updates = latestNotebook.cells
-      .map((cell, index) => {
-        const key = getIpynbCellKey(cell, index)
-        return hasIpynbSourceDraft(drafts, key) ? { index, source: drafts[key] ?? '' } : null
-      })
-      .filter((update): update is { index: number; source: string } => update !== null)
-    return updateIpynbCellSources(contentRef.current, updates)
-  }, [])
-
-  const flushSourceDrafts = useCallback((): string => {
-    if (sourceCommitTimerRef.current !== null) {
-      clearTimeout(sourceCommitTimerRef.current)
-      sourceCommitTimerRef.current = null
-    }
-    const nextContent = materializeSourceDrafts()
-    if (nextContent !== contentRef.current) {
-      contentRef.current = nextContent
-      onContentChangeRef.current(nextContent)
-    }
-    return nextContent
-  }, [materializeSourceDrafts])
-
-  const queueSourceDraftCommit = useCallback((): void => {
-    if (sourceCommitTimerRef.current !== null) {
-      clearTimeout(sourceCommitTimerRef.current)
-    }
-    sourceCommitTimerRef.current = setTimeout(() => {
-      void flushSourceDrafts()
-    }, NOTEBOOK_SOURCE_COMMIT_DELAY_MS)
-  }, [flushSourceDrafts])
-
-  useEffect(
-    () => registerPendingEditorFlush(fileId, flushSourceDrafts),
-    [fileId, flushSourceDrafts]
-  )
-
-  useEffect(() => {
-    if (!notebook || Object.keys(sourceDraftsRef.current).length === 0) {
-      return
-    }
-    const nextDrafts = { ...sourceDraftsRef.current }
-    let changed = false
-    for (const [index, cell] of notebook.cells.entries()) {
-      const key = getIpynbCellKey(cell, index)
-      if (hasIpynbSourceDraft(nextDrafts, key) && nextDrafts[key] === cell.source) {
-        delete nextDrafts[key]
-        changed = true
-      }
-    }
-    if (changed) {
-      sourceDraftsRef.current = nextDrafts
-      setSourceDrafts(nextDrafts)
-    }
-  }, [notebook])
-
-  const setRootRef = useCallback(
-    (node: HTMLDivElement | null): void => {
-      rootRef.current = node
-      if (node !== null) {
-        return
-      }
-      void flushSourceDrafts()
+  const setRootRef = useCallback((node: HTMLDivElement | null): void => {
+    rootRef.current = node
+    if (node === null) {
       cancelStructuralFrames(structuralFrameIdsRef)
-    },
-    [flushSourceDrafts]
-  )
-
-  const applyContent = useCallback((nextContent: string): void => {
-    contentRef.current = nextContent
-    onContentChangeRef.current(nextContent)
+    }
   }, [])
 
   const updateCellSource = useCallback(
-    (index: number, source: string): void => {
-      const cell = notebookRef.current?.cells[index]
-      if (!cell) {
-        return
-      }
-      const key = getIpynbCellKey(cell, index)
-      const nextDrafts = { ...sourceDraftsRef.current, [key]: source }
-      sourceDraftsRef.current = nextDrafts
-      setSourceDrafts(nextDrafts)
-      onDirtyStateHintRef.current(true)
-      queueSourceDraftCommit()
-    },
-    [queueSourceDraftCommit]
+    (index: number, source: string): void =>
+      editNotebookDocument(
+        fileId,
+        (document) => updateIpynbCellSource(document, index, source),
+        'debounced'
+      ),
+    [fileId]
   )
 
   const applyStructuralChange = useCallback(
-    (getNextContent: (latestContent: string) => string): void => {
-      const latestContent = flushSourceDrafts()
+    (edit: (document: IpynbDocument) => IpynbDocument): void => {
       onDeactivateEditor()
-      requestStructuralFrame(structuralFrameIdsRef, () => {
-        applyContent(getNextContent(latestContent))
-      })
+      requestStructuralFrame(structuralFrameIdsRef, () => editNotebookDocument(fileId, edit, 'now'))
     },
-    [applyContent, flushSourceDrafts, onDeactivateEditor]
+    [fileId, onDeactivateEditor]
   )
 
-  const updateCellKind = (index: number, kind: IpynbCellKind): void => {
-    const language = notebookRef.current?.language ?? 'python'
-    applyStructuralChange((latestContent) =>
-      updateIpynbCellKind(latestContent, index, kind, language)
-    )
-  }
-  const insertCell = (index: number, kind: IpynbCellKind): void => {
-    const language = notebookRef.current?.language ?? 'python'
-    applyStructuralChange((latestContent) => insertIpynbCell(latestContent, index, kind, language))
-  }
-  const moveCell = (index: number, direction: -1 | 1): void => {
-    applyStructuralChange((latestContent) => moveIpynbCell(latestContent, index, direction))
-  }
-  const deleteCell = (index: number): void => {
-    applyStructuralChange((latestContent) => deleteIpynbCell(latestContent, index))
-  }
+  const updateCellKind = useCallback(
+    (index: number, kind: IpynbCellKind): void =>
+      applyStructuralChange((document) => updateIpynbCellKind(document, index, kind, language)),
+    [applyStructuralChange, language]
+  )
+  const insertCell = useCallback(
+    (index: number, kind: IpynbCellKind): void =>
+      applyStructuralChange((document) => insertIpynbCell(document, index, kind, language)),
+    [applyStructuralChange, language]
+  )
+  const moveCell = useCallback(
+    (index: number, direction: -1 | 1): void =>
+      applyStructuralChange((document) => moveIpynbCell(document, index, direction)),
+    [applyStructuralChange]
+  )
+  const deleteCell = useCallback(
+    (index: number): void => applyStructuralChange((document) => deleteIpynbCell(document, index)),
+    [applyStructuralChange]
+  )
 
   return {
     rootRef,
     setRootRef,
-    sourceDrafts,
-    flushSourceDrafts,
-    applyContent,
     updateCellSource,
     updateCellKind,
     insertCell,

@@ -2,14 +2,14 @@ import { expect, it, vi } from 'vitest'
 import {
   flushPendingEditorChange,
   hasPendingEditorChange,
-  registerPendingEditorFlush
-} from './editor-pending-flush'
+  registerEditorBufferOwner
+} from './editor-buffer-owners'
 
 it('retains legacy replacement semantics and independently cleans up registrations', () => {
   const earlier = vi.fn()
   const later = vi.fn()
-  const removeEarlier = registerPendingEditorFlush('legacy', earlier)
-  const removeLater = registerPendingEditorFlush('legacy', later)
+  const removeEarlier = registerEditorBufferOwner('legacy', { flush: earlier })
+  const removeLater = registerEditorBufferOwner('legacy', { flush: later })
   try {
     flushPendingEditorChange('legacy')
     expect(earlier).not.toHaveBeenCalled()
@@ -28,8 +28,14 @@ it('retains legacy replacement semantics and independently cleans up registratio
 it('checks pending changes across panes and retains the remaining registration on cleanup', () => {
   const earlier = vi.fn()
   const later = vi.fn()
-  const removeEarlier = registerPendingEditorFlush('panes', earlier, () => true)
-  const removeLater = registerPendingEditorFlush('panes', later, () => false)
+  const removeEarlier = registerEditorBufferOwner('panes', {
+    flush: earlier,
+    hasChange: () => true
+  })
+  const removeLater = registerEditorBufferOwner('panes', {
+    flush: later,
+    hasChange: () => false
+  })
   try {
     expect(hasPendingEditorChange('panes')).toBe(true)
     removeLater()

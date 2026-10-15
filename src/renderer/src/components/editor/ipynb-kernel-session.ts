@@ -7,8 +7,9 @@ import type {
   KernelStartResult,
   PythonEnvironment
 } from '../../../../shared/notebook-kernel-types'
-import { applyKernelOutput } from './ipynb-kernel-outputs'
-import { fenced, noticeOutput, startRun, stopRuns } from './ipynb-kernel-runs'
+import { updateNotebookCellRun, writeNotebookDraft } from './ipynb-document-store'
+import { noticeOutput } from './ipynb-kernel-outputs'
+import { applyOutputFrames, endRun, fenced, startRun } from './ipynb-kernel-runs'
 import {
   getSession,
   runningCellKey,
@@ -35,14 +36,18 @@ function failQueue(filePath: string, message: string, detail = ''): void {
     runs: head
       ? {
           ...runs,
-          [head.key]: {
-            ...startRun(),
-            outputs: [noticeOutput(message + fenced(detail))],
-            finishedAt: Date.now()
-          }
+          [head.key]: { ...startRun(head.fileId), finishedAt: Date.now() }
         }
       : runs
   }))
+  if (head) {
+    const notice = noticeOutput(message + fenced(detail))
+    updateNotebookCellRun(head.fileId, head.key, {
+      outputs: () => [notice],
+      executionCount: null
+    })
+    writeNotebookDraft(head.fileId)
+  }
 }
 
 function pump(filePath: string): void {
@@ -51,7 +56,14 @@ function pump(filePath: string): void {
   if (session.status !== 'ready' || !next || runningCellKey(session) !== null) {
     return
   }
-  updateSession(filePath, ({ runs }) => ({ queue, runs: { ...runs, [next.key]: startRun() } }))
+  updateSession(filePath, ({ runs }) => ({
+    queue,
+    runs: { ...runs, [next.key]: startRun(next.fileId) }
+  }))
+  updateNotebookCellRun(next.fileId, next.key, {
+    outputs: () => [],
+    executionCount: null
+  })
   void window.api.notebook.execute({ filePath, code: next.code })
 }
 
@@ -168,7 +180,7 @@ export async function runCells(
 }
 
 export function restartKernel(filePath: string): void {
-  updateSession(filePath, stopRuns)
+  endRun(filePath)
   void start(filePath)
 }
 
@@ -273,13 +285,6 @@ export function cancelSetup(filePath: string): void {
   }))
 }
 
-export function markRunCommitted(filePath: string, key: string): void {
-  updateSession(filePath, ({ runs }) => {
-    const run = runs[key]
-    return run ? { runs: { ...runs, [key]: { ...run, outputs: [], committed: true } } } : {}
-  })
-}
-
 /** Forgets finished runs, e.g. after Clear All Outputs; the executing run keeps streaming. */
 export function forgetFinishedRuns(filePath: string): void {
   updateSession(filePath, ({ runs }) => ({
@@ -294,14 +299,13 @@ function handleFrame({ filePath, frame }: KernelFrameEvent): void {
   const session = getSession(filePath)
   if (frame.type === 'exit') {
     const died = translate('auto.components.editor.IpynbViewer.kernelDied', 'The kernel died.')
-    updateSession(filePath, (current) => ({
-      ...stopRuns(current, [noticeOutput(died + fenced(frame.detail))]),
-      status: 'dead'
-    }))
+    endRun(filePath, noticeOutput(died + fenced(frame.detail)))
+    updateSession(filePath, () => ({ status: 'dead' }))
     return
   }
   const key = runningCellKey(session)
-  if (key === null) {
+  const run = key === null ? undefined : session.runs[key]
+  if (key === null || !run) {
     return
   }
   if (frame.type === 'done') {
@@ -314,12 +318,14 @@ function handleFrame({ filePath, frame }: KernelFrameEvent): void {
         [key]: { ...runs[key], executionCount: frame.execution_count, finishedAt: Date.now() }
       }
     }))
+    updateNotebookCellRun(run.fileId, key, {
+      executionCount: frame.execution_count
+    })
+    writeNotebookDraft(run.fileId)
     pump(filePath)
     return
   }
-  updateSession(filePath, ({ runs }) => ({
-    runs: { ...runs, [key]: applyKernelOutput(runs[key], frame.type, frame.content) }
-  }))
+  applyOutputFrames(filePath, key, [frame])
 }
 
 // Kernels only exist once this module has loaded with the notebook viewer, so it subscribes here.

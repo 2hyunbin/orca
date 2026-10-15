@@ -7,7 +7,7 @@ import {
   type EditorSaveFileDetail,
   type EditorSaveQuiesceDetail
 } from './editor-autosave'
-import { flushPendingEditorChange } from './editor-pending-flush'
+import { flushPendingEditorChange, subscribeEditorBufferChanges } from './editor-buffer-owners'
 import {
   autosaveSubscriberInputsEqual,
   getAutosaveSubscriberInputs
@@ -115,6 +115,7 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     previousAutosaveInputs = nextAutosaveInputs
     syncAutoSave()
   })
+  const unsubscribeBufferChanges = subscribeEditorBufferChanges(syncAutoSave)
   syncAutoSave()
 
   window.addEventListener(ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT, handleSaveDirtyFiles as EventListener)
@@ -129,6 +130,7 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
 
   return () => {
     unsubscribe()
+    unsubscribeBufferChanges()
     window.removeEventListener(
       ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT,
       handleSaveDirtyFiles as EventListener

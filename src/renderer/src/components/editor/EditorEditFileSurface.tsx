@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { translate } from '@/i18n/i18n'
 import { getConnectionIdForFile } from '@/lib/connection-context'
 import type { MarkdownViewMode, OpenFile, PendingEditorReveal } from '@/store/slices/editor'
@@ -19,6 +20,7 @@ import { EditorFileLoadErrorView } from './EditorFileLoadErrorView'
 import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableRenderErrorBoundary'
 import type { FileContent } from './editor-panel-content-types'
 import { ExternalFileChangeBanner } from './ExternalFileChangeBanner'
+import { cancelEditorBufferDiscard } from './editor-buffer-owners'
 import type { useMarkdownDocuments } from './useMarkdownDocuments'
 import { EditorMarkdownFileSurface } from './EditorMarkdownFileSurface'
 import type { MarkdownRenderState } from './markdown-render-mode'
@@ -93,6 +95,13 @@ export function EditorEditFileSurface({
   handleSave: (content: string) => Promise<boolean>
   reloadContent: (file: OpenFile) => void
 }): React.JSX.Element {
+  const loadError = fileContent?.loadError
+  // Why: a discard waits for the reloaded disk text; when the read fails, no later text is that reload.
+  useEffect(() => {
+    if (loadError) {
+      cancelEditorBufferDiscard(activeFile.id)
+    }
+  }, [activeFile.id, loadError])
   if (activeFile.conflict?.kind === 'conflict-placeholder') {
     return <ConflictPlaceholderView file={activeFile} />
   }
@@ -288,13 +297,11 @@ export function EditorEditFileSurface({
   ) : isNotebook && mdViewMode === 'rich' ? (
     <IpynbViewer
       key={activeFile.id}
-      content={currentContent}
+      diskContent={fileContent.content}
       fileId={activeFile.id}
       filePath={activeFile.filePath}
       worktreeId={activeFile.worktreeId}
       scrollCacheKey={`${editorViewStateKey}:notebook`}
-      onContentChange={handleContentChange}
-      onDirtyStateHint={handleDirtyStateHint}
       onSave={handleSave}
     />
   ) : (

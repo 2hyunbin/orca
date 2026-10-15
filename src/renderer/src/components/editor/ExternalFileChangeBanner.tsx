@@ -12,6 +12,7 @@ import type { OpenFile } from '@/store/slices/editor'
 import { ExternalFileChangeCompareDialog } from './ExternalFileChangeCompareDialog'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
+import { discardEditorBufferChanges, flushPendingEditorChange } from './editor-buffer-owners'
 
 // Why: when an external process (usually an agent) rewrites a file while the
 // tab holds unsaved edits, the reload pipeline preserves the buffer and marks
@@ -25,6 +26,12 @@ export function reloadTabContentFromDisk(
   file: OpenFile,
   reloadContent: (file: OpenFile) => void
 ): void {
+  // Why: a document model may hold changes newer than its draft; Undo must restore those too.
+  try {
+    flushPendingEditorChange(file.id)
+  } catch (error) {
+    console.warn('Flushing pending edits before reload failed', error)
+  }
   const state = useAppStore.getState()
   const discardedDraft = state.editorDrafts[file.id]
   const discardedDiskSignature = state.openFiles.find(
@@ -33,6 +40,7 @@ export function reloadTabContentFromDisk(
   // Why: drop the draft before reloading — the buffer shadows loaded content
   // (editBuffers ?? fileContents), so a reload alone would keep showing the
   // stale unsaved text.
+  discardEditorBufferChanges(file.id)
   state.clearEditorDraft(file.id)
   state.markFileDirty(file.id, false)
   state.setExternalMutation(file.id, null)

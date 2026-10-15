@@ -11,6 +11,20 @@ const { appStoreListeners, openFiles } = vi.hoisted(() => {
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+// The document store's side of the contract: outputs a run writes into each cell.
+const { cellOutputs } = vi.hoisted(() => ({ cellOutputs: new Map<string, unknown[]>() }))
+vi.mock('./ipynb-document-store', () => ({
+  updateNotebookCellRun: (
+    _fileId: string,
+    key: string,
+    run: { outputs?: (outputs: unknown[]) => unknown[] }
+  ) => {
+    if (run.outputs) {
+      cellOutputs.set(key, run.outputs(cellOutputs.get(key) ?? []))
+    }
+  },
+  writeNotebookDraft: vi.fn()
+}))
 vi.mock('@/store', () => ({
   useAppStore: {
     subscribe: (listener: Listener) => appStoreListeners.push(listener)
@@ -47,6 +61,7 @@ function frame(value: KernelFrame): void {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  cellOutputs.clear()
   notebookApi.listPythonEnvironments.mockResolvedValue({ workspace: [VENV], path: [] })
   notebookApi.startKernel.mockResolvedValue({ status: 'ready' })
   // Closing the tab drops the session, giving each test a fresh one.
@@ -80,7 +95,7 @@ describe('notebook kernel session', () => {
     expect(getSession(untrusted)).toMatchObject({ status: 'off', trusted: false, queue: [] })
 
     session.trustNotebook(untrusted)
-    await session.runCells(untrusted, [{ key: 'a', code: 'x' }], '/untrusted')
+    await session.runCells(untrusted, [{ key: 'a', fileId: 'nb', code: 'x' }], '/untrusted')
     expect(notebookApi.startKernel).toHaveBeenCalledWith({
       filePath: untrusted,
       python: shipped.path
@@ -91,7 +106,7 @@ describe('notebook kernel session', () => {
   it('discovers with workspace interpreters once trusted', async () => {
     openFiles.current = [{ filePath: '/fifth.ipynb' }]
     session.trustNotebook('/fifth.ipynb')
-    await session.runCells('/fifth.ipynb', [{ key: 'a', code: 'x' }], '/proj')
+    await session.runCells('/fifth.ipynb', [{ key: 'a', fileId: 'nb', code: 'x' }], '/proj')
     expect(notebookApi.listPythonEnvironments).toHaveBeenCalledWith({
       filePath: '/fifth.ipynb',
       rootPath: '/proj',
@@ -103,9 +118,9 @@ describe('notebook kernel session', () => {
     await session.runCells(
       FILE,
       [
-        { key: 'a', code: 'x = 1' },
-        { key: 'b', code: '1 / 0' },
-        { key: 'c', code: 'x' }
+        { key: 'a', fileId: 'nb', code: 'x = 1' },
+        { key: 'b', fileId: 'nb', code: '1 / 0' },
+        { key: 'c', fileId: 'nb', code: 'x' }
       ],
       '/proj'
     )
@@ -115,10 +130,8 @@ describe('notebook kernel session', () => {
 
     frame({ type: 'stream', content: { name: 'stdout', text: 'hi\n' } })
     frame({ type: 'done', status: 'ok', execution_count: 1 })
-    expect(getCellRun(FILE, 'a')).toMatchObject({
-      executionCount: 1,
-      outputs: [{ output_type: 'stream', text: 'hi\n' }]
-    })
+    expect(getCellRun(FILE, 'a')).toMatchObject({ executionCount: 1 })
+    expect(cellOutputs.get('a')).toMatchObject([{ output_type: 'stream', text: 'hi\n' }])
     expect(notebookApi.execute).toHaveBeenLastCalledWith({ filePath: FILE, code: '1 / 0' })
 
     frame({ type: 'error', content: { ename: 'ZeroDivisionError', evalue: '', traceback: [] } })
@@ -132,16 +145,16 @@ describe('notebook kernel session', () => {
     await session.runCells(
       FILE,
       [
-        { key: 'a', code: 'import os; os._exit(1)' },
-        { key: 'b', code: 'x' }
+        { key: 'a', fileId: 'nb', code: 'import os; os._exit(1)' },
+        { key: 'b', fileId: 'nb', code: 'x' }
       ],
       null
     )
     frame({ type: 'exit', detail: 'segfault' })
     const run = getCellRun(FILE, 'a')
     expect(run?.finishedAt).not.toBeNull()
-    expect(JSON.stringify(run?.outputs)).toContain('The kernel died.')
-    expect(JSON.stringify(run?.outputs)).toContain('segfault')
+    expect(JSON.stringify(cellOutputs.get('a'))).toContain('The kernel died.')
+    expect(JSON.stringify(cellOutputs.get('a'))).toContain('segfault')
     expect(getCellRun(FILE, 'b')).toBeUndefined()
     expect(notebookApi.execute).toHaveBeenCalledTimes(1)
   })
@@ -152,10 +165,10 @@ describe('notebook kernel session', () => {
       externallyManaged: false
     })
     notebookApi.installIpykernel.mockResolvedValue({ ok: true, detail: '' })
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     expect(getSession(FILE).setup).toMatchObject({ base: VENV, offer: 'install', phase: 'idle' })
     // A second run while the dialog is open waits too.
-    await session.runCells(FILE, [{ key: 'b', code: 'y' }], null)
+    await session.runCells(FILE, [{ key: 'b', fileId: 'nb', code: 'y' }], null)
     expect(notebookApi.startKernel).toHaveBeenCalledOnce()
 
     await session.installIpykernel(FILE)
@@ -170,11 +183,11 @@ describe('notebook kernel session', () => {
       externallyManaged: false
     })
     notebookApi.installIpykernel.mockResolvedValue({ ok: false, detail: 'network unreachable' })
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     await session.installIpykernel(FILE)
     expect(getSession(FILE)).toMatchObject({
       setup: { phase: 'idle', error: 'network unreachable' },
-      queue: [{ key: 'a', code: 'x' }]
+      queue: [{ key: 'a', fileId: 'nb', code: 'x' }]
     })
 
     session.cancelSetup(FILE)
@@ -191,7 +204,7 @@ describe('notebook kernel session', () => {
       externallyManaged: true
     })
     notebookApi.createVenv.mockResolvedValue({ ok: true, environment: created })
-    await session.runCells('/repo/nb.ipynb', [{ key: 'a', code: 'x' }], '/repo')
+    await session.runCells('/repo/nb.ipynb', [{ key: 'a', fileId: 'nb', code: 'x' }], '/repo')
     expect(getSession('/repo/nb.ipynb').setup).toMatchObject({ base: system, offer: 'venv' })
 
     await session.createVirtualEnvironment('/repo/nb.ipynb', '/repo')
@@ -210,7 +223,7 @@ describe('notebook kernel session', () => {
   it('switches a running notebook to a venv made from the picker, keeping it on failure', async () => {
     const created = { path: '/repo/.venv/bin/python', name: '.venv', version: '3.14.0' }
     const system = { path: '/usr/bin/python3', name: 'python3', version: '3.14.0' }
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     frame({ type: 'done', status: 'ok', execution_count: 1 })
 
     session.offerVirtualEnvironment(FILE, system)
@@ -234,7 +247,7 @@ describe('notebook kernel session', () => {
       status: 'missing-ipykernel',
       externallyManaged: false
     })
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     session.selectEnvironment(FILE, other)
     expect(getSession(FILE).setup).toBeNull()
     await vi.waitFor(() => expect(getSession(FILE).status).toBe('ready'))
@@ -249,7 +262,7 @@ describe('notebook kernel session', () => {
     })
     let finish: (value: { ok: boolean; detail: string }) => void = () => {}
     notebookApi.installIpykernel.mockReturnValue(new Promise((resolve) => (finish = resolve)))
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     const install = session.installIpykernel(FILE)
     for (const listener of appStoreListeners) {
       listener({ openFiles: [] }, { openFiles: openFiles.current })
@@ -264,7 +277,7 @@ describe('notebook kernel session', () => {
     notebookApi.listPythonEnvironments.mockResolvedValue({ workspace: [], path: [VENV] })
     // A remembered env from an earlier test would skip discovery; use a fresh notebook.
     openFiles.current = [{ filePath: '/other.ipynb' }]
-    await session.runCells('/other.ipynb', [{ key: 'a', code: 'x' }], null)
+    await session.runCells('/other.ipynb', [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     expect(notebookApi.startKernel).toHaveBeenCalledWith({
       filePath: '/other.ipynb',
       python: VENV.path
@@ -274,11 +287,11 @@ describe('notebook kernel session', () => {
   it('starts one kernel when a second run lands during discovery', async () => {
     openFiles.current = [{ filePath: '/third.ipynb' }]
     await Promise.all([
-      session.runCells('/third.ipynb', [{ key: 'a', code: 'x' }], null),
-      session.runCells('/third.ipynb', [{ key: 'b', code: 'y' }], null)
+      session.runCells('/third.ipynb', [{ key: 'a', fileId: 'nb', code: 'x' }], null),
+      session.runCells('/third.ipynb', [{ key: 'b', fileId: 'nb', code: 'y' }], null)
     ])
     expect(notebookApi.startKernel).toHaveBeenCalledOnce()
-    expect(getSession('/third.ipynb').queue).toEqual([{ key: 'b', code: 'y' }])
+    expect(getSession('/third.ipynb').queue).toEqual([{ key: 'b', fileId: 'nb', code: 'y' }])
   })
 
   it.each([
@@ -287,16 +300,16 @@ describe('notebook kernel session', () => {
   ] as const)('recovers when %s rejects', async (_step, filePath, method) => {
     openFiles.current = [{ filePath }]
     notebookApi[method].mockRejectedValueOnce(new Error('not authorized'))
-    await session.runCells(filePath, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(filePath, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     expect(getSession(filePath)).toMatchObject({ status: 'off', queue: [] })
-    expect(JSON.stringify(getCellRun(filePath, 'a')?.outputs)).toContain('not authorized')
+    expect(JSON.stringify(cellOutputs.get('a'))).toContain('not authorized')
 
-    await session.runCells(filePath, [{ key: 'b', code: 'y' }], null)
+    await session.runCells(filePath, [{ key: 'b', fileId: 'nb', code: 'y' }], null)
     expect(notebookApi.execute).toHaveBeenCalledWith({ filePath, code: 'y' })
   })
 
   it('shuts the kernel down when the notebook tab closes', async () => {
-    await session.runCells(FILE, [{ key: 'a', code: 'x' }], null)
+    await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'x' }], null)
     for (const listener of appStoreListeners) {
       listener({ openFiles: [] }, { openFiles: openFiles.current })
     }
@@ -307,7 +320,7 @@ describe('notebook kernel session', () => {
   it('offers a restart when an interrupt gets no answer', async () => {
     vi.useFakeTimers()
     try {
-      await session.runCells(FILE, [{ key: 'a', code: 'while True: pass' }], null)
+      await session.runCells(FILE, [{ key: 'a', fileId: 'nb', code: 'while True: pass' }], null)
       session.interruptKernel(FILE)
       expect(notebookApi.interrupt).toHaveBeenCalledWith({ filePath: FILE })
       vi.advanceTimersByTime(9_000)

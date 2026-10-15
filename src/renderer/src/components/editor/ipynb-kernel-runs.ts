@@ -1,19 +1,26 @@
-import type { NotebookOutput } from './ipynb-kernel-outputs'
-import { runningCellKey, type CellRun, type NotebookKernelSession } from './ipynb-kernel-store'
+import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
+import { updateNotebookCellRun, writeNotebookDraft } from './ipynb-document-store'
+import { applyKernelOutput, type NotebookOutput } from './ipynb-kernel-outputs'
+import {
+  getSession,
+  runningCellKey,
+  updateSession,
+  type CellRun,
+  type NotebookKernelSession
+} from './ipynb-kernel-store'
 
-export function startRun(): CellRun {
+export function startRun(fileId: string): CellRun {
   return {
-    outputs: [],
+    fileId,
     clearOnNextOutput: false,
     executionCount: null,
     startedAt: Date.now(),
-    finishedAt: null,
-    committed: false
+    finishedAt: null
   }
 }
 
 /** Ends the executing run, if any, and drops every queued cell. */
-export function stopRuns(session: NotebookKernelSession, extraOutputs: NotebookOutput[] = []) {
+function stopRuns(session: NotebookKernelSession) {
   const key = runningCellKey(session)
   const run = key === null ? null : session.runs[key]
   return {
@@ -22,16 +29,52 @@ export function stopRuns(session: NotebookKernelSession, extraOutputs: NotebookO
     runs:
       key === null || !run
         ? session.runs
-        : {
-            ...session.runs,
-            [key]: { ...run, outputs: [...run.outputs, ...extraOutputs], finishedAt: Date.now() }
-          }
+        : { ...session.runs, [key]: { ...run, finishedAt: Date.now() } }
   }
 }
 
-/** Orca's own notices (no Python, install failures) are written as markdown outputs of the cell. */
-export function noticeOutput(markdown: string): NotebookOutput {
-  return { output_type: 'display_data', data: { 'text/markdown': markdown }, metadata: {} }
+/** Stops the session's runs; the executing run's outputs, plus `notice`, join the notebook's draft. */
+export function endRun(filePath: string, notice?: NotebookOutput): void {
+  const session = getSession(filePath)
+  const key = runningCellKey(session)
+  const run = key === null ? undefined : session.runs[key]
+  updateSession(filePath, stopRuns)
+  if (key !== null && run) {
+    if (notice) {
+      updateNotebookCellRun(run.fileId, key, {
+        outputs: (outputs) => [...outputs, notice]
+      })
+    }
+    writeNotebookDraft(run.fileId)
+  }
+}
+
+/** Writes a run's output frames into its notebook's document as one change. */
+export function applyOutputFrames(
+  filePath: string,
+  key: string,
+  frames: { type: KernelOutputType; content: Record<string, unknown> }[]
+): void {
+  const run = getSession(filePath).runs[key]
+  if (!run) {
+    return
+  }
+  let { clearOnNextOutput } = run
+  updateNotebookCellRun(run.fileId, key, {
+    outputs: (outputs) => {
+      const live = frames.reduce(
+        (next, frame) => applyKernelOutput(next, frame.type, frame.content),
+        { outputs, clearOnNextOutput }
+      )
+      clearOnNextOutput = live.clearOnNextOutput
+      return live.outputs
+    }
+  })
+  if (clearOnNextOutput !== run.clearOnNextOutput) {
+    updateSession(filePath, ({ runs }) => ({
+      runs: { ...runs, [key]: { ...(runs[key] ?? run), clearOnNextOutput } }
+    }))
+  }
 }
 
 export function fenced(text: string): string {

@@ -11,7 +11,11 @@ import {
   ORCA_EDITOR_FILE_SAVED_EVENT,
   type EditorFileSavedDetail
 } from './editor-autosave'
-import { flushPendingEditorChange, hasPendingEditorChange } from './editor-pending-flush'
+import {
+  flushPendingEditorChange,
+  getEditorBufferVersion,
+  hasPendingEditorChange
+} from './editor-buffer-owners'
 import {
   clearSelfWrite,
   recordSelfWrite,
@@ -26,7 +30,7 @@ export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 export type EditorSaveQueue = {
   queueSave: (
     file: OpenFile,
-    fallbackContent: string,
+    fallbackContent: string | undefined,
     trigger?: 'autosave' | 'user'
   ) => Promise<void>
   quiesceFileSave: (fileId: string) => Promise<void>
@@ -39,7 +43,11 @@ export type EditorSaveQueue = {
 // Why: keeping the save queue, quiesce coordination, and the debounce timers that feed it together avoids split-brain saves.
 export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveTimers = new Map<string, number>()
-  const autoSaveScheduledContent = new Map<string, string>()
+  // Why the owner version: a document model can change without writing a new draft.
+  const autoSaveScheduledContent = new Map<
+    string,
+    { draft: string | undefined; version: number | undefined }
+  >()
   const saveQueue = new Map<string, Promise<void>>()
   const saveGeneration = new Map<string, number>()
 
@@ -58,7 +66,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
   const queueSave = (
     file: OpenFile,
-    fallbackContent: string,
+    fallbackContent: string | undefined,
     trigger: 'autosave' | 'user' = 'user'
   ): Promise<void> => {
     clearAutoSaveTimer(file.id)
@@ -100,6 +108,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
         flushPendingEditorChange(file.id, trigger === 'autosave')
         const contentToSave = store.getState().editorDrafts[file.id] ?? fallbackContent
+        if (contentToSave === undefined) {
+          return
+        }
         if (
           trigger === 'autosave' &&
           hasPendingEditorChange(file.id) &&
@@ -197,7 +208,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         canAutoSaveOpenFile(file) &&
         // Why: suspension holds until the user picks a side via the banner (or saves manually).
         !isAutosaveSuspendedForFile(file) &&
-        draft !== undefined
+        (draft !== undefined || hasPendingEditorChange(fileId))
       if (!shouldKeepTimer) {
         clearAutoSaveTimer(fileId)
       }
@@ -212,7 +223,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       const draft = state.editorDrafts[file.id]
       if (
         !file.isDirty ||
-        draft === undefined ||
+        (draft === undefined && !hasPendingEditorChange(file.id)) ||
         !canAutoSaveOpenFile(file) ||
         isAutosaveSuspendedForFile(file)
       ) {
@@ -220,12 +231,18 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         continue
       }
 
-      if (autoSaveTimers.has(file.id) && autoSaveScheduledContent.get(file.id) === draft) {
+      const version = getEditorBufferVersion(file.id)
+      const scheduled = autoSaveScheduledContent.get(file.id)
+      if (
+        autoSaveTimers.has(file.id) &&
+        scheduled?.draft === draft &&
+        scheduled.version === version
+      ) {
         continue
       }
 
       clearAutoSaveTimer(file.id)
-      autoSaveScheduledContent.set(file.id, draft)
+      autoSaveScheduledContent.set(file.id, { draft, version })
       const timerId = window.setTimeout(() => {
         autoSaveTimers.delete(file.id)
         autoSaveScheduledContent.delete(file.id)

@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import { requestEditorSaveQuiesce } from './editor-autosave'
+import { discardEditorBufferChanges } from './editor-buffer-owners'
 
 /** "Don't Save": cancel pending saves, drop unsaved edits, then close the tab. */
 export async function discardEditorFileChangesAndClose(fileId: string): Promise<void> {
@@ -9,6 +10,7 @@ export async function discardEditorFileChangesAndClose(fileId: string): Promise<
   } catch (error) {
     console.warn('Autosave quiesce failed before discard', error)
   }
+  discardEditorBufferChanges(fileId)
   const state = useAppStore.getState()
   state.markFileDirty(fileId, false)
   // Why: a leftover draft makes closeFile keep a never-saved untitled placeholder on disk.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
-import { registerPendingEditorFlush } from '../editor-pending-flush'
+import { registerEditorBufferOwner } from '../editor-buffer-owners'
 import { ORCA_EDITOR_FILE_SAVED_EVENT } from '../editor-autosave'
 import type { CsvTextDocument } from './csv-text-document'
 import { editCsvTextCells } from './csv-text-cell-edits'
@@ -28,22 +28,22 @@ export function useCsvPendingCell({
     if (!fileId) {
       return
     }
-    const unregister = registerPendingEditorFlush(
-      fileId,
-      () => {
+    const unregister = registerEditorBufferOwner(fileId, {
+      flush: () => {
         if (!latest.current.commit()) {
           throw new Error('Resolve the pending CSV cell edit before saving.')
         }
       },
-      () => {
+      hasChange: () => {
         const draft = editingRef.current
         return Boolean(
           draft &&
           draft.value !==
             (latest.current.document?.rows[draft.sourceRow]?.[draft.position.column] ?? '')
         )
-      }
-    )
+      },
+      skipOnAutosave: true
+    })
     const saved = (event: Event): void => {
       if (!(event instanceof CustomEvent)) {
         return

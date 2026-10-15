@@ -15553,7 +15553,9 @@
           "earlierOutputHidden": "较早的输出已隐藏。",
           "moreOutputsHidden": "另有 {{count}} 个输出已隐藏。",
           "moreOutputsHidden_one": "另有 {{count}} 个输出已隐藏。",
-          "moreOutputsHidden_other": "另有 {{count}} 个输出已隐藏。"
+          "moreOutputsHidden_other": "另有 {{count}} 个输出已隐藏。",
+          "outputLimitReached": "此单元格的输出已达到大小上限，后续输出未保留。",
+          "tooLargeToSave": "此笔记本太大，无法保存。"
         },
         "MarkdownPreview": {
           "e4683f70c4": "取消",

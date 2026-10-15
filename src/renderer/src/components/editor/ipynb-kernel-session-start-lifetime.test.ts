@@ -16,6 +16,20 @@ const { appStoreListeners } = vi.hoisted(() => {
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+// The document store's side of the contract: outputs a run writes into each cell.
+const { cellOutputs } = vi.hoisted(() => ({ cellOutputs: new Map<string, unknown[]>() }))
+vi.mock('./ipynb-document-store', () => ({
+  updateNotebookCellRun: (
+    _fileId: string,
+    key: string,
+    run: { outputs?: (outputs: unknown[]) => unknown[] }
+  ) => {
+    if (run.outputs) {
+      cellOutputs.set(key, run.outputs(cellOutputs.get(key) ?? []))
+    }
+  },
+  writeNotebookDraft: vi.fn()
+}))
 vi.mock('@/store', () => ({
   useAppStore: {
     subscribe: (listener: AppStoreListener) => {
@@ -75,6 +89,7 @@ function finishFreshCell(): void {
 
 beforeEach(() => {
   closeNotebook()
+  cellOutputs.clear()
   store.setState({ environments: {} })
   vi.clearAllMocks()
   notebookApi.startKernel.mockReset().mockResolvedValue({ status: 'ready' })
@@ -105,10 +120,14 @@ describe('notebook start request session ownership', () => {
       notebookApi.startKernel
         .mockReturnValueOnce(oldReply.promise)
         .mockReturnValueOnce(freshReply.promise)
-      const old = session.runCells(FILE, [{ key: 'old', code: 'old cell' }], null)
+      const old = session.runCells(FILE, [{ key: 'old', fileId: 'nb', code: 'old cell' }], null)
       closeNotebook()
       reopenNotebook()
-      const fresh = session.runCells(FILE, [{ key: 'fresh', code: 'fresh cell' }], null)
+      const fresh = session.runCells(
+        FILE,
+        [{ key: 'fresh', fileId: 'nb', code: 'fresh cell' }],
+        null
+      )
       if (freshReadyFirst) {
         freshReply.resolve({ status: 'ready' })
         await fresh
@@ -143,8 +162,11 @@ describe('notebook start request session ownership', () => {
         status: 'ready',
         setup: null,
         queue: [],
-        runs: { fresh: { outputs: [{ output_type: 'stream', text: 'fresh output\n' }] } }
+        runs: { fresh: { fileId: 'nb' } }
       })
+      expect(cellOutputs.get('fresh')).toMatchObject([
+        { output_type: 'stream', text: 'fresh output\n' }
+      ])
     }
   )
 
@@ -155,11 +177,19 @@ describe('notebook start request session ownership', () => {
       const freshReply = Promise.withResolvers<KernelStartResult>()
       store.setState({ environments: {} })
       notebookApi.listPythonEnvironments.mockReturnValueOnce(discovered.promise)
-      const old = session.runCells(FILE, [{ key: 'old', code: 'old cell' }], '/workspace')
+      const old = session.runCells(
+        FILE,
+        [{ key: 'old', fileId: 'nb', code: 'old cell' }],
+        '/workspace'
+      )
       closeNotebook()
       reopenNotebook()
       notebookApi.startKernel.mockReturnValueOnce(freshReply.promise)
-      const fresh = session.runCells(FILE, [{ key: 'fresh', code: 'fresh cell' }], null)
+      const fresh = session.runCells(
+        FILE,
+        [{ key: 'fresh', fileId: 'nb', code: 'fresh cell' }],
+        null
+      )
       if (freshReadyFirst) {
         freshReply.resolve({ status: 'ready' })
         await fresh

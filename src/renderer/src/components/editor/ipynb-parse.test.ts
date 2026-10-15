@@ -4,17 +4,24 @@ import {
   insertIpynbCell,
   moveIpynbCell,
   clearIpynbOutputs,
+  serializeIpynbDocument,
   updateIpynbCellKind,
-  updateIpynbCellRun,
+  updateIpynbCodeCell,
   updateIpynbCellSource,
-  updateIpynbCellSources,
   withIpynbCellIds
 } from './ipynb-cell-mutations'
 import {
   concatIpynbMultilineString,
   parseIpynb,
-  translateKernelLanguageToMonaco
+  parseIpynbDocument,
+  translateKernelLanguageToMonaco,
+  type IpynbDocument
 } from './ipynb-parse'
+
+/** Applies a document change to notebook text and returns the saved JSON. */
+function edited(content: string, change: (document: IpynbDocument) => IpynbDocument) {
+  return JSON.parse(serializeIpynbDocument(change(parseIpynbDocument(content))))
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -102,7 +109,9 @@ describe('ipynb parsing', () => {
       cells: [{ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }]
     })
 
-    const updated = JSON.parse(updateIpynbCellSource(content, 0, 'print("hi")\nprint("bye")'))
+    const updated = edited(content, (doc) =>
+      updateIpynbCellSource(doc, 0, 'print("hi")\nprint("bye")')
+    )
     expect(updated.metadata).toEqual({ custom: true })
     expect(updated.cells[0].source).toEqual(['print("hi")\n', 'print("bye")'])
   })
@@ -118,35 +127,13 @@ describe('ipynb parsing', () => {
     const match = vi.spyOn(String.prototype, 'match')
     const source = `${'print(1)\n'.repeat(5000)}last`
 
-    const updated = JSON.parse(updateIpynbCellSource(content, 0, source))
+    const updated = edited(content, (doc) => updateIpynbCellSource(doc, 0, source))
 
     expect(updated.cells[0].source).toHaveLength(5001)
     expect(updated.cells[0].source[0]).toBe('print(1)\n')
     expect(updated.cells[0].source.at(-1)).toBe('last')
     expect(split).not.toHaveBeenCalled()
     expect(match).not.toHaveBeenCalled()
-  })
-
-  it('serializes batched source edits with one notebook mutation', () => {
-    const content = JSON.stringify({
-      nbformat: 4,
-      nbformat_minor: 5,
-      metadata: { custom: true },
-      cells: [
-        { cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] },
-        { cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }
-      ]
-    })
-
-    const updated = JSON.parse(
-      updateIpynbCellSources(content, [
-        { index: 0, source: 'x = 41' },
-        { index: 1, source: 'print(x + 1)' }
-      ])
-    )
-    expect(updated.metadata).toEqual({ custom: true })
-    expect(updated.cells[0].source).toEqual(['x = 41'])
-    expect(updated.cells[1].source).toEqual(['print(x + 1)'])
   })
 
   it('inserts, deletes, and changes cell kinds', () => {
@@ -157,7 +144,7 @@ describe('ipynb parsing', () => {
       cells: [{ cell_type: 'markdown', metadata: {}, source: ['# Title'] }]
     })
 
-    const inserted = JSON.parse(insertIpynbCell(content, 1, 'code', 'python'))
+    const inserted = edited(content, (doc) => insertIpynbCell(doc, 1, 'code', 'python'))
     expect(inserted.cells).toHaveLength(2)
     expect(inserted.cells[1]).toMatchObject({
       cell_type: 'code',
@@ -166,10 +153,12 @@ describe('ipynb parsing', () => {
       metadata: { vscode: { languageId: 'python' } }
     })
 
-    const changed = JSON.parse(updateIpynbCellKind(JSON.stringify(inserted), 0, 'code', 'python'))
+    const changed = edited(JSON.stringify(inserted), (doc) =>
+      updateIpynbCellKind(doc, 0, 'code', 'python')
+    )
     expect(changed.cells[0]).toMatchObject({ cell_type: 'code', outputs: [] })
 
-    const deleted = JSON.parse(deleteIpynbCell(JSON.stringify(changed), 1))
+    const deleted = edited(JSON.stringify(changed), (doc) => deleteIpynbCell(doc, 1))
     expect(deleted.cells).toHaveLength(1)
   })
 
@@ -192,40 +181,42 @@ describe('ipynb parsing', () => {
       ]
     })
 
-    const movedDown = JSON.parse(moveIpynbCell(content, 0, 1))
+    const movedDown = edited(content, (doc) => moveIpynbCell(doc, 0, 1))
     expect(movedDown.cells.map((cell: { id: string }) => cell.id)).toEqual(['b', 'a', 'c'])
     expect(movedDown.cells[0].metadata).toEqual({ keep: true })
 
-    const movedUp = JSON.parse(moveIpynbCell(JSON.stringify(movedDown), 2, -1))
+    const movedUp = edited(JSON.stringify(movedDown), (doc) => moveIpynbCell(doc, 2, -1))
     expect(movedUp.cells.map((cell: { id: string }) => cell.id)).toEqual(['b', 'c', 'a'])
 
-    expect(moveIpynbCell(content, 0, -1)).toBe(content)
-    expect(moveIpynbCell(content, 2, 1)).toBe(content)
+    const document = parseIpynbDocument(content)
+    expect(moveIpynbCell(document, 0, -1)).toBe(document)
+    expect(moveIpynbCell(document, 2, 1)).toBe(document)
   })
 
-  it('writes a kernel run into the cell, storing stream text as lines', () => {
+  it('writes a kernel run into the cell, storing stream text as lines without display ids', () => {
     const content = JSON.stringify({
       nbformat: 4,
       nbformat_minor: 5,
       metadata: {},
-      cells: [{ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }]
+      cells: [
+        { id: 'a', cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }
+      ]
     })
 
-    const updated = JSON.parse(
-      updateIpynbCellRun(
-        content,
-        0,
-        [
+    const updated = edited(content, (doc) =>
+      updateIpynbCodeCell(doc, 'a', {
+        outputs: () => [
           { output_type: 'stream', name: 'stdout', text: 'a\nb' },
           {
             output_type: 'execute_result',
             execution_count: 7,
             data: { 'text/plain': '42' },
-            metadata: {}
+            metadata: {},
+            transient: { display_id: 'd' }
           }
         ],
-        7
-      )
+        executionCount: 7
+      })
     )
     expect(updated.cells[0].execution_count).toBe(7)
     expect(updated.cells[0].outputs).toEqual([
@@ -240,23 +231,32 @@ describe('ipynb parsing', () => {
   })
 
   it('serializes newline-heavy stream output without regex match or split helpers', () => {
-    const content = JSON.stringify({
-      nbformat: 4,
-      nbformat_minor: 5,
-      metadata: {},
-      cells: [{ cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }]
+    const document = parseIpynbDocument(
+      JSON.stringify({
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {},
+        cells: [
+          {
+            id: 'a',
+            cell_type: 'code',
+            metadata: {},
+            execution_count: null,
+            outputs: [],
+            source: []
+          }
+        ]
+      })
+    )
+    const run = updateIpynbCodeCell(document, 'a', {
+      outputs: () => [
+        { output_type: 'stream', name: 'stdout', text: `${'line\n'.repeat(5000)}tail` }
+      ]
     })
     const split = vi.spyOn(String.prototype, 'split')
     const match = vi.spyOn(String.prototype, 'match')
 
-    const updated = JSON.parse(
-      updateIpynbCellRun(
-        content,
-        0,
-        [{ output_type: 'stream', name: 'stdout', text: `${'line\n'.repeat(5000)}tail` }],
-        1
-      )
-    )
+    const updated = JSON.parse(serializeIpynbDocument(run))
 
     expect(updated.cells[0].outputs[0].text).toHaveLength(5001)
     expect(updated.cells[0].outputs[0].text.at(-1)).toBe('tail')
@@ -280,7 +280,7 @@ describe('ipynb parsing', () => {
         }
       ]
     })
-    const cleared = JSON.parse(clearIpynbOutputs(content))
+    const cleared = edited(content, clearIpynbOutputs)
     expect(cleared.cells[0]).toEqual({ cell_type: 'markdown', metadata: {}, source: ['# hi'] })
     expect(cleared.cells[1]).toMatchObject({ execution_count: null, outputs: [] })
   })
@@ -295,10 +295,11 @@ describe('ipynb parsing', () => {
         { cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [] }
       ]
     })
-    const upgraded = JSON.parse(withIpynbCellIds(content))
+    const upgraded = edited(content, withIpynbCellIds)
     expect(upgraded.nbformat_minor).toBe(5)
     expect(upgraded.cells[0].id).toBe('kept')
     expect(upgraded.cells[1].id).toMatch(/^[\w-]+$/)
-    expect(withIpynbCellIds(JSON.stringify(upgraded))).toBe(JSON.stringify(upgraded))
+    const document = parseIpynbDocument(JSON.stringify(upgraded))
+    expect(withIpynbCellIds(document)).toBe(document)
   })
 })

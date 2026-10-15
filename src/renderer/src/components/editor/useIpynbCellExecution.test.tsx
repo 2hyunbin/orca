@@ -1,39 +1,36 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseIpynb } from './ipynb-parse'
+import { parseIpynbDocumentView } from './ipynb-parse'
 import type { KernelFrameEvent } from '../../../../shared/notebook-kernel-types'
 
-const { getConnectionIdMock, notebookApi, toastError, frameListener } = vi.hoisted(() => {
-  const frameListener = { current: (_event: KernelFrameEvent): void => {} }
+const { getConnectionIdMock, notebookApi, toastError } = vi.hoisted(() => {
   const notebookApi = {
     listPythonEnvironments: vi.fn(),
     startKernel: vi.fn(),
     execute: vi.fn(),
     shutdownKernel: vi.fn(),
-    onKernelFrame: vi.fn((listener: (event: KernelFrameEvent) => void) => {
-      frameListener.current = listener
-      return () => {}
-    })
+    onKernelFrame: vi.fn((_listener: (event: KernelFrameEvent) => void) => () => {})
   }
   // The kernel session subscribes to kernel frames when it loads.
   Object.defineProperty(window, 'api', { configurable: true, value: { notebook: notebookApi } })
   return {
     getConnectionIdMock: vi.fn((): string | null => null),
     notebookApi,
-    toastError: vi.fn(),
-    frameListener
+    toastError: vi.fn()
   }
 })
 
 vi.mock('@/lib/connection-context', () => ({ getConnectionId: getConnectionIdMock }))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
-vi.mock('@/store', () => ({ useAppStore: { subscribe: () => () => {} } }))
+vi.mock('@/store', async () => ({
+  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+}))
 
 import { useIpynbCellExecution } from './useIpynbCellExecution'
-import { runCells, trustNotebook } from './ipynb-kernel-session'
-import { getSession } from './ipynb-kernel-store'
+import { getNotebookDocumentView, openNotebookDocument } from './ipynb-document-store'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
 
 function notebookContent(withIds: boolean): string {
   return JSON.stringify({
@@ -54,21 +51,23 @@ function notebookContent(withIds: boolean): string {
   })
 }
 
-function renderExecution(filePath: string, applyContent = vi.fn(), withIds = true) {
-  let content = notebookContent(withIds)
-  applyContent.mockImplementation((next: string) => {
-    content = next
-  })
+function renderExecution(filePath: string, withIds = true) {
+  notebookTestAppStore.setState({ openFiles: [] })
+  openNotebookTestFile('notebook', filePath)
+  openNotebookDocument('notebook', notebookContent(withIds))
   const hook = renderHook(() =>
     useIpynbCellExecution({
+      fileId: 'notebook',
       filePath,
       worktreeId: 'worktree-a',
-      rootPath: '/repo',
-      flushSourceDrafts: () => content,
-      applyContent
+      rootPath: '/repo'
     })
   )
-  return { hook, applyContent, content: () => content }
+  const cells = () => {
+    const document = getNotebookDocumentView('notebook')?.document
+    return document ? parseIpynbDocumentView(document).cells : []
+  }
+  return { hook, cells }
 }
 
 beforeEach(() => {
@@ -90,7 +89,9 @@ describe('notebook cell execution', () => {
     const { hook } = renderExecution('/repo/trust.ipynb')
 
     act(() => hook.result.current.runCell(1))
-    expect(hook.result.current.pendingRun).toEqual([{ key: 'run', code: 'print(42)' }])
+    expect(hook.result.current.pendingRun).toEqual([
+      { key: 'run', code: 'print(42)', fileId: 'notebook' }
+    ])
     expect(notebookApi.startKernel).not.toHaveBeenCalled()
 
     act(() => hook.result.current.confirmPendingRun())
@@ -108,169 +109,23 @@ describe('notebook cell execution', () => {
 
   it('refuses to run in SSH workspaces without touching the notebook or starting a kernel', () => {
     getConnectionIdMock.mockReturnValue('ssh-connection')
-    const { hook, applyContent } = renderExecution('/remote/notebook.ipynb')
+    const { hook } = renderExecution('/remote/notebook.ipynb', false)
 
     act(() => hook.result.current.runCell(1))
     expect(toastError).toHaveBeenCalledWith(
       'Notebook cells can only run for files on this computer.'
     )
-    expect(applyContent).not.toHaveBeenCalled()
+    expect(notebookTestAppStore.getState().openFiles[0]?.isDirty).toBe(false)
     expect(hook.result.current.pendingRun).toBeNull()
     expect(notebookApi.startKernel).not.toHaveBeenCalled()
   })
 
   it('gives id-less cells ids before queueing, so output follows a moved cell', () => {
-    const { hook, content } = renderExecution('/repo/legacy.ipynb', vi.fn(), false)
+    const { hook, cells } = renderExecution('/repo/legacy.ipynb', false)
 
     act(() => hook.result.current.runCell(1))
     const [cell] = hook.result.current.pendingRun ?? []
-    const { cells } = parseIpynb(content())
-    expect(cells[1]?.id).toBeTruthy()
-    expect(cell?.key).toBe(cells[1]?.id)
+    expect(cells()[1]?.id).toBeTruthy()
+    expect(cell?.key).toBe(cells()[1]?.id)
   })
-})
-
-function completedNotebookContent(count: number): string {
-  return JSON.stringify({
-    nbformat: 4,
-    nbformat_minor: 5,
-    metadata: { language_info: { name: 'python' }, custom: { keep: true } },
-    cells: Array.from({ length: count }, (_, index) => ({
-      id: `cell-${index}`,
-      cell_type: 'code',
-      metadata: { tags: ['keep'] },
-      execution_count: null,
-      outputs: [],
-      source: [`print(${index})\n`]
-    }))
-  })
-}
-
-async function finishHiddenRuns(filePath: string, count: number): Promise<void> {
-  trustNotebook(filePath)
-  await runCells(
-    filePath,
-    Array.from({ length: count }, (_, index) => ({
-      key: `cell-${index}`,
-      code: `print(${index})`
-    })),
-    '/repo'
-  )
-  for (let index = 0; index < count; index += 1) {
-    frameListener.current({
-      filePath,
-      frame: { type: 'stream', content: { name: 'stdout', text: `α😀 ${index}\nsecond\n` } }
-    })
-    frameListener.current({
-      filePath,
-      frame: {
-        type: 'display_data',
-        content: {
-          data: { 'text/plain': `result ${index}` },
-          metadata: { keep: true },
-          transient: { display_id: `display-${index}` }
-        }
-      }
-    })
-    frameListener.current({
-      filePath,
-      frame: { type: 'done', status: 'ok', execution_count: index + 1 }
-    })
-  }
-}
-
-function mountFinishedNotebook(filePath: string, content: string) {
-  const applyContent = vi.fn()
-  const flushSourceDrafts = vi.fn(() => content)
-  const hook = renderHook(() =>
-    useIpynbCellExecution({
-      filePath,
-      worktreeId: 'worktree-a',
-      rootPath: '/repo',
-      flushSourceDrafts,
-      applyContent
-    })
-  )
-  return { hook, applyContent, flushSourceDrafts }
-}
-
-describe('finished notebook runs retained while the viewer is hidden', () => {
-  it('persists all completed outputs with one serialization when the viewer remounts', async () => {
-    const filePath = '/repo/hidden-batch.ipynb'
-    const content = completedNotebookContent(20)
-    await finishHiddenRuns(filePath, 20)
-    expect(Object.values(getSession(filePath).runs).every((run) => !run.committed)).toBe(true)
-    const serialize = vi.spyOn(JSON, 'stringify')
-    const { hook, applyContent, flushSourceDrafts } = mountFinishedNotebook(filePath, content)
-    expect(serialize).toHaveBeenCalledTimes(1)
-    serialize.mockRestore()
-    expect(flushSourceDrafts).toHaveBeenCalledTimes(1)
-    expect(applyContent).toHaveBeenCalledTimes(1)
-    const saved: unknown = applyContent.mock.calls[0]?.[0]
-    expect(typeof saved).toBe('string')
-    if (typeof saved !== 'string') {
-      throw new Error('Expected saved notebook text')
-    }
-    const cells = parseIpynb(saved).cells
-    expect(cells).toHaveLength(20)
-    for (let index = 0; index < cells.length; index += 1) {
-      expect(cells[index]?.executionCount).toBe(index + 1)
-      expect(cells[index]?.outputs[0]).toEqual({
-        kind: 'stream',
-        name: 'stdout',
-        drawn: { text: `α😀 ${index}\nsecond\n`, truncated: false }
-      })
-      expect(cells[index]?.outputs[1]).toMatchObject({
-        kind: 'display',
-        items: [{ mime: 'text/plain', value: `result ${index}` }]
-      })
-    }
-    expect(saved).toContain('"custom"')
-    expect(saved).toContain('"tags"')
-    expect(saved).not.toContain('"transient"')
-    expect(
-      Object.values(getSession(filePath).runs).every(
-        (run) => run.committed && run.outputs.length === 0
-      )
-    ).toBe(true)
-    hook.unmount()
-  })
-
-  it('preserves the saved prefix when a later raw cell refuses the update and retires every run', async () => {
-    const filePath = '/repo/hidden-refused-middle.ipynb'
-    const content = completedNotebookContent(3)
-    const raw: unknown = JSON.parse(content)
-    if (typeof raw !== 'object' || raw === null || !('cells' in raw) || !Array.isArray(raw.cells)) {
-      throw new Error('Expected notebook cells')
-    }
-    raw.cells.splice(1, 0, null)
-    await finishHiddenRuns(filePath, 3)
-    const { hook, applyContent } = mountFinishedNotebook(filePath, JSON.stringify(raw))
-    expect(applyContent).toHaveBeenCalledTimes(1)
-    const saved: unknown = applyContent.mock.calls[0]?.[0]
-    if (typeof saved !== 'string') {
-      throw new Error('Expected saved prefix')
-    }
-    const cells = parseIpynb(saved).cells
-    expect(cells.map((cell) => cell.executionCount)).toEqual([1, null, null])
-    expect(cells.map((cell) => cell.outputs.length)).toEqual([2, 0, 0])
-    expect(
-      Object.values(getSession(filePath).runs).every(
-        (run) => run.committed && run.outputs.length === 0
-      )
-    ).toBe(true)
-    hook.unmount()
-  })
-
-  it.each(['{', '{"cells":[null,{"id":"cell-0","cell_type":"code","source":[]}]}'])(
-    'retires runs without changing a document that refuses its first update: %s',
-    async (content) => {
-      const filePath = `/repo/hidden-refused-first-${content}.ipynb`
-      await finishHiddenRuns(filePath, 1)
-      const { hook, applyContent } = mountFinishedNotebook(filePath, content)
-      expect(applyContent).not.toHaveBeenCalled()
-      expect(getSession(filePath).runs['cell-0']).toMatchObject({ committed: true, outputs: [] })
-      hook.unmount()
-    }
-  )
 })

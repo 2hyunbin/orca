@@ -76,7 +76,7 @@ export function applyKernelOutput<T extends LiveOutputs>(
   return { ...live, outputs: [...outputs, output], clearOnNextOutput: false }
 }
 
-/** Drops live-only fields so the outputs are valid nbformat. */
-export function toStoredOutputs(outputs: NotebookOutput[]): NotebookOutput[] {
-  return outputs.map(({ transient: _transient, ...output }) => output)
+/** Orca's own notices (no Python, install failures) are written as markdown outputs of the cell. */
+export function noticeOutput(markdown: string): NotebookOutput {
+  return { output_type: 'display_data', data: { 'text/markdown': markdown }, metadata: {} }
 }

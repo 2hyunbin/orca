@@ -1,13 +1,14 @@
 // @vitest-environment happy-dom
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { editor } from 'monaco-editor'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IpynbCellSource } from './IpynbCellEditor'
-import { parseIpynb } from './ipynb-parse'
+import { parseIpynb, parseIpynbDocumentView } from './ipynb-parse'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
 import {
   getIpynbCellKey,
-  hasIpynbSourceDraft,
+  useIpynbDocument,
   useIpynbDocumentEditing
 } from './useIpynbDocumentEditing'
 
@@ -25,10 +26,8 @@ vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
   translate: (_key: string, fallback: string) => fallback
 }))
-vi.mock('@/store', () => ({
-  useAppStore: (
-    selector: (state: { settings: undefined; editorFontZoomLevel: number }) => unknown
-  ) => selector({ settings: undefined, editorFontZoomLevel: 0 })
+vi.mock('@/store', async () => ({
+  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
 }))
 vi.mock('@/hooks/use-document-dark-theme', () => ({ useDocumentDarkTheme: () => true }))
 vi.mock('./MonacoCodeExcerpt', () => ({ useMonacoColorizedLines: () => [] }))
@@ -92,38 +91,26 @@ function notebookContent(
   })
 }
 
-function NotebookCells({
-  content,
-  onContentChange,
-  onDirtyStateHint
-}: {
-  content: string
-  onContentChange: (content: string) => void
-  onDirtyStateHint: (dirty: boolean) => void
-}): React.JSX.Element {
-  const notebook = useMemo(() => parseIpynb(content), [content])
+const FILE_ID = 'external-notebook'
+
+function NotebookCells({ content }: { content: string }): React.JSX.Element {
+  const { document } = useIpynbDocument(FILE_ID, content)
+  const notebook = document ? parseIpynbDocumentView(document) : null
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null)
   const editing = useIpynbDocumentEditing({
-    content,
-    fileId: 'external-notebook',
-    notebook,
-    onContentChange,
-    onDirtyStateHint,
+    fileId: FILE_ID,
+    language: notebook?.language ?? 'python',
     onDeactivateEditor: () => setEditingCellKey(null)
   })
   return (
     <div ref={editing.setRootRef}>
-      {notebook.cells.map((cell, index) => {
+      {notebook?.cells.map((cell, index) => {
         const key = getIpynbCellKey(cell, index)
         return (
           <IpynbCellSource
             key={key}
             cell={cell}
-            source={
-              hasIpynbSourceDraft(editing.sourceDrafts, key)
-                ? (editing.sourceDrafts[key] ?? '')
-                : cell.source
-            }
+            source={cell.source}
             active={editingCellKey === key}
             onActivate={() => setEditingCellKey(key)}
             onDeactivate={() => setEditingCellKey(null)}
@@ -133,6 +120,15 @@ function NotebookCells({
       })}
     </div>
   )
+}
+
+/** The notebook text the document last wrote as the file's draft. */
+function committedContent(): string | undefined {
+  return notebookTestAppStore.getState().editorDrafts[FILE_ID]
+}
+
+function isDirty(): boolean {
+  return notebookTestAppStore.getState().openFiles[0]?.isDirty === true
 }
 
 function activeModel(): editor.ITextModel {
@@ -158,6 +154,8 @@ function appendText(model: editor.ITextModel, text: string): void {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  notebookTestAppStore.setState({ openFiles: [] })
+  openNotebookTestFile(FILE_ID)
 })
 afterEach(() => {
   cleanup()
@@ -171,63 +169,40 @@ afterEach(() => {
 
 describe('active notebook cell external reload', () => {
   it('shows the new source without dirtying the clean notebook or recreating the model', () => {
-    const onContentChange = vi.fn<(content: string) => void>()
-    const onDirtyStateHint = vi.fn<(dirty: boolean) => void>()
     const initialContent = notebookContent([{ id: 'a', source: 'original source' }])
-    const { rerender } = render(
-      <NotebookCells content={initialContent} {...{ onContentChange, onDirtyStateHint }} />
-    )
+    const { rerender } = render(<NotebookCells content={initialContent} />)
     fireEvent.mouseDown(screen.getByRole('button', { name: 'original source' }), { button: 0 })
     const model = activeModel()
     expect(model.getValue()).toBe('original source')
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
+    expect(isDirty()).toBe(false)
 
     rerender(
-      <NotebookCells
-        content={notebookContent([{ id: 'a', source: 'updated from disk' }])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
+      <NotebookCells content={notebookContent([{ id: 'a', source: 'updated from disk' }])} />
     )
 
     expect(liveModels).toEqual([model])
     expect(model.getValue()).toBe('updated from disk')
-    expect(onContentChange).not.toHaveBeenCalled()
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
+    expect(committedContent()).toBeUndefined()
+    expect(isDirty()).toBe(false)
     expect(widgetCalls.focus).toHaveBeenCalledOnce()
     appendText(model, '!')
-    const committedContent = onContentChange.mock.calls.at(-1)?.[0]
-    expect(committedContent).toBeDefined()
-    expect(parseIpynb(committedContent ?? '').cells[0]?.source).toBe('updated from disk!')
+    expect(parseIpynb(committedContent() ?? '').cells[0]?.source).toBe('updated from disk!')
   })
 
   it('writes edits to the same cell after a clean external reload reorders it', () => {
-    const onContentChange = vi.fn<(content: string) => void>()
-    const onDirtyStateHint = vi.fn<(dirty: boolean) => void>()
     const first = { id: 'a', source: 'active source' }
     const second = { id: 'b', source: 'other source' }
-    const { rerender } = render(
-      <NotebookCells
-        content={notebookContent([first, second])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
-    )
+    const { rerender } = render(<NotebookCells content={notebookContent([first, second])} />)
     fireEvent.mouseDown(screen.getByRole('button', { name: first.source }), { button: 0 })
     const model = activeModel()
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
+    expect(isDirty()).toBe(false)
 
-    rerender(
-      <NotebookCells
-        content={notebookContent([second, first])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
-    )
+    rerender(<NotebookCells content={notebookContent([second, first])} />)
     expect(liveModels).toEqual([model])
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
+    expect(isDirty()).toBe(false)
     appendText(model, '!')
 
-    const committedContent = onContentChange.mock.calls.at(-1)?.[0]
-    expect(committedContent).toBeDefined()
-    const cells = parseIpynb(committedContent ?? '').cells
+    const cells = parseIpynb(committedContent() ?? '').cells
     expect(cells.map(({ id, source }) => ({ id, source }))).toEqual([
       second,
       { ...first, source: 'active source!' }
@@ -235,50 +210,33 @@ describe('active notebook cell external reload', () => {
   })
 
   it('retains undo for external source changes and treats undo as a user edit', async () => {
-    const onContentChange = vi.fn<(content: string) => void>()
-    const onDirtyStateHint = vi.fn<(dirty: boolean) => void>()
     const { rerender } = render(
-      <NotebookCells
-        content={notebookContent([{ id: 'a', source: 'original source' }])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
+      <NotebookCells content={notebookContent([{ id: 'a', source: 'original source' }])} />
     )
     fireEvent.mouseDown(screen.getByRole('button', { name: 'original source' }), { button: 0 })
     const model = activeModel()
-    rerender(
-      <NotebookCells
-        content={notebookContent([{ id: 'a', source: 'updated source' }])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
-    )
+    rerender(<NotebookCells content={notebookContent([{ id: 'a', source: 'updated source' }])} />)
 
     expect(model.canUndo()).toBe(true)
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
+    expect(isDirty()).toBe(false)
     await act(async () => {
       await model.undo()
       vi.advanceTimersByTime(400)
     })
     expect(model.getValue()).toBe('original source')
-    expect(onDirtyStateHint).toHaveBeenCalledWith(true)
-    const committedContent = onContentChange.mock.calls.at(-1)?.[0]
-    expect(parseIpynb(committedContent ?? '').cells[0]?.source).toBe('original source')
+    expect(isDirty()).toBe(true)
+    expect(parseIpynb(committedContent() ?? '').cells[0]?.source).toBe('original source')
   })
 
   it('updates language, wrapping and height when a clean reload changes the active cell', () => {
-    const onContentChange = vi.fn<(content: string) => void>()
-    const onDirtyStateHint = vi.fn<(dirty: boolean) => void>()
     const { rerender } = render(
-      <NotebookCells
-        content={notebookContent([{ id: 'a', source: 'original source' }])}
-        {...{ onContentChange, onDirtyStateHint }}
-      />
+      <NotebookCells content={notebookContent([{ id: 'a', source: 'original source' }])} />
     )
     fireEvent.mouseDown(screen.getByRole('button', { name: 'original source' }), { button: 0 })
     const model = activeModel()
     rerender(
       <NotebookCells
         content={notebookContent([{ id: 'a', source: 'updated source' }], 'javascript')}
-        {...{ onContentChange, onDirtyStateHint }}
       />
     )
     expect(model.getLanguageId()).toBe('javascript')
@@ -292,7 +250,6 @@ describe('active notebook cell external reload', () => {
         content={notebookContent([
           { id: 'a', kind: 'markdown', source: '**Updated**\n\nParagraph' }
         ])}
-        {...{ onContentChange, onDirtyStateHint }}
       />
     )
     expect(liveModels).toEqual([model])
@@ -302,7 +259,7 @@ describe('active notebook cell external reload', () => {
     )
     expect(widgetCalls.layout).toHaveBeenCalled()
     expect(model.getValue()).toBe('**Updated**\n\nParagraph')
-    expect(onDirtyStateHint).not.toHaveBeenCalled()
-    expect(onContentChange).not.toHaveBeenCalled()
+    expect(isDirty()).toBe(false)
+    expect(committedContent()).toBeUndefined()
   })
 })

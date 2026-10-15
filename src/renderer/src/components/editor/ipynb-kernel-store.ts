@@ -2,18 +2,20 @@ import { useStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import { createStore } from 'zustand/vanilla'
 import type { PythonEnvironment } from '../../../../shared/notebook-kernel-types'
-import type { LiveOutputs } from './ipynb-kernel-outputs'
 import { isRecord } from './ipynb-parse'
 
-export type QueuedCell = { key: string; code: string }
+/** A cell to run; `fileId` is the open notebook whose document receives its output. */
+export type QueuedCell = { key: string; code: string; fileId: string }
 
-/** A cell's latest run. Outputs live here until the open notebook writes them into its document. */
-export type CellRun = LiveOutputs & {
+/** A cell's latest run; its outputs are written straight into the notebook document. */
+export type CellRun = {
+  fileId: string
+  /** `clear_output(wait=True)`: clear when the next output arrives, so updates do not flicker. */
+  clearOnNextOutput: boolean
   executionCount: number | null
   startedAt: number
   /** Null while the cell is executing. */
   finishedAt: number | null
-  committed: boolean
 }
 
 type KernelStatus = 'off' | 'starting' | 'ready' | 'dead'
@@ -120,18 +122,6 @@ export function useCellRun(
       const session = state.sessions[filePath] ?? IDLE_SESSION
       return { run: session.runs[key], queued: session.queue.some((cell) => cell.key === key) }
     })
-  )
-}
-
-/** Finished runs whose outputs are not yet in the notebook document. */
-export function useUncommittedRunKeys(filePath: string): string[] {
-  return useStore(
-    store,
-    useShallow((state) =>
-      Object.entries(state.sessions[filePath]?.runs ?? {})
-        .filter(([, run]) => run.finishedAt !== null && !run.committed)
-        .map(([key]) => key)
-    )
   )
 }
 

@@ -4,7 +4,7 @@ import {
   requestEditorSaveQuiesce,
   type EditorFileSavedDetail
 } from '@/components/editor/editor-autosave'
-import { flushPendingEditorChange } from '@/components/editor/editor-pending-flush'
+import { flushPendingEditorChange } from '@/components/editor/editor-buffer-owners'
 import { getConnectionIdForFile } from '@/lib/connection-context'
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import { useAppStore } from '@/store'

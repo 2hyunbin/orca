@@ -15553,7 +15553,9 @@
           "earlierOutputHidden": "이전 출력은 숨겨져 있습니다.",
           "moreOutputsHidden": "출력 {{count}}개가 더 숨겨져 있습니다.",
           "moreOutputsHidden_one": "출력 {{count}}개가 더 숨겨져 있습니다.",
-          "moreOutputsHidden_other": "출력 {{count}}개가 더 숨겨져 있습니다."
+          "moreOutputsHidden_other": "출력 {{count}}개가 더 숨겨져 있습니다.",
+          "outputLimitReached": "이 셀의 출력이 크기 제한에 도달하여 이후 출력은 보관되지 않았습니다.",
+          "tooLargeToSave": "이 노트북은 너무 커서 저장할 수 없습니다."
         },
         "MarkdownPreview": {
           "e4683f70c4": "취소",

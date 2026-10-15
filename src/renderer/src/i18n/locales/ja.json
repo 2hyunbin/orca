@@ -15553,7 +15553,9 @@
           "earlierOutputHidden": "以前の出力は非表示です。",
           "moreOutputsHidden": "さらに {{count}} 件の出力が非表示です。",
           "moreOutputsHidden_one": "さらに {{count}} 件の出力が非表示です。",
-          "moreOutputsHidden_other": "さらに {{count}} 件の出力が非表示です。"
+          "moreOutputsHidden_other": "さらに {{count}} 件の出力が非表示です。",
+          "outputLimitReached": "このセルの出力はサイズ上限に達したため、以降の出力は保持されませんでした。",
+          "tooLargeToSave": "このノートブックは大きすぎて保存できません。"
         },
         "MarkdownPreview": {
           "e4683f70c4": "キャンセル",

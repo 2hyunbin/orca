@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
-import { applyKernelOutput, toStoredOutputs, type LiveOutputs } from './ipynb-kernel-outputs'
+import { serializeIpynbDocument } from './ipynb-cell-mutations'
+import { applyKernelOutput, type LiveOutputs } from './ipynb-kernel-outputs'
 import { collapseCarriageReturns } from './ipynb-stream-text'
 
 const EMPTY: LiveOutputs = { outputs: [], clearOnNextOutput: false }
@@ -201,7 +202,8 @@ describe('applyKernelOutput', () => {
         { data: { 'text/plain': '100%' }, metadata: {}, transient: { display_id: 'p' } }
       ]
     ])
-    expect(toStoredOutputs(live.outputs)).toEqual([
+    const saved = serializeIpynbDocument({ root: {}, cells: [{ outputs: live.outputs }] })
+    expect(JSON.parse(saved).cells[0].outputs).toEqual([
       { output_type: 'display_data', data: { 'text/plain': '100%' }, metadata: {} },
       { output_type: 'display_data', data: { 'text/plain': 'other' }, metadata: {} }
     ])

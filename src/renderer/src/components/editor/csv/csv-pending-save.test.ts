@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { createEditorSaveQueue } from '../editor-save-queue'
-import { registerPendingEditorFlush } from '../editor-pending-flush'
+import { registerEditorBufferOwner } from '../editor-buffer-owners'
 import {
   createEditorStore,
   stubEditorWindowWithDisk
@@ -27,9 +27,9 @@ function setup() {
 
 it('autosave flushes a legacy editor and reads its updated draft before writing', async () => {
   const { disk, store, file, queue } = setup()
-  const unregister = registerPendingEditorFlush(file.id, () =>
-    store.getState().setEditorDraft(file.id, 'header\nlatest')
-  )
+  const unregister = registerEditorBufferOwner(file.id, {
+    flush: () => store.getState().setEditorDraft(file.id, 'header\nlatest')
+  })
   try {
     await queue.queueSave(file, 'header\nstale', 'autosave')
     expect(disk.files.get(file.filePath)).toBe('header\nlatest')
@@ -42,8 +42,10 @@ it('autosave flushes a legacy editor and reads its updated draft before writing'
 
 it('a failed pending edit prevents the write and keeps the existing dirty draft', async () => {
   const { disk, store, file, queue } = setup()
-  const unregister = registerPendingEditorFlush(file.id, () => {
-    throw new Error('invalid pending cell')
+  const unregister = registerEditorBufferOwner(file.id, {
+    flush: () => {
+      throw new Error('invalid pending cell')
+    }
   })
   try {
     await expect(queue.queueSave(file, 'fallback')).rejects.toThrow('invalid pending cell')
@@ -60,7 +62,7 @@ it('a suspended autosave does not flush a pending cell or write the file', async
   const { disk, store, file, queue } = setup()
   store.getState().setExternalMutation(file.id, 'changed')
   const flush = vi.fn()
-  const unregister = registerPendingEditorFlush(file.id, flush)
+  const unregister = registerEditorBufferOwner(file.id, { flush })
   try {
     await queue.queueSave(file, 'fallback', 'autosave')
     expect(flush).not.toHaveBeenCalled()
@@ -83,11 +85,11 @@ it('keeps a newer pending cell dirty when an earlier remote save completes', asy
       })
   )
   let pending = false
-  const unregister = registerPendingEditorFlush(
-    file.id,
-    () => {},
-    () => pending
-  )
+  const unregister = registerEditorBufferOwner(file.id, {
+    flush: () => {},
+    hasChange: () => pending,
+    skipOnAutosave: true
+  })
   try {
     const saving = queue.queueSave(file, 'fallback')
     await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalledTimes(1))
@@ -109,7 +111,11 @@ it.each([false, true])(
     const flush = vi.fn(() => {
       throw new Error('rejected cell')
     })
-    const unregister = registerPendingEditorFlush(file.id, flush, () => changed)
+    const unregister = registerEditorBufferOwner(file.id, {
+      flush,
+      hasChange: () => changed,
+      skipOnAutosave: true
+    })
     try {
       await queue.queueSave(file, 'fallback', 'autosave')
       expect(flush).not.toHaveBeenCalled()

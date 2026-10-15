@@ -18,88 +18,69 @@ import { editorShortcutMatches } from './editor-shortcuts'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { getConnectionId } from '@/lib/connection-context'
-import { IpynbCellToolbar, IpynbToolbarButton } from './IpynbCellToolbar'
-import { IpynbCellSource } from './IpynbCellEditor'
-import { IpynbCellRunOutputs, IpynbCellRunPrompt } from './IpynbCellRun'
+import { IpynbToolbarButton } from './IpynbCellToolbar'
+import { IpynbCellRow } from './IpynbCellRow'
 import { IpynbKernelToolbar } from './IpynbKernelToolbar'
-import { parseIpynb } from './ipynb-parse'
+import { parseIpynbDocumentView } from './ipynb-parse'
 import {
   getIpynbCellKey,
-  hasIpynbSourceDraft,
+  useIpynbDocument,
   useIpynbDocumentEditing
 } from './useIpynbDocumentEditing'
 import { useIpynbCellExecution } from './useIpynbCellExecution'
 import { useIpynbScrollRestoration } from './useIpynbScrollRestoration'
 
 type IpynbViewerProps = {
-  content: string
+  /** The file's text on disk; the viewer draws the notebook's document, not this. */
+  diskContent: string
   fileId: string
   filePath: string
   worktreeId: string
   scrollCacheKey: string
-  onContentChange: (content: string) => void
-  onDirtyStateHint: (dirty: boolean) => void
   onSave: (content: string) => Promise<boolean>
 }
 
 export default function IpynbViewer({
-  content,
+  diskContent,
   fileId,
   filePath,
   worktreeId,
   scrollCacheKey,
-  onContentChange,
-  onDirtyStateHint,
   onSave
 }: IpynbViewerProps): React.JSX.Element {
   const editorFontZoomLevel = useAppStore((s) => s.editorFontZoomLevel)
   const rootPath = useAppStore((s) => findWorktreeById(s.worktreesByRepo, worktreeId)?.path ?? null)
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null)
-  const parsed = useMemo(() => {
-    try {
-      return { notebook: parseIpynb(content), error: null as string | null }
-    } catch (error) {
-      return {
-        notebook: null,
-        error: error instanceof Error ? error.message : 'Invalid notebook'
-      }
-    }
-  }, [content])
+  const { document, error } = useIpynbDocument(fileId, diskContent)
+  const notebook = useMemo(() => (document ? parseIpynbDocumentView(document) : null), [document])
   const deactivateEditor = useCallback((): void => setEditingCellKey(null), [])
   const {
     rootRef,
     setRootRef,
-    sourceDrafts,
-    flushSourceDrafts,
-    applyContent,
     updateCellSource,
     updateCellKind,
     insertCell,
     moveCell,
     deleteCell
   } = useIpynbDocumentEditing({
-    content,
     fileId,
-    notebook: parsed.notebook,
-    onContentChange,
-    onDirtyStateHint,
+    language: notebook?.language ?? 'python',
     onDeactivateEditor: deactivateEditor
   })
   const execution = useIpynbCellExecution({
+    fileId,
     filePath,
     worktreeId,
-    rootPath,
-    flushSourceDrafts,
-    applyContent
+    rootPath
   })
-  useIpynbScrollRestoration(rootRef, scrollCacheKey, content)
+  useIpynbScrollRestoration(rootRef, scrollCacheKey, document !== null)
   const saveShortcut = useShortcutKeyDetails('editor.save')
   const fontSize = computeEditorFontSize(13, editorFontZoomLevel)
 
+  // Why the disk text: the save flushes the document's draft first, which is what gets written.
   const saveNotebook = useCallback(async (): Promise<void> => {
-    const latestContent = flushSourceDrafts()
-    await onSave(latestContent)
-  }, [flushSourceDrafts, onSave])
+    await onSave(diskContent)
+  }, [diskContent, onSave])
 
   const handleNotebookKeyDownCapture = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -113,31 +94,34 @@ export default function IpynbViewer({
     [saveNotebook]
   )
 
+  const { runCell } = execution
   // Shift+Enter runs a cell and moves to the next; Cmd/Ctrl+Enter runs it in place.
-  const handleCellKeyDownCapture = (
-    event: React.KeyboardEvent<HTMLElement>,
-    index: number
-  ): void => {
-    const mod = getShortcutPlatform() === 'darwin' ? event.metaKey : event.ctrlKey
-    // Exactly one of Shift or Cmd/Ctrl.
-    if (
-      isImeOwnedKeyboardEvent(event) ||
-      event.key !== 'Enter' ||
-      event.altKey ||
-      event.shiftKey === mod
-    ) {
-      return
-    }
-    event.preventDefault()
-    event.stopPropagation()
-    execution.runCell(index)
-    if (event.shiftKey) {
-      // Focusing the next cell's preview also ends editing here, so repeated presses walk the notebook.
-      event.currentTarget.nextElementSibling?.querySelector<HTMLElement>('[tabindex="0"]')?.focus()
-    }
-  }
+  const handleCellKeyDownCapture = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>, index: number): void => {
+      const mod = getShortcutPlatform() === 'darwin' ? event.metaKey : event.ctrlKey
+      // Exactly one of Shift or Cmd/Ctrl.
+      if (
+        isImeOwnedKeyboardEvent(event) ||
+        event.key !== 'Enter' ||
+        event.altKey ||
+        event.shiftKey === mod
+      ) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      runCell(index)
+      if (event.shiftKey) {
+        // Focusing the next cell's preview also ends editing here, so repeated presses walk the notebook.
+        event.currentTarget.nextElementSibling
+          ?.querySelector<HTMLElement>('[tabindex="0"]')
+          ?.focus()
+      }
+    },
+    [runCell]
+  )
 
-  if (parsed.error || !parsed.notebook) {
+  if (error || !notebook) {
     return (
       <div className="flex h-full items-center justify-center bg-editor-surface p-6 text-sm text-muted-foreground">
         <div className="flex max-w-md items-start gap-3 rounded-md border border-border bg-background p-4">
@@ -149,14 +133,13 @@ export default function IpynbViewer({
                 'Unable to render notebook'
               )}
             </div>
-            <div className="mt-1">{parsed.error}</div>
+            <div className="mt-1">{error}</div>
           </div>
         </div>
       </div>
     )
   }
 
-  const { notebook } = parsed
   // Kernels are local Python only; other notebooks still render and edit.
   const canRun = notebook.language === 'python' && !getConnectionId(worktreeId)
   return (
@@ -199,49 +182,24 @@ export default function IpynbViewer({
         ) : (
           notebook.cells.map((cell, index) => {
             const cellKey = getIpynbCellKey(cell, index)
-            const source = hasIpynbSourceDraft(sourceDrafts, cellKey)
-              ? (sourceDrafts[cellKey] ?? '')
-              : cell.source
             return (
-              <section
+              <IpynbCellRow
                 key={cellKey}
-                className="group relative flex gap-2 py-1.5"
-                onKeyDownCapture={(event) => handleCellKeyDownCapture(event, index)}
-              >
-                {/* Mirrors the code surface's border and padding so the count shares the first line's box. */}
-                <div className="flex w-12 shrink-0 justify-center border-y border-transparent py-1">
-                  {cell.kind === 'code' ? (
-                    <IpynbCellRunPrompt
-                      filePath={filePath}
-                      cellKey={cellKey}
-                      executionCount={cell.executionCount}
-                      onRun={() => execution.runCell(index)}
-                    />
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <IpynbCellSource
-                    cell={cell}
-                    source={source}
-                    active={editingCellKey === cellKey}
-                    onActivate={() => setEditingCellKey(cellKey)}
-                    onDeactivate={() =>
-                      setEditingCellKey((current) => (current === cellKey ? null : current))
-                    }
-                    onChange={(nextSource) => updateCellSource(index, nextSource)}
-                  />
-                  <IpynbCellRunOutputs filePath={filePath} cellKey={cellKey} cell={cell} />
-                </div>
-                <IpynbCellToolbar
-                  kind={cell.kind}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < notebook.cells.length - 1}
-                  onKindChange={(kind) => updateCellKind(index, kind)}
-                  onInsert={(offset, kind) => insertCell(index + offset, kind)}
-                  onMove={(direction) => moveCell(index, direction)}
-                  onDelete={() => deleteCell(index)}
-                />
-              </section>
+                cell={cell}
+                index={index}
+                cellKey={cellKey}
+                filePath={filePath}
+                active={editingCellKey === cellKey}
+                isLast={index === notebook.cells.length - 1}
+                setEditingCellKey={setEditingCellKey}
+                onKeyDownCapture={handleCellKeyDownCapture}
+                runCell={execution.runCell}
+                updateCellSource={updateCellSource}
+                updateCellKind={updateCellKind}
+                insertCell={insertCell}
+                moveCell={moveCell}
+                deleteCell={deleteCell}
+              />
             )
           })
         )}

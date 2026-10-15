@@ -5,7 +5,7 @@ import {
   MOBILE_MARKDOWN_READ_MAX_BYTES
 } from '../../../shared/mobile-markdown-document'
 import { attachEditorAutosaveController } from '../components/editor/editor-autosave-controller'
-import { registerPendingEditorFlush } from '../components/editor/editor-pending-flush'
+import { registerEditorBufferOwner } from '../components/editor/editor-buffer-owners'
 import { useAppStore } from '../store'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import { attachMobileMarkdownBridge } from './mobile-markdown-bridge'
@@ -37,9 +37,11 @@ describe('mobile markdown bridge', () => {
       readFile: vi.fn().mockResolvedValue({ content: 'disk', isBinary: false })
     })
     const detach = attachMobileMarkdownBridge()
-    const unregisterFlush = registerPendingEditorFlush('/repo/README.md', () => {
-      useAppStore.getState().setEditorDraft('/repo/README.md', '# pending\n')
-      useAppStore.getState().markFileDirty('/repo/README.md', true)
+    const unregisterFlush = registerEditorBufferOwner('/repo/README.md', {
+      flush: () => {
+        useAppStore.getState().setEditorDraft('/repo/README.md', '# pending\n')
+        useAppStore.getState().markFileDirty('/repo/README.md', true)
+      }
     })
 
     try {

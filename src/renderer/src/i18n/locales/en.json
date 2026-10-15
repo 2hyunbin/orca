@@ -15783,7 +15783,9 @@
           "earlierOutputHidden": "Earlier output is hidden.",
           "moreOutputsHidden": "{{count}} more outputs are hidden.",
           "moreOutputsHidden_one": "{{count}} more output is hidden.",
-          "moreOutputsHidden_other": "{{count}} more outputs are hidden."
+          "moreOutputsHidden_other": "{{count}} more outputs are hidden.",
+          "outputLimitReached": "This cell's output reached the size limit; later output was not kept.",
+          "tooLargeToSave": "This notebook is too large to save."
         },
         "MarkdownPreview": {
           "e4683f70c4": "Cancel",

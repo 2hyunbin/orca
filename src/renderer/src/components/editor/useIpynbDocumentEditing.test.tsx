@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPendingEditorChange } from './editor-pending-flush'
-import { parseIpynb } from './ipynb-parse'
-import { useIpynbDocumentEditing } from './useIpynbDocumentEditing'
+import { flushPendingEditorChange } from './editor-buffer-owners'
+import { parseIpynb, parseIpynbDocumentView } from './ipynb-parse'
+import { notebookTestAppStore, openNotebookTestFile } from './ipynb-test-app-store'
+import { useIpynbDocument, useIpynbDocumentEditing } from './useIpynbDocumentEditing'
+
+vi.mock('@/store', async () => ({
+  useAppStore: (await import('./ipynb-test-app-store')).notebookTestAppStore
+}))
 
 function notebookContent(firstSource = 'a', secondSource = 'b'): string {
   return JSON.stringify({
@@ -31,6 +36,22 @@ function notebookContent(firstSource = 'a', secondSource = 'b'): string {
   })
 }
 
+function draft(): string | undefined {
+  return notebookTestAppStore.getState().editorDrafts['notebook-a']
+}
+
+function renderEditing(onDeactivateEditor = vi.fn()) {
+  return renderHook(() => {
+    const { document } = useIpynbDocument('notebook-a', notebookContent())
+    const editing = useIpynbDocumentEditing({
+      fileId: 'notebook-a',
+      language: 'python',
+      onDeactivateEditor
+    })
+    return { notebook: document ? parseIpynbDocumentView(document) : null, ...editing }
+  })
+}
+
 describe('notebook document editing lifecycle', () => {
   const animationFrames = new Map<number, FrameRequestCallback>()
   let nextFrameId = 1
@@ -39,6 +60,8 @@ describe('notebook document editing lifecycle', () => {
     vi.useFakeTimers()
     animationFrames.clear()
     nextFrameId = 1
+    notebookTestAppStore.setState({ openFiles: [] })
+    openNotebookTestFile('notebook-a')
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -61,75 +84,43 @@ describe('notebook document editing lifecycle', () => {
     vi.unstubAllGlobals()
   })
 
-  it('debounces drafts, flushes the latest source, and releases acknowledged drafts', () => {
-    const onContentChange = vi.fn()
-    const onDirtyStateHint = vi.fn()
-    const onDeactivateEditor = vi.fn()
-    const initialContent = notebookContent()
-    const hook = renderHook(
-      ({ content }: { content: string }) =>
-        useIpynbDocumentEditing({
-          content,
-          fileId: 'notebook-a',
-          notebook: parseIpynb(content),
-          onContentChange,
-          onDirtyStateHint,
-          onDeactivateEditor
-        }),
-      { initialProps: { content: initialContent } }
-    )
+  it('shows typing at once, writes the draft after a pause, and flushes the latest source', () => {
+    const hook = renderEditing()
 
     act(() => {
       hook.result.current.updateCellSource(0, 'first draft')
       hook.result.current.updateCellSource(0, 'latest draft')
       vi.advanceTimersByTime(399)
     })
-    expect(onDirtyStateHint).toHaveBeenCalledTimes(2)
-    expect(onContentChange).not.toHaveBeenCalled()
+    expect(hook.result.current.notebook?.cells[0]?.source).toBe('latest draft')
+    expect(notebookTestAppStore.getState().openFiles[0]?.isDirty).toBe(true)
+    expect(draft()).toBeUndefined()
 
     act(() => flushPendingEditorChange('notebook-a'))
-    expect(onContentChange).toHaveBeenCalledTimes(1)
-    const committedContent = onContentChange.mock.calls[0]?.[0] as string
-    expect(parseIpynb(committedContent).cells[0]?.source).toBe('latest draft')
+    expect(parseIpynb(draft() ?? '').cells[0]?.source).toBe('latest draft')
 
-    hook.rerender({ content: committedContent })
-    expect(Object.hasOwn(hook.result.current.sourceDrafts, 'a')).toBe(false)
-
-    const externalContent = notebookContent('external source')
-    hook.rerender({ content: externalContent })
-    expect(Object.hasOwn(hook.result.current.sourceDrafts, 'a')).toBe(false)
+    act(() => {
+      hook.result.current.updateCellSource(1, 'typed later')
+      vi.advanceTimersByTime(400)
+    })
+    expect(parseIpynb(draft() ?? '').cells[1]?.source).toBe('typed later')
   })
 
-  it('flushes drafts before structural work and cancels queued work on detach', () => {
-    const onContentChange = vi.fn()
+  it('applies structural work on the next frame and cancels queued work on detach', () => {
     const onDeactivateEditor = vi.fn()
-    const content = notebookContent()
-    const { result } = renderHook(() =>
-      useIpynbDocumentEditing({
-        content,
-        fileId: 'notebook-a',
-        notebook: parseIpynb(content),
-        onContentChange,
-        onDirtyStateHint: vi.fn(),
-        onDeactivateEditor
-      })
-    )
+    const { result } = renderEditing(onDeactivateEditor)
 
     act(() => {
       result.current.updateCellSource(0, 'edited before move')
       result.current.moveCell(0, 1)
     })
     expect(onDeactivateEditor).toHaveBeenCalledOnce()
-    expect(onContentChange).toHaveBeenCalledTimes(1)
-    expect(parseIpynb(onContentChange.mock.calls[0]?.[0] as string).cells[0]?.source).toBe(
-      'edited before move'
-    )
     expect(animationFrames.size).toBe(1)
 
     const [[frameId, frameCallback]] = [...animationFrames.entries()]
     animationFrames.delete(frameId)
     act(() => frameCallback(0))
-    const movedNotebook = parseIpynb(onContentChange.mock.calls[1]?.[0] as string)
+    const movedNotebook = parseIpynb(draft() ?? '')
     expect(movedNotebook.cells.map((cell) => cell.id)).toEqual(['b', 'a'])
     expect(movedNotebook.cells[1]?.source).toBe('edited before move')
 

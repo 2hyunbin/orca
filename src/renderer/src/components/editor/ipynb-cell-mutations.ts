@@ -1,5 +1,6 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { isRecord, type IpynbCellKind } from './ipynb-parse'
+import type { NotebookOutput } from './ipynb-kernel-outputs'
+import { isRecord, type IpynbCellKind, type IpynbDocument } from './ipynb-parse'
 
 function splitIpynbSource(source: string): string[] {
   if (!source) {
@@ -20,197 +21,191 @@ function splitIpynbSource(source: string): string[] {
   return lines
 }
 
-function parseNotebookRoot(content: string): Record<string, unknown> {
-  const parsed = JSON.parse(content) as unknown
-  if (!isRecord(parsed)) {
-    throw new Error('Notebook root must be a JSON object')
+/** The key a cell's run and editor use: its id, or its position for an id-less (nbformat 4.4) cell. */
+export function ipynbCellKey(cell: unknown, index: number): string {
+  if (isRecord(cell) && typeof cell.id === 'string') {
+    return cell.id
   }
-  if (!Array.isArray(parsed.cells)) {
-    throw new Error('Notebook is missing a cells array')
-  }
-  return parsed
+  return `${index}:${isRecord(cell) ? String(cell.cell_type) : ''}`
 }
 
-function ensureCell(root: Record<string, unknown>, index: number): Record<string, unknown> {
-  const cells = root.cells
-  if (!Array.isArray(cells) || !isRecord(cells[index])) {
+function storedOutput(output: unknown): unknown {
+  if (!isRecord(output)) {
+    return output
+  }
+  const { transient: _transient, ...stored } = output
+  // Like Jupyter, store stream text as lines so notebook diffs stay line-oriented.
+  return stored.output_type === 'stream' && typeof stored.text === 'string'
+    ? { ...stored, text: splitIpynbSource(stored.text) }
+    : stored
+}
+
+function storedCell(cell: unknown): unknown {
+  return isRecord(cell) && Array.isArray(cell.outputs) && cell.outputs.length > 0
+    ? { ...cell, outputs: cell.outputs.map(storedOutput) }
+    : cell
+}
+
+/** The notebook's file text; live-only fields (display ids) are dropped here, never in the model. */
+export function serializeIpynbDocument(document: IpynbDocument): string {
+  return `${JSON.stringify({ ...document.root, cells: document.cells.map(storedCell) }, null, 1)}\n`
+}
+
+function replaceCell(
+  document: IpynbDocument,
+  index: number,
+  change: (cell: Record<string, unknown>) => Record<string, unknown>
+): IpynbDocument {
+  const cell = document.cells[index]
+  if (!isRecord(cell)) {
     throw new Error('Notebook cell no longer exists')
   }
-  return cells[index]
+  const cells = [...document.cells]
+  cells[index] = change(cell)
+  return { ...document, cells }
 }
 
-function serializeNotebook(root: Record<string, unknown>): string {
-  return `${JSON.stringify(root, null, 1)}\n`
-}
-
-export function updateIpynbCellSource(content: string, index: number, source: string): string {
-  const root = parseNotebookRoot(content)
-  ensureCell(root, index).source = splitIpynbSource(source)
-  return serializeNotebook(root)
-}
-
-export function updateIpynbCellSources(
-  content: string,
-  updates: { index: number; source: string }[]
-): string {
-  if (updates.length === 0) {
-    return content
-  }
-  const root = parseNotebookRoot(content)
-  for (const update of updates) {
-    ensureCell(root, update.index).source = splitIpynbSource(update.source)
-  }
-  return serializeNotebook(root)
+export function updateIpynbCellSource(
+  document: IpynbDocument,
+  index: number,
+  source: string
+): IpynbDocument {
+  return replaceCell(document, index, (cell) => ({
+    ...cell,
+    source: splitIpynbSource(source)
+  }))
 }
 
 export function updateIpynbCellKind(
-  content: string,
+  document: IpynbDocument,
   index: number,
   kind: IpynbCellKind,
   fallbackLanguage: string
-): string {
-  const root = parseNotebookRoot(content)
-  const cell = ensureCell(root, index)
-  cell.cell_type = kind
-  if (kind === 'code') {
-    cell.outputs = Array.isArray(cell.outputs) ? cell.outputs : []
-    cell.execution_count = typeof cell.execution_count === 'number' ? cell.execution_count : null
-    cell.metadata = isRecord(cell.metadata) ? cell.metadata : {}
-    const metadata = cell.metadata as Record<string, unknown>
+): IpynbDocument {
+  return replaceCell(document, index, (cell) => {
+    if (kind !== 'code') {
+      const { outputs: _outputs, execution_count: _executionCount, ...rest } = cell
+      return { ...rest, cell_type: kind }
+    }
+    const metadata = isRecord(cell.metadata) ? cell.metadata : {}
     const vscode = isRecord(metadata.vscode) ? metadata.vscode : {}
-    metadata.vscode = { ...vscode, languageId: fallbackLanguage }
-  } else {
-    delete cell.outputs
-    delete cell.execution_count
-  }
-  return serializeNotebook(root)
+    return {
+      ...cell,
+      cell_type: kind,
+      outputs: Array.isArray(cell.outputs) ? cell.outputs : [],
+      execution_count: typeof cell.execution_count === 'number' ? cell.execution_count : null,
+      metadata: {
+        ...metadata,
+        vscode: { ...vscode, languageId: fallbackLanguage }
+      }
+    }
+  })
 }
 
-export function insertIpynbCell(
-  content: string,
-  index: number,
-  kind: IpynbCellKind,
-  language: string
-): string {
-  const root = parseNotebookRoot(content)
-  const cells = root.cells as unknown[]
-  const nextCell: Record<string, unknown> = {
+function newCell(kind: IpynbCellKind, language: string): Record<string, unknown> {
+  const cell: Record<string, unknown> = {
     cell_type: kind,
     id: createBrowserUuid(),
     metadata: {},
     source: []
   }
-  if (kind === 'code') {
-    nextCell.execution_count = null
-    nextCell.outputs = []
-    nextCell.metadata = { vscode: { languageId: language } }
-  }
-  cells.splice(Math.min(Math.max(index, 0), cells.length), 0, nextCell)
-  return serializeNotebook(root)
+  return kind === 'code'
+    ? {
+        ...cell,
+        execution_count: null,
+        outputs: [],
+        metadata: { vscode: { languageId: language } }
+      }
+    : cell
 }
 
-export function deleteIpynbCell(content: string, index: number): string {
-  const root = parseNotebookRoot(content)
-  const cells = root.cells as unknown[]
-  if (cells.length <= 1) {
-    cells.splice(0, cells.length, {
-      cell_type: 'code',
-      id: createBrowserUuid(),
-      metadata: {},
-      execution_count: null,
-      outputs: [],
-      source: []
-    })
-  } else {
-    cells.splice(index, 1)
-  }
-  return serializeNotebook(root)
+export function insertIpynbCell(
+  document: IpynbDocument,
+  index: number,
+  kind: IpynbCellKind,
+  language: string
+): IpynbDocument {
+  const cells = [...document.cells]
+  cells.splice(Math.min(Math.max(index, 0), cells.length), 0, newCell(kind, language))
+  return { ...document, cells }
 }
 
-export function moveIpynbCell(content: string, index: number, direction: -1 | 1): string {
-  const root = parseNotebookRoot(content)
-  const cells = root.cells as unknown[]
+export function deleteIpynbCell(document: IpynbDocument, index: number): IpynbDocument {
+  if (document.cells.length <= 1) {
+    const cell = { cell_type: 'code', id: createBrowserUuid(), metadata: {} }
+    return {
+      ...document,
+      cells: [{ ...cell, execution_count: null, outputs: [], source: [] }]
+    }
+  }
+  return {
+    ...document,
+    cells: document.cells.filter((_cell, cellIndex) => cellIndex !== index)
+  }
+}
+
+export function moveIpynbCell(
+  document: IpynbDocument,
+  index: number,
+  direction: -1 | 1
+): IpynbDocument {
   const nextIndex = index + direction
+  const { cells } = document
   if (index < 0 || index >= cells.length || nextIndex < 0 || nextIndex >= cells.length) {
-    return content
+    return document
   }
-  const [cell] = cells.splice(index, 1)
-  cells.splice(nextIndex, 0, cell)
-  return serializeNotebook(root)
+  const moved = [...cells]
+  moved[index] = cells[nextIndex]
+  moved[nextIndex] = cells[index]
+  return { ...document, cells: moved }
 }
 
-export function updateIpynbCellRun(
-  content: string,
-  index: number,
-  outputs: Record<string, unknown>[],
-  executionCount: number | null
-): string {
-  const root = parseNotebookRoot(content)
-  applyIpynbCellRun(root, index, outputs, executionCount)
-  return serializeNotebook(root)
+/** Changes the code cell keyed `key`; returns `document` itself when there is no such code cell. */
+export function updateIpynbCodeCell(
+  document: IpynbDocument,
+  key: string,
+  change: {
+    outputs?: (outputs: NotebookOutput[]) => NotebookOutput[]
+    executionCount?: number | null
+  }
+): IpynbDocument {
+  const index = document.cells.findIndex((cell, cellIndex) => ipynbCellKey(cell, cellIndex) === key)
+  const cell = document.cells[index]
+  if (!isRecord(cell) || cell.cell_type !== 'code') {
+    return document
+  }
+  const outputs = Array.isArray(cell.outputs) ? cell.outputs.filter(isRecord) : []
+  return replaceCell(document, index, () => ({
+    ...cell,
+    ...(change.outputs ? { outputs: change.outputs(outputs) } : {}),
+    ...(change.executionCount === undefined ? {} : { execution_count: change.executionCount })
+  }))
 }
 
-function applyIpynbCellRun(
-  root: Record<string, unknown>,
-  index: number,
-  outputs: Record<string, unknown>[],
-  executionCount: number | null
-): void {
-  const cell = ensureCell(root, index)
-  // Like Jupyter, store stream text as lines so notebook diffs stay line-oriented.
-  cell.outputs = outputs.map((output) =>
-    output.output_type === 'stream' && typeof output.text === 'string'
-      ? { ...output, text: splitIpynbSource(output.text) }
-      : output
-  )
-  cell.execution_count = executionCount
-}
-
-export function updateIpynbCellRuns(
-  content: string,
-  updates: { index: number; outputs: Record<string, unknown>[]; executionCount: number | null }[]
-): string {
-  if (updates.length === 0) {
-    return content
+export function clearIpynbOutputs(document: IpynbDocument): IpynbDocument {
+  return {
+    ...document,
+    cells: document.cells.map((cell) =>
+      isRecord(cell) && cell.cell_type === 'code'
+        ? { ...cell, outputs: [], execution_count: null }
+        : cell
+    )
   }
-  const root = parseNotebookRoot(content)
-  let changed = false
-  for (const update of updates) {
-    try {
-      applyIpynbCellRun(root, update.index, update.outputs, update.executionCount)
-      changed = true
-    } catch {
-      // Preserve the successful prefix when a later cell no longer exists.
-      break
-    }
-  }
-  return changed ? serializeNotebook(root) : content
-}
-
-export function clearIpynbOutputs(content: string): string {
-  const root = parseNotebookRoot(content)
-  for (const cell of Array.isArray(root.cells) ? root.cells : []) {
-    if (isRecord(cell) && cell.cell_type === 'code') {
-      cell.outputs = []
-      cell.execution_count = null
-    }
-  }
-  return serializeNotebook(root)
 }
 
 /** Gives every cell an nbformat 4.5 id, as Jupyter does when it upgrades a 4.4 notebook. */
-export function withIpynbCellIds(content: string): string {
-  const root = parseNotebookRoot(content)
-  const cells = Array.isArray(root.cells) ? root.cells.filter(isRecord) : []
-  if (cells.every((cell) => typeof cell.id === 'string')) {
-    return content
+export function withIpynbCellIds(document: IpynbDocument): IpynbDocument {
+  const { root, cells } = document
+  if (cells.every((cell) => !isRecord(cell) || typeof cell.id === 'string')) {
+    return document
   }
-  for (const cell of cells) {
-    cell.id = typeof cell.id === 'string' ? cell.id : createBrowserUuid()
+  return {
+    root: {
+      ...root,
+      nbformat_minor: Math.max(typeof root.nbformat_minor === 'number' ? root.nbformat_minor : 0, 5)
+    },
+    cells: cells.map((cell) =>
+      isRecord(cell) && typeof cell.id !== 'string' ? { ...cell, id: createBrowserUuid() } : cell
+    )
   }
-  root.nbformat_minor = Math.max(
-    typeof root.nbformat_minor === 'number' ? root.nbformat_minor : 0,
-    5
-  )
-  return serializeNotebook(root)
 }

@@ -3,7 +3,7 @@ import { fileArtifactSourceKey, type FileArtifactOwner } from '@/lib/file-artifa
 import { basename } from '@/lib/path'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
-import { flushPendingEditorChange } from './editor-pending-flush'
+import { flushPendingEditorChange } from './editor-buffer-owners'
 
 export type ShareableFileContentType = ArtifactWriteRequest['contentType']
 

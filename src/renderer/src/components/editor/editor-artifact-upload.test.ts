@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({ editorDrafts: mocks.drafts }) }
 }))
-vi.mock('./editor-pending-flush', () => ({
+vi.mock('./editor-buffer-owners', () => ({
   flushPendingEditorChange: mocks.flush
 }))
 

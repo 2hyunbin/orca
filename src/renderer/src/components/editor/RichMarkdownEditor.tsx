@@ -10,7 +10,7 @@ import type { LinkBubbleState } from './RichMarkdownLinkBubble'
 import { useLinkBubble } from './useLinkBubble'
 import { useEditorScrollRestore } from './useEditorScrollRestore'
 import { useModifierHeldClass } from './useModifierHeldClass'
-import { registerPendingEditorFlush } from './editor-pending-flush'
+import { registerEditorBufferOwner } from './editor-buffer-owners'
 import { useRichMarkdownTableOfContents } from './use-rich-markdown-table-of-contents'
 import { RichMarkdownEditorSurface } from './RichMarkdownEditorSurface'
 import { useRichMarkdownEditorInstance } from './useRichMarkdownEditorInstance'
@@ -173,7 +173,9 @@ export default function RichMarkdownEditor({
     // Why: autosave/restart paths live outside the editor component tree, so a
     // mounted rich editor must expose a synchronous "flush now" hook to avoid
     // a dirty-without-draft window during the debounce period.
-    return registerPendingEditorFlush(fileId, flushPendingSerialization)
+    return registerEditorBufferOwner(fileId, {
+      flush: flushPendingSerialization
+    })
   }, [fileId, flushPendingSerialization])
 
   const { clearTransientReviewState } = review
