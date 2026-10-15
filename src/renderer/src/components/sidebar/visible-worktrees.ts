@@ -2,13 +2,6 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 export type { SidebarFilterState } from './visible-worktree-kinds'
-export {
-  isAutomationGeneratedWorkspace,
-  isCliCreatedWorkspace,
-  isDetachedHeadWorkspace,
-  isSleepingSweepExemptionNarrowingList,
-  isSleepingSweepExemptWorkspace
-} from './visible-worktree-kinds'
 export { sidebarHasActiveFilters, computeClearFilterActions } from './sidebar-filter-actions'
 export type { ClearFilterActions } from './sidebar-filter-actions'
 import {

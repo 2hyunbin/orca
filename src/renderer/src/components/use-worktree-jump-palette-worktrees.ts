@@ -85,7 +85,7 @@ export function useWorktreeJumpPaletteWorktrees({
   )
   const defaultHostId = getSettingsFocusedExecutionHostId(settings)
   const emptyQueryVisibleWorktrees = useMemo(() => {
-    // Why no project or host scope: the palette jumps anywhere the sidebar's filters would show.
+    // Why no project or host scope: the palette ignores the sidebar's scope; filterPredicate scopes it.
     const visible = filterWorkspaceRows(
       workspaces,
       {

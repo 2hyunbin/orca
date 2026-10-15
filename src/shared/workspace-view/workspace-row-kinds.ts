@@ -1,10 +1,9 @@
 import { isFolderRepo } from '../repo-kind'
 import type { Repo } from '../repo-types'
 import type { Worktree } from '../worktree/types'
-import { isDetachedHeadCheckout } from '../worktree/git-identity'
+import { getWorktreeBranchName, getWorktreeShortHead } from '../worktree/git-identity'
 
-// What KIND of workspace a row is, as the Workspace options filters read it. The desktop sidebar
-// asks these of its own worktrees; a host asks them of the rows it serves a phone.
+// What KIND of workspace a row is, as the Workspace options filters read it.
 
 export function isAutomationGeneratedWorkspace(
   worktree: Pick<Worktree, 'automationProvenance'>
@@ -16,8 +15,17 @@ export function isCliCreatedWorkspace(worktree: Pick<Worktree, 'cliProvenance'>)
   return worktree.cliProvenance?.kind === 'created-by-cli'
 }
 
-export function isDetachedHeadWorkspace(worktree: Pick<Worktree, 'branch' | 'head'>): boolean {
-  return isDetachedHeadCheckout(worktree)
+/**
+ * A checkout of a commit rather than a branch.
+ *
+ * Why the head check: folder workspaces and SSH-synthesized rows carry both an empty branch and an
+ * empty head, so branch-emptiness alone would call them detached.
+ */
+export function isDetachedHeadWorkspace(worktree: {
+  branch?: string | null
+  head?: string | null
+}): boolean {
+  return getWorktreeBranchName(worktree.branch) === '' && getWorktreeShortHead(worktree.head) !== ''
 }
 
 /** Keeps provisioned roots visible because they are the recipe-created workspace, not a source-repo row. */

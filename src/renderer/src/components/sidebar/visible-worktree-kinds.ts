@@ -1,31 +1,4 @@
 import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
-import type { Worktree } from '../../../../shared/worktree/types'
-import {
-  isSleepingSweepExempt,
-  isSleepingSweepExemptionNarrowingList as isExemptionNarrowing
-} from '../../../../shared/workspace-view/workspace-row-filters'
-
-export {
-  isAutomationGeneratedWorkspace,
-  isCliCreatedWorkspace,
-  isDetachedHeadWorkspace
-} from '../../../../shared/workspace-view/workspace-row-kinds'
-
-/** Whether the "Hide sleeping" sweep must keep this row (#8873); see isSleepingSweepExempt. */
-export function isSleepingSweepExemptWorkspace(
-  worktree: Pick<Worktree, 'isMainWorktree'>,
-  alwaysShowDefaultBranchWorkspace: boolean | undefined
-): boolean {
-  return isSleepingSweepExempt(worktree.isMainWorktree, alwaysShowDefaultBranchWorkspace)
-}
-
-/** Whether the exemption being off narrows the list; takes the store's positive sleeping flag. */
-export function isSleepingSweepExemptionNarrowingList(
-  showSleepingWorkspaces: boolean,
-  alwaysShowDefaultBranchWorkspace: boolean | undefined
-): boolean {
-  return isExemptionNarrowing(!showSleepingWorkspaces, alwaysShowDefaultBranchWorkspace)
-}
 
 /** Inputs describing sidebar filter settings that the Clear Filters path owns. */
 export type SidebarFilterState = {

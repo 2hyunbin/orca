@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { computeVisibleWorktreeIds } from './visible-worktrees'
-import { buildWorktreeComparator, type SortBy } from './smart-sort'
-import { IDLE, type WorktreeAttention } from './smart-attention'
+import { buildWorktreeComparator, buildWorktreeSortLabels, type SortBy } from './smart-sort'
+import { IDLE, type SmartClass, type WorktreeAttention } from './smart-attention'
+import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { countActiveWorkspaceFilters } from '../../../../shared/workspace-view/workspace-row-filters'
 import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { isWorkspaceOwnedBySomeoneElse } from '../../../../shared/workspace-creator-visibility'
@@ -34,6 +35,7 @@ const repos: Repo[] = [
   }
 ]
 const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
+const pairedDeviceIdsByEnvironment = new Map([['env', 'me']])
 
 function row(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {
@@ -82,6 +84,17 @@ const rows: Worktree[] = [
   row('detached', { branch: '', head: 'deadbeef' }),
   row('synthesized', { branch: '', head: '' }),
   row('host-made', { creatorProvenance: { kind: 'host' } }),
+  row('other-device', { creatorProvenance: { kind: 'paired-device', deviceId: 'laptop' } }),
+  row('mine-on-server', {
+    repoId: 'remote',
+    runtimeOwnerEnvironmentId: 'env',
+    creatorProvenance: { kind: 'paired-device', deviceId: 'me' }
+  }),
+  row('theirs-on-server', {
+    repoId: 'remote',
+    runtimeOwnerEnvironmentId: 'env',
+    creatorProvenance: { kind: 'paired-device', deviceId: 'laptop' }
+  }),
   row('remote', { repoId: 'remote', sortOrder: 3, manualOrder: 1, createdAt: 100 }),
   row('orphan', { repoId: 'gone' }),
   row('archived', { isArchived: true })
@@ -160,7 +173,7 @@ function previousDesktopFilter(t: Toggles): string[] {
     (w.branch.trim() !== '' || repo?.kind === 'folder')
   let all = rows.filter((w) => !w.isArchived)
   if (t.hideWorkspacesFromOtherDevices) {
-    all = all.filter((w) => !isWorkspaceOwnedBySomeoneElse(w, new Map()))
+    all = all.filter((w) => !isWorkspaceOwnedBySomeoneElse(w, pairedDeviceIdsByEnvironment))
   }
   if (t.hideDefaultBranchWorkspace) {
     all = all.filter((w) => !defaultBranch(w, repoMap.get(w.repoId)))
@@ -224,7 +237,7 @@ describe('the shared Workspace options evaluator matches the sidebar it replaced
           ptyIdsByTabId,
           browserTabsByWorktree: {},
           worktreeIdsWithLiveAgent: new Set(),
-          pairedDeviceIdsByEnvironment: new Map(),
+          pairedDeviceIdsByEnvironment,
           repoMap,
           workspaceHostScope: 'all',
           defaultHostId: 'local',
@@ -252,7 +265,11 @@ describe('the shared Workspace options evaluator matches the sidebar it replaced
 })
 
 // The sidebar comparator before the shared evaluator, verbatim apart from the label lookup.
-function previousDesktopComparator(sortBy: SortBy, now: number) {
+function previousDesktopComparator(
+  sortBy: SortBy,
+  now: number,
+  attention: Map<string, WorktreeAttention>
+) {
   const label = (w: Worktree) => w.displayName
   const recent = (w: Worktree) =>
     w.createdAt === undefined || now >= w.createdAt + 5 * 60 * 1000
@@ -262,7 +279,16 @@ function previousDesktopComparator(sortBy: SortBy, now: number) {
     switch (sortBy) {
       case 'name':
         return label(a).localeCompare(label(b))
-      case 'smart':
+      case 'smart': {
+        const aw = attention.get(a.id) ?? IDLE
+        const bw = attention.get(b.id) ?? IDLE
+        return (
+          aw.cls - bw.cls ||
+          bw.attentionTimestamp - aw.attentionTimestamp ||
+          recent(b) - recent(a) ||
+          label(a).localeCompare(label(b))
+        )
+      }
       case 'recent':
         return recent(b) - recent(a) || label(a).localeCompare(label(b))
       case 'repo': {
@@ -280,6 +306,11 @@ function previousDesktopComparator(sortBy: SortBy, now: number) {
   }
 }
 
+const SMART_CLASSES: readonly SmartClass[] = [1, 2, 3]
+function attentionFor(index: number): WorktreeAttention {
+  return { cls: SMART_CLASSES[index % 3], attentionTimestamp: index % 4 }
+}
+
 describe('the shared comparator matches the sidebar comparator it replaced', () => {
   const sortRows = rows.map((w, index) => ({
     ...w,
@@ -292,11 +323,31 @@ describe('the shared comparator matches the sidebar comparator it replaced', () 
   for (const sortBy of ['name', 'smart', 'recent', 'repo', 'manual'] as const) {
     it(`orders rows the same way by ${sortBy}`, () => {
       const now = 60_000
-      // Idle attention for every row reduces smart to its recency tiebreak.
-      const attention = new Map<string, WorktreeAttention>(sortRows.map((w) => [w.id, IDLE]))
-      const actual = [...sortRows].sort(buildWorktreeComparator(sortBy, repoMap, now, attention))
-      const expected = [...sortRows].sort(previousDesktopComparator(sortBy, now))
+      // Classes and attention stamps tie in places, so every smart tiebreak runs.
+      const attention = new Map<string, WorktreeAttention>(
+        sortRows.map((w, index) => [w.id, index % 2 === 0 ? IDLE : attentionFor(index)])
+      )
+      const labels = buildWorktreeSortLabels(sortRows)
+      const actual = [...sortRows].sort(
+        buildWorktreeComparator(sortBy, repoMap, now, attention, labels)
+      )
+      const expected = [...sortRows].sort(previousDesktopComparator(sortBy, now, attention))
       expect(actual.map((w) => w.id)).toEqual(expected.map((w) => w.id))
     })
   }
+})
+
+describe('the desktop row fact reader', () => {
+  it('reads folder workspace keys as folder rows', () => {
+    const read = buildDesktopWorkspaceRowFactReader({
+      repoMap,
+      defaultHostId: 'local',
+      pairedDeviceIdsByEnvironment,
+      tabsByWorktree,
+      ptyIdsByTabId,
+      worktreeIdsWithLiveAgent: new Set()
+    })
+    expect(read.isFolderWorkspace(row('folder:group-1'))).toBe(true)
+    expect(read.isFolderWorkspace(row('folder-root'))).toBe(false)
+  })
 })

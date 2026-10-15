@@ -22,7 +22,7 @@ export type WorkspaceRowFilters = {
  */
 export type WorkspaceRowFactReader<Row> = {
   isArchived: (row: Row) => boolean
-  /** A folder workspace follows only the host and other-client filters, as the sidebar's lanes do. */
+  /** A folder workspace follows only the host and other-client filters (useSidebarHostVisibleScope). */
   isFolderWorkspace: (row: Row) => boolean
   repoId: (row: Row) => string
   /** Null when the row's host cannot be resolved; a host filter then hides it. */
@@ -61,48 +61,51 @@ export function isSleepingSweepExemptionNarrowingList(
   return hideSleepingWorkspaces && alwaysShowDefaultBranchWorkspace === false
 }
 
-export function isWorkspaceRowVisible<Row>(
-  row: Row,
+/** Whether a row survives the Workspace options filters; the sets are built once per call. */
+export function buildWorkspaceRowPredicate<Row>(
   filters: WorkspaceRowFilters,
-  read: WorkspaceRowFactReader<Row>,
-  scope: { repoIds: ReadonlySet<string> | null; hostIds: ReadonlySet<ExecutionHostId> | null }
-): boolean {
-  if (read.isArchived(row)) {
-    return false
-  }
-  if (filters.hideWorkspacesFromOtherDevices && read.isOtherClient(row)) {
-    return false
-  }
-  if (scope.hostIds) {
-    const hostId = read.hostId(row)
-    if (hostId === null || !scope.hostIds.has(hostId)) {
+  read: WorkspaceRowFactReader<Row>
+): (row: Row) => boolean {
+  const repoIds = filters.filterRepoIds.length > 0 ? new Set(filters.filterRepoIds) : null
+  const hostIds = filters.visibleHostIds ? new Set(filters.visibleHostIds) : null
+  return (row) => {
+    if (read.isArchived(row)) {
       return false
     }
+    if (filters.hideWorkspacesFromOtherDevices && read.isOtherClient(row)) {
+      return false
+    }
+    if (hostIds) {
+      const hostId = read.hostId(row)
+      if (hostId === null || !hostIds.has(hostId)) {
+        return false
+      }
+    }
+    if (read.isFolderWorkspace(row)) {
+      return true
+    }
+    if (filters.hideDefaultBranchWorkspace && read.isDefaultBranch(row)) {
+      return false
+    }
+    if (filters.hideAutomationGeneratedWorkspaces && read.isAutomationCreated(row)) {
+      return false
+    }
+    if (filters.hideCliCreatedWorkspaces && read.isCliCreated(row)) {
+      return false
+    }
+    if (filters.hideDetachedHeadWorkspaces && read.isDetachedHead(row)) {
+      return false
+    }
+    if (repoIds && !repoIds.has(read.repoId(row))) {
+      return false
+    }
+    // Why the explicit hide above still wins: the exemption only shields a row from the sweep.
+    return (
+      !filters.hideSleepingWorkspaces ||
+      isSleepingSweepExempt(read.isMainWorktree(row), filters.alwaysShowDefaultBranchWorkspace) ||
+      !read.isSleeping(row)
+    )
   }
-  if (read.isFolderWorkspace(row)) {
-    return true
-  }
-  if (filters.hideDefaultBranchWorkspace && read.isDefaultBranch(row)) {
-    return false
-  }
-  if (filters.hideAutomationGeneratedWorkspaces && read.isAutomationCreated(row)) {
-    return false
-  }
-  if (filters.hideCliCreatedWorkspaces && read.isCliCreated(row)) {
-    return false
-  }
-  if (filters.hideDetachedHeadWorkspaces && read.isDetachedHead(row)) {
-    return false
-  }
-  if (scope.repoIds && !scope.repoIds.has(read.repoId(row))) {
-    return false
-  }
-  // Why the explicit hide above still wins: the exemption only shields a row from the sweep.
-  return (
-    !filters.hideSleepingWorkspaces ||
-    isSleepingSweepExempt(read.isMainWorktree(row), filters.alwaysShowDefaultBranchWorkspace) ||
-    !read.isSleeping(row)
-  )
 }
 
 /** The rows the Workspace options filters keep, in their given order. */
@@ -111,11 +114,7 @@ export function filterWorkspaceRows<Row>(
   filters: WorkspaceRowFilters,
   read: WorkspaceRowFactReader<Row>
 ): Row[] {
-  const scope = {
-    repoIds: filters.filterRepoIds.length > 0 ? new Set(filters.filterRepoIds) : null,
-    hostIds: filters.visibleHostIds ? new Set(filters.visibleHostIds) : null
-  }
-  return rows.filter((row) => isWorkspaceRowVisible(row, filters, read, scope))
+  return rows.filter(buildWorkspaceRowPredicate(filters, read))
 }
 
 /**
