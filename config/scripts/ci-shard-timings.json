@@ -4456,7 +4456,6 @@
       "src/main/runtime/mobile-subscribe-idle-pane-hydrate.test.ts": 5902,
       "src/main/runtime/mobile-subscribe-integration.test.ts": 22684,
       "src/main/runtime/multi-client-navigation-isolation.integration.test.ts": 5282,
-      "src/main/runtime/native-chat-visuals-workspace-verdict.test.ts": 326,
       "src/main/runtime/omp-readiness-transcripts.test.ts": 7797,
       "src/main/runtime/opencode-agent-row-enter-transcript.test.ts": 562,
       "src/main/runtime/opencode-agent-row-structure-transcript.test.ts": 347,

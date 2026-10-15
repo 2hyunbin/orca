@@ -88,6 +88,8 @@ export type RuntimeStore = {
   getMobileClientTabSelections?: Store['getMobileClientTabSelections']
   setMobileClientTabSelections?: Store['setMobileClientTabSelections']
   getSettings(): {
+    agentWorkspaceTrustEnabled?: GlobalSettings['agentWorkspaceTrustEnabled']
+    codexManagedAccounts?: GlobalSettings['codexManagedAccounts']
     nestedWorkerMaxDepth?: GlobalSettings['nestedWorkerMaxDepth']
     workspaceDir: string
     nestWorkspaces: boolean
