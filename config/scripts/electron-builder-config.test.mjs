@@ -410,6 +410,21 @@ describe('electron-builder config', () => {
     ).toBe(true)
   })
 
+  // Why: a packed file is streamed from a one-time /tmp extract; once a /tmp sweep removes it,
+  // every web-client request answers an empty 500 until restart (#27976).
+  it('unpacks the paired web client that serve streams over HTTP', () => {
+    const matcher = new FileMatcher(
+      '/app',
+      '/dest',
+      (value) => value,
+      electronBuilderConfig.asarUnpack
+    )
+    const isUnpacked = matcher.createFilter()
+    for (const webPath of ['out/web/web-index.html', 'out/web/assets/index-abc123.js']) {
+      expect(isUnpacked(join('/app', webPath), { isDirectory: () => false })).toBe(true)
+    }
+  })
+
   it('keeps the worker-thread hang watchdog inside app.asar', () => {
     expect(electronBuilderConfig.asarUnpack).not.toContain(
       'out/main/main-thread-hang-watchdog-entry.js'
