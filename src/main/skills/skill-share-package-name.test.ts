@@ -3,9 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SKILL_SHARE_NAME_TAKEN_ERROR } from '../../shared/skill-sharing-contract'
-import { SkillCloudRequestError } from './skill-cloud-request-error'
 import { SkillCloudService } from './skill-cloud-service'
-import { skillInstallFailureFromError } from './skill-install-operation-error'
 import { SkillSharePreparationService } from './skill-share-preparation-service'
 
 vi.mock('electron', () => ({ app: { isPackaged: false } }))
@@ -25,11 +23,11 @@ function stubLookup(status: number, body: unknown): void {
   )
 }
 
-function service(publishVersion = vi.fn()): SkillSharePreparationService {
+function service(): SkillSharePreparationService {
   const cloud = new SkillCloudService(root)
   return new SkillSharePreparationService(join(root, 'preparations'), {
     findOwnedPackageId: (name) => cloud.findOwnedPackageId(name, { apiUrl: API_URL }),
-    publishVersion,
+    publishVersion: vi.fn(),
     createShare: vi.fn()
   })
 }
@@ -104,38 +102,5 @@ describe('skill share package id by name', () => {
 
     expect(preview.packageId).toBe('pkg_managed')
     expect(lookups).toEqual([])
-  })
-
-  it('reports a name taken at finalize as the same error', async () => {
-    stubLookup(404, { code: 'skill_package_not_found' })
-    const taken = new SkillCloudRequestError(409, 'skill_package_name_taken', 'taken')
-    const shares = service(vi.fn().mockRejectedValue(taken))
-    const preview = await shares.prepare({ sourceDirectory: source, bundleName: 'lw-test' })
-
-    await expect(
-      shares.publish({ preparationId: preview.preparationId, releaseNotes: '' })
-    ).rejects.toThrow(SKILL_SHARE_NAME_TAKEN_ERROR)
-  })
-})
-
-describe('cloud request failure classification', () => {
-  it('reports a rejected cloud request as transport, not filesystem', () => {
-    expect(
-      skillInstallFailureFromError(
-        new SkillCloudRequestError(409, 'skill_package_name_taken', 'taken')
-      )
-    ).toEqual({ category: 'transport', code: 'skill-cloud-request-failed', retryable: false })
-    expect(
-      skillInstallFailureFromError(new SkillCloudRequestError(503, 'unavailable', 'down'))
-        ?.retryable
-    ).toBe(true)
-  })
-
-  it('still maps a real filesystem errno', () => {
-    expect(skillInstallFailureFromError(Object.assign(new Error('x'), { code: 'EBUSY' }))).toEqual({
-      category: 'filesystem',
-      code: 'skill-install-filesystem-failed',
-      retryable: true
-    })
   })
 })

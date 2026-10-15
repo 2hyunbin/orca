@@ -24,13 +24,6 @@ type Preparation = {
   publishedVersion: SkillCloudVersion | null
 }
 
-// Why: the name lookup and finalize both report a held name this way.
-function shareError(error: unknown): unknown {
-  return error instanceof SkillCloudRequestError && error.code === 'skill_package_name_taken'
-    ? new Error(SKILL_SHARE_NAME_TAKEN_ERROR, { cause: error })
-    : error
-}
-
 function shareIdempotencyKey(preparationId: string): string {
   return `${preparationId}_share`
 }
@@ -155,7 +148,7 @@ export class SkillSharePreparationService {
       return preview(preparationId, value)
     } catch (error) {
       await rm(directory, { recursive: true, force: true })
-      throw shareError(error)
+      throw error
     } finally {
       this.preparingCount -= 1
     }
@@ -213,8 +206,6 @@ export class SkillSharePreparationService {
         status: 'ok',
         value: { version, share: shared.value }
       } satisfies SkillSharePublishOperation
-    } catch (error) {
-      throw shareError(error)
     } finally {
       const current = this.preparations.get(input.preparationId)
       if (current) {
@@ -225,8 +216,12 @@ export class SkillSharePreparationService {
 
   // Why: the cloud keeps one live package per name, and the id is baked into the archive.
   private async packageIdForName(bundleName: string): Promise<string> {
-    const owned = await this.cloud.findOwnedPackageId(bundleName, {})
-    // Why: signed out, publishing stops at sign-in before any name check.
+    const owned = await this.cloud.findOwnedPackageId(bundleName, {}).catch((error: unknown) => {
+      throw error instanceof SkillCloudRequestError && error.code === 'skill_package_name_taken'
+        ? new Error(SKILL_SHARE_NAME_TAKEN_ERROR, { cause: error })
+        : error
+    })
+    // Why: signed out, the preview still works without an account; publish asks for sign-in.
     return (owned.status === 'ok' && owned.value) || randomUUID()
   }
 

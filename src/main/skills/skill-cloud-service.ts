@@ -14,7 +14,8 @@ import type {
 import { resolveArtifactCloudApiUrl } from '../artifacts/artifact-cloud-config'
 import { runSkillCloudOperation } from './skill-cloud-auth'
 import { uploadSkillPackageToSignedPolicy } from './skill-cloud-direct-upload'
-import { SkillCloudRequestError, skillCloudRequest } from './skill-cloud-request'
+import { skillCloudRequest } from './skill-cloud-request'
+import { SkillCloudRequestError } from './skill-cloud-request-error'
 import { startSkillPhaseOperation } from './skill-operation-observability'
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/

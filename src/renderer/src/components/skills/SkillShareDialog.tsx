@@ -217,16 +217,15 @@ export function SkillShareDialog({
     } catch (cause) {
       console.warn('[skills] publish failed:', cause)
       setError(
-        nameTakenError(cause, preview.name) ??
-          (cancellationRequested.current
-            ? translate(
-                'auto.components.skills.SkillShareDialog.publishCancelled',
-                'Upload cancelled. The prepared copy is still available to retry.'
-              )
-            : translate(
-                'auto.components.skills.SkillShareDialog.publishFailed',
-                'Could not publish this skill. The prepared copy is still available to retry.'
-              ))
+        cancellationRequested.current
+          ? translate(
+              'auto.components.skills.SkillShareDialog.publishCancelled',
+              'Upload cancelled. The prepared copy is still available to retry.'
+            )
+          : translate(
+              'auto.components.skills.SkillShareDialog.publishFailed',
+              'Could not publish this skill. The prepared copy is still available to retry.'
+            )
       )
     } finally {
       cancellationRequested.current = false

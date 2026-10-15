@@ -170,18 +170,6 @@ describe('SkillShareDialog', () => {
     )
   })
 
-  it('explains a bundle name taken while publishing', async () => {
-    const { skills } = setup([])
-    skills.publishShare.mockRejectedValue(new Error('skill-share-name-taken'))
-    await screen.findByRole('heading', { name: 'Share skill' })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Publish skill' }))
-
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'A teammate already shares a skill named “private-skill”. Rename your skill to share it.'
-    )
-  })
-
   it('releases a prepared archive when the dialog unmounts', async () => {
     const { skills, unmount } = setup([])
     await screen.findByRole('heading', { name: 'Share skill' })
