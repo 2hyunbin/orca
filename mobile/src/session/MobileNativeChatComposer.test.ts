@@ -58,6 +58,7 @@ vi.mock('../components/BottomDrawer', async () => {
 describe('MobileNativeChatComposer', () => {
   let renderer: ReactTestRenderer | null = null
   const getCurrentSendCompletionGeneration = () => 0
+  const image = { id: 'img-1', path: '/tmp/a.png', previewUri: 'file:///a.png' }
 
   afterEach(() => {
     act(() => renderer?.unmount())
@@ -152,13 +153,15 @@ describe('MobileNativeChatComposer', () => {
   // The phone has no Enter key: Stop takes the round button only while there is nothing to send.
   it('turns the round button into Stop while the agent works and nothing is typed', async () => {
     const onStop = vi.fn()
-    const composer = (value: string, stopping = false) =>
+    const composer = (value: string, stopping = false, sendDisabled = false, attachment = false) =>
       createElement(MobileNativeChatComposer, {
         value,
         onChangeText: vi.fn(),
         onSend: vi.fn().mockResolvedValue(true),
         sendSurfaceId: 'tab-a',
         getSendCompletionGeneration: getCurrentSendCompletionGeneration,
+        sendDisabled,
+        attachments: attachment ? [image] : [],
         stop: { onStop, stopping }
       })
     const labelled = (label: string) =>
@@ -178,6 +181,13 @@ describe('MobileNativeChatComposer', () => {
 
     await act(async () => renderer!.update(composer('', true)))
     expect(labelled('Stopping…')[0]!.props.disabled).toBe(true)
+
+    await act(async () => renderer!.update(composer('retained draft', false, true)))
+    expect(labelled('Stop the agent')[0]!.props.disabled).toBe(false)
+    await act(async () => renderer!.update(composer('', false, true, true)))
+    expect(labelled('Stop the agent')).toHaveLength(1)
+    await act(async () => renderer!.update(composer('steer this')))
+    expect(labelled('Send message')[0]!.props.disabled).toBe(false)
   })
 
   it('ignores a Stop tap that arrives right after Send turned into Stop', async () => {
@@ -207,6 +217,39 @@ describe('MobileNativeChatComposer', () => {
     expect(onStop).not.toHaveBeenCalled()
     pressStop(1_500)
     expect(onStop).toHaveBeenCalledTimes(1)
+    now.mockRestore()
+  })
+
+  it('stops immediately after clearing unsent content or switching chats', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const onStop = vi.fn()
+    const composer = (value: string, attachment = false, surface = 'tab-a', working = true) =>
+      createElement(MobileNativeChatComposer, {
+        value,
+        onChangeText: vi.fn(),
+        onSend: vi.fn().mockResolvedValue(true),
+        sendSurfaceId: surface,
+        getSendCompletionGeneration: getCurrentSendCompletionGeneration,
+        attachments: attachment ? [image] : [],
+        stop: working ? { onStop, stopping: false } : null
+      })
+    const pressStop = () =>
+      act(() =>
+        renderer!.root.findByProps({ accessibilityLabel: 'Stop the agent' }).props.onPress()
+      )
+    await act(async () => {
+      renderer = create(composer('unsent'))
+    })
+    await act(async () => renderer!.update(composer('')))
+    pressStop()
+    await act(async () => renderer!.update(composer('', true)))
+    await act(async () => renderer!.update(composer('')))
+    pressStop()
+    await act(async () => renderer!.update(composer('new message', false, 'tab-a', false)))
+    await act(async () => sendButton().props.onPress())
+    await act(async () => renderer!.update(composer('', false, 'tab-b')))
+    pressStop()
+    expect(onStop).toHaveBeenCalledTimes(3)
     now.mockRestore()
   })
 

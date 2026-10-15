@@ -143,7 +143,7 @@ export function MobileNativeChatComposer({
     isWorking: stop !== null,
     composerEmpty,
     queueHeld: false,
-    sendsWhileWorking: true
+    sendsWhileWorking: !sendDisabled
   })
 
   const trigger = useMemo(() => detectAutocompleteTrigger(value, cursor), [value, cursor])
@@ -345,6 +345,7 @@ export function MobileNativeChatComposer({
               </Pressable>
             ) : null}
             <MobileNativeChatComposerPrimaryButton
+              sendSurfaceId={sendSurfaceId}
               stop={primaryAction === 'stop' ? stop : null}
               canSend={canSend}
               onSend={handleSend}
