@@ -83,11 +83,7 @@ export function registerWorkerReleaseInventoryTests(): void {
     it('retains when persisted state has another resource for the exact terminal identity', async () => {
       h.setup()
       const { dispatchId } = await h.startSettledWorker()
-      const raw = (
-        h.db as unknown as {
-          db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } }
-        }
-      ).db
+      const raw = h.db.db
       raw
         .prepare(
           `INSERT INTO worker_terminal_resources (
