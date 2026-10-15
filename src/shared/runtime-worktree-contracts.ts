@@ -93,14 +93,15 @@ export type RuntimeWorktreePsSummary = {
   removing?: true
   /** See `GitWorktreeInfo.removalError`. */
   removalError?: string
-  /** The Workspace options row facts, as the host's own sidebar reads them (workspace-row-kinds).
-   *  Optional on the wire: an older host never sends them, and a reader treats absence as "not
-   *  that kind", so the row stays visible. */
-  defaultBranchWorkspace?: boolean
+  /** Workspace options row facts, from the host's own predicates (workspace-row-kinds). Older hosts
+   *  send none. `defaultBranch` is always sent by newer hosts; absent, a reader keeps its own
+   *  guess. The others are sent only when true; absent reads "not that kind", so the row shows. */
+  defaultBranch?: boolean
   automationCreated?: true
   cliCreated?: true
   detachedHead?: true
-  /** This host's "Hide other-client workspaces" hides the row; sent only to its own phones. */
+  /** A verdict, not a fact: this host's "Hide other-client workspaces" hides the row; sent only
+   *  to its own phones, and only while that filter is on. */
   desktopOtherClient?: true
 }
 
