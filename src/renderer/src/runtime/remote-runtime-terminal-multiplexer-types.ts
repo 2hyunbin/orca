@@ -57,6 +57,8 @@ export type RemoteRuntimeMultiplexedTerminalCallbacks = {
     }
   ) => void
   onSubscribed?: () => void
+  /** The host installed the stream and named its capabilities; its initial snapshot is still on the way. */
+  onSubscribeAcknowledged?: () => void
   onOutputPauseCapability?: () => void
   /** The host discarded output while this stream was paused (negotiated streams only). */
   onPausedOutputDropped?: () => void
