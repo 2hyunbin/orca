@@ -104,7 +104,7 @@ const devChannelRepo = isHourlyChannel
     : isAdhocChannel
       ? 'orca-adhoc'
       : null
-const appId = 'com.stablyai.orca'
+const appId = 'com.stablyai.orca.hangtest'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
@@ -235,13 +235,12 @@ const ORCA_MAC_TEAM_ID = '6CX3WHS9HZ'
 module.exports = {
   appId,
   productName: 'Orca',
-  protocols: [{ name: 'Orca', schemes: ['orca'] }],
+  protocols: [],
   toolsets: { appimage: '1.0.3' },
-  ...(devChannelBuildVersion
-    ? { extraMetadata: { version: devChannelBuildVersion } }
-    : localBuildVersion
-      ? { extraMetadata: { version: localBuildVersion } }
-      : {}),
+  extraMetadata: {
+    name: 'orca-hangtest',
+    ...(devChannelBuildVersion ? { version: devChannelBuildVersion } : localBuildVersion ? { version: localBuildVersion } : {})
+  },
   directories: {
     buildResources: 'resources/build'
   },
