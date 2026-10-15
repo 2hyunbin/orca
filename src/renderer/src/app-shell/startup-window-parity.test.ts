@@ -63,17 +63,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     paths: [`${GIT} terminal tab-a reattaches`]
   },
   {
-    fixture: 'tab-bar entry declaring a group that does not list it',
-    rule: 'group owner: the window keeps a tab in the group its entry declares; the Loader moves it to the first group listing it',
-    paths: [
-      `${GIT} groups`,
-      `${GIT} group 0 tabs`,
-      `${GIT} group 1 tabs`,
-      `${GIT} group 1 active tab`,
-      `${GIT} tab tab-b`
-    ]
-  },
-  {
     fixture: 'session from before the tab bar, with an open file',
     rule: 'old sessions: the window builds tabs from rows and open files; the Loader builds them from rows only, losing editor tabs',
     paths: [

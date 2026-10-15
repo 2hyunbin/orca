@@ -2,11 +2,11 @@ import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../../shared/tab-t
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { resolveTabGroupOwners } from '../../../../shared/workspace-layout/tab-group-owners'
 import {
   adoptGrouplessTabs,
   appendOwnedTabIdsToGroups,
-  layoutSpanningGroups,
-  resolveTabGroupOwners
+  layoutSpanningGroups
 } from './tab-group-reference-repair'
 import {
   dedupeEditorTabsWithinGroups,
