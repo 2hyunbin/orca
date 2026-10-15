@@ -99,6 +99,12 @@ function withListConsequences(records: string[]): string[] {
   return [...allowed]
 }
 
+const FOLDED_LEGACY_ROW_GAPS = new Map<string, string[]>([
+  ['legacy row repeating a tab-bar tab’s terminal', ['closeTabs']],
+  ['legacy row repeating a tab-bar tab’s terminal, selected', ['closeTabs']],
+  ['legacy split row sharing one pane’s terminal with a tab-bar tab', ['closeTabs', 'moveTab']]
+])
+
 describe('patchStoredSession', () => {
   const profiles = [...WORKSPACE_LAYOUT_PROFILES, ...LEGACY_WORKSPACE_LAYOUT_PROFILES]
 
@@ -110,6 +116,7 @@ describe('patchStoredSession', () => {
       const before = saveWorkspaceLayout(loaded)
       const normalizedAtLoad = diffStoredSession(stored, before).length > 0
       let applied = 0
+      const roundTripGaps = new Set<string>()
       for (const command of commandsFor(loaded.layout)) {
         const result = applyLayoutCommand(loaded.layout, command, CONTEXT)
         if (!result.ok) {
@@ -123,6 +130,17 @@ describe('patchStoredSession', () => {
           // A partition the load leaves alone: the patch is the full save, field for field.
           expect(stableJson(patched), label).toBe(stableJson(after))
         }
+        // The written partition loads to what the command produced. The revision is exempt: the
+        // load's tombstone retirement bumps it again on every load.
+        const reloaded = (session: typeof stored) => ({
+          ...saveWorkspaceLayout(
+            loadWorkspaceLayout(profile.hostId, session, nameBasedLoadContext())
+          ),
+          terminalTopologyRevisionByRepoId: undefined
+        })
+        if (stableJson(reloaded(patched)) !== stableJson(reloaded(after))) {
+          roundTripGaps.add(command.type)
+        }
         const written = changedRecords(diffStoredSession(stored, patched))
         const commanded = withListConsequences(changedRecords(diffStoredSession(before, after)))
         expect(
@@ -131,6 +149,9 @@ describe('patchStoredSession', () => {
         ).toEqual([])
       }
       expect(applied > 0 || Object.keys(loaded.layout.workspaces).length === 0).toBe(true)
+      // Known gap, closed before layout.apply accepts more than splitPane: a legacy row the load
+      // folds into a tab-bar tab stays stored, so closing or moving that tab brings the row back.
+      expect([...roundTripGaps]).toEqual(FOLDED_LEGACY_ROW_GAPS.get(profile.name) ?? [])
     }
   )
 
@@ -162,5 +183,33 @@ describe('patchStoredSession', () => {
     ])
     // Stored fields keep their order; the command's new field follows them.
     expect(Object.keys(patched).slice(0, Object.keys(stored).length)).toEqual(Object.keys(stored))
+  })
+
+  it('writes a layout the load supplied whole, so the split keeps the tab’s terminal', () => {
+    const profile = WORKSPACE_LAYOUT_PROFILES[0]!
+    const stored = profile.build()
+    const [workspace, rows] = Object.entries(stored.tabsByWorktree).find(([, tabs]) =>
+      tabs.some((tab) => tab.ptyId)
+    )!
+    const row = rows.find((tab) => tab.ptyId)!
+    const { [row.id]: _dropped, ...layouts } = stored.terminalLayoutsByTabId
+    stored.terminalLayoutsByTabId = layouts
+    const loaded = loadWorkspaceLayout(profile.hostId, stored, nameBasedLoadContext())
+    const tab = loaded.layout.workspaces[workspace]!.tabs.find((entry) => entry.id === row.id)
+    const leafId = tab?.kind === 'terminal' ? collectLayoutLeafIdsInOrder(tab.panes.root)[0] : null
+    const result = applyLayoutCommand(
+      loaded.layout,
+      { type: 'splitPane', workspace, tabId: row.id, leafId: leafId!, direction: 'vertical' },
+      CONTEXT
+    )
+    if (!result.ok) {
+      throw new Error(result.code)
+    }
+    const after = saveWorkspaceLayout({ ...loaded, layout: result.model })
+
+    const patched = patchStoredSession(stored, saveWorkspaceLayout(loaded), after)
+
+    expect(patched.terminalLayoutsByTabId[row.id]).toEqual(after.terminalLayoutsByTabId[row.id])
+    expect(patched.terminalLayoutsByTabId[row.id]?.ptyIdsByLeafId?.[leafId!]).toBe(row.ptyId)
   })
 })

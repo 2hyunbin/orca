@@ -36,6 +36,7 @@ export function patchStoredSession(
   const patched: Json = { ...storedFields }
   for (const field of changedKeys(beforeFields, afterFields)) {
     const idOf = LIST_FIELDS[field]
+    // The command dropped the field: stored records the load never read go with it.
     if (afterFields[field] === undefined) {
       delete patched[field]
     } else if (idOf) {
@@ -126,7 +127,13 @@ function insertionIndex(
 }
 
 function patchValue(stored: unknown, before: unknown, after: unknown, depth: number): unknown {
-  if (depth === 0 || !isRecord(before) || !isRecord(after)) {
+  // A record the stored partition lacks is written whole; a missing map is patched key by key.
+  if (
+    depth === 0 ||
+    !isRecord(before) ||
+    !isRecord(after) ||
+    (!isRecord(stored) && depth !== MAP_RECORD_DEPTH)
+  ) {
     return after
   }
   const base = asJson(stored)
