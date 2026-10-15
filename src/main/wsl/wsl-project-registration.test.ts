@@ -133,4 +133,14 @@ describe('new WSL project ownership', () => {
     expect(() => assertWslProjectRoutingCaller(saved.path, { kind: 'paired-device', deviceId: 'old-client' })).toThrow('Windows desktop')
     expect(() => assertWslProjectRoutingCaller(saved.path, { kind: 'local-cli' })).not.toThrow()
   })
+
+  it('does not deploy a host or create a guest group for an already-known nested selection', async () => {
+    const saved = { ...guest, path: '\\\\wsl$\\Ubuntu\\home\\me\\old' }
+    const result = await importNestedProjectsOnWslHost({ getRepos: () => [saved] }, {
+      parentPath: '\\\\wsl.localhost\\Ubuntu\\home\\me', mode: 'group', projectPaths: [saved.path]
+    })
+    expect(result).toMatchObject({ importedCount: 0, alreadyKnownCount: 1 })
+    expect(mocks.ensure).not.toHaveBeenCalled()
+    expect(mocks.call).not.toHaveBeenCalled()
+  })
 })

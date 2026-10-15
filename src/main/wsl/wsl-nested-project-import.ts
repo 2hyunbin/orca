@@ -26,10 +26,8 @@ export async function importNestedProjectsOnWslHost(
   if (args.connectionId) {
     return null
   }
-  // Each selected project is checked separately; a saved parent folder is not a new import.
-  const owner = await resolveNewWslProjectHost(store, args.parentPath, null)
   const parent = parseWslUncPath(args.parentPath)
-  if (!owner || 'repo' in owner || !parent) {
+  if (!parent || args.projectPaths.length === 0) {
     return null
   }
   const existing: ProjectGroupImportResult['projects'] = []
@@ -39,10 +37,10 @@ export async function importNestedProjectsOnWslHost(
     if (!parsed || parsed.distro.toLowerCase() !== parent.distro.toLowerCase()) {
       throw new Error('Selected projects must belong to the selected WSL distro.')
     }
-    const key = foldWslUncPathCaseInsensitiveParts(path)
+    const key = foldWslUncPathCaseInsensitiveParts(path.replace(/[\\/]+$/, ''))
     const known = store.getRepos().find((repo) =>
       getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID &&
-      foldWslUncPathCaseInsensitiveParts(repo.path) === key
+      foldWslUncPathCaseInsensitiveParts(repo.path.replace(/[\\/]+$/, '')) === key
     )
     if (known) {
       existing.push({ path, projectId: known.id, status: 'already-known' })
@@ -50,9 +48,22 @@ export async function importNestedProjectsOnWslHost(
       projectPaths.push(parsed.linuxPath)
     }
   }
+  // A batch containing only saved local rows must not start a guest or create an empty group.
+  const firstNewPath = projectPaths[0]
+  const owner = await resolveNewWslProjectHost(
+    store,
+    firstNewPath ? toWindowsWslUncPath(firstNewPath, parent.distro) : existing[0].path,
+    firstNewPath ? null : undefined
+  )
+  if (!owner) {
+    return null
+  }
+  if ('repo' in owner) {
+    return { projects: existing, importedCount: 0, alreadyKnownCount: existing.length, failedCount: 0 }
+  }
   const response = await callWslProjectHost(
     owner.environmentId, 'projectGroup.importNested',
-    { ...args, parentPath: owner.linuxPath, projectPaths }
+    { ...args, parentPath: parent.linuxPath, projectPaths }
   )
   const result = ImportReply.parse(response)
   const executionHostId = toRuntimeExecutionHostId(owner.environmentId)
