@@ -65,8 +65,11 @@ export async function closeProviderProcess(
   if (tree) {
     await tree.capture()
   }
+  let groupVerdict: DescendantTreeVerdict | null = null
   if (input.group) {
-    await input.group.stop(policy.closeRequest ?? 'stdin-end')
+    groupVerdict = (await input.group.stop(policy.closeRequest ?? 'stdin-end'))
+      ? 'exited'
+      : 'unverifiable'
   } else {
     try {
       child.stdin?.end()
@@ -75,7 +78,7 @@ export async function closeProviderProcess(
     }
   }
   let reaped = false
-  let fallbackTree: DescendantTreeVerdict | null = null
+  let fallbackTree: DescendantTreeVerdict | null = groupVerdict
   if (input.rootVerdict() !== 'exited') {
     await waitForProcessExitUntil(input.exitPromise, policy.gracefulExitMs)
     if (input.rootVerdict() !== 'exited') {
@@ -95,10 +98,18 @@ export async function closeProviderProcess(
     !tree?.forcedReapAttempted &&
     input.rootVerdict() === 'exited'
   ) {
-    return { root: 'exited', tree: tree ? tree.treeVerdict : null, selfExit: true }
+    return { root: 'exited', tree: completionVerdict(groupVerdict, tree, groupVerdict), selfExit: true }
   }
   if (!reaped && input.rootVerdict() === 'exited' && tree && tree.treeVerdict !== 'exited') {
     await tree.reap()
   }
-  return { root: input.rootVerdict(), tree: tree ? tree.treeVerdict : fallbackTree }
+  return { root: input.rootVerdict(), tree: completionVerdict(groupVerdict, tree, fallbackTree) }
+}
+
+function completionVerdict(
+  group: DescendantTreeVerdict | null,
+  tree: ProviderProcessTree | undefined,
+  fallback: DescendantTreeVerdict | null
+): DescendantTreeVerdict | null {
+  return group === 'unverifiable' ? group : tree ? tree.treeVerdict : fallback
 }

@@ -1,3 +1,4 @@
+import { spawnProcess } from '@orca/process-host'
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -6,7 +7,7 @@ import {
   waitFor,
   type SupervisedProbeRig
 } from '../codex/supervised-probe-owner.test-fixture'
-import { PROVIDER_GROUP_MAX_STOP_MS } from './provider-group-watchdog'
+import { PROVIDER_GROUP_MAX_STOP_MS, providerGroupWatchdogLaunch } from './provider-group-watchdog'
 
 // Stands in for Orca's main: one host watchdog, three providers spawned one after another (so a
 // later one would hold the watchdog's pipe if it leaked), one per way a provider stops.
@@ -45,6 +46,24 @@ afterEach(() => {
 })
 
 describe.runIf(process.platform !== 'win32')('provider group watchdog', () => {
+  it('still cleans earlier groups if the owner loses the ACK reader during registration', async () => {
+    rig = createSupervisedProbeRig()
+    const provider = spawnProcess({ program: rig.writeStandIn('agent'), env: { ...process.env, ...rig.env }, detached: true })
+    const pids = await rig.readPids()
+    const launch = providerGroupWatchdogLaunch()
+    const watcher = spawnProcess({ program: launch.command, args: launch.args, env: launch.env, detached: true })
+    if (watcher.pid) extraPids.push(watcher.pid)
+    // Reader closure deterministically makes the pending registration's ACK fail with EPIPE.
+    watcher.stdout.destroy()
+    watcher.stdin.on('error', () => {})
+    watcher.stdin.end(`+ ${pids.provider} stop\n`)
+    expect(await waitFor(() => !alive(pids.provider) && !alive(pids.grandchild), PROVIDER_GROUP_MAX_STOP_MS + 1_000)).toBe(true)
+    await new Promise<void>((resolve) => {
+      if (provider.exitCode !== null || provider.signalCode !== null) resolve()
+      else provider.once('exit', () => resolve())
+    })
+  })
+
   it.each([
     ['is SIGKILLed', 'SIGKILL'],
     ['quits', 'SIGUSR2']

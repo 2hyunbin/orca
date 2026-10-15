@@ -158,6 +158,30 @@ describe('structured session recovery resolution', () => {
     })
   })
 
+  it('waits for an initially rootless group without signalling an unverified saved number', async () => {
+    const store = await openStore()
+    await liveOwner(store)
+    await latch(store)
+    let groupAlive = true
+    const kill = vi.spyOn(process, 'kill').mockImplementation((pid) => {
+      if (pid === -4242 && groupAlive) return true
+      throw Object.assign(new Error('gone'), { code: 'ESRCH' })
+    })
+    const stopOwnerProcess = vi.fn()
+    try {
+      const result = await resolveStructuredSessionRecovery(deps(store, () => ({ outcome: 'pid-absent' }), {
+        stopOwnerProcess,
+        platform: 'darwin',
+        delay: async () => { groupAlive = false }
+      }), SESSION)
+      expect(result).toBe('resolved')
+      expect(stopOwnerProcess).not.toHaveBeenCalled()
+      expect(store.getRecord(SESSION)?.lease.deathEvidence).not.toBeNull()
+    } finally {
+      kill.mockRestore()
+    }
+  })
+
   it('stops a live identity-matched orphan and evicts only after absence is proven', async () => {
     const store = await openStore()
     await liveOwner(store)
@@ -331,7 +355,7 @@ describe('structured session recovery resolution', () => {
 // A new build's owner: the provider leads its group, and its helper stops on the group SIGTERM.
 const GROUP_LEADER = String.raw`
   const helper = require('node:child_process').spawn(process.execPath, ['-e',
-    "process.on('SIGTERM', () => process.exit(0)); process.stdout.write(String(process.pid)); setInterval(() => {}, 60000)"],
+    "process.on('SIGTERM', () => {}); process.stdout.write(String(process.pid)); setInterval(() => {}, 60000)"],
     { stdio: ['ignore', 'pipe', 'ignore'] })
   helper.stdout.once('data', (pid) => process.stdout.write(process.pid + ' ' + pid + '\n'))
   process.on('SIGTERM', () => process.exit(0))
@@ -398,8 +422,8 @@ describe.runIf(process.platform !== 'win32')('structured session recovery of a l
   it('stops a group-led owner through its group, its helpers included', async () => {
     const [provider, helper] = await recoverOwner(GROUP_LEADER)
     expect(alive(provider)).toBe(false)
-    // A SIGTERM to the provider alone would have left its helper running.
-    await vi.waitFor(() => expect(alive(helper)).toBe(false))
+    // Returning before this helper's SIGKILL would admit overlapping writes.
+    expect(alive(helper)).toBe(false)
   })
 
   it("stops an older build's owner, a supervisor that leads a group of its own", async () => {

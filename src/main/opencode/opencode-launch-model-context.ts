@@ -120,7 +120,8 @@ export async function probeOpenCodeLaunchModelContext(options: {
     args: spawnSpec.args,
     cwd: options.cwd,
     env: spawnSpec.env,
-    detached: true
+    detached: true,
+    stdio: ['pipe', 'pipe', 'pipe', ...spawnSpec.extraStdio]
   })
   const group = spawnSpec.adopt(child)
   const output = createOutputSink(4096)

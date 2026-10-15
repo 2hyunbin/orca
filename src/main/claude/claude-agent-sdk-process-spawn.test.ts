@@ -1,3 +1,4 @@
+import { PROVIDER_EXEC_GATE_SCRIPT } from '../provider-process/provider-exec-gate'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { describe, expect, it, vi } from 'vitest'
 import type { SpawnOptions as SdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
@@ -56,7 +57,7 @@ describe('claude agent SDK process spawn', () => {
   })
 
   it.each(['darwin', 'linux'] as const)(
-    'starts Claude directly as the leader of its own group on %s, whose pid the lease records',
+    'gates Claude exec in its own group on %s, retaining the pid the lease records',
     (platform) => {
       const process = fakeSpawn()
       const spawn = createClaudeCodeProcessSpawn(process.spawnImpl, platform)
@@ -64,12 +65,12 @@ describe('claude agent SDK process spawn', () => {
 
       expect(spawn.pid).toBe(4321)
       expect(process.specs[0]).toEqual({
-        program: '/usr/local/bin/claude',
-        args: ['--output-format', 'stream-json'],
+        program: '/bin/sh',
+        args: ['-c', PROVIDER_EXEC_GATE_SCRIPT, '/usr/local/bin/claude', '/usr/local/bin/claude', '--output-format', 'stream-json'],
         cwd: '/work/repo',
         env: { PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/accounts/one' },
         detached: true,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe', 'pipe']
       })
       // A gone Orca closes Claude as its own close does (stdin end and SIGTERM), not with the
       // root-only stdin-end drain a managed provider gets by default.

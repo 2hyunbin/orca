@@ -1,3 +1,4 @@
+import { PROVIDER_EXEC_GATE_SCRIPT, providerExecGate } from './provider-exec-gate'
 import type { ChildProcessHandle } from '@orca/process-host/process-spec'
 import { resolveProviderChildEnv, type ProviderProcessLaunch } from './provider-process-launch'
 import {
@@ -32,7 +33,7 @@ export type ProviderProcessGroup = {
   readonly pgid: number
   /** Resolves once the provider has exited and its group is gone (or its reap timed out), so an
    *  exit reported on it never precedes the group's last member. */
-  readonly exited: Promise<void>
+  readonly exited: Promise<boolean>
   /**
    * Ends stdin, SIGTERMs the group (at once, or after a draining session's stdin-end grace),
    * SIGKILLs what outlives the SIGTERM grace, and resolves once the group is gone or its reap
@@ -45,7 +46,7 @@ const GROUP_POLL_MS = 25
 
 type GroupChild = Pick<
   ChildProcessHandle,
-  'pid' | 'spawnfile' | 'stdin' | 'exitCode' | 'signalCode' | 'once'
+  'pid' | 'spawnfile' | 'stdin' | 'stdio' | 'kill' | 'emit' | 'listenerCount' | 'exitCode' | 'signalCode' | 'once'
 >
 
 function groupExists(pgid: number): boolean {
@@ -87,13 +88,13 @@ function ownerDeathStop({
 }
 
 /**
- * Takes ownership of a just-spawned detached POSIX child's group: registers it with this process's
- * watchdog, so the group stops with Orca however Orca exits, and kills what is left of the group
- * when the provider exits on its own. Call in the spawn's own tick. Null without a spawned pid.
+ * Registers a gated POSIX child before permitting exec; natural exit reaps its group.
+ * Call in the spawn's own tick. Null without a spawned pid.
  */
 export function adoptProviderProcessGroup(
   child: GroupChild,
-  options: ProviderGroupOptions = {}
+  options: ProviderGroupOptions = {},
+  command = child.spawnfile
 ): ProviderProcessGroup | null {
   const pgid = child.pid
   // Only a process this one spawned (spawn sets `spawnfile`), never a bare pid or a stand-in: a
@@ -102,7 +103,8 @@ export function adoptProviderProcessGroup(
     return null
   }
   const lifetime = options.lifetime ?? 'session'
-  const release = watchProviderGroup(pgid, ownerDeathStop(options))
+  const gate = providerExecGate(child, command)
+  const release = watchProviderGroup(pgid, ownerDeathStop(options), gate.ready, gate.failed)
   let rootExited = child.exitCode !== null || child.signalCode !== null
   let terminated = false
   let stopping: Promise<boolean> | null = null
@@ -137,7 +139,7 @@ export function adoptProviderProcessGroup(
     child.once('exit', onRootExit)
   }
   const exited = rootExit.then(async () => {
-    await (selfExitReap ?? stopping)
+    return (await (selfExitReap ?? stopping)) ?? !groupExists(pgid)
   })
   const runStop = async (closeRequest: ProviderCloseRequest): Promise<boolean> => {
     try {
@@ -176,6 +178,7 @@ export type ProviderSpawnSpec = {
   env: NodeJS.ProcessEnv
   cwd: string
   detached: boolean
+  extraStdio: [] | ['pipe']
   /** POSIX: the child leads its own group, which `adopt` hands to Orca and its watchdog. */
   supervised: boolean
   /** Call with the spawned child in the same tick; null on Windows or without a pid. */
@@ -195,12 +198,15 @@ export function createProviderSpawnSpec(
     delete env.ELECTRON_RUN_AS_NODE
   }
   return {
-    program: launch.command,
-    args: launch.args,
+    program: supervised ? '/bin/sh' : launch.command,
+    args: supervised
+      ? ['-c', PROVIDER_EXEC_GATE_SCRIPT, launch.command, launch.command, ...launch.args]
+      : launch.args,
     env,
     cwd: launch.cwd ?? process.cwd(),
     detached: supervised,
+    extraStdio: supervised ? ['pipe'] : [],
     supervised,
-    adopt: (child) => (supervised ? adoptProviderProcessGroup(child, options) : null)
+    adopt: (child) => (supervised ? adoptProviderProcessGroup(child, options, launch.command) : null)
   }
 }

@@ -41,7 +41,7 @@ function fakeGroupLeader(stopMs: number | null): FakeGroupLeader {
     signalCode: null,
     group: {
       pgid: 4242,
-      exited: Promise.resolve(),
+      exited: Promise.resolve(true),
       stop: vi.fn(async () => {
         if (stopMs === null) {
           await new Promise((resolve) => setTimeout(resolve, PROVIDER_GROUP_MAX_STOP_MS))
@@ -155,6 +155,43 @@ describe('a group-led agent one-shot that runs out of time', () => {
     await expect(second).resolves.toMatchObject({ success: true, message: 'Update README' })
     expect(agents[0]!.kill).not.toHaveBeenCalled()
     expect(terminateTreeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('natural source-control group completion', () => {
+  it('holds the home and rejects success until the natural group result is known', async () => {
+    vi.useFakeTimers()
+    const agents = [fakeGroupLeader(0), fakeGroupLeader(0)]
+    let finishGroup!: (reaped: boolean) => void
+    Object.assign(agents[0]!.group, {
+      exited: new Promise<boolean>((resolve) => { finishGroup = resolve })
+    })
+    const spawnAgent = vi.fn(() => asSpawned(agents[spawnAgent.mock.calls.length - 1]!))
+    const request = (cwd: string) => generateCommitMessage({
+      context: { branch: 'main', stagedSummary: 'M README.md', stagedPatch: '+test' },
+      params: { agentId: 'codex', model: 'gpt-5.5' },
+      target: { kind: 'local' as const, cwd, env: { CODEX_HOME: '/codex/natural-group-home' } },
+      spawnAgent
+    })
+    const first = request('/repo/natural-first')
+    await vi.advanceTimersByTimeAsync(0)
+    agents[0]!.stdout.emit('data', Buffer.from('Update README\n'))
+    agents[0]!.exitCode = 0
+    agents[0]!.emit('exit', 0)
+    agents[0]!.emit('close', 0)
+    const firstSettled = vi.fn()
+    void first.then(firstSettled)
+    const second = request('/repo/natural-second')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(firstSettled).not.toHaveBeenCalled()
+    expect(spawnAgent).toHaveBeenCalledTimes(1)
+    finishGroup(false)
+    await vi.advanceTimersByTimeAsync(0)
+    await expect(first).resolves.toMatchObject({ success: false, error: expect.stringMatching(/cleanup/) })
+    expect(spawnAgent).toHaveBeenCalledTimes(2)
+    agents[1]!.stdout.emit('data', Buffer.from('Update README\n'))
+    agents[1]!.emit('close', 0)
+    await expect(second).resolves.toMatchObject({ success: true })
   })
 })
 

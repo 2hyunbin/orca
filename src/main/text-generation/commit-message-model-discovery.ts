@@ -1,3 +1,4 @@
+import { sourceControlAgentCompletion } from './source-control-agent-completion'
 import { isMissingProviderExecutable } from '../provider-process/provider-executable-missing'
 import { mergeCommandEnvironment } from '../../shared/command-environment'
 import type { CommandTemplateBackslash } from '../../shared/commit-message-prompt'
@@ -104,7 +105,7 @@ export async function discoverModelsLocal(input: {
         terminationComplete ??= killSourceControlAgentProcess(child)
       }
       const markClosedAfterTermination = (): void => {
-        void (terminationComplete ?? Promise.resolve()).then(markProcessClosed)
+        void sourceControlAgentCompletion(child, terminationComplete).then(markProcessClosed)
       }
       const finish = (value: DiscoverCommitMessageModelsResult): void => {
         if (settled) {
@@ -159,11 +160,17 @@ export async function discoverModelsLocal(input: {
         })
       }
       const onClose = (code: number | null): void => {
+        void finishClose(code)
+      }
+      const finishClose = async (code: number | null): Promise<void> => {
+        const reaped = await sourceControlAgentCompletion(child, terminationComplete)
         markClosedAfterTermination()
         finish(
-          outputLimitExceeded
-            ? { success: false, error: `${spec.label} returned too much model data.` }
-            : finalizeModelDiscoveryOutput(spec, stdout, stderr, code)
+          !reaped
+            ? { success: false, error: `${spec.label} model discovery cleanup could not be confirmed. Try again.` }
+            : outputLimitExceeded
+              ? { success: false, error: `${spec.label} returned too much model data.` }
+              : finalizeModelDiscoveryOutput(spec, stdout, stderr, code)
         )
       }
       child.stdout?.on('data', onStdoutData)

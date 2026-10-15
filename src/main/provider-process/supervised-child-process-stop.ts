@@ -26,7 +26,7 @@ export async function stopSupervisedChildProcess(
 ): Promise<ProviderProcessCloseResult> {
   const exited = (): boolean => child.exitCode !== null || child.signalCode !== null
   if (exited()) {
-    return { root: 'exited', tree: null }
+    return { root: 'exited', tree: await group.exited ? 'exited' : 'unverifiable' }
   }
   return closeProviderProcess({
     child,

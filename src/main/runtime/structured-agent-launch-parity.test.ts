@@ -1,3 +1,4 @@
+import { PROVIDER_EXEC_GATE_SCRIPT } from '../provider-process/provider-exec-gate'
 // Parity oracle for native-chat launches: the exact child every agent spawns, read at the spawn
 // boundary, with production's own dependency wiring. A refactor of the launch path must leave the
 // snapshot file unchanged.
@@ -509,9 +510,12 @@ function sortedEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 /** The child as the provider sees it. */
 function childOf(capture: { spec: ProcessSpec; envToDelete: readonly string[] }) {
   const { spec } = capture
+  const gated = spec.program === '/bin/sh' && spec.args?.[1] === PROVIDER_EXEC_GATE_SCRIPT
+  const command = gated ? spec.args?.[3] : spec.program
+  if (!command) throw new Error('Provider launch has no executable')
   return {
-    command: normalized(spec.program),
-    args: (spec.args ?? []).map(normalized),
+    command: normalized(command),
+    args: (gated ? spec.args?.slice(4) ?? [] : spec.args ?? []).map(normalized),
     cwd: normalized(spec.cwd ?? ''),
     env: sortedEnv({ ...spec.env }),
     envToDelete: [...new Set(capture.envToDelete)].sort()

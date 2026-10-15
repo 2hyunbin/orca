@@ -55,7 +55,7 @@ export function spawnCodexBackfillRecoveryProcess(
   )
   const child = spawnProcess(spawnSpec.program, spawnSpec.args, {
     cwd: codexHomePath,
-    stdio: ['pipe', 'ignore', 'ignore'],
+    stdio: ['pipe', 'ignore', 'ignore', ...spawnSpec.extraStdio],
     windowsHide: true,
     env: spawnSpec.env,
     ...(spawnSpec.detached ? { detached: true } : {})

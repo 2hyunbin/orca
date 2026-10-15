@@ -82,6 +82,7 @@ export async function runAgentModelCatalogListing(
   const stderrDetail = (): string => managed.stderrTail().trim().slice(0, STDERR_DETAIL_MAX_CHARS)
   let timer: ReturnType<typeof setTimeout> | undefined
   let onAbort = (): void => {}
+  let completed = false
   try {
     return await new Promise<string>((resolve, reject) => {
       const fail = (message: string, reason: AgentModelCatalogProbeFailure): void =>
@@ -113,7 +114,10 @@ export async function runAgentModelCatalogListing(
       })
       // `close`, not `exit`: only then has every byte of stdout arrived.
       child.on('close', (code: number | null) => {
-        if (code === 0) {
+        if (managed.executableMissing) {
+          fail(`${launch.command} could not start: executable not found`, 'spawn')
+        } else if (code === 0) {
+          completed = true
           resolve(output.text())
         } else {
           const detail = stderrDetail()
@@ -132,7 +136,10 @@ export async function runAgentModelCatalogListing(
   } finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', onAbort)
-    await managed.close()
+    const result = await managed.close()
+    if (completed && managed.supervised && (result.root !== 'exited' || result.tree !== 'exited')) {
+      throw new AgentModelCatalogProbeError(`${launch.command} listing cleanup could not be confirmed`, 'exit')
+    }
   }
 }
 

@@ -107,7 +107,7 @@ function spawnSupervisedAgent(
     env: spec.env,
     cwd: spec.cwd,
     detached: spec.detached,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe', ...spec.extraStdio]
   })
   return Object.assign(child, { group: spec.adopt(child) })
 }

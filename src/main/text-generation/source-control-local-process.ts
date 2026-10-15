@@ -1,3 +1,4 @@
+import { sourceControlAgentCompletion } from './source-control-agent-completion'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'
 import { UnsafeWindowsBatchArgumentsError } from '../win32-utils'
@@ -148,7 +149,7 @@ export function runLocalSourceControlPlan(input: {
       terminationComplete ??= killSourceControlAgentProcess(child)
     }
     const markClosedAfterTermination = (): void => {
-      void (terminationComplete ?? Promise.resolve()).then(markProcessClosed)
+      void sourceControlAgentCompletion(child, terminationComplete).then(markProcessClosed)
     }
     const finalize = (value: InternalTextGenerationResult): void => {
       if (settled) {
@@ -216,7 +217,15 @@ export function runLocalSourceControlPlan(input: {
       })
     }
     const onClose = (code: number | null): void => {
+      void finishClose(code)
+    }
+    const finishClose = async (code: number | null): Promise<void> => {
+      const reaped = await sourceControlAgentCompletion(child, terminationComplete)
       markClosedAfterTermination()
+      if (!reaped) {
+        finalize({ success: false, error: `${plan.label} cleanup could not be confirmed. Try again.` })
+        return
+      }
       if (canceledByUser) {
         finalize({ success: false, error: 'Generation canceled.', canceled: true })
         return

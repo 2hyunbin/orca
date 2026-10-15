@@ -91,7 +91,7 @@ export function spawnManagedProviderProcess(
     cwd: spec.cwd,
     env: spec.env,
     detached: spec.detached,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe', ...spec.extraStdio]
   })
   const group = spec.adopt(child)
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
@@ -131,7 +131,10 @@ export function spawnManagedProviderProcess(
     rootExit = exit
     // A group-led provider's exit is reported once its group is gone, never before a member.
     if (group) {
-      void group.exited.then(() => observeExit(exit))
+      void group.exited.then((reaped) => {
+        lastCloseResult ??= { root: 'exited', tree: reaped ? 'exited' : 'unverifiable' }
+        observeExit(exit)
+      })
     } else {
       observeExit(exit)
     }
@@ -186,7 +189,7 @@ export function spawnManagedProviderProcess(
       return exitProof.run(async () => {
         // The one already-exited guard. It observed nothing, so an earlier close's findings stay.
         if (observed && !tree) {
-          const result: ProviderProcessCloseResult = { root: 'exited', tree: null }
+          const result = lastCloseResult ?? { root: 'exited' as const, tree: null }
           lastCloseResult ??= result
           return result
         }

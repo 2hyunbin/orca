@@ -120,6 +120,18 @@ describe('structured agent-session owner probe', () => {
     expect(result).toEqual({ outcome: 'pid-absent' })
   })
 
+  it.runIf(process.platform !== 'win32')('keeps rootless groups unproven in both single and batched restart probes', async () => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    try {
+      const one = await createStructuredAgentSessionOwnerProbe(HOST_ID, deadProbe())(record(OWNER))
+      const many = await createStructuredAgentSessionOwnerProbes(HOST_ID, async () => [{ outcome: 'pid-absent' }])([record(OWNER)])
+      expect(one).toMatchObject({ outcome: 'indeterminate' })
+      expect(many.get('session-1')).toMatchObject({ outcome: 'indeterminate' })
+    } finally {
+      kill.mockRestore()
+    }
+  })
+
   it('reads the process table once for many local owners', async () => {
     const secondOwner = { ...OWNER, pid: 5252, spawnToken: 'token-2' }
     const probeMany = vi.fn(async () => [

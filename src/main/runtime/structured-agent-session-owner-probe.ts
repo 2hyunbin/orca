@@ -1,3 +1,4 @@
+import { retainProviderGroupProbe } from '../provider-process/provider-process-group-probe'
 import type { AgentSessionOwnerProbe } from '../../shared/agent-session-lease-adjudication'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import {
@@ -52,10 +53,10 @@ export function createStructuredAgentSessionOwnerProbe(
     }
     // The env read-back answers on hosts that expose it and null elsewhere, giving the
     // probe a PID-reuse-safe element even when no start time was recorded.
-    return probe({
+    return retainProviderGroupProbe(owner.pid, await probe({
       identity: owner,
       deps: { readEchoedSpawnToken: readEchoedAgentSessionSpawnToken }
-    })
+    }))
   }
 }
 
@@ -82,10 +83,11 @@ export function createStructuredAgentSessionOwnerProbes(
       identities: localOwners.map(({ owner }) => owner),
       deps: { readEchoedSpawnToken: readEchoedAgentSessionSpawnToken }
     })
-    for (const [index, { record }] of localOwners.entries()) {
+    for (const [index, { record, owner }] of localOwners.entries()) {
       results.set(
         record.sessionId,
-        probes[index] ?? { outcome: 'indeterminate', reason: 'owner probe returned no result' }
+        retainProviderGroupProbe(owner.pid,
+          probes[index] ?? { outcome: 'indeterminate', reason: 'owner probe returned no result' })
       )
     }
     return results

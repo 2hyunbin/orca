@@ -36,6 +36,7 @@ const LAST_TICK = DRAIN + TERM + ticks(PROVIDER_GROUP_REAP_TIMEOUT_MS)
  * leader pid is gone (a live pgid is never reused) or still the process registered.
  */
 export const PROVIDER_GROUP_WATCHDOG_SCRIPT = `
+trap '' PIPE
 groups=' '
 procfs=
 [ -r /proc/self/stat ] && procfs=1
@@ -52,12 +53,14 @@ started() {
   fi
 }
 add() {
-  case "$groups" in *" $1 "*) ;; *) groups="$groups$1 " ;; esac
   started $1
+  [ -n "$st" ] || return 1
+  case "$groups" in *" $1 "*) ;; *) groups="$groups$1 " ;; esac
   eval "mode_$1=\\$2; start_$1=\\$st"
 }
 remove() {
   case "$groups" in *" $1 "*) groups="\${groups%% $1 *} \${groups#* $1 }" ;; esac
+  unset mode_$1 start_$1
 }
 ours() {
   started $1
@@ -69,7 +72,7 @@ signal() { kill -s $1 -- -$2 2>/dev/null; }
 while read -r op pgid mode; do
   case $pgid in ''|*[!0-9]*|0|1) continue ;; esac
   case $op in
-    +) case $mode in drain|stop|one-shot) add $pgid $mode ;; esac ;;
+    +) case $mode in drain|stop|one-shot) add $pgid $mode && printf '%s\\n' "$pgid" ;; esac ;;
     -) remove $pgid ;;
   esac
 done
@@ -115,76 +118,92 @@ export function providerGroupWatchdogLaunch(): {
   }
 }
 
-// A watchdog that dies this soon after its start is failing to start; the next watch retries.
-const RESPAWN_MIN_UPTIME_MS = 1_000
+const REGISTRATION_TIMEOUT_MS = 5_000
 
-type Watchdog = { child: ChildProcessHandle; spawnedAt: number }
-
+type WatchedGroup = {
+  ready: () => void
+  failed: (error: Error) => void
+  timer: ReturnType<typeof setTimeout> | null
+}
+type Watchdog = { child: ChildProcessHandle; groups: Map<number, WatchedGroup> }
 let watchdog: Watchdog | null = null
-const watched = new Map<number, ProviderGroupOwnerDeathStop>()
 
-function startWatchdog(): Watchdog | null {
+function failWatchdog(current: Watchdog, error: Error): void {
+  if (watchdog !== current) return
+  watchdog = null
+  current.child.stdin?.destroy()
+  for (const group of current.groups.values()) {
+    if (group.timer) clearTimeout(group.timer)
+    group.failed(error)
+  }
+  current.groups.clear()
+}
+
+function startWatchdog(): Watchdog {
   const launch = providerGroupWatchdogLaunch()
-  let child: ChildProcessHandle
-  try {
-    child = spawnProcess({
-      program: launch.command,
-      args: launch.args,
-      env: launch.env,
-      // Only this process may hold the write end, or Orca's death never reaches the watchdog as EOF.
-      stdio: ['pipe', 'ignore', 'ignore'],
-      detached: true
-    })
-  } catch (error) {
-    console.warn('[provider-group-watchdog] could not start:', error)
-    return null
-  }
-  if (child.pid === undefined || !child.stdin) {
-    child.on('error', (error) => console.warn('[provider-group-watchdog] could not start:', error))
-    return null
-  }
-  const started: Watchdog = { child, spawnedAt: Date.now() }
-  child.on('error', () => {})
-  child.stdin.on('error', () => {})
-  child.once('exit', () => {
-    if (watchdog !== started) {
-      return
-    }
-    watchdog = null
-    if (watched.size > 0 && Date.now() - started.spawnedAt >= RESPAWN_MIN_UPTIME_MS) {
-      ensureWatchdog()
-    }
+  const child = spawnProcess({
+    program: launch.command,
+    args: launch.args,
+    env: launch.env,
+    // Only Orca holds the write end, so its death is always EOF.
+    stdio: ['pipe', 'pipe', 'ignore'],
+    detached: true
   })
-  // A short-lived CLI entry must still exit on its own; its exit is the watchdog's EOF.
-  child.unref()
-  if (child.stdin instanceof Socket) {
-    child.stdin.unref()
-  }
-  watchdog = started
-  for (const [pgid, stop] of watched) {
-    child.stdin.write(`+ ${pgid} ${stop}\n`)
-  }
-  return started
-}
-
-function ensureWatchdog(): Watchdog | null {
-  return watchdog ?? startWatchdog()
-}
-
-/**
- * Has this process's watchdog stop the group `pgid` leads if this process dies before releasing
- * it. Release only once the group is gone: a released group is no longer stopped with Orca.
- */
-export function watchProviderGroup(pgid: number, stop: ProviderGroupOwnerDeathStop): () => void {
-  const replayed = !watchdog
-  watched.set(pgid, stop)
-  const current = ensureWatchdog()
-  if (current && !replayed) {
-    current.child.stdin?.write(`+ ${pgid} ${stop}\n`)
-  }
-  return () => {
-    if (watched.delete(pgid)) {
-      watchdog?.child.stdin?.write(`- ${pgid}\n`)
+  const current: Watchdog = { child, groups: new Map() }
+  watchdog = current
+  const fail = (error: Error): void => failWatchdog(current, error)
+  child.on('error', fail)
+  child.stdin?.on('error', fail)
+  child.once('exit', () => fail(new Error('Provider cleanup watcher exited')))
+  let pending = ''
+  child.stdout?.setEncoding('utf8').on('data', (chunk: string) => {
+    pending += chunk
+    let end: number
+    while ((end = pending.indexOf('\n')) !== -1) {
+      const pgid = Number(pending.slice(0, end))
+      pending = pending.slice(end + 1)
+      const group = current.groups.get(pgid)
+      if (group?.timer) {
+        clearTimeout(group.timer)
+        group.timer = null
+        group.ready()
+      }
     }
+    if (pending.length > 64) fail(new Error('Invalid provider cleanup acknowledgement'))
+  })
+  child.unref()
+  for (const pipe of [child.stdin, child.stdout]) {
+    if (pipe instanceof Socket) pipe.unref()
+  }
+  if (child.pid === undefined || !child.stdin || !child.stdout) {
+    queueMicrotask(() => fail(new Error('Provider cleanup watcher could not start')))
+  }
+  return current
+}
+
+/** The caller keeps exec gated until the surviving watcher acknowledges ownership. */
+export function watchProviderGroup(
+  pgid: number,
+  stop: ProviderGroupOwnerDeathStop,
+  ready: () => void,
+  failed: (error: Error) => void
+): () => void {
+  let current: Watchdog
+  try {
+    current = watchdog ?? startWatchdog()
+  } catch (error) {
+    queueMicrotask(() => failed(error instanceof Error ? error : new Error(String(error))))
+    return () => {}
+  }
+  const group: WatchedGroup = { ready, failed, timer: null }
+  current.groups.set(pgid, group)
+  group.timer = setTimeout(
+    () => failWatchdog(current, new Error('Provider cleanup watcher did not acknowledge launch')),
+    REGISTRATION_TIMEOUT_MS
+  )
+  current.child.stdin?.write(`+ ${pgid} ${stop}\n`)
+  return () => {
+    if (group.timer) clearTimeout(group.timer)
+    if (current.groups.delete(pgid)) current.child.stdin?.write(`- ${pgid}\n`)
   }
 }
