@@ -4,7 +4,7 @@ import { LEGACY_CONTRACT_VERSION } from '../contract-constants'
 import { isEquivalentPaneKey } from '../pane-key-match'
 import type { OrchestrationDb } from '../orchestration-db'
 import type { OrcaSessionId } from '../../../../../shared/orca-session-address'
-import { findCallerWorkerDispatches, workerRunBindingRefusal } from './worker-run-binding'
+import { workerRunBindingRefusal } from './worker-run-binding'
 import {
   mailboxAddressOf,
   runBoundToCoordinator,
@@ -151,11 +151,13 @@ export function bindRun(
         )
       }
       if (probed.liveLabel !== null) {
-        // A worker passed the worker rule, so this is its own sub-Run that someone else now holds.
-        const worker = findCallerWorkerDispatches(this, coordinator)[0]
-        throw worker
-          ? workerRunBindingRefusal(this, coordinator, params.runId, { takeover: true, bind: true })
-          : runCoordinatorLiveError(params.runId, probed.liveLabel)
+        // A worker that passed the worker rule is resuming its own sub-Run, which someone else now holds.
+        throw (
+          workerRunBindingRefusal(this, coordinator, params.runId, {
+            takeover: true,
+            bind: true
+          }) ?? runCoordinatorLiveError(params.runId, probed.liveLabel)
+        )
       }
     }
     this.unbindOtherRunsForCoordinator(coordinator, params.runId)
