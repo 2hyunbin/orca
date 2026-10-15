@@ -16,6 +16,7 @@ import { JournalUnreleasedSchemaError } from './journal-open-failure'
 import { ensureQueuedMessagesTable } from './queued-message-schema'
 import { ensureCommandReceiptsTable } from './command-receipt-schema'
 import { ensureAgentSessionAttachmentClaimTables } from '../agent-session-attachments/agent-session-attachment-claims'
+import { initializeJournalPruneState } from './journal-prune-state'
 
 export const JOURNAL_BUSY_TIMEOUT_MS = 5000
 /** Bounds the WAL a checkpoint leaves behind; SQLite truncates it back to this after a reset. */
@@ -27,9 +28,13 @@ export type OpenJournalDatabase = {
   db: Database.Database
   /** A newer `user_version` was met: this build reads and never writes. */
   readOnly: boolean
+  maintenanceEnabled: boolean
 }
 
-export type JournalTransaction = <T>(run: (db: Database.Database) => T) => T
+export type JournalTransaction = <T>(
+  run: (db: Database.Database) => T,
+  mode?: 'IMMEDIATE' | 'DEFERRED'
+) => T
 
 export function journalPragmaNumber(db: Database.Database, name: string): number {
   return Number(db.pragma(name, { simple: true }) ?? 0)
@@ -67,7 +72,8 @@ export function openJournalDatabase(dbPath: string): OpenJournalDatabase {
     probe.close()
     return {
       db: new Database(dbPath, { readonly: true, fileMustExist: true }),
-      readOnly: true
+      readOnly: true,
+      maintenanceEnabled: false
     }
   }
   let transferred = false
@@ -88,7 +94,7 @@ export function openJournalDatabase(dbPath: string): OpenJournalDatabase {
     ensureAgentSessionAttachmentClaimTables(probe)
     hardenSqliteDatabaseFiles(dbPath)
     transferred = true
-    return { db: probe, readOnly: false }
+    return { db: probe, readOnly: false, maintenanceEnabled: initializeJournalPruneState(probe) }
   } finally {
     if (!transferred) {
       probe.close()
@@ -140,9 +146,10 @@ function migrateJournalSchema(db: Database.Database, stored: number): void {
 export function runJournalTransaction<T>(
   db: Database.Database,
   run: (db: Database.Database) => T,
-  onStranded: () => void = () => undefined
+  onStranded: () => void = () => undefined,
+  mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE'
 ): T {
-  db.exec('BEGIN IMMEDIATE')
+  db.exec(`BEGIN ${mode}`)
   try {
     const result = run(db)
     if (result instanceof Promise) {

@@ -264,6 +264,20 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
     expect(other.snapshot().items.map((entry) => entry.body)).toEqual([text('served')])
   })
 
+  it('acknowledges a committed append when optional maintenance cannot record pending work', async () => {
+    const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+    const database = openTestJournalHostDatabase(root)
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    database.db.exec('DROP TABLE temp.journal_prune_pending')
+    await expect(
+      journal.appendItem(item(1), text('saved'), { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+    ).resolves.toBeDefined()
+    expect(journal.snapshot().items.map((entry) => entry.body)).toEqual([text('saved')])
+    expect(readTestJournalRows(database.db, IDENTITY.sessionId, journal.epoch).at(-1)?.seq)
+      .toBe(journal.cursor().sequence)
+    expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
+  })
+
   it('refuses a transaction body that awaits', () => {
     const database = openTestJournalHostDatabase(root)
     expect(() => database.transaction(async () => undefined)).toThrow('must not await')

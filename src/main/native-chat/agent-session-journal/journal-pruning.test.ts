@@ -52,7 +52,7 @@ it('drains host maintenance, stops its timer when idle and cancels it on close',
   vi.useFakeTimers()
   const maintenance = new JournalMaintenance(
     () => db,
-    (run) => runJournalTransaction(db, run)
+    (run, mode) => runJournalTransaction(db, run, undefined, mode)
   )
   try {
     publishJournalSessionEpoch(db, identity, 'epoch')
@@ -140,7 +140,7 @@ function prune(epoch: string): number {
   const pass = new JournalPrunePass(db, identity.sessionId, epoch)
   let removed = 0
   for (let step = 0; step < 1_000; step++) {
-    const result = pass.step(db, (run) => database.transaction(run))
+    const result = pass.step(db, (run, mode) => runJournalTransaction(db, run, undefined, mode))
     expect(result.scanned).toBeLessThanOrEqual(JOURNAL_PRUNE_MAX_ROWS)
     removed += result.compacted
     if (result.done) {
@@ -314,7 +314,7 @@ it('validates the complete frozen prefix before shrinking anything and abandons 
   expect(rows()).toHaveLength(41)
   const pass = new JournalPrunePass(db, identity.sessionId, epoch)
   await journal.rollEpoch('handle_forked', 2)
-  expect(pass.step(db, (run) => openTestJournalHostDatabase(root).transaction(run))).toEqual({
+  expect(pass.step(db, (run, mode) => runJournalTransaction(db, run, undefined, mode))).toEqual({
     done: true,
     compacted: 0,
     scanned: 0

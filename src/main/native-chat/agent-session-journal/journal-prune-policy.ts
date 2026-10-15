@@ -2,7 +2,7 @@ import { agentJournalLinkageFields } from '../../../shared/agent-session-journal
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import type { JournalItemRow, JournalRow } from './journal-row-schema'
 
-type Candidate = {
+export type JournalPruneCandidate = {
   seq: number
   revision: number
   signature: string
@@ -11,9 +11,15 @@ type Candidate = {
   observedAt: number
 }
 
+export type JournalPruneCandidates = {
+  get: (itemId: string) => JournalPruneCandidate | undefined
+  set: (itemId: string, candidate: JournalPruneCandidate) => void
+  delete: (itemId: string) => void
+}
+
 /** Keep creation and both sides of semantic transitions; only full snapshot rewrites retire. */
 export class JournalPrunePolicy {
-  private readonly candidates = new Map<string, Candidate>()
+  constructor(private readonly candidates: JournalPruneCandidates) {}
 
   observe(row: JournalRow, savedAt: number): number | null {
     if (row.kind === 'lifecycle-batch') {
@@ -27,9 +33,6 @@ export class JournalPrunePolicy {
       return null
     }
     if (row.kind !== 'item') {
-      return null
-    }
-    if (!this.candidates.has(row.itemId) && this.candidates.size >= 16_384) {
       return null
     }
     const signature = pruneSignature(row)

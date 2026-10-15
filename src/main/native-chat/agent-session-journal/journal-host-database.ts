@@ -37,11 +37,11 @@ export class JournalHostDatabase {
   ) {
     this.connection = opened.db
     this.readOnly = opened.readOnly
-    this.maintenance = opened.readOnly
+    this.maintenance = !opened.maintenanceEnabled
       ? null
       : new JournalMaintenance(
           () => this.db,
-          (run) => this.runTransaction(run)
+          (run, mode) => this.runTransaction(run, mode)
         )
   }
 
@@ -75,10 +75,18 @@ export class JournalHostDatabase {
     return result
   }
 
-  private runTransaction<T>(run: (db: Database.Database) => T): T {
-    return runJournalTransaction(this.db, run, () => {
-      this.stranded = true
-    })
+  private runTransaction<T>(
+    run: (db: Database.Database) => T,
+    mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE'
+  ): T {
+    return runJournalTransaction(
+      this.db,
+      run,
+      () => {
+        this.stranded = true
+      },
+      mode
+    )
   }
 
   journalAppended(sessionId: string): void {

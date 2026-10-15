@@ -3,6 +3,7 @@ import type Database from '../../sqlite/sync-database'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
 import type { JournalTransaction } from './journal-database'
 import { JournalPrunePolicy } from './journal-prune-policy'
+import { JournalPruneRefusal, JournalPruneState } from './journal-prune-state'
 import { parseJournalRow } from './journal-row-schema'
 import { readJournalRowsAfter, readJournalSessionEpoch } from './journal-row-table'
 
@@ -10,25 +11,38 @@ export const JOURNAL_PRUNE_MAX_ROWS = 32
 const MAX_PASS_BYTES = 256 * 1024
 const PASS_BUDGET_MS = 4
 
-/** A finite epoch scan; only a newer durable full snapshot can retire an earlier payload. */
+function journalPruneUpper(db: Database.Database, sessionId: string, epoch: string): number {
+  const seq = db.prepare(`SELECT MAX(seq) AS seq FROM journal_rows
+WHERE session_id = ? AND epoch = ?`).get(sessionId, epoch)?.seq
+  return typeof seq === 'number' ? seq : 0
+}
+
+/** A continuing epoch scan; validate each frozen suffix before consuming obsolete payloads. */
 export class JournalPrunePass {
-  private after = 0
-  private validating = true
-  private readonly policy = new JournalPrunePolicy()
-  private readonly upper: number
+  private readonly state: JournalPruneState
+  private readonly policy: JournalPrunePolicy
+  private readonly initialUpper: number
+  private initialized = false
 
   constructor(
     db: Database.Database,
     readonly sessionId: string,
     readonly epoch: string
   ) {
-    const upper = db
-      .prepare(
-        `SELECT MAX(seq) AS seq FROM journal_rows
-WHERE session_id = ? AND epoch = ?`
-      )
-      .get(sessionId, epoch)?.seq
-    this.upper = typeof upper === 'number' ? upper : 0
+    this.state = new JournalPruneState(db, sessionId, epoch)
+    this.policy = new JournalPrunePolicy(this.state)
+    this.initialUpper = journalPruneUpper(db, sessionId, epoch)
+  }
+
+  refuse(transaction: JournalTransaction): void {
+    transaction(() => this.state.abandon(true), 'DEFERRED')
+  }
+
+  coversPendingRows(db: Database.Database): boolean {
+    return this.state.progress().refused || (
+      journalPruneUpper(db, this.sessionId, this.epoch) <= this.initialUpper &&
+      this.state.next() === null
+    )
   }
 
   step(db: Database.Database, transaction: JournalTransaction): {
@@ -37,84 +51,111 @@ WHERE session_id = ? AND epoch = ?`
     scanned: number
   } {
     if (readJournalSessionEpoch(db, this.sessionId) !== this.epoch) {
+      transaction(() => this.state.abandon(), 'DEFERRED')
       return { done: true, compacted: 0, scanned: 0 }
     }
+    if (!this.initialized) {
+      transaction(() => this.state.initialize(this.initialUpper), 'DEFERRED')
+      this.initialized = true
+    }
+    const progress = this.state.progress()
+    if (progress.refused) {
+      return { done: true, compacted: 0, scanned: 0 }
+    }
+    const upper = this.initialUpper
+    if (upper < progress.scanned) {
+      throw new JournalPruneRefusal('journal pruning refused a shortened epoch')
+    }
+    if (progress.scanned < upper) {
+      const scanned = this.scanSuffix(db, transaction, progress.scanned, upper)
+      return { done: false, compacted: 0, scanned }
+    }
+    const obsolete = this.state.next()
+    if (obsolete === null) {
+      return { done: true, compacted: 0, scanned: 0 }
+    }
+    const compacted = shrinkSupersededPayload(db, this.state, obsolete, transaction)
+    return { done: false, compacted: Number(compacted), scanned: 0 }
+  }
+
+  private scanSuffix(
+    db: Database.Database,
+    transaction: JournalTransaction,
+    after: number,
+    upper: number
+  ): number {
     const started = performance.now()
     let scanned = 0
-    let compacted = 0
     let bytes = 0
-    let done = false
-    while (scanned < JOURNAL_PRUNE_MAX_ROWS && bytes < MAX_PASS_BYTES) {
-      const stored = readJournalRowsAfter(db, this.sessionId, this.epoch, this.after, 1)[0]
-      if (!stored || stored.seq > this.upper) {
-        if (this.validating) {
-          this.validating = false
-          this.after = 0
-        } else {
-          done = true
-        }
-        break
+    while (after < upper && scanned < JOURNAL_PRUNE_MAX_ROWS && bytes < MAX_PASS_BYTES) {
+      const stored = readJournalRowsAfter(db, this.sessionId, this.epoch, after, 1)[0]
+      if (!stored || stored.seq !== after + 1 || stored.seq > upper) {
+        throw new JournalPruneRefusal('journal pruning refused a sequence gap')
       }
       const parsed = parseJournalRow(stored.rowJson)
       if (!parsed.ok || parsed.row.seq !== stored.seq || parsed.row.epoch !== this.epoch) {
-        throw new Error('journal pruning refused an unreadable row')
+        throw new JournalPruneRefusal('journal pruning refused an unreadable row')
       }
-      const row = parsed.row
-      if (this.validating) {
-        if ((this.after === 0 && row.kind !== 'epoch') || row.seq !== this.after + 1) {
-          throw new Error('journal pruning refused a sequence gap')
-        }
-      } else {
-        const obsolete = this.policy.observe(row, stored.ts)
-        if (
-          obsolete !== null &&
-          shrinkSupersededPayload(db, this.sessionId, this.epoch, obsolete, transaction)
-        ) {
-          compacted++
-        }
+      if (after === 0 && parsed.row.kind !== 'epoch') {
+        throw new JournalPruneRefusal('journal pruning refused a missing epoch row')
       }
-      this.after = stored.seq
-      bytes += Buffer.byteLength(stored.rowJson, 'utf8')
+      // Finish the main read before the TEMP-only transaction; discovery takes no main write lock.
+      transaction(
+        () => {
+          const obsolete = this.policy.observe(parsed.row, stored.ts)
+          if (obsolete !== null) {
+            this.state.enqueue(obsolete)
+          }
+          this.state.advance(stored.seq, upper)
+        },
+        'DEFERRED'
+      )
+      after = stored.seq
       scanned++
-      if (compacted > 0 || performance.now() - started >= PASS_BUDGET_MS) {
+      bytes += Buffer.byteLength(stored.rowJson, 'utf8')
+      if (performance.now() - started >= PASS_BUDGET_MS) {
         break
       }
     }
-    return { done, compacted, scanned }
+    return scanned
   }
 }
 
 function shrinkSupersededPayload(
   db: Database.Database,
-  sessionId: string,
-  epoch: string,
+  state: JournalPruneState,
   sequence: number,
   transaction: JournalTransaction
 ): boolean {
+  const { sessionId, epoch } = state
   const stored = readJournalRowsAfter(db, sessionId, epoch, sequence - 1, 1)[0]
   const parsed = stored && parseJournalRow(stored.rowJson)
-  if (!parsed?.ok || parsed.row.kind !== 'item' || stored.seq !== sequence) {
-    throw new Error('journal pruning could not retain its superseded row')
+  if (
+    !parsed?.ok ||
+    parsed.row.kind !== 'item' ||
+    stored.seq !== sequence ||
+    parsed.row.seq !== sequence ||
+    parsed.row.epoch !== epoch
+  ) {
+    throw new JournalPruneRefusal('journal pruning could not retain its superseded row')
   }
   const bodyJson = JSON.stringify(compactJournalPayload(parsed.row.body))
   if (Buffer.byteLength(bodyJson) >= Buffer.byteLength(JSON.stringify(parsed.row.body))) {
+    transaction(() => state.consume(sequence), 'DEFERRED')
     return false
   }
   // Atomic same-key replacement reclaims leaf pages as well as overflow pages.
   return transaction((db) => {
-    const removed = db
-      .prepare(
-        `DELETE FROM journal_rows
-WHERE session_id = ? AND epoch = ? AND seq = ? AND row_json = ?`
-      )
+    const removed = db.prepare(`DELETE FROM journal_rows
+WHERE session_id = ? AND epoch = ? AND seq = ? AND row_json = ?`)
       .run(sessionId, epoch, sequence, stored.rowJson)
     if (removed.changes === 0) {
-      return false
+      throw new JournalPruneRefusal('journal pruning refused a changed superseded row')
     }
-    db.prepare(
-      `INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json)
-VALUES (?, ?, ?, ?, json_set(?, '$.body', json(?)))`
-    ).run(sessionId, epoch, sequence, stored.ts, stored.rowJson, bodyJson)
+    db.prepare(`INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json)
+VALUES (?, ?, ?, ?, json_set(?, '$.body', json(?)))`)
+      .run(sessionId, epoch, sequence, stored.ts, stored.rowJson, bodyJson)
+    state.consume(sequence)
     return true
   })
 }
