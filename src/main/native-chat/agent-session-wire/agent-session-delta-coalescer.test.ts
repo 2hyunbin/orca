@@ -96,8 +96,11 @@ describe('agent-session delta coalescer', () => {
     expect(emitted).toEqual(['first answer', 'first answer.'])
   })
 
-  it('writes a slowly growing long stream at least once per time cap', () => {
-    let time = 0
+  it.each([
+    { start: 0, interval: 20 },
+    { start: 0.25, interval: 20.125 }
+  ])('writes a slowly growing long stream within each cap: %j', ({ start, interval }) => {
+    let time = start
     const timers: { at: number; run: () => void }[] = []
     const writtenAt: number[] = []
     const instance = createAgentSessionDeltaCoalescer({
@@ -128,14 +131,52 @@ describe('agent-session delta coalescer', () => {
     }
 
     instance.append('item-1', 'x'.repeat(1_000))
-    // Two characters every 20 ms: an eighth of 1,000 characters would take over a second.
-    for (let at = 20; at <= 1_000; at += 20) {
+    // Two characters about every 20 ms: an eighth of 1,000 would take over a second.
+    for (let at = start + interval; at <= start + 1_000; at += interval) {
       advanceTo(at)
       instance.append('item-1', 'xx')
     }
 
     const cap = AGENT_SESSION_STREAMED_TEXT_MAX_GAP_MS
-    expect(writtenAt).toEqual([60, 60 + cap, 60 + 2 * cap])
+    const firstWrite = start + AGENT_SESSION_DELTA_COALESCE_MS
+    expect(writtenAt).toEqual([firstWrite, firstWrite + cap, firstWrite + 2 * cap])
+  })
+
+  it('keeps the original cap across clock reads and an early timer callback', () => {
+    const clock = manualClock()
+    let time = 0.25
+    let readStep = 0
+    const emitted: string[] = []
+    const instance = createAgentSessionDeltaCoalescer({
+      now: () => {
+        const value = time
+        time += readStep
+        return value
+      },
+      schedule: clock.schedule,
+      emit: (_key, text) => emitted.push(text)
+    })
+
+    const prefix = 'x'.repeat(1_000)
+    instance.append('item-1', prefix)
+    time = 60.25
+    clock.fire()
+    time = 80.25
+    instance.append('item-1', '.')
+    time = 140.25
+    readStep = 0.125
+    clock.fire()
+    expect(clock.windows()).toEqual([319.875])
+
+    // This window closes after the original cap, but before a recomputed cap would.
+    readStep = 0
+    time = 400.3125
+    instance.append('item-1', '.')
+    expect(clock.windows()).toEqual([319.875])
+    time = 460.125
+    clock.fire()
+    expect(emitted).toEqual([prefix, `${prefix}..`])
+    expect(clock.pendingCount()).toBe(0)
   })
 
   it('appends ten thousand deltas without rebuilding the retained prefix per token', () => {

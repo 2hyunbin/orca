@@ -153,8 +153,7 @@ export function createAgentSessionDeltaCoalescer(
   }
 
   /** Close the shared window within `ms`; a pending window that closes sooner stands. */
-  const scheduleFlush = (ms = windowMs): void => {
-    const at = now() + ms
+  const scheduleFlush = (ms = windowMs, at = now() + ms): void => {
     if (timer && timer.at <= at) {
       return
     }
@@ -178,7 +177,7 @@ export function createAgentSessionDeltaCoalescer(
       }
     }
     if (due !== Infinity) {
-      scheduleFlush(Math.max(0, Math.ceil(due - now())))
+      scheduleFlush(Math.max(0, due - now()), due)
     }
   }
 
