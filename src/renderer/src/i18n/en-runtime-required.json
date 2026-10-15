@@ -1968,11 +1968,9 @@
           "abc62b6328": "Add Project"
         },
         "SidebarWorkspaceOptionsMenu": {
-          "1a0eec0d35": "Status",
           "2d4f0eb933": "Default",
           "631b97eea9": "Host scope",
           "680043342f": "compact",
-          "b5536d5a88": "Tasks",
           "bc96dbd041": "Workspace options ({{value0}})",
           "c7591b6014": "repo"
         },

@@ -3,9 +3,12 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  WORKSPACE_GROUP_BY_CHOICES,
   WORKSPACE_VIEW_OPTIONS,
+  WORKSPACE_VIEW_SECTION_LABELS,
   getShownWorkspaceViewSections,
-  type WorkspaceViewOptionContext
+  type WorkspaceViewOptionContext,
+  type WorkspaceViewOptionKey
 } from '../../../../shared/workspace-view/workspace-view-options'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -17,7 +20,10 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: Record<string, unknown>) => unknown) => selector(mocks.state)
+  useAppStore: Object.assign(
+    (selector: (state: Record<string, unknown>) => unknown) => selector(mocks.state),
+    { getState: () => mocks.state }
+  )
 }))
 
 vi.mock('./use-sidebar-host-scope-options', () => ({
@@ -66,7 +72,7 @@ const BASE_CONTEXT: WorkspaceViewOptionContext = {
   mayHaveServerHosts: false
 }
 
-function setState(context: WorkspaceViewOptionContext): void {
+function setState(context: WorkspaceViewOptionContext, catalogHydrated = true): void {
   mocks.hostOptions = context.hasRemoteHosts ? [{ id: 'local' }, { id: 'ssh:box' }] : []
   const noop = vi.fn()
   mocks.state = {
@@ -92,7 +98,7 @@ function setState(context: WorkspaceViewOptionContext): void {
     hideWorkspacesFromOtherDevices: context.hideWorkspacesFromOtherDevices,
     setHideWorkspacesFromOtherDevices: noop,
     runtimeEnvironments: context.mayHaveServerHosts ? [{ id: 'server' }] : [],
-    runtimeEnvironmentCatalogHydrated: true,
+    runtimeEnvironmentCatalogHydrated: catalogHydrated,
     settings: {
       compactWorktreeCards: false,
       experimentalNewWorktreeCardStyle: context.newCardStyle
@@ -123,13 +129,21 @@ afterEach(() => {
   container.remove()
 })
 
-/** Every descriptor label the menu shows, in document order. */
-function renderedOptionLabels(): string[] {
+// Text only that option's own control renders; Group by's heading belongs to the section.
+const PROBE: Partial<Record<WorkspaceViewOptionKey, string>> = {
+  groupBy: WORKSPACE_GROUP_BY_CHOICES[0].label
+}
+
+/** The options whose control the menu rendered, in document order. */
+function renderedOptionKeys(): WorkspaceViewOptionKey[] {
   const text = container.textContent ?? ''
-  return WORKSPACE_VIEW_OPTIONS.filter((option) => text.includes(option.label))
-    .map((option) => ({ label: option.label, at: text.indexOf(option.label) }))
+  return WORKSPACE_VIEW_OPTIONS.map((option) => ({
+    key: option.key,
+    at: text.indexOf(PROBE[option.key] ?? option.label)
+  }))
+    .filter((option) => option.at >= 0)
     .sort((a, b) => a.at - b.at)
-    .map((option) => option.label)
+    .map((option) => option.key)
 }
 
 const CONTEXTS: WorkspaceViewOptionContext[] = [
@@ -150,10 +164,16 @@ describe('Workspace options menu renders from the shared option list', () => {
     it(`shows one control per shown option, in order: ${JSON.stringify(context)}`, () => {
       setState(context)
       act(() => root.render(<WorkspaceOptionsMenuItems />))
-      const expected = getShownWorkspaceViewSections(context).flatMap(({ options }) =>
-        options.map((option) => option.label)
+      const sections = getShownWorkspaceViewSections(context)
+      expect(renderedOptionKeys()).toEqual(
+        sections.flatMap(({ options }) => options.map((option) => option.key))
       )
-      expect(renderedOptionLabels()).toEqual(expected)
+      for (const { section } of sections) {
+        const heading = WORKSPACE_VIEW_SECTION_LABELS[section]
+        if (heading) {
+          expect(container.textContent).toContain(heading)
+        }
+      }
     })
   }
 
@@ -166,5 +186,11 @@ describe('Workspace options menu renders from the shared option list', () => {
       )
     )
     expect([...everShown].sort()).toEqual(WORKSPACE_VIEW_OPTIONS.map((o) => o.key).sort())
+  })
+
+  it('keeps the other-client filter while the server catalog is still loading', () => {
+    setState(BASE_CONTEXT, false)
+    act(() => root.render(<WorkspaceOptionsMenuItems />))
+    expect(renderedOptionKeys()).toContain('hideWorkspacesFromOtherDevices')
   })
 })

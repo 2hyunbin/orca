@@ -30,9 +30,7 @@ type FilterRow = {
   ariaLabel?: () => string
   indented?: boolean
   checked: (state: AppState) => boolean
-  setter: (state: AppState) => (next: boolean) => void
-  /** The store keeps the positive form; the row shows the hide form. */
-  inverted?: true
+  set: (next: boolean) => void
 }
 
 const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
@@ -43,9 +41,8 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'auto.components.sidebar.SidebarWorkspaceFilterSection.ed1611b65b',
         'Hide sleeping'
       ),
-    checked: (state) => state.showSleepingWorkspaces,
-    setter: (state) => state.setShowSleepingWorkspaces,
-    inverted: true
+    checked: (state) => !state.showSleepingWorkspaces,
+    set: (hide) => useAppStore.getState().setShowSleepingWorkspaces(!hide)
   },
   alwaysShowDefaultBranchWorkspace: {
     icon: <GitBranch className="size-3.5" />,
@@ -61,7 +58,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
       ),
     indented: true,
     checked: (state) => state.alwaysShowDefaultBranchWorkspace,
-    setter: (state) => state.setAlwaysShowDefaultBranchWorkspace
+    set: (next) => useAppStore.getState().setAlwaysShowDefaultBranchWorkspace(next)
   },
   hideDefaultBranchWorkspace: {
     icon: <GitBranch className="size-3.5" />,
@@ -71,7 +68,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'Hide default branch'
       ),
     checked: (state) => state.hideDefaultBranchWorkspace,
-    setter: (state) => state.setHideDefaultBranchWorkspace
+    set: (next) => useAppStore.getState().setHideDefaultBranchWorkspace(next)
   },
   hideAutomationGeneratedWorkspaces: {
     icon: <CalendarClock className="size-3.5" />,
@@ -81,7 +78,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'Hide automation-created'
       ),
     checked: (state) => state.hideAutomationGeneratedWorkspaces,
-    setter: (state) => state.setHideAutomationGeneratedWorkspaces
+    set: (next) => useAppStore.getState().setHideAutomationGeneratedWorkspaces(next)
   },
   hideCliCreatedWorkspaces: {
     icon: <SquareTerminal className="size-3.5" />,
@@ -91,7 +88,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'Hide CLI-created'
       ),
     checked: (state) => state.hideCliCreatedWorkspaces,
-    setter: (state) => state.setHideCliCreatedWorkspaces
+    set: (next) => useAppStore.getState().setHideCliCreatedWorkspaces(next)
   },
   hideWorkspacesFromOtherDevices: {
     icon: <MonitorSmartphone className="size-3.5" />,
@@ -106,7 +103,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'Hide workspaces created from other Orca clients on shared remote servers'
       ),
     checked: (state) => state.hideWorkspacesFromOtherDevices,
-    setter: (state) => state.setHideWorkspacesFromOtherDevices
+    set: (next) => useAppStore.getState().setHideWorkspacesFromOtherDevices(next)
   },
   hideDetachedHeadWorkspaces: {
     icon: <GitCommitHorizontal className="size-3.5" />,
@@ -116,7 +113,7 @@ const FILTER_ROWS: Record<WorkspaceFilterOptionKey, FilterRow> = {
         'Hide detached HEAD'
       ),
     checked: (state) => state.hideDetachedHeadWorkspaces,
-    setter: (state) => state.setHideDetachedHeadWorkspaces
+    set: (next) => useAppStore.getState().setHideDetachedHeadWorkspaces(next)
   }
 }
 
@@ -126,16 +123,15 @@ export function WorkspaceFilterOptionRow({
   optionKey: WorkspaceFilterOptionKey
 }): React.JSX.Element {
   const row = FILTER_ROWS[optionKey]
-  const value = useAppStore(row.checked)
-  const setValue = useAppStore(row.setter)
+  const checked = useAppStore(row.checked)
   return (
     <FilterToggleRow
       icon={row.icon}
       label={row.label()}
       ariaLabel={row.ariaLabel?.()}
       indented={row.indented}
-      checked={row.inverted ? !value : value}
-      onChange={(next) => setValue(row.inverted ? !next : next)}
+      checked={checked}
+      onChange={row.set}
     />
   )
 }

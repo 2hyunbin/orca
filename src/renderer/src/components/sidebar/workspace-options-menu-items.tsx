@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type JSX } from 'react'
+import { Fragment, useMemo, type ComponentType, type JSX } from 'react'
 import { useAppStore } from '@/store'
 import {
   DropdownMenuLabel,
@@ -12,7 +12,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { countActiveWorkspaceFilters } from '../../../../shared/workspace-view/workspace-row-filters'
 import SidebarRepositoryFilterSection from './SidebarRepositoryFilterSection'
-import { WorkspaceFilterOptionRow } from './SidebarWorkspaceFilterSection'
+import { WorkspaceFilterOptionRow } from './workspace-filter-option-row'
 import { getSidebarHostVisibilityLabel, shouldShowHostScopeControls } from './sidebar-host-options'
 import { useSidebarHostScopeOptions } from './use-sidebar-host-scope-options'
 import { SidebarHostScopeMenuSection } from './SidebarHostScopeMenuSection'
@@ -21,7 +21,7 @@ import {
   WorktreeCardDisplayMenuItem,
   WorktreeCardLayoutMenuItem,
   WorktreeCardPropertiesMenuItem
-} from './worktree-card-menu-items'
+} from './worktree-card-option-items'
 import {
   getShownWorkspaceViewSections,
   type WorkspaceViewOptionKey,
@@ -225,11 +225,9 @@ function ProjectOrderOptionItem({ preserveWorkspaceBoardOpen }: OptionItemProps)
 }
 
 /** One desktop control per shared option; a new option fails to compile until it has one. */
-const OPTION_ITEMS: Record<WorkspaceViewOptionKey, (props: OptionItemProps) => JSX.Element> = {
+const OPTION_ITEMS: Record<WorkspaceViewOptionKey, ComponentType<OptionItemProps>> = {
   hosts: HostsOptionItem,
-  projects: ({ preserveWorkspaceBoardOpen }) => (
-    <SidebarRepositoryFilterSection preserveWorkspaceBoardOpen={preserveWorkspaceBoardOpen} />
-  ),
+  projects: SidebarRepositoryFilterSection,
   groupBy: GroupByOptionItem,
   sortBy: SortByOptionItem,
   projectOrderBy: ProjectOrderOptionItem,

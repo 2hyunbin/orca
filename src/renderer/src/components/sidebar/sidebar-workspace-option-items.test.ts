@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES,
   WORKSPACE_CARD_DISPLAY_CHOICES,
-  WORKSPACE_CARD_DISPLAY_FOLDER_BRANCH_LABEL,
   WORKSPACE_CARD_LAYOUT_CHOICES,
   WORKSPACE_CARD_PROPERTY_CHOICES,
   WORKSPACE_GROUP_BY_CHOICES,
   WORKSPACE_PROJECT_ORDER_CHOICES,
-  WORKSPACE_SORT_BY_CHOICES
+  WORKSPACE_SORT_BY_CHOICES,
+  getWorkspaceCardDisplayChoiceLabel
 } from '../../../../shared/workspace-view/workspace-view-options'
 import {
   AGENT_ACTIVITY_DISPLAY_OPTIONS,
@@ -38,18 +38,16 @@ describe('desktop Workspace options copy', () => {
     expect(desktopCopy(PROPERTY_OPTIONS)).toEqual(sharedCopy(WORKSPACE_CARD_PROPERTY_CHOICES))
   })
 
-  it('matches the shared card display choices, with the folder copy only for project groups', () => {
-    const copy = (hasProjectGroups: boolean) =>
-      getWorktreeCardDisplayOptions(hasProjectGroups).map(({ id, label, properties }) => ({
-        id,
-        label,
-        properties
-      }))
-    expect(copy(false)).toEqual(
-      WORKSPACE_CARD_DISPLAY_CHOICES.map(({ id, label, properties }) => ({ id, label, properties }))
-    )
-    expect(copy(true).find((option) => option.id === 'branch')?.label).toBe(
-      WORKSPACE_CARD_DISPLAY_FOLDER_BRANCH_LABEL
-    )
+  it('matches the shared card display choices, with or without project groups', () => {
+    for (const hasProjectGroups of [false, true]) {
+      expect(
+        getWorktreeCardDisplayOptions(hasProjectGroups).map(({ id, label }) => ({ id, label }))
+      ).toEqual(
+        WORKSPACE_CARD_DISPLAY_CHOICES.map((choice) => ({
+          id: choice.id,
+          label: getWorkspaceCardDisplayChoiceLabel(choice, hasProjectGroups)
+        }))
+      )
+    }
   })
 })
