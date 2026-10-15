@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   AGENT_SESSION_STREAMED_TEXT_MAX_BYTES,
-  AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER as marker,
   createAgentSessionDeltaCoalescer
 } from './agent-session-delta-coalescer'
+import { AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER as marker } from './agent-session-streamed-text-utf8-bound'
 
 describe('streamed output overflow prefix', () => {
   it('encodes only the retained prefix when 64 KiB command deltas cross the default limit', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_SESSION_DELTA_COALESCE_MS,
+  AGENT_SESSION_STREAMED_TEXT_MAX_GAP_MS,
   createAgentSessionDeltaCoalescer
 } from './agent-session-delta-coalescer'
 
@@ -93,6 +94,48 @@ describe('agent-session delta coalescer', () => {
     clock.fire()
 
     expect(emitted).toEqual(['first answer', 'first answer.'])
+  })
+
+  it('writes a slowly growing long stream at least once per time cap', () => {
+    let time = 0
+    const timers: { at: number; run: () => void }[] = []
+    const writtenAt: number[] = []
+    const instance = createAgentSessionDeltaCoalescer({
+      now: () => time,
+      schedule: (run, ms) => {
+        const timer = { at: time + ms, run }
+        timers.push(timer)
+        return () => {
+          const index = timers.indexOf(timer)
+          if (index !== -1) {
+            timers.splice(index, 1)
+          }
+        }
+      },
+      emit: () => writtenAt.push(time)
+    })
+    const advanceTo = (at: number): void => {
+      for (;;) {
+        const next = timers.sort((a, b) => a.at - b.at)[0]
+        if (!next || next.at > at) {
+          break
+        }
+        timers.shift()
+        time = next.at
+        next.run()
+      }
+      time = at
+    }
+
+    instance.append('item-1', 'x'.repeat(1_000))
+    // Two characters every 20 ms: an eighth of 1,000 characters would take over a second.
+    for (let at = 20; at <= 1_000; at += 20) {
+      advanceTo(at)
+      instance.append('item-1', 'xx')
+    }
+
+    const cap = AGENT_SESSION_STREAMED_TEXT_MAX_GAP_MS
+    expect(writtenAt).toEqual([60, 60 + cap, 60 + 2 * cap])
   })
 
   it('appends ten thousand deltas without rebuilding the retained prefix per token', () => {

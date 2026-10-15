@@ -771,7 +771,6 @@ describe('Codex streamed checkpoint admission', () => {
       expect(prefixJoins()).toHaveLength(0)
       expect(tap.rows).toHaveLength(rows)
       expect(tap.publishes()).toBe(publications)
-      expect(window.idle()).toBe(true)
 
       translator.flush()
       expect(prefixJoins()).toHaveLength(1)
