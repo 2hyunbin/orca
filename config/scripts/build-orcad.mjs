@@ -320,11 +320,12 @@ if (graphErrors.length > 0) {
     { encoding: 'utf8', timeout: 60_000 }
   )
   if (providerSmoke.error || providerSmoke.signal || providerSmoke.status !== 0) {
+    const status = providerSmoke.status ?? 'none'
+    const signal = providerSmoke.signal ?? 'none'
+    const error = providerSmoke.error?.message ?? 'none'
+    const output = `${providerSmoke.stdout ?? ''}${providerSmoke.stderr ?? ''}`.slice(0, 2000)
     console.error(
-      `[build-orcad] the packaged structured provider failed to load.\n` +
-        `status=${providerSmoke.status ?? 'none'} signal=${providerSmoke.signal ?? 'none'} ` +
-        `error=${providerSmoke.error?.message ?? 'none'}\n` +
-        `${providerSmoke.stdout ?? ''}${providerSmoke.stderr ?? ''}`.slice(0, 2000)
+      `[build-orcad] the packaged structured provider failed to load.\nstatus=${status} signal=${signal} error=${error}\n${output}`
     )
     process.exitCode = 1
   }
