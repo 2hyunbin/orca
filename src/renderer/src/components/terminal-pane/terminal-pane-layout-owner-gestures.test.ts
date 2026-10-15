@@ -28,7 +28,9 @@ vi.mock('@/store', () => ({
 
 function gestures(shouldPersistLayout = true) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the gestures read only getLeafId.
-  const manager = { getLeafId: (paneId: number) => `leaf-${paneId}` } as unknown as PaneManager
+  const manager = {
+    getLeafId: (paneId: number) => (paneId > 0 ? `leaf-${paneId}` : null)
+  } as unknown as PaneManager
   return layoutOwnerPaneGestures({
     worktreeId: 'worktree-1',
     tabId: 'tab-1',
@@ -58,6 +60,16 @@ describe('layoutOwnerPaneGestures', () => {
       { apply: move, asToday: move }
     )
     expect(move).not.toHaveBeenCalled()
+  })
+
+  it('leaves the drop to the window when main cannot take it', () => {
+    const drop = { sourcePaneId: 2, targetPaneId: 1, zone: 'left' } as const
+
+    expect(gestures().takePaneDrop?.({ ...drop, sourcePaneId: 0 }, vi.fn())).toBe(false)
+    expect(mocks.send).not.toHaveBeenCalled()
+
+    mocks.send.mockReturnValue(false)
+    expect(gestures().takePaneDrop?.(drop, vi.fn())).toBe(false)
   })
 
   it('sends the tab’s new ratios to main when a divider drag ends', () => {

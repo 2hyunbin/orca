@@ -10,6 +10,11 @@ import {
   type DragReorderCallbacks
 } from './pane-drag-reorder'
 import type { TerminalLeafId } from '../../../../shared/stable-pane-id'
+import { serializePaneTree } from '@/components/terminal-pane/layout-serialization'
+import {
+  insertLeafBeside,
+  removeLayoutLeaf
+} from '../../../../shared/workspace-layout/terminal-pane-tree'
 
 function makeLeafId(id: number): TerminalLeafId {
   return `${id}${id}${id}${id}${id}${id}${id}${id}-${id}${id}${id}${id}-4${id}${id}${id}-8${id}${id}${id}-${id}${id}${id}${id}${id}${id}${id}${id}${id}${id}${id}${id}` as TerminalLeafId
@@ -133,6 +138,38 @@ describe('handlePaneDrop with a drop taker', () => {
     expect(onLayoutChanged).toHaveBeenCalledExactlyOnceWith('gesture')
   })
 
+  it('draws the same tree main saves for a move out of a nested, resized split', () => {
+    const panes = createVerticalSplit([1, 2])
+    const outer = panes.get(1)!.container.parentElement!
+    panes.get(1)!.container.style.flex = '7 1 0%'
+    const inner = document.createElement('div')
+    inner.className = 'pane-split is-horizontal'
+    inner.style.flex = '3 1 0%'
+    outer.replaceChild(inner, panes.get(2)!.container)
+    inner.appendChild(panes.get(2)!.container)
+    const third = document.createElement('div')
+    inner.appendChild(third)
+    panes.set(3, createPane(3, third))
+    const before = serializePaneTree(outer)!
+    const { callbacks } = callbacksFor(panes)
+    // The manager's root holds the top split; it is not the split itself.
+    const root = document.createElement('div')
+    outer.replaceWith(root)
+    root.appendChild(outer)
+    callbacks.getRoot = () => root
+
+    handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
+
+    const saved = insertLeafBeside(
+      removeLayoutLeaf(before, makeLeafId(3))!,
+      makeLeafId(1),
+      makeLeafId(3),
+      'left'
+    )
+    expect(serializePaneTree(outer)).toEqual(saved)
+    expect(saved).toMatchObject({ ratio: 0.7 })
+  })
+
   it('drops a taken move whose pane closed before the taker ran it', () => {
     const panes = createVerticalSplit([1, 2, 3])
     let move: (() => void) | undefined
@@ -143,6 +180,21 @@ describe('handlePaneDrop with a drop taker', () => {
 
     handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
     panes.delete(3)
+    move?.()
+
+    expect(onLayoutChanged).not.toHaveBeenCalled()
+  })
+
+  it('drops a taken move once the manager is destroyed', () => {
+    const panes = createVerticalSplit([1, 2, 3])
+    let move: (() => void) | undefined
+    const { callbacks, onLayoutChanged } = callbacksFor(panes, (_drop, later) => {
+      move = later
+      return true
+    })
+
+    handlePaneDrop(3, 1, 'left', createDragReorderState(), callbacks)
+    callbacks.isDestroyed = () => true
     move?.()
 
     expect(onLayoutChanged).not.toHaveBeenCalled()
