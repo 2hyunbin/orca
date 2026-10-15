@@ -423,11 +423,12 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(empty.toJSON()).toBeNull()
     })
 
-    it('Clear all captures card ids while Resume and Steer stay available', async () => {
+    it('Clear all greys Resume and every card it deletes until it settles, leaving a busy card out', async () => {
       const release = Promise.withResolvers<boolean>()
+      const sending = Promise.withResolvers<boolean>()
       const onClearAll = vi.fn(() => release.promise)
       const onResume = vi.fn(async () => true)
-      const onSend = vi.fn(async () => true)
+      const onSend = vi.fn(() => sending.promise)
       const mounted = await mountPaused({
         cards: [waiting, card({ messageId: 'b' }), card({ messageId: 'c' })],
         pause: { reason: 'stopped' },
@@ -435,31 +436,49 @@ describe('MobileNativeChatQueuedMessages', () => {
         onResume,
         onSend
       })
-      await act(async () =>
-        mounted.root
-          .findByProps({ accessibilityLabel: 'Delete every queued message' })
-          .props.onPress()
+      const byLabel = (label: string) => mounted.root.findAllByProps({ accessibilityLabel: label })
+      const clearAll = () => byLabel('Delete every queued message')[0]!
+      const resume = () => byLabel('Resume sending the queued messages')[0]!
+      const steers = () => byLabel('Submit without interrupting the model')
+      const deletes = () => byLabel('Delete this queued message')
+      // The last card's own Steer is still on its way: Clear all leaves it to that action.
+      await act(async () => steers()[2]!.props.onPress())
+      await act(async () => clearAll().props.onPress())
+      expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b'])
+      expect([clearAll(), resume(), ...steers(), ...deletes()].map((b) => b.props.disabled)).toEqual(
+        [true, true, true, true, true, true, true, true]
       )
-      expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b', 'c'])
-      expect(
-        mounted.root.findByProps({ accessibilityLabel: 'Delete every queued message' }).props
-          .disabled
-      ).toBe(true)
-      const resume = mounted.root.findByProps({
-        accessibilityLabel: 'Resume sending the queued messages'
-      })
-      const steer = mounted.root.findAllByProps({
-        accessibilityLabel: 'Submit without interrupting the model'
-      })[0]
-      expect(resume.props.disabled).toBe(false)
-      expect(steer.props.disabled).toBe(false)
       await act(async () => {
-        resume.props.onPress()
-        steer.props.onPress()
+        resume().props.onPress()
+        steers()[0]!.props.onPress()
       })
-      expect(onResume).toHaveBeenCalledOnce()
+      expect(onResume).not.toHaveBeenCalled()
       expect(onSend).toHaveBeenCalledOnce()
       await act(async () => release.resolve(true))
+      await act(async () => sending.resolve(true))
+      expect([clearAll(), resume(), ...steers()].map((b) => b.props.disabled)).toEqual([
+        false,
+        false,
+        false,
+        false,
+        false
+      ])
+    })
+
+    it('Resume greys Clear all until the host answers', async () => {
+      const answer = Promise.withResolvers<boolean>()
+      const onClearAll = vi.fn(async () => true)
+      const mounted = await mountPaused({
+        pause: { reason: 'stopped' },
+        onClearAll,
+        onResume: vi.fn(() => answer.promise)
+      })
+      await act(async () => resumeButton(mounted).props.onPress())
+      const clearAll = mounted.root.findByProps({ accessibilityLabel: 'Delete every queued message' })
+      expect(clearAll.props.disabled).toBe(true)
+      await act(async () => clearAll.props.onPress())
+      expect(onClearAll).not.toHaveBeenCalled()
+      await act(async () => answer.resolve(true))
     })
 
     it('the chevron folds only the cards; the header and its actions stay', async () => {

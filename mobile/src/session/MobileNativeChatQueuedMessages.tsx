@@ -18,9 +18,8 @@ import type { MobileQueuedMessageCard } from './mobile-structured-queued-message
 import type { MobileQueuePause } from './mobile-structured-queued-message-feed'
 import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
 
-/** The header's in-flight keys beside the cards' message ids, which never contain NUL. */
-const RESUME_KEY = '\u0000resume'
-const CLEAR_KEY = '\u0000clear'
+/** Held by Resume and Clear all, so each refuses the other; message ids never contain NUL. */
+const QUEUE_KEY = '\u0000queue'
 
 export type MobileNativeChatQueuedMessagesProps = {
   cards?: MobileQueuedMessageCard[]
@@ -50,8 +49,8 @@ export function MobileNativeChatQueuedMessages({
   onResume,
   steerHeld = false
 }: MobileNativeChatQueuedMessagesProps): React.JSX.Element | null {
-  // One in-flight action per card; a second tap must not double-consume. The ref
-  // closes the same-frame double tap the disabled state cannot.
+  // One in-flight action per control, drawn as busy until it settles; a second tap must not
+  // double-consume. The ref closes the same-frame double tap the disabled state cannot.
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
   const inFlightRef = useRef(new Set<string>())
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -63,21 +62,34 @@ export function MobileNativeChatQueuedMessages({
     }
     return null
   }
-  const run = async (messageId: string, action?: (id: string) => Promise<boolean>) => {
-    if (inFlightRef.current.has(messageId) || !action) {
+  const run = async (keys: readonly string[], action?: () => Promise<boolean>) => {
+    const held = inFlightRef.current
+    if (!action || keys.some((key) => held.has(key))) {
       return
     }
-    inFlightRef.current.add(messageId)
-    setBusyIds(new Set(inFlightRef.current))
+    keys.forEach((key) => held.add(key))
+    setBusyIds(new Set(held))
     try {
-      await action(messageId)
+      await action()
     } finally {
-      inFlightRef.current.delete(messageId)
-      setBusyIds(new Set(inFlightRef.current))
+      keys.forEach((key) => held.delete(key))
+      setBusyIds(new Set(held))
     }
   }
-  const resuming = busyIds.has(RESUME_KEY)
-  const clearing = busyIds.has(CLEAR_KEY)
+  const runOnCard = (messageId: string, action?: (id: string) => Promise<boolean>) =>
+    void run([messageId], action && (() => action(messageId)))
+  // Each header action greys during the other: a Resume would send the cards a Clear is deleting.
+  const queueBusy = busyIds.has(QUEUE_KEY)
+  const clearAll = (clear: (messageIds: string[]) => Promise<boolean>) => {
+    // A card whose own action is out is left to it; every card it deletes shows busy until the
+    // whole Clear settles.
+    const messageIds = cards
+      .map((card) => card.messageId)
+      .filter((messageId) => !inFlightRef.current.has(messageId))
+    if (messageIds.length > 0) {
+      void run([QUEUE_KEY, ...messageIds], () => clear(messageIds))
+    }
+  }
   // A card that drained or was removed while its menu was open closes the menu, for good: a
   // Stop-requeued draft comes back under the same id and must not reopen it.
   const menuCard = cards.find((card) => card.messageId === menuFor)
@@ -107,17 +119,15 @@ export function MobileNativeChatQueuedMessages({
               {onClearAll ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: clearing }}
+                  accessibilityState={{ disabled: queueBusy }}
                   accessibilityLabel="Delete every queued message"
                   style={({ pressed }) => [
                     styles.textAction,
                     pressed && styles.pressed,
-                    clearing && styles.disabled
+                    queueBusy && styles.disabled
                   ]}
-                  disabled={clearing}
-                  onPress={() =>
-                    void run(CLEAR_KEY, () => onClearAll(cards.map((card) => card.messageId)))
-                  }
+                  disabled={queueBusy}
+                  onPress={() => clearAll(onClearAll)}
                 >
                   <Trash2 size={12} color={colors.textPrimary} strokeWidth={2} />
                   <Text style={styles.actionLabel}>Clear all</Text>
@@ -125,15 +135,15 @@ export function MobileNativeChatQueuedMessages({
               ) : null}
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: resuming }}
+                accessibilityState={{ disabled: queueBusy }}
                 accessibilityLabel="Resume sending the queued messages"
                 style={({ pressed }) => [
                   styles.textAction,
                   pressed && styles.pressed,
-                  resuming && styles.disabled
+                  queueBusy && styles.disabled
                 ]}
-                disabled={resuming}
-                onPress={() => void run(RESUME_KEY, onResume && (() => onResume()))}
+                disabled={queueBusy}
+                onPress={() => void run([QUEUE_KEY], onResume)}
               >
                 <Play size={12} color={colors.textPrimary} strokeWidth={2} />
                 <Text style={styles.actionLabel}>Resume</Text>
@@ -206,7 +216,7 @@ export function MobileNativeChatQueuedMessages({
                     (busy || steerHeld) && styles.disabled
                   ]}
                   disabled={busy || steerHeld}
-                  onPress={() => void run(card.messageId, onSend)}
+                  onPress={() => runOnCard(card.messageId, onSend)}
                 >
                   {steers ? (
                     <CornerDownRight size={12} color={colors.textPrimary} strokeWidth={2} />
@@ -226,7 +236,7 @@ export function MobileNativeChatQueuedMessages({
                   busy && styles.disabled
                 ]}
                 disabled={busy}
-                onPress={() => void run(card.messageId, onDelete)}
+                onPress={() => runOnCard(card.messageId, onDelete)}
               >
                 <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
               </Pressable>
@@ -262,7 +272,7 @@ export function MobileNativeChatQueuedMessages({
             closeBeforePress: true,
             onPress: () => {
               if (menuCard) {
-                void run(menuCard.messageId, onEdit)
+                runOnCard(menuCard.messageId, onEdit)
               }
             }
           }
