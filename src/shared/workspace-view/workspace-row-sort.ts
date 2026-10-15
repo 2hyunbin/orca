@@ -9,8 +9,8 @@ export type WorkspaceSortBy = PersistedUIState['sortBy']
  */
 export const CREATE_GRACE_MS = 5 * 60 * 1000
 
-/** Recency with the create-grace floor, applied only while the window is open. */
-export function effectiveRecentActivity(
+/** Recency with the create-grace floor, applied only while the window is open; non-finite stamps from a row get none. */
+export function recentActivityWithCreateGrace(
   lastActivityAt: number,
   createdAt: number | undefined,
   now: number
@@ -29,11 +29,11 @@ export function effectiveRecentActivity(
 export type WorkspaceRowSortReader<Row> = {
   label: (row: Row) => string
   repoLabel: (row: Row) => string
-  /** Already floored by effectiveRecentActivity. */
+  /** Already floored by recentActivityWithCreateGrace. */
   recentActivity: (row: Row) => number
   /** Higher ranks sort first; null sorts after every ranked row. */
   manualRank: (row: Row) => number | null
-  /** Agent activity: the desktop ranks live agent attention, the phone the desktop's saved order. */
+  /** Agent activity: the desktop ranks live agent attention, the phone the desktop's saved order. Ties fall to the label. */
   compareSmart: (a: Row, b: Row) => number
 }
 
@@ -57,7 +57,7 @@ export function buildWorkspaceRowComparator<Row>(
       case 'name':
         return byLabel(a, b)
       case 'smart':
-        return read.compareSmart(a, b)
+        return read.compareSmart(a, b) || byLabel(a, b)
       case 'recent':
         return read.recentActivity(b) - read.recentActivity(a) || byLabel(a, b)
       case 'repo':

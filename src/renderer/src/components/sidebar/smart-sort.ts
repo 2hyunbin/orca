@@ -9,7 +9,7 @@ import { tabHasLivePty } from '@/lib/tab-has-live-pty'
 import { basename } from '@/lib/path'
 import {
   buildWorkspaceRowComparator,
-  effectiveRecentActivity as effectiveRecentActivityAt,
+  recentActivityWithCreateGrace,
   type WorkspaceSortBy
 } from '../../../../shared/workspace-view/workspace-row-sort'
 import {
@@ -25,7 +25,7 @@ export { CREATE_GRACE_MS } from '../../../../shared/workspace-view/workspace-row
 
 /** Recent-sort rank: `lastActivityAt`, floored at `createdAt + CREATE_GRACE_MS` while that window is open. */
 export function effectiveRecentActivity(worktree: Worktree, now: number): number {
-  return effectiveRecentActivityAt(worktree.lastActivityAt, worktree.createdAt, now)
+  return recentActivityWithCreateGrace(worktree.lastActivityAt, worktree.createdAt, now)
 }
 
 export type WorktreeSortLabelInput = Pick<Worktree, 'displayName' | 'path' | 'id'>
@@ -107,8 +107,7 @@ export function buildWorktreeComparator(
         bw.attentionTimestamp - aw.attentionTimestamp ||
         // Why: idle worktrees fall through to recency (and the create-grace
         // floor for brand-new worktrees) before alphabetical.
-        effectiveRecentActivity(b, now) - effectiveRecentActivity(a, now) ||
-        label(a).localeCompare(label(b))
+        effectiveRecentActivity(b, now) - effectiveRecentActivity(a, now)
       )
     }
   })
