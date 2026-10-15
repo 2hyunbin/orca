@@ -113,7 +113,11 @@ async function oomCase(bundlePath, prefix, systemdVersion, mode) {
     const daemonState = alive(daemon.pid) ? 'live' : 'killed'
     const neighbours = alive(term1) && alive(term3) ? 'live' : 'killed'
     console.log(JSON.stringify({ mode, systemdVersion, daemon: daemonState, neighbours }))
-    systemctl('stop', daemon.unit)
+    try {
+      systemctl('stop', daemon.unit)
+    } catch {
+      // The OOM stop already ended the scope, and --collect may have unloaded it.
+    }
     return
   }
   // Without OOMPolicy, systemd's own policy decides terminal 2's fate; neighbours never share it.
