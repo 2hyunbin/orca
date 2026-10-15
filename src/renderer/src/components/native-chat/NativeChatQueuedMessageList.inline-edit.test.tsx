@@ -59,6 +59,8 @@ function controller(
     resume: vi.fn(async () => false),
     resuming: false,
     clear: vi.fn(async () => true),
+    clearing: false,
+    busy: () => false,
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     edit: vi.fn(async () => {}),

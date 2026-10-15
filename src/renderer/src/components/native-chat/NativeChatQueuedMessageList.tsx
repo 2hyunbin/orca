@@ -109,6 +109,7 @@ export function NativeChatQueuedMessageList({
               attentionCaption={attentionCaption}
               pause={pause}
               resuming={controller.resuming}
+              clearing={controller.clearing}
               clearCapable={controller.clearCapable}
               expanded={expanded}
               listId={listId}
@@ -137,6 +138,7 @@ export function NativeChatQueuedMessageList({
                   statedFailures={statedFailures}
                   showsSteerShortcut={controller.queueCapable && card === newest}
                   steerHeld={steerHeld}
+                  busy={controller.busy(card.messageId)}
                   onSteer={() => refocusAfter(controller.steer(card.messageId))}
                   onDelete={() => refocusAfter(controller.remove(card.messageId))}
                   onEdit={
@@ -164,6 +166,7 @@ function NativeChatQueueHeader({
   attentionCaption,
   pause,
   resuming,
+  clearing,
   clearCapable,
   expanded,
   listId,
@@ -175,6 +178,7 @@ function NativeChatQueueHeader({
   attentionCaption: string | null
   pause: { reason: string } | null
   resuming: boolean
+  clearing: boolean
   clearCapable: boolean
   expanded: boolean
   listId: string
@@ -213,13 +217,20 @@ function NativeChatQueueHeader({
             type="button"
             variant="ghost"
             size="xs"
-            disabled={!clearCapable}
+            disabled={!clearCapable || clearing}
             onClick={onClearAll}
           >
             <Trash2 />
             {translate('components.native-chat.queuedMessages.clearAll', 'Clear all')}
           </Button>
-          <Button type="button" variant="ghost" size="xs" disabled={resuming} onClick={onResume}>
+          {/* A Resume during Clear would send the cards it is deleting. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            disabled={resuming || clearing}
+            onClick={onResume}
+          >
             <Play />
             {translate('components.native-chat.queuedMessages.resume', 'Resume')}
           </Button>

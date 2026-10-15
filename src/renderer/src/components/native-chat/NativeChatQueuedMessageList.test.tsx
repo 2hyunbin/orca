@@ -24,6 +24,7 @@ vi.mock('../../store', () => {
   return { useAppStore }
 })
 
+import { toast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import { NativeChatQueuedMessageList } from './NativeChatQueuedMessageList'
@@ -32,7 +33,10 @@ import {
   useStructuredAgentSessionQueuedMessages,
   type StructuredAgentSessionQueuedMessagesController
 } from './use-structured-agent-session-queued-messages'
-import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
+import type {
+  StructuredAgentSessionMutate,
+  StructuredAgentSessionWrite
+} from './use-structured-agent-session-mutate'
 import type { AgentSessionQueuedMessage } from '../../../../shared/agent-session-wire'
 import type { AgentSessionQueuePause } from '../../../../shared/agent-session-queued-message-wire'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
@@ -86,6 +90,8 @@ function controller(
     resume: vi.fn(async () => false),
     resuming: false,
     clear: vi.fn(async () => true),
+    clearing: false,
+    busy: () => false,
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     edit: vi.fn(async () => {}),
@@ -112,7 +118,8 @@ function waitingDraft(
 function renderHeldQueue(
   queuedMessages: AgentSessionQueuedMessage[],
   queuePause: AgentSessionQueuePause | null,
-  hasPendingPrompt = false
+  hasPendingPrompt = false,
+  write: StructuredAgentSessionWrite = async () => ({ kind: 'dropped' })
 ) {
   const mutate = vi.fn(async (..._call: [string, string, Record<string, unknown>]) => null)
   function HeldQueue(): React.JSX.Element {
@@ -130,7 +137,7 @@ function renderHeldQueue(
         target: { kind: 'local' },
         sessionId: 'session',
         capable: false,
-        write: async () => ({ kind: 'dropped' })
+        write
       }
     })
     return <NativeChatQueuedMessageList chatWorktreeId={null} controller={owner} />
@@ -539,6 +546,43 @@ describe('NativeChatQueuedMessageList', () => {
     )
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
     expect(container.textContent).toContain('Queued3')
+  })
+
+  it('a slow Clear all greys Clear all, Resume and every card until the host answers', async () => {
+    vi.mocked(toast.error).mockClear()
+    const answer = Promise.withResolvers<void>()
+    const write = vi.fn(async () => {
+      await answer.promise
+      return {
+        kind: 'not-done' as const,
+        notice: 'Could not delete',
+        failure: { kind: 'failed' as const }
+      }
+    })
+    renderHeldQueue(
+      [waitingDraft('a', 1), waitingDraft('b', 2)],
+      { reason: 'stopped' },
+      false,
+      write
+    )
+    const clearAll = () => screen.getByRole('button', { name: 'Clear all' })
+    const controls = () => [
+      clearAll(),
+      screen.getByRole('button', { name: 'Resume' }),
+      ...screen.getAllByRole('button', { name: /^(Delete|Steer|Send|More actions)$/ })
+    ]
+    fireEvent.click(clearAll())
+    fireEvent.click(clearAll())
+    await waitFor(() =>
+      controls().forEach((control) => expect(control).toHaveProperty('disabled', true))
+    )
+    expect(write).toHaveBeenCalledTimes(2)
+    answer.resolve()
+    await waitFor(() =>
+      controls().forEach((control) => expect(control).toHaveProperty('disabled', false))
+    )
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith('Could not delete')
   })
 
   it('Resume shows it is pending and hands focus back', async () => {

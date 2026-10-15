@@ -45,6 +45,10 @@ export type StructuredAgentSessionQueuedMessagesController = {
   resuming: boolean
   /** Delete every card shown; false when one could not be (already a toast). */
   clear: () => Promise<boolean>
+  /** A Clear all is in flight. */
+  clearing: boolean
+  /** The card's own action, or the Clear deleting it, is in flight. */
+  busy: (messageId: string) => boolean
   /** Send-now into the running turn; the transcript shows it at delivery position. */
   steer: (messageId: string) => Promise<void>
   remove: (messageId: string) => Promise<void>
@@ -60,6 +64,9 @@ export type StructuredAgentSessionQueuedMessagesController = {
 
 const NO_SENDS: readonly StructuredAgentSessionPendingSend[] = []
 const CLEAR_DELETE_CONCURRENCY = 8
+/** The header's in-flight keys beside the cards' message ids, which never contain NUL. */
+const RESUME_KEY = '\u0000resume'
+const CLEAR_KEY = '\u0000clear'
 
 function alreadySentNotice(): void {
   toast.error(
@@ -109,40 +116,44 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     cardsRef.current = cards
   }, [cards])
 
-  // One action per card at a time: a double-click or a chord repeat is not a second request.
-  const actingOnRef = useRef(new Set<string>())
-  const actOnce = useCallback(
-    async (messageId: string, action: () => Promise<void>): Promise<void> => {
-      if (actingOnRef.current.has(messageId)) {
-        return
+  // One action per control at a time, drawn as busy until it settles. The ref closes the
+  // same-frame double click or chord repeat the disabled state cannot.
+  const inFlightRef = useRef(new Set<string>())
+  const [inFlight, setInFlight] = useState<ReadonlySet<string>>(() => new Set())
+  const run = useCallback(
+    async <T>(keys: readonly string[], action: () => Promise<T>): Promise<T | false> => {
+      const held = inFlightRef.current
+      if (keys.some((key) => held.has(key))) {
+        return false
       }
-      actingOnRef.current.add(messageId)
+      keys.forEach((key) => held.add(key))
+      setInFlight(new Set(held))
       try {
-        await action()
+        return await action()
       } finally {
-        actingOnRef.current.delete(messageId)
+        keys.forEach((key) => held.delete(key))
+        setInFlight(new Set(held))
       }
     },
     []
   )
 
   const steer = useCallback(
-    (messageId: string): Promise<void> =>
-      actOnce(messageId, async () => {
-        await mutate<AgentSessionSendResult>(
+    async (messageId: string): Promise<void> => {
+      await run([messageId], () =>
+        mutate<AgentSessionSendResult>(
           'agentSession.queuedMessageSend',
           'agentSession.queuedMessageSend',
           { messageId }
         )
-      }),
-    [actOnce, mutate]
+      )
+    },
+    [mutate, run]
   )
 
-  /** True once the card has left the queue, deleted or already sent; a failure is a toast. */
-  const removeCard = useCallback(
-    async (messageId: string): Promise<boolean> => {
-      let removed = false
-      await actOnce(messageId, async () => {
+  const remove = useCallback(
+    async (messageId: string): Promise<void> => {
+      await run([messageId], async () => {
         const result = await mutate<AgentSessionQueuedMessageDeleteResult>(
           'agentSession.queuedMessageDelete',
           'agentSession.queuedMessageDelete',
@@ -151,17 +162,9 @@ export function useStructuredAgentSessionQueuedMessages(args: {
         if (result && !result.deleted && result.disposition === 'dispatched') {
           alreadySentNotice()
         }
-        removed = result !== null
       })
-      return removed
     },
-    [actOnce, mutate]
-  )
-  const remove = useCallback(
-    async (messageId: string): Promise<void> => {
-      await removeCard(messageId)
-    },
-    [removeCard]
+    [mutate, run]
   )
 
   const editing = useStructuredAgentSessionQueuedEdit({
@@ -185,80 +188,63 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     return true
   }, [enabled, steer])
 
-  const resumingRef = useRef(false)
-  const [resuming, setResuming] = useState(false)
-  const resume = useCallback(async (): Promise<boolean> => {
-    if (resumingRef.current) {
-      return false
-    }
-    resumingRef.current = true
-    setResuming(true)
-    try {
-      const result = await mutate<AgentSessionQueuedMessagesResumeResult>(
-        'agentSession.queuedMessagesResume',
-        'agentSession.queuedMessagesResume',
-        {}
-      )
-      return result?.resumed === true
-    } finally {
-      resumingRef.current = false
-      setResuming(false)
-    }
-  }, [mutate])
+  const resume = useCallback(
+    (): Promise<boolean> =>
+      run([RESUME_KEY], async () => {
+        const result = await mutate<AgentSessionQueuedMessagesResumeResult>(
+          'agentSession.queuedMessagesResume',
+          'agentSession.queuedMessagesResume',
+          {}
+        )
+        return result?.resumed === true
+      }),
+    [mutate, run]
+  )
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
   const clearCapable = !cards.some((card) => card.hold === 'sending')
-  const clearingRef = useRef<Promise<boolean> | null>(null)
-  const clearCards = useCallback(async (): Promise<boolean> => {
-    if (!clearCapable) {
-      return false
-    }
+  const clear = useCallback(async (): Promise<boolean> => {
+    // A card whose own action is out is left to it.
     const messageIds = cardsRef.current
-      .filter((card) => card.hold !== 'sending')
+      .filter((card) => card.hold !== 'sending' && !inFlightRef.current.has(card.messageId))
       .map((card) => card.messageId)
-    if (messageIds.length === 0) {
+    if (!clearCapable || messageIds.length === 0) {
       return false
     }
-    const results = await mapSettledWithConcurrency(
-      messageIds,
-      CLEAR_DELETE_CONCURRENCY,
-      (messageId) =>
-        args.editTransport.write<AgentSessionQueuedMessageDeleteResult>(
-          'agentSession.queuedMessageDelete',
-          'agentSession.queuedMessageDelete',
-          { messageId }
-        )
-    )
-    const dispatched = results.some(
-      (result) =>
-        result.status === 'fulfilled' &&
-        result.value.kind === 'done' &&
-        !result.value.value.deleted &&
-        result.value.value.disposition === 'dispatched'
-    )
-    const failure = results.find(
-      (result) => result.status === 'fulfilled' && result.value.kind === 'not-done'
-    )
-    if (failure?.status === 'fulfilled' && failure.value.kind === 'not-done') {
-      toast.error(failure.value.notice)
-    }
-    if (dispatched) {
-      alreadySentNotice()
-    }
-    return (
-      !dispatched &&
-      results.every((result) => result.status === 'fulfilled' && result.value.kind === 'done')
-    )
-  }, [args.editTransport, clearCapable])
-  const clear = useCallback((): Promise<boolean> => {
-    const pending =
-      clearingRef.current ??
-      clearCards().finally(() => {
-        clearingRef.current = null
-      })
-    clearingRef.current = pending
-    return pending
-  }, [clearCards])
+    // Every card it deletes shows busy until the whole Clear settles.
+    return run([CLEAR_KEY, ...messageIds], async () => {
+      const results = await mapSettledWithConcurrency(
+        messageIds,
+        CLEAR_DELETE_CONCURRENCY,
+        (messageId) =>
+          args.editTransport.write<AgentSessionQueuedMessageDeleteResult>(
+            'agentSession.queuedMessageDelete',
+            'agentSession.queuedMessageDelete',
+            { messageId }
+          )
+      )
+      const dispatched = results.some(
+        (result) =>
+          result.status === 'fulfilled' &&
+          result.value.kind === 'done' &&
+          !result.value.value.deleted &&
+          result.value.value.disposition === 'dispatched'
+      )
+      const failure = results.find(
+        (result) => result.status === 'fulfilled' && result.value.kind === 'not-done'
+      )
+      if (failure?.status === 'fulfilled' && failure.value.kind === 'not-done') {
+        toast.error(failure.value.notice)
+      }
+      if (dispatched) {
+        alreadySentNotice()
+      }
+      return (
+        !dispatched &&
+        results.every((result) => result.status === 'fulfilled' && result.value.kind === 'done')
+      )
+    })
+  }, [args.editTransport, clearCapable, run])
 
   return {
     cards,
@@ -266,8 +252,10 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     clearCapable,
     pause,
     resume,
-    resuming,
+    resuming: inFlight.has(RESUME_KEY),
     clear,
+    clearing: inFlight.has(CLEAR_KEY),
+    busy: (messageId) => inFlight.has(messageId),
     steer,
     remove,
     edit: editing.begin,

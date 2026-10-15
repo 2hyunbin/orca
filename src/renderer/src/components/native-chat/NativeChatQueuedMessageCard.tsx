@@ -132,6 +132,7 @@ export function NativeChatQueuedMessageCard({
   statedFailures,
   showsSteerShortcut,
   steerHeld = false,
+  busy = false,
   onSteer,
   onDelete,
   onEdit,
@@ -148,6 +149,8 @@ export function NativeChatQueuedMessageCard({
   showsSteerShortcut: boolean
   /** The chat reads Stopping: the card waits for the stop (`NativeChatQueuedMessageList`). */
   steerHeld?: boolean
+  /** Its own action, or a Clear all deleting it, is still on its way to the host. */
+  busy?: boolean
   onSteer: () => void
   onDelete: () => void
   /** Absent when the host cannot edit in place: the card then offers no Edit at all. */
@@ -233,7 +236,7 @@ export function NativeChatQueuedMessageCard({
                     variant="ghost"
                     size="xs"
                     onClick={onSteer}
-                    disabled={steerHeld}
+                    disabled={steerHeld || busy}
                   >
                     {sendNow.steers ? (
                       <CornerDownRight className="size-3" />
@@ -260,6 +263,7 @@ export function NativeChatQueuedMessageCard({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={translate('components.native-chat.queuedMessages.delete', 'Delete')}
+                  disabled={busy}
                   onClick={onDelete}
                 >
                   <Trash2 className="size-3.5" />
@@ -280,6 +284,7 @@ export function NativeChatQueuedMessageCard({
                       'components.native-chat.queuedMessages.moreActions',
                       'More actions'
                     )}
+                    disabled={busy}
                   >
                     <MoreHorizontal className="size-3.5" />
                   </Button>
