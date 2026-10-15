@@ -479,29 +479,38 @@ describe('payload bounds on import', () => {
 })
 
 describe('import failures', () => {
-  it('rejects a legacy source above the fixed 16 MiB import cap before decoding', async () => {
-    const journalDir = join(root, 'oversized-source-journal')
+  it('imports a source past 16 MiB, keeping its newest messages', async () => {
     const journal = await open('claude', CLAUDE_SESSION, {
-      database: openTestJournalHostDatabase(journalDir)
+      database: openTestJournalHostDatabase(join(root, 'large-source-journal'))
     })
-    const filePath = join(root, 'oversized-source.jsonl')
-    await writeFile(filePath, 'x'.repeat(16 * 1024 * 1024 + 1), 'utf8')
-    const epoch = journal.epoch
-
-    await expect(
-      importLegacyTranscriptIntoJournal({
-        journal,
-        agent: 'claude',
-        sessionId: CLAUDE_SESSION,
-        fence: 1,
-        options: { filePath }
+    const filePath = join(root, 'large-source.jsonl')
+    const filler = 'x'.repeat(17 * 1024)
+    const lines = Array.from({ length: 1_100 }, (_, index) =>
+      JSON.stringify({
+        type: 'assistant',
+        uuid: `message-${index}`,
+        message: { role: 'assistant', content: [{ type: 'text', text: `${index} ${filler}` }] }
       })
-    ).resolves.toMatchObject({
-      ok: false,
-      error: `Legacy transcript exceeds the ${16 * 1024 * 1024}-byte import bound`
+    )
+    await writeFile(filePath, `${lines.join('\n')}\n`, 'utf8')
+
+    const result = await importLegacyTranscriptIntoJournal({
+      journal,
+      agent: 'claude',
+      sessionId: CLAUDE_SESSION,
+      fence: 1,
+      options: { filePath }
     })
-    expect(journal.epoch).toBe(epoch)
-    expect(journal.snapshot().items).toEqual([])
+
+    expect(result).toMatchObject({ ok: true, replaced: true })
+    const texts = journal.snapshot().items.map((item) =>
+      item.body.kind === 'message' && item.body.blocks[0]?.type === 'text'
+        ? item.body.blocks[0].text.split(' ')[0]
+        : null
+    )
+    expect(texts.at(-1)).toBe('1099')
+    expect(texts.length).toBeGreaterThan(900)
+    expect(texts.length).toBeLessThan(lines.length)
   })
 
   it('bounds oversized legacy tool-call input before journal publication', async () => {
