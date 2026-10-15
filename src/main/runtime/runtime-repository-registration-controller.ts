@@ -16,6 +16,7 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
 import { runtimeRepoMatchesExecutionHost } from './runtime-worktree-selection'
+import { registerProjectOnWslHost } from '../wsl/wsl-project-registration'
 
 type RuntimeRepositoryRegistrationDependencies = {
   getStore: () => RuntimeStore | null
@@ -34,6 +35,12 @@ export class RuntimeRepositoryRegistrationController {
     displayName?: string
   ): Promise<Repo> {
     const store = this.requireStore()
+    const hosted = await registerProjectOnWslHost(
+      store, { kind: 'add', path, repoKind: kind, displayName }, executionHostId
+    )
+    if (hosted) {
+      return hosted
+    }
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
@@ -95,6 +102,12 @@ export class RuntimeRepositoryRegistrationController {
     const trimmedName = name.trim()
     const trimmedParentPath = parentPath.trim()
     const repoKind: 'git' | 'folder' = kind === 'folder' ? 'folder' : 'git'
+    const hosted = await registerProjectOnWslHost(store, {
+      kind: 'create', path: trimmedParentPath, name: trimmedName, repoKind
+    })
+    if (hosted) {
+      return { repo: hosted }
+    }
     if (!trimmedName) {
       return { error: 'Name cannot be empty' }
     }

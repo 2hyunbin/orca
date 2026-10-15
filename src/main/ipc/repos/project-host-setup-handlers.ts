@@ -28,6 +28,7 @@ import {
 } from './repo-ipc-arg-schemas'
 import { addLocalRepoFromPath } from './local-repo-registration'
 import { sshTargetNotConnectedMessage } from '../../providers/ssh-host-not-served-error'
+import { setupProjectOnWslHost } from '../../wsl/wsl-project-host-setup'
 import {
   assertWslMoveHostSetupIdWritable,
   assertWslMoveHostSetupWritable
@@ -159,6 +160,11 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
       const parsedHost = parseExecutionHostId(args.hostId)
       if (!parsedHost) {
         throw new Error(`Unsupported host: ${args.hostId}`)
+      }
+      const hosted = await setupProjectOnWslHost(store, args)
+      if (hosted) {
+        notifyReposChanged(mainWindow)
+        return hosted
       }
       const result =
         parsedHost.kind === 'local'

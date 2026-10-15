@@ -29,6 +29,7 @@ import {
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
+import { setupProjectOnWslHost } from '../wsl/wsl-project-host-setup'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import {
   countRepoWorkspacesWithMetadata,
@@ -113,6 +114,11 @@ export class RuntimeProjectHostSetupController {
     if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
     }
+    const store = this.deps.getStore()
+    const hosted = store ? await setupProjectOnWslHost(store, args) : null
+    if (hosted) {
+      return hosted
+    }
     const kind = args.kind === 'folder' ? 'folder' : 'git'
     const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
     const sshTargetId = getSshTargetIdForExecutionHost(args.hostId)
@@ -132,6 +138,11 @@ export class RuntimeProjectHostSetupController {
   }
 
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {
+    const store = this.deps.getStore()
+    const hosted = store ? await setupProjectOnWslHost(store, args) : null
+    if (hosted) {
+      return hosted
+    }
     assertCloneHostIsSupported(args.hostId)
     const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
     const repo = await this.deps.cloneRepo(args.url, args.destination, args.hostId)

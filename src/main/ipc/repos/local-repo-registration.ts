@@ -13,6 +13,7 @@ import {
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
+import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
 
 export async function addLocalRepoFromPath(
   store: Store,
@@ -21,6 +22,12 @@ export async function addLocalRepoFromPath(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const repoKind = kind === 'folder' ? 'folder' : 'git'
+  const hosted = await registerProjectOnWslHost(store, {
+    kind: 'add', path, repoKind, displayName
+  })
+  if (hosted) {
+    return { repo: hosted, alreadyExisted: store.getRepos().some((repo) => repo.id === hosted.id) }
+  }
   if (repoKind === 'git') {
     await awaitWindowsHostGitEnvironmentReady({ cwd: path })
   }

@@ -34,6 +34,7 @@ import {
 import { WslOrcadLaunchDeferredError, type WslOrcadConnection } from './wsl-orcad-connection'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import { defaultWslOrcadEnvironmentId } from './wsl-orcad-deploy'
+import { WslProjectHostEnsurer } from './wsl-project-host-ensurer'
 
 /** The WSL side the service drives: C3 holder, C5 connections, C6 liveness (or an e2e fake). */
 export type WslHostConnector = {
@@ -70,6 +71,15 @@ export class WslHostService {
   private readonly adding = new Map<string, Promise<WslHostAddResult>>()
   private visible = new Set<string>()
   private readonly removing = new Set<string>()
+
+  private readonly projectHosts = new WslProjectHostEnsurer({
+    userDataPath: () => this.deps.userDataPath(),
+    isEnabled: () => this.deps.isEnabled(),
+    hasServerFiles: () => this.deps.hasServerFiles(),
+    listDistros: () => this.wsl.listDistros(),
+    add: (distro) => this.add({ distro, startIfStopped: true }),
+    connect: (environmentId) => this.connect(environmentId)
+  })
 
   constructor(private readonly deps: WslHostServiceDependencies) {}
 
@@ -127,6 +137,15 @@ export class WslHostService {
     const operation = this.addOnce(args).finally(() => this.adding.delete(key))
     this.adding.set(key, operation)
     return operation
+  }
+
+  isEnabled(): boolean {
+    return this.deps.isEnabled()
+  }
+
+  /** Explicit project actions may start their distro, and wait for its paired server. */
+  ensure(distro: string): Promise<string> {
+    return this.projectHosts.ensure(distro)
   }
 
   async remove(environmentId: string): Promise<WslHostServerStop> {

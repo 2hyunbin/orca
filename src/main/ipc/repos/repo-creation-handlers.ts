@@ -18,6 +18,7 @@ import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cac
 import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { addLocalRepoFromPath } from './local-repo-registration'
+import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
 
 const GIT_AVAILABILITY_TIMEOUT_MS = 1500
 
@@ -92,6 +93,13 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       const parentPath = args.parentPath?.trim() ?? ''
       // Why: IPC input is untrusted — coerce to the narrow union so a bogus kind can't skip git init yet persist in the store.
       const repoKind: 'git' | 'folder' = args.kind === 'folder' ? 'folder' : 'git'
+      const hosted = await registerProjectOnWslHost(store, {
+        kind: 'create', path: parentPath, name, repoKind
+      })
+      if (hosted) {
+        notifyReposChanged(mainWindow)
+        return { repo: hosted }
+      }
 
       if (!name) {
         return { error: 'Name cannot be empty' }

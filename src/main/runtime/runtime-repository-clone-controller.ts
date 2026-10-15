@@ -24,6 +24,7 @@ import { getRepoName } from '../git/repo'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimeRepoMatchesExecutionHost } from './runtime-worktree-selection'
+import { registerProjectOnWslHost } from '../wsl/wsl-project-registration'
 
 type RuntimeRepositoryCloneDependencies = {
   getStore: () => RuntimeStore | null
@@ -44,6 +45,15 @@ export class RuntimeRepositoryCloneController {
   ): Promise<Repo> {
     if (!this.deps.getStore()) {
       throw new Error('runtime_unavailable')
+    }
+    const store = this.deps.getStore()
+    if (store) {
+      const hosted = await registerProjectOnWslHost(
+        store, { kind: 'clone', path: destination.trim(), url: url.trim() }, executionHostId
+      )
+      if (hosted) {
+        return hosted
+      }
     }
     const trimmedUrl = url.trim()
     const trimmedDestination = destination.trim()
