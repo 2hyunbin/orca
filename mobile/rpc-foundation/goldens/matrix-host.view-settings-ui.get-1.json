@@ -38,10 +38,8 @@
         }
       }
     },
-    "0f3a03a73be4": {
-      "name": "view",
-      "ordinal": 3,
-      "value": {
+    "1601446c4409": {
+      "view": {
         "collapsedGroups": [],
         "filters": {
           "alwaysShowDefaultBranchWorkspace": true,
@@ -57,7 +55,9 @@
           }
         },
         "groupBy": "repo",
-        "sharesOtherClientFilter": false,
+        "sharesOtherClientFilter": {
+          "$rpc": "null"
+        },
         "sortBy": "name",
         "workspaceStatuses": [
           {
@@ -421,12 +421,10 @@
         ]
       }
     },
-    "9270aeb7d9c6": {
-      "status": "pending",
-      "startedAt": 0
-    },
-    "92782a95703a": {
-      "view": {
+    "85b53cd1c708": {
+      "name": "view",
+      "ordinal": 3,
+      "value": {
         "collapsedGroups": [],
         "filters": {
           "alwaysShowDefaultBranchWorkspace": true,
@@ -442,7 +440,9 @@
           }
         },
         "groupBy": "repo",
-        "sharesOtherClientFilter": false,
+        "sharesOtherClientFilter": {
+          "$rpc": "null"
+        },
         "sortBy": "name",
         "workspaceStatuses": [
           {
@@ -471,6 +471,10 @@
           }
         ]
       }
+    },
+    "9270aeb7d9c6": {
+      "status": "pending",
+      "startedAt": 0
     },
     "985caf5772e9": {
       "name": "ui.get#1",
@@ -582,6 +586,55 @@
         ]
       }
     },
+    "c886cd24aa84": {
+      "view": {
+        "collapsedGroups": [],
+        "filters": {
+          "alwaysShowDefaultBranchWorkspace": true,
+          "filterRepoIds": [],
+          "hideAutomationGeneratedWorkspaces": false,
+          "hideCliCreatedWorkspaces": false,
+          "hideDefaultBranchWorkspace": false,
+          "hideDetachedHeadWorkspaces": false,
+          "hideSleepingWorkspaces": false,
+          "hideWorkspacesFromOtherDevices": false,
+          "visibleHostIds": {
+            "$rpc": "null"
+          }
+        },
+        "groupBy": "repo",
+        "sharesOtherClientFilter": {
+          "$rpc": "null"
+        },
+        "sortBy": "recent",
+        "workspaceStatuses": [
+          {
+            "color": "neutral",
+            "icon": "circle",
+            "id": "todo",
+            "label": "Todo"
+          },
+          {
+            "color": "conductor-progress",
+            "icon": "conductor-progress",
+            "id": "in-progress",
+            "label": "In progress"
+          },
+          {
+            "color": "conductor-review",
+            "icon": "conductor-review",
+            "id": "in-review",
+            "label": "In review"
+          },
+          {
+            "color": "conductor-done",
+            "icon": "conductor-done",
+            "id": "completed",
+            "label": "Done"
+          }
+        ]
+      }
+    },
     "d5d6bbbd1680": {
       "name": "ui.get#1",
       "ordinal": 1,
@@ -634,53 +687,6 @@
         "groupBy": "repo",
         "sharesOtherClientFilter": false,
         "sortBy": "name",
-        "workspaceStatuses": [
-          {
-            "color": "neutral",
-            "icon": "circle",
-            "id": "todo",
-            "label": "Todo"
-          },
-          {
-            "color": "conductor-progress",
-            "icon": "conductor-progress",
-            "id": "in-progress",
-            "label": "In progress"
-          },
-          {
-            "color": "conductor-review",
-            "icon": "conductor-review",
-            "id": "in-review",
-            "label": "In review"
-          },
-          {
-            "color": "conductor-done",
-            "icon": "conductor-done",
-            "id": "completed",
-            "label": "Done"
-          }
-        ]
-      }
-    },
-    "eb5df1ffefc6": {
-      "view": {
-        "collapsedGroups": [],
-        "filters": {
-          "alwaysShowDefaultBranchWorkspace": true,
-          "filterRepoIds": [],
-          "hideAutomationGeneratedWorkspaces": false,
-          "hideCliCreatedWorkspaces": false,
-          "hideDefaultBranchWorkspace": false,
-          "hideDetachedHeadWorkspaces": false,
-          "hideSleepingWorkspaces": false,
-          "hideWorkspacesFromOtherDevices": false,
-          "visibleHostIds": {
-            "$rpc": "null"
-          }
-        },
-        "groupBy": "repo",
-        "sharesOtherClientFilter": false,
-        "sortBy": "recent",
         "workspaceStatuses": [
           {
             "color": "neutral",
@@ -804,7 +810,7 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "eb5df1ffefc6",
+          "state": "c886cd24aa84",
           "effects": []
         }
       },
@@ -832,8 +838,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -846,8 +852,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -860,8 +866,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -874,8 +880,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -888,8 +894,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -902,8 +908,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -916,8 +922,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -930,8 +936,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -944,8 +950,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       },
       {
@@ -958,8 +964,8 @@
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "92782a95703a",
-          "effects": ["0f3a03a73be4"]
+          "state": "1601446c4409",
+          "effects": ["85b53cd1c708"]
         }
       }
     ]
