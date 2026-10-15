@@ -336,7 +336,7 @@ export function MountedBottomDrawer({
     <>
       {handle}
       <GestureDetector gesture={contentPanGesture}>
-        <Animated.View collapsable={false}>
+        <Animated.View collapsable={false} style={styles.scrollFrame}>
           <GestureDetector gesture={scrollGesture}>
             <Animated.ScrollView
               bounces={false}
