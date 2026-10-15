@@ -340,7 +340,7 @@ async function spawnLocalStartupAndSetupTerminals(args: {
       startupCommand: startup.command,
       platform,
       shell: setup.shell,
-      // Why: the window quoted this command by the same rule, for this worktree's pane.
+      // Why: the window quoted this command by this rule; a COMSPEC pane spawn can still differ.
       startupShell: resolveLocalWindowsAgentStartupShell({
         platform: process.platform,
         isRemote: false,

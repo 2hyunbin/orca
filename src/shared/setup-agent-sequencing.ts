@@ -70,6 +70,7 @@ export function createSequencedSetupAgentCommands(args: {
       ),
       // Why: a cmd-quoted command must be read by cmd, so the gate only waits and the pane runs
       // it; cmd expands the variable before parsing the line.
+      // Expansion is one pass, so a %NAME% inside the command itself stays literal.
       startupCommand:
         args.startupShell === 'cmd'
           ? `${buildWindowsStartupCommand(markerPath, nonce, waitTimeoutSeconds, false)} && %${SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV}%`

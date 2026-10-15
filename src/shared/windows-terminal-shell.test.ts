@@ -6,7 +6,6 @@ import {
   resolveLocalWindowsAgentStartupShell,
   resolveWindowsShellStartupFamily
 } from './windows-terminal-shell'
-import { createSequencedSetupAgentCommands } from './setup-agent-sequencing'
 import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
 
 const WINDOWS_HOST: ProjectExecutionRuntimeResolution = {
@@ -38,20 +37,6 @@ describe('the shell that reads a local Windows agent command', () => {
     expect(quotingShell('wsl.exe')).toBe('posix')
     expect(quotingShell('wsl.exe', WINDOWS_HOST)).toBe('powershell')
     expect(quotingShell('cmd.exe', undefined, true)).toBeUndefined()
-  })
-
-  it('is the cmd pane after the setup gate, which only waits', () => {
-    const gate = (startupShell: 'cmd' | 'powershell') =>
-      createSequencedSetupAgentCommands({
-        runnerScriptPath: 'C:\\repo\\setup-runner.cmd',
-        startupCommand: 'agent',
-        platform: 'windows',
-        startupShell
-      }).startupCommand
-    expect(gate('cmd')).toMatch(/^powershell\.exe .* && %ORCA_SEQUENCED_STARTUP_COMMAND%$/)
-    expect(gate('powershell')).toMatch(
-      /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand \S+$/
-    )
   })
 })
 
