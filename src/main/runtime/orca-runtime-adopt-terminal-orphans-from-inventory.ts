@@ -206,13 +206,6 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
     )
   }
 
-  /** Hook-proven agent presence in a coordinator's pane; null when no hook identified an owner. */
-  checkCoordinatorAgentPresence(
-    paneKey: string
-  ): Promise<'live' | 'unverifiable' | 'exited' | null> {
-    return this.checkHookAgentPresenceFn?.(paneKey) ?? Promise.resolve(null)
-  }
-
   getLiveTerminalPaneKey(handle: string): string | null {
     const structured = resolveStructuredWorkerAuthority(
       handle,
