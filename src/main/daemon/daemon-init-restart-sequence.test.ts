@@ -88,14 +88,16 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     )
   })
 
-  it('does not end current sessions when retired-daemon recovery cannot prove cleanup', async () => {
+  it('still restarts the current daemon when retired-daemon recovery cannot prove cleanup', async () => {
     const mod = await importFresh()
     await mod.initDaemonPtyProvider()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     recoverRetired.mockRejectedValueOnce(new Error('retired descendants unverifiable'))
-    await expect(mod.restartDaemon()).rejects.toThrow('retired descendants unverifiable')
-    expect(adapterInstances[0].fanoutSyntheticExits).not.toHaveBeenCalled()
-    expect(unbindLocalProviderListenersMock).not.toHaveBeenCalled()
-    expect(spawnerInstances[0].resetHandle).not.toHaveBeenCalled()
+    await expect(mod.restartDaemon()).resolves.toBeDefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('retired descendants unverifiable'))
+    expect(adapterInstances[0].fanoutSyntheticExits).toHaveBeenCalled()
+    expect(spawnerInstances[0].resetHandle).toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('refuses a targeted restart before ending anything when another daemon owns the endpoint', async () => {

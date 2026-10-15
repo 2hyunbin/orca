@@ -130,8 +130,8 @@ An explicit, untargeted Restart also recovers signed-helper jobs left by older b
 retired their PID record and endpoint but failed to exit. Recovery uses exact launchd labels and
 arguments for this profile, ignores newer protocols, and preserves live or unreadable endpoints
 and services still publishing a PID record. It verifies descendant exits before killing the old
-root and releasing its label. Startup never runs this cleanup, and a failed recovery aborts before
-the current daemon's sessions are ended. Node/SSH hosts do not perform GUI-service recovery.
+root and releasing its label. Startup never runs this cleanup, and a failed recovery is logged
+without blocking the current daemon's restart. Node/SSH hosts do not perform GUI-service recovery.
 
 Running old daemons keep their terminals; settings reports app and terminal-host Full Disk Access
 separately, and a denied terminal is recovered by closing it or restarting the daemon. The packaging
