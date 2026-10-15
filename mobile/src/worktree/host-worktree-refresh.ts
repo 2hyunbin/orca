@@ -12,7 +12,7 @@ type HostWorktreeRefreshArgs = {
   fetchWorktrees: (options?: WorktreeRefreshOptions) => Promise<void>
   fetchRepoMetadata: (options?: RepoRefreshOptions) => Promise<void>
   /** Re-reads the Workspace options the phone shares with the desktop. */
-  syncViewSettings?: () => Promise<void>
+  syncViewSettings: () => Promise<void>
 }
 
 export function startHostWorktreeRefresh({
@@ -64,7 +64,7 @@ export function startHostWorktreeRefresh({
           // Why: client events are not queued while disconnected, so re-read both snapshots after replay.
           void fetchWorktrees()
           void fetchRepoMetadata({ force: true, queueIfInFlight: true })
-          void syncViewSettings?.()
+          void syncViewSettings()
         }
         return
       }
@@ -77,7 +77,7 @@ export function startHostWorktreeRefresh({
         void fetchWorktrees()
         void fetchRepoMetadata({ force: true, queueIfInFlight: true })
       } else if (event.type === 'workspaceViewChanged') {
-        void syncViewSettings?.()
+        void syncViewSettings()
       } else if (event.type === 'worktreesChanged') {
         void fetchWorktrees()
       } else if (event.type === 'sshStateChanged') {

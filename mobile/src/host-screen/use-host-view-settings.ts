@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { getMobileWorkspaceLineageGroupKey } from '../worktree/mobile-workspace-lineage'
@@ -6,6 +6,7 @@ import { WORKSPACE_SORT_OPTIONS as SORT_OPTIONS } from '../worktree/workspace-li
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
+  changedFilters,
   type MobileGroupMode,
   type MobileSortMode,
   type MobileViewPatch,
@@ -44,6 +45,8 @@ export function useHostViewSettings(args: {
     workspaceStatuses
   } = state
 
+  const localEditsRef = useRef(0)
+
   useEffect(() => {
     viewStateRef.current = {
       groupMode,
@@ -67,6 +70,7 @@ export function useHostViewSettings(args: {
   // Apply the change locally, then patch the desktop's shared store (ui.set) so both apps stay in sync.
   const persistViewSettings = useCallback(
     (patch: MobileViewPatch) => {
+      localEditsRef.current += 1
       const previous = viewStateRef.current
       const next: MobileViewState = {
         ...previous,
@@ -98,9 +102,15 @@ export function useHostViewSettings(args: {
     }
     const requestClient = client
     const requestHostId = hostId
+    const editsAtRequest = localEditsRef.current
     try {
       const reply = await hostViewSettingsRead.request(requestClient)
-      if (clientRef.current !== requestClient || hostId !== requestHostId) {
+      // Why skip after a local edit: this reply may predate it; the edit's own change event re-reads.
+      if (
+        clientRef.current !== requestClient ||
+        hostId !== requestHostId ||
+        localEditsRef.current !== editsAtRequest
+      ) {
         return
       }
       const settings = hostViewSettingsRead.interpret(reply)
@@ -152,7 +162,9 @@ export function useHostViewSettings(args: {
 
   // Why every filter: Clear filters on the desktop resets them all, not only the ones shown here.
   const clearFilters = useCallback(() => {
-    persistViewSettings({ filters: NO_WORKSPACE_ROW_FILTERS })
+    persistViewSettings({
+      filters: changedFilters(viewStateRef.current.filters, NO_WORKSPACE_ROW_FILTERS)
+    })
   }, [persistViewSettings])
 
   const selectedSortLabel =

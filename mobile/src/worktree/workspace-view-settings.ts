@@ -5,7 +5,10 @@
 
 import type { WorkspaceStatusDefinition } from '../../../src/shared/worktree/types'
 import { coerceMobileWorkspaceStatuses } from './mobile-workspace-statuses'
-import { WORKSPACE_ROW_FILTER_KEYS } from '../../../src/shared/workspace-view/workspace-row-filters'
+import {
+  WORKSPACE_ROW_FILTER_KEYS,
+  WORKSPACE_ROW_FILTER_UI_FIELDS
+} from '../../../src/shared/workspace-view/workspace-row-filters'
 import { normalizeVisibleExecutionHostIds } from '../../../src/shared/execution-host'
 import type { PersistedUIState } from '../../../src/shared/persisted-ui-state-types'
 import type { FilterState } from './workspace-list-types'
@@ -15,13 +18,11 @@ import { DEFAULT_WORKTREE_CARD_PROPERTIES } from '../../../src/shared/worktree/c
 export type MobileGroupMode = 'none' | 'workspaceStatus' | 'repo' | 'prStatus'
 export type MobileSortMode = PersistedUIState['sortBy']
 
-type PersistedFilterKey<Key extends keyof FilterState> = Key extends 'visibleHostIds'
-  ? 'visibleWorkspaceHostIds'
-  : Key
-
 // Desktop PersistedUIState fields this screen syncs (a structural subset).
 export type WorkspaceViewSettings = {
-  [Key in keyof FilterState as PersistedFilterKey<Key>]?: Key extends 'filterRepoIds'
+  [
+    Key in keyof FilterState as (typeof WORKSPACE_ROW_FILTER_UI_FIELDS)[Key]
+  ]?: Key extends 'filterRepoIds'
     ? string[]
     : Key extends 'visibleHostIds'
       ? string[] | null
@@ -35,11 +36,6 @@ export type WorkspaceViewSettings = {
   agentActivityDisplayMode?: AgentActivityDisplayMode
   collapsedGroups?: string[]
   workspaceStatuses?: WorkspaceStatusDefinition[]
-}
-
-/** The desktop's name for a filter: only the host scope differs. */
-function persistedFilterKey(key: keyof FilterState): keyof WorkspaceViewSettings {
-  return key === 'visibleHostIds' ? 'visibleWorkspaceHostIds' : key
 }
 
 const GROUP_TO_DESKTOP: Record<MobileGroupMode, NonNullable<WorkspaceViewSettings['groupBy']>> = {
@@ -79,10 +75,9 @@ export function sortModeFromDesktop(
 /**
  * Map a user edit to the ui.set payload, carrying only the fields the edit touched.
  *
- * Why patch-only (STA-5781): the shared store is edited concurrently by desktop and web clients,
- * and this screen's mirror refreshes only on connect/focus. Echoing the whole snapshot let a stale
- * mirror revert sibling fields another client had just changed; the host merges partial updates
- * field-by-field, so sending only the touched fields is lossless.
+ * Why patch-only (STA-5781): the shared store is edited concurrently by desktop and web clients.
+ * Echoing the whole snapshot let a stale mirror revert sibling fields another client had just
+ * changed; the host merges partial updates field-by-field.
  */
 export function buildWorkspaceViewSettingsUpdate(
   patch: MobileViewPatch,
@@ -99,7 +94,7 @@ export function buildWorkspaceViewSettingsUpdate(
     if (patch.filters && key in patch.filters) {
       const value = next.filters[key]
       Object.assign(update, {
-        [persistedFilterKey(key)]: Array.isArray(value) ? [...value] : value
+        [WORKSPACE_ROW_FILTER_UI_FIELDS[key]]: Array.isArray(value) ? [...value] : value
       })
     }
   }
@@ -119,6 +114,23 @@ export function buildWorkspaceViewSettingsUpdate(
     update.workspaceStatuses = [...next.workspaceStatuses]
   }
   return update
+}
+
+/** The filters `target` sets differently from `current`; an older host's strict ui.set refuses unknown keys. */
+export function changedFilters(current: FilterState, target: FilterState): Partial<FilterState> {
+  const changed: Partial<FilterState> = {}
+  for (const key of WORKSPACE_ROW_FILTER_KEYS) {
+    const from = current[key]
+    const to = target[key]
+    const same =
+      Array.isArray(from) && Array.isArray(to)
+        ? from.length === to.length && from.every((value, i) => value === to[i])
+        : from === to
+    if (!same) {
+      Object.assign(changed, { [key]: to })
+    }
+  }
+  return changed
 }
 
 /** An edit: the fields it sets, and for filters only the filters it touches. */
@@ -163,13 +175,15 @@ export function applyDesktopViewSettings(
     : current.workspaceStatuses
   const filters: FilterState = { ...current.filters }
   for (const key of WORKSPACE_ROW_FILTER_KEYS) {
-    const value = settings[persistedFilterKey(key)]
+    const value = settings[WORKSPACE_ROW_FILTER_UI_FIELDS[key]]
     if (value !== undefined) {
-      Object.assign(filters, { [key]: value })
+      Object.assign(filters, {
+        [key]:
+          key === 'visibleHostIds'
+            ? normalizeVisibleExecutionHostIds(settings.visibleWorkspaceHostIds)
+            : value
+      })
     }
-  }
-  if (settings.visibleWorkspaceHostIds !== undefined) {
-    filters.visibleHostIds = normalizeVisibleExecutionHostIds(settings.visibleWorkspaceHostIds)
   }
   return {
     groupMode: groupMode ?? current.groupMode,
