@@ -2,7 +2,11 @@
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { WorktreeCardDisplayMenuSection } from './WorktreeCardDisplayMenuSection'
+import {
+  WorktreeCardDisplayMenuItem,
+  WorktreeCardLayoutMenuItem,
+  WorktreeCardPropertiesMenuItem
+} from './worktree-card-menu-items'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -109,7 +113,16 @@ function renderMenu(): void {
   document.body.appendChild(container)
   root = createRoot(container)
   act(() => {
-    root?.render(<WorktreeCardDisplayMenuSection preserveWorkspaceBoardOpen={false} />)
+    root?.render(
+      settings.experimentalNewWorktreeCardStyle ? (
+        <WorktreeCardDisplayMenuItem preserveWorkspaceBoardOpen={false} />
+      ) : (
+        <>
+          <WorktreeCardLayoutMenuItem preserveWorkspaceBoardOpen={false} />
+          <WorktreeCardPropertiesMenuItem preserveWorkspaceBoardOpen={false} />
+        </>
+      )
+    )
   })
 }
 
@@ -143,7 +156,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('WorktreeCardDisplayMenuSection', () => {
+describe('worktree card menu items', () => {
   it('applies the compact card mode preset from the visible card layout menu', () => {
     renderMenu()
 
