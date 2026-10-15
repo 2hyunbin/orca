@@ -72,12 +72,6 @@ exports[`native-chat launch parity > claude floating fresh 1`] = `
       "SHELL_UNLISTED": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {
     "permissionMode": "default",
@@ -160,12 +154,6 @@ exports[`native-chat launch parity > claude floating resumed 1`] = `
       "SHELL_UNLISTED": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {
     "permissionMode": "default",
@@ -246,12 +234,6 @@ exports[`native-chat launch parity > claude worktree fresh 1`] = `
       "SHELL_UNLISTED": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {
     "permissionMode": "default",
@@ -333,12 +315,6 @@ exports[`native-chat launch parity > claude worktree fresh configured 1`] = `
       "SHELL_ONLY": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {},
   "pinnedLaunchDirectories": [],
@@ -412,12 +388,6 @@ exports[`native-chat launch parity > claude worktree fresh worker 1`] = `
       "SHELL_UNLISTED": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {
     "permissionMode": "default",
@@ -498,12 +468,6 @@ exports[`native-chat launch parity > claude worktree resumed 1`] = `
       "SHELL_UNLISTED": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {
     "permissionMode": "default",
@@ -585,12 +549,6 @@ exports[`native-chat launch parity > claude worktree resumed configured 1`] = `
       "SHELL_ONLY": "shell",
     },
     "envToDelete": [],
-    "supervisor": {
-      "closeRequest": "stdin-end-and-sigterm",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {},
-    },
   },
   "launchPosture": {},
   "pinnedLaunchDirectories": [],
@@ -615,6 +573,7 @@ exports[`native-chat launch parity > codex floating fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -649,14 +608,6 @@ exports[`native-chat launch parity > codex floating fresh 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -689,6 +640,7 @@ exports[`native-chat launch parity > codex floating resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -723,14 +675,6 @@ exports[`native-chat launch parity > codex floating resumed 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -761,6 +705,7 @@ exports[`native-chat launch parity > codex worktree fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -795,14 +740,6 @@ exports[`native-chat launch parity > codex worktree fresh 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -833,6 +770,7 @@ exports[`native-chat launch parity > codex worktree fresh configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -866,14 +804,6 @@ exports[`native-chat launch parity > codex worktree fresh configured 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -904,6 +834,7 @@ exports[`native-chat launch parity > codex worktree fresh worker 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -938,14 +869,6 @@ exports[`native-chat launch parity > codex worktree fresh worker 1`] = `
       "ORCA_CHAT_SCRATCH_DIR",
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -976,6 +899,7 @@ exports[`native-chat launch parity > codex worktree resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -1010,14 +934,6 @@ exports[`native-chat launch parity > codex worktree resumed 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -1048,6 +964,7 @@ exports[`native-chat launch parity > codex worktree resumed configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_HOOK_ENDPOINT": "parent-orca_agent_hook_endpoint",
       "ORCA_AGENT_HOOK_ENV": "parent-orca_agent_hook_env",
       "ORCA_AGENT_HOOK_PORT": "parent-orca_agent_hook_port",
@@ -1081,14 +998,6 @@ exports[`native-chat launch parity > codex worktree resumed configured 1`] = `
     "envToDelete": [
       "ORCA_CHAT_VISUALS_DIR",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "permissionPolicy": {
@@ -1122,6 +1031,7 @@ exports[`native-chat launch parity > grok floating fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000013",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/205832d622938c215d9919d8002db900",
@@ -1156,14 +1066,6 @@ exports[`native-chat launch parity > grok floating fresh 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -1195,6 +1097,7 @@ exports[`native-chat launch parity > grok floating resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000014",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/ccd97507ebec4aa1657cda85a2bfc454",
@@ -1229,14 +1132,6 @@ exports[`native-chat launch parity > grok floating resumed 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -1266,6 +1161,7 @@ exports[`native-chat launch parity > grok worktree fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000011",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/dd7df116468181b64e6126c7fec56f82",
@@ -1300,14 +1196,6 @@ exports[`native-chat launch parity > grok worktree fresh 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -1336,6 +1224,7 @@ exports[`native-chat launch parity > grok worktree fresh configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000035",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/4c6c945b7f4f83e068aec56a1037f603",
@@ -1369,14 +1258,6 @@ exports[`native-chat launch parity > grok worktree fresh configured 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1404,6 +1285,7 @@ exports[`native-chat launch parity > grok worktree fresh worker 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000015",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -1438,14 +1320,6 @@ exports[`native-chat launch parity > grok worktree fresh worker 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -1475,6 +1349,7 @@ exports[`native-chat launch parity > grok worktree resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000012",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/5ba39b7cfa537ea49862ef2aa91047d0",
@@ -1509,14 +1384,6 @@ exports[`native-chat launch parity > grok worktree resumed 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -1545,6 +1412,7 @@ exports[`native-chat launch parity > grok worktree resumed configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000036",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/4513a9571ec9fe3b6c2cee8782d16d37",
@@ -1578,14 +1446,6 @@ exports[`native-chat launch parity > grok worktree resumed configured 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1612,6 +1472,7 @@ exports[`native-chat launch parity > omp floating fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000023",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/04e2e3dee61c2161997f73ad32af9fad",
@@ -1647,14 +1508,6 @@ exports[`native-chat launch parity > omp floating fresh 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1683,6 +1536,7 @@ exports[`native-chat launch parity > omp floating resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000024",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/52b586c587fa58fc8ce47971e57d8d10",
@@ -1718,14 +1572,6 @@ exports[`native-chat launch parity > omp floating resumed 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1752,6 +1598,7 @@ exports[`native-chat launch parity > omp worktree fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000021",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/a28c50c0e7e8aef4cef08e0d88a19f2d",
@@ -1787,14 +1634,6 @@ exports[`native-chat launch parity > omp worktree fresh 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1821,6 +1660,7 @@ exports[`native-chat launch parity > omp worktree fresh configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000039",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/7eca093e243e678793121c8537d04cc0",
@@ -1855,14 +1695,6 @@ exports[`native-chat launch parity > omp worktree fresh configured 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1887,6 +1719,7 @@ exports[`native-chat launch parity > omp worktree fresh worker 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000025",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -1922,14 +1755,6 @@ exports[`native-chat launch parity > omp worktree fresh worker 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -1956,6 +1781,7 @@ exports[`native-chat launch parity > omp worktree resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000022",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/c9a6a6942b3dd2bfaf1304d9bf0db2bc",
@@ -1991,14 +1817,6 @@ exports[`native-chat launch parity > omp worktree resumed 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2025,6 +1843,7 @@ exports[`native-chat launch parity > omp worktree resumed configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000040",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CHAT_SCRATCH_DIR": "<root>/state/chat-scratch/3d37237436bb2343509e2f2d6240ec5c",
@@ -2059,14 +1878,6 @@ exports[`native-chat launch parity > omp worktree resumed configured 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2091,6 +1902,7 @@ exports[`native-chat launch parity > opencode floating fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2133,14 +1945,6 @@ exports[`native-chat launch parity > opencode floating fresh 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2167,6 +1971,7 @@ exports[`native-chat launch parity > opencode floating resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2209,14 +2014,6 @@ exports[`native-chat launch parity > opencode floating resumed 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2241,6 +2038,7 @@ exports[`native-chat launch parity > opencode worktree fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2283,14 +2081,6 @@ exports[`native-chat launch parity > opencode worktree fresh 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2315,6 +2105,7 @@ exports[`native-chat launch parity > opencode worktree fresh configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2356,14 +2147,6 @@ exports[`native-chat launch parity > opencode worktree fresh configured 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2388,6 +2171,7 @@ exports[`native-chat launch parity > opencode worktree fresh worker 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000020",
@@ -2429,14 +2213,6 @@ exports[`native-chat launch parity > opencode worktree fresh worker 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2461,6 +2237,7 @@ exports[`native-chat launch parity > opencode worktree resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2503,14 +2280,6 @@ exports[`native-chat launch parity > opencode worktree resumed 1`] = `
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2535,6 +2304,7 @@ exports[`native-chat launch parity > opencode worktree resumed configured 1`] = 
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "OPENCODE_CLIENT": "acp",
       "OPENCODE_CONFIG_CONTENT": "{"skills":{"paths":["<repo>/resources/native-chat-visuals/skills"]}}",
       "OPENCODE_ENABLE_QUESTION_TOOL": "false",
@@ -2576,14 +2346,6 @@ exports[`native-chat launch parity > opencode worktree resumed configured 1`] = 
       "XDG_DATA_HOME",
       "XDG_STATE_HOME",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": false,
@@ -2609,6 +2371,7 @@ exports[`native-chat launch parity > pi floating fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000028",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2644,14 +2407,6 @@ exports[`native-chat launch parity > pi floating fresh 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -2681,6 +2436,7 @@ exports[`native-chat launch parity > pi floating resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000029",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2716,14 +2472,6 @@ exports[`native-chat launch parity > pi floating resumed 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/floating-pinned",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -2749,6 +2497,7 @@ exports[`native-chat launch parity > pi worktree fresh 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000026",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2784,14 +2533,6 @@ exports[`native-chat launch parity > pi worktree fresh 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -2817,6 +2558,7 @@ exports[`native-chat launch parity > pi worktree fresh configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000041",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2851,14 +2593,6 @@ exports[`native-chat launch parity > pi worktree fresh configured 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -2884,6 +2618,7 @@ exports[`native-chat launch parity > pi worktree fresh worker 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000030",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2919,14 +2654,6 @@ exports[`native-chat launch parity > pi worktree fresh worker 1`] = `
       "ORCA_TAB_ID",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -2954,6 +2681,7 @@ exports[`native-chat launch parity > pi worktree resumed 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "process",
       "LANG": "en_US.UTF-8",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000027",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -2989,14 +2717,6 @@ exports[`native-chat launch parity > pi worktree resumed 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
@@ -3024,6 +2744,7 @@ exports[`native-chat launch parity > pi worktree resumed configured 1`] = `
       "HOME": "<root>/home",
       "INHERITED_ONLY": "overlay",
       "LANG": "C",
+      "NODE_OPTIONS": "--max-old-space-size=4096",
       "ORCA_AGENT_SESSION_ID": "00000000-0000-4000-8000-000000000042",
       "ORCA_AGENT_SESSION_SPAWN_TOKEN": "parity-spawn-token",
       "ORCA_CLI_BIN_DIR": "<root>/orca-cli/bin",
@@ -3058,14 +2779,6 @@ exports[`native-chat launch parity > pi worktree resumed configured 1`] = `
       "ORCA_TERMINAL_HANDLE",
       "ORCA_WORKTREE_ID",
     ],
-    "supervisor": {
-      "closeRequest": "stdin-end",
-      "cwd": "<root>/worktree",
-      "lifetime": "session",
-      "nodeEnv": {
-        "NODE_OPTIONS": "--max-old-space-size=4096",
-      },
-    },
   },
   "launchPosture": {
     "fullAccess": true,
