@@ -125,11 +125,8 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
             apply: () => closePaneLocally(paneId, leafId),
             asToday: () => closePaneLocally(paneId),
             // An earlier close in flight took the sibling: once it lands here too, the tab closes.
-            refused: (code) => {
-              if (code === 'last_pane' && (managerRef.current?.getPanes().length ?? 0) <= 1) {
-                onCloseTab()
-              }
-            }
+            refused: (code) =>
+              code === 'last_pane' && managerRef.current?.getPanes().length === 1 && onCloseTab()
           }
         )
       ) {
