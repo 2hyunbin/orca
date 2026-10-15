@@ -1,7 +1,7 @@
 type PairedCheckCleanup = {
   closeClient: () => void
   drain: () => Promise<void>
-  closeChildren: () => void
+  closeChildren: () => void | Promise<void>
   stopServer: () => Promise<void>
   removeDirectory: () => void
 }

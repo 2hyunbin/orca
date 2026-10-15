@@ -198,15 +198,21 @@ describe('paired check details over real encrypted loopback transport', () => {
               },
               { timeout: mode === 'drain-failure' ? 25 : 1_000 }
             ),
-          closeChildren: () => {
+          closeChildren: async () => {
             childClosureAttempted = true
             for (const child of children) {
               child.emit('close', 0, null)
             }
+            if (mode === 'stop-stall') {
+              await server.stop()
+              serverStopped = true
+            }
           },
           stopServer: async () => {
-            await server.stop()
-            serverStopped = true
+            if (mode !== 'stop-stall') {
+              await server.stop()
+              serverStopped = true
+            }
             if (mode === 'stop-failure') {
               throw cleanupFailure
             }
