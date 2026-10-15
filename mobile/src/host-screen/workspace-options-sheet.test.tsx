@@ -229,6 +229,7 @@ describe('the phone Workspace options sheet', () => {
     expect(texts()).not.toContain('Ports')
     press('Automation')
     expect(settings.toggleCardProperty).toHaveBeenCalledWith('automation')
+    expect(settings.toggleCardProperty).not.toHaveBeenCalledWith('ports')
     press('Full list')
     expect(settings.setAgentActivityDisplayMode).toHaveBeenCalledWith('full')
   })

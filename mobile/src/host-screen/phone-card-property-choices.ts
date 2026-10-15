@@ -9,8 +9,10 @@ type CardPropertyChoiceId =
   | (typeof WORKSPACE_CARD_PROPERTY_CHOICES)[number]['id']
   | (typeof WORKSPACE_CARD_DISPLAY_CHOICES)[number]['id']
 
+type PhoneCardPropertySupport = 'shown' | 'hidden'
+
 /** Whether the phone offers each shared card property; a new desktop choice fails to compile until classified. */
-const PHONE_CARD_PROPERTY: Record<CardPropertyChoiceId, 'shown' | 'hidden'> = {
+const PHONE_CARD_PROPERTY: Record<CardPropertyChoiceId, PhoneCardPropertySupport> = {
   issue: 'shown',
   'linear-issue': 'shown',
   'jira-issue': 'shown',
@@ -25,7 +27,7 @@ const PHONE_CARD_PROPERTY: Record<CardPropertyChoiceId, 'shown' | 'hidden'> = {
   branch: 'shown'
 }
 
-const PHONE_CARD_PROPERTY_BY_ID: Partial<Record<WorktreeCardProperty, 'shown' | 'hidden'>> =
+const PHONE_CARD_PROPERTY_BY_ID: Partial<Record<WorktreeCardProperty, PhoneCardPropertySupport>> =
   PHONE_CARD_PROPERTY
 
 function isShownOnPhone(id: WorktreeCardProperty): boolean {
@@ -40,7 +42,7 @@ export function phoneCardPropertyChoices<Choice extends WorkspaceViewChoice<Work
 }
 
 /** The shown properties the phone counts, so its count matches the rows it lists. */
-export function phoneShownCardProperties(
+export function withoutPhoneHiddenProperties(
   properties: readonly WorktreeCardProperty[]
 ): WorktreeCardProperty[] {
   return properties.filter(isShownOnPhone)

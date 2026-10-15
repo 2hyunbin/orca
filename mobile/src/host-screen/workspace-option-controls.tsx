@@ -23,10 +23,13 @@ import {
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { WorktreeCardProperty } from '../../../src/shared/ui-chrome-types'
 import { hostScreenStyles as styles } from './host-screen-styles'
+import {
+  phoneCardPropertyChoices,
+  withoutPhoneHiddenProperties
+} from './phone-card-property-choices'
 import type { HostScreenController } from './use-host-screen-controller'
 import { CheckRow, ChoiceRows, OptionRowList, SwitchRow } from './workspace-option-rows'
 import { choiceLabel, summarizeChecklist } from './workspace-option-values'
-import { phoneCardPropertyChoices, phoneShownCardProperties } from './phone-card-property-choices'
 
 export type WorkspaceOptionHost = { id: ExecutionHostId; label: string }
 
@@ -201,7 +204,7 @@ function CardPropertyRows(props: {
 // As the desktop: "Hover" under Compact, otherwise how many of the phone's properties show.
 function showPropertiesValue({ controller }: WorkspaceOptionProps): string {
   const value = getWorkspaceCardPropertiesValue(
-    phoneShownCardProperties(controller.state.view.worktreeCardProperties),
+    withoutPhoneHiddenProperties(controller.state.view.worktreeCardProperties),
     controller.state.cardSettings.compactWorktreeCards
   )
   return value === 'hover' ? 'Hover' : value === null ? '' : String(value)
