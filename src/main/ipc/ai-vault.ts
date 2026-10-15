@@ -114,12 +114,18 @@ async function listAiVaultSessions(
     signal: options.signal,
     onRows: options.onRows,
     start: (scanSignal, publish) => {
-      let previous = new Map<string, AiVaultScanRows['sessions'][number]>()
+      let previous = new Set<string>()
       const onRows = (view: AiVaultScanRows): void => {
-        const current = new Map(view.sessions.map((row) => [row.id, row]))
+        if (view.kind === 'delta') {
+          for (const id of view.delta.removed) previous.delete(id)
+          for (const row of view.delta.upserts) previous.add(row.id)
+          publish(view.delta)
+          return
+        }
+        const current = new Set(view.sessions.map((row) => row.id))
         const delta: AiVaultRowDelta = {
-          removed: [...previous.keys()].filter((id) => !current.has(id)),
-          upserts: view.sessions.filter((row) => previous.get(row.id) !== row)
+          removed: [...previous].filter((id) => !current.has(id)),
+          upserts: [...view.sessions]
         }
         previous = current
         publish(delta)
@@ -246,7 +252,7 @@ async function scanLocalAiVaultSessions(
   const generation = aiVaultSessionListGeneration()
   const result = await listCachedLocalAiVaultSessions(args, { signal, onRows })
   if (!signal?.aborted && generation === aiVaultSessionListGeneration()) {
-    onRows?.({ scanId: randomUUID(), revision: 0, sessions: result.sessions })
+    onRows?.({ kind: 'snapshot', scanId: randomUUID(), revision: 0, sessions: result.sessions })
   }
   return result
 }

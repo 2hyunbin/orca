@@ -4,8 +4,10 @@ import type { AiVaultSession } from './ai-vault-types'
 export type AiVaultScanRows = {
   scanId: string
   revision: number
-  sessions: readonly AiVaultSession[]
-}
+} & (
+  | { kind: 'snapshot'; sessions: readonly AiVaultSession[] }
+  | { kind: 'delta'; delta: AiVaultRowDelta }
+)
 
 export type AiVaultRowDelta = {
   upserts: AiVaultSession[]

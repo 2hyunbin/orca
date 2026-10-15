@@ -1,3 +1,4 @@
+import type { AiVaultSession } from '../../shared/ai-vault-types'
 import type { IpcMainEvent, WebContents } from 'electron'
 import type { AiVaultRowsEvent, AiVaultScanRows } from '../../shared/ai-vault-scan-rows'
 import { aiVaultSessionListGeneration } from '../ai-vault/cached-session-list'
@@ -14,7 +15,7 @@ export class AiVaultRowDelivery {
   private publisher: SessionRowPublisher | null = null
   private scanId: string | null = null
   private sequence = 0
-  private seenRows = false
+  private readonly rows = new Map<string, AiVaultSession>()
   private acknowledge: (() => void) | null = null
   private closed = false
   private readonly generation = aiVaultSessionListGeneration()
@@ -38,7 +39,7 @@ export class AiVaultRowDelivery {
       this.acknowledge?.()
       void this.publisher?.finish()
       this.scanId = view.scanId
-      this.seenRows = false
+      this.rows.clear()
       let reset = true
       this.publisher = new SessionRowPublisher(async (delta) => {
         if (!this.isCurrent() || this.scanId !== view.scanId) return
@@ -59,10 +60,16 @@ export class AiVaultRowDelivery {
         })
       })
     }
-    if (view.sessions.length === 0 && !this.seenRows) return
-    this.seenRows ||= view.sessions.length > 0
-    const rows = projectStructuredAiVaultRows(view.sessions, OPENS_EVERY_STRUCTURED_CHAT)
-    void this.publisher?.observe(() => rows)
+    if (view.kind === 'snapshot') {
+      this.rows.clear()
+      for (const row of view.sessions) this.rows.set(row.id, row)
+      if (this.rows.size === 0 && this.sequence === 0) return
+    } else {
+      for (const id of view.delta.removed) this.rows.delete(id)
+      for (const row of view.delta.upserts) this.rows.set(row.id, row)
+    }
+    this.publisher?.observe(() =>
+      projectStructuredAiVaultRows([...this.rows.values()], OPENS_EVERY_STRUCTURED_CHAT))
   }
 
   ack(sequence: number): void {

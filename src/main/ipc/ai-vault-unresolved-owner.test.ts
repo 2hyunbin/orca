@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   requestActiveSshAiVaultSessionTitles: vi.fn()
 }))
 
-vi.mock('electron', () => ({ app: { on: vi.fn() }, ipcMain: { handle: vi.fn() } }))
+vi.mock('electron', () => ({ app: { on: vi.fn() }, ipcMain: { handle: vi.fn(), on: vi.fn() } }))
 
 vi.mock('../ai-vault/session-scanner-service-spawn', async (importOriginal) => ({
   ...(await importOriginal<object>()),

@@ -87,7 +87,7 @@ export class AiVaultScanCoordinator {
           for (const id of delta.removed) entry.rows.delete(id)
           for (const row of delta.upserts) entry.rows.set(row.id, row)
           entry.revision++
-          for (const observer of entry.observers) notifyRows(entry, observer)
+          for (const observer of entry.observers) notifyRows(entry, observer, delta)
         })
       }),
       waiterCount: 0,
@@ -183,9 +183,11 @@ function scanCancellationError(): Error {
   return error
 }
 
-function notifyRows(entry: ScanEntry, observer: (view: AiVaultScanRows) => void): void {
+function notifyRows(entry: ScanEntry, observer: (view: AiVaultScanRows) => void, delta?: AiVaultRowDelta): void {
   try {
-    observer({ scanId: entry.scanId, revision: entry.revision, sessions: [...entry.rows.values()] })
+    const identity = { scanId: entry.scanId, revision: entry.revision }
+    observer(delta ? { ...identity, kind: 'delta', delta }
+      : { ...identity, kind: 'snapshot', sessions: [...entry.rows.values()] })
   } catch {
     // Presentation failures cannot change scan ownership or its final result.
   }

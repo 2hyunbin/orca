@@ -170,10 +170,12 @@ it('attaches a coherent current snapshot and rejects publications from retired g
   publishers[0]!({ upserts: [row], removed: [] })
   const late: AiVaultScanRows[] = []
   const second = coordinator.run({ key: 'scope', start, onRows: (view) => late.push(view) })
-  expect(late[0]).toEqual(views.at(-1))
-  expect(late[0]?.sessions).toEqual([row])
+  expect(late[0]).toMatchObject({ kind: 'snapshot', revision: views.at(-1)?.revision })
+  const snapshot = late[0]
+  expect(snapshot?.kind === 'snapshot' ? snapshot.sessions : []).toEqual([row])
   publishers[0]!({ upserts: [{ ...row, title: 'Updated' }], removed: [] })
-  expect(late.at(-1)?.sessions[0]?.title).toBe('Updated')
+  const update = late.at(-1)
+  expect(update?.kind === 'delta' ? update.delta.upserts[0]?.title : null).toBe('Updated')
   const forced = coordinator.run({ key: 'scope', force: true, start })
   await Promise.resolve()
   const revision = views.at(-1)

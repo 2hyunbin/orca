@@ -1,3 +1,5 @@
+import { AiVaultScannerServiceClient } from './session-scanner-service-client'
+import { AiVaultServiceTestChild, readyAiVaultServiceChild, aiVaultServiceRequestId } from './session-scanner-service-test-child'
 import { mkdtemp, mkdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,9 +19,14 @@ it('delivers a completed row before its held sibling and preserves final aliases
   let releaseSend!: () => void
   const heldSend = new Promise<void>((resolve) => { releaseSend = resolve })
   const rows = new Map<string, AiVaultSession>()
+  const child = new AiVaultServiceTestChild()
+  const client = new AiVaultScannerServiceClient({
+    processFactory: () => child.asChildProcess(),
+    init: () => ({ sessionParseCache: null, sessionSearch: null })
+  })
+  let requestId = 0
   const publisher = new SessionRowPublisher(async (delta) => {
-    for (const id of delta.removed) rows.delete(id)
-    for (const row of delta.upserts) rows.set(row.id, row)
+    child.emit('message', { type: 'rows', id: requestId, delta })
     await heldSend
   })
   let scan: ReturnType<typeof scanAiVaultSessions> | undefined
@@ -50,11 +57,23 @@ it('delivers a completed row before its held sibling and preserves final aliases
       return original(...args)
     })
     const options = { ...roots, additionalCodexSessionsDirs: [extra], limit: 2, scopePaths: ['/repo/old'] }
+    const response = client.request<{ result: Awaited<ReturnType<typeof scanAiVaultSessions>> }>(
+      { type: 'request', operation: 'scan', options }, undefined, (delta) => {
+        for (const id of delta.removed) rows.delete(id)
+        for (const row of delta.upserts) rows.set(row.id, row)
+      })
+    void response.catch(() => undefined)
+    readyAiVaultServiceChild(child)
+    await Promise.resolve()
+    requestId = aiVaultServiceRequestId(child, 'scan')
     scan = scanAiVaultSessions(options, publisher.observe)
     await vi.waitFor(() => expect([...rows.values()].map((row) => row.sessionId)).toContain('ready'))
     expect([...rows.values()].map((row) => row.sessionId)).not.toContain('held')
     release()
     const streamed = await scan
+    child.emit('message', { type: 'result', operation: 'scan', id: requestId,
+      value: { result: streamed, durationMs: 1 } })
+    expect((await response).result).toBe(streamed)
     spy.mockRestore()
     const ordinary = await scanAiVaultSessions(options)
     expect(streamed.sessions).toEqual(ordinary.sessions)
@@ -65,6 +84,7 @@ it('delivers a completed row before its held sibling and preserves final aliases
     releaseSend()
     await scan?.catch(() => undefined)
     publisher.finish()
+    client.dispose()
     vi.restoreAllMocks()
     await rm(root, { recursive: true, force: true })
   }
