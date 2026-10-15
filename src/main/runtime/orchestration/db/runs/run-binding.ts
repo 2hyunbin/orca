@@ -40,6 +40,21 @@ export function bindRun(
       this.db.exec('ROLLBACK')
       return undefined
     }
+    const callerAddress = mailboxAddressOf(coordinator)
+    const workedDispatch = callerAddress
+      ? this.getActiveDispatchMailboxOwners(callerAddress).find(
+          (dispatch) => dispatch.run_id === params.runId
+        )
+      : undefined
+    // Why: a worker binding the Run it works for unbinds its real coordinator, and the worker's
+    // own mail then routes to the Run mailbox for good. Lineage is fixed by the Dispatch.
+    if (workedDispatch) {
+      throw new OrchestrationError(
+        'worker_cannot_coordinate_own_run',
+        `This caller works Dispatch ${workedDispatch.id} in Run ${params.runId}, so it cannot coordinate that Run. Report to its coordinator with orchestration send; to coordinate sub-workers, create your own Run with orchestration run-create. No effects were applied.`,
+        { effectsApplied: false }
+      )
+    }
     const sameBinding = runBoundToCoordinator(run, coordinator)
     const adoption = this.getLegacyAdoption()
     const adoptedRun = adoption?.adopted_run_id === params.runId

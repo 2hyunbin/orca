@@ -223,6 +223,18 @@ describe('OrchestrationDb Run state', () => {
   })
 
   describe('lightweight Run scope', () => {
+    it('refuses a worker binding the Run it works for, leaving its coordinator bound', () => {
+      const d = createDb()
+      const run = createBoundRun(d)
+      createRootDispatch(d, d.createTask({ spec: 'work', runId: run.id }).id, 'term_worker')
+      const bind = { runId: run.id, coordinatorHandle: 'term_worker', coordinatorPaneKey: null }
+
+      expect(() => d.bindRun(bind)).toThrow(
+        expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' })
+      )
+      expect(d.getRun(run.id)?.coordinator_handle).toBe('term_coord')
+    })
+
     it('binds creation to one pane and fences that pane when it creates another Run', () => {
       const d = createDb()
       const first = d.createRun({
