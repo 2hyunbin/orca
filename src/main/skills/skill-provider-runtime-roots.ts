@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
+import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
 import { toWindowsWslPath } from '../../shared/wsl-paths'
 import { runWslProcess } from '../wsl/wsl-runner'
 import type { SkillProviderRootOverrides } from './skill-provider-destinations'
@@ -30,12 +31,14 @@ function normalizedRoot(value: string | undefined): string | null {
 export function resolveEnvironmentSkillProviderRoots(
   env: NodeJS.ProcessEnv = process.env
 ): SkillProviderRootOverrides {
-  const claudeConfig = normalizedRoot(env.CLAUDE_CONFIG_DIR)
-  const grokHome = normalizedRoot(env.GROK_HOME)
-  return {
-    ...(claudeConfig ? { claude: join(claudeConfig, 'skills') } : {}),
-    ...(grokHome ? { grok: join(grokHome, 'skills') } : {})
+  const roots: SkillProviderRootOverrides = {}
+  for (const provider of SKILL_INSTALL_PROVIDERS) {
+    const home = provider.homeEnv ? normalizedRoot(env[provider.homeEnv]) : null
+    if (home) {
+      roots[provider.id] = join(home, 'skills')
+    }
   }
+  return roots
 }
 
 // Why: `HERMES_HOME` relocates a whole Hermes profile tree (`hermes -p coder`),

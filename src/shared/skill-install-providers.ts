@@ -23,6 +23,12 @@ export type SkillInstallProviderDefinition = {
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
+  /** Names the source in skill listings (`<name> home`); defaults to displayName. */
+  shortName?: string
+  /** Env var that relocates the agent's home; global skills then live in `<home>/skills`. */
+  homeEnv?: string
+  /** Discovery-only user folder for an agent whose installs go to the canonical root. */
+  globalDiscoverySegments?: readonly string[]
 }
 
 export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] = [
@@ -36,8 +42,10 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
   {
     id: 'claude',
     displayName: 'Claude Code',
+    shortName: 'Claude',
     globalSegments: ['.claude', 'skills'],
-    workspaceSegments: ['.claude', 'skills']
+    workspaceSegments: ['.claude', 'skills'],
+    homeEnv: 'CLAUDE_CONFIG_DIR'
   },
   // Why: Cursor and Gemini read the canonical root inside a project but keep
   // their own home directory, so they only need a placement at global scope.
@@ -50,6 +58,7 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
   {
     id: 'gemini',
     displayName: 'Gemini CLI',
+    shortName: 'Gemini',
     globalSegments: ['.gemini', 'skills'],
     workspaceSegments: null
   },
@@ -75,7 +84,8 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
     id: 'grok',
     displayName: 'Grok',
     globalSegments: ['.grok', 'skills'],
-    workspaceSegments: ['.grok', 'skills']
+    workspaceSegments: ['.grok', 'skills'],
+    homeEnv: 'GROK_HOME'
   },
   {
     id: 'aug',
@@ -83,12 +93,14 @@ export const SKILL_INSTALL_PROVIDERS: readonly SkillInstallProviderDefinition[] 
     globalSegments: ['.augment', 'skills'],
     workspaceSegments: ['.augment', 'skills']
   },
-  // Why: Muse reads the canonical .agents/skills root at both scopes.
+  // Why: Muse reads the canonical .agents/skills root at both scopes, plus user
+  // skills under XDG config home.
   {
     id: 'muse',
     displayName: 'Muse',
     globalSegments: null,
-    workspaceSegments: null
+    workspaceSegments: null,
+    globalDiscoverySegments: ['.config', 'muse', 'skills']
   },
   // Why: ZCode loads user skills from `~/.zcode/skills`; project skills come from the
   // canonical `.agents/skills` root the shared repo source already covers.
