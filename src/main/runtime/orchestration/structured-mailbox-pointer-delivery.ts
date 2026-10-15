@@ -74,6 +74,8 @@ export type StructuredMailboxPointerHost = {
   /** Current lease fence; `null` when no record backs the session any more. */
   currentFence: (sessionId: string) => number | null
   currentContextClearOperationId: (sessionId: string) => string | undefined
+  /** Whether the session's agent is working now: a running turn or a send it owes. */
+  isWorking: (sessionId: string) => boolean
 }
 
 type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageWaiter> = {
@@ -177,7 +179,12 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     // to a worker's `dispatch:` gate and cannot suppress the nudges a coordinator sends its
     // workers. Worth more here than in the PTY lane: a structured nudge costs a whole provider
     // turn, not a line of text into a composer.
-    if (db.hasOutstandingMailboxDelivery?.(mailboxHandle)) {
+    // Only a working turn holds a batch: one that ended unacknowledged (finished, stopped, killed
+    // with Orca) never acks, and this nudge is what starts the turn whose check replays it.
+    if (
+      db.hasOutstandingMailboxDelivery?.(mailboxHandle) &&
+      this.deps.host.isWorking(target.sessionId)
+    ) {
       return
     }
     const unread = selectOrchestrationPointerBatch({

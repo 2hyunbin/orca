@@ -442,6 +442,50 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(await userTexts(COORDINATOR)).toEqual([expect.stringMatching(POINTER)])
   })
 
+  it('wakes a coordinator whose agent stopped holding an unacknowledged batch, and tells workers once it cannot read mail', async () => {
+    // The chat checked and its agent stopped before acknowledging: nothing but the next report's
+    // pointer can start the turn that would.
+    const chat = await openChat(COORDINATOR)
+    const { runId, taskId } = await coordinatorRunAndTask()
+    const second = await call(
+      'orchestration.taskCreate',
+      { spec: 'more' },
+      { sessionId: COORDINATOR }
+    )
+    await finishWorker(taskId)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    const held = await call('orchestration.check', {}, { sessionId: COORDINATOR })
+    expect(held).toMatchObject({ count: 1 })
+    await settleTurn(COORDINATOR, 0)
+    await host.close(COORDINATOR, 'evict')
+    const before = codex.connections.length
+
+    await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+
+    await vi.waitFor(() => expect(codex.connections.length).toBe(before + 1), WAIT)
+    await vi.waitFor(() => expect(connectionFor(COORDINATOR).turns).toHaveLength(1), WAIT)
+    expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
+      deliveryId: held.deliveryId,
+      replayed: true
+    })
+    expect(await call('orchestration.runShow', { id: runId })).toMatchObject({
+      coordinator: { address: `orca_session_id:${COORDINATOR}`, status: 'live' }
+    })
+
+    // A chat the user closed is not revived, and a worker writing to it hears so.
+    await host.setSessionTabVisibility(COORDINATOR, false)
+    expect(await call('orchestration.runShow', { id: runId })).toMatchObject({
+      coordinator: { status: 'exited', reason: 'The chat was closed.' }
+    })
+    const sent = await call('orchestration.send', {
+      from: 'term_worker_2',
+      to: `run:${runId}`,
+      subject: 'Go or no-go?',
+      type: 'question'
+    })
+    expect(sent.warnings).toEqual([expect.objectContaining({ code: 'recipient_unreachable' })])
+  })
+
   it('points mail at the idle edge when it arrived mid-turn', async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()

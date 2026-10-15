@@ -29,6 +29,8 @@ function harness(options: {
   /** The coordinator of this worker's Run is mid-batch: it checked and has not acked yet. */
   outstandingRunDelivery?: boolean
   outstandingOwnDelivery?: boolean
+  /** The session's agent is mid-turn. */
+  working?: boolean
   /** The mailbox this worker owns; its own handle for direct peer mail outside a dispatch. */
   mailbox?: string
   dispatchId?: string | null
@@ -81,6 +83,7 @@ function harness(options: {
       readSessionFacts: async () => (attached ? { submissions } : null),
       currentFence: () => 4,
       currentContextClearOperationId: readContext,
+      isWorking: () => options.working ?? false,
       send
     }
   })
@@ -264,10 +267,10 @@ describe('structured mailbox pointer delivery', () => {
     expect(markAsDelivered).toHaveBeenCalledWith(['m1'])
   })
 
-  it('does not re-nudge a mailbox still holding its own unacked batch', async () => {
+  it('does not re-nudge a mailbox whose working turn holds its own unacked batch', async () => {
     // The other half of the same gate: the consumer already has this batch, so a second nudge
     // spends a whole provider turn telling it something it was told.
-    const { delivery, send } = harness({ outstandingOwnDelivery: true })
+    const { delivery, send } = harness({ outstandingOwnDelivery: true, working: true })
     delivery.deliverForHandle('dispatch:d1')
     await flush()
     expect(send).not.toHaveBeenCalled()
@@ -476,6 +479,7 @@ describe('forgetting one settled worker', () => {
         readSessionFacts: async () => (attached ? { submissions: [] } : null),
         currentFence: () => 4,
         currentContextClearOperationId: () => undefined,
+        isWorking: () => false,
         send
       }
     })
@@ -577,6 +581,7 @@ describe('a mailbox a /clear moves while its nudge is in flight', () => {
         readSessionFacts: async () => ({ submissions: [] }),
         currentFence: () => 4,
         currentContextClearOperationId: () => contextClearOperationId,
+        isWorking: () => false,
         send
       }
     })

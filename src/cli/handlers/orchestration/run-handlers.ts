@@ -75,13 +75,35 @@ export const ORCHESTRATION_RUN_HANDLERS: Record<string, CommandHandler> = {
         legacy: number
         created_at: string
       }
+      // Absent from a runtime that predates it.
+      coordinator?: RunCoordinatorLine | null
     }>('orchestration.runShow', { id: getRequiredStringFlag(flags, 'id') })
-    printResult(
-      result,
-      json,
-      (r) =>
+    printResult(result, json, (r) => {
+      const coordinator =
+        r.coordinator === undefined ? '' : `\n${formatRunCoordinatorLine(r.coordinator)}`
+      return (
         `${r.run.id}${r.run.legacy ? ' [legacy, inspect only]' : ''} ${r.run.objective}\n` +
-        `consumer generation ${r.run.consumer_generation}; created ${r.run.created_at}`
-    )
+        `consumer generation ${r.run.consumer_generation}; created ${r.run.created_at}${coordinator}`
+      )
+    })
   }
+}
+
+type RunCoordinatorLine = { address: string; status: string; reason?: string }
+
+const MAIL_WAITS =
+  'mail waits unread in the Run mailbox; tell the user rather than picking another recipient'
+
+function formatRunCoordinatorLine(coordinator: RunCoordinatorLine | null): string {
+  if (!coordinator) {
+    return `coordinator: none bound; ${MAIL_WAITS}`
+  }
+  const reason = coordinator.reason ? ` (${coordinator.reason})` : ''
+  const state =
+    coordinator.status === 'live'
+      ? 'live; mail reaches it, and starts it if it is at rest'
+      : coordinator.status === 'exited'
+        ? `exited${reason}; ${MAIL_WAITS}`
+        : `${coordinator.status}${reason}`
+  return `coordinator: ${coordinator.address}, ${state}`
 }

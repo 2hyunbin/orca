@@ -101,6 +101,11 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
       )
     },
 
+    isWorking(sessionId) {
+      // None held reads as not working: an agent at rest holds no batch.
+      return getStructuredAgentSessionHost()?.currentWork(sessionId)?.working() === true
+    },
+
     currentContextClearOperationId(sessionId) {
       return getStructuredAgentSessionHost()?.deps.store.getRecord(sessionId)
         ?.providerContextBoundary?.operationId
