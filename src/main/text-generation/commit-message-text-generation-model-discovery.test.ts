@@ -158,7 +158,7 @@ describe('discoverCommitMessageModelsLocal on the Windows direct-child path', ()
     ])
     expect(spawnMock.mock.calls[0]![2]).toMatchObject({
       windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: process.platform === 'win32' ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe', 'pipe']
     })
     expect(child.stdin.end).toHaveBeenCalledWith(expect.stringContaining('"list_models"'))
   })

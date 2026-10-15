@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { expect, vi } from 'vitest'
+import { PROVIDER_EXEC_GATE_SCRIPT } from '../provider-process/provider-exec-gate'
 
 export type MockDiscoveryChild = EventEmitter & {
   pid: number
@@ -51,5 +52,13 @@ export function createChildTerminationExpectation(
 
 /** The argv a spawn started as the agent. */
 export function spawnedAgentArgv([file, args]: readonly unknown[]): unknown[] {
+  if (
+    file === '/bin/sh' &&
+    Array.isArray(args) &&
+    args[0] === '-c' &&
+    args[1] === PROVIDER_EXEC_GATE_SCRIPT
+  ) {
+    return args.slice(3)
+  }
   return [file, ...(Array.isArray(args) ? args : [])]
 }

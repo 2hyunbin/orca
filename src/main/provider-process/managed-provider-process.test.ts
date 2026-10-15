@@ -160,7 +160,7 @@ describe('managed provider process', () => {
     fixture.child.emit('exit', 0, null)
     fixture.child.emit('close', 0, null)
     expect(report).toHaveBeenCalledOnce()
-    await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
+    await expect(managed.close()).resolves.toEqual({ root: 'exited', tree: 'unverifiable' })
   })
 
   it('requires error then close for a processless spawn to settle', async () => {
@@ -212,7 +212,7 @@ describe('managed provider process', () => {
     })
     expect(fixture.child.kill).not.toHaveBeenCalledWith('SIGTERM')
     fixture.child.emit('exit', null, 'SIGKILL')
-    await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
+    await expect(managed.close()).resolves.toEqual({ root: 'exited', tree: 'unverifiable' })
   })
 
   it('preserves a caller requiring tree proof, including live and unverifiable descendants', async () => {
@@ -264,7 +264,7 @@ describe('managed provider process', () => {
     await vi.advanceTimersByTimeAsync(150)
     await expect(close).resolves.toMatchObject({ root: 'live' })
     fixture.child.emit('exit', null, 'SIGKILL')
-    await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
+    await expect(managed.close()).resolves.toEqual({ root: 'exited', tree: 'unverifiable' })
     expect(managed.lastCloseResult).toEqual({ root: 'live', tree: 'unverifiable' })
   })
 })
