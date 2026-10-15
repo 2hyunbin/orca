@@ -104,6 +104,9 @@ type HostKeyTrustSources = {
 
 /** Bounds the trust-source reads that run before the handshake, which nothing else times out. */
 const HOST_KEY_SOURCE_READ_TIMEOUT_MS = 5_000
+// Why: resume and the window's own resume/online signal land together; a handshake younger than this
+// is the one the first signal just started, not one stuck on the route from before sleep.
+const STALE_BACKGROUND_ATTEMPT_MS = 5_000
 // Counts every INFO_REQUEST of the handshake, so it must cover each partial-success stage the auth
 // queue will answer (MAX_PARTIAL_SUCCESS_STAGES) times the rounds a PAM stack spends per stage.
 const SSH_KEYBOARD_INTERACTIVE_MAX_ROUNDS = 8
@@ -189,6 +192,7 @@ export class SshConnection {
   private target: SshTarget
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private readonly reconnectLadder = new SshReconnectLadder()
+  private backgroundAttemptStartedAtMs: number | null = null
   private disposed = false
   private cachedPassphrase: string | null = null
   private cachedPassword: string | null = null
@@ -821,6 +825,34 @@ export class SshConnection {
     if (this.disposed || this.state.status === 'connecting') {
       return
     }
+    await this.restartReconnect()
+  }
+
+  /**
+   * Wake or network return: a spent ladder, a pending backoff, or a background handshake still
+   * running from before the route came back restarts now with a fresh budget, since attempts made
+   * while asleep (or in a macOS dark wake) say nothing about whether the host is reachable.
+   */
+  retryAfterNetworkReturn(nowMs = Date.now()): boolean {
+    if (this.disposed || this.isAwaitingCredential()) {
+      return false
+    }
+    const { status } = this.state
+    const startedAt = this.backgroundAttemptStartedAtMs
+    const stalled =
+      status === 'reconnection-failed' ||
+      (status === 'reconnecting' && this.reconnectTimer !== null) ||
+      (status === 'connecting' &&
+        startedAt !== null &&
+        nowMs - startedAt >= STALE_BACKGROUND_ATTEMPT_MS)
+    if (!stalled) {
+      return false
+    }
+    void this.restartReconnect()
+    return true
+  }
+
+  private async restartReconnect(): Promise<void> {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
@@ -1392,6 +1424,7 @@ export class SshConnection {
 
   private async runReconnectAttempt(): Promise<void> {
     const connectGeneration = ++this.connectGeneration
+    this.backgroundAttemptStartedAtMs = Date.now()
     try {
       // Why: reset before connecting so the 'connected' broadcast carries reconnectAttempt=0, which ssh.ts uses to trigger relay re-establishment.
       this.state.reconnectAttempt = 0
@@ -1421,6 +1454,10 @@ export class SshConnection {
       }
       this.reconnectLadder.markAttemptFailed()
       this.scheduleReconnect()
+    } finally {
+      if (this.connectGeneration === connectGeneration) {
+        this.backgroundAttemptStartedAtMs = null
+      }
     }
   }
 
