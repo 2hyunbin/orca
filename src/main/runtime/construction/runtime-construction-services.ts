@@ -41,6 +41,7 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import type * as PtyControllerContract from '../runtime-pty-controller-contract'
 import type { RuntimeClientEventBus } from '../runtime-client-event-bus'
+import type { RuntimeConstructionDependencies } from './runtime-construction-dependencies'
 
 export abstract class RuntimeConstructionServices {
   abstract getOrchestrationDb(): OrchestrationDb
@@ -246,6 +247,7 @@ export abstract class RuntimeConstructionServices {
   protected abstract readonly getAgentStatusSnapshotForPaneFn:
     | ((paneKey: string) => AgentStatusIpcPayload[])
     | null
+  protected abstract readonly getEndedOpenAgentTurnForPaneFn: RuntimeConstructionDependencies['getEndedOpenAgentTurnForPane']
   abstract readonly getAgentStatusSnapshotFn: (() => AgentStatusIpcPayload[]) | null
   protected abstract getTrackedDisplayTitleForPty(ptyId: string): string | null
   protected abstract getLeavesForPty(ptyId: string): RuntimeLeafRecord[]

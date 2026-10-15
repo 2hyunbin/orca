@@ -16,6 +16,7 @@ import type { RuntimeDesktopWindowStatus } from '../../../shared/runtime-types'
 import type { AgentSessionClaimSigner } from '../agent-session-claim-identity'
 import type { OrchestrationEnvironmentTransport } from '../orchestration/environment-transport'
 import type { SessionSearchSettingsApply } from '../runtime-session-search-settings'
+import type { AgentEndedOpenTurn } from '../../agent-hooks/server/server-ended-open-turns'
 
 export type RuntimeConstructionDependencies = {
   getLocalProvider?: () => IPtyProvider
@@ -26,6 +27,8 @@ export type RuntimeConstructionDependencies = {
   onClaudeTerminalEvidence?: (paneKey: string, evidence: ClaudeTerminalEvidence) => void
   getAgentStatusSnapshot?: () => AgentStatusIpcPayload[]
   getAgentStatusSnapshotForPane?: (paneKey: string) => AgentStatusIpcPayload[]
+  /** The last turn a pane's agent process ended mid-way, from the hook store. */
+  getEndedOpenAgentTurnForPane?: (paneKey: string) => AgentEndedOpenTurn | null
   structuredAgentStatusSink?: StructuredAgentSessionStatusSink
   readObservedAgentStatusPaneIdentity?: (paneKey: string) => ObservedAgentStatusPaneIdentity
   getAgentProviderSessionSnapshot?: () => AgentStatusIpcPayload[]

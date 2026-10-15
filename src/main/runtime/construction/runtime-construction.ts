@@ -89,6 +89,8 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     | ((paneKey: string) => AgentStatusIpcPayload[])
     | null
 
+  protected readonly getEndedOpenAgentTurnForPaneFn: RuntimeConstructionDependencies['getEndedOpenAgentTurnForPane']
+
   protected readonly machineName = new RuntimeMachineName(
     () => this.store?.getSettings?.().machineName
   )
@@ -199,6 +201,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     }
     this.getAgentStatusSnapshotFn = deps?.getAgentStatusSnapshot ?? null
     this.getAgentStatusSnapshotForPaneFn = deps?.getAgentStatusSnapshotForPane ?? null
+    this.getEndedOpenAgentTurnForPaneFn = deps?.getEndedOpenAgentTurnForPane
     this.structuredAgentStatusSinkFn = deps?.structuredAgentStatusSink ?? null
     this.readObservedAgentStatusPaneIdentityFn =
       deps?.readObservedAgentStatusPaneIdentity ?? (() => ({ kind: 'unobserved' }))

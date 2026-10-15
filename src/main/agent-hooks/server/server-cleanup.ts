@@ -16,8 +16,16 @@ import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import { isLocalHookConnectionId } from '../../../shared/wsl-hook-relay-contract'
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { AgentHookServerAuthorityFences } from './server-authority-fences'
+import { AgentEndedOpenTurns, type AgentEndedOpenTurn } from './server-ended-open-turns'
 
 export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFences {
+  private readonly endedOpenTurns = new AgentEndedOpenTurns()
+
+  /** The last turn the pane's agent process ended mid-way (`AgentEndedOpenTurns`). */
+  getEndedOpenTurnForPane(paneKey: string): AgentEndedOpenTurn | null {
+    return this.endedOpenTurns.get(this.resolvePaneKeyAlias(paneKey))
+  }
+
   /** The resume-identity remnant of a dropped row: a `providerSessionOnly` entry carries no state
    *  claim — it cannot gate a pane `working` — so it survives teardowns that end the pane's live
    *  claims. Returns null when the row has no resumable session to keep. */
@@ -151,6 +159,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
         | EnrichedAgentHookEventPayload
         | undefined
+      this.endedOpenTurns.record(resolvedPaneKey, previous)
       this.clearPaneState(resolvedPaneKey, { emitStatusRowMutation: false })
       if (retained) {
         admitLegacyAgentStatus(

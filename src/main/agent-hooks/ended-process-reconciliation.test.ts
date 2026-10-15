@@ -92,6 +92,27 @@ describe('reconcileEndedProcessForPaneKeys', () => {
     }
   })
 
+  // A mail holder reads a turn its agent process died in as cut, after the next row replaced it.
+  it('remembers the open turn a process ended in, and no turn that had finished', async () => {
+    const server = await startServer()
+    try {
+      claudeRow(server, 'done')
+      server.reconcileEndedProcessForPaneKeys([PANE])
+      expect(server.getEndedOpenTurnForPane(PANE)).toBeNull()
+
+      resumableClaudeRow(server)
+      server.reconcileEndedProcessForPaneKeys([PANE])
+      expect(server.getEndedOpenTurnForPane(PANE)).toEqual({
+        conversationId: 'resume-me',
+        turnStartedAt: expect.any(Number)
+      })
+      claudeRow(server, 'done')
+      expect(server.getEndedOpenTurnForPane(PANE)?.conversationId).toBe('resume-me')
+    } finally {
+      server.stop()
+    }
+  })
+
   it('is a no-op for a pane with nothing to retire', async () => {
     const server = await startServer()
     try {
