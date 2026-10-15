@@ -34,7 +34,12 @@ import {
 import type { LaunchWorkItemDirectArgs } from '@/lib/launch-work-item-direct-types'
 import { resolveSourceControlLaunchPlatform } from '@/lib/source-control-launch-platform'
 import { getLocalRepoProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
-import { beginDirectWorkItemStructuredLaunch } from '@/lib/launch-work-item-direct-agent-routing'
+import {
+  beginDirectWorkItemStructuredLaunch,
+  resolveDirectWorkItemStartupShell
+} from '@/lib/launch-work-item-direct-agent-routing'
+import { resolveRepoExecutionHostPlatform } from '@/lib/execution-host-facts'
+import { resolveStartupShell } from '../../../shared/tui-agent-startup-shell'
 import { prepareDirectWorkItemAgentLaunch } from '@/lib/launch-work-item-direct-route-preparation'
 import {
   planAgentSessionLaunch,
@@ -96,7 +101,10 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       worktreePath: repo.path,
       projectRuntime: repoProjectRuntime
     })
-  const shell = preflightLaunchPlatform === 'win32' ? 'powershell' : 'posix'
+  // Why: quote for the shell the agent runs in, the same way new-tab launches do.
+  const hostFact = resolveRepoExecutionHostPlatform(store, repo, () => repoProjectRuntime)
+  const hostShell = resolveDirectWorkItemStartupShell(hostFact, preflightLaunchPlatform, settings)
+  const shell = resolveStartupShell(preflightLaunchPlatform, hostShell)
   const agentArgsPlan = planAgentCliArgsSuffix(agentArgs, shell)
   if (!agentArgsPlan.ok) {
     // Why: direct launches may create a worktree before the agent startup plan
@@ -219,6 +227,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
       promptDelivery,
       launchPlatform: args.launchPlatform,
       repoProjectRuntime,
+      hostFact,
       planLaunch: planAgentSessionLaunch,
       requestId: newAgentLaunchRequestId()
     })

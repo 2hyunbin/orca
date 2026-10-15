@@ -40,6 +40,9 @@ describe('launchWorkItemDirect owner row', () => {
     mocks.store = {
       repos: [],
       worktreesByRepo: {},
+      sshConnectionStates: new Map(),
+      sshStateByEnvironment: new Map(),
+      runtimeStatusByEnvironmentId: new Map(),
       settings: {},
       ensureDetectedAgents: vi.fn().mockResolvedValue([]),
       ensureRemoteDetectedAgents: vi.fn().mockResolvedValue([]),

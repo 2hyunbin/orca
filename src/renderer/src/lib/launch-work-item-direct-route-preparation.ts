@@ -39,6 +39,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   promptDelivery: 'draft' | 'submit-after-ready'
   launchPlatform?: NodeJS.Platform
   repoProjectRuntime?: Parameters<typeof buildDirectWorkItemStartup>[0]['repoProjectRuntime']
+  hostFact: Parameters<typeof buildDirectWorkItemStartup>[0]['hostFact']
   planLaunch: typeof planAgentSessionLaunch
   /** The start action this launch serves. */
   requestId: AgentLaunchRequestId
@@ -89,7 +90,8 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
             args.worktreeId,
             CLIENT_PLATFORM
           ) ?? args.repoProjectRuntime)
-        : undefined
+        : undefined,
+    hostFact: args.hostFact
   })
 
   const plan =
