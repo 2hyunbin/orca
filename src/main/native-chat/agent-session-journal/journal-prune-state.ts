@@ -57,15 +57,21 @@ export class JournalPruneState implements JournalPruneCandidates {
   ) {}
 
   initialize(upper: number): void {
-    this.db.prepare(`UPDATE temp.journal_prune_epochs SET garbage = 1
-WHERE session_id = ? AND epoch != ? AND garbage = 0`).run(this.sessionId, this.epoch)
-    this.db.prepare(`INSERT OR IGNORE INTO temp.journal_prune_epochs
-(session_id, epoch, upper_seq) VALUES (?, ?, ?)`).run(this.sessionId, this.epoch, upper)
+    this.db
+      .prepare(`UPDATE temp.journal_prune_epochs SET garbage = 1
+WHERE session_id = ? AND epoch != ? AND garbage = 0`)
+      .run(this.sessionId, this.epoch)
+    this.db
+      .prepare(`INSERT OR IGNORE INTO temp.journal_prune_epochs
+(session_id, epoch, upper_seq) VALUES (?, ?, ?)`)
+      .run(this.sessionId, this.epoch, upper)
   }
 
   progress(): { scanned: number; upper: number; refused: boolean } {
-    const row = this.db.prepare(`SELECT scanned, upper_seq, refused
-FROM temp.journal_prune_epochs WHERE session_id = ? AND epoch = ?`).get(this.sessionId, this.epoch)
+    const row = this.db
+      .prepare(`SELECT scanned, upper_seq, refused
+FROM temp.journal_prune_epochs WHERE session_id = ? AND epoch = ?`)
+      .get(this.sessionId, this.epoch)
     if (
       typeof row?.scanned !== 'number' ||
       typeof row.upper_seq !== 'number' ||
@@ -81,18 +87,23 @@ FROM temp.journal_prune_epochs WHERE session_id = ? AND epoch = ?`).get(this.ses
   }
 
   advance(scanned: number, upper: number): void {
-    this.db.prepare(`UPDATE temp.journal_prune_epochs
+    this.db
+      .prepare(`UPDATE temp.journal_prune_epochs
 SET scanned = ?, upper_seq = ?
-WHERE session_id = ? AND epoch = ?`).run(scanned, upper, this.sessionId, this.epoch)
+WHERE session_id = ? AND epoch = ?`)
+      .run(scanned, upper, this.sessionId, this.epoch)
   }
 
   abandon(refused = false): void {
-    this.db.prepare(`UPDATE temp.journal_prune_epochs SET garbage = 1, refused = ?
-WHERE session_id = ? AND epoch = ?`).run(Number(refused), this.sessionId, this.epoch)
+    this.db
+      .prepare(`UPDATE temp.journal_prune_epochs SET garbage = 1, refused = ?
+WHERE session_id = ? AND epoch = ?`)
+      .run(Number(refused), this.sessionId, this.epoch)
   }
 
   get(itemId: string): JournalPruneCandidate | undefined {
-    const row = this.db.prepare(`SELECT seq, revision, signature, removable, saved_at, observed_at
+    const row = this.db
+      .prepare(`SELECT seq, revision, signature, removable, saved_at, observed_at
 FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? AND item_id = ?`)
       .get(this.sessionId, this.epoch, itemId)
     if (!row) {
@@ -119,34 +130,52 @@ FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? AND item_id = ?
   }
 
   set(itemId: string, candidate: JournalPruneCandidate): void {
-    this.db.prepare(`INSERT INTO temp.journal_prune_items
+    this.db
+      .prepare(`INSERT INTO temp.journal_prune_items
 (session_id, epoch, item_id, seq, revision, signature, removable, saved_at, observed_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, epoch, item_id) DO UPDATE SET
 seq = excluded.seq, revision = excluded.revision, signature = excluded.signature,
 removable = excluded.removable, saved_at = excluded.saved_at, observed_at = excluded.observed_at`)
-      .run(this.sessionId, this.epoch, itemId, candidate.seq, candidate.revision,
-        candidate.signature, Number(candidate.removable), candidate.savedAt, candidate.observedAt)
+      .run(
+        this.sessionId,
+        this.epoch,
+        itemId,
+        candidate.seq,
+        candidate.revision,
+        candidate.signature,
+        Number(candidate.removable),
+        candidate.savedAt,
+        candidate.observedAt
+      )
   }
 
   delete(itemId: string): void {
-    this.db.prepare(`DELETE FROM temp.journal_prune_items
-WHERE session_id = ? AND epoch = ? AND item_id = ?`).run(this.sessionId, this.epoch, itemId)
+    this.db
+      .prepare(`DELETE FROM temp.journal_prune_items
+WHERE session_id = ? AND epoch = ? AND item_id = ?`)
+      .run(this.sessionId, this.epoch, itemId)
   }
 
   enqueue(sequence: number): void {
-    this.db.prepare(`INSERT OR IGNORE INTO temp.journal_prune_work
-(session_id, epoch, seq) VALUES (?, ?, ?)`).run(this.sessionId, this.epoch, sequence)
+    this.db
+      .prepare(`INSERT OR IGNORE INTO temp.journal_prune_work
+(session_id, epoch, seq) VALUES (?, ?, ?)`)
+      .run(this.sessionId, this.epoch, sequence)
   }
 
   next(): number | null {
-    const seq = this.db.prepare(`SELECT seq FROM temp.journal_prune_work
-WHERE session_id = ? AND epoch = ? ORDER BY seq LIMIT 1`).get(this.sessionId, this.epoch)?.seq
+    const seq = this.db
+      .prepare(`SELECT seq FROM temp.journal_prune_work
+WHERE session_id = ? AND epoch = ? ORDER BY seq LIMIT 1`)
+      .get(this.sessionId, this.epoch)?.seq
     return typeof seq === 'number' ? seq : null
   }
 
   consume(sequence: number): void {
-    this.db.prepare(`DELETE FROM temp.journal_prune_work
-WHERE session_id = ? AND epoch = ? AND seq = ?`).run(this.sessionId, this.epoch, sequence)
+    this.db
+      .prepare(`DELETE FROM temp.journal_prune_work
+WHERE session_id = ? AND epoch = ? AND seq = ?`)
+      .run(this.sessionId, this.epoch, sequence)
   }
 }
 
@@ -155,8 +184,10 @@ export function collectJournalPruneGarbage(
   db: Database.Database,
   transaction: JournalTransaction
 ): boolean {
-  const row = db.prepare(`SELECT session_id, epoch, refused FROM temp.journal_prune_epochs
-WHERE garbage = 1 ORDER BY session_id, epoch LIMIT 1`).get()
+  const row = db
+    .prepare(`SELECT session_id, epoch, refused FROM temp.journal_prune_epochs
+WHERE garbage = 1 ORDER BY session_id, epoch LIMIT 1`)
+    .get()
   if (typeof row?.session_id !== 'string' || typeof row.epoch !== 'string') {
     return false
   }
@@ -164,14 +195,16 @@ WHERE garbage = 1 ORDER BY session_id, epoch LIMIT 1`).get()
   const epoch = row.epoch
   const keepRefusal = row.refused === 1 && readJournalSessionEpoch(db, sessionId) === epoch
   transaction(() => {
-    const items = db.prepare(`DELETE FROM temp.journal_prune_items
+    const items = db
+      .prepare(`DELETE FROM temp.journal_prune_items
 WHERE session_id = ? AND epoch = ? AND item_id IN (
 SELECT item_id FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? LIMIT 32)`)
       .run(sessionId, epoch, sessionId, epoch)
     if (items.changes > 0) {
       return
     }
-    const work = db.prepare(`DELETE FROM temp.journal_prune_work
+    const work = db
+      .prepare(`DELETE FROM temp.journal_prune_work
 WHERE session_id = ? AND epoch = ? AND seq IN (
 SELECT seq FROM temp.journal_prune_work WHERE session_id = ? AND epoch = ? LIMIT 32)`)
       .run(sessionId, epoch, sessionId, epoch)
@@ -182,8 +215,10 @@ SELECT seq FROM temp.journal_prune_work WHERE session_id = ? AND epoch = ? LIMIT
       db.prepare(`UPDATE temp.journal_prune_epochs SET garbage = 0
 WHERE session_id = ? AND epoch = ?`).run(sessionId, epoch)
     } else {
-      db.prepare('DELETE FROM temp.journal_prune_epochs WHERE session_id = ? AND epoch = ?')
-        .run(sessionId, epoch)
+      db.prepare('DELETE FROM temp.journal_prune_epochs WHERE session_id = ? AND epoch = ?').run(
+        sessionId,
+        epoch
+      )
     }
   }, 'DEFERRED')
   return true

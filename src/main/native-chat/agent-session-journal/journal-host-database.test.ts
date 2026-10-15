@@ -270,11 +270,15 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     database.db.exec('DROP TABLE temp.journal_prune_pending')
     await expect(
-      journal.appendItem(item(1), text('saved'), { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+      journal.appendItem(item(1), text('saved'), {
+        fence: 1,
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      })
     ).resolves.toBeDefined()
     expect(journal.snapshot().items.map((entry) => entry.body)).toEqual([text('saved')])
-    expect(readTestJournalRows(database.db, IDENTITY.sessionId, journal.epoch).at(-1)?.seq)
-      .toBe(journal.cursor().sequence)
+    expect(readTestJournalRows(database.db, IDENTITY.sessionId, journal.epoch).at(-1)?.seq).toBe(
+      journal.cursor().sequence
+    )
     expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
   })
 

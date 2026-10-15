@@ -12,8 +12,10 @@ const MAX_PASS_BYTES = 256 * 1024
 const PASS_BUDGET_MS = 4
 
 function journalPruneUpper(db: Database.Database, sessionId: string, epoch: string): number {
-  const seq = db.prepare(`SELECT MAX(seq) AS seq FROM journal_rows
-WHERE session_id = ? AND epoch = ?`).get(sessionId, epoch)?.seq
+  const seq = db
+    .prepare(`SELECT MAX(seq) AS seq FROM journal_rows
+WHERE session_id = ? AND epoch = ?`)
+    .get(sessionId, epoch)?.seq
   return typeof seq === 'number' ? seq : 0
 }
 
@@ -39,13 +41,17 @@ export class JournalPrunePass {
   }
 
   coversPendingRows(db: Database.Database): boolean {
-    return this.state.progress().refused || (
-      journalPruneUpper(db, this.sessionId, this.epoch) <= this.initialUpper &&
-      this.state.next() === null
+    return (
+      this.state.progress().refused ||
+      (journalPruneUpper(db, this.sessionId, this.epoch) <= this.initialUpper &&
+        this.state.next() === null)
     )
   }
 
-  step(db: Database.Database, transaction: JournalTransaction): {
+  step(
+    db: Database.Database,
+    transaction: JournalTransaction
+  ): {
     done: boolean
     compacted: number
     scanned: number
@@ -100,16 +106,13 @@ export class JournalPrunePass {
         throw new JournalPruneRefusal('journal pruning refused a missing epoch row')
       }
       // Finish the main read before the TEMP-only transaction; discovery takes no main write lock.
-      transaction(
-        () => {
-          const obsolete = this.policy.observe(parsed.row, stored.ts)
-          if (obsolete !== null) {
-            this.state.enqueue(obsolete)
-          }
-          this.state.advance(stored.seq, upper)
-        },
-        'DEFERRED'
-      )
+      transaction(() => {
+        const obsolete = this.policy.observe(parsed.row, stored.ts)
+        if (obsolete !== null) {
+          this.state.enqueue(obsolete)
+        }
+        this.state.advance(stored.seq, upper)
+      }, 'DEFERRED')
       after = stored.seq
       scanned++
       bytes += Buffer.byteLength(stored.rowJson, 'utf8')
@@ -146,15 +149,22 @@ function shrinkSupersededPayload(
   }
   // Atomic same-key replacement reclaims leaf pages as well as overflow pages.
   return transaction((db) => {
-    const removed = db.prepare(`DELETE FROM journal_rows
+    const removed = db
+      .prepare(`DELETE FROM journal_rows
 WHERE session_id = ? AND epoch = ? AND seq = ? AND row_json = ?`)
       .run(sessionId, epoch, sequence, stored.rowJson)
     if (removed.changes === 0) {
       throw new JournalPruneRefusal('journal pruning refused a changed superseded row')
     }
     db.prepare(`INSERT INTO journal_rows (session_id, epoch, seq, ts, row_json)
-VALUES (?, ?, ?, ?, json_set(?, '$.body', json(?)))`)
-      .run(sessionId, epoch, sequence, stored.ts, stored.rowJson, bodyJson)
+VALUES (?, ?, ?, ?, json_set(?, '$.body', json(?)))`).run(
+      sessionId,
+      epoch,
+      sequence,
+      stored.ts,
+      stored.rowJson,
+      bodyJson
+    )
     state.consume(sequence)
     return true
   })

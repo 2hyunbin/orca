@@ -31,8 +31,10 @@ export class JournalMaintenance {
       return
     }
     try {
-      this.database().prepare(`INSERT OR IGNORE INTO temp.journal_prune_pending
-(session_id, ready_at) VALUES (?, ?)`).run(sessionId, Date.now() + QUIET_DELAY_MS)
+      this.database()
+        .prepare(`INSERT OR IGNORE INTO temp.journal_prune_pending
+(session_id, ready_at) VALUES (?, ?)`)
+        .run(sessionId, Date.now() + QUIET_DELAY_MS)
       this.changed()
     } catch (error) {
       // The append already committed; optional cleanup must never reject its acknowledgement.
@@ -76,11 +78,15 @@ export class JournalMaintenance {
       if (!collected) {
         this.step(db)
       }
-      const garbage = db.prepare('SELECT 1 AS pending FROM temp.journal_prune_epochs WHERE garbage = 1 LIMIT 1').get()
+      const garbage = db
+        .prepare('SELECT 1 AS pending FROM temp.journal_prune_epochs WHERE garbage = 1 LIMIT 1')
+        .get()
       if (this.current || this.sweeping || this.vacuumPending || garbage) {
         this.schedule(PASS_DELAY_MS)
       } else {
-        const ready = db.prepare('SELECT ready_at FROM temp.journal_prune_pending ORDER BY ready_at LIMIT 1').get()?.ready_at
+        const ready = db
+          .prepare('SELECT ready_at FROM temp.journal_prune_pending ORDER BY ready_at LIMIT 1')
+          .get()?.ready_at
         if (typeof ready === 'number') {
           this.schedule(Math.max(PASS_DELAY_MS, ready - Date.now()))
         }
@@ -111,7 +117,9 @@ export class JournalMaintenance {
       }
       pass.refuse(this.transaction)
       console.warn('[journal-maintenance] skipped epoch:', {
-        sessionId: pass.sessionId, epoch: pass.epoch, reason: error.message
+        sessionId: pass.sessionId,
+        epoch: pass.epoch,
+        reason: error.message
       })
     }
     const epoch = readJournalSessionEpoch(db, pass.sessionId)
@@ -119,24 +127,30 @@ export class JournalMaintenance {
       db.prepare('DELETE FROM temp.journal_prune_pending WHERE session_id = ?').run(pass.sessionId)
     } else {
       db.prepare(`INSERT INTO temp.journal_prune_pending (session_id, ready_at)
-VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET ready_at = excluded.ready_at`)
-        .run(pass.sessionId, Date.now() + QUIET_DELAY_MS)
+VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET ready_at = excluded.ready_at`).run(
+        pass.sessionId,
+        Date.now() + QUIET_DELAY_MS
+      )
     }
     this.current = null
   }
 
   private nextSession(db: Database.Database): JournalPrunePass | null {
     if (this.sweeping) {
-      const row = db.prepare(`SELECT session_id, epoch FROM journal_sessions
-WHERE session_id > ? ORDER BY session_id LIMIT 1`).get(this.sessionAfter)
+      const row = db
+        .prepare(`SELECT session_id, epoch FROM journal_sessions
+WHERE session_id > ? ORDER BY session_id LIMIT 1`)
+        .get(this.sessionAfter)
       if (typeof row?.session_id === 'string' && typeof row.epoch === 'string') {
         this.sessionAfter = row.session_id
         return new JournalPrunePass(db, row.session_id, row.epoch)
       }
       this.sweeping = false
     }
-    const row = db.prepare(`SELECT session_id FROM temp.journal_prune_pending
-WHERE ready_at <= ? ORDER BY ready_at, session_id LIMIT 1`).get(Date.now())
+    const row = db
+      .prepare(`SELECT session_id FROM temp.journal_prune_pending
+WHERE ready_at <= ? ORDER BY ready_at, session_id LIMIT 1`)
+      .get(Date.now())
     if (typeof row?.session_id !== 'string') {
       return null
     }

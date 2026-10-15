@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type Database from '../../sqlite/sync-database'
-import { openJournalDatabase, runJournalTransaction, type JournalTransaction } from './journal-database'
+import {
+  openJournalDatabase,
+  runJournalTransaction,
+  type JournalTransaction
+} from './journal-database'
 import { JournalMaintenance } from './journal-maintenance'
 import { replayJournal } from './journal-open'
 import { JournalPrunePass } from './journal-prune-pass'
@@ -12,7 +16,8 @@ import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-tabl
 
 let root: string
 let db: Database.Database
-const transaction: JournalTransaction = (run, mode) => runJournalTransaction(db, run, undefined, mode)
+const transaction: JournalTransaction = (run, mode) =>
+  runJournalTransaction(db, run, undefined, mode)
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-prune-progress-'))
@@ -28,15 +33,39 @@ afterEach(async () => {
 function start(sessionId = 'chat', epoch = 'epoch'): void {
   publishJournalSessionEpoch(db, { sessionId, workspaceId: 'folder' }, epoch)
   insertJournalRow(db, sessionId, {
-    v: 1, epoch, seq: 1, fence: 1, ts: 1, kind: 'epoch', reason: 'session_created',
+    v: 1,
+    epoch,
+    seq: 1,
+    fence: 1,
+    ts: 1,
+    kind: 'epoch',
+    reason: 'session_created',
     providerHandle: { kind: 'codex', threadId: 'thread' }
   })
 }
 
-function item(seq: number, itemId: string, revision: number, sessionId = 'chat', epoch = 'epoch', repeats = 10): void {
+function item(
+  seq: number,
+  itemId: string,
+  revision: number,
+  sessionId = 'chat',
+  epoch = 'epoch',
+  repeats = 10
+): void {
   insertJournalRow(db, sessionId, {
-    v: 1, epoch, seq, fence: 1, ts: seq, kind: 'item', itemId, revision,
-    body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `revision ${revision} `.repeat(repeats) }] }
+    v: 1,
+    epoch,
+    seq,
+    fence: 1,
+    ts: seq,
+    kind: 'item',
+    itemId,
+    revision,
+    body: {
+      kind: 'message',
+      role: 'assistant',
+      blocks: [{ type: 'text', text: `revision ${revision} `.repeat(repeats) }]
+    }
   })
 }
 
@@ -61,7 +90,8 @@ function snapshot(sessionId = 'chat') {
 }
 
 function bodyAt(seq: number, sessionId = 'chat'): unknown {
-  const json = db.prepare('SELECT row_json FROM journal_rows WHERE session_id = ? AND seq = ?')
+  const json = db
+    .prepare('SELECT row_json FROM journal_rows WHERE session_id = ? AND seq = ?')
     .get(sessionId, seq)?.row_json
   const row: unknown = JSON.parse(String(json))
   return typeof row === 'object' && row !== null && 'body' in row ? row.body : undefined
@@ -81,8 +111,10 @@ it('reaches identities beyond the old admission cap without changing replay or s
   expect(drain()).toEqual({ scanned: 16_388, compacted: 1 })
   expect(bodyAt(16_387)).toMatchObject({ blocks: [] })
   expect(snapshot()).toEqual(before)
-  expect(db.prepare('SELECT COUNT(*) AS n, MAX(seq) AS tip FROM journal_rows').get())
-    .toEqual({ n: 16_388, tip: 16_388 })
+  expect(db.prepare('SELECT COUNT(*) AS n, MAX(seq) AS tip FROM journal_rows').get()).toEqual({
+    n: 16_388,
+    tip: 16_388
+  })
 })
 
 it('continues only the appended suffix across lifecycle and tombstone boundaries', () => {
@@ -99,11 +131,21 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
   transaction(() => {
     item(305, 'old', 4)
     insertJournalRow(db, 'chat', {
-      v: 1, epoch: 'epoch', seq: 306, fence: 1, ts: 306,
-      kind: 'lifecycle-batch', settlementId: 'boundary', mutations: [{
-        kind: 'item', itemId: 'old', revision: 5,
-        body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'boundary' }] }
-      }]
+      v: 1,
+      epoch: 'epoch',
+      seq: 306,
+      fence: 1,
+      ts: 306,
+      kind: 'lifecycle-batch',
+      settlementId: 'boundary',
+      mutations: [
+        {
+          kind: 'item',
+          itemId: 'old',
+          revision: 5,
+          body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'boundary' }] }
+        }
+      ]
     })
     for (let revision = 6; revision <= 8; revision++) {
       item(301 + revision, 'old', revision)
@@ -112,8 +154,14 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
       item(309 + revision, 'new', revision)
     }
     insertJournalRow(db, 'chat', {
-      v: 1, epoch: 'epoch', seq: 313, fence: 1, ts: 313,
-      kind: 'tombstone', itemId: 'new', revision: 4
+      v: 1,
+      epoch: 'epoch',
+      seq: 313,
+      fence: 1,
+      ts: 313,
+      kind: 'tombstone',
+      itemId: 'new',
+      revision: 4
     })
     for (let revision = 5; revision <= 7; revision++) {
       item(309 + revision, 'new', revision)
@@ -155,8 +203,11 @@ it('finishes captured prefixes while appends preserve a later quiet-delay pass',
     expect(db.pragma('freelist_count', { simple: true })).toBe(0)
     const pagesBefore = Number(db.pragma('page_count', { simple: true }))
     const before = [snapshot('a-active'), snapshot('b-quiet')]
-    const envelopes = () => db.prepare(`SELECT session_id, epoch, seq, ts,
-json_remove(row_json, '$.body') AS envelope FROM journal_rows ORDER BY session_id, seq`).all()
+    const envelopes = () =>
+      db
+        .prepare(`SELECT session_id, epoch, seq, ts,
+json_remove(row_json, '$.body') AS envelope FROM journal_rows ORDER BY session_id, seq`)
+        .all()
     const retained = envelopes()
     await vi.runAllTimersAsync()
     expect(bodyAt(5, 'a-active')).toMatchObject({ blocks: [] })
@@ -184,8 +235,9 @@ it('schedules a replacement epoch even without an append notification', async ()
       }
     })
     await vi.advanceTimersByTimeAsync(10)
-    expect(db.prepare('SELECT ready_at FROM temp.journal_prune_pending').get()?.ready_at)
-      .toBeGreaterThan(Date.now())
+    expect(
+      db.prepare('SELECT ready_at FROM temp.journal_prune_pending').get()?.ready_at
+    ).toBeGreaterThan(Date.now())
     await vi.runAllTimersAsync()
     expect(bodyAt(3)).toMatchObject({ blocks: [] })
     expect(vi.getTimerCount()).toBe(0)
@@ -210,13 +262,17 @@ it('refuses an unknown suffix without rewriting it and continues healthy chats a
     db.prepare(`UPDATE journal_rows SET row_json = json_set(row_json, '$.v', 999)
 WHERE session_id = 'a-bad' AND seq = 6`).run()
   })
-  const unchanged = db.prepare("SELECT row_json FROM journal_rows WHERE session_id = 'a-bad' ORDER BY seq").all()
+  const unchanged = db
+    .prepare("SELECT row_json FROM journal_rows WHERE session_id = 'a-bad' ORDER BY seq")
+    .all()
   vi.useFakeTimers()
   const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   const maintenance = new JournalMaintenance(() => db, transaction)
   try {
     await vi.runAllTimersAsync()
-    expect(db.prepare("SELECT row_json FROM journal_rows WHERE session_id = 'a-bad' ORDER BY seq").all()).toEqual(unchanged)
+    expect(
+      db.prepare("SELECT row_json FROM journal_rows WHERE session_id = 'a-bad' ORDER BY seq").all()
+    ).toEqual(unchanged)
     expect(bodyAt(3, 'z-good')).toMatchObject({ blocks: [] })
     expect(warned).toHaveBeenCalledTimes(1)
     maintenance.appended('a-bad')
@@ -232,8 +288,9 @@ WHERE session_id = 'a-bad' AND seq = 6`).run()
     maintenance.appended('a-bad')
     await vi.runAllTimersAsync()
     expect(bodyAt(3, 'a-bad')).toMatchObject({ blocks: [] })
-    expect(db.prepare("SELECT epoch FROM temp.journal_prune_epochs WHERE session_id = 'a-bad'").all())
-      .toEqual([{ epoch: 'replacement' }])
+    expect(
+      db.prepare("SELECT epoch FROM temp.journal_prune_epochs WHERE session_id = 'a-bad'").all()
+    ).toEqual([{ epoch: 'replacement' }])
     expect(vi.getTimerCount()).toBe(0)
   } finally {
     maintenance.close()
