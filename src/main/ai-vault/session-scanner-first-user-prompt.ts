@@ -125,7 +125,7 @@ export function seedFullFirstUserPrompt(
     role === 'user' &&
     seedFirstUserPrompt !== false &&
     !accumulator.firstUserPrompt &&
-    seedFullFirstUserPrompt()
+    shouldCaptureFullFirstUserPrompt()
   ) {
     accumulator.firstUserPrompt = fullText()
   }

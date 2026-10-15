@@ -61,12 +61,11 @@ describe('Agent Session History scan coalescing', () => {
   })
 
   it('isolates summary acceptance while coalescing equivalent exact callers', async () => {
-    registerRuntimeHost()
-    mocks.scanRuntimeAiVaultSessions.mockImplementation(async (_host, args) => {
+    mocks.scanAiVaultSessionsInService.mockImplementation(async (options) => {
       await Promise.resolve()
-      return { ...EMPTY_RESULT, scannedAt: args.acceptPartialRows ? 'summary' : 'exact' }
+      return { ...EMPTY_RESULT, scannedAt: options.acceptPartialRows ? 'summary' : 'exact' }
     })
-    const scope = { executionHostScope: 'runtime:remote-server' }
+    const scope = { executionHostScope: 'local' }
     const [summary, exact, implicit] = await Promise.all([
       _internals.listAiVaultSessions({ ...scope, acceptPartialRows: true }),
       _internals.listAiVaultSessions({ ...scope, acceptPartialRows: false }),
@@ -77,7 +76,7 @@ describe('Agent Session History scan coalescing', () => {
       'exact',
       'exact'
     ])
-    expect(mocks.scanRuntimeAiVaultSessions).toHaveBeenCalledTimes(2)
+    expect(mocks.scanAiVaultSessionsInService).toHaveBeenCalledTimes(2)
   })
 
   it('does not forward conditional hints into truncated all-host merges', async () => {
