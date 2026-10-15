@@ -399,9 +399,8 @@ describe('a send a Stop took back before Codex echoed it', () => {
       await vi.advanceTimersByTimeAsync(1)
       expect(openWaits.ended.slice(endedBeforeStop)).toEqual(['turn-2'])
       vi.useRealTimers()
-      expect(await settledWithin(stopping, 2_000)).not.toBe('held')
       // The Stop waits out the turn-open wait for a turn that never opens, then ends there.
-      expect(await settledWithin(stopping, CODEX_TURN_OPEN_WAIT_MS + 2_000)).not.toBe('held')
+      expect(await settledWithin(stopping, 2_000)).not.toBe('held')
     } finally {
       vi.useRealTimers()
       openWaits.began = null
