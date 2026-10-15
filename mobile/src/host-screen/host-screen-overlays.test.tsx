@@ -23,6 +23,7 @@ vi.mock('../components/NewWorktreeModalController', () => ({
   NewWorktreeModalController: 'NewWorktreeModalController'
 }))
 vi.mock('./workspace-options-sheet', () => ({ WorkspaceOptionsSheet: 'WorkspaceOptionsSheet' }))
+vi.mock('./workspace-action-details', () => ({ WorkspaceActionDetails: 'WorkspaceActionDetails' }))
 
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
@@ -37,8 +38,8 @@ afterEach(() => {
   renderer = null
 })
 
-/** The long-press sheet's action labels for `row`. */
-async function actionLabels(row: Partial<Worktree>): Promise<string[]> {
+/** The long-press sheet for `row`. */
+async function renderSheet(row: Partial<Worktree>) {
   const controller = {
     actions: {},
     catalog: {},
@@ -65,7 +66,16 @@ async function actionLabels(row: Partial<Worktree>): Promise<string[]> {
       })
     )
   })
-  const sheet = renderer!.root.find((node) => String(node.type) === 'ActionSheetContent')
+  return {
+    client: controller.client,
+    sheet: renderer!.root.find((node) => String(node.type) === 'ActionSheetContent'),
+    details: renderer!.root.find((node) => String(node.type) === 'WorkspaceActionDetails')
+  }
+}
+
+/** The long-press sheet's action labels for `row`. */
+async function actionLabels(row: Partial<Worktree>): Promise<string[]> {
+  const { sheet } = await renderSheet(row)
   return sheet.props.actions.map((action: { label: string }) => action.label)
 }
 
@@ -79,5 +89,26 @@ describe('the workspace long-press sheet', () => {
       'Pin',
       'Delete'
     ])
+  })
+
+  it("shows the workspace's details above its actions, read from the desktop for its own", async () => {
+    const { client, details } = await renderSheet({ comment: 'Check iPad' })
+    expect(details.props.row).toMatchObject({ worktreeId: 'wt', comment: 'Check iPad' })
+    expect(details.props.client).toBe(client)
+  })
+
+  it("asks a server's workspace's details of that server, not the desktop", async () => {
+    const { client, details } = await renderSheet({ worktreeId: 'vm-wt', hostId: 'runtime:vm' })
+    expect(details.props.client).not.toBe(client)
+    expect(details.props.client).not.toBeNull()
+  })
+
+  it('gives a folder workspace its details only, since the actions act on worktrees', async () => {
+    const { sheet, details } = await renderSheet({
+      worktreeId: 'folder:f1',
+      workspaceKind: 'folder-workspace'
+    })
+    expect(sheet.props.actions).toEqual([])
+    expect(details.props.row).toMatchObject({ worktreeId: 'folder:f1' })
   })
 })

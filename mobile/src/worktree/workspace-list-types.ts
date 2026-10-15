@@ -58,6 +58,8 @@ export type Worktree = {
   linkedLinearIssue?: string | null
   linkedGitLabMR?: number | null
   linkedGitLabIssue?: number | null
+  /** The host's attachments (titles and links), unvalidated; read via buildWorkspaceDetailLinks. */
+  linkedItems?: unknown
   comment?: string
   status?: 'working' | 'active' | 'permission' | 'done' | 'inactive'
   workingMode?: AgentWorkingMode

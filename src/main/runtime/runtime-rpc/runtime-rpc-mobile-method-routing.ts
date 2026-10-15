@@ -196,6 +196,8 @@ export const EXECUTION_HOST_METHODS = [
   'terminal.unsubscribe',
   'terminal.updateViewport',
   'terminal.wait',
+  // Read-only: the phone's long-press details list a workspace's live ports. Stop stays desktop-only.
+  'workspacePorts.scanHost',
   'worktree.activate',
   'worktree.create',
   'worktree.forceDeleteBranch',
