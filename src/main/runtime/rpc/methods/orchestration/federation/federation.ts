@@ -220,12 +220,12 @@ export const ORCHESTRATION_FEDERATION_ATTACH_METHODS = [
           terminalHandle,
           dispatchId: params.dispatchId,
           dispatchDepth: params.depth ?? 1,
-          runId: createdAttachment.run_id,
+          runId: createdAttachment.home_run_id,
           taskId: params.taskId,
           taskSpec: params.taskSpec,
-          coordinatorHandle: `run:${createdAttachment.run_id}`,
+          coordinatorHandle: `run:${createdAttachment.home_run_id}`,
           devMode: params.devMode,
-          requestId: orchestrationMutation.requestId,
+          requestId: orchestrationMutation.requestId ?? params.dispatchId,
           launchedAgent: params.terminal ? null : agent
         })
         if (prompt.structuredTurnStart?.verdict === 'unobserved') {

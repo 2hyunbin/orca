@@ -76,7 +76,12 @@ it('reconciles an accepted structured worker after losing its launch reply witho
     }),
     call: async (_selector, method, params, _timeout, envelope) => {
       if (method === 'status.get') {
-        return { id: 'status', ok: true, result: worker.getStatus() }
+        return {
+          id: 'status',
+          ok: true,
+          result: worker.getStatus(),
+          _meta: { runtimeId: worker.getRuntimeId() }
+        }
       }
       const response = await receiver.dispatch({
         id: method, authToken: 'home-peer', method, params,
