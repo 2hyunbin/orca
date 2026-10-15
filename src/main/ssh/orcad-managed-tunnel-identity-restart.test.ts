@@ -105,6 +105,7 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
           outcome: 'ready', distro: 'Ubuntu', distroId: null, fullVersion: '1', pid: null,
           holder: 'adopted', port: Number(new URL(server.getWebSocketEndpoint()!).port),
           readiness: { runtimeId: server['runtime'].getRuntimeId(),
+            managedWslCliReconciliation: 'settled',
             ...await buildServePairingReadiness({ pairingAddress: '127.0.0.1' }, server) }
         }),
         listen: async (_transport, { remotePort }) => ({
@@ -126,7 +127,7 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
     expect(first.caller).toBeTruthy()
     addWslHostEnvironment(desktopProfile, {
       id: 'wsl:ubuntu', name: 'Ubuntu', pairingCode: first.connection.pairingOffer,
-      record: { kind: 'wsl', distro: 'Ubuntu', distroId: null,
+      record: { kind: 'wsl', distro: 'Ubuntu',
         localPort: first.connection.localPort, remotePort: first.connection.remotePort }
     })
     await server.stop()
