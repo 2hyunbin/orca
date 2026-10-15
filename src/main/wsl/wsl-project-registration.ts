@@ -19,8 +19,16 @@ type WslProjectRegistrationStore = {
   getSettings?(): Pick<GlobalSettings, 'experimentalWslHosts'>
 }
 
-function wslProjectRoutingEnabled(store: WslProjectRegistrationStore): boolean {
-  return getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true
+export function wslProjectRoutingEnabled(
+  store: WslProjectRegistrationStore,
+  executionHostId?: ExecutionHostId | null
+): boolean {
+  return (
+    process.platform === 'win32' &&
+    (executionHostId == null || executionHostId === LOCAL_EXECUTION_HOST_ID) &&
+    wslHostsGateOpen() &&
+    (getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true)
+  )
 }
 
 type WslProjectOperation =
@@ -47,15 +55,11 @@ export async function registerProjectOnWslHost(
   operation: WslProjectOperation,
   executionHostId?: ExecutionHostId | null
 ): Promise<Repo | null> {
-  if (
-    process.platform !== 'win32' ||
-    (executionHostId != null && executionHostId !== LOCAL_EXECUTION_HOST_ID) ||
-    !wslHostsGateOpen()
-  ) {
+  if (!wslProjectRoutingEnabled(store, executionHostId)) {
     return null
   }
   const path = parseWslUncPath(operation.path)
-  if (!path || !wslProjectRoutingEnabled(store)) {
+  if (!path) {
     return null
   }
   const name =
@@ -100,16 +104,12 @@ export async function resolveNewWslProjectHost(
   targetKey = foldWslUncPathCaseInsensitiveParts(uncPath.replace(/[\\/]+$/, '')),
   executionHostId?: ExecutionHostId | null
 ): Promise<{ repo: Repo } | { environmentId: string; linuxPath: string } | null> {
-  if (
-    process.platform !== 'win32' ||
-    (executionHostId != null && executionHostId !== LOCAL_EXECUTION_HOST_ID) ||
-    !wslHostsGateOpen()
-  ) {
+  if (!wslProjectRoutingEnabled(store, executionHostId)) {
     return null
   }
   const path = parseWslUncPath(uncPath)
   const service = getWslHostService()
-  if (!path || !wslProjectRoutingEnabled(store)) {
+  if (!path) {
     return null
   }
   const existing = store.getRepos().find(

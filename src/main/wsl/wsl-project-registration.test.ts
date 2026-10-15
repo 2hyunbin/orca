@@ -105,7 +105,9 @@ describe('new WSL project ownership', () => {
     await expect(registerProjectOnWslHost(store, { kind: 'add', path: saved.path })).resolves.toBe(saved)
     const operation = { kind: 'add' as const, path: '\\\\wsl$\\Ubuntu\\home\\me\\new' }
     await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow('desktop app')
-    await expect(registerProjectOnWslHost({ ...store, getSettings: () => ({ experimentalWslHosts: false }) }, operation)).resolves.toBeNull()
+    await expect(registerProjectOnWslHost(
+      { ...store, getSettings: () => ({ experimentalWslHosts: false }) }, operation
+    )).resolves.toBeNull()
     expect(mocks.ensure).not.toHaveBeenCalled()
     expect(mocks.call).not.toHaveBeenCalled()
   })

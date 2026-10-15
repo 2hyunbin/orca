@@ -3,7 +3,7 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID, toRuntimeExecutionHost
 import type { ProjectGroupImportMode, ProjectGroupImportResult } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
 import { foldWslUncPathCaseInsensitiveParts, parseWslUncPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
-import { callWslProjectHost, resolveNewWslProjectHost } from './wsl-project-registration'
+import { callWslProjectHost, resolveNewWslProjectHost, wslProjectRoutingEnabled } from './wsl-project-registration'
 
 const ImportReply = z.object({
   group: z.object({
@@ -23,7 +23,7 @@ export async function importNestedProjectsOnWslHost(
   store: { getRepos(): Repo[] },
   args: { parentPath: string; projectPaths: string[]; groupName?: string; mode: ProjectGroupImportMode; connectionId?: string | null }
 ): Promise<ProjectGroupImportResult | null> {
-  if (args.connectionId) {
+  if (args.connectionId || !wslProjectRoutingEnabled(store)) {
     return null
   }
   const parent = parseWslUncPath(args.parentPath)
