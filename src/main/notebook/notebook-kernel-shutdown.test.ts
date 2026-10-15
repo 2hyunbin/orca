@@ -11,7 +11,9 @@ vi.mock('../../../resources/notebook/kernel-bridge.py?asset&asarUnpack', () => (
   default: '/bridge.py'
 }))
 
-import { startNotebookKernel } from './notebook-kernel'
+import { type createFrameReader, startNotebookKernel } from './notebook-kernel'
+
+type BridgeFrame = Parameters<Parameters<typeof createFrameReader>[0]>[0]
 
 function fakeChild() {
   const stream = () => Object.assign(new EventEmitter(), { setEncoding: vi.fn() })
@@ -24,7 +26,7 @@ function fakeChild() {
   return child
 }
 
-function emit(child: ReturnType<typeof fakeChild>, frame: object): void {
+function emit(child: ReturnType<typeof fakeChild>, frame: BridgeFrame): void {
   child.stdout.emit('data', `${JSON.stringify(frame)}\n`)
 }
 
