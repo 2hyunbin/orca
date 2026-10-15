@@ -13,10 +13,7 @@ import { getWorktreeRowIdentity } from '../worktree/worktree-host-row-identity'
 import { HostWorkspaceListStates } from '../worktree/host-workspace-list-states'
 import { getWorktreeStatus } from '../worktree/workspace-list-sections'
 import { repoColor } from '../worktree/repo-color'
-import {
-  getWorktreeCardDetails,
-  getWorktreeCardLayout
-} from '../../../src/shared/worktree/card-properties'
+import { getWorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { buildRepoLookById } from './host-repo-looks'
 import type { HostScreenController } from './use-host-screen-controller'
@@ -48,16 +45,11 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
   } = controller
   const { rawSections, sections, repoById } = sectionsResult
   const repoLookById = useMemo(() => buildRepoLookById(repoById), [repoById])
-  const { compactWorktreeCards, newCardStyle } = state.cardSettings
-  const cardStyle = useMemo(
-    () => ({ compactCards: !newCardStyle && compactWorktreeCards, newCardStyle }),
-    [compactWorktreeCards, newCardStyle]
-  )
+  const { worktreeCardProperties, compactWorktreeCards, newCardStyle } = state.view
   const cardDetails = useMemo(
-    () => getWorktreeCardDetails(state.view.worktreeCardProperties, cardStyle),
-    [state.view.worktreeCardProperties, cardStyle]
+    () => getWorktreeCardDetails(worktreeCardProperties, { compactWorktreeCards, newCardStyle }),
+    [worktreeCardProperties, compactWorktreeCards, newCardStyle]
   )
-  const cardLayout = useMemo(() => getWorktreeCardLayout(cardStyle), [cardStyle])
 
   return (
     <>
@@ -211,7 +203,6 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
               repoIcon={repoLookById.get(item.repoId)?.icon ?? null}
               hideRepo={state.view.groupBy === 'repo'}
               cardDetails={cardDetails}
-              cardLayout={cardLayout}
               agentActivityDisplayMode={state.view.agentActivityDisplayMode}
               onPress={actions.openWorktreeSession}
               onLongPress={

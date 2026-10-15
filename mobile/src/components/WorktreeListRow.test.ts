@@ -16,9 +16,7 @@ import { WorktreeListRow } from './WorktreeListRow'
 import {
   DEFAULT_WORKTREE_CARD_PROPERTIES,
   getWorktreeCardDetails,
-  getWorktreeCardLayout,
-  type WorktreeCardDetails,
-  type WorktreeCardLayout
+  type WorktreeCardDetails
 } from '../../../src/shared/worktree/card-properties'
 
 const { agentSpinnerRender, agentStateDotRender, metaGlyphsRender } = vi.hoisted(() => ({
@@ -73,23 +71,21 @@ type TestItem = Worktree & { status: NonNullable<Worktree['status']> }
 const stableRepoIcon = { type: 'emoji', emoji: 'o' } as const
 let updateSibling: Dispatch<SetStateAction<number>> = () => undefined
 
-const DETAILED_STYLE = { compactCards: false, newCardStyle: false }
-const DETAILED = getWorktreeCardLayout(DETAILED_STYLE)
-const COMPACT = getWorktreeCardLayout({ compactCards: true, newCardStyle: false })
-const NEW_CARD_STYLE = getWorktreeCardLayout({ compactCards: false, newCardStyle: true })
-const ALL_DETAILS = getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, DETAILED_STYLE)
+const detailsFor = (compactWorktreeCards: boolean, newCardStyle: boolean) =>
+  getWorktreeCardDetails(DEFAULT_WORKTREE_CARD_PROPERTIES, { compactWorktreeCards, newCardStyle })
+const ALL_DETAILS = detailsFor(false, false)
+const COMPACT = detailsFor(true, false)
+const NEW_CARD_STYLE = detailsFor(false, true)
 
 function ListRowHarness({
   item,
   now,
   cardDetails = ALL_DETAILS,
-  cardLayout = DETAILED,
   hideRepo = false
 }: {
   item: TestItem
   now: number
   cardDetails?: WorktreeCardDetails
-  cardLayout?: WorktreeCardLayout
   hideRepo?: boolean
 }) {
   const [sibling, setSibling] = useState(0)
@@ -112,7 +108,6 @@ function ListRowHarness({
       repoIcon: stableRepoIcon,
       hideRepo,
       cardDetails,
-      cardLayout,
       agentActivityDisplayMode: 'compact',
       status: item.status,
       onPress,
@@ -216,7 +211,6 @@ describe('memoized worktree rows', () => {
         repoIcon: { type: 'emoji', emoji: 'o' },
         // A fresh but equal details object each render, as a parent re-render makes.
         cardDetails: { ...ALL_DETAILS },
-        cardLayout: { ...DETAILED },
         agentActivityDisplayMode: 'compact',
         status: item.status,
         onPress: overrides.onPress ?? onPress
@@ -384,7 +378,7 @@ describe('memoized worktree rows', () => {
           item,
           now: 2_000,
           cardDetails: getWorktreeCardDetails(['status', 'unread'], {
-            compactCards: false,
+            compactWorktreeCards: false,
             newCardStyle: false
           })
         })
@@ -404,7 +398,7 @@ describe('memoized worktree rows', () => {
     const render = async (
       props: Partial<{
         item: TestItem
-        cardLayout: WorktreeCardLayout
+        cardDetails: WorktreeCardDetails
         hideRepo: boolean
       }> = {}
     ) => {
@@ -423,7 +417,7 @@ describe('memoized worktree rows', () => {
       expect(texts()).toEqual(expect.arrayContaining(['orca', 'feature/mobile-list']))
       expect(repoChips()).toHaveLength(0)
 
-      await render({ cardLayout: COMPACT })
+      await render({ cardDetails: COMPACT })
       expect(texts()).not.toContain('orca')
       expect(texts()).not.toContain('feature/mobile-list')
       expect(texts()).toContain('mobile-list')
@@ -440,7 +434,7 @@ describe('memoized worktree rows', () => {
       await render({ item })
       expect(texts()).toEqual(expect.arrayContaining(['openclaw', 'Child']))
 
-      await render({ item, cardLayout: COMPACT })
+      await render({ item, cardDetails: COMPACT })
       expect(texts()).not.toContain('openclaw')
       expect(texts()).not.toContain('Child')
       const glyphs = () => renderer!.root.findAll((node) => String(node.type) === 'Server')
@@ -449,18 +443,25 @@ describe('memoized worktree rows', () => {
         renderer!.root.findAll((node) => node.props.accessibilityLabel === 'openclaw')
       ).toHaveLength(1)
 
+      // A remote row with no host label still gets the glyph, named generically.
+      await render({ item: { ...item, hostContextLabel: undefined }, cardDetails: COMPACT })
+      expect(glyphs()).toHaveLength(1)
+      expect(
+        renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Remote host')
+      ).toHaveLength(1)
+
       // Local rows get no glyph, as the desktop shows none for local projects.
-      await render({ item: { ...item, hostId: 'local' }, cardLayout: COMPACT })
+      await render({ item: { ...item, hostId: 'local' }, cardDetails: COMPACT })
       expect(glyphs()).toHaveLength(0)
       expect(renderer!.root.findAll((node) => String(node.type) === 'Monitor')).toHaveLength(0)
     })
 
     it('leaves the chip out when the list is grouped by repo or the row is a folder', async () => {
-      await render({ cardLayout: COMPACT, hideRepo: true })
+      await render({ cardDetails: COMPACT, hideRepo: true })
       expect(repoChips()).toHaveLength(0)
 
       await render({
-        cardLayout: COMPACT,
+        cardDetails: COMPACT,
         item: { ...baseItem, workspaceKind: 'folder-workspace' }
       })
       expect(repoChips()).toHaveLength(0)
@@ -469,18 +470,21 @@ describe('memoized worktree rows', () => {
 
     it('keeps the PR badge next to the repo chip', async () => {
       await render({
-        cardLayout: COMPACT,
+        cardDetails: COMPACT,
         item: { ...baseItem, linkedPR: { number: 7, state: 'open' } }
       })
       expect(repoChips()).toHaveLength(1)
       expect(renderer!.root.findAll((node) => String(node.type) === 'GitPullRequest')).toHaveLength(
         1
       )
-      expect(texts()).toContain('#')
+      const badgeTexts = renderer!.root
+        .findAllByType('Text' as never)
+        .map((node) => [node.props.children].flat().join(''))
+      expect(badgeTexts).toContain('#7')
     })
 
     it('uses the chip under the new card style but keeps the branch line', async () => {
-      await render({ cardLayout: NEW_CARD_STYLE })
+      await render({ cardDetails: NEW_CARD_STYLE })
       expect(repoChips()).toHaveLength(1)
       expect(texts()).not.toContain('orca')
       expect(texts()).toContain('feature/mobile-list')
@@ -494,15 +498,11 @@ describe('memoized worktree rows', () => {
       cliCreated: true,
       linkedItems: [{ provider: 'jira', type: 'issue', number: 12, jiraIdentifier: 'ORCA-12' }]
     }
-    const lastGlyphs = () => metaGlyphsRender.mock.lastCall?.[0]
+    const lastPresence = () => metaGlyphsRender.mock.lastCall?.[0].presence
     await act(async () => {
       renderer = create(createElement(ListRowHarness, { item, now: 2_000 }))
     })
-    expect(lastGlyphs()).toMatchObject({
-      linkedJiraIssue: true,
-      automationCreated: true,
-      cliCreated: true
-    })
+    expect(lastPresence()).toMatchObject({ jira: true, automation: true, cli: true })
 
     await act(async () =>
       renderer!.update(
@@ -510,27 +510,12 @@ describe('memoized worktree rows', () => {
           item,
           now: 2_000,
           cardDetails: getWorktreeCardDetails(['status', 'unread'], {
-            compactCards: false,
+            compactWorktreeCards: false,
             newCardStyle: false
           })
         })
       )
     )
-    expect(lastGlyphs()).toMatchObject({
-      linkedJiraIssue: false,
-      automationCreated: false,
-      cliCreated: false
-    })
-  })
-
-  it('shows none of them for a row from a host that sends none of the facts', async () => {
-    await act(async () => {
-      renderer = create(createElement(ListRowHarness, { item: baseItem, now: 2_000 }))
-    })
-    expect(metaGlyphsRender.mock.lastCall?.[0]).toMatchObject({
-      linkedJiraIssue: false,
-      automationCreated: false,
-      cliCreated: false
-    })
+    expect(lastPresence()).toMatchObject({ jira: false, automation: false, cli: false })
   })
 })

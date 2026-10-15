@@ -1,9 +1,5 @@
 import React from 'react'
 import { getWorkspaceAttachments } from '../../../../shared/workspace-attachments'
-import {
-  getWorktreeCardDetails,
-  getWorktreeCardLayout
-} from '../../../../shared/worktree/card-properties'
 
 import {
   getFlushWorktreeCardPaddingLeft,
@@ -37,6 +33,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     showIdentityInNewCard,
     conflictOperation,
     cardProps,
+    cardDetails,
     cacheStartedAt,
     hasDetails,
     hasPorts,
@@ -82,15 +79,12 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
 
   // Why: pinned trees mix repos, so the repo icon shows regardless of groupBy's hideRepoBadge.
   const showPinnedRepoIcon = inPinnedSection && !!repo
-  const layout = getWorktreeCardLayout({ compactCards, newCardStyle })
   const showInlineRepoBadge =
-    layout.repoInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
+    cardDetails.repoInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
-    !layout.repoInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
-  const showHostContextBadge =
-    !!hostContextLabel && getWorktreeCardDetails(cardProps, { compactCards, newCardStyle }).host
-  const showDetachedHeadInMetaRow =
-    layout.identityMetaRow && !isFolder && detachedHeadDisplay !== null
+    !cardDetails.repoInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
+  const showHostContextBadge = !!hostContextLabel && cardDetails.host
+  const showDetachedHeadInMetaRow = cardDetails.metaRow && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&
     branch.length > 0 &&
@@ -118,7 +112,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     cacheStartedAt != null ||
     showMetaRowDetails
   )
-  const hasMetaRow = layout.identityMetaRow
+  const hasMetaRow = cardDetails.metaRow
     ? hasDetailedMetaRowContent
     : hasMetadataBadge || cacheStartedAt != null
   const showHeaderActions = showTitleRowPrimary || showDeleteQuickAction

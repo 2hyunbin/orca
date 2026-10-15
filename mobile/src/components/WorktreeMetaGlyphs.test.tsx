@@ -25,9 +25,19 @@ afterEach(() => {
   renderer = null
 })
 
-function glyphs(props: Parameters<typeof WorktreeMetaGlyphs>[0]): string[] {
+const NONE = {
+  notes: false,
+  automation: false,
+  cli: false,
+  issue: false,
+  jira: false,
+  linear: false,
+  gitLabMR: false
+}
+
+function glyphs(presence: Partial<typeof NONE>): string[] {
   act(() => {
-    renderer = create(createElement(WorktreeMetaGlyphs, props))
+    renderer = create(createElement(WorktreeMetaGlyphs, { presence: { ...NONE, ...presence } }))
   })
   return renderer!.root
     .findAll((node) => typeof node.type === 'string' && String(node.type) !== 'View')
@@ -39,22 +49,15 @@ function glyphs(props: Parameters<typeof WorktreeMetaGlyphs>[0]): string[] {
 }
 
 describe('WorktreeMetaGlyphs', () => {
-  it('draws the automation, CLI and Jira glyphs in the desktop order', () => {
+  it('draws the glyphs in the desktop order', () => {
     expect(
-      glyphs({
-        comment: 'note',
-        automationCreated: true,
-        cliCreated: true,
-        linkedIssue: 3,
-        linkedJiraIssue: true,
-        linkedLinearIssue: 'ENG-1'
-      })
+      glyphs({ notes: true, automation: true, cli: true, issue: true, jira: true, linear: true })
     ).toEqual(['StickyNote', 'CalendarClock', 'SquareTerminal', 'CircleDot', 'logo:jira', 'Text'])
   })
 
   it('draws nothing when the row has none of them', () => {
     act(() => {
-      renderer = create(createElement(WorktreeMetaGlyphs, {}))
+      renderer = create(createElement(WorktreeMetaGlyphs, { presence: NONE }))
     })
     expect(renderer!.toJSON()).toBeNull()
   })

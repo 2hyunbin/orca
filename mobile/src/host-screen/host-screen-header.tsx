@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native'
 import {
   workspaceOptionsAccessibilityLabel,
   WORKSPACE_OPTIONS_TITLE
-} from '../worktree/workspace-list-picker-options'
+} from '../worktree/workspace-options-copy'
 import { WorkspaceOptionsCountBadge } from './workspace-options-count-badge'
 import {
   ChevronLeft,

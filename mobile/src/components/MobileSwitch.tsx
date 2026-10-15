@@ -1,4 +1,4 @@
-import { Platform, Switch } from 'react-native'
+import { Switch } from 'react-native'
 import { colors } from '../theme/mobile-theme'
 
 export type MobileSwitchProps = {
@@ -11,14 +11,14 @@ export type MobileSwitchProps = {
 
 // react-native-web paints an "on" thumb with its own teal unless given activeThumbColor, a prop
 // React Native's types do not declare.
-const WEB_ON_THUMB = Platform.OS === 'web' ? { activeThumbColor: colors.textPrimary } : {}
+const ON_THUMB = { activeThumbColor: colors.textPrimary }
 
 /** The app's switch: neutral track and thumb, no platform accent. */
 export function MobileSwitch(props: MobileSwitchProps) {
   return (
     <Switch
       {...props}
-      {...WEB_ON_THUMB}
+      {...ON_THUMB}
       trackColor={{ false: colors.bgRaised, true: colors.textSecondary }}
       thumbColor={colors.textPrimary}
     />

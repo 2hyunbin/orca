@@ -1,14 +1,14 @@
-import { formatActiveFilterLabel } from '../../../src/shared/workspace-view/workspace-row-filters'
+import {
+  formatActiveFilterBadge,
+  formatActiveFilterLabel
+} from '../../../src/shared/workspace-view/workspace-row-filters'
 
 /** The desktop's name for the control that opens these options, and for the options themselves. */
 export const WORKSPACE_OPTIONS_TITLE = 'Workspace options'
 
 /** The chip's corner badge, capped as on the desktop; null with no active filter. */
 export function workspaceOptionsBadgeText(activeFilterCount: number): string | null {
-  if (activeFilterCount <= 0) {
-    return null
-  }
-  return activeFilterCount > 9 ? '9+' : String(activeFilterCount)
+  return activeFilterCount > 0 ? formatActiveFilterBadge(activeFilterCount) : null
 }
 
 /** The desktop trigger's accessibility label, word for word. */

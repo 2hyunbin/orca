@@ -5,14 +5,11 @@ import type { MobileRenderableRepoIcon } from '../host-screen/host-screen-reply-
 import { triggerMediumImpact } from '../platform/haptics'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { Worktree } from '../worktree/workspace-list-types'
-import type {
-  WorktreeCardDetails,
-  WorktreeCardLayout
-} from '../../../src/shared/worktree/card-properties'
-import { parseExecutionHostId } from '../../../src/shared/execution-host'
+import type { WorktreeCardDetails } from '../../../src/shared/worktree/card-properties'
+import { isRemoteExecutionHostId } from '../../../src/shared/execution-host'
 import type { AgentActivityDisplayMode } from '../../../src/shared/ui-chrome-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
-import { hasLinkedJiraIssue } from '../worktree/worktree-linked-jira-issue'
+import { getWorktreeMetaGlyphPresence } from '../worktree/worktree-meta-glyph-presence'
 import { AgentSpinner } from './AgentSpinner'
 import { HostKindIcon } from './HostKindIcon'
 import { MobileRepoIcon } from './MobileRepoIcon'
@@ -36,10 +33,8 @@ type Props = {
   // When the list is already grouped under this repo's section header, the row
   // omits its own repo icon+name to avoid the redundant "📁 orca" on every row.
   hideRepo?: boolean
-  /** What the desktop's shared Card layout and properties show. */
+  /** What the desktop's shared Card layout and properties show, and where identity goes. */
   cardDetails: WorktreeCardDetails
-  /** Where the desktop's card style puts identity; Compact folds the row into its title line. */
-  cardLayout: WorktreeCardLayout
   agentActivityDisplayMode: AgentActivityDisplayMode
   status: WorktreeRollupStatus
   onPress: (item: Worktree) => void
@@ -55,7 +50,6 @@ function WorktreeListRowComponent({
   repoIcon,
   hideRepo = false,
   cardDetails,
-  cardLayout: layout,
   agentActivityDisplayMode,
   status,
   onPress,
@@ -67,17 +61,14 @@ function WorktreeListRowComponent({
   const metaText = isFolderWorkspace ? folderMeta : displayBranch(item.branch)
   const lineageDepth = Math.max(0, item.lineageDepth ?? 0)
   const lineageChildCount = item.lineageChildCount ?? 0
-  const showRepoChip = layout.repoInTitle && !hideRepo && !isFolderWorkspace
-  const showRepoInMetaRow = !layout.repoInTitle && !hideRepo
+  const showRepoChip = cardDetails.repoInTitle && !hideRepo && !isFolderWorkspace
+  const showRepoInMetaRow = !cardDetails.repoInTitle && !hideRepo
   const hostId = item.hostContextHostId ?? item.hostId
   const hostAccessibilityLabel = [item.hostContextLabel, item.hostContextHealthLabel]
     .filter(Boolean)
     .join(', ')
   // Why: the desktop's compact card keeps an icon-only glyph for remote projects after the host badge goes.
-  const showHostGlyph =
-    !layout.identityMetaRow &&
-    !!item.hostContextLabel &&
-    (parseExecutionHostId(hostId)?.kind ?? 'local') !== 'local'
+  const showHostGlyph = !cardDetails.metaRow && isRemoteExecutionHostId(hostId)
 
   return (
     <Pressable
@@ -114,7 +105,7 @@ function WorktreeListRowComponent({
       <View style={styles.worktreeMain}>
         <View style={styles.worktreeNameRow}>
           {showHostGlyph && (
-            <View accessibilityLabel={hostAccessibilityLabel}>
+            <View accessibilityLabel={hostAccessibilityLabel || 'Remote host'}>
               <HostKindIcon hostId={hostId} size={11} />
             </View>
           )}
@@ -146,18 +137,9 @@ function WorktreeListRowComponent({
               <Text style={styles.folderBadgeText}>Folder</Text>
             </View>
           )}
-          <WorktreeMetaGlyphs
-            comment={cardDetails.comment ? item.comment : null}
-            linkedLinearIssue={cardDetails.linearIssue ? item.linkedLinearIssue : null}
-            linkedGitLabMR={cardDetails.pr ? item.linkedGitLabMR : null}
-            linkedIssue={cardDetails.issue ? item.linkedIssue : null}
-            linkedGitLabIssue={cardDetails.issue ? item.linkedGitLabIssue : null}
-            linkedJiraIssue={cardDetails.jiraIssue && hasLinkedJiraIssue(item.linkedItems)}
-            automationCreated={cardDetails.automation && item.automationCreated === true}
-            cliCreated={cardDetails.cli && item.cliCreated === true}
-          />
+          <WorktreeMetaGlyphs presence={getWorktreeMetaGlyphPresence(item, cardDetails)} />
         </View>
-        {layout.identityMetaRow && (
+        {cardDetails.metaRow && (
           <View style={styles.worktreeMetaRow}>
             {lineageDepth > 0 && (
               <View style={styles.childBadge}>

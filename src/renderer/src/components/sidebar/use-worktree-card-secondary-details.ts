@@ -1,7 +1,6 @@
 import React, { useCallback } from 'react'
 import { getWorkspaceAttachments } from '../../../../shared/workspace-attachments'
 import { toast } from 'sonner'
-import { getWorktreeCardDetails } from '../../../../shared/worktree/card-properties'
 
 import type { GitHubWorkItem } from '../../../../shared/github/work-item-types'
 import { translate } from '@/i18n/i18n'
@@ -40,9 +39,9 @@ export function useWorktreeCardSecondaryDetails({
   linkedBitbucketPR,
   linkedAzureDevOpsPR,
   linkedGiteaPR,
-  cardProps,
   newCardStyle,
   compactCards,
+  cardDetails,
   agentActivityDisplayMode,
   workspacePorts,
   openTaskPage,
@@ -51,9 +50,9 @@ export function useWorktreeCardSecondaryDetails({
 }: Pick<WorktreeCardProps, 'worktree' | 'repo' | 'statusPrDisplay'> &
   Pick<
     Foundation,
-    | 'cardProps'
     | 'newCardStyle'
     | 'compactCards'
+    | 'cardDetails'
     | 'agentActivityDisplayMode'
     | 'workspacePorts'
     | 'openTaskPage'
@@ -90,10 +89,7 @@ export function useWorktreeCardSecondaryDetails({
   const metaAutomationProvenance = showAutomation ? worktree.automationProvenance : null
   const metaCliProvenance = showCli ? worktree.cliProvenance : null
   const metaComment = showComment ? hoverComment : null
-  const showInlineAgentList = getWorktreeCardDetails(cardProps, {
-    compactCards,
-    newCardStyle
-  }).inlineAgents
+  const showInlineAgentList = cardDetails.inlineAgents
   const compactInlineAgentRows = useWorktreeAgentRows(
     worktree.id,
     showInlineAgentList && agentActivityDisplayMode === 'compact'

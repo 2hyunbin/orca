@@ -11,7 +11,6 @@ import { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details
 import { useWorktreeCardReviewDetails } from './use-worktree-card-review-details'
 import { useWorktreeCardSecondaryDetails } from './use-worktree-card-secondary-details'
 import { useWorktreeCardWorkspaceActions } from './use-worktree-card-workspace-actions'
-import { getWorktreeCardDetails } from '../../../../shared/worktree/card-properties'
 
 export function useWorktreeCardController(props: ResolvedWorktreeCardProps) {
   const { worktree, repo } = props
@@ -45,7 +44,7 @@ export function useWorktreeCardController(props: ResolvedWorktreeCardProps) {
     cli: showCli,
     comment: showComment,
     ports: showPorts
-  } = getWorktreeCardDetails(foundation.cardProps, foundation)
+  } = foundation.cardDetails
   const shouldRefreshHostedReview = foundation.newCardStyle ? showStatus : showPR
   const detailsHoverControl = useWorktreeCardDetailsHoverControl()
   const hoverDetailsOpen = detailsHoverControl.hoverOpen
@@ -149,9 +148,9 @@ export function useWorktreeCardController(props: ResolvedWorktreeCardProps) {
     linkedBitbucketPR: review.linkedBitbucketPR,
     linkedAzureDevOpsPR: review.linkedAzureDevOpsPR,
     linkedGiteaPR: review.linkedGiteaPR,
-    cardProps: foundation.cardProps,
     newCardStyle: foundation.newCardStyle,
     compactCards: foundation.compactCards,
+    cardDetails: foundation.cardDetails,
     agentActivityDisplayMode: foundation.agentActivityDisplayMode,
     workspacePorts: foundation.workspacePorts,
     openTaskPage: foundation.openTaskPage,
