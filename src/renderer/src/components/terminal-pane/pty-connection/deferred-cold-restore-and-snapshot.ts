@@ -12,6 +12,7 @@ import type { FreshSpawnOptions, ColdRestoreAgentResumeStartup } from './fresh-s
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { bindCaptureTransportOutputCallbacks } from './transport-output-callbacks'
+import { paneResumeRecord } from './pane-resume-record'
 
 import { bindReplayDataDrain } from './replay-data-drain'
 import { bindStartFreshSpawn } from './fresh-spawn-start'
@@ -34,40 +35,36 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
     })
     return true
   }
-  session.adoptSleepingRecordAfterColdRestoreSpawn = (
-    startup: ColdRestoreAgentResumeStartup | null,
-    resumeUnavailable: boolean
+  // Why the pane keeps its record: a resumed agent may not report its session until its next
+  // turn, so the record is the only resume handle if this terminal dies again before then.
+  session.keepResumeRecordAfterColdRestore = (
+    startup: ColdRestoreAgentResumeStartup | null
   ): void => {
     if (!startup) {
       return
     }
     const state = useAppStore.getState()
-    const consumed = startup.useLiveEntry ? null : startup.sleepingRecordEntry
-    if (consumed) {
-      session.clearSleepingRecordProviderDuplicates(state, consumed)
+    if (!startup.useLiveEntry && startup.sleepingRecordEntry) {
+      session.clearSleepingRecordProviderDuplicates(
+        state,
+        startup.sleepingRecordEntry,
+        session.cacheKey
+      )
     }
-    if (resumeUnavailable) {
-      return
+    const record = paneResumeRecord(session, startup)
+    if (record) {
+      useAppStore.getState().rememberSleepingAgentSession(record)
     }
-    // Why: a resumed agent may not report its session until its next turn, so this record is
-    // the pane's only resume handle if its terminal dies again before then.
-    const now = Date.now()
-    const { restoreOnTabOpenOnly: _lazyWake, ...base } = consumed?.record ?? {
-      prompt: '',
-      state: 'working' as const,
-      capturedAt: now,
-      updatedAt: now,
-      launchConfig: startup.launchConfig
+  }
+  // Why: main started a new session instead, so the old one is no longer this pane's to resume.
+  session.dropResumeRecordAfterRefusedResume = (
+    startup: ColdRestoreAgentResumeStartup | null
+  ): void => {
+    const state = useAppStore.getState()
+    if (startup && !startup.useLiveEntry && startup.sleepingRecordEntry) {
+      session.clearSleepingRecordProviderDuplicates(state, startup.sleepingRecordEntry)
     }
-    state.rememberSleepingAgentSession({
-      ...base,
-      paneKey: session.cacheKey,
-      tabId: session.deps.tabId,
-      worktreeId: session.deps.worktreeId,
-      agent: startup.agent,
-      providerSession: startup.resumeProviderSession,
-      origin: 'live'
-    })
+    state.clearSleepingAgentSession(session.cacheKey)
   }
   session.mergeStartupEnvWithPaneIdentity = (
     env: Record<string, string> | undefined

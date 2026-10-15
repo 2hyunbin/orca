@@ -88,7 +88,8 @@ describe('reattach payload context', () => {
       applyColdRestoreAgentResumeStartup,
       schedulePendingStartupCommandDelivery,
       showSessionRestoredBanner: vi.fn(),
-      adoptSleepingRecordAfterColdRestoreSpawn: vi.fn(),
+      dropResumeRecordAfterRefusedResume: vi.fn(),
+      keepResumeRecordAfterColdRestore: vi.fn(),
       consumeRestoredViewportBlankingMarker: vi.fn(),
       writeFreshShellViewportBlanking: vi.fn()
     })

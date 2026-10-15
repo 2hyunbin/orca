@@ -239,7 +239,8 @@ describe('connectPanePty', () => {
       expect(deps.clearTabPtyId).toHaveBeenCalledWith('tab-1', 'restored-session')
       expect(deps.syncPanePtyLayoutBinding).not.toHaveBeenCalledWith(2, 'restored-session')
       expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'fresh-resume-pty')
-      expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
+      // The resumed pane keeps its record as its resume handle.
+      expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeDefined()
       expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(paneKey, 1)
     } finally {
       globalThis.setTimeout = originalSetTimeout

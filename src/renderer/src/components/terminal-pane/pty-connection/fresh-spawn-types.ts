@@ -17,6 +17,8 @@ export type FreshSpawnOptions = {
 export type ColdRestoreAgentResumeStartup = PendingStartupCommand & {
   agent: ResumableTuiAgent
   resumeProviderSession: AgentProviderSessionMetadata
+  /** The host the resumed session's transcript lives on; the record must keep it for wrong-host guards. */
+  connectionId?: string | null
   launchConfig: NonNullable<ReturnType<typeof buildAgentResumeStartupPlan>>['launchConfig']
   launchToken: string
   useLiveEntry: boolean

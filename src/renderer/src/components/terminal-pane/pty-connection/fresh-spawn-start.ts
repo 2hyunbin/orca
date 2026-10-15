@@ -191,17 +191,21 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
               foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
             })
           }
-          const resumeUnavailable = Boolean(
-            spawnedPtyId && typeof spawnedPtyId === 'object' && spawnedPtyId.agentResumeUnavailable
-          )
-          if (resumeUnavailable) {
+          if (
+            spawnedPtyId &&
+            typeof spawnedPtyId === 'object' &&
+            spawnedPtyId.agentResumeUnavailable
+          ) {
             // Why: main dropped the resume argv, so this pane is a NEW session —
             // the plain restored banner would claim the old one came back.
             session.showSessionRestoredBanner('resume-unavailable')
-          } else if (coldRestoreOverride?.hasSleepingRecord) {
-            session.showSessionRestoredBanner()
+            session.dropResumeRecordAfterRefusedResume(coldRestoreOverride)
+          } else {
+            if (coldRestoreOverride?.hasSleepingRecord) {
+              session.showSessionRestoredBanner()
+            }
+            session.keepResumeRecordAfterColdRestore(coldRestoreOverride)
           }
-          session.adoptSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride, resumeUnavailable)
         } else if (
           session.paneStartup?.launchConfig ||
           (startupOverride && 'launchConfig' in startupOverride)

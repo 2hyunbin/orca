@@ -270,13 +270,13 @@ export function createReattachPayloadHandlers(
           // Why: main dropped the resume argv, so this pane is a NEW session —
           // the plain restored banner would claim the old one came back.
           session.showSessionRestoredBanner('resume-unavailable')
-        } else if (preparedStartup?.hasSleepingRecord) {
-          session.showSessionRestoredBanner()
+          session.dropResumeRecordAfterRefusedResume(preparedStartup)
+        } else {
+          if (preparedStartup?.hasSleepingRecord) {
+            session.showSessionRestoredBanner()
+          }
+          session.keepResumeRecordAfterColdRestore(preparedStartup)
         }
-        session.adoptSleepingRecordAfterColdRestoreSpawn(
-          preparedStartup,
-          ctx.connectResult.agentResumeUnavailable === true
-        )
       }
       // Why: cold-restore spawned a fresh shell; reset mode bytes a crashed TUI (e.g. Claude's \e[?1004h) left in scrollback that no live TUI now consumes.
       session.writeInputModeGround(POST_REPLAY_MODE_RESET)

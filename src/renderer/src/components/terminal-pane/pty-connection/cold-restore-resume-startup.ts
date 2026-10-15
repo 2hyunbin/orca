@@ -51,11 +51,9 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
     // is the pane's own transport and is authoritative when set, but it is still unresolved on an
     // early reattach frame — and failing open on that frame is precisely when a wrong resume slips
     // out. The catalog's answer for the record's worktree covers that window.
+    const connectionId = useLiveEntry ? entry.connectionId : sleepingRecord?.connectionId
     if (
-      agentResumeOriginNamesAnotherExecutionHost(
-        useLiveEntry ? entry.connectionId : sleepingRecord?.connectionId,
-        session.executionHostId
-      ) ||
+      agentResumeOriginNamesAnotherExecutionHost(connectionId, session.executionHostId) ||
       (sleepingRecord && sleepingRecordNamesAnotherExecutionHost(sleepingRecord, state))
     ) {
       return null
@@ -114,6 +112,7 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
       },
       launchConfig: startupPlan.launchConfig,
       resumeProviderSession: providerSession,
+      ...(connectionId !== undefined ? { connectionId } : {}),
       launchToken: coldRestoreLaunchToken,
       useLiveEntry: Boolean(useLiveEntry),
       hasSleepingRecord: Boolean(sleepingRecord),

@@ -55,13 +55,19 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
     getAgentLaunchConfigForStatusEntry: vi.fn((entry: { paneKey: string }) => {
       return getState().agentLaunchConfigByPaneKey[entry.paneKey]?.launchConfig
     }),
+    // Why both maps: the real action drops the pane's launch registration with its record.
     clearSleepingAgentSession: vi.fn((paneKey: string) => {
       delete getState().sleepingAgentSessionsByPaneKey[paneKey]
+      delete getState().agentLaunchConfigByPaneKey[paneKey]
     }),
     rememberSleepingAgentSession: vi.fn((record: { paneKey: string }) => {
       getState().sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
     }),
-    registerAgentLaunchConfig: vi.fn(),
+    registerAgentLaunchConfig: vi.fn(
+      (paneKey: string, launchConfig: unknown, identity?: { agentType?: string }) => {
+        getState().agentLaunchConfigByPaneKey[paneKey] = { launchConfig, identity }
+      }
+    ),
     clearAgentLaunchConfig: vi.fn(),
     observeTerminalGitHubPullRequestLink: vi.fn(),
     recordTerminalInput: vi.fn(),

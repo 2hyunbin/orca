@@ -530,7 +530,8 @@ describe('connectPanePty', () => {
 
     deferredSpawn.resolve('pty-resumed')
     await flushAsyncTicks()
-    expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
+    // The resumed pane keeps its record as its resume handle.
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toBeDefined()
   })
 
   it('re-arms the exact hibernation target after a replacement spawn fails', async () => {

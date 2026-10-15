@@ -13,7 +13,7 @@ import {
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
 import { createInitialStoreState } from './pty-connection-test-store-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
-import type { MockTransport } from './pty-connection-test-pane-fixtures'
+import type { ConnectCallbacks, MockTransport } from './pty-connection-test-pane-fixtures'
 import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
@@ -175,12 +175,17 @@ function setRestoredPaneState(
   })
 }
 
+let lastConnectCallbacks: ConnectCallbacks | undefined
+
 function queueColdRestoreTransport(ptyId: string, result: Record<string, unknown> = {}) {
   const transport = createMockTransport(ptyId)
-  transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
-    sessionId
-      ? { id: ptyId, coldRestore: { scrollback: 'cold-payload', cwd: '/tmp/wt-1' }, ...result }
-      : ptyId
+  transport.connect.mockImplementation(
+    async ({ sessionId, callbacks }: { sessionId?: string; callbacks?: ConnectCallbacks }) => {
+      lastConnectCallbacks = callbacks
+      return sessionId
+        ? { id: ptyId, coldRestore: { scrollback: 'cold-payload', cwd: '/tmp/wt-1' }, ...result }
+        : ptyId
+    }
   )
   transportFactoryQueue.push(transport)
   return transport
@@ -467,14 +472,11 @@ describe('connectPanePty', () => {
         })
       })
     )
-    // Why: the pane now runs this session, so the record stays as its live resume handle rather
-    // than a quit capture a later worktree activation would launch again.
-    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
-      paneKey,
-      tabId: 'tab-1',
-      providerSession: { id: 'codex-session-1' },
-      origin: 'live'
-    })
+    // Why: the pane keeps its record exactly as captured; it stays the pane's resume handle.
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toEqual(
+      expect.objectContaining({ paneKey, state: 'working', capturedAt: 1 })
+    )
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).not.toHaveProperty('origin')
   })
 
   it('resumes a silent agent again when its terminal dies a second time before its next turn', async () => {
@@ -499,7 +501,9 @@ describe('connectPanePty', () => {
     // Why: workspace activation clears a working pane's record in favour of its live row, which
     // an app restart does not bring back for an agent that stays silent after resuming.
     setRestoredPaneState({
-      agentStatusByPaneKey: { [PANE_KEY]: codexStatus('working') },
+      agentStatusByPaneKey: {
+        [PANE_KEY]: { ...codexStatus('working'), connectionId: null }
+      },
       sleepingAgentSessionsByPaneKey: {}
     })
     const transport = queueColdRestoreTransport('lost-pty')
@@ -508,13 +512,47 @@ describe('connectPanePty', () => {
     expect(transport.connect).toHaveBeenCalledWith(
       expect.objectContaining({ command: CODEX_RESUME_COMMAND })
     )
+    // Why connectionId: the wrong-host guards read it after a restart, when no live row is left.
     expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toMatchObject({
       worktreeId: 'wt-1',
       agent: 'codex',
       providerSession: { id: 'codex-session-1' },
-      state: 'working',
-      origin: 'live'
+      connectionId: null,
+      launchConfig: expect.anything()
     })
+    // The registration made for this launch survives the record write.
+    expect(mockStoreState.agentLaunchConfigByPaneKey[PANE_KEY]).toBeDefined()
+  })
+
+  it('keeps the launch registration of a pane resumed from its own record', async () => {
+    setRestoredPaneState({
+      agentStatusByPaneKey: {},
+      sleepingAgentSessionsByPaneKey: { [PANE_KEY]: codexRecord({ state: 'done', origin: 'quit' }) }
+    })
+    queueColdRestoreTransport('lost-pty')
+    await connectRestoredPane('lost-pty')
+
+    expect(mockStoreState.agentLaunchConfigByPaneKey[PANE_KEY]).toBeDefined()
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toMatchObject({
+      origin: 'quit'
+    })
+  })
+
+  it('clears the kept record once the resumed agent exits to a confirmed shell', async () => {
+    // Why: the kept record must not outlive the agent, or the next restore relaunches one the user quit.
+    vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
+    setRestoredPaneState({
+      agentStatusByPaneKey: {},
+      sleepingAgentSessionsByPaneKey: { [PANE_KEY]: codexRecord({ state: 'done', origin: 'quit' }) }
+    })
+    queueColdRestoreTransport('lost-pty')
+    await connectRestoredPane('lost-pty')
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBeDefined()
+
+    lastConnectCallbacks?.onData?.('\x1b]133;D;0\x07')
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toBeUndefined()
   })
 
   it('does not resume a finished agent whose record is gone, as after the user quit it', async () => {
