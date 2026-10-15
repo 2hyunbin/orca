@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { diffStoredSession } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
 import { WORKSPACE_LAYOUT_PROFILES } from '../../../shared/workspace-layout/workspace-layout-profile.test-fixture'
@@ -65,36 +64,13 @@ const FOLDED_LEGACY_ROW_CLOSES = new Map([
   ]
 ])
 
-function withRestartedPanes(stored: WorkspaceSessionState): WorkspaceSessionState {
-  const restarted = Object.values(stored.tabsByWorktree)
-    .flat()
-    .flatMap((tab) =>
-      collectTerminalLayoutLeafIds(stored.terminalLayoutsByTabId[tab.id]?.root).map(
-        (leafId) => [`${tab.id}:${leafId}`, `restarted-${leafId}`] as const
-      )
-    )
-  return {
-    ...stored,
-    terminalPtyIncarnationsByPaneKey: {
-      ...stored.terminalPtyIncarnationsByPaneKey,
-      ...Object.fromEntries(restarted)
-    }
-  }
-}
-
 describe('layout.apply closePane against the legacy pane close', () => {
   const profiles = [...WORKSPACE_LAYOUT_PROFILES, ...LEGACY_WORKSPACE_LAYOUT_PROFILES]
 
-  // Restarted: every pane's terminal has a new incarnation the window never saw; both still close.
-  it.each(
-    profiles.flatMap((profile) => [
-      [profile.name, 'as stored', profile, false] as const,
-      [profile.name, 'restarted', profile, true] as const
-    ])
-  )(
-    '%s (%s): writes what the legacy close writes, and refuses a tab’s last pane',
-    (_name, _variant, profile, restarted) => {
-      const stored = restarted ? withRestartedPanes(profile.build()) : profile.build()
+  it.each(profiles.map((profile) => [profile.name, profile] as const))(
+    '%s: writes what the legacy close writes, and refuses a tab’s last pane',
+    (_name, profile) => {
+      const stored = profile.build()
       for (const [worktreeId, tabs] of Object.entries(stored.tabsByWorktree)) {
         for (const tab of tabs) {
           const panes = collectTerminalLayoutLeafIds(stored.terminalLayoutsByTabId[tab.id]?.root)
@@ -120,14 +96,42 @@ describe('layout.apply closePane against the legacy pane close', () => {
             const differences = diffStoredSession(legacy.session, dark.session ?? stored)
               .filter((change) => !legacyOnly(change))
               .map(({ table, record, field }) => `${table}/${record}/${field}`)
-            // A recorded incarnation tells the row's terminal apart, so the load does not fold it.
-            const gap = restarted ? undefined : FOLDED_LEGACY_ROW_CLOSES.get(tab.id)
-            expect(differences, label).toEqual(gap ?? [])
+            expect(differences, label).toEqual(FOLDED_LEGACY_ROW_CLOSES.get(tab.id) ?? [])
           }
         }
       }
     }
   )
+
+  // The legacy persisted close refuses a pane restarted after the request, but the window has
+  // already removed it and saves its layout without it; main closes it outright.
+  it('closes a pane whose terminal restarted after the window asked', () => {
+    const window = new WindowSession(getDefaultWorkspaceSession())
+    window.addTab(WORKTREE, TAB, LEAF_A)
+    window.setLayout(
+      TAB,
+      {
+        type: 'split',
+        direction: 'vertical',
+        first: { type: 'leaf', leafId: LEAF_A },
+        second: { type: 'leaf', leafId: LEAF_B }
+      },
+      { [LEAF_A]: 'pty-a', [LEAF_B]: 'pty-b-restarted' }
+    )
+    window.session.terminalPtyIncarnationsByPaneKey = { [`${TAB}:${LEAF_B}`]: 'incarnation-2' }
+
+    const closed = applyCommandToSession('local', window.snapshot(), {
+      type: 'closePane',
+      workspace: WORKTREE,
+      tabId: TAB,
+      leafId: LEAF_B,
+      userPaneClose: true
+    })
+
+    expect(closed.value.ok).toBe(true)
+    expect(leafIds(closed.session?.terminalLayoutsByTabId[TAB]?.root)).toEqual([LEAF_A])
+    expect(closed.session?.terminalPtyIncarnationsByPaneKey?.[`${TAB}:${LEAF_B}`]).toBeUndefined()
+  })
 })
 
 describe('Store.applyLayoutCommand pane operations', () => {
