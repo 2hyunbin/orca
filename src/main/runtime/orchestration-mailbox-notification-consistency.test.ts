@@ -742,12 +742,10 @@ describe('orchestration notification mailbox consistency', () => {
       .map(([sql]) => sql)
       .find((sql) => sql.includes('SELECT id FROM messages') && sql.includes('json_each'))
     expect(revalidationSql).toContain('INDEXED BY idx_messages_id')
-    const revalidationPlan = sqliteFor(db)
+    const revalidationPlan: unknown[] = sqliteFor(db)
       .prepare(`EXPLAIN QUERY PLAN ${revalidationSql}`)
-      .all(`run:${run.id}`, JSON.stringify(staged), '') as {
-      detail: string
-    }[]
-    expect(revalidationPlan.map((row) => row.detail).join(' ')).toContain('idx_messages_id')
+      .all(`run:${run.id}`, JSON.stringify(staged), '')
+    expect(JSON.stringify(revalidationPlan)).toContain('idx_messages_id')
     expect(checked).toMatchObject({ runId: run.id, count: 50 })
     expect(checked.deliveryId).toBeTruthy()
     expect(checked.messages).toEqual(
