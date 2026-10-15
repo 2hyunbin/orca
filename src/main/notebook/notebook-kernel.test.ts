@@ -255,6 +255,9 @@ describe.skipIf(!python)('notebook kernel against a real ipykernel', () => {
       python: python!,
       cwd: __dirname,
       onFrame: (frame) => {
+        if (frame.type === 'stopped') {
+          return
+        }
         frames.push(...(frame.type === 'outputs' ? frame.outputs : [frame]))
         onFrame()
       }
