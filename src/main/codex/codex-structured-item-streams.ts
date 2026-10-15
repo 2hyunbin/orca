@@ -49,8 +49,6 @@ export function createCodexStructuredItemStreams(
   deps: CodexItemStreamDeps
 ): CodexStructuredItemStreams {
   const states = new CodexItemStreamRetention(deps.maxMetadataBytes)
-  const checkpointLengths = new Map<string, number>()
-  const pendingCheckpoints = new Set<string>()
   // Which thread and turn produced each stream, resolved to its attribution per append
   // so a parent learned after the first checkpoint still reaches the row.
   const producers = new Map<string, { threadId: string; turnId: string | null }>()
@@ -69,8 +67,6 @@ export function createCodexStructuredItemStreams(
   const forgetState = (key: string): void => {
     coalescer.forget(key)
     states.forget(key)
-    checkpointLengths.delete(key)
-    pendingCheckpoints.delete(key)
     producers.delete(key)
     const pending = pendingPatches.get(key)
     if (pending) {
@@ -86,7 +82,7 @@ export function createCodexStructuredItemStreams(
         break
       }
       const pending = coalescer.snapshot(oldest)
-      if (pending && pending.text.length > 0 && !persist(oldest, pending.text, true)) {
+      if (pending && pending.text.length > 0 && !persist(oldest, pending.text)) {
         // Keep the state (and its buffered text) until the sink recovers. A
         // bounded map is preferable to silently losing streamed output.
         break
@@ -122,23 +118,9 @@ export function createCodexStructuredItemStreams(
     }).accepted
   }
 
-  const shouldPersist = (key: string, textLength: number): boolean => {
-    const checkpointLength = checkpointLengths.get(key) ?? 0
-    const nextLength = Math.max(checkpointLength + 32, Math.ceil(checkpointLength * 1.125))
-    return !(checkpointLength > 0 && textLength < nextLength)
-  }
-
-  const persist = (key: string, text: string, force: boolean): boolean => {
-    if (!force && !shouldPersist(key, text.length)) {
-      return true
-    }
+  const persist = (key: string, text: string): boolean => {
     const state = states.get(key)
-    if (state && append(key, state, text)) {
-      checkpointLengths.set(key, text.length)
-      pendingCheckpoints.delete(key)
-      return true
-    }
-    return false
+    return state !== undefined && append(key, state, text)
   }
 
   const coalescer = createAgentSessionDeltaCoalescer({
@@ -147,10 +129,7 @@ export function createCodexStructuredItemStreams(
     maxTotalRetainedBytes: deps.maxTotalRetainedBytes,
     isProtected: (key) => states.isPersistent(key),
     schedule: deps.schedule,
-    shouldEmit: shouldPersist,
-    emit: (key, text) => {
-      return persist(key, text, false)
-    }
+    emit: persist
   })
 
   const ensureState = (
@@ -177,14 +156,6 @@ export function createCodexStructuredItemStreams(
 
   const flush = (): boolean => {
     let flushed = coalescer.flushAll()
-    for (const key of pendingCheckpoints) {
-      const snapshot = coalescer.snapshot(key)
-      if (snapshot && checkpointLengths.get(key) !== snapshot.text.length) {
-        flushed = persist(key, snapshot.text, true) && flushed
-      } else {
-        pendingCheckpoints.delete(key)
-      }
-    }
     for (const key of pendingPatches.keys()) {
       flushed = flushPatch(key).accepted && flushed
     }
@@ -291,7 +262,6 @@ export function createCodexStructuredItemStreams(
       const delta = method === REASONING_PART_METHOD ? '\n' : paramsRecord.delta
       if (typeof delta === 'string') {
         const key = codexStructuredItemKey(threadId, state.item.id)
-        pendingCheckpoints.add(key)
         const accepted = coalescer.append(key, delta)
         if (!accepted) {
           return { handled: true, admission: { accepted: false, reason: 'backpressure' } }
@@ -307,8 +277,6 @@ export function createCodexStructuredItemStreams(
     dispose: () => {
       coalescer.dispose()
       states.clear()
-      checkpointLengths.clear()
-      pendingCheckpoints.clear()
       producers.clear()
       pendingPatches.clear()
       retainedPatchBytes = 0

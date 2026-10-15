@@ -5,7 +5,8 @@
 // its identity is its name, thread, channel and producer: a change to any starts the next
 // message. Deltas accumulate in the shared coalescer, and a row is a snapshot of the text so far.
 // Text owed to the journal is written inside the next event's transition — every other event is
-// an ordering barrier — or by the coalescer's window, and is marked written once the sink takes it.
+// an ordering barrier — or by the coalescer's window once it has grown enough, and is marked
+// written once the sink takes it.
 // Every write first reads the turn its row is in: once any writer settled that turn (a person's
 // Stop, the turn's own end), the stream writes nothing more. A stream stopped that way keeps its
 // key until the turn's boundary, so the provider's trailing deltas drop rather than start a

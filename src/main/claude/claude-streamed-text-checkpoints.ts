@@ -57,12 +57,6 @@ export type ClaudeStreamedTextCheckpoints = {
   dispose: () => void
 }
 
-/**
- * Growth of a streamed block's row between its deltas and its final frame.
- *
- * The row is rewritten on a widening interval rather than per delta: a 200-line
- * reply would otherwise rewrite the same journal row once per token.
- */
 function sameLinkage(
   left: StructuredAgentSessionAppendOptions,
   right: StructuredAgentSessionAppendOptions
@@ -88,8 +82,8 @@ export function createClaudeStreamedTextCheckpoints(
    *  row and re-resolving can only revise it; this exists so a re-attribution
    *  that would change nothing does not burn a revision. */
   const writtenLinkage = new Map<string, StructuredAgentSessionAppendOptions>()
+  /** The text each block's row was last written with. */
   const latestText = new Map<string, string>()
-  const checkpointLengths = new Map<string, number>()
 
   /** Resolved FRESH on every checkpoint. A provisional producer is stamped with
    *  the handle it has rather than holding the prose back: the next checkpoint,
@@ -102,19 +96,13 @@ export function createClaudeStreamedTextCheckpoints(
     return agentJournalLinkageFields(deps.producer.settledLinkageFor(scope).linkage)
   }
 
-  const persist = (key: string, text: string, force: boolean): void => {
-    latestText.set(key, text)
-    const checkpointLength = checkpointLengths.get(key) ?? 0
-    const nextLength = Math.max(checkpointLength + 32, Math.ceil(checkpointLength * 1.125))
-    if (!force && checkpointLength > 0 && text.length < nextLength) {
-      return
-    }
+  const persist = (key: string, text: string): void => {
     const identity = identities.get(key)
     if (!identity) {
       return
     }
     const options = producerOptions(key)
-    checkpointLengths.set(key, text.length)
+    latestText.set(key, text)
     writtenLinkage.set(key, options)
     deps.persist(identity, text, options)
   }
@@ -122,7 +110,7 @@ export function createClaudeStreamedTextCheckpoints(
   const coalescer = createAgentSessionDeltaCoalescer({
     ...(deps.coalesceMs === undefined ? {} : { windowMs: deps.coalesceMs }),
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
-    emit: (key, text) => persist(key, text, false)
+    emit: persist
   })
 
   const drop = (key: string): void => {
@@ -131,7 +119,6 @@ export function createClaudeStreamedTextCheckpoints(
     scopes.delete(key)
     writtenLinkage.delete(key)
     latestText.delete(key)
-    checkpointLengths.delete(key)
   }
 
   return {
@@ -143,11 +130,6 @@ export function createClaudeStreamedTextCheckpoints(
     },
     flush: () => {
       coalescer.flushAll()
-      for (const [key, text] of latestText) {
-        if (checkpointLengths.get(key) !== text.length) {
-          persist(key, text, true)
-        }
-      }
     },
     reattribute: () => {
       for (const [key, identity] of identities) {
@@ -172,8 +154,7 @@ export function createClaudeStreamedTextCheckpoints(
         if (only && !only(key)) {
           continue
         }
-        coalescer.flush(key)
-        const text = latestText.get(key)
+        const text = coalescer.snapshot(key)?.text ?? latestText.get(key)
         if (text !== undefined) {
           deps.persist(identity, text, producerOptions(key), ended)
         }
@@ -195,7 +176,6 @@ export function createClaudeStreamedTextCheckpoints(
       scopes.clear()
       writtenLinkage.clear()
       latestText.clear()
-      checkpointLengths.clear()
     }
   }
 }

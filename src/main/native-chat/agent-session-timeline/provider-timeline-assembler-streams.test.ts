@@ -98,3 +98,30 @@ describe('the open budget counts every provider string a stream keeps', () => {
     ).toEqual({ accepted: false, reason: 'failed' })
   })
 })
+
+describe('a long streamed reply', () => {
+  it('is rewritten only as it grows, and its turn end writes the full text', async () => {
+    const windows = new Set<() => void>()
+    const rig = await openProviderTimelineRig({
+      schedule: (run) => {
+        windows.add(run)
+        return () => windows.delete(run)
+      }
+    })
+    rig.assembler.apply({ type: 'turn.open', turn: 't1', at: 1_000 })
+    const reply = 'word '.repeat(2_000)
+    for (let at = 0; at < reply.length; at += 20) {
+      const text = reply.slice(at, at + 20)
+      rig.assembler.apply({ type: 'text.delta', item: { id: 'm' }, channel: 'assistant', text })
+      const due = [...windows]
+      windows.clear()
+      due.forEach((run) => run())
+    }
+    rig.assembler.apply({ type: 'turn.end', turn: 't1', at: 2_000, state: 'completed' })
+
+    const row = await rig.row(providerItemId('item', 'm'))
+    expect(messageText(row?.body)).toBe(reply)
+    // A rewrite per window would be 500 revisions of a 10,000-character reply.
+    expect(row?.revision).toBeLessThan(60)
+  })
+})

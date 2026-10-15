@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   AGENT_SESSION_DELTA_COALESCE_MS,
   createAgentSessionDeltaCoalescer
@@ -61,16 +61,63 @@ describe('agent-session delta coalescer', () => {
   it('emits the accumulated snapshot again, not the increment, on the next window', () => {
     const clock = manualClock()
     const { instance, emitted } = coalescer(clock)
+    const tail = 'l'.repeat(32)
 
     instance.append('item-1', 'he')
     clock.fire()
-    instance.append('item-1', 'llo')
+    instance.append('item-1', tail)
     clock.fire()
 
     expect(emitted).toEqual([
       ['item-1', 'he'],
-      ['item-1', 'hello']
+      ['item-1', `he${tail}`]
     ])
+  })
+
+  it('rewrites a stream on the window only once it has grown, and owes the rest to a flush', () => {
+    const clock = manualClock()
+    const { instance, emitted } = coalescer(clock)
+
+    instance.append('item-1', 'x'.repeat(1000))
+    clock.fire()
+    // An eighth of the written length is due; less waits for later growth.
+    instance.append('item-1', 'y'.repeat(124))
+    clock.fire()
+    instance.append('item-1', 'y')
+    clock.fire()
+    expect(emitted.map(([, text]) => text.length)).toEqual([1000, 1125])
+
+    instance.append('item-1', 'z')
+    clock.fire()
+    expect(instance.dirty().map(({ snapshot }) => snapshot.text.length)).toEqual([1126])
+    instance.flushAll()
+    expect(emitted.map(([, text]) => text.length)).toEqual([1000, 1125, 1126])
+  })
+
+  it('retries a refused lifecycle flush in full, not only once the text grows', () => {
+    const clock = manualClock()
+    let reject = false
+    const emitted: string[] = []
+    const instance = createAgentSessionDeltaCoalescer({
+      schedule: clock.schedule,
+      emit: (_key, text) => {
+        if (reject) {
+          return false
+        }
+        emitted.push(text)
+        return true
+      }
+    })
+
+    instance.append('item-1', 'first answer')
+    clock.fire()
+    instance.append('item-1', '.')
+    reject = true
+    expect(instance.flushAll()).toBe(false)
+    reject = false
+    clock.fire()
+
+    expect(emitted).toEqual(['first answer', 'first answer.'])
   })
 
   it('appends ten thousand deltas without rebuilding the retained prefix per token', () => {
@@ -242,42 +289,5 @@ describe('agent-session delta coalescer', () => {
     expect(snapshots.map((snapshot) => snapshot?.observedBytes)).toEqual([80, 80, 160])
     expect(snapshots.map((snapshot) => snapshot?.truncated)).toEqual([false, true, true])
     expect(emitted.get('item-3')).toEqual({ text: '', observedBytes: 80, truncated: true })
-  })
-})
-
-describe('snapshot admission before assembly', () => {
-  it('reports retained UTF-16 length after Unicode appends and byte truncation', () => {
-    const clock = manualClock()
-    const shouldEmit = vi.fn(() => true)
-    const emitted: [string, string][] = []
-    const instance = createAgentSessionDeltaCoalescer({
-      schedule: clock.schedule,
-      maxRetainedBytes: 40,
-      shouldEmit,
-      emit: (key, text) => emitted.push([key, text])
-    })
-    instance.append('unicode', 'éé')
-    instance.append('surrogate', '\ud83d')
-    instance.append('surrogate', '\ude00')
-    clock.fire()
-    expect(shouldEmit.mock.calls).toEqual([
-      ['unicode', 2],
-      ['surrogate', 2]
-    ])
-    expect(emitted).toEqual([
-      ['unicode', 'éé'],
-      ['surrogate', '😀']
-    ])
-
-    instance.append('unicode', `${'é'.repeat(20)}more`)
-    clock.fire()
-    const truncated = 'ééé\n[Orca: streamed output truncated]'
-    expect(shouldEmit).toHaveBeenLastCalledWith('unicode', truncated.length)
-    expect(emitted.at(-1)).toEqual(['unicode', truncated])
-    const calls = shouldEmit.mock.calls.length
-    instance.append('unicode', 'ignored')
-    clock.fire()
-    expect(shouldEmit).toHaveBeenCalledTimes(calls)
-    instance.dispose()
   })
 })

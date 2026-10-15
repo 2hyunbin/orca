@@ -7,6 +7,10 @@
 // SNAPSHOT of the text so far, which is also what makes dropping intermediate
 // frames safe for a reconnecting client.
 //
+// Because every row is a full snapshot, the window rewrites a stream only once its
+// text has grown by a fixed fraction since its last write. Stored bytes then stay a
+// bounded multiple of the final text instead of growing with its square.
+//
 // The window applies to text only. Lifecycle — an item completing, a turn
 // ending, an approval arriving — bypasses it by flushing first, so nothing can
 // be journaled ahead of the text that preceded it.
@@ -23,6 +27,19 @@ export const AGENT_SESSION_STREAMED_TEXT_TOTAL_MAX_BYTES = 32 * 1024 * 1024
 export const AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER = '\n[Orca: streamed output truncated]'
 export const AGENT_SESSION_MAX_STREAMS = 256
 
+/** Whether a stream written at `writtenLength` has grown enough for the window to rewrite it:
+ *  by 32 characters while short, by an eighth once long, which keeps the sum of every snapshot
+ *  under about nine times the final text. */
+export function agentSessionStreamedTextCheckpointDue(
+  writtenLength: number,
+  textLength: number
+): boolean {
+  return (
+    writtenLength === 0 ||
+    textLength >= Math.max(writtenLength + 32, Math.ceil(writtenLength * 1.125))
+  )
+}
+
 export type AgentSessionDeltaSnapshot = {
   text: string
   observedBytes: number
@@ -32,8 +49,6 @@ export type AgentSessionDeltaSnapshot = {
 export type AgentSessionDeltaCoalescerDeps = {
   /** Called with the FULL text accumulated for the key, not the increment. */
   emit: (key: string, text: string, snapshot: AgentSessionDeltaSnapshot) => unknown
-  /** False accepts a skipped snapshot; sink refusal is reported by emit. */
-  shouldEmit?: (key: string, textLength: number) => boolean
   windowMs?: number
   maxRetainedBytes?: number
   maxTotalRetainedBytes?: number
@@ -48,9 +63,9 @@ export type AgentSessionDeltaCoalescerDeps = {
 export type AgentSessionDeltaCoalescer = {
   /** Returns false when a full stream cannot be flushed to admit this new key. */
   append: (key: string, delta: string) => boolean
-  /** Emit one stream now, if it has unflushed text. */
+  /** Emit one stream now, if it has unflushed text, however little it grew. */
   flush: (key: string) => boolean
-  /** Emit every stream now. The lifecycle bypass. */
+  /** Emit every stream with unflushed text now, however little it grew. The lifecycle bypass. */
   flushAll: () => boolean
   /** Drop a stream without emitting — its authoritative body arrived, so the
    *  accumulated text is now the stale copy. */
@@ -85,6 +100,8 @@ export function createAgentSessionDeltaCoalescer(
       chunks: string[]
       retainedBytes: number
       textLength: number
+      /** Text length at the stream's last write; the window's growth rule measures from it. */
+      writtenLength: number
       observedBytes: number
       truncated: boolean
       dirty: boolean
@@ -92,15 +109,20 @@ export function createAgentSessionDeltaCoalescer(
   >()
   let totalRetainedBytes = 0
   let cancelTimer: (() => void) | null = null
+  /** A lifecycle flush the sink refused: its retry writes everything owed, not only grown text. */
+  let retryOwed = false
   const evictable = new Set<string>()
 
-  const flushKey = (key: string): boolean => {
+  const flushKey = (key: string, onWindow = false): boolean => {
     const stream = streams.get(key)
     if (!stream?.dirty) {
       return true
     }
-    if (deps.shouldEmit?.(key, stream.textLength) === false) {
-      stream.dirty = false
+    // Skipped text stays owed: a later window that finds it grown, or a lifecycle flush, writes it.
+    if (
+      onWindow &&
+      !agentSessionStreamedTextCheckpointDue(stream.writtenLength, stream.textLength)
+    ) {
       return true
     }
     const text = stream.chunks.join('')
@@ -113,23 +135,25 @@ export function createAgentSessionDeltaCoalescer(
       return false
     }
     stream.dirty = false
+    stream.writtenLength = stream.textLength
     return true
   }
 
   const scheduleFlush = (): void => {
     cancelTimer ??= schedule(() => {
       cancelTimer = null
-      flushAll()
+      flushAll(!retryOwed)
     }, windowMs)
   }
 
-  const flushAll = (): boolean => {
+  const flushAll = (onWindow = false): boolean => {
     cancelTimer?.()
     cancelTimer = null
     let emitted = true
     for (const key of streams.keys()) {
-      emitted = flushKey(key) && emitted
+      emitted = flushKey(key, onWindow) && emitted
     }
+    retryOwed = !emitted && (retryOwed || !onWindow)
     if (!emitted) {
       scheduleFlush()
     }
@@ -167,6 +191,7 @@ export function createAgentSessionDeltaCoalescer(
           chunks: [],
           retainedBytes: 0,
           textLength: 0,
+          writtenLength: 0,
           observedBytes: 0,
           truncated: false,
           dirty: false
@@ -204,8 +229,8 @@ export function createAgentSessionDeltaCoalescer(
       scheduleFlush()
       return true
     },
-    flush: flushKey,
-    flushAll,
+    flush: (key) => flushKey(key),
+    flushAll: () => flushAll(),
     forget: (key) => {
       const stream = streams.get(key)
       if (stream) {
@@ -217,6 +242,7 @@ export function createAgentSessionDeltaCoalescer(
     dispose: () => {
       cancelTimer?.()
       cancelTimer = null
+      retryOwed = false
       streams.clear()
       evictable.clear()
       totalRetainedBytes = 0
@@ -250,6 +276,7 @@ export function createAgentSessionDeltaCoalescer(
       const stream = streams.get(key)
       if (stream) {
         stream.dirty = false
+        stream.writtenLength = stream.textLength
       }
     }
   }
