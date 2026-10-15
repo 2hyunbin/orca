@@ -12676,7 +12676,7 @@
         "moveAnyway": {
           "action": "Déplacer quand même…",
           "title": "Déplacer cet hôte quand même",
-          "description": "Orca déplace cet hôte vers son serveur géré sans les éléments enregistrés ci-dessous. Ils restent dans les réglages enregistrés de cet ordinateur et ne sont pas supprimés : une version antérieure d’Orca les conserve. Ils n’apparaîtront pas sur le serveur géré.",
+          "description": "Orca déplace cet hôte vers son serveur géré sans les éléments enregistrés ci-dessous. Ils restent sur cet ordinateur et n’apparaissent pas sur le serveur géré. Les modifications non enregistrées sont conservées, jamais supprimées.",
           "cancel": "Annuler",
           "confirm": "Déplacer quand même"
         },

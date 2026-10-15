@@ -12807,7 +12807,7 @@
         "moveAnyway": {
           "action": "Move anyway…",
           "title": "Move this host anyway",
-          "description": "Orca moves this host to its managed server without the saved items below. They stay in this computer’s saved settings and are not deleted, so an older version of Orca still has them. They won’t appear on the managed server.",
+          "description": "Orca moves this host to its managed server without the saved items below. They stay on this computer and don’t appear on the managed server. Unsaved edits are kept, never deleted.",
           "cancel": "Cancel",
           "confirm": "Move anyway"
         },

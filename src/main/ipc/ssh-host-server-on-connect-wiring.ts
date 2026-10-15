@@ -108,8 +108,8 @@ export function hostServerOnConnectDeps(userDataPath: string): HostServerOnConne
         destinationFor: orcadMigrationDestinationFor,
         serverRepositoriesFor: orcadServerRepositoriesFor
       })
-      if (converted.outcome === 'converted') {
-        // "Move anyway" covered this move only; a later move asks again.
+      if (converted.outcome === 'converted' || converted.outcome === 'refused') {
+        // "Move anyway" covers one attempt; a later move, or a later delta, asks again.
         registry.updateTarget(target.id, { managedServerLeaveBehind: undefined })
       }
       return converted

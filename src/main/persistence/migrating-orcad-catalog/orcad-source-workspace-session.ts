@@ -20,6 +20,7 @@ import {
   collectUnsupportedSessionItems,
   projectDormantSessionFocus,
   projectSessionToDestination,
+  isUnsavedDraftItem,
   transferableSleepingAgentSession,
   worktreeLabel
 } from './orcad-source-workspace-session-eligibility'
@@ -29,10 +30,14 @@ import {
   dropOrcadMigrationTerminalBindings
 } from './orcad-source-workspace-session-layout'
 import { mergeSessionFragments } from './orcad-source-workspace-session-fragments'
+import {
+  desktopDrafts,
+  resolveCopiesForHost,
+  type SessionFragment
+} from './orcad-source-session-copy-resolution'
 import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../shared/workspace-scope'
-import { withoutWorkspaces } from '../../../shared/workspace-session-stranded-partition-adoption'
 import { orcadMigrationSessionPartitions } from './orcad-source-session-partitions'
 import {
   hasDuplicateOrcadMigrationScrollbackDescriptors,
@@ -70,15 +75,20 @@ export function collectOrcadMigrationSourceWorkspaceSession(
       leftBehindItems: []
     }
   }
-  // "Move anyway": what still can't move leaves the whole saved session on this desktop.
-  return leaveBehind && collected.blockedItems.length > 0
-    ? {
+  if (!leaveBehind || collected.blockedItems.length === 0) {
+    return collected
+  }
+  // "Move anyway": what still can't move leaves the whole saved session on this desktop, unless an
+  // unsaved draft would go with it. A desktop-side draft has no retained copy once the host moves.
+  const drafts = desktopDrafts(state, source, catalog)
+  return drafts.length > 0 || collected.blockedItems.includes(UNREADABLE_SESSION)
+    ? { ...collected, blockedItems: drafts.length > 0 ? drafts : collected.blockedItems }
+    : {
         payload: undefined,
         snapshots: [],
         blockedItems: [],
         leftBehindItems: [...collected.leftBehindItems, ...collected.blockedItems]
       }
-    : collected
 }
 
 function collectWorkspaceSession(
@@ -89,15 +99,16 @@ function collectWorkspaceSession(
   leaveBehind: boolean
 ): OrcadMigrationSourceWorkspaceSessionInspection {
   const sourceScope = createOrcadMigrationSourceScope({ source, catalog, repos: state.repos })
-  const fragments: WorkspaceSessionState[] = []
-  const localFragments = new Set<WorkspaceSessionState>()
-  const snapshots: OrcadMigrationTerminalScrollbackSnapshot[] = []
+  const fragments: SessionFragment[] = []
   const blockedItems: string[] = []
   const leftBehindItems: string[] = []
   const partitions = orcadMigrationSessionPartitions(state, sourceScope).map(
     ([partitionId, saved]) => {
       const scope = orcadMigrationPartitionScope(sourceScope, partitionId)
-      const session = withoutLeftBehindSessionRows(saved, scope, leaveBehind)
+      // A desktop-side draft stays a refusal: only the host's own rows are kept once it moves.
+      const session = withoutLeftBehindSessionRows(saved, scope, leaveBehind, {
+        leaveDrafts: partitionId !== LOCAL_EXECUTION_HOST_ID
+      })
       return {
         saved,
         session,
@@ -111,17 +122,29 @@ function collectWorkspaceSession(
   )
   for (const { saved, session, scope, terminalTabIds } of partitions) {
     const sourceHostPartition = scope.partitionHostId === scope.hostId
-    // Left behind, these are rows the export already drops or never extracts.
-    ;(leaveBehind ? leftBehindItems : blockedItems).push(
-      ...collectUnsupportedSessionItems(
-        // The rows as saved, so what stays behind is still named.
-        leaveBehind ? withoutLeftBehindSessionRows(saved, scope) : session,
-        scope,
-        sourceHostPartition,
-        terminalTabIds,
-        sourceTerminalTabIds
-      )
+    const unsupported = collectUnsupportedSessionItems(
+      session,
+      scope,
+      sourceHostPartition,
+      terminalTabIds,
+      sourceTerminalTabIds
     )
+    if (leaveBehind) {
+      // What the export dropped or never extracts stays behind; only a desktop-side draft refuses.
+      const kept = new Set(unsupported.filter(isUnsavedDraftItem))
+      blockedItems.push(...kept)
+      leftBehindItems.push(
+        ...collectUnsupportedSessionItems(
+          withoutLeftBehindSessionRows(saved, scope),
+          scope,
+          sourceHostPartition,
+          terminalTabIds,
+          sourceTerminalTabIds
+        ).filter((item) => !kept.has(item))
+      )
+    } else {
+      blockedItems.push(...unsupported)
+    }
     const fragment = extractSessionOwnersForTransfer(session, {
       mapOwnerKey: (ownerKey) =>
         orcadMigrationOwnerMatchesScope(ownerKey, scope)
@@ -150,18 +173,18 @@ function collectWorkspaceSession(
     if (hasTransferredSessionState(fragment)) {
       const projected = projectOrcadMigrationSessionScrollback(
         projectSessionToDestination(fragment, scope),
-        storage
+        storage,
+        leaveBehind
       )
       blockedItems.push(...projected.blockedItems)
-      snapshots.push(...projected.snapshots)
-      fragments.push(projected.session)
-      if (scope.partitionHostId === LOCAL_EXECUTION_HOST_ID) {
-        localFragments.add(projected.session)
-      }
+      leftBehindItems.push(...projected.leftBehindItems)
+      fragments.push({
+        session: projected.session,
+        snapshots: projected.snapshots,
+        local: scope.partitionHostId === LOCAL_EXECUTION_HOST_ID,
+        sourceHost: sourceHostPartition
+      })
     }
-  }
-  if (hasDuplicateOrcadMigrationScrollbackDescriptors(snapshots)) {
-    blockedItems.push('terminal history saved twice for one pane')
   }
   if (blockedItems.length > 0 || fragments.length === 0) {
     return { payload: undefined, snapshots: [], blockedItems, leftBehindItems }
@@ -173,21 +196,42 @@ function collectWorkspaceSession(
       )
     )
   )
-  let merged = mergeSessionFragments(fragments, closedTabIds)
+  let merged = mergeSessionFragments(
+    fragments.map((fragment) => fragment.session),
+    closedTabIds
+  )
+  let moving = fragments
   if (!merged.session && leaveBehind) {
-    // "Move anyway": the host's copy moves, as the app reads it; the desktop's stays behind.
+    // "Move anyway": the host's copy moves, as the app reads it, with the desktop copy's drafts.
     const conflicting = new Set(merged.conflicts.map(normalizeWorkspaceSessionKeyToWorkspaceId))
+    const resolved = resolveCopiesForHost(fragments, conflicting)
+    if (resolved.clashingDrafts.length > 0) {
+      return {
+        payload: undefined,
+        snapshots: [],
+        blockedItems: resolved.clashingDrafts,
+        leftBehindItems
+      }
+    }
     leftBehindItems.push(
       ...merged.conflicts.map(
-        (ownerKey) => `this desktop's older copy of the tabs in ${worktreeLabel(ownerKey)}`
+        (ownerKey) => `this desktop's other copy of the tabs in ${worktreeLabel(ownerKey)}`
       )
     )
+    moving = resolved.fragments
     merged = mergeSessionFragments(
-      fragments.map((fragment) =>
-        localFragments.has(fragment) ? withoutWorkspaces(fragment, conflicting) : fragment
-      ),
+      moving.map((fragment) => fragment.session),
       closedTabIds
     )
+  }
+  const snapshots = moving.flatMap((fragment) => fragment.snapshots)
+  if (merged.session && hasDuplicateOrcadMigrationScrollbackDescriptors(snapshots)) {
+    return {
+      payload: undefined,
+      snapshots: [],
+      blockedItems: ['terminal history saved twice for one pane'],
+      leftBehindItems
+    }
   }
   return merged.session
     ? { payload: merged.session, snapshots, blockedItems: [], leftBehindItems }

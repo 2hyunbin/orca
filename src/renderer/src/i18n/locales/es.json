@@ -12568,7 +12568,7 @@
         "moveAnyway": {
           "action": "Mover de todos modos…",
           "title": "Mover este host de todos modos",
-          "description": "Orca mueve este host a su servidor gestionado sin los elementos guardados que aparecen abajo. Se quedan en la configuración guardada de este equipo y no se eliminan, así que una versión anterior de Orca los conserva. No aparecerán en el servidor gestionado.",
+          "description": "Orca mueve este host a su servidor gestionado sin los elementos guardados que aparecen abajo. Se quedan en este equipo y no aparecen en el servidor gestionado. Las ediciones sin guardar se conservan; nunca se eliminan.",
           "cancel": "Cancelar",
           "confirm": "Mover de todos modos"
         },

@@ -72,7 +72,7 @@ describe('Move anyway', () => {
     const container = await render(refused, onChanged)
     await act(async () => button(container, 'Move anyway…').click())
     expect(container.textContent).toContain('unsaved changes to /etc/hosts')
-    expect(container.textContent).toContain('are not deleted')
+    expect(container.textContent).toContain('Unsaved edits are kept, never deleted.')
     await act(async () => button(container, 'Move anyway').click())
     expect(allowMoveLeavingBehind).toHaveBeenCalledWith({ sshTargetId: 'ssh-1' })
     expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-1' })

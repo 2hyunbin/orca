@@ -185,24 +185,28 @@ export function collectOrcadMigrationSourceDormantState(
     workspaceSession.payload
   )
   blockedCounts['saved-port-forward'] = clientState.blockedCounts['saved-port-forward']
-  blockedSessionItems.push(
-    ...Array.from({ length: clientState.blockedCount }, () => 'a browser page close saved twice')
-  )
-  blockedCounts['workspace-session'] = blockedSessionItems.length
   const leftBehindItems = [...workspaceSession.leftBehindItems]
+  const duplicateCloses = Array.from(
+    { length: clientState.blockedCount },
+    () => 'a browser page close saved twice'
+  )
+  // "Move anyway": duplicate closes are already out of the payload. What the session still refuses
+  // is what can't be left behind (an unsaved draft), so it keeps blocking.
+  ;(leaveBehind ? leftBehindItems : blockedSessionItems).push(...duplicateCloses)
+  blockedCounts['workspace-session'] = blockedSessionItems.length
   if (leaveBehind) {
-    // Every row a count names is already out of the payload; left behind, it no longer blocks.
-    // Saved port forwards never block a move, and duplicate ports stay a refusal the server makes.
-    for (const kind of ORCAD_MIGRATION_TRANSFERRED_DORMANT_KINDS.filter(
-      (entry) => entry !== 'saved-port-forward'
-    )) {
-      if (blockedCounts[kind] > 0 && kind !== 'workspace-session') {
+    // Every row these counts name is already out of the payload. Saved port forwards never block,
+    // and the server itself refuses duplicate ports.
+    for (const kind of ORCAD_MIGRATION_TRANSFERRED_DORMANT_KINDS) {
+      if (
+        kind !== 'workspace-session' &&
+        kind !== 'saved-port-forward' &&
+        blockedCounts[kind] > 0
+      ) {
         leftBehindItems.push(`${blockedCounts[kind]} saved ${kind} record(s)`)
+        blockedCounts[kind] = 0
       }
-      blockedCounts[kind] = 0
     }
-    leftBehindItems.push(...blockedSessionItems)
-    blockedSessionItems.length = 0
   }
   return {
     payload: {

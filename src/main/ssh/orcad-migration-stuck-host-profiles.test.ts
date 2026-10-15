@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import type { SshRemotePtyLease, SshTarget } from '../../shared/ssh-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
@@ -199,18 +200,31 @@ describe('#29083: about 14 projects, folders, a saved session and relay-era leas
         name: 'folders',
         parentPath: '/home/dev/notes',
         connectionId: TARGET.id,
+        parentGroupId: null,
         createdFrom: 'manual',
-        createdAt: 1
-      } as PersistedState['projectGroups'][number]
+        tabOrder: 0,
+        isCollapsed: false,
+        color: null,
+        createdAt: 1,
+        updatedAt: 1
+      }
     ]
-    state.folderWorkspaces = ['notes', 'scratch', 'docs'].map((name) => ({
+    state.folderWorkspaces = ['notes', 'scratch', 'docs'].map((name): FolderWorkspace => ({
       id: `folder-${name}`,
       projectGroupId: 'group-folders',
       name,
       folderPath: `/home/dev/notes/${name}`,
       connectionId: TARGET.id,
-      createdAt: 1
-    })) as PersistedState['folderWorkspaces']
+      linkedTask: null,
+      comment: '',
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 0,
+      lastActivityAt: 1,
+      createdAt: 1,
+      updatedAt: 1
+    }))
     const host = state.workspaceSessionsByHostId![HOST]!
     for (const index of [0, 3, 7]) {
       openTerminal(host, `repo-${index}::/home/dev/src/project-${index}`, `tab-${index}`)
@@ -324,9 +338,7 @@ describe('"Move anyway"', () => {
 
   it('moves what it can and leaves the rest in the retained profile', async () => {
     const loaded = load(savedStateOnly())
-    loaded.store.updateSshTarget(TARGET.id, {
-      managedServerLeaveBehind: { confirmedAt: '2026-10-15T00:00:00.000Z' }
-    })
+    confirmed(loaded)
     const before = structuredClone(loaded.store.getWorkspaceSession(HOST))
     const result = await connectMove(loaded)
     expect(result).toMatchObject({ outcome: 'fenced' })
@@ -342,6 +354,74 @@ describe('"Move anyway"', () => {
     expect(
       loaded.store.getWorkspaceSession().tabsByWorktree[worktreeId]?.map((tab) => tab.id)
     ).toEqual(['older-tab'])
+  })
+
+  function confirmed(loaded: ReturnType<typeof load>): void {
+    loaded.store.updateSshTarget(TARGET.id, {
+      managedServerLeaveBehind: { confirmedAt: '2026-10-15T00:00:00.000Z' }
+    })
+  }
+
+  it("still refuses an unsaved draft only this desktop's session holds, and names it", async () => {
+    const state = savedStateOnly()
+    const host = state.workspaceSessionsByHostId![HOST]!
+    state.workspaceSession.openFilesByWorktree = structuredClone(host.openFilesByWorktree)
+    host.openFilesByWorktree = {}
+    delete state.workspaceSession.tabsByWorktree[worktreeId]
+    const loaded = load(state)
+    confirmed(loaded)
+    await expect(connectMove(loaded)).resolves.toMatchObject({
+      outcome: 'refused',
+      reason: expect.stringContaining('unsaved changes to /etc/hosts in /home/dev/src/project-0')
+    })
+  })
+
+  it("carries the desktop copy's drafts when the host's copy of the tabs wins", async () => {
+    const state = savedStateOnly()
+    state.workspaceSession.openFilesByWorktree = {
+      [worktreeId]: [
+        {
+          filePath: '/home/dev/src/project-0/notes.md',
+          relativePath: 'notes.md',
+          worktreeId,
+          language: 'markdown',
+          dirtyDraftContent: 'desktop draft'
+        }
+      ]
+    }
+    const loaded = load(state)
+    confirmed(loaded)
+    const result = await connectMove(loaded)
+    expect(result).toMatchObject({ outcome: 'fenced' })
+    if (!('cutover' in result)) {
+      return
+    }
+    const session = result.cutover.manifest.payload.dormantState?.workspaceSession
+    expect(session?.tabsByWorktree[worktreeId]?.map((tab) => tab.id)).toEqual(['tab-1'])
+    expect(session?.openFilesByWorktree?.[worktreeId]).toEqual([
+      expect.objectContaining({ dirtyDraftContent: 'desktop draft' })
+    ])
+  })
+
+  it('moves a pane whose saved history is gone, without that history', async () => {
+    const state = savedStateOnly()
+    state.workspaceSessionsByHostId![HOST]!.terminalLayoutsByTabId['tab-1'] = {
+      root: { type: 'leaf', leafId: LEAF },
+      activeLeafId: LEAF,
+      expandedLeafId: null,
+      scrollbackRefsByLeafId: { [LEAF]: 'missing-snapshot-ref' }
+    }
+    delete state.workspaceSession.tabsByWorktree[worktreeId]
+    const refused = load(structuredClone(state))
+    await expect(connectMove(refused)).resolves.toMatchObject({ outcome: 'refused' })
+    const loaded = load(state)
+    confirmed(loaded)
+    const result = await connectMove(loaded)
+    expect(result).toMatchObject({ outcome: 'fenced' })
+    if ('cutover' in result) {
+      const session = result.cutover.manifest.payload.dormantState?.workspaceSession
+      expect(session?.terminalLayoutsByTabId['tab-1']?.scrollbackRefsByLeafId).toBeUndefined()
+    }
   })
 
   it('never leaves a running terminal behind', async () => {

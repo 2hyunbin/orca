@@ -16,8 +16,10 @@ import {
 export function withoutLeftBehindSessionRows(
   session: WorkspaceSessionState,
   scope: OrcadMigrationSourceScope,
-  /** "Move anyway": also every host-bound file, drafts included, and tabs another host runs. */
-  leaveBehind = false
+  /** "Move anyway": also every clean host-bound file, and tabs another host runs. */
+  leaveBehind = false,
+  /** Drafts too: only where a retained copy outlives the move (the host's own partition). */
+  options: { leaveDrafts: boolean } = { leaveDrafts: false }
 ): WorkspaceSessionState {
   const owns = (ownerKey: string): boolean => orcadMigrationOwnerMatchesScope(ownerKey, scope)
   const isolated = new Set(
@@ -25,7 +27,7 @@ export function withoutLeftBehindSessionRows(
       owns(ownerKey) ? workspaces.filter(usesSessionProfile).map((workspace) => workspace.id) : []
     )
   )
-  const hiddenFiles = hiddenHostBoundFiles(session, owns, leaveBehind)
+  const hiddenFiles = hiddenHostBoundFiles(session, owns, leaveBehind, options.leaveDrafts)
   const foreignTabIds = new Set(
     leaveBehind
       ? Object.entries(session.unifiedTabs ?? {}).flatMap(([ownerKey, tabs]) =>
@@ -133,7 +135,8 @@ function usesSessionProfile(workspace: BrowserWorkspace): boolean {
 function hiddenHostBoundFiles(
   session: WorkspaceSessionState,
   owns: (ownerKey: string) => boolean,
-  leaveBehind: boolean
+  leaveBehind: boolean,
+  leaveDrafts: boolean
 ): Map<string, Set<string>> {
   const hidden = new Map<string, Set<string>>()
   // Without the unified model, hydration shows every saved file as a tab.
@@ -152,7 +155,8 @@ function hiddenHostBoundFiles(
       const visible =
         shown.has(file.filePath) ||
         shown.has(ownedEditorFileId(file.filePath, ownerKey, file.runtimeEnvironmentId))
-      if (hostBound && (leaveBehind || (file.dirtyDraftContent === undefined && !visible))) {
+      const clean = file.dirtyDraftContent === undefined
+      if (hostBound && (clean || (leaveBehind && leaveDrafts)) && (leaveBehind || !visible)) {
         hidden.set(ownerKey, (hidden.get(ownerKey) ?? new Set()).add(file.filePath))
       }
     }

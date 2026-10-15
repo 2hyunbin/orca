@@ -210,7 +210,10 @@ async function fenceOrResume(
   }
   return {
     ...refuse(result.verdict, result.code, result.reason),
-    ...(result.blockers && onlyLeavableOrcadMigrationBlockers(result.blockers)
+    // Already moving anyway: what still refuses is what can't be left behind.
+    ...(result.blockers &&
+    onlyLeavableOrcadMigrationBlockers(result.blockers) &&
+    !target.managedServerLeaveBehind
       ? { canLeaveBehind: true }
       : {})
   }

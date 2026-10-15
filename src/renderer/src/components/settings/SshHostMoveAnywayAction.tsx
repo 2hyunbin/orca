@@ -13,8 +13,8 @@ import {
 } from '../ui/dialog'
 
 /**
- * The way out of a move refused only by saved state: move the host now and keep what can't move in
- * this computer's saved settings. Nothing is deleted, and live terminals still have to be closed.
+ * The way out of a move refused only by saved state: move the host now and keep what can't move on
+ * this computer. Unsaved drafts are never deleted, and live terminals still have to be closed.
  */
 export function SshHostMoveAnywayAction({
   target,
@@ -75,7 +75,7 @@ export function SshHostMoveAnywayAction({
             <DialogDescription>
               {translate(
                 'auto.components.settings.moveAnyway.description',
-                'Orca moves this host to its managed server without the saved items below. They stay in this computer’s saved settings and are not deleted, so an older version of Orca still has them. They won’t appear on the managed server.'
+                'Orca moves this host to its managed server without the saved items below. They stay on this computer and don’t appear on the managed server. Unsaved edits are kept, never deleted.'
               )}
             </DialogDescription>
           </DialogHeader>
