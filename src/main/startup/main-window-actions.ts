@@ -24,6 +24,7 @@ import {
   type RendererRecoveryPromptFailure
 } from '../window/renderer-recovery-prompt'
 import { probeRendererLaunchCapacity } from '../window/renderer-launch-failure-probe'
+import { deferAppKitSceneMutation } from '../appkit-scene-mutation'
 
 // The window module injects this callback to avoid a cycle between actions and lifecycle code.
 let openWindow: (options?: { revealOnDidFinishLoad?: boolean }) => BrowserWindow
@@ -132,7 +133,7 @@ export function createSystemTrayDeferred(
   onCreated?: () => void
 ): () => void {
   let trayCreated = false
-  return () => {
+  const createTray = (): void => {
     if (trayCreated || window.isDestroyed() || state.isQuitting || !state.store) {
       return
     }
@@ -148,6 +149,8 @@ export function createSystemTrayDeferred(
       onCreated?.()
     }
   }
+  // NSStatusItem creation needs the same timer boundary as later AppKit scene writes.
+  return process.platform === 'darwin' ? () => deferAppKitSceneMutation(createTray) : createTray
 }
 
 function resolveMenuTargetRenderer(targetWindow?: BrowserWindow | null): WebContents | undefined {
