@@ -88,9 +88,8 @@ function controller(
     editor: undefined,
     pause,
     resume: vi.fn(async () => false),
-    resuming: false,
     clear: vi.fn(async () => true),
-    clearing: false,
+    queueBusy: false,
     busy: () => false,
     steer: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
@@ -589,7 +588,7 @@ describe('NativeChatQueuedMessageList', () => {
     const focusComposer = vi.fn()
     const owner = {
       ...controller([card({ messageId: 'waiting', hold: 'queue-paused' })], { reason: 'stopped' }),
-      resuming: true
+      queueBusy: true
     }
     render(
       <TooltipProvider delayDuration={0}>

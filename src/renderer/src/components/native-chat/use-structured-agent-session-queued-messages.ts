@@ -41,12 +41,10 @@ export type StructuredAgentSessionQueuedMessagesController = {
   pause: { reason: string } | null
   /** Whether the host lifted the pause; a failure is a toast, and Resume is the retry. */
   resume: () => Promise<boolean>
-  /** A Resume is in flight. */
-  resuming: boolean
   /** Delete every card shown; false when one could not be (already a toast). */
   clear: () => Promise<boolean>
-  /** A Clear all is in flight. */
-  clearing: boolean
+  /** Resume or Clear all is on its way; both header actions grey. */
+  queueBusy: boolean
   /** The card's own action, or the Clear deleting it, is in flight. */
   busy: (messageId: string) => boolean
   /** Send-now into the running turn; the transcript shows it at delivery position. */
@@ -64,9 +62,8 @@ export type StructuredAgentSessionQueuedMessagesController = {
 
 const NO_SENDS: readonly StructuredAgentSessionPendingSend[] = []
 const CLEAR_DELETE_CONCURRENCY = 8
-/** The header's in-flight keys beside the cards' message ids, which never contain NUL. */
-const RESUME_KEY = '\u0000resume'
-const CLEAR_KEY = '\u0000clear'
+/** Held by Resume and Clear all, so each refuses the other; message ids never contain NUL. */
+const QUEUE_KEY = '\u0000queue'
 
 function alreadySentNotice(): void {
   toast.error(
@@ -181,7 +178,8 @@ export function useStructuredAgentSessionQueuedMessages(args: {
       return false
     }
     const newest = newestSteerableQueuedMessageCard(cardsRef.current)
-    if (!newest) {
+    // A card already on its way leaves the chord to the composer, as with no card.
+    if (!newest || inFlightRef.current.has(newest.messageId)) {
       return false
     }
     void steer(newest.messageId)
@@ -190,7 +188,7 @@ export function useStructuredAgentSessionQueuedMessages(args: {
 
   const resume = useCallback(
     (): Promise<boolean> =>
-      run([RESUME_KEY], async () => {
+      run([QUEUE_KEY], async () => {
         const result = await mutate<AgentSessionQueuedMessagesResumeResult>(
           'agentSession.queuedMessagesResume',
           'agentSession.queuedMessagesResume',
@@ -212,7 +210,7 @@ export function useStructuredAgentSessionQueuedMessages(args: {
       return false
     }
     // Every card it deletes shows busy until the whole Clear settles.
-    return run([CLEAR_KEY, ...messageIds], async () => {
+    return run([QUEUE_KEY, ...messageIds], async () => {
       const results = await mapSettledWithConcurrency(
         messageIds,
         CLEAR_DELETE_CONCURRENCY,
@@ -252,9 +250,8 @@ export function useStructuredAgentSessionQueuedMessages(args: {
     clearCapable,
     pause,
     resume,
-    resuming: inFlight.has(RESUME_KEY),
     clear,
-    clearing: inFlight.has(CLEAR_KEY),
+    queueBusy: inFlight.has(QUEUE_KEY),
     busy: (messageId) => inFlight.has(messageId),
     steer,
     remove,

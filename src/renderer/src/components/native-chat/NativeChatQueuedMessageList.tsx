@@ -108,8 +108,7 @@ export function NativeChatQueuedMessageList({
               count={cards.length}
               attentionCaption={attentionCaption}
               pause={pause}
-              resuming={controller.resuming}
-              clearing={controller.clearing}
+              queueBusy={controller.queueBusy}
               clearCapable={controller.clearCapable}
               expanded={expanded}
               listId={listId}
@@ -165,8 +164,7 @@ function NativeChatQueueHeader({
   count,
   attentionCaption,
   pause,
-  resuming,
-  clearing,
+  queueBusy,
   clearCapable,
   expanded,
   listId,
@@ -177,8 +175,7 @@ function NativeChatQueueHeader({
   count: number
   attentionCaption: string | null
   pause: { reason: string } | null
-  resuming: boolean
-  clearing: boolean
+  queueBusy: boolean
   clearCapable: boolean
   expanded: boolean
   listId: string
@@ -213,24 +210,18 @@ function NativeChatQueueHeader({
       ) : null}
       {pause ? (
         <>
+          {/* Each greys during the other: a Resume would send the cards a Clear is deleting. */}
           <Button
             type="button"
             variant="ghost"
             size="xs"
-            disabled={!clearCapable || clearing}
+            disabled={!clearCapable || queueBusy}
             onClick={onClearAll}
           >
             <Trash2 />
             {translate('components.native-chat.queuedMessages.clearAll', 'Clear all')}
           </Button>
-          {/* A Resume during Clear would send the cards it is deleting. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            disabled={resuming || clearing}
-            onClick={onResume}
-          >
+          <Button type="button" variant="ghost" size="xs" disabled={queueBusy} onClick={onResume}>
             <Play />
             {translate('components.native-chat.queuedMessages.resume', 'Resume')}
           </Button>

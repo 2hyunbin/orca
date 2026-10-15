@@ -99,13 +99,15 @@ describe('queued message actions', () => {
     await act(async () => {
       pending = harness.result.current.clear()
       expect(await harness.result.current.clear()).toBe(false)
+      expect(await harness.result.current.resume()).toBe(false)
     })
+    expect(harness.mutateCalls).toEqual([])
     expect(harness.writeCalls.map(([, , fields]) => fields.messageId)).toEqual(ids.slice(0, 8))
-    expect(harness.result.current.clearing).toBe(true)
+    expect(harness.result.current.queueBusy).toBe(true)
     release.resolve()
     await act(async () => expect(await pending).toBe(true))
     expect(harness.writeCalls).toHaveLength(ids.length)
-    expect(harness.result.current.clearing).toBe(false)
+    expect(harness.result.current.queueBusy).toBe(false)
   })
 
   it('keeps Clear all unavailable while a local send has no host card', async () => {
