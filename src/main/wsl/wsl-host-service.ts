@@ -43,6 +43,8 @@ export type WslHostConnector = {
   /** User-initiated; may boot the distro. `force` takes an update live terminals deferred. */
   connect(distro: string, options?: { force?: boolean }): Promise<WslOrcadConnection>
   get(distro: string): WslOrcadConnection | null
+  /** Checks the paired server without starting a stopped or unconfirmed distro. */
+  isReachable(distro: string): Promise<boolean>
   disconnect(distro: string): Promise<void>
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>
@@ -193,7 +195,7 @@ export class WslHostService {
    */
   async ensureForRuntimeCall(environmentId: string): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
-    if (!record || !this.connector || this.connector.get(record.distro)) {
+    if (!record || !this.connector || (await this.connector.isReachable(record.distro))) {
       return
     }
     const refusal = wslHostRunRefusal(this.deps)
@@ -221,8 +223,8 @@ export class WslHostService {
         continue
       }
       const record = this.recordForEnvironment(environmentId)
-      if (record && !this.connector.get(record.distro)) {
-        this.connector.connect(record.distro).catch((error: unknown) => {
+      if (record) {
+        this.ensureForRuntimeCall(environmentId).catch((error: unknown) => {
           console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
         })
       }

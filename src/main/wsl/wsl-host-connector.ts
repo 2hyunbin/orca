@@ -1,5 +1,8 @@
 /** The production WSL side of `WslHostService`: one holder, connection manager and supervisor. */
-import { isWslDistroRunning } from '../wsl-background-distro-gate'
+import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
+import { parsePairingCode } from '../../shared/pairing'
+import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { verifyOrcadPairingIdentity } from '../ssh/orcad-managed-tunnel-identity'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
 import type { WslHostConnector } from './wsl-host-service'
@@ -19,6 +22,8 @@ import {
 } from './wsl-host-server-stop'
 import { createWslOrcadLivenessSupervisor } from './wsl-orcad-liveness-wiring'
 import type { WslOrcadLivenessSupervisor } from './wsl-orcad-liveness-supervisor'
+import { confirmsRunning } from './wsl-orcad-liveness-model'
+import { wslDistroHolderKey } from './wsl-distro-holder-record'
 
 function targetFor(distro: string): WslOrcadHostTarget {
   return { kind: 'wsl', id: defaultWslOrcadEnvironmentId(distro), distro, label: distro }
@@ -66,18 +71,41 @@ export function createWslHostConnector(options: {
     hasUserVisibleWork: options.hasUserVisibleWork
   })
   supervisor = liveness
+  const isReachable = async (distro: string): Promise<boolean> => {
+    const connection = manager.get(distro)
+    if (!connection) {
+      return false
+    }
+    // Dialing the bridge starts wsl.exe, so passive checks must first confirm the distro runs.
+    if (!confirmsRunning(await readConfirmedRunningWslDistros(), wslDistroHolderKey(distro))) {
+      return false
+    }
+    const offer = parsePairingCode(connection.pairingOffer)
+    if (!offer) {
+      return false
+    }
+    const identity = await verifyOrcadPairingIdentity(pairedRuntimeConnectionFromOffer(offer), {
+      runtimeId: null
+    })
+    return identity.verdict === 'verified' && manager.get(distro) === connection
+  }
   return {
     listDistros: () => listWslHostDistros(),
     readOrcadPublicKey: (distro) => readWslDistroOrcadPublicKey(transportFor(distro)),
     connect: (distro, connectOptions) => liveness.connect(distro, connectOptions),
     get: (distro) => manager.get(distro),
+    isReachable,
     disconnect: (distro) => liveness.stop(distro),
     stopServer: async (distro, environmentId) => {
-      if (!manager.get(distro)) {
-        // A stopped distro runs nothing; a running one is reached without booting it.
-        if (!(await isWslDistroRunning(distro))) {
-          return { stopped: true }
-        }
+      // A retained bridge is not proof that its distro or server still runs.
+      const running = await readConfirmedRunningWslDistros()
+      if (running.status === 'unavailable') {
+        return { stopped: false, reason: 'The WSL service did not confirm whether the distro runs.' }
+      }
+      if (!confirmsRunning(running, wslDistroHolderKey(distro))) {
+        return { stopped: true }
+      }
+      if (!(await isReachable(distro))) {
         await liveness.connect(distro)
       }
       const target = targetFor(distro)
