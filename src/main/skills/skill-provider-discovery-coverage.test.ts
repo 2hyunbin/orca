@@ -1,8 +1,16 @@
 import { join, posix, resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+const runWslProcessMock = vi.hoisted(() => vi.fn())
+vi.mock('../wsl/wsl-runner', () => ({ runWslProcess: runWslProcessMock }))
+
 import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
+import { toWindowsWslPath } from '../../shared/wsl-paths'
 import { buildSkillDiscoverySources } from './skill-discovery-sources'
-import { resolveEnvironmentSkillProviderRoots } from './skill-provider-runtime-roots'
+import {
+  resolveEnvironmentSkillProviderRoots,
+  resolveWslSkillProviderRoots
+} from './skill-provider-runtime-roots'
 
 const HOME = '/home/test'
 const WORKSPACE = '/workspace/current'
@@ -62,6 +70,38 @@ describe('skill install provider table drives discovery', () => {
           (source) => source.sourceKind === 'home' && source.owner === provider.id
         )?.path
       ).toBe(overrides[provider.id])
+    }
+  })
+
+  it('reads every provider home env var from the WSL login shell in one probe', async () => {
+    const homeEnvs = SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
+      provider.homeEnv ? [{ id: provider.id, name: provider.homeEnv }] : []
+    )
+    runWslProcessMock.mockResolvedValue({
+      environmentResolved: true,
+      code: 0,
+      stdout: homeEnvs.map(({ id }) => `/srv/${id}\0`).join(''),
+      stderr: '',
+      timedOut: false
+    })
+
+    const roots = await resolveWslSkillProviderRoots('Ubuntu')
+
+    expect(runWslProcessMock).toHaveBeenCalledTimes(1)
+    const [{ script }] = runWslProcessMock.mock.calls[0]
+    expect(script).toContain(homeEnvs.map(({ name }) => `"\${${name}:-}"`).join(' '))
+    expect(roots).toEqual(
+      Object.fromEntries(
+        homeEnvs.map(({ id }) => [id, toWindowsWslPath(`/srv/${id}/skills`, 'Ubuntu')])
+      )
+    )
+  })
+
+  it('names each provider home with a plain env var the probe can expand', () => {
+    for (const provider of SKILL_INSTALL_PROVIDERS) {
+      if (provider.homeEnv) {
+        expect(provider.homeEnv).toMatch(/^[A-Z_][A-Z0-9_]*$/u)
+      }
     }
   })
 })

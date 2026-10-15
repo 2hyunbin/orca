@@ -1,12 +1,20 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
 import {
   resolveDefaultHermesSkillsRoot,
   resolveEnvironmentHermesSkillsRoot,
   resolveEnvironmentSkillProviderRoots,
-  resolveWslGrokSkillProviderRoot,
+  resolveWslSkillProviderRoots,
   withClaudeSkillProviderRoot
 } from './skill-provider-runtime-roots'
+
+// The probe prints each table `homeEnv` in table order, each NUL-terminated.
+function wslHomes(values: Record<string, string>): string {
+  return SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
+    provider.homeEnv ? [`${values[provider.homeEnv] ?? ''}\0`] : []
+  ).join('')
+}
 
 describe('skill provider runtime roots', () => {
   it('maps Claude and Grok config homes to their global skill roots', () => {
@@ -103,23 +111,30 @@ describe('skill provider runtime roots', () => {
     expect(seen).toEqual([])
   })
 
-  it('maps the WSL login shell GROK_HOME to a host-readable skill root', async () => {
+  it('maps a WSL login shell home var to a host-readable skill root', async () => {
     await expect(
-      resolveWslGrokSkillProviderRoot('Ubuntu-24.04', async () => '/srv/grok\n')
-    ).resolves.toBe('\\\\wsl.localhost\\Ubuntu-24.04\\srv\\grok\\skills')
+      resolveWslSkillProviderRoots('Ubuntu-24.04', async () =>
+        wslHomes({ GROK_HOME: '/srv/grok\n' })
+      )
+    ).resolves.toEqual({ grok: '\\\\wsl.localhost\\Ubuntu-24.04\\srv\\grok\\skills' })
   })
 
-  it('ignores unsafe or missing WSL GROK_HOME values', async () => {
+  it('ignores unsafe, clipped or missing WSL home values', async () => {
     await expect(
-      resolveWslGrokSkillProviderRoot('Ubuntu', async () => '../grok')
-    ).resolves.toBeNull()
+      resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: '../grok' }))
+    ).resolves.toEqual({})
     await expect(
-      resolveWslGrokSkillProviderRoot('Ubuntu', async () => '/srv/grok\0other')
-    ).resolves.toBeNull()
+      resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: '/srv/a\tb' }))
+    ).resolves.toEqual({})
+    // `head` clipped the output inside the value, so it has no terminator.
+    const homes = wslHomes({ GROK_HOME: '/srv/grok' })
     await expect(
-      resolveWslGrokSkillProviderRoot('Ubuntu', async () => {
+      resolveWslSkillProviderRoots('Ubuntu', async () => homes.slice(0, homes.indexOf('/grok')))
+    ).resolves.toEqual({})
+    await expect(
+      resolveWslSkillProviderRoots('Ubuntu', async () => {
         throw new Error('probe failed')
       })
-    ).resolves.toBeNull()
+    ).resolves.toEqual({})
   })
 })

@@ -8,11 +8,18 @@ import type { SkillProviderRootOverrides } from './skill-provider-destinations'
 const PROVIDER_ROOT_MAX_LENGTH = 32_768
 const WSL_ENV_PROBE_TIMEOUT_MS = 8_000
 const WSL_ENV_PROBE_MAX_BYTES = 4_097
-const WSL_GROK_HOME_SCRIPT = [
+const PROVIDER_HOME_ENVS = SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
+  provider.homeEnv ? [{ id: provider.id, name: provider.homeEnv }] : []
+)
+const WSL_PROVIDER_HOMES_MAX_BYTES = PROVIDER_HOME_ENVS.length * WSL_ENV_PROBE_MAX_BYTES
+const WSL_PROVIDER_HOME_REFS = PROVIDER_HOME_ENVS.map(({ name }) => `"\${${name}:-}"`).join(' ')
+// Why NUL-terminated: it cannot occur in an env value, and a value clipped by
+// `head` loses its terminator, so a truncated path is never mistaken for whole.
+const WSL_PROVIDER_HOMES_SCRIPT = [
   'entry=$(getent passwd "$(id -u)" 2>/dev/null || true)',
   'login_shell=${entry##*:}',
   'case "$login_shell" in /*) ;; *) login_shell=/bin/sh ;; esac',
-  `exec "$login_shell" -lc 'printf %s "\${GROK_HOME:-}" | head -c ${WSL_ENV_PROBE_MAX_BYTES}'`
+  `exec "$login_shell" -lc 'printf "%s\\0" ${WSL_PROVIDER_HOME_REFS} | head -c ${WSL_PROVIDER_HOMES_MAX_BYTES}'`
 ].join('\n')
 
 function normalizedRoot(value: string | undefined): string | null {
@@ -93,18 +100,18 @@ export function withClaudeSkillProviderRoot(
 
 type WslEnvironmentProbe = (distro: string) => Promise<string>
 
-async function probeWslGrokHome(distro: string): Promise<string> {
+async function probeWslProviderHomes(distro: string): Promise<string> {
   const result = await runWslProcess({
     distro,
     // 'none': the script runs its own `"$login_shell" -lc`, so asking the
     // runner to probe first buys a second login shell and spends up to half
-    // the 8s budget before the -lc that actually reads GROK_HOME starts.
+    // the 8s budget before the -lc that actually reads the home vars starts.
     loginPath: 'none',
-    script: WSL_GROK_HOME_SCRIPT,
+    script: WSL_PROVIDER_HOMES_SCRIPT,
     // POSIX (`case`, `exec`); declared because the payload is opaque here.
     shell: 'sh',
     timeoutMs: WSL_ENV_PROBE_TIMEOUT_MS,
-    maxOutputBytes: WSL_ENV_PROBE_MAX_BYTES
+    maxOutputBytes: WSL_PROVIDER_HOMES_MAX_BYTES
   })
   // A timeout mid-write can leave a truncated but shape-valid absolute path.
   if (result.code !== 0 || result.timedOut) {
@@ -113,28 +120,41 @@ async function probeWslGrokHome(distro: string): Promise<string> {
   return result.stdout
 }
 
-export async function resolveWslGrokSkillProviderRoot(
-  distro: string,
-  probe: WslEnvironmentProbe = probeWslGrokHome
-): Promise<string | null> {
-  try {
-    const value = await probe(distro)
-    const candidate = value.trim()
-    if (
-      !candidate ||
-      candidate.length >= WSL_ENV_PROBE_MAX_BYTES ||
-      !candidate.startsWith('/') ||
-      candidate.includes('\\') ||
-      Array.from(candidate).some((character) => {
-        const code = character.charCodeAt(0)
-        return code <= 0x1f || code === 0x7f
-      })
-    ) {
-      return null
-    }
-    const grokHome = candidate.replace(/\/+$/u, '') || '/'
-    return toWindowsWslPath(`${grokHome === '/' ? '' : grokHome}/skills`, distro)
-  } catch {
+function wslSkillRoot(value: string, distro: string): string | null {
+  const candidate = value.trim()
+  if (
+    !candidate ||
+    candidate.length >= WSL_ENV_PROBE_MAX_BYTES ||
+    !candidate.startsWith('/') ||
+    candidate.includes('\\') ||
+    Array.from(candidate).some((character) => {
+      const code = character.charCodeAt(0)
+      return code <= 0x1f || code === 0x7f
+    })
+  ) {
     return null
   }
+  const home = candidate.replace(/\/+$/u, '') || '/'
+  return toWindowsWslPath(`${home === '/' ? '' : home}/skills`, distro)
+}
+
+/** Every table `homeEnv` as the WSL login shell sees it, read in one probe. */
+export async function resolveWslSkillProviderRoots(
+  distro: string,
+  probe: WslEnvironmentProbe = probeWslProviderHomes
+): Promise<SkillProviderRootOverrides> {
+  const roots: SkillProviderRootOverrides = {}
+  try {
+    // The last field is unterminated (empty, or clipped by `head`), so it is never read.
+    const values = (await probe(distro)).split('\0').slice(0, -1)
+    PROVIDER_HOME_ENVS.forEach(({ id }, index) => {
+      const root = index < values.length ? wslSkillRoot(values[index], distro) : null
+      if (root) {
+        roots[id] = root
+      }
+    })
+  } catch {
+    return {}
+  }
+  return roots
 }

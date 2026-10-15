@@ -140,6 +140,7 @@ export function buildSkillDiscoverySources(
     // Why: `npx skills add --global` writes into each agent's own home skills
     // directory, so coverage misses them unless we scan every provider root.
     ...providerHomeSources(home, pathApi, providerRootOverrides),
+    // Why: discovery-only agent folders; installs for these agents go to the canonical root.
     source(
       'home-opencode',
       'OpenCode home',
@@ -172,14 +173,6 @@ export function buildSkillDiscoverySources(
       'home',
       ['agent-skills'],
       'prime-agent'
-    ),
-    source(
-      'home-antigravity',
-      'Antigravity home',
-      pathApi.join(home, '.gemini', 'config', 'skills'),
-      'home',
-      ['agent-skills'],
-      'antigravity'
     ),
     // Why: Muse installs to `.agents/skills` but also reads XDG config home.
     source(
