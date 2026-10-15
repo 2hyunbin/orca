@@ -17,7 +17,9 @@ export function replacedRuntimeEnvironmentIds(
   return next
     .filter((environment) => {
       const before = previousById.get(environment.id)
-      if (!before) return false
+      if (!before) {
+        return false
+      }
       const left = before.orcadDeployment
       const right = environment.orcadDeployment
       const registrationChanged =
