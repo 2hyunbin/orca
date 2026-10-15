@@ -14,6 +14,8 @@ import type { NativeChatTranscriptSlot } from './native-chat-transcript-slots'
 import type { NativeChatDiffReveal, NativeChatDiffTarget } from './native-chat-turn-diffs'
 import { NativeChatRewindContext } from './native-chat-rewind-context'
 import { nativeChatRowOffersRewind } from './native-chat-rewind-eligibility'
+import { NativeChatNewRowsMarker } from './NativeChatNewRowsMarker'
+import type { NativeChatNewRowsMarkerState } from './native-chat-new-rows-marker'
 
 /** Everything a row needs that is the same for every row. Held as one memoized
  *  object so a row's props change only when that row's own slot does. */
@@ -42,10 +44,13 @@ export type NativeChatTranscriptRowContext = {
  *  wrapper carries that spacing itself — the gap BETWEEN rows is the window's. */
 export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
   slot,
-  context
+  context,
+  newRowsMarker
 }: {
   slot: NativeChatTranscriptSlot
   context: NativeChatTranscriptRowContext
+  /** The "New" marker, when it draws in this row. */
+  newRowsMarker?: NativeChatNewRowsMarkerState
 }): React.JSX.Element {
   // Offered only on the conversation's own turn-opening prompts (`nativeChatRowOffersRewind`).
   const rewind = useContext(NativeChatRewindContext)
@@ -81,6 +86,9 @@ export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
   const deliveryNotice = context.deliveryNotices?.get(message.id)
   const predecessors = context.taskListPredecessors.get(message.id)
   const expanded = turnKey ? context.expandedTurnIds.has(turnKey) : undefined
+  const marker = newRowsMarker ? (
+    <NativeChatNewRowsMarker marker={newRowsMarker} onReveal={context.onScrollMessageToTop} />
+  ) : null
   const statusRow = status ? (
     <NativeChatWorkingStatus
       startedAt={status.startedAt}
@@ -95,6 +103,7 @@ export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
   return (
     // The negative margin shortens the measured row, which is what moves the next one up.
     <div className={cn('flex flex-col gap-5', slot.continuesTurn && '-mb-3', sectionClassName)}>
+      {newRowsMarker?.place === 'above-row' ? marker : null}
       {/* A turn with no user bubble carries its bar above its first row. */}
       {slot.statusAbove ? statusRow : null}
       {!slot.drawsMessage ? null : receipt ? (
@@ -131,6 +140,7 @@ export const NativeChatTranscriptRow = memo(function NativeChatTranscriptRow({
           workRun={workRun}
         />
       )}
+      {newRowsMarker?.place === 'above-turn-bar' ? marker : null}
       {slot.statusAbove ? null : statusRow}
       {turnDiff ? (
         <NativeChatTurnDiffRollup diff={turnDiff} onReveal={context.onRevealDiff} />

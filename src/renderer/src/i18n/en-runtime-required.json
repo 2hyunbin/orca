@@ -233,11 +233,7 @@
           "ff5db28639": "existing"
         },
         "AutomationEditorDialogHeader": {
-          "03142e7721": "Edit Hermes automation",
-          "0a75e5e2fa": "Create Hermes automation",
-          "4c8e1a72b9": "A recurring agent task",
-          "6f309eef8d": "Orca",
-          "7e35393632": "Hermes"
+          "4c8e1a72b9": "A recurring agent task"
         },
         "AutomationRunHistory": {
           "fdb3caa8fb": "known"
@@ -256,21 +252,17 @@
         "AutomationsPage": {
           "2695883141": "delete",
           "0329f9bef1": "Close · Esc",
-          "08efc3ae12": "Hermes automation updated.",
-          "0ae52dd760": "hermes",
           "3e42a5cc1b": "SSH connection failed.",
           "53f06f0ad5": "Retry source",
           "587a4b205c": "Next",
           "5918020edc": "run",
           "67c7ff795b": "Close automations",
           "761a35834d": "Automation",
-          "77b81bc4ac": "Hermes automation created.",
           "7934ee0d81": "Connect SSH",
           "7b2e285552": "SSH connections are unavailable in this client.",
           "82eb6cb933": "source",
           "8705757e27": "job",
           "8d1afa8269": "Add automation",
-          "97ff587ee3": "Connect this source to check for Hermes automations in the remote profile.",
           "9f2855677c": "SSH connected.",
           "a21f6c33ad": "Automation source refreshed.",
           "aaa007846f": "source unavailable",
@@ -280,7 +272,6 @@
           "dd0bc7a1ba": "new_per_run",
           "destinationProjectUnavailable": "Choose a project owned by the selected automation destination.",
           "e059042585": "Read-only",
-          "e431bb85d4": "Choose a workspace on the same host as this Hermes automation.",
           "f93ed7a6f8": "Connecting...",
           "moveOriginalKept": "Created on {host}, but the original could not be deleted. Remove it on the old host.",
           "moveOriginalUnverified": "Created on {host}, but the original deletion could not be verified. Check the old host before retrying.",
@@ -295,32 +286,7 @@
           "tableProject": "Project"
         },
         "ExternalAutomationManagers": {
-          "1df491fd00": "Edit external automation",
-          "330b3c32e8": "available",
-          "766abf833c": "Hermes",
-          "844f1acb72": "found",
-          "8e9165af08": "run",
-          "bf5f67b590": "hermes",
-          "e66091daf4": "runs"
-        },
-        "ExternalAutomationRunTable": {
-          "0ba9c0a95c": "Next run page",
-          "2d4388a908": "Runs",
-          "52d468a0b8": "Previous run page",
-          "7475c0ce96": "of",
-          "872d032d05": "run",
-          "8ea934cacf": "Loading runs...",
-          "9c080765ff": "No Hermes runs found yet.",
-          "a813df9808": "Preview",
-          "be551397ca": "Status",
-          "d4b34feb66": "Run time",
-          "d5527d8fe7": "runs"
-        },
-        "HermesCronOutputView": {
-          "05affc68e3": "Error",
-          "4557213074": "Response",
-          "88d48157fc": "default",
-          "e27c716b43": "Prompt"
+          "330b3c32e8": "available"
         },
         "createDestination": {
           "stale": "{host} changed while this form was open. Choose it again before saving.",
