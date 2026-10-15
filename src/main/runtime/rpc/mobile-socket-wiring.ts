@@ -13,6 +13,7 @@ import { E2EEChannel, type E2EEAuthenticatedDevice } from './e2ee-channel'
 import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { RpcBinarySender } from './rpc-binary-sender'
+import { mobileClientTraces } from './mobile-client-trace'
 
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
@@ -36,7 +37,12 @@ export type MobileSocketTransport = {
     ) => void
   ): void
   onConnectionClose(
-    handler: (clientId: string | null, ws: WebSocket, hasOtherConnections: boolean) => void
+    handler: (
+      clientId: string | null,
+      ws: WebSocket,
+      hasOtherConnections: boolean,
+      closeCode?: number
+    ) => void
   ): void
   setClientId(ws: WebSocket, clientId: string): void
   terminateClientConnections(clientId: string): number
@@ -146,7 +152,9 @@ export class MobileSocketWiring {
     transport.onMessage((message, _reply, ws) => {
       this.handleRawMessage(transport, ws, message, getMetadata(ws))
     })
-    transport.onConnectionClose((_clientId, ws) => this.handleClose(ws))
+    transport.onConnectionClose((_clientId, ws, _hasOther, closeCode) =>
+      this.handleClose(ws, closeCode)
+    )
     let attached = true
     return () => {
       if (!attached) {
@@ -170,6 +178,11 @@ export class MobileSocketWiring {
   }
 
   terminateDeviceConnections(deviceId: string): number {
+    for (const socket of this.authenticatedSockets.values()) {
+      if (socket.device.deviceId === deviceId) {
+        mobileClientTraces.forConnection(socket.connectionId)?.markHostClose()
+      }
+    }
     let terminated = 0
     for (const transport of this.transports) {
       terminated += transport.terminateClientConnections(deviceId)
@@ -186,7 +199,10 @@ export class MobileSocketWiring {
     let channel = this.channels.get(ws)
     if (!channel) {
       const connectionId = randomBytes(8).toString('hex')
+      // Why: a frame after a host-side close starts a new channel; end the old trace, don't leak it.
+      mobileClientTraces.closed(this.connectionIds.get(ws), undefined)
       this.connectionIds.set(ws, connectionId)
+      const trace = mobileClientTraces.open(connectionId, metadata.transport)
       channel = new E2EEChannel(ws, {
         serverSecretKey: this.e2eeKeypair.secretKey,
         transportContext:
@@ -257,6 +273,7 @@ export class MobileSocketWiring {
             transport: metadata
           }
           this.authenticatedSockets.set(ws, socket)
+          trace.authenticated(device.scope, device.deviceId)
           transport.setClientId(ws, device.deviceId)
           // Why: deferred — the client's e2ee_authenticated must not wait on a secure-file rewrite.
           this.deviceRegistry.updateLastSeenDeferred(device.deviceId)
@@ -264,6 +281,7 @@ export class MobileSocketWiring {
         },
         onError: (code, reason) => {
           const reportUnpairedDevice = code === 4001 && reason === 'Unauthorized'
+          trace.hostClosing(code, reason)
           this.channels.get(ws)?.destroy()
           this.channels.delete(ws)
           ws.close(code, reason)
@@ -294,7 +312,8 @@ export class MobileSocketWiring {
     channel.handleRawMessage(message)
   }
 
-  private handleClose(ws: WebSocket): void {
+  private handleClose(ws: WebSocket, closeCode: number | undefined): void {
+    mobileClientTraces.closed(this.connectionIds.get(ws), closeCode)
     const socket = this.authenticatedSockets.get(ws) ?? null
     this.authenticatedSockets.delete(ws)
     this.channels.get(ws)?.destroy()
