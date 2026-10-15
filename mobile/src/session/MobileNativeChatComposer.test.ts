@@ -199,7 +199,9 @@ describe('MobileNativeChatComposer', () => {
     await act(async () => renderer!.update(composer('')))
     const pressStop = (at: number) => {
       now.mockReturnValue(at)
-      act(() => renderer!.root.findByProps({ accessibilityLabel: 'Stop the agent' }).props.onPress())
+      act(() =>
+        renderer!.root.findByProps({ accessibilityLabel: 'Stop the agent' }).props.onPress()
+      )
     }
     pressStop(1_200)
     expect(onStop).not.toHaveBeenCalled()
