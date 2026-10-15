@@ -112,6 +112,8 @@ jobs:
         with:
           ref: ${{ steps.source.outputs.commit }}
           fetch-depth: 2
+          sparse-checkout: /**
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       - uses: ./.github/actions/prepare-headless-compiler

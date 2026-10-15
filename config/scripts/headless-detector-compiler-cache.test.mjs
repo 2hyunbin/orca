@@ -196,7 +196,8 @@ it('expands the same sparse detector commit before loading local graph inputs', 
   expect(expansion.if).toBe("steps.scope.outputs.graph_required == 'true'")
   expect(expansion.with.ref).toBe('${{ steps.source.outputs.commit }}')
   expect(expansion.with.filter).toBeUndefined()
-  expect(expansion.with['sparse-checkout']).toBeUndefined()
+  expect(expansion.with['sparse-checkout']).toBe('/**')
+  expect(expansion.with['sparse-checkout-cone-mode']).toBe(false)
   const scope = steps.find((step) => step.id === 'scope')
   expect(steps.indexOf(source)).toBeLessThan(steps.indexOf(scope))
   expect(steps.indexOf(expansion)).toBeGreaterThan(steps.indexOf(scope))
@@ -205,6 +206,87 @@ it('expands the same sparse detector commit before loading local graph inputs', 
   for (const consumer of consumers) {
     expect(steps.indexOf(consumer)).toBeGreaterThan(steps.indexOf(expansion))
   }
+})
+
+it('restores every tracked byte before loading local actions from the sparse detector', () => {
+  const workflow = parse(readFileSync('.github/workflows/node-server-tests.yml', 'utf8'))
+  const [source, expansion] = workflow.jobs.changes.steps.filter(
+    (step) => step.uses === 'actions/checkout@v6'
+  )
+  const root = mkdtempSync(join(tmpdir(), 'headless-checkout-'))
+  temporary.push(root)
+  const git = (...args) => {
+    const result = runProcessSync({ program: 'git', args: ['-C', root, ...args], timeoutMs: 5_000 })
+    expect(result.code, result.stderr).toBe(0)
+    return result.stdout.trim()
+  }
+  const manifests = [
+    '.github/actions/prepare-headless-compiler/action.yml',
+    '.github/actions/install-node-dependencies/action.yml',
+    '.github/actions/restore-pnpm-verification/action.yml',
+    '.github/actions/prepare-native-runtime/action.yml'
+  ]
+  const files = Object.fromEntries(
+    [
+      ...source.with['sparse-checkout']
+        .trim()
+        .split('\n')
+        .map((path) => path.slice(1)),
+      ...manifests
+    ].map((path) => [path, readFileSync(path)])
+  )
+  files['src/deep/.hidden/source.bin'] = Buffer.from([0, 1, 255])
+  files['nested/space name.txt'] = Buffer.from('all source paths')
+  for (const [path, bytes] of Object.entries(files)) {
+    mkdirSync(join(root, path, '..'), { recursive: true })
+    writeFileSync(join(root, path), bytes)
+  }
+  git('init')
+  git('config', 'core.autocrlf', 'false')
+  git('add', '--all')
+  git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    '-c',
+    'commit.gpgsign=false',
+    '-c',
+    'core.hooksPath=.git/hooks',
+    'commit',
+    '-m',
+    'fixture'
+  )
+  const commit = git('rev-parse', 'HEAD')
+  const sparse = join(root, '.git/info/sparse-checkout')
+  mkdirSync(join(sparse, '..'), { recursive: true })
+  git('config', 'core.sparseCheckout', 'true')
+  writeFileSync(sparse, source.with['sparse-checkout'])
+  git('checkout', '--force', '--detach', commit)
+  for (const manifest of manifests) {
+    expect(existsSync(join(root, manifest))).toBe(false)
+  }
+  if (expansion.with['sparse-checkout']) {
+    appendFileSync(sparse, `\n${expansion.with['sparse-checkout']}\n`)
+  } else {
+    git('sparse-checkout', 'disable')
+    runProcessSync({
+      program: 'git',
+      args: ['-C', root, 'config', '--local', '--unset-all', 'extensions.worktreeConfig'],
+      timeoutMs: 5_000
+    })
+  }
+  git('checkout', '--force', '--detach', commit)
+  expect(git('rev-parse', 'HEAD')).toBe(commit)
+  for (const [path, bytes] of Object.entries(files)) {
+    expect(readFileSync(join(root, path)), path).toEqual(bytes)
+  }
+  expect(
+    git('ls-files', '-t')
+      .split('\n')
+      .some((line) => line.startsWith('S '))
+  ).toBe(false)
+  expect(git('status', '--porcelain')).toBe('')
 })
 
 it('uses exact optional restores, seeds only main and retains full dependency fallback', () => {
