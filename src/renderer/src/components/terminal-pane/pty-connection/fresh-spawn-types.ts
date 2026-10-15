@@ -12,6 +12,8 @@ export type PendingStartupCommand = {
 
 export type FreshSpawnOptions = {
   forceBlankRestoredViewport?: boolean
+  /** Shown somewhere other than this hidden pane (a paired client), so host admission treats it as the user's. */
+  shownElsewhere?: true
 }
 
 export type ColdRestoreAgentResumeStartup = PendingStartupCommand & {

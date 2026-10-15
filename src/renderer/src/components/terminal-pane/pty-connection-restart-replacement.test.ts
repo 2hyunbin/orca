@@ -185,7 +185,9 @@ describe('connectPanePty', () => {
     }
     const connects = (): number => transport.connect.mock.calls.length
     const lastCommand = (): string | undefined => transport.connect.mock.calls.at(-1)?.[0]?.command
-    return { binding, exit, connects, lastCommand }
+    const lastIntent = (): string | undefined =>
+      transport.connect.mock.calls.at(-1)?.[0]?.resumeSpawnIntent
+    return { binding, exit, connects, lastCommand, lastIntent }
   }
 
   it('resumes a restart-replaced hidden pane once, when it is next shown', async () => {
@@ -216,6 +218,8 @@ describe('connectPanePty', () => {
     await flushAsyncTicks()
     expect(pane.connects()).toBe(before + 1)
     expect(pane.lastCommand()).toContain('sess-1')
+    // Opened on the client, so the host must not hold it back as a background restore.
+    expect(pane.lastIntent()).toBe('user-resume')
 
     pane.binding.noteVisibilityResume()
     await flushAsyncTicks()

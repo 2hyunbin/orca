@@ -162,8 +162,8 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
           this.shouldMaterializeHeadlessMobileSessionTab(snapshot!, tab))
       if (shouldMaterializePendingTerminal) {
         const sessionId = tab.ptyId ?? tab.parentLayout?.ptyIdsByLeafId?.[tab.leafId] ?? undefined
-        // Why: the window's replacement resumes the agent and keeps old output; a spawn here is a
-        // bare shell. The pane republishes once it binds, which is what the opening client awaits.
+        // Why: the window holds this pane's restart replacement (agent resume, old output); a spawn
+        // here is a bare shell. The pane republishes once it binds, which the opening client awaits.
         if (
           sessionId &&
           this.ptysById.get(sessionId)?.replacedByRestart &&
@@ -301,7 +301,6 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
     )
   }
 
-  // Why: the window also answers a mounted pane whose restart replacement is armed for `ptyId`.
   protected sendRendererTerminalTabMount(target: {
     worktreeId: string
     tabId?: string

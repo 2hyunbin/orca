@@ -105,7 +105,8 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       ...(coldRestoreOverride ? { launchToken: coldRestoreOverride.launchToken } : {}),
       ...(coldRestoreOverride ? { launchAgent: coldRestoreOverride.agent } : {}),
       ...(session.shouldDeclareHiddenAtSpawn() ? { initiallyHidden: true } : {}),
-      resumeSpawnIntent: visibleAtSpawn ? 'user-resume' : 'automatic-restore',
+      resumeSpawnIntent:
+        visibleAtSpawn || options.shownElsewhere ? 'user-resume' : 'automatic-restore',
       ...(session.pendingReplacedPtyId
         ? { claimReplacedPtyId: session.claimPendingReplacedPtyId }
         : {}),

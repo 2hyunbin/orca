@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import type { FreshSpawnOptions } from './fresh-spawn-types'
 
 // Why by PTY id: a paired client opening the pane names only the dead process, not the pane.
 const armedSessionsByPtyId = new Map<string, ConnectPanePtySession>()
@@ -21,7 +22,10 @@ export function armRestartReplacement(session: ConnectPanePtySession, ptyId: str
 }
 
 /** Spawns the armed replacement, unless the pane closed or another flow already rebound it. */
-export function consumeRestartReplacement(session: ConnectPanePtySession): void {
+export function consumeRestartReplacement(
+  session: ConnectPanePtySession,
+  options: FreshSpawnOptions = {}
+): void {
   const ptyId: string | null = session.restartReplacementPtyId ?? null
   if (!ptyId) {
     return
@@ -40,7 +44,7 @@ export function consumeRestartReplacement(session: ConnectPanePtySession): void 
   ) {
     return
   }
-  void session.startFreshColdRestoreAgentResume()
+  void session.startFreshColdRestoreAgentResume(undefined, options)
 }
 
 /** A paired client (phone or another desktop) opened the pane, which counts as showing it. */
@@ -49,7 +53,7 @@ export function consumeRestartReplacementForPty(ptyId: string): boolean {
   if (!session) {
     return false
   }
-  consumeRestartReplacement(session)
+  consumeRestartReplacement(session, { shownElsewhere: true })
   return true
 }
 
