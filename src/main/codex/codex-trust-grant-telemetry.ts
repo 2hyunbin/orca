@@ -1,5 +1,6 @@
 import type { CodexTrustGrantSessionVerifyClass } from './codex-app-server-client'
 import { WSL_CODEX_NOT_FOUND_MESSAGE } from '../codex-accounts/wsl-codex-command'
+import { providerExecutableMissing } from '../provider-process/provider-executable-missing'
 
 /** Which install surface asked for the grant. Only a WSL managed home grants
  *  now, so every event says 'managed' and 'wsl'; 'real-home' and 'native' stay
@@ -44,6 +45,7 @@ export function classifyCodexTrustGrantError(error: unknown): CodexTrustGrantErr
     return 'entry-failed'
   }
   if (
+    providerExecutableMissing(error) ||
     /^spawn (?:.*[\\/])?codex(?:\.(?:cmd|exe|bat))? ENOENT$/.test(message) ||
     message.includes(WSL_CODEX_NOT_FOUND_MESSAGE)
   ) {

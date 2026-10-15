@@ -53,8 +53,10 @@ export type ManagedProviderProcess = {
   readonly processless: boolean
   /** `exited` covers a processless child too; use `rootExitObserved` for "a real process exited". */
   readonly rootVerdict: DescendantTreeVerdict
-  /** A process that existed was seen to exit; never true for a processless child. */
+  /** A process that existed was seen to exit and its exit reported; never true for a processless child. */
   readonly rootExitObserved: boolean
+  /** The root's own exit status, known before its group is reaped and its exit reported. */
+  readonly rootExit: ProviderProcessExit | null
   /** The last close that ran the ladder; the already-exited answer only when none did. */
   readonly lastCloseResult: ProviderProcessCloseResult | null
   readonly exitPromise: Promise<void>
@@ -95,7 +97,7 @@ export function spawnManagedProviderProcess(
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
   // The root's own exit, which can precede `observed` while the rest of its group is reaped.
-  let rootExited = false
+  let rootExit: ProviderProcessExit | null = null
   let spawnFailed = false
   let spawnError: unknown = null
   let lastCloseResult: ProviderProcessCloseResult | null = null
@@ -125,8 +127,8 @@ export function spawnManagedProviderProcess(
     listeners.clear()
   }
   child.on('exit', (code, signal) => {
-    rootExited = true
     const exit = { code, signal, processless: false }
+    rootExit = exit
     // A group-led provider's exit is reported once its group is gone, never before a member.
     if (group) {
       void group.exited.then(() => observeExit(exit))
@@ -145,7 +147,7 @@ export function spawnManagedProviderProcess(
     }
   })
   const rootVerdict = (): DescendantTreeVerdict =>
-    observed || rootExited ? 'exited' : child.pid === undefined ? 'unverifiable' : 'live'
+    observed || rootExit ? 'exited' : child.pid === undefined ? 'unverifiable' : 'live'
   const terminateTree = (): Promise<ProviderProcessTeardownVerdict> =>
     terminateProviderProcessTree(child, { site: options.site, platform })
 
@@ -160,7 +162,10 @@ export function spawnManagedProviderProcess(
       return rootVerdict()
     },
     get rootExitObserved() {
-      return rootExited
+      return observed !== null && !observed.processless
+    },
+    get rootExit() {
+      return rootExit ?? observed
     },
     get executableMissing() {
       return isMissingProviderExecutable(spawnError, launch.command)

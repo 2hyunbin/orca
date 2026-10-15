@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
 import { resolveProviderChildEnv } from '../provider-process/provider-process-launch'
+import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
 import { stderrIndicatesMissingAppServer } from './codex-app-server-capability-signal'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
@@ -144,7 +145,7 @@ export async function runCodexAppServerSession<T>(
   // (ENOENT); surface it to every in-flight request or they wait forever.
   let spawnError: Error | null = null
   child.on('error', (error) => {
-    spawnError = error
+    spawnError = managed.executableMissing ? withMissingProviderExecutable(error) : error
     exited = true
     failPending(error)
   })
