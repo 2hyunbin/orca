@@ -9,6 +9,7 @@ import type { WslHostConnector } from './wsl-host-service'
 import { readWslDistroOrcadPublicKey } from './wsl-host-ssh-orcad-conflict'
 import {
   WslOrcadConnectionManager,
+  type WslOrcadConnection,
   type WslOrcadConnectionDependencies
 } from './wsl-orcad-connection'
 import { defaultWslOrcadEnvironmentId, deployAndLaunchWslOrcad } from './wsl-orcad-deploy'
@@ -32,6 +33,8 @@ function targetFor(distro: string): WslOrcadHostTarget {
 function transportFor(distro: string) {
   return createWslOrcadHostTransport({ target: targetFor(distro) })
 }
+
+type Reachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
 
 export function createWslHostConnector(options: {
   userDataPath: string
@@ -71,41 +74,84 @@ export function createWslHostConnector(options: {
     hasUserVisibleWork: options.hasUserVisibleWork
   })
   supervisor = liveness
-  const isReachable = async (distro: string): Promise<boolean> => {
-    const connection = manager.get(distro)
-    if (!connection) {
-      return false
+  const coldProbes = new Map<
+    string,
+    {
+      connection: WslOrcadConnection | null
+      pairingOffer: string | undefined
+      result: Promise<Reachability>
     }
+  >()
+  const probe = async (
+    distro: string,
+    environmentId: string,
+    connection: WslOrcadConnection | null
+  ): Promise<Reachability> => {
     // Dialing the bridge starts wsl.exe, so passive checks must first confirm the distro runs.
-    if (!confirmsRunning(await readConfirmedRunningWslDistros(), wslDistroHolderKey(distro))) {
-      return false
+    const running = await readConfirmedRunningWslDistros()
+    if (running.status === 'unavailable') {
+      return 'unavailable'
+    }
+    if (!confirmsRunning(running, wslDistroHolderKey(distro))) {
+      return 'stopped'
+    }
+    if (!options.isKnownDistro(distro) || manager.get(distro) !== connection) {
+      return 'unreachable'
+    }
+    if (options.runtime.isReady?.(environmentId)) {
+      return 'available'
+    }
+    if (!connection) {
+      return 'unreachable'
     }
     const offer = parsePairingCode(connection.pairingOffer)
     if (!offer) {
-      return false
+      return 'unreachable'
     }
     const identity = await verifyOrcadPairingIdentity(pairedRuntimeConnectionFromOffer(offer), {
       runtimeId: null
     })
     return identity.verdict === 'verified' && manager.get(distro) === connection
+      ? 'available'
+      : 'unreachable'
+  }
+  const coldReachability = (distro: string, environmentId: string): Promise<Reachability> => {
+    const key = `${wslDistroHolderKey(distro)}\0${environmentId}`
+    const connection = manager.get(distro)
+    const pairingOffer = connection?.pairingOffer
+    const pending = coldProbes.get(key)
+    if (pending && pending.connection === connection && pending.pairingOffer === pairingOffer) {
+      return pending.result
+    }
+    const result = probe(distro, environmentId, connection).finally(() => {
+      if (coldProbes.get(key)?.result === result) {
+        coldProbes.delete(key)
+      }
+    })
+    coldProbes.set(key, { connection, pairingOffer, result })
+    return result
   }
   return {
     listDistros: () => listWslHostDistros(),
     readOrcadPublicKey: (distro) => readWslDistroOrcadPublicKey(transportFor(distro)),
     connect: (distro, connectOptions) => liveness.connect(distro, connectOptions),
     get: (distro) => manager.get(distro),
-    isReachable,
+    isReachable: async (distro, environmentId) =>
+      options.runtime.isReady?.(environmentId) ||
+      (await coldReachability(distro, environmentId)) === 'available',
     disconnect: (distro) => liveness.stop(distro),
     stopServer: async (distro, environmentId) => {
-      // A retained bridge is not proof that its distro or server still runs.
-      const running = await readConfirmedRunningWslDistros()
-      if (running.status === 'unavailable') {
-        return { stopped: false, reason: 'The WSL service did not confirm whether the distro runs.' }
+      const reachability = await coldReachability(distro, environmentId)
+      if (reachability === 'unavailable') {
+        return {
+          stopped: false,
+          reason: 'The WSL service did not confirm whether the distro runs.'
+        }
       }
-      if (!confirmsRunning(running, wslDistroHolderKey(distro))) {
+      if (reachability === 'stopped') {
         return { stopped: true }
       }
-      if (!(await isReachable(distro))) {
+      if (reachability === 'unreachable') {
         await liveness.connect(distro)
       }
       const target = targetFor(distro)
