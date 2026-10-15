@@ -56,8 +56,8 @@ export function sendPaneCommandToLayoutOwner(
         }
       },
       (error: unknown) => {
-        // Why as today: a thrown write is rolled back, except an indeterminate disk write, which
-        // the window's own save then overwrites.
+        // Why as today: a thrown write is rolled back. An indeterminate disk write is not, and may
+        // leave a pane main minted; accepted until main is the only writer.
         console.warn(`[layout-owner] ${command.type} failed:`, errorMessage(error))
         handlers.asToday()
       }
