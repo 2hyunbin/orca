@@ -15,6 +15,7 @@ import {
   type LayoutContentFacts
 } from './workspace-layout-beside'
 import { omitStoredFields, pickStoredFields } from './stored-record-fields'
+import { buildLegacyWorkspaceTabBar } from './legacy-tab-bar'
 import {
   applyLegacySurfaceTombstones,
   loadLeaves,
@@ -28,6 +29,7 @@ import type {
 } from './workspace-layout-load-types'
 import { saveWorkspaceLayout } from './workspace-layout-save'
 import { loadWorkspace } from './workspace-layout-load-workspace'
+import { rootGroupSeed } from './workspace-layout-minted-ids'
 import type {
   LegacyLayoutPersistence,
   WorkspaceLayout,
@@ -67,6 +69,28 @@ function resolveTerminalHomes(session: WorkspaceSessionState): Map<string, strin
     }
   }
   return homes
+}
+
+/** A session from before the tab bar gets each workspace's group as the window builds it. */
+function addLegacyTabBar(
+  session: WorkspaceSessionState,
+  context: WorkspaceLayoutLoadContext
+): void {
+  const unifiedTabs: NonNullable<WorkspaceSessionState['unifiedTabs']> = {}
+  const tabGroups: NonNullable<WorkspaceSessionState['tabGroups']> = {}
+  for (const key of workspaceKeys(session)) {
+    // The Loader has no clock; an editor tab's creation time only breaks sort ties.
+    const built = buildLegacyWorkspaceTabBar(session, key, {
+      mintGroupId: () => context.mintId(rootGroupSeed(key)),
+      now: 0
+    })
+    if (built) {
+      unifiedTabs[key] = built.tabs
+      tabGroups[key] = [built.group]
+    }
+  }
+  session.unifiedTabs = unifiedTabs
+  session.tabGroups = tabGroups
 }
 
 function loadRecords(session: WorkspaceSessionState): WorkspaceLayoutRecords {
@@ -133,6 +157,11 @@ export function loadWorkspaceLayoutWithoutReport(
 ): LoadedWorkspaceLayout {
   // The Loader edits its own copy; the Store's object stays untouched.
   const session = structuredClone(stored)
+  // Neither map, not either: main stores groups without entries (orphan adoption), which the
+  // window reads through the local partition's tab bar.
+  if (session.unifiedTabs === undefined && session.tabGroups === undefined) {
+    addLegacyTabBar(session, context)
+  }
   const desktopView: DesktopLayoutView = {
     ...pickStoredFields(session, VIEW_SESSION_FIELDS),
     activeRepoId: session.activeRepoId,

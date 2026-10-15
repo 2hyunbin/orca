@@ -63,6 +63,50 @@ describe('Loader precedence for stored data that disagrees with itself, and its 
     expect(changed(load(stored))).toEqual([])
   })
 
+  it('builds a session from before the tab bar as the window does: rows, then open files', () => {
+    const stored = twoTabs()
+    delete stored.unifiedTabs
+    delete stored.tabGroups
+    delete stored.tabGroupLayouts
+    const filePath = '/Users/dev/orca/src/app.ts'
+    stored.openFilesByWorktree = {
+      [GIT_KEY]: [{ filePath, relativePath: 'src/app.ts', worktreeId: GIT_KEY, language: 'ts' }]
+    }
+    stored.activeFileIdByWorktree = { [GIT_KEY]: filePath }
+    stored.activeTabTypeByWorktree = { [GIT_KEY]: 'editor' }
+    const saved = saveWorkspaceLayout(load(stored))
+    expect(saved.tabGroups?.[GIT_KEY]).toEqual([
+      {
+        id: 'minted-1',
+        worktreeId: GIT_KEY,
+        activeTabId: filePath,
+        tabOrder: ['tab-a', 'tab-b', filePath],
+        recentTabIds: [filePath]
+      }
+    ])
+    expect(
+      saved.unifiedTabs?.[GIT_KEY]?.map((tab) => [tab.id, tab.contentType, tab.label])
+    ).toEqual([
+      ['tab-a', 'terminal', 'Terminal 1'],
+      ['tab-b', 'terminal', 'Terminal 2'],
+      [filePath, 'editor', 'src/app.ts']
+    ])
+    expect(rules(saved)).toEqual([])
+  })
+
+  it('keeps stored groups that have no tab-bar entries (orphan adoption)', () => {
+    const stored = addWorkspace(emptySession(), GIT_KEY, [
+      { id: 'g1', tabs: [{ id: 'tab-a', leaves: [[leaf(1), 'pty-a']] }] },
+      { id: 'g2', tabs: [{ id: 'tab-b', leaves: [[leaf(2), 'pty-b']] }] }
+    ])
+    delete stored.unifiedTabs
+    const groups = load(stored).layout.workspaces[GIT_KEY]!.groups
+    expect(groups.map((group) => [group.id, group.tabOrder])).toEqual([
+      ['g1', ['tab-a']],
+      ['g2', ['tab-b']]
+    ])
+  })
+
   it('gives terminal rows saved without a tab bar (headless runtime) an entry in a new first group', () => {
     const stored = twoTabs()
     stored.unifiedTabs = {}

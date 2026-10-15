@@ -74,15 +74,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     ]
   },
   {
-    fixture: 'session from before the tab bar, with an open file',
-    rule: 'old sessions: the window builds tabs from rows and open files; the Loader builds them from rows only, losing editor tabs',
-    paths: [
-      `${GIT} group 0 tabs`,
-      `${GIT} group 0 active tab`,
-      `${GIT} tab /Users/dev/orca/src/app.ts`
-    ]
-  },
-  {
     fixture: 'legacy surface tombstone on a pane still showing its terminal',
     rule: 'tombstones: the Loader closes a pane a legacy surface tombstone names; the window ignores the tombstone and shows the pane',
     paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
