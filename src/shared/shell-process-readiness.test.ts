@@ -2,7 +2,7 @@ import { once } from 'node:events'
 import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from './child-process/run-process'
 import { describe, expect, it } from 'vitest'
 import {
   parseDarwinExecutablePath,

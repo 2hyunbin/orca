@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '../../shared/child-process/run-process'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   isWindowsProcessTableAvailable,
