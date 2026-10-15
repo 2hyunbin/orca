@@ -332,31 +332,6 @@ describe('closeTabs', () => {
 })
 
 describe('layout command effects', () => {
-  it('keeps a preview tab when it is pinned, as the tab bar does', () => {
-    const ctx = testContext()
-    const opened = build(ctx, [
-      {
-        type: 'openEditorTab',
-        workspace: WS,
-        fileId: '/w/a.ts',
-        contentType: 'editor',
-        file: { filePath: '/w/a.ts', relativePath: 'a.ts', language: 'typescript' },
-        preview: true
-      }
-    ])
-    const tabId = opened.results[0]!.tabId!
-    const tabOf = (model: WorkspaceLayoutModel) =>
-      model.workspaces[WS]!.tabs.find((tab) => tab.id === tabId)
-    expect(tabOf(opened.model)?.isPreview).toBe(true)
-    const pinned = build(
-      ctx,
-      [{ type: 'setTabProps', workspace: WS, tabId, isPinned: true }],
-      opened.model
-    ).model
-    expect(tabOf(pinned)).toMatchObject({ isPinned: true })
-    expect(tabOf(pinned)?.isPreview).toBeUndefined()
-  })
-
   it('places a new terminal after its anchor, keeps pinned tabs first, and reuses the lowest free ordinal', () => {
     const { model, tabA, tabB, editor, ctx } = setup()
     const pinned = build(

@@ -116,6 +116,8 @@ type Case = {
   windowAction: (state: AppState) => void
   /** Where main's result differs from today's, by `shownTabs` path: main's value. */
   mainShows?: Record<string, unknown>
+  /** What main's copy shows until the window's own action runs and the window saves it. */
+  mainCopyLags?: Record<string, unknown>
 }
 
 const CASES: Case[] = [
@@ -210,7 +212,11 @@ const CASES: Case[] = [
       tabId: 'editor:src/app.ts',
       isPinned: true
     },
-    windowAction: (state) => state.pinFile('/Users/dev/orca/src/app.ts', 'editor:src/app.ts')
+    windowAction: (state) => state.pinFile('/Users/dev/orca/src/app.ts', 'editor:src/app.ts'),
+    // Preview stays the window's until main opens files (phase C4).
+    mainCopyLags: {
+      [`${GIT_KEY} tab editor:src/app.ts props`]: { pinned: true, preview: true, color: null }
+    }
   }
 ]
 
@@ -239,15 +245,16 @@ describe('tab properties through main', () => {
       sync.start()
       stream.onFrame!(frameOf(afterMain))
       await flushMicrotasks()
-      expect(shownTabs(drawn.getState())).toEqual(expected)
+      const mainCopy = { ...expected, ...entry.mainCopyLags }
+      expect(shownTabs(drawn.getState())).toEqual(mainCopy)
 
-      // Main's answer then runs the window's own action, which finds nothing left to change.
+      // Main's answer then runs the window's own action, which leaves what today's action shows.
       entry.windowAction(drawn.getState())
       expect(shownTabs(drawn.getState())).toEqual(expected)
       sync.close()
 
-      // A restart from main's write alone shows the same.
-      expect(shownTabs((await boot(afterMain)).getState())).toEqual(expected)
+      // A restart from main's write alone shows main's copy.
+      expect(shownTabs((await boot(afterMain)).getState())).toEqual(mainCopy)
     }
   )
 })
