@@ -2,7 +2,7 @@ import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
 import type { RuntimeWorktreePsSummary } from '../../shared/runtime-types'
 import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
 import { getWorkspaceAttachments } from '../../shared/workspace-attachments'
-import { getWorkspaceRowKindFacts } from '../../shared/workspace-view/workspace-row-kinds'
+import { getWorkspaceRowKindFacts } from '../../shared/worktree/workspace-kinds'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 

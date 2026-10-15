@@ -4,7 +4,7 @@ import {
   isAutomationGeneratedWorkspace,
   isCliCreatedWorkspace,
   isDetachedHeadWorkspace
-} from '../../../shared/workspace-view/workspace-row-kinds'
+} from '../../../shared/worktree/workspace-kinds'
 import { revealRepoInProjectFilter } from '@/components/sidebar/project-filter-reveal'
 
 /** Lifts the workspace-list filters hiding an activated worktree; its reveal needs the card rendered, else it silently no-ops. */

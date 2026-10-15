@@ -1,4 +1,5 @@
 import type { AgentSessionUnavailable } from './agent-session-availability'
+import type { AgentSessionCurrentWorkFields } from './agent-session-current-work-wire'
 import type {
   AgentSessionBackgroundTask,
   AgentSessionBackgroundTaskState
@@ -148,7 +149,7 @@ export type AgentSessionHistoryPage = {
   subagentRoster?: AgentSessionSubagentRosterEntry[]
   /** As of the page's read; a client applies it only from a page that replaces its state. */
   latestTurn?: AgentSessionLatestTurn | null
-}
+} & AgentSessionCurrentWorkFields
 
 export type AgentSessionHistoryResult =
   | { ok: true; page: AgentSessionHistoryPage; providerSession?: AgentProviderSessionMetadata }
@@ -209,7 +210,8 @@ export type AgentSessionSubscribeEvent =
       latestTurn?: AgentSessionLatestTurn | null
       /** On a catch-up page with more behind it; absent on the last, live, and from older hosts. */
       hasNewer?: true
-    } & AgentSessionFrameFields)
+    } & AgentSessionCurrentWorkFields &
+      AgentSessionFrameFields)
   | ({
       type: 'reset'
       sessionId: string
@@ -462,9 +464,7 @@ export type AgentSessionSlashCommand = {
 /** The provider's own command surface, read per session. Additive read-only
  *  surface: a host that predates it answers `method_not_found`, and the client
  *  keeps rendering its curated catalog. */
-export type AgentSessionCommandsResult = {
-  commands?: AgentSessionSlashCommand[]
-}
+export type AgentSessionCommandsResult = { commands?: AgentSessionSlashCommand[] }
 
 /** Longest objective a client may send; matches the provider's own limit. */
 export const AGENT_SESSION_THREAD_GOAL_OBJECTIVE_MAX_LENGTH = 4000

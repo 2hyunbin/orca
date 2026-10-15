@@ -11,7 +11,7 @@ import {
   isCliCreatedWorkspace,
   isDefaultBranchWorkspace,
   isDetachedHeadWorkspace
-} from '../../../src/shared/workspace-view/workspace-row-kinds'
+} from '../../../src/shared/worktree/workspace-kinds'
 import type { Worktree as DesktopWorktree } from '../../../src/shared/worktree/types'
 import { filterWorktrees, type Worktree } from './workspace-list-sections'
 
