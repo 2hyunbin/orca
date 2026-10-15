@@ -102,13 +102,13 @@ export function buildWorkspaceViewSettingsUpdate(
       })
     }
   }
-  if ('projectOrderBy' in patch) {
+  if ('projectOrderBy' in patch && next.projectOrderBy) {
     update.projectOrderBy = next.projectOrderBy
   }
   if ('worktreeCardProperties' in patch) {
     update.worktreeCardProperties = [...next.worktreeCardProperties]
     // As the desktop's own edit: a hand-picked set is no longer a Card layout preset.
-    update._worktreeCardModeDefaulted = false
+    update._worktreeCardModeDefaulted = patch._worktreeCardModeDefaulted ?? false
   }
   if ('agentActivityDisplayMode' in patch) {
     update.agentActivityDisplayMode = next.agentActivityDisplayMode
@@ -142,13 +142,16 @@ export function changedFilters(current: FilterState, target: FilterState): Parti
 /** An edit: the fields it sets, and for filters only the filters it touches. */
 export type MobileViewPatch = Partial<Omit<MobileViewState, 'filters'>> & {
   filters?: Partial<FilterState>
+  /** Write-only: whether the properties are a Card layout preset (absent means hand-picked). */
+  _worktreeCardModeDefaulted?: boolean
 }
 
 export type MobileViewState = {
   groupMode: MobileGroupMode
   sortMode: MobileSortMode
   filters: FilterState
-  projectOrderBy: ProjectOrderBy
+  /** Null until the desktop's value is read. */
+  projectOrderBy: ProjectOrderBy | null
   /** May hold a property a newer desktop added; it is carried back unchanged. */
   worktreeCardProperties: readonly WorktreeCardProperty[]
   agentActivityDisplayMode: AgentActivityDisplayMode
@@ -156,14 +159,12 @@ export type MobileViewState = {
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
 }
 
-export type MobileCardView = Pick<
+/** The desktop's defaults, until its own values arrive. */
+export const DEFAULT_CARD_VIEW: Pick<
   MobileViewState,
   'projectOrderBy' | 'worktreeCardProperties' | 'agentActivityDisplayMode'
->
-
-/** The desktop's defaults, until its own values arrive. */
-export const DEFAULT_CARD_VIEW: MobileCardView = {
-  projectOrderBy: 'manual',
+> = {
+  projectOrderBy: null,
   worktreeCardProperties: DEFAULT_WORKTREE_CARD_PROPERTIES,
   agentActivityDisplayMode: 'compact'
 }

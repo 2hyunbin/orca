@@ -53,7 +53,10 @@ function useWorkspaceOptionHosts(controller: HostScreenController): WorkspaceOpt
 export function WorkspaceOptionsSheet({ controller }: { controller: HostScreenController }) {
   const { state } = controller
   return (
-    <BottomDrawer visible={state.showFilterModal} onClose={() => state.setShowFilterModal(false)}>
+    <BottomDrawer
+      visible={state.showWorkspaceOptions}
+      onClose={() => state.setShowWorkspaceOptions(false)}
+    >
       <WorkspaceOptionsContent controller={controller} />
     </BottomDrawer>
   )
@@ -98,7 +101,14 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
                 <OptionRowList>
                   {options.map((option) => {
                     const Rows = WORKSPACE_OPTION_ROWS[option.key]
-                    return <Rows key={option.key} controller={controller} hosts={hosts} />
+                    return (
+                      <Rows
+                        key={option.key}
+                        controller={controller}
+                        hosts={hosts}
+                        label={option.label}
+                      />
+                    )
                   })}
                 </OptionRowList>
               </View>
@@ -106,12 +116,12 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
               options.map((option) => {
                 const Rows = WORKSPACE_OPTION_ROWS[option.key]
                 return (
-                  <View key={option.key}>
+                  <View key={option.key} testID={`workspace-option-${option.key}`}>
                     {option.label !== sectionLabel && (
                       <Text style={styles.optionHeading}>{option.label}</Text>
                     )}
                     <View style={styles.filterGroup}>
-                      <Rows controller={controller} hosts={hosts} />
+                      <Rows controller={controller} hosts={hosts} label={option.label} />
                     </View>
                   </View>
                 )

@@ -145,7 +145,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
                 styles.embeddedFilterChip,
                 controller.activeFilterCount > 0 && styles.filterChipActive
               ]}
-              onPress={() => state.setShowFilterModal(true)}
+              onPress={() => state.setShowWorkspaceOptions(true)}
               accessibilityRole="button"
               accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
             >
@@ -276,7 +276,7 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
         <View style={styles.toolbar}>
           <Pressable
             style={[styles.filterChip, controller.activeFilterCount > 0 && styles.filterChipActive]}
-            onPress={() => state.setShowFilterModal(true)}
+            onPress={() => state.setShowWorkspaceOptions(true)}
             accessibilityRole="button"
             accessibilityLabel={`Filter workspaces${controller.activeFilterCount > 0 ? `, ${controller.activeFilterCount} active` : ''}`}
           >

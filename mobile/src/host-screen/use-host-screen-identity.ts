@@ -28,6 +28,7 @@ export function useHostScreenIdentity(args: {
     setPinnedIds,
     setRepoHostIdByRepoId,
     setShowPinnedInGroups,
+    setSharesOtherClientFilter,
     setWorktrees,
     setWorktreesLoaded
   } = state
@@ -66,6 +67,7 @@ export function useHostScreenIdentity(args: {
     setHostHealthById(new Map())
     setHostPlatform(null)
     setShowPinnedInGroups(false)
+    setSharesOtherClientFilter(false)
     repoMetadataFetchedAtRef.current = 0
     // Why: useState initializer runs only on first mount, so re-seed the cache when Expo Router reuses this screen for a new hostId.
     const freshCache = hostId ? (getCachedWorktrees(hostId) as Worktree[] | null) : null

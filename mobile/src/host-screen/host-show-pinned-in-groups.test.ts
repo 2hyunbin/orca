@@ -58,6 +58,7 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
         'setLastKnownWorktrees',
         'setOptimisticActiveWorktreeIdentity',
         'setPinnedIds',
+        'setSharesOtherClientFilter',
         'setRepoHostIdByRepoId',
         'setServedProjectSections',
         'setSleptIds',

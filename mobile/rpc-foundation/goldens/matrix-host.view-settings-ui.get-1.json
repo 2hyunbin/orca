@@ -4,9 +4,84 @@
   "family": "host.view-settings",
   "namedDeltas": [],
   "values": {
-    "0564ac1adf7f": {
-      "name": "settings.get#1",
+    "05876e518e27": {
+      "name": "agentActivityDisplayMode",
       "ordinal": 10,
+      "value": "compact"
+    },
+    "06a18c945779": {
+      "name": "groupMode",
+      "ordinal": 15,
+      "value": "repo"
+    },
+    "0a4ced35542b": {
+      "name": "filters",
+      "ordinal": 19,
+      "value": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
+      }
+    },
+    "0a59df4b1729": {
+      "name": "projectOrderBy",
+      "ordinal": 8,
+      "value": {
+        "$rpc": "null"
+      }
+    },
+    "0cab015e1ac3": {
+      "agentActivityDisplayMode": "compact",
+      "cardSettings": {
+        "compactWorktreeCards": true,
+        "newCardStyle": false
+      },
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": true,
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
+      },
+      "groupMode": "repo",
+      "projectOrderBy": {
+        "$rpc": "null"
+      },
+      "sortMode": "name",
+      "statuses": [],
+      "worktreeCardProperties": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
+    },
+    "131abe749307": {
+      "name": "settings.get#1",
+      "ordinal": 12,
       "args": [
         {
           "name": "method",
@@ -40,83 +115,28 @@
         }
       }
     },
-    "15ceca282184": {
-      "name": "filters",
-      "ordinal": 17,
-      "value": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      }
-    },
     "16b99eacf628": {
       "name": "groupMode",
       "ordinal": 3,
       "value": "none"
     },
-    "171c7f1d77a5": {
-      "name": "cardView",
-      "ordinal": 9,
-      "value": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
-      }
-    },
-    "18756573b007": {
-      "name": "ui.set#1",
-      "ordinal": 19,
-      "args": [
-        {
-          "name": "method",
-          "value": "ui.set"
-        },
-        {
-          "name": "params",
-          "value": {
-            "sortBy": "name"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-3",
-          "ok": true,
-          "result": {
-            "ok": true
-          }
-        }
-      }
+    "17143c28f92b": {
+      "name": "worktreeCardProperties",
+      "ordinal": 21,
+      "value": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
     },
     "19da51d77d45": {
       "name": "ui.get#1",
@@ -150,15 +170,51 @@
         }
       }
     },
-    "299d6a7db6c6": {
-      "name": "collapsedGroups",
-      "ordinal": 16,
-      "value": []
+    "23dc5a4b98ba": {
+      "name": "projectOrderBy",
+      "ordinal": 20,
+      "value": {
+        "$rpc": "null"
+      }
     },
-    "2d1426400b3f": {
-      "name": "groupMode",
-      "ordinal": 13,
-      "value": "repo"
+    "297c5b23e7cc": {
+      "name": "agentActivityDisplayMode",
+      "ordinal": 11,
+      "value": "compact"
+    },
+    "2cbe77123a12": {
+      "name": "ui.set#1",
+      "ordinal": 23,
+      "args": [
+        {
+          "name": "method",
+          "value": "ui.set"
+        },
+        {
+          "name": "params",
+          "value": {
+            "sortBy": "name"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-3",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
     },
     "2f74fcfacfbd": {
       "name": "ui.get#1",
@@ -229,26 +285,12 @@
         }
       }
     },
-    "3b91637436a0": {
-      "name": "cardView",
-      "ordinal": 18,
+    "3fe06421b60e": {
+      "name": "cardSettings",
+      "ordinal": 14,
       "value": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
+        "compactWorktreeCards": true,
+        "newCardStyle": false
       }
     },
     "443c5731ec35": {
@@ -291,33 +333,11 @@
       "ordinal": 5,
       "value": "name"
     },
-    "493de6c8959c": {
-      "name": "sortMode",
-      "ordinal": 14,
-      "value": "name"
-    },
-    "500a8e88e36a": {
+    "4d3f6c91d0ad": {
+      "agentActivityDisplayMode": "compact",
       "cardSettings": {
         "compactWorktreeCards": false,
         "newCardStyle": false
-      },
-      "cardView": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
       },
       "collapsed": [],
       "filters": {
@@ -334,30 +354,30 @@
         }
       },
       "groupMode": "none",
-      "sortMode": "recent",
-      "statuses": []
+      "projectOrderBy": {
+        "$rpc": "null"
+      },
+      "sortMode": "name",
+      "statuses": [],
+      "worktreeCardProperties": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
     },
-    "50de7b7317f4": {
-      "name": "cardView",
-      "ordinal": 8,
-      "value": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
-      }
+    "53dedbd59c38": {
+      "name": "ui.set#1",
+      "ordinal": 12,
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
     },
     "582477c8e0af": {
       "name": "ui.get#1",
@@ -464,81 +484,6 @@
       "ordinal": 6,
       "value": []
     },
-    "731bdc3315cb": {
-      "name": "ui.set#1",
-      "ordinal": 9,
-      "args": [
-        {
-          "name": "method",
-          "value": "ui.set"
-        },
-        {
-          "name": "params",
-          "value": {
-            "sortBy": "name"
-          }
-        },
-        {
-          "name": "options",
-          "value": {
-            "$rpc": "absent"
-          }
-        }
-      ],
-      "settlement": {
-        "status": "fulfilled",
-        "startedAt": 0,
-        "settledAt": 0,
-        "value": {
-          "id": "frame-2",
-          "ok": true,
-          "result": {
-            "ok": true
-          }
-        }
-      }
-    },
-    "7507160154f5": {
-      "cardSettings": {
-        "compactWorktreeCards": false,
-        "newCardStyle": false
-      },
-      "cardView": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
-      },
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": false,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      },
-      "groupMode": "none",
-      "sortMode": "name",
-      "statuses": []
-    },
     "754a5e5d6868": {
       "name": "ui.get#1",
       "ordinal": 1,
@@ -590,6 +535,29 @@
         }
       }
     },
+    "84e483960210": {
+      "name": "worktreeCardProperties",
+      "ordinal": 9,
+      "value": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
+    },
+    "88630780b883": {
+      "name": "sortMode",
+      "ordinal": 16,
+      "value": "name"
+    },
     "9270aeb7d9c6": {
       "status": "pending",
       "startedAt": 0
@@ -620,32 +588,76 @@
         "startedAt": 0
       }
     },
-    "98a4efbae63e": {
-      "name": "settings.get#1",
+    "a22479408aee": {
+      "name": "ui.set#1",
       "ordinal": 11,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+      "args": [
+        {
+          "name": "method",
+          "value": "ui.set"
+        },
+        {
+          "name": "params",
+          "value": {
+            "sortBy": "name"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "fulfilled",
+        "startedAt": 0,
+        "settledAt": 0,
+        "value": {
+          "id": "frame-2",
+          "ok": true,
+          "result": {
+            "ok": true
+          }
+        }
+      }
     },
     "a8806d0780bb": {
       "name": "sortMode",
       "ordinal": 4,
       "value": "name"
     },
-    "b2b7ab90a15c": {
-      "name": "cardSettings",
-      "ordinal": 12,
-      "value": {
-        "compactWorktreeCards": true,
-        "newCardStyle": false
-      }
+    "b2c0943e4fdf": {
+      "name": "worktreeCardProperties",
+      "ordinal": 10,
+      "value": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
     },
-    "c1252b2e2879": {
+    "b2f9de523b9c": {
       "name": "ui.set#1",
-      "ordinal": 20,
+      "ordinal": 24,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
     },
-    "c3ee2f2830fa": {
+    "b91a655e2f55": {
+      "name": "collapsedGroups",
+      "ordinal": 18,
+      "value": []
+    },
+    "c35f994aa1e3": {
       "name": "workspaceStatuses",
-      "ordinal": 15,
+      "ordinal": 17,
       "value": []
     },
     "c40ad123c151": {
@@ -683,6 +695,52 @@
         }
       }
     },
+    "c9990fdfe24b": {
+      "agentActivityDisplayMode": "compact",
+      "cardSettings": {
+        "compactWorktreeCards": false,
+        "newCardStyle": false
+      },
+      "collapsed": [],
+      "filters": {
+        "alwaysShowDefaultBranchWorkspace": true,
+        "filterRepoIds": [],
+        "hideAutomationGeneratedWorkspaces": false,
+        "hideCliCreatedWorkspaces": false,
+        "hideDefaultBranchWorkspace": false,
+        "hideDetachedHeadWorkspaces": false,
+        "hideSleepingWorkspaces": false,
+        "hideWorkspacesFromOtherDevices": false,
+        "visibleHostIds": {
+          "$rpc": "null"
+        }
+      },
+      "groupMode": "none",
+      "projectOrderBy": {
+        "$rpc": "null"
+      },
+      "sortMode": "recent",
+      "statuses": [],
+      "worktreeCardProperties": [
+        "status",
+        "unread",
+        "issue",
+        "linear-issue",
+        "jira-issue",
+        "pr",
+        "automation",
+        "cli",
+        "comment",
+        "ports",
+        "inline-agents",
+        "host"
+      ]
+    },
+    "cc8e295f40de": {
+      "name": "settings.get#1",
+      "ordinal": 13,
+      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+    },
     "d3f0839be5aa": {
       "name": "collapsedGroups",
       "ordinal": 7,
@@ -719,46 +777,10 @@
         }
       }
     },
-    "d6c5657cf471": {
-      "cardSettings": {
-        "compactWorktreeCards": true,
-        "newCardStyle": false
-      },
-      "cardView": {
-        "agentActivityDisplayMode": "compact",
-        "projectOrderBy": "manual",
-        "worktreeCardProperties": [
-          "status",
-          "unread",
-          "issue",
-          "linear-issue",
-          "jira-issue",
-          "pr",
-          "automation",
-          "cli",
-          "comment",
-          "ports",
-          "inline-agents",
-          "host"
-        ]
-      },
-      "collapsed": [],
-      "filters": {
-        "alwaysShowDefaultBranchWorkspace": true,
-        "filterRepoIds": [],
-        "hideAutomationGeneratedWorkspaces": false,
-        "hideCliCreatedWorkspaces": false,
-        "hideDefaultBranchWorkspace": false,
-        "hideDetachedHeadWorkspaces": false,
-        "hideSleepingWorkspaces": true,
-        "hideWorkspacesFromOtherDevices": false,
-        "visibleHostIds": {
-          "$rpc": "null"
-        }
-      },
-      "groupMode": "repo",
-      "sortMode": "name",
-      "statuses": []
+    "d703b373fcae": {
+      "name": "agentActivityDisplayMode",
+      "ordinal": 22,
+      "value": "compact"
     },
     "ea08a39d5c22": {
       "name": "sharesOtherClientFilter",
@@ -810,6 +832,13 @@
         }
       }
     },
+    "f1c98f774973": {
+      "name": "projectOrderBy",
+      "ordinal": 9,
+      "value": {
+        "$rpc": "null"
+      }
+    },
     "f2c38899636a": {
       "name": "ui.get#1",
       "ordinal": 1,
@@ -842,11 +871,6 @@
         }
       }
     },
-    "f39d7bf2e66d": {
-      "name": "ui.set#1",
-      "ordinal": 10,
-      "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
-    },
     "fa699d780625": {
       "name": "workspaceStatuses",
       "ordinal": 5,
@@ -870,21 +894,21 @@
             "mount": "eb79a9b3682a",
             "sync": "9270aeb7d9c6"
           },
-          "state": "500a8e88e36a",
+          "state": "c9990fdfe24b",
           "effects": []
         }
       },
       {
         "id": "host-view-settings-sync.normal:settled",
         "observation": {
-          "sender": ["651e8014c9ff", "0564ac1adf7f", "18756573b007"],
-          "payloads": ["582477c8e0af", "98a4efbae63e", "c1252b2e2879"],
+          "sender": ["651e8014c9ff", "131abe749307", "2cbe77123a12"],
+          "payloads": ["582477c8e0af", "cc8e295f40de", "b2f9de523b9c"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "d6c5657cf471",
+          "state": "0cab015e1ac3",
           "effects": [
             "ea08a39d5c22",
             "ff3c6fc39ae4",
@@ -892,224 +916,248 @@
             "710ac9afc635",
             "d3f0839be5aa",
             "6e7f52214e23",
-            "171c7f1d77a5",
-            "b2b7ab90a15c",
-            "2d1426400b3f",
-            "493de6c8959c",
-            "c3ee2f2830fa",
-            "299d6a7db6c6",
-            "15ceca282184",
-            "3b91637436a0"
+            "f1c98f774973",
+            "b2c0943e4fdf",
+            "297c5b23e7cc",
+            "3fe06421b60e",
+            "06a18c945779",
+            "88630780b883",
+            "c35f994aa1e3",
+            "b91a655e2f55",
+            "0a4ced35542b",
+            "23dc5a4b98ba",
+            "17143c28f92b",
+            "d703b373fcae"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.result-absent:settled",
         "observation": {
-          "sender": ["d5d6bbbd1680", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["d5d6bbbd1680", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.result-null:settled",
         "observation": {
-          "sender": ["2f74fcfacfbd", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["2f74fcfacfbd", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.inner-ok-missing:settled",
         "observation": {
-          "sender": ["754a5e5d6868", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["754a5e5d6868", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.inner-false-string-error:settled",
         "observation": {
-          "sender": ["c40ad123c151", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["c40ad123c151", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.inner-false-object-error:settled",
         "observation": {
-          "sender": ["efd2522b079c", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["efd2522b079c", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.outer-refused:settled",
         "observation": {
-          "sender": ["6811622f22fd", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["6811622f22fd", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.outer-refused-no-message:settled",
         "observation": {
-          "sender": ["3937ae2aa8ac", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["3937ae2aa8ac", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.method-not-found:settled",
         "observation": {
-          "sender": ["443c5731ec35", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["443c5731ec35", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.transport-rejection:settled",
         "observation": {
-          "sender": ["19da51d77d45", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["19da51d77d45", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       },
       {
         "id": "host-view-settings-sync.transport-rejection-no-message:settled",
         "observation": {
-          "sender": ["f2c38899636a", "731bdc3315cb"],
-          "payloads": ["582477c8e0af", "f39d7bf2e66d"],
+          "sender": ["f2c38899636a", "a22479408aee"],
+          "payloads": ["582477c8e0af", "53dedbd59c38"],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
-          "state": "7507160154f5",
+          "state": "4d3f6c91d0ad",
           "effects": [
             "16b99eacf628",
             "a8806d0780bb",
             "fa699d780625",
             "641f71cd84d7",
             "7ca5d47dfec0",
-            "50de7b7317f4"
+            "0a59df4b1729",
+            "84e483960210",
+            "05876e518e27"
           ]
         }
       }

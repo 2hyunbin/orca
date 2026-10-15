@@ -28,10 +28,14 @@ describe('buildProjectSectionCatalog', () => {
     const served: ServedProjectSections = {
       repos: [repo('r1'), repo('r1', 'runtime:m4air')],
       projects: [],
-      setups: [],
-      projectOrderBy: 'manual'
+      setups: []
     }
-    const catalog = buildProjectSectionCatalog(served, [repo('r1', undefined, uploaded)], null)
+    const catalog = buildProjectSectionCatalog(
+      served,
+      [repo('r1', undefined, uploaded)],
+      null,
+      'manual'
+    )
     expect(catalog.repos.map((entry) => entry.repoIcon)).toEqual([uploaded, undefined])
   })
 })

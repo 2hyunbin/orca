@@ -12,11 +12,6 @@ vi.mock('lucide-react-native', () => ({ Check: 'Check' }))
 vi.mock('../components/BottomDrawer', () => ({ BottomDrawer: 'BottomDrawer' }))
 vi.mock('../components/MobileSearchField', () => ({ MobileSearchField: 'MobileSearchField' }))
 
-import {
-  WORKSPACE_VIEW_SECTION_LABELS,
-  getShownWorkspaceViewSections,
-  type WorkspaceViewOptionContext
-} from '../../../src/shared/workspace-view/workspace-view-options'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import { DEFAULT_CARD_VIEW } from '../worktree/workspace-view-settings'
 import { WorkspaceOptionsSheet } from './workspace-options-sheet'
@@ -42,6 +37,7 @@ function render(options: { newCardStyle: boolean; hideSleeping: boolean }) {
   }
   const controller = {
     activeFilterCount: 0,
+    projectOrderBy: 'manual',
     displayWorktrees: [],
     sectionsResult: {
       uniqueRepos: [
@@ -52,16 +48,16 @@ function render(options: { newCardStyle: boolean; hideSleeping: boolean }) {
     settings,
     state: {
       cardSettings: { compactWorktreeCards: false, newCardStyle: options.newCardStyle },
-      cardView: DEFAULT_CARD_VIEW,
+      ...DEFAULT_CARD_VIEW,
       filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: options.hideSleeping },
       groupMode: 'repo',
       hostLabelById: new Map(),
       hostPlatform: null,
       repoHostIdByRepoId: new Map([['r2', 'ssh:box']]),
       serverWorkspaces: { hosts: [{ hostId: 'runtime:vm', label: 'VM' }], worktrees: [] },
-      setShowFilterModal: vi.fn(),
+      setShowWorkspaceOptions: vi.fn(),
       sharesOtherClientFilter: true,
-      showFilterModal: true,
+      showWorkspaceOptions: true,
       sortMode: 'smart'
     }
   }
@@ -84,52 +80,61 @@ const texts = () =>
     .map((node) => node.props.children)
     .filter((child): child is string => typeof child === 'string')
 
-// The first row with `label`, in menu order ("Compact" is a card layout before an activity layout).
-const press = (label: string) =>
-  renderer!.root
-    .findAll(
-      (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label
-    )[0]
+/** Taps the row named `label`, inside one option's card when `option` is given. */
+const press = (label: string, option?: string) => {
+  const scope = option
+    ? renderer!.root.find((node) => node.props.testID === `workspace-option-${option}`)
+    : renderer!.root
+  scope
+    .find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label)
     .props.onPress()
+}
 
 describe('the phone Workspace options sheet', () => {
-  it.each([
-    { newCardStyle: false, hideSleeping: true },
-    { newCardStyle: true, hideSleeping: false }
-  ])('renders every option the shared list shows (%o)', (options) => {
-    render(options)
-    const context: WorkspaceViewOptionContext = {
-      groupBy: 'repo',
-      hideSleepingWorkspaces: options.hideSleeping,
-      hideWorkspacesFromOtherDevices: false,
-      newCardStyle: options.newCardStyle,
-      hasRemoteHosts: true,
-      projectCount: 2,
-      mayHaveServerHosts: true
-    }
+  it('shows the classic card options and the default-branch exemption while sleeping ones hide', () => {
+    render({ newCardStyle: false, hideSleeping: true })
     const shown = texts()
-    for (const { section, options: sectionOptions } of getShownWorkspaceViewSections(context)) {
-      const sectionLabel = WORKSPACE_VIEW_SECTION_LABELS[section]
-      if (sectionLabel) {
-        expect(shown).toContain(sectionLabel)
-      }
-      for (const option of sectionOptions) {
-        expect(shown).toContain(option.label)
-      }
+    for (const label of [
+      'Show',
+      'Hosts',
+      'Projects',
+      'Group by',
+      'Sort by',
+      'Project order',
+      'Card layout',
+      'Show properties',
+      'Agent activity layout',
+      'Filters',
+      'Hide sleeping',
+      'Except default branch',
+      'Hide other-client workspaces',
+      'Hide detached HEAD'
+    ]) {
+      expect(shown).toContain(label)
     }
-    expect(shown.includes('Card display')).toBe(options.newCardStyle)
-    expect(shown.includes('Except default branch')).toBe(options.hideSleeping)
+    expect(shown).not.toContain('Card display')
+  })
+
+  it('swaps in Card display for the new card style and drops the exemption when nothing sleeps', () => {
+    render({ newCardStyle: true, hideSleeping: false })
+    const shown = texts()
+    expect(shown).toContain('Card display')
+    expect(shown).not.toContain('Card layout')
+    expect(shown).not.toContain('Show properties')
+    expect(shown).not.toContain('Except default branch')
   })
 
   it('writes each control to the shared value it names', () => {
     const settings = render({ newCardStyle: false, hideSleeping: false })
     press('Hide CLI-created')
     expect(settings.setFilter).toHaveBeenCalledWith('hideCliCreatedWorkspaces', true)
-    press('Compact')
+    press('Compact', 'cardLayout')
     expect(settings.setCardLayout).toHaveBeenCalledWith('compact')
-    press('Recent')
+    press('Recent', 'sortBy')
     expect(settings.handleSortChange).toHaveBeenCalledWith('recent')
-    press('VM')
+    press('Recent', 'projectOrderBy')
+    expect(settings.setProjectOrderBy).toHaveBeenCalledWith('recent')
+    press('VM', 'hosts')
     expect(settings.setFilter).toHaveBeenCalledWith('visibleHostIds', ['runtime:vm'])
   })
 })

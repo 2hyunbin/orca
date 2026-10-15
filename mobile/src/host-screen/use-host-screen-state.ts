@@ -9,12 +9,12 @@ import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../worktree/mobile-workspace-
 import { WorktreeCatalogSnapshotClient } from '../worktree/worktree-catalog-snapshot-client'
 import {
   DEFAULT_CARD_VIEW,
-  type MobileCardView,
   type MobileGroupMode,
   type MobileSortMode,
   type MobileViewState
 } from '../worktree/workspace-view-settings'
 import type { HostCardSettings } from './host-screen-reply-schema'
+import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
 import { NO_WORKSPACE_ROW_FILTERS } from '../../../src/shared/workspace-view/workspace-row-filters'
 import type { FilterState, Worktree } from '../worktree/workspace-list-sections'
 import type { ServedProjectSections } from '../worktree/project-sections-operations'
@@ -63,7 +63,15 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [sortMode, setSortMode] = useState<MobileSortMode>('recent')
   const [filters, setFilters] = useState<FilterState>(NO_WORKSPACE_ROW_FILTERS)
   const [groupMode, setGroupMode] = useState<MobileGroupMode>('repo')
-  const [cardView, setCardView] = useState<MobileCardView>(DEFAULT_CARD_VIEW)
+  const [projectOrderBy, setProjectOrderBy] = useState<ProjectOrderBy | null>(
+    DEFAULT_CARD_VIEW.projectOrderBy
+  )
+  const [worktreeCardProperties, setWorktreeCardProperties] = useState(
+    DEFAULT_CARD_VIEW.worktreeCardProperties
+  )
+  const [agentActivityDisplayMode, setAgentActivityDisplayMode] = useState(
+    DEFAULT_CARD_VIEW.agentActivityDisplayMode
+  )
   const [cardSettings, setCardSettings] = useState<HostCardSettings>(NO_CARD_SETTINGS)
   // Whether this host shares "Hide other-client workspaces" with its phone; older hosts keep it.
   const [sharesOtherClientFilter, setSharesOtherClientFilter] = useState(false)
@@ -91,7 +99,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
   const [serverNotice, setServerNotice] = useState<string | null>(null)
   const [showSortPicker, setShowSortPicker] = useState(false)
   const [showGroupPicker, setShowGroupPicker] = useState(false)
-  const [showFilterModal, setShowFilterModal] = useState(false)
+  const [showWorkspaceOptions, setShowWorkspaceOptions] = useState(false)
   const [actionTarget, setActionTarget] = useState<Worktree | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null)
   const [confirmRemoveHost, setConfirmRemoveHost] = useState(false)
@@ -118,7 +126,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     catalogError,
     clientRef,
     cardSettings,
-    cardView,
+    agentActivityDisplayMode,
     collapsedGroups,
     confirmDelete,
     confirmRemoveHost,
@@ -139,6 +147,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     newWorktreeModalVisibleRef,
     optimisticActiveWorktreeIdentity,
     pinnedIds,
+    projectOrderBy,
     repoHostIdByRepoId,
     servedProjectSections,
     desktopRepos,
@@ -149,7 +158,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     serverWorkspaces,
     setActionTarget,
     setCardSettings,
-    setCardView,
+    setAgentActivityDisplayMode,
     setCatalogError,
     setCollapsedGroups,
     setConfirmDelete,
@@ -166,6 +175,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setLastKnownWorktrees,
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
+    setProjectOrderBy,
     setRepoHostIdByRepoId,
     setServedProjectSections,
     setDesktopRepos,
@@ -174,7 +184,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setServerNotice,
     setServerWorkspaces,
     setSharesOtherClientFilter,
-    setShowFilterModal,
+    setShowWorkspaceOptions,
     setShowPinnedInGroups,
     setShowGroupPicker,
     setShowSearch,
@@ -182,10 +192,11 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     setSleptIds,
     setSortMode,
     setWorkspaceStatuses,
+    setWorktreeCardProperties,
     setWorktrees,
     setWorktreesLoaded,
     sharesOtherClientFilter,
-    showFilterModal,
+    showWorkspaceOptions,
     showPinnedInGroups,
     showGroupPicker,
     showSearch,
@@ -194,6 +205,7 @@ export function useHostScreenState(hostId: string | undefined, action: string | 
     sortMode,
     viewStateRef,
     workspaceStatuses,
+    worktreeCardProperties,
     worktreeCatalogRef,
     worktrees,
     worktreesLoaded

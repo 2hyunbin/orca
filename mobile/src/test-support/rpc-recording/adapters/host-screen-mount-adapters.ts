@@ -30,7 +30,7 @@ export function hostScreenMountAdapters(
       >('mobile/src/host-screen/use-host-view-settings.ts').useHostViewSettings
       const state = observableModel(context, {
         cardSettings: { compactWorktreeCards: false, newCardStyle: false },
-        cardView: DEFAULT_CARD_VIEW,
+        ...DEFAULT_CARD_VIEW,
         clientRef: { current: context.client },
         collapsedGroups: new Set<string>(),
         sharesOtherClientFilter: false,
@@ -71,7 +71,9 @@ export function hostScreenMountAdapters(
             groupMode: state.groupMode,
             sortMode: state.sortMode,
             filters: state.filters,
-            cardView: state.cardView,
+            projectOrderBy: state.projectOrderBy,
+            worktreeCardProperties: state.worktreeCardProperties,
+            agentActivityDisplayMode: state.agentActivityDisplayMode,
             cardSettings: state.cardSettings,
             collapsed: state.collapsedGroups,
             statuses: state.workspaceStatuses

@@ -26,11 +26,14 @@ export const WORKSPACE_SORT_OPTIONS: PickerOption<MobileSortMode>[] =
   WORKSPACE_SORT_BY_CHOICES.map(toPickerOption)
 
 /** The desktop's Group by choices, keyed by the phone's own group modes. */
-export const WORKSPACE_GROUP_OPTIONS: PickerOption<MobileGroupMode>[] =
+export const WORKSPACE_GROUP_CHOICES: WorkspaceViewChoice<MobileGroupMode>[] =
   WORKSPACE_GROUP_BY_CHOICES.flatMap((choice) => {
     const mode = groupModeFromDesktop(choice.id)
-    return mode ? [{ value: mode, label: choice.label }] : []
+    return mode ? [{ id: mode, label: choice.label }] : []
   })
+
+export const WORKSPACE_GROUP_OPTIONS: PickerOption<MobileGroupMode>[] =
+  WORKSPACE_GROUP_CHOICES.map(toPickerOption)
 
 /** The Group chip's label: the chosen grouping, or "Group" when there is none. */
 export function workspaceGroupChipLabel(mode: MobileGroupMode): string {

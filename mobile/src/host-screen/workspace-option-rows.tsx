@@ -9,21 +9,19 @@ import {
   WORKSPACE_CARD_LAYOUT_CHOICES,
   WORKSPACE_CARD_PROPERTY_CHOICES,
   WORKSPACE_PROJECT_ORDER_CHOICES,
-  WORKSPACE_VIEW_OPTIONS,
+  WORKSPACE_SORT_BY_CHOICES,
   getWorkspaceCardDisplayChoiceLabel,
   type WorkspaceViewChoice,
   type WorkspaceViewOptionKey
 } from '../../../src/shared/workspace-view/workspace-view-options'
 import {
+  getCheckedHostRows,
   toggleAllVisibleHosts,
   toggleVisibleHostRow
 } from '../../../src/shared/workspace-view/workspace-host-visibility'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { WorktreeCardProperty } from '../../../src/shared/ui-chrome-types'
-import {
-  WORKSPACE_GROUP_OPTIONS,
-  WORKSPACE_SORT_OPTIONS
-} from '../worktree/workspace-list-picker-options'
+import { WORKSPACE_GROUP_CHOICES } from '../worktree/workspace-list-picker-options'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
 
@@ -32,6 +30,8 @@ export type WorkspaceOptionHost = { id: ExecutionHostId; label: string }
 export type WorkspaceOptionRowsProps = {
   controller: HostScreenController
   hosts: readonly WorkspaceOptionHost[]
+  /** The shared option's label. */
+  label: string
 }
 
 function CheckRow(props: {
@@ -41,13 +41,21 @@ function CheckRow(props: {
   detail?: string
   indent?: boolean
   leading?: ReactNode
+  /** Pick-one rows read as radio buttons. */
+  radio?: boolean
+  disabled?: boolean
 }) {
   return (
     <Pressable
-      style={[styles.filterRow, props.indent && styles.optionRowIndented]}
+      style={[
+        styles.filterRow,
+        props.indent && styles.optionRowIndented,
+        props.disabled && styles.optionRowDisabled
+      ]}
       onPress={props.onPress}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: props.checked }}
+      disabled={props.disabled}
+      accessibilityRole={props.radio ? 'radio' : 'checkbox'}
+      accessibilityState={{ checked: props.checked, disabled: props.disabled }}
       accessibilityLabel={props.label}
     >
       {props.leading}
@@ -93,6 +101,7 @@ function ChoiceRows<Id extends string>(props: {
           key={choice.id}
           label={choice.label}
           detail={choice.description}
+          radio
           checked={choice.id === props.selected}
           onPress={() => props.onSelect(choice.id)}
         />
@@ -101,20 +110,12 @@ function ChoiceRows<Id extends string>(props: {
   )
 }
 
-const pickerChoices = <Id extends string>(
-  options: readonly { value: Id; label: string; subtitle?: string }[]
-): WorkspaceViewChoice<Id>[] =>
-  options.map((option) => ({
-    id: option.value,
-    label: option.label,
-    ...(option.subtitle ? { description: option.subtitle } : {})
-  }))
-
+// As the desktop: while every host shows, no single host is checked, and tapping one shows only it.
 function HostsRows({ controller, hosts }: WorkspaceOptionRowsProps) {
   const { settings, state } = controller
   const visible = state.filters.visibleHostIds
+  const checked = new Set(visible ? getCheckedHostRows(hosts, visible).map((host) => host.id) : [])
   const write = (next: ExecutionHostId[] | null | undefined) => {
-    // undefined: the last shown host cannot be turned off.
     if (next !== undefined) {
       settings.setFilter('visibleHostIds', next)
     }
@@ -129,14 +130,19 @@ function HostsRows({ controller, hosts }: WorkspaceOptionRowsProps) {
           checked={!visible}
           onPress={() => write(toggleAllVisibleHosts(hosts, visible))}
         />,
-        ...hosts.map((host) => (
-          <CheckRow
-            key={host.id}
-            label={host.label}
-            checked={!visible || visible.includes(host.id)}
-            onPress={() => write(toggleVisibleHostRow(hosts, visible, host))}
-          />
-        ))
+        ...hosts.map((host) => {
+          const next = toggleVisibleHostRow(hosts, visible, host)
+          return (
+            <CheckRow
+              key={host.id}
+              label={host.label}
+              checked={checked.has(host.id)}
+              // The last shown host cannot be turned off.
+              disabled={next === undefined}
+              onPress={() => write(next)}
+            />
+          )
+        })
       ]}
     </OptionRowList>
   )
@@ -185,7 +191,7 @@ function CardPropertyRows(props: {
         <CheckRow
           key={choice.id}
           label={choice.label}
-          checked={state.cardView.worktreeCardProperties.includes(choice.id)}
+          checked={state.worktreeCardProperties.includes(choice.id)}
           onPress={() => settings.toggleCardProperty(choice.id)}
         />
       ))}
@@ -194,16 +200,16 @@ function CardPropertyRows(props: {
 }
 
 function filterRow(key: Extract<WorkspaceViewOptionKey, `hide${string}` | `always${string}`>) {
-  const label = WORKSPACE_VIEW_OPTIONS.find((option) => option.key === key)?.label ?? key
-  return function FilterRow({ controller }: WorkspaceOptionRowsProps) {
+  const isExemption = key === 'alwaysShowDefaultBranchWorkspace'
+  return function FilterRow({ controller, label }: WorkspaceOptionRowsProps) {
     const value = controller.state.filters[key]
-    // Absent means on (#8873), so only an explicit false reads as off.
-    const checked = key === 'alwaysShowDefaultBranchWorkspace' ? value !== false : value === true
+    // The exemption's absence means on (#8873), so only an explicit false reads as off.
+    const checked = isExemption ? value !== false : value === true
     return (
       <CheckRow
         label={label}
         checked={checked}
-        indent={key === 'alwaysShowDefaultBranchWorkspace'}
+        indent={isExemption}
         onPress={() => controller.settings.setFilter(key, !checked)}
       />
     )
@@ -219,14 +225,14 @@ export const WORKSPACE_OPTION_ROWS: Record<
   projects: ProjectsRows,
   groupBy: ({ controller }) => (
     <ChoiceRows
-      choices={pickerChoices(WORKSPACE_GROUP_OPTIONS)}
+      choices={WORKSPACE_GROUP_CHOICES}
       selected={controller.state.groupMode}
       onSelect={controller.settings.handleGroupChange}
     />
   ),
   sortBy: ({ controller }) => (
     <ChoiceRows
-      choices={pickerChoices(WORKSPACE_SORT_OPTIONS)}
+      choices={WORKSPACE_SORT_BY_CHOICES}
       selected={controller.state.sortMode}
       onSelect={controller.settings.handleSortChange}
     />
@@ -234,7 +240,7 @@ export const WORKSPACE_OPTION_ROWS: Record<
   projectOrderBy: ({ controller }) => (
     <ChoiceRows
       choices={WORKSPACE_PROJECT_ORDER_CHOICES}
-      selected={controller.state.cardView.projectOrderBy}
+      selected={controller.projectOrderBy}
       onSelect={controller.settings.setProjectOrderBy}
     />
   ),
@@ -251,7 +257,7 @@ export const WORKSPACE_OPTION_ROWS: Record<
       <Text style={styles.optionSubheading}>Agent activity layout</Text>
       <ChoiceRows
         choices={WORKSPACE_AGENT_ACTIVITY_LAYOUT_CHOICES}
-        selected={controller.state.cardView.agentActivityDisplayMode}
+        selected={controller.state.agentActivityDisplayMode}
         onSelect={controller.settings.setAgentActivityDisplayMode}
       />
     </>

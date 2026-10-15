@@ -122,6 +122,9 @@ export const hostScreenSecondaryStyles = StyleSheet.create({
   optionRowIndented: {
     paddingLeft: spacing.md + 2 + spacing.lg
   },
+  optionRowDisabled: {
+    opacity: 0.5
+  },
   optionSearch: {
     padding: spacing.sm
   },
