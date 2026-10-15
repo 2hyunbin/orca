@@ -1,4 +1,3 @@
-import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
 import { structuredAgentSessionRestartRefusal } from './structured-agent-session-restart-admission'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
@@ -8,7 +7,6 @@ import {
   type AgentSessionAttachResult,
   type AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
-import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { journalOpenRefusalError } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
@@ -23,14 +21,11 @@ import {
   pinnedAgentSessionLaunchEnv
 } from './structured-agent-session-launch-env'
 import {
-  adapterSupportsCreate,
-  knownAgentIds,
   adapterSupportsCreateIfDeclared,
   hostCanStartRecord
 } from './structured-agent-session-provider-support'
 import { performSend } from './structured-agent-session-turns'
 import { observedReceipt } from './structured-agent-session-operation-settlement'
-import { attachStructuredAgentSession } from './structured-agent-session-attach-orchestration'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 
@@ -273,28 +268,6 @@ async function foundConversation(
     if (!committed && !existing) {
       await session.journal.close()
     }
-  }
-}
-
-/** Host entry points that open a chat: attach an existing one or create a new one. */
-export function structuredAgentSessionEntryDelegates(
-  context: () => StructuredAgentSessionAttachContext
-) {
-  return {
-    supportsCreate: (location: AgentSessionExecutionLocation, agent: string) =>
-      adapterSupportsCreate(context().deps.adapter, location, agent),
-    agentDefinitions: () => context().deps.agents.definitions(),
-    knownAgentIds: () => knownAgentIds(context().deps),
-    attach: (
-      caller: StructuredAgentSessionCaller,
-      params: AgentSessionAttachParams,
-      options?: Parameters<typeof attachStructuredAgentSession>[3]
-    ) => attachStructuredAgentSession(context(), caller.callerKey, params, options),
-    create: (
-      caller: StructuredAgentSessionCaller,
-      params: AgentSessionAttachParams,
-      options?: StructuredAgentSessionCreateOptions
-    ) => createStructuredAgentSession(context(), caller.callerKey, params, options)
   }
 }
 
