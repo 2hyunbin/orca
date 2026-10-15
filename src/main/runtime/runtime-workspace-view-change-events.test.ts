@@ -55,7 +55,7 @@ describe('publishWorkspaceViewChanges', () => {
     ])
   })
 
-  it('announces a change to the card layout or card style settings, and nothing else', () => {
+  it('announces a change to the card layout, card style or pinned placement, and nothing else', () => {
     const store = fakeStore()
     const emit = vi.fn()
     publishWorkspaceViewChanges(store, emit)
@@ -64,6 +64,7 @@ describe('publishWorkspaceViewChanges', () => {
     expect(emit).not.toHaveBeenCalled()
     store.updateSettings({ compactWorktreeCards: true })
     store.updateSettings({ experimentalNewWorktreeCardStyle: true })
-    expect(emit).toHaveBeenCalledTimes(2)
+    store.updateSettings({ showPinnedWorktreesInGroups: true })
+    expect(emit).toHaveBeenCalledTimes(3)
   })
 })

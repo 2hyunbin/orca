@@ -83,7 +83,10 @@ export const INITIAL_MOBILE_VIEW: MobileViewState = {
   newCardStyle: false
 }
 
-/** An edit: the fields it sets, and for filters only the filters it touches. */
+/**
+ * An edit: the fields it sets, and for filters only the filters it touches. compactWorktreeCards
+ * is a desktop setting, not ui.set state: only setCardLayout patches it, writing settings itself.
+ */
 export type MobileViewPatch = Partial<
   Omit<MobileViewState, 'filters' | 'sharesOtherClientFilter' | 'newCardStyle'>
 > & {

@@ -68,51 +68,62 @@ function screenState(clientRef: ClientRef, applied: boolean[]) {
   }
 }
 
-// One view sync: ui.get and settings.get go out together, each answered by `answer`.
+type Actions = ReturnType<typeof useHostViewSettings>
+
+// One view sync: ui.get and settings.get go out together; `failing` rejects one of them.
 async function syncWith(
   settings: unknown,
-  onSent: (clientRef: ClientRef) => void = noop
+  options: {
+    failing?: 'ui.get' | 'settings.get'
+    onSent?: (clientRef: ClientRef, actions: Actions) => void
+  } = {}
 ): Promise<{ applied: boolean[]; view: MobileViewState; methods: string[] }> {
   const client = new FakeSession('connected')
   const clientRef: ClientRef = { current: client }
+  let actions: Actions | null = null
   client.sendRequest.mockImplementation(async (method: string) => {
-    onSent(clientRef)
+    if (method === options.failing) {
+      throw new Error('transport closed')
+    }
+    if (method === 'ui.set') {
+      return reply(null)
+    }
+    options.onSent?.(clientRef, actions!)
     return method === 'settings.get' ? reply({ settings }) : reply({ ui: { groupBy: 'none' } })
   })
   const applied: boolean[] = []
   const state = screenState(clientRef, applied)
-  let sync: () => Promise<void> = async () => {}
   function Probe(): null {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the view sync reads only the refs and setters screenState provides.
     const hostState = state as unknown as Parameters<typeof useHostViewSettings>[0]['state']
-    sync = useHostViewSettings({
-      client,
-      connState: 'connected',
-      hostId: 'host-1',
-      state: hostState
-    }).syncViewSettingsFromDesktop
+    actions = useHostViewSettings({ client, connState: 'connected', state: hostState })
     return null
   }
   await act(async () => {
     create(createElement(Probe))
   })
   await act(async () => {
-    await sync()
+    await actions!.syncViewSettingsFromDesktop()
   })
   return {
     applied,
     view: state.viewRef.current,
-    methods: client.sendRequest.mock.calls.map(([method]) => String(method)).sort()
+    methods: client.sendRequest.mock.calls
+      .map(([method]) => String(method))
+      .filter((method) => method !== 'ui.set')
+      .sort()
   }
+}
+
+const ALL_ON = {
+  showPinnedWorktreesInGroups: true,
+  compactWorktreeCards: true,
+  experimentalNewWorktreeCardStyle: true
 }
 
 describe('the host list mirrors the desktop list settings', () => {
   it('reads them with one settings.get beside ui.get, absent reading as off', async () => {
-    const on = await syncWith({
-      showPinnedWorktreesInGroups: true,
-      compactWorktreeCards: true,
-      experimentalNewWorktreeCardStyle: true
-    })
+    const on = await syncWith(ALL_ON)
     expect(on.methods).toEqual(['settings.get', 'ui.get'])
     expect(on.applied).toEqual([true])
     expect(on.view).toMatchObject({
@@ -129,12 +140,31 @@ describe('the host list mirrors the desktop list settings', () => {
     const moveOn = (clientRef: ClientRef) => {
       clientRef.current = new FakeSession('connected')
     }
-    const moved = await syncWith(
-      { showPinnedWorktreesInGroups: true, compactWorktreeCards: true },
-      moveOn
-    )
+    const moved = await syncWith(ALL_ON, { onSent: moveOn })
     expect(moved.applied).toEqual([])
     expect(moved.view).toBe(INITIAL_MOBILE_VIEW)
+  })
+
+  it('applies each read on its own when the other fails', async () => {
+    const noUi = await syncWith(ALL_ON, { failing: 'ui.get' })
+    expect(noUi.applied).toEqual([true])
+    expect(noUi.view).toMatchObject({ groupBy: 'repo', compactWorktreeCards: true })
+    const noSettings = await syncWith(ALL_ON, { failing: 'settings.get' })
+    expect(noSettings.applied).toEqual([])
+    expect(noSettings.view).toMatchObject({ groupBy: 'none', compactWorktreeCards: false })
+  })
+
+  it('keeps a local edit made during the read, while pinned placement still applies', async () => {
+    const edited = await syncWith(ALL_ON, {
+      onSent: (_clientRef, actions) => actions.handleSortChange('name')
+    })
+    expect(edited.applied).toEqual([true])
+    expect(edited.view).toMatchObject({
+      sortBy: 'name',
+      groupBy: 'repo',
+      compactWorktreeCards: false,
+      newCardStyle: false
+    })
   })
 
   it('resets to off when the screen is reused for another host', async () => {

@@ -112,7 +112,7 @@ export const terminalCopyTrimsGutterRead = bindDeferredRpcOperation(
   })
 )
 
-export type HostListSettings = {
+type HostListSettings = {
   showPinnedWorktreesInGroups: boolean
   compactWorktreeCards: boolean
   newCardStyle: boolean
