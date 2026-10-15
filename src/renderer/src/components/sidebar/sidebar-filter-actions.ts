@@ -5,7 +5,7 @@ import {
 } from '../../../../shared/workspace-view/workspace-row-filters'
 import { resolveVisibleWorkspaceHostIds } from '../../../../shared/workspace-view/workspace-host-visibility'
 import type { AppState } from '../../store/types'
-import type { SidebarFilterState } from './visible-worktree-kinds'
+import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 
 /**
  * Whether the sidebar is currently filtered, and what "clear filters" should undo.
@@ -13,6 +13,21 @@ import type { SidebarFilterState } from './visible-worktree-kinds'
  * Split out of visible-worktrees to keep that file under the line cap; this is
  * about the filter CHROME, not about which rows survive filtering.
  */
+
+/** Inputs describing sidebar filter settings that the Clear Filters path owns. */
+export type SidebarFilterState = {
+  showSleepingWorkspaces: boolean
+  filterRepoIds: readonly string[]
+  hideDefaultBranchWorkspace: boolean
+  hideAutomationGeneratedWorkspaces: boolean
+  hideCliCreatedWorkspaces: boolean
+  hideDetachedHeadWorkspaces: boolean
+  hideWorkspacesFromOtherDevices: boolean
+  /** Keeps each project's main workspace out of the "Hide sleeping" sweep; absent means on. */
+  alwaysShowDefaultBranchWorkspace?: boolean
+  visibleWorkspaceHostIds?: readonly ExecutionHostId[] | null
+  workspaceHostScope?: ExecutionHostScope
+}
 
 /** The sidebar's store fields as the shared Workspace options filters. */
 export function sidebarWorkspaceRowFilters(state: SidebarFilterState): WorkspaceRowFilters {
