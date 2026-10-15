@@ -107,6 +107,7 @@ describe('orchestration federation lifecycle settlement', () => {
 
   afterEach(() => {
     homeRuntime.stopOrchestrationFederationRelay()
+    setStructuredAgentSessionHost(null)
     homeDb.close()
     workerDb.close()
     structuredWorkerIdentities.clear()
