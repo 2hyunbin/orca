@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native'
-import { ChevronLeft, X } from 'lucide-react-native'
+import {
+  ChevronLeft,
+  FilePenLine,
+  Hand,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+  type LucideIcon
+} from 'lucide-react-native'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import {
@@ -21,7 +29,12 @@ import {
   SessionOptionSummaryRow
 } from './MobileNativeChatSessionOptionRows'
 import { sortNativeChatSessionOptions } from '../../../src/shared/native-chat-session-option-snapshot'
-import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../src/shared/agent-chat-permission-mode'
+import {
+  AGENT_CHAT_PERMISSION_MODE_ICON_NAMES,
+  AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
+  isAgentChatPermissionMode,
+  type AgentChatPermissionModeIconName
+} from '../../../src/shared/agent-chat-permission-mode'
 import type { MobileNativeChatSessionOptionsController } from './use-mobile-native-chat-session-options'
 
 export type MobileNativeChatSessionOptionPickersProps = {
@@ -39,6 +52,20 @@ export type MobileNativeChatSessionOptionPickersProps = {
 /** Full access reads in the warning colour wherever it is shown. */
 function permissionChoiceColor(value: string | undefined): string | undefined {
   return value === 'full-access' ? colors.statusAmber : undefined
+}
+
+const PERMISSION_MODE_ICONS: Record<AgentChatPermissionModeIconName, LucideIcon> = {
+  Hand,
+  FilePenLine,
+  ShieldCheck,
+  ShieldAlert
+}
+
+/** Undefined for a mode a newer host states that this build has no icon for. */
+function permissionModeIcon(value: string): LucideIcon | undefined {
+  return isAgentChatPermissionMode(value)
+    ? PERMISSION_MODE_ICONS[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES[value]]
+    : undefined
 }
 
 /** The permission pill, then the combined model/session-option pill, sharing one bottom drawer. */
@@ -111,12 +138,14 @@ export function MobileNativeChatSessionOptionPickers({
       ? permission.kind.choices.find((choice) => choice.value === permission.kind.currentValue)
       : undefined
   const pillsBusy = pendingId !== null || sendInFlight
+  const permissionIcon = permissionChoice ? permissionModeIcon(permissionChoice.value) : undefined
 
   return (
     <View style={styles.pills}>
       {permission && permissionChoice ? (
         <Pill
-          label={permissionChoice.label}
+          // Icon only so the model pill keeps the room; the name stays in the accessible name.
+          {...(permissionIcon ? { icon: permissionIcon } : { label: permissionChoice.label })}
           accessibleName={`Permissions, ${permissionChoice.label}`}
           disabled={pillsBusy}
           labelColor={permissionChoiceColor(permissionChoice.value)}
@@ -196,7 +225,7 @@ export function MobileNativeChatSessionOptionPickers({
 }
 
 const styles = StyleSheet.create({
-  // The composer row's only shrinkable item: a long label truncates before it pushes Send off.
+  // The composer row's only shrinkable item: a long model label truncates before it pushes Send off.
   pills: {
     flexDirection: 'row',
     alignItems: 'center',

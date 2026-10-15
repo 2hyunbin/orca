@@ -1,14 +1,22 @@
 import type { LucideIcon } from 'lucide-react'
 import { FilePenLine, Hand, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
-import type { AgentChatPermissionMode } from '../../../../shared/agent-chat-permission-mode'
+import {
+  AGENT_CHAT_PERMISSION_MODE_ICON_NAMES,
+  type AgentChatPermissionMode,
+  type AgentChatPermissionModeIconName
+} from '../../../../shared/agent-chat-permission-mode'
 
-export const NATIVE_CHAT_PERMISSION_MODE_ICONS = {
-  ask: Hand,
-  'accept-edits': FilePenLine,
-  auto: ShieldCheck,
-  'full-access': ShieldAlert
-} as const satisfies Record<AgentChatPermissionMode, LucideIcon>
+const PERMISSION_MODE_ICONS: Record<AgentChatPermissionModeIconName, LucideIcon> = {
+  Hand,
+  FilePenLine,
+  ShieldCheck,
+  ShieldAlert
+}
+
+export function nativeChatPermissionModeIcon(mode: AgentChatPermissionMode): LucideIcon {
+  return PERMISSION_MODE_ICONS[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES[mode]]
+}
 
 export function nativeChatPermissionModeLabel(mode: AgentChatPermissionMode): string {
   switch (mode) {
