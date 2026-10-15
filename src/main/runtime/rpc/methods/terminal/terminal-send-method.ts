@@ -106,7 +106,12 @@ export const TERMINAL_SEND_METHODS = [
         params.viewport &&
         // Why: clients attach their viewport to every send, so a focus report or query reply
         // would otherwise claim the PTY and start a resize war between two mirrors (#26469).
-        !(typeof params.text === 'string' && isUntypedTerminalInput(params.text))
+        !(
+          typeof params.text === 'string' &&
+          isUntypedTerminalInput(params.text) &&
+          params.enter !== true &&
+          params.interrupt !== true
+        )
       ) {
         const claim = await updateViewportForClient(
           runtime,

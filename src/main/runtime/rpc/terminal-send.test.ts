@@ -196,11 +196,12 @@ describe('terminal send RPC', () => {
       sendTerminal
     })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
-    const send = (text: string) =>
+    const send = (text: string, suffix: { enter?: boolean } = {}) =>
       dispatcher.dispatch(
         makeRequest('terminal.send', {
           terminal: 'terminal-1',
           text,
+          ...suffix,
           client: { id: 'desktop-1', type: 'desktop' },
           viewport: { cols: 96, rows: 32 },
           claimViewport: true
@@ -212,6 +213,9 @@ describe('terminal send RPC', () => {
     await expect(send('\x1b[?62;22c')).resolves.toMatchObject({ ok: true })
     expect(refreshRemoteDesktopViewer).not.toHaveBeenCalled()
     expect(sendTerminal).toHaveBeenCalledTimes(3)
+
+    await expect(send('\x1b[I', { enter: true })).resolves.toMatchObject({ ok: true })
+    expect(refreshRemoteDesktopViewer).toHaveBeenCalledTimes(1)
 
     await expect(send('a')).resolves.toMatchObject({ ok: true })
     expect(refreshRemoteDesktopViewer).toHaveBeenCalledWith('pty-1', 'desktop-1', 96, 32, true)
