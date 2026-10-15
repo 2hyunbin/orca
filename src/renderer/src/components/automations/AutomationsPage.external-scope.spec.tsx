@@ -23,8 +23,6 @@ import {
 import { listedExternalEntries } from './automations-page-listed-items'
 import { makeExternalManager } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 const DESKTOP_SELF_FILTER = {
   kind: 'host' as const,
   host: { authority: { kind: 'desktop' as const }, selector: { kind: 'self' as const } }
@@ -67,6 +65,8 @@ function openclawOnly(): void {
 }
 
 describe('AutomationsPage external manager probes', () => {
+  installAutomationsPageHarness()
+
   it('probes no SSH host when the selection is the local desktop', async () => {
     withSshHosts('staging', 'web-01', 'web-02')
     mocks.state.automationHostFilter = DESKTOP_SELF_FILTER

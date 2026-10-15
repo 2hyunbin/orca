@@ -24,8 +24,6 @@ import {
 import { listedRow, listedRows } from './automations-page-listed-items'
 import { makeAutomation } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 const DESKTOP_SELF_FILTER = {
   kind: 'host' as const,
   host: { authority: { kind: 'desktop' as const }, selector: { kind: 'self' as const } }
@@ -46,6 +44,8 @@ function listedNextRunAt(): number | null | undefined {
 }
 
 describe('AutomationsPage run visibility', () => {
+  installAutomationsPageHarness()
+
   it('shows the post-run schedule the host reports, not the row the run started from', async () => {
     desktopStoreHolds([BEFORE_RUN])
     mocks.state.automationHostFilter = DESKTOP_SELF_FILTER

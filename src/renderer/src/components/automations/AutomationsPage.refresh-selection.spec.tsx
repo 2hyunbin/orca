@@ -25,8 +25,6 @@ import {
 import { listedRows } from './automations-page-listed-items'
 import { makeAutomation, makeRun } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 async function openAutomationRow(container: HTMLElement, name: string): Promise<void> {
   const row = [
     ...container.querySelectorAll<HTMLButtonElement>('[data-testid="automation-row"]')
@@ -37,6 +35,8 @@ async function openAutomationRow(container: HTMLElement, name: string): Promise<
 }
 
 describe('AutomationsPage refresh', () => {
+  installAutomationsPageHarness()
+
   it('never asks a host for every run it has retained', async () => {
     const run = makeRun({ id: 'run-1', automationId: 'a-1' })
     api.automations.list.mockResolvedValue([makeAutomation({ id: 'a-1' })])
@@ -120,6 +120,8 @@ describe('AutomationsPage refresh', () => {
 })
 
 describe('AutomationsPage selection', () => {
+  installAutomationsPageHarness()
+
   it('loads the first automation into the detail pane and fetches its runs', async () => {
     const run = makeRun({ id: 'run-1', automationId: 'a-1' })
     api.automations.list.mockResolvedValue([makeAutomation({ id: 'a-1', name: 'Nightly' })])
@@ -164,6 +166,8 @@ describe('AutomationsPage selection', () => {
 })
 
 describe('AutomationsPage multi-host selection', () => {
+  installAutomationsPageHarness()
+
   it('keeps a selection that lives on another host when the window regains focus', async () => {
     runtimeHost([makeAutomation({ id: 'a-remote', name: 'Remote nightly' })], [])
     const desktop = makeAutomation({ id: 'a-desktop', name: 'Desktop nightly' })

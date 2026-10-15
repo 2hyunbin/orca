@@ -24,8 +24,6 @@ import {
 } from './automations-page-test-harness'
 import { makeAutomation, REPO_ID, WORKSPACE_ID } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 const DESKTOP_SELF_FILTER = {
   kind: 'host' as const,
   host: { authority: { kind: 'desktop' as const }, selector: { kind: 'self' as const } }
@@ -60,6 +58,8 @@ async function createSweep(): Promise<void> {
 }
 
 describe('AutomationsPage save visibility', () => {
+  installAutomationsPageHarness()
+
   it('lists a newly created automation on the host it was saved to', async () => {
     desktopStoreHolds([])
     mocks.state.automationHostFilter = DESKTOP_SELF_FILTER

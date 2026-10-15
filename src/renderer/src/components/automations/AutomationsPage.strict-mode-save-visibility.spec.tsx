@@ -31,8 +31,6 @@ import {
 } from './automations-page-test-harness'
 import { makeAutomation, REPO_ID, WORKSPACE_ID } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 const CREATED = makeAutomation({ id: 'a-new', name: 'Sweep' })
 
 const RUNTIME_SELF_KEY = hostStableKey({
@@ -66,6 +64,8 @@ async function createSweep(): Promise<void> {
 }
 
 describe('AutomationsPage save visibility under StrictMode', () => {
+  installAutomationsPageHarness()
+
   it('lists a newly created automation without a reload', async () => {
     desktopStoreHolds([])
     api.automations.create.mockResolvedValue(CREATED)

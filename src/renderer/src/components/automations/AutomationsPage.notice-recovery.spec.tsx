@@ -28,8 +28,6 @@ import {
 import { listedRow } from './automations-page-listed-items'
 import { makeAutomation } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 const FENCING_REQUIRED = 'The host changed: automation_owner_fencing_required'
 
 /** Fails one runtime RPC the way an under-versioned server does, leaving the rest answering. */
@@ -54,6 +52,8 @@ function watchSettings(): { open: ReturnType<typeof vi.fn>; target: ReturnType<t
 }
 
 describe('AutomationsPage notice recovery', () => {
+  installAutomationsPageHarness()
+
   it('sends the create dialog Update server to where that destination host is versioned', async () => {
     api.automations.list.mockResolvedValue([])
     scopedList([])

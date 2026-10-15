@@ -25,8 +25,6 @@ import {
 import { listedRows } from './automations-page-listed-items'
 import { makeAutomation } from './automations-page-fixtures'
 
-installAutomationsPageHarness()
-
 /** Desktop and runtime both hold `a-1`; the runtime's row is committed last. */
 async function collidingHosts(): Promise<void> {
   runtimeHost([makeAutomation({ id: 'a-1', name: 'Remote nightly' })], [])
@@ -52,6 +50,8 @@ function runtimeAutomationCalls(): string[] {
 }
 
 describe('AutomationsPage row actions under a colliding automation id', () => {
+  installAutomationsPageHarness()
+
   it('names the selected row’s own host, not the desktop that listed it', async () => {
     await collidingHosts()
     await renderPage()

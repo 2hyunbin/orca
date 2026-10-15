@@ -15,8 +15,6 @@ import {
   settleHostQueries
 } from './automations-page-test-harness'
 
-installAutomationsPageHarness()
-
 function pressEscape(target: EventTarget): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
   target.dispatchEvent(event)
@@ -32,6 +30,8 @@ async function renderWithCloseSpy(): Promise<ReturnType<typeof vi.fn>> {
 }
 
 describe('automations page Escape precedence', () => {
+  installAutomationsPageHarness()
+
   it('closes the page when nothing is layered above it', async () => {
     const closeAutomationsPage = await renderWithCloseSpy()
 
