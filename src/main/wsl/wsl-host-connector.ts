@@ -1,7 +1,7 @@
 /** The production WSL side of `WslHostService`: one holder, connection manager and supervisor. */
 import { isWslDistroRunning } from '../wsl-background-distro-gate'
-import { listEnvironments } from '../../shared/runtime-environment-store'
-import { getPreferredPairingOffer } from '../../shared/runtime-environments'
+import { resolveEnvironmentPairingOffer } from '../../shared/runtime-environment-store'
+import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
 import type { WslHostConnector } from './wsl-host-service'
@@ -56,12 +56,10 @@ export function createWslHostConnector(options: {
   }
   const manager = new WslOrcadConnectionManager({
     holder,
-    getPairingOffer: (environmentId) => {
-      const environment = listEnvironments(options.userDataPath).find(
-        (entry) => entry.id === environmentId
-      )
-      return environment ? getPreferredPairingOffer(environment) : null
-    },
+    getPairingOffer: (environmentId) =>
+      findWslHostDeployment(options.userDataPath, environmentId)
+        ? resolveEnvironmentPairingOffer(options.userDataPath, environmentId)
+        : null,
     onChange: options.onChange,
     deployAndLaunch: (distro, deployOptions) =>
       options.isKnownDistro(distro)
