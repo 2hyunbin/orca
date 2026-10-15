@@ -62,7 +62,7 @@ function installHost() {
     close: async (sessionId: string) => {
       closed.push(sessionId)
     },
-    hasSession: () => true,
+    hasSession: () => closed.length === 0,
     hold: async () => {},
     release: () => {},
     subscribe: () => () => {},
@@ -72,8 +72,11 @@ function installHost() {
           location: { executionHostId: 'local', wslDistro: null },
           lease: {
             runtimeKind: 'native',
-            claimStatus: 'live',
-            deathEvidence: null,
+            claimStatus: closed.length === 0 ? 'live' : 'released',
+            deathEvidence:
+              closed.length === 0
+                ? null
+                : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
             runtimeFence: 1
           }
         })
