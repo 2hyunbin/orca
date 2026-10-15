@@ -8,7 +8,7 @@ import type { AgentSkillShareRequest } from '../../shared/agent-skill-sharing-co
 import { getDefaultSettings } from '../../shared/constants'
 import type { DiscoveredSkill } from '../../shared/skills'
 import { extractSkillBundleArchive } from '../skills/skill-bundle-extraction'
-import { SkillCloudRequestError } from '../skills/skill-cloud-request'
+import { SkillCloudRequestError } from '../skills/skill-cloud-request-error'
 import { OrcaRuntimeService } from './orca-runtime'
 
 const mocks = vi.hoisted(() => ({ userDataPath: '/tmp' }))

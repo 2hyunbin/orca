@@ -4,7 +4,7 @@ import {
   classifySkillInstallFailureCode,
   type SkillInstallFailure
 } from '../../shared/skill-install-failure'
-import { SkillCloudRequestError } from './skill-cloud-request'
+import { SkillCloudRequestError } from './skill-cloud-request-error'
 
 export class SkillInstallOperationError extends Error {
   readonly code = SKILL_INSTALL_RPC_ERROR_CODE

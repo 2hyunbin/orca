@@ -11,7 +11,7 @@ import {
 import type { SkillCloudVersion } from '../../shared/skill-cloud-contract'
 import { createSkillBundleArchive, type CreatedSkillBundle } from './skill-bundle-creation'
 import type { SkillCloudService } from './skill-cloud-service'
-import { SkillCloudRequestError } from './skill-cloud-request'
+import { SkillCloudRequestError } from './skill-cloud-request-error'
 import { readSkillInstallReceipt } from './skill-install-provenance'
 
 const PREPARATION_TTL_MS = 30 * 60 * 1000
