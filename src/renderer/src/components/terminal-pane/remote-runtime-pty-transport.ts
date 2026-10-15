@@ -1865,6 +1865,9 @@ export function createRemoteRuntimePtyTransport(
       if (claim && stream) {
         unconfirmedClaim = { stream, cols, rows, sentAt: Date.now() }
         flushPendingClaimInput(stream)
+      } else if (unconfirmedClaim && !isUnconfirmedClaim(unconfirmedClaim.stream, cols, rows)) {
+        // Why: the host now holds a different grid, so a later claim of the old one is new again.
+        unconfirmedClaim = null
       }
       return
     }

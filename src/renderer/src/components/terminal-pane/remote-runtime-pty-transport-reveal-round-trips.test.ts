@@ -131,4 +131,25 @@ describe('remote pane reveal round trips', () => {
     transport.claimViewport?.(100, 40)
     expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(3)
   })
+
+  it('claims a grid again after a different resize reached the host', async () => {
+    vi.useFakeTimers()
+    try {
+      const transport = await createRevealTransport()
+      await transport.connect({ url: '', cols: 120, rows: 40, callbacks: {} })
+      const claims = () =>
+        subscriptionSendBinary.mock.calls.filter(
+          ([bytes]) =>
+            decodeTerminalStreamFrame(bytes)?.opcode === TerminalStreamOpcode.ClaimViewport
+        ).length
+
+      transport.claimViewport?.(120, 40)
+      transport.resize(100, 40)
+      await vi.advanceTimersByTimeAsync(100)
+      transport.claimViewport?.(120, 40)
+      expect(claims()).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
