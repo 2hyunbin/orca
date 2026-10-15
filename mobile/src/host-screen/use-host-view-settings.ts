@@ -2,7 +2,6 @@ import { useCallback, useRef } from 'react'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { getMobileWorkspaceLineageGroupKey } from '../worktree/mobile-workspace-lineage'
-import { WORKSPACE_SORT_OPTIONS as SORT_OPTIONS } from '../worktree/workspace-list-picker-options'
 import {
   applyDesktopViewSettings,
   buildWorkspaceViewSettingsUpdate,
@@ -152,9 +151,6 @@ export function useHostViewSettings(args: {
     })
   }, [persistViewSettings])
 
-  const selectedSortLabel =
-    SORT_OPTIONS.find((option) => option.value === state.view.sortBy)?.label ?? 'Recent'
-
   const handleGroupChange = useCallback(
     (value: MobileViewState['groupBy']) => {
       persistViewSettings({ groupBy: value })
@@ -223,7 +219,6 @@ export function useHostViewSettings(args: {
     toggleCardProperty,
     handleGroupChange,
     handleSortChange,
-    selectedSortLabel,
     syncViewSettingsFromDesktop,
     toggleCollapsed,
     setFilter,

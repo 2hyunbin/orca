@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { ChevronLeft } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
@@ -24,6 +24,7 @@ import { withServerHosts } from '../worktree/server-workspaces'
 import { hostScreenStyles as styles } from './host-screen-styles'
 import type { HostScreenController } from './use-host-screen-controller'
 import { DrillRow, OptionRowList } from './workspace-option-rows'
+import { OptionPager, useOptionPager } from './workspace-options-pager'
 import {
   WORKSPACE_OPTION_CONTROLS,
   type WorkspaceOptionHost,
@@ -85,32 +86,31 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
       state.view.sharesOtherClientFilter === true && state.serverWorkspaces.hosts.length > 0
   })
 
-  // The drilled-into option; it falls back to the main sheet once the option stops showing.
-  const [page, setPage] = useState<WorkspaceViewOptionKey | null>(null)
+  const pager = useOptionPager<WorkspaceViewOptionKey>()
+  // The open option; it falls back to the main sheet once the option stops showing.
   const pageOption = sections
     .flatMap(({ options }) => options)
-    .find((option) => option.key === page)
-  if (page !== null && !pageOption) {
+    .find((option) => option.key === pager.page)
+  if (pager.page !== null && !pageOption) {
     // Forget it, so the page does not reopen by itself if the option shows again.
-    setPage(null)
+    pager.forget()
   }
   const pageControl = pageOption ? WORKSPACE_OPTION_CONTROLS[pageOption.key] : null
   // Back from a page returns to the main sheet; the drawer's own claim closes it from there.
   useBackClaim(
     pageOption
       ? () => {
-          setPage(null)
+          pager.close()
           return true
         }
       : null
   )
-  if (pageOption && pageControl?.kind === 'page') {
-    const { Page } = pageControl
-    return (
+  const page =
+    pageOption && pageControl?.kind === 'page' ? (
       <>
         <Pressable
           style={styles.optionBack}
-          onPress={() => setPage(null)}
+          onPress={pager.close}
           accessibilityRole="button"
           accessibilityLabel={`Back to ${WORKSPACE_OPTIONS_TITLE}`}
         >
@@ -118,12 +118,11 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
           <Text style={styles.optionBackText}>{WORKSPACE_OPTIONS_TITLE}</Text>
         </Pressable>
         <Text style={[styles.filterModalTitle, styles.optionPageTitle]}>{pageOption.label}</Text>
-        <Page controller={controller} hosts={hosts} label={pageOption.label} />
+        <pageControl.Page controller={controller} hosts={hosts} label={pageOption.label} />
       </>
-    )
-  }
+    ) : null
 
-  return (
+  const main = (
     <>
       <View style={styles.filterModalHeader}>
         <View style={styles.filterModalHeading}>
@@ -151,7 +150,7 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
                 key={option.key}
                 label={option.label}
                 value={control.value(props)}
-                onPress={() => setPage(option.key)}
+                onPress={() => pager.open(option.key)}
               />
             )
           } else {
@@ -173,4 +172,6 @@ function WorkspaceOptionsContent({ controller }: { controller: HostScreenControl
       })}
     </>
   )
+
+  return <OptionPager slide={pager.slide} main={main} page={page} />
 }
