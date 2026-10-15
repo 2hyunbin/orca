@@ -87,9 +87,8 @@ export function deliverToSubscriber(
       emitCaughtUp(port, subscriber, emitCheckpoint, shared)
       return
     }
-    // A phone's app ends a stream that outruns its unacked window, so a gap of more than one page
-    // arrives as the newest page instead; older rows load on scroll.
-    if (page.hasNewer && subscriber.boundedFrames) {
+    // Replaying an unbounded gap blocks the host; older rows remain available on scroll.
+    if (page.hasNewer) {
       const tail = readAgentSessionHydrationPage(journal, subscriber.fence, reader)
       port.emit(subscriber, {
         type: 'snapshot',
