@@ -28,7 +28,11 @@ async function readReview(
   branch: string,
   linkedGitHubPR: number | null
 ) {
-  const outcome = await fetchHostedReviewForBranch(client, worktreeId, { branch, linkedGitHubPR })
+  const outcome = await fetchHostedReviewForBranch(client, worktreeId, {
+    branch,
+    linkedGitHubPR,
+    active: false
+  })
   return outcome.ok ? outcome.result : null
 }
 
@@ -67,37 +71,56 @@ export function useWorkspaceDetailExtras(
     buildWorkspaceDetailLinks(row).some((link) => link.type !== 'issue')
   const readsOrigin = Boolean(row?.automationCreated || row?.cliCreated)
 
-  useEffect(() => {
-    if (!worktreeId || !client) {
+  // One effect per read, so a refresh that changes one section's inputs re-reads only that one.
+  const read = <Field extends keyof WorkspaceDetailExtras>(
+    field: Field,
+    load: (() => Promise<WorkspaceDetailExtras[Field]>) | null
+  ) => {
+    if (!worktreeId || !load) {
       return
     }
     let cancelled = false
-    const merge = (patch: WorkspaceDetailExtras) => {
-      if (!cancelled) {
-        setExtras((current) => ({
-          key: worktreeId,
-          value: { ...(current?.key === worktreeId ? current.value : {}), ...patch }
-        }))
-      }
-    }
-    const selector = `id:${worktreeId}`
-    if (readsReview) {
-      void readReview(client, worktreeId, branch, linkedGitHubPR)
-        .catch(() => null)
-        .then((review) => merge({ review }))
-    }
-    if (readsOrigin) {
-      void readOrigin(client, selector)
-        .catch(() => null)
-        .then((origin) => merge({ origin }))
-    }
-    void readPorts(client, selector, worktreeId)
+    void load()
       .catch(() => null)
-      .then((ports) => merge({ ports }))
+      .then((value) => {
+        if (!cancelled) {
+          setExtras((current) => ({
+            key: worktreeId,
+            value: { ...(current?.key === worktreeId ? current.value : {}), [field]: value }
+          }))
+        }
+      })
     return () => {
       cancelled = true
     }
-  }, [worktreeId, client, branch, linkedGitHubPR, readsReview, readsOrigin])
+  }
+  const selector = worktreeId ? `id:${worktreeId}` : ''
+
+  useEffect(
+    () =>
+      read(
+        'review',
+        client && readsReview && worktreeId
+          ? () => readReview(client, worktreeId, branch, linkedGitHubPR)
+          : null
+      ),
+    [worktreeId, client, branch, linkedGitHubPR, readsReview]
+  )
+  useEffect(
+    () => read('origin', client && readsOrigin ? () => readOrigin(client, selector) : null),
+    [worktreeId, client, readsOrigin]
+  )
+  useEffect(
+    () =>
+      read('ports', client && worktreeId ? () => readPorts(client, selector, worktreeId) : null),
+    [worktreeId, client]
+  )
+  // A reopened sheet reads afresh rather than showing the last open's ports.
+  useEffect(() => {
+    if (!worktreeId) {
+      setExtras(null)
+    }
+  }, [worktreeId])
 
   return extras && extras.key === worktreeId ? extras.value : {}
 }

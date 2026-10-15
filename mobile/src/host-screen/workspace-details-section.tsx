@@ -237,25 +237,35 @@ function PortRow({ port }: { port: WorkspaceDetailPort }) {
   const clipboard = useClipboardWriter()
   const [copied, setCopied] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(
-    () => () => {
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
       if (timer.current) {
         clearTimeout(timer.current)
       }
-    },
-    []
-  )
+    }
+  }, [])
   const copy = () => {
     void clipboard
       .writeText(port.address)
       .then(() => {
+        // The sheet may have closed while the clipboard answered.
+        if (!mounted.current) {
+          return
+        }
         setCopied(true)
         if (timer.current) {
           clearTimeout(timer.current)
         }
         timer.current = setTimeout(() => setCopied(false), COPIED_MS)
       })
-      .catch(() => setCopied(false))
+      .catch(() => {
+        if (mounted.current) {
+          setCopied(false)
+        }
+      })
   }
   return (
     <DetailRow

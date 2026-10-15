@@ -1,6 +1,8 @@
 import { formatAgentTypeLabel } from '../../../src/shared/agent-type-label'
 import type { CheckStatus } from '../../../src/shared/github/pull-request-types'
 import type { HostedReviewInfo } from '../../../src/shared/hosted-review'
+import { getWorkspaceAttachmentKey } from '../../../src/shared/workspace-attachment-normalization'
+import { getWorkspaceAttachments } from '../../../src/shared/workspace-attachments'
 import type { WorkspaceAttachment } from '../../../src/shared/worktree/types'
 import type { Worktree } from './workspace-list-types'
 
@@ -40,27 +42,8 @@ export type WorkspaceDetailPort = {
   processName?: string
 }
 
-const PROVIDERS: readonly LinkProvider[] = [
-  'github',
-  'gitlab',
-  'linear',
-  'jira',
-  'bitbucket',
-  'azure-devops',
-  'gitea'
-]
-const TYPES: readonly LinkType[] = ['issue', 'pr', 'mr']
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-function isProvider(value: unknown): value is LinkProvider {
-  return PROVIDERS.some((provider) => provider === value)
-}
-
-function isLinkType(value: unknown): value is LinkType {
-  return TYPES.some((type) => type === value)
 }
 
 function isPositiveNumber(value: unknown): value is number {
@@ -77,123 +60,91 @@ function webUrl(value: unknown): string | undefined {
   return url && /^https?:\/\//i.test(url) ? url : undefined
 }
 
-function referenceLabel(provider: LinkProvider, type: LinkType, number: number, key?: string) {
-  if ((provider === 'linear' || provider === 'jira') && key) {
-    return key
+function referenceLabel(item: WorkspaceAttachment): string {
+  if (item.provider === 'linear' || item.provider === 'jira') {
+    const key = item.identifier ?? item.linearIdentifier ?? item.jiraIdentifier
+    if (key) {
+      return key
+    }
   }
-  if (type === 'mr') {
-    return `MR !${number}`
+  if (item.type === 'mr') {
+    return `MR !${item.number}`
   }
-  return type === 'pr' ? `PR #${number}` : `Issue #${number}`
+  return item.type === 'pr' ? `PR #${item.number}` : `Issue #${item.number}`
 }
 
-function link(
-  provider: LinkProvider,
-  type: LinkType,
-  ref: { number: number; key?: string },
-  extra: Partial<WorkspaceDetailLink> = {}
-): WorkspaceDetailLink {
+function toDetailLink(item: WorkspaceAttachment): WorkspaceDetailLink {
   return {
-    key: `${provider}:${type}:${ref.key ?? ref.number}`,
-    provider,
-    type,
-    label: referenceLabel(provider, type, ref.number, ref.key),
-    ...extra
+    key: getWorkspaceAttachmentKey(item),
+    provider: item.provider,
+    type: item.type,
+    label: referenceLabel(item),
+    title: optionalText(item.title),
+    url: webUrl(item.url)
   }
 }
 
-/** One `linkedItems` entry, or null for one this build cannot place (rows arrive unvalidated). */
-function readAttachment(raw: unknown): WorkspaceDetailLink | null {
-  if (!isRecord(raw) || !isProvider(raw.provider) || !isLinkType(raw.type)) {
-    return null
-  }
-  const key =
-    raw.provider === 'linear' || raw.provider === 'jira'
-      ? (optionalText(raw.identifier) ??
-        optionalText(raw.linearIdentifier) ??
-        optionalText(raw.jiraIdentifier))
-      : undefined
-  const number = isPositiveNumber(raw.number) ? raw.number : 0
-  if (!number && !key) {
-    return null
-  }
-  return link(
-    raw.provider,
-    raw.type,
-    { number, key },
-    { title: optionalText(raw.title), url: webUrl(raw.url) }
+function isReviewOf(link: WorkspaceDetailLink, review: HostedReviewInfo): boolean {
+  return (
+    link.type !== 'issue' &&
+    link.provider === review.provider &&
+    link.label ===
+      referenceLabel({ provider: link.provider, type: link.type, number: review.number }) &&
+    (!link.url || !review.url || link.url === review.url)
   )
 }
 
-function reviewType(provider: LinkProvider): LinkType {
-  return provider === 'gitlab' ? 'mr' : 'pr'
-}
-
-// Desktop hover card order: reviews, then hosted issues, then Linear, then Jira.
-function linkRank(item: WorkspaceDetailLink): number {
-  if (item.type !== 'issue') {
-    return 0
-  }
-  return item.provider === 'linear' ? 2 : item.provider === 'jira' ? 3 : 1
-}
-
 /**
- * Every review and task linked to the row. `linkedItems` is the host's merged list; the singular
- * fields cover hosts that predate it and the branch's discovered PR, which is never an attachment.
- * `review` is the host's live lookup for the branch, which brings the title, link and checks.
+ * Every review and task linked to the row, read the way the desktop hover card reads them
+ * (getWorkspaceAttachments: the host's list, then the singular fields older hosts send), plus the
+ * branch's discovered PR, which is never an attachment. `review` is the host's live lookup for the
+ * branch, which brings the title, link and checks. Reviews come first, as the desktop's list does.
  */
 export function buildWorkspaceDetailLinks(
   row: Worktree,
   review?: HostedReviewInfo | null
 ): WorkspaceDetailLink[] {
-  const pr = row.linkedPR
-  const candidates = [
-    ...(Array.isArray(row.linkedItems) ? row.linkedItems.map(readAttachment) : []),
-    isPositiveNumber(pr?.number) ? link('github', 'pr', pr, { state: pr.state }) : null,
-    isPositiveNumber(row.linkedGitLabMR)
-      ? link('gitlab', 'mr', { number: row.linkedGitLabMR })
-      : null,
-    isPositiveNumber(row.linkedIssue) ? link('github', 'issue', { number: row.linkedIssue }) : null,
-    isPositiveNumber(row.linkedGitLabIssue)
-      ? link('gitlab', 'issue', { number: row.linkedGitLabIssue })
-      : null,
-    optionalText(row.linkedLinearIssue)
-      ? link('linear', 'issue', { number: 0, key: optionalText(row.linkedLinearIssue) })
-      : null
-  ]
-  const links = new Map<string, WorkspaceDetailLink>()
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue
-    }
-    const known = links.get(candidate.key)
-    // The same reference from two sources: keep the first, fill what it lacks.
-    links.set(
-      candidate.key,
-      known
-        ? {
-            ...known,
-            title: known.title ?? candidate.title,
-            url: known.url ?? candidate.url,
-            state: known.state ?? candidate.state
-          }
-        : candidate
-    )
+  const links = getWorkspaceAttachments({
+    // Rows arrive unvalidated; the shared reader drops entries it cannot place.
+    linkedItems: Array.isArray(row.linkedItems) ? row.linkedItems : undefined,
+    linkedPR: isPositiveNumber(row.linkedPR?.number) ? row.linkedPR.number : null,
+    linkedIssue: row.linkedIssue ?? null,
+    linkedGitLabMR: row.linkedGitLabMR ?? null,
+    linkedGitLabIssue: row.linkedGitLabIssue ?? null,
+    linkedLinearIssue: optionalText(row.linkedLinearIssue) ?? null
+  }).map(toDetailLink)
+  const branchPR = links.find(
+    (link) =>
+      link.provider === 'github' &&
+      link.type === 'pr' &&
+      link.label === `PR #${row.linkedPR?.number}`
+  )
+  if (branchPR && row.linkedPR) {
+    branchPR.state = row.linkedPR.state
   }
-  if (review && isProvider(review.provider) && isPositiveNumber(review.number)) {
-    const live = link(review.provider, reviewType(review.provider), review)
-    const known = links.get(live.key)
-    links.set(live.key, {
-      ...live,
-      ...known,
+  const provider = review?.provider
+  if (review && provider && provider !== 'unsupported' && isPositiveNumber(review.number)) {
+    const known = links.find((link) => isReviewOf(link, review))
+    const live: WorkspaceDetailLink = {
+      ...(known ??
+        toDetailLink({
+          provider,
+          type: provider === 'gitlab' ? 'mr' : 'pr',
+          number: review.number
+        })),
       title: optionalText(review.title) ?? known?.title,
       url: webUrl(review.url) ?? known?.url,
       state: optionalText(review.state) ?? known?.state,
       checks: review.status
-    })
+    }
+    if (known) {
+      links[links.indexOf(known)] = live
+    } else {
+      links.unshift(live)
+    }
   }
-  // Stable sort keeps the host's own order within a rank.
-  return [...links.values()].sort((a, b) => linkRank(a) - linkRank(b))
+  // Stable: the host's own order holds within reviews and within tasks.
+  return links.sort((a, b) => Number(a.type === 'issue') - Number(b.type === 'issue'))
 }
 
 /** The row's origin, filled in from `worktree.show` once it answers. */

@@ -41,7 +41,7 @@ function review(overrides: Partial<HostedReviewInfo> = {}): HostedReviewInfo {
 }
 
 describe('buildWorkspaceDetailLinks', () => {
-  it('lists reviews first, then hosted issues, Linear and Jira, as the desktop hover card does', () => {
+  it("lists reviews first, then tasks in the host's order, as the desktop hover card does", () => {
     const links = buildWorkspaceDetailLinks(
       row({
         linkedItems: [
@@ -53,9 +53,9 @@ describe('buildWorkspaceDetailLinks', () => {
       })
     )
 
-    expect(links.map((link) => link.label)).toEqual(['PR #12', 'Issue #3', 'ENG-7', 'ORCA-4'])
+    expect(links.map((link) => link.label)).toEqual(['PR #12', 'ORCA-4', 'ENG-7', 'Issue #3'])
     expect(links[0]).toMatchObject({ state: 'open' })
-    expect(links[1]).toMatchObject({ title: 'Bug', url: 'https://x/3' })
+    expect(links[3]).toMatchObject({ title: 'Bug', url: 'https://x/3' })
   })
 
   it('reads the singular fields of a host that predates linkedItems', () => {
@@ -119,7 +119,28 @@ describe('buildWorkspaceDetailLinks', () => {
     )
     const links = buildWorkspaceDetailLinks(row({ linkedItems }))
 
-    expect(links).toEqual([expect.objectContaining({ label: 'Issue #8', url: undefined })])
+    expect(links).toEqual([])
+  })
+
+  it('keeps two same-numbered issues from different repos apart, as the desktop does', () => {
+    const links = buildWorkspaceDetailLinks(
+      row({
+        linkedItems: [
+          {
+            provider: 'github',
+            type: 'issue',
+            number: 4,
+            url: 'https://github.com/a/one/issues/4'
+          },
+          { provider: 'github', type: 'issue', number: 4, url: 'https://github.com/a/two/issues/4' }
+        ]
+      })
+    )
+
+    expect(links.map((link) => link.url)).toEqual([
+      'https://github.com/a/one/issues/4',
+      'https://github.com/a/two/issues/4'
+    ])
   })
 })
 

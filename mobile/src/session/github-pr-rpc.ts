@@ -82,7 +82,7 @@ export function fetchGithubRepoSlug(
 export function fetchHostedReviewForBranch(
   client: RpcOperationSender,
   worktreeId: string,
-  args: { branch: string; linkedGitHubPR?: number | null }
+  args: { branch: string; linkedGitHubPR?: number | null; active?: boolean }
 ): Promise<GitHubPrReadOutcome<HostedReviewInfo | null>> {
   return settleGithubPrRead(hostedReviewBranchLookupRead, () =>
     hostedReviewBranchLookupRead.request(client, {
@@ -90,8 +90,9 @@ export function fetchHostedReviewForBranch(
       branch: args.branch,
       linkedGitHubPR: args.linkedGitHubPR ?? null,
       // Why: the mobile PR sidebar is only ever open on the selected worktree,
-      // so it belongs in the host's fast re-check tier (#11532).
-      active: true
+      // so it belongs in the host's fast re-check tier (#11532). A one-off read
+      // (the long-press details) passes false so it does not take that slot.
+      active: args.active ?? true
     })
   )
 }
