@@ -32,8 +32,7 @@ import { sortNativeChatSessionOptions } from '../../../src/shared/native-chat-se
 import {
   AGENT_CHAT_PERMISSION_MODE_ICON_NAMES,
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
-  isAgentChatPermissionMode,
-  type AgentChatPermissionModeIconName
+  isAgentChatPermissionMode
 } from '../../../src/shared/agent-chat-permission-mode'
 import type { MobileNativeChatSessionOptionsController } from './use-mobile-native-chat-session-options'
 
@@ -54,18 +53,21 @@ function permissionChoiceColor(value: string | undefined): string | undefined {
   return value === 'full-access' ? colors.statusAmber : undefined
 }
 
-const PERMISSION_MODE_ICONS: Record<AgentChatPermissionModeIconName, LucideIcon> = {
-  Hand,
-  FilePenLine,
-  ShieldCheck,
-  ShieldAlert
-}
-
 /** Undefined for a mode a newer host states that this build has no icon for. */
 function permissionModeIcon(value: string): LucideIcon | undefined {
-  return isAgentChatPermissionMode(value)
-    ? PERMISSION_MODE_ICONS[AGENT_CHAT_PERMISSION_MODE_ICON_NAMES[value]]
-    : undefined
+  if (!isAgentChatPermissionMode(value)) {
+    return undefined
+  }
+  switch (AGENT_CHAT_PERMISSION_MODE_ICON_NAMES[value]) {
+    case 'Hand':
+      return Hand
+    case 'FilePenLine':
+      return FilePenLine
+    case 'ShieldCheck':
+      return ShieldCheck
+    case 'ShieldAlert':
+      return ShieldAlert
+  }
 }
 
 /** The permission pill, then the combined model/session-option pill, sharing one bottom drawer. */
