@@ -248,7 +248,7 @@ export function MobileNativeChatView({
     endUserDrag,
     beginMomentum,
     endMomentum,
-    readerIsScrolling,
+    scrollMayLoadEarlier,
     recordScrollMetrics
   } = useMobileNativeChatTailFollow<NativeChatMessage>({ hasItems: data.length > 0 })
 
@@ -274,12 +274,12 @@ export function MobileNativeChatView({
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset } = e.nativeEvent
       recordScrollMetrics(e.nativeEvent)
-      // Near the top — page in older history. Only the reader's scroll: a pin reports offsets too.
-      if (contentOffset.y < 60 && hasMore && !loadingEarlier && readerIsScrolling()) {
+      // Near the top — page in older history. Only the reader's drag: a pin reports offsets too.
+      if (contentOffset.y < 60 && hasMore && !loadingEarlier && scrollMayLoadEarlier()) {
         loadEarlier()
       }
     },
-    [hasMore, loadingEarlier, loadEarlier, readerIsScrolling, recordScrollMetrics]
+    [hasMore, loadingEarlier, loadEarlier, scrollMayLoadEarlier, recordScrollMetrics]
   )
 
   // Per-turn status rows: one live indicator while the turn runs, then a settled
@@ -322,6 +322,9 @@ export function MobileNativeChatView({
   )
 
   const history = useMobileNativeChatPageHistory(turns.listMessages, renderItem)
+  const listHeader = history.withHistory(
+    mobileNativeChatListHeader(hasMore, loadingEarlier, loadEarlier)
+  )
 
   const liveStatus = turns.liveLine ? (
     <MobileNativeChatLiveLine
@@ -331,6 +334,7 @@ export function MobileNativeChatView({
       onOpenFile={onOpenFile}
     />
   ) : null
+  const listFooter = mobileNativeChatListFooter(liveStatus, turns.waitingRows, renderItem)
 
   const emptyState = mobileNativeChatEmptyState(status, agent ?? null, error)
   const showLoading = status === 'loading' && messages.length === 0
@@ -361,7 +365,13 @@ export function MobileNativeChatView({
         </View>
       ) : (
         <GestureHandlerRootView style={styles.listWrap}>
-          <MobileNativeChatScrollHold headKey={turns.listMessages[0]?.id} listRef={listRef} />
+          <MobileNativeChatScrollHold
+            headKey={turns.listMessages[0]?.id}
+            header={listHeader !== null}
+            loadEarlier={hasMore === true}
+            footer={listFooter !== null}
+            listRef={listRef}
+          />
           <GestureDetector gesture={pinchGesture}>
             <FlatList
               ref={listRef}
@@ -381,14 +391,8 @@ export function MobileNativeChatView({
               onContentSizeChange={pinToTailAfterContentResize}
               onLayout={pinToTail}
               maintainVisibleContentPosition={mobileNativeChatRowAnchor(hasMore === true)}
-              ListHeaderComponent={history.withHistory(
-                mobileNativeChatListHeader(hasMore, loadingEarlier, loadEarlier)
-              )}
-              ListFooterComponent={mobileNativeChatListFooter(
-                liveStatus,
-                turns.waitingRows,
-                renderItem
-              )}
+              ListHeaderComponent={listHeader}
+              ListFooterComponent={listFooter}
               ListEmptyComponent={emptyStateView}
             />
           </GestureDetector>
