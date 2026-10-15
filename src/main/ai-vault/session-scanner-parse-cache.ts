@@ -143,9 +143,9 @@ export async function parseAgentSessionFileCached(
  * What the caller needs out of this parse. Absent: the session list's own read,
  * which needs the whole file covered.
  *
- * `partial-ok`: a large transcript may be read as its first and last bytes
- * (see readPartialTranscript), and such a row is reused. For a list whose client
- * shows those rows without counts.
+ * `partial-ok`: a complete fold may collect only suffix previews
+ * (see readPartialTranscript), and such a row is reused. Exact consumers
+ * still require the ordinary read that publishes every turn.
  *
  * `any`: some bytes must be read. A cursor already at the file's current stat
  * is dropped so the reader opens it; one that is merely behind is left alone,

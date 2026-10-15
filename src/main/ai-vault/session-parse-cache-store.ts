@@ -21,8 +21,8 @@ export type SessionParseResumePoint = {
   // Records this fold dropped for exceeding the per-record budget, accumulated
   // across resumes. Lives with the fold, so a whole-file re-read starts clean.
   skippedRecords: SkippedTranscriptRecord[]
-  // The fold skipped the middle of the file (see readPartialTranscript). Such a
-  // fold never publishes to consumers, and only a partial-ok caller resumes it.
+  // The fold collected suffix previews without publishing to exact consumers.
+  // Only a partial-ok caller resumes it (see readPartialTranscript).
   partial?: true
 }
 

@@ -59,8 +59,7 @@ export type AiVaultScanOptions = {
   // Active workspace/project paths whose sessions must be included regardless of
   // the recency cap (see discoverInScopeCwdBucketFiles).
   scopePaths?: readonly string[]
-  // The client shows rows built from a transcript's first and last bytes
-  // (`contentCoverage`) without their counts, so large files may be read that way.
+  // The client accepts shortened previews marked by `contentCoverage`.
   acceptPartialRows?: boolean
   platform?: NodeJS.Platform
   executionHostId?: ExecutionHostId
@@ -124,10 +123,8 @@ export type ResumableSessionParseState = {
   consumeLineBytes?(line: Buffer): void
   // Lets a parser terminate an excluded transcript without draining the file.
   shouldStop?(): boolean
-  // Called between the head and the tail of a partial read. False refuses the
-  // gap (the head lacks what the row needs) and the reader reads whole; parsers
-  // without it are never read partially.
-  skipToTail?(): boolean
+  // Preview projection is independent of the complete metadata/message fold.
+  setPreviewCollection?(enabled: boolean): void
   // What the fold knows about the session right now, for a consumer that has to
   // commit before the read ends (see TranscriptSessionIdentity).
   identity?(): TranscriptSessionIdentity | null
@@ -161,8 +158,9 @@ export type SessionAccumulator = {
   // True once an older message fell out of the newest-N preview window, so the
   // earliest preview turn is no longer the session's opening ask.
   previewMessagesTruncated: boolean
-  // True once the fold skipped part of the file (see skipAccumulatorToTail).
+  // Summary rows retain exact metadata but shorten the preview.
   partial: boolean
+  collectPreviewMessages: boolean
   antigravityOpeningPrompt?: AiVaultSession['antigravityOpeningPrompt'] | null
   firstUserPrompt: string | null
   lastUserPrompt: string | null

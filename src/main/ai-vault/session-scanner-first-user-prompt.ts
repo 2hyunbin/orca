@@ -1,3 +1,5 @@
+import type { AiVaultSessionPreviewMessage } from '../../shared/ai-vault-types'
+import type { SessionAccumulator } from './session-scanner-types'
 import { isKnownHarnessInjectedUserTurnText } from '../../shared/harness-injected-user-turns'
 import { getFirstUserPromptCaptureMode } from './session-scanner-first-user-prompt-capture'
 import { stripGrokUserQueryEnvelope } from './session-scanner-grok-user-text'
@@ -105,4 +107,26 @@ function firstUserPromptContentItemText(item: unknown): string | null {
     return record.content
   }
   return null
+}
+
+/**
+ * Seed the copyable first prompt from the first real user turn. `fullText` is a
+ * thunk so list scans (capture mode `none`) never pay the extraction cost.
+ */
+export function seedFullFirstUserPrompt(
+  accumulator: SessionAccumulator,
+  role: AiVaultSessionPreviewMessage['role'],
+  fullText: () => string | null,
+  seedFirstUserPrompt?: boolean
+): void {
+  // Why: list scans never store firstUserPrompt (payload/perf). Only the
+  // on-demand full-capture path seeds the untruncated copy body.
+  if (
+    role === 'user' &&
+    seedFirstUserPrompt !== false &&
+    !accumulator.firstUserPrompt &&
+    seedFullFirstUserPrompt()
+  ) {
+    accumulator.firstUserPrompt = fullText()
+  }
 }

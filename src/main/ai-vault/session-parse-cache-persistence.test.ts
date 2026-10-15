@@ -182,7 +182,7 @@ describe('session parse cache persistence', () => {
     expect(stats.reused).toBe(0)
   })
 
-  it('ignores a cache file with a mismatched schemaVersion', async () => {
+  it('rejects previously sampled schema-4 rows', async () => {
     const root = await makeTempDir()
     const cacheFile = join(root, 'session-parse-cache.json')
     initSessionParseCachePersistence({ filePath: cacheFile, appVersion: APP_VERSION })
@@ -190,13 +190,46 @@ describe('session parse cache persistence', () => {
     await parseAndPersist(transcript)
 
     const persisted = JSON.parse(await readFile(cacheFile, 'utf-8'))
-    persisted.schemaVersion = 999
+    persisted.schemaVersion = 4
+    persisted.entries[0][1].session.contentCoverage = 'partial'
     await writeFile(cacheFile, JSON.stringify(persisted))
 
     simulateRestart(cacheFile)
     const stats = await coldParseStats(transcript)
     expect(stats.fullParses).toBe(1)
     expect(stats.reused).toBe(0)
+  })
+
+  it('persists schema-5 summaries without serving them to exact callers', async () => {
+    const root = await makeTempDir()
+    const cacheFile = join(root, 'session-parse-cache.json')
+    initSessionParseCachePersistence({ filePath: cacheFile, appVersion: APP_VERSION })
+    const transcript = await writeTranscript(root)
+    await appendFile(
+      transcript,
+      `${JSON.stringify({ type: 'filler', pad: 'x'.repeat(400_000) })}\n`
+    )
+    const candidate = await claudeCandidate(transcript)
+    const summary = await parseAgentSessionFileCached(
+      candidate,
+      process.platform,
+      undefined,
+      'partial-ok'
+    )
+    expect(summary?.contentCoverage).toBe('partial')
+    scheduleSessionParseCachePersist()
+    await flushSessionParseCachePersistForTests()
+    expect(JSON.parse(await readFile(cacheFile, 'utf-8')).schemaVersion).toBe(5)
+    simulateRestart(cacheFile)
+    await ensureSessionParseCacheLoaded()
+    const stats = createSessionParseStats()
+    expect(
+      await parseAgentSessionFileCached(candidate, process.platform, stats, 'partial-ok')
+    ).toEqual(summary)
+    expect(stats.reused).toBe(1)
+    expect(
+      (await parseAgentSessionFileCached(candidate, process.platform))?.contentCoverage
+    ).toBeUndefined()
   })
 
   it('reuses a schema-compatible cache written by a different app version', async () => {

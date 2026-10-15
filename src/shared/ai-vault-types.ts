@@ -121,9 +121,9 @@ export type AiVaultSession = {
    * is NOT the opening ask, so first-prompt consumers must not scan it. */
   previewMessagesTruncated?: boolean
   /**
-   * Present when the row was built from the start and end of the transcript only:
-   * `messageCount` and `totalTokens` cover just those parts, and the preview and
-   * `lastUserPrompt` only the end. Hosts write `'partial'`; treat any value as partial.
+   * Present when preview collection is limited to the transcript suffix; other
+   * row fields remain exact. Hosts write `'partial'`; treat any value as partial.
+   * Older hosts may also return incomplete counts under this marker.
    */
   contentCoverage?: string
   /** Bounded opening-prompt identity for Antigravity history joins; never a rolling preview. */
@@ -236,7 +236,7 @@ export type AiVaultListArgs = {
   scopePaths?: readonly string[]
   /**
    * Set by the host from the caller's capability, never sent over the wire: rows
-   * may be built from a transcript's first and last bytes (`contentCoverage`).
+   * may have shortened suffix previews marked by `contentCoverage`.
    */
   acceptPartialRows?: boolean
   executionHostScope?: ExecutionHostScope

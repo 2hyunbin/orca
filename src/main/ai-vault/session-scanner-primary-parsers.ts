@@ -20,10 +20,10 @@ import {
   createAccumulator,
   finalizeSession,
   sessionIdFromFileName,
+  setPreviewCollection,
   updateLatestLocation,
   updateTimeline
 } from './session-scanner-accumulator'
-import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
 import { countSubagentTranscripts } from './session-scanner-subagent-transcripts'
 import {
   asRecord,
@@ -210,15 +210,7 @@ function claudeResumeStateFromParseState(
 ): ResumableSessionParseState {
   return {
     consumeLine: (line) => consumeClaudeSessionLine(state, line),
-    // Without a real prompt in the head the fallback title would come from a
-    // late prompt, and an empty session would be judged from a partial read.
-    skipToTail: () => {
-      if (state.firstUserTitle === null) {
-        return false
-      }
-      skipAccumulatorToTail(state.accumulator)
-      return true
-    },
+    setPreviewCollection: (enabled) => setPreviewCollection(state.accumulator, enabled),
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () => claudeResumeStateFromParseState(cloneClaudeSessionParseState(state)),
     touchFile: (file) => {

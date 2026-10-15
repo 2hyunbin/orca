@@ -15,7 +15,7 @@ import type {
 import {
   extractFullFirstUserPromptText,
   normalizeFullFirstUserPromptText,
-  shouldCaptureFullFirstUserPrompt
+  seedFullFirstUserPrompt
 } from './session-scanner-first-user-prompt'
 import {
   extractPreviewContentText,
@@ -33,6 +33,8 @@ import {
   transcriptMessageRole,
   transcriptMessagesFromContent
 } from './session-transcript-message-content'
+
+export { seedFullFirstUserPrompt } from './session-scanner-first-user-prompt'
 
 const SESSION_PREVIEW_MESSAGE_LIMIT = 5
 
@@ -61,6 +63,7 @@ export function createAccumulator(args: {
     previewMessages: [],
     previewMessagesTruncated: false,
     partial: false,
+    collectPreviewMessages: true,
     firstUserPrompt: null,
     lastUserPrompt: null,
     queuedMessageCount: 0,
@@ -208,6 +211,14 @@ export function updateTimeline(accumulator: SessionAccumulator, timestamp: unkno
   }
 }
 
+export function setPreviewCollection(accumulator: SessionAccumulator, enabled: boolean): void {
+  accumulator.collectPreviewMessages = enabled
+  if (!enabled) {
+    accumulator.partial = true
+    accumulator.previewMessagesTruncated = true
+  }
+}
+
 export function addPreviewMessage(
   accumulator: SessionAccumulator,
   args: {
@@ -232,6 +243,9 @@ export function addPreviewMessage(
     () => (args.text ? normalizeFullFirstUserPromptText(args.text) : null),
     args.seedFirstUserPrompt
   )
+  if (!accumulator.collectPreviewMessages) {
+    return
+  }
   const text = normalizePreviewText(args.text ?? '', args.role)
   if (!text) {
     return
@@ -267,6 +281,9 @@ export function addPreviewContent(
       accumulator.messages.push(message)
     }
   }
+  if (!accumulator.collectPreviewMessages) {
+    return
+  }
   addPreviewMessage(accumulator, {
     role,
     text: extractPreviewContentText(content, role),
@@ -292,28 +309,6 @@ function publishTranscriptMessage(
       text: messageText,
       timestamp: timestampIso(timestamp)
     })
-  }
-}
-
-/**
- * Seed the copyable first prompt from the first real user turn. `fullText` is a
- * thunk so list scans (capture mode `none`) never pay the extraction cost.
- */
-export function seedFullFirstUserPrompt(
-  accumulator: SessionAccumulator,
-  role: AiVaultSessionPreviewMessage['role'],
-  fullText: () => string | null,
-  seedFirstUserPrompt?: boolean
-): void {
-  // Why: list scans never store firstUserPrompt (payload/perf). Only the
-  // on-demand full-capture path seeds the untruncated copy body.
-  if (
-    role === 'user' &&
-    seedFirstUserPrompt !== false &&
-    !accumulator.firstUserPrompt &&
-    shouldCaptureFullFirstUserPrompt()
-  ) {
-    accumulator.firstUserPrompt = fullText()
   }
 }
 

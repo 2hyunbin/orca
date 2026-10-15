@@ -27,12 +27,8 @@ type JsonlReadResult = {
 export async function consumeCompleteJsonlLines(args: {
   path: string
   start: number
-  /** Stop once a line ends at or past this byte: the line crossing it is finished, not cut. */
-  stopAt?: number
-  /** `start` may fall mid-record: drop bytes through the first newline at or after `start`. */
-  startsMidLine?: boolean
-  onLine: (line: string) => void
-  onLineBytes?: (line: Buffer) => void
+  onLine: (line: string, byteOffset: number) => void
+  onLineBytes?: (line: Buffer, byteOffset: number) => void
   shouldStop?: () => boolean
   signal?: AbortSignal
 }): Promise<JsonlReadResult> {
@@ -47,8 +43,6 @@ export async function consumeCompleteJsonlLines(args: {
   }
   let consumedThrough = args.start
   let bytesRead = 0
-  // Until the first newline, a mid-file start is inside a record we never saw begin.
-  let seekingLineStart = args.startsMidLine === true
   // A piece list avoids O(record^2) copying when one record spans many chunks.
   let remainderParts: Buffer[] = []
   let remainderLength = 0
@@ -69,17 +63,6 @@ export async function consumeCompleteJsonlLines(args: {
     const chunkEnd = chunkStart + chunk.length
     let lineStart = 0
     let newlineIndex = chunk.indexOf(NEWLINE_BYTE, lineStart)
-    if (seekingLineStart) {
-      if (newlineIndex === -1) {
-        consumedThrough = chunkEnd
-        chunkStart = chunkEnd
-        continue
-      }
-      seekingLineStart = false
-      consumedThrough = chunkStart + newlineIndex + 1
-      lineStart = newlineIndex + 1
-      newlineIndex = chunk.indexOf(NEWLINE_BYTE, lineStart)
-    }
     while (newlineIndex !== -1) {
       const newlineOffset = chunkStart + newlineIndex
       const recordLength = newlineOffset - consumedThrough
@@ -99,14 +82,14 @@ export async function consumeCompleteJsonlLines(args: {
         }
         const lineEnd = line.at(-1) === CARRIAGE_RETURN_BYTE ? line.length - 1 : line.length
         if (args.onLineBytes) {
-          args.onLineBytes(line.subarray(0, lineEnd))
+          args.onLineBytes(line.subarray(0, lineEnd), consumedThrough)
         } else {
-          args.onLine(line.toString('utf-8', 0, lineEnd))
+          args.onLine(line.toString('utf-8', 0, lineEnd), consumedThrough)
         }
       }
       consumedThrough = newlineOffset + 1
       lineStart = newlineIndex + 1
-      if (args.shouldStop?.() || (args.stopAt !== undefined && consumedThrough >= args.stopAt)) {
+      if (args.shouldStop?.()) {
         stopped = true
         break
       }

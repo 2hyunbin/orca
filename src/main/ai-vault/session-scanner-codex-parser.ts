@@ -9,9 +9,9 @@ import {
   createAccumulator,
   finalizeSession,
   sessionIdFromFileName,
+  setPreviewCollection,
   updateTimeline
 } from './session-scanner-accumulator'
-import { skipAccumulatorToTail } from './session-scanner-accumulator-gap'
 import {
   consumeCodexCompletedMessage,
   consumeCodexLegacyEventMessage,
@@ -276,14 +276,7 @@ function codexResumeStateFromParseState(
       }
     },
     shouldStop: () => state.nonUserOrigin !== null,
-    // The title is first-wins: once the head set it, the tail cannot change it.
-    skipToTail: () => {
-      if (state.titleSource === null || state.accumulator.messageCount === 0) {
-        return false
-      }
-      skipAccumulatorToTail(state.accumulator)
-      return true
-    },
+    setPreviewCollection: (enabled) => setPreviewCollection(state.accumulator, enabled),
     identity: () => accumulatorSessionIdentity(state.accumulator),
     clone: () =>
       codexResumeStateFromParseState(cloneCodexParseState(state), codexHome, titleReader),
