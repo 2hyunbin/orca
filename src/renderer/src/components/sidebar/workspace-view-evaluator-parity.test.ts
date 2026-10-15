@@ -338,6 +338,32 @@ describe('the shared comparator matches the sidebar comparator it replaced', () 
 })
 
 describe('the desktop row fact reader', () => {
+  it('keeps folder workspace rows through restrictive sidebar filters', () => {
+    const folder = row('folder:group-1', { repoId: 'folder' })
+    expect(
+      computeVisibleWorktreeIds({ folder: [folder] }, [folder.id], {
+        filterRepoIds: ['not-selected'],
+        showSleepingWorkspaces: false,
+        tabsByWorktree: {},
+        ptyIdsByTabId: {},
+        browserTabsByWorktree: {},
+        worktreeIdsWithLiveAgent: new Set(),
+        hideDefaultBranchWorkspace: true,
+        hideAutomationGeneratedWorkspaces: true,
+        hideCliCreatedWorkspaces: true,
+        hideDetachedHeadWorkspaces: true,
+        hideWorkspacesFromOtherDevices: true,
+        pairedDeviceIdsByEnvironment,
+        alwaysShowDefaultBranchWorkspace: false,
+        repoMap,
+        workspaceHostScope: 'all',
+        visibleWorkspaceHostIds: ['local'],
+        defaultHostId: 'local',
+        worktreeLineageById: {}
+      })
+    ).toEqual([folder.id])
+  })
+
   it('reads folder workspace keys as folder rows', () => {
     const read = buildDesktopWorkspaceRowFactReader({
       repoMap,
