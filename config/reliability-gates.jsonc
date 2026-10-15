@@ -20908,11 +20908,16 @@
       "invariant": "A different provider inheriting an active pane key cannot replace its child roster, main turn, prompt, resume identity, model or freshness, nor mutate the owning provider caches. Same-provider children still update; finished or stale owners permit provider replacement.",
       "oracle": "Send a full Claude child roster, interleave Codex review lifecycle/tool/approval/completion hooks, and require identical snapshots plus zero publications. A later Claude child event must retain the original prompt and roster, and a real child completion must shrink it.",
       "commands": [
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts --maxWorkers=2"
       ],
       "testFiles": [
+        "src/wsl-guest/agent-hook-provider-normalization.test.ts",
+        "src/main/agent-hooks/server-nested-agent-boundaries.test.ts",
+        "src/main/agent-hooks/server-nested-agent-consumers.test.ts",
+        "src/renderer/src/store/slices/agent-status-nested-resume.test.ts",
         "src/main/agent-hooks/server-nested-agent-roster.test.ts",
         "src/main/agent-hooks/server-nested-agent-model.test.ts",
         "src/main/agent-hooks/server-ingest-remote.test.ts",
@@ -20928,6 +20933,15 @@
         }
       ],
       "evidenceRuns": [
+        {
+          "date": "2026-10-15",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
+          "result": "passed",
+          "durationSeconds": 8.81,
+          "summary": "94 tests across 11 files passed after review fixes, including actual mobile transcript selection, renderer Claude resume argv, Pi identity-only boundaries, clock rollback and provider-isolated relay HTTP/spool/reconnect/teardown. Separate relay/interrupt/OpenCode suites also passed in sub-agent review."
+        },
         {
           "date": "2026-10-15",
           "runner": "local",
@@ -20961,7 +20975,7 @@
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "Reuses the existing constant-time provider identity decision. Rejected nested hooks add no polling, timers, subprocesses, retained state or renderer publications; tests require zero status publications for six nested hooks."
+        "evidence": "Main reuses the constant-time provider identity decision and publishes no rejected updates. Legacy relays retain provider-specific prompt/tool/previous-status caches, bounded by MAX_CACHED_PANES for each finite provider and cleared on pane teardown or stop; no polling, timers or subprocesses added."
       },
       "promotionCriteria": [
         "Save red/green evidence and CI soak before promotion."

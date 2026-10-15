@@ -85,6 +85,16 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       this.commitStatusRowMutation(rowBefore, previous)
       return previous
     }
+    const connectionClearWatermark = terminalOwnedPayload.connectionId
+      ? this.connectionTimestampWatermarkById.get(terminalOwnedPayload.connectionId)
+      : undefined
+    const restoredStatusWatermark = previous?.restoredUnconfirmed ? previous.receivedAt : undefined
+    // Delivery ordering and identity freshness must use the same clock across rollback.
+    const now = Math.max(
+      Date.now(),
+      (connectionClearWatermark ?? -1) + 1,
+      (restoredStatusWatermark ?? -1) + 1
+    )
     const identity = resolveAgentStatusIdentity({
       existing: previous
         ? {
@@ -95,7 +105,7 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
           }
         : undefined,
       incoming: terminalOwnedPayload.payload.agentType,
-      now: Date.now()
+      now
     })
     if (
       previous &&
@@ -110,16 +120,6 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       // Why: the prompt boundary is authoritative even when text is unchanged; its next OSC working row must not inherit the prior cron/background turn stamp.
       this.activeHookTurnCompletedAtByPaneKey.delete(payload.paneKey)
     }
-    const connectionClearWatermark = terminalOwnedPayload.connectionId
-      ? this.connectionTimestampWatermarkById.get(terminalOwnedPayload.connectionId)
-      : undefined
-    // Why: renderer ordering rejects older rows; live evidence must sort after reconnect clears and restored rows across clock rollback.
-    const restoredStatusWatermark = previous?.restoredUnconfirmed ? previous.receivedAt : undefined
-    const now = Math.max(
-      Date.now(),
-      (connectionClearWatermark ?? -1) + 1,
-      (restoredStatusWatermark ?? -1) + 1
-    )
     if (terminalOwnedPayload.connectionId) {
       this.connectionTimestampWatermarkById.set(terminalOwnedPayload.connectionId, now)
     }
