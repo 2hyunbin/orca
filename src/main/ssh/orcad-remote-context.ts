@@ -13,6 +13,7 @@ import {
 import {
   decideOrcadMachineHome,
   orcadMachineClaimCommand,
+  orcadMachineDataRoot,
   orcadMachineHomeDir,
   orcadMachineHomeProbeCommand,
   parseOrcadMachineClaim,
@@ -41,8 +42,8 @@ export type OrcadRemoteContext<Target extends OrcadHostTarget = SshTarget> = {
   connection: OrcadHostTransport
   host: RemoteHostPlatform
   /**
-   * What `~/.orca-remote` and `~/.orca` hang off: the login home, or this machine's own home
-   * when several machines share one (see `orcad-machine-home.ts`).
+   * What `~/.orca-remote` hangs off: the login home, or this machine's own home when several
+   * machines share one (see `orcad-machine-home.ts`). `userDataDir` follows the same choice.
    */
   remoteHome: string
   target: Target
@@ -60,7 +61,7 @@ export async function resolveOrcadRemoteContext<Target extends OrcadHostTarget =
     throw new OrcadHostUnsupportedError('This SSH host platform is not supported by managed orcad.')
   }
   const remote = { conn: connection, host, signal }
-  const { orcadHome: remoteHome } = await resolveOrcadMachineHome(
+  const { orcadHome: remoteHome, userDataDir } = await resolveOrcadMachineHome(
     remote,
     !isWslOrcadHostTarget(target)
   )
@@ -93,7 +94,7 @@ export async function resolveOrcadRemoteContext<Target extends OrcadHostTarget =
     host,
     remoteHome,
     target,
-    userDataDir: joinRemotePath(host, remoteHome, '.orca')
+    userDataDir
   }
 }
 
@@ -104,7 +105,7 @@ export async function resolveOrcadRemoteContext<Target extends OrcadHostTarget =
 export async function resolveOrcadMachineHome(
   remote: OrcadRemoteExecTarget,
   keyByMachine: boolean
-): Promise<{ loginHome: string; orcadHome: string }> {
+): Promise<{ loginHome: string; orcadHome: string; userDataDir: string }> {
   const { host } = remote
   if (!keyByMachine || isWindowsRemoteHost(host)) {
     const loginHome = normalizeRemoteHome(
@@ -114,7 +115,11 @@ export async function resolveOrcadMachineHome(
     if (!validateRemoteHome(loginHome, host)) {
       throw new Error(`Remote home is not a valid path: ${loginHome.slice(0, 100)}`)
     }
-    return { loginHome, orcadHome: loginHome }
+    return {
+      loginHome,
+      orcadHome: loginHome,
+      userDataDir: joinRemotePath(host, loginHome, '.orca')
+    }
   }
   const probe = parseOrcadMachineHomeProbe(
     await execOrcadRemote(remote, orcadMachineHomeProbeCommand(host)),
@@ -140,9 +145,17 @@ export async function resolveOrcadMachineHome(
         : { kind: 'machine-home', machineKey: decision.machineKey }
   }
   if (decision.kind === 'login-home') {
-    return { loginHome, orcadHome: loginHome }
+    return {
+      loginHome,
+      orcadHome: loginHome,
+      userDataDir: joinRemotePath(host, loginHome, '.orca')
+    }
   }
   const orcadHome = orcadMachineHomeDir(host, loginHome, decision.machineKey)
   await execOrcadRemote(remote, `umask 077; mkdir -p ${shellEscape(orcadHome)}`)
-  return { loginHome, orcadHome }
+  return {
+    loginHome,
+    orcadHome,
+    userDataDir: orcadMachineDataRoot(host, loginHome, decision.machineKey)
+  }
 }

@@ -36,7 +36,7 @@ export type OrcadMachineIdentity = {
   /** Short, path-safe hash; the raw identity never lands on disk. */
   key: string
   /** What the data root's profile-state owners record, to recognise another machine's. */
-  machineIdentity: string | null
+  machineIdentity: string
   hostname: string | null
 }
 
@@ -77,7 +77,9 @@ export function orcadMachineHomeProbeCommand(host: RemoteHostPlatform): string {
       ? 'sysctl -n kern.hostuuid 2>/dev/null;'
       : 'cat /etc/machine-id 2>/dev/null;',
     `echo; echo ${SECTION}; uname -n 2>/dev/null; echo; echo ${SECTION};`,
-    `if [ ! -e ${claim} ] && [ ! -L ${claim} ]; then echo ${CLAIM_ABSENT};`,
+    // An empty claim is one a full disk cut short; the claim command replaces it.
+    `if { [ ! -e ${claim} ] && [ ! -L ${claim} ]; } || { [ -f ${claim} ] && [ ! -s ${claim} ]; };`,
+    `then echo ${CLAIM_ABSENT};`,
     `elif [ -f ${claim} ]; then echo ${CLAIM_PRESENT}; head -c ${RECORD_MAX_BYTES} ${claim}; echo;`,
     `else echo UNREADABLE; fi; echo ${SECTION};`,
     `for f in ${access}/participants/*/*.owner ${access}/maintenance/*.owner; do`,
@@ -115,32 +117,31 @@ export function parseOrcadMachineHomeProbe(
 }
 
 /**
- * Linux keys on machine-id AND hostname: diskless cluster nodes booted from one image can share
- * a machine-id, and containers often have none. macOS keys on the hardware UUID alone, since its
- * hostname follows the network.
+ * The same machine identity the profile-state owners record: `/etc/machine-id` on Linux, the
+ * hardware UUID on macOS. Neither changes when the host is renamed or a container is recreated
+ * over a persistent home. A host without one keeps the login home, as before (#29059).
  */
 export function orcadMachineIdentity(
   host: RemoteHostPlatform,
   machineRaw: string,
   hostnameRaw: string
 ): OrcadMachineIdentity | null {
-  const hostname = /^[\x21-\x7e]{1,255}$/u.test(hostnameRaw) ? hostnameRaw : null
   const machineIdentity =
     host.os === 'darwin'
       ? /^[0-9A-Fa-f-]{36}$/u.test(machineRaw)
-        ? machineRaw
+        ? machineRaw.toLowerCase()
         : null
       : /^[a-f0-9]{32}$/u.test(machineRaw) && !/^0+$/u.test(machineRaw)
         ? machineRaw
         : null
-  if (!machineIdentity && !hostname) {
+  if (!machineIdentity) {
     return null
   }
-  const parts =
-    host.os === 'darwin' && machineIdentity
-      ? [`darwin:${machineIdentity}`]
-      : [`machine:${machineIdentity ?? ''}`, `host:${hostname ?? ''}`]
-  const key = createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16)
+  const key = createHash('sha256')
+    .update(`${host.os}:${machineIdentity}`)
+    .digest('hex')
+    .slice(0, 16)
+  const hostname = /^[\x21-\x7e]{1,255}$/u.test(hostnameRaw) ? hostnameRaw : null
   return { key, machineIdentity, hostname }
 }
 
@@ -203,16 +204,14 @@ function isForeignOwner(
   identity: OrcadMachineIdentity,
   host: RemoteHostPlatform
 ): boolean {
-  const machineDiffers = Boolean(
-    owner.machineIdentity &&
-    identity.machineIdentity &&
-    owner.machineIdentity.toLowerCase() !== identity.machineIdentity.toLowerCase()
+  if (owner.machineIdentity) {
+    return owner.machineIdentity.toLowerCase() !== identity.machineIdentity
+  }
+  // An owner too old to record its machine is judged by hostname, except on drifting macOS names.
+  return (
+    host.os !== 'darwin' &&
+    Boolean(owner.host && identity.hostname && owner.host !== identity.hostname)
   )
-  const hostDiffers = Boolean(owner.host && identity.hostname && owner.host !== identity.hostname)
-  // Mirrors the key: macOS hostnames drift, so only a different hardware UUID is foreign there.
-  return host.os === 'darwin' && owner.machineIdentity && identity.machineIdentity
-    ? machineDiffers
-    : machineDiffers || hostDiffers
 }
 
 /**
@@ -254,9 +253,21 @@ export function orcadMachineHomeDir(
 }
 
 /**
+ * A sibling of `~/.orca`, not inside the machine home: orcad binds its runtime socket in the data
+ * root, and a deeper path would cross the Unix socket length limit on long cluster home paths.
+ */
+export function orcadMachineDataRoot(
+  host: RemoteHostPlatform,
+  loginHome: string,
+  machineKey: string
+): string {
+  return joinRemotePath(host, loginHome, `.orca-${machineKey.slice(0, 8)}`)
+}
+
+/**
  * Publishes the claim exclusively and prints whichever claim won. Why a hard link: `ln` is atomic
- * and exclusive on NFS too, and a reader never sees a half-written claim. `set -C` covers a
- * filesystem without hard links.
+ * and exclusive on NFS too, and a reader never sees a half-written claim. A filesystem without
+ * hard links, or an empty claim a full disk left, falls back to an atomic (not exclusive) rename.
  */
 export function orcadMachineClaimCommand(
   host: RemoteHostPlatform,
@@ -284,7 +295,7 @@ export function orcadMachineClaimCommand(
   return [
     `umask 077; mkdir -p ${base} || exit 65;`,
     `printf %s ${body} > ${partial} || exit 65;`,
-    `ln ${partial} ${claim} 2>/dev/null || [ -e ${claim} ] || ( set -C; cat ${partial} > ${claim} ) 2>/dev/null;`,
+    `ln ${partial} ${claim} 2>/dev/null || [ -s ${claim} ] || mv -f ${partial} ${claim};`,
     `rm -f ${partial}; cat ${claim}`
   ].join(' ')
 }
