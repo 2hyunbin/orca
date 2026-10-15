@@ -10,7 +10,6 @@ import type {
   RuntimeMobileSessionTabsResult,
   RuntimeSyncedTab
 } from '../../../shared/runtime-types'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../../shared/execution-host'
@@ -163,15 +162,13 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     ptyInventory: PtyControllerInventory | null
     changeSequence: number
   }> {
-    const loadedSessions = new Map<WorkspaceSessionState, WorkspaceSessionState>()
     for (const worktreeId of this.getKnownWorkspaceSessionWorktreeIds()) {
       this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
         allowAttachedWindow: true,
-        onlyRuntimeOwnedTerminals: true,
-        loadedSessions
+        onlyRuntimeOwnedTerminals: true
       })
     }
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(undefined, { loadedSessions })
+    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
     const ptyInventory = await this.refreshMobileSessionPtyInventory()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(null)
     const snapshots = [...this.mobileSessionTabsByWorktree.values()].map((snapshot) =>

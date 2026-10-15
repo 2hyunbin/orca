@@ -1,12 +1,10 @@
 import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import type { TerminalTab } from '../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
-import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
-import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
-import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
-import { collectLayoutLeafIdsInOrder } from '../../shared/workspace-layout/terminal-pane-tree'
-import { isSameTerminal } from '../../shared/workspace-layout/terminal-owner-invariants'
+import {
+  readCanonicalPtyOwners,
+  resolveCanonicalPtyClaim
+} from '../../shared/workspace-layout/legacy-terminal-row-claims'
 import {
   cloneTerminalLayoutSnapshot,
   collectPersistedTerminalLeafIds,
@@ -14,82 +12,33 @@ import {
   isPersistedTerminalLeafActive
 } from './mobile-session-layout-projection'
 
-/** `legacy`: the row has no tab-bar entry, so the Loader matches its terminals by id alone. */
-type TerminalBinding = { ptyId: string; incarnationId?: string; legacy: boolean }
-
 /**
- * Whether stored rows repeat a row id, or bind one terminal (as the Loader compares terminals) in
- * two rows or two of a row's mounted panes. Exists only to skip the Loader's cost.
+ * Drops a legacy row with no tab-bar entry whose every terminal a tab-bar tab of this workspace
+ * holds (the shared Loader's rule; the window hides it too), and moves a selection on it to that tab.
  */
-function storedTerminalsRepeat(session: WorkspaceSessionState): boolean {
-  const rowIds = new Set<string>()
-  const boundByPtyId = new Map<string, TerminalBinding[]>()
-  for (const [key, rows] of Object.entries(session.tabsByWorktree ?? {})) {
-    const tabBarIds = new Set(
-      (session.unifiedTabs?.[key] ?? [])
-        .filter((tab) => tab.contentType === 'terminal')
-        .map((tab) => tab.entityId)
-    )
-    for (const row of rows) {
-      const legacy = !tabBarIds.has(row.id)
-      const layout = session.terminalLayoutsByTabId?.[row.id]
-      const paneIds = layout?.root
-        ? collectLayoutLeafIdsInOrder(layout.root)
-        : Object.keys(layout?.ptyIdsByLeafId ?? {})
-      const panes = paneIds.flatMap((leafId) => {
-        const ptyId = layout?.ptyIdsByLeafId?.[leafId]
-        const incarnationId = session.terminalPtyIncarnationsByPaneKey?.[`${row.id}:${leafId}`]
-        return ptyId ? [{ ptyId, incarnationId, legacy }] : []
-      })
-      const bindings = [
-        ...panes,
-        ...(row.ptyId && !panes.some((pane) => pane.ptyId === row.ptyId)
-          ? [{ ptyId: row.ptyId, legacy }]
-          : [])
-      ]
-      // Two tab-bar rows are compared by incarnation, as the Loader's pane check does.
-      const repeats = (binding: TerminalBinding, others: readonly TerminalBinding[]) =>
-        others.some(
-          (other) =>
-            other.ptyId === binding.ptyId &&
-            (other.legacy || binding.legacy || isSameTerminal(other, binding))
-        )
-      if (
-        rowIds.has(row.id) ||
-        panes.some((pane, index) => repeats(pane, panes.slice(0, index))) ||
-        bindings.some((binding) => repeats(binding, boundByPtyId.get(binding.ptyId) ?? []))
-      ) {
-        return true
-      }
-      rowIds.add(row.id)
-      for (const binding of bindings) {
-        boundByPtyId.set(binding.ptyId, [...(boundByPtyId.get(binding.ptyId) ?? []), binding])
-      }
+function withoutAbsorbedLegacyRows(
+  worktreeId: string,
+  persistedTabs: readonly TerminalTab[],
+  session: WorkspaceSessionState
+): { rows: TerminalTab[]; selection: WorkspaceSessionState } {
+  const canonical = readCanonicalPtyOwners(session, worktreeId, persistedTabs)
+  const canonicalTabIdByAbsorbedTabId = new Map<string, string>()
+  const rows = persistedTabs.filter((row) => {
+    const claim = resolveCanonicalPtyClaim(session, row, canonical)
+    if (claim.kind === 'subsumed') {
+      canonicalTabIdByAbsorbedTabId.set(row.id, claim.canonicalTabId)
     }
-  }
-  return false
-}
-
-/**
- * The partition the phone is built from: the stored rows unchanged, or for a partition that
- * repeats a row or terminal, the shared Loader's result whole, as the window shows it. `cache`
- * lives for one caller loop. It ignores `hostId`, which only stamps tab-bar entries and never
- * changes which rows or panes survive.
- */
-export function loadTerminalSession(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  cache?: Map<WorkspaceSessionState, WorkspaceSessionState>
-): WorkspaceSessionState {
-  const loaded =
-    cache?.get(session) ??
-    (storedTerminalsRepeat(session)
-      ? saveWorkspaceLayout(
-          loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext())
-        )
-      : session)
-  cache?.set(session, loaded)
-  return loaded
+    return claim.kind !== 'subsumed'
+  })
+  const activeTabId = session.activeTabIdByWorktree?.[worktreeId] ?? session.activeTabId
+  const followed = activeTabId ? canonicalTabIdByAbsorbedTabId.get(activeTabId) : undefined
+  const selection = followed
+    ? {
+        ...session,
+        activeTabIdByWorktree: { ...session.activeTabIdByWorktree, [worktreeId]: followed }
+      }
+    : session
+  return { rows, selection }
 }
 
 export function buildHeadlessMobileSessionTerminalTabs(
@@ -97,7 +46,8 @@ export function buildHeadlessMobileSessionTerminalTabs(
   persistedTabs: readonly TerminalTab[],
   session: WorkspaceSessionState
 ): RuntimeMobileSessionTerminalTab[] {
-  return [...persistedTabs]
+  const { rows, selection } = withoutAbsorbedLegacyRows(worktreeId, persistedTabs, session)
+  return rows
     .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt)
     .flatMap((tab, index) => {
       const layout = session.terminalLayoutsByTabId?.[tab.id]
@@ -127,7 +77,7 @@ export function buildHeadlessMobileSessionTerminalTabs(
             ...(tab.color != null ? { color: tab.color } : {}),
             ...(tab.isPinned ? { isPinned: true } : {}),
             ...(tab.viewMode ? { viewMode: tab.viewMode } : {}),
-            isActive: isPersistedTerminalLeafActive(session, worktreeId, tab.id, leafId, layout)
+            isActive: isPersistedTerminalLeafActive(selection, worktreeId, tab.id, leafId, layout)
           }
         ]
       })

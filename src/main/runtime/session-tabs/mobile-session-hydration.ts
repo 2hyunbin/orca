@@ -6,11 +6,7 @@ import { RuntimeSessionTabsInventoryPublication } from './session-tabs-inventory
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
-import {
-  buildHeadlessMobileSessionTerminalTabs,
-  loadTerminalSession
-} from '../mobile-session-terminal-projection'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { buildHeadlessMobileSessionTerminalTabs } from '../mobile-session-terminal-projection'
 import { buildHeadlessMobileSessionEditorTabs } from '../mobile-session-editor-projection'
 import type {
   RuntimeMobileSessionSnapshotTab,
@@ -106,8 +102,6 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
       onlyRuntimeOwnedTerminals?: boolean
       runtimeOwnedTerminalCandidateKnown?: boolean
       workspaceSession?: WorkspaceSessionState
-      /** Shared across one caller loop over worktrees, so each stored partition loads once. */
-      loadedSessions?: Map<WorkspaceSessionState, WorkspaceSessionState>
     } = {}
   ): Set<string> {
     // Why: report which worktrees were reconciled in place so callers don't
@@ -164,8 +158,7 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
     // repo inventory on the hot poll path, and `null` when the store cannot
     // report repos — an unavailable list must not read as "every repo is gone".
     let liveRepoIds: Set<string> | null | undefined
-    let loaded: WorkspaceSessionState | undefined
-    for (const [entryWorktreeId] of entries) {
+    for (const [entryWorktreeId, persistedTabs] of entries) {
       const ownerRepoId = splitWorktreeIdForFilesystem(entryWorktreeId)?.repoId
       if (ownerRepoId) {
         if (liveRepoIds === undefined) {
@@ -195,17 +188,10 @@ export abstract class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspa
       const runtimeOwnedOnly =
         options.onlyRuntimeOwnedTerminals === true &&
         (existing !== undefined || hasAuthoritativeWindow)
-      loaded ??= loadTerminalSession(
-        worktreeId
-          ? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
-          : LOCAL_EXECUTION_HOST_ID,
-        session,
-        options.loadedSessions
-      )
       const terminalTabs = buildHeadlessMobileSessionTerminalTabs(
         entryWorktreeId,
-        loaded.tabsByWorktree[entryWorktreeId] ?? [],
-        loaded
+        persistedTabs,
+        session
       ).filter(
         (tab) =>
           !runtimeOwnedOnly ||
