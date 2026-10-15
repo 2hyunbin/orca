@@ -137,6 +137,7 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
 
   it('rehydrates a remote structured worker and keeps its child running until the attachment settles', () => {
     const handle = mintStructuredWorkerHandle()
+    const workerPane = mintStructuredWorkerPaneKey(SESSION)
     const remote = db.createRemoteDispatchAttachment({
       runId: 'run_home',
       dispatchId: 'ctx_remote_structured',
@@ -153,7 +154,7 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     })
     db.prepareRemoteAttachmentAuthority({
       dispatchId: remote.dispatch_id,
-      paneKey: mintStructuredWorkerPaneKey(SESSION),
+      paneKey: workerPane,
       processIncarnation: structuredWorkerProcessIncarnation(SESSION),
       worktreeId: 'wt_1',
       terminalHandle: handle,
@@ -166,9 +167,7 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     expect(resolveStructuredWorkerIdentity(handle, db)?.sessionId).toBe(SESSION)
     installHost(record({}), [SESSION])
     expect(structuredSessionOwnedMailboxes(SESSION, db)).toContain(`dispatch:${remote.dispatch_id}`)
-    expect(structuredWorkerMailboxDispatchId(handle, mintStructuredWorkerPaneKey(SESSION), db)).toBe(
-      remote.dispatch_id
-    )
+    expect(structuredWorkerMailboxDispatchId(handle, workerPane, db)).toBe(remote.dispatch_id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
     db.markRemoteAttachmentReady(remote.dispatch_id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)

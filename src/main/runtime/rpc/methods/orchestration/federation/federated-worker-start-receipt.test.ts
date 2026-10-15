@@ -148,7 +148,13 @@ describe('federated worker start receipt validation', () => {
       })
 
     const result = await startFederatedWorker({
-      params: { task: task.id, from: 'term_coord', on: 'remote', worktree: 'id:worktree_remote' },
+      params: {
+        task: task.id,
+        from: 'term_coord',
+        on: 'remote',
+        worktree: 'id:worktree_remote',
+        agent: 'claude'
+      },
       runtime,
       db,
       runId: run.id,
