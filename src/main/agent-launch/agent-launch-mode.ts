@@ -144,8 +144,7 @@ export function decideAgentLaunchMode(args: {
       detail: `Started ${vocabulary.terminal}, the default for new agent tabs in your settings.`
     }
   }
-  // A worker placed on another runtime starts through federation, which creates terminal agents
-  // only; this host cannot answer for that runtime's structured support.
+  // This local decision cannot answer for another host; federation resolves mode on its receiver.
   if (placement.on) {
     return downgraded('remote_execution_host', vocabulary)
   }
