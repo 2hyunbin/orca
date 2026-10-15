@@ -136,6 +136,29 @@ describe('a Codex send its turn ended without echoing', () => {
     ])
   })
 
+  it("names no hook's reason when the blocked turn refuses more than one send", async () => {
+    const rig = await turnEndRig()
+    await rig.sendAndOpen('client-1')
+    await rig.send('client-2')
+
+    rig.codex.connections[0]!.handlers.onNotification?.('hook/completed', {
+      threadId: CODEX_TEST_THREAD_ID,
+      turnId: 'turn-1',
+      run: {
+        eventName: 'userPromptSubmit',
+        status: 'blocked',
+        entries: [{ kind: 'feedback', text: 'Prompt blocked by policy.' }]
+      }
+    })
+    rig.turns.end('completed')
+
+    const generic = { rejection: { kind: 'providerRejected' } }
+    expect(rig.settlements).toEqual([
+      expect.objectContaining({ clientMessageId: 'client-1', ...generic }),
+      expect.objectContaining({ clientMessageId: 'client-2', ...generic })
+    ])
+  })
+
   it('accepts a send its turn echoed, with its key, exactly once', async () => {
     const rig = await turnEndRig()
     await rig.sendAndOpen('client-1')

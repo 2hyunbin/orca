@@ -56,9 +56,9 @@ export type CodexDispatchEchoes = {
   opened: (threadId: string, turnId: string) => void
   /** Whether Codex opened this turn: an `error` naming one it never opened is that turn's end. */
   hasOpened: (threadId: string, turnId: string) => boolean
-  /** A prompt hook's refusal reason, held only until that turn ends. */
-  noteTurnRejection: (threadId: string, turnId: string, detail: ProviderDiagnostic) => void
-  takeTurnRejection: (threadId: string, turnId: string) => ProviderDiagnostic | undefined
+  /** A blocked prompt hook's reason, held only until that turn ends; the first one stands. */
+  notePromptHookReason: (threadId: string, turnId: string, detail: ProviderDiagnostic) => void
+  takePromptHookReason: (threadId: string, turnId: string) => ProviderDiagnostic | undefined
   /** The latest armed send's answered turn a wait left unopened, neither open nor ended: Codex may
    *  still open it, though no wait is spent on it again. */
   answeredTurnLeftUnopened: (threadId: string, openTurnIds: ReadonlySet<string>) => string | null
@@ -89,7 +89,7 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
     }
   >()
   const endedTurns = new Map<string, CodexTurnEnd>()
-  const turnRejections = new Map<string, ProviderDiagnostic>()
+  const promptHookReasons = new Map<string, ProviderDiagnostic>()
   const unopenedTurns = new Set<string>()
   const openedTurns = new Set<string>()
   let nextSequence = 0
@@ -160,22 +160,22 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
       }
     },
     hasOpened: (threadId, turnId) => openedTurns.has(turnKey(threadId, turnId)),
-    noteTurnRejection: (threadId, turnId, detail) => {
+    notePromptHookReason: (threadId, turnId, detail) => {
       const key = turnKey(threadId, turnId)
-      if (!endedTurns.has(key) && !turnRejections.has(key)) {
-        turnRejections.set(key, detail)
+      if (!endedTurns.has(key) && !promptHookReasons.has(key)) {
+        promptHookReasons.set(key, detail)
       }
-      for (const oldest of turnRejections.keys()) {
-        if (turnRejections.size <= MAX_CODEX_RECORDED_TURN_ENDS) {
+      for (const oldest of promptHookReasons.keys()) {
+        if (promptHookReasons.size <= MAX_CODEX_RECORDED_TURN_ENDS) {
           break
         }
-        turnRejections.delete(oldest)
+        promptHookReasons.delete(oldest)
       }
     },
-    takeTurnRejection: (threadId, turnId) => {
+    takePromptHookReason: (threadId, turnId) => {
       const key = turnKey(threadId, turnId)
-      const detail = turnRejections.get(key)
-      turnRejections.delete(key)
+      const detail = promptHookReasons.get(key)
+      promptHookReasons.delete(key)
       return detail
     },
     endTurn: (threadId, turnId, end) => {
@@ -208,7 +208,7 @@ export function createCodexDispatchEchoes(): CodexDispatchEchoes {
     clear: () => {
       armed.clear()
       endedTurns.clear()
-      turnRejections.clear()
+      promptHookReasons.clear()
       unopenedTurns.clear()
       openedTurns.clear()
       nextSequence = 0

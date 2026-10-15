@@ -2,8 +2,9 @@
 // steered send waits in Codex's pending input, which the interrupt clears; a send that opened the
 // turn is saved as the turn cancels, but Codex hard-aborts that save after 100 ms, so it is lost
 // or reaches only the model's context, and the thread history shows no user message either way.
-// So it is withdrawn, as a Stop's host-side withdrawal is. Other ends record accepted input
-// before `turn/completed`, so an unechoed send is refused, including one a prompt hook blocked.
+// So it is withdrawn, as a Stop's host-side withdrawal is. Codex records accepted input and emits
+// its receipt before `turn/completed`, a failed turn's after its `error` (0.136 through current),
+// so any other end refuses a send it never echoed, including one a prompt hook blocked.
 // A turn Codex never opened has no `turn/completed`: before 0.148 its final `error` is its end.
 
 import {
@@ -126,7 +127,8 @@ export function codexTurnEndRejection(
   )
 }
 
-function notePromptHookRejection(
+/** A blocked prompt hook's reason for its turn: its verdict names no message. */
+function notePromptHookReason(
   session: Pick<CodexSession, 'threadId' | 'dispatchEchoes'>,
   params: unknown,
   turnId: string
@@ -139,12 +141,22 @@ function notePromptHookRejection(
     return
   }
   const entries = Array.isArray(run.entries) ? run.entries.map(readCodexJournalRecord) : []
-  const reason = entries.find((entry) => entry.kind === 'feedback' || entry.kind === 'stop')
-  const warning = entries.find((entry) => entry.kind === 'warning')
-  const text = reason?.text ?? warning?.text
-  const detail = typeof text === 'string' ? providerDiagnostic(text, 'person') : undefined
-  if (detail) {
-    session.dispatchEchoes.noteTurnRejection(session.threadId, turnId, detail)
+  const entryText = (...kinds: string[]): unknown =>
+    entries.find(
+      (entry) =>
+        typeof entry.kind === 'string' &&
+        kinds.includes(entry.kind) &&
+        typeof entry.text === 'string' &&
+        entry.text.trim()
+    )?.text
+  const text =
+    entryText('feedback', 'stop') ?? entryText('error') ?? entryText('warning') ?? run.statusMessage
+  if (typeof text === 'string' && text.trim()) {
+    session.dispatchEchoes.notePromptHookReason(
+      session.threadId,
+      turnId,
+      providerDiagnostic(text, 'person')
+    )
   }
 }
 
@@ -171,7 +183,7 @@ export function settleCodexSendsInEndedTurn(
     return
   }
   if (frame.method === 'hook/completed') {
-    notePromptHookRejection(session, frame.params, turnId)
+    notePromptHookReason(session, frame.params, turnId)
     return
   }
   const end =
@@ -180,14 +192,16 @@ export function settleCodexSendsInEndedTurn(
   if (!end) {
     return
   }
-  const detail = session.dispatchEchoes.takeTurnRejection(session.threadId, turnId)
-  const settledEnd = end.status === 'completed' && detail ? { ...end, detail } : end
-  const rejection = codexTurnEndRejection(settledEnd, session.account)
-  for (const { clientMessageId, via } of session.dispatchEchoes.endTurn(
-    session.threadId,
-    turnId,
-    settledEnd
-  )) {
+  const hookReason = session.dispatchEchoes.takePromptHookReason(session.threadId, turnId)
+  const refused = session.dispatchEchoes.endTurn(session.threadId, turnId, end)
+  // The hook's reason is that send's only when the turn refuses exactly one.
+  const rejection = codexTurnEndRejection(
+    end.status === 'completed' && hookReason && refused.length === 1
+      ? { ...end, detail: hookReason }
+      : end,
+    session.account
+  )
+  for (const { clientMessageId, via } of refused) {
     settle({
       clientMessageId,
       state: 'rejected',

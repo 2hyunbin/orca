@@ -14,12 +14,10 @@ import type {
 } from '../codex/codex-app-server-connection'
 import { codexTurnLifecycleFake } from '../codex/codex-turn-lifecycle-fake'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalDispatchState,
   AgentJournalTurnItem
 } from '../../shared/agent-session-journal-types'
-import { projectStructuredAgentSessionStatusState } from '../../shared/structured-agent-session-projection'
 import {
   HOST_TEST_SESSION as SESSION,
   HOST_TEST_THREAD as THREAD,
@@ -78,13 +76,23 @@ function envelope(method: string, fields: Record<string, unknown>) {
   }
 }
 
-async function send(text: string): Promise<string> {
+/** Resolves with the send's id, or the card's when a mid-turn send is held as one. */
+async function send(text: string, delivery?: 'queue-if-active'): Promise<string> {
   const body = hostTestMessage(text)
-  const sent = await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  const fields = { body, ...(delivery ? { delivery } : {}) }
+  const sent = await host.send(CALLER, {
+    envelope: envelope('agentSession.send', fields),
+    ...fields
+  })
   if (!sent.ok) {
     throw new Error(JSON.stringify(sent.refusal))
   }
-  return sent.value.clientMessageId
+  return 'queued' in sent.value ? sent.value.queued.messageId : sent.value.clientMessageId
+}
+
+async function cards() {
+  const page = await host.history({ sessionId: SESSION, direction: 'tail' })
+  return page.ok ? (page.page.queuedMessages ?? []) : []
 }
 
 /** A stored row, or one mutation of a lifecycle batch: what a settlement or a frame lands as. */
@@ -185,61 +193,6 @@ afterEach(async () => {
 })
 
 describe('a settlement Codex proves keeps its place behind the frame that proved it', () => {
-  it('settles a hook-refused prompt when its turn completes, and the next send runs', async () => {
-    const sent = await send('blocked prompt')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    handlers?.onNotification?.('hook/completed', {
-      threadId: THREAD,
-      turnId: 'turn-1',
-      run: {
-        eventName: 'userPromptSubmit',
-        status: 'blocked',
-        entries: [{ kind: 'feedback', text: 'Prompt blocked by policy.' }]
-      }
-    })
-    turns.end('completed')
-
-    await host.flushStreamedEvents(SESSION)
-    await vi.waitFor(() => expect(seqOf(dispatchRow(sent, 'rejected'))).toBeDefined())
-    const snapshot = await host.journalSnapshot(SESSION)
-    expect(snapshot.submissions.find((entry) => entry.clientMessageId === sent)).toMatchObject({
-      dispatchState: 'rejected',
-      rejection: {
-        kind: 'providerRejected',
-        detail: { text: 'Prompt blocked by policy.', audience: 'person' }
-      }
-    })
-    expect(owesStructuredAgentSessionWork(snapshot.items, snapshot.submissions, fence)).toBe(false)
-    expect(
-      projectStructuredAgentSessionStatusState(snapshot.items, snapshot.submissions, fence)
-    ).toMatchObject({
-      summary: { status: 'idle', turnOutcome: 'failure' },
-      latestRequest: {
-        kind: 'refused-send',
-        id: agentJournalSubmissionKey(sent),
-        outcome: 'failure'
-      }
-    })
-    const ended = seqOf((entry) => turnOf(entry)?.state === 'completed')
-    expect(seqOf(dispatchRow(sent, 'rejected'))).toBeGreaterThan(ended!)
-
-    const next = await send('allowed prompt')
-    await vi.waitFor(() => expect(answers).toBe(2))
-    turns.start()
-    turns.echo(next)
-    turns.end('completed')
-    await vi.waitFor(() => expect(seqOf(dispatchRow(next, 'accepted'))).toBeDefined())
-    await host.flushStreamedEvents(SESSION)
-    const nextSnapshot = await host.journalSnapshot(SESSION)
-    expect(
-      projectStructuredAgentSessionStatusState(nextSnapshot.items, nextSnapshot.submissions, fence)
-    ).toMatchObject({
-      summary: { status: 'idle', turnOutcome: 'success' },
-      latestRequest: { kind: 'turn', id: 'turn-2', outcome: 'success' }
-    })
-  })
-
   it('rejects a send only after the failed turn that refused it has ended', async () => {
     const sent = await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
@@ -272,5 +225,45 @@ describe('a settlement Codex proves keeps its place behind the frame that proved
     const echoed = seqOf((entry) => turnOf(entry)?.userItemId === `orca:${sent}`)
     expect(echoed).toBeDefined()
     expect(seqOf(dispatchRow(sent, 'accepted'))).toBeGreaterThan(echoed!)
+  })
+})
+
+describe('a Codex prompt hook that blocks a queued card', () => {
+  it('returns a hook-refused queued card with its reason, holding the card behind it', async () => {
+    const working = await send('look around')
+    await vi.waitFor(() => expect(answers).toBe(1))
+    turns.start()
+    const refused = await send('blocked prompt', 'queue-if-active')
+    const held = await send('held behind it', 'queue-if-active')
+    turns.echo(working)
+    turns.end('completed')
+
+    // The drain hands the first card to Codex, whose prompt hook blocks it.
+    await vi.waitFor(() => expect(answers).toBe(2))
+    turns.start()
+    handlers?.onNotification?.('hook/completed', {
+      threadId: THREAD,
+      turnId: 'turn-2',
+      run: {
+        eventName: 'userPromptSubmit',
+        status: 'blocked',
+        entries: [{ kind: 'feedback', text: 'Prompt blocked by policy.' }]
+      }
+    })
+    turns.end('completed')
+
+    await vi.waitFor(async () =>
+      expect((await cards()).map(({ messageId, state }) => ({ messageId, state }))).toEqual([
+        { messageId: refused, state: 'returned' },
+        { messageId: held, state: 'waiting' }
+      ])
+    )
+    expect((await cards())[0]?.returnedRejection).toEqual({
+      kind: 'providerRejected',
+      detail: { text: 'Prompt blocked by policy.', audience: 'person' }
+    })
+    await host.flushStreamedEvents(SESSION)
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(owesStructuredAgentSessionWork(snapshot.items, snapshot.submissions, fence)).toBe(false)
   })
 })
