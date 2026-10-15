@@ -18,7 +18,8 @@ import { OptionRowList } from './workspace-option-rows'
 import { TaskProviderLogo } from '../components/TaskProviderLogo'
 import type { WorkspaceDetailLink, WorkspaceOrigin } from '../worktree/workspace-details-model'
 
-const ICON_SIZE = 18
+// The action rows' icon and gap, so both groups share one text column.
+const ICON_SIZE = 16
 
 const PROVIDER_LABELS: Record<WorkspaceDetailLink['provider'], string> = {
   github: 'GitHub',
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm + 2,
     minHeight: 46,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md + 2
