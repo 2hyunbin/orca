@@ -160,7 +160,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
       return undefined
     }
     // Why: nothing here spends the record, so a session another pane also records could be
-    // resumed twice, two writers on one transcript; leave such panes to the window's dedupe.
+    // resumed twice (two writers on one transcript), as could one already live in another pane.
     const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
     const sharedWithAnotherPane = Object.values(records ?? {}).some(
       (other) =>
@@ -168,7 +168,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
         other.agent === record.agent &&
         other.providerSession?.id === record.providerSession.id
     )
-    if (sharedWithAnotherPane) {
+    if (sharedWithAnotherPane || this.isProviderSessionLiveInAnotherPane(record)) {
       return {}
     }
     try {
@@ -177,6 +177,27 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     } catch {
       return {}
     }
+  }
+
+  /** The host's hook store places this conversation in another pane whose PTY is still connected. */
+  private isProviderSessionLiveInAnotherPane(record: SleepingAgentSessionRecord): boolean {
+    const otherPaneKeys = new Set(
+      (this.getAgentProviderSessionSnapshotFn?.() ?? [])
+        .filter(
+          (row) =>
+            row.paneKey !== record.paneKey && row.providerSession?.id === record.providerSession.id
+        )
+        .map((row) => row.paneKey)
+    )
+    if (otherPaneKeys.size === 0) {
+      return false
+    }
+    for (const pty of this.ptysById.values()) {
+      if (pty.connected && pty.paneKey && otherPaneKeys.has(pty.paneKey)) {
+        return true
+      }
+    }
+    return false
   }
 
   private getPaneSleepingAgentRecord(

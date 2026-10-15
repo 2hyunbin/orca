@@ -50,18 +50,26 @@ describe('OrcaRuntimeService', () => {
       )
     }
 
-    function makeParkedRuntime(runtimeStore: unknown): {
+    function makeParkedRuntime(
+      runtimeStore: unknown,
+      host: {
+        deps?: ConstructorParameters<typeof OrcaRuntimeService>[2]
+        livePtyIds?: string[]
+      } = {}
+    ): {
       runtime: OrcaRuntimeService
       spawn: ReturnType<typeof vi.fn>
     } {
       const spawn = vi.fn().mockResolvedValue({ id: 'persisted-pty' })
-      const runtime = new OrcaRuntimeService(runtimeStore as never)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
+      const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, host.deps)
       runtime.setPtyController({
         spawn,
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null,
-        listProcesses: async () => []
+        listProcesses: async () =>
+          (host.livePtyIds ?? []).map((id) => ({ id, cwd: '/tmp', title: 'Claude' }))
       })
       runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
       return { runtime, spawn }
@@ -291,6 +299,31 @@ describe('OrcaRuntimeService', () => {
       const tap = makeParkedRuntime(makeParkedSessionStore('live').runtimeStore)
       await userActivate(tap.runtime)
       expect(tap.spawn.mock.calls[0]?.[0]).toMatchObject({ spawnIntent: 'user-resume' })
+    })
+
+    it('does not resume a session the hook store places in another live pane', async () => {
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
+      const otherPaneKey = `other-tab:${HEADLESS_SECOND_LEAF_ID}`
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
+        livePtyIds: ['other-pty'],
+        deps: {
+          getAgentProviderSessionSnapshot: () => [
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only paneKey and providerSession.
+            {
+              paneKey: otherPaneKey,
+              providerSession: { key: 'session_id', id: 'provider-session-1' }
+            } as never
+          ]
+        }
+      })
+      runtime.registerPty('other-pty', TEST_WORKTREE_ID, null, {
+        tabId: 'other-tab',
+        leafId: HEADLESS_SECOND_LEAF_ID
+      })
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
     })
 
     // Why: a session id names a transcript on the machine that captured it.
