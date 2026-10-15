@@ -91,6 +91,10 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     isDisposed: () => disposed,
     deliveryActive: host.deliveryActive,
     childWork: host.readChildWork,
+    store: {
+      getRecord: (sessionId) => deps().store.getRecord(sessionId),
+      replacedRuntime: (sessionId) => deps().store.replacedRuntime(sessionId)
+    },
     hasOpenDispatch,
     providerHoldsDispatch,
     // The host puts an idle agent to rest: a turn it cuts short is news, not the user's Stop.

@@ -26,6 +26,7 @@ import {
 import type { CommandReceiptResult } from '../agent-session-journal/command-receipt-schema'
 import type { JournalRow } from '../agent-session-journal/journal-row-schema'
 import { settledPrompt, validatePendingPrompt } from './structured-agent-session-prompt-state'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 
 export type AgentSessionPromptRequest = {
@@ -134,7 +135,10 @@ export async function performPrompt(
           identity,
           { ...prompt, resolution },
           // A revision: the prompt keeps the turn it was raised in.
-          { fence: ctx.fence, turnScope: ctx.journal.liveTurnScope() },
+          {
+            fence: ctx.fence,
+            turnScope: contextStructuredAgentSessionCurrentWork(ctx).turnScope()
+          },
           // The answer's identity commits here, before the adapter tells the provider.
           ctx.operationReceipt
         )
@@ -159,7 +163,7 @@ export async function performPrompt(
           surface: 'row'
         })
       },
-      { fence: ctx.fence, turnScope: ctx.journal.liveTurnScope() }
+      { fence: ctx.fence, turnScope: contextStructuredAgentSessionCurrentWork(ctx).turnScope() }
     )
   }
   const appended = committed.item
