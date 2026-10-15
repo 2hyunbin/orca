@@ -140,7 +140,9 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
       pairingCode: encodePairingOffer(pairingOffer(server)),
       localPort: restarted.connection.localPort, remotePort: restarted.connection.remotePort
     })
-    expect((await connect()).caller).not.toBe(first.caller)
+    const rePaired = await connect()
+    expect(rePaired.caller).toBeTruthy()
+    expect(rePaired.caller).not.toBe(first.caller)
   })
 
   it('accepts the same host under a new runtime id, and its status recovers', async () => {

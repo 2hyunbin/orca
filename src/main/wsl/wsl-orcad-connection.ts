@@ -8,11 +8,7 @@ import { errorMessage } from '../../shared/error-message'
 import { parsePairingCode, type PairingOffer } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
-import {
-  OrcadManagedIdentityError,
-  type OrcadTunnelIdentity
-} from '../ssh/orcad-managed-tunnel-identity'
-import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
+import type { OrcadTunnelIdentity } from '../ssh/orcad-managed-tunnel-identity'
 import type { StartedPortForward } from '../ssh/ssh-port-forward-provider'
 import type { WslDistroHolder } from './wsl-distro-holder'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
@@ -26,7 +22,7 @@ import {
 } from './wsl-orcad-deploy'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
-import { verifyWslOrcadIdentity } from './wsl-orcad-pairing-identity'
+import { resolveWslOrcadPairing } from './wsl-orcad-pairing-identity'
 import { trackWslOrcadHostEnvironment } from './wsl-orcad-host-environments'
 import {
   listenWslOrcadStdioBridge,
@@ -237,7 +233,9 @@ export class WslOrcadConnectionManager {
       current.connection.remotePort === launch.port &&
       current.connection.environmentId === environmentId
     ) {
-      const pairingOffer = await this.pairingFor(launch, current.connection.localPort, paired)
+      const pairingOffer = await resolveWslOrcadPairing(
+        launch, current.connection.localPort, paired, this.dependencies.verifyIdentity
+      )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
@@ -261,7 +259,9 @@ export class WslOrcadConnectionManager {
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      const pairingOffer = await this.pairingFor(launch, forward.entry.localPort, paired)
+      const pairingOffer = await resolveWslOrcadPairing(
+        launch, forward.entry.localPort, paired, this.dependencies.verifyIdentity
+      )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
@@ -287,25 +287,6 @@ export class WslOrcadConnectionManager {
       await forward.close()
       throw error
     }
-  }
-
-  private async pairingFor(
-    launch: Extract<WslOrcadLaunch, { outcome: 'ready' }>,
-    localPort: number,
-    paired: PairingOffer | null
-  ): Promise<string> {
-    const pairingOffer = tunneledOrcadPairingCode(launch.readiness, localPort, paired)
-    const identity = await (this.dependencies.verifyIdentity ?? verifyWslOrcadIdentity)(
-      pairingOffer,
-      launch.readiness
-    )
-    if (identity.verdict === 'foreign') {
-      throw new OrcadManagedIdentityError(launch.port, identity.detail)
-    }
-    if (identity.verdict === 'unreachable') {
-      console.warn(`[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`)
-    }
-    return pairingOffer
   }
 
   private refreshOffer(
