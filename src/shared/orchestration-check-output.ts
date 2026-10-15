@@ -37,6 +37,8 @@ export type OrchestrationCheckOutput = {
   count: number
   formatted?: string
   deliveryId?: string | null
+  /** The batch was handed out before and never acknowledged; absent from older hosts. */
+  replayed?: boolean
   timedOut?: boolean
   cancelled?: boolean
   connectionLost?: boolean
@@ -61,6 +63,16 @@ export function isLegacyReadOnlyMessage(
   )
 }
 
+/** A replayed batch says so, and how to move past it, since `check` keeps returning it until acked. */
+function deliveryHeader({ deliveryId, replayed }: OrchestrationCheckOutput): string {
+  if (!deliveryId) {
+    return ''
+  }
+  return replayed
+    ? `Delivery ${deliveryId} (handed out before and not acknowledged: process it, then run \`check --ack ${deliveryId}\` to get newer mail)\n`
+    : `Delivery ${deliveryId}\n`
+}
+
 export function formatOrchestrationCheckText(
   result: OrchestrationCheckOutput,
   checkedTerminal: string
@@ -82,7 +94,7 @@ export function formatOrchestrationCheckText(
     : ''
   const deliveryNotice = formatCurrentDeliveryNotice(prepared.legacyCompatibility?.currentDelivery)
   if (prepared.formatted) {
-    return `${legacyHeader}${prepared.deliveryId ? `Delivery ${prepared.deliveryId}\n` : ''}${prepared.formatted}${deliveryNotice}`
+    return `${legacyHeader}${deliveryHeader(prepared)}${prepared.formatted}${deliveryNotice}`
   }
   if (prepared.count === 0) {
     if (prepared.timedOut) {
@@ -105,7 +117,7 @@ export function formatOrchestrationCheckText(
         )} [${message.type ?? 'status'}] from=${message.from_handle} "${message.subject}"`
     )
     .join('\n')
-  const output = prepared.deliveryId ? `Delivery ${prepared.deliveryId}\n${rendered}` : rendered
+  const output = `${deliveryHeader(prepared)}${rendered}`
   return `${legacyHeader}${output}${deliveryNotice}`
 }
 

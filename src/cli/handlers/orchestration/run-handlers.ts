@@ -6,8 +6,6 @@ import {
   getRequiredStringFlag
 } from '../../flags'
 import { ORCHESTRATION_RUN_PAGE_LIMIT } from '../../../shared/orchestration-run-pagination'
-import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-address-prefix'
-import { isStructuredWorkerHandle } from '../../../shared/structured-worker-handle'
 import { callOrchestrationMutation } from './mutation-request'
 import { resolveCoordinatorTerminalHandle } from './terminal-identity'
 
@@ -103,17 +101,9 @@ function formatRunCoordinatorLine(coordinator: RunCoordinatorLine | null): strin
   const reason = coordinator.reason ? ` (${coordinator.reason})` : ''
   const state =
     coordinator.status === 'live'
-      ? `live; mail reaches it${startedByMail(coordinator.address) ? ', and starts it if it is at rest' : ''}`
+      ? 'live; mail reaches it, and starts it if it is at rest'
       : coordinator.status === 'exited'
         ? `exited${reason}; ${MAIL_WAITS}`
         : `${coordinator.status}${reason}`
   return `coordinator: ${coordinator.address ? `${coordinator.address}, ` : ''}${state}`
-}
-
-/** Only a session (chat or structured worker) is promised a start: the terminal lane still skips
- *  the nudge to an agent at rest while a batch it fetched is unacknowledged. */
-function startedByMail(address: string | undefined): boolean {
-  return (
-    isStructuredWorkerHandle(address) || Boolean(address?.startsWith(ORCA_SESSION_ADDRESS_PREFIX))
-  )
 }

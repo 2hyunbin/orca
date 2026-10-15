@@ -229,7 +229,12 @@ export const ORCHESTRATION_SEND_METHODS = [
             sendWarnings.push(runBound.warning)
           }
         }
-        const coordinatorWarning = await runCoordinatorUnreachableWarning(runtime, db, to)
+        // A heartbeat recurs every few minutes and asks nothing of the coordinator, so it is the one
+        // report that does not repeat the warning; the worker's next real report still carries it.
+        const coordinatorWarning =
+          params.type === 'heartbeat'
+            ? null
+            : await runCoordinatorUnreachableWarning(runtime, db, to)
         if (coordinatorWarning) {
           sendWarnings.push(coordinatorWarning)
         }
