@@ -10,7 +10,13 @@ export class OrcadRestartWorkAdmission {
   track<T>(run: () => Promise<T>): Promise<T> {
     this.operations++
     try {
-      return run().finally(() => { this.operations-- })
+      const operation = run()
+      // Observe settlement without delaying the session queue's result behind its next task.
+      void operation.then(
+        () => { this.operations-- },
+        () => { this.operations-- }
+      )
+      return operation
     } catch (error) {
       this.operations--
       return Promise.reject(error)
