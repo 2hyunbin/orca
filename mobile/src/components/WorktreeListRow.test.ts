@@ -450,6 +450,18 @@ describe('memoized worktree rows', () => {
         renderer!.root.findAll((node) => node.props.accessibilityLabel === 'Remote host')
       ).toHaveLength(1)
 
+      // An older host's row carries only the resolved host the label pass stamped.
+      await render({
+        item: { ...item, hostId: undefined, hostContextHostId: 'ssh:ssh-1' },
+        cardDetails: COMPACT
+      })
+      expect(glyphs()).toHaveLength(1)
+
+      // The new card style keeps the host badge in its meta row: one server icon, the badge's.
+      await render({ item, cardDetails: NEW_CARD_STYLE })
+      expect(glyphs()).toHaveLength(1)
+      expect(texts()).toContain('openclaw')
+
       // Local rows get no glyph, as the desktop shows none for local projects.
       await render({ item: { ...item, hostId: 'local' }, cardDetails: COMPACT })
       expect(glyphs()).toHaveLength(0)

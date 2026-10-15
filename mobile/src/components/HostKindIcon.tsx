@@ -4,7 +4,7 @@ import { colors } from '../theme/mobile-theme'
 
 /** The desktop's own machine is a monitor, any other host a server, as on the desktop's run targets. */
 export function HostKindIcon({ hostId, size }: { hostId: string | undefined; size: number }) {
-  // Rows from hosts that predate hostId stamping are local: a remote row always carries one.
+  // An absent id reads as local: an older host's row may omit it (its label pass fills it in).
   const Icon = isRemoteExecutionHostId(hostId) ? Server : Monitor
   return <Icon size={size} color={colors.textMuted} />
 }

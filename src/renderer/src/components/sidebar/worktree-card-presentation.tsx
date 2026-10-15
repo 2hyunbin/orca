@@ -112,6 +112,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     cacheStartedAt != null ||
     showMetaRowDetails
   )
+  // Why: without the identity meta row, a compact card keeps a row only for badges and the timer.
   const hasMetaRow = cardDetails.metaRow
     ? hasDetailedMetaRowContent
     : hasMetadataBadge || cacheStartedAt != null
