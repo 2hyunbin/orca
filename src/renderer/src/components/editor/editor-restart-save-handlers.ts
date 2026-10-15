@@ -93,25 +93,27 @@ export function createEditorRestartSaveHandlers({
     }
     const dirtyFiles = state.openFiles.filter((file) => file.isDirty)
     const duplicateDirtySavePaths = new Set(getDuplicateDirtySavePaths(dirtyFiles))
-    await Promise.all(
-      dirtyFiles.map((file) => {
-        const draft = state.editorDrafts[file.id]
-        if (
-          draft === undefined ||
-          !canAutoSaveOpenFile(file) ||
-          duplicateDirtySavePaths.has(file.filePath)
-        ) {
-          return undefined
-        }
-        // Why: a stalled save (e.g. an unreachable SSH host) must not hold the restart; the file stays dirty and is re-checked below.
-        return settleWithin(
+    const saves: Promise<void>[] = []
+    for (const file of dirtyFiles) {
+      const draft = state.editorDrafts[file.id]
+      if (
+        draft === undefined ||
+        !canAutoSaveOpenFile(file) ||
+        duplicateDirtySavePaths.has(file.filePath)
+      ) {
+        continue
+      }
+      // Why: a stalled save (e.g. an unreachable SSH host) must not hold the restart; the file stays dirty and is re-checked below.
+      saves.push(
+        settleWithin(
           queueSave(file, draft, 'autosave').catch((error) => {
             console.error('[editor] save before restart failed', error)
           }),
           RESTART_SAVE_TIME_LIMIT_MS
         )
-      })
-    )
+      )
+    }
+    await Promise.all(saves)
   }
 
   const handlePrepareHotExit = async (event: Event): Promise<void> => {
