@@ -55,7 +55,9 @@ function mergeBatch(
     ...(right.activity !== undefined || left.activity !== undefined
       ? { activity: right.activity !== undefined ? right.activity : (left.activity ?? null) }
       : {}),
-    ...(latestTurn !== undefined ? { latestTurn } : {})
+    ...(latestTurn !== undefined ? { latestTurn } : {}),
+    // The later page's: a merged frame ends the catch-up only if its last page did.
+    ...(right.hasNewer ? { hasNewer: true as const } : {})
   }
 }
 
