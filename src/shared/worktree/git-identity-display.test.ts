@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getWorktreeGitIdentityDisplay } from './worktree-git-identity-display'
+import { getWorktreeGitIdentityDisplay } from './git-identity-display'
 
 describe('worktree git identity display', () => {
   it('shows a branch name when the worktree has a branch ref', () => {

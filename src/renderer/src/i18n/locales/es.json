@@ -7841,6 +7841,8 @@
           "2a2033c388": "Elige la alerta que Orca reproduce cuando se entrega una notificación de escritorio.",
           "88686e6ca8": "Sonido de notificación",
           "b6fc369244": "Un terminal en segundo plano emite un carácter de campana.",
+          "ba07e60f38": "Notificar sobre espacios de trabajo ocultos",
+          "e4b5e909ff": "Si está desactivado, los espacios de trabajo ocultos por un interruptor Ocultar del menú Filtros de la barra lateral no muestran el punto de no leído ni envían notificaciones a este equipo ni a tu teléfono.",
           "591fe605b9": "Campana del terminal",
           "55f901a59b": "Un agente de programación termina y queda inactivo.",
           "ca76d06fd2": "Tarea del agente completada",

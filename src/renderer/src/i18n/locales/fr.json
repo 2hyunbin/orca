@@ -7981,6 +7981,8 @@
           "2a2033c388": "Choisissez l'alerte jouée par Orca lors d'une notification bureau.",
           "88686e6ca8": "Son de notification",
           "b6fc369244": "Un terminal en arrière-plan émet un caractère de sonnerie.",
+          "ba07e60f38": "Notifier pour les espaces de travail masqués",
+          "e4b5e909ff": "Si cette option est désactivée, les espaces de travail masqués par un interrupteur Masquer du menu Filtres de la barre latérale n’affichent pas de point non lu et n’envoient aucune notification à cet ordinateur ni à votre téléphone.",
           "591fe605b9": "Sonnerie du terminal",
           "55f901a59b": "Un agent de codage termine et devient inactif.",
           "ca76d06fd2": "Tâche d'agent terminée",
