@@ -278,8 +278,11 @@ describe('runCodexHookTrustGrantSession', () => {
     expect(written.reloadUserConfig).toBe(true)
     // Why: the entry process waits on these handles after setting exitCode, so
     // an uncleared grace timer adds its full delay to synchronous launch prep.
-    const timerHandles = setTimeoutSpy.mock.results.map(({ value }) => value)
-    expect(timerHandles).toHaveLength(2)
+    // A group-gone poll tick fires within 25 ms, so it cannot hold the entry.
+    const timerHandles = setTimeoutSpy.mock.calls.flatMap(([, delayMs], index) =>
+      (delayMs ?? 0) > 100 ? [setTimeoutSpy.mock.results[index].value] : []
+    )
+    expect(timerHandles.length).toBeGreaterThanOrEqual(2)
     expect(clearTimeoutSpy.mock.calls.map(([handle]) => handle)).toEqual(
       expect.arrayContaining(timerHandles)
     )

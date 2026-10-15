@@ -7,6 +7,7 @@ import {
   watchProviderGroup,
   type ProviderGroupOwnerDeathStop
 } from './provider-group-watchdog'
+import { waitForProcessExitUntil } from './provider-process-exit-deadline'
 
 /**
  * `session`: ending stdin is a close, so the provider is stopped after a grace.
@@ -146,7 +147,7 @@ export function adoptProviderProcessGroup(
     }
     // A one-shot's stdin end was its request, so only the SIGTERM is a stop.
     if (lifetime === 'session' && closeRequest === 'stdin-end' && !rootExited) {
-      await waitUntil(() => rootExited, PROVIDER_STDIN_END_GRACE_MS)
+      await waitForProcessExitUntil(rootExit, PROVIDER_STDIN_END_GRACE_MS)
     }
     if (selfExitReap) {
       return selfExitReap
@@ -154,7 +155,11 @@ export function adoptProviderProcessGroup(
     terminated = true
     signalGroup(pgid, 'SIGTERM')
     // A one-shot's helpers die with it once it has exited; a session's keep the grace to clean up.
-    await waitUntil(lifetime === 'one-shot' ? () => rootExited : gone, PROVIDER_SIGTERM_GRACE_MS)
+    if (lifetime === 'one-shot') {
+      await waitForProcessExitUntil(rootExit, PROVIDER_SIGTERM_GRACE_MS)
+    } else {
+      await waitUntil(gone, PROVIDER_SIGTERM_GRACE_MS)
+    }
     return reap()
   }
   return {
