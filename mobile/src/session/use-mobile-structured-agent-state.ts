@@ -16,6 +16,7 @@ import {
   type StructuredAgentSessionAction,
   type StructuredAgentSessionState
 } from '../../../src/shared/structured-agent-session-reducer'
+import { subscribeConnectionRevival } from '../transport/connection-revival-signal'
 import type { RpcClient } from '../transport/rpc-client'
 import {
   agentSessionReadFailureRefusal,
@@ -23,10 +24,7 @@ import {
   agentSessionReadRefusalText,
   callAgentSession
 } from './mobile-structured-agent-session-rpc'
-import {
-  subscribeAppForeground,
-  subscribeTranscriptAfterHold
-} from './mobile-structured-agent-session-live-feed'
+import { subscribeTranscriptAfterHold } from './mobile-structured-agent-session-live-feed'
 import {
   reduceMobileQueuePause,
   reduceMobileQueuedMessageFeed,
@@ -194,7 +192,8 @@ export function useMobileStructuredAgentState(args: {
       },
       sessionId,
       subscribe: subscribeTranscriptAfterHold(client, held, () => ended),
-      subscribeRetryNow: subscribeAppForeground
+      // The app coming back (or a new network) cuts a grown reopen wait short.
+      subscribeRetryNow: subscribeConnectionRevival
     })
     return () => {
       ended = true

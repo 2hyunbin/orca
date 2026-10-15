@@ -1,5 +1,4 @@
 import { createElement } from 'react'
-import { AppState, type AppStateStatus } from 'react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -7,6 +6,7 @@ import type {
   AgentJournalRenderItem
 } from '../../../src/shared/agent-session-journal-types'
 import type { AgentSessionHistoryPage } from '../../../src/shared/agent-session-wire'
+import { publishConnectionRevival } from '../transport/connection-revival-signal'
 import type { RpcClient } from '../transport/rpc-client'
 import { useMobileStructuredAgentState } from './use-mobile-structured-agent-state'
 
@@ -173,16 +173,10 @@ describe('useMobileStructuredAgentState live feed', () => {
     act(() => renderer?.unmount())
     renderer = null
     vi.useRealTimers()
-    vi.restoreAllMocks()
   })
 
   it('reopens a feed that ended under a live connection from its last row', async () => {
     vi.useFakeTimers()
-    const foreground: ((state: AppStateStatus) => void)[] = []
-    vi.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
-      foreground.push(listener)
-      return { remove: () => {} }
-    })
     const streams: { params: unknown; frame: (value: unknown) => void }[] = []
     const subscribe = vi.fn((_method: string, params: unknown, frame: (value: unknown) => void) => {
       streams.push({ params, frame })
@@ -241,7 +235,7 @@ describe('useMobileStructuredAgentState live feed', () => {
 
     // A host-ended feed waiting to reopen goes now when the app comes back.
     act(() => streams[1].frame({ type: 'end' }))
-    act(() => foreground.forEach((listener) => listener('active')))
+    act(() => publishConnectionRevival('app-resume'))
     await vi.waitFor(() => expect(streams).toHaveLength(3), { interval: 1, timeout: 50 })
     expect(streams[2].params).toEqual({ sessionId: 'session-1', cursor: cursorAt(61) })
   })

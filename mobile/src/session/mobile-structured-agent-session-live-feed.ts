@@ -1,4 +1,3 @@
-import { AppState } from 'react-native'
 import type { AgentSessionSubscribeEvent } from '../../../src/shared/agent-session-wire'
 import type { StructuredAgentSessionLiveSubscribe } from '../../../src/shared/structured-agent-session-live-read'
 import type { RpcClient } from '../transport/rpc-client'
@@ -37,14 +36,4 @@ export function subscribeTranscriptAfterHold(
     })
     return { unsubscribe: close }
   }
-}
-
-/** Coming back to the foreground cuts a grown reopen wait short. */
-export function subscribeAppForeground(retryNow: () => void): () => void {
-  const subscription = AppState.addEventListener('change', (next) => {
-    if (next === 'active') {
-      retryNow()
-    }
-  })
-  return () => subscription.remove()
 }
