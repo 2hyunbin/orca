@@ -59,6 +59,8 @@ export function TaskPageJiraFavouriteFilters({
         <Button
           variant="outline"
           size="sm"
+          className="max-w-64"
+          title={active?.name}
           aria-label={
             active
               ? translate('jira.favourites.activeLabel', 'Jira favourites: {{name}}', {
@@ -68,7 +70,9 @@ export function TaskPageJiraFavouriteFilters({
           }
         >
           <Star />
-          {active ? active.name : translate('jira.favourites.label', 'Jira favourites')}
+          <span className="truncate">
+            {active ? active.name : translate('jira.favourites.label', 'Jira favourites')}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
