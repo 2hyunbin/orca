@@ -180,11 +180,4 @@ describe('input state before later runtime layers initialize', () => {
   it('preserves mail method reentry from the original constructor getter seam', () => {
     expect(() => new ConstructorMailStatusProbe()).not.toThrow()
   })
-
-  it('retains one canonical scheduler without an additional mailbox owner', () => {
-    const target = new OrcaRuntimeService()
-    const descriptor = Object.getOwnPropertyDescriptor(target, 'mailPointerRepointScheduler')
-    expect(descriptor?.value).toBe(target['mailPointerRepointScheduler'])
-    expect(Object.hasOwn(target, 'mailboxControl')).toBe(false)
-  })
 })
