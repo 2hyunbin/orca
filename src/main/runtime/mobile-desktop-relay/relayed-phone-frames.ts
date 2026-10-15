@@ -1,4 +1,7 @@
-import { BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+} from '../../../shared/protocol-version'
 import {
   readTerminalStreamFrameId,
   writeTerminalStreamFrameId
@@ -28,9 +31,14 @@ export function rewriteRelayedPhoneRequest(
 // Why: the server lists client-placed browser tabs only to callers declaring this; for a
 // mobile-scoped caller it is projection-only, since hosting duty requires a runtime-scoped one.
 export function relayedPhoneCapabilities(capabilities: readonly string[]): readonly string[] {
-  return capabilities.includes(BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY)
-    ? capabilities
-    : [...capabilities, BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY]
+  // The relay chooses legacy createSupport's mode from the paired desktop's preference.
+  return [
+    ...new Set([
+      ...capabilities,
+      BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+      STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+    ])
+  ]
 }
 
 /** A forwarded `runtime.clientCapabilities.update` frame, carrying the relayed phone's set. */

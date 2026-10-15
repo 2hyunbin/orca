@@ -13,6 +13,7 @@ import { localHostedBrowserPageRequest } from './hosted-browser-page-route'
 import type { MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
 import type { MobileRelayWorkDemand } from './mobile-relay-work-demand'
 import { RELAYED_STREAM_CARRIERS } from './relayed-stream-carriers'
+import { createSupportFollowsHostSetting } from '../rpc/methods/structured-agent-session-policy'
 import {
   declareRelayedPhoneCapabilities,
   RelayedPhoneReplies,
@@ -105,6 +106,23 @@ export class MobileDesktopRelay {
     request: { id: string; method: string },
     frame: string
   ): void {
+    if (
+      request.method === 'agentSession.createSupport' &&
+      createSupportFollowsHostSetting({
+        clientKind: 'mobile',
+        clientCapabilities: phone.clientCapabilities()
+      }) &&
+      !this.options.nativeChatDefault()
+    ) {
+      phone.reply(
+        failure(
+          request.id,
+          'structured_agent_session_unsupported',
+          'structured_agent_session_unsupported'
+        )
+      )
+      return
+    }
     if (RELAYED_STREAM_CARRIERS.get(request.method) === 'phone-binary-frames') {
       phone.reply(
         failure(

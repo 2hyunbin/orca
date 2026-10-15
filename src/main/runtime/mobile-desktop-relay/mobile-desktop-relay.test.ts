@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DELEGATED_MOBILE_DEVICES_RUNTIME_CAPABILITY } from '../../../shared/delegated-mobile-device-contract'
-import { BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+} from '../../../shared/protocol-version'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import { RemoteRuntimeClientError } from '../../../shared/remote-runtime-client-error'
 import type { RemoteRuntimePassthroughCallbacks } from '../../../shared/remote-runtime-passthrough-socket'
@@ -190,7 +193,11 @@ describe('MobileDesktopRelay', () => {
       '{"id":"r2","method":"terminal.list"}'
     )
     await vi.waitFor(() => expect(sockets.map((socket) => socket.sent.length)).toEqual([1, 1]))
-    expect(sockets[0]!.capabilities).toEqual(['cap.a', BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY])
+    expect(sockets[0]!.capabilities).toEqual([
+      'cap.a',
+      BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+      STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+    ])
 
     setCapabilities(['cap.b'])
     const update = JSON.stringify({
@@ -206,7 +213,13 @@ describe('MobileDesktopRelay', () => {
       const mirrored = JSON.parse(socket.sent[1]!)
       expect(mirrored).toMatchObject({
         method: 'runtime.clientCapabilities.update',
-        params: { clientCapabilities: ['cap.b', BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY] }
+        params: {
+          clientCapabilities: [
+            'cap.b',
+            BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+            STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY
+          ]
+        }
       })
       expect(mirrored.id).not.toBe('caps')
       expect(mirrored.deviceToken).toBeUndefined()
