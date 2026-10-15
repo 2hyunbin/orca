@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   workspaceOptionsAccessibilityLabel,
-  workspaceOptionsChipLabel
+  workspaceOptionsBadgeText
 } from './workspace-list-picker-options'
 
 describe('the Workspace options chip', () => {
-  it("uses the desktop's name, with the active-filter count when there is one", () => {
-    expect(workspaceOptionsChipLabel(0)).toBe('Workspace options')
-    expect(workspaceOptionsChipLabel(2)).toBe('Workspace options (2)')
+  it('badges the active-filter count as the desktop does, capped at 9+', () => {
+    expect(workspaceOptionsBadgeText(0)).toBeNull()
+    expect(workspaceOptionsBadgeText(2)).toBe('2')
+    expect(workspaceOptionsBadgeText(12)).toBe('9+')
   })
 
   it("reads to screen readers as the desktop's trigger does", () => {

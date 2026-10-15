@@ -2,11 +2,11 @@ import { Pressable, Text, View } from 'react-native'
 import {
   workspaceGroupChipLabel,
   workspaceOptionsAccessibilityLabel,
-  workspaceOptionsChipLabel
+  WORKSPACE_OPTIONS_TITLE
 } from '../worktree/workspace-list-picker-options'
+import { WorkspaceOptionsCountBadge } from './workspace-options-count-badge'
 import {
   ChevronLeft,
-  Filter,
   Layers,
   List,
   PanelLeftClose,
@@ -153,10 +153,6 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
               accessibilityRole="button"
               accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
             >
-              <Filter
-                size={12}
-                color={controller.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
-              />
               <Text
                 style={[
                   styles.filterChipText,
@@ -164,8 +160,9 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
                 ]}
                 numberOfLines={1}
               >
-                {workspaceOptionsChipLabel(controller.activeFilterCount)}
+                {WORKSPACE_OPTIONS_TITLE}
               </Text>
+              <WorkspaceOptionsCountBadge count={controller.activeFilterCount} />
             </Pressable>
 
             <Pressable
@@ -284,18 +281,15 @@ export function HostScreenHeader({ controller }: { controller: HostScreenControl
             accessibilityRole="button"
             accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
           >
-            <Filter
-              size={12}
-              color={controller.activeFilterCount > 0 ? colors.textPrimary : colors.textSecondary}
-            />
             <Text
               style={[
                 styles.filterChipText,
                 controller.activeFilterCount > 0 && styles.filterChipTextActive
               ]}
             >
-              {workspaceOptionsChipLabel(controller.activeFilterCount)}
+              {WORKSPACE_OPTIONS_TITLE}
             </Text>
+            <WorkspaceOptionsCountBadge count={controller.activeFilterCount} />
           </Pressable>
 
           <Pressable

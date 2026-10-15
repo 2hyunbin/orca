@@ -11,11 +11,12 @@ import { formatActiveFilterLabel } from '../../../src/shared/workspace-view/work
 /** The desktop's name for the control that opens these options, and for the options themselves. */
 export const WORKSPACE_OPTIONS_TITLE = 'Workspace options'
 
-/** The chip's text: the desktop's name, with the active-filter count its badge shows. */
-export function workspaceOptionsChipLabel(activeFilterCount: number): string {
-  return activeFilterCount > 0
-    ? `${WORKSPACE_OPTIONS_TITLE} (${activeFilterCount})`
-    : WORKSPACE_OPTIONS_TITLE
+/** The chip's corner badge, capped as on the desktop; null with no active filter. */
+export function workspaceOptionsBadgeText(activeFilterCount: number): string | null {
+  if (activeFilterCount <= 0) {
+    return null
+  }
+  return activeFilterCount > 9 ? '9+' : String(activeFilterCount)
 }
 
 /** The desktop trigger's accessibility label, word for word. */
