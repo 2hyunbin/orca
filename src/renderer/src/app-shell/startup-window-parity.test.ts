@@ -58,17 +58,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     paths: [`${GIT} terminal tab-a reattaches`]
   },
   {
-    fixture: 'tab-bar entry declaring a group that does not list it',
-    rule: 'group owner: the window keeps a tab in the group its entry declares; the Loader moves it to the first group listing it',
-    paths: [
-      `${GIT} groups`,
-      `${GIT} group 0 tabs`,
-      `${GIT} group 1 tabs`,
-      `${GIT} group 1 active tab`,
-      `${GIT} tab tab-b`
-    ]
-  },
-  {
     fixture: 'legacy surface tombstone on a pane still showing its terminal',
     rule: 'tombstones: the Loader closes a pane a legacy surface tombstone names; the window ignores the tombstone and shows the pane',
     paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
