@@ -97,9 +97,22 @@ export function createRuntimeEnvironmentMobileRelayHosts(): MobileDesktopRelayHo
         return null
       }
       const release = service.acquireDemand(environmentId)
+      const serverKey = getPreferredPairingOffer(environment).publicKeyB64
       return {
         // Prepare before taking the pairing fence: reconnect can rotate the bridge's credentials.
-        ready: Promise.resolve().then(() => service.ensureForRuntimeCall(environmentId)),
+        ready: Promise.resolve().then(async () => {
+          await service.ensureForRuntimeCall(environmentId)
+          const current = listRelayableEnvironments(userDataPath).find(
+            (entry) => entry.id === environmentId
+          )
+          if (
+            !current ||
+            current.createdAt !== environment.createdAt ||
+            getPreferredPairingOffer(current).publicKeyB64 !== serverKey
+          ) {
+            throw new Error('The server changed while connecting.')
+          }
+        }),
         release
       }
     },

@@ -102,6 +102,13 @@ describe('runtime environment mobile relay hosts', () => {
     expect(mocks.ensure).toHaveBeenCalledWith('wsl:ubuntu')
     demand?.release()
     expect(mocks.acquire.mock.results[0]?.value).toHaveBeenCalledOnce()
+    // Removing and re-adding the same id cannot redirect an action already preparing.
+    mocks.ensure.mockImplementationOnce(async () => {
+      mocks.environments[1] = { ...mocks.environments[1], createdAt: 3 }
+    })
+    const replaced = hosts.acquireDemand?.('wsl:ubuntu', 'agentSession.send')
+    await expect(replaced?.ready).rejects.toThrow('server changed')
+    replaced?.release()
     mocks.enabled = false
     expect(hosts.list().environments.map((environment) => environment.id)).toEqual(['env-1'])
     await expect(hosts.resolve('wsl:ubuntu')).resolves.toBeNull()
