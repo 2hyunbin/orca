@@ -423,7 +423,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(empty.toJSON()).toBeNull()
     })
 
-    it('Clear all greys Resume and every card it deletes until it settles, leaving a busy card out', async () => {
+    it('Clear all waits for card actions, then greys Resume and its full snapshot until it settles', async () => {
       const release = Promise.withResolvers<boolean>()
       const sending = Promise.withResolvers<boolean>()
       const onClearAll = vi.fn(() => release.promise)
@@ -441,10 +441,23 @@ describe('MobileNativeChatQueuedMessages', () => {
       const resume = () => byLabel('Resume sending the queued messages')[0]!
       const steers = () => byLabel('Submit without interrupting the model')
       const deletes = () => byLabel('Delete this queued message')
-      // The last card's own Steer is still on its way: Clear all leaves it to that action.
-      await act(async () => steers()[2]!.props.onPress())
+      // Both taps land before disabled renders: the full snapshot conflicts with the busy card.
+      await act(async () => {
+        steers()[2]!.props.onPress()
+        clearAll().props.onPress()
+      })
+      expect(onClearAll).not.toHaveBeenCalled()
+      expect(clearAll().props.disabled).toBe(true)
+      expect(clearAll().props.accessibilityState).toEqual({ disabled: true })
+      expect(flatStyle(clearAll().props.style({ pressed: false })).opacity).toBe(0.5)
+      expect([resume(), ...steers()].map((b) => b.props.disabled)).toEqual([false, false, false, true])
       await act(async () => clearAll().props.onPress())
-      expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b'])
+      expect(onClearAll).not.toHaveBeenCalled()
+      await act(async () => sending.resolve(false))
+      expect(clearAll().props.disabled).toBe(false)
+      expect(onClearAll).not.toHaveBeenCalled()
+      await act(async () => clearAll().props.onPress())
+      expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b', 'c'])
       expect([clearAll(), resume(), ...steers(), ...deletes()].map((b) => b.props.disabled)).toEqual(
         [true, true, true, true, true, true, true, true]
       )
@@ -455,7 +468,6 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(onResume).not.toHaveBeenCalled()
       expect(onSend).toHaveBeenCalledOnce()
       await act(async () => release.resolve(true))
-      await act(async () => sending.resolve(true))
       expect([clearAll(), resume(), ...steers()].map((b) => b.props.disabled)).toEqual([
         false,
         false,
