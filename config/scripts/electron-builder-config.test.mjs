@@ -410,9 +410,9 @@ describe('electron-builder config', () => {
     ).toBe(true)
   })
 
-  // Why: a packed file is streamed from a one-time /tmp extract; once a /tmp sweep removes it,
-  // every web-client request answers an empty 500 until restart (#27976).
-  it('unpacks the paired web client that serve streams over HTTP', () => {
+  // Why: opening a packed file reads a one-time /tmp extract; once a /tmp sweep removes it, the
+  // web client answers an empty 500 and phone bundle reads fail until restart (#27976).
+  it('unpacks the web and mobile bundles a host serves by opening their files', () => {
     const matcher = new FileMatcher(
       '/app',
       '/dest',
@@ -420,7 +420,12 @@ describe('electron-builder config', () => {
       electronBuilderConfig.asarUnpack
     )
     const isUnpacked = matcher.createFilter()
-    for (const webPath of ['out/web/web-index.html', 'out/web/assets/index-abc123.js']) {
+    for (const webPath of [
+      'out/web/web-index.html',
+      'out/web/assets/index-abc123.js',
+      'out/mobile-web/manifest.json',
+      'out/mobile-web/assets/index-abc123.js'
+    ]) {
       expect(isUnpacked(join('/app', webPath), { isDirectory: () => false })).toBe(true)
     }
   })
