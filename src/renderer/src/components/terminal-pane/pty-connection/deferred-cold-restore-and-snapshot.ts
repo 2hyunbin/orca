@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store'
 import type { PtyReplayDataMeta } from '../pty-transport-types'
 import { INITIAL_MODE_2031_REPLY_SCAN_STATE } from '../../../../../shared/terminal-color-scheme-protocol'
+import { agentProviderSessionsEqual } from '../../../../../shared/agent-session-resume'
 import { waitForTerminalOutputParsed } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import { executeTerminalStartupCommandPaste } from '../terminal-startup-command-paste'
 import { resolveTerminalPasteRuntime } from '../terminal-paste-runtime'
@@ -52,9 +53,13 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       )
     }
     const own = useAppStore.getState().sleepingAgentSessionsByPaneKey[session.cacheKey]
-    // Why: quit and live records already name a pane that owns its session; any other origin
-    // reads as a hibernated pane, which would retire this live PTY or arm a second wake.
-    if (own?.origin === 'quit' || own?.origin === 'live') {
+    // Why: only a pane-owned record naming the session just resumed may stay; any other origin
+    // reads as hibernated (retiring this PTY or arming a second wake), and another session is stale.
+    if (
+      (own?.origin === 'quit' || own?.origin === 'live') &&
+      own.agent === startup.agent &&
+      agentProviderSessionsEqual(startup.agent, own.providerSession, startup.resumeProviderSession)
+    ) {
       return
     }
     const record = paneResumeRecord(session, startup)

@@ -584,6 +584,29 @@ describe('connectPanePty', () => {
     expect(mockStoreState.agentLaunchConfigByPaneKey[PANE_KEY]).toBeDefined()
   })
 
+  it('replaces a pane-owned record naming another session with the one just resumed', async () => {
+    // Why: once the live row is gone after a restart, the stale record would resume the old session.
+    setRestoredPaneState({
+      agentStatusByPaneKey: { [PANE_KEY]: codexStatus('working') },
+      sleepingAgentSessionsByPaneKey: {
+        [PANE_KEY]: {
+          ...codexRecord({ state: 'done', origin: 'quit' }),
+          providerSession: { key: 'session_id', id: 'codex-session-old' }
+        }
+      }
+    })
+    const transport = queueColdRestoreTransport('lost-pty')
+    await connectRestoredPane('lost-pty')
+
+    expect(transport.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ command: CODEX_RESUME_COMMAND })
+    )
+    expect(mockStoreState.sleepingAgentSessionsByPaneKey[PANE_KEY]).toMatchObject({
+      origin: 'quit',
+      providerSession: { id: 'codex-session-1' }
+    })
+  })
+
   it('replaces a worktree-sleep record with a pane-owned one after an in-place resume', async () => {
     // Why: a hibernation record on a running pane would let an empty reattach retire it.
     setRestoredPaneState({
