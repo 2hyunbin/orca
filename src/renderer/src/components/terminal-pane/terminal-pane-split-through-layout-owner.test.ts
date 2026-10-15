@@ -60,6 +60,15 @@ describe('splitThroughLayoutOwner', () => {
     expect(mount).not.toHaveBeenCalled()
   })
 
+  it('splits as today when main says a paired server holds the tab', async () => {
+    mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'host_not_owned' })
+    const mount = vi.fn()
+
+    expect(splitThroughLayoutOwner(SPLIT, mount)).toBe(true)
+
+    await vi.waitFor(() => expect(mount).toHaveBeenCalledWith(undefined))
+  })
+
   it('leaves a paired server’s workspace to today’s split', () => {
     mocks.hostId = 'runtime:env-1'
 

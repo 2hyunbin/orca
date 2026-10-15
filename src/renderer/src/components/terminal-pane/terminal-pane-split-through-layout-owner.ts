@@ -6,7 +6,8 @@ import type { LayoutApplyReply } from '../../../../shared/workspace-layout/works
 
 /**
  * A split in a layout-owner build: main writes it and mints the new pane's id, then `mount` shows
- * that pane. False when a paired server owns the workspace's layout; the caller splits as today.
+ * that pane (no id: split as today). False when a paired server owns the workspace's layout; the
+ * caller splits as today.
  */
 export function splitThroughLayoutOwner(
   split: {
@@ -15,7 +16,7 @@ export function splitThroughLayoutOwner(
     leafId: string
     direction: 'vertical' | 'horizontal'
   },
-  mount: (leafId: string) => void
+  mount: (leafId: string | undefined) => void
 ): boolean {
   const hostId = getExecutionHostIdForWorktree(useAppStore.getState(), split.worktreeId)
   if (parseExecutionHostId(hostId)?.kind === 'runtime') {
@@ -28,6 +29,9 @@ export function splitThroughLayoutOwner(
     .then((reply) => {
       if (reply.ok && reply.result.leafId) {
         mount(reply.result.leafId)
+      } else if (!reply.ok && reply.code === 'host_not_owned') {
+        // A tab a paired server holds inside a local workspace (#18202): split it as today.
+        mount(undefined)
       } else {
         console.warn('[layout-owner] split refused:', reply.ok ? 'no_leaf' : reply.code)
       }

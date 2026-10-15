@@ -17,6 +17,7 @@ import type { LoadedWorkspaceLayout } from '../../../shared/workspace-layout/wor
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import { paneKeyOf } from '../../../shared/workspace-layout/workspace-layout-model'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
+import { patchStoredSession } from '../../../shared/workspace-layout/workspace-layout-record-patch'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
 export type TerminalPaneAdmission =
@@ -53,18 +54,25 @@ export function withdrawPaneFromSession(
   return { ...change, value: change.value.ok ? null : change.value.code }
 }
 
-/** A client's layout command (`layout.apply`), with main minting every new id. */
+/**
+ * A client's layout command (`layout.apply`), with main minting every new id. Only the records the
+ * command changed are written; the rest of the partition stays as stored, normalized or not.
+ */
 export function applyCommandToSession(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
-  return applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), command)
+  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  return applyToSession(loaded, command, (after) =>
+    patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+  )
 }
 
 function applyToSession(
   loaded: LoadedWorkspaceLayout,
-  command: LayoutCommand
+  command: LayoutCommand,
+  write: (after: WorkspaceSessionState) => WorkspaceSessionState = (after) => after
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const applied = applyLayoutCommand(loaded.layout, command, {
     mintId: randomUUID,
@@ -74,7 +82,7 @@ function applyToSession(
   return applied.ok
     ? {
         value: { ok: true, result: applied.result },
-        session: saveWorkspaceLayout({ ...loaded, layout: applied.model })
+        session: write(saveWorkspaceLayout({ ...loaded, layout: applied.model }))
       }
     : { value: { ok: false, code: applied.code }, session: null }
 }

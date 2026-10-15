@@ -7,6 +7,7 @@ import type { Store } from '../loading-store/store'
 import { leafIds, WindowSession } from './terminal-topology-window-session-fixture'
 import {
   emptyTerminalSessionProfile,
+  FIXTURE_FOLDER_WORKTREE_ID,
   FIXTURE_GIT_WORKTREE_ID,
   openTopologyStore,
   reopenTopologyStore
@@ -30,12 +31,15 @@ afterEach(() => {
   }
 })
 
-async function storeWithOneTab(hostId?: string): Promise<{ store: Store; directory: string }> {
+async function storeWithOneTab(
+  hostId?: string,
+  worktreeId = WORKTREE
+): Promise<{ store: Store; directory: string }> {
   const directory = mkdtempSync(join(tmpdir(), 'orca-layout-apply-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = new WindowSession(getDefaultWorkspaceSession())
-  window.addTab(WORKTREE, TAB, LEAF)
+  window.addTab(worktreeId, TAB, LEAF)
   window.bind(TAB, LEAF, 'pty-1')
   store.setWorkspaceSession(window.snapshot(), hostId)
   await store.flushPendingOrThrowAsync()
@@ -70,6 +74,42 @@ describe('Store.applyLayoutCommand (layout.apply)', () => {
     })
     // The new pane has no terminal yet: the window starts it when it mounts the pane.
     expect(layout?.ptyIdsByLeafId).toEqual({ [LEAF]: 'pty-1' })
+  })
+
+  it('writes a folder workspace’s split', async () => {
+    const { store } = await storeWithOneTab(undefined, FIXTURE_FOLDER_WORKTREE_ID)
+
+    const reply = await store.applyLayoutCommand({
+      ...split,
+      workspace: FIXTURE_FOLDER_WORKTREE_ID
+    })
+
+    expect(reply.ok).toBe(true)
+    const root = store.getWorkspaceSession().terminalLayoutsByTabId[TAB]?.root
+    expect(leafIds(root)).toEqual([LEAF, reply.ok ? reply.result.leafId : undefined])
+  })
+
+  it('keeps records the split did not touch exactly as stored', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'orca-layout-apply-'))
+    directories.push(directory)
+    const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
+    const window = new WindowSession(getDefaultWorkspaceSession())
+    window.addTab(WORKTREE, TAB, LEAF)
+    window.bind(TAB, LEAF, 'pty-1')
+    // Leftovers a full load-and-save rewrite would drop or renumber.
+    window.session.terminalPtyIncarnationsByPaneKey = { [`${TAB}:${LEAF}`]: 'incarnation-1' }
+    window.session.tabsByWorktree[WORKTREE]![0]!.sortOrder = 7
+    store.setWorkspaceSession(window.snapshot())
+    const stored = store.getWorkspaceSession()
+
+    await store.applyLayoutCommand(split)
+
+    const written = store.getWorkspaceSession()
+    expect(written.terminalPtyIncarnationsByPaneKey).toEqual(
+      stored.terminalPtyIncarnationsByPaneKey
+    )
+    expect(written.tabsByWorktree).toEqual(stored.tabsByWorktree)
+    expect(written.unifiedTabs).toEqual(stored.unifiedTabs)
   })
 
   it('refuses a pane main does not hold and writes nothing', async () => {

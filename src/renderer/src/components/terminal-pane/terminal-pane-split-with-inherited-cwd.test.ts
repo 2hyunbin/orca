@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: false,
   recordCreatedTerminalPaneSplit: vi.fn(),
   resolveSplitCwd: vi.fn(),
-  splitThroughLayoutOwner: vi.fn<(split: unknown, mount: (leafId: string) => void) => boolean>(),
+  splitThroughLayoutOwner:
+    vi.fn<(split: unknown, mount: (leafId: string | undefined) => void) => boolean>(),
   splitWebRuntimeTerminal: vi.fn()
 }))
 
