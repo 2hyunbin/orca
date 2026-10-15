@@ -12,7 +12,7 @@ type SkillInstallProviderEntry = {
   displayName: string
   globalSegments: readonly string[] | null
   workspaceSegments: readonly string[] | null
-  /** Env var relocating the agent's home (skills in `<home>/skills`); the WSL probe is still Grok-only. */
+  /** Env var relocating the agent's home (skills in `<home>/skills`). */
   homeEnv?: string
 }
 
@@ -89,6 +89,130 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
     id: 'zcode',
     displayName: 'ZCode',
     globalSegments: ['.zcode', 'skills'],
+    workspaceSegments: null
+  },
+  {
+    id: 'codebuddy',
+    displayName: 'CodeBuddy',
+    globalSegments: ['.codebuddy', 'skills'],
+    workspaceSegments: ['.codebuddy', 'skills']
+  },
+  {
+    id: 'qoder',
+    displayName: 'Qoder',
+    globalSegments: ['.qoder', 'skills'],
+    workspaceSegments: ['.qoder', 'skills']
+  },
+  {
+    id: 'kiro',
+    displayName: 'Kiro',
+    globalSegments: ['.kiro', 'skills'],
+    workspaceSegments: ['.kiro', 'skills'],
+    homeEnv: 'KIRO_HOME'
+  },
+  // Why: the Antigravity CLI keeps user skills under its config home and
+  // project skills in the canonical root.
+  {
+    id: 'antigravity',
+    displayName: 'Antigravity',
+    globalSegments: ['.gemini', 'config', 'skills'],
+    workspaceSegments: null
+  },
+  // Why: every agent below reads the canonical .agents/skills root at both scopes.
+  {
+    id: 'autohand',
+    displayName: 'Autohand Code',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'goose',
+    displayName: 'Goose',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'crush',
+    displayName: 'Crush',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'command-code',
+    displayName: 'Command Code',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'mistral-vibe',
+    displayName: 'Mistral Vibe',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'qwen-code',
+    displayName: 'Qwen Code',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'rovo',
+    displayName: 'Rovo Dev',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'openclaw',
+    displayName: 'OpenClaw',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'devin',
+    displayName: 'Devin',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'opencode',
+    displayName: 'OpenCode',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'pi',
+    displayName: 'Pi',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'amp',
+    displayName: 'Amp',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'kilo',
+    displayName: 'Kilo Code',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'cline',
+    displayName: 'Cline',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'kimi',
+    displayName: 'Kimi',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'copilot',
+    displayName: 'GitHub Copilot',
+    globalSegments: null,
     workspaceSegments: null
   }
 ] satisfies SkillInstallProviderEntry[])

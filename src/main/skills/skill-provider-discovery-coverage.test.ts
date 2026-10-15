@@ -55,13 +55,24 @@ describe('skill install provider table drives discovery', () => {
         continue
       }
       const relocated = resolve('/srv', provider.id)
-      const overrides = resolveEnvironmentSkillProviderRoots({ [provider.homeEnv]: relocated })
+      const overrides = resolveEnvironmentSkillProviderRoots(
+        { [provider.homeEnv]: relocated },
+        resolve(HOME)
+      )
       expect(overrides).toEqual({ [provider.id]: join(relocated, 'skills') })
       expect(
         discover(overrides).find(
           (source) => source.sourceKind === 'home' && source.owner === provider.id
         )?.path
       ).toBe(overrides[provider.id])
+    }
+  })
+
+  it('names each provider home with a plain env var the WSL probe can expand', () => {
+    for (const provider of SKILL_INSTALL_PROVIDERS) {
+      if (provider.homeEnv) {
+        expect(provider.homeEnv).toMatch(/^[A-Z_][A-Z0-9_]*$/u)
+      }
     }
   })
 })
