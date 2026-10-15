@@ -30,6 +30,7 @@ describe('prepareRendererForAppRestart', () => {
       prepareRendererForAppRestart(eventTarget, {
         startedEventName: 'restart-started',
         abortedEventName: 'restart-aborted',
+        userInitiated: true,
         awaitCheckpoint: () => Promise.resolve()
       })
     ).rejects.toThrow('Renderer shutdown checkpoint was not completed.')
@@ -53,6 +54,7 @@ describe('prepareRendererForAppRestart', () => {
       prepareRendererForAppRestart(eventTarget, {
         startedEventName: 'restart-started',
         abortedEventName: 'restart-aborted',
+        userInitiated: true,
         awaitCheckpoint: () => Promise.resolve()
       })
     ).rejects.toThrow('Renderer shutdown checkpoint was not completed: sendSync payload rejected')
@@ -67,6 +69,7 @@ describe('prepareRendererForAppRestart', () => {
     await prepareRendererForAppRestart(eventTarget, {
       startedEventName: 'restart-started',
       abortedEventName: 'restart-aborted',
+      userInitiated: true,
       awaitCheckpoint
     })
 
@@ -83,6 +86,7 @@ describe('prepareRendererForAppRestart', () => {
     const prepared = prepareRendererForAppRestart(eventTarget, {
       startedEventName: 'restart-started',
       abortedEventName: 'restart-aborted',
+      userInitiated: true,
       awaitCheckpoint: () =>
         new Promise<void>((resolve) => {
           order.push('awaiting-flush')
@@ -114,6 +118,7 @@ describe('prepareRendererForAppRestart', () => {
       prepareRendererForAppRestart(eventTarget, {
         startedEventName: 'restart-started',
         abortedEventName: 'restart-aborted',
+        userInitiated: true,
         awaitCheckpoint: () => Promise.reject(new Error('Failed to persist renderer state.'))
       })
     ).rejects.toThrow('Failed to persist renderer state.')

@@ -1,13 +1,26 @@
 import type { OpenFile } from '@/store/slices/editor'
 import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
+import { getBackedUpEditorDraft } from '@/lib/editor-draft-backup'
 import { canAutoSaveOpenFile } from './editor-autosave'
 import { flushPendingEditorChange } from './editor-buffer-owners'
 import { getDuplicateDirtySavePaths } from './editor-autosave-state-projections'
 import type { AppStoreApi, EditorSaveQueue } from './editor-save-queue'
-import type {
-  EditorPrepareHotExitDetail,
-  EditorSaveDirtyFilesDetail
-} from '../../../../shared/editor-save-events'
+import { requestRestartUnsavedChangesDecision } from './restart-unsaved-changes-dialog'
+import type { EditorSaveDirtyFilesDetail } from '../../../../shared/editor-save-events'
+import { acceptEditorHotExitRequest } from '../../../../shared/editor-hot-exit-request'
+import { APP_RESTART_CANCELLED_BY_USER_MESSAGE } from '../../../../shared/app-restart-cancellation'
+
+const RESTART_SAVE_TIME_LIMIT_MS = 5_000
+
+function settleWithin(work: Promise<void>, timeoutMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, timeoutMs)
+    void work.finally(() => {
+      window.clearTimeout(timer)
+      resolve()
+    })
+  })
+}
 
 type EditorRestartSaveHandlerOptions = {
   store: AppStoreApi
@@ -72,44 +85,88 @@ export function createEditorRestartSaveHandlers({
     }
   }
 
+  // Why: with autosave on, saving is what the user asked for; only what's left needs the backup or the dialog.
+  const autoSaveBeforeRestart = async (): Promise<void> => {
+    const state = store.getState()
+    if (!state.settings?.editorAutoSave) {
+      return
+    }
+    const dirtyFiles = state.openFiles.filter((file) => file.isDirty)
+    const duplicateDirtySavePaths = new Set(getDuplicateDirtySavePaths(dirtyFiles))
+    const saves: Promise<void>[] = []
+    for (const file of dirtyFiles) {
+      const draft = state.editorDrafts[file.id]
+      if (
+        draft === undefined ||
+        !canAutoSaveOpenFile(file) ||
+        duplicateDirtySavePaths.has(file.filePath)
+      ) {
+        continue
+      }
+      // Why: a stalled save (e.g. an unreachable SSH host) must not hold the restart; the file stays dirty and is re-checked below.
+      saves.push(
+        settleWithin(
+          queueSave(file, draft, 'autosave').catch((error) => {
+            console.error('[editor] save before restart failed', error)
+          }),
+          RESTART_SAVE_TIME_LIMIT_MS
+        )
+      )
+    }
+    await Promise.all(saves)
+  }
+
   const handlePrepareHotExit = async (event: Event): Promise<void> => {
-    const detail = (event as CustomEvent<EditorPrepareHotExitDetail>).detail
-    if (!detail) {
+    const request = acceptEditorHotExitRequest(event)
+    if (!request) {
       return
     }
 
     try {
-      detail.claim()
-
       const initiallyDirtyFiles = store.getState().openFiles.filter((file) => file.isDirty)
       await Promise.all(initiallyDirtyFiles.map((file) => quiesceFileSave(file.id)))
+      await autoSaveBeforeRestart()
 
-      const state = store.getState()
-      const dirtyFiles = state.openFiles.filter((file) => file.isDirty)
-      const unsupportedDirtyFiles = dirtyFiles.filter((file) => file.mode !== 'edit')
-      if (unsupportedDirtyFiles.length > 0) {
-        detail.reject('Some unsaved editor changes cannot be backed up before restart.')
-        return
-      }
-
-      for (const file of dirtyFiles) {
-        if (state.editorDrafts[file.id] === undefined) {
-          throw new Error(`Missing editor buffer for ${file.relativePath}`)
+      const confirmedLostFileIds = new Set<string>()
+      for (;;) {
+        const state = store.getState()
+        const dirtyFiles = state.openFiles.filter((file) => file.isDirty)
+        if (dirtyFiles.length > 0 && !shouldPersistWorkspaceSession(state)) {
+          request.reject(
+            'Unsaved editor changes cannot be backed up until workspace restore finishes.'
+          )
+          return
         }
-      }
-
-      if (dirtyFiles.length > 0 && !shouldPersistWorkspaceSession(state)) {
-        detail.reject(
-          'Unsaved editor changes cannot be backed up until workspace restore finishes.'
+        const notBackedUp = dirtyFiles.filter(
+          (file) => getBackedUpEditorDraft(file, state.editorDrafts) === undefined
         )
-        return
+        // Why: the dialog is awaited, so files can join meanwhile; consent covers only the files it named.
+        if (notBackedUp.every((file) => confirmedLostFileIds.has(file.id))) {
+          break
+        }
+        const decision = request.userInitiated
+          ? requestRestartUnsavedChangesDecision([
+              ...new Set(notBackedUp.map((file) => file.relativePath))
+            ])
+          : null
+        if (!decision) {
+          request.reject('Some unsaved editor changes cannot be backed up before restart.')
+          return
+        }
+        if ((await decision) !== 'restart-anyway') {
+          request.reject(APP_RESTART_CANCELLED_BY_USER_MESSAGE)
+          return
+        }
+        for (const file of notBackedUp) {
+          confirmedLostFileIds.add(file.id)
+        }
       }
 
       // Why: preload dispatches beforeunload immediately after this resolves;
       // App owns the one combined session/UI checkpoint for restart and update.
-      detail.resolve()
+      request.resolve()
     } catch (error) {
-      detail.reject(String((error as Error)?.message ?? error))
+      request.reject(error instanceof Error ? error.message : String(error))
     }
   }
 

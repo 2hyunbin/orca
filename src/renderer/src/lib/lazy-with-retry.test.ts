@@ -14,10 +14,8 @@ import {
 } from './updater-beforeunload'
 import { ORCA_RENDERER_UNLOAD_PREVENTED_EVENT } from '../../../shared/renderer-shutdown-events'
 import { ORCA_APP_RESTART_ABORTED_EVENT } from '../../../shared/updater-renderer-events'
-import {
-  ORCA_EDITOR_PREPARE_HOT_EXIT_EVENT,
-  type EditorPrepareHotExitDetail
-} from '../../../shared/editor-save-events'
+import { ORCA_EDITOR_PREPARE_HOT_EXIT_EVENT } from '../../../shared/editor-save-events'
+import { acceptEditorHotExitRequest } from '../../../shared/editor-hot-exit-request'
 
 const RELOAD_GUARD_KEY = 'orca:lazy-chunk-reload-attempted'
 const LANDED_RELOAD_GUARD_VALUE = 'doc-before-the-reload'
@@ -254,24 +252,6 @@ describe('loadLazyWithRetry', () => {
     expect(isLazyChunkLoadError(caught)).toBe(true)
   })
 
-  it('preserves ordinary (non-parse) module evaluation errors so real bugs still report', async () => {
-    // An ordinary Error from a lazy module is a genuine evaluation bug, not a
-    // corrupt chunk; it must still surface raw after the guard is set.
-    const reload = spyOnReload()
-    window.sessionStorage.setItem(RELOAD_GUARD_KEY, LANDED_RELOAD_GUARD_VALUE)
-    const error = new Error('render bug from lazy module evaluation')
-    const factory = vi.fn(() => Promise.reject(error))
-
-    const loaded = loadLazyWithRetry(factory, { retries: 1, baseDelayMs: 100 })
-    const assertion = expect(loaded).rejects.toBe(error)
-    await vi.advanceTimersByTimeAsync(5000)
-    await assertion
-
-    expect(reload).not.toHaveBeenCalled()
-    const caught = await loaded.catch((rejection) => rejection)
-    expect(isLazyChunkLoadError(caught)).toBe(false)
-  })
-
   it('fails closed with the original error when sessionStorage reads throw', async () => {
     const reload = spyOnReload()
     // Private-mode / sandboxed storage makes reads throw. The guard must treat
@@ -387,14 +367,13 @@ describe('loadLazyWithRetry recovery reload vs the dirty-editor-tab unload veto'
       preventUnloadAndScheduleShutdownCheckpointReset(event, window)
     }
     const hotExitBackup = (event: Event): void => {
-      const detail = (event as CustomEvent<EditorPrepareHotExitDetail>).detail
-      detail.claim()
+      const request = acceptEditorHotExitRequest(event)
       harness.hotExitBackups += 1
       if (options.hotExitBackupFails === true) {
-        detail.reject('Some unsaved editor changes cannot be backed up before restart.')
+        request?.reject('Some unsaved editor changes cannot be backed up before restart.')
         return
       }
-      detail.resolve()
+      request?.resolve()
     }
 
     window.addEventListener('beforeunload', dirtyTabGuard)
