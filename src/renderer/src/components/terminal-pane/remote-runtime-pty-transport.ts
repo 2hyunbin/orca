@@ -2349,8 +2349,14 @@ export function createRemoteRuntimePtyTransport(
           if (isCurrentSubscription()) {
             storedCallbacks.onOutputPauseChanged?.(
               desiredOutputPaused,
-              nextStream.setOutputPaused(desiredOutputPaused)
+              nextStream.setOutputPaused(desiredOutputPaused),
+              nextStream.reportsPausedOutputDrops?.() === true
             )
+          }
+        },
+        onPausedOutputDropped: () => {
+          if (isCurrentSubscription()) {
+            storedCallbacks.onPausedOutputDropped?.()
           }
         },
         onSubscribed: () => {
@@ -2359,7 +2365,8 @@ export function createRemoteRuntimePtyTransport(
           }
           storedCallbacks.onOutputPauseChanged?.(
             desiredOutputPaused,
-            nextStream.setOutputPaused(desiredOutputPaused)
+            nextStream.setOutputPaused(desiredOutputPaused),
+            nextStream.reportsPausedOutputDrops?.() === true
           )
           if (!subscriptionAttached && sameHandleEndRecovery) {
             recordSameHandleEndReuse(subscribedHandle)
@@ -3049,8 +3056,13 @@ export function createRemoteRuntimePtyTransport(
       if (!connected || !handle) {
         return false
       }
-      const supported = getCurrentMultiplexedStream(handle)?.setOutputPaused(paused) === true
-      storedCallbacks.onOutputPauseChanged?.(paused, supported)
+      const stream = getCurrentMultiplexedStream(handle)
+      const supported = stream?.setOutputPaused(paused) === true
+      storedCallbacks.onOutputPauseChanged?.(
+        paused,
+        supported,
+        stream?.reportsPausedOutputDrops?.() === true
+      )
       return supported
     },
 

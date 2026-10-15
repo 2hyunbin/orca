@@ -47,6 +47,14 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
       stream.callbacks.onWriteUnavailable?.()
       return
     }
+    if (frame.opcode === TerminalStreamOpcode.PausedOutputDropped) {
+      if (!stream.supportsPausedOutputDropNotice) {
+        return
+      }
+      stream.pausedOutputGapExpected = true
+      stream.callbacks.onPausedOutputDropped?.()
+      return
+    }
     if (frame.opcode === TerminalStreamOpcode.InputAck) {
       if (!stream.supportsInputAck) {
         return
@@ -112,11 +120,12 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
       ) {
         return
       }
-      if (this.detectOutputGap(stream, seq, rawLength)) {
+      if (!stream.pausedOutputGapExpected && this.detectOutputGap(stream, seq, rawLength)) {
         this.requestResyncSnapshot(stream)
         return
       }
       if (typeof seq === 'number') {
+        stream.pausedOutputGapExpected = false
         stream.expectedSeq = seq
         stream.commandProbeBaselineSeq = undefined
       }
