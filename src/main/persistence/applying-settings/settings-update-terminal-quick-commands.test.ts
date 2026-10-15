@@ -63,9 +63,12 @@ describe('updateSettings terminalQuickCommands', () => {
 
     expect(() =>
       updateSettings(operations, {
+        opencodeSessionCookie: '',
+        httpProxyUrl: '',
         terminalQuickCommands: [agentCommand('review', `${promptAtLimit('x')}x`)]
       })
     ).toThrow(/"review" is 257 KB\. Quick command prompts can be up to 256 KB/)
+    expect(operations.removeRetainedBlob).not.toHaveBeenCalled()
     expect(operations.scheduleSave).not.toHaveBeenCalled()
   })
 
