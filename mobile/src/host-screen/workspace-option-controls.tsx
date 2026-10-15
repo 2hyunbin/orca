@@ -23,6 +23,10 @@ import {
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { WorktreeCardProperty } from '../../../src/shared/ui-chrome-types'
 import { hostScreenStyles as styles } from './host-screen-styles'
+import {
+  phoneCardPropertyChoices,
+  withoutPhoneHiddenProperties
+} from './phone-card-property-choices'
 import type { HostScreenController } from './use-host-screen-controller'
 import { CheckRow, ChoiceRows, OptionRowList, SwitchRow } from './workspace-option-rows'
 import { choiceLabel, summarizeChecklist } from './workspace-option-values'
@@ -49,11 +53,9 @@ export type WorkspaceOptionControl =
     }
 
 // The phone cannot see the desktop's project groups, so it uses the plain label.
-const CARD_DISPLAY_CHOICES: WorkspaceViewChoice<WorktreeCardProperty>[] =
-  WORKSPACE_CARD_DISPLAY_CHOICES.map((choice) => ({
-    id: choice.id,
-    label: getWorkspaceCardDisplayChoiceLabel(choice, false)
-  }))
+const CARD_DISPLAY_CHOICES: WorkspaceViewChoice<WorktreeCardProperty>[] = phoneCardPropertyChoices(
+  WORKSPACE_CARD_DISPLAY_CHOICES
+).map((choice) => ({ id: choice.id, label: getWorkspaceCardDisplayChoiceLabel(choice, false) }))
 
 function hostsValue({ controller, hosts }: WorkspaceOptionProps): string {
   const visible = controller.state.view.filters.visibleHostIds
@@ -199,10 +201,10 @@ function CardPropertyRows(props: {
   )
 }
 
-// As the desktop: "Hover" under Compact, otherwise how many properties show.
+// As the desktop: "Hover" under Compact, otherwise how many of the phone's properties show.
 function showPropertiesValue({ controller }: WorkspaceOptionProps): string {
   const value = getWorkspaceCardPropertiesValue(
-    controller.state.view.worktreeCardProperties,
+    withoutPhoneHiddenProperties(controller.state.view.worktreeCardProperties),
     controller.state.cardSettings.compactWorktreeCards
   )
   return value === 'hover' ? 'Hover' : value === null ? '' : String(value)
@@ -294,7 +296,7 @@ export const WORKSPACE_OPTION_CONTROLS: Record<WorkspaceViewOptionKey, Workspace
     (controller) => (controller.state.cardSettings.compactWorktreeCards ? 'compact' : 'detailed'),
     (controller) => controller.settings.setCardLayout
   ),
-  cardProperties: propertiesPage(WORKSPACE_CARD_PROPERTY_CHOICES, {
+  cardProperties: propertiesPage(phoneCardPropertyChoices(WORKSPACE_CARD_PROPERTY_CHOICES), {
     value: showPropertiesValue,
     withAgentLayout: true
   }),
