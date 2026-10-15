@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as LaunchAgentInNewTabModule from './launch-agent-in-new-tab'
 
 const mocks = vi.hoisted(() => ({
   createSupport: vi.fn(),
@@ -86,9 +87,9 @@ describe('a structured chat launch on a paired server', () => {
       activeWorkspaceExecutionHostId: 'runtime:server-1',
       runtimeStatusByEnvironmentId: new Map()
     })
-    const { launchAgentInNewTab } = await vi.importActual<
-      typeof import('./launch-agent-in-new-tab')
-    >('./launch-agent-in-new-tab')
+    const { launchAgentInNewTab } = await vi.importActual<typeof LaunchAgentInNewTabModule>(
+      './launch-agent-in-new-tab'
+    )
 
     const launch = launchAgentInNewTab({
       requestId: 'before-host-status',
