@@ -3,7 +3,7 @@
 // so a frame never replaces a change main has not received yet.
 
 let busy = false
-const idleListeners = new Set<() => void>()
+let idleListener: (() => void) | null = null
 
 export function reportWindowSessionWriteActivity(nextBusy: boolean): void {
   if (busy === nextBusy) {
@@ -11,9 +11,7 @@ export function reportWindowSessionWriteActivity(nextBusy: boolean): void {
   }
   busy = nextBusy
   if (!busy) {
-    for (const listener of idleListeners) {
-      listener()
-    }
+    idleListener?.()
   }
 }
 
@@ -21,9 +19,12 @@ export function isWindowSessionWriteBusy(): boolean {
   return busy
 }
 
+/** The one listener: the window's layout frame sync. */
 export function onWindowSessionWriteIdle(listener: () => void): () => void {
-  idleListeners.add(listener)
+  idleListener = listener
   return () => {
-    idleListeners.delete(listener)
+    if (idleListener === listener) {
+      idleListener = null
+    }
   }
 }

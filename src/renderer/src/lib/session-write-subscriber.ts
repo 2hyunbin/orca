@@ -126,16 +126,14 @@ export function createSessionWriteSubscriber({
   const pendingChangedFields = new Set<SessionRelevantField>()
   const terminalTabsProjection = createTerminalSessionTabsProjection()
   const unifiedTabsProjection = createUnifiedSessionTabsProjection()
-  // Switch point: layout frames wait while a write is scheduled or unacknowledged.
-  const reportActivity = (): void => {
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
-    }
-  }
 
   const flushPendingWrite = (): void => {
     timer = null
-    reportActivity()
+    // Switch point (each report below): layout frames wait while a write is scheduled or
+    // unacknowledged. Inline checks, so a window-owned build keeps none of it.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+    }
     if (disposed || writing || pendingChangedFields.size === 0) {
       return
     }
@@ -160,7 +158,9 @@ export function createSessionWriteSubscriber({
       return
     }
     writing = true
-    reportActivity()
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+    }
     const settle = (failed: boolean, error?: unknown): void => {
       writing = false
       if (disposed) {
@@ -175,7 +175,9 @@ export function createSessionWriteSubscriber({
       } else if (pendingChangedFields.size > 0) {
         armFlushTimer()
       }
-      reportActivity()
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+      }
     }
     try {
       const result = persist({ patch })
@@ -200,7 +202,9 @@ export function createSessionWriteSubscriber({
       clearTimeout(timer)
     }
     timer = setTimeout(flushPendingWrite, debounceMs)
-    reportActivity()
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+    }
   }
 
   /**
@@ -293,6 +297,8 @@ export function createSessionWriteSubscriber({
       clearTimeout(timer)
     }
     pendingChangedFields.clear()
-    reportActivity()
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      reportWindowSessionWriteActivity(!disposed && (timer !== null || writing))
+    }
   }
 }
