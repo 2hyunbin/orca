@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { resolvePullRequestDiffBase } from './git-pull-request-diff-base.mjs'
 
 // Why: schema 3 dropped release revisions and git tree identity along with the snapshot
 // registry. Freshness compares installed copies against these bytes only.
@@ -18,7 +19,8 @@ const RELEASED_DIGESTS_PATH = path.join(OUTPUT_ROOT, 'released-digests.json')
 const EMBEDDED_PACKAGES_PATH = path.join(
   REPO_ROOT,
   'src',
-  'shared',
+  'main',
+  'skills',
   'bundled-orca-skill-packages.ts'
 )
 
@@ -199,8 +201,7 @@ async function readReleasedDigests() {
 function withDigests(ledger, additions) {
   const skills = { ...ledger.skills }
   for (const [name, digests] of additions) {
-    const known = skills[name] ?? []
-    skills[name] = [...known, ...digests.filter((digest) => !known.includes(digest))]
+    skills[name] = [...new Set([...(skills[name] ?? []), ...digests])]
   }
   const names = Object.keys(skills).sort(compareCodeUnits)
   return { schemaVersion: 1, skills: Object.fromEntries(names.map((name) => [name, skills[name]])) }
@@ -242,7 +243,12 @@ async function buildEmbeddedPackages(manifest, ledger) {
 }
 
 function git(args, encoding) {
-  return execFileSync('git', args, { cwd: REPO_ROOT, encoding, maxBuffer: 16 * 1024 * 1024 })
+  return execFileSync('git', args, {
+    cwd: REPO_ROOT,
+    encoding,
+    maxBuffer: 16 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
 }
 
 // Why: seeds the ledger from one bounded path history per shipped skill, never a ref scan.
@@ -252,27 +258,73 @@ function historicalDigests(skill) {
     .filter(Boolean)
   const digests = []
   for (const commit of commits) {
-    const paths = git(
-      ['ls-tree', '-r', '--name-only', commit, '--', `${skill.sourcePath}/`],
-      'utf8'
-    )
+    // `<mode> <type> <object>\t<path>`; 100755 is the executable bit the copy carried.
+    const entries = git(['ls-tree', '-r', commit, '--', `${skill.sourcePath}/`], 'utf8')
       .split('\n')
       .filter(Boolean)
-    if (!paths.includes(`${skill.sourcePath}/SKILL.md`)) {
+      .map((line) => {
+        const [meta, filePath] = line.split('\t')
+        return { executable: meta.startsWith('100755 '), filePath }
+      })
+    if (!entries.some((entry) => entry.filePath === `${skill.sourcePath}/SKILL.md`)) {
       continue
     }
-    const files = paths
-      .map((filePath) => ({
-        relativePath: filePath.slice(skill.sourcePath.length + 1),
-        filePath
+    const files = entries
+      .map((entry) => ({
+        ...entry,
+        relativePath: entry.filePath.slice(skill.sourcePath.length + 1)
       }))
       .filter(({ relativePath }) => !isOsMetadataSkillEntryName(path.posix.basename(relativePath)))
-      .map(({ relativePath, filePath }) =>
-        describeFile(relativePath, git(['show', `${commit}:${filePath}`]), false)
+      .map(({ relativePath, filePath, executable }) =>
+        describeFile(relativePath, git(['show', `${commit}:${filePath}`]), executable)
       )
     digests.push(packageDigest(sortManifestFiles(files)))
   }
   return digests
+}
+
+function tryGit(args) {
+  try {
+    return git(args, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+// Why: on a PR merge ref HEAD^1 is the base; locally, the merge base with main.
+function ledgerBaseCommit() {
+  try {
+    return (
+      resolvePullRequestDiffBase(REPO_ROOT, null) ??
+      (tryGit(['merge-base', 'origin/main', 'HEAD'])?.trim() || null)
+    )
+  } catch {
+    return null
+  }
+}
+
+/** Every digest the base branch knew must survive; the ledger only grows. */
+export function findDroppedReleasedDigests(baseLedger, ledger) {
+  return Object.entries(baseLedger.skills ?? {}).flatMap(([name, digests]) =>
+    digests
+      .filter((digest) => !(ledger.skills[name] ?? []).includes(digest))
+      .map((digest) => `${name}:${digest}`)
+  )
+}
+
+function verifyLedgerKeepsBase(ledger) {
+  const base = ledgerBaseCommit()
+  const relativePath = path.relative(REPO_ROOT, RELEASED_DIGESTS_PATH).split(path.sep).join('/')
+  const baseText = base ? tryGit(['show', `${base}:${relativePath}`]) : null
+  if (baseText === null) {
+    return
+  }
+  const dropped = findDroppedReleasedDigests(JSON.parse(baseText), ledger)
+  if (dropped.length > 0) {
+    throw new Error(
+      `${relativePath} dropped digests its base shipped (it is append-only):\n${dropped.join('\n')}`
+    )
+  }
 }
 
 async function verifyGeneratedFile(filePath, expected) {
@@ -310,6 +362,7 @@ async function main() {
   }
   await verifyGeneratedFile(CURRENT_MANIFEST_PATH, serialized(manifest))
   await verifyGeneratedFile(RELEASED_DIGESTS_PATH, serialized(ledger))
+  verifyLedgerKeepsBase(ledger)
   await verifyGeneratedFile(EMBEDDED_PACKAGES_PATH, embedded)
 }
 
@@ -322,6 +375,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
 
 export {
   buildCurrentManifest,
+  withDigests,
   classifyFile,
   collectPackageFiles,
   describeFile,

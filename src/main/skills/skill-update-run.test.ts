@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SkillUpdateRun } from '../../shared/skill-freshness'
 import type { SkillInstallResult } from '../../shared/skill-install-contract'
 import { SkillUpdateRunner } from './skill-update-run'
@@ -138,8 +138,9 @@ describe('SkillUpdateRunner', () => {
     })
   })
 
-  it('stays running after Stop until the install settles, then goes idle', async () => {
-    const { runner, installs } = makeRunner(async () => [])
+  it('stays running after Stop until the install settles, re-scans, then goes idle', async () => {
+    const rescan = vi.fn(async () => [])
+    const { runner, installs } = makeRunner(rescan)
     runner.start(['orca-cli'])
     runner.cancel()
 
@@ -149,6 +150,7 @@ describe('SkillUpdateRunner', () => {
 
     installs[0].done.resolve([result('orca-cli', 'cancelled')])
     await flush()
+    expect(rescan).toHaveBeenCalledWith(['orca-cli'])
     expect(runner.getState()).toEqual({ state: 'idle' })
     expect(runner.start(['orca-cli'])).toEqual({ started: true })
   })

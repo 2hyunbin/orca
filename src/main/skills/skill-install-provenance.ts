@@ -15,7 +15,7 @@ export type SkillInstallReceiptV1 = {
   versionId: string
   packageDigest: string
   bundleDigest?: string
-  archiveSha256: string
+  archiveSha256?: string
   scope: 'global' | 'workspace'
   destinationIdentity: string
   canonicalPath: string
@@ -69,7 +69,7 @@ function isReceipt(value: unknown): value is SkillInstallReceiptV1 {
     typeof receipt.versionId === 'string' &&
     typeof receipt.packageDigest === 'string' &&
     (receipt.bundleDigest === undefined || typeof receipt.bundleDigest === 'string') &&
-    typeof receipt.archiveSha256 === 'string' &&
+    (receipt.archiveSha256 === undefined || typeof receipt.archiveSha256 === 'string') &&
     (receipt.scope === 'global' || receipt.scope === 'workspace') &&
     typeof receipt.destinationIdentity === 'string' &&
     typeof receipt.canonicalPath === 'string' &&

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import {
   BUNDLED_ORCA_SKILL_PACKAGES,
   type BundledOrcaSkillPackage
-} from '../../shared/bundled-orca-skill-packages'
+} from './bundled-orca-skill-packages'
 import type { SkillInstallResult } from '../../shared/skill-install-contract'
 import {
   computeSkillPackageDigest,
@@ -15,13 +15,14 @@ import {
 import { isOrcaSkillLockSource } from '../../shared/skill-freshness'
 import {
   installSharedExtractedSkill,
-  skillInstallLocalInput,
-  type SkillInstallServiceInput
+  skillInstallLocalTarget,
+  type SkillInstallTargetInput
 } from './skill-install-service'
-import { inspectSkillCanonicalState, type SkillCanonicalState } from './skill-install-planner'
+import type { LocalSkillInstallTarget } from './skill-install-transaction'
 import {
   BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX,
-  readSkillInstallReceipt
+  readSkillInstallReceipt,
+  type SkillInstallReceiptV1
 } from './skill-install-provenance'
 import {
   beginSkillExtractionRecovery,
@@ -29,7 +30,6 @@ import {
 } from './skill-extraction-recovery'
 import { nativeSkillInstallFilesystem } from './skill-install-filesystem'
 import { skillInstallFailureFromError } from './skill-install-operation-error'
-import { skillInstallPathExists } from './skill-install-recovery'
 import { readProjectSkillLockSources, readSkillLockSources } from './skill-lock-sources'
 
 export function findBundledOrcaSkillPackage(name: string): BundledOrcaSkillPackage | null {
@@ -68,8 +68,8 @@ export function bundledOrcaSkillManifest(entry: BundledOrcaSkillPackage): SkillP
 }
 
 export type BundledOrcaSkillInstallInput = Omit<
-  SkillInstallServiceInput,
-  'operationId' | 'archivePath' | 'adoptableDigests' | 'conflictResolution'
+  SkillInstallTargetInput,
+  'operationId' | 'adoptableDigests' | 'conflictResolution' | 'expectedPackageDigest'
 > & {
   /** Replaces copies with local changes too; never a link or a colliding name. */
   discardLocalChanges?: boolean
@@ -77,76 +77,73 @@ export type BundledOrcaSkillInstallInput = Omit<
   readLockSources?: () => Promise<ReadonlyMap<string, string>>
 }
 
-type BundledInstallContext = {
-  input: BundledOrcaSkillInstallInput
+export type BundledInstallContext = {
+  target: Omit<SkillInstallTargetInput, 'operationId'>
   lockSources: ReadonlyMap<string, string>
 }
 
-async function bundledInstallContext(
+export async function bundledInstallContext(
   input: BundledOrcaSkillInstallInput
 ): Promise<BundledInstallContext> {
-  const readLockSources =
-    input.readLockSources ??
+  const { discardLocalChanges, readLockSources, ...target } = input
+  const lockSources = await (
+    readLockSources ??
     (() =>
       input.scope === 'workspace' && input.workspaceDirectory
         ? readProjectSkillLockSources(input.workspaceDirectory)
         : readSkillLockSources())
-  return { input, lockSources: await readLockSources() }
+  )()
+  return {
+    target: {
+      ...target,
+      ...(discardLocalChanges ? { conflictResolution: 'replace-and-discard-local' as const } : {})
+    },
+    lockSources
+  }
 }
 
-function serviceInput(
-  context: BundledInstallContext,
-  manifest: SkillPackageManifestV1,
-  adoptableDigests: readonly string[] | undefined
-): SkillInstallServiceInput {
-  return {
-    ...context.input,
-    operationId: randomUUID(),
-    // Why empty: the package is staged from embedded bytes, so no archive is read.
-    archivePath: '',
-    expectedPackageDigest: manifest.packageDigest,
-    adoptableDigests,
-    ...(context.input.discardLocalChanges
-      ? { conflictResolution: 'replace-and-discard-local' as const }
-      : {})
-  }
+export type PreparedBundledSkill = {
+  entry: BundledOrcaSkillPackage
+  manifest: SkillPackageManifestV1
+  canonicalPath: string
+  receipt: SkillInstallReceiptV1 | null
+  request: SkillInstallTargetInput
+  local: LocalSkillInstallTarget
 }
 
 /**
  * An earlier Orca version is ours to replace when the skills.sh lock or Orca's own receipt
  * says Orca installed it. Any other bytes are the user's and stay a conflict.
  */
-async function adoptableDigests(
-  context: BundledInstallContext,
-  entry: BundledOrcaSkillPackage,
-  canonicalPath: string,
-  stateDirectory: string
-): Promise<readonly string[] | undefined> {
-  if (isOrcaSkillLockSource(context.lockSources.get(entry.name) ?? null)) {
-    return entry.releasedDigests
-  }
-  const receipt = await readSkillInstallReceipt(stateDirectory, canonicalPath)
-  return receipt && receipt.packageId.startsWith(BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX)
-    ? entry.releasedDigests
-    : undefined
-}
-
-async function prepareBundledSkill(context: BundledInstallContext, entry: BundledOrcaSkillPackage) {
-  const manifest = bundledOrcaSkillManifest(entry)
-  const draft = skillInstallLocalInput(serviceInput(context, manifest, undefined))
-  const canonicalPath = join(draft.destinationRoot, entry.name)
-  const adoptable = await adoptableDigests(context, entry, canonicalPath, draft.stateDirectory)
-  return { manifest, canonicalPath, request: serviceInput(context, manifest, adoptable) }
-}
-
-async function installBundledSkill(
+export async function prepareBundledSkill(
   context: BundledInstallContext,
   entry: BundledOrcaSkillPackage
-): Promise<SkillInstallResult> {
-  const { manifest, canonicalPath, request } = await prepareBundledSkill(context, entry)
-  const local = skillInstallLocalInput(request)
-  // Why: an adopted copy has no receipt, which the installer would report as a fresh install.
-  const replacing = await skillInstallPathExists(canonicalPath)
+): Promise<PreparedBundledSkill> {
+  const manifest = bundledOrcaSkillManifest(entry)
+  const base: SkillInstallTargetInput = {
+    ...context.target,
+    operationId: randomUUID(),
+    expectedPackageDigest: manifest.packageDigest
+  }
+  const resolved = skillInstallLocalTarget(base)
+  const canonicalPath = join(resolved.destinationRoot, entry.name)
+  const receipt = await readSkillInstallReceipt(resolved.stateDirectory, canonicalPath)
+  const owned =
+    isOrcaSkillLockSource(context.lockSources.get(entry.name) ?? null) ||
+    Boolean(receipt?.packageId.startsWith(BUNDLED_ORCA_SKILL_PACKAGE_ID_PREFIX))
+  const adoptableDigests = owned ? entry.releasedDigests : undefined
+  return {
+    entry,
+    manifest,
+    canonicalPath,
+    receipt,
+    request: { ...base, adoptableDigests },
+    local: { ...resolved, adoptableDigests }
+  }
+}
+
+async function installBundledSkill(prepared: PreparedBundledSkill): Promise<SkillInstallResult> {
+  const { entry, manifest, request, local } = prepared
   const filesystem = request.filesystem ?? nativeSkillInstallFilesystem
   await mkdir(local.destinationRoot, { recursive: true })
   const recovery = await beginSkillExtractionRecovery(
@@ -162,12 +159,10 @@ async function installBundledSkill(
       await writeFile(target, file.text, 'utf8')
     }
     await request.filesystem?.prepareExtractedSkill(skillRoot, manifest)
-    const result = await installSharedExtractedSkill(request, {
+    return await installSharedExtractedSkill(request, {
       extractionPath: recovery.extractionPath,
-      manifest,
-      archiveSha256: manifest.packageDigest
+      manifest
     })
-    return replacing && result.status === 'installed' ? { ...result, status: 'updated' } : result
   } finally {
     await finishSkillExtractionRecovery(local.stateDirectory, recovery, filesystem)
   }
@@ -187,7 +182,7 @@ function failedResult(entry: BundledOrcaSkillPackage, error: unknown): SkillInst
   }
 }
 
-function requireBundledPackages(names: readonly string[]): BundledOrcaSkillPackage[] {
+export function requireBundledPackages(names: readonly string[]): BundledOrcaSkillPackage[] {
   return names.map((name) => {
     const entry = findBundledOrcaSkillPackage(name)
     if (!entry) {
@@ -209,48 +204,10 @@ export async function installBundledOrcaSkills(
   // abandon the rest.
   for (const entry of entries) {
     results.push(
-      await installBundledSkill(context, entry).catch((error) => failedResult(entry, error))
+      await prepareBundledSkill(context, entry)
+        .then(installBundledSkill)
+        .catch((error) => failedResult(entry, error))
     )
   }
   return results
-}
-
-export type BundledOrcaSkillPlan = {
-  name: string
-  canonicalPath: string
-  state: SkillCanonicalState['kind']
-  /** Whether a run would write this skill; false for up-to-date and conflicting copies. */
-  willWrite: boolean
-}
-
-/** What a run would do, read without writing anything. */
-export async function planBundledOrcaSkills(
-  names: readonly string[],
-  input: BundledOrcaSkillInstallInput
-): Promise<BundledOrcaSkillPlan[]> {
-  const entries = requireBundledPackages(names)
-  const context = await bundledInstallContext(input)
-  return Promise.all(
-    entries.map(async (entry) => {
-      const { manifest, canonicalPath, request } = await prepareBundledSkill(context, entry)
-      const local = skillInstallLocalInput(request)
-      const state = await inspectSkillCanonicalState({
-        canonicalPath,
-        manifest,
-        receipt: await readSkillInstallReceipt(local.stateDirectory, canonicalPath),
-        filesystem: request.filesystem
-      })
-      const adoptable =
-        (state.kind === 'modified' || state.kind === 'unowned') &&
-        state.digest !== undefined &&
-        (request.adoptableDigests?.includes(state.digest) === true ||
-          request.conflictResolution === 'replace-and-discard-local')
-      return {
-        name: entry.name,
-        canonicalPath,
-        state: state.kind,
-        willWrite: state.kind === 'missing' || state.kind === 'clean-update' || adoptable
-      }
-    })
-  )
 }

@@ -15,10 +15,12 @@ import {
 } from '../../shared/tui-agent-detection-commands'
 import {
   installBundledOrcaSkills,
-  planBundledOrcaSkills,
-  type BundledOrcaSkillInstallInput,
-  type BundledOrcaSkillPlan
+  type BundledOrcaSkillInstallInput
 } from '../../main/skills/bundled-orca-skill-install'
+import {
+  planBundledOrcaSkills,
+  type BundledOrcaSkillPlan
+} from '../../main/skills/bundled-orca-skill-plan'
 import {
   describeBundledSkillInstallResult,
   describeSkillConflictReason
@@ -94,20 +96,37 @@ function installInput(flags: Map<string, string | boolean>): BundledOrcaSkillIns
       scope === 'global'
         ? `global:${CLI_HOST_IDENTITY}`
         : `workspace:${CLI_HOST_IDENTITY}:${workspaceDirectory}`,
-    discardLocalChanges: flags.get('force') === true
+    discardLocalChanges: flags.get('force') === true,
+    // Why: stdout is this command's own output (JSON with --json).
+    discoveryLog: (line) => process.stderr.write(`${line}\n`)
   }
 }
 
+const PLACEMENT_PLAN_TEXT = {
+  link: 'would link',
+  replace: 'would replace',
+  skip: 'would leave (not installed by Orca)'
+} as const
+
 function describePlan(plan: BundledOrcaSkillPlan): string {
-  if (plan.state === 'unchanged') {
-    return `${plan.name}: already up to date (${plan.canonicalPath})`
-  }
-  if (!plan.willWrite) {
+  if (plan.state !== 'unchanged' && !plan.replacesCanonical) {
     const kind =
       plan.state === 'external-link' || plan.state === 'name-collision' ? plan.state : undefined
     return `${plan.name}: would not change, ${describeSkillConflictReason(kind)} (${plan.canonicalPath})`
   }
-  return `${plan.name}: would ${plan.state === 'missing' ? 'install' : 'update'} ${plan.canonicalPath}`
+  const steps = [
+    plan.replacesCanonical
+      ? `would ${plan.state === 'missing' ? 'install' : 'update'} ${plan.canonicalPath}`
+      : null,
+    ...plan.placements.flatMap((placement) =>
+      placement.action === 'keep'
+        ? []
+        : [`${PLACEMENT_PLAN_TEXT[placement.action]} ${placement.path}`]
+    )
+  ].filter((step) => step !== null)
+  return steps.length === 0 || !plan.willWrite
+    ? `${plan.name}: already up to date (${plan.canonicalPath})${steps.length ? `; ${steps.join('; ')}` : ''}`
+    : `${plan.name}: ${steps.join('; ')}`
 }
 
 function landed(result: SkillInstallResult): boolean {
@@ -201,13 +220,7 @@ export function createSkillMutationHandler(verb: SkillMutationVerb): CommandHand
       return
     }
 
-    // Why: post-install discovery logs a diagnostic through console.info, and stdout is this
-    // command's own output (JSON with --json).
-    const info = console.info
-    console.info = (...args: unknown[]) => console.error(...args)
-    const results = await installBundledOrcaSkills(skillNames, input).finally(() => {
-      console.info = info
-    })
+    const results = await installBundledOrcaSkills(skillNames, input)
     const failed = results.some((result) => !landed(result))
     if (failed) {
       process.exitCode = 1

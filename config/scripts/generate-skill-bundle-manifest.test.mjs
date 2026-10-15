@@ -21,7 +21,9 @@ import {
   describeFile,
   normalizeText,
   packageDigest,
-  sortManifestFiles
+  findDroppedReleasedDigests,
+  sortManifestFiles,
+  withDigests
 } from './generate-skill-bundle-manifest.mjs'
 
 const temporaryDirectories = []
@@ -44,7 +46,9 @@ async function createGeneratorSandbox() {
   const script = path.join(root, 'config', 'scripts', 'generate-skill-bundle-manifest.mjs')
   await mkdir(path.dirname(script), { recursive: true })
   await mkdir(skillRoot, { recursive: true })
-  await copyFile(path.join(import.meta.dirname, 'generate-skill-bundle-manifest.mjs'), script)
+  for (const name of ['generate-skill-bundle-manifest.mjs', 'git-pull-request-diff-base.mjs']) {
+    await copyFile(path.join(import.meta.dirname, name), path.join(path.dirname(script), name))
+  }
   await writeFile(path.join(skillRoot, 'SKILL.md'), 'demo skill\n')
   return {
     generate: (...args) => execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' }),
@@ -123,6 +127,15 @@ describe('skill bundle manifest generator', () => {
     expect(() => sandbox.generate()).toThrow()
   })
 
+  it('merges ledger digests without duplicates and reports any the base had but HEAD lost', () => {
+    const merged = withDigests({ skills: { demo: ['a'] } }, [['demo', ['b', 'a', 'b']]])
+    expect(merged.skills.demo).toEqual(['a', 'b'])
+    expect(findDroppedReleasedDigests({ skills: { demo: ['a', 'b'] } }, merged)).toEqual([])
+    expect(
+      findDroppedReleasedDigests({ skills: { demo: ['a', 'c'], gone: ['d'] } }, merged)
+    ).toEqual(['demo:c', 'gone:d'])
+  })
+
   it('keeps every shipped digest in the ledger and embeds the current bytes', async () => {
     const sandbox = await createGeneratorSandbox()
     sandbox.generate('--write')
@@ -135,7 +148,7 @@ describe('skill bundle manifest generator', () => {
       schemaVersion: 1,
       skills: { demo: [first, manifest.skills[0].packageDigest] }
     })
-    const embedded = await sandbox.readRepoFile('src/shared/bundled-orca-skill-packages.ts')
+    const embedded = await sandbox.readRepoFile('src/main/skills/bundled-orca-skill-packages.ts')
     expect(embedded).toContain(
       JSON.stringify({
         name: 'demo',

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { BUNDLED_ORCA_SKILL_PACKAGES } from '../../shared/bundled-orca-skill-packages'
+import { BUNDLED_ORCA_SKILL_PACKAGES } from './bundled-orca-skill-packages'
 import { bundledOrcaSkillManifest } from './bundled-orca-skill-install'
 
 describe('embedded Orca skill packages', () => {

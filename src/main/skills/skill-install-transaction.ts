@@ -41,15 +41,14 @@ import { settleObservedSkillTransactionRecovery } from './skill-transaction-reco
 import { recoverSkillPlacementTransaction } from './skill-placement-transaction'
 import { historicalSuccessfulProviderRoots } from './skill-install-historical-provider-roots'
 
-export type LocalSkillInstallInput = {
+/** Where and how to install a package that is already staged on disk. */
+export type LocalSkillInstallTarget = {
   operationId: string
-  archivePath: string
   destinationRoot: string
   stateDirectory: string
   scope: 'global' | 'workspace'
   destinationIdentity: string
   hostIdentity: string
-  expectedArchiveSha256?: string
   expectedPackageDigest?: string
   expectedPackageId?: string
   expectedVersionId?: string
@@ -63,6 +62,11 @@ export type LocalSkillInstallInput = {
   lockTimeoutMs?: number
 }
 
+export type LocalSkillInstallInput = LocalSkillInstallTarget & {
+  archivePath: string
+  expectedArchiveSha256?: string
+}
+
 export type LocalSkillInstallPreview = {
   manifest: SkillPackageManifestV1
   canonicalPath: string
@@ -72,7 +76,8 @@ export type LocalSkillInstallPreview = {
 export type LocalExtractedSkillPackage = {
   extractionPath: string
   manifest: SkillPackageManifestV1
-  archiveSha256: string
+  /** Absent when the package was staged from bytes rather than an archive. */
+  archiveSha256?: string
 }
 
 async function inspectExtractedPackage(
@@ -117,7 +122,7 @@ export async function previewLocalSkillPackage(
 }
 
 export async function previewLocalExtractedSkillPackage(
-  input: LocalSkillInstallInput,
+  input: LocalSkillInstallTarget,
   extracted: LocalExtractedSkillPackage
 ): Promise<LocalSkillInstallPreview> {
   const canonicalPath = join(input.destinationRoot, extracted.manifest.name)
@@ -153,7 +158,7 @@ export async function installLocalSkillPackage(
 }
 
 export async function installLocalExtractedSkillPackage(
-  input: LocalSkillInstallInput,
+  input: LocalSkillInstallTarget,
   extracted: LocalExtractedSkillPackage,
   dependencies: TransactionDependencies = {}
 ): Promise<SkillInstallResult> {
@@ -279,7 +284,7 @@ export async function installLocalExtractedSkillPackage(
     await rm(statePath, { force: true })
     return {
       operationId: input.operationId,
-      status: previous ? 'updated' : 'installed',
+      status: previous || destinationExists ? 'updated' : 'installed',
       name: extracted.manifest.name,
       packageDigest: extracted.manifest.packageDigest,
       canonicalPath,

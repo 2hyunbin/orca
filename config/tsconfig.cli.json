@@ -293,6 +293,8 @@
     "../src/main/win32-utils.ts",
     "../src/main/skills/bundled-orca-skill-install-report.ts",
     "../src/main/skills/bundled-orca-skill-install.ts",
+    "../src/main/skills/bundled-orca-skill-packages.ts",
+    "../src/main/skills/bundled-orca-skill-plan.ts",
     "../src/main/skills/claude-plugin-skill-sources-wsl.ts",
     "../src/main/skills/claude-plugin-skill-sources.ts",
     "../src/main/skills/discovery.ts",

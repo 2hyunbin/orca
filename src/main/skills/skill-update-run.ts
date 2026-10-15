@@ -85,10 +85,6 @@ export class SkillUpdateRunner {
       return
     }
     this.controller = null
-    if (this.run.state === 'running' && this.run.stopping) {
-      this.publish({ state: 'idle' })
-      return
-    }
     const output = [
       ...results.map(describeBundledSkillInstallResult),
       ...(installError ? [installError] : [])
@@ -98,6 +94,12 @@ export class SkillUpdateRunner {
     // dialog reports on; the install results only stand in when it cannot.
     const rescanned = await this.deps.rescanOutdatedNames?.(names).catch(() => null)
     if (token !== this.runToken) {
+      return
+    }
+    // Why after the re-scan: a stopped run may still have written some skills, and the
+    // re-scan is what refreshes the copies the dialog shows.
+    if (this.run.state === 'running' && this.run.stopping) {
+      this.publish({ state: 'idle' })
       return
     }
     const failed = rescanned ?? (installError ? names : failedNames(results))

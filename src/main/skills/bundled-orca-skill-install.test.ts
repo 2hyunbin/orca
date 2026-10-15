@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BundledOrcaSkillPackage } from '../../shared/bundled-orca-skill-packages'
+import type { BundledOrcaSkillPackage } from './bundled-orca-skill-packages'
 
 const OLD_TEXT = '---\nname: test-skill\ndescription: Old\n---\n\nOld body\n'
 const NEW_TEXT = '---\nname: test-skill\ndescription: New\n---\n\nNew body\n'
@@ -11,14 +11,15 @@ const packages = vi.hoisted(() => {
   const value: BundledOrcaSkillPackage[] = []
   return { value }
 })
-vi.mock('../../shared/bundled-orca-skill-packages', () => ({
+vi.mock('./bundled-orca-skill-packages', () => ({
   get BUNDLED_ORCA_SKILL_PACKAGES() {
     return packages.value
   }
 }))
 
-const { bundledOrcaSkillManifest, installBundledOrcaSkills, planBundledOrcaSkills } =
+const { bundledOrcaSkillManifest, installBundledOrcaSkills } =
   await import('./bundled-orca-skill-install')
+const { planBundledOrcaSkills } = await import('./bundled-orca-skill-plan')
 const { listManagedSkillInstalls } = await import('./skill-install-provenance')
 
 function entry(text: string, releasedDigests: string[] = []): BundledOrcaSkillPackage {
@@ -239,16 +240,44 @@ describe('bundled Orca skill install', () => {
     expect(await readFile(projectLock, 'utf8')).toBe(lockText)
   })
 
-  it('plans without writing', async () => {
+  it('plans without writing, including agent-home links and takeovers', async () => {
     packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
-    const { canonical, input } = await fixture({ 'test-skill': { source: 'stablyai/orca' } })
+    const { home, canonical, input } = await fixture({ 'test-skill': { source: 'stablyai/orca' } })
+    const claudePath = join(home, '.claude', 'skills', 'test-skill')
     await placeCopy(canonical, OLD_TEXT)
 
     expect(await planBundledOrcaSkills(['test-skill'], input)).toEqual([
-      { name: 'test-skill', canonicalPath: canonical, state: 'unowned', willWrite: true }
+      {
+        name: 'test-skill',
+        canonicalPath: canonical,
+        state: 'unowned',
+        replacesCanonical: true,
+        placements: [{ path: claudePath, action: 'link' }],
+        willWrite: true
+      }
     ])
+
+    // Current shared copy but an old real folder in the agent home: still work to do.
+    await writeFile(join(canonical, 'SKILL.md'), NEW_TEXT)
+    await placeCopy(claudePath, OLD_TEXT)
+    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
+      state: 'unchanged',
+      replacesCanonical: false,
+      placements: [{ path: claudePath, action: 'replace' }],
+      willWrite: true
+    })
+
+    await writeFile(join(claudePath, 'SKILL.md'), 'mine\n')
+    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
+      placements: [{ path: claudePath, action: 'skip' }],
+      willWrite: false
+    })
+
     await writeFile(join(canonical, 'SKILL.md'), 'mine\n')
-    expect((await planBundledOrcaSkills(['test-skill'], input))[0].willWrite).toBe(false)
+    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
+      replacesCanonical: false,
+      willWrite: false
+    })
     expect(await readFile(join(canonical, 'SKILL.md'), 'utf8')).toBe('mine\n')
   })
 

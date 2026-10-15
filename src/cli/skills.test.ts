@@ -26,8 +26,9 @@ vi.mock('../shared/local-agent-install-dir-detection', () => ({
 // Why: the installer writes real homes; its own suite covers the filesystem.
 vi.mock('../main/skills/bundled-orca-skill-install', () => {
   installerModuleLoadMock()
-  return { installBundledOrcaSkills: installMock, planBundledOrcaSkills: planMock }
+  return { installBundledOrcaSkills: installMock }
 })
+vi.mock('../main/skills/bundled-orca-skill-plan', () => ({ planBundledOrcaSkills: planMock }))
 
 vi.mock('./runtime/metadata', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -318,7 +319,8 @@ describe('orca skills CLI', () => {
         workspaceDirectory: undefined,
         orcaStateDirectory: '/tmp/orca-user-data',
         detectedProviders: ['claude'],
-        discardLocalChanges: false
+        discardLocalChanges: false,
+        discoveryLog: expect.any(Function)
       })
     )
     expect(stdoutText(stdoutSpy)).toBe(
@@ -417,9 +419,26 @@ describe('orca skills CLI', () => {
         name: 'alpha',
         canonicalPath: '/h/.agents/skills/alpha',
         state: 'missing',
+        replacesCanonical: true,
+        placements: [{ path: '/h/.claude/skills/alpha', action: 'link' }],
         willWrite: true
       },
-      { name: 'zeta', canonicalPath: '/h/.agents/skills/zeta', state: 'modified', willWrite: false }
+      {
+        name: 'gamma',
+        canonicalPath: '/h/.agents/skills/gamma',
+        state: 'unchanged',
+        replacesCanonical: false,
+        placements: [{ path: '/h/.claude/skills/gamma', action: 'replace' }],
+        willWrite: true
+      },
+      {
+        name: 'zeta',
+        canonicalPath: '/h/.agents/skills/zeta',
+        state: 'modified',
+        replacesCanonical: false,
+        placements: [],
+        willWrite: false
+      }
     ])
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -427,7 +446,8 @@ describe('orca skills CLI', () => {
 
     expect(installMock).not.toHaveBeenCalled()
     expect(stdoutText(stdoutSpy)).toBe(
-      'alpha: would install /h/.agents/skills/alpha\n' +
+      'alpha: would install /h/.agents/skills/alpha; would link /h/.claude/skills/alpha\n' +
+        'gamma: would replace /h/.claude/skills/gamma\n' +
         'zeta: would not change, the installed copy has changes Orca did not make ' +
         '(/h/.agents/skills/zeta)\n\nRerun without --dry-run to install now.\n'
     )
@@ -435,7 +455,14 @@ describe('orca skills CLI', () => {
 
   it('gives dry-run --json and real --json stable schemas', async () => {
     const plan = [
-      { name: 'alpha', canonicalPath: '/h/.agents/skills/alpha', state: 'unowned', willWrite: true }
+      {
+        name: 'alpha',
+        canonicalPath: '/h/.agents/skills/alpha',
+        state: 'unowned',
+        replacesCanonical: true,
+        placements: [],
+        willWrite: true
+      }
     ]
     planMock.mockResolvedValue(plan)
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
