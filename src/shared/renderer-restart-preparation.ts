@@ -19,11 +19,11 @@ export async function prepareRendererForAppRestart(
   eventTarget: EventTarget,
   { startedEventName, abortedEventName, userInitiated, awaitCheckpoint }: AppRestartPrepOptions
 ): Promise<void> {
-  eventTarget.dispatchEvent(new Event(startedEventName))
   let checkpointFailed = false
 
   try {
     await requestEditorHotExitBackup(eventTarget, userInitiated)
+    eventTarget.dispatchEvent(new Event(startedEventName))
     const markCheckpointFailed = (): void => {
       checkpointFailed = true
     }

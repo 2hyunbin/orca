@@ -12,13 +12,19 @@ import { APP_RESTART_CANCELLED_BY_USER_MESSAGE } from '../../../../shared/app-re
 
 const RESTART_SAVE_TIME_LIMIT_MS = 5_000
 
-function settleWithin(work: Promise<void>, timeoutMs: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(resolve, timeoutMs)
-    void work.finally(() => {
-      window.clearTimeout(timer)
-      resolve()
-    })
+function settleWithin(work: Promise<unknown>, deadline: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, Math.max(0, deadline - performance.now()))
+    void work.then(
+      () => {
+        window.clearTimeout(timer)
+        resolve()
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer)
+        reject(error)
+      }
+    )
   })
 }
 
@@ -86,7 +92,7 @@ export function createEditorRestartSaveHandlers({
   }
 
   // Why: with autosave on, saving is what the user asked for; only what's left needs the backup or the dialog.
-  const autoSaveBeforeRestart = async (): Promise<void> => {
+  const autoSaveBeforeRestart = async (deadline: number): Promise<void> => {
     const state = store.getState()
     if (!state.settings?.editorAutoSave) {
       return
@@ -103,14 +109,10 @@ export function createEditorRestartSaveHandlers({
       ) {
         continue
       }
-      // Why: a stalled save (e.g. an unreachable SSH host) must not hold the restart; the file stays dirty and is re-checked below.
       saves.push(
-        settleWithin(
-          queueSave(file, draft, 'autosave').catch((error) => {
-            console.error('[editor] save before restart failed', error)
-          }),
-          RESTART_SAVE_TIME_LIMIT_MS
-        )
+        queueSave(file, draft, 'autosave', deadline).catch((error) => {
+          console.error('[editor] save before restart failed', error)
+        })
       )
     }
     await Promise.all(saves)
@@ -123,9 +125,11 @@ export function createEditorRestartSaveHandlers({
     }
 
     try {
+      const deadline = performance.now() + RESTART_SAVE_TIME_LIMIT_MS
       const initiallyDirtyFiles = store.getState().openFiles.filter((file) => file.isDirty)
-      await Promise.all(initiallyDirtyFiles.map((file) => quiesceFileSave(file.id)))
-      await autoSaveBeforeRestart()
+      const drains = initiallyDirtyFiles.map((file) => quiesceFileSave(file.id))
+      // Quiesce flushes synchronously; per-file queues keep healthy saves independent of stalled hosts.
+      await settleWithin(Promise.all([...drains, autoSaveBeforeRestart(deadline)]), deadline)
 
       const confirmedLostFileIds = new Set<string>()
       for (;;) {

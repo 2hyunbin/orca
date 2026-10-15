@@ -27,7 +27,8 @@ export type EditorSaveQueue = {
   queueSave: (
     file: OpenFile,
     fallbackContent: string,
-    trigger?: 'autosave' | 'user'
+    trigger?: 'autosave' | 'user',
+    admissionDeadline?: number
   ) => Promise<void>
   quiesceFileSave: (fileId: string) => Promise<void>
   clearAutoSaveTimer: (fileId: string) => void
@@ -59,7 +60,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const queueSave = (
     file: OpenFile,
     fallbackContent: string,
-    trigger: 'autosave' | 'user' = 'user'
+    trigger: 'autosave' | 'user' = 'user',
+    admissionDeadline?: number
   ): Promise<void> => {
     clearAutoSaveTimer(file.id)
     const queuedGeneration = saveGeneration.get(file.id) ?? 0
@@ -112,6 +114,10 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           : null
         const fileContext = getEditorFileOperationContext(state, liveFile, worktree?.path ?? null)
         const connectionId = fileContext.connectionId
+        // Expired restart work must not begin writing when an older remote save finally settles.
+        if (admissionDeadline !== undefined && performance.now() >= admissionDeadline) {
+          return
+        }
         // Why: stamp before writing so useEditorExternalWatch ignores our own fs:changed echo (editor-self-write-registry).
         recordSelfWrite(
           liveFile.filePath,

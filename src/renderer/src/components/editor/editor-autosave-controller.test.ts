@@ -584,43 +584,67 @@ describe('attachEditorAutosaveController', () => {
     }
   })
 
-  it('saves what autosave can before a restart, then asks once about what the restart cannot keep', async () => {
-    // Why: b.ts stands for a save that never finishes, such as one to an unreachable SSH host.
-    const writeFile = vi
-      .fn()
-      .mockImplementation(({ filePath }: { filePath: string }) =>
-        filePath === '/repo/b.ts' ? new Promise<void>(() => undefined) : Promise.resolve()
-      )
-    const eventTarget = stubIsolatedWorldWindow(writeFile)
-    const store = createEditorStore()
-    // Why: keep the worktree so the saves resolve a write target instead of failing fast.
-    store.setState({ ...makeSessionReadyState(), worktreesByRepo: store.getState().worktreesByRepo })
-    openDirtyFile(store, 'a.ts', 'saved before restart')
-    openDirtyFile(store, 'b.ts', 'stalled save', 'unstaged')
-    const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
-    const cleanup = attachEditorAutosaveController(store)
-    try {
-      const outcome = requestEditorHotExitBackup(eventTarget, true).then(
-        () => 'restarted',
-        (error: unknown) => error
-      )
-      await vi.advanceTimersByTimeAsync(4_999)
-      expect(getRestartUnsavedChangesFilePaths()).toBeNull()
-      await vi.advanceTimersByTimeAsync(1)
+  it.each([false, true])(
+    'bounds existing and new restart saves (old write finishes in budget: %s)',
+    async (finishesInBudget) => {
+      let releaseOldWrite!: () => void
+      const oldWrite = new Promise<void>((resolve) => {
+        releaseOldWrite = resolve
+      })
+      const writeB = vi
+        .fn()
+        .mockReturnValueOnce(oldWrite)
+        .mockReturnValue(new Promise<void>(() => undefined))
+      const writeFile = vi
+        .fn()
+        .mockImplementation(({ filePath }: { filePath: string }) =>
+          filePath === '/repo/b.ts' ? writeB() : Promise.resolve()
+        )
+      const eventTarget = stubIsolatedWorldWindow(writeFile)
+      const store = createEditorStore()
+      // Why: keep the worktree so the saves resolve a write target instead of failing fast.
+      store.setState({
+        ...makeSessionReadyState(),
+        worktreesByRepo: store.getState().worktreesByRepo
+      })
+      openDirtyFile(store, 'b.ts', 'stalled save', 'unstaged')
+      const unsubscribeDialog = subscribeRestartUnsavedChangesRequest(() => undefined)
+      const cleanup = attachEditorAutosaveController(store)
+      try {
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(writeB).toHaveBeenCalledTimes(1)
+        openDirtyFile(store, 'a.ts', 'saved before restart')
+        const outcome = requestEditorHotExitBackup(eventTarget, true).then(
+          () => 'restarted',
+          (error: unknown) => error
+        )
+        // Isolate restart's admitted work from independent ordinary autosave after the wait.
+        store.setState({ settings: { ...store.getState().settings, editorAutoSave: false } })
+        await vi.advanceTimersByTimeAsync(4_000)
+        if (finishesInBudget) {
+          releaseOldWrite()
+        }
+        await vi.advanceTimersByTimeAsync(999)
+        expect(getRestartUnsavedChangesFilePaths()).toBeNull()
+        await vi.advanceTimersByTimeAsync(1)
 
-      expect(store.getState().openFiles.find((file) => file.relativePath === 'a.ts')?.isDirty).toBe(
-        false
-      )
-      expect(getRestartUnsavedChangesFilePaths()).toEqual(['b.ts'])
-      answerRestartUnsavedChangesRequest('cancel')
+        expect(
+          store.getState().openFiles.find((file) => file.relativePath === 'a.ts')?.isDirty
+        ).toBe(false)
+        expect(getRestartUnsavedChangesFilePaths()).toEqual(['b.ts'])
+        answerRestartUnsavedChangesRequest('cancel')
 
-      expect(isRestartCancelledByUser(await outcome)).toBe(true)
-      expect(store.getState().editorDrafts['/repo/b.ts']).toBe('stalled save')
-    } finally {
-      cleanup()
-      unsubscribeDialog()
+        expect(isRestartCancelledByUser(await outcome)).toBe(true)
+        expect(store.getState().editorDrafts['/repo/b.ts']).toBe('stalled save')
+        releaseOldWrite()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(writeB).toHaveBeenCalledTimes(finishesInBudget ? 2 : 1)
+      } finally {
+        cleanup()
+        unsubscribeDialog()
+      }
     }
-  })
+  )
 
   it('asks again when unsaved files join while the dialog is open; automatic restarts never ask', async () => {
     const eventTarget = stubIsolatedWorldWindow(vi.fn().mockResolvedValue(undefined))
