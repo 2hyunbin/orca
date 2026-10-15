@@ -80,10 +80,12 @@ it('drains host maintenance, stops its timer when idle and cancels it on close',
         }
       })
     }
+    const pagesBefore = Number(db.pragma('page_count', { simple: true }))
     await vi.runAllTimersAsync()
     expect(db.prepare('SELECT COUNT(*) AS n FROM journal_rows').get()?.n).toBe(100)
     expect(vi.getTimerCount()).toBe(0)
     expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+    expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
     maintenance.appended(identity.sessionId)
     expect(vi.getTimerCount()).toBe(1)
     maintenance.close()
