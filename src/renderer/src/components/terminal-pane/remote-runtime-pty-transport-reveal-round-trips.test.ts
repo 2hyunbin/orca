@@ -123,10 +123,26 @@ describe('remote pane reveal round trips', () => {
     transport.claimViewport?.(100, 40)
     expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(2)
 
-    // Once the host answers, the same grid may be claimed again (e.g. after another viewer took it).
+    // The host echoing our own grid back (either mode) is an answer, not a reason to claim again.
+    for (const mode of ['remote-desktop-fit', 'desktop-fit'] as const) {
+      subscriptionCallbacks?.onResponse({
+        ok: true,
+        result: { type: 'fit-override-changed', streamId, mode, cols: 100, rows: 40 }
+      })
+      transport.claimViewport?.(100, 40)
+    }
+    expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(2)
+
+    // A hold at another grid (another viewer took the pane) re-arms the claim.
     subscriptionCallbacks?.onResponse({
       ok: true,
-      result: { type: 'fit-override-changed', streamId, mode: 'desktop-fit', cols: 100, rows: 40 }
+      result: {
+        type: 'fit-override-changed',
+        streamId,
+        mode: 'remote-desktop-fit',
+        cols: 80,
+        rows: 24
+      }
     })
     transport.claimViewport?.(100, 40)
     expect(framesOf(TerminalStreamOpcode.ClaimViewport)).toBe(3)

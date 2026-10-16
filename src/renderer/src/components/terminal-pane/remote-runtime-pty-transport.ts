@@ -2529,13 +2529,22 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
-          unconfirmedClaim = null
+          // Why: the host's answer to our own claim echoes its grid; only a hold elsewhere re-arms one.
+          if (
+            event.mode === 'mobile-fit' ||
+            event.cols !== unconfirmedClaim?.cols ||
+            event.rows !== unconfirmedClaim?.rows
+          ) {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setFitOverride(subscribedPtyId, event.mode, event.cols, event.rows)
           }
         },
         onDriverChanged: (driver) => {
-          unconfirmedClaim = null
+          if (driver.kind !== 'desktop') {
+            unconfirmedClaim = null
+          }
           if (isCurrentSubscription() && subscribedPtyId) {
             setDriverForPty(subscribedPtyId, driver)
           }
@@ -2603,7 +2612,10 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a viewport change during the subscribe round-trip hit the no-op one-shot fallback; replay the latest viewport so the PTY isn't stuck at subscribe-time size.
     if (pendingViewportClaim && desiredViewport) {
-      nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+      if (!isUnconfirmedClaim(nextStream, desiredViewport.cols, desiredViewport.rows)) {
+        nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
+        unconfirmedClaim = { stream: nextStream, ...desiredViewport, sentAt: Date.now() }
+      }
     } else if (
       desiredViewport &&
       (desiredViewport.cols !== subscribedViewport?.cols ||
