@@ -193,7 +193,7 @@ describe('a chat pane over its own launch', () => {
       })
       let created!: (receipt: { sessionId: string; fence: number }) => void
       mocks.launch.mockReturnValue(new Promise((resolve) => (created = resolve)))
-      const launch = startStructuredAgentLaunch('wt-claude', 'claude', {})
+      const launch = startStructuredAgentLaunch('wt-claude', 'claude', { requestId: 'request-4' })
       const view = renderLaunchedChat('wt-claude', launch.sessionId, 'claude')
       await waitFor(() => expect(currentModel(view.result.current.optionSnapshot)).toBe('sonnet'))
       if (picked) {
