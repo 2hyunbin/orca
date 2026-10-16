@@ -115,47 +115,51 @@ export function refreshWslHostPairing(
   if (!record) {
     throw new RuntimeEnvironmentStoreError('invalid_argument', 'This server is not a WSL host.')
   }
-  // Record first, as on add: the overlay ignores it until the pairing below matches it.
-  if (
-    record.localPort !== args.localPort ||
-    record.remotePort !== args.remotePort ||
-    record.pairingPublicKeyB64 !== offer.publicKeyB64
-  ) {
+  const store = readPersistedEnvironmentStore(userDataPath)
+  const existing = resolveEnvironmentFromStore(store, environmentId)
+  const pairingChanged = !samePairing(getPreferredPairingOffer(existing), offer)
+  // Validated before any write, so a refused pairing leaves both files as they were.
+  const next = pairingChanged
+    ? PersistedRuntimeEnvironmentSchema.parse({
+        ...createEnvironmentFromPairingOffer({
+          id: existing.id,
+          name: existing.name,
+          now: existing.createdAt,
+          offer,
+          runtimeId: existing.runtimeId
+        }),
+        updatedAt: now,
+        pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
+        lastUsedAt: existing.lastUsedAt
+      })
+    : null
+  if (next) {
+    assertPairingUsesBridge(next, args.localPort)
+  }
+  const keyChanged = record.pairingPublicKeyB64 !== offer.publicKeyB64
+  if (record.localPort !== args.localPort || record.remotePort !== args.remotePort || keyChanged) {
+    // The previous key keeps the record bound to the old pairing until the write below lands.
     writeWslHostDeployment(userDataPath, environmentId, {
       ...record,
       localPort: args.localPort,
       remotePort: args.remotePort,
-      pairingPublicKeyB64: offer.publicKeyB64
+      pairingPublicKeyB64: offer.publicKeyB64,
+      previousPairingPublicKeyB64: keyChanged
+        ? record.pairingPublicKeyB64
+        : record.previousPairingPublicKeyB64
     })
   }
-  const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId)
-  if (samePairing(getPreferredPairingOffer(current), offer)) {
-    return { environment: current, pairingChanged: false }
+  if (next) {
+    writeEnvironmentStore(userDataPath, {
+      version: 1,
+      environments: store.environments.map((candidate) =>
+        candidate.id === existing.id ? next : candidate
+      )
+    })
   }
-  const store = readPersistedEnvironmentStore(userDataPath)
-  const existing = resolveEnvironmentFromStore(store, environmentId)
-  const next = PersistedRuntimeEnvironmentSchema.parse({
-    ...createEnvironmentFromPairingOffer({
-      id: existing.id,
-      name: existing.name,
-      now: existing.createdAt,
-      offer,
-      runtimeId: existing.runtimeId
-    }),
-    updatedAt: now,
-    pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
-    lastUsedAt: existing.lastUsedAt
-  })
-  assertPairingUsesBridge(next, args.localPort)
-  writeEnvironmentStore(userDataPath, {
-    version: 1,
-    environments: store.environments.map((candidate) =>
-      candidate.id === existing.id ? next : candidate
-    )
-  })
   return {
     environment: resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId),
-    pairingChanged: true
+    pairingChanged
   }
 }
 

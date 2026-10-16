@@ -25,7 +25,9 @@ export const WslHostDeploymentRecordSchema = OrcadWslDeploymentLinkSchema.extend
    * The paired orcad's host key, so a stale record cannot claim a server re-paired under the same
    * id and bridge port. Optional: records written before it are bound by port only until refreshed.
    */
-  pairingPublicKeyB64: z.string().min(1).optional()
+  pairingPublicKeyB64: z.string().min(1).optional(),
+  /** The key a refresh replaced, accepted until the pairing write that follows it lands. */
+  previousPairingPublicKeyB64: z.string().min(1).optional()
 })
 
 export type WslHostDeploymentRecord = z.infer<typeof WslHostDeploymentRecordSchema>
@@ -193,11 +195,14 @@ export function overlayWslHostDeployments(
         environmentId: _environmentId,
         createdAt: _createdAt,
         pairingPublicKeyB64,
+        previousPairingPublicKeyB64,
         ...link
       } = record
+      const pairingKey = getPreferredPairingOffer(environment).publicKeyB64
       if (
         pairingPublicKeyB64 !== undefined &&
-        getPreferredPairingOffer(environment).publicKeyB64 !== pairingPublicKeyB64
+        pairingKey !== pairingPublicKeyB64 &&
+        pairingKey !== previousPairingPublicKeyB64
       ) {
         warnUnreadableEnvironmentState(
           `Ignoring the WSL deployment for server ${environment.id}; it was written for a different pairing.`
