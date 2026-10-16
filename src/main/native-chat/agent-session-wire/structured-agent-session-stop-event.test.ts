@@ -23,11 +23,7 @@ const observationClock = createStructuredSessionObservationClock(() => rig.host,
 beforeEach(() => observationClock.start())
 
 afterEach(async () => {
-  try {
-    await rig.dispose()
-  } finally {
-    observationClock.restore()
-  }
+  await observationClock.restoreBeforeCleanup(() => rig.dispose())
 })
 
 function journal() {

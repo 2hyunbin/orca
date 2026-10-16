@@ -37,7 +37,7 @@ function installRigLifecycleHooks(): void {
     rig = await createQueuedMessageTestRig()
   })
 
-  afterEach(() => rig.dispose())
+  afterEach(() => observationClock.restoreBeforeCleanup(() => rig.dispose()))
 }
 
 /** No drain step may convert the drafts, and the queue reads paused. */

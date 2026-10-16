@@ -5,6 +5,10 @@ export function createStructuredSessionObservationClock(
   getHost: () => StructuredAgentSessionHost,
   sessionId: string
 ) {
+  function restore(): void {
+    vi.useRealTimers()
+  }
+
   return {
     start(): void {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
@@ -17,8 +21,10 @@ export function createStructuredSessionObservationClock(
       await new Promise<void>((resolve) => setImmediate(resolve))
       await host.collaboratorsForTests().serialize(sessionId, async () => {})
     },
-    restore(): void {
-      vi.useRealTimers()
+    restore,
+    async restoreBeforeCleanup(cleanup: () => Promise<void>): Promise<void> {
+      restore()
+      await cleanup()
     }
   }
 }

@@ -65,11 +65,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks()
-  try {
-    await rig.dispose()
-  } finally {
-    observationClock.restore()
-  }
+  await observationClock.restoreBeforeCleanup(() => rig.dispose())
 })
 
 /** The exact request a client sends, so a test can send the same one again. */
@@ -732,7 +728,8 @@ describe("the reopen's mark", () => {
 
   // An idle eviction is Orca's own act: the person sees the same rows, and nothing new is held.
   it('an idle-sweep eviction of a stopped chat writes nothing, and its Stop row stays', async () => {
-    await rig.dispose()
+    await observationClock.restoreBeforeCleanup(() => rig.dispose())
+    observationClock.start()
     rig = await createQueuedMessageTestRig({ idleSweep: { idleMs: 0, intervalMs: 60 * 60 * 1000 } })
     const marks = vi.spyOn(AgentSessionJournal.prototype, 'appendQueueReopen')
     const working = await rig.workingSend()

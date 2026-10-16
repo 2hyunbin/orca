@@ -26,11 +26,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  try {
-    await rig.dispose()
-  } finally {
-    observationClock.restore()
-  }
+  await observationClock.restoreBeforeCleanup(() => rig.dispose())
 })
 
 async function queuedDraft(text: string): Promise<string> {

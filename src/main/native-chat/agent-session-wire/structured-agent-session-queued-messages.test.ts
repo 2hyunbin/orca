@@ -52,11 +52,9 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  try {
+  await observationClock.restoreBeforeCleanup(async () => {
     await currentRig?.dispose()
-  } finally {
-    observationClock.restore()
-  }
+  })
 })
 
 const send: QueuedMessageTestRig['send'] = (...args) => rig.send(...args)
