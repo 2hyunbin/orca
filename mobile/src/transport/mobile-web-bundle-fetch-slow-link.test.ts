@@ -17,9 +17,12 @@ vi.mock('expo-crypto', async () => {
   }
 })
 
-// The real host's range grid, so a reply is as large on this link as on the real one.
-const RANGE_GRID = 384 * 1024
+// The phone pages whatever grid the host names, so a small one keeps hashing and base64 cheap; the
+// link's cost per window is modelled in time below, not derived from the payload's size.
+const RANGE_GRID = 1024
 const ONE_WAY_LATENCY_MS = 150
+/** One 384 KiB window sealed at ~40 KB/s, the slow relayed path #29697 reported. */
+const WINDOW_TRANSFER_MS = 17_000
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -45,12 +48,12 @@ function noiseBytes(byteLength: number, seed: number): Uint8Array {
 }
 
 /**
- * A host behind one ordered link of `bytesPerSecond`: replies leave in the order they were made and
- * each occupies the link for its sealed size, as on the desktop's E2EE socket. Requests go through
+ * A host behind one ordered link: replies leave in the order they were made and each window
+ * occupies the link for `windowTransferMs`, as on the desktop's E2EE socket. Requests go through
  * the phone's real request tracker, so its per-request timeout is the one a real fetch runs under.
- * `bytesPerSecond: 0` is a link that stops carrying anything after the manifest.
+ * `windowTransferMs: null` is a link that stops carrying anything after the manifest.
  */
-function slowLinkHost(files: Record<string, Uint8Array>, bytesPerSecond: number) {
+function slowLinkHost(files: Record<string, Uint8Array>, windowTransferMs: number | null) {
   const assets = Object.entries(files)
     .map(([path, content]) => ({
       path,
@@ -106,14 +109,12 @@ function slowLinkHost(files: Record<string, Uint8Array>, bytesPerSecond: number)
         _meta: { runtimeId: 'r' }
       }
       const isManifest = frame.method === 'mobileWeb.bundle.manifest'
-      if (!isManifest && bytesPerSecond === 0) {
+      if (!isManifest && windowTransferMs === null) {
         return true
       }
-      // E2EE seals the JSON reply as base64 text: 4/3 of its UTF-8 length on the wire.
-      const sealedBytes = Math.ceil((JSON.stringify(response).length * 4) / 3)
       const now = Date.now()
       const startsAt = Math.max(now + ONE_WAY_LATENCY_MS, linkFreeAt)
-      linkFreeAt = isManifest ? startsAt : startsAt + (sealedBytes / bytesPerSecond) * 1000
+      linkFreeAt = isManifest ? startsAt : startsAt + (windowTransferMs ?? 0)
       setTimeout(
         () => {
           delivered += 1
@@ -138,7 +139,7 @@ function slowLinkHost(files: Record<string, Uint8Array>, bytesPerSecond: number)
   return { client, delivered: () => delivered, pending: () => tracker.size() }
 }
 
-/** Twelve 384 KiB windows: four assets of three, the shape of the bundle's larger images. */
+/** Twelve windows: four assets of three, the shape of the bundle's larger images. */
 function bundleFiles(): Record<string, Uint8Array> {
   return Object.fromEntries(
     [0, 1, 2, 3].map((seed) => [`assets/image-${seed}.png`, noiseBytes(RANGE_GRID * 3, seed)])
@@ -166,9 +167,9 @@ describe('fetchMobileWebBundle over a slow link', () => {
   })
 
   it('finishes when every reply lands within the stall budget but four queued ones do not', async () => {
-    // 40 KB/s: one sealed 384 KiB window takes ~17s, so the fourth read in flight waits ~70s.
+    // Each window lands 17s after the one before it, so the fourth read in flight waits ~68s.
     const files = bundleFiles()
-    const host = slowLinkHost(files, 40_000)
+    const host = slowLinkHost(files, WINDOW_TRANSFER_MS)
 
     const outcome = await settle(fetchMobileWebBundle({ client: host.client }))
 
@@ -180,7 +181,7 @@ describe('fetchMobileWebBundle over a slow link', () => {
   })
 
   it('fails as a lost link once no window has landed for the stall budget', async () => {
-    const host = slowLinkHost(bundleFiles(), 0)
+    const host = slowLinkHost(bundleFiles(), null)
     const startedAt = Date.now()
 
     const outcome = await settle(fetchMobileWebBundle({ client: host.client }))
