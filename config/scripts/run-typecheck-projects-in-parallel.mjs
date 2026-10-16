@@ -71,7 +71,13 @@ export function resolveProjectCompiler(config, root = repoRoot) {
 }
 
 export function parseTypecheckOptions(args) {
-  const options = { compiler: 'native', bunConcurrency: 1, bunThreads: 4 }
+  const options = {
+    compiler: 'native',
+    bunConcurrency: 1,
+    bunThreads: 4,
+    concurrency: 1,
+    cpuBudget: Number(process.env.GOMAXPROCS ?? 4)
+  }
   for (const argument of args) {
     if (argument === '--compiler=bun' || argument === '--compiler=native') {
       options.compiler = argument.slice('--compiler='.length)
@@ -79,6 +85,25 @@ export function parseTypecheckOptions(args) {
       options.bunConcurrency = Number(argument.slice('--bun-concurrency='.length))
     } else if (argument.startsWith('--bun-threads=')) {
       options.bunThreads = Number(argument.slice('--bun-threads='.length))
+    } else if (argument.startsWith('--concurrency=')) {
+      options.concurrency = Number(argument.slice('--concurrency='.length))
+    } else if (argument.startsWith('--cpu-budget=')) {
+      options.cpuBudget = Number(argument.slice('--cpu-budget='.length))
+    } else if (argument.startsWith('--project=')) {
+      const name = argument.slice('--project='.length)
+      const configs = {
+        node: 'config/tsconfig.node.json',
+        web: 'config/tsconfig.tc.web.json',
+        cli: 'config/tsconfig.tc.cli.json',
+        e2e: 'config/tsconfig.e2e.json'
+      }
+      if (!Object.hasOwn(configs, name)) {
+        throw new Error(`Unknown typecheck project: ${name}`)
+      }
+      const config = configs[name]
+      options.projects = [
+        TYPECHECK_PROJECTS.find((project) => project.config === config) ?? { config, heapGib: 7 }
+      ]
     } else {
       throw new Error(`Unknown typecheck option: ${argument}`)
     }
@@ -88,20 +113,31 @@ export function parseTypecheckOptions(args) {
       throw new Error('Bun concurrency and threads must be integers from 1 to 4')
     }
   }
+  for (const value of [options.concurrency, options.cpuBudget]) {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new Error('Typecheck concurrency and CPU budget must be positive integers')
+    }
+  }
   return options
 }
 
-export function typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism }) {
+export function typecheckBatches(
+  projects,
+  { compiler, bunConcurrency, concurrency = 1, cpuBudget = 4, memoryBytes, parallelism }
+) {
   return planTypecheckBatches(
     compiler === 'bun' ? projects.map((project) => ({ ...project, heapGib: 4 })) : projects,
     {
       budgetGib: admissibleHeapGib(memoryBytes),
-      parallelism: compiler === 'bun' ? Math.min(parallelism, bunConcurrency) : parallelism
+      parallelism:
+        compiler === 'bun'
+          ? Math.min(parallelism, bunConcurrency)
+          : Math.min(parallelism, concurrency, cpuBudget)
     }
   )
 }
 
-function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
+function checkProject(config, { compiler, bunThreads, nativeThreads, root, spawnCompiler }) {
   return new Promise((resolve, reject) => {
     const installedCompiler = resolveProjectCompilerInfo(config, root)
     // Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
@@ -117,6 +153,9 @@ function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
           ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
           : [installedCompiler.program, '--noEmit', '-p', config],
       cwd: root,
+      ...(compiler === 'native'
+        ? { env: { ...process.env, GOMAXPROCS: String(nativeThreads) } }
+        : {}),
       stdio: 'inherit'
     })
     child.on('error', reject)
@@ -136,13 +175,22 @@ export async function runTypecheckProjects({
   compiler = 'native',
   bunConcurrency = 1,
   bunThreads = 4,
+  concurrency = 1,
+  cpuBudget = Number(process.env.GOMAXPROCS ?? 4),
   root = repoRoot,
   projects = TYPECHECK_PROJECTS,
   spawnCompiler = spawnProcess,
   memoryBytes = totalmem(),
   parallelism = availableParallelism()
 } = {}) {
-  const batches = typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism })
+  const batches = typecheckBatches(projects, {
+    compiler,
+    bunConcurrency,
+    concurrency,
+    cpuBudget,
+    memoryBytes,
+    parallelism
+  })
   if (compiler === 'bun') {
     // Equal Bun reservations let a freed slot start the next project without waiting for peers.
     const pending = batches.flat()
@@ -165,9 +213,10 @@ export async function runTypecheckProjects({
   // Every batch runs even after one fails, so a single broken project still reports the rest.
   const failures = []
   for (const batch of batches) {
+    const nativeThreads = Math.max(1, Math.floor(Math.min(cpuBudget, parallelism) / batch.length))
     const results = await Promise.allSettled(
       batch.map((project) =>
-        checkProject(project.config, { compiler, bunThreads, root, spawnCompiler })
+        checkProject(project.config, { compiler, bunThreads, nativeThreads, root, spawnCompiler })
       )
     )
     for (const result of results) {

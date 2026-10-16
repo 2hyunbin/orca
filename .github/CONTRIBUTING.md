@@ -37,6 +37,42 @@ Wayland development, run `pnpm build:native` before `pnpm dev` to make text copy
 available. See the [clipboard build guide](../native/wayland-clipboard/README.md#building-and-testing).
 macOS and Windows builds do not use this helper or require Docker for it.
 
+## Keeping local checks light
+
+`pnpm tc` uses TypeScript 7's native compiler with incremental caches. It runs one
+project at a time and limits the compiler to four CPU threads (or fewer on smaller
+machines). The same limit applies to `pnpm tc:node`, `pnpm tc:web`, and `pnpm tc:cli`.
+This avoids several compilers each taking every core and holding their largest
+heaps at once. A cold check can take longer; subsequent checks reuse `.tsbuildinfo`.
+
+Check only the area you changed when iterating, then run `pnpm tc` before review:
+
+```bash
+pnpm tc:web
+pnpm tc:node --cpu-budget=2
+pnpm tc --cpu-budget=8 --concurrency=2
+```
+
+`--cpu-budget` is shared across concurrent native compiler processes. `GOMAXPROCS`
+sets its default if present. Increasing `--concurrency` also increases peak memory;
+the existing memory admission limit still applies.
+
+For a full check without an incremental cache, try the same Bun checker CI uses:
+
+```bash
+pnpm tc:full
+pnpm tc:full --bun-threads=2
+```
+
+Bun checks every project in full each time. Keep the pinned Bun version from
+`config/.bun-version`; the runner verifies the installed TypeScript version matches
+the version used for the Bun parity comparison. Bun's `--bun-threads` and
+`--bun-concurrency` settings are separate from the native compiler's resource limits.
+
+`pnpm dev` transpiles code without running a background typecheck. Its main-process
+watcher recompiles the external process-host package only when that package's
+sources or compiler configuration change.
+
 ## Branch Naming
 
 Use a clear, descriptive branch name that reflects the change.

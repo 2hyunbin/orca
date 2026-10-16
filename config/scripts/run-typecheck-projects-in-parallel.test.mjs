@@ -9,6 +9,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { EventEmitter } from 'node:events'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -136,12 +137,18 @@ describe('CI compiler selection', () => {
     expect(parseTypecheckOptions([]).compiler).toBe('native')
   })
 
-  it.each(['--compiler=typo', '--bun-concurrency=0', '--bun-threads=NaN', '--bun-concurrency=5'])(
-    'rejects unsafe or unknown options: %s',
-    (argument) => {
-      expect(() => parseTypecheckOptions([argument])).toThrow()
-    }
-  )
+  it.each([
+    '--compiler=typo',
+    '--bun-concurrency=0',
+    '--bun-threads=NaN',
+    '--bun-concurrency=5',
+    '--concurrency=0',
+    '--cpu-budget=NaN',
+    '--cpu-budget=1.5',
+    '--project=typo'
+  ])('rejects unsafe or unknown options: %s', (argument) => {
+    expect(() => parseTypecheckOptions([argument])).toThrow()
+  })
 
   it('bounds Bun project concurrency and reserves memory for overlapping checks', () => {
     const options = parseTypecheckOptions([
@@ -218,5 +225,62 @@ describe('CI compiler selection', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('local compiler resource limits', () => {
+  it.each([
+    { concurrency: 1, cpuBudget: 4, parallelism: 24, expectedConcurrent: 1 },
+    { concurrency: 2, cpuBudget: 4, parallelism: 24, expectedConcurrent: 2 },
+    { concurrency: 4, cpuBudget: 2, parallelism: 24, expectedConcurrent: 2 },
+    { concurrency: 4, cpuBudget: 4, parallelism: 1, expectedConcurrent: 1 }
+  ])('shares a CPU budget between admitted compilers: %j', async (options) => {
+    const invocations = []
+    let active = 0
+    let peak = 0
+    let activeThreads = 0
+    let peakThreads = 0
+    const failures = await runTypecheckProjects({
+      ...options,
+      memoryBytes: DEV_LAPTOP.totalBytes,
+      spawnCompiler(spec) {
+        invocations.push(spec)
+        const threads = Number(spec.env.GOMAXPROCS)
+        active += 1
+        activeThreads += threads
+        peak = Math.max(peak, active)
+        peakThreads = Math.max(peakThreads, activeThreads)
+        const child = new EventEmitter()
+        queueMicrotask(() => {
+          active -= 1
+          activeThreads -= threads
+          child.emit('close', 0, null)
+        })
+        return child
+      }
+    })
+    expect(failures).toEqual([])
+    expect(peak).toBe(options.expectedConcurrent)
+    expect(peakThreads).toBeLessThanOrEqual(Math.min(options.cpuBudget, options.parallelism))
+    expect(invocations).toHaveLength(TYPECHECK_PROJECTS.length)
+    for (const invocation of invocations) {
+      expect(invocation.args).toContain('--noEmit')
+      expect(invocation.args).not.toContain('--incremental')
+    }
+  })
+
+  it('defaults to one native compiler at a time', () => {
+    expect(parseTypecheckOptions([]).concurrency).toBe(1)
+  })
+
+  it.each([
+    ['node', 'config/tsconfig.node.json'],
+    ['web', 'config/tsconfig.tc.web.json'],
+    ['cli', 'config/tsconfig.tc.cli.json'],
+    ['e2e', 'config/tsconfig.e2e.json']
+  ])('keeps the existing %s check scope', (name, config) => {
+    expect(parseTypecheckOptions([`--project=${name}`]).projects).toEqual([
+      expect.objectContaining({ config })
+    ])
   })
 })
