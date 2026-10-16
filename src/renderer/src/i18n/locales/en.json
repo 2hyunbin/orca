@@ -20181,5 +20181,38 @@
       "clear": "Clear Jira favourite",
       "activeLabel": "Jira favourites: {{name}}"
     }
+  },
+  "workspaceSpace": {
+    "compact": {
+      "linkedAndUnavailable": "{{value0}} in linked worktrees · {{value1}} unavailable",
+      "linkedAndScanned": "{{value0}} in linked worktrees · {{value1}} workspaces",
+      "linked": "Linked"
+    },
+    "savedScan": {
+      "folderDetailsUnavailable": "Folder details are not saved with past scans. Refresh to inspect this workspace."
+    },
+    "empty": {
+      "title": "See where workspace storage goes",
+      "description": "Scan your workspaces to compare sizes, inspect their largest folders, and review space you can reclaim.",
+      "scan": "Scan workspaces"
+    },
+    "metric": {
+      "linkedWorktrees": "Linked worktrees"
+    },
+    "summary": {
+      "linkedWorktrees": "{{value0}} is used by linked worktrees. Managed worktrees can be removed here."
+    },
+    "status": {
+      "notManaged": "Not managed"
+    },
+    "chart": {
+      "folderSizes": "Folder sizes",
+      "workspaceSizes": "Workspace sizes"
+    },
+    "window": {
+      "close": "Close",
+      "errorTitle": "Space hit an error.",
+      "errorDescription": "Close and reopen Space to try again."
+    }
   }
 }

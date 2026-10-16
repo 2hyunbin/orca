@@ -5,19 +5,20 @@ import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
 import { formatBytes } from './workspace-space-format'
 import { buildTreemapLayout, type TreemapRect } from './workspace-space-layout'
+import { getWorkspaceSpaceWorktreeIdentity } from './workspace-space-delete-selection'
 import { translate } from '@/i18n/i18n'
 
 const TREEMAP_FILLS = [
-  'color-mix(in srgb, var(--chart-2) 34%, var(--card))',
-  'color-mix(in srgb, var(--foreground) 20%, var(--card))',
-  'color-mix(in srgb, var(--chart-4) 28%, var(--card))',
-  'color-mix(in srgb, var(--primary) 24%, var(--card))',
-  'color-mix(in srgb, var(--chart-1) 38%, var(--card))'
+  'color-mix(in srgb, var(--chart-2) 58%, var(--card))',
+  'color-mix(in srgb, var(--chart-4) 56%, var(--card))',
+  'color-mix(in srgb, var(--chart-1) 50%, var(--card))',
+  'color-mix(in srgb, var(--chart-3) 52%, var(--card))',
+  'color-mix(in srgb, var(--chart-5) 54%, var(--card))'
 ]
 
 function getTreemapFill(rect: TreemapRect, selected: boolean): string {
   if (selected) {
-    return 'color-mix(in srgb, var(--ring) 40%, var(--card))'
+    return 'color-mix(in srgb, var(--chart-2) 65%, var(--card))'
   }
   return TREEMAP_FILLS[rect.index % TREEMAP_FILLS.length]
 }
@@ -37,7 +38,8 @@ export function WorkspaceSpaceTreemap({
   onSelect: (worktreeId: string) => void
   onZoomChange: (worktreeId: string | null) => void
 }): React.JSX.Element {
-  const selectedWorktree = rows.find((row) => row.worktreeId === selectedWorktreeId) ?? null
+  const selectedWorktree =
+    rows.find((row) => getWorkspaceSpaceWorktreeIdentity(row) === selectedWorktreeId) ?? null
   const canZoomSelected =
     !!selectedWorktree &&
     selectedWorktree.status === 'ok' &&
@@ -57,7 +59,7 @@ export function WorkspaceSpaceTreemap({
           : rows
               .filter((row) => row.status === 'ok' && row.sizeBytes > 0)
               .map((row) => ({
-                id: row.worktreeId,
+                id: getWorkspaceSpaceWorktreeIdentity(row),
                 label: row.displayName,
                 sizeBytes: row.sizeBytes
               }))
@@ -101,7 +103,12 @@ export function WorkspaceSpaceTreemap({
   }
 
   return (
-    <div className="relative h-72 overflow-hidden rounded-lg border border-border/70 bg-muted/20">
+    <div className="relative h-72 overflow-hidden rounded-lg border border-border bg-card">
+      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-border bg-background/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-xs backdrop-blur">
+        {zoomedWorktree
+          ? translate('workspaceSpace.chart.folderSizes', 'Folder sizes')
+          : translate('workspaceSpace.chart.workspaceSizes', 'Workspace sizes')}
+      </div>
       <div className="absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2">
         {zoomedWorktree ? (
           <>
@@ -122,7 +129,7 @@ export function WorkspaceSpaceTreemap({
           <Button
             variant="outline"
             size="xs"
-            onClick={() => onZoomChange(selectedWorktree.worktreeId)}
+            onClick={() => onZoomChange(getWorkspaceSpaceWorktreeIdentity(selectedWorktree))}
             className="gap-1.5 bg-background/90 px-2.5 backdrop-blur"
           >
             <ZoomIn className="size-3" />
@@ -157,7 +164,7 @@ export function WorkspaceSpaceTreemap({
             <div
               key={rect.id}
               title={`${rect.label} • ${formatBytes(rect.sizeBytes)}`}
-              className="absolute overflow-hidden border border-background/80 p-2 text-left"
+              className="absolute overflow-hidden border border-background/90 p-2 text-left"
               style={rectStyle}
             >
               {rectContent}
@@ -173,7 +180,7 @@ export function WorkspaceSpaceTreemap({
             title={`${rect.label} • ${formatBytes(rect.sizeBytes)}`}
             onClick={() => onSelect(rect.id)}
             className={cn(
-              'absolute overflow-hidden border border-background/80 p-2 text-left transition-[filter,outline] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'absolute overflow-hidden border border-background/90 p-2 text-left transition-[filter,outline] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               selected && 'ring-2 ring-ring ring-offset-1 ring-offset-background'
             )}
             style={rectStyle}
