@@ -90,10 +90,26 @@ function KeychainCredentialNoticeBody({
       return
     }
     // Why poll: the unlock happens outside Orca, and the host only sees it on its next status read.
-    const timer = setInterval(() => {
-      void (service === 'Linear' ? checkLinearConnection(true) : checkJiraConnection())
-    }, KEYCHAIN_UNLOCK_POLL_MS)
-    return () => clearInterval(timer)
+    // Why chained, not an interval: a newer read discards an older one, so overlaps could never land.
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const schedule = (): void => {
+      timer = setTimeout(() => {
+        const read = service === 'Linear' ? checkLinearConnection(true) : checkJiraConnection()
+        void read
+          .catch(() => {})
+          .finally(() => {
+            if (!cancelled) {
+              schedule()
+            }
+          })
+      }, KEYCHAIN_UNLOCK_POLL_MS)
+    }
+    schedule()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [locked, service, checkLinearConnection, checkJiraConnection])
 
   if (locked) {
