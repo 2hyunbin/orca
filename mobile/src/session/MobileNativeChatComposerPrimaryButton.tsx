@@ -14,7 +14,7 @@ export type MobileNativeChatComposerStop = {
 // 500 ms is the common double-click ceiling and still lets a deliberate Stop through.
 const STOP_AFTER_SEND_GUARD_MS = 500
 
-/** The composer's round button: Send, or Stop when the shared primary action says so. */
+/** The composer's round button: Send, or Stop when the shared composer rule says so. */
 export function MobileNativeChatComposerPrimaryButton({
   sendSurfaceId,
   stop,
@@ -22,7 +22,7 @@ export function MobileNativeChatComposerPrimaryButton({
   onSend
 }: {
   sendSurfaceId: string
-  /** Set only while the primary action is Stop. */
+  /** Set only while the button is Stop. */
   stop: MobileNativeChatComposerStop | null
   canSend: boolean
   onSend: () => Promise<void>

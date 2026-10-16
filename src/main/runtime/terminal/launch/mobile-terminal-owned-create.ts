@@ -1,7 +1,11 @@
 import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import type {
+  AgentProviderSessionMetadata,
+  SleepingAgentLaunchConfig
+} from '../../../../shared/agent-session-resume'
+import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
@@ -23,6 +27,7 @@ const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
 
 export type OwnedMobileTerminalCreateOptions = {
   command?: string
+  shellOverride?: string
   cwd?: string
   env?: Record<string, string>
   envToDelete?: string[]
@@ -34,6 +39,8 @@ export type OwnedMobileTerminalCreateOptions = {
   targetGroupId?: string
   supportsSplitGroupPlacement?: boolean
   launchConfig?: SleepingAgentLaunchConfig
+  resumeProviderSession?: AgentProviderSessionMetadata
+  spawnIntent?: SpawnIntent
   launchRuntime?: AgentLaunchRuntime
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
@@ -108,10 +115,15 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           : {}),
         ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
         command: opts.command,
+        ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
         cwd,
         env: opts.env,
         envToDelete: opts.envToDelete,
         ...(opts.launchConfig ? { launchConfig: opts.launchConfig } : {}),
+        ...(opts.resumeProviderSession
+          ? { resumeProviderSession: opts.resumeProviderSession }
+          : {}),
+        ...(opts.spawnIntent ? { spawnIntent: opts.spawnIntent } : {}),
         ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
         ...(opts.launchRuntime ? { launchRuntime: opts.launchRuntime } : {}),
         ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),

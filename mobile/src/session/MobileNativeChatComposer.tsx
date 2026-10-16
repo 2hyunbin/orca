@@ -13,7 +13,7 @@ import { ImagePlus, Mic, Square, X } from 'lucide-react-native'
 import { colors, radii, spacing } from '../theme/mobile-theme'
 import { structuredSlashCommands } from '../../../src/shared/structured-agent-session-composer'
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
-import { nativeChatComposerPrimaryAction } from '../../../src/shared/native-chat-composer-primary-action'
+import { nativeChatComposerStops } from '../../../src/shared/native-chat-composer-primary-action'
 import {
   applyAutocomplete,
   detectAutocompleteTrigger,
@@ -138,12 +138,11 @@ export function MobileNativeChatComposer({
     !sending &&
     !isAttaching &&
     !sessionOptionDispatching
-  // No Enter key here, so typed text keeps Send mid-turn; a held queue's Resume lives on its own box.
-  const primaryAction = nativeChatComposerPrimaryAction({
+  // No Enter key here, so typed text keeps Send mid-turn.
+  const stops = nativeChatComposerStops({
     isWorking: stop !== null,
-    composerEmpty,
-    queueHeld: false,
-    sendsWhileWorking: !sendDisabled
+    sendsWhileWorking: !sendDisabled,
+    hasContent: !composerEmpty
   })
 
   const trigger = useMemo(() => detectAutocompleteTrigger(value, cursor), [value, cursor])
@@ -346,7 +345,7 @@ export function MobileNativeChatComposer({
             ) : null}
             <MobileNativeChatComposerPrimaryButton
               sendSurfaceId={sendSurfaceId}
-              stop={primaryAction === 'stop' ? stop : null}
+              stop={stops ? stop : null}
               canSend={canSend}
               onSend={handleSend}
             />

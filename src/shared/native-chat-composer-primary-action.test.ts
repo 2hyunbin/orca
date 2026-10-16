@@ -1,32 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { nativeChatComposerPrimaryAction } from './native-chat-composer-primary-action'
+import { nativeChatComposerStops } from './native-chat-composer-primary-action'
 
-describe('the composer primary action', () => {
+describe('the composer button', () => {
   it.each([
-    { isWorking: false, composerEmpty: true, queueHeld: true, action: 'resume' },
-    { isWorking: false, composerEmpty: false, queueHeld: true, action: 'send' },
-    { isWorking: false, composerEmpty: true, queueHeld: false, action: 'send' },
-    { isWorking: false, composerEmpty: false, queueHeld: false, action: 'send' },
-    { isWorking: true, composerEmpty: true, queueHeld: true, action: 'stop' },
-    { isWorking: true, composerEmpty: false, queueHeld: false, action: 'stop' },
-    {
-      isWorking: true,
-      composerEmpty: true,
-      queueHeld: false,
-      sendsWhileWorking: true,
-      action: 'stop'
-    },
-    {
-      isWorking: true,
-      composerEmpty: false,
-      queueHeld: false,
-      sendsWhileWorking: true,
-      action: 'send'
-    }
+    { isWorking: false, hasContent: false, stops: false },
+    { isWorking: true, hasContent: true, stops: true },
+    { isWorking: true, hasContent: false, sendsWhileWorking: true, stops: true },
+    { isWorking: true, hasContent: true, sendsWhileWorking: true, stops: false }
   ])(
-    'working $isWorking, empty $composerEmpty, held $queueHeld: $action',
-    ({ action, ...input }) => {
-      expect(nativeChatComposerPrimaryAction(input)).toBe(action)
+    'working $isWorking, content $hasContent, sends while working $sendsWhileWorking: stops $stops',
+    ({ stops, ...input }) => {
+      expect(nativeChatComposerStops(input)).toBe(stops)
     }
   )
 })

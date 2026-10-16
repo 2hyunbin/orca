@@ -1,10 +1,10 @@
 import type { RuntimeSessionTabsInventoryPublication as SessionTabsInventoryPublicationMethods } from './session-tabs-inventory-publication'
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from '../orca-runtime-schedule-mobile-session-tabs-changed'
+import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
 import type { OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession as HydrateHeadlessMobileSessionTabsFromWorkspaceSessionMethods } from './mobile-session-hydration'
-import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs as BuildHeadlessMobileSessionBrowserTabsMethods } from '../orca-runtime-build-headless-mobile-session-browser-tabs'
+import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs as BuildHeadlessMobileSessionBrowserTabsMethods } from '../session-lifecycle/projection/build-headless-mobile-session-browser-tabs'
 import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RestoreLivePairedRendererSessionOwnedMobileTerminalsMethods } from './renderer-session-terminal-rescue'
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../orca-runtime-prune-mobile-session-tab-group-layout'
+import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 import { OrcaRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
 import type {
   RuntimeMobileSessionTabsResult,
@@ -31,6 +31,14 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     >
   ): ReturnType<
     ResolveBrowserNetworkExecutionHostForWorktreeMethods['getValidatedExplicitWorktreeIdSelector']
+  >
+
+  abstract getExplicitSessionWorktreeIdSelector(
+    ...args: Parameters<
+      ResolveBrowserNetworkExecutionHostForWorktreeMethods['getExplicitSessionWorktreeIdSelector']
+    >
+  ): ReturnType<
+    ResolveBrowserNetworkExecutionHostForWorktreeMethods['getExplicitSessionWorktreeIdSelector']
   >
 
   protected abstract hydrateHeadlessMobileSessionTabsFromWorkspaceSession(
@@ -119,9 +127,10 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
 
   async listMobileSessionTabs(
     worktreeSelector: string,
-    clientNavigationId?: string
+    clientNavigationId?: string,
+    options?: { includeInitialSurfaceLaunch?: true }
   ): Promise<RuntimeMobileSessionTabsResult> {
-    const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
+    const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     if (explicitWorktreeId) {
       this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId, {
         allowAttachedWindow: true,
@@ -129,8 +138,11 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       })
       this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId)
       await this.refreshMobileSessionPtyRecords(explicitWorktreeId)
-      this.restoreLivePairedRendererSessionOwnedMobileTerminals(explicitWorktreeId)
-      return this.getMobileSessionTabsForWorktree(explicitWorktreeId, clientNavigationId)
+      // Why: the refresh may discover a surviving PTY under the host's original path spelling.
+      const resolvedId =
+        this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ?? explicitWorktreeId
+      this.restoreLivePairedRendererSessionOwnedMobileTerminals(resolvedId)
+      return this.getMobileSessionTabsForWorktree(resolvedId, clientNavigationId, options)
     }
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id, {
@@ -140,7 +152,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id)
     await this.refreshMobileSessionPtyRecords()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktree.id)
-    return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId)
+    return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId, options)
   }
 
   async listAllMobileSessionTabs(
