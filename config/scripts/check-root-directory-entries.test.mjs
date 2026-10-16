@@ -231,28 +231,7 @@ describe('root directory guard', () => {
     expect(result.stdout).not.toContain('guard passed')
   })
 
-  it('keeps the root and README guards on docs-only PRs without another runner', () => {
-    const prWorkflow = parse(readFileSync(join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
-    const detector = prWorkflow.jobs.code_paths
-    // Only draft PRs skip the detector; verify skips with it, so no draft reports a result.
-    const runsFor = (expression, draft) =>
-      runInNewContext(expression.replace(/^\$\{\{(.*)\}\}$/s, '$1'), {
-        github: { event_name: 'pull_request', event: { pull_request: { draft } } },
-        cancelled: () => false
-      })
-    expect(runsFor(detector.if, false)).toBe(true)
-    expect(runsFor(detector.if, true)).toBe(false)
-    expect(runsFor(prWorkflow.jobs.verify.if, true)).toBe(false)
-    expect(detector.needs).toBeUndefined()
-    for (const name of ['Reject new root-level files and folders', 'Check README local links']) {
-      const step = detector.steps.find((candidate) => candidate.name === name)
-      expect(step).toBeDefined()
-      expect(step.if).toBeUndefined()
-    }
-    expect(prWorkflow.jobs.root_directory_guard).toBeUndefined()
-  })
-
-  it('is wired into the PR verify gate', () => {
+  it('is wired into the ready PR verify gate', () => {
     const workflow = parse(readFileSync(join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
     const guardJob = workflow.jobs.code_paths
     const guardStep = guardJob.steps.find(

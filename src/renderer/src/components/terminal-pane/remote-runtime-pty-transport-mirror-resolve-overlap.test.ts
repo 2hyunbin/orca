@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeMobileSessionClientTab } from '../../../../shared/runtime-mobile-session-tab-contracts'
 import {
   createRemoteRuntimeTransportMocks,
   type MultiplexSubscriptionCallbacks
 } from './remote-runtime-pty-transport-test-harness'
-import type { RuntimeMobileSessionClientTab } from '../../../../shared/runtime-types'
 
 // A parked web-mirror reveal used to wait for session.tabs.activate before sending
 // terminal.resolvePane, a whole extra round trip before Subscribe. The pane read has no

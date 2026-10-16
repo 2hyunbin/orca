@@ -338,34 +338,37 @@ describe('CI dependency download caches', () => {
   })
 
   it.each([
-    ['pull_request', false, false],
-    ['push', true, false],
-    ['schedule', true, true],
-    ['workflow_dispatch', true, true]
-  ])('retains cache producers and Windows validation on %s', (event, armRuns, sharedPlatforms) => {
-    const shared = workflow('ci-cache-warmup')
-    const caller = workflow('ci-cache-warmup-platforms')
-    const platforms = read(caller.jobs['warm-platforms'].uses)
-    const contextFor = (draft) => ({
-      github: {
-        event_name: event,
-        event: event === 'pull_request' ? { pull_request: { draft } } : {}
+    ['pull_request', false, true, false, false],
+    ['pull_request', true, false, false, false],
+    ['push', false, true, true, false],
+    ['schedule', false, true, true, true],
+    ['workflow_dispatch', false, true, true, true]
+  ])(
+    'retains eligible cache producers and Windows validation on %s (draft %s)',
+    (event, draft, admitted, armRuns, sharedPlatforms) => {
+      const shared = workflow('ci-cache-warmup')
+      const platformWorkflow = workflow('ci-cache-warmup-platforms')
+      const platforms = read(platformWorkflow.jobs['warm-platforms'].uses)
+      const contextFor = (isDraft) => ({
+        github: {
+          event_name: event,
+          event: event === 'pull_request' ? { pull_request: { draft: isDraft } } : {}
+        }
+      })
+      const context = contextFor(draft)
+      expect(runInNewContext(platforms.jobs['warm-linux-runtime'].if, context)).toBe(armRuns)
+      expect(runInNewContext(shared.jobs['warm-platforms'].if, context)).toBe(sharedPlatforms)
+      for (const guard of [shared.jobs.warm.if, platformWorkflow.jobs['warm-platforms'].if]) {
+        expect(runInNewContext(guard, context)).toBe(admitted)
+        expect(runInNewContext(guard, contextFor(!draft))).toBe(event !== 'pull_request' || draft)
       }
-    })
-    const context = contextFor(false)
-    expect(runInNewContext(platforms.jobs['warm-linux-runtime'].if, context)).toBe(armRuns)
-    expect(runInNewContext(shared.jobs['warm-platforms'].if, context)).toBe(sharedPlatforms)
-    // Draft PRs skip the producers; every other event still runs them.
-    for (const guard of [shared.jobs.warm.if, caller.jobs['warm-platforms'].if]) {
-      expect(runInNewContext(guard, context)).toBe(true)
-      expect(runInNewContext(guard, contextFor(true))).toBe(event !== 'pull_request')
+      expect(platforms.jobs['warm-windows'].if).toBeUndefined()
+      expect(platforms.jobs['warm-windows'].strategy.matrix.os).toEqual([
+        'windows-2022',
+        'windows-11-arm'
+      ])
     }
-    expect(platforms.jobs['warm-windows'].if).toBeUndefined()
-    expect(platforms.jobs['warm-windows'].strategy.matrix.os).toEqual([
-      'windows-2022',
-      'windows-11-arm'
-    ])
-  })
+  )
 
   it('validates the omitted Linux warmer preparation in the real PR consumers', () => {
     const platforms = read(workflow('ci-cache-warmup-platforms').jobs['warm-platforms'].uses)

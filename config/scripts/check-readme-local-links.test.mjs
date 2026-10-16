@@ -157,8 +157,8 @@ describe('README local link check', () => {
     ])
   })
 
-  // Docs-only diffs skip preflight, so the detector must check README links.
-  it('runs on every non-draft PR through the detector and in the lint script', () => {
+  // Ready docs-only diffs skip preflight, so the detector must check README links.
+  it('checks ready PRs through the detector and in the lint script', () => {
     const { scripts } = JSON.parse(readFileSync(path.join(projectDir, 'package.json'), 'utf8'))
     const workflow = parse(readFileSync(path.join(projectDir, '.github/workflows/pr.yml'), 'utf8'))
     const guardJob = workflow.jobs.code_paths

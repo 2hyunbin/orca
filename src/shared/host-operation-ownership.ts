@@ -23,7 +23,6 @@ export const HOST_OPERATION_OWNERSHIP = {
   browser: 'host',
   clipboard: 'host',
   computer: 'host',
-  // The paired desktop attaches to the named managed host, whose agents own the requests.
   desktopBrowserBridge: 'host',
   diagnostics: 'host',
   emulator: 'host',
@@ -71,8 +70,9 @@ export const HOST_OPERATION_OWNERSHIP = {
   worktree: 'host'
 } as const satisfies Record<string, HostOperationOwnership>
 
-/** Methods whose owner differs from their namespace: row-less forge reads use the source picker. */
+/** Method overrides for scope-picked forge reads and streams without a subscription name. */
 const HOST_OPERATION_METHOD_OWNERSHIP = {
+  'desktopBrowserBridge.attach': 'stream',
   'github.project.listAccessible': 'scope-picked',
   'github.project.listViews': 'scope-picked',
   'github.project.resolveRef': 'scope-picked',

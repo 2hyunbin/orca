@@ -12,6 +12,8 @@ describe('getHostOperationOwnership', () => {
   })
 
   it('reads subscriptions as streams and forge namespaces as credential-sourced', () => {
+    expect(getHostOperationOwnership('desktopBrowserBridge.attach')).toBe('stream')
+    expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
     expect(getHostOperationOwnership('terminal.subscribe')).toBe('stream')
     expect(getHostOperationOwnership('files.unwatch')).toBe('stream')
     expect(getHostOperationOwnership('session.tabs.subscribeAll')).toBe('stream')
@@ -27,12 +29,6 @@ describe('getHostOperationOwnership', () => {
     expect(getHostOperationOwnership('github.project.resolveRef')).toBe('scope-picked')
     // Row edits route to the matched repo's owner first, so they stay credential-sourced.
     expect(getHostOperationOwnership('github.project.updateItemField')).toBe('credential')
-  })
-
-  it('keeps the desktop browser bridge on the managed host it attaches to', () => {
-    // Like browser.clientHost.attach, a long-lived attach stays host-owned rather than a stream.
-    expect(getHostOperationOwnership('desktopBrowserBridge.attach')).toBe('host')
-    expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
   })
 
   it('keeps client effects client and returns null for unknown names', () => {
