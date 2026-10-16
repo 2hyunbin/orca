@@ -1989,6 +1989,8 @@ export function createRemoteRuntimePtyTransport(
   })
 
   function deferViewportForRecovery(claim: boolean): void {
+    // Why: the replay sends the latest viewport; an older queued batch flushing after it would win.
+    viewportBatcher.clear()
     recoveryDeferredViewport = claim ? 'claim' : (recoveryDeferredViewport ?? 'resize')
   }
 

@@ -204,6 +204,29 @@ describe('remote recovery input at the subscribed ack', () => {
     transport.destroy?.()
   })
 
+  it('does not let a resize batched before a second outage overwrite the replayed claim', async () => {
+    const { transport, streamId } = await recoveringTransport()
+    acknowledgeSubscribe(streamId)
+    expect(transport.resize(90, 25)).toBe(true)
+    subscriptionCallbacks?.onError?.({
+      code: 'remote_runtime_unavailable',
+      message: 'Remote runtime connection closed.'
+    })
+    expect(transport.claimViewport?.(120, 40)).toBe(true)
+    // Reconnect inside the 33ms viewport batch window.
+    for (let turn = 0; turn < 50 && subscribeFrameCount() < 3; turn += 1) {
+      await Promise.resolve()
+    }
+    expect(subscribeFrameCount()).toBe(3)
+    const next = latestSubscribePayload().streamId
+    subscriptionSendBinary.mockClear()
+    acknowledgeSubscribe(next)
+    // Outlasts the viewport batch window, so a surviving stale batch would have flushed.
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(viewportAndInputFrames()).toEqual(['claim 120x40', 'resize 120x40'])
+    transport.destroy?.()
+  })
+
   it('sends a claim made after the subscribed ack instead of dropping it', async () => {
     const { transport, streamId } = await recoveringTransport()
     acknowledgeSubscribe(streamId)
