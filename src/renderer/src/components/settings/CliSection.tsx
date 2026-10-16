@@ -4,10 +4,7 @@ import { FolderOpen, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CliInstallStatus } from '../../../../shared/cli-install-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import {
-  ORCA_CLI_SKILL_INSTALL_COMMAND,
-  ORCA_CLI_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkill
@@ -19,12 +16,7 @@ import { Switch } from '../ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { CliRegistrationDialog } from './CliRegistrationDialog'
-import {
-  buildSkillCommandForRuntime,
-  getAgentSkillTerminalShellOverride,
-  getSelectedAgentRuntime,
-  getSkillDiscoveryTargetForRuntime
-} from './CliSkillRuntimeSetup'
+import { getSelectedAgentRuntime, getSkillDiscoveryTargetForRuntime } from './CliSkillRuntimeSetup'
 import { WslCliRegistration } from './WslCliRegistration'
 import { useCliRegistrationActions } from './use-cli-registration-actions'
 import { useLocalCliSkillFreshnessName } from './use-local-cli-skill-freshness-name'
@@ -95,15 +87,6 @@ export function CliSection({
     discoveryTarget: cliSkillDiscoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
-  const cliSkillInstallCommand = buildSkillCommandForRuntime(
-    ORCA_CLI_SKILL_INSTALL_COMMAND,
-    agentRuntime
-  )
-  const cliSkillTerminalShellOverride = getAgentSkillTerminalShellOverride(
-    currentPlatform,
-    settings,
-    agentRuntime
-  )
   const handleStatusChange = useCallback(
     (nextStatus: CliInstallStatus): void => {
       if (mountedRef.current) {
@@ -325,12 +308,11 @@ export function CliSection({
                 'auto.components.settings.CliSection.e8012c03a1',
                 'Enables agents to use Orca workspace, terminal, and progress commands.'
               )}
-              command={cliSkillInstallCommand}
+              skillNames={[ORCA_CLI_SKILL_NAME]}
               terminalTitle="CLI skill setup"
               terminalAriaLabel="CLI skill install terminal"
               terminalWorktreeId={`settings-cli-skill-terminal-${agentRuntime.runtime}`}
-              terminalShellOverride={cliSkillTerminalShellOverride}
-              terminalRuntime={agentRuntime}
+              agentRuntime={agentRuntime}
               installed={cliSkillDetected}
               loading={cliSkillLoading}
               error={cliSkillError}

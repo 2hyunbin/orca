@@ -4,9 +4,12 @@ import type {
   SkillDeleteResult
 } from '../../../shared/skill-delete-contract'
 import {
+  BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY,
   SKILL_DELETE_CAPABILITY,
   SKILL_DELETE_UPDATE_REQUIRED_MESSAGE
 } from '../../../shared/skill-install-capability'
+import type { BundledOrcaSkillInstallRequest } from '../../../shared/bundled-orca-skill-install-contract'
+import type { SkillInstallResult } from '../../../shared/skill-install-contract'
 import type { SkillDiscoveryResult, SkillDiscoveryTarget } from '../../../shared/skills'
 import {
   assertRuntimeEnvironmentCapability,
@@ -124,4 +127,40 @@ export async function deleteSkillsOnRuntimeTarget(
   return callRuntimeRpc<SkillDeleteResult>(runtimeTarget, 'skills.delete', request, {
     timeoutMs: SKILL_DELETE_TIMEOUT_MS
   })
+}
+
+const BUNDLED_ORCA_SKILL_INSTALL_TIMEOUT_MS = 5 * 60_000
+
+export type BundledOrcaSkillInstallOutcome =
+  | { kind: 'installed'; results: SkillInstallResult[] }
+  // Delete with the terminal fallback once paired hosts without the capability age out.
+  | { kind: 'unsupported' }
+
+/** Installs Orca's own skills on the runtime that runs the agents, from the files its build ships. */
+export async function installBundledOrcaSkillsOnRuntimeTarget(
+  runtimeTarget: RuntimeClientTarget,
+  request: BundledOrcaSkillInstallRequest
+): Promise<BundledOrcaSkillInstallOutcome> {
+  if (runtimeTarget.kind === 'local') {
+    if (!(await window.api.skills.bundledOrcaInstallSupported())) {
+      return { kind: 'unsupported' }
+    }
+    return { kind: 'installed', results: await window.api.skills.installBundledOrca(request) }
+  }
+  if (
+    !(await runtimeEnvironmentSupportsCapability(
+      runtimeTarget.environmentId,
+      BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY
+    ))
+  ) {
+    return { kind: 'unsupported' }
+  }
+  // Why no wsl: the request's distro names this client's WSL, not the remote host's.
+  const results = await callRuntimeRpc<SkillInstallResult[]>(
+    runtimeTarget,
+    'skills.installBundledOrca',
+    { names: request.names },
+    { timeoutMs: BUNDLED_ORCA_SKILL_INSTALL_TIMEOUT_MS }
+  )
+  return { kind: 'installed', results }
 }

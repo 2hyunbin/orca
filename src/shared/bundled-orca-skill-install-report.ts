@@ -1,4 +1,4 @@
-import type { SkillInstallResult } from '../../shared/skill-install-contract'
+import type { SkillInstallResult } from './skill-install-contract'
 
 export function describeSkillConflictReason(
   kind: NonNullable<SkillInstallResult['conflict']>['kind'] | undefined

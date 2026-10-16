@@ -1,3 +1,5 @@
+import type { BundledOrcaSkillInstallRequest } from '../../shared/bundled-orca-skill-install-contract'
+import type { SkillInstallResult } from '../../shared/skill-install-contract'
 import type { SkillDiscoveryResult, SkillDiscoveryTarget } from '../../shared/skills'
 import type {
   SkillCloudOperation,
@@ -75,6 +77,10 @@ export type SkillsApi = {
    *  true on desktop; on web the "local" host is a remote server that updates
    *  independently and may predate the capability. */
   deleteSupported: () => Promise<boolean>
+  /** Like `deleteSupported`, for `installBundledOrca`. */
+  bundledOrcaInstallSupported: () => Promise<boolean>
+  /** Installs Orca's own skills from the files this build ships. */
+  installBundledOrca: (request: BundledOrcaSkillInstallRequest) => Promise<SkillInstallResult[]>
   previewDelete: (request: SkillDeleteRequest) => Promise<SkillDeletePlan>
   delete: (request: SkillDeleteRequest) => Promise<SkillDeleteResult>
   listManagedInstalls: (environmentId?: string) => Promise<ManagedSkillInstallListOperation>

@@ -3,17 +3,6 @@ import {
   deriveGlobalWindowsRuntimeDefaultFromLegacySettings,
   normalizeGlobalWindowsRuntimeDefault
 } from '../../../../shared/project-execution-runtime'
-import {
-  quotePowerShellLiteral,
-  quotePowerShellNativeArgument
-} from '../../../../shared/powershell-native-argument'
-import { buildWslLoginShellCommand } from '../../../../shared/wsl-login-shell-command'
-import { isWslShellName } from '../../../../shared/local-windows-terminal-runtime'
-import { resolveWindowsShellStartupFamily } from '../../../../shared/windows-terminal-shell'
-import { getOrcaCliCommandNameForPlatform } from '../../../../shared/orca-cli-command-name'
-import { ORCA_SKILL_COMMAND_EXECUTABLE } from '../../../../shared/agent-feature-install-commands'
-import { getProjectAgentSkillTerminalShellOverride } from '@/lib/project-skill-runtime'
-import { useAppStore } from '@/store'
 import { toast } from 'sonner'
 import type { CliInstallStatus } from '../../../../shared/cli-install-types'
 import {
@@ -26,11 +15,6 @@ export type LocalAgentRuntime = {
   runtime: 'host' | 'wsl'
   wslDistro?: string | null
   label: string
-}
-
-const LOCAL_HOST_AGENT_RUNTIME: LocalAgentRuntime = {
-  runtime: 'host',
-  label: ''
 }
 
 export function getHostRuntimeLabel(): string {
@@ -62,15 +46,6 @@ export function getSelectedAgentRuntime(
   return { runtime: 'host', label: getHostRuntimeLabel() }
 }
 
-function encodeWslLoginShellScript(command: string): string {
-  const bytes = new TextEncoder().encode(buildWslLoginShellCommand(command))
-  let binary = ''
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte)
-  }
-  return btoa(binary)
-}
-
 export function getWslCliDistroRequest(
   runtime?: LocalAgentRuntime
 ): { distro: string } | undefined {
@@ -79,161 +54,12 @@ export function getWslCliDistroRequest(
     : undefined
 }
 
-/**
- * Points an `orca skills ...` command at the CLI name the target runtime registers: Linux
- * and WSL install it as `orca-ide` because a bare `orca` there is the GNOME screen reader.
- */
-export function buildSkillCommandForRuntime(
-  command: string,
-  runtime?: LocalAgentRuntime,
-  currentPlatform = getSkillCommandPlatform()
-): string {
-  const prefix = `${ORCA_SKILL_COMMAND_EXECUTABLE} `
-  if (!command.startsWith(prefix)) {
-    return command
-  }
-  const targetsLinux =
-    (runtime ?? LOCAL_HOST_AGENT_RUNTIME).runtime === 'wsl' ||
-    // Why: a focused remote runtime runs the command on a host whose platform this client
-    // does not know; its Orca terminals resolve a bare `orca`.
-    (currentPlatform === 'linux' && !isRemoteRuntimeEnvironmentFocused())
-  if (!targetsLinux) {
-    return command
-  }
-  return `${getOrcaCliCommandNameForPlatform('linux')} ${command.slice(prefix.length)}`
-}
-
-/**
- * Adapts a copied skill command for Orca's inline setup terminal auto-paste. WSL-targeted
- * PowerShell wrappers must become bash-native because the daemon forces wsl.exe for WSL
- * worktrees.
- */
-export function buildSkillSetupTerminalCommand(
-  copiedCommand: string,
-  effectiveShell: string | undefined,
-  runtime?: LocalAgentRuntime,
-  currentPlatform = getSkillCommandPlatform()
-): string {
-  // Why: the created tab is authoritative when project runtime replaces the requested shell.
-  const wslNative = isWslShellName(effectiveShell)
-    ? decodeWslSetupTerminalCommand(copiedCommand)
-    : null
-  if (wslNative) {
-    return wslNative
-  }
-  if (!isSetupTerminalForcedToPowerShell(effectiveShell)) {
-    return copiedCommand
-  }
-  if (runtime?.runtime === 'wsl' && currentPlatform === 'win32') {
-    return buildPowerShellWslSkillCommand(copiedCommand, runtime)
-  }
-  return copiedCommand
-}
-
-function buildPowerShellWslSkillCommand(command: string, runtime: LocalAgentRuntime): string {
-  const distroArg = runtime.wslDistro?.trim()
-    ? ` -d ${quotePowerShellLiteral(runtime.wslDistro.trim())}`
-    : ''
-  // Why: encoding preserves the user's configured login-shell PATH across the Windows argv boundary.
-  const encodedScript = encodeWslLoginShellScript(command)
-  const visibleCommand = command.replace(/[\r\n]+/g, ' ')
-  // Why $(...) and not a backtick eval: PowerShell treats ` as its own escape
-  // character, so the old `eval "\`printf ...\`"` had the payload's quotes
-  // interacting with two escaping layers and dash saw `case  in` -- the
-  // `word unexpected (expecting "in")` in #14292. Credit: #14785.
-  //
-  // Why not a plain pipe into sh: that hands the payload the pipe as its stdin,
-  // so a setup command that reads input gets base64 remnants instead. Command
-  // substitution runs in a subshell and leaves the terminal's stdin intact.
-  const shellScript = `sh -c "$(printf %s ${encodedScript} | base64 -d)"`
-  // Why --exec: `--` makes wsl.exe expand $name in the argv it forwards to the guest.
-  const wslCommand = `wsl.exe${distroArg} --exec sh -c ${quotePowerShellNativeArgument(shellScript)}`
-  return `& { $PSNativeCommandArgumentPassing = 'Legacy'; ${wslCommand} } # Runs: ${visibleCommand}`
-}
-
-function decodeWslSetupTerminalCommand(command: string): string | null {
-  if (
-    !command.startsWith("& { $PSNativeCommandArgumentPassing = 'Legacy'; wsl.exe") ||
-    !command.includes(' } # Runs: ')
-  ) {
-    return null
-  }
-
-  // Why both separators: commands persisted before the --exec switch must still decode.
-  const encoded =
-    // Both shapes: commands persisted before the pipe switch still decode.
-    /(?:--|--exec) sh -c '(?:eval \\"`|sh -c \\"\$\()?printf %s ([A-Za-z0-9+/=]+) \| base64 -d/.exec(
-      command
-    )?.[1]
-  if (!encoded) {
-    return null
-  }
-
-  try {
-    const binary = atob(encoded)
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
-    return new TextDecoder().decode(bytes)
-  } catch {
-    return null
-  }
-}
-
-function isSetupTerminalForcedToPowerShell(terminalShellOverride: string | undefined): boolean {
-  const trimmedOverride = terminalShellOverride?.trim()
-  return (
-    Boolean(trimmedOverride) && resolveWindowsShellStartupFamily(trimmedOverride) === 'powershell'
-  )
-}
-
-function isRemoteRuntimeEnvironmentFocused(): boolean {
-  // Why: the terminal router also weighs how many environments are saved, but
-  // that slice has no subscriber here. Read only the focused id, which every
-  // caller re-renders on.
-  return Boolean(useAppStore.getState().settings?.activeRuntimeEnvironmentId?.trim())
-}
-
-function getSkillCommandPlatform(): NodeJS.Platform {
-  const platform =
-    typeof window === 'undefined' ? undefined : window.api?.platform?.get?.()?.platform
-  if (platform) {
-    return platform
-  }
-
-  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent
-  if (userAgent.includes('Windows')) {
-    return 'win32'
-  }
-  if (userAgent.includes('Mac')) {
-    return 'darwin'
-  }
-  return 'linux'
-}
-
-export function buildSkillInstallCommandForRuntime(
-  command: string,
-  runtime: LocalAgentRuntime
-): string {
-  return buildSkillCommandForRuntime(command, runtime)
-}
-
 export function getSkillDiscoveryTargetForRuntime(
   runtime: LocalAgentRuntime
 ): { runtime: 'wsl'; wslDistro?: string | null } | undefined {
   return runtime.runtime === 'wsl'
     ? { runtime: 'wsl', wslDistro: runtime.wslDistro ?? null }
     : undefined
-}
-
-export function getAgentSkillTerminalShellOverride(
-  currentPlatform: string,
-  settings: GlobalSettings,
-  runtime: LocalAgentRuntime
-): string | undefined {
-  return getProjectAgentSkillTerminalShellOverride(
-    currentPlatform as NodeJS.Platform,
-    settings,
-    runtime
-  )
 }
 
 export async function ensureWslCliAvailableForAgentSkillTerminal(

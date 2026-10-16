@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import TerminalPane from '@/components/terminal-pane/TerminalPane'
 import { PASTE_TERMINAL_TEXT_EVENT, type PasteTerminalTextDetail } from '@/constants/terminal'
@@ -21,7 +21,6 @@ const PTY_TEXT_FALLBACK_MS = 750
 
 type OnboardingInlineCommandTerminalProps = {
   command: string
-  prepareCommandForShell?: (command: string, shellOverride: string | undefined) => string
   title: string
   description?: string
   ariaLabel: string
@@ -30,10 +29,6 @@ type OnboardingInlineCommandTerminalProps = {
   descriptionPaddingClassName?: string
   autoScrollIntoView?: boolean
   worktreeId?: string
-  shellOverride?: string
-  forceHostRuntime?: boolean
-  onOpened?: () => void
-  onInteracted?: (method: 'keyboard' | 'pointer', event?: KeyboardEvent<HTMLElement>) => void
   onTerminalExit?: () => void
   // OSC 133;D reports the command outcome while the shell remains alive.
   onCommandFinished?: (bestEffortExitCode: number | null) => void
@@ -45,7 +40,6 @@ type OnboardingInlineCommandTerminalProps = {
  */
 export function OnboardingInlineCommandTerminal({
   command,
-  prepareCommandForShell,
   title,
   description,
   ariaLabel,
@@ -54,10 +48,6 @@ export function OnboardingInlineCommandTerminal({
   descriptionPaddingClassName = 'px-4 py-3',
   autoScrollIntoView = true,
   worktreeId: worktreeIdProp = ONBOARDING_INLINE_TERMINAL_WORKTREE_ID,
-  shellOverride,
-  forceHostRuntime = false,
-  onOpened,
-  onInteracted,
   onTerminalExit,
   onCommandFinished
 }: OnboardingInlineCommandTerminalProps): React.JSX.Element {
@@ -79,21 +69,13 @@ export function OnboardingInlineCommandTerminal({
     []
   )
   const [cwd, setCwd] = useState<string | null>(null)
-  const [createdTab, setCreatedTab] = useState<{
-    id: string
-    shellOverride: string | undefined
-  } | null>(null)
-  const tabId = createdTab?.id ?? null
+  const [tabId, setTabId] = useState<string | null>(null)
   // Why: starts at `prefersReducedMotion` so users opted out of motion never
   // see the slide-in frame; otherwise we flip to true after first paint so the
   // CSS transition has a starting state to interpolate from.
   const [entered, setEntered] = useState(prefersReducedMotion)
   const terminalSectionRef = useRef<HTMLElement>(null)
   const autoInsertedRef = useRef<{ tabId: string; command: string } | null>(null)
-
-  useEffect(() => {
-    onOpened?.()
-  }, [onOpened])
 
   // Why: the branded id isolates command outcomes to this inline terminal.
   useEffect(() => {
@@ -126,29 +108,19 @@ export function OnboardingInlineCommandTerminal({
   }, [])
 
   useEffect(() => {
-    const tab = createTab(worktreeId, undefined, shellOverride, {
+    const tab = createTab(worktreeId, undefined, undefined, {
       activate: false,
-      recordInteraction: false,
-      forceHostRuntime
+      recordInteraction: false
     })
     setActiveTabForWorktree(worktreeId, tab.id)
     setTabCustomTitle(tab.id, title, { recordInteraction: false })
-    setCreatedTab({ id: tab.id, shellOverride: tab.shellOverride })
+    setTabId(tab.id)
     return () => {
       // Why: inline setup panels can disappear after detection succeeds; close
       // the backing tab so installer shells do not keep running invisibly.
       closeTab(tab.id, { recordInteraction: false, reason: 'cleanup' })
     }
-  }, [
-    closeTab,
-    createTab,
-    forceHostRuntime,
-    setActiveTabForWorktree,
-    setTabCustomTitle,
-    shellOverride,
-    title,
-    worktreeId
-  ])
+  }, [closeTab, createTab, setActiveTabForWorktree, setTabCustomTitle, title, worktreeId])
 
   useEffect(() => {
     if (!autoScrollIntoView) {
@@ -211,17 +183,13 @@ export function OnboardingInlineCommandTerminal({
   }, [autoScrollIntoView, entered, prefersReducedMotion])
 
   const insertCommand = useCallback(() => {
-    if (!createdTab) {
+    if (!tabId) {
       return
     }
-    const terminalCommand = prepareCommandForShell?.(command, createdTab.shellOverride) ?? command
-    if (
-      autoInsertedRef.current?.tabId === createdTab.id &&
-      autoInsertedRef.current.command === terminalCommand
-    ) {
+    if (autoInsertedRef.current?.tabId === tabId && autoInsertedRef.current.command === command) {
       return
     }
-    autoInsertedRef.current = { tabId: createdTab.id, command: terminalCommand }
+    autoInsertedRef.current = { tabId, command }
     if (autoScrollIntoView) {
       terminalSectionRef.current?.scrollIntoView({
         behavior: 'auto',
@@ -231,13 +199,13 @@ export function OnboardingInlineCommandTerminal({
     window.dispatchEvent(
       new CustomEvent<PasteTerminalTextDetail>(PASTE_TERMINAL_TEXT_EVENT, {
         detail: {
-          tabId: createdTab.id,
-          text: terminalCommand.trim()
+          tabId,
+          text: command.trim()
         }
       })
     )
-    focusTerminalTabSurface(createdTab.id)
-  }, [autoScrollIntoView, command, createdTab, prepareCommandForShell])
+    focusTerminalTabSurface(tabId)
+  }, [autoScrollIntoView, command, tabId])
 
   useEffect(() => {
     if (!tabId || !cwd) {
@@ -323,12 +291,7 @@ export function OnboardingInlineCommandTerminal({
             <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
           </div>
         ) : null}
-        <div
-          className="relative min-h-0 bg-background"
-          style={{ height: terminalHeightPx }}
-          onKeyDownCapture={(event) => onInteracted?.('keyboard', event)}
-          onPointerDownCapture={() => onInteracted?.('pointer')}
-        >
+        <div className="relative min-h-0 bg-background" style={{ height: terminalHeightPx }}>
           {cwd && tabId ? (
             <TerminalPane
               tabId={tabId}

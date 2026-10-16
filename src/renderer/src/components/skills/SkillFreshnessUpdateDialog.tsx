@@ -1,7 +1,6 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, Copy, Loader2, RefreshCw } from 'lucide-react'
+import { useMemo, useRef, useSyncExternalStore } from 'react'
+import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, RefreshCw } from 'lucide-react'
 import {
-  canonicalizeSkillUpdateNames,
   isSkillScanIssueNeedingAttention,
   isSkillScanIssueTruncatingScan,
   type SkillFreshnessInventory
@@ -9,8 +8,6 @@ import {
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
-import { buildOrcaSkillCommand } from '../../../../shared/agent-feature-install-commands'
-import { buildSkillCommandForRuntime } from '@/components/settings/CliSkillRuntimeSetup'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import {
@@ -79,7 +76,6 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     getSkillFreshnessUpdateDialogRequest,
     getSkillFreshnessUpdateDialogRequest
   )
-  const [copied, setCopied] = useState(false)
 
   // Why: settling a run notifies every skills surface, and that refresh nulls the
   // inventory *synchronously* while it re-hashes each package on disk. Rendering
@@ -158,7 +154,6 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     // Why: closing never cancels. The run is owned by main and keeps going; the
     // status-bar segment carries it from here.
     consumeSkillFreshnessUpdateDialogRequest()
-    setCopied(false)
     selection.reset()
     // Don't carry a finished session's rows into the next open — but a live run
     // keeps its own, or reopening from the status segment mid-run would land on
@@ -174,24 +169,6 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
 
   const handleUpdate = (names: readonly string[]): void => {
     void startSkillUpdateRun(names)
-  }
-
-  const handleCopyCommand = (): void => {
-    const names = run.state === 'error' ? canonicalizeSkillUpdateNames(run.failedNames) : null
-    if (!names) {
-      return
-    }
-    // Clipboard writes reject on a denied permission or an unfocused document;
-    // without this the button just never flips to "Copied".
-    void navigator.clipboard
-      .writeText(buildSkillCommandForRuntime(buildOrcaSkillCommand('update', names)))
-      .then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      })
-      .catch((error: unknown) => {
-        console.error('Failed to copy skill update command', error)
-      })
   }
 
   const headline = ((): React.JSX.Element => {
@@ -362,21 +339,6 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                 onClick={() => handleUpdate(run.failedNames)}
               >
                 {translate('auto.components.skills.SkillFreshnessUpdateDialog.retry', 'Retry')}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="gap-1.5"
-                onClick={handleCopyCommand}
-              >
-                <Copy className="size-3.5" />
-                {copied
-                  ? translate('auto.components.skills.SkillFreshnessUpdateDialog.copied', 'Copied')
-                  : translate(
-                      'auto.components.skills.SkillFreshnessUpdateDialog.copyCommand',
-                      'Copy command'
-                    )}
               </Button>
             </div>
           </div>

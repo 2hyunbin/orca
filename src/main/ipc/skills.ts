@@ -11,6 +11,8 @@ import type {
   SkillUpdateRun,
   SkillUpdateStartResult
 } from '../../shared/skill-freshness'
+import { BundledOrcaSkillInstallRequestSchema } from '../../shared/bundled-orca-skill-install-contract'
+import type { SkillInstallResult } from '../../shared/skill-install-contract'
 import { inventorySkillFreshness } from '../skills/skill-freshness-inventory'
 import { SkillUpdateRunner } from '../skills/skill-update-run'
 import { skillUpdateFailedNames } from '../skills/skill-update-outcome'
@@ -93,4 +95,16 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
   handleMainWindowSkillIpc('skills:getUpdateRun', async (): Promise<SkillUpdateRun> => {
     return runner.getState()
   })
+
+  // Local only; a paired runtime is reached through `skills.installBundledOrca` from the renderer.
+  handleMainWindowSkillIpc(
+    'skills:installBundledOrca',
+    async (_event, value: unknown): Promise<SkillInstallResult[]> => {
+      const request = BundledOrcaSkillInstallRequestSchema.parse(value)
+      if (!runtime) {
+        throw new Error('Skill installs are unavailable in this process.')
+      }
+      return runtime.installBundledOrcaSkills(request.names, undefined, request)
+    }
+  )
 }

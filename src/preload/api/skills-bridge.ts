@@ -1,4 +1,6 @@
 import { ipcRenderer } from 'electron'
+import type { BundledOrcaSkillInstallRequest } from '../../shared/bundled-orca-skill-install-contract'
+import type { SkillInstallResult } from '../../shared/skill-install-contract'
 import type {
   SkillDeletePlan,
   SkillDeleteRequest,
@@ -89,6 +91,9 @@ export const skillsApi = {
     ipcRenderer.invoke('skills:removeInstall', input),
   // Desktop always registers the delete IPC handlers in its own main process.
   deleteSupported: (): Promise<boolean> => Promise.resolve(true),
+  bundledOrcaInstallSupported: (): Promise<boolean> => Promise.resolve(true),
+  installBundledOrca: (request: BundledOrcaSkillInstallRequest): Promise<SkillInstallResult[]> =>
+    ipcRenderer.invoke('skills:installBundledOrca', request),
   previewDelete: (request: SkillDeleteRequest): Promise<SkillDeletePlan> =>
     ipcRenderer.invoke('skills:previewDelete', request),
   delete: (request: SkillDeleteRequest): Promise<SkillDeleteResult> =>

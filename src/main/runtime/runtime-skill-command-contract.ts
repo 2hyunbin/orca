@@ -2,6 +2,7 @@ import type {
   AgentSkillShareOperation,
   AgentSkillShareRequest
 } from '../../shared/agent-skill-sharing-contract'
+import type { BundledOrcaSkillInstallRequest } from '../../shared/bundled-orca-skill-install-contract'
 import type { DiscoveredSkill } from '../../shared/skills'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type {
@@ -98,7 +99,8 @@ export type RuntimeSkillCommandSurface = {
   ): Promise<SkillBundleInstallResult>
   installBundledOrcaSkills(
     names: readonly string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    target?: Pick<BundledOrcaSkillInstallRequest, 'wsl'>
   ): Promise<SkillInstallResult[]>
   getSharedSkillInstallProgress(operationId: string): SkillBundleInstallProgress | null
   cancelSharedSkillInstall(operationId: string): boolean

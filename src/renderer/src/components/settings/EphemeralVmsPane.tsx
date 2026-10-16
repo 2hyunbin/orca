@@ -8,16 +8,12 @@ import { Button } from '../ui/button'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { EphemeralVmRecipeRow } from './EphemeralVmRecipeRow'
 import { translate } from '@/i18n/i18n'
-import {
-  EPHEMERAL_VMS_SKILL_INSTALL_COMMAND,
-  EPHEMERAL_VMS_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+import { EPHEMERAL_VMS_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkill
 } from '@/hooks/useInstalledAgentSkills'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
-import { buildSkillCommandForRuntime } from './CliSkillRuntimeSetup'
 
 type RecipeCatalogEntry = Awaited<
   ReturnType<typeof window.api.ephemeralVm.listRecipeCatalog>
@@ -45,15 +41,6 @@ export function EphemeralVmsPane(): React.JSX.Element {
       }
     }
   }, [])
-
-  // Why: an absent runtime still resolves to the local host, so the command still gets the
-  // host's CLI name.
-  const installCommand = activeSkillRuntime.installDisabledReason
-    ? EPHEMERAL_VMS_SKILL_INSTALL_COMMAND
-    : buildSkillCommandForRuntime(
-        EPHEMERAL_VMS_SKILL_INSTALL_COMMAND,
-        activeSkillRuntime.agentRuntime
-      )
 
   const {
     installed: skillDetected,
@@ -154,7 +141,7 @@ export function EphemeralVmsPane(): React.JSX.Element {
           'auto.components.settings.EphemeralVmsPane.skillDescription',
           'Sets up, builds, authenticates, and validates repo-owned environment recipes.'
         )}
-        command={installCommand}
+        skillNames={[EPHEMERAL_VMS_SKILL_NAME]}
         terminalTitle={translate(
           'auto.components.settings.EphemeralVmsPane.cloudVmTerminalTitle',
           'Cloud VM setup'
@@ -164,8 +151,7 @@ export function EphemeralVmsPane(): React.JSX.Element {
           'Cloud VM skill install terminal'
         )}
         terminalWorktreeId="settings-ephemeral-vms-skill-terminal"
-        terminalShellOverride={activeSkillRuntime.terminalShellOverride}
-        terminalRuntime={activeSkillRuntime.agentRuntime}
+        agentRuntime={activeSkillRuntime.agentRuntime}
         installed={skillDetected}
         loading={skillLoading}
         error={activeSkillRuntime.installDisabledReason ?? skillError}

@@ -10,7 +10,11 @@ import type {
 import type { SkillFreshnessInventory } from '../../../../shared/skill-freshness'
 import type { SkillDiscoveryResult } from '../../../../shared/skills'
 import type { SkillDeletePlan, SkillDeleteResult } from '../../../../shared/skill-delete-contract'
-import { SKILL_DELETE_CAPABILITY } from '../../../../shared/skill-install-capability'
+import {
+  BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY,
+  SKILL_DELETE_CAPABILITY
+} from '../../../../shared/skill-install-capability'
+import type { SkillInstallResult } from '../../../../shared/skill-install-contract'
 import { callRuntimeResult, getRemoteRuntimeStatus } from './web-runtime-calls'
 import { requireActiveEnvironmentOrNull } from './web-runtime-session'
 import { getBrowserPlatform } from './web-storage'
@@ -145,6 +149,8 @@ export function createComputerUsePermissionsApi(): NonNullable<
   }
 }
 
+const BUNDLED_ORCA_SKILL_INSTALL_TIMEOUT_MS = 5 * 60_000
+
 export function createSkillsApi(): NonNullable<Partial<PreloadApi>['skills']> {
   return {
     discover: (target) =>
@@ -186,6 +192,16 @@ export function createSkillsApi(): NonNullable<Partial<PreloadApi>['skills']> {
       const status = await getRemoteRuntimeStatus().catch(() => null)
       return status?.capabilities?.includes(SKILL_DELETE_CAPABILITY) === true
     },
+    bundledOrcaInstallSupported: async () => {
+      const status = await getRemoteRuntimeStatus().catch(() => null)
+      return status?.capabilities?.includes(BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY) === true
+    },
+    installBundledOrca: (request) =>
+      callRuntimeResult<SkillInstallResult[]>(
+        'skills.installBundledOrca',
+        request,
+        BUNDLED_ORCA_SKILL_INSTALL_TIMEOUT_MS
+      ),
     previewDelete: (request) =>
       callRuntimeResult<SkillDeletePlan>('skills.previewDelete', request, 60_000),
     delete: (request) => callRuntimeResult<SkillDeleteResult>('skills.delete', request, 5 * 60_000),

@@ -1,4 +1,4 @@
-import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
 

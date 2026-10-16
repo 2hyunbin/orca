@@ -4,7 +4,7 @@ import {
   type SkillUpdateStartResult
 } from '../../shared/skill-freshness'
 import type { SkillInstallResult } from '../../shared/skill-install-contract'
-import { describeBundledSkillInstallResult } from './bundled-orca-skill-install-report'
+import { describeBundledSkillInstallResult } from '../../shared/bundled-orca-skill-install-report'
 
 export type SkillUpdateRunnerDeps = {
   /** Installs this build's copy of each name on the host the inventory scans. */

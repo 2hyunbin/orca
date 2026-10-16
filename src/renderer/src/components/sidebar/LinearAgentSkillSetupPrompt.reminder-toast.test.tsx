@@ -4,7 +4,7 @@ import { act, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LINEAR_AGENT_SKILL_NAMES } from '@/lib/agent-feature-install-commands'
+import { LINEAR_AGENT_SKILL_NAMES } from '@/lib/agent-feature-skill-names'
 import {
   LinearAgentSkillSetupPrompt,
   _linearAgentSkillSetupPromptInternalsForTests

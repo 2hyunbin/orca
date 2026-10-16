@@ -1,13 +1,15 @@
 import { useCallback, useState } from 'react'
-import { ArrowUpRight, Loader2, Terminal } from 'lucide-react'
+import { ArrowUpRight, Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { useAppStore } from '@/store'
-import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
-import type { OnboardingFeatureSetupRuntimeContext } from '../onboarding/onboarding-feature-setup-runtime'
+import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
+import { useBundledSkillInstall } from '@/hooks/use-bundled-skill-install'
+import { FeatureSetupSkillInstallStatus } from '../onboarding/FeatureSetupSkillInstallStatus'
+import { getOnboardingFeatureSetupAgentRuntime } from '../onboarding/onboarding-feature-setup-runtime'
 import {
   runOnboardingFeatureSetup,
   type OnboardingFeatureSetupSelection
@@ -93,25 +95,27 @@ const BROWSER_ONLY_FEATURE_SETUP: OnboardingFeatureSetupSelection = {
 // the agent skills step uses, scoped to just browser use.
 function BrowserSkillInstallButton(): React.JSX.Element {
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
-  const [command, setCommand] = useState<string | null>(null)
-  const [runtimeContext, setRuntimeContext] = useState<OnboardingFeatureSetupRuntimeContext | null>(
-    null
-  )
   const [busy, setBusy] = useState(false)
+  const [skillNames, setSkillNames] = useState<string[]>([])
   const activeSkillRuntime = useActiveProjectSkillRuntime()
+  const { state: skillInstallState, install: installSkills } = useBundledSkillInstall({
+    agentRuntime: getOnboardingFeatureSetupAgentRuntime(activeSkillRuntime),
+    onFinished: notifyInstalledAgentSkillsChanged
+  })
 
   const handleInstall = useCallback(async () => {
-    if (busy || command !== null) {
+    if (busy) {
       return
     }
     setBusy(true)
     try {
-      const result = await runOnboardingFeatureSetup(
-        BROWSER_ONLY_FEATURE_SETUP,
-        undefined,
-        activeSkillRuntime
-      )
+      const result = await runOnboardingFeatureSetup(BROWSER_ONLY_FEATURE_SETUP)
       recordFeatureInteraction('agent-browser-setup')
+      setSkillNames(result.skillNames)
+      const installState = await installSkills(result.skillNames)
+      if (installState?.kind === 'failed') {
+        throw new Error(installState.message)
+      }
       const firstWarning = result.warnings[0]
       if (firstWarning) {
         toast.warning(
@@ -121,23 +125,13 @@ function BrowserSkillInstallButton(): React.JSX.Element {
           ),
           { description: firstWarning.message }
         )
-      } else if (result.skillCommandsCopied) {
+      } else if (installState?.kind === 'idle') {
         toast.success(
           translate(
             'auto.components.feature.wall.FeatureWallBrowserAction.e02b11e6b0',
             'Browser setup ready'
-          ),
-          {
-            description: translate(
-              'auto.components.feature.wall.FeatureWallBrowserAction.d6d15077df',
-              'Skill command copied and inserted below for review.'
-            )
-          }
+          )
         )
-      }
-      if (result.skillInstallCommand) {
-        setRuntimeContext(activeSkillRuntime)
-        setCommand(result.skillInstallCommand)
       }
     } catch (error) {
       console.error('Browser setup failed', error)
@@ -159,14 +153,15 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
-  }, [activeSkillRuntime, busy, command, recordFeatureInteraction])
+  }, [busy, installSkills, recordFeatureInteraction])
 
-  if (command) {
+  if (skillInstallState.kind === 'legacy-terminal') {
     return (
-      <FeatureSetupInlineTerminal
-        command={command}
-        runtimeContext={runtimeContext ?? undefined}
-        selection={BROWSER_ONLY_FEATURE_SETUP}
+      <FeatureSetupSkillInstallStatus
+        state={skillInstallState}
+        terminalWorktreeId="feature-wall-browser-skill-terminal"
+        onRetry={() => void installSkills(skillNames)}
+        onLegacyTerminalFinished={notifyInstalledAgentSkillsChanged}
       />
     )
   }
@@ -180,7 +175,7 @@ function BrowserSkillInstallButton(): React.JSX.Element {
       disabled={busy}
       onClick={() => void handleInstall()}
     >
-      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Terminal className="size-3.5" />}
+      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
       {busy
         ? translate(
             'auto.components.feature.wall.FeatureWallBrowserAction.5f97caf76b',

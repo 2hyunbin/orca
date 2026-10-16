@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LinearApiKeyDialog } from '@/components/linear-api-key-dialog'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store'
+import { ORCA_LINEAR_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { TaskSourceShowInTasksStep } from './TaskSourceShowInTasksStep'
 import { TaskSourceStepRow } from './TaskSourceStepRow'
@@ -125,8 +126,8 @@ export function TaskSourceLinearSetup({
                 'Linear skill'
               )}
               description={null}
-              command={skillSetup.installCommand}
-              installedCommand={skillSetup.updateCommand}
+              skillNames={[ORCA_LINEAR_SKILL_NAME]}
+              installedSkillNames={[skillSetup.updateSkillName]}
               terminalTitle={translate(
                 'auto.components.settings.TaskSourceLinearSetup.terminalTitle',
                 'Linear skill setup'
@@ -136,8 +137,7 @@ export function TaskSourceLinearSetup({
                 'Linear skill install terminal'
               )}
               terminalWorktreeId="settings-tasks-linear-skill-terminal"
-              terminalShellOverride={skillSetup.terminalShellOverride}
-              terminalRuntime={skillSetup.terminalRuntime}
+              agentRuntime={skillSetup.agentRuntime}
               installed={skillSetup.skillInstalled}
               loading={skillSetup.skillLoading}
               error={skillSetup.error}

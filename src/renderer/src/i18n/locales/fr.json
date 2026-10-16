@@ -4755,8 +4755,6 @@
           "updatedPartial": "{{value0}} skills mis à jour sur {{value1}}",
           "errorTitle": "La mise à jour ne s'est pas terminée",
           "retry": "Réessayer",
-          "copyCommand": "Copier la commande",
-          "copied": "Copied",
           "showLog": "Afficher le journal",
           "updating": "Mise à jour…",
           "updateActionOne": "Mettre à jour 1 skill",
@@ -6304,7 +6302,6 @@
         },
         "LinearAgentSkillSetupPrompt": {
           "modalTitle": "Activer l'accès aux tickets Linear",
-          "modalDescription": "Installez le skill Linear depuis un terminal.",
           "modalPrompt": "Permet aux agents de lire et de modifier le ticket Linear attaché.",
           "dontShowAgain": "Ne plus afficher",
           "missingBoth": "La CLI Orca et le skill d'agent Linear sont manquants.",
@@ -6330,7 +6327,8 @@
           "toastMissingSkill": "Le skill Linear est manquant",
           "toastInstallSkillDescription": "Installez le skill Linear pour permettre à vos agents de lire et de modifier les tâches Linear via la CLI Orca.",
           "toastRemoteDescription": "{{value0}} Les environnements d'agents distants peuvent nécessiter leur propre configuration.",
-          "toastWslDescription": "{{value0}} Cette configuration s'exécute dans le runtime d'agent WSL sélectionné."
+          "toastWslDescription": "{{value0}} Cette configuration s'exécute dans le runtime d'agent WSL sélectionné.",
+          "modalInstallDescription": "Installez la skill Linear pour vos agents."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "Échec de la connexion au projet.",
@@ -6954,7 +6952,6 @@
         },
         "AgentSkillSetupPanel": {
           "0b810ec59f": "Appuyez sur Entrée pour lancer la commande.",
-          "ed197f59a2": "Copier la commande",
           "817d3f9f18": "Copier la commande",
           "5289300939": "Non installé",
           "9fcebceb2a": "Installés",
@@ -6962,17 +6959,12 @@
           "c689392435": "Revérifier",
           "a31e2aa302": "Échec de la copie de la commande.",
           "378ad26865": "Commande copiée.",
-          "copiedCommand": "Commande copiée.",
-          "failedToCopyCommand": "Échec de la copie de la commande.",
-          "copyCommandAria": "Copier la commande",
           "runCommandDescription": "Appuyez sur Entrée pour lancer la commande.",
-          "5f818f12ab": "Préparation...",
-          "4c05b9d7cb": "Préparation du terminal de configuration.",
           "installLabel": "Installer",
           "updateLabel": "Mettre à jour",
-          "setupCommandFailed": "La commande de configuration s'est terminée avec le code {{value0}}. Cette erreur disparaîtra après une nouvelle tentative réussie.",
           "setupFailed": "Échec de la configuration",
-          "retrySetup": "Réessayer"
+          "retrySetup": "Réessayer",
+          "installing": "Installation..."
         },
         "AgentsPane": {
           "d83834f5e6": "Détection des agents installés…",
@@ -8042,8 +8034,6 @@
         "OrchestrationPane": {
           "52e0634e2c": "Demandez à un agent coordinateur d'utiliser l'orchestration pour les passations, les transferts de worktree et les agents enfants séquentiels ou parallèles.",
           "ae79504732": "Comment l'utiliser",
-          "7bc082f4de": "Copier la commande d'installation",
-          "832f1f3ee6": "Vous préférez votre propre terminal ?",
           "9bedd2a6e5": "Permet aux agents de transmettre le contexte et de coordonner le travail via Orca.",
           "07641b9768": "Skill d'orchestration",
           "2aacdb0517": "Coordonnez les agents de codage entre passations, transferts de worktree et travaux d'agents enfants.",
@@ -8065,15 +8055,6 @@
           "fullCoverage_other": "Tous les {{value0}} agents détectés possèdent le skill.",
           "noCoverage": "Installez le skill ci-dessus, puis relancez la vérification.",
           "partialCoverage": "{{value0}} des {{value1}} agents détectés possèdent le skill."
-        },
-        "OrchestrationSkillPromptDialog": {
-          "f08d45293d": "Copier la commande",
-          "35550f3b3b": "Terminé",
-          "1bdce1911e": "Copier la commande d'installation du skill d'orchestration",
-          "b99f375eb2": "Exécutez cette commande dans un terminal pour installer le skill d'orchestration pour vos agents.",
-          "2914abcfa2": "Installer le skill d'orchestration",
-          "d3dc559225": "Échec de la copie de la commande d'installation.",
-          "239bf9132b": "Commande d'installation copiée."
         },
         "PrivacyDiagnosticBundleControls": {
           "dc8404a930": "Créer le fichier de diagnostic",
@@ -11581,16 +11562,12 @@
             "skill": {
               "install": {
                 "cta": {
-                  "copiedCommand": "Commande copiée.",
-                  "copyFailed": "Échec de la copie de la commande.",
                   "skillLabel": "Skill d'agent :",
                   "checking": "Vérification...",
                   "installed": "Installés",
                   "notInstalled": "Non installé",
                   "recheck": "Revérifier",
-                  "installedDescription": "Skill d'agent installée. Pour la mettre à jour, exécutez :",
-                  "description": "Permet aux agents de lire et modifier les tâches Linear. La configuration guidée complète (connexion + skill + visibilité) se trouve dans Paramètres → Task Sources.",
-                  "copyCommand": "Copier la commande"
+                  "description": "Permet aux agents de lire et modifier les tâches Linear. La configuration guidée complète (connexion + skill + visibilité) se trouve dans Paramètres → Task Sources."
                 }
               },
               "search": {
@@ -14306,8 +14283,7 @@
         },
         "FeatureSetupInlineTerminal": {
           "47fc6cc6dc": "Commande de configuration du skill",
-          "c767ab7061": "Configuration du skill",
-          "pressEnterToRun": "Appuyez sur Entrée pour exécuter la commande. Vous pouvez aussi configurer cela plus tard dans les paramètres."
+          "c767ab7061": "Configuration du skill"
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea et Jira se trouvent dans Paramètres > Intégrations.",
@@ -14852,7 +14828,6 @@
             "c61c91e642": "Laissez les agents se coordonner via Orca pour faire avancer jusqu'au bout les grandes tâches en plusieurs étapes.",
             "ac07f8887f": "Orchestration d'agents",
             "e9eb197e12": "Autorisations Computer Use ouvertes",
-            "3a59452a67": "Commande de skill copiée et insérée ci-dessous pour vérification.",
             "c605f51f2b": "Configuration des capacités prête",
             "1aa657d8f4": "Certaines configurations de capacités demandent votre attention",
             "allInstalled": "Toutes les skills sont installées",
@@ -15208,7 +15183,6 @@
             "c9728107c5": "Essayez",
             "25dd101f15": "La configuration du navigateur demande votre attention",
             "e02b11e6b0": "Configuration du navigateur prête",
-            "d6d15077df": "Commande de skill copiée et insérée ci-dessous pour vérification.",
             "78e65f19d9": "Échec de la configuration du navigateur",
             "b7345c18db": "Une erreur inattendue s'est produite.",
             "5f97caf76b": "Installation…"
@@ -15254,13 +15228,8 @@
             "22e62f3bab": "Session Claude Code démarrée"
           },
           "CliSkillSetupTerminal": {
-            "1953e90447": "Appuyez sur Entrée pour installer la skill d'orchestration Orca CLI destinée à vos agents.",
             "43b60ec5c3": "Terminal d'installation de l'Orca CLI et de la skill d'orchestration",
-            "84e9576dac": "Configuration du skill",
-            "5c3aee22c0": "Copier la commande",
-            "5eca672aac": "Copier la commande d'installation de la skill",
-            "6ff813fc1d": "Impossible de copier la commande de la skill.",
-            "b8ad063571": "Commande d'installation de la skill copiée."
+            "84e9576dac": "Configuration du skill"
           },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "Paramètres → Raccourcis",
@@ -15288,6 +15257,9 @@
             "d20ccf1e61": "terminé",
             "379d776971": "saisie",
             "0418f9becc": "ouvrir"
+          },
+          "CliSkillSetupPanel": {
+            "description": "Installez les skills de la CLI Orca et d'orchestration pour vos agents."
           }
         }
       },

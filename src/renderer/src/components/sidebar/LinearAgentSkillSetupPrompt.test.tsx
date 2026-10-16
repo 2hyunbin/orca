@@ -4,7 +4,7 @@ import { act, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { ProjectExecutionRuntimeResolution } from '../../../../shared/project-execution-runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LINEAR_AGENT_SKILL_NAMES } from '@/lib/agent-feature-install-commands'
+import { LINEAR_AGENT_SKILL_NAMES } from '@/lib/agent-feature-skill-names'
 import {
   LinearAgentSkillSetupPrompt,
   _linearAgentSkillSetupPromptInternalsForTests
@@ -56,13 +56,6 @@ vi.mock('@/hooks/useInstalledAgentSkills', async (importOriginal) => ({
   useInstalledAgentSkillNames: mocks.useInstalledAgentSkillNames
 }))
 
-vi.mock('../settings/CliSkillRuntimeSetup', () => ({
-  buildSkillCommandForRuntime: (
-    command: string,
-    _runtime: { runtime: string; wslDistro?: string | null }
-  ) => command
-}))
-
 vi.mock('../settings/AgentSkillSetupPanel', () => ({
   AgentSkillSetupPanel: (props: Record<string, unknown> & { children?: ReactNode }) => {
     mocks.panelProps.push(props)
@@ -70,7 +63,7 @@ vi.mock('../settings/AgentSkillSetupPanel', () => ({
       <section data-testid="linear-skill-inline-panel">
         <h2>{String(props.title)}</h2>
         <p>{String(props.description)}</p>
-        <code>{String(props.command)}</code>
+        <code>{String(props.skillNames)}</code>
         <button
           type="button"
           onClick={() => {
@@ -349,12 +342,12 @@ describe('LinearAgentSkillSetupPrompt', () => {
     })
     await settleRender()
 
-    expect(document.body.textContent).toContain('orca skills install')
+    expect(document.body.textContent).toContain('orca-linear')
     expect(mocks.panelProps.at(-1)).toEqual(
       expect.objectContaining({
-        installedCommand: 'orca skills install --skill orca-linear',
-        terminalShellOverride: 'powershell.exe',
-        terminalRuntime: expect.objectContaining({ runtime: 'wsl', wslDistro: 'Fedora' })
+        skillNames: ['orca-linear'],
+        installedSkillNames: ['orca-linear'],
+        agentRuntime: expect.objectContaining({ runtime: 'wsl', wslDistro: 'Fedora' })
       })
     )
     expect(mocks.panelProps.at(-1)?.getPrerequisiteStatus).toBeUndefined()
@@ -717,8 +710,8 @@ describe('LinearAgentSkillSetupPrompt', () => {
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await settleRender()
-    expect(mocks.panelProps.at(-1)?.command).toContain('orca skills install')
-    expect(mocks.panelProps.at(-1)?.terminalRuntime).toEqual(
+    expect(mocks.panelProps.at(-1)?.skillNames).toEqual(['orca-linear'])
+    expect(mocks.panelProps.at(-1)?.agentRuntime).toEqual(
       expect.objectContaining({ runtime: 'wsl', wslDistro: 'Ubuntu' })
     )
   })

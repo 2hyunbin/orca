@@ -4734,8 +4734,6 @@
           "updatedPartial": "Updated {{value0}} of {{value1}} skills",
           "errorTitle": "The update didn't finish",
           "retry": "Retry",
-          "copyCommand": "Copy command",
-          "copied": "Copied",
           "showLog": "Show log",
           "updating": "Updating…",
           "updateActionOne": "Update 1 skill",
@@ -6152,7 +6150,6 @@
         },
         "LinearAgentSkillSetupPrompt": {
           "modalTitle": "Linear 티켓 접근 활성화",
-          "modalDescription": "terminal에서 Linear 스킬을 설치합니다.",
           "modalPrompt": "agents가 첨부된 Linear 티켓을 읽고 편집할 수 있게 합니다.",
           "dontShowAgain": "다시 표시하지 않음",
           "missingBoth": "Orca CLI와 Linear agent 스킬이 없습니다.",
@@ -6178,7 +6175,8 @@
           "toastMissingSkill": "Linear 스킬이 없습니다",
           "toastInstallSkillDescription": "Linear 스킬을 설치하여 agents가 Orca CLI를 통해 Linear 작업을 읽고 편집할 수 있게 하세요.",
           "toastRemoteDescription": "{{value0}} 원격 agent 환경에는 자체 설정이 필요할 수 있습니다.",
-          "toastWslDescription": "{{value0}} 이 설정은 선택한 WSL agent 런타임에서 실행됩니다."
+          "toastWslDescription": "{{value0}} 이 설정은 선택한 WSL agent 런타임에서 실행됩니다.",
+          "modalInstallDescription": "에이전트용 Linear 스킬을 설치합니다."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "프로젝트에 연결하지 못했습니다.",
@@ -6831,7 +6829,6 @@
         },
         "AgentSkillSetupPanel": {
           "0b810ec59f": "Enter를 눌러 명령을 실행하세요.",
-          "ed197f59a2": "명령 복사",
           "817d3f9f18": "명령 복사",
           "5289300939": "설치되지 않음",
           "9fcebceb2a": "설치됨",
@@ -6839,17 +6836,12 @@
           "c689392435": "재확인",
           "a31e2aa302": "명령 복사 실패.",
           "378ad26865": "명령 복사됨.",
-          "copiedCommand": "명령 복사됨.",
-          "failedToCopyCommand": "명령 복사 실패.",
-          "copyCommandAria": "명령 복사",
           "runCommandDescription": "Enter를 눌러 명령을 실행하세요.",
-          "5f818f12ab": "준비 중...",
-          "4c05b9d7cb": "설정 터미널을 준비하고 있습니다.",
           "installLabel": "설치",
           "updateLabel": "업데이트",
-          "setupCommandFailed": "설정 명령이 {{value0}} 코드로 종료되었습니다. 이 오류는 재시도에 성공하면 사라집니다.",
           "setupFailed": "설정 실패",
-          "retrySetup": "다시 시도"
+          "retrySetup": "다시 시도",
+          "installing": "설치 중..."
         },
         "AgentsPane": {
           "d83834f5e6": "설치된 에이전트 감지 중…",
@@ -7887,8 +7879,6 @@
         "OrchestrationPane": {
           "52e0634e2c": "핸드오프, 작업 트리 핸드오버, 순차 또는 병렬 하위 에이전트 작업에 오케스트레이션을 사용하도록 조율 에이전트에게 요청하세요.",
           "ae79504732": "사용 방법",
-          "7bc082f4de": "설치 명령 복사",
-          "832f1f3ee6": "사용 중인 터미널에서 직접 설치하시겠어요?",
           "9bedd2a6e5": "에이전트가 Orca를 통해 컨텍스트를 인계하고 작업을 조율할 수 있습니다.",
           "07641b9768": "오케스트레이션 스킬",
           "2aacdb0517": "핸드오프, 작업 트리 핸드오버, 하위 에이전트 작업 전반에 걸쳐 코딩 에이전트를 조율합니다.",
@@ -7910,15 +7900,6 @@
           "fullCoverage_other": "감지된 {{value0}}개 에이전트 모두에 스킬이 설치되어 있습니다.",
           "noCoverage": "위의 스킬을 설치한 후 다시 확인해 보세요.",
           "partialCoverage": "감지된 {{value1}}개 에이전트 중 {{value0}}개에 스킬이 설치되어 있습니다."
-        },
-        "OrchestrationSkillPromptDialog": {
-          "f08d45293d": "명령 복사",
-          "35550f3b3b": "완료",
-          "1bdce1911e": "오케스트레이션 스킬 설치 명령 복사",
-          "b99f375eb2": "에이전트용 오케스트레이션 스킬을 설치하려면 터미널에서 이 명령을 실행하세요.",
-          "2914abcfa2": "오케스트레이션 스킬 설치",
-          "d3dc559225": "설치 명령을 복사하지 못했습니다.",
-          "239bf9132b": "설치 명령을 복사했습니다."
         },
         "PrivacyDiagnosticBundleControls": {
           "dc8404a930": "진단 파일 만들기",
@@ -11495,16 +11476,12 @@
             "skill": {
               "install": {
                 "cta": {
-                  "copiedCommand": "명령이 복사되었습니다.",
-                  "copyFailed": "명령 복사 실패.",
                   "skillLabel": "에이전트 스킬:",
                   "checking": "확인 중...",
                   "installed": "설치됨",
                   "notInstalled": "설치되지 않음",
                   "recheck": "다시 확인",
-                  "installedDescription": "에이전트 스킬이 설치되었습니다. 업데이트하려면 다음을 실행하세요:",
-                  "description": "에이전트가 Linear 작업을 읽고 편집할 수 있도록 합니다. 전체 가이드 설정(연결 + 스킬 + 표시)은 설정 → 작업 소스에 있습니다.",
-                  "copyCommand": "명령 복사"
+                  "description": "에이전트가 Linear 작업을 읽고 편집할 수 있도록 합니다. 전체 가이드 설정(연결 + 스킬 + 표시)은 설정 → 작업 소스에 있습니다."
                 }
               },
               "search": {
@@ -14198,8 +14175,7 @@
         },
         "FeatureSetupInlineTerminal": {
           "47fc6cc6dc": "스킬 설정 명령어",
-          "c767ab7061": "스킬 설정",
-          "pressEnterToRun": "Enter를 눌러 명령을 실행합니다. 나중에 설정에서 설정할 수도 있습니다."
+          "c767ab7061": "스킬 설정"
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea 및 Jira는 설정 > 연동에 있습니다.",
@@ -14744,7 +14720,6 @@
             "c61c91e642": "agents가 Orca를 통해 조정하여 대규모 다단계 작업을 완료할 수 있도록 하세요.",
             "ac07f8887f": "Agent 오케스트레이션",
             "e9eb197e12": "열린 컴퓨터 사용 권한",
-            "3a59452a67": "리뷰를 위해 스킬 명령을 아래에 복사하여 삽입했습니다.",
             "c605f51f2b": "기능 설정 준비 완료",
             "1aa657d8f4": "일부 기능 설정에 주의가 필요합니다.",
             "allInstalled": "모든 스킬 설치됨",
@@ -15100,7 +15075,6 @@
             "c9728107c5": "사용해 보기",
             "25dd101f15": "브라우저 설정에 주의가 필요합니다",
             "e02b11e6b0": "브라우저 설정이 준비되었습니다",
-            "d6d15077df": "리뷰를 위해 스킬 명령을 아래에 복사하여 삽입했습니다.",
             "78e65f19d9": "브라우저 설정에 실패했습니다",
             "b7345c18db": "예기치 않은 오류가 발생했습니다.",
             "5f97caf76b": "설치 중…"
@@ -15146,13 +15120,8 @@
             "22e62f3bab": "Claude Code 세션이 시작되었습니다."
           },
           "CliSkillSetupTerminal": {
-            "1953e90447": "Enter를 눌러 agents 용 Orca CLI 오케스트레이션 스킬을 설치하세요.",
             "43b60ec5c3": "Orca CLI 및 오케스트레이션 스킬 설치 terminal",
-            "84e9576dac": "스킬 설정",
-            "5c3aee22c0": "명령 복사",
-            "5eca672aac": "스킬 설치 명령어 복사",
-            "6ff813fc1d": "스킬 명령어 복사에 실패했습니다.",
-            "b8ad063571": "스킬 설치 명령어를 복사했습니다."
+            "84e9576dac": "스킬 설정"
           },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "설정 → 바로가기",
@@ -15180,6 +15149,9 @@
             "d20ccf1e61": "완료",
             "379d776971": "입력 중",
             "0418f9becc": "열림"
+          },
+          "CliSkillSetupPanel": {
+            "description": "에이전트용 Orca CLI 및 오케스트레이션 스킬을 설치합니다."
           }
         }
       },

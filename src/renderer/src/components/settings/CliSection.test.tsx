@@ -7,12 +7,11 @@ import { getDefaultSettings } from '../../../../shared/constants'
 import { CliSection } from './CliSection'
 
 type CapturedPanelProps = {
-  command: string
-  installedCommand: string
-  terminalRuntime?: { runtime: 'host' | 'wsl'; wslDistro?: string | null; label: string }
+  skillNames: readonly string[]
+  installedSkillNames?: readonly string[]
+  agentRuntime?: { runtime: 'host' | 'wsl'; wslDistro?: string | null; label: string }
   freshnessSkillName?: string
-  getPrerequisiteStatus?: () => Promise<unknown>
-  onBeforeOpenTerminal?: () => Promise<void>
+  onBeforeInstall?: () => Promise<void>
 }
 
 const capturedPanel = vi.hoisted(
@@ -135,16 +134,15 @@ describe('CliSection project runtime defaults', () => {
         sourceKinds: ['global']
       })
     )
-    expect(capturedPanel.props?.command).toBe('orca-ide skills install --skill orca-cli')
-    // `skills install` re-copies, so the panel reuses the install command as its update.
-    expect(capturedPanel.props?.installedCommand).toBeUndefined()
-    expect(capturedPanel.props?.terminalRuntime).toEqual({
+    expect(capturedPanel.props?.skillNames).toEqual(['orca-cli'])
+    // An install re-copies, so the panel reuses the install names as its update.
+    expect(capturedPanel.props?.installedSkillNames).toBeUndefined()
+    expect(capturedPanel.props?.agentRuntime).toEqual({
       runtime: 'wsl',
       wslDistro: 'Ubuntu',
       label: 'WSL Ubuntu'
     })
-    expect(capturedPanel.props?.getPrerequisiteStatus).toBeUndefined()
-    expect(capturedPanel.props?.onBeforeOpenTerminal).toBeUndefined()
+    expect(capturedPanel.props?.onBeforeInstall).toBeUndefined()
     expect(getWslInstallStatus).not.toHaveBeenCalled()
   })
 

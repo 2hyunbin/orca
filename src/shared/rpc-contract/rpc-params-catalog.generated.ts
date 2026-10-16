@@ -18,6 +18,7 @@ import {
   BrowserNetworkTunnelAttachParams
 } from '../browser-client-host-protocol'
 import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata-protocol'
+import { BundledOrcaSkillInstallRequestSchema } from '../bundled-orca-skill-install-contract'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
@@ -1230,6 +1231,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'skills.getInstallProgress': SkillsGetInstallProgressParams,
   'skills.install': SkillInstallRequestSchema,
   'skills.installBundle': SkillBundleInstallRequestSchema,
+  'skills.installBundledOrca': BundledOrcaSkillInstallRequestSchema,
   'skills.listManagedInstalls': null,
   'skills.previewDelete': SkillDeleteRequestSchema,
   'skills.previewInstall': SkillInstallPreviewRequestSchema,

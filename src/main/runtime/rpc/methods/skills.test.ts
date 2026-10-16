@@ -156,6 +156,18 @@ describe('skills.install RPC', () => {
     expect(installSharedSkillBundleRequest).toHaveBeenCalledWith(request, undefined)
   })
 
+  it('installs Orca bundled skills on the executing runtime', async () => {
+    const installBundledOrcaSkills = vi.fn(async () => [])
+    const request = { names: ['orchestration'] }
+
+    await method('skills.installBundledOrca').handler(
+      request,
+      Object.assign(makeContext({}), { runtime: { installBundledOrcaSkills } })
+    )
+
+    expect(installBundledOrcaSkills).toHaveBeenCalledWith(['orchestration'], undefined, request)
+  })
+
   it('delegates installation to the executing runtime service', async () => {
     const installSharedSkillRequest = vi.fn(async () => ({ status: 'installed' }))
     const runtime = {

@@ -20,6 +20,10 @@ export const SKILL_DELETE_CAPABILITY = 'skills.delete.v1' as const
 export const SKILL_DELETE_UPDATE_REQUIRED_MESSAGE =
   'Update Orca on the selected machine to delete skills.'
 
+/** Why capability-gated: `skills.installBundledOrca` is a new method, and clients fall back
+ *  to the terminal install on a host that predates it. */
+export const BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY = 'skills.install.bundled-orca.v1' as const
+
 export const SKILL_RUNTIME_CAPABILITIES = [
   SKILL_INSTALL_CAPABILITY,
   SKILL_BUNDLE_INSTALL_CAPABILITY,
@@ -29,5 +33,6 @@ export const SKILL_RUNTIME_CAPABILITIES = [
   SKILL_UPLOAD_CAPABILITY,
   SKILL_MANAGEMENT_CAPABILITY,
   SKILL_INSTALL_PROVIDERS_CAPABILITY,
-  SKILL_DELETE_CAPABILITY
+  SKILL_DELETE_CAPABILITY,
+  BUNDLED_ORCA_SKILL_INSTALL_CAPABILITY
 ] as const

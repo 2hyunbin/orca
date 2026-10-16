@@ -26,6 +26,7 @@ import {
   discoverSkillsOnTarget,
   resolveSkillDiscoveryTarget
 } from '../../../skills/skill-discovery-target'
+import { BundledOrcaSkillInstallRequestSchema } from '../../../../shared/bundled-orca-skill-install-contract'
 import { SKILL_INSTALL_RESULT_V2_CAPABILITY } from '../../../../shared/skill-install-capability'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import {
@@ -154,6 +155,13 @@ export const SKILL_METHODS = [
     params: SkillBundleInstallRequestSchema,
     handler: (params, { runtime, signal }) =>
       runtime.installSharedSkillBundleRequest(params, signal)
+  }),
+  defineMethod({
+    name: 'skills.installBundledOrca',
+    permission: 'skills-admin',
+    params: BundledOrcaSkillInstallRequestSchema,
+    handler: (params, { runtime, signal }) =>
+      runtime.installBundledOrcaSkills(params.names, signal, params)
   }),
   defineMethod({
     name: 'skills.cancelInstall',

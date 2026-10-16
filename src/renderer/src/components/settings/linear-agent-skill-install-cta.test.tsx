@@ -16,9 +16,7 @@ const mocks = vi.hoisted(() => ({
     refresh: vi.fn(async () => true)
   },
   useInstalledAgentSkillNames: vi.fn(),
-  clipboardWrite: vi.fn(async () => {}),
-  toastSuccess: vi.fn(),
-  toastError: vi.fn()
+  install: vi.fn()
 }))
 
 vi.mock('@/hooks/useInstalledAgentSkills', async (importOriginal) => ({
@@ -26,12 +24,12 @@ vi.mock('@/hooks/useInstalledAgentSkills', async (importOriginal) => ({
   useInstalledAgentSkillNames: mocks.useInstalledAgentSkillNames
 }))
 
-vi.mock('./CliSkillRuntimeSetup', () => ({
-  buildSkillCommandForRuntime: (command: string) => command
+vi.mock('@/runtime/runtime-skills-client', () => ({
+  installBundledOrcaSkillsOnRuntimeTarget: mocks.install
 }))
 
-vi.mock('sonner', () => ({
-  toast: { success: mocks.toastSuccess, error: mocks.toastError }
+vi.mock('@/hooks/use-active-skill-discovery-runtime-target', () => ({
+  useActiveSkillDiscoveryRuntimeTarget: () => ({ kind: 'local' })
 }))
 
 let root: Root | null = null
@@ -85,13 +83,8 @@ describe('LinearAgentSkillInstallCta', () => {
     mocks.skillState.refresh.mockClear()
     mocks.useInstalledAgentSkillNames.mockReset()
     mocks.useInstalledAgentSkillNames.mockReturnValue(mocks.skillState)
-    mocks.clipboardWrite.mockClear()
-    mocks.toastSuccess.mockClear()
-    mocks.toastError.mockClear()
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: { ui: { writeClipboardText: mocks.clipboardWrite } }
-    })
+    mocks.install.mockReset()
+    mocks.install.mockResolvedValue({ kind: 'installed', results: [] })
   })
 
   afterEach(async () => {
@@ -103,10 +96,9 @@ describe('LinearAgentSkillInstallCta', () => {
     root = null
     container?.remove()
     container = null
-    Reflect.deleteProperty(window, 'api')
   })
 
-  it('shows the install command and explanation when the skill is missing', async () => {
+  it('offers Install and the explanation when the skill is missing', async () => {
     const rendered = await renderCta()
 
     expect(rendered.textContent).toContain('Agent skill:')
@@ -115,31 +107,31 @@ describe('LinearAgentSkillInstallCta', () => {
     expect(rendered.textContent).toContain(
       'Full guided setup (connect + skill + visibility) is under Settings → Task Sources.'
     )
-    expect(rendered.textContent).toContain('orca skills install --skill orca-linear')
+    expect(rendered.textContent).toContain('Install skill')
+    expect(rendered.textContent).not.toContain('Copy command')
   })
 
-  it('copies the install command to the clipboard', async () => {
+  it('installs the skill directly and re-checks it', async () => {
     const rendered = await renderCta()
 
     await act(async () => {
-      rendered
-        .querySelector<HTMLButtonElement>('button[aria-label="Copy command"]')
+      Array.from(rendered.querySelectorAll('button'))
+        .find((button) => button.textContent === 'Install skill')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(mocks.clipboardWrite).toHaveBeenCalledWith('orca skills install --skill orca-linear')
-    expect(mocks.toastSuccess).toHaveBeenCalled()
+    expect(mocks.install).toHaveBeenCalledWith({ kind: 'local' }, { names: ['orca-linear'] })
+    expect(mocks.skillState.refresh).toHaveBeenCalled()
   })
 
-  it('shows a subtle confirmation and the update command when installed', async () => {
+  it('shows a subtle confirmation and Update when installed', async () => {
     mocks.skillState.installed = true
     mocks.skillState.skills = [discoveredSkill({ name: 'orca-linear' })]
 
     const rendered = await renderCta()
 
     expect(rendered.textContent).toContain('Installed')
-    expect(rendered.textContent).toContain('Agent skill installed. To update it, run:')
-    expect(rendered.textContent).toContain('orca skills install --skill orca-linear')
+    expect(rendered.textContent).toContain('Update')
     expect(rendered.textContent).not.toContain('Not installed')
   })
 
@@ -155,7 +147,13 @@ describe('LinearAgentSkillInstallCta', () => {
 
     const rendered = await renderCta()
 
-    expect(rendered.textContent).toContain('orca skills install --skill linear-tickets')
+    await act(async () => {
+      Array.from(rendered.querySelectorAll('button'))
+        .find((button) => button.textContent === 'Update')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mocks.install).toHaveBeenCalledWith({ kind: 'local' }, { names: ['linear-tickets'] })
   })
 
   it('notes that remote agent environments need their own setup', async () => {

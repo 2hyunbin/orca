@@ -4734,8 +4734,6 @@
           "updatedPartial": "{{value1}} 件中 {{value0}} 件のスキルを更新しました",
           "errorTitle": "更新が完了しませんでした",
           "retry": "再試行",
-          "copyCommand": "コマンドをコピー",
-          "copied": "コピーしました",
           "showLog": "ログを表示",
           "updating": "Updating…",
           "updateActionOne": "1 件のスキルを更新",
@@ -6152,7 +6150,6 @@
         },
         "LinearAgentSkillSetupPrompt": {
           "modalTitle": "Linear チケットアクセスを有効にする",
-          "modalDescription": "ターミナルから Linear スキルをインストールします。",
           "modalPrompt": "Agent が添付された Linear チケットを読み書きできるようにします。",
           "dontShowAgain": "今後表示しない",
           "missingBoth": "Orca CLI と Linear Agent スキルがありません。",
@@ -6178,7 +6175,8 @@
           "toastMissingSkill": "Linear スキルがありません",
           "toastInstallSkillDescription": "Linear スキルをインストールして、Agent が Orca CLI を通じて Linear タスクを読み書きできるようにします。",
           "toastRemoteDescription": "{{value0}} リモート Agent 環境では独自の設定が必要な場合があります。",
-          "toastWslDescription": "{{value0}} この設定は選択した WSL Agent ランタイムで実行されます。"
+          "toastWslDescription": "{{value0}} この設定は選択した WSL Agent ランタイムで実行されます。",
+          "modalInstallDescription": "Agent 用に Linear スキルをインストールします。"
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "プロジェクトへの接続に失敗しました。",
@@ -6831,7 +6829,6 @@
         },
         "AgentSkillSetupPanel": {
           "0b810ec59f": "Enter を押してコマンドを実行します。",
-          "ed197f59a2": "コマンドをコピー",
           "817d3f9f18": "コマンドをコピー",
           "5289300939": "未インストール",
           "9fcebceb2a": "インストール済み",
@@ -6839,17 +6836,12 @@
           "c689392435": "再確認",
           "a31e2aa302": "コマンドのコピーに失敗しました。",
           "378ad26865": "コマンドをコピーしました。",
-          "copiedCommand": "コマンドをコピーしました。",
-          "failedToCopyCommand": "コマンドのコピーに失敗しました。",
-          "copyCommandAria": "コマンドをコピー",
           "runCommandDescription": "Enter を押してコマンドを実行します。",
-          "5f818f12ab": "準備中…",
-          "4c05b9d7cb": "セットアップ用ターミナルを準備しています。",
           "installLabel": "インストール",
           "updateLabel": "更新",
-          "setupCommandFailed": "セットアップコマンドはコード {{value0}} で終了しました。このエラーは再試行が成功すると解消されます。",
           "setupFailed": "セットアップに失敗しました",
-          "retrySetup": "再試行"
+          "retrySetup": "再試行",
+          "installing": "インストール中..."
         },
         "AgentsPane": {
           "d83834f5e6": "インストールされている Agent を検出しています…",
@@ -7924,8 +7916,6 @@
         "OrchestrationPane": {
           "52e0634e2c": "コーディネーター Agent に、ハンドオフ、ワークツリーハンドオーバー、および順次または並列の子 Agent にオーケストレーションを使用するように依頼します。",
           "ae79504732": "使い方",
-          "7bc082f4de": "インストールコマンドのコピー",
-          "832f1f3ee6": "独自のターミナルをご希望ですか?",
           "9bedd2a6e5": "Agent がコンテキストを引き継ぎ、Orca を通じて作業を調整できるようにします。",
           "07641b9768": "オーケストレーションスキル",
           "2aacdb0517": "ハンドオフ、ワークツリーのハンドオーバー、および子 Agent の作業全体にわたってコーディング Agent を調整します。",
@@ -7947,15 +7937,6 @@
           "fullCoverage_other": "検出されたすべての {{value0}} Agent がスキルを持っています。",
           "noCoverage": "上記スキルをインストールして再確認してください。",
           "partialCoverage": "{{value1}} 件中 {{value0}} 件の Agent がスキルを持っていることが検出されました。"
-        },
-        "OrchestrationSkillPromptDialog": {
-          "f08d45293d": "コマンドをコピー",
-          "35550f3b3b": "完了",
-          "1bdce1911e": "オーケストレーションスキルのインストールコマンドのコピー",
-          "b99f375eb2": "ターミナルでこのコマンドを実行して、Agent のオーケストレーションスキルをインストールします。",
-          "2914abcfa2": "オーケストレーションスキルをインストールする",
-          "d3dc559225": "インストールコマンドのコピーに失敗しました。",
-          "239bf9132b": "インストールコマンドをコピーしました。"
         },
         "PrivacyDiagnosticBundleControls": {
           "dc8404a930": "診断ファイルを作成",
@@ -11495,16 +11476,12 @@
             "skill": {
               "install": {
                 "cta": {
-                  "copiedCommand": "コマンドをコピーしました。",
-                  "copyFailed": "コマンドのコピーに失敗しました。",
                   "skillLabel": "Agent スキル：",
                   "checking": "確認中…",
                   "installed": "インストール済み",
                   "notInstalled": "未インストール",
                   "recheck": "再確認",
-                  "installedDescription": "Agent スキルがインストールされました。更新するには以下を実行してください：",
-                  "description": "Agent が Linear の課題を読み書きできるようにします。接続、スキル、表示設定を含むガイドは、設定 → タスクソースにあります。",
-                  "copyCommand": "コマンドをコピー"
+                  "description": "Agent が Linear の課題を読み書きできるようにします。接続、スキル、表示設定を含むガイドは、設定 → タスクソースにあります。"
                 }
               },
               "search": {
@@ -14198,8 +14175,7 @@
         },
         "FeatureSetupInlineTerminal": {
           "47fc6cc6dc": "スキルセットアップコマンド",
-          "c767ab7061": "スキルセットアップ",
-          "pressEnterToRun": "Enter キーを押してコマンドを実行します。これは、後で [設定] で設定することもできます。"
+          "c767ab7061": "スキルセットアップ"
         },
         "IntegrationsStep": {
           "277f30eb34": "Linear、GitLab、Bitbucket、Azure DevOps、Gitea、Jira は [設定] > [連携] にあります。",
@@ -14744,7 +14720,6 @@
             "c61c91e642": "Agent が Orca を通じて調整し、大規模な複数ステップのタスクを完了まで進められるようにします。",
             "ac07f8887f": "Agent オーケストレーション",
             "e9eb197e12": "開かれたコンピュータ操作許可",
-            "3a59452a67": "スキルコマンドをコピーし、確認用に以下へ挿入しました。",
             "c605f51f2b": "機能セットアップの準備完了",
             "1aa657d8f4": "一部の機能の設定には注意が必要です",
             "allInstalled": "すべてのスキルがインストール済み",
@@ -15100,7 +15075,6 @@
             "c9728107c5": "試してみる",
             "25dd101f15": "ブラウザのセットアップに注意が必要です",
             "e02b11e6b0": "ブラウザのセットアップが完了しました",
-            "d6d15077df": "スキルコマンドをコピーし、確認用に以下へ挿入しました。",
             "78e65f19d9": "ブラウザのセットアップに失敗しました",
             "b7345c18db": "予期しないエラーが発生しました。",
             "5f97caf76b": "インストール中…"
@@ -15146,13 +15120,8 @@
             "22e62f3bab": "Claude Code セッションが開始されました"
           },
           "CliSkillSetupTerminal": {
-            "1953e90447": "Enter を押して、Agent に Orca CLI オーケストレーションスキルをインストールします。",
             "43b60ec5c3": "Orca CLI およびオーケストレーションスキルのインストールターミナル",
-            "84e9576dac": "スキルセットアップ",
-            "5c3aee22c0": "コマンドをコピー",
-            "5eca672aac": "スキルインストールコマンドのコピー",
-            "6ff813fc1d": "スキルコマンドのコピーに失敗しました。",
-            "b8ad063571": "スキルインストールコマンドをコピーしました。"
+            "84e9576dac": "スキルセットアップ"
           },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "設定→ショートカット",
@@ -15180,6 +15149,9 @@
             "d20ccf1e61": "完了",
             "379d776971": "タイピング",
             "0418f9becc": "開く"
+          },
+          "CliSkillSetupPanel": {
+            "description": "Agent 用に Orca CLI とオーケストレーションのスキルをインストールします。"
           }
         }
       },

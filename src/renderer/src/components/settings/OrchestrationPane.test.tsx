@@ -12,10 +12,7 @@ import { OrchestrationPane } from './OrchestrationPane'
 import { getOrchestrationPaneSearchEntries } from './orchestration-search'
 import { matchesSettingsSearch } from './settings-search'
 
-const INSTALL_COMMAND = 'orca skills install --skill orchestration'
-
 const mocks = vi.hoisted(() => ({
-  dialogProps: [] as Record<string, unknown>[],
   panelProps: [] as Record<string, unknown>[],
   skillInstalled: true,
   updateSettings: vi.fn()
@@ -38,17 +35,6 @@ vi.mock('./AgentSkillSetupPanel', () => ({
         {props.footer}
       </section>
     )
-  }
-}))
-
-vi.mock('./OrchestrationSkillPromptDialog', () => ({
-  OrchestrationSkillPromptDialog: (props: Record<string, unknown>) => {
-    mocks.dialogProps.push(props)
-    return props.open ? (
-      <div data-testid="orchestration-skill-prompt-dialog">
-        <code>{String(props.command)}</code>
-      </div>
-    ) : null
   }
 }))
 
@@ -159,7 +145,6 @@ describe('OrchestrationPane', () => {
     root = null
     container?.remove()
     container = null
-    mocks.dialogProps.length = 0
     mocks.panelProps.length = 0
     mocks.skillInstalled = true
     mocks.updateSettings.mockReset()
@@ -251,47 +236,15 @@ describe('OrchestrationPane', () => {
     ).toBe(false)
   })
 
-  it('passes the install command, which also updates, without a manual-copy path', async () => {
-    const rendered = await renderPane()
-
-    expect(mocks.panelProps.at(-1)).toEqual(expect.objectContaining({ command: INSTALL_COMMAND }))
-    expect(mocks.panelProps.at(-1)?.installedCommand).toBeUndefined()
-
-    expect(rendered.textContent).not.toContain('Prefer your own terminal?')
-    expect(rendered.textContent).not.toContain('Copy update command')
-    expect(rendered.textContent).not.toContain('Copy install command')
-    expect(mocks.dialogProps).not.toContainEqual(expect.objectContaining({ mode: 'update' }))
-    expect(mocks.dialogProps).not.toContainEqual(
-      expect.objectContaining({
-        command: INSTALL_COMMAND,
-        open: true
-      })
-    )
-  })
-
-  it('keeps first-time manual copy on the install command', async () => {
+  it('installs the orchestration skill, which also updates, with no manual-copy path', async () => {
     mocks.skillInstalled = false
     const rendered = await renderPane()
 
-    expect(rendered.textContent).toContain('Prefer your own terminal?')
-    expect(rendered.textContent).toContain('Copy install command')
-    expect(rendered.textContent).not.toContain('Copy update command')
-
-    const copyButton = Array.from(rendered.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Copy install command'
+    expect(mocks.panelProps.at(-1)).toEqual(
+      expect.objectContaining({ skillNames: ['orchestration'] })
     )
-    expect(copyButton).toBeDefined()
-
-    await act(async () => {
-      copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(mocks.dialogProps.at(-1)).toEqual(
-      expect.objectContaining({
-        command: INSTALL_COMMAND,
-        open: true
-      })
-    )
-    expect(rendered.textContent).toContain(INSTALL_COMMAND)
+    expect(mocks.panelProps.at(-1)?.installedSkillNames).toBeUndefined()
+    expect(rendered.textContent).not.toContain('Prefer your own terminal?')
+    expect(rendered.textContent).not.toContain('Copy install command')
   })
 })

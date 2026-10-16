@@ -1,8 +1,6 @@
 import { useAppStore } from '@/store'
-import { ORCA_CLI_SKILL_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
-import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { AgentSkillSetupPanel } from '../settings/AgentSkillSetupPanel'
-import { buildSkillCommandForRuntime } from '../settings/CliSkillRuntimeSetup'
 import type { useMobileEmulatorAgentSetupState } from './use-mobile-emulator-agent-setup-state'
 import { translate } from '@/i18n/i18n'
 
@@ -16,10 +14,6 @@ export function MobileEmulatorAgentSetupGuideSteps({
   worktreeId
 }: MobileEmulatorAgentSetupGuideStepsProps): React.JSX.Element {
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
-  const activeSkillRuntime = useActiveProjectSkillRuntime()
-  // Why: skill detection here scans the local host only, so keep building host
-  // commands; routing them to a WSL runtime would install where we never look.
-  const skillInstallCommand = buildSkillCommandForRuntime(ORCA_CLI_SKILL_INSTALL_COMMAND)
   const terminalWorktreeId = `mobile-emulator-${worktreeId}-orca-cli-skill-terminal`
 
   return (
@@ -42,7 +36,8 @@ export function MobileEmulatorAgentSetupGuideSteps({
           'auto.components.emulator.pane.MobileEmulatorAgentSetupGuideSteps.64fb057667',
           'Teaches agents the orca emulator commands for this worktree.'
         )}
-        command={skillInstallCommand}
+        // Why no agentRuntime: detection here scans the host, so a WSL install would land unseen.
+        skillNames={[ORCA_CLI_SKILL_NAME]}
         terminalTitle={translate(
           'auto.components.emulator.pane.MobileEmulatorAgentSetupGuideSteps.5c59ea96ca',
           'Mobile emulator Orca CLI skill setup'
@@ -52,13 +47,12 @@ export function MobileEmulatorAgentSetupGuideSteps({
           'Mobile emulator Orca CLI skill install terminal'
         )}
         terminalWorktreeId={terminalWorktreeId}
-        terminalShellOverride={activeSkillRuntime.terminalShellOverride}
         installed={setup.cliSkillInstalled}
         loading={setup.cliSkillLoading || setup.setupRechecking}
         error={setup.cliSkillError}
         showInstallWhenInstalled={!setup.cliSkillInstalled}
         terminalHeightPx={112}
-        onBeforeOpenTerminal={() => {
+        onBeforeInstall={() => {
           recordFeatureInteraction('mobile-emulator-agent-setup')
         }}
         onRecheck={() => {

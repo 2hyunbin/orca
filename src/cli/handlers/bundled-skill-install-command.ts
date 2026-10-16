@@ -24,7 +24,7 @@ import {
 import {
   describeBundledSkillInstallResult,
   describeSkillConflictReason
-} from '../../main/skills/bundled-orca-skill-install-report'
+} from '../../shared/bundled-orca-skill-install-report'
 import { resolveEnvironmentSkillProviderRoots } from '../../main/skills/skill-provider-runtime-roots'
 
 export type SkillMutationVerb = 'install' | 'update'

@@ -2,10 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { applyDocumentTheme } from '@/lib/document-theme'
 import { useSettingsNavigationMetadata } from '@/hooks/useSettingsNavigationMetadata'
 import type { SettingsNavInstallStatus } from '@/lib/settings-navigation-types'
-import {
-  COMPUTER_USE_SKILL_NAME,
-  ORCHESTRATION_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+import { COMPUTER_USE_SKILL_NAME, ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import {
   getAgentSkillNavInstallStatus,
   getLinearAgentSkillNavInstallStatus

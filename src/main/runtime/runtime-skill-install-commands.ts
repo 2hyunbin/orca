@@ -6,6 +6,12 @@ import { executeSkillBundleInstallRequest } from '../skills/skill-bundle-install
 import { SkillUploadSessionService } from '../skills/skill-upload-session-service'
 import { SKILL_UPLOAD_STAGING_ROOT_NAME } from '../skills/skill-upload-staging-ownership'
 import { installBundledOrcaSkills } from '../skills/bundled-orca-skill-install'
+import { resolveSkillInstallDestination } from '../skills/skill-install-destinations'
+import { detectSkillProvidersInWsl } from '../skills/skill-wsl-provider-detection'
+import { createWslSkillInstallFilesystem } from '../skills/skill-wsl-install-filesystem'
+import { readSkillLockSources } from '../skills/skill-lock-sources'
+import { getDefaultWslDistro } from '../wsl'
+import type { BundledOrcaSkillInstallRequest } from '../../shared/bundled-orca-skill-install-contract'
 import type {
   SkillBundleInstallProgress,
   SkillBundleInstallRequest,
@@ -166,12 +172,16 @@ export class RuntimeSkillInstallCommands {
       this.progress.delete(request.operationId)
     }
   }
-  // Why this host's global homes only: they are what the freshness inventory scans.
+  // Why global homes only: agents load Orca's skills from there, and the freshness inventory scans them.
   async installBundledOrcaSkills(
     names: readonly string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    target: Pick<BundledOrcaSkillInstallRequest, 'wsl'> = {}
   ): Promise<SkillInstallResult[]> {
     await this.host.skillTransactionRecovery
+    if (target.wsl) {
+      return this.installBundledOrcaSkillsInWsl(names, target.wsl.distro, signal)
+    }
     const homeDirectory = homedir()
     const runtimeId = this.host.getRuntimeId()
     return installBundledOrcaSkills(names, {
@@ -182,6 +192,40 @@ export class RuntimeSkillInstallCommands {
       providerRootOverrides: await this.roots({ scope: 'global', homeDirectory }),
       hostIdentity: runtimeId,
       destinationIdentity: `global:${runtimeId}`,
+      signal
+    })
+  }
+  private async installBundledOrcaSkillsInWsl(
+    names: readonly string[],
+    requestedDistro: string | undefined,
+    signal?: AbortSignal
+  ): Promise<SkillInstallResult[]> {
+    const distro = requestedDistro ?? getDefaultWslDistro()
+    if (!distro) {
+      throw new Error('skill-install-wsl-unavailable')
+    }
+    const destination = await resolveSkillInstallDestination(
+      { scope: 'global', executionTarget: { kind: 'wsl', distro } },
+      this.authority()
+    )
+    const providerRootOverrides = await this.roots(destination)
+    return installBundledOrcaSkills(names, {
+      scope: 'global',
+      homeDirectory: destination.homeDirectory,
+      orcaStateDirectory: this.userDataPath(),
+      detectedProviders: await detectSkillProvidersInWsl(distro),
+      providerRootOverrides,
+      hostIdentity: this.host.getRuntimeId(),
+      destinationIdentity: destination.destinationIdentity,
+      filesystem: createWslSkillInstallFilesystem({
+        distro,
+        homeDirectory: destination.homeDirectory,
+        providerRootOverrides
+      }),
+      wslDistro: distro,
+      // Why stateHome null: XDG_STATE_HOME is this process's, not the distro's.
+      readLockSources: () =>
+        readSkillLockSources({ homeDir: destination.homeDirectory, stateHome: null }),
       signal
     })
   }

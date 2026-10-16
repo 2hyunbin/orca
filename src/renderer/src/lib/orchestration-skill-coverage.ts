@@ -1,7 +1,7 @@
 import type { AgentType } from '../../../shared/agent-status-types'
 import type { DiscoveredSkill, SkillDiscoverySource } from '../../../shared/skills'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { getAgentLabel } from '@/lib/agent-catalog'
 import { TUI_AGENT_AUTO_PICK_ORDER } from '../../../shared/tui-agent-selection'
 

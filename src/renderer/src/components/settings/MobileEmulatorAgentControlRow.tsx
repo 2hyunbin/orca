@@ -1,12 +1,8 @@
 import { Import } from 'lucide-react'
-import {
-  ORCA_CLI_SKILL_INSTALL_COMMAND,
-  ORCA_CLI_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { useMobileEmulatorAgentSetupState } from '../emulator-pane/use-mobile-emulator-agent-setup-state'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
-import { buildSkillCommandForRuntime } from './CliSkillRuntimeSetup'
 import { MobileEmulatorExamples } from './MobileEmulatorExamples'
 import { translate } from '@/i18n/i18n'
 
@@ -20,9 +16,6 @@ const EMULATOR_CLI_COMMANDS = [
 export function MobileEmulatorAgentControlRow(): React.JSX.Element {
   const setup = useMobileEmulatorAgentSetupState(true)
   const activeSkillRuntime = useActiveProjectSkillRuntime()
-  // Why: skill detection here scans the local host only, so keep building host
-  // commands; routing them to a WSL runtime would install where we never look.
-  const cliSkillInstallCommand = buildSkillCommandForRuntime(ORCA_CLI_SKILL_INSTALL_COMMAND)
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/30 p-4">
@@ -55,11 +48,11 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
               'auto.components.settings.MobileEmulatorAgentControlRow.d94ca6a623',
               'Enables agents to use Orca CLI commands, including mobile emulator control.'
             )}
-            command={cliSkillInstallCommand}
+            // Why no agentRuntime: detection here scans the host, so a WSL install would land unseen.
+            skillNames={[ORCA_CLI_SKILL_NAME]}
             terminalTitle="Orca CLI skill setup"
             terminalAriaLabel="Orca CLI skill install terminal"
             terminalWorktreeId="settings-mobile-emulator-orca-cli-skill-terminal"
-            terminalShellOverride={activeSkillRuntime.terminalShellOverride}
             installed={setup.cliSkillInstalled}
             loading={setup.cliSkillLoading}
             error={setup.cliSkillError}

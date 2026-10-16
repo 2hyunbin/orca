@@ -10,7 +10,6 @@ import {
 } from '@/lib/local-preflight-context'
 import {
   getProjectAgentSkillRuntime,
-  getProjectAgentSkillTerminalShellOverride,
   getProjectSkillDiscoveryTarget,
   getProjectSkillInstallDisabledReason,
   type ProjectAgentSkillRuntime
@@ -22,7 +21,6 @@ type ActiveProjectSkillRuntime = {
   projectRuntime?: ProjectExecutionRuntimeResolution
   discoveryTarget?: SkillDiscoveryTarget
   agentRuntime?: ProjectAgentSkillRuntime
-  terminalShellOverride?: string
   installDisabledReason: string | null
   canUseLocalSkillFreshness: boolean
 }
@@ -103,20 +101,9 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined)
     if (!projectRuntime) {
-      // Why: buildSkillCommandForRuntime still builds a Windows host command
-      // without a project runtime, so the terminal has to match that shell.
-      const terminalShellOverride = hasLocalSkillRuntimeAuthority(runtimeTarget)
-        ? getProjectAgentSkillTerminalShellOverride(
-            currentPlatform,
-            runtimeState.settings,
-            undefined
-          )
-        : undefined
-      const canUseLocalSkillFreshness = shouldUseLocalSkillFreshness(runtimeTarget)
-      if (!terminalShellOverride && !canUseLocalSkillFreshness) {
-        return EMPTY_ACTIVE_PROJECT_SKILL_RUNTIME
-      }
-      return { installDisabledReason: null, terminalShellOverride, canUseLocalSkillFreshness }
+      return shouldUseLocalSkillFreshness(runtimeTarget)
+        ? { installDisabledReason: null, canUseLocalSkillFreshness: true }
+        : EMPTY_ACTIVE_PROJECT_SKILL_RUNTIME
     }
 
     const agentRuntime = getProjectAgentSkillRuntime(projectRuntime, currentPlatform)
@@ -124,11 +111,6 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       projectRuntime,
       discoveryTarget: getProjectSkillDiscoveryTarget(projectRuntime),
       agentRuntime,
-      terminalShellOverride: getProjectAgentSkillTerminalShellOverride(
-        currentPlatform,
-        runtimeState.settings,
-        agentRuntime
-      ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
       canUseLocalSkillFreshness: shouldUseLocalSkillFreshness(runtimeTarget, agentRuntime)
     }

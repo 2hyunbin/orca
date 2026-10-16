@@ -291,7 +291,7 @@
     "../src/main/sqlite/node-sqlite-reader-api.ts",
     "../src/main/sqlite/node-sqlite-statement.ts",
     "../src/main/win32-utils.ts",
-    "../src/main/skills/bundled-orca-skill-install-report.ts",
+    "../src/shared/bundled-orca-skill-install-report.ts",
     "../src/main/skills/bundled-orca-skill-install.ts",
     "../src/main/skills/bundled-orca-skill-packages.ts",
     "../src/main/skills/bundled-orca-skill-plan.ts",

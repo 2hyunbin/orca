@@ -6,7 +6,7 @@ import type {
   SkillDiscoveryTarget,
   SkillSourceKind
 } from '../../../shared/skills'
-import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { markOrchestrationSetupComplete } from '@/lib/orchestration-setup-state'
 import {
   discoverInstalledAgentSkills,
