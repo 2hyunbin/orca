@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   _resetLayoutFramePositionForTests,
   afterLayoutFrame,
+  beginLayoutFramePositions,
   endLayoutFramePositions,
   layoutFramesFlowing,
   noteLayoutFramePosition
@@ -21,8 +22,17 @@ describe('afterLayoutFrame', () => {
     expect(run).toHaveBeenCalledTimes(2)
   })
 
-  it('waits for a stream not yet open: its first frame, or its end', () => {
+  it('runs at once while the window has opened no stream', () => {
     _resetLayoutFramePositionForTests()
+    const run = vi.fn()
+    afterLayoutFrame(2, run)
+    expect(run).toHaveBeenCalledOnce()
+    expect(layoutFramesFlowing()).toBe(false)
+  })
+
+  it('waits for an opened stream before its first frame: that frame, or its end', () => {
+    _resetLayoutFramePositionForTests()
+    beginLayoutFramePositions()
     const framed = vi.fn()
     afterLayoutFrame(2, framed)
     expect(framed).not.toHaveBeenCalled()
@@ -30,6 +40,7 @@ describe('afterLayoutFrame', () => {
     expect(framed).toHaveBeenCalledOnce()
 
     _resetLayoutFramePositionForTests()
+    beginLayoutFramePositions()
     const ended = vi.fn()
     afterLayoutFrame(2, ended)
     expect(layoutFramesFlowing()).toBe(true)

@@ -185,4 +185,97 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
       }
     }
   )
+
+  it('holds a record that lands while main takes the split back, then writes it', async () => {
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal()
+    )
+    const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
+    const withdrawal = Promise.withResolvers<null>()
+    Reflect.set(runtimeStore, 'applyLayoutCommand', applyLayoutCommand)
+    Reflect.set(
+      runtimeStore,
+      'withdrawTerminalPane',
+      vi.fn(() => withdrawal.promise)
+    )
+    const notifier = createMobileCreateTestNotifier(vi.fn())
+    const splitTerminal = vi.mocked(notifier.splitTerminal)
+    const runtime = new OrcaRuntimeService(runtimeStore)
+    runtime.setNotifier(notifier)
+    runtime.syncWindowGraph(1, graph([HEADLESS_LEAF_ID]))
+    const handle = runtime.getTerminalHandleForPaneKey(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))
+
+    vi.useFakeTimers()
+    try {
+      const split = runtime.splitTerminal(handle!, { direction: 'vertical' })
+      const rejected = expect(split).rejects.toThrow()
+      await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+      const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+      await vi.advanceTimersByTimeAsync(11_000)
+      const record = {
+        type: 'splitPane',
+        workspace: TEST_WORKTREE_ID,
+        tabId: TAB_ID,
+        leafId: HEADLESS_LEAF_ID,
+        direction: 'vertical',
+        newLeafId,
+        mainAsked: true
+      } as const
+
+      const recorded = runtime.applyLayoutCommand(record)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(applyLayoutCommand).not.toHaveBeenCalled()
+
+      withdrawal.resolve(null)
+      await recorded
+      await rejected
+      const { mainAsked: _mainAsked, ...plain } = record
+      expect(applyLayoutCommand).toHaveBeenLastCalledWith(plain, expect.anything())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets the record write a split main made without writing it (no partition for the tab yet)', async () => {
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal()
+    )
+    const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
+    Reflect.set(runtimeStore, 'applyLayoutCommand', applyLayoutCommand)
+    const notifier = createMobileCreateTestNotifier(vi.fn())
+    const splitTerminal = vi.mocked(notifier.splitTerminal)
+    const runtime = new OrcaRuntimeService(runtimeStore)
+    runtime.setNotifier(notifier)
+    runtime.syncWindowGraph(1, graph([HEADLESS_LEAF_ID]))
+    const handle = runtime.getTerminalHandleForPaneKey(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))
+    const hostIdsForTab = Reflect.get(runtime, 'getWorkspaceSessionHostIdsForTab')
+    Reflect.set(runtime, 'getWorkspaceSessionHostIdsForTab', () => [])
+
+    vi.useFakeTimers()
+    try {
+      const split = runtime.splitTerminal(handle!, { direction: 'vertical' })
+      const rejected = expect(split).rejects.toThrow()
+      await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+      const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+      Reflect.set(runtime, 'getWorkspaceSessionHostIdsForTab', hostIdsForTab)
+      const record = {
+        type: 'splitPane',
+        workspace: TEST_WORKTREE_ID,
+        tabId: TAB_ID,
+        leafId: HEADLESS_LEAF_ID,
+        direction: 'vertical',
+        newLeafId,
+        mainAsked: true
+      } as const
+
+      await runtime.applyLayoutCommand(record)
+
+      const { mainAsked: _mainAsked, ...plain } = record
+      expect(applyLayoutCommand).toHaveBeenLastCalledWith(plain, expect.anything())
+      await vi.advanceTimersByTimeAsync(11_000)
+      await rejected
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -15,6 +15,13 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
 
   /** Splits main wrote and did not take back itself: gone, a client closed it. */
   private readonly writtenSplitLeafIds = new Set<string>()
+  /** Splits main is taking back now; a record waits, so it sees the outcome. */
+  private readonly withdrawingSplits = new Map<string, Promise<void>>()
+
+  /** Settles once main is done taking back this split, if it is. */
+  protected async splitWithdrawalSettled(leafId: string): Promise<void> {
+    await this.withdrawingSplits.get(leafId)
+  }
 
   /**
    * The window recorded a split it mounted: one main awaits counts as shown before its graph says
@@ -68,6 +75,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
         const newLeafId = randomUUID()
         this.awaitedSplitLeafIds.set(newLeafId, false)
+        const withdrawn = Promise.withResolvers<void>()
         const { result: newHandle } = await startInAdmittedPane(
           this.store,
           {
@@ -96,14 +104,24 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           },
           {
             // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
-            shown: () =>
-              this.awaitedSplitLeafIds.get(newLeafId) === true ||
-              this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
+            shown: () => {
+              const shown =
+                this.awaitedSplitLeafIds.get(newLeafId) === true ||
+                this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId))
+              if (!shown) {
+                this.withdrawingSplits.set(newLeafId, withdrawn.promise)
+              }
+              return shown
+            },
             startIfWriteFails: true,
             // Taken back unshown: the window's late record may write it again.
             onWithdrawn: () => this.writtenSplitLeafIds.delete(newLeafId)
           }
-        ).finally(() => this.awaitedSplitLeafIds.delete(newLeafId))
+        ).finally(() => {
+          this.awaitedSplitLeafIds.delete(newLeafId)
+          this.withdrawingSplits.delete(newLeafId)
+          withdrawn.resolve()
+        })
         return {
           handle: newHandle,
           tabId: leaf.tabId,

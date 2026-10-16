@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
-import { endLayoutFramePositions, noteLayoutFramePosition } from '@/runtime/layout-frame-position'
+import {
+  _resetLayoutFramePositionForTests,
+  beginLayoutFramePositions,
+  endLayoutFramePositions,
+  noteLayoutFramePosition
+} from '@/runtime/layout-frame-position'
 import {
   _resetLayoutOwnerPaneIntentsForTests,
   takeTabRowFields
@@ -84,6 +89,23 @@ describe('createInitialTerminalThroughLayoutOwner', () => {
 
     expect(create).toHaveBeenCalledWith({ tabId: command.tabId, leafId: command.leafId })
     expect(takeTabRowFields(command.tabId)).toBeNull()
+  })
+
+  it('waits for a stream not yet in, and draws main’s tab itself if it ends first', async () => {
+    _resetLayoutFramePositionForTests()
+    beginLayoutFramePositions()
+    const { create, command } = start()
+
+    mocks.reply?.({
+      ok: true,
+      result: { tabId: command.tabId, leafId: command.leafId },
+      frameSeq: 1
+    })
+    await settle()
+    expect(create).not.toHaveBeenCalled()
+
+    endLayoutFramePositions()
+    expect(create).toHaveBeenCalledWith({ tabId: command.tabId, leafId: command.leafId })
   })
 
   it('draws nothing itself when a frame showed the tab before the stream ended', async () => {

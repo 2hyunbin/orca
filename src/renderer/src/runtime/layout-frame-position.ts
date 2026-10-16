@@ -6,8 +6,8 @@ type Waiter = { seq: number; run: () => void }
 
 /** Null while no sequenced stream is open: nothing is coming to wait for. */
 let position: number | null = null
-/** Set once the stream ended, until a frame comes again; a stream not yet open is still coming. */
-let ended = false
+/** 'none' before the window opens its stream; 'coming' from then, even before its first frame. */
+let stream: 'none' | 'coming' | 'ended' = 'none'
 let waiters: Waiter[] = []
 
 function release(ready: (waiter: Waiter) => boolean): void {
@@ -30,31 +30,36 @@ export function noteLayoutFramePosition(seq: number | undefined): void {
   if (seq === undefined) {
     return
   }
-  ended = false
+  stream = 'coming'
   position = position === null ? seq : Math.max(position, seq)
   const reached = position
   release((waiter) => waiter.seq <= reached)
 }
 
-/** Whether main's frames will come: false once the stream ended. */
+/** Whether main's frames will come: from when the window opens its stream until it ends. */
 export function layoutFramesFlowing(): boolean {
-  return !ended
+  return stream === 'coming'
+}
+
+/** The window opened its stream: replies wait for its frames, even before the first. */
+export function beginLayoutFramePositions(): void {
+  stream = 'coming'
 }
 
 /** The stream ended: no frame will come, so every waiter runs now. */
 export function endLayoutFramePositions(): void {
   position = null
-  ended = true
+  stream = 'ended'
   release(() => true)
 }
 
 /**
  * Runs `run` once this window holds the frame at `seq`: at once when it already does, when the
- * reply names no position (an older host), or when the stream ended. A stream not yet open is
- * still coming, so the wait holds until its first frame or its end.
+ * reply names no position (an older host), or while no stream is coming. An opened stream is
+ * coming before its first frame too, so the wait holds until that frame or its end.
  */
 export function afterLayoutFrame(seq: number | undefined, run: () => void): void {
-  if (seq === undefined || ended || (position !== null && position >= seq)) {
+  if (seq === undefined || stream !== 'coming' || (position !== null && position >= seq)) {
     run()
     return
   }
@@ -63,6 +68,6 @@ export function afterLayoutFrame(seq: number | undefined, run: () => void): void
 
 export function _resetLayoutFramePositionForTests(): void {
   position = null
-  ended = false
+  stream = 'none'
   waiters = []
 }

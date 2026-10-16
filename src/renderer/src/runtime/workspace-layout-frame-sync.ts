@@ -34,7 +34,11 @@ import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layo
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
-import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
+import {
+  beginLayoutFramePositions,
+  endLayoutFramePositions,
+  noteLayoutFramePosition
+} from './layout-frame-position'
 import { provideLayoutFrameTerminalPanes } from './layout-frame-terminal-panes'
 import {
   isTabPaneTreeHeld,
@@ -257,6 +261,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
     }
   }
 
+  beginLayoutFramePositions()
   const stream = subscribeRuntimeLayout(
     { kind: 'local' },
     {},
