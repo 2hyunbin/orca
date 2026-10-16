@@ -1,14 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { applyKernelOutput, type LiveOutputs } from './ipynb-kernel-outputs'
 import { DRAWN_OUTPUT_CHARS, DRAWN_OUTPUT_LINES, drawnTail } from './ipynb-output-tail'
-import { parseIpynbOutput } from './ipynb-parse'
+import { concatIpynbMultilineString, parseIpynbOutput } from './ipynb-parse'
 
 const lines = (count: number, from = 0): string =>
   Array.from({ length: count }, (_, index) => `line ${from + index}\n`).join('')
 
 function drawnOf(output: unknown): unknown {
   const parsed = parseIpynbOutput(output)
-  return parsed?.kind === 'stream' ? parsed.drawn : undefined
+  return parsed?.kind === 'stream'
+    ? { text: parsed.drawn.text, truncated: parsed.drawn.truncated }
+    : undefined
 }
 
 describe('drawn output tail', () => {
@@ -34,6 +36,25 @@ describe('drawn output tail', () => {
     expect(drawnOf({ output_type: 'stream', name: 'stdout', text })).toEqual(
       drawnTail(text.join('').replace(/\r\n/g, '\n'))
     )
+  })
+
+  it('clips giant saved items while preserving normalized units, separators and surrogate cuts', () => {
+    for (const text of [
+      ['x'.repeat(4 * DRAWN_OUTPUT_CHARS), '\r', '😀end'],
+      ['\r\n'.repeat(DRAWN_OUTPUT_CHARS), '', 'last\r', 'end'],
+      ['prefix', '😀'.repeat(DRAWN_OUTPUT_CHARS), '']
+    ]) {
+      const expected = drawnTail(concatIpynbMultilineString(text))
+      const normalize = vi.spyOn(String.prototype, 'replace')
+      try {
+        const actual = drawnOf({ output_type: 'stream', text })
+        const largest = Math.max(...normalize.mock.contexts.map((value) => String(value).length))
+        expect(largest).toBeLessThanOrEqual(2 * DRAWN_OUTPUT_CHARS + 2)
+        expect(actual).toEqual(expected)
+      } finally {
+        normalize.mockRestore()
+      }
+    }
   })
 
   it('keeps a live stream drawn end equal to the tail of its whole text across chunk boundaries', () => {

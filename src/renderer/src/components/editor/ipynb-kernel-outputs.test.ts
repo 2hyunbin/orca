@@ -56,6 +56,25 @@ describe('collapseCarriageReturns', () => {
 })
 
 describe('applyKernelOutput', () => {
+  it('does not inspect historical endless text when CR is accepted, rewritten or promoted', () => {
+    let live = apply([['stream', { name: 'stdout', text: 'x'.repeat(8 * 1024 * 1024) }]])
+    const scans = (['replace', 'slice', 'lastIndexOf'] as const).map((name) =>
+      vi.spyOn(String.prototype, name)
+    )
+    try {
+      for (const text of ['\r', '', 'next', '\r\r', '\n']) {
+        live = applyKernelOutput(live, 'stream', { name: 'stdout', text })
+      }
+      const sizes = scans.flatMap((scan) => scan.mock.contexts.map((value) => String(value).length))
+      expect(Math.max(...sizes)).toBeLessThan(2 * 1024 * 1024)
+    } finally {
+      scans.forEach((scan) => scan.mockRestore())
+    }
+    expect(toStoredOutputs(live.outputs)).toEqual([
+      { output_type: 'stream', name: 'stdout', text: '\n' }
+    ])
+  })
+
   it('does not normalize accumulated LF-only or LF-free text again on append', () => {
     for (const chunk of ['log entry\n'.repeat(400), 'x'.repeat(4320)]) {
       let live = EMPTY

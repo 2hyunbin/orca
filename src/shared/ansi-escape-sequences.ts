@@ -10,6 +10,8 @@ export const TERMINAL_CONTROL_CHARACTER_PATTERN =
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g
 
 type TerminatorSearch = { cursor: number; start: number; end: number }
+export type AnsiSourceRange = { start: number; end: number }
+type StripObserver = { removed(start: number, end: number): void; unfinished(start: number): void }
 const OSC_INTRODUCER_PATTERN = /\u001b\]|\u009d/
 const STRING_INTRODUCER_PATTERN = /\u001b[P_^X]|[\u0090\u0098\u009e\u009f]/
 const CONTROL_STRING_INTRODUCER_PATTERN = /\u001b[\]P_^X]|[\u0090\u0098\u009d-\u009f]/
@@ -58,7 +60,7 @@ function createAnsiSpanCollector(value: string) {
   }
 }
 
-function stripControlStrings(value: string, osc: boolean): string {
+function stripControlStrings(value: string, osc: boolean, observer?: StripObserver): string {
   if (!(osc ? OSC_INTRODUCER_PATTERN : STRING_INTRODUCER_PATTERN).test(value)) {
     return value
   }
@@ -92,8 +94,10 @@ function stripControlStrings(value: string, osc: boolean): string {
     const useBel = osc && bel >= payloadStart && (st.start < payloadStart || bel < st.start)
     const end = useBel ? bel + 1 : st.start >= payloadStart ? st.end : -1
     if (end === -1) {
+      observer?.unfinished(index)
       continue
     }
+    observer?.removed(index, end)
     collector ??= createAnsiSpanCollector(value)
     collector.appendSpan(spanStart, index)
     spanStart = end
@@ -106,7 +110,7 @@ function stripControlStrings(value: string, osc: boolean): string {
   return collector.finish()
 }
 
-function stripGenericEscapes(value: string): string {
+function stripGenericEscapes(value: string, observer?: StripObserver): string {
   let index = value.indexOf('\u001b')
   let spanStart = 0
   let collector: ReturnType<typeof createAnsiSpanCollector> | undefined
@@ -119,6 +123,7 @@ function stripGenericEscapes(value: string): string {
       unit = value.charCodeAt(end)
     }
     if (unit >= 0x30 && unit <= 0x7e) {
+      observer?.removed(index, end + 1)
       collector ??= createAnsiSpanCollector(value)
       collector.appendSpan(spanStart, index)
       end += 1
@@ -147,4 +152,61 @@ export function stripAnsiEscapeSequences(value: string): string {
     : value
   const withoutCsi = stripped.replace(CSI_SEQUENCE_PATTERN, '')
   return stripGenericEscapes(withoutCsi)
+}
+
+/** Raw dependencies of the ordered stripping passes, including escapes exposed by removal. */
+export function ansiSourceRanges(value: string): AnsiSourceRange[] {
+  const ranges: AnsiSourceRange[] = []
+  let toSource = (offset: number): number => offset
+  let text = value
+  const stage = (strip: (input: string, observer: StripObserver) => string): void => {
+    const removed: AnsiSourceRange[] = []
+    const source = toSource
+    text = strip(text, {
+      removed: (start, end) => {
+        ranges.push({ start: source(start), end: source(end) })
+        removed.push({ start, end })
+      },
+      unfinished: (start) => ranges.push({ start: source(start), end: Infinity })
+    })
+    let units = 0
+    const cuts = removed.map(({ start, end }) => {
+      const at = start - units
+      units += end - start
+      return { at, units }
+    })
+    toSource = (offset) => {
+      let low = 0
+      let high = cuts.length
+      while (low < high) {
+        const middle = (low + high) >>> 1
+        if (cuts[middle].at <= offset) {
+          low = middle + 1
+        } else {
+          high = middle
+        }
+      }
+      return source(offset + (low ? cuts[low - 1].units : 0))
+    }
+  }
+  stage((input, observer) => stripControlStrings(input, true, observer))
+  stage((input, observer) => stripControlStrings(input, false, observer))
+  stage((input, observer) => {
+    const partial = /(?:\u001b\[|\u009b)[0-?]*[ -/]*$/.exec(input)
+    if (partial) {
+      observer.unfinished(partial.index)
+    }
+    return input.replace(CSI_SEQUENCE_PATTERN, (match: string, start: number) => {
+      observer.removed(start, start + match.length)
+      return ''
+    })
+  })
+  stage((input, observer) => {
+    const partial = /\u001b[ -/]*$/.exec(input)
+    if (partial) {
+      observer.unfinished(partial.index)
+    }
+    return stripGenericEscapes(input, observer)
+  })
+  return ranges
 }

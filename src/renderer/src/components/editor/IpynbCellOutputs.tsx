@@ -9,7 +9,8 @@ import {
 } from '@/lib/terminal-theme'
 import { IpynbMarkdownCell } from './IpynbCellEditor'
 import { IpynbHtmlOutput } from './IpynbHtmlOutput'
-import { parseAnsiSegments, type AnsiColor } from './ipynb-ansi'
+import { parseAnsiSegments, type AnsiColor, type AnsiSegment } from './ipynb-ansi'
+import { interpretDrawnBlocks } from './ipynb-drawn-ansi'
 import { DRAWN_OUTPUTS_PER_CELL, drawnText, type DrawnText } from './ipynb-output-tail'
 import type { IpynbCell, IpynbOutput, IpynbOutputItem } from './ipynb-parse'
 import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
@@ -72,12 +73,14 @@ function isRenderableMime(mime: string): boolean {
   )
 }
 
-function AnsiText({ text }: { text: string }): React.JSX.Element {
+const AnsiText = memo(function AnsiText({
+  segments
+}: {
+  segments: readonly AnsiSegment[]
+}): React.JSX.Element {
   const palette = ANSI_PALETTES[useDocumentDarkTheme() ? 'dark' : 'light']
   const resolve = (color: AnsiColor | undefined): string | undefined =>
     typeof color === 'number' ? palette[color] : color
-  // Why: styles start fresh in the drawn text; one begun in hidden earlier output is not carried.
-  const segments = useMemo(() => parseAnsiSegments(text), [text])
   return (
     <>
       {segments.map((segment, index) => (
@@ -96,9 +99,16 @@ function AnsiText({ text }: { text: string }): React.JSX.Element {
       ))}
     </>
   )
-}
+})
 
 function TextOutput({ drawn, error = false }: { drawn: DrawnText; error?: boolean }) {
+  const blocks = useMemo(
+    () =>
+      drawn.blocks
+        ? interpretDrawnBlocks(drawn.blocks)
+        : [{ id: 0, segments: parseAnsiSegments(drawn.text) }],
+    [drawn]
+  )
   return (
     <>
       {/* Outside the <pre> so copying the output does not copy the notice. */}
@@ -116,7 +126,9 @@ function TextOutput({ drawn, error = false }: { drawn: DrawnText; error?: boolea
           error && 'bg-destructive/10'
         )}
       >
-        <AnsiText text={drawn.text} />
+        {blocks.map((block) => (
+          <AnsiText key={block.id} segments={block.segments} />
+        ))}
       </pre>
     </>
   )
@@ -160,12 +172,26 @@ export function IpynbCellOutputs({ cell }: { cell: IpynbCell }): React.JSX.Eleme
     return null
   }
   const hidden = cell.outputs.length - DRAWN_OUTPUTS_PER_CELL
+  const selected = new Set<number>()
+  if (hidden > 0) {
+    selected.add(cell.outputs.length - 1)
+    const error = cell.outputs.findLastIndex((output) => output.kind === 'error')
+    if (error !== -1) {
+      selected.add(error)
+    }
+  }
+  const count = Math.min(cell.outputs.length, DRAWN_OUTPUTS_PER_CELL)
+  for (let index = 0; selected.size < count; index += 1) {
+    selected.add(index)
+  }
   return (
     <div className="flex min-w-0 flex-col gap-1 pt-2">
-      {cell.outputs.slice(0, DRAWN_OUTPUTS_PER_CELL).map((output, index) => (
-        // Scoping by run means a re-execution remounts outputs instead of reusing stale frames.
-        <Output key={`${cell.executionCount}:${index}`} output={output} />
-      ))}
+      {[...selected]
+        .sort((a, b) => a - b)
+        .map((index) => (
+          // Scoping by run means a re-execution remounts outputs instead of reusing stale frames.
+          <Output key={`${cell.executionCount}:${index}`} output={cell.outputs[index]} />
+        ))}
       {hidden > 0 ? (
         <div className="px-3 text-xs text-muted-foreground">
           {translate(

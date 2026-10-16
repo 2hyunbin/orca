@@ -67,15 +67,24 @@ function drawnMultilineString(value: unknown): DrawnText {
     return drawnText(String(value ?? ''))
   }
   let first = value.length
-  let units = 0
-  // Why: DRAWN_OUTPUT_LINES + 1 items hold at least DRAWN_OUTPUT_LINES whole lines.
-  while (first > 0 && value.length - first <= DRAWN_OUTPUT_LINES && units <= DRAWN_OUTPUT_CHARS) {
+  let remaining = 2 * DRAWN_OUTPUT_CHARS + 2
+  const pieces: string[] = []
+  let clipped = false
+  // Every nonfinal item contributes LF; CRLF can contract the raw suffix by at most half.
+  while (first > 0 && pieces.length <= DRAWN_OUTPUT_LINES && remaining > 0) {
     first -= 1
-    units += String(value[first] ?? '').length
+    const item = String(value[first] ?? '')
+    const separator = first < value.length - 1 && !item.endsWith('\n') ? '\n' : ''
+    const take = Math.max(0, remaining - separator.length)
+    clipped = item.length > take
+    pieces.push(item.slice(Math.max(0, item.length - take)) + separator)
+    remaining -= Math.min(item.length, take) + separator.length
   }
-  return first === 0
-    ? drawnText(concatIpynbMultilineString(value))
-    : drawnText(concatIpynbMultilineString(value.slice(first)), true)
+  let suffix = ''
+  for (let index = pieces.length - 1; index >= 0; index -= 1) {
+    suffix += pieces[index]
+  }
+  return drawnText(suffix.replace(/\r\n/g, '\n'), clipped || first > 0)
 }
 
 export function concatIpynbMultilineString(value: unknown): string {

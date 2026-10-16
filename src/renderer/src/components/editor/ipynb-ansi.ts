@@ -1,4 +1,8 @@
-import { stripAnsiEscapeSequences } from '../../../../shared/ansi-escape-sequences'
+import {
+  ansiSourceRanges,
+  stripAnsiEscapeSequences,
+  type AnsiSourceRange
+} from '../../../../shared/ansi-escape-sequences'
 
 /** 0-15 index the themed ANSI palette; strings are explicit CSS colors. */
 export type AnsiColor = number | string
@@ -77,12 +81,15 @@ function applySgr(style: AnsiStyle, params: string): AnsiStyle {
 }
 
 /** Splits terminal output into styled runs; non-SGR escape sequences are dropped. */
-export function parseAnsiSegments(input: string): AnsiSegment[] {
+export function parseAnsiBlock(
+  input: string,
+  initial: AnsiStyle = {}
+): { segments: AnsiSegment[]; style: AnsiStyle } {
   if (!ANSI_INTRODUCER_PATTERN.test(input)) {
-    return input ? [{ text: input }] : []
+    return { segments: input ? [{ ...initial, text: input }] : [], style: initial }
   }
   const segments: AnsiSegment[] = []
-  let style: AnsiStyle = {}
+  let style: AnsiStyle = initial
   let offset = 0
   const pushText = (raw: string): void => {
     const text = stripAnsiEscapeSequences(raw)
@@ -96,5 +103,34 @@ export function parseAnsiSegments(input: string): AnsiSegment[] {
     offset = match.index + match[0].length
   }
   pushText(input.slice(offset))
-  return segments
+  return { segments, style }
+}
+
+export function parseAnsiSegments(input: string): AnsiSegment[] {
+  return parseAnsiBlock(input).segments
+}
+
+/** SGR splits stripping spans before control removal, including SGR inside control payloads. */
+export function ansiBlockRanges(input: string): AnsiSourceRange[] {
+  if (!ANSI_INTRODUCER_PATTERN.test(input)) {
+    return []
+  }
+  const ranges: AnsiSourceRange[] = []
+  let offset = 0
+  // An unfinished span depends on the following SGR that split it, even without a terminator.
+  const span = (end: number, contextEnd: number): void => {
+    for (const range of ansiSourceRanges(input.slice(offset, end))) {
+      ranges.push({
+        start: offset + range.start,
+        end: Number.isFinite(range.end) ? offset + range.end : contextEnd
+      })
+    }
+  }
+  for (const match of input.matchAll(SGR_PATTERN)) {
+    span(match.index, match.index + match[0].length)
+    offset = match.index + match[0].length
+    ranges.push({ start: match.index, end: offset })
+  }
+  span(input.length, Infinity)
+  return ranges
 }

@@ -5,7 +5,9 @@ import { IpynbCellOutputs } from './IpynbCellOutputs'
 import { IpynbCellSource, IpynbMarkdownCell } from './IpynbCellEditor'
 import { IpynbRunPrompt } from './IpynbCellToolbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { DRAWN_OUTPUT_LINES, DRAWN_OUTPUTS_PER_CELL } from './ipynb-output-tail'
+import * as tail from './ipynb-output-tail'
+import { applyKernelOutput, type LiveOutputs } from './ipynb-kernel-outputs'
+import * as ansi from './ipynb-ansi'
 import { parseIpynbOutput, type IpynbCell, type IpynbOutput } from './ipynb-parse'
 
 vi.mock('@/i18n/i18n', () => ({
@@ -99,6 +101,49 @@ describe('notebook run prompt', () => {
 })
 
 describe('notebook outputs', () => {
+  it.each([false, true])('keeps DOM and ANSI through CR and LF (chain: %s)', (chain) => {
+    let live: LiveOutputs = { outputs: [], clearOnNextOutput: false }
+    const view = render(<IpynbCellOutputs cell={cell('code', '')} />)
+    const update = (text: string): void => {
+      live = applyKernelOutput(live, 'stream', { name: 'stdout', text })
+      const output = parseIpynbOutput(live.outputs[0])
+      if (!output || output.kind !== 'stream') {
+        throw new Error('Missing stream')
+      }
+      view.rerender(<IpynbCellOutputs cell={cell('code', '', [output])} />)
+      expect(output.drawn.text).toBe(tail.drawnTail(String(live.outputs[0]?.text)).text)
+      expect(output.drawn.text.length).toBeLessThanOrEqual(tail.DRAWN_OUTPUT_CHARS)
+    }
+    const completed = chain
+      ? `${'x'.repeat(8191)}${`\u001b[31m${'x'.repeat(8187)}`.repeat(2)}\u001b]title\n`
+      : `\u001b[31m${'x'.repeat(4090)}\n`.repeat(260)
+    update(`${completed}${chain ? '\u0007' : ''}1%`)
+    const spans = [...document.querySelectorAll('pre span')]
+    const interior = spans[Math.floor(spans.length / 2)]
+    const red = interior?.getAttribute('style')
+    const stable = chain ? spans.filter((span) => span.textContent?.includes('x')) : [interior]
+    if (chain) {
+      expect(stable.map((span) => span.textContent).join('')).toBe('x'.repeat(24565))
+    }
+    const parse = vi.spyOn(ansi, 'parseAnsiBlock')
+    const ranges = vi.spyOn(ansi, 'ansiBlockRanges')
+    try {
+      for (const text of ['\r20%', '\r\u001b[32m30%', '\r4%', '\nnext']) {
+        update(chain ? text.replace('\r', '\r\u0007') : text)
+      }
+      expect(stable.every((span) => span?.isConnected)).toBe(true)
+      expect(document.querySelector('pre span:last-child')?.getAttribute('style')).toBe(red)
+      for (const spy of [parse, ranges]) {
+        expect(Math.max(...spy.mock.calls.map(([input]) => input.length))).toBeLessThanOrEqual(
+          chain ? 17 : 8192
+        )
+      }
+    } finally {
+      parse.mockRestore()
+      ranges.mockRestore()
+    }
+  })
+
   it('renders only the richest representation of a display bundle', () => {
     render(
       <IpynbCellOutputs
@@ -160,29 +205,34 @@ describe('notebook outputs', () => {
     expect(document.body.textContent).not.toContain('\u001b')
   })
 
-  it('draws only the end of a long output and the first outputs of a cell, saying what is hidden', () => {
+  it('bounds outputs while keeping the latest traceback and final kernel detail in order', () => {
     const long = parseIpynbOutput({
       output_type: 'stream',
       name: 'stdout',
-      text: Array.from({ length: DRAWN_OUTPUT_LINES + 1 }, (_, index) => `line ${index}\n`)
+      text: Array.from({ length: tail.DRAWN_OUTPUT_LINES + 1 }, (_, index) => `line ${index}\n`)
     })
-    const short = Array.from(
-      { length: DRAWN_OUTPUTS_PER_CELL },
-      (): IpynbOutput => ({
-        kind: 'stream',
-        name: 'stdout',
-        drawn: { text: 'x', truncated: false }
-      })
-    )
-    if (!long) {
+    const short = Array.from({ length: tail.DRAWN_OUTPUTS_PER_CELL }, (): IpynbOutput => ({
+      kind: 'stream',
+      name: 'stdout',
+      drawn: { text: 'x', truncated: false }
+    }))
+    const error = parseIpynbOutput({ output_type: 'error', traceback: ['final traceback'] })
+    const final = parseIpynbOutput({
+      output_type: 'display_data',
+      data: { 'text/markdown': 'Kernel stopped\n\n```\nexit detail\n```' }
+    })
+    if (!long || !error || !final) {
       throw new Error('Missing stream output')
     }
-    render(<IpynbCellOutputs cell={cell('code', 'spam()', [long, ...short])} />)
+    const outputs = [long, ...short, error, ...short.slice(0, 12), final]
+    render(<IpynbCellOutputs cell={cell('code', 'spam()', outputs)} />)
     const pres = document.querySelectorAll('pre')
-    expect(pres).toHaveLength(DRAWN_OUTPUTS_PER_CELL)
+    expect(pres).toHaveLength(tail.DRAWN_OUTPUTS_PER_CELL)
     expect(pres[0]?.textContent?.startsWith('line 1\n')).toBe(true)
     expect(pres[0]?.previousElementSibling?.textContent).toBe('Earlier output is hidden.')
     expect(screen.getByText('{{count}} more outputs are hidden.')).toBeTruthy()
+    expect(screen.getByText('final traceback')).toBeTruthy()
+    expect([...pres].at(-1)?.textContent).toContain('exit detail')
   })
 
   it('sandboxes HTML output behind a no-network CSP and strips scripts', () => {

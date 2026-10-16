@@ -1,7 +1,39 @@
 import { describe, expect, it, vi } from 'vitest'
-import { parseAnsiSegments } from './ipynb-ansi'
+import { parseAnsiSegments, type AnsiSegment } from './ipynb-ansi'
+import { interpretDrawnBlocks } from './ipynb-drawn-ansi'
+import { drawnBlock } from './ipynb-output-tail'
 
 describe('parseAnsiSegments', () => {
+  it.each([
+    ['\u001b]title\ntext', '\u0007'],
+    ['\u009dtitle\ntext', '\u009c'],
+    ['\u001bPpayload\ntext\u001b', '\\'],
+    ['\u0090payload\ntext', '\u009c'],
+    ['\u001b[3', '1mred\u001b[0m'],
+    ['\u001b(', 'Btext'],
+    ['\u001b]title\n\u001b[32mgreen', '\u0007'],
+    ['\u001bPouter\u001b]inner\u0007\n', '\u001b\\'],
+    ['\u001b\u001b]title\u0007', '[31mRED'],
+    ['\u001b\u001bPpayload\u001b\\]title\u0007', 'ordinary']
+  ])('keeps split control semantics and releases closed dependencies: %j', (a, b) => {
+    const flatten = (runs: AnsiSegment[]) =>
+      runs.flatMap((run) =>
+        [...run.text].map((unit) => [unit, run.fg, run.bg, run.bold, run.italic, run.underline])
+      )
+    const first = drawnBlock(a)
+    interpretDrawnBlocks([first])
+    for (const suffix of ['', b.slice(0, -1), b, '\u001b[31m1%', '\u000720%']) {
+      const actual = interpretDrawnBlocks([first, drawnBlock(suffix, 0)])
+      expect(flatten(actual.flatMap((block) => block.segments))).toEqual(
+        flatten(parseAnsiSegments(a + suffix))
+      )
+    }
+    const second = drawnBlock(b)
+    const closed = interpretDrawnBlocks([first, second, drawnBlock('\n1%', 0)])
+    const next = interpretDrawnBlocks([first, second, drawnBlock('\n20%', 0)])
+    expect(next[0]).toBe(closed[0])
+  })
+
   it('returns plain text untouched', () => {
     expect(parseAnsiSegments('hello\nworld')).toEqual([{ text: 'hello\nworld' }])
   })
