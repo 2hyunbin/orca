@@ -1,4 +1,5 @@
 import type { RuntimeFileReadChunkResult } from '../../../shared/runtime-types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { validateFileRangeRequest } from '../../../shared/file-range-read'
 import type { RuntimeFileReadArgs } from './runtime-file-client-types'
 import { assertExternalSshReadOwnership, canReadRelativeRuntimeFile } from './runtime-file-routing'
@@ -6,7 +7,14 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
-function rangeReadTarget(args: RuntimeFileReadArgs) {
+/** A file on a paired runtime, addressed the way its host's `files.*` methods expect. */
+export type RuntimeRemoteFileAddress = {
+  target: Extract<RuntimeClientTarget, { kind: 'environment' }>
+  worktree: string
+  relativePath: string
+}
+
+function rangeReadTarget(args: RuntimeFileReadArgs): RuntimeRemoteFileAddress | null {
   assertExternalSshReadOwnership(args.target, args.connectionId, args.expectedExternalSshTargetId)
   const target = args.target
   if (target.kind !== 'environment') {
@@ -27,6 +35,30 @@ function rangeReadTarget(args: RuntimeFileReadArgs) {
 
 export type RuntimeFileSnapshot = { size: number; isDirectory: boolean; mtime: number }
 
+export function statRemoteRuntimeFile(
+  remote: RuntimeRemoteFileAddress
+): Promise<RuntimeFileSnapshot> {
+  return callRuntimeRpc<RuntimeFileSnapshot>(
+    remote.target,
+    'files.stat',
+    { worktree: remote.worktree, relativePath: remote.relativePath },
+    { timeoutMs: 15_000 }
+  )
+}
+
+export function readRemoteRuntimeFileChunk(
+  remote: RuntimeRemoteFileAddress,
+  offset: number,
+  length: number
+): Promise<RuntimeFileReadChunkResult> {
+  return callRuntimeRpc<RuntimeFileReadChunkResult>(
+    remote.target,
+    'files.readChunk',
+    { worktree: remote.worktree, relativePath: remote.relativePath, offset, length },
+    { timeoutMs: 60_000 }
+  )
+}
+
 export async function statRuntimeReadTarget(
   args: RuntimeFileReadArgs
 ): Promise<RuntimeFileSnapshot> {
@@ -38,15 +70,7 @@ export async function statRuntimeReadTarget(
       access: args.access
     })
   }
-  return callRuntimeRpc<RuntimeFileSnapshot>(
-    remote.target,
-    'files.stat',
-    {
-      worktree: remote.worktree,
-      relativePath: remote.relativePath
-    },
-    { timeoutMs: 15_000 }
-  )
+  return statRemoteRuntimeFile(remote)
 }
 
 export async function readRuntimeFileRange(
@@ -59,17 +83,7 @@ export async function readRuntimeFileRange(
   let result: RuntimeFileReadChunkResult
   try {
     result = remote
-      ? await callRuntimeRpc<RuntimeFileReadChunkResult>(
-          remote.target,
-          'files.readChunk',
-          {
-            worktree: remote.worktree,
-            relativePath: remote.relativePath,
-            offset,
-            length
-          },
-          { timeoutMs: 60_000 }
-        )
+      ? await readRemoteRuntimeFileChunk(remote, offset, length)
       : await window.api.fs.readFileChunk({
           filePath: args.filePath,
           connectionId: args.connectionId,

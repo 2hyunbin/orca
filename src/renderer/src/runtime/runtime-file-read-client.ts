@@ -22,6 +22,11 @@ import { chatScratchFileAddress } from './runtime-chat-scratch-file-address'
 import { isAgentSessionAttachmentStorePath } from '../../../shared/agent-session-attachments'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
 import { readRuntimeTerminalArtifactContent } from './runtime-terminal-artifact-read'
+import {
+  pagedTextFileResult,
+  readRemoteFileInChunks,
+  readRemoteFilePreview
+} from './runtime-paged-file-read'
 
 const REMOTE_DOWNLOAD_CHUNK_BYTES = 384 * 1024
 const REMOTE_DOWNLOAD_UPDATE_REQUIRED_MESSAGE =
@@ -46,7 +51,8 @@ export async function readRuntimeFileContent({
   expectedExternalSshTargetId,
   includeLocalLogMetadata,
   access,
-  terminalArtifactGrantId
+  terminalArtifactGrantId,
+  pageOversizedBinary
 }: RuntimeFileReadArgs): Promise<RuntimeReadableFileContent> {
   assertExternalSshReadOwnership(target, connectionId, expectedExternalSshTargetId)
   if (target.kind !== 'environment' || !worktreeId) {
@@ -86,19 +92,26 @@ export async function readRuntimeFileContent({
     // back to the base64 preview RPC so PDFs/images render like local/SSH paths.
     // Match the exact typed error so an unrelated failure can't spoof the fallback.
     if (err instanceof RuntimeRpcCallError && err.message === 'binary_file') {
-      return callRuntimeRpc<RuntimeFilePreviewResult>(
-        target,
-        'files.readPreview',
-        { worktree, relativePath: readPath },
-        { timeoutMs: 15_000 }
+      // Why: baseline checks call this too and discard binary content, so paging is opt-in.
+      return readRemoteFilePreview(
+        { target, worktree, relativePath: readPath },
+        { pageOversized: pageOversizedBinary === true }
       )
     }
     throw err
   }
   if (result.truncated) {
-    // Why: the runtime file RPC is preview-sized today; treating a truncated
-    // payload as editable content would make saves overwrite the rest of the file.
-    throw new Error(`Remote file is too large to open in the editor (${result.byteLength} bytes)`)
+    // Why: files.read stops at 512 KiB to fit one reply; a truncated payload saved as
+    // editable content would drop the rest of the file, so read the whole file in chunks.
+    const paged = await readRemoteFileInChunks({ target, worktree, relativePath: readPath })
+    if (paged.kind === 'ok') {
+      return pagedTextFileResult(paged.bytes)
+    }
+    throw new Error(
+      paged.kind === 'unsupported'
+        ? 'Remote file is larger than the 512 KB this Orca server can send. Update the server to open it.'
+        : `Remote file is too large to open in the editor (${paged.size} bytes)`
+    )
   }
   return { content: result.content, isBinary: false }
 }
@@ -139,11 +152,13 @@ export async function readRuntimeFilePreview(
       ...localAccess(context.connectionId, access)
     })
   }
-  return callRuntimeRpc<RuntimeFilePreviewResult>(
-    remoteArgs.target,
-    'files.readPreview',
-    { worktree: remoteArgs.worktreeSelector, relativePath: remoteArgs.relativePath },
-    { timeoutMs: 15_000 }
+  return readRemoteFilePreview(
+    {
+      target: remoteArgs.target,
+      worktree: remoteArgs.worktreeSelector,
+      relativePath: remoteArgs.relativePath
+    },
+    { pageOversized: true }
   )
 }
 
