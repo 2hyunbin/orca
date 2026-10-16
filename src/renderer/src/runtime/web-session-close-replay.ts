@@ -2,6 +2,11 @@
 // never received (the connection dropped) would otherwise be lost and the host's next snapshot
 // brings the tab back. The close is kept here and sent again once the host is reachable.
 
+import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import {
+  makeWebSessionCloseIntentDurable,
+  recordWebSessionCloseIntent
+} from './web-session-close-intent'
 import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-session-intent-owner'
 
 /** Bounded so a host that keeps failing the close hands the tab back instead of hiding it forever. */
@@ -100,13 +105,32 @@ export function settleWebSessionCloseReplay(
   return 'retry'
 }
 
-export function clearWebSessionCloseReplaysForOwner(owner: WebSessionIntentOwner): void {
-  const prefix = `${webSessionIntentOwnerKey(owner)}\0`
-  for (const key of pendingReplays.keys()) {
-    if (key.startsWith(prefix)) {
-      pendingReplays.delete(key)
+/** Sends the closes a received host snapshot made due; see `takeDueWebSessionCloseReplays`. */
+export function replayWebSessionClosesDueForSnapshot(
+  environmentId: string,
+  snapshot: RuntimeMobileSessionTabsResult | { worktree: string; removed: true }
+): void {
+  if (pendingReplays.size === 0 || !('tabs' in snapshot)) {
+    return
+  }
+  const presentHostTabIds = new Set(
+    snapshot.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))
+  )
+  const due = takeDueWebSessionCloseReplays({ environmentId }, snapshot.worktree, presentHostTabIds)
+  if (due.length === 0) {
+    return
+  }
+  // Why re-assert: a subscription reinstall clears close intents, and this snapshot lists the tab.
+  for (const replay of due) {
+    for (const hostTabId of replay.hostTabIds) {
+      recordWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId, Date.now())
+      makeWebSessionCloseIntentDurable(replay.owner, replay.worktreeId, hostTabId)
     }
   }
+  // Lazy: the lifecycle module reaches the store, which loads this module.
+  void import('./web-runtime-session-tab-lifecycle').then(({ replayWebSessionTabCloses }) =>
+    replayWebSessionTabCloses(environmentId, due)
+  )
 }
 
 export function resetWebSessionCloseReplaysForTests(): void {

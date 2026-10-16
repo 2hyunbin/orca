@@ -8,7 +8,7 @@ import {
   settleWebSessionCloseReplay,
   takeDueWebSessionCloseReplays
 } from './web-session-close-replay'
-import { recordWebSessionCloseIntent } from './web-session-close-intent'
+import { recordReceivedWebSessionTabsSnapshot } from './web-session-tabs-sync/tracking'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import {
   ENV,
@@ -94,10 +94,12 @@ describe('web session close replay', () => {
   })
 
   it('sends the held close when a host snapshot arrives, while keeping the tab hidden', async () => {
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-1', NOW)
     queueWebSessionCloseReplay(OWNER, WT, ['host-tab-1'])
+    const snapshot = makeSnapshot([SURFACE])
 
-    const patch = applyWebSessionTabsSnapshot(makeState(), makeSnapshot([SURFACE]), ENV, NOW)
+    // Receipt, not apply: the reconnect snapshot is unchanged, so it may never be applied.
+    recordReceivedWebSessionTabsSnapshot(ENV, snapshot)
+    const patch = applyWebSessionTabsSnapshot(makeState(), snapshot, ENV, NOW)
 
     expect((patch.tabsByWorktree?.[WT] ?? []).map((tab) => tab.id)).not.toContain(
       toWebTerminalSurfaceTabId('host-tab-1')

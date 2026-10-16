@@ -6,6 +6,7 @@ import {
   replayWebSessionTabCloses
 } from './web-runtime-session-tab-lifecycle'
 import {
+  queueWebSessionCloseReplay,
   resetWebSessionCloseReplaysForTests,
   takeDueWebSessionCloseReplays
 } from './web-session-close-replay'
@@ -649,6 +650,20 @@ describe('web runtime session tab actions', () => {
     expect(
       takeDueWebSessionCloseReplays(owner, WORKTREE_ID, new Set(['host-browser-unified']))
     ).toEqual([])
+  })
+
+  it('never replays a held close to an environment re-paired since', async () => {
+    const runtimeCall = vi.fn()
+    stubRuntimeEnvironmentBridge({ call: runtimeCall })
+    const staleOwner = { environmentId: ENVIRONMENT_ID, pairingRevision: 99 }
+    queueWebSessionCloseReplay(staleOwner, WORKTREE_ID, ['host-browser-unified'])
+
+    await replayWebSessionTabCloses(
+      ENVIRONMENT_ID,
+      takeDueWebSessionCloseReplays(staleOwner, WORKTREE_ID, new Set(['host-browser-unified']))
+    )
+
+    expect(runtimeCall).not.toHaveBeenCalled()
   })
 
   it('does not hold a lifecycle close the host never received', async () => {

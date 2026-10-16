@@ -10,7 +10,6 @@ import {
   reconcileWebSessionCloseIntents,
   isWebSessionCloseIntentPending
 } from '../web-session-close-intent'
-import { takeDueWebSessionCloseReplays } from '../web-session-close-replay'
 import {
   peekWebSessionFocusIntent,
   resolveWebSessionVisibleTabId,
@@ -43,19 +42,11 @@ export function prepareWebSessionTabsSnapshotBase(
 ) {
   const snapshotHostTabId = (tab: RuntimeMobileSessionTabsResult['tabs'][number]): string =>
     tab.type === 'terminal' ? tab.parentTabId : tab.id
-  const presentHostTabIds = new Set(rawSnapshot.tabs.map((tab) => snapshotHostTabId(tab)))
-  reconcileWebSessionCloseIntents({ environmentId }, worktreeId, presentHostTabIds)
-  // A snapshot proves the host reachable again, so a close it never received is sent now.
-  const dueCloseReplays = takeDueWebSessionCloseReplays(
+  reconcileWebSessionCloseIntents(
     { environmentId },
     worktreeId,
-    presentHostTabIds
+    new Set(rawSnapshot.tabs.map((tab) => snapshotHostTabId(tab)))
   )
-  if (dueCloseReplays.length > 0) {
-    void import('../web-runtime-session-tab-lifecycle').then(({ replayWebSessionTabCloses }) =>
-      replayWebSessionTabCloses(environmentId, dueCloseReplays)
-    )
-  }
   const snapshot: RuntimeMobileSessionTabsResult = rawSnapshot.tabs.some((tab) =>
     isWebSessionCloseIntentPending({ environmentId }, worktreeId, snapshotHostTabId(tab), now)
   )

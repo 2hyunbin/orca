@@ -30,7 +30,8 @@ import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import {
   captureRuntimeEnvironmentCall,
   captureWebSessionIntentOwner,
-  isWebRuntimeSessionActive
+  isWebRuntimeSessionActive,
+  matchesWebSessionIntentOwner
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 
@@ -83,6 +84,8 @@ export async function closeWebRuntimeSessionTab(args: {
   reason: RuntimeSessionTabCloseReason
   publicationEpoch?: string | null
   terminalHandle?: string | null
+  /** A replay's pairing; the call is refused if the environment was re-paired since. */
+  expectedPairingRevision?: number
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
 }
@@ -119,11 +122,19 @@ export async function replayWebSessionTabCloses(
   replays: readonly WebSessionCloseReplay[]
 ): Promise<void> {
   for (const replay of replays) {
+    // Why: the close was the old pairing's; a replacement host must never receive it.
+    if (!matchesWebSessionIntentOwner(replay.owner)) {
+      settleWebSessionCloseReplay(replay, true)
+      continue
+    }
     const outcome = await closeWebRuntimeSessionTab({
       worktreeId: replay.worktreeId,
       tabId: replay.hostTabIds[0],
       environmentId,
-      reason: 'user'
+      reason: 'user',
+      ...(replay.owner.pairingRevision !== undefined
+        ? { expectedPairingRevision: replay.owner.pairingRevision }
+        : {})
     })
     if (settleWebSessionCloseReplay(replay, outcome !== 'failed') !== 'gave-up') {
       continue
@@ -132,7 +143,10 @@ export async function replayWebSessionTabCloses(
     for (const hostTabId of replay.hostTabIds) {
       clearWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId)
     }
-    await refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId)
+    // The unchanged snapshot that made this replay due would otherwise be refused as stale.
+    await refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId, {
+      acceptCurrentSnapshot: true
+    })
   }
 }
 
@@ -155,6 +169,7 @@ async function callWebRuntimeSessionTabMethod(
     terminalHandle?: string | null
     leafId?: string | null
     expectedCurrentLocalTabId?: string | null
+    expectedPairingRevision?: number
   }
 ): Promise<WebRuntimeSessionTabCloseOutcome> {
   const environmentId = resolveTabEnvironmentId(args.environmentId)
@@ -166,7 +181,10 @@ async function callWebRuntimeSessionTabMethod(
     }
     return 'failed'
   }
-  const intentOwner = captureWebSessionIntentOwner(environmentId)
+  const intentOwner =
+    args.expectedPairingRevision !== undefined
+      ? { environmentId, pairingRevision: args.expectedPairingRevision }
+      : captureWebSessionIntentOwner(environmentId)
   const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
   const closeIntentTabIds = new Set<string>()
   let activationHostTabId: string | null = null

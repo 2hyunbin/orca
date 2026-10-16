@@ -23,6 +23,7 @@ import {
   recordReceivedWebSessionTabsEnvironmentFrame
 } from './publisher-identity-fences'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
+import { replayWebSessionClosesDueForSnapshot } from '../web-session-close-replay'
 
 export function isSessionTabsListAllResult(value: unknown): value is SessionTabsListAllResult {
   return (
@@ -102,6 +103,9 @@ export function recordReceivedWebSessionTabsSnapshot(
     return frame
   }
   recordReceivedWebSessionTabsEnvironmentFrame(environmentId, frame)
+  // Why at receipt: an unchanged snapshot is filtered before it is applied, and the reconnect
+  // snapshot is unchanged precisely when the host never received the close.
+  replayWebSessionClosesDueForSnapshot(environmentId, snapshot)
   const publicationEpoch = snapshot.publicationEpoch
   const isRetraction = 'removed' in snapshot && snapshot.removed === true
   const history = sessionTabsPublicationEpochHistoryByWorktree.get(key)
