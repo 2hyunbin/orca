@@ -135,7 +135,9 @@ export function resolveRepoExecutionHostPlatform(
 export function resolveWorktreeExecutionHostPlatform(
   state: WorktreeHostFactsState,
   worktreeId: string,
-  workspacePath: string | null | undefined
+  workspacePath: string | null | undefined,
+  /** Local runtime to use when the worktree is not hydrated yet (e.g. its repo's WSL preference). */
+  fallbackProjectRuntime?: () => ProjectExecutionRuntimeResolution | undefined
 ): ExecutionHostPlatformFact {
   // Why the routing default: an owner-less row launches where routing sends it, so read that host.
   const host = parseExecutionHostId(getExecutionHostIdForWorktree(state, worktreeId))
@@ -146,8 +148,26 @@ export function resolveWorktreeExecutionHostPlatform(
     sshOwnerEnvironmentId:
       host?.kind === 'ssh' ? getRuntimeEnvironmentIdForWorktree(state, worktreeId) : null,
     workspacePath,
-    projectRuntime: () => getLocalProjectExecutionRuntimeContext(state, worktreeId)
+    projectRuntime: () =>
+      getLocalProjectExecutionRuntimeContext(state, worktreeId) ?? fallbackProjectRuntime?.()
   })
+}
+
+export type KnownExecutionHostPlatform = Extract<ExecutionHostPlatformFact, { kind: 'known' }>
+
+/** A caller's platform only refines a local launch (e.g. WSL); a remote host's own OS wins. */
+export function refineLocalLaunchPlatform(
+  fact: KnownExecutionHostPlatform,
+  callerPlatform: NodeJS.Platform | undefined
+): KnownExecutionHostPlatform {
+  return fact.hostKind === 'local' && callerPlatform ? { ...fact, platform: callerPlatform } : fact
+}
+
+/** `undefined` when withheld, so the launch itself stops and tells the user why. */
+export function knownExecutionHostPlatform(
+  fact: ExecutionHostPlatformFact
+): NodeJS.Platform | undefined {
+  return fact.kind === 'known' ? fact.platform : undefined
 }
 
 export function requireExecutionHostPlatform(fact: ExecutionHostPlatformFact): NodeJS.Platform {

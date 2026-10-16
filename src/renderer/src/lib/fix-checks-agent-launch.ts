@@ -1,5 +1,4 @@
 import { toast } from 'sonner'
-import { getConnectionId } from '@/lib/connection-context'
 import {
   ensureDetectedAgentsForRepo,
   ensureDetectedAgentsForWorktree,
@@ -10,14 +9,15 @@ import { findGithubPrWorkspaceAttachment } from '@/lib/github-work-item-workspac
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchWorkItemDirect } from '@/lib/launch-work-item-direct'
-import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
-import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import {
   pickSourceControlLaunchAgent,
   readSourceControlLaunchRecipeAgentId
 } from '../../../shared/source-control-launch-agent-selection'
-import { resolveSourceControlLaunchPlatform } from '@/lib/source-control-launch-platform'
+import {
+  knownExecutionHostPlatform,
+  resolveWorktreeExecutionHostPlatform
+} from '@/lib/execution-host-facts'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import { resolveSourceControlActionRecipe } from '../../../shared/source-control-ai'
@@ -158,18 +158,18 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       )
       return false
     }
-    const targetConnectionId = getConnectionId(targetWorktreeId) ?? repo?.connectionId ?? null
     const agent = await pickExistingWorktreeAgent(targetWorktreeId, savedAgentId)
     if (!agent) {
       return false
     }
-    const launchPlatform = resolveSourceControlLaunchPlatform({
-      connectionId: targetConnectionId,
-      worktreePath: targetWorktree.path,
-      projectRuntime: targetConnectionId
-        ? undefined
-        : getLocalProjectExecutionRuntimeContext(store, targetWorktreeId, CLIENT_PLATFORM)
-    })
+    // Why: the agent runs on the workspace's execution host, so its OS decides quoting (#27971).
+    const launchPlatform = knownExecutionHostPlatform(
+      resolveWorktreeExecutionHostPlatform(
+        useAppStore.getState(),
+        targetWorktreeId,
+        targetWorktree.path
+      )
+    )
     if (!launchPlatform) {
       toast.error(
         translate(

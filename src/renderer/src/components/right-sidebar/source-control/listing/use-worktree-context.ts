@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
 import { getConnectionId } from '@/lib/connection-context'
-import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
-import { resolveSourceControlLaunchPlatform } from '@/lib/source-control-launch-platform'
+import {
+  knownExecutionHostPlatform,
+  resolveWorktreeExecutionHostPlatform
+} from '@/lib/execution-host-facts'
 import { getWorktreeGitIdentityDisplay } from '../../../../../../shared/worktree/git-identity-display'
 import { useAppStore } from '@/store'
 import { useActiveWorktree, useRepoById, useWorktreeMap } from '@/store/selectors'
@@ -129,13 +131,12 @@ export function useSourceControlWorktreeContext() {
   const activeConnectionId = activeWorktreeId
     ? (getConnectionId(activeWorktreeId) ?? activeRepoConnectionId)
     : null
-  const activeSourceControlLaunchPlatform = resolveSourceControlLaunchPlatform({
-    connectionId: activeConnectionId,
-    worktreePath,
-    projectRuntime: activeConnectionId
-      ? undefined
-      : getLocalProjectExecutionRuntimeContext(useAppStore.getState(), activeWorktreeId)
-  })
+  // Why: agents run on the workspace's execution host, so its OS decides quoting (#27971).
+  const activeSourceControlLaunchPlatform = activeWorktreeId
+    ? knownExecutionHostPlatform(
+        resolveWorktreeExecutionHostPlatform(useAppStore.getState(), activeWorktreeId, worktreePath)
+      )
+    : undefined
   // Why: the sidebar stays mounted when closed, so gate polling on tab AND open or branchCompare/PR fetch would run with no visible consumer.
   const isBranchVisible = rightSidebarTab === 'source-control' && rightSidebarOpen
   const hasUncommittedEntries = entries.length > 0

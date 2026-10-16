@@ -2,8 +2,12 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
 import { getConnectionId } from '@/lib/connection-context'
 import type { RepoHostFields } from '@/lib/agent-detection-target-inventory'
-import { CLIENT_PLATFORM } from '@/lib/new-workspace'
-import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
+import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
+import {
+  refineLocalLaunchPlatform,
+  resolveWorktreeExecutionHostPlatform,
+  type KnownExecutionHostPlatform
+} from '@/lib/execution-host-facts'
 import type {
   AgentSessionLaunchPlan,
   planAgentSessionLaunch
@@ -26,6 +30,31 @@ export type DirectWorkItemAgentLaunchPreparation = {
   plan: AgentSessionLaunchPlan | null
 }
 
+function resolveDirectWorkItemLaunchHost(args: {
+  latestStore: AppState
+  worktreeId: string
+  worktreePath: string
+  launchPlatform?: NodeJS.Platform
+  repoLaunchHost: KnownExecutionHostPlatform
+  repoProjectRuntime?: ProjectExecutionRuntimeResolution
+}): KnownExecutionHostPlatform {
+  // Why: the worktree was created on the repo's host and may not be hydrated yet, which reads as
+  // local; only a local workspace's own runtime (e.g. WSL) can refine the repo's answer.
+  if (args.repoLaunchHost.hostKind !== 'local') {
+    return args.repoLaunchHost
+  }
+  const fact = resolveWorktreeExecutionHostPlatform(
+    args.latestStore,
+    args.worktreeId,
+    args.worktreePath,
+    () => args.repoProjectRuntime
+  )
+  return refineLocalLaunchPlatform(
+    fact.kind === 'known' && fact.hostKind === 'local' ? fact : args.repoLaunchHost,
+    args.launchPlatform
+  )
+}
+
 export async function prepareDirectWorkItemAgentLaunch(args: {
   worktreeId: string
   worktreePath: string
@@ -40,7 +69,9 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   draftContent: string
   promptDelivery: 'draft' | 'submit-after-ready'
   launchPlatform?: NodeJS.Platform
-  repoProjectRuntime?: Parameters<typeof buildDirectWorkItemStartup>[0]['repoProjectRuntime']
+  /** Host the repo creates worktrees on; stands in while the new worktree is not hydrated. */
+  repoLaunchHost: KnownExecutionHostPlatform
+  repoProjectRuntime?: ProjectExecutionRuntimeResolution
   planLaunch: typeof planAgentSessionLaunch
   /** The start action this launch serves. */
   requestId: AgentLaunchRequestId
@@ -83,17 +114,9 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     draftContent: args.draftContent,
     promptDelivery: args.promptDelivery,
     settings: args.settings,
-    launchPlatform: args.launchPlatform,
-    launchConnectionId,
-    worktreePath: args.worktreePath,
-    repoProjectRuntime:
-      launchConnectionId === null
-        ? (getLocalProjectExecutionRuntimeContext(
-            args.latestStore,
-            args.worktreeId,
-            CLIENT_PLATFORM
-          ) ?? args.repoProjectRuntime)
-        : undefined
+    launchHost: resolveDirectWorkItemLaunchHost(args),
+    terminalWindowsShell: args.settings?.terminalWindowsShell,
+    launchConnectionId
   })
 
   const plan =
