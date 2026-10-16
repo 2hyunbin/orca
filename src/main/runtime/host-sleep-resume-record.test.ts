@@ -20,7 +20,8 @@ const SESSION_ID = 'slept-provider-session'
 
 type Verdict = 'exited' | 'unverifiable' | null
 
-function makeRuntime(verdict: Verdict, holderVerdict: Verdict = null) {
+function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
+  let verdict = initialVerdict
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
@@ -71,7 +72,10 @@ function makeRuntime(verdict: Verdict, holderVerdict: Verdict = null) {
   const reportHolder = (): void => {
     rows = [{ ...row, paneKey: HOLDER_PANE_KEY, tabId: 'holder-tab' }]
   }
-  return { runtime, spawn, reportAgent, reportHolder }
+  const setVerdict = (next: Verdict): void => {
+    verdict = next
+  }
+  return { runtime, spawn, reportAgent, reportHolder, setVerdict }
 }
 
 function userActivate(runtime: InstanceType<typeof OrcaRuntimeService>) {
@@ -121,6 +125,28 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
 
     expect(spawnCommand(spawn, 1).includes(SESSION_ID)).toBe(resumes)
   })
+
+  it.each([
+    [null, true],
+    ['exited', false]
+  ] as const)(
+    're-slept before its first hook, verdict %s: reopen resumes %s',
+    async (v, resumes) => {
+      const { runtime, spawn, reportAgent, setVerdict } = makeRuntime(null)
+      await userActivate(runtime)
+      reportAgent()
+      await runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`)
+      await userActivate(runtime)
+      // The resumed agent has not reported yet, so the host holds no row for the pane.
+      setVerdict(v)
+      await runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`)
+
+      await userActivate(runtime)
+
+      expect(spawn).toHaveBeenCalledTimes(3)
+      expect(spawnCommand(spawn, 2).includes(SESSION_ID)).toBe(resumes)
+    }
+  )
 
   it.each([
     ['claude', true],
