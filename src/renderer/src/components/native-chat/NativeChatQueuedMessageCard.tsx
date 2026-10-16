@@ -358,8 +358,9 @@ function QueuedMessageImageCount({
       <TooltipTrigger asChild>
         <span
           role="img"
+          tabIndex={0}
           aria-label={queuedMessageImageCount(images.length)}
-          className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
+          className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ImageIcon className="size-3.5" aria-hidden />
           <span aria-hidden>{images.length}</span>
