@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 it.each(['local', 'runtime:server'] as const)(
-  'shows WSL/version refusals with finite native-enabled reads on %s',
+  'shows WSL/version refusals with finite workspace-enabled reads on %s',
   async (host) => {
     useAppStore.setState({ activeWorkspaceExecutionHostId: host })
     const hook = renderHook(({ open, id }) => useNewTabAgentMenuRows(id, open), {
@@ -87,15 +87,15 @@ it.each(['local', 'runtime:server'] as const)(
     hook.rerender({ open: true, id: 'two' })
     expect(pending[0]?.signal.aborted).toBe(true)
     hook.rerender({ open: false, id: 'two' })
-    expect(pending[2]?.signal.aborted).toBe(true)
+    expect(pending[3]?.signal.aborted).toBe(true)
     hook.rerender({ open: true, id: 'two' })
-    await act(async () => pending.slice(2, 4).forEach((read) => read.resolve({ kind: 'admitted' })))
+    await act(async () => pending.slice(3, 6).forEach((read) => read.resolve({ kind: 'admitted' })))
     expect(hook.result.current.rows.some((row) => row.kind === 'chat')).toBe(false)
     await act(async () => vi.advanceTimersByTimeAsync(10_000))
-    expect(pending[4]?.signal.aborted).toBe(true)
+    expect(pending[6]?.signal.aborted).toBe(true)
     expect(hook.result.current.rows.find((row) => row.agent === 'claude')).toMatchObject({
       reason: 'not-on-host'
     })
-    expect(mocks.support).toHaveBeenCalledTimes(6)
+    expect(mocks.support).toHaveBeenCalledTimes(9)
   }
 )
