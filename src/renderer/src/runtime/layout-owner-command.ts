@@ -22,6 +22,7 @@ export type WindowLayoutCommand =
   | { type: 'moveTab'; tabId: string; toGroupId: string; index: number }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
+  | { type: 'closeTabs'; tabIds: [string]; recordClose: 'user' | 'cleanup' }
 
 /**
  * A layout command in a layout-owner build: main applies it first, then `apply` shows main's
