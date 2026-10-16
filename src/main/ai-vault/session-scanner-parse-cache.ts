@@ -1,7 +1,6 @@
 import { createQoderSessionResumeState } from './session-scanner-qoder-parser'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 import { inSessionParseFileLane } from './session-parse-file-lane'
-import { noteAiVaultScanProgress } from './ai-vault-scan-progress'
 import { createAntigravitySessionResumeState } from './session-scanner-antigravity-parser'
 import { createCodexSessionResumeState } from './session-scanner-codex-parser'
 import { createDroidSessionResumeState } from './session-scanner-droid-parser'
@@ -17,6 +16,7 @@ import type { ResumableSessionParseState, SessionFileCandidate } from './session
 import { refreshCachedCodexTitle } from './session-scanner-codex-cached-title'
 import {
   getSessionParseCacheEntry,
+  noteSessionParseCacheListed,
   storeSessionParseCacheEntry,
   type SessionParseCacheEntry
 } from './session-parse-cache-store'
@@ -130,11 +130,23 @@ export async function parseAgentSessionFileCached(
 ): Promise<AiVaultSession | null> {
   // The whole lookup-read-store sequence runs in the lane: a concurrent parse of
   // the same path shares this entry's resume point and its message channel.
-  const session = await inSessionParseFileLane(candidate.file.path, () =>
+  return inSessionParseFileLane(candidate.file.path, () =>
     parseCachedInLane(candidate, platform, stats, requireRead, signal)
   )
-  noteAiVaultScanProgress(signal)
-  return session
+}
+
+/**
+ * A Session History scan's parse. Listing the path first is what exempts its row
+ * from the count bound kept for other readers.
+ */
+export function parseListedSessionFile(
+  candidate: SessionFileCandidate,
+  platform: NodeJS.Platform,
+  stats: SessionParseStats,
+  signal?: AbortSignal
+): Promise<AiVaultSession | null> {
+  noteSessionParseCacheListed(candidate.file.path)
+  return parseAgentSessionFileCached(candidate, platform, stats, undefined, signal)
 }
 
 /**
