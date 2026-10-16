@@ -40,6 +40,7 @@ import {
   setChatPane,
   setTabProps
 } from './workspace-layout-tab-commands'
+import { moveTabToWorkspace } from './workspace-layout-workspace-move'
 
 const CREATES_WORKSPACE = new Set<LayoutCommand['type']>([
   'createTerminalTab',
@@ -106,6 +107,8 @@ function applyCommand(
       return openInNewGroup(model, command, (next) => openEditorTab(next, command, context))
     case 'promotePreviewTab':
       return promotePreviewTab(model, command)
+    case 'moveTabToWorkspace':
+      return moveTabToWorkspace(model, command, context)
     case 'openBrowserTab':
       return openInNewGroup(model, command, (next) => openBrowserTab(next, command, context))
     case 'openBrowserPage':

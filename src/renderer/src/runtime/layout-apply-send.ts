@@ -68,6 +68,13 @@ export type WindowLayoutCommand =
       split?: NewGroupSplit
     }
   | { type: 'promotePreviewTab'; tabId: string }
+  | {
+      type: 'moveTabToWorkspace'
+      toWorkspace: string
+      tabs: { tabId: string; newTabId: string; newEntityId: string }[]
+      groupId: string
+      file?: LayoutEditorFile
+    }
   | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
 
@@ -80,9 +87,9 @@ export type LayoutApplyHandlers = {
 /**
  * A layout command in a layout-owner build: main applies it first, then `apply` shows main's
  * result. `asToday` runs instead when main cannot act on it: a paired server holds the tab
- * (#18202), main's copy lacks the workspace, tab, pane or group, or the call threw. `refused` on
- * any other refusal. False when a paired server owns the workspace's layout; the caller acts as
- * today.
+ * (#18202), a move's workspaces are in two partitions, main's copy lacks the workspace, tab, pane
+ * or group, or the call threw. `refused` on any other refusal. False when a paired server owns the
+ * workspace's layout; the caller acts as today.
  */
 export function sendLayoutApply(
   state: Parameters<typeof getExplicitRuntimeEnvironmentIdForWorktree>[0],
@@ -102,7 +109,11 @@ export function sendLayoutApply(
       (reply) => {
         if (reply.ok) {
           handlers.apply(reply.result)
-        } else if (reply.code === 'host_not_owned' || mainLacksTarget(reply.code)) {
+        } else if (
+          reply.code === 'host_not_owned' ||
+          reply.code === 'other_partition' ||
+          mainLacksTarget(reply.code)
+        ) {
           // Why lacking: main's copy lags the window's here (the window still saves its own).
           handlers.asToday()
         } else {
