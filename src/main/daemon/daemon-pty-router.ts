@@ -63,7 +63,7 @@ export class DaemonPtyRouter implements IPtyProvider {
       }
       const adapter =
         (opts.sessionId ? this.sessionAdapters.get(opts.sessionId) : undefined) ??
-        (await findLegacySessionOwner(opts, this.legacy, this.legacyExitProof))
+        (await findLegacySessionOwner(opts, this.current, this.legacy, this.legacyExitProof))
       const target = await routeSpawnOrHold(opts, adapter, this.current, this.ownerResolver)
       const result = await target.spawn(opts)
       // Why: the adapter filters intentional recovery exits and canonical-ID races before publishing proof.

@@ -64,6 +64,20 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
     expect(current.spawn).toHaveBeenCalledExactlyOnceWith({ ...SPAWN, sessionId: 'other-session' })
   })
 
+  it('reattaches a current-daemon session while an unrelated older daemon cannot answer', async () => {
+    const current = createAdapter('current', ['current-session'])
+    const legacy = createAdapter('legacy')
+    vi.mocked(legacy.listProcesses).mockRejectedValue(new Error('wedged'))
+    vi.mocked(legacy.probePtyLiveness).mockResolvedValue(null)
+    const router = new DaemonPtyRouter({ current, legacy: [legacy] })
+    await router.discoverLegacySessions()
+
+    await router.spawn({ ...SPAWN, sessionId: 'current-session' })
+
+    expect(current.spawn).toHaveBeenCalledOnce()
+    expect(legacy.spawn).not.toHaveBeenCalled()
+  })
+
   it('creates on the current daemon once the older daemon no longer runs the id', async () => {
     const current = createAdapter('current')
     const legacy = createAdapter('legacy', [])
