@@ -13,6 +13,15 @@ import {
 import { WorktreeCardPortsDetails, WorktreeCardPortsTrigger } from './WorktreeCardPorts'
 import type { WorktreeCardController } from './use-worktree-card-controller'
 
+function getVisibleContextLabel(
+  projectLabel: string | undefined,
+  hostLabel: string | undefined,
+  showHost: boolean
+): string | undefined {
+  const labels = [projectLabel, showHost ? hostLabel : undefined].filter(Boolean)
+  return labels.length > 0 ? labels.join(' · ') : undefined
+}
+
 export function buildWorktreeCardPresentation(card: WorktreeCardController) {
   const {
     worktree,
@@ -20,6 +29,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     inPinnedSection,
     hideRepoBadge,
     hostContextLabel,
+    showProjectName,
     affiliateListMode,
     flushSurface,
     contentIndent,
@@ -77,13 +87,18 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     showDeleteQuickAction
   } = card
 
-  // Why: pinned trees mix repos, so the repo icon shows regardless of groupBy's hideRepoBadge.
-  const showPinnedRepoIcon = inPinnedSection && !!repo
+  // Why: pinned trees mix repos, so ordinary rows keep the repo icon; cross-repo children use the name.
+  const showPinnedRepoIcon = inPinnedSection && !!repo && !showProjectName
   const showInlineRepoBadge =
     cardDetails.repoInTitle && !!repo && !hideRepoBadge && !isFolder && !showPinnedRepoIcon
   const showRepoBadgeInMetaRow =
     !cardDetails.repoInTitle && !!repo && !hideRepoBadge && !showPinnedRepoIcon
-  const showHostContextBadge = !!hostContextLabel && cardDetails.host
+  const contextLabel = getVisibleContextLabel(
+    undefined,
+    hostContextLabel,
+    cardProps.includes('host')
+  )
+  const showHostContextBadge = !!contextLabel && (!compactCards || !!showProjectName)
   const showDetachedHeadInMetaRow = cardDetails.metaRow && !isFolder && detachedHeadDisplay !== null
   const showBranch =
     !isFolder &&
@@ -246,6 +261,7 @@ export function buildWorktreeCardPresentation(card: WorktreeCardController) {
     showInlineRepoBadge,
     showRepoBadgeInMetaRow,
     showHostContextBadge,
+    contextLabel,
     showIdentityInNewCard,
     showDetachedHeadInMetaRow,
     showBranch,

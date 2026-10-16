@@ -61,8 +61,9 @@ function WorktreeListRowComponent({
   const metaText = isFolderWorkspace ? folderMeta : displayBranch(item.branch)
   const lineageDepth = Math.max(0, item.lineageDepth ?? 0)
   const lineageChildCount = item.lineageChildCount ?? 0
-  const showRepoChip = cardDetails.repoInTitle && !hideRepo && !isFolderWorkspace
-  const showRepoInMetaRow = !cardDetails.repoInTitle && !hideRepo
+  const shouldHideRepo = hideRepo && !item.showProjectName
+  const showRepoChip = cardDetails.repoInTitle && !shouldHideRepo && !isFolderWorkspace
+  const showRepoInMetaRow = !cardDetails.repoInTitle && !shouldHideRepo
   const hostId = item.hostContextHostId ?? item.hostId
   const hostAccessibilityLabel = [item.hostContextLabel, item.hostContextHealthLabel]
     .filter(Boolean)
