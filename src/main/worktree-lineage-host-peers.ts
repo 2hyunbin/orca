@@ -5,7 +5,7 @@ import { getWorktreeHostIdentity } from '../shared/worktree/host-qualified-ident
 import { splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
 import {
-  getConnectedWorktreeLineageIds,
+  getConnectedWorktreeLineageInstances,
   projectResolvedWorktreeLineage
 } from '../shared/resolved-worktree-lineage'
 import { areWorktreePathsEqual } from './ipc/worktree-path-comparison'
@@ -39,22 +39,15 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   if (rows.length === 0) {
     return projectResolvedWorktreeLineage(rows, lineageById)
   }
-  const relatedIds = getConnectedWorktreeLineageIds(
-    rows.map((row) => row.id),
+  const relatedInstances = getConnectedWorktreeLineageInstances(
+    rows.flatMap((row) => (row.instanceId ? [row.instanceId] : [])),
     lineageById
   )
   const ownKeys = new Set(rows.map(getWorktreeHostIdentity))
-  const relatedInstances = new Set(
-    Object.values(lineageById).flatMap((edge) =>
-      relatedIds.has(edge.worktreeId) || relatedIds.has(edge.parentWorktreeId)
-        ? [edge.worktreeInstanceId, edge.parentWorktreeInstanceId]
-        : []
-    )
-  )
   const peers: Worktree[] = []
   for (const meta of savedOwners) {
     const { id, repo: owner, hostId } = meta
-    if (!relatedIds.has(id) && !relatedInstances.has(meta.instanceId)) {
+    if (!relatedInstances.has(meta.instanceId)) {
       continue
     }
     if (ownKeys.has(getWorktreeHostIdentity({ id, hostId }))) {

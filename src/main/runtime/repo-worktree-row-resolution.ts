@@ -16,7 +16,7 @@ import {
 } from '../persistence/host-qualified-worktree-meta'
 import { isFolderRepo } from '../../shared/repo-kind'
 import {
-  getConnectedWorktreeLineageIds,
+  getConnectedWorktreeLineageInstances,
   projectResolvedWorktreeLineage
 } from '../../shared/resolved-worktree-lineage'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
@@ -201,7 +201,7 @@ export async function resolveRepoWorktreeRows(
 }
 
 /**
- * Resolve one `<repoId>::<path>` id by scanning its owner and only lineage-related repos on that host.
+ * Resolve one `<repoId>::<path>` id by scanning its owner and only instance-connected repo owners.
  * Returns `null` on ambiguous ownership, so the caller can use its fleet fallback.
  */
 export async function resolveScopedWorktreeIdRow(
@@ -247,32 +247,16 @@ export async function resolveScopedWorktreeIdRow(
   }
   const savedOwners = readSavedWorktreeOwners(store)
   const lineageById = readSavedWorktreeLineage(store, savedOwners)
-  const relatedIds = getConnectedWorktreeLineageIds([target.id], lineageById)
-  const relatedInstances = new Set(
-    Object.values(lineageById).flatMap((edge) =>
-      relatedIds.has(edge.worktreeId) || relatedIds.has(edge.parentWorktreeId)
-        ? [edge.worktreeInstanceId, edge.parentWorktreeInstanceId]
-        : []
-    )
+  const relatedInstances = getConnectedWorktreeLineageInstances(
+    target.instanceId ? [target.instanceId] : [],
+    lineageById
   )
-  for (const owner of savedOwners) {
-    if (relatedInstances.has(owner.instanceId)) {
-      relatedIds.add(owner.id)
-    }
-  }
-  const relatedRepoIds = new Set(
-    [...relatedIds]
-      .map((id) => splitWorktreeIdForFilesystem(id)?.repoId)
-      .filter((id) => id !== undefined)
+  const relatedOwners = new Set(
+    savedOwners.filter((owner) => relatedInstances.has(owner.instanceId)).map((owner) => owner.repo)
   )
   const relatedRepos = store
     .getRepos()
-    .filter(
-      (candidate) =>
-        relatedRepoIds.has(candidate.id) &&
-        (candidate.id !== repo.id ||
-          getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo))
-    )
+    .filter((candidate) => candidate !== repo && relatedOwners.has(candidate))
   const metaById = store.getAllWorktreeMeta() ?? {}
   const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, relatedRepos)
   const otherRows = await Promise.all(

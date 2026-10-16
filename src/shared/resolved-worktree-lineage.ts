@@ -73,13 +73,13 @@ export function getCyclicChildKeys<Key>(
   return cyclic
 }
 
-export function getConnectedWorktreeLineageIds(
-  seedIds: readonly string[],
+export function getConnectedWorktreeLineageInstances(
+  seedInstances: readonly string[],
   lineageById: Readonly<Record<string, WorktreeLineage>>
 ): Set<string> {
   const edges = Object.values(lineageById)
   const adjacency = new Map<string, Set<string>>()
-  const connectedInstances = new Set<string>()
+  const connectedInstances = new Set(seedInstances)
   for (const edge of edges) {
     for (const [from, to] of [
       [edge.worktreeInstanceId, edge.parentWorktreeInstanceId],
@@ -89,11 +89,8 @@ export function getConnectedWorktreeLineageIds(
       adjacent.add(to)
       adjacency.set(from, adjacent)
     }
-    if (seedIds.includes(edge.worktreeId) || seedIds.includes(edge.parentWorktreeId)) {
-      connectedInstances.add(edge.worktreeInstanceId)
-      connectedInstances.add(edge.parentWorktreeInstanceId)
-    }
   }
+
   const pending = [...connectedInstances]
   for (const instance of pending) {
     for (const adjacent of adjacency.get(instance) ?? []) {
@@ -103,14 +100,7 @@ export function getConnectedWorktreeLineageIds(
       }
     }
   }
-  return new Set([
-    ...seedIds,
-    ...edges.flatMap((edge) =>
-      connectedInstances.has(edge.worktreeInstanceId)
-        ? [edge.worktreeId, edge.parentWorktreeId]
-        : []
-    )
-  ])
+  return connectedInstances
 }
 
 export function selectResolvedWorktreeLineage<

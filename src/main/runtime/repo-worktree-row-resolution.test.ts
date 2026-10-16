@@ -67,12 +67,14 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
 }
 
 describe('host-qualified scoped worktree resolution', () => {
-  it('projects cross-repository lineage by scanning only related repos on the selected host', async () => {
+  it('scans only owners connected by instance across execution hosts', async () => {
     const childRepo = repo('child-repo', '/child-repo', { executionHostId: 'local' })
-    const parentRepo = repo('parent-repo', '/parent-repo', { executionHostId: 'local' })
-    const remoteParent = repo('parent-repo', '/remote-parent-repo', {
+    const parentRepo = repo('parent-repo', '/parent-repo', {
       connectionId: 'builder',
       executionHostId: 'ssh:builder'
+    })
+    const remoteParent = repo('parent-repo', '/remote-parent-repo', {
+      executionHostId: 'local'
     })
     const unrelated = repo('unrelated', '/unrelated', { executionHostId: 'local' })
     const deps = createDeps([childRepo, parentRepo, remoteParent, unrelated])
@@ -85,7 +87,7 @@ describe('host-qualified scoped worktree resolution', () => {
     })
     deps.metaById[parentId] = mergeWorktreeMetaForWrite(undefined, {
       instanceId: 'parent-instance',
-      hostId: 'local',
+      hostId: 'ssh:builder',
       projectId: 'parent-project'
     })
     const lineage: WorktreeLineage = {
@@ -110,7 +112,7 @@ describe('host-qualified scoped worktree resolution', () => {
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([childRepo, parentRepo])
 
     deps.scanRepo.mockClear()
-    await expect(resolveScopedWorktreeIdRow(deps, parentId, 'local')).resolves.toMatchObject({
+    await expect(resolveScopedWorktreeIdRow(deps, parentId, 'ssh:builder')).resolves.toMatchObject({
       childWorktreeIds: [childId]
     })
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([parentRepo, childRepo])
