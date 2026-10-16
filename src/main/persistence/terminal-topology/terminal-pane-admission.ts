@@ -22,6 +22,7 @@ import {
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
 import { patchStoredSession } from '../../../shared/workspace-layout/workspace-layout-record-patch'
 import { followRemoteSessionAfterPaneClose } from './pane-close-remote-session'
+import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
 export type TerminalPaneAdmission =
@@ -74,7 +75,9 @@ export function applyCommandToSession(
   }
   return applyToSession(loaded, command, (after) => {
     const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
-    return patched === session ? null : followRemoteSessionAfterPaneClose(command, session, patched)
+    return patched === session
+      ? null
+      : followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
   })
 }
 
@@ -94,6 +97,22 @@ function applyToSession(
         session: write(saveWorkspaceLayout({ ...loaded, layout: applied.model }))
       }
     : { value: { ok: false, code: applied.code }, session: null }
+}
+
+/** A recorded close prunes the partition's close records, as today's close does. */
+function prunedOnRecord(
+  command: LayoutCommand,
+  session: WorkspaceSessionState
+): WorkspaceSessionState {
+  return command.type === 'closeTabs' && command.recordClose
+    ? {
+        ...session,
+        closedTerminalTabTombstonesByTabId: pruneClosedTerminalTabTombstones(
+          session.closedTerminalTabTombstonesByTabId,
+          Date.now()
+        )
+      }
+    : session
 }
 
 /**

@@ -12465,7 +12465,11 @@
             "target": "SSH ホスト経由で接続",
             "port": "サーバーポート",
             "link": "SSH を使用",
-            "linking": "接続中…"
+            "linking": "接続中…",
+            "pendingLink": "SSH 経由の接続が完了しませんでした。",
+            "pendingUnlink": "SSH アクセスの停止が完了しませんでした。",
+            "retry": "再試行",
+            "cancelLink": "キャンセル"
           },
           "search": {
             "title": "管理対象サーバー",
@@ -17963,6 +17967,13 @@
           "deleteColumn": "列を削除",
           "deleteTable": "テーブルを削除"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Orca ホストに接続できませんでした",
+        "description": "失われたものはありません。ホストが応答すると Orca は再読み込みされます。それまで変更は保存されません。",
+        "retry": "今すぐ再試行"
       }
     }
   },

@@ -12573,7 +12573,11 @@
             "target": "Passer par un hôte SSH",
             "port": "Port du serveur",
             "link": "Utiliser SSH",
-            "linking": "Connexion…"
+            "linking": "Connexion…",
+            "pendingLink": "La connexion via SSH n’a pas abouti.",
+            "pendingUnlink": "L’arrêt de l’accès SSH n’a pas abouti.",
+            "retry": "Réessayer",
+            "cancelLink": "Annuler"
           },
           "search": {
             "title": "Serveurs gérés",
@@ -18067,6 +18071,13 @@
           "deleteColumn": "Supprimer la colonne",
           "deleteTable": "Supprimer le tableau"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Impossible de joindre votre hôte Orca",
+        "description": "Rien n'a été perdu. Orca se rechargera lorsque l'hôte répondra et n'enregistrera aucune modification d'ici là.",
+        "retry": "Réessayer maintenant"
       }
     }
   },

@@ -12461,7 +12461,11 @@
             "target": "Conectar a través del host SSH",
             "port": "Puerto del servidor",
             "link": "Usar SSH",
-            "linking": "Conectando…"
+            "linking": "Conectando…",
+            "pendingLink": "La conexión por SSH no terminó.",
+            "pendingUnlink": "La desactivación del acceso SSH no terminó.",
+            "retry": "Reintentar",
+            "cancelLink": "Cancelar"
           },
           "search": {
             "title": "Servidores gestionados",
@@ -17959,6 +17963,13 @@
           "deleteColumn": "Eliminar columna",
           "deleteTable": "Eliminar tabla"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "No se pudo contactar con tu host de Orca",
+        "description": "No se perdió nada. Orca se recargará cuando el host responda y no guardará cambios hasta entonces.",
+        "retry": "Reintentar ahora"
       }
     }
   },
