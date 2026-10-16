@@ -8,10 +8,7 @@ import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inve
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { getWorktreeGitIdentityDisplay } from '../../../../../shared/worktree/git-identity-display'
-import {
-  knownExecutionHostPlatform,
-  resolveWorktreeExecutionHostPlatform
-} from '@/lib/execution-host-facts'
+import { resolveRepoWorktreeLaunchPlatform } from '@/lib/execution-host-facts'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { normalizeGlobalWindowsRuntimeDefault } from '../../../../../shared/project-execution-runtime'
 import {
@@ -221,15 +218,15 @@ export function useChecksPanelControllerState() {
   const activeWorktreePath = activeWorktree?.path ?? null
   const activeWorktreePushTarget = activeWorktree?.pushTarget ?? null
   // Why: agents run on the workspace's execution host, so its OS decides quoting (#27971).
-  const activeSourceControlLaunchPlatform = activeWorktreeId
-    ? knownExecutionHostPlatform(
-        resolveWorktreeExecutionHostPlatform(
+  const activeSourceControlLaunchPlatform =
+    activeWorktreeId && repo
+      ? resolveRepoWorktreeLaunchPlatform(
           useAppStore.getState(),
+          repo,
           activeWorktreeId,
           activeWorktreePath
         )
-      )
-    : undefined
+      : undefined
   const runtimeEnvironmentId = useAppStore((s) =>
     getRuntimeEnvironmentIdForWorktree(s, activeWorktreeId)
   )

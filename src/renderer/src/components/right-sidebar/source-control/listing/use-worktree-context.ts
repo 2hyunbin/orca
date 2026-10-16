@@ -1,10 +1,7 @@
 import { useMemo } from 'react'
 import { getConnectionId } from '@/lib/connection-context'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
-import {
-  knownExecutionHostPlatform,
-  resolveWorktreeExecutionHostPlatform
-} from '@/lib/execution-host-facts'
+import { resolveRepoWorktreeLaunchPlatform } from '@/lib/execution-host-facts'
 import { getWorktreeGitIdentityDisplay } from '../../../../../../shared/worktree/git-identity-display'
 import { useAppStore } from '@/store'
 import { useActiveWorktree, useRepoById, useWorktreeMap } from '@/store/selectors'
@@ -132,11 +129,15 @@ export function useSourceControlWorktreeContext() {
     ? (getConnectionId(activeWorktreeId) ?? activeRepoConnectionId)
     : null
   // Why: agents run on the workspace's execution host, so its OS decides quoting (#27971).
-  const activeSourceControlLaunchPlatform = activeWorktreeId
-    ? knownExecutionHostPlatform(
-        resolveWorktreeExecutionHostPlatform(useAppStore.getState(), activeWorktreeId, worktreePath)
-      )
-    : undefined
+  const activeSourceControlLaunchPlatform =
+    activeWorktreeId && activeRepo
+      ? resolveRepoWorktreeLaunchPlatform(
+          useAppStore.getState(),
+          activeRepo,
+          activeWorktreeId,
+          worktreePath
+        )
+      : undefined
   // Why: the sidebar stays mounted when closed, so gate polling on tab AND open or branchCompare/PR fetch would run with no visible consumer.
   const isBranchVisible = rightSidebarTab === 'source-control' && rightSidebarOpen
   const hasUncommittedEntries = entries.length > 0

@@ -5,9 +5,11 @@ import type { RepoHostFields } from '@/lib/agent-detection-target-inventory'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import {
   refineLocalLaunchPlatform,
-  resolveWorktreeExecutionHostPlatform,
+  resolveRepoExecutionHostPlatform,
   type KnownExecutionHostPlatform
 } from '@/lib/execution-host-facts'
+import { CLIENT_PLATFORM } from '@/lib/new-workspace'
+import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import type {
   AgentSessionLaunchPlan,
   planAgentSessionLaunch
@@ -34,23 +36,23 @@ function resolveDirectWorkItemLaunchHost(args: {
   latestStore: AppState
   worktreeId: string
   worktreePath: string
+  repoHost: RepoHostFields & { path: string }
   launchPlatform?: NodeJS.Platform
   repoLaunchHost: KnownExecutionHostPlatform
   repoProjectRuntime?: ProjectExecutionRuntimeResolution
 }): KnownExecutionHostPlatform {
-  // Why: the worktree was created on the repo's host and may not be hydrated yet, which reads as
-  // local; only a local workspace's own runtime (e.g. WSL) can refine the repo's answer.
-  if (args.repoLaunchHost.hostKind !== 'local') {
-    return args.repoLaunchHost
-  }
-  const fact = resolveWorktreeExecutionHostPlatform(
+  // Why the repo's owner: the worktree was created on that host and may not be hydrated yet; its
+  // own path and runtime still refine the OS (a WSL worktree on a Windows host runs in Linux).
+  const fact = resolveRepoExecutionHostPlatform(
     args.latestStore,
-    args.worktreeId,
-    args.worktreePath,
-    () => args.repoProjectRuntime
+    args.repoHost,
+    () =>
+      getLocalProjectExecutionRuntimeContext(args.latestStore, args.worktreeId, CLIENT_PLATFORM) ??
+      args.repoProjectRuntime,
+    args.worktreePath
   )
   return refineLocalLaunchPlatform(
-    fact.kind === 'known' && fact.hostKind === 'local' ? fact : args.repoLaunchHost,
+    fact.kind === 'known' ? fact : args.repoLaunchHost,
     args.launchPlatform
   )
 }
@@ -62,7 +64,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   agentOverride?: TuiAgent
   agentArgs?: string | null
   repoConnectionId: string | null
-  repoHost: RepoHostFields
+  repoHost: RepoHostFields & { path: string }
   detectedAgentsPromise: Promise<string[]> | null
   latestStore: AppState
   settings: AppState['settings']

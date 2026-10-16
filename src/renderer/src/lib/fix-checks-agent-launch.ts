@@ -14,10 +14,7 @@ import {
   pickSourceControlLaunchAgent,
   readSourceControlLaunchRecipeAgentId
 } from '../../../shared/source-control-launch-agent-selection'
-import {
-  knownExecutionHostPlatform,
-  resolveWorktreeExecutionHostPlatform
-} from '@/lib/execution-host-facts'
+import { resolveRepoWorktreeLaunchPlatform } from '@/lib/execution-host-facts'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import { resolveSourceControlActionRecipe } from '../../../shared/source-control-ai'
@@ -163,13 +160,17 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       return false
     }
     // Why: the agent runs on the workspace's execution host, so its OS decides quoting (#27971).
-    const launchPlatform = knownExecutionHostPlatform(
-      resolveWorktreeExecutionHostPlatform(
-        useAppStore.getState(),
-        targetWorktreeId,
-        targetWorktree.path
-      )
-    )
+    const latestStore = useAppStore.getState()
+    const targetRepo =
+      latestStore.repos.find((candidate) => candidate.id === targetWorktree.repoId) ?? repo
+    const launchPlatform = targetRepo
+      ? resolveRepoWorktreeLaunchPlatform(
+          latestStore,
+          targetRepo,
+          targetWorktreeId,
+          targetWorktree.path
+        )
+      : undefined
     if (!launchPlatform) {
       toast.error(
         translate(

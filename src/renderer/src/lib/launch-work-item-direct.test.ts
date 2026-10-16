@@ -193,21 +193,6 @@ describe('launchWorkItemDirect', () => {
         }
       ],
       worktreesByRepo: {},
-      // Why: SSH fixtures use target `ssh-1`, which reports a Linux host once connected.
-      sshConnectionStates: new Map([
-        [
-          'ssh-1',
-          {
-            targetId: 'ssh-1',
-            status: 'connected',
-            error: null,
-            reconnectAttempt: 0,
-            remotePlatform: 'linux'
-          }
-        ]
-      ]),
-      sshStateByEnvironment: new Map(),
-      runtimeStatusByEnvironmentId: new Map(),
       settings: {
         defaultTuiAgent: 'codex',
         disabledTuiAgents: [],
@@ -222,6 +207,21 @@ describe('launchWorkItemDirect', () => {
       seedNativeChatLaunchDraft: mocks.seedNativeChatLaunchDraft,
       markNativeChatLaunchPromptFailed: mocks.markNativeChatLaunchPromptFailed
     } as typeof mocks.store
+    // Why: SSH fixtures use target `ssh-1`, which reports a Linux host once connected.
+    mocks.store.sshConnectionStates = new Map([
+      [
+        'ssh-1',
+        {
+          targetId: 'ssh-1',
+          status: 'connected',
+          error: null,
+          reconnectAttempt: 0,
+          remotePlatform: 'linux'
+        }
+      ]
+    ])
+    mocks.store.sshStateByEnvironment = new Map()
+    mocks.store.runtimeStatusByEnvironmentId = new Map()
     // @ts-expect-error -- test shim
     globalThis.window = { api: mockApi }
   })

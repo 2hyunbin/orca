@@ -115,18 +115,22 @@ function resolveHostPlatform(
   return { kind: 'known', platform, hostKind: 'runtime' }
 }
 
-/** Platform of the host that runs agents for a repo that has no workspace yet. */
+/**
+ * Platform of the host that runs agents for a repo's workspaces, read from the repo row's owner.
+ * `workspacePath` names a workspace on that host (e.g. a WSL worktree); it defaults to the repo.
+ */
 export function resolveRepoExecutionHostPlatform(
   state: HostFactsState,
   repo: { connectionId?: string | null; executionHostId?: string | null; path: string },
-  projectRuntime: () => ProjectExecutionRuntimeResolution | undefined
+  projectRuntime: () => ProjectExecutionRuntimeResolution | undefined,
+  workspacePath: string | null | undefined = repo.path
 ): ExecutionHostPlatformFact {
   const host = parseExecutionHostId(getRepoExecutionHostId(repo))
   return resolveHostPlatform(state, {
     host,
     nestedSshTargetId: host?.kind === 'runtime' ? repo.connectionId?.trim() || null : null,
     sshOwnerEnvironmentId: null,
-    workspacePath: repo.path,
+    workspacePath,
     projectRuntime
   })
 }
@@ -135,9 +139,7 @@ export function resolveRepoExecutionHostPlatform(
 export function resolveWorktreeExecutionHostPlatform(
   state: WorktreeHostFactsState,
   worktreeId: string,
-  workspacePath: string | null | undefined,
-  /** Local runtime to use when the worktree is not hydrated yet (e.g. its repo's WSL preference). */
-  fallbackProjectRuntime?: () => ProjectExecutionRuntimeResolution | undefined
+  workspacePath: string | null | undefined
 ): ExecutionHostPlatformFact {
   // Why the routing default: an owner-less row launches where routing sends it, so read that host.
   const host = parseExecutionHostId(getExecutionHostIdForWorktree(state, worktreeId))
@@ -148,8 +150,7 @@ export function resolveWorktreeExecutionHostPlatform(
     sshOwnerEnvironmentId:
       host?.kind === 'ssh' ? getRuntimeEnvironmentIdForWorktree(state, worktreeId) : null,
     workspacePath,
-    projectRuntime: () =>
-      getLocalProjectExecutionRuntimeContext(state, worktreeId) ?? fallbackProjectRuntime?.()
+    projectRuntime: () => getLocalProjectExecutionRuntimeContext(state, worktreeId)
   })
 }
 
@@ -163,10 +164,22 @@ export function refineLocalLaunchPlatform(
   return fact.hostKind === 'local' && callerPlatform ? { ...fact, platform: callerPlatform } : fact
 }
 
-/** `undefined` when withheld, so the launch itself stops and tells the user why. */
-export function knownExecutionHostPlatform(
-  fact: ExecutionHostPlatformFact
+/**
+ * Preflight platform for a worktree's agent launch, read from its repo's owner. `undefined` when
+ * withheld: the launch itself resolves the worktree's own host and tells the user why it stopped.
+ */
+export function resolveRepoWorktreeLaunchPlatform(
+  state: WorktreeHostFactsState,
+  repo: { connectionId?: string | null; executionHostId?: string | null; path: string },
+  worktreeId: string,
+  worktreePath: string | null | undefined
 ): NodeJS.Platform | undefined {
+  const fact = resolveRepoExecutionHostPlatform(
+    state,
+    repo,
+    () => getLocalProjectExecutionRuntimeContext(state, worktreeId),
+    worktreePath ?? repo.path
+  )
   return fact.kind === 'known' ? fact.platform : undefined
 }
 

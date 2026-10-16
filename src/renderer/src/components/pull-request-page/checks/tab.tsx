@@ -23,10 +23,7 @@ import {
 } from '@/lib/github-source-runtime-context'
 import { getLocalRepoProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
-import {
-  knownExecutionHostPlatform,
-  resolveRepoExecutionHostPlatform
-} from '@/lib/execution-host-facts'
+import { resolveRepoExecutionHostPlatform } from '@/lib/execution-host-facts'
 import { resolveSourceControlActionRecipe } from '../../../../../shared/source-control-ai'
 import type {
   GitHubWorkItem,
@@ -126,40 +123,38 @@ export function ChecksTab({
   const sshStateByEnvironment = useAppStore((s) => s.sshStateByEnvironment)
   const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)
   // Why: the fix agent runs on the repo's execution host, so its OS decides quoting (#27971).
-  const fixChecksLaunchPlatform = useMemo(
-    () =>
-      repo
-        ? knownExecutionHostPlatform(
-            resolveRepoExecutionHostPlatform(
-              { sshConnectionStates, sshStateByEnvironment, runtimeStatusByEnvironmentId },
-              repo,
-              () =>
-                getLocalRepoProjectExecutionRuntimeContext(
-                  // Why: repo-scoped resolution only reads repos/projects/settings, and subscribing keeps the launch platform fresh.
-                  {
-                    activeRepoId: null,
-                    activeWorktreeId: null,
-                    projects,
-                    repos,
-                    settings,
-                    worktreesByRepo: {}
-                  },
-                  repo.id,
-                  CLIENT_PLATFORM
-                )
-            )
-          )
-        : undefined,
-    [
-      projects,
+  const fixChecksLaunchPlatform = useMemo(() => {
+    if (!repo) {
+      return undefined
+    }
+    const fact = resolveRepoExecutionHostPlatform(
+      { sshConnectionStates, sshStateByEnvironment, runtimeStatusByEnvironmentId },
       repo,
-      repos,
-      runtimeStatusByEnvironmentId,
-      settings,
-      sshConnectionStates,
-      sshStateByEnvironment
-    ]
-  )
+      () =>
+        getLocalRepoProjectExecutionRuntimeContext(
+          // Why: repo-scoped resolution only reads repos/projects/settings, and subscribing keeps the launch platform fresh.
+          {
+            activeRepoId: null,
+            activeWorktreeId: null,
+            projects,
+            repos,
+            settings,
+            worktreesByRepo: {}
+          },
+          repo.id,
+          CLIENT_PLATFORM
+        )
+    )
+    return fact.kind === 'known' ? fact.platform : undefined
+  }, [
+    projects,
+    repo,
+    repos,
+    runtimeStatusByEnvironmentId,
+    settings,
+    sshConnectionStates,
+    sshStateByEnvironment
+  ])
   // Why: parses a fresh host object per call, so memoize to keep the check action callbacks stable.
   const runtimeHost = useMemo(() => getGitHubSourceRuntimeHost(sourceContext), [sourceContext])
   const canUseChecksRepoContext = canUseGitHubRepoContext(repoPath, sourceContext)

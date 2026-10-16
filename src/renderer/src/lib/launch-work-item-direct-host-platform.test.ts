@@ -3,13 +3,17 @@ import type { RuntimeEnvironmentStatus } from '../../../shared/runtime-host-stat
 import type { SshConnectionState } from '../../../shared/ssh-types'
 import type * as TuiAgentStartupModule from '@/lib/tui-agent-startup'
 
-const mocks = vi.hoisted(() => ({
-  clientPlatform: 'win32' as NodeJS.Platform,
-  toastError: vi.fn(),
-  createWorktree: vi.fn(),
-  activateAndRevealWorktree: vi.fn(),
-  store: {} as Record<string, unknown>
-}))
+const mocks = vi.hoisted(() => {
+  const clientPlatform: NodeJS.Platform = 'win32'
+  const store: Record<string, unknown> = {}
+  return {
+    clientPlatform,
+    toastError: vi.fn(),
+    createWorktree: vi.fn(),
+    activateAndRevealWorktree: vi.fn(),
+    store
+  }
+})
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.store } }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, message: vi.fn() } }))
@@ -192,6 +196,19 @@ describe('launchWorkItemDirect quotes for the execution host (#27971)', () => {
   it("keeps the server's OS when the created worktree is not hydrated yet", async () => {
     setStore(HOST_CASES[0])
     mocks.createWorktree.mockResolvedValue({ worktree: { id: 'wt-new', path: '/wt' } })
+
+    await expect(startLinearIssue()).resolves.toBe(true)
+
+    expect(buildAgentDraftLaunchPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ platform: 'linux' })
+    )
+  })
+
+  it("quotes a Windows server's new WSL worktree for that distro", async () => {
+    setStore(HOST_CASES[5])
+    mocks.createWorktree.mockResolvedValue({
+      worktree: { id: 'wt-wsl', path: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\wt' }
+    })
 
     await expect(startLinearIssue()).resolves.toBe(true)
 

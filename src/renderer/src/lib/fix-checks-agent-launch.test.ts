@@ -55,7 +55,7 @@ const mocks = vi.hoisted(() => {
     pickSourceControlLaunchAgent: vi.fn(),
     readSourceControlLaunchRecipeAgentId: vi.fn(),
     resolveSourceControlActionRecipe: vi.fn(),
-    resolveWorktreeExecutionHostPlatform: vi.fn(),
+    resolveRepoWorktreeLaunchPlatform: vi.fn(),
     toastError: vi.fn(),
     toastMessage: vi.fn()
   }
@@ -109,7 +109,7 @@ vi.mock('@/lib/execution-host-facts', async () => {
   )
   return {
     ...actual,
-    resolveWorktreeExecutionHostPlatform: mocks.resolveWorktreeExecutionHostPlatform
+    resolveRepoWorktreeLaunchPlatform: mocks.resolveRepoWorktreeLaunchPlatform
   }
 })
 
@@ -165,11 +165,7 @@ describe('startFixChecksAgent', () => {
     mocks.resolveSourceControlActionRecipe.mockReturnValue({
       commandInputTemplate: '{basePrompt}'
     })
-    mocks.resolveWorktreeExecutionHostPlatform.mockReturnValue({
-      kind: 'known',
-      platform: 'darwin',
-      hostKind: 'local'
-    })
+    mocks.resolveRepoWorktreeLaunchPlatform.mockReturnValue('darwin')
   })
 
   it('activates the attached workspace as a surface-providing caller', async () => {
@@ -261,19 +257,16 @@ describe('startFixChecksAgent', () => {
     ).resolves.toBe(true)
 
     expect(mocks.store.ensureRemoteDetectedAgents).toHaveBeenCalledWith('ssh-1')
-    expect(mocks.resolveWorktreeExecutionHostPlatform).toHaveBeenCalledWith(
+    expect(mocks.resolveRepoWorktreeLaunchPlatform).toHaveBeenCalledWith(
       mocks.store,
+      expect.objectContaining({ id: 'repo-1', connectionId: 'ssh-1' }),
       'wt-1',
       '/repo/wt-1'
     )
   })
 
   it("plans a Linux server's launch for that server from a Windows client (#27971)", async () => {
-    mocks.resolveWorktreeExecutionHostPlatform.mockReturnValue({
-      kind: 'known',
-      platform: 'linux',
-      hostKind: 'runtime'
-    })
+    mocks.resolveRepoWorktreeLaunchPlatform.mockReturnValue('linux')
     const { startFixChecksAgent } = await import('./fix-checks-agent-launch')
 
     await expect(
@@ -291,10 +284,7 @@ describe('startFixChecksAgent', () => {
   })
 
   it('fails without launching when the execution host has not reported its OS', async () => {
-    mocks.resolveWorktreeExecutionHostPlatform.mockReturnValue({
-      kind: 'withheld',
-      reason: 'The Orca server has not reported its operating system yet.'
-    })
+    mocks.resolveRepoWorktreeLaunchPlatform.mockReturnValue(undefined)
     const { startFixChecksAgent } = await import('./fix-checks-agent-launch')
 
     await expect(

@@ -12,10 +12,7 @@ import { openSourceControlAiSettingsTarget } from '@/components/right-sidebar/so
 import { getConnectionId } from '@/lib/connection-context'
 import { startFixChecksAgent } from '@/lib/fix-checks-agent-launch'
 import { readSourceControlLaunchRecipeAgentId } from '../../../../shared/source-control-launch-agent-selection'
-import {
-  knownExecutionHostPlatform,
-  resolveWorktreeExecutionHostPlatform
-} from '@/lib/execution-host-facts'
+import { resolveRepoWorktreeLaunchPlatform } from '@/lib/execution-host-facts'
 import { useAppStore } from '@/store'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai'
@@ -151,15 +148,15 @@ export function useCheckRunDetailsFixWithAI(args: {
     ? (getConnectionId(args.worktreeId) ?? repo?.connectionId ?? null)
     : null
   // Why: the fix agent runs on the workspace's execution host, so its OS decides quoting (#27971).
-  const launchPlatform = args.worktreeId
-    ? knownExecutionHostPlatform(
-        resolveWorktreeExecutionHostPlatform(
+  const launchPlatform =
+    args.worktreeId && repo
+      ? resolveRepoWorktreeLaunchPlatform(
           useAppStore.getState(),
+          repo,
           args.worktreeId,
-          worktree?.path ?? null
+          worktree?.path
         )
-      )
-    : undefined
+      : undefined
   const fixChecksRecipe = useMemo(
     () =>
       resolveSourceControlActionRecipe({
