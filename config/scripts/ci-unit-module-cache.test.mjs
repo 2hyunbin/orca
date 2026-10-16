@@ -147,18 +147,24 @@ it('uses an optional exact restore after install and saves successful scoped pro
   expect(workflow.on.workflow_call.inputs.run_relay_integration.default).toBe(true)
 })
 
-it('retains the four-worker ARM limit when the runner provider changes', () => {
+it('retains four workers on ARM and the four-core Blacksmith unit runner', () => {
   const workflow = parse(readFileSync('.github/workflows/unit-tests.yml', 'utf8'))
   const step = workflow.jobs.test.steps.find((step) => step.name === 'Test shard')
   const expression = [...step.run.matchAll(/\$\{\{(.+?)\}\}/g)].find((match) =>
     match[1].includes('--maxWorkers')
   )[1]
-  for (const runner of ['ubuntu-24.04-arm', 'blacksmith-4vcpu-ubuntu-2404-arm']) {
-    expect(runInNewContext(expression, { runner: { arch: 'ARM64' }, inputs: { runner } })).toBe(
+  for (const [arch, runner] of [
+    ['ARM64', 'ubuntu-24.04-arm'],
+    ['ARM64', 'blacksmith-4vcpu-ubuntu-2404-arm'],
+    ['X64', 'blacksmith-4vcpu-ubuntu-2404']
+  ]) {
+    expect(runInNewContext(expression, { runner: { arch }, inputs: { runner } })).toBe(
       '--maxWorkers=4'
     )
   }
-  expect(runInNewContext(expression, { runner: { arch: 'X64' } })).toBe('')
+  expect(
+    runInNewContext(expression, { runner: { arch: 'X64' }, inputs: { runner: 'ubuntu-latest' } })
+  ).toBe('')
 })
 
 it('runs full same-source controls serially with five four-worker shards and included producer costs', () => {

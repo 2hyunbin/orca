@@ -175,8 +175,8 @@ jobs:
     name: static analysis and typecheck
     needs: [code_paths]
     if: needs.code_paths.outputs.static_analysis == 'true' || needs.code_paths.outputs.typecheck == 'true'
-    # Keep ARM64; 24 GB leaves room for typechecking and overlapping checks.
-    runs-on: blacksmith-8vcpu-ubuntu-2404-arm
+    # Leave headroom for typechecking and overlapping checks.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     outputs:
       shards: ${{ steps.unit-plan.outputs.shards }}
       managed_hook_node18: ${{ steps.managed_hook_node18.outcome }}
@@ -893,7 +893,7 @@ jobs:
     uses: ./.github/workflows/unit-tests.yml
     with:
       node_versions: '["24"]'
-      runner: blacksmith-4vcpu-ubuntu-2404-arm
+      runner: blacksmith-4vcpu-ubuntu-2404
       shards: ${{ needs.preflight.outputs.shards }}
       run_shards: ${{ needs.code_paths.outputs.mobile_ci_tools != 'true' }}
       browser_contract: ${{ needs.code_paths.outputs.orcad_browser == 'true' }}
