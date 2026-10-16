@@ -2002,9 +2002,15 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const { cols, rows } = desiredViewport
-    if (deferred === 'resize') {
-      stream.resize(cols, rows)
-    } else if (!isUnconfirmedClaim(stream, cols, rows) && stream.claimViewport(cols, rows)) {
+    if (deferred === 'claim' && isUnconfirmedClaim(stream, cols, rows)) {
+      return
+    }
+    const sent =
+      deferred === 'resize' ? stream.resize(cols, rows) : stream.claimViewport(cols, rows)
+    if (!sent) {
+      // Why: a failed write starts another recovery, whose stream must still carry this intent.
+      deferViewportForRecovery(deferred === 'claim')
+    } else if (deferred === 'claim') {
       unconfirmedClaim = { stream, cols, rows, sentAt: Date.now() }
     }
   }

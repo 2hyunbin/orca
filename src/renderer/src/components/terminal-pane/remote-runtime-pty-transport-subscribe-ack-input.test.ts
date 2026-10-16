@@ -227,6 +227,27 @@ describe('remote recovery input at the subscribed ack', () => {
     transport.destroy?.()
   })
 
+  it('keeps a deferred claim for the next stream when its replay fails to write', async () => {
+    const { transport, streamId } = await recoveringTransport((outage) => {
+      expect(outage.claimViewport?.(100, 30)).toBe(true)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    subscriptionSendBinary.mockImplementationOnce((bytes) => {
+      if (decodeTerminalStreamFrame(bytes)?.opcode === TerminalStreamOpcode.ClaimViewport) {
+        throw new Error('socket closed')
+      }
+    })
+    acknowledgeSubscribe(streamId)
+    await vi.waitFor(() => expect(subscribeFrameCount()).toBe(3))
+    const next = latestSubscribePayload().streamId
+    subscriptionSendBinary.mockClear()
+    acknowledgeSubscribe(next)
+    await vi.waitFor(() =>
+      expect(viewportAndInputFrames()).toEqual(['claim 100x30', 'resize 100x30'])
+    )
+    transport.destroy?.()
+  })
+
   it('sends a claim made after the subscribed ack instead of dropping it', async () => {
     const { transport, streamId } = await recoveringTransport()
     acknowledgeSubscribe(streamId)
