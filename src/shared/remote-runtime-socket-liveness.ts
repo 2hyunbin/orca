@@ -110,12 +110,20 @@ export function startRemoteRuntimeSocketLiveness(args: {
     if (!tryPing()) {
       return
     }
+    const probedAt = now()
     resumeProbeTimer = setTimeout(() => {
       resumeProbeTimer = null
-      if (!stopped && !activitySinceResumeProbe) {
-        stop()
-        args.onDead()
+      if (stopped || activitySinceResumeProbe) {
+        return
       }
+      // Why: a late timer means this process slept or stalled, so replies may still be queued; probe afresh.
+      const elapsedMs = now() - probedAt
+      if (elapsedMs < 0 || elapsedMs > deadlineMs * 1.5) {
+        probeNow(deadlineMs)
+        return
+      }
+      stop()
+      args.onDead()
     }, deadlineMs)
     // Why: mobile typechecks shared code with DOM timer types where unref is absent.
     if (

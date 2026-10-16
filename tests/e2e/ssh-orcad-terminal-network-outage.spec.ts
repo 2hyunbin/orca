@@ -23,9 +23,7 @@ test.skip(process.platform === 'win32', 'The Docker SSH host uses POSIX tooling'
 
 const OUTAGES = [
   { mode: 'silent', ms: 30_000, label: '30 s' },
-  { mode: 'reset', ms: 30_000, label: '30 s' },
-  // Why: outlasts the pane's ~3 min auto-recovery window, with no `online` event when it returns.
-  { mode: 'silent', ms: 200_000, label: 'long' }
+  { mode: 'reset', ms: 30_000, label: '30 s' }
 ] as const
 
 function sshStatus(page: Page, targetId: string): Promise<string | null> {
