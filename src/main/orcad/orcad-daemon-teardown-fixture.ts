@@ -4,6 +4,8 @@
  * The daemon outlives orcad by design and only its pid record names it. Killing it is not
  * enough: until it has exited it can still remove its socket, pid and token files and append
  * to its log, so a recursive delete racing it fails with ENOTEMPTY (seen on macOS).
+ * An idle-retiring daemon deletes its pid record before it exits, so callers record the pid
+ * before stopping orcad (the daemon's last client) and teardown still waits on it.
  */
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -114,16 +116,38 @@ export async function killChildAndWait(child: ReturnType<typeof spawnProcess>): 
   await exited
 }
 
-/** Authenticates each profile daemon, shuts down its PTYs, and requires process exit. */
-export async function killProfileDaemons(userData: string): Promise<void> {
-  const daemonDir = join(userData, 'daemon')
-  const daemons = (existsSync(daemonDir) ? readdirSync(daemonDir) : []).flatMap((name) => {
+const recordedDaemonPids = new Map<string, Set<number>>()
+
+function readProfileDaemons(daemonDir: string): { pid: number; protocolVersion: number }[] {
+  return (existsSync(daemonDir) ? readdirSync(daemonDir) : []).flatMap((name) => {
     const match = /^daemon-v(\d+)\.pid$/u.exec(name)
     const pid = match ? readDaemonPidRecord(join(daemonDir, name))?.pid : undefined
     return pid && match ? [{ pid, protocolVersion: Number(match[1]) }] : []
   })
-  const results = await Promise.allSettled(
-    daemons.map(async ({ pid, protocolVersion }) => {
+}
+
+/** Call before stopping orcad: losing its last client lets the daemon delete its pid record. */
+export function recordProfileDaemons(userData: string): void {
+  const daemonDir = join(userData, 'daemon')
+  const recorded = recordedDaemonPids.get(daemonDir) ?? new Set<number>()
+  for (const { pid } of readProfileDaemons(daemonDir)) {
+    recorded.add(pid)
+  }
+  recordedDaemonPids.set(daemonDir, recorded)
+}
+
+/** Authenticates each profile daemon, shuts down its PTYs, and requires process exit. */
+export async function killProfileDaemons(userData: string): Promise<void> {
+  const daemonDir = join(userData, 'daemon')
+  const daemons = readProfileDaemons(daemonDir)
+  const retiring = [...(recordedDaemonPids.get(daemonDir) ?? [])].filter(
+    (pid) => !daemons.some((daemon) => daemon.pid === pid)
+  )
+  recordedDaemonPids.delete(daemonDir)
+  const results = await Promise.allSettled([
+    // Already past its pid record, so only its exit is left to prove.
+    waitForProcessExit(retiring),
+    ...daemons.map(async ({ pid, protocolVersion }) => {
       try {
         await cleanupDaemonForProtocol(daemonDir, protocolVersion, pid)
       } catch (error) {
@@ -137,7 +161,7 @@ export async function killProfileDaemons(userData: string): Promise<void> {
       }
       await waitForProcessExit([pid])
     })
-  )
+  ])
   const failures = results.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : []
   )

@@ -10,6 +10,7 @@ import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
 import {
   killAndAwaitExit,
   killProfileDaemons,
+  recordProfileDaemons,
   waitForProcessExit
 } from './orcad-daemon-teardown-fixture'
 
@@ -253,6 +254,28 @@ describe('profile daemon cleanup after loss of contact', () => {
       vi.useRealTimers()
       signal.mockRestore()
     }
+  })
+
+  it('waits for a recorded daemon that deleted its pid record before exiting', async ({
+    onTestFinished
+  }) => {
+    const retiring = spawnProcess({
+      program: process.execPath,
+      args: ['-e', 'setTimeout(() => {}, 1_000)'],
+      timeoutMs: null
+    })
+    const closed = new Promise<void>((resolve, reject) => {
+      retiring.once('error', reject)
+      retiring.once('close', () => resolve())
+    })
+    onTestFinished(() => closed)
+    const root = profile(retiring.pid!, onTestFinished)
+    recordProfileDaemons(root)
+    rmSync(join(root, 'daemon', 'daemon-v1.pid'))
+    vi.mocked(cleanupDaemonForProtocol).mockClear()
+    await killProfileDaemons(root)
+    expect(() => process.kill(retiring.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
+    expect(cleanupDaemonForProtocol).not.toHaveBeenCalled()
   })
 
   it.for([
