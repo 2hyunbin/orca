@@ -12,6 +12,7 @@ on:
     paths:
       - 'src/main/daemon/**'
       - '!src/main/daemon/**/*.test.ts'
+      - '!src/main/daemon/serialize-grid-roundtrip.ts'
       # D7 packages production entries; the unit jobs own these test roots.
       - 'src/main/orcad/**'
       - '!src/main/orcad/**/*.test.ts'

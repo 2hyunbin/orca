@@ -35,6 +35,7 @@ on:
       - '!src/main/daemon/daemon-init-test-harness.ts'
       - '!src/main/daemon/daemon-init-fresh-import.ts'
       - '!src/main/daemon/daemon-init-mock-types.ts'
+      - '!src/main/daemon/serialize-grid-roundtrip.ts'
       - 'src/main/providers/local-pty-provider.ts'
       - 'src/main/providers/windows-shell-args.ts'
       - 'src/main/providers/windows-shell-preflight-runtime.windows.test.ts'

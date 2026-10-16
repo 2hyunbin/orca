@@ -12,6 +12,9 @@ const workflows = {
   ),
   wsl: parse(
     readFileSync(new URL('../../.github/workflows/wsl-orcad-e2e.yml', import.meta.url), 'utf8')
+  ),
+  computer: parse(
+    readFileSync(new URL('../../.github/workflows/computer-e2e.yml', import.meta.url), 'utf8')
   )
 }
 
@@ -96,6 +99,35 @@ for (const [lane, { excluded, retained, product }] of Object.entries(cases)) {
     })
   })
 }
+
+describe.each(['windows', 'computer'])('%s serializer oracle routing', (lane) => {
+  const paths = workflows[lane].on.pull_request.paths
+  const helper = 'src/main/daemon/serialize-grid-roundtrip.ts'
+  const product = 'src/main/daemon/daemon-entry.ts'
+  const renamed = 'src/main/daemon/serialize-grid-runtime.ts'
+
+  it('leaves the unit-only oracle to the unit suites', () => {
+    expect(workflowIncludes(paths, [helper])).toBe(false)
+    expect(workflowIncludes(paths, [helper, 'docs/ci.md'])).toBe(false)
+    expect(workflowIncludes(paths, [helper, product])).toBe(true)
+    // Both names of a rename must retain the production workflow.
+    expect(workflowIncludes(paths, [helper, renamed])).toBe(true)
+    expect(workflowIncludes(paths, [renamed, helper])).toBe(true)
+    expect(workflowIncludes(paths, ['src/main/daemon/unknown-test-harness.ts'])).toBe(true)
+  })
+})
+
+it.each([
+  'config/scripts/daemon-boot-smoke.mjs',
+  'config/scripts/daemon-endpoint-handover-smoke.mjs',
+  'config/scripts/computer-use-smoke.test.mjs',
+  'src/main/providers/windows-shell-preflight-runtime.windows.test.ts',
+  'native/computer-use-macos/Sources/OrcaComputerUseMacOS/main.swift',
+  'src/cli/handlers/computer.ts',
+  '.github/workflows/computer-e2e.yml'
+])('keeps the computer contract owner selected: %s', (file) => {
+  expect(workflowIncludes(workflows.computer.on.pull_request.paths, [file])).toBe(true)
+})
 
 it('re-includes the real WSL distro root after excluding unit tests', () => {
   const paths = workflows.wsl.on.pull_request.paths
