@@ -16,6 +16,8 @@ type FakeTarget = RelayDatabaseTarget & {
   answer: Answer
   // Every operation's login is refused (28P01, before any statement ran).
   refuses: boolean
+  // The move tool's mark on the copy it left behind.
+  superseded: boolean
   probes: number
   openSessions: number
   // `fail:<code>` rejects with that code after running; `wait:<ms>` delays, then runs.
@@ -50,7 +52,9 @@ function fakeTarget(name: string, answer: Answer): FakeTarget {
     target.probes += 1
     const current = target.answer
     if (current === 'hang') return await new Promise(() => undefined)
-    return current === null ? null : { generation: current, opened: target.opened }
+    return current === null
+      ? null
+      : { generation: current, superseded: target.superseded, opened: target.opened }
   }
   const target: FakeTarget = {
     opened: {
@@ -62,6 +66,7 @@ function fakeTarget(name: string, answer: Answer): FakeTarget {
     },
     answer,
     refuses: false,
+    superseded: false,
     probes: 0,
     openSessions: 0,
     queries,
@@ -121,19 +126,26 @@ function setup(input: {
   const primary = fakeTarget('primary', input.primary)
   const dedicated = fakeTarget('dedicated', input.dedicated)
   const openDedicated = vi.fn(() => dedicated)
-  const first = input.firstPointer === undefined ? pointer() : input.firstPointer
-  const database = new SwitchingRelayDatabase({
+  // What the bucket holds now; a read applies it, as the control flag channel does.
+  const bucket = {
+    pointer: input.firstPointer === undefined ? pointer() : input.firstPointer
+  }
+  const database: SwitchingRelayDatabase = new SwitchingRelayDatabase({
     primary,
     openDedicated,
-    firstPointer: async () =>
-      first === 'hang' ? await new Promise<null>(() => undefined) : first,
+    firstPointer: async () => {
+      const current = bucket.pointer
+      if (current === 'hang') return await new Promise<null>(() => undefined)
+      if (current) database.applyPointer(current)
+      return current
+    },
     probeTimeoutMs: 40,
     probeIntervalMs: 10,
     bootSelectionCapMs: 150,
     firstPointerWaitMs: 60,
     unavailableReprobeMs: 20
   })
-  return { primary, dedicated, openDedicated, database }
+  return { primary, dedicated, openDedicated, database, bucket }
 }
 
 describe('switching relay database', () => {
@@ -158,7 +170,8 @@ describe('switching relay database', () => {
     const { database, openDedicated, primary } = setup({ primary: 0, dedicated: 5, firstPointer: null })
     expect(await servedBy(database)).toBe('primary')
     expect(openDedicated).not.toHaveBeenCalled()
-    expect(primary.probes).toBe(0)
+    // One authority read, so a primary the move tool left behind is never served.
+    expect(primary.probes).toBe(1)
     expect(events('orca_relay_database_target_selected')).toEqual([
       expect.objectContaining({ target: 'primary', reason: 'no-pointer', phase: 'boot' })
     ])
@@ -460,5 +473,57 @@ describe('switching relay database', () => {
     const ran = database.query('fail:57P01')
     await expect(ran).rejects.toMatchObject({ code: '57P01' })
     expect(dedicated.queries.filter((sql) => sql === 'fail:57P01')).toHaveLength(1)
+  })
+
+  describe('superseded copy', () => {
+    it('never serves a superseded primary without a pointer, and writes nothing there', async () => {
+      const { database, primary } = setup({ primary: 0, dedicated: 1, firstPointer: null })
+      primary.superseded = true
+      await expect(database.query('INSERT 1')).rejects.toMatchObject({ code: '57P03' })
+      const fastAt = Date.now()
+      await expect(database.query('INSERT 2')).rejects.toMatchObject({ code: '57P03' })
+      expect(Date.now() - fastAt).toBeLessThan(20)
+      await sleep(60)
+      await expect(database.query('INSERT 3')).rejects.toMatchObject({ code: '57P03' })
+      expect(primary.queries).toEqual([])
+    })
+
+    it('moves to dedicated once the pointer is readable', async () => {
+      const { database, primary, bucket } = setup({ primary: 0, dedicated: 1, firstPointer: null })
+      primary.superseded = true
+      await expect(database.query('INSERT 1')).rejects.toMatchObject({ code: '57P03' })
+      bucket.pointer = pointer(undefined, 1)
+      await sleep(80)
+      expect(await servedBy(database)).toBe('dedicated')
+      expect(primary.queries).toEqual([])
+    })
+
+    it('serves primary again without a pointer once it is no longer superseded', async () => {
+      const { database, primary } = setup({ primary: 0, dedicated: 0, firstPointer: null })
+      primary.superseded = true
+      await expect(database.query('SELECT 1')).rejects.toMatchObject({ code: '57P03' })
+      primary.superseded = false
+      await sleep(80)
+      expect(await servedBy(database)).toBe('primary')
+    })
+
+    it('never selects, switches to, or recovers onto a superseded target', async () => {
+      const boot = setup({ primary: 0, dedicated: 2 })
+      boot.dedicated.superseded = true
+      expect(await servedBy(boot.database)).toBe('primary')
+
+      const { database, dedicated } = setup({ primary: 0, dedicated: 0 })
+      await database.ready()
+      dedicated.answer = 1
+      dedicated.superseded = true
+      database.applyPointer(pointer(quiesceFromNow('cut-8', 0, 80)))
+      await sleep(5)
+      expect(await servedBy(database)).toBe('primary')
+      await sleep(1_000)
+      await expect(database.query('fail:28P01')).rejects.toMatchObject({ code: '28P01' })
+      await sleep(20)
+      expect(await servedBy(database)).toBe('primary')
+      expect(events('orca_relay_database_switched')).toEqual([])
+    })
   })
 })
