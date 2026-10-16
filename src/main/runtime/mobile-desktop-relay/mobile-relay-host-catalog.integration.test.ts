@@ -131,10 +131,11 @@ describe('mobile relay hosts: phone -> desktop lists the servers it shows', () =
           ])
         )
       }),
-      resolve: async (environmentId) => {
+      captureRegistration: (environmentId) => () => {
         const server = servers.get(environmentId)
         return server ? { environmentId, fence: 'pairing-1', pairing: server.pairing } : null
       },
+      resolve: async (environmentId) => hosts.captureRegistration(environmentId)?.() ?? null,
       call: (host, method, params) =>
         sendRemoteRuntimeRequest(
           pairedRuntimeConnectionFromOffer(servers.get(host.environmentId)!.pairing),

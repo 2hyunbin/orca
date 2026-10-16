@@ -10,7 +10,10 @@ import {
   runtimeEnvironmentStatusFromSnapshot,
   type RuntimeEnvironmentStatus
 } from '../../shared/runtime-host-status'
-import type { MobileDesktopRelayHosts } from '../runtime/mobile-desktop-relay/mobile-desktop-relay-hosts'
+import type {
+  MobileDesktopRelayHost,
+  MobileDesktopRelayHosts
+} from '../runtime/mobile-desktop-relay/mobile-desktop-relay-hosts'
 import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
 import type { SshConnectionState } from '../../shared/ssh-types'
 import { getRegisteredSshState, listRegisteredSshTargets } from '../ssh/ssh-target-registry'
@@ -77,10 +80,26 @@ export function createRuntimeEnvironmentMobileRelayHosts(): MobileDesktopRelayHo
         return null
       }
       const environment = await resolveManagedRuntimeEnvironment(userDataPath, environmentId)
-      return {
-        environmentId,
-        fence: relayHostFence(environment),
-        pairing: getPreferredPairingOffer(environment)
+      return relayHost(environment)
+    },
+    captureRegistration: (environmentId) => {
+      const environment = listRelayableEnvironments(userDataPath).find(
+        (entry) => entry.id === environmentId
+      )
+      if (!environment) {
+        return null
+      }
+      const createdAt = environment.createdAt
+      const serverKey = getPreferredPairingOffer(environment).publicKeyB64
+      return () => {
+        const current = listRelayableEnvironments(userDataPath).find(
+          (entry) => entry.id === environmentId
+        )
+        return current &&
+          current.createdAt === createdAt &&
+          getPreferredPairingOffer(current).publicKeyB64 === serverKey
+          ? relayHost(current)
+          : null
       }
     },
     acquireDemand: (environmentId, method) => {
@@ -97,22 +116,9 @@ export function createRuntimeEnvironmentMobileRelayHosts(): MobileDesktopRelayHo
         return null
       }
       const release = service.acquireDemand(environmentId)
-      const serverKey = getPreferredPairingOffer(environment).publicKeyB64
       return {
         // Prepare before taking the pairing fence: reconnect can rotate the bridge's credentials.
-        ready: Promise.resolve().then(async () => {
-          await service.ensureForRuntimeCall(environmentId)
-          const current = listRelayableEnvironments(userDataPath).find(
-            (entry) => entry.id === environmentId
-          )
-          if (
-            !current ||
-            current.createdAt !== environment.createdAt ||
-            getPreferredPairingOffer(current).publicKeyB64 !== serverKey
-          ) {
-            throw new Error('The server changed while connecting.')
-          }
-        }),
+        ready: Promise.resolve().then(() => service.ensureForRuntimeCall(environmentId)),
         release
       }
     },
@@ -143,4 +149,12 @@ function pairingRevision(environment: KnownRuntimeEnvironment): number {
 
 function relayHostFence(environment: KnownRuntimeEnvironment): string {
   return `${pairingRevision(environment)}\0${environment.runtimeId}`
+}
+
+function relayHost(environment: KnownRuntimeEnvironment): MobileDesktopRelayHost {
+  return {
+    environmentId: environment.id,
+    fence: relayHostFence(environment),
+    pairing: getPreferredPairingOffer(environment)
+  }
 }

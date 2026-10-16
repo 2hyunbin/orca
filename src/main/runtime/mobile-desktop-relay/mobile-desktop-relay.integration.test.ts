@@ -161,10 +161,11 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
         sshTargetLabels: new Map(),
         sshConnectionStates: new Map()
       }),
-      resolve: async (environmentId) =>
+      captureRegistration: (environmentId) =>
         environmentId === 'env-1'
-          ? { environmentId, fence: 'pairing-1', pairing: desktopOnHost }
+          ? () => ({ environmentId, fence: 'pairing-1', pairing: desktopOnHost })
           : null,
+      resolve: async (environmentId) => hosts.captureRegistration(environmentId)?.() ?? null,
       call: async (_host, method, params) => {
         if (method === DELEGATED_MOBILE_DEVICE_SYNC_METHOD) {
           const { phones } = DelegatedMobileDeviceSyncParamsSchema.parse(params)

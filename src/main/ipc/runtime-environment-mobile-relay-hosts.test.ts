@@ -24,8 +24,9 @@ vi.mock('../../shared/runtime-environment-store', () => ({
 }))
 vi.mock('../../shared/runtime-environments', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getPreferredPairingOffer: (environment: { endpoint: string }) => ({
-    endpoint: environment.endpoint
+  getPreferredPairingOffer: (environment: { endpoint: string; publicKeyB64?: string }) => ({
+    endpoint: environment.endpoint,
+    ...(environment.publicKeyB64 ? { publicKeyB64: environment.publicKeyB64 } : {})
   })
 }))
 vi.mock('./runtime-environment-managed-tunnel', () => ({
@@ -102,14 +103,20 @@ describe('runtime environment mobile relay hosts', () => {
     expect(mocks.ensure).toHaveBeenCalledWith('wsl:ubuntu')
     demand?.release()
     expect(mocks.acquire.mock.results[0]?.value).toHaveBeenCalledOnce()
-    // Removing and re-adding the same id cannot redirect an action already preparing.
-    mocks.ensure.mockImplementationOnce(async () => {
-      mocks.environments[1] = { ...mocks.environments[1], createdAt: 3 }
-    })
-    const replaced = hosts.acquireDemand?.('wsl:ubuntu', 'agentSession.send')
-    await expect(replaced?.ready).rejects.toThrow('server changed')
-    replaced?.release()
+    const select = hosts.captureRegistration('wsl:ubuntu')!
+    mocks.environments[1] = { ...mocks.environments[1], endpoint: 'ws://new', pairingRevision: 9 }
+    expect(select()).toMatchObject({ pairing: { endpoint: 'ws://new' }, fence: '9\0null' })
+    const original = mocks.environments[1]!
+    for (const replacement of [
+      null, { ...original, createdAt: 3 }, { ...original, publicKeyB64: 'other' }
+    ]) {
+      mocks.environments = [mocks.environments[0]!, ...(replacement ? [replacement] : [])]
+      expect(select()).toBeNull()
+    }
+    mocks.environments = [mocks.environments[0]!, original]
     mocks.enabled = false
+    expect(select()).toBeNull()
+    expect(hosts.captureRegistration('wsl:ubuntu')).toBeNull()
     expect(hosts.list().environments.map((environment) => environment.id)).toEqual(['env-1'])
     await expect(hosts.resolve('wsl:ubuntu')).resolves.toBeNull()
     expect(mocks.resolveManaged).not.toHaveBeenCalled()

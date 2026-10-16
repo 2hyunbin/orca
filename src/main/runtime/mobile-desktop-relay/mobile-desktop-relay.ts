@@ -10,7 +10,7 @@ import {
 } from '../../../shared/remote-runtime-passthrough-socket'
 import { DelegatedPhoneGrantCache } from './delegated-phone-grant-cache'
 import { localHostedBrowserPageRequest } from './hosted-browser-page-route'
-import type { MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
+import type { MobileDesktopRelayHost, MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
 import type { MobileRelayWorkDemand } from './mobile-relay-work-demand'
 import { RELAYED_STREAM_CARRIERS } from './relayed-stream-carriers'
 import { createSupportFollowsHostSetting } from '../rpc/methods/structured-agent-session-policy'
@@ -40,7 +40,8 @@ class RelayLink {
   readonly replies: RelayedPhoneReplies
   readonly opened: Promise<OpenedRelayLink>
   demand: MobileRelayWorkDemand | null = null
-  preparing = false
+  // Opening stays unbound until current registration and demand agree.
+  preparing = true
 
   constructor(
     readonly environmentId: string,
@@ -193,7 +194,7 @@ export class MobileDesktopRelay {
   retireEnvironment(environmentId: string): void {
     this.grants.delete(environmentId)
     for (const link of this.links.values()) {
-      // Preparation owns no pairing yet; resolve takes the current identity after it finishes.
+      // Unbound openings validate their original registration before committing a transport.
       if (link.environmentId === environmentId && !link.preparing) {
         this.endLink(link, unavailable('The server connection was reset.'))
       }
@@ -230,7 +231,6 @@ export class MobileDesktopRelay {
       this.open(opening)
     )
     link.demand = this.options.hosts.acquireDemand?.(environmentId, method) ?? null
-    link.preparing = link.demand !== null
     link.opened.catch((error: unknown) => {
       this.endLink(
         link,
@@ -242,17 +242,40 @@ export class MobileDesktopRelay {
   }
 
   private async open(link: RelayLink): Promise<OpenedRelayLink> {
+    const selectHost = this.options.hosts.captureRegistration(link.environmentId)
     // Yield until linkFor has attached demand and registered the link.
     await Promise.resolve()
-    await link.demand?.ready
-    link.preparing = false
-    if (!this.isCurrent(link)) {
-      throw unavailable('The relayed request was cancelled.')
+    if (!selectHost) {
+      throw unavailable('The server is not configured on this computer.')
     }
     const { phone } = link
-    const host = await this.options.hosts.resolve(link.environmentId)
-    if (!host) {
-      throw unavailable('The server is not configured on this computer.')
+    let host: MobileDesktopRelayHost | null
+    for (;;) {
+      const demand = link.demand
+      await demand?.ready
+      if (!this.isCurrent(link)) {
+        throw unavailable('The relayed request was cancelled.')
+      }
+      const outcome = await this.options.hosts.resolve(link.environmentId).then(
+        (candidate) => ({ ok: true as const, candidate }),
+        (error: unknown) => ({ ok: false as const, error })
+      )
+      if (!this.isCurrent(link)) {
+        throw unavailable('The relayed request was cancelled.')
+      }
+      // Demand changes only once, from passive to explicit; discard every obsolete outcome.
+      if (link.demand !== demand) {
+        continue
+      }
+      if (!outcome.ok) {
+        throw outcome.error
+      }
+      host = outcome.candidate ? selectHost() : null
+      if (!host) {
+        throw unavailable('The server is not configured on this computer.')
+      }
+      link.preparing = false
+      break
     }
     const grants = await this.grants.get(host, phone.deviceId)
     if (grants.kind === 'update-needed') {

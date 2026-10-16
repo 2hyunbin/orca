@@ -47,6 +47,8 @@ export type MobileDesktopRelayHosts = {
   }
   /** Null when the id names no configured server; a phone-supplied endpoint is never used. */
   resolve: (environmentId: string) => Promise<MobileDesktopRelayHost | null>
+  /** Capture one registration; select its current transport synchronously when opening commits. */
+  captureRegistration: (environmentId: string) => (() => MobileDesktopRelayHost | null) | null
   /** Optional desktop-local preparation; its lease ends with the phone's relay connection. */
   acquireDemand?: (environmentId: string, method: string) => MobileRelayWorkDemand | null
   /** A call as the desktop itself, over its own connection to the server. */
