@@ -78,31 +78,7 @@ vi.mock('./MobileNativeChatComposer', async () => {
   }
 })
 
-type Overrides = {
-  messages?: Parameters<typeof MobileNativeChatView>[0]['messages']
-  folded?: Parameters<typeof MobileNativeChatView>[0]['folded']
-  streaming?: string | null
-  sendErrorMessage?: string | null
-  onClearSendError?: () => void
-  inputLockReason?: 'disconnected' | 'waiting' | null
-  onSend?: (text: string) => Promise<boolean>
-  pending?: Parameters<typeof MobileNativeChatView>[0]['pending']
-  structuredActivityUi?: boolean
-  turnIndicator?: Parameters<typeof MobileNativeChatView>[0]['turnIndicator']
-  agentWorking?: boolean
-  canStop?: boolean
-  ask?: Parameters<typeof MobileNativeChatView>[0]['ask']
-  question?: Parameters<typeof MobileNativeChatView>[0]['question']
-  permission?: Parameters<typeof MobileNativeChatView>[0]['permission']
-  sendSurfaceId?: string
-  keyboardInset?: number
-  hasMore?: boolean
-  onLoadEarlier?: () => void
-  status?: Parameters<typeof MobileNativeChatView>[0]['status']
-  error?: string
-  readFailedFinally?: boolean
-  actionablePromptIds?: readonly string[]
-}
+type Overrides = Partial<Parameters<typeof MobileNativeChatView>[0]>
 
 function assistantTurn(id: string, text: string): NativeChatMessage {
   return { id, role: 'assistant', blocks: [{ type: 'text', text }], timestamp: 0, source: 'hook' }
