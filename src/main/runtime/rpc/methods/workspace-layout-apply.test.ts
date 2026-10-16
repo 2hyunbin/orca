@@ -270,6 +270,25 @@ describe('layout.apply', () => {
     ).toEqual({ command: { type: 'closeTabs', workspace: WORKTREE, tabIds: ['e1'] } })
   })
 
+  it('accepts an editor tab move to the workspace the window resolved, naming its new ids', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const move = {
+      type: 'moveTabToWorkspace',
+      workspace: WORKTREE,
+      toWorkspace: 'repo-1::/work/two',
+      tabs: [{ tabId: 'e1', newTabId: 'e1', newEntityId: 'editor:two:/work/two/a.ts' }],
+      groupId: 'g2',
+      file: { filePath: '/work/two/a.ts', relativePath: 'a.ts', language: 'typescript' }
+    }
+
+    expect(parse(move)?.success).toBe(true)
+    expect(parse({ ...move, file: undefined })?.success).toBe(true)
+    expect(parse({ ...move, tabs: [] })?.success).toBe(false)
+    expect(parse({ ...move, groupId: undefined })?.success).toBe(false)
+    expect(parse({ ...move, toWorkspace: '' })?.success).toBe(false)
+  })
+
   it('opens an editor tab in the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const open = {
