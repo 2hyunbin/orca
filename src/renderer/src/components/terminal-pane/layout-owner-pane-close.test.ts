@@ -74,6 +74,7 @@ it('a layout-owner build removes the pane only once main’s frame drops it', as
 it('a layout-owner build closes the pane itself when main closed it and no frame is coming', async () => {
   mocks.layoutOwnerIsMain = true
   const p = await preparePendingSplitClose()
+  ;(await import('@/runtime/layout-frame-position')).endLayoutFramePositions()
 
   p.actions.executeClosePane(1)
   mocks.sendLayoutCommandToOwner.mock.calls[0]?.[2].apply({})

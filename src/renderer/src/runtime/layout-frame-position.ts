@@ -6,6 +6,8 @@ type Waiter = { seq: number; run: () => void }
 
 /** Null while no sequenced stream is open: nothing is coming to wait for. */
 let position: number | null = null
+/** Set once the stream ended, until a frame comes again; a stream not yet open is still coming. */
+let ended = false
 let waiters: Waiter[] = []
 
 function release(ready: (waiter: Waiter) => boolean): void {
@@ -28,19 +30,21 @@ export function noteLayoutFramePosition(seq: number | undefined): void {
   if (seq === undefined) {
     return
   }
+  ended = false
   position = position === null ? seq : Math.max(position, seq)
   const reached = position
   release((waiter) => waiter.seq <= reached)
 }
 
-/** Whether main's frames are arriving; false before the stream opens and after it ends. */
+/** Whether main's frames will come: false once the stream ended. */
 export function layoutFramesFlowing(): boolean {
-  return position !== null
+  return !ended
 }
 
 /** The stream ended: no frame will come, so every waiter runs now. */
 export function endLayoutFramePositions(): void {
   position = null
+  ended = true
   release(() => true)
 }
 

@@ -86,6 +86,17 @@ describe('createInitialTerminalThroughLayoutOwner', () => {
     expect(takeTabRowFields(command.tabId)).toBeNull()
   })
 
+  it('draws nothing itself when a frame showed the tab before the stream ended', async () => {
+    let state = stateWith()
+    const { create, command } = start(() => state)
+
+    state = stateWith([command.tabId])
+    mocks.reply?.({ ok: true, result: { tabId: command.tabId, leafId: command.leafId } })
+    await settle()
+
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('draws nothing when main’s copy already has a tab there', async () => {
     const { create, command } = start()
 

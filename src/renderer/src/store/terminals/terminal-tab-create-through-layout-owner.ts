@@ -118,9 +118,12 @@ export function createInitialTerminalThroughLayoutOwner(
     .then(
       (reply) => {
         if (reply.ok && reply.result.tabId === tabId) {
+          // Why the store check: a frame may have drawn it before the stream ended.
           if (!layoutFramesFlowing()) {
             release()
-            create({ tabId, leafId })
+            if (!holdsTerminalTab(getState(), tabId)) {
+              create({ tabId, leafId })
+            }
           }
           return
         }
@@ -153,3 +156,7 @@ export function createInitialTerminalThroughLayoutOwner(
 
 /** The window's own mark on a first terminal: its spawn does not count as workspace activity. */
 const ACTIVATION_ROW_FIELDS = { pendingActivationSpawn: true } as const
+
+function holdsTerminalTab(state: AppState, tabId: string): boolean {
+  return Object.values(state.tabsByWorktree).some((tabs) => tabs.some((tab) => tab.id === tabId))
+}
