@@ -327,4 +327,15 @@ export const electronViteConfig: UserConfig = {
   }
 }
 
-export default defineConfig(electronViteConfig)
+export default defineConfig(({ command }) => {
+  if (command !== 'serve' || process.env.ORCA_DEV_MAIN_SOURCEMAPS !== '0') {
+    return electronViteConfig
+  }
+  return {
+    ...electronViteConfig,
+    main: {
+      ...electronViteConfig.main,
+      build: { ...electronViteConfig.main?.build, sourcemap: false }
+    }
+  }
+})

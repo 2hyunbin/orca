@@ -340,7 +340,9 @@ async function startOrcadRuntime(
     // once a device has connected, so a loopback deployment would silently go wide one
     // restart after its first client paired.
     pinnedBindHost: bindHost,
-    ...(options.port !== undefined ? { wsPort: options.port, preferPinnedWsPort: true, requirePinnedWsPort: true } : {})
+    ...(options.port !== undefined
+      ? { wsPort: options.port, preferPinnedWsPort: true, requirePinnedWsPort: true }
+      : {})
   })
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
