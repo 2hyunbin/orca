@@ -123,7 +123,16 @@ function project(leaf: RuntimeLeafRecord, titleEpochMs: number | null, receivedA
 describe('restored turns on a synced leaf', () => {
   it('stays unverifiable when only a seeded (unclocked) shell title is known', () => {
     const receivedAt = Date.now() - 60_000
-    const result = project(leafWithTitle('user@host:~/repo'), null, receivedAt)
+    const result = project(leafWithTitle('bash'), null, receivedAt)
+
+    expect(result.agentStatus).toEqual(
+      expect.objectContaining({ state: 'working', restoredUnconfirmed: true })
+    )
+  })
+
+  it('stays unverifiable under a newer title that is not a shell', () => {
+    const receivedAt = Date.now() - 60_000
+    const result = project(leafWithTitle('vim'), receivedAt + 1_000, receivedAt)
 
     expect(result.agentStatus).toEqual(
       expect.objectContaining({ state: 'working', restoredUnconfirmed: true })
@@ -132,7 +141,7 @@ describe('restored turns on a synced leaf', () => {
 
   it('retires to done once the leaf PTY paints a newer shell title', () => {
     const receivedAt = Date.now() - 60_000
-    const result = project(leafWithTitle('user@host:~/repo'), receivedAt + 1_000, receivedAt)
+    const result = project(leafWithTitle('bash'), receivedAt + 1_000, receivedAt)
 
     expect(result.agentStatus?.state).toBe('done')
     expect(result.agentStatus).not.toHaveProperty('restoredUnconfirmed')

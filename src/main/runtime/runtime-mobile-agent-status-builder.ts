@@ -15,7 +15,8 @@ import type { RuntimeAgentRowSnapshot } from './runtime-worktree-agent-rows'
 import {
   classifyAgentTitle,
   getLatestAgentCandidateTitle,
-  getLatestPtyTitle
+  getLatestPtyTitle,
+  terminalTitleBlocksExplicitAgentStatus
 } from './runtime-worktree-status-projection'
 
 type RuntimeMobileAgentStatusHost = {
@@ -133,8 +134,8 @@ export function buildRuntimeMobileAgentStatus(
   // `done` told clients a running agent had stopped. Keep its own date (so it cannot outrank a
   // client's row) and drop the question fields (#12346). Only a later shell title retires it.
   const shellTitleRetiredRestored =
-    nonAgentTitle &&
     hookRow.restored !== null &&
+    terminalTitleBlocksExplicitAgentStatus(ptyTitle) &&
     (pty?.lastOscTitleEpochMs ?? host.getPtyTitleObservedAtEpochMs?.(leaf?.ptyId ?? null) ?? 0) >=
       hookRow.restored.updatedAt
   const restored = !pty?.lastAgentStatus && !shellTitleRetiredRestored ? hookRow.restored : null

@@ -273,7 +273,7 @@ describe('headless hook agent-status projection (#11761)', () => {
   it('lets a shell title retire a restored turn as done', async () => {
     const agentStatus = await projectAgentStatus(
       [hookRow({ state: 'working', interactivePrompt: undefined, restoredUnconfirmed: true })],
-      (runtime) => observePaneTitle(runtime, 'user@host:~/repo')
+      (runtime) => observePaneTitle(runtime, 'bash')
     )
 
     expect(agentStatus === undefined || agentStatus.state === 'done').toBe(true)
