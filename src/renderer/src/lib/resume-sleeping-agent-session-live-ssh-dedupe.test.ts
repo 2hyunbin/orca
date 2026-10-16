@@ -217,6 +217,31 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
   })
 
+  it('ignores a claim from a folder workspace whose host moved since capture', () => {
+    const folderWorkspaceId = 'folder:fw-1'
+    const local = makeRecord({ providerSession: { key: 'session_id', id: 'sess-9' } })
+    const moved = makeRecord({
+      paneKey: makePaneKey('tab-2', OTHER_LEAF_ID),
+      tabId: 'tab-2',
+      worktreeId: folderWorkspaceId,
+      connectionId: null,
+      providerSession: { key: 'session_id', id: 'sess-9' }
+    })
+    setStoreState({
+      activeWorktreeId: 'wt-other',
+      folderWorkspaces: [{ id: 'fw-1', connectionId: 'ssh-target-1', diffComments: [] }],
+      tabsByWorktree: {
+        'wt-1': [],
+        [folderWorkspaceId]: [makeTerminalTab('tab-2', folderWorkspaceId)]
+      },
+      terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, SSH_PTY_ID) },
+      ptyIdsByTabId: {},
+      sleepingAgentSessionsByPaneKey: { [local.paneKey]: local, [moved.paneKey]: moved }
+    })
+
+    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+  })
+
   // Matching ids on two machines (a copied state dir) are two sessions, not one. Here only the
   // catalog names this record's machine and only the capture stamp names the other's.
   it('ignores a claim from a pane on a different machine than this record', () => {
