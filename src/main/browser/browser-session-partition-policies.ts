@@ -59,10 +59,16 @@ export function forgetBrowserSessionPartitionConfiguration(partition: string): v
   configuredPartitions.delete(partition)
 }
 const handleWillDownload = (
-  _event: Electron.Event,
+  event: Electron.Event,
   item: Electron.DownloadItem,
   webContents: Electron.WebContents
 ): void => {
+  // Why: a host-driven page could otherwise write a host-chosen file into this desktop's Downloads.
+  if (isRemoteCliDrivenGuest(webContents.id)) {
+    event.preventDefault()
+    console.info('[desktop-browser-bridge] refused a download from a page an SSH host drives')
+    return
+  }
   browserManager.handleGuestWillDownload({ guestWebContentsId: webContents.id, item })
 }
 

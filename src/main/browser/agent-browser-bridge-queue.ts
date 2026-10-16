@@ -82,7 +82,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
             worktreeId,
             pageId,
             (session, target) => {
-              assertNotRevoked()
+              assertNotRevoked(target.webContentsId)
               return execute(session, target)
             },
             options

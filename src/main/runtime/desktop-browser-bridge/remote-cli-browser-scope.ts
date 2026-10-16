@@ -7,30 +7,49 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { BrowserError } from '../../browser/browser-error'
 import {
   DESKTOP_BROWSER_BRIDGE_SCOPE_CODE,
-  DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE
+  DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
+  DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE
 } from '../../../shared/desktop-browser-bridge-protocol'
 
-const scope = new AsyncLocalStorage<{ workspaceId: string; revoked?: AbortSignal }>()
+type RemoteCliBrowserScope = {
+  workspaceId: string
+  revoked?: AbortSignal
+  /** True only for a guest that browses through this host's SSH route right now. */
+  admitGuest?: (webContentsId: number) => boolean
+}
+
+const scope = new AsyncLocalStorage<RemoteCliBrowserScope>()
 
 export function runInRemoteCliBrowserScope<T>(
   workspaceId: string,
   run: () => Promise<T>,
-  revoked?: AbortSignal
+  revoked?: AbortSignal,
+  admitGuest?: (webContentsId: number) => boolean
 ): Promise<T> {
-  return scope.run({ workspaceId, ...(revoked ? { revoked } : {}) }, run)
+  return scope.run(
+    { workspaceId, ...(revoked ? { revoked } : {}), ...(admitGuest ? { admitGuest } : {}) },
+    run
+  )
 }
 
 /**
  * Captured where a browser command is queued; the returned check throws once the bridge that
  * issued it detached, so a command waiting behind another never runs after access was revoked.
  */
-export function captureRemoteCliBrowserRevocation(): () => void {
-  const revoked = scope.getStore()?.revoked
-  return () => {
-    if (revoked?.aborted) {
+export function captureRemoteCliBrowserRevocation(): (webContentsId?: number) => void {
+  const active = scope.getStore()
+  return (webContentsId) => {
+    if (active?.revoked?.aborted) {
       throw new BrowserError(
         DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
         'The Orca desktop stopped sharing its browser before this command ran.'
+      )
+    }
+    // Why at execution: routing can be turned off while the command waits, remounting the page unrouted.
+    if (webContentsId !== undefined && active?.admitGuest && !active.admitGuest(webContentsId)) {
+      throw new BrowserError(
+        DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE,
+        "This page is not browsing through the SSH host, so the host's orca CLI cannot use it."
       )
     }
   }

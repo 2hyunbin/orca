@@ -66,6 +66,7 @@ function deps(overrides: Partial<DesktopBrowserBridgeExecutorDeps> = {}) {
     worktreeIdForPage: (page) => MOUNTED_PAGE_OWNERS[page] ?? null,
     markWorkspaceDriven: (workspaceId) => driven.push(workspaceId),
     isHostBrowsingRouted: () => true,
+    isGuestRoutedThroughHost: () => true,
     dispatch: async (method, params) => {
       // Inside the dispatch, a selector for any other workspace must be refused.
       const scopeProbe = await resolveRemoteCliBrowserScopeSelector(`id:${LOCAL_WORKSPACE}`)?.catch(
@@ -574,5 +575,23 @@ describe('boundRemoteCliBrowserWork', () => {
 
     await expect(outcome).resolves.toBe('done')
     expect(cancel).not.toHaveBeenCalled()
+  })
+})
+
+describe('captureRemoteCliBrowserRevocation guest routing', () => {
+  it('refuses to run a queued command on a page that stopped browsing through the host', async () => {
+    let routed = true
+    const assertAdmitted = await runInRemoteCliBrowserScope(
+      HOST_WORKSPACE,
+      async () => captureRemoteCliBrowserRevocation(),
+      new AbortController().signal,
+      () => routed
+    )
+
+    expect(() => assertAdmitted(7)).not.toThrow()
+    routed = false
+    expect(() => assertAdmitted(7)).toThrow('not browsing through the SSH host')
+    // A check with no guest yet (before the queue resolves one) still only checks revocation.
+    expect(() => assertAdmitted()).not.toThrow()
   })
 })

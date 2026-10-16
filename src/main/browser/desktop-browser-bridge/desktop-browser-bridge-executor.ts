@@ -50,6 +50,8 @@ export type DesktopBrowserBridgeExecutorDeps = {
   markWorkspaceDriven(workspaceId: string): void
   /** True when this host's desktop tabs browse through the host (SSH browser routing on for it). */
   isHostBrowsingRouted(): boolean
+  /** True only for a guest whose session is this host's prepared SSH route partition. */
+  isGuestRoutedThroughHost(webContentsId: number): boolean
   dispatch(method: string, params: Record<string, unknown>): Promise<RpcResponse>
   audit(entry: DesktopBrowserBridgeAuditEntry): void
 }
@@ -101,7 +103,8 @@ export async function executeDesktopBrowserBridgeRequest(
     const response = await runInRemoteCliBrowserScope(
       workspaceId,
       () => deps.dispatch(request.method, params),
-      signal
+      signal,
+      (webContentsId) => deps.isHostBrowsingRouted() && deps.isGuestRoutedThroughHost(webContentsId)
     )
     if (!response.ok) {
       deps.audit({ ...audit, outcome: 'failed', code: response.error.code })

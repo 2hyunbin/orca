@@ -230,6 +230,15 @@ describe('partition permission policy', () => {
     expect(checkHandler({ id: 8 }, 'clipboard-read')).toBe(true)
   })
 
+  it('cancels a download from a page an SSH host drives (#29145)', async () => {
+    mocks.isRemoteCliDrivenGuest.mockImplementation((id?: number) => id === 42)
+    const install = await loadInstaller()
+    install(profileFor('persist:browsing-3'))
+
+    expect(fireWillDownload('persist:browsing-3')).toEqual({ cancelled: true })
+    expect(mocks.handleGuestWillDownload).not.toHaveBeenCalled()
+  })
+
   it('denies every request and check on a strict partition without WebAuthn handlers', async () => {
     const install = await loadInstaller()
     install(profileFor('orca-doc-preview'), { permissions: 'deny' })

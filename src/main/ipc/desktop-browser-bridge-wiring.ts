@@ -3,7 +3,7 @@
  * reach their orcad over the paired encrypted connection, and how a forwarded command runs here.
  */
 import { randomUUID } from 'node:crypto'
-import type { BrowserWindow } from 'electron'
+import { webContents, type BrowserWindow } from 'electron'
 import {
   DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY,
   isDesktopBrowserBridgeMethod
@@ -34,11 +34,13 @@ import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-
 import { setDesktopBrowserBridgeControl } from './desktop-browser-bridge-reconcile'
 import { markRemoteCliDrivenWorkspace } from '../browser/desktop-browser-bridge/remote-cli-driven-workspaces'
 import { persistedStore } from './ssh-ipc-context'
+import { localSshBrowserTargetIdForSession } from '../browser/local-ssh-browser-partitions'
 
 const ATTACH_TIMEOUT_MS = 15_000
 const BRIDGE_CLIENT_ID = randomUUID()
 
 let manager: DesktopBrowserBridgeManager | null = null
+let stopWatchingRoutingSettings: (() => void) | null = null
 
 function log(message: string): void {
   console.info(`[desktop-browser-bridge] ${message}`)
@@ -55,6 +57,10 @@ export function listDesktopBrowserBridgeCandidates(
       continue
     }
     if (connections?.getState(target.id)?.status !== 'connected') {
+      continue
+    }
+    // Why: an unrouted host's pages egress from this desktop, so it must not stay attached at all.
+    if (!isSshTargetBrowsingRouted(target.id)) {
       continue
     }
     const environmentId = getManagedOrcadFenceEnvironmentId(target)
@@ -144,6 +150,14 @@ export function installDesktopBrowserBridge(options: {
             }),
           markWorkspaceDriven: markRemoteCliDrivenWorkspace,
           isHostBrowsingRouted: () => isSshTargetBrowsingRouted(candidate.targetId),
+          isGuestRoutedThroughHost: (webContentsId) => {
+            const guest = webContents.fromId(webContentsId)
+            return Boolean(
+              guest &&
+              !guest.isDestroyed() &&
+              localSshBrowserTargetIdForSession(guest.session) === candidate.targetId
+            )
+          },
           worktreeIdForPage: (browserPageId) =>
             browserManager.getWorktreeIdForTab(browserPageId) ?? null,
           dispatch: (method, params) =>
@@ -154,6 +168,18 @@ export function installDesktopBrowserBridge(options: {
       ),
     log
   })
+  // Why: turning routing off for a host must detach it (and cancel its waiting commands) at once.
+  stopWatchingRoutingSettings?.()
+  // Why optional: test doubles of the store omit the listener API.
+  stopWatchingRoutingSettings =
+    persistedStore?.onSettingsChanged?.((updates) => {
+      if (
+        'browserSshWorkspaceRoutingEnabled' in updates ||
+        'browserSshWorkspaceRoutingDisabledTargetIds' in updates
+      ) {
+        manager?.reconcile()
+      }
+    }) ?? null
   setDesktopBrowserBridgeControl({
     reconcile: () => manager?.reconcile(),
     resetEnvironment: (environmentId) => manager?.resetEnvironment(environmentId)
@@ -171,6 +197,8 @@ function isSshTargetBrowsingRouted(targetId: string): boolean {
 }
 
 export function disposeDesktopBrowserBridge(): void {
+  stopWatchingRoutingSettings?.()
+  stopWatchingRoutingSettings = null
   setDesktopBrowserBridgeControl(null)
   manager?.dispose()
   manager = null
