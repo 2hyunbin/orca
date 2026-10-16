@@ -14,8 +14,6 @@ import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { afterEach, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
-import { runProcess, runProcessSync } from '@orca/process-host'
-import { ensurePinnedNodeExecutable, preparePinnedNodeDir } from './pinned-node-downloads.mjs'
 import { sha256Of } from './orcad-prebuild-slot-contents.mjs'
 import { peImage } from './windows-pe-image-fixture.mjs'
 import {
@@ -26,32 +24,6 @@ import {
   runSecurityComparisonSample,
   withInvalidSecurityCandidate
 } from './benchmark-windows-security-reuse.mjs'
-
-vi.mock('@orca/process-host', () => ({ runProcess: vi.fn(), runProcessSync: vi.fn() }))
-vi.mock('./pinned-node-downloads.mjs', () => ({
-  ensurePinnedNodeExecutable: vi.fn(),
-  preparePinnedNodeDir: vi.fn()
-}))
-vi.mock('../../src/shared/node-runtime-pin.ts', async (importOriginal) => {
-  const actual = await importOriginal()
-  const { createHash } = await import('node:crypto')
-  const executableSha256 = createHash('sha256').update('pinned fixture').digest('hex')
-  return {
-    ...actual,
-    NODE_RUNTIME_ASSETS: { 'win32-x64': { executableSha256 }, 'win32-arm64': { executableSha256 } }
-  }
-})
-vi.mock('./orcad-prebuild-slot-contents.mjs', async (importOriginal) => {
-  const actual = await importOriginal()
-  const { createHash } = await import('node:crypto')
-  return {
-    ...actual,
-    sha256Of: (path) =>
-      path === process.execPath
-        ? createHash('sha256').update('pinned fixture').digest('hex')
-        : actual.sha256Of(path)
-  }
-})
 
 const directories = []
 const sourceSha = 'a'.repeat(40)
@@ -113,7 +85,8 @@ function fixture(arch = 'x64') {
     }
     return { ...success, stdout }
   })
-  return { root, arch, candidate, runtimePath, output, receiptFile, run }
+  const runtimeAssets = { [`win32-${arch}`]: { executableSha256: digest('pinned fixture') } }
+  return { root, arch, candidate, runtimePath, output, receiptFile, run, runtimeAssets }
 }
 function windows(arch = 'x64') {
   vi.stubGlobal('process', {
@@ -205,22 +178,26 @@ it.each(['timeout', 'truncated', 'download', 'spawn'])(
 
 it('rejects wrong PE/runtime identity and a changed artifact during probing', () => {
   const f = fixture()
-  expect(() => probeSecurityArtifact(f.candidate, f.runtimePath, 'arm64', f.run)).toThrow(
-    'architecture'
-  )
-  writeFileSync(f.runtimePath, 'wrong runtime')
   expect(() => probeSecurityArtifact(f.candidate, f.runtimePath, 'x64', f.run)).toThrow(
     'Runtime hash'
   )
+  expect(f.run).not.toHaveBeenCalled()
+  expect(() =>
+    probeSecurityArtifact(f.candidate, f.runtimePath, 'arm64', f.run, f.runtimeAssets)
+  ).toThrow('architecture')
+  writeFileSync(f.runtimePath, 'wrong runtime')
+  expect(() =>
+    probeSecurityArtifact(f.candidate, f.runtimePath, 'x64', f.run, f.runtimeAssets)
+  ).toThrow('Runtime hash')
   expect(f.run).not.toHaveBeenCalled()
   writeFileSync(f.runtimePath, 'pinned fixture')
   f.run.mockImplementationOnce(() => {
     writeFileSync(f.candidate, 'changed')
     return { ...success, stdout: 'windows-security-ready' }
   })
-  expect(() => probeSecurityArtifact(f.candidate, f.runtimePath, 'x64', f.run)).toThrow(
-    'changed during probe'
-  )
+  expect(() =>
+    probeSecurityArtifact(f.candidate, f.runtimePath, 'x64', f.run, f.runtimeAssets)
+  ).toThrow('changed during probe')
 })
 
 it.each(['success', 'rejection'])(
@@ -318,14 +295,13 @@ function hostedFixture(arch = 'x64', failure) {
     mkdirSync(dirname(join(f.root, path)), { recursive: true })
     writeFileSync(join(f.root, path), 'source fixture')
   }
-  vi.mocked(ensurePinnedNodeExecutable).mockResolvedValue(f.runtimePath)
-  vi.mocked(preparePinnedNodeDir).mockImplementation(async ({ workDir }) => {
+  const ensureRuntime = vi.fn(async () => f.runtimePath)
+  const prepareHeaders = vi.fn(async ({ workDir }) => {
     mkdirSync(workDir, { recursive: true })
     writeFileSync(join(workDir, 'header'), 'verified header fixture')
     return workDir
   })
-  vi.mocked(runProcessSync).mockImplementation(f.run)
-  vi.mocked(runProcess).mockImplementation(async (spec) => {
+  const run = vi.fn(async (spec) => {
     if (spec.args.includes('HEAD') && spec.args.includes('rev-parse')) {
       return { ...success, stdout: sourceSha }
     }
@@ -352,6 +328,14 @@ function hostedFixture(arch = 'x64', failure) {
     }
     return success
   })
+  f.ports = {
+    run,
+    runSync: f.run,
+    ensureRuntime,
+    prepareHeaders,
+    runtimeAssets: f.runtimeAssets,
+    hashFile: (path) => (path === process.execPath ? digest('pinned fixture') : sha256Of(path))
+  }
   return f
 }
 
@@ -359,7 +343,7 @@ it.each(['x64', 'arm64'])(
   'qualifies exactly one same-source %s pair and fallback after separate preparation',
   async (arch) => {
     const f = hostedFixture(arch)
-    const report = await benchmarkWindowsSecurityReuse(f.root)
+    const report = await benchmarkWindowsSecurityReuse(f.root, f.ports)
     expect(report.qualification).toBe('passed')
     expect(
       report.samples.map((sample) => [sample.variant, sample.compilerInvocationCount])
@@ -392,7 +376,7 @@ it.each(['x64', 'arm64'])(
 
 it('restores the owned candidate and leaves a failed redacted receipt when fallback times out', async () => {
   const f = hostedFixture('x64', 'fallback')
-  await expect(benchmarkWindowsSecurityReuse(f.root)).rejects.toThrow('did not qualify')
+  await expect(benchmarkWindowsSecurityReuse(f.root, f.ports)).rejects.toThrow('did not qualify')
   const report = JSON.parse(
     readFileSync(join(f.root, '.build/windows-native-benchmark/security/receipt.json'), 'utf8')
   )
@@ -408,8 +392,8 @@ it('restores the owned candidate and leaves a failed redacted receipt when fallb
 
 it('refuses another checkout commit before preparing artifacts', async () => {
   const f = hostedFixture()
-  vi.mocked(runProcess).mockResolvedValueOnce({ ...success, stdout: 'c'.repeat(40) })
-  await expect(benchmarkWindowsSecurityReuse(f.root)).rejects.toThrow('did not qualify')
-  expect(preparePinnedNodeDir).not.toHaveBeenCalled()
+  f.ports.run.mockResolvedValueOnce({ ...success, stdout: 'c'.repeat(40) })
+  await expect(benchmarkWindowsSecurityReuse(f.root, f.ports)).rejects.toThrow('did not qualify')
+  expect(f.ports.prepareHeaders).not.toHaveBeenCalled()
   expect(existsSync(f.candidate)).toBe(false)
 })

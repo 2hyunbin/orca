@@ -60,6 +60,7 @@ export function reusePreparedWindowsSecurityAddon(
     root = ROOT,
     platform = process.platform,
     hostArch = process.arch,
+    runtimeAssets = NODE_RUNTIME_ASSETS,
     run = runProcessSync
   } = {}
 ) {
@@ -74,7 +75,7 @@ export function reusePreparedWindowsSecurityAddon(
     if (
       readPeMachine(candidate) !== PE_MACHINE[arch] ||
       !isAbsolute(runtimePath) ||
-      sha256Of(runtimePath) !== NODE_RUNTIME_ASSETS[`win32-${arch}`]?.executableSha256
+      sha256Of(runtimePath) !== runtimeAssets[`win32-${arch}`]?.executableSha256
     ) {
       return false
     }

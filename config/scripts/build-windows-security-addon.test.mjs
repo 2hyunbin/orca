@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
@@ -8,19 +9,6 @@ import {
   reusePreparedWindowsSecurityAddon
 } from './build-windows-security-addon.mjs'
 import { peImage } from './windows-pe-image-fixture.mjs'
-
-vi.mock('../../src/shared/node-runtime-pin.ts', async (importOriginal) => {
-  const actual = await importOriginal()
-  const { createHash } = await import('node:crypto')
-  const executableSha256 = createHash('sha256').update('pinned Node fixture').digest('hex')
-  return {
-    ...actual,
-    NODE_RUNTIME_ASSETS: {
-      'win32-x64': { executableSha256 },
-      'win32-arm64': { executableSha256 }
-    }
-  }
-})
 
 const roots = []
 afterEach(() => {
@@ -40,6 +28,8 @@ function fixture(arch = 'x64') {
   writeFileSync(join(root, 'native/windows-security/src/addon.cc'), 'source')
   const runtimePath = join(root, 'pinned node.exe')
   writeFileSync(runtimePath, 'pinned Node fixture')
+  const executableSha256 = createHash('sha256').update('pinned Node fixture').digest('hex')
+  const runtimeAssets = { [`win32-${arch}`]: { executableSha256 } }
   const output = join(root, 'output/windows-security.node')
   const run = vi.fn((invocation) => {
     if (invocation.args.includes('rebuild')) {
@@ -59,7 +49,15 @@ function fixture(arch = 'x64') {
   return {
     candidate,
     output,
-    options: { enabled: true, root, runtimePath, platform: 'win32', hostArch: arch, run }
+    options: {
+      enabled: true,
+      root,
+      runtimePath,
+      platform: 'win32',
+      hostArch: arch,
+      runtimeAssets,
+      run
+    }
   }
 }
 
@@ -108,6 +106,13 @@ it.each([
 
 it('declines missing, corrupt, wrong-architecture candidates and an unverified runtime', () => {
   const { candidate, output, options } = fixture()
+  expect(
+    reusePreparedWindowsSecurityAddon('x64', output, {
+      ...options,
+      runtimeAssets: undefined
+    })
+  ).toBe(false)
+  expect(options.run).not.toHaveBeenCalled()
   for (const bytes of [Buffer.from('corrupt'), peImage({ arch: 'arm64' })]) {
     writeFileSync(candidate, bytes)
     expect(reusePreparedWindowsSecurityAddon('x64', output, options)).toBe(false)

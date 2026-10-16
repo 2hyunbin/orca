@@ -4,11 +4,8 @@ import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { afterEach, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
-import { runProcessSync } from '@orca/process-host'
 import { windowsSecurityAddonOutput } from './build-windows-security-addon.mjs'
 import { stageOrcadWindowsSecurity } from './orcad-windows-security.mjs'
-
-vi.mock('@orca/process-host', () => ({ runProcessSync: vi.fn() }))
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
@@ -156,15 +153,16 @@ it.each(['ssh-windows-hosts', 'node-server-tests'])(
 it.each([false, true])('passes an explicit CLI opt-in only when enabled: %s', (enabled) => {
   const { root, output, write } = fixture()
   const runtimePath = join(root, 'pinned node.exe')
-  vi.mocked(runProcessSync).mockImplementationOnce(() => {
+  const run = vi.fn(() => {
     write('x64', 0x8664)
     return { code: 0 }
   })
   stageOrcadWindowsSecurity(root, output, 'win32-x64', { platform: 'win32' }, undefined, {
     enabled,
-    runtimePath
+    runtimePath,
+    run
   })
-  expect(runProcessSync).toHaveBeenLastCalledWith({
+  expect(run).toHaveBeenLastCalledWith({
     program: process.execPath,
     args: [
       join(root, 'config/scripts/build-windows-security-addon.mjs'),
@@ -179,9 +177,9 @@ it.each([false, true])('passes an explicit CLI opt-in only when enabled: %s', (e
 
 it('does not stage an addon when the child builder fails', () => {
   const { root, output } = fixture()
-  vi.mocked(runProcessSync).mockReturnValueOnce({ code: 1 })
-  expect(() => stageOrcadWindowsSecurity(root, output, 'win32-x64', { platform: 'win32' })).toThrow(
-    'failed with exit 1'
-  )
+  const run = vi.fn(() => ({ code: 1 }))
+  expect(() =>
+    stageOrcadWindowsSecurity(root, output, 'win32-x64', { platform: 'win32' }, undefined, { run })
+  ).toThrow('failed with exit 1')
   expect(existsSync(join(output, 'windows-security.node'))).toBe(false)
 })

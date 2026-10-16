@@ -42,8 +42,12 @@ export function stageOrcadWindowsSecurity(
   copyFileSync(source, join(outputDir, ORCAD_WINDOWS_SECURITY_FILENAME))
 }
 
-function compileOrcadWindowsSecurity(root, arch, { enabled = false, runtimePath } = {}) {
-  const result = runProcessSync({
+function compileOrcadWindowsSecurity(
+  root,
+  arch,
+  { enabled = false, runtimePath, run = runProcessSync } = {}
+) {
+  const result = run({
     program: process.execPath,
     args: [
       join(root, 'config/scripts/build-windows-security-addon.mjs'),

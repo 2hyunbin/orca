@@ -61,13 +61,19 @@ export function assertSecurityCommand(result) {
   )
 }
 
-export function probeSecurityArtifact(path, runtimePath, arch, run = runProcessSync) {
+export function probeSecurityArtifact(
+  path,
+  runtimePath,
+  arch,
+  run = runProcessSync,
+  runtimeAssets = NODE_RUNTIME_ASSETS
+) {
   const machine = readPeMachine(path)
   assert.equal(machine, PE_MACHINE[arch], 'Security artifact architecture mismatch')
   const sha256 = sha256Of(path)
   assert.equal(
     sha256Of(runtimePath),
-    NODE_RUNTIME_ASSETS[`win32-${arch}`]?.executableSha256,
+    runtimeAssets[`win32-${arch}`]?.executableSha256,
     'Runtime hash mismatch'
   )
   const result = probeWindowsSecurityAddon(runtimePath, resolve(path), arch, run)
@@ -103,7 +109,8 @@ export function runSecurityComparisonSample({
   runtimePath,
   output,
   receiptFile,
-  run = runProcessSync
+  run = runProcessSync,
+  runtimeAssets = NODE_RUNTIME_ASSETS
 }) {
   assert(['control', 'candidate', 'fallback'].includes(variant), 'Unknown sample')
   const receipt = { variant, qualification: 'incomplete', stage: 'initial-validation', calls: [] }
@@ -146,7 +153,7 @@ export function runSecurityComparisonSample({
     assert.equal(arch, process.arch, 'Sample architecture differs from host')
     assert.equal(
       sha256Of(runtimePath),
-      NODE_RUNTIME_ASSETS[`win32-${arch}`]?.executableSha256,
+      runtimeAssets[`win32-${arch}`]?.executableSha256,
       'Runtime hash mismatch'
     )
     receipt.stage = 'build'
@@ -155,10 +162,11 @@ export function runSecurityComparisonSample({
       root,
       run: observed,
       enabled: variant !== 'control',
-      runtimePath
+      runtimePath,
+      runtimeAssets
     })
     receipt.buildIncludingReuseProbesMs = performance.now() - start
-    receipt.staged = probeSecurityArtifact(output, runtimePath, arch, observed)
+    receipt.staged = probeSecurityArtifact(output, runtimePath, arch, observed, runtimeAssets)
     receipt.compilerInvocationCount = receipt.calls.filter(
       (call) => call.phase === 'compiler'
     ).length
@@ -188,7 +196,17 @@ export function runSecurityComparisonSample({
   }
 }
 
-export async function benchmarkWindowsSecurityReuse(root = ROOT) {
+export async function benchmarkWindowsSecurityReuse(
+  root = ROOT,
+  {
+    run = runProcess,
+    runSync = runProcessSync,
+    ensureRuntime = ensurePinnedNodeExecutable,
+    prepareHeaders = preparePinnedNodeDir,
+    runtimeAssets = NODE_RUNTIME_ASSETS,
+    hashFile = sha256Of
+  } = {}
+) {
   assertSecurityComparisonHost()
   const arch = process.arch
   const target = `win32-${arch}`
@@ -220,7 +238,7 @@ export async function benchmarkWindowsSecurityReuse(root = ROOT) {
   const command = async (label, program, args) => {
     report.stage = label
     const start = performance.now()
-    const result = await runProcess({
+    const result = await run({
       program,
       args,
       cwd: root,
@@ -258,8 +276,8 @@ export async function benchmarkWindowsSecurityReuse(root = ROOT) {
     await sourceCheck()
     report.stage = 'verify-build-node'
     assert.equal(
-      sha256Of(process.execPath),
-      NODE_RUNTIME_ASSETS[target].executableSha256,
+      hashFile(process.execPath),
+      runtimeAssets[target].executableSha256,
       'Build Node hash mismatch'
     )
     const sourceFiles = (
@@ -289,8 +307,8 @@ export async function benchmarkWindowsSecurityReuse(root = ROOT) {
     assert(!existsSync(candidate), 'Security comparison requires a fresh unprepared checkout')
     report.stage = 'prepare-pinned-runtime-and-headers'
     const preparationStart = performance.now()
-    const runtimePath = await ensurePinnedNodeExecutable({ target })
-    const nodeDir = await preparePinnedNodeDir({ target, workDir: join(temporary, 'headers') })
+    const runtimePath = await ensureRuntime({ target })
+    const nodeDir = await prepareHeaders({ target, workDir: join(temporary, 'headers') })
     environment = {
       ...environment,
       npm_config_nodedir: nodeDir,
@@ -300,7 +318,7 @@ export async function benchmarkWindowsSecurityReuse(root = ROOT) {
     report.runtime = {
       version: NODE_RUNTIME_PIN.version,
       sha256: sha256Of(runtimePath),
-      buildNodeSha256: sha256Of(process.execPath)
+      buildNodeSha256: hashFile(process.execPath)
     }
     report.headers = treeDigest(nodeDir)
     await command('prepare-node-artifacts', process.execPath, [
@@ -320,7 +338,7 @@ export async function benchmarkWindowsSecurityReuse(root = ROOT) {
       lstatSync(candidate).isFile() && !lstatSync(candidate).isSymbolicLink(),
       'Prepared candidate must be regular'
     )
-    report.prepared = probeSecurityArtifact(candidate, runtimePath, arch)
+    report.prepared = probeSecurityArtifact(candidate, runtimePath, arch, runSync, runtimeAssets)
     const sample = async (variant) => {
       await sourceCheck()
       const receiptFile = join(output, `${variant}.json`)
