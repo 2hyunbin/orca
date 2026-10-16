@@ -3,6 +3,7 @@ import type {
   LayoutApplyReply,
   LayoutCommand
 } from '../../shared/workspace-layout/workspace-layout-command-types'
+import type { TerminalLeafMoveRequest } from '../../shared/terminal-leaf-move'
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -13,12 +14,14 @@ export type WindowLayoutCommand = LayoutCommand &
 /**
  * `layout.apply`: the window's command on the partitions holding its tab, routed partition first;
  * a group tree command goes to the workspace's routed partition. A pane close is the user's: main
- * marks it so, and the window cannot.
+ * marks it so, and the window cannot. A pane moved to a new tab follows the desktop's move rules.
  */
 export async function applyWindowLayoutCommand(
   store: RuntimeStore,
   hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
-  command: WindowLayoutCommand
+  command: WindowLayoutCommand,
+  /** Agent status and orchestration records follow a pane moved into a new tab. */
+  onPaneMoved: (move: TerminalLeafMoveRequest) => void = () => {}
 ): Promise<LayoutApplyReply> {
   const routedTabId =
     'tabId' in command ? command.tabId : command.type === 'closeTabs' ? command.tabIds[0] : null
@@ -36,12 +39,7 @@ export async function applyWindowLayoutCommand(
     // The window already confirmed, removed the tab and stopped its terminals: main forces the
     // close, records it, and stops nothing (a terminal another tab shares must live on).
     if (command.recordClose === 'user') {
-      // Launches go by the terminal's own id, which a legacy tab-bar entry's can differ from.
-      const tabId =
-        store
-          .getWorkspaceSession?.(hostIds[0])
-          ?.unifiedTabs?.[command.workspace]?.find((entry) => entry.id === command.tabIds[0])
-          ?.entityId ?? command.tabIds[0]
+      const tabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabIds[0])
       markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId })
     }
     const reply = await store.applyLayoutCommand({ ...command, force: true }, holders)
@@ -50,6 +48,30 @@ export async function applyWindowLayoutCommand(
       ? { ok: false, code: 'workspace_not_found' }
       : reply
   }
+  if (command.type === 'movePaneToNewTab') {
+    // Read before the move, which re-homes the pane.
+    const sourceTabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabId)
+    const reply = await store.applyLayoutCommand(
+      { ...command, windowDetach: { ptyId: command.windowDetach?.ptyId ?? null } },
+      holders
+    )
+    if (reply.ok && reply.result.tabId) {
+      const move = {
+        worktreeId: command.workspace,
+        sourceTabId,
+        targetTabId: reply.result.tabId,
+        leafId: command.leafId,
+        ptyId: reply.result.ptyId ?? null
+      }
+      // Why: the move is committed; a throw here would send the window to today's move as well.
+      try {
+        onPaneMoved(move)
+      } catch (error) {
+        console.warn('[layout] moved pane kept some of its old keys:', error)
+      }
+    }
+    return reply
+  }
   if (command.type !== 'closePane') {
     return store.applyLayoutCommand(command, [hostIds[0]])
   }
@@ -57,4 +79,18 @@ export async function applyWindowLayoutCommand(
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).
   markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
   return store.applyLayoutCommand({ ...command, userPaneClose: true }, holders)
+}
+
+/** A tab-bar id's terminal id, which a legacy entry's can differ from. */
+function terminalIdOf(
+  store: RuntimeStore,
+  hostId: ExecutionHostId,
+  workspace: string,
+  tabId: string
+): string {
+  return (
+    store
+      .getWorkspaceSession?.(hostId)
+      ?.unifiedTabs?.[workspace]?.find((entry) => entry.id === tabId)?.entityId ?? tabId
+  )
 }
