@@ -25,7 +25,7 @@ vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.f
 
 type FrameDouble = {
   onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null
-  sync: Pick<WorkspaceLayoutFrameSync, 'holdsTerminalTab'> | null
+  sync: Pick<WorkspaceLayoutFrameSync, 'holdsTerminalPane'> | null
 }
 const frames = vi.hoisted((): FrameDouble => ({ onFrame: null, sync: null }))
 vi.mock('../runtime/runtime-layout-client', () => ({
@@ -42,8 +42,9 @@ vi.mock('../runtime/workspace-layout-frame-sync', async (importOriginal) => {
   const actual = await importOriginal<typeof FrameSyncModule>()
   return {
     ...actual,
-    layoutFramesHoldTerminalTab: (worktreeId: string, tabId: string) =>
-      frames.sync?.holdsTerminalTab(worktreeId, tabId) ?? false
+    layoutFramesHoldTerminalPane: (
+      ...args: Parameters<WorkspaceLayoutFrameSync['holdsTerminalPane']>
+    ) => frames.sync?.holdsTerminalPane(...args) ?? false
   }
 })
 
@@ -53,16 +54,26 @@ const OTHER_PTY = `${GIT_KEY}@@aaaa0001`
 const LEFT_PTY = `${GIT_KEY}@@aaaa0002`
 const RIGHT_PTY = `${GIT_KEY}@@aaaa0003`
 
-type TerminalSpec = { id: string; leaves: [string, string][]; split?: 'vertical' }
+type TerminalSpec = {
+  id: string
+  entityId?: string
+  leaves: [string, string][]
+  split?: 'vertical'
+}
 
-/** The window's copy: one shell tab. Main's: that tab and a split agent tab the window lacks. */
-function sessions(): { window: WorkspaceSessionState; main: WorkspaceSessionState } {
+/** The window's copy: one shell tab. Main's: that tab and a split agent tab the window lacks,
+ *  whose tab-bar id differs from its terminal id, as for a tab adopted from another window. */
+function sessions(splitPtyIds: [string, string] = [LEFT_PTY, RIGHT_PTY]): {
+  window: WorkspaceSessionState
+  main: WorkspaceSessionState
+} {
   const other: TerminalSpec = { id: 'tab-other', leaves: [[leaf(1), OTHER_PTY]] }
   const split: TerminalSpec = {
-    id: 'tab-split',
+    id: 'entry-split',
+    entityId: 'tab-split',
     leaves: [
-      [leaf(2), LEFT_PTY],
-      [leaf(3), RIGHT_PTY]
+      [leaf(2), splitPtyIds[0]],
+      [leaf(3), splitPtyIds[1]]
     ],
     split: 'vertical'
   }
@@ -142,6 +153,25 @@ describe('adopting live terminals in a layout-owner build', () => {
         throw new Error('not asked: nothing is unbound')
       })
     ).resolves.toEqual({ surfaced: true, declinedPtyIds: [] })
+  })
+
+  it('declines a terminal whose pane main binds to another terminal', async () => {
+    const { window: windowSession, main } = sessions([
+      `${GIT_KEY}@@aaaa0008`,
+      `${GIT_KEY}@@aaaa0009`
+    ])
+    const store = createTestStore()
+    await bootWindowFromPartitions(store, [{ hostId: 'local', session: windowSession }])
+    sync = openWorkspaceLayoutFrameSync(store)
+    frames.sync = sync
+    sync.start()
+    reportWindowSessionWriteActivity(true)
+    frames.onFrame!(snapshotOf(main))
+    await flushMicrotasks()
+
+    await expect(
+      adoptLiveWorkspacePtySurfaces(store.getState, GIT_KEY, [LEFT_PTY], async () => owners)
+    ).resolves.toEqual({ surfaced: false, declinedPtyIds: [LEFT_PTY] })
   })
 
   it('declines a terminal whose tab main does not hold, rather than making one', async () => {

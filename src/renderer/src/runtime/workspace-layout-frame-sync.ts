@@ -45,8 +45,12 @@ export type WorkspaceLayoutFrameSync = {
   /** Shows every workspace the frames own once the snapshot is in, then keeps them current. */
   start: () => void
   close: () => void
-  /** Whether main's latest frames hold this terminal tab in this workspace, shown yet or not. */
-  holdsTerminalTab: (worktreeId: string, tabId: string) => boolean
+  /** Whether main's latest frames show this terminal in this pane, drawn yet or not. An unbound
+   *  pane counts: the window binds the terminal to it once drawn. */
+  holdsTerminalPane: (
+    worktreeId: string,
+    pane: { tabId: string; leafId: string; ptyId: string }
+  ) => boolean
 }
 
 /** A bucket, not a host: the view read-back routes the workspaces a rebuild skips here. */
@@ -230,8 +234,15 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       stopIdleListener()
       stream.close()
     },
-    holdsTerminalTab: (worktreeId, tabId) =>
-      cache[worktreeId]?.tabs.some((tab) => tab.terminal && tab.entityId === tabId) ?? false
+    holdsTerminalPane: (worktreeId, { tabId, leafId, ptyId }) =>
+      cache[worktreeId]?.tabs.some(
+        (tab) =>
+          tab.entityId === tabId &&
+          (tab.terminal?.panes.some(
+            (pane) => pane.leafId === leafId && (pane.ptyId ?? ptyId) === ptyId
+          ) ??
+            false)
+      ) ?? false
   }
 }
 
@@ -244,7 +255,10 @@ export function showStartupLayoutFrames(): void {
   startupFrames.start()
 }
 
-/** Whether main's frames will draw this terminal tab; false before the window's stream opens. */
-export function layoutFramesHoldTerminalTab(worktreeId: string, tabId: string): boolean {
-  return startupFrames?.holdsTerminalTab(worktreeId, tabId) ?? false
+/** Whether main's frames will draw this terminal's pane; false before the stream's snapshot. */
+export function layoutFramesHoldTerminalPane(
+  worktreeId: string,
+  pane: { tabId: string; leafId: string; ptyId: string }
+): boolean {
+  return startupFrames?.holdsTerminalPane(worktreeId, pane) ?? false
 }
