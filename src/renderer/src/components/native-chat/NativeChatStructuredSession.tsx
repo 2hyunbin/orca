@@ -220,8 +220,7 @@ export function NativeChatStructuredSession(
     optionPickerRequest,
     setOptionPickerRequest,
     onError: reportComposerError,
-    onSubmitted: revealLatest,
-    queuedMessages: submits.queuedMessages
+    onSubmitted: revealLatest
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.
