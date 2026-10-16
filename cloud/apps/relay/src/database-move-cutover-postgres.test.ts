@@ -10,6 +10,7 @@ import {
   verifyCommand
 } from './database-move-commands.js'
 import {
+  finishCommand,
   restorePasswordCommand,
   type MoveCutoverContext
 } from './database-move-cutover-commands.js'
@@ -42,7 +43,6 @@ const TIMINGS: CutoverTimings = {
 }
 const POLL_MS = 100
 const CELLS = ['c0', 'c1', 'c2', 'c3']
-
 
 type Fleet = {
   processes: SwitchingRelayDatabase[]
@@ -159,14 +159,6 @@ function moveEvents(event: string): Array<Record<string, unknown>> {
         line !== null &&
         Reflect.get(line, 'event') === `orca_relay_move_${event}`
     )
-}
-
-async function readSuperseded(url: string): Promise<boolean> {
-  return await withPgClient(url, async (client) =>
-    Boolean(
-      (await client.query(`SELECT superseded FROM relay_database_authority`)).rows[0]?.superseded
-    )
-  )
 }
 
 async function loginCode(url: string): Promise<string | null> {
@@ -367,9 +359,6 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     await syncCommand(ctx, 'dedicated', { stopAtBacklog: 0, idleMs: 5 })
     expect(await verifyCommand(ctx, {})).toBe(true)
 
-    // The superseded mark: primary may not serve again until a cutover back clears it.
-    expect(await readSuperseded(sides.primary.move.url)).toBe(true)
-    expect(await readSuperseded(sides.dedicated.move.url)).toBe(false)
     const reopenPrimary = async (): Promise<void> => {
       await withPgClient(adminUrl ?? '', (admin) =>
         admin.query(`ALTER ROLE ${sides.primary.app.user} PASSWORD '${sides.primary.app.password}'`)
@@ -396,7 +385,7 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     // And back: the rollback cutover reopens the fenced primary itself, then moves the fleet.
     const returning = await startFleet(sides, store)
     await sleep(300)
-    // Interrupted right after the reopen: primary is fenced again and stays superseded.
+    // Interrupted right after the reopen: primary is fenced again.
     await expect(
       runCutover({
         ...rollback,
@@ -404,32 +393,7 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
       })
     ).rejects.toThrow('interrupted')
     expect(await loginCode(sides.primary.app.url)).toBe('28P01')
-    expect(await readSuperseded(sides.primary.move.url)).toBe(true)
     expect(store.current()?.quiesce).toBeUndefined()
-
-    // Even with primary's login open again (as during a reopen), a process that cannot read the
-    // pointer refuses the superseded copy instead of writing to it.
-    await reopenPrimary()
-    const blindSettings = {
-      poolMax: 2,
-      applicationName: markRelayDatabaseMoveCapability('orca-relay/cell/blind', '0000000b')
-    }
-    const blind = new SwitchingRelayDatabase({
-      primary: openPrimaryRelayDatabaseTarget(sides.primary.app.url, blindSettings),
-      openDedicated: () => openPrimaryRelayDatabaseTarget(sides.dedicated.app.url, blindSettings),
-      firstPointer: async () => null,
-      firstPointerWaitMs: 200
-    })
-    await expect(
-      blind.query(
-        `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES ('blind-1', 1, 't', '{}')`
-      )
-    ).rejects.toMatchObject({ code: '57P03' })
-    await blind.close()
-    const blindRows = await withPgClient(sides.primary.move.url, (client) =>
-      client.query(`SELECT 1 FROM relay_audit_events WHERE id = 'blind-1'`)
-    )
-    expect(blindRows.rows).toEqual([])
 
     const back = await runCutover(rollback)
     await sleep(300)
@@ -442,9 +406,94 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     ])
     expect(store.current()?.generation).toBe(2)
     expect(await loginCode(sides.dedicated.app.url)).toBe('28P01')
-    expect(await readSuperseded(sides.primary.move.url)).toBe(false)
-    expect(await readSuperseded(sides.dedicated.move.url)).toBe(true)
+
+    // Finish, keeping primary: only the serving side can be kept. Afterwards a process with no
+    // pointer serves DATABASE_URL exactly as before the move.
+    await expect(finishCommand(ctx, 'dedicated', { pointerDrainMs: 0 })).rejects.toThrow(
+      'kept_side_is_not_serving'
+    )
+    await finishCommand(ctx, 'primary', { pointerDrainMs: 0 })
+    expect(store.current()).toBeNull()
+    const after = await withPgClient(sides.primary.app.url, (client) =>
+      client.query(
+        `SELECT to_regclass('relay_database_authority') IS NULL AS gone,
+           to_regclass('relay_move_dirty') IS NULL AS untracked`
+      )
+    )
+    expect(after.rows[0]).toEqual({ gone: true, untracked: true })
+    const settings = {
+      poolMax: 2,
+      applicationName: markRelayDatabaseMoveCapability('orca-relay/cell/after', '0000000a')
+    }
+    const plain = new SwitchingRelayDatabase({
+      primary: openPrimaryRelayDatabaseTarget(sides.primary.app.url, settings),
+      openDedicated: () => openPrimaryRelayDatabaseTarget(sides.dedicated.app.url, settings),
+      firstPointer: async () => null,
+      firstPointerWaitMs: 200
+    })
+    await plain.query(
+      `INSERT INTO relay_audit_events (id, at, type, detail_json) VALUES ('after-finish', 1, 't', '{}')`
+    )
+    expect(plain.activeTargetName()).toBe('primary')
+    await plain.close()
   }, 90_000)
+
+  it('keeps primary serving when the fencing session dies before the abort', async () => {
+    // A row only the target has makes the comparison fail after the fence.
+    await withPgClient(sides.dedicated.move.url, (client) =>
+      client.query(
+        `INSERT INTO relay_cells (cell_id, cell_url, enabled, capacity_requests, reserved_requests,
+           observed_requests, last_heartbeat_at, updated_at) VALUES ('ghost', 'https://ghost', 0, 0, 0, 0, 0, 0)`
+      )
+    )
+    const fleet = await startFleet(sides, store)
+    await sleep(300)
+    // The fencing session is killed as soon as the fence lands, so undo cannot use it.
+    const killer = setInterval(() => {
+      if (moveEvents('fence_complete').length === 0) return
+      void withPgClient(sides.primary.adminUrl, (admin) =>
+        admin.query(
+          `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+           WHERE application_name LIKE 'orca-relay-move/cutover-fence%'`
+        )
+      )
+    }, 5)
+    let restoredThroughApi = 0
+    await expect(
+      runCutover({
+        databases: ctx.databases,
+        to: 'dedicated',
+        pointerStore: store,
+        timings: TIMINGS,
+        // Stands in for the Cloud SQL Admin API restore.
+        restoreSourcePassword: async () => {
+          restoredThroughApi += 1
+          await withPgClient(adminUrl ?? '', (admin) =>
+            admin.query(
+              `ALTER ROLE ${sides.primary.app.user} PASSWORD '${sides.primary.app.password}'`
+            )
+          )
+        }
+      })
+    ).rejects.toThrow()
+    clearInterval(killer)
+    await sleep(500)
+    await fleet.stop()
+    expect(restoredThroughApi).toBe(1)
+    expect(fleet.failures).toEqual([])
+    expect(fleet.processes.map((database) => database.activeTargetName())).toEqual([
+      'primary',
+      'primary'
+    ])
+    expect(store.current()?.quiesce).toBeUndefined()
+    expect(await loginCode(sides.primary.app.url)).toBeNull()
+    // Processes that start now still serve primary.
+    const restarted = await startFleet(sides, store)
+    await sleep(500)
+    await restarted.stop()
+    expect(restarted.failures).toEqual([])
+    expect(restarted.ackedEvents.size).toBeGreaterThan(0)
+  }, 60_000)
 
   it('aborts when a process cannot reach the target, naming it, with no failed operation', async () => {
     const fleet = await startFleet(sides, store, { unreachable: true })
@@ -533,9 +582,6 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     ])
     expect(store.current()?.quiesce).toBeUndefined()
     expect(await loginCode(sides.primary.app.url)).toBeNull()
-    // Marked superseded just before the fence, and cleared again by the abort.
-    expect(await readSuperseded(sides.primary.move.url)).toBe(false)
-    expect(moveEvents('source_supersede_cleared').length).toBe(1)
     const generation = await withPgClient(sides.dedicated.move.url, (client) =>
       readAuthorityGeneration(client)
     )

@@ -276,8 +276,6 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
   let heldSession: pg.Client | null = null
   let targetSession: pg.Client | null = null
   let targetReopened = false
-  let supersededSource = false
-  let sourceSessionForUndo: pg.Client | null = null
   let newGeneration = 0
   try {
     const sourceLogin = await databases.login(from, 'app')
@@ -291,7 +289,6 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       source: await open(from, 'move', 'cutover-sync'),
       target: await open(to, 'move', 'cutover-sync')
     }
-    sourceSessionForUndo = sessions.source
     // The processes will log in there next; prove the relay's password works first. The session
     // stays open to see which processes reach the target during the window.
     let targetApp = await open(to, 'app', 'cutover-gate').catch((error: unknown) => error)
@@ -382,8 +379,8 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     if (writers.length > 0) throw new MoveRefusal('other_roles_can_write_relay_rows', { writers })
     if (targetPasswordRestore === 'needed' && !dryRun && input.restoreTargetPassword) {
       phase = 'reopen-target'
-      // From here an abort must fence the target again: it stays superseded meanwhile, so no
-      // process may use it, but its login is open.
+      // From here an abort must fence the target again: it is below the pointer's generation, so
+      // no process may serve it, but its login is open.
       targetReopened = true
       await input.restoreTargetPassword()
       logMoveEvent('target_password_restored', { side: to })
@@ -459,12 +456,6 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       await sleep(timings.quietScanSpacingMs)
     }
 
-    // Superseded before the fence: a process that boots from here on never picks the source, even
-    // when it cannot read the pointer. Undone on abort.
-    phase = 'supersede'
-    supersededSource = true
-    await setSuperseded(sessions.source, true, sourceGeneration)
-
     phase = 'fence'
     fenced = true
     const fence = await fenceWithSession(held)
@@ -505,10 +496,10 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     try {
       await sessions.target.query(
         `INSERT INTO ${RELAY_DATABASE_AUTHORITY_TABLE}
-           (singleton, generation, written_at, superseded, tracking_arm)
-         VALUES (TRUE, $1, $2, FALSE, $3)
+           (singleton, generation, written_at, tracking_arm)
+         VALUES (TRUE, $1, $2, $3)
          ON CONFLICT (singleton) DO UPDATE SET generation = EXCLUDED.generation,
-           written_at = EXCLUDED.written_at, superseded = FALSE, tracking_arm = EXCLUDED.tracking_arm`,
+           written_at = EXCLUDED.written_at, tracking_arm = EXCLUDED.tracking_arm`,
         [generation, Date.now(), targetArm]
       )
     } catch (error) {
@@ -555,7 +546,6 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
         fenced,
         quiesceId,
         written,
-        source: supersededSource ? sourceSessionForUndo : null,
         target: targetReopened ? targetSession : null,
         reopened: targetReopened
       })
@@ -603,18 +593,28 @@ async function checkAuthorityWrite(
   }
 }
 
-// As the tool role. A side with no authority row yet gets one at its current generation.
-async function setSuperseded(
-  client: pg.Client,
-  superseded: boolean,
-  generation: number
-): Promise<void> {
-  await client.query(
-    `INSERT INTO ${RELAY_DATABASE_AUTHORITY_TABLE} (singleton, generation, written_at, superseded)
-     VALUES (TRUE, $1, $2, $3)
-     ON CONFLICT (singleton) DO UPDATE SET superseded = EXCLUDED.superseded`,
-    [generation, Date.now(), superseded]
-  )
+// Over the cutover's session if it still works, else a fresh one: the target's login is open
+// right now, so a new relay-role session can still log in to close it.
+async function fenceReopenedTarget(input: CutoverInput, shared: pg.Client | null): Promise<void> {
+  const side = input.to
+  for (const attempt of ['shared', 'fresh'] as const) {
+    let session: pg.Client | null = null
+    try {
+      session =
+        attempt === 'shared'
+          ? shared
+          : await input.databases.connect(side, 'app', 'cutover-refence')
+      if (!session) continue
+      await fenceWithSession(session)
+      logMoveEvent('target_fenced_again', { side, session: attempt })
+      return
+    } catch (error) {
+      logMoveEvent('target_refence_failed', { side, session: attempt, ...describeMoveError(error) })
+    } finally {
+      if (attempt === 'fresh') await endQuietly(session)
+    }
+  }
+  logMoveEvent('target_left_open', { side, run: `fence --side ${side}` })
 }
 
 async function undoCutover(
@@ -624,8 +624,6 @@ async function undoCutover(
     fenced: boolean
     quiesceId: string | null
     written: StoredDatabaseTargetPointer | null
-    // Set when the source was marked superseded: the session to clear it with.
-    source: pg.Client | null
     // Set when a rollback reopened its target: the relay-role session to fence it again with.
     target: pg.Client | null
     reopened: boolean
@@ -633,27 +631,7 @@ async function undoCutover(
 ): Promise<void> {
   const from = otherMoveSide(input.to)
   const { held, fenced, quiesceId, written } = undo
-  if (undo.reopened) {
-    try {
-      if (!undo.target) throw new MoveRefusal('target_session_missing')
-      await fenceWithSession(undo.target)
-      logMoveEvent('target_fenced_again', { side: input.to })
-    } catch (error) {
-      logMoveEvent('target_left_open', {
-        side: input.to,
-        run: `fence --side ${input.to}`,
-        ...describeMoveError(error)
-      })
-    }
-  }
-  if (undo.source) {
-    try {
-      await setSuperseded(undo.source, false, 0)
-      logMoveEvent('source_supersede_cleared', { side: from })
-    } catch (error) {
-      logMoveEvent('source_supersede_not_cleared', { side: from, ...describeMoveError(error) })
-    }
-  }
+  if (undo.reopened) await fenceReopenedTarget(input, undo.target)
   if (fenced) {
     try {
       if (!held) throw new MoveRefusal('held_session_missing')

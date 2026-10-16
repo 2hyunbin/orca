@@ -18,6 +18,7 @@ import {
 import {
   cutoverCommand,
   fenceCommand,
+  finishCommand,
   restorePasswordCommand,
   statusCommand,
   type MoveCutoverContext
@@ -36,13 +37,15 @@ const USAGE = `commands:
   prepare-target                                copy --from primary|dedicated [--restart]
   sync --from primary|dedicated [--until-empty] verify [--tables a,b]
   fence --side primary|dedicated                restore-password --side primary|dedicated
-  cutover --to dedicated|primary [--dry-run]    status`
+  cutover --to dedicated|primary [--dry-run]    status
+  finish --keep primary|dedicated`
 
 // Both sides together; a 13 M-row database verifies in about 11 minutes.
 const DEFAULT_VERIFY_ROWS_PER_SECOND = 40_000
 
 const OPTIONS = {
   side: { type: 'string' },
+  keep: { type: 'string' },
   from: { type: 'string' },
   to: { type: 'string' },
   'dry-run': { type: 'boolean' },
@@ -184,6 +187,9 @@ export async function runMoveCli(
         })
         return 0
       }
+      case 'finish':
+        await finishCommand(ctx, side(flags.keep, 'keep'))
+        return 0
       case 'status':
         await statusCommand(ctx)
         return 0
