@@ -11,7 +11,7 @@ const {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } = await import('./orca-runtime-test-fixtures.spec')
-const { captureWorktreeSleepResumeRecords } =
+const { applyWorktreeSleepResumeRecords, captureWorktreeSleepResumeRecords } =
   await import('./terminal/stop/worktree-sleep-resume-records')
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
@@ -171,5 +171,33 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
       capturedAt: 2
     })
     expect(capture.get('pty')?.records[0]?.launchConfig).toEqual(kept ? config : undefined)
+  })
+
+  it('stamps the SSH host and keeps the saved recipe a reattached PTY forgot', () => {
+    const launchConfig = { agentArgs: '--x', agentEnv: {} }
+    const record = {
+      paneKey: PANE_KEY,
+      worktreeId: TEST_WORKTREE_ID,
+      agent: 'claude' as const,
+      providerSession: { key: 'session_id' as const, id: SESSION_ID },
+      prompt: '',
+      state: 'done' as const,
+      capturedAt: 1,
+      updatedAt: 1,
+      connectionId: 'ssh-target'
+    }
+    const session = makeWorkspaceSessionWithHeadlessTerminal({
+      sleepingAgentSessionsByPaneKey: { [PANE_KEY]: { ...record, launchConfig } }
+    })
+    const next = applyWorktreeSleepResumeRecords(
+      session,
+      new Map([['pty', { exitedPaneKeys: [], records: [{ ...record, capturedAt: 2 }] }]]),
+      ['pty']
+    )
+    expect(next?.sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toMatchObject({
+      capturedAt: 2,
+      connectionId: 'ssh-target',
+      launchConfig
+    })
   })
 })

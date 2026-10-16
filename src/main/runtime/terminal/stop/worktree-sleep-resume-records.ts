@@ -1,4 +1,5 @@
 import {
+  agentProviderSessionsEqual,
   isResumableTuiAgent,
   normalizeAgentProviderSession,
   type SleepingAgentLaunchConfig,
@@ -75,6 +76,8 @@ export async function captureWorktreeSleepResumeRecords(args: {
         updatedAt: row.receivedAt,
         origin: 'worktree-sleep',
         restoreOnTabOpenOnly: true,
+        // Why: the SSH host boundary; a stamp keeps the id off another machine's `--resume`.
+        connectionId: row.connectionId,
         ...(launch?.config && launch.agent === agent ? { launchConfig: launch.config } : {})
       })
     }
@@ -102,7 +105,16 @@ export function applyWorktreeSleepResumeRecords(
       }
     }
     for (const record of entry?.records ?? []) {
-      next[record.paneKey] = record
+      const previous = next[record.paneKey]
+      // Why: a reattached PTY forgets its launch recipe; the earlier capture of this session kept it.
+      const keptLaunchConfig =
+        !record.launchConfig &&
+        previous?.launchConfig &&
+        previous.agent === record.agent &&
+        agentProviderSessionsEqual(record.agent, previous.providerSession, record.providerSession)
+          ? { launchConfig: previous.launchConfig }
+          : {}
+      next[record.paneKey] = { ...record, ...keptLaunchConfig }
       changed = true
     }
   }
