@@ -11,7 +11,13 @@ export function installFirstWorkRenameHookSubscription(): () => void {
     if (event.providerSessionOnly || event.restoredUnconfirmed || event.structuredHost) {
       return
     }
-    maybeAutoRenameBranchOnFirstWorkFromHook(event)
+    maybeAutoRenameBranchOnFirstWorkFromHook({
+      paneKey: event.paneKey,
+      tabId: event.tabId,
+      worktreeId: event.worktreeId,
+      payload: event.payload,
+      isReplay: event.isReplay
+    })
   })
 }
 
