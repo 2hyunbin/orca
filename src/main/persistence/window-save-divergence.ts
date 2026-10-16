@@ -22,6 +22,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 const LOG_PATH_ENV = 'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG'
 const MAX_PATHS = 12
 const RECORDS = ['defaultTabsAppliedByWorkspace', 'clientHostedBrowserPagesByWorkspace'] as const
+const BINDING_ONLY = /^leaf \S+ changed: (ptyId|incarnationId)(, (ptyId|incarnationId))?$/
 
 export type WindowSaveDivergence = { workspace: string; paths: string[] }
 
@@ -109,17 +110,21 @@ export function diffWorkspaceLayouts(
       listById(before.browserTabs, (b) => b.id),
       listById(after.browserTabs, (b) => b.id)
     ),
-    ...diffKeyed('leaf', recordById(before.leaves), recordById(after.leaves)),
     ...diffKeyed(
       'closed tab',
       recordById(before.closedTerminalTabs),
       recordById(after.closedTerminalTabs)
-    )
+    ),
+    ...diffKeyed('leaf', recordById(before.leaves), recordById(after.leaves))
   ]
   if (stableJson(before.groupLayout ?? null) !== stableJson(after.groupLayout ?? null)) {
     paths.push('group layout changed')
   }
-  return paths
+  // A pane's terminal binding still reaches main only through saves, on every spawn and reattach;
+  // counted last so it never crowds out a structural change.
+  const rebound = paths.filter((path) => BINDING_ONLY.test(path)).length
+  const structural = paths.filter((path) => !BINDING_ONLY.test(path))
+  return rebound > 0 ? [...structural, `${rebound} pane(s) rebound`] : structural
 }
 
 /** Each workspace whose part of main's model differs between two copies of one partition. */
@@ -127,10 +132,18 @@ export function windowSaveDivergences(
   was: WorkspaceLayoutModel | null,
   now: WorkspaceLayoutModel | null
 ): WindowSaveDivergence[] {
-  const workspaces = new Set([
-    ...Object.keys(was?.workspaces ?? {}),
-    ...Object.keys(now?.workspaces ?? {})
-  ])
+  // Records count for a workspace with no tabs too.
+  const workspaces = new Set(
+    [was, now].flatMap((model) =>
+      model
+        ? [
+            ...Object.keys(model.workspaces),
+            ...RECORDS.flatMap((record) => Object.keys(model.records[record] ?? {})),
+            ...Object.keys(model.legacy.terminalRowOwners)
+          ]
+        : []
+    )
+  )
   const result: WindowSaveDivergence[] = []
   for (const workspace of workspaces) {
     const paths = diffWorkspaceLayouts(was?.workspaces[workspace], now?.workspaces[workspace])
@@ -141,6 +154,12 @@ export function windowSaveDivergences(
       ) {
         paths.push(`${record} changed`)
       }
+    }
+    if (
+      Boolean(was?.legacy.terminalRowOwners[workspace]) !==
+      Boolean(now?.legacy.terminalRowOwners[workspace])
+    ) {
+      paths.push('terminal row owner changed')
     }
     if (paths.length > 0) {
       result.push({ workspace, paths: paths.slice(0, MAX_PATHS) })

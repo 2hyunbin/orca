@@ -121,6 +121,53 @@ describe('writeWindowSaveWatchingLayout', () => {
     )
   })
 
+  it('writes once when the check cannot read the stored copy, and lets a failed write throw', () => {
+    const write = vi.fn()
+    writeWindowSaveWatchingLayout(
+      () => {
+        throw new Error('unreadable')
+      },
+      'local',
+      write,
+      'session:set'
+    )
+    expect(write).toHaveBeenCalledOnce()
+
+    const read = vi.fn(() => session([{ id: 'tab-a' }]))
+    expect(() =>
+      writeWindowSaveWatchingLayout(
+        read,
+        'local',
+        () => {
+          throw new Error('disk full')
+        },
+        'session:set'
+      )
+    ).toThrow('disk full')
+    expect(read).toHaveBeenCalledOnce()
+  })
+
+  it('counts panes only rebound to their terminals after the layout changes', () => {
+    const bound = (ptyId: string): WorkspaceSessionState => {
+      const result = session([{ id: 'tab-a' }, { id: 'tab-b' }])
+      result.terminalLayoutsByTabId['tab-a'] = {
+        ...result.terminalLayoutsByTabId['tab-a']!,
+        ptyIdsByLeafId: { [leaf(1)]: ptyId }
+      }
+      return result
+    }
+    const next = bound('pty-2')
+    next.tabGroups![GIT_KEY]![0]!.tabOrder.reverse()
+
+    save(bound('pty-1'), next)
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({ paths: ['group group-1 changed: tabOrder', '1 pane(s) rebound'] })
+    )
+  })
+
   it('leaves a paired server’s partition alone: its layout is the server’s', () => {
     const next = session([{ id: 'tab-c' }])
     expect(save(session([{ id: 'tab-a' }]), next, 'runtime:env-1')).toBe(next)
