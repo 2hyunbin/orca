@@ -8,6 +8,7 @@ import {
 import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-ipc-payload'
 import type { AgentProcessVerdict } from '../../../../shared/agent-process-presence'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { isLocalHookConnectionId } from '../../../../shared/wsl-hook-relay-contract'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
 /** Per slept PTY: the resume records captured, and the panes whose agent the hook store proved exited. */
@@ -81,8 +82,8 @@ export async function captureWorktreeSleepResumeRecords(args: {
         updatedAt: row.receivedAt,
         origin: 'worktree-sleep',
         restoreOnTabOpenOnly: true,
-        // Why: the SSH host boundary; a stamp keeps the id off another machine's `--resume`.
-        connectionId: row.connectionId,
+        // Why: the SSH host boundary keeps the id off another machine; a WSL relay tag is local transport.
+        connectionId: isLocalHookConnectionId(row.connectionId) ? null : row.connectionId,
         ...(launch?.config && launch.agent === agent ? { launchConfig: launch.config } : {})
       })
     }

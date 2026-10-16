@@ -190,6 +190,31 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     expect(capture.get('pty')?.records[0]?.launchConfig).toEqual(kept ? config : undefined)
   })
 
+  it.each([
+    [null, null],
+    ['wsl:Ubuntu', null],
+    ['ssh-target', 'ssh-target']
+  ] as const)('stamps hook connection %s as host %s', async (rowConnectionId, stamped) => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
+    const row = {
+      paneKey: PANE_KEY,
+      agentType: 'claude',
+      providerSession: { key: 'session_id', id: SESSION_ID },
+      prompt: '',
+      receivedAt: 1,
+      connectionId: rowConnectionId
+    } as AgentStatusIpcPayload
+    const capture = await captureWorktreeSleepResumeRecords({
+      worktreeId: TEST_WORKTREE_ID,
+      paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
+      launchByPtyId: new Map(),
+      readRows: () => [row],
+      checkAgentPresence: null,
+      capturedAt: 2
+    })
+    expect(capture.get('pty')?.records[0]?.connectionId).toBe(stamped)
+  })
+
   it('stamps the SSH host and keeps the saved recipe a reattached PTY forgot', () => {
     const launchConfig = { agentArgs: '--x', agentEnv: {} }
     const record = {
