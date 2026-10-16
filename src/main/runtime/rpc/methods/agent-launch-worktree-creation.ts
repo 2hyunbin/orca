@@ -1,4 +1,3 @@
-import { terminalImageViewerSupported } from '../../terminal-image-viewer-env'
 /**
  * Creating the worktree an `agent.launch` asks for.
  *
@@ -89,10 +88,7 @@ export function agentLaunchWorkspaceFactory(
               }),
               creatorProvenance: resolveRpcWorkspaceCreatorProvenance(context)
             },
-            {
-              clientKind: context.clientKind,
-              terminalImageViewerSupported: terminalImageViewerSupported(context)
-            }
+            context
           ),
           ...(agentArgs !== undefined ? { startupAgentArgs: agentArgs } : {}),
           ...(startupPrompt
