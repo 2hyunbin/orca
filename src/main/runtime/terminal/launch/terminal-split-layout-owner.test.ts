@@ -55,7 +55,8 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
   }
 
   it('writes the new pane in main before the window mounts it, and keeps it however the start goes', async () => {
-    const { runtime, handle, splitTerminal, leafIds } = setup()
+    const { runtime, runtimeStore, handle, splitTerminal, leafIds } = setup()
+    const withdraw = vi.spyOn(runtimeStore, 'withdrawTerminalPane')
 
     vi.useFakeTimers()
     try {
@@ -66,10 +67,11 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
       expect(notice).toMatchObject({ command: 'make test', sourceLeafId: HEADLESS_LEAF_ID })
       expect(leafIds()).toEqual([HEADLESS_LEAF_ID, notice.newLeafId])
 
-      // No window mounted it in time: main keeps it; the window's frames draw it.
+      // Its terminal never starts: main keeps a dead pane, as any, and takes nothing back.
       await vi.advanceTimersByTimeAsync(11_000)
       await rejected
       expect(leafIds()).toEqual([HEADLESS_LEAF_ID, notice.newLeafId])
+      expect(withdraw).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
