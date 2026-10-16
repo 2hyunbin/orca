@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import {
   captureDevWebClientInputs,
   isDevWebClientFresh,
@@ -194,13 +194,35 @@ it('retains the inputs from before a build so concurrent edits invalidate its ou
   expect(isDevWebClientFresh(root)).toBe(false)
 })
 
-it('invalidates a tracked bundle after replacing same-size source with a restored mtime', () => {
+it('detects same-size atomic replacement with restored mtime within one timestamp tick', async () => {
   const root = fixture()
-  expect(isDevWebClientFresh(root)).toBe(true)
   const file = join(root, 'src/shared/value.ts')
-  rmSync(file)
-  writeFileSync(file, '')
-  utimesSync(file, OLD, OLD)
-  utimesSync(dirname(file), OLD, OLD)
-  expect(isDevWebClientFresh(root)).toBe(false)
+  const replacement = join(root, 'replacement.ts')
+  vi.doMock('node:fs', async (importOriginal) => {
+    const actual = await importOriginal()
+    return {
+      ...actual,
+      statSync: (...args) => {
+        const stat = actual.statSync(...args)
+        if (args[0] === file) {
+          stat.ctimeNs = 0n
+        }
+        return stat
+      }
+    }
+  })
+  vi.resetModules()
+  try {
+    const { isDevWebClientFresh: isFreshWithCoarseClock } =
+      await import('./dev-web-client-freshness.mjs')
+    expect(isFreshWithCoarseClock(root)).toBe(true)
+    writeFileSync(replacement, '')
+    utimesSync(replacement, OLD, OLD)
+    renameSync(replacement, file)
+    utimesSync(dirname(file), OLD, OLD)
+    expect(isFreshWithCoarseClock(root)).toBe(false)
+  } finally {
+    vi.doUnmock('node:fs')
+    vi.resetModules()
+  }
 })

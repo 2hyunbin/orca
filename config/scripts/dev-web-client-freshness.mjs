@@ -10,15 +10,19 @@ const TEST_SOURCE_PATTERN = /\.(?:test|spec)\.[cm]?[jt]sx?$/
 function collectInputs(targetPath, relativePath, files) {
   let stat
   try {
-    stat = statSync(targetPath)
+    stat = statSync(targetPath, { bigint: true })
   } catch {
     return 0
   }
+  const mtimeMs = Number(stat.mtimeNs) / 1e6
   if (!stat.isDirectory()) {
-    files.push([relativePath, stat.mtimeMs, stat.ctimeMs, stat.size])
-    return stat.mtimeMs
+    files.push([
+      relativePath,
+      ...[stat.mtimeNs, stat.ctimeNs, stat.dev, stat.ino, stat.size].map(String)
+    ])
+    return mtimeMs
   }
-  let latest = stat.mtimeMs
+  let latest = mtimeMs
   for (const entry of readdirSync(targetPath, { withFileTypes: true }).sort((a, b) =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   )) {
