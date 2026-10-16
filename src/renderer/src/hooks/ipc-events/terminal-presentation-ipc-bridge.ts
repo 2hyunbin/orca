@@ -92,7 +92,16 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
             ownership.kind === 'owned'
               ? worktreeTabs.find((candidate) => candidate.id === ownership.tabId)
               : undefined
-          const reusedTab = existingTab ?? splitTargetTab
+          let reusedTab = existingTab ?? splitTargetTab
+          // Switch point: main wrote this tab before revealing it, so its frame may have drawn it
+          // while stale records left the terminal's owner unclear; that tab is the one to show.
+          const frameDrawnTab =
+            ORCA_LAYOUT_OWNER_IS_MAIN && !reusedTab && tabId !== undefined
+              ? worktreeTabs.find((candidate) => candidate.id === tabId)
+              : undefined
+          if (frameDrawnTab) {
+            reusedTab = frameDrawnTab
+          }
           const tab =
             reusedTab ??
             (ptyId
