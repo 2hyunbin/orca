@@ -6,6 +6,7 @@ import { composeWorktreeHostIdentity } from '../shared/worktree/host-qualified-i
 import type { RuntimeStore } from './runtime/runtime-store-contract'
 import { readAllWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
 import { getRepoOwnedWorktreeMeta } from './worktree-metadata-ownership'
+import { resolveRepoOwnershipEvidence } from './ipc/worktrees/listing/worktree-host-ownership'
 
 type CatalogStore = Pick<
   RuntimeStore,
@@ -18,14 +19,26 @@ type CatalogStore = Pick<
 
 export function readSavedWorktreeOwners(store: CatalogStore) {
   const repos = store.getRepos()
+  const invalidRepoIds = new Set(
+    repos
+      .filter((repo) => resolveRepoOwnershipEvidence(repo).status !== 'owned')
+      .map((repo) => repo.id)
+  )
   const counts = new Map<string, number>()
   for (const repo of repos) {
     counts.set(repo.id, (counts.get(repo.id) ?? 0) + 1)
   }
   const rows = []
   for (const hostId of new Set(repos.map(getRepoExecutionHostId))) {
+    const hostRepos = repos.filter((repo) => getRepoExecutionHostId(repo) === hostId)
     const owners = new Map(
-      repos.filter((repo) => getRepoExecutionHostId(repo) === hostId).map((repo) => [repo.id, repo])
+      hostRepos
+        .filter(
+          (repo) =>
+            !invalidRepoIds.has(repo.id) &&
+            hostRepos.filter((candidate) => candidate.id === repo.id).length === 1
+        )
+        .map((repo) => [repo.id, repo])
     )
     const snapshot = readAllWorktreeMetaForHost(store, hostId)
     for (const [id] of Object.entries(snapshot)) {
