@@ -36,17 +36,6 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
   }
   // Seed before the first disk await so live output appends to the restored history.
   seedHeadlessTerminalFromSpawnResult(ctx.deps.runtime, ctx.result, ctx.validatedPaneKey)
-  // Why before the first await: the agent's own first report must find this seed already written.
-  seedResumeLaunchIdentityFromSpawn({
-    paneKey: ctx.validatedPaneKey,
-    launchAgent: args.launchAgent,
-    resumeProviderSession: args.resumeProviderSession,
-    connectionId: args.connectionId,
-    worktreeId: args.worktreeId,
-    launchedAt: ctx.codexHomeLaunchStartedAt,
-    resumeArgvDropped: ctx.codexResumeLaunch.droppedResumeArgv,
-    result: ctx.result
-  })
   seedTerminalRestoreRecordsFromSpawnResult(ctx.deps.runtime, ctx.result)
   const committedSize = await persistPtyIpcSpawnCommit(ctx)
   if (
@@ -163,6 +152,17 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
       clearMigrationUnsupportedPtysForPaneKey(ctx.validatedPaneKey)
     }
   }
+  // Why after commit: a spawn rejected above must not leave a published identity behind.
+  seedResumeLaunchIdentityFromSpawn({
+    paneKey: ctx.validatedPaneKey,
+    launchAgent: args.launchAgent,
+    resumeProviderSession: args.resumeProviderSession,
+    connectionId: args.connectionId,
+    worktreeId: args.worktreeId,
+    launchedAt: ctx.codexHomeLaunchStartedAt,
+    resumeArgvDropped: ctx.codexResumeLaunch.droppedResumeArgv,
+    result: ctx.result
+  })
   // Why: record the spawn-result pid once here so the memory module needn't reach back into ipc/pty on a hot path (works for in-process and daemon-hosted PTYs).
   const spawnedPid = ctx.result.pid ?? null
   // Why: args.worktreeId/sessionId arrive as untrusted IPC strings (type unenforced at the boundary); bound them so malformed/oversized values can't pollute registerPty's maps.

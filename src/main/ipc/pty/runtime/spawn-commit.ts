@@ -59,17 +59,6 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   }
   // Seed before the first disk await so live output appends to the restored history.
   seedHeadlessTerminalFromSpawnResult(ctx.deps.runtime, ctx.result, ctx.spawnIdentityPaneKey)
-  // Why before the first await: the agent's own first report must find this seed already written.
-  seedResumeLaunchIdentityFromSpawn({
-    paneKey: ctx.env?.ORCA_PANE_KEY,
-    launchAgent: args.launchAgent,
-    resumeProviderSession: args.resumeProviderSession,
-    connectionId: args.connectionId,
-    worktreeId: args.worktreeId,
-    launchedAt: ctx.codexHomeLaunchStartedAt,
-    resumeArgvDropped: ctx.codexResumeArgvDropped,
-    result: ctx.result
-  })
   seedTerminalRestoreRecordsFromSpawnResult(ctx.deps.runtime, ctx.result)
   try {
     ctx.stablePaneBindingPersisted = await persistAdmittedStablePaneBinding({
@@ -263,6 +252,17 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       typeof ctx.result.pid === 'number' && Number.isFinite(ctx.result.pid) && ctx.result.pid > 0
         ? ctx.result.pid
         : null
+  })
+  // Why after commit: a spawn rejected above must not leave a published identity behind.
+  seedResumeLaunchIdentityFromSpawn({
+    paneKey,
+    launchAgent: args.launchAgent,
+    resumeProviderSession: args.resumeProviderSession,
+    connectionId: args.connectionId,
+    worktreeId: args.worktreeId,
+    launchedAt: ctx.codexHomeLaunchStartedAt,
+    resumeArgvDropped: ctx.codexResumeArgvDropped,
+    result: ctx.result
   })
   // Why: runtime-owned/background spawns bypass mounted-pane state, so inventory consumers need an explicit signal.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)
