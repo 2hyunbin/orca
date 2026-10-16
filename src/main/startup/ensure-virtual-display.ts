@@ -72,7 +72,10 @@ function waitForDisplayReady(
     if (lockPid !== xvfbPid) {
       return isManagedDisplayServerAlive(displayNumber) ? 'taken' : null
     }
-    return isUnixSocket(xvfbSocketPath(displayNumber)) ? 'ready' : null
+    // Why the liveness probe too: lock and socket both survive a SIGKILLed Xvfb.
+    return isUnixSocket(xvfbSocketPath(displayNumber)) && isManagedDisplayServerAlive(displayNumber)
+      ? 'ready'
+      : null
   }
   while (Date.now() < deadline) {
     const state = probe()

@@ -404,6 +404,34 @@ describe('ensureVirtualDisplayForHeadlessServe', () => {
       expect(rmSyncMock).not.toHaveBeenCalled()
     })
 
+    it('does not accept a spawned Xvfb that died after writing its lock and socket', async () => {
+      setPlatform('linux')
+      const alive: number[] = []
+      mockDisplays({}, alive)
+      const startXvfb = spawnMock.getMockImplementation()!
+      spawnMock.mockImplementation((command: string, args: string[]) => {
+        const child = startXvfb(command, args)
+        alive.splice(alive.indexOf(child.pid), 1)
+        return child
+      })
+      const { ensureVirtualDisplayForHeadlessServe } = await import('./ensure-virtual-display')
+
+      vi.useFakeTimers({ toFake: ['Date'] })
+      const sleep = vi
+        .spyOn(Atomics, 'wait')
+        .mockImplementation((_array, _index, _value, timeout) => {
+          vi.setSystemTime(Date.now() + (timeout ?? 0))
+          return 'timed-out'
+        })
+      try {
+        expect(ensureVirtualDisplayForHeadlessServe({ isServeMode: true })).toBe(false)
+        expect(process.env.DISPLAY).toBeUndefined()
+      } finally {
+        sleep.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
     it('moves on when another server wins the free display first', async () => {
       setPlatform('linux')
       const displays: Record<number, FakeDisplay> = {}
