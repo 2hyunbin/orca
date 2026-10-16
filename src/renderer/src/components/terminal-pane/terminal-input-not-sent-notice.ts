@@ -5,7 +5,7 @@ import { translate } from '@/i18n/i18n'
  *  made the first command after a daemon death vanish without a trace. Worded as "may": an
  *  unacknowledged write can still have reached the old shell, and retyping blindly could repeat it. */
 export function notifyTerminalInputNotSent(tabId: string): void {
-  toast.warning(
+  toast.info(
     translate(
       'terminal.restartedInputNotSent',
       'The terminal restarted while you were typing, so some input may not have reached it. Check the new shell before typing it again.'
