@@ -39,22 +39,34 @@ export function publishedLayouts(
   return result
 }
 
-function byId<T>(items: readonly T[], id: (item: T) => string): Map<string, string> {
-  return new Map(items.map((item) => [id(item), stableJson(item)]))
+function byId<T extends object>(items: readonly T[], id: (item: T) => string): Map<string, T> {
+  return new Map(items.map((item) => [id(item), item]))
 }
 
-function diffById(
+/** The fields two copies of one record differ in. */
+function changedFields(before: object, after: object): string[] {
+  const was = new Map(Object.entries(before))
+  const now = new Map(Object.entries(after))
+  return [...new Set([...was.keys(), ...now.keys()])].filter(
+    (key) => stableJson(was.get(key) ?? null) !== stableJson(now.get(key) ?? null)
+  )
+}
+
+function diffById<T extends object>(
   prefix: string,
-  before: Map<string, string>,
-  after: Map<string, string>
+  before: Map<string, T>,
+  after: Map<string, T>
 ): string[] {
   const paths: string[] = []
-  for (const [id, json] of after) {
+  for (const [id, item] of after) {
     const old = before.get(id)
     if (old === undefined) {
       paths.push(`${prefix} ${id} added`)
-    } else if (old !== json) {
-      paths.push(`${prefix} ${id} changed`)
+      continue
+    }
+    const fields = changedFields(old, item)
+    if (fields.length > 0) {
+      paths.push(`${prefix} ${id} changed: ${fields.join(', ')}`)
     }
   }
   for (const id of before.keys()) {

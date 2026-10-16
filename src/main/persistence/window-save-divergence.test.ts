@@ -69,7 +69,11 @@ describe('writeWindowSaveWatchingLayout', () => {
     const logged = JSON.parse(line!)
     expect(logged).toMatchObject({ source: 'session:set', partition: 'local', workspace: GIT_KEY })
     expect(logged.paths).toEqual(
-      expect.arrayContaining(['tab tab-a removed', 'tab tab-c added', 'group group-1 changed'])
+      expect.arrayContaining([
+        'tab tab-a removed',
+        'tab tab-c added',
+        'group group-1 changed: tabIds'
+      ])
     )
     expect(warn).toHaveBeenCalledOnce()
   })
@@ -80,7 +84,7 @@ describe('writeWindowSaveWatchingLayout', () => {
     expect(warn).toHaveBeenCalledWith(
       '[layout-owner] window save changed main layout:',
       'session:set',
-      expect.objectContaining({ paths: expect.arrayContaining(['group group-1 changed']) })
+      expect.objectContaining({ paths: expect.arrayContaining(['group group-1 changed: tabIds']) })
     )
   })
 
