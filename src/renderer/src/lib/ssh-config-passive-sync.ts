@@ -5,6 +5,8 @@ const SSH_CONFIG_SYNC_MIN_INTERVAL_MS = 10_000
 
 let inFlight: Promise<void> | null = null
 let lastStartedAt = Number.NEGATIVE_INFINITY
+// An import persists hosts before they are listed; a failed listing must be retried next time.
+let metadataRefreshPending = false
 
 /**
  * Non-destructive ~/.ssh/config sync: no reAdopt, so hosts the user deleted stay deleted. Settings →
@@ -25,8 +27,10 @@ export function syncSshConfigTargetsPassively(): Promise<void> {
       const store = useAppStore.getState()
       store.recordSshRepoReadoptions(result.repoReadoptions)
       // Unchanged config is the common case; skip the extra listing and store write.
-      if (result.targets.length > 0) {
-        store.setSshTargetsMetadata(await window.api.ssh.listTargets())
+      if (result.targets.length > 0 || metadataRefreshPending) {
+        metadataRefreshPending = true
+        useAppStore.getState().setSshTargetsMetadata(await window.api.ssh.listTargets())
+        metadataRefreshPending = false
       }
     } catch {
       // Best-effort; the explicit Import button surfaces failures.
@@ -40,4 +44,5 @@ export function syncSshConfigTargetsPassively(): Promise<void> {
 export function resetSshConfigPassiveSyncForTests(): void {
   inFlight = null
   lastStartedAt = Number.NEGATIVE_INFINITY
+  metadataRefreshPending = false
 }

@@ -56,6 +56,21 @@ describe('syncSshConfigTargetsPassively', () => {
     expect(importConfig).toHaveBeenCalledTimes(2)
   })
 
+  it('retries the listing when the import already saved hosts but listing them failed', async () => {
+    importConfig.mockResolvedValueOnce({
+      targets: [{ id: 'ssh-new', label: 'new-box' }],
+      repoReadoptions: []
+    })
+    listTargets.mockRejectedValueOnce(new Error('ipc busy'))
+    await syncSshConfigTargetsPassively()
+
+    listTargets.mockResolvedValue([{ id: 'ssh-new', label: 'new-box' }])
+    vi.advanceTimersByTime(10_000)
+    await syncSshConfigTargetsPassively()
+
+    expect(useAppStore.getState().sshTargetLabels.get('ssh-new')).toBe('new-box')
+  })
+
   it('swallows a failed import so callers still list known hosts', async () => {
     importConfig.mockRejectedValue(new Error('bad config'))
 
