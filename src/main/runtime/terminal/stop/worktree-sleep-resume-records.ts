@@ -11,10 +11,10 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isLocalHookConnectionId } from '../../../../shared/wsl-hook-relay-contract'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
-/** Per slept PTY: the resume records captured, and the panes whose agent the hook store proved exited. */
+/** Per slept PTY: the resume records captured, and the panes the hook store proves moved on. */
 export type WorktreeSleepResumeCapture = Map<
   string,
-  { exitedPaneKeys: string[]; records: SleepingAgentSessionRecord[] }
+  { retiredPaneKeys: string[]; records: SleepingAgentSessionRecord[] }
 >
 
 /** Captures before a host-driven sleep stops its PTYs and persists for the ones proven stopped. */
@@ -55,18 +55,23 @@ export async function captureWorktreeSleepResumeRecords(args: {
       return pane ? [{ paneKey, tabId: pane.tabId }] : []
     })
     const records: SleepingAgentSessionRecord[] = []
-    const exitedPaneKeys: string[] = []
+    const retiredPaneKeys: string[] = []
     const launch = args.launchByPtyId.get(ptyId)
     for (const { paneKey, tabId } of panes) {
       // Why: the one holder rule — an agent the hook store proved exited left a plain shell.
       if ((await args.checkAgentPresence?.(paneKey, 0).catch(() => null)) === 'exited') {
-        exitedPaneKeys.push(paneKey)
+        retiredPaneKeys.push(paneKey)
         continue
       }
       const row = args.readRows().find((candidate) => candidate.paneKey === paneKey)
       const agent = row?.agentType
       const providerSession = normalizeAgentProviderSession(row?.providerSession)
-      if (!row || !isResumableTuiAgent(agent) || !providerSession) {
+      if (!row) {
+        continue
+      }
+      if (!isResumableTuiAgent(agent) || !providerSession) {
+        // Why: the hook store names another agent here now, so an older capture no longer applies.
+        retiredPaneKeys.push(paneKey)
         continue
       }
       records.push({
@@ -87,7 +92,7 @@ export async function captureWorktreeSleepResumeRecords(args: {
         ...(launch?.config && launch.agent === agent ? { launchConfig: launch.config } : {})
       })
     }
-    capture.set(ptyId, { exitedPaneKeys, records })
+    capture.set(ptyId, { retiredPaneKeys, records })
   }
   return capture
 }
@@ -102,8 +107,8 @@ export function applyWorktreeSleepResumeRecords(
   let changed = false
   for (const ptyId of stoppedPtyIds) {
     const entry = capture.get(ptyId)
-    for (const paneKey of entry?.exitedPaneKeys ?? []) {
-      // Why: only a proven exit retires an older capture; a missing hook row (an agent still
+    for (const paneKey of entry?.retiredPaneKeys ?? []) {
+      // Why: only hook evidence retires an older capture; a missing hook row (an agent still
       // starting after a resume) is no evidence the session left the pane.
       if (next[paneKey]) {
         delete next[paneKey]

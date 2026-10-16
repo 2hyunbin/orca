@@ -190,6 +190,25 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     expect(capture.get('pty')?.records[0]?.launchConfig).toEqual(kept ? config : undefined)
   })
 
+  it('retires an older capture when the hook store names a non-resumable agent in the pane', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
+    const row = {
+      paneKey: PANE_KEY,
+      agentType: 'amp',
+      prompt: '',
+      receivedAt: 1
+    } as AgentStatusIpcPayload
+    const capture = await captureWorktreeSleepResumeRecords({
+      worktreeId: TEST_WORKTREE_ID,
+      paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
+      launchByPtyId: new Map(),
+      readRows: () => [row],
+      checkAgentPresence: async () => 'unverifiable',
+      capturedAt: 2
+    })
+    expect(capture.get('pty')).toEqual({ retiredPaneKeys: [PANE_KEY], records: [] })
+  })
+
   it.each([
     [null, null],
     ['wsl:Ubuntu', null],
@@ -233,7 +252,7 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     })
     const next = applyWorktreeSleepResumeRecords(
       session,
-      new Map([['pty', { exitedPaneKeys: [], records: [{ ...record, capturedAt: 2 }] }]]),
+      new Map([['pty', { retiredPaneKeys: [], records: [{ ...record, capturedAt: 2 }] }]]),
       ['pty']
     )
     expect(next?.sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toMatchObject({
