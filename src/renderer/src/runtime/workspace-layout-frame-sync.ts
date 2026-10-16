@@ -129,8 +129,17 @@ function framesDrawWorkspace(state: AppState): (key: string) => boolean {
       return false
     }
     hostIdOf ??= buildHostIdByWorktreeId(state)
-    return parseExecutionHostId(hostIdOf(key))?.kind !== 'runtime'
+    return !isPairedServerHost(hostIdOf(key))
   }
+}
+
+function isPairedServerHost(hostId: string | null | undefined): boolean {
+  return parseExecutionHostId(hostId)?.kind === 'runtime'
+}
+
+/** A paired server mirrors this workspace's layout, so main's frames draw none of it. */
+export function pairedServerMirrorsWorkspace(state: AppState, key: string): boolean {
+  return isPairedServerHost(buildHostIdByWorktreeId(state)(key))
 }
 
 export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLayoutFrameSync {
