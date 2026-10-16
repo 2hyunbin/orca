@@ -6,19 +6,20 @@ import type {
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import type { RuntimeStore } from './runtime-store-contract'
 
-/** A window's layout command: one on a tab, which names the partitions it applies to. */
-export type WindowLayoutCommand = LayoutCommand & { tabId: string }
+/** A window's layout command: one on a tab, which names its partitions, or on the group tree. */
+export type WindowLayoutCommand = LayoutCommand & ({ tabId: string } | { type: 'setGroupRatios' })
 
 /**
- * `layout.apply`: the window's command on the partitions holding its tab, routed partition first.
- * A pane close is the user's: main marks it so, and the window cannot.
+ * `layout.apply`: the window's command on the partitions holding its tab, routed partition first;
+ * a group tree command goes to the workspace's routed partition. A pane close is the user's: main
+ * marks it so, and the window cannot.
  */
 export async function applyWindowLayoutCommand(
   store: RuntimeStore,
-  hostIdsForTab: (worktreeId: string, tabId: string) => ExecutionHostId[],
+  hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
   command: WindowLayoutCommand
 ): Promise<LayoutApplyReply> {
-  const hostIds = hostIdsForTab(command.workspace, command.tabId)
+  const hostIds = hostIdsFor(command.workspace, 'tabId' in command ? command.tabId : null)
   // Why: a paired server's workspaces keep today's mirrored layout until that server owns it.
   if (!hostIds[0] || parseExecutionHostId(hostIds[0])?.kind === 'runtime') {
     return { ok: false, code: 'host_not_owned' }

@@ -4,6 +4,7 @@ import { isValidHostTerminalTabId } from '../terminal-tab-id'
 import type { TuiAgent } from '../tui-agent'
 import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
+import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -59,6 +60,31 @@ const EqualizePanesCommand = z.object({
   tabId: OnPane.tabId
 })
 
+const OnTab = { workspace: OnPane.workspace, tabId: OnPane.tabId }
+
+/** Within one group too: a reorder is a move to the tab's own group. */
+const MoveTabCommand = z.object({
+  type: z.literal('moveTab'),
+  ...OnTab,
+  toGroupId: z.string().min(1),
+  index: z.number().int().nonnegative()
+})
+
+/** Main mints the new group's id, or moves a lone tab's group whole. */
+const SplitGroupCommand = z.object({
+  type: z.literal('splitGroup'),
+  ...OnTab,
+  besideGroupId: z.string().min(1),
+  direction: z.enum(['left', 'right', 'up', 'down'])
+})
+
+/** The workspace's group tree with its new ratios; main refuses one whose groups differ. */
+const SetGroupRatiosCommand = z.object({
+  type: z.literal('setGroupRatios'),
+  workspace: OnPane.workspace,
+  groupLayout: TerminalOrphanGroupLayout
+})
+
 /**
  * A terminal tab under the ids the window drew it with: its callers and the pane's terminal need
  * them at once. Main refuses an id another tab holds; the same create again changes nothing.
@@ -97,6 +123,9 @@ export const LayoutApplyParams = z.object({
     RenamePaneCommand,
     EqualizePanesCommand,
     MovePaneCommand,
-    SetPaneRatiosCommand
+    SetPaneRatiosCommand,
+    MoveTabCommand,
+    SplitGroupCommand,
+    SetGroupRatiosCommand
   ])
 })
