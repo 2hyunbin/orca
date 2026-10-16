@@ -14,8 +14,10 @@ import {
   type WebSocketMessageHandler
 } from './node-websocket-lifecycle'
 import { RemoteRuntimeServerHeartbeat } from './remote-runtime-server-heartbeat'
+import { assertPortNotShadowingListener } from './shadowed-port-probe'
+import { REMOTE_RUNTIME_MAX_INBOUND_FRAME_BYTES } from '../../../shared/remote-runtime-memory-limits'
 
-const WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES = 1024 * 1024
+export const WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES = REMOTE_RUNTIME_MAX_INBOUND_FRAME_BYTES
 // Why: one desktop remote-host client can hold many concurrent streams, so keep the cap high enough that stale streams don't starve control RPCs.
 const WEBSOCKET_TRANSPORT_MAX_CONNECTIONS = 128
 // Why: bound pre-upgrade descriptor use above the WS cap so raw sockets can't grow without bound.
@@ -43,6 +45,8 @@ export type WebSocketTransportOptions = {
   fallbackPort?: number
   // Why: serve --port clients dial the pinned port; prefer it first so a stale fallback can't steal the pin (issue #8535). Default keeps fallback-first (STA-1511).
   preferPinnedPort?: boolean
+  // Why: an explicit `orca serve --port` must fail when that port is taken, not move elsewhere (#26603).
+  requirePinnedPort?: boolean
   // Why: deterministic ports tried before an OS-assigned one, so a fallback stays stable across reboots.
   fallbackLadder?: readonly number[]
 }
@@ -57,6 +61,7 @@ export class WebSocketTransport implements RpcTransport {
   private readonly staticRoot: string | undefined
   private readonly fallbackPort: number | undefined
   private readonly preferPinnedPort: boolean
+  private readonly requirePinnedPort: boolean
   private readonly fallbackLadder: readonly number[]
   private persistedFallbackBindFailed = false
   private httpServer: HttpsServer | HttpServer | null = null
@@ -80,6 +85,7 @@ export class WebSocketTransport implements RpcTransport {
     staticRoot,
     fallbackPort,
     preferPinnedPort,
+    requirePinnedPort,
     fallbackLadder
   }: WebSocketTransportOptions) {
     this.host = host
@@ -95,6 +101,7 @@ export class WebSocketTransport implements RpcTransport {
     this.staticRoot = staticRoot
     this.fallbackPort = fallbackPort
     this.preferPinnedPort = preferPinnedPort === true
+    this.requirePinnedPort = requirePinnedPort === true
     this.fallbackLadder = fallbackLadder ?? []
   }
 
@@ -152,6 +159,14 @@ export class WebSocketTransport implements RpcTransport {
     if (this.wss) {
       return
     }
+    if (this.requirePinnedPort) {
+      await this.tryListen(this.port).catch((error: unknown) => {
+        throw isPortListenFallbackError(error, this.port)
+          ? new PinnedPortUnavailableError(this.host, this.port, error)
+          : error
+      })
+      return
+    }
     // Why: bind a persisted fallback first so devices paired to it aren't stranded (STA-1511); serve --port flips to pinned-first (issue #8535); then the deterministic ladder, and only then an OS-assigned port 0.
     const persistedFallbackPort =
       this.fallbackPort !== undefined && this.fallbackPort !== 0 && this.fallbackPort !== this.port
@@ -202,6 +217,7 @@ export class WebSocketTransport implements RpcTransport {
 
   // Why: attach the WSS only after listen succeeds; earlier it re-emits httpServer's EADDRINUSE as an uncatchable exception and breaks the fallback.
   private async tryListen(port: number): Promise<void> {
+    await assertPortNotShadowingListener(this.host, port)
     const httpServer = this.createHttpServer()
 
     await new Promise<void>((resolve, reject) => {
@@ -263,6 +279,19 @@ export class WebSocketTransport implements RpcTransport {
       getMessageHandler: () => this.messageHandler,
       getConnectionCloseHandler: () => this.connectionCloseHandler
     })
+  }
+}
+
+export class PinnedPortUnavailableError extends Error {
+  readonly code = 'pinned_port_unavailable'
+
+  constructor(host: string, port: number, cause: unknown) {
+    const reason = cause instanceof Error && 'code' in cause ? String(cause.code) : 'unavailable'
+    super(
+      `Port ${port} on ${host} is unavailable (${reason}). Stop whatever is using it, or pass a different --port.`,
+      { cause }
+    )
+    this.name = 'PinnedPortUnavailableError'
   }
 }
 
