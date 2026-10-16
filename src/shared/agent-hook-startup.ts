@@ -10,7 +10,14 @@ export class AgentHookStartup {
     if (this.pending) {
       return this.pending.generation === generation
         ? this.pending.promise
-        : this.pending.promise.catch(() => {}).then(() => this.start(bind))
+        : this.pending.promise
+            .catch(() => {})
+            .then(() => {
+              if (generation === this.generation) {
+                return this.start(bind)
+              }
+              return undefined
+            })
     }
     const isCurrent = () => generation === this.generation
     const promise = bind(isCurrent)

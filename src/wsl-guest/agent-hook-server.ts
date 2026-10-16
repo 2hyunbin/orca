@@ -14,7 +14,7 @@ import type {
 } from './agent-hook-server-contract'
 import { handleRelayHookRequest } from './agent-hook-request'
 import { RelayAgentPresence } from './relay-agent-presence'
-import type { createServer, IncomingMessage, ServerResponse } from 'node:http'
+import type { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
@@ -131,7 +131,21 @@ export class RelayAgentHookServer extends RelayAgentHookCanonicalStatus {
     await bindRelayHookServer({
       preferredPort: this.preferredPort,
       isCurrent,
-      handleRequest: (req, res) => this.handleRequest(req, res),
+      handleRequest: (req, res) =>
+        handleRelayHookRequest(req, res, {
+          isCurrent,
+          token: this.token,
+          env: this.env,
+          state: this.state,
+          providerNormalization: this.providerNormalization,
+          checkAgentPresence: (paneKey) => this.checkAgentPresence(paneKey),
+          isPaneSurfaceRetired: this.isPaneSurfaceRetired,
+          getAgentLaunchToken: this.getAgentLaunchToken,
+          applyEvent: (event, source, env, version) => this.applyEvent(event, source, env, version),
+          ingestTmuxHook: (source, body) => this.ingestCanonicalTmuxHook(source, body, this.env),
+          retryScheduler: this.retryScheduler,
+          transportInterference: this.transportInterference
+        }),
       setServer: (server) => {
         this.server = server
       },
@@ -269,22 +283,6 @@ export class RelayAgentHookServer extends RelayAgentHookCanonicalStatus {
   }
 
   // ─── Private ──────────────────────────────────────────────────────
-
-  private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    await handleRelayHookRequest(req, res, {
-      token: this.token,
-      env: this.env,
-      state: this.state,
-      providerNormalization: this.providerNormalization,
-      checkAgentPresence: (paneKey) => this.checkAgentPresence(paneKey),
-      isPaneSurfaceRetired: this.isPaneSurfaceRetired,
-      getAgentLaunchToken: this.getAgentLaunchToken,
-      applyEvent: (event, source, env, version) => this.applyEvent(event, source, env, version),
-      ingestTmuxHook: (source, body) => this.ingestCanonicalTmuxHook(source, body, this.env),
-      retryScheduler: this.retryScheduler,
-      transportInterference: this.transportInterference
-    })
-  }
 
   private applyEvent(
     incoming: AgentHookEventPayload,

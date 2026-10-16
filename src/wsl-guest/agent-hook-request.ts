@@ -18,6 +18,7 @@ export async function handleRelayHookRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: {
+    isCurrent: () => boolean
     token: string
     env: string
     state: HookListenerState
@@ -61,6 +62,11 @@ export async function handleRelayHookRequest(
       return
     }
     const body = await readRequestBody(req)
+    if (!options.isCurrent()) {
+      res.writeHead(204)
+      res.end()
+      return
+    }
     const hookBody = mergeAgentHookRequestHeaders(body, req.headers)
     if (await options.ingestTmuxHook?.(source, hookBody)) {
       res.writeHead(204)
@@ -74,6 +80,11 @@ export async function handleRelayHookRequest(
       options.env,
       options.checkAgentPresence
     )
+    if (!options.isCurrent()) {
+      res.writeHead(204)
+      res.end()
+      return
+    }
     let admittedOpenCodeTuiOwner = false
     const event = options.providerNormalization.normalize(
       options.state,

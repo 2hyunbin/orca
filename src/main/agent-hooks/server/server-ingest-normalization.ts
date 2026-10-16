@@ -87,8 +87,13 @@ export abstract class AgentHookServerIngestNormalization extends AgentHookServer
       return
     }
     const token = this.token
+    const statusHookGeneration = this.statusHookGeneration
     const apply = () => {
-      if (!this.statusHooksEnabled || this.token !== token) {
+      if (
+        !this.statusHooksEnabled ||
+        this.token !== token ||
+        this.statusHookGeneration !== statusHookGeneration
+      ) {
         throw new Error('Status hook spool replay interrupted')
       }
       this.applySpoolHook(record, body)

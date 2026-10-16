@@ -128,49 +128,59 @@ describe('idle foreground process owns its provider session', () => {
     }
   )
 
-  it('keeps the spool durable when status hooks are disabled during an owner probe', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'idle-owner-disabled-spool-'))
-    let server: AgentHookServer | undefined
-    try {
-      const first = await start(directory)
-      await idleClaude(first)
-      first.flushStatusPersistSync()
-      first.stop()
-      const spool = join(directory, 'agent-hooks', 'spool')
-      mkdirSync(spool, { recursive: true })
-      const path = join(spool, 'replacement.jsonl')
-      const contents = `${JSON.stringify({
-        paneKey: PANE,
-        tabId: 'tab-1',
-        worktreeId: 'wt-1',
-        source: 'codex',
-        receivedAt: Date.now(),
-        payload: { hook_event_name: 'UserPromptSubmit', session_id: 'replacement' }
-      })}\n`
-      writeFileSync(path, contents)
-      server = new AgentHookServer()
-      servers.push(server)
-      await server.start({ env: 'production', userDataPath: directory, statusHooksEnabled: false })
-      let release: (() => void) | undefined
-      probe.mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            release = () => resolve('live')
-          })
-      )
-      const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-      server.setStatusHooksEnabled(true)
-      expect(probe).toHaveBeenCalledTimes(1)
-      server.setStatusHooksEnabled(false)
-      release?.()
-      await vi.waitFor(() => expect(log).toHaveBeenCalled())
-      expect(readFileSync(path, 'utf8')).toBe(contents)
-      expect(server.getStatusSnapshot()[0].agentType).toBe('claude')
-    } finally {
-      server?.stop()
-      rmSync(directory, { recursive: true, force: true })
+  it.each([false, true])(
+    'keeps interrupted spool replay durable (re-enable: %s)',
+    async (reEnable) => {
+      const directory = mkdtempSync(join(tmpdir(), 'idle-owner-disabled-spool-'))
+      let server: AgentHookServer | undefined
+      try {
+        const first = await start(directory)
+        await idleClaude(first)
+        first.flushStatusPersistSync()
+        first.stop()
+        const spool = join(directory, 'agent-hooks', 'spool')
+        mkdirSync(spool, { recursive: true })
+        const path = join(spool, 'replacement.jsonl')
+        const contents = `${JSON.stringify({
+          paneKey: PANE,
+          tabId: 'tab-1',
+          worktreeId: 'wt-1',
+          source: 'codex',
+          receivedAt: Date.now(),
+          payload: { hook_event_name: 'UserPromptSubmit', session_id: 'replacement' }
+        })}\n`
+        writeFileSync(path, contents)
+        server = new AgentHookServer()
+        servers.push(server)
+        await server.start({
+          env: 'production',
+          userDataPath: directory,
+          statusHooksEnabled: false
+        })
+        let release: (() => void) | undefined
+        probe.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = () => resolve('live')
+            })
+        )
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+        server.setStatusHooksEnabled(true)
+        expect(probe).toHaveBeenCalledTimes(1)
+        server.setStatusHooksEnabled(false)
+        if (reEnable) {
+          server.setStatusHooksEnabled(true)
+        }
+        release?.()
+        await vi.waitFor(() => expect(log).toHaveBeenCalled())
+        expect(readFileSync(path, 'utf8')).toBe(contents)
+        expect(server.getStatusSnapshot()[0].agentType).toBe('claude')
+      } finally {
+        server?.stop()
+        rmSync(directory, { recursive: true, force: true })
+      }
     }
-  })
+  )
 
   it.each(['live', 'exited'] as const)(
     'orders spooled replacements after checking a hydrated %s process owner',

@@ -120,3 +120,20 @@ it('allows a fresh main startup after replay admission rejects', async () => {
   expect(server.port()).toBeGreaterThan(0)
   expect(existsSync(server.endpoint)).toBe(true)
 })
+
+it.each(['main', 'relay'] as const)(
+  'cancels a queued %s restart when stopped again before replay settles',
+  async (mode) => {
+    const server = fixture(mode)
+    const release = pauseReplay()
+    const first = server.start()
+    server.stop()
+    const restarted = server.start()
+    server.stop()
+    release()
+    await Promise.all([first, restarted])
+    expect(drain).toHaveBeenCalledTimes(1)
+    expect(server.port()).toBe(0)
+    expect(existsSync(server.endpoint)).toBe(false)
+  }
+)

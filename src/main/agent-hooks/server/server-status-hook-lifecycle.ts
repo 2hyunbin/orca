@@ -8,6 +8,7 @@ export abstract class AgentHookServerStatusHookLifecycle extends AgentHookServer
     if (enabled === this.statusHooksEnabled) {
       return
     }
+    this.statusHookGeneration += 1
     if (!enabled) {
       this.flushStatusPersistSync()
       this.stopOpenCodeBinderLoop()
@@ -35,6 +36,7 @@ export abstract class AgentHookServerStatusHookLifecycle extends AgentHookServer
 
   private async loadStatusHookOwner(): Promise<void> {
     const token = this.token
+    const statusHookGeneration = this.statusHookGeneration
     if (!this.ownerStateInitialized) {
       // Why: hydrate before binding the listener so an early hook POST runs against a populated map.
       if (this.lastStatusFilePath) {
@@ -49,14 +51,14 @@ export abstract class AgentHookServerStatusHookLifecycle extends AgentHookServer
           getPersistedLaunchTokenHash: (paneKey) =>
             this.hydratedLaunchTokenHashByPaneKey.get(this.resolvePaneKeyAlias(paneKey)),
           ingest: async (record: SpoolRecord) => {
-            if (this.token !== token) {
+            if (this.token !== token || this.statusHookGeneration !== statusHookGeneration) {
               throw new Error('Status hook spool replay interrupted')
             }
             await this.ingestSpoolRecord(record)
             replayedPaneKeys.add(this.resolvePaneKeyAlias(record.paneKey))
           }
         })
-        if (this.token !== token) {
+        if (this.token !== token || this.statusHookGeneration !== statusHookGeneration) {
           return
         }
         // Why: the owner may have died while Orca was down; check each replayed pane once.

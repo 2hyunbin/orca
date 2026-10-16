@@ -73,6 +73,9 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
         res.end()
         return
       }
+      const statusHookGeneration = this.statusHookGeneration
+      const isStatusCurrent = () =>
+        isCurrent() && this.statusHooksEnabled && this.statusHookGeneration === statusHookGeneration
       // Why: bound request time so a stalled client can't hold a socket open (slowloris).
       // Why: track our own destroy so the slowloris cap can't be misread as outside interference.
       let destroyedBySlowlorisCap = false
@@ -83,6 +86,11 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
       const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
       try {
         const body = await readRequestBody(req)
+        if (!isCurrent()) {
+          res.writeHead(204)
+          res.end()
+          return
+        }
         if (pathname === OPENCODE_STARTUP_PROMPT_CLAIM_PATH) {
           res.writeHead(200, { 'content-type': 'application/json' })
           const claim = this.onStartupPromptClaim?.(body)
@@ -94,13 +102,13 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
           )
           return
         }
-        if (!this.statusHooksEnabled) {
+        if (!isStatusCurrent()) {
           res.writeHead(404)
           res.end()
           return
         }
         await this.initializeStatusHookOwner()
-        if (!this.statusHooksEnabled) {
+        if (!isStatusCurrent()) {
           res.writeHead(404)
           res.end()
           return
@@ -132,6 +140,11 @@ export abstract class AgentHookServerLifecycle extends AgentHookServerStatusHook
         await checkHookOwnerPresence(this.state, source, aliasedBody, this.env, (paneKey) =>
           this.checkAgentPresence(paneKey)
         )
+        if (!isStatusCurrent()) {
+          res.writeHead(204)
+          res.end()
+          return
+        }
         const normalized = this.normalizeLocalHookPayload(source, aliasedBody)
         const statusDisposition = normalized.event
           ? this.getAgentStatusDisposition(normalized.event.paneKey, {
