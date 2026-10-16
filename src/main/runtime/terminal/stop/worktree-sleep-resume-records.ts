@@ -1,6 +1,7 @@
 import {
   isResumableTuiAgent,
   normalizeAgentProviderSession,
+  type SleepingAgentLaunchConfig,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
 import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-ipc-payload'
@@ -29,6 +30,11 @@ export type WorktreeSleepResumeRecorder = {
 export async function captureWorktreeSleepResumeRecords(args: {
   worktreeId: string
   paneKeysByPtyId: ReadonlyMap<string, Iterable<string>>
+  /** The agent each PTY was launched as, with its recipe; resume must reuse a custom binary/args. */
+  launchByPtyId: ReadonlyMap<
+    string,
+    { agent: string | null; config: SleepingAgentLaunchConfig | null }
+  >
   rows: readonly AgentStatusIpcPayload[]
   checkAgentPresence:
     | ((paneKey: string, exitedSince?: number) => Promise<AgentProcessVerdict | null>)
@@ -42,6 +48,7 @@ export async function captureWorktreeSleepResumeRecords(args: {
       return pane ? [{ paneKey, tabId: pane.tabId }] : []
     })
     const records: SleepingAgentSessionRecord[] = []
+    const launch = args.launchByPtyId.get(ptyId)
     for (const { paneKey, tabId } of panes) {
       const row = args.rows.find((candidate) => candidate.paneKey === paneKey)
       const agent = row?.agentType
@@ -66,7 +73,8 @@ export async function captureWorktreeSleepResumeRecords(args: {
         capturedAt: args.capturedAt,
         updatedAt: row.receivedAt,
         origin: 'worktree-sleep',
-        restoreOnTabOpenOnly: true
+        restoreOnTabOpenOnly: true,
+        ...(launch?.config && launch.agent === agent ? { launchConfig: launch.config } : {})
       })
     }
     capture.set(ptyId, { paneKeys: panes.map((pane) => pane.paneKey), records })

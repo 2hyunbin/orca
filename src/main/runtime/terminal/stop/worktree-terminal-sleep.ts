@@ -191,6 +191,8 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
           committedPtyIds,
           terminalHandlesByPtyId
         })
+        // Why: the stops were acknowledged and their hook rows are gone; a retry has nothing to capture.
+        this.sleepResumeRecords.persist(worktree.id, resumeCapture, successfulStopPtyIds)
         if (failedStopIndex !== -1) {
           const failedStop = stopResults[failedStopIndex]
           throw Object.assign(new Error('terminal_worktree_sleep_failed'), {

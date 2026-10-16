@@ -11,6 +11,8 @@ const {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } = await import('./orca-runtime-test-fixtures.spec')
+const { captureWorktreeSleepResumeRecords } =
+  await import('./terminal/stop/worktree-sleep-resume-records')
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const HOLDER_PANE_KEY = 'holder-tab:44444444-4444-4444-8444-444444444444'
@@ -118,5 +120,30 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     await userActivate(runtime)
 
     expect(spawnCommand(spawn, 1).includes(SESSION_ID)).toBe(resumes)
+  })
+
+  it.each([
+    ['claude', true],
+    ['codex', false]
+  ] as const)('keeps a %s-launched PTY recipe: %s', async (launchAgent, kept) => {
+    const config = { agentCommand: '/opt/claude-custom', agentArgs: '--x', agentEnv: {} }
+    const capture = await captureWorktreeSleepResumeRecords({
+      worktreeId: TEST_WORKTREE_ID,
+      paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
+      launchByPtyId: new Map([['pty', { agent: launchAgent, config }]]),
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
+      rows: [
+        {
+          paneKey: PANE_KEY,
+          agentType: 'claude',
+          providerSession: { key: 'session_id', id: SESSION_ID },
+          prompt: '',
+          receivedAt: 1
+        } as AgentStatusIpcPayload
+      ],
+      checkAgentPresence: null,
+      capturedAt: 2
+    })
+    expect(capture.get('pty')?.records[0]?.launchConfig).toEqual(kept ? config : undefined)
   })
 })

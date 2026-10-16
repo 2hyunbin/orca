@@ -13,6 +13,12 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
         paneKeysByPtyId: new Map(
           [...ptyIds].map((ptyId) => [ptyId, this.collectAgentStatusPaneKeysForPty(ptyId)])
         ),
+        launchByPtyId: new Map(
+          [...ptyIds].map((ptyId) => {
+            const pty = this.ptysById.get(ptyId)
+            return [ptyId, { agent: pty?.launchAgent ?? null, config: pty?.launchConfig ?? null }]
+          })
+        ),
         rows: this.getAgentProviderSessionSnapshotFn?.() ?? [],
         checkAgentPresence: this.checkHookAgentPresenceFn,
         capturedAt: Date.now()
