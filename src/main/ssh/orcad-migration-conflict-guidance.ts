@@ -21,9 +21,9 @@ export function orcadMigrationConflictGuidance(error: unknown): string | null {
   if (terminals) {
     return (
       `Terminals an older version of Orca started in ${terminals[1]} are still running, and this ` +
-      'host’s managed server already has that project from another Orca desktop. They keep ' +
-      'working in their tabs here. Close them or end them on the host, then reconnect, or remove ' +
-      'that project from this desktop and connect again.'
+      'host’s managed server already has that project from another Orca desktop. Close them or ' +
+      'end them on the host, then reconnect, or remove that project from this desktop and ' +
+      'connect again.'
     )
   }
   const unowned = UNOWNED_TERMINALS.exec(message)
