@@ -102,7 +102,8 @@ function KeychainCredentialNoticeBody({
     )
   }
   const target = defaultScopeHost(settings)
-  if (!status.canMoveCredentialKeyToFile || target.kind !== 'environment') {
+  // Why any target: a paired browser's local target routes to its server; desktop never sets it.
+  if (!status.canMoveCredentialKeyToFile) {
     return null
   }
 
