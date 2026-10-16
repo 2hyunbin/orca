@@ -95,10 +95,8 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
       return '"<unserializable>"'
     }
   }
-  let closeSync
   let diagnosticFileDescriptor
-  let openSync
-  let writeSync
+  let closeSync, openSync, writeSync
   try {
     const fs = require('node:fs')
     closeSync = fs.closeSync
@@ -335,6 +333,7 @@ export const electronViteConfig: UserConfig = {
         input: {
           index: resolve('src/renderer/index.html'),
           popout: resolve('src/renderer/popout.html'),
+          space: resolve('src/renderer/space.html'),
           web: resolve('src/renderer/web-index.html')
         }
       }

@@ -97,7 +97,7 @@ describe('WorkspaceSpaceBreakdownList', () => {
     expect(container.textContent).toContain('1 top-level items')
   })
 
-  it('shows the omitted aggregate rather than an empty state when every item was omitted', () => {
+  it('explains how to inspect folders when a saved scan omits every item', () => {
     const { container } = render(
       <WorkspaceSpaceBreakdownList
         isScanning={false}
@@ -106,6 +106,7 @@ describe('WorkspaceSpaceBreakdownList', () => {
     )
 
     expect(container.textContent).not.toContain('No files found.')
-    expect(renderedRowNames(container)).toEqual(['Other top-level items (4)'])
+    expect(renderedRowNames(container)).toEqual([])
+    expect(container.textContent).toContain('Refresh to inspect this workspace.')
   })
 })

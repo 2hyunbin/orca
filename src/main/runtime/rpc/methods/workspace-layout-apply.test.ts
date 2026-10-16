@@ -228,6 +228,23 @@ describe('layout.apply', () => {
     expect(applyLayoutCommand).toHaveBeenCalledWith(create, ['local'])
   })
 
+  it('takes a tab’s custom title, color and pin, and no other tab kind or property', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const tab = { workspace: WORKTREE, tabId: 'tab-1' }
+    const parses = (command: Record<string, unknown>) =>
+      apply?.params?.safeParse({ command: { ...tab, ...command } }).success
+
+    expect(parses({ type: 'renameTab', kind: 'custom', title: ' Build ' })).toBe(true)
+    expect(parses({ type: 'renameTab', kind: 'custom', title: null })).toBe(true)
+    expect(parses({ type: 'renameTab', kind: 'generated', title: 'x' })).toBe(false)
+    expect(parses({ type: 'setTabProps', color: '#f00', isPinned: true })).toBe(true)
+    expect(parses({ type: 'setTabProps', color: null })).toBe(true)
+    expect(parses({ type: 'setTabProps', isPinned: 'yes' })).toBe(false)
+    expect(
+      apply?.params?.parse({ command: { ...tab, type: 'setTabProps', viewMode: 'chat' } })
+    ).toEqual({ command: { ...tab, type: 'setTabProps' } })
+  })
+
   it('applies to the partition that holds the tab, such as an SSH host’s', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
 
