@@ -1,7 +1,9 @@
 /**
  * Tests for the presence-based mobile driver lock (see docs/mobile-presence-lock.md).
  */
+import './mobile-subscribe-integration.spec'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { listWorktrees } from '../git/worktree'
 import type * as GitUsernameModule from '../git/git-username'
 import { OrcaRuntimeService } from './orca-runtime'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
@@ -69,6 +71,7 @@ const store = {
 
 // Why (#7588): held-modal repro needs indefinite hold (null); legacy tests need the finite 5s default. Wrap per-test without mutating the shared stub.
 function createRuntime(mobileAutoRestoreFitMs: number | null = 5_000) {
+  vi.mocked(listWorktrees).mockResolvedValue([])
   const effectiveStore = {
     ...store,
     getSettings: () => ({ ...store.getSettings(), mobileAutoRestoreFitMs })
@@ -517,7 +520,11 @@ describe('mobile presence lock — multi-mobile semantics', () => {
 
     expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
     expect(resizes.at(-1)).toEqual({ ptyId: 'pty-1', cols: 132, rows: 44 })
-    expect(runtime.getLastRendererSize('pty-1')).toEqual({ cols: 132, rows: 44 })
+    // Why: controller drift must not replace the remembered renderer geometry.
+    ptySizes.set('pty-1', { cols: 160, rows: 50 })
+    await runtime.handleMobileSubscribe('pty-1', 'phone-A', { cols: 49, rows: 20 })
+    expect(await runtime.reclaimTerminalForDesktop('pty-1')).toBe(true)
+    expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
   })
 
   it('updateMobileViewport records viewport without applying layout in desktop mode', async () => {
@@ -553,7 +560,6 @@ describe('mobile presence lock — multi-mobile semantics', () => {
 
     expect(ptySizes.get('pty-1')).toEqual({ cols: 49, rows: 20 })
     expect(resizes).toEqual([])
-    expect(runtime.getLastRendererSize('pty-1')).toEqual({ cols: 132, rows: 44 })
 
     expect(await runtime.reclaimTerminalForDesktop('pty-1')).toBe(true)
     expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
