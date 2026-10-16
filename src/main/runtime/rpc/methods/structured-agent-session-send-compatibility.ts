@@ -21,7 +21,7 @@ export async function sendStructuredAgentSessionForClient(
   context: RpcContext
 ) {
   const host = requireStructuredSessionHost(context, params.envelope.sessionId)
-  // A client's own send: a restart or a close keeps it as a card if it never reached the agent.
+  // Person provenance lets undelivered text recover as an ordinary queued card.
   const result = await host.send(structuredCallerFor(context), {
     ...params,
     userSend: true,
