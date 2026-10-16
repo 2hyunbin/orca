@@ -22,6 +22,7 @@ import {
 } from './database-move-pointer-store.js'
 import {
   replayClaims,
+  requireCurrentCopy,
   runSyncLoop,
   syncBatch,
   takeSyncLock,
@@ -357,6 +358,8 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       })
       checkpoint()
     }
+    // A copy made before tracking was last installed missed the changes in between.
+    await requireCurrentCopy(sessions)
     if (to === 'dedicated') {
       // The dedicated copy got its rows from `copy`; a stopped one would leave big tables short.
       const progress = await sessions.target.query(

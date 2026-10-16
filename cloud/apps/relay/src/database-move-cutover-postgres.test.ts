@@ -6,6 +6,7 @@ import {
   installTrackingCommand,
   prepareTargetCommand,
   syncCommand,
+  uninstallTrackingCommand,
   verifyCommand
 } from './database-move-commands.js'
 import {
@@ -343,6 +344,8 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     await expect(restorePasswordCommand(ctx, 'primary')).rejects.toThrow(
       'side_is_behind_the_pointer'
     )
+    // Fenced: its triggers go when the old database is dropped through the Cloud SQL API.
+    await expect(uninstallTrackingCommand(ctx, 'primary')).rejects.toThrow('side_is_fenced')
 
     const dedicated = await withPgClient(sides.dedicated.move.url, async (client) => ({
       generation: await readAuthorityGeneration(client),
@@ -429,6 +432,24 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     expect(store.current()?.quiesce).toBeUndefined()
     expect(store.current()?.generation).toBeUndefined()
     expect(await loginCode(sides.primary.app.url)).toBeNull()
+  }, 60_000)
+
+  it('refuses a dry run whose copy predates the current tracking', async () => {
+    await uninstallTrackingCommand(ctx, 'primary')
+    await withPgClient(sides.primary.app.url, (client) =>
+      client.query(`UPDATE relay_audit_events SET at = -at WHERE type = 'seed'`)
+    )
+    await installTrackingCommand(ctx, 'primary')
+    const dryRun = {
+      databases: ctx.databases,
+      to: 'dedicated' as const,
+      pointerStore: store,
+      dryRun: true
+    }
+    await expect(runCutover(dryRun)).rejects.toThrow('copy_predates_tracking')
+    await copyCommand(ctx, 'primary', { restart: true, maxBytesPerSecond: 1e9 })
+    await expect(runCutover(dryRun)).resolves.toMatchObject({ dryRun: true })
+    expect(await verifyCommand(ctx, {})).toBe(true)
   }, 60_000)
 
   it('aborts on a hot-table difference and leaves the processes on the restored source', async () => {
