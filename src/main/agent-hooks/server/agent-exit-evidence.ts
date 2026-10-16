@@ -11,25 +11,30 @@ import {
 export type AgentExitEvidence = {
   at: number
   paneKeys: Set<string>
+  agent?: string
   process?: AgentProcessIdentity
 }
 
 export type PersistedAgentExitEvidence = {
   at: number
   paneKeys: string[]
+  agent?: string
   process?: AgentProcessIdentity
 }
+
+type EndedAgent = { agent?: string; process?: AgentProcessIdentity }
 
 export function recordAgentExit(
   exits: Map<string, AgentExitEvidence>,
   paneKeys: Iterable<string>,
-  process: AgentProcessIdentity | undefined,
+  ended: EndedAgent | undefined,
   at = Date.now()
 ): void {
   const exit: AgentExitEvidence = {
     at,
     paneKeys: new Set(paneKeys),
-    ...(process ? { process } : {})
+    ...(ended?.agent ? { agent: ended.agent } : {}),
+    ...(ended?.process ? { process: ended.process } : {})
   }
   for (const key of exit.paneKeys) {
     forgetAgentExit(exits, key)
@@ -57,6 +62,11 @@ export function claimsPaneAfterExit(
   if (sender) {
     return !exit.process || !isSameAgentProcess(sender, exit.process)
   }
+  const agent = event.agentPresence?.agent ?? event.payload.agentType
+  // Why: only Claude hooks carry a process identity, so another provider reporting is the successor.
+  if (exit.agent && agent && agent !== 'unknown' && agent !== exit.agent) {
+    return true
+  }
   // Why: an unidentified late hook from the ended session (a Stop) is no evidence of a successor.
   return (
     opensNewTurn(event) ||
@@ -70,6 +80,7 @@ export function serializeAgentExits(
   return [...new Set(exits.values())].map((exit) => ({
     at: exit.at,
     paneKeys: [...exit.paneKeys],
+    ...(exit.agent ? { agent: exit.agent } : {}),
     ...(exit.process ? { process: exit.process } : {})
   }))
 }
@@ -97,6 +108,14 @@ export function readPersistedAgentExits(
       return []
     }
     const process = 'process' in entry ? readAgentProcessIdentity(entry.process) : undefined
-    return [{ at, paneKeys: paneKeys.map(String), ...(process ? { process } : {}) }]
+    const agent = 'agent' in entry && typeof entry.agent === 'string' ? entry.agent : undefined
+    return [
+      {
+        at,
+        paneKeys: paneKeys.map(String),
+        ...(agent ? { agent } : {}),
+        ...(process ? { process } : {})
+      }
+    ]
   })
 }

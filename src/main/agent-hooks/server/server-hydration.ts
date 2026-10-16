@@ -139,7 +139,7 @@ export abstract class AgentHookServerHydration extends AgentHookServerTabCleanup
       }
     }
     for (const exit of readPersistedAgentExits(file.agentExits, ttlCutoff)) {
-      recordAgentExit(this.agentExitedAtByPaneKey, exit.paneKeys, exit.process, exit.at)
+      recordAgentExit(this.agentExitedAtByPaneKey, exit.paneKeys, exit, exit.at)
     }
     for (const [paneKey, rawCommitment] of Object.entries(file.authorityCommitments ?? {})) {
       const resolvedPaneKey = this.resolvePaneKeyAlias(paneKey)

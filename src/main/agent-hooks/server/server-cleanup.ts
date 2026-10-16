@@ -143,7 +143,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
             paneKeys.add(aliasKey)
           }
         }
-        recordAgentExit(this.agentExitedAtByPaneKey, paneKeys, options.endedPresence.process)
+        recordAgentExit(this.agentExitedAtByPaneKey, paneKeys, options.endedPresence)
         this.scheduleStatusPersist()
       }
       if (!this.hasLiveClaimsForPaneKey(resolvedPaneKey)) {
