@@ -26,7 +26,7 @@ import {
   NativeChatTranscriptItems,
   NativeChatWaitingTranscriptItems
 } from './NativeChatTranscriptItems'
-import type { NativeChatTranscriptRowContext } from './NativeChatTranscriptRow'
+import { useNativeChatTranscriptRowContext } from './use-native-chat-transcript-row-context'
 import type { StructuredAgentSessionHostWork } from './use-structured-agent-session-transport-state'
 import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import {
@@ -63,7 +63,6 @@ import type { NativeChatSettledTurns } from '../../../../shared/native-chat-turn
 import type { NativeChatDiffReveal, NativeChatDiffTarget } from './native-chat-turn-diffs'
 import { useNativeChatTurnDiffs } from './use-native-chat-turn-diffs'
 import { transcriptTailRow } from './native-chat-transcript-tail-row'
-import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 
 /** The turn is blocked on the reader. `shown`: the pane draws the prompt itself, as a card;
  *  `unshown`: it cannot (the prompt is only in the agent's terminal). */
@@ -337,40 +336,22 @@ export function NativeChatMessageList({
     release: setNavigationRequest
   })
 
-  const rowContext = useMemo<NativeChatTranscriptRowContext>(
-    () => ({
-      agentName: structuredAgentLabel(session.agent),
-      actionablePromptIds: hostWork?.actionablePromptIds,
-      expandSignal,
-      revealedDiff,
-      taskListPredecessors,
-      expandedTurnIds,
-      deliveryNotices,
-      allowFileUriLinks,
-      runtimeContext,
-      onLinkClick,
-      onToggleExpandedTurn: toggleExpandedTurn,
-      subagentDisclosure,
-      onScrollMessageToTop: scrollMessageToTop,
-      onRevealDiff: revealDiff
-    }),
-    [
-      session.agent,
-      hostWork,
-      allowFileUriLinks,
-      expandSignal,
-      expandedTurnIds,
-      deliveryNotices,
-      onLinkClick,
-      revealDiff,
-      revealedDiff,
-      runtimeContext,
-      scrollMessageToTop,
-      taskListPredecessors,
-      subagentDisclosure,
-      toggleExpandedTurn
-    ]
-  )
+  const rowContext = useNativeChatTranscriptRowContext({
+    agent: session.agent,
+    hostWork,
+    expandSignal,
+    revealedDiff,
+    taskListPredecessors,
+    expandedTurnIds,
+    deliveryNotices,
+    allowFileUriLinks,
+    runtimeContext,
+    onLinkClick,
+    onToggleExpandedTurn: toggleExpandedTurn,
+    subagentDisclosure,
+    onScrollMessageToTop: scrollMessageToTop,
+    onRevealDiff: revealDiff
+  })
 
   return (
     <NativeChatDisclosureContext.Provider value={disclosures}>
