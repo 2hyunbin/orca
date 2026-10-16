@@ -31,7 +31,10 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRunti
 vi.mock('@/lib/structured-agent-launch-settlement', () => ({}))
 
 import * as localCapabilities from '@/runtime/local-runtime-capabilities'
-import { resetHostStructuredAgentsForTests } from '@/runtime/host-structured-agents'
+import {
+  resetHostStructuredAgentsForTests,
+  loadHostStructuredAgents
+} from '@/runtime/host-structured-agents'
 import {
   refreshLocalRuntimeCapabilities,
   setLocalRuntimeCapabilitiesForTests
@@ -298,32 +301,19 @@ describe("a new tab during startup, before this computer's runtime answered", ()
   })
 })
 
-it('pins explicit surfaces through full planning without registry wait or request-field loss', () => {
+it('keeps a selected CLI terminal when native discovery and the catalog later allow chat', async () => {
   const store = storeWithSettings(SETTINGS)
-  const delivered = vi.fn()
-  const full = {
-    ...request,
-    prompt: 'notes',
-    promptDelivery: 'submit-after-ready' as const,
-    onPromptDelivered: delivered,
-    promptKeptByCaller: true as const,
-    selectedExecutionHostId: 'runtime:selected' as const
+  mocks.state.current.localDetectedAgentIdsByContext = { host: [] }
+  setLocalRuntimeCapabilitiesForTests(null)
+  const route = routeNewTabLaunch(store, args, { ...request, requestedSurface: 'terminal' })
+  if (!('plan' in route)) {
+    throw new Error('explicit surface must not wait')
   }
-  for (const requestedSurface of ['chat', 'terminal'] as const) {
-    const route = routeNewTabLaunch(store, args, { ...full, requestedSurface })
-    expect(route).not.toHaveProperty('awaited')
-    if (!('plan' in route)) {
-      throw new Error('explicit action must plan synchronously')
-    }
-    expect(route.plan).toMatchObject({
-      prompt: 'notes',
-      promptDelivery: 'submit-after-ready',
-      promptKeptByCaller: true,
-      onPromptDelivered: delivered,
-      requestId: args.requestId,
-      route: requestedSurface === 'chat' ? 'structured-native-chat' : 'terminal-tui',
-      ...(requestedSurface === 'chat' ? { executionHostId: 'runtime:selected' } : {})
-    })
-  }
-  expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+  mocks.state.current.localDetectedAgentIdsByContext = { host: ['opencode'] }
+  setLocalRuntimeCapabilitiesForTests(REGISTERED)
+  await loadHostStructuredAgents('local', REGISTERED, null)
+  expect(route.plan?.route).toBe('terminal-tui')
+  expect(routeNewTabLaunch(store, args, request)).toMatchObject({
+    plan: { route: 'structured-native-chat' }
+  })
 })

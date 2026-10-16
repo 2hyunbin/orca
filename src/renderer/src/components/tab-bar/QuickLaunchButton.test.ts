@@ -16,6 +16,7 @@ const {
       defaultTuiAgent: 'codex' as 'claude' | 'codex' | 'gemini' | 'blank' | null,
       disabledTuiAgents: [] as string[]
     },
+    runtimeStatusByEnvironmentId: new Map(),
     worktreesByRepo: {} as Record<string, unknown[]>,
     repos: [] as unknown[],
     openSettingsPage: vi.fn(),
@@ -32,28 +33,6 @@ vi.mock('@/hooks/useDetectedAgents', () => ({
   useDetectedAgents: useDetectedAgentsMock
 }))
 
-vi.mock('./use-new-tab-agent-menu-rows', async () => {
-  const { useAppStore } = await import('@/store')
-  const { useDetectedAgents } = await import('@/hooks/useDetectedAgents')
-  const { useAgentDetectionTargetForWorktree } = await import('@/hooks/useAgentDetectionTarget')
-  const { buildNewTabAgentMenuRows } = await import('@/lib/new-tab-agent-menu-rows')
-  return {
-    useNewTabAgentMenuRows: (worktreeId: string) => {
-      const detection = useDetectedAgents(useAgentDetectionTargetForWorktree(worktreeId))
-      return {
-        detection,
-        validate: () => true,
-        rows: buildNewTabAgentMenuRows({
-          settings: useAppStore.getState().settings,
-          installedHere: detection.detectedIds,
-          detectedOnHost: detection.detectedIds,
-          chatAgents: [],
-          hostChatAnswer: () => 'no-chats'
-        })
-      }
-    }
-  }
-})
 vi.mock('@/hooks/useShortcutLabel', () => ({
   useOptionalShortcutLabel: shortcutLabelMock
 }))

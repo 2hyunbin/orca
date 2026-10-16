@@ -9,8 +9,6 @@ export type TabAgentLaunchOption = {
   agent: TuiAgent
   aliases: readonly string[]
   label: string
-  /** The projected action keeps search selection bound to the displayed surface. */
-  surface?: 'chat' | 'cli' | 'terminal'
   disabled?: boolean
   id?: string
   row?: NewTabAgentMenuRow
@@ -85,7 +83,6 @@ export function buildTabAgentLaunchOptionsFromRows(
       agent: row.agent,
       aliases: base?.aliases ?? [],
       label: rowLabel(row),
-      surface: row.kind === 'chat-unavailable' ? ('chat' as const) : row.kind,
       disabled: row.kind === 'chat-unavailable',
       reason: row.kind === 'chat-unavailable' ? chatUnavailableLabel(row.reason) : undefined,
       row,

@@ -53,13 +53,30 @@ const NOT_DELIVERED_NOTIFIED: StructuredPromptDeliveryResult = {
   failureNotified: true
 }
 
-function notifyExplicitChatFailure(agent: TuiAgent): void {
+function notifyExplicitChatFailure(agent: TuiAgent, reason?: string): void {
   toast.error(
     translate(
       'auto.components.tab.bar.QuickLaunchButton.chatUnavailableAfterSelection',
       "Couldn't start a {{value0}} chat.",
       { value0: structuredAgentLabel(agent) }
-    )
+    ),
+    {
+      description:
+        reason === 'wsl'
+          ? translate(
+              'components.native-chat.explicitChatWsl',
+              'Chat is not available in WSL. Open the agent in a terminal instead.'
+            )
+          : reason === 'remote'
+            ? translate(
+                'components.native-chat.explicitChatSsh',
+                'Chat is not available over SSH. Open the agent in a terminal instead.'
+              )
+            : translate(
+                'components.native-chat.explicitChatUnavailable',
+                'This workspace cannot run the chat. Check the agent installation or open it in a terminal.'
+              )
+    }
   )
 }
 
@@ -171,9 +188,9 @@ export function beginHostAdmittedStructuredLaunch(args: {
         resolveDelivery = resolve
       })
     : undefined
-  const failBeforeSurface = (error: unknown): StructuredAgentLaunchSettlement => {
+  const failBeforeSurface = (error: unknown, reason?: string): StructuredAgentLaunchSettlement => {
     if (plan.requestedSurface === 'chat' && !admitted) {
-      notifyExplicitChatFailure(plan.agent)
+      notifyExplicitChatFailure(plan.agent, reason)
       resolveDelivery(NOT_DELIVERED_NOTIFIED)
       return { kind: 'failed', error, notified: true }
     }
@@ -213,7 +230,8 @@ export function beginHostAdmittedStructuredLaunch(args: {
       if (admission.kind === 'declined') {
         if (plan.resumeFrom || plan.requestedSurface === 'chat') {
           return failBeforeSurface(
-            new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported')
+            new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported'),
+            admission.reason
           )
         }
         const terminal = await args.onHostDeclined(args.target)

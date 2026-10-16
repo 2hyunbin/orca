@@ -3,11 +3,11 @@ import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
-import { useTabAgentMenuLaunch } from './tab-agent-launch-action'
+import { useTabAgentMenuLaunch } from './QuickLaunchButton'
 import { useNewTabAgentMenuRows, type NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
 import { buildTabAgentLaunchOptionsFromRows } from './tab-agent-launch-options'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
-import { selectTabCreateMenuOption } from './tab-create-menu-selection'
+import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
 import {
   buildWindowsShellMenuEntries,
   type WindowsShellMenuEntry
@@ -185,29 +185,47 @@ export function useTabBarCreateMenuController({
       workspaceHasSimulatorTab
     ]
   )
-  const handleSelectCreateMenuOption = (option: TabCreateMenuOption): void =>
-    selectTabCreateMenuOption({
-      option,
-      queueTerminalFocus: queueNewActiveTerminalFocusAfterNewTabMenuClose,
-      onNewTerminalTab,
-      onNewTerminalWithShell,
-      onNewBrowserTab,
-      onNewSimulatorTab,
-      onNewFileTab,
-      onOpenFileTab,
-      defaultWindowsPowerShellImplementation,
-      windowsTerminalCapabilities
-    })
-  const launchAgentRow = useTabAgentMenuLaunch(
-    {
-      worktreeId,
-      groupId: resolvedGroupId,
-      launchSource: 'tab_bar_quick_launch',
-      onFocusTerminal: queueTerminalTabFocusAfterNewTabMenuClose,
-      onFocusHostTerminal: queueNewActiveTerminalFocusAfterNewTabMenuClose
-    },
-    agentMenu
-  )
+  const handleSelectCreateMenuOption = (option: TabCreateMenuOption): void => {
+    switch (option.kind) {
+      case 'new-terminal':
+        queueNewActiveTerminalFocusAfterNewTabMenuClose()
+        onNewTerminalTab()
+        break
+      case 'new-terminal-shell':
+        if (!onNewTerminalWithShell || !option.shell) {
+          break
+        }
+        queueNewActiveTerminalFocusAfterNewTabMenuClose()
+        onNewTerminalWithShell(
+          resolveWindowsShellLaunchTarget(
+            option.shell,
+            defaultWindowsPowerShellImplementation,
+            windowsTerminalCapabilities.pwshAvailable
+          )
+        )
+        break
+      case 'new-browser':
+        onNewBrowserTab()
+        break
+      case 'new-markdown':
+        onNewFileTab?.()
+        break
+      case 'open-markdown':
+        onOpenFileTab?.()
+        break
+      case 'new-simulator':
+      case 'go-to-simulator':
+        onNewSimulatorTab?.()
+        break
+    }
+  }
+  const launchAgentRow = useTabAgentMenuLaunch({
+    worktreeId,
+    groupId: resolvedGroupId,
+    launchSource: 'tab_bar_quick_launch',
+    onFocusTerminal: queueTerminalTabFocusAfterNewTabMenuClose,
+    onFocusHostTerminal: queueNewActiveTerminalFocusAfterNewTabMenuClose
+  })
   const launchAgentFromNewTabEntry = (option: TabAgentLaunchOption): void => {
     if (option.row) {
       launchAgentRow(option.row)

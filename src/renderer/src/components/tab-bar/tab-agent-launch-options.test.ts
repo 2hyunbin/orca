@@ -123,7 +123,4 @@ it('projects the same CLI label, unavailable reason and stable chat ID as static
     { id: 'chat:claude', label: 'Claude', reason: 'No chat over SSH', disabled: true },
     { id: 'cli:claude', label: 'Claude (CLI)', disabled: false }
   ])
-  expect(buildTabAgentLaunchOptionsFromRows([{ kind: 'chat', agent: 'claude' }])[0]?.id).toBe(
-    unavailable[0]?.id
-  )
 })
