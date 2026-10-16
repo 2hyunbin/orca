@@ -92,7 +92,7 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
             ? { noParent: true }
             : args.parentWorktreeId
               ? {
-                  parentWorktree: args.parentWorktreeId.startsWith('identity:')
+                  parentWorktree: /^(identity:|id:)/.test(args.parentWorktreeId)
                     ? args.parentWorktreeId
                     : `id:${args.parentWorktreeId}`
                 }

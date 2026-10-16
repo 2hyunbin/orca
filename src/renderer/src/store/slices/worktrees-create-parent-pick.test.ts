@@ -62,6 +62,7 @@ describe('createWorktree composer parent pick', () => {
   it('nests the new workspace under a picked parent in another repository on the same host', async () => {
     const parent = makeWorktree({
       id: 'repo2::/path/parent',
+      hostId: 'local',
       repoId: 'repo2',
       path: '/path/parent',
       instanceId: 'parent-instance'
@@ -306,10 +307,16 @@ describe('createWorktree parent pick on a remote runtime', () => {
       }
     }))
 
-    await createOnRemote(createRemoteStore())
+    const store = createRemoteStore()
+    const parent = store.getState().worktreesByRepo[REMOTE_REPO][0]
+    const identity = { key: 'wt2:local:p', executionHostId: 'local', instanceId: 'p' } as const
+    const hosts = ['runtime:env-1', 'runtime:env-2'] as const
+    const parents = hosts.map((hostId) => ({ ...parent, hostId, instanceId: 'p', identity }))
+    store.setState({ worktreesByRepo: { [REMOTE_REPO]: parents } })
+    await createOnRemote(store)
 
     expect(createCalls()[0]?.params).toMatchObject({
-      parentWorkspace: worktreeWorkspaceKey(PARENT_ID),
+      parentWorkspace: 'identity:wt2:local:p',
       parentWorkspaceOrigin: 'manual'
     })
     expect(toast.warning).not.toHaveBeenCalled()

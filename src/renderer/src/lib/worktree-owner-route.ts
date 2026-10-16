@@ -4,6 +4,7 @@ import {
   toSshExecutionHostId
 } from '../../../shared/execution-host'
 import type { ExecutionHostId } from '../../../shared/execution-host'
+import { projectedWorktreeAuthority } from '../../../shared/worktree/projected-worktree-authority'
 import type {
   WorktreeOperationOwnerRecord,
   WorktreeOperationRoute,
@@ -15,16 +16,13 @@ export function routeForOwner(owner: {
   hostId?: ExecutionHostId
   runtimeOwnerEnvironmentId?: string
 }): WorktreeOperationRoute | null {
-  const runtimeOwnerEnvironmentId = owner.runtimeOwnerEnvironmentId?.trim()
+  const runtimeOwnerEnvironmentId = projectedWorktreeAuthority(owner)
   if (!owner.hostId && !runtimeOwnerEnvironmentId) {
     return null
   }
-  const parsedHost = parseExecutionHostId(owner.hostId)
   return {
     executionHostId: owner.hostId ?? null,
-    runtimeEnvironmentId:
-      runtimeOwnerEnvironmentId ||
-      (parsedHost?.kind === 'runtime' ? parsedHost.environmentId : null)
+    runtimeEnvironmentId: runtimeOwnerEnvironmentId
   }
 }
 

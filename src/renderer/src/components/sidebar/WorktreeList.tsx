@@ -322,6 +322,7 @@ const WorktreeList = React.memo(function WorktreeList({
         repoMap={repoMap}
         defaultHostId={defaultHostId}
         worktreeMap={worktreeMap}
+        lineageWorktreeMap={lineageWorktreeMap}
         worktreeLineageById={worktreeLineageById}
         workspaceLineageByChildKey={workspaceLineageByChildKey}
         allRepoIds={rowModel.allRepoIds}

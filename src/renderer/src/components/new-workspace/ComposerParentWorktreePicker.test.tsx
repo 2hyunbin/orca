@@ -36,7 +36,7 @@ const popoverMock = vi.hoisted(() => ({
 const indexSpies = vi.hoisted(() => ({
   getIndexedAllWorktrees: vi.fn(),
   getIndexedWorktreeMap: vi.fn(),
-  getIndexedWorktreeById: vi.fn()
+  getIndexedWorktreesById: vi.fn()
 }))
 
 vi.mock('@/i18n/i18n', () => ({
@@ -57,7 +57,7 @@ vi.mock('@/store/worktree-repo-index', async (importOriginal) => {
   const actual = await importOriginal<typeof WorktreeRepoIndex>()
   indexSpies.getIndexedAllWorktrees.mockImplementation(actual.getIndexedAllWorktrees)
   indexSpies.getIndexedWorktreeMap.mockImplementation(actual.getIndexedWorktreeMap)
-  indexSpies.getIndexedWorktreeById.mockImplementation(actual.getIndexedWorktreeById)
+  indexSpies.getIndexedWorktreesById.mockImplementation(actual.getIndexedWorktreesById)
   return { ...actual, ...indexSpies }
 })
 
@@ -192,7 +192,7 @@ beforeEach(() => {
   storeState.workspaceLineageByChildKey = {}
   indexSpies.getIndexedAllWorktrees.mockClear()
   indexSpies.getIndexedWorktreeMap.mockClear()
-  indexSpies.getIndexedWorktreeById.mockClear()
+  indexSpies.getIndexedWorktreesById.mockClear()
 })
 
 afterEach(cleanup)
@@ -204,7 +204,7 @@ describe('ComposerParentWorktreePicker', () => {
     render(<ComposerParentWorktreePicker repoId={REPO_ID} value="alpha" onChange={vi.fn()} />)
 
     // The closed trigger resolves one name from the shared index; it never enumerates.
-    expect(indexSpies.getIndexedWorktreeById).toHaveBeenCalled()
+    expect(indexSpies.getIndexedWorktreesById).toHaveBeenCalled()
     expect(indexSpies.getIndexedAllWorktrees).not.toHaveBeenCalled()
     expect(indexSpies.getIndexedWorktreeMap).not.toHaveBeenCalled()
 

@@ -1,11 +1,16 @@
 import {
   getRepoExecutionHostId,
   getSettingsFocusedExecutionHostId,
+  isUnresolvedOwnerHostId,
+  type ExecutionHostId,
   parseExecutionHostId
 } from '../../../shared/execution-host'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { Repo } from '../../../shared/repo-types'
-import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
+import {
+  ipcOrRuntimeTargetForHostId,
+  runtimeRpcTargetForAuthorityKey
+} from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
 export type RepoRuntimeOwnerState = {
@@ -43,6 +48,19 @@ export function runtimeTargetForRepoOwner(
 ): RuntimeClientTarget | null {
   const repo = repoId ? findRepoOwner(state, repoId) : null
   return repo ? ipcOrRuntimeTargetForHostId(getRepoExecutionHostId(repo)) : null
+}
+
+export function runtimeTargetForWorktreeCreate(
+  state: RepoRuntimeOwnerState,
+  repoId: string,
+  executionHostId?: ExecutionHostId | null
+): RuntimeClientTarget | null {
+  if (isUnresolvedOwnerHostId(executionHostId)) {
+    return null
+  }
+  return executionHostId
+    ? (runtimeRpcTargetForAuthorityKey(executionHostId) ?? { kind: 'local' })
+    : runtimeTargetForRepoOwner(state, repoId)
 }
 
 export function getRuntimeEnvironmentIdForRepo(

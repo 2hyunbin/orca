@@ -9,12 +9,14 @@ export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
 }
 
 export function indexWorktreesByInstance<T extends { instanceId?: string }>(
-  worktrees: Iterable<T>
+  worktrees: Iterable<T>,
+  instanceKey: (row: T, instance: string) => string = (_row, instance) => instance
 ): Map<string, T | null> {
   const byInstance = new Map<string, T | null>()
   for (const worktree of worktrees) {
     if (worktree.instanceId) {
-      byInstance.set(worktree.instanceId, byInstance.has(worktree.instanceId) ? null : worktree)
+      const key = instanceKey(worktree, worktree.instanceId)
+      byInstance.set(key, byInstance.has(key) ? null : worktree)
     }
   }
   return byInstance
@@ -105,17 +107,21 @@ export function getConnectedWorktreeLineageInstances(
 
 export function selectResolvedWorktreeLineage<
   T extends Pick<Worktree, 'id' | 'hostId' | 'instanceId'>
->(worktrees: readonly T[], getLineage: (child: T) => WorktreeLineage | null | undefined) {
-  const byInstance = indexWorktreesByInstance(worktrees)
+>(
+  worktrees: readonly T[],
+  getLineage: (child: T) => WorktreeLineage | null | undefined,
+  instanceKey: (row: T, instance: string) => string = (_row, instance) => instance
+) {
+  const byInstance = indexWorktreesByInstance(worktrees, instanceKey)
   const selected = new Map<string, { lineage: WorktreeLineage; parent: T }>()
   const parents = new Map<string, string>()
   for (const child of worktrees) {
     const lineage = getLineage(child)
-    const parent = lineage && byInstance.get(lineage.parentWorktreeInstanceId)
+    const parent = lineage && byInstance.get(instanceKey(child, lineage.parentWorktreeInstanceId))
     if (
       !lineage ||
       !parent ||
-      !byInstance.get(lineage.worktreeInstanceId) ||
+      !byInstance.get(instanceKey(child, lineage.worktreeInstanceId)) ||
       !isValidResolvedWorktreeLineageEdge(child, parent, lineage)
     ) {
       continue

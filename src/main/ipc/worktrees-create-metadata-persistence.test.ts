@@ -133,6 +133,16 @@ describe('registerWorktreeHandlers', () => {
     runtimeStub = setupWorktreeHandlers()
   })
 
+  it.each(['P', 'id:P', 'identity:K', undefined])('qualifies parent %s', async (pick) => {
+    const updateManagedWorktreeMeta = vi.fn().mockResolvedValue({ id: 'C', repoId: harnessRepo.id })
+    Object.assign(runtimeStub, { updateManagedWorktreeMeta })
+    Object.assign(store, { getWorktreeLineage: () => null })
+    const args = { worktreeId: 'C', parentWorktreeId: pick, noParent: !pick }
+    await handlers['worktrees:updateLineage'](null, args)
+    const lineage = pick ? { parentWorktree: pick === 'P' ? 'id:P' : pick } : { noParent: true }
+    expect(updateManagedWorktreeMeta).toHaveBeenCalledWith('C', { lineage })
+  })
+
   it('clears the GitLab MR base handler before re-registering IPC handlers', () => {
     expect(removeHandlerMock).toHaveBeenCalledWith('worktrees:resolveMrBase')
     expect(handlers['worktrees:resolveMrBase']).toBeDefined()

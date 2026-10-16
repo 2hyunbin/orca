@@ -71,6 +71,7 @@ export type VirtualizedWorktreeViewportProps = {
   repoMap: Map<string, Repo>
   defaultHostId: ExecutionHostId
   worktreeMap: Map<string, Worktree>
+  lineageWorktreeMap: ReadonlyMap<string, Worktree>
   worktreeLineageById: Record<string, WorktreeLineage>
   workspaceLineageByChildKey: Record<string, WorkspaceLineage>
   // Full canonical repo-id order; must include hidden repos or a reorder silently drops them.

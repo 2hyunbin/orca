@@ -1,4 +1,3 @@
-import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { repoHostId } from '../listing/worktree-host-ownership'
 import {
   isUnresolvedOwnerHostId,
@@ -19,7 +18,7 @@ import {
   callRuntimeRpc
 } from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
-import { runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
+import { runtimeTargetForWorktreeCreate } from '@/lib/repo-runtime-owner'
 import { WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY } from '../../../../../../shared/protocol-version'
 import { showLocalBaseRefUpdateSuggestionToast } from '@/components/sidebar/local-base-ref-suggestion-toast'
 import { requestWorktreeBaseFallbackNotice } from '@/components/worktree-base-fallback-notice'
@@ -181,9 +180,7 @@ export function createCreateWorktree(
         throw new Error('The workspace host is unresolved. Choose a host and retry.')
       }
       // Direct SSH still uses desktop IPC; paired runtimes use their captured environment.
-      const target = options?.executionHostId
-        ? (runtimeRpcTargetForAuthorityKey(options.executionHostId) ?? { kind: 'local' as const })
-        : runtimeTargetForRepoOwner(get(), repoId)
+      const target = runtimeTargetForWorktreeCreate(get(), repoId, options?.executionHostId)
       if (!target) {
         throw new Error('The project host is unresolved. Choose a host and retry.')
       }
@@ -193,7 +190,7 @@ export function createCreateWorktree(
         resolveOwnHostId: () => repoHostId(get(), repoId)
       })
       // Why outside the retry loop: a branch-name conflict retry must not re-warn about the same dropped pick.
-      const parent = resolveWorktreeCreateParent(get(), options?.parentWorktreeId, creationHostId)
+      const parent = resolveWorktreeCreateParent(get(), options?.parentWorktreeId, target)
       let warnedParentDropped = false
       const warnParentDroppedOnce = (): void => {
         if (warnedParentDropped) {

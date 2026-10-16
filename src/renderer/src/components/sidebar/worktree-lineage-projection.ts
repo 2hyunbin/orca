@@ -3,6 +3,7 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { projectedWorktreeAuthority } from '../../../../shared/worktree/projected-worktree-authority'
 
 export type LineageRenderInfo =
   | { state: 'none' }
@@ -51,8 +52,10 @@ function getLineageProjection(
   }
   let projection = byWorktreeMap.get(worktreeMap)
   if (!projection) {
-    projection = selectResolvedWorktreeLineage([...worktreeMap.values()], (child) =>
-      getProjectedWorktreeLineage(child, lineageById)
+    projection = selectResolvedWorktreeLineage(
+      [...worktreeMap.values()],
+      (child) => getProjectedWorktreeLineage(child, lineageById),
+      (row, instance) => JSON.stringify([projectedWorktreeAuthority(row), instance])
     )
     byWorktreeMap.set(worktreeMap, projection)
   }

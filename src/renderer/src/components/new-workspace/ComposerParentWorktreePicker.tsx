@@ -9,11 +9,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import {
-  getIndexedAllWorktrees,
-  getIndexedWorktreeById,
-  getIndexedWorktreeByIdentity
-} from '@/store/worktree-repo-index'
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import { runtimeTargetForWorktreeCreate } from '@/lib/repo-runtime-owner'
+import { worktreeMatchesTransport } from '@/lib/selected-worktree-reference'
+import { resolveWorktreeCreateParent } from '@/store/slices/worktrees/create/worktree-create-parent-pick'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
 import { branchDisplayName } from '@/components/sidebar/WorktreeCardHelpers'
 import { getCyclicProjectedWorktreeLineageIds } from '@/components/sidebar/worktree-lineage-projection'
@@ -34,11 +33,7 @@ import { COMBOBOX_POPOVER_SURFACE } from './type-ahead-combobox-styles'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import {
-  getRepoExecutionHostId,
-  getWorktreeExecutionHostId,
-  type ExecutionHostId
-} from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { useRepoMap } from '@/store/selectors'
 
 /** Single-line row: text-sm leading (20px) over py-2. Set as the row's explicit height. */
@@ -93,10 +88,9 @@ function ComposerParentWorktreePickerImpl({
     if (!value) {
       return null
     }
-    const parent = value.startsWith('identity:')
-      ? getIndexedWorktreeByIdentity(s.worktreesByRepo, value.slice('identity:'.length))
-      : getIndexedWorktreeById(s.worktreesByRepo, value)
-    return parent && !parent.isArchived ? parent.displayName : null
+    const target = runtimeTargetForWorktreeCreate(s, repoId, executionHostId)
+    const parent = target && resolveWorktreeCreateParent(s, value, target)
+    return parent && !parent.staleBeforeCreate ? parent.pickedDisplayName : null
   })
 
   // Why: the trigger goes inert when the Advanced drawer collapses, but the portaled
@@ -181,13 +175,13 @@ function getFolderWorkspaceSubtreeIds(
 ): Set<string> {
   const folderKey = folderWorkspaceKey(folderWorkspaceId)
   const rootIds = new Set<string>()
-  for (const lineage of Object.values(workspaceLineageByChildKey)) {
+  for (const [key, lineage] of Object.entries(workspaceLineageByChildKey)) {
     if (lineage.parentWorkspaceKey !== folderKey) {
       continue
     }
     // Why: the folder view drops archived and instance-stale rows, so accepting them here
     // would offer a parent whose whole branch the folder never actually shows.
-    const rootWorktree = getLineageChildWorktree(lineage, worktreeById)
+    const rootWorktree = getLineageChildWorktree(lineage, worktreeById, key)
     if (rootWorktree) {
       rootIds.add(getWorktreeHostIdentity(rootWorktree))
     }
@@ -214,6 +208,8 @@ function ParentWorktreeCandidateList({
   onSelect
 }: ParentWorktreeCandidateListProps): React.JSX.Element {
   const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const repos = useAppStore((s) => s.repos)
+  const settings = useAppStore((s) => s.settings)
   const repoMap = useRepoMap()
   const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
@@ -224,9 +220,7 @@ function ParentWorktreeCandidateList({
   const [highlightedIndex, setHighlightedIndex] = useState(0)
 
   const candidates = useMemo(() => {
-    // Legacy rows inherit their real repo host, including candidates from another project.
-    const childRepo = repoMap.get(repoId)
-    const childHostId = executionHostId ?? (childRepo ? getRepoExecutionHostId(childRepo) : 'local')
+    const target = runtimeTargetForWorktreeCreate({ repos, settings }, repoId, executionHostId)
     const worktreeMap = new Map(
       getIndexedAllWorktrees(worktreesByRepo).map((row) => [getWorktreeHostIdentity(row), row])
     )
@@ -243,8 +237,8 @@ function ParentWorktreeCandidateList({
       .filter(
         (candidate) =>
           !candidate.isArchived &&
-          (getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId)) === childHostId ||
-            (!childHostId.startsWith('runtime:') && !candidate.hostId?.startsWith('runtime:'))) &&
+          target &&
+          worktreeMatchesTransport({ repos }, candidate, target) &&
           !cyclicLineageIds.has(getWorktreeHostIdentity(candidate)) &&
           (folderSubtreeIds === null || folderSubtreeIds.has(getWorktreeHostIdentity(candidate)))
       )
@@ -253,7 +247,8 @@ function ParentWorktreeCandidateList({
     activeFolderWorkspaceId,
     executionHostId,
     repoId,
-    repoMap,
+    repos,
+    settings,
     workspaceLineageByChildKey,
     worktreeLineageById,
     worktreesByRepo

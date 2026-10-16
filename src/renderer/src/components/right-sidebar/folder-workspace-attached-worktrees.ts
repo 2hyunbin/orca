@@ -1,4 +1,10 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import {
+  composeWorktreeHostIdentity,
+  getExecutionHostIdFromWorktreeHostIdentity,
+  getWorktreeIdFromHostIdentity,
+  getWorktreeHostIdentity,
+  isWorktreeHostIdentity
+} from '../../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -52,9 +58,9 @@ export function getAttachedWorktreesForFolderWorkspace({
 
   const folderKey = folderWorkspaceKey(folderWorkspace.id)
   const worktreeById = getWorktreeById(worktreesByRepo)
-  const childWorktrees = Object.values(workspaceLineageByChildKey)
-    .filter((lineage) => lineage.parentWorkspaceKey === folderKey)
-    .map((lineage) => getLineageChildWorktree(lineage, worktreeById))
+  const childWorktrees = Object.entries(workspaceLineageByChildKey)
+    .filter(([, lineage]) => lineage.parentWorkspaceKey === folderKey)
+    .map(([key, lineage]) => getLineageChildWorktree(lineage, worktreeById, key))
     .filter((worktree): worktree is Worktree => worktree !== null)
     .sort(sortWorktreesByRecentActivity)
 
@@ -141,13 +147,25 @@ function getWorktreeById(
 /** Exported so the composer's parent picker offers exactly the roots this view attaches. */
 export function getLineageChildWorktree(
   lineage: WorkspaceLineage,
-  worktreeById: Map<string, Worktree>
+  worktreeById: ReadonlyMap<string, Worktree>,
+  key = lineage.childWorkspaceKey
 ): Worktree | null {
   const childScope = parseWorkspaceKey(lineage.childWorkspaceKey)
   if (childScope?.type !== 'worktree') {
     return null
   }
-  const matches = [...worktreeById.values()].filter(
+  const qualified = isWorktreeHostIdentity(key)
+  const scope = qualified ? parseWorkspaceKey(getWorktreeIdFromHostIdentity(key)) : null
+  const exact =
+    scope?.type === 'worktree'
+      ? worktreeById.get(
+          composeWorktreeHostIdentity(
+            getExecutionHostIdFromWorktreeHostIdentity(key),
+            scope.worktreeId
+          )
+        )
+      : undefined
+  const matches = (qualified ? (exact ? [exact] : []) : [...worktreeById.values()]).filter(
     (row) =>
       row.id === childScope.worktreeId &&
       (!lineage.childInstanceId || row.instanceId === lineage.childInstanceId)

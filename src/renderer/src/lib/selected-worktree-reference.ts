@@ -3,7 +3,10 @@ import type { WorktreeIdentity } from '../../../shared/worktree/identity'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import { getIndexedWorktreeByIdentity, getIndexedWorktreesById } from '@/store/worktree-repo-index'
+import {
+  getIndexedWorktreeIdentityCandidates,
+  getIndexedWorktreesById
+} from '@/store/worktree-repo-index'
 import type { AppState } from '@/store/types'
 import { resolveExactWorktreeRoute } from './worktree-owner-route'
 import type { WorktreeOperationRouteState } from './worktree-operation-route'
@@ -27,6 +30,15 @@ export function selectedWorktreeTransport(state: WorktreeOperationRouteState, ro
   return route && route.kind === 'resolved'
     ? runtimeTargetForOwnerEnvironment(route.route.runtimeEnvironmentId)
     : null
+}
+
+export function worktreeMatchesTransport(
+  state: WorktreeOperationRouteState,
+  row: Worktree,
+  target: RuntimeClientTarget
+): boolean {
+  const current = selectedWorktreeTransport(state, row)
+  return Boolean(current && getRuntimeTargetHostId(current) === getRuntimeTargetHostId(target))
 }
 
 export type SelectedWorktreeReference = {
@@ -69,23 +81,19 @@ export function resolveSelectedWorktree(
   }
   const candidates =
     ref.kind === 'identified'
-      ? [
-          getIndexedWorktreeByIdentity(state.worktreesByRepo, ref.identity.key, ref.hostId) ??
-            getIndexedWorktreeByIdentity(state.worktreesByRepo, ref.identity.key)
-        ].filter((row) => row !== undefined)
+      ? getIndexedWorktreeIdentityCandidates(state.worktreesByRepo, ref.identity.key)
       : getIndexedWorktreesById(state.worktreesByRepo, ref.id)
-  const matches = candidates.filter((row) => {
-    const target = selectedWorktreeTransport(state, row)
-    return target && getRuntimeTargetHostId(target) === getRuntimeTargetHostId(ref.target)
-  })
+  const matches = candidates.filter(
+    (row) =>
+      worktreeMatchesTransport(state, row, ref.target) &&
+      selectedWorktreeHost(state, row) === ref.hostId &&
+      row.runtimeOwnerEnvironmentId === ref.runtimeOwnerEnvironmentId &&
+      (ref.kind === 'identified'
+        ? row.identity?.instanceId === ref.identity.instanceId
+        : !row.identity)
+  )
   const row = matches.length === 1 ? matches[0] : undefined
-  if (
-    !row ||
-    selectedWorktreeHost(state, row) !== ref.hostId ||
-    row.runtimeOwnerEnvironmentId !== ref.runtimeOwnerEnvironmentId ||
-    (ref.kind === 'identified' && row.identity?.instanceId !== ref.identity.instanceId) ||
-    (ref.kind === 'legacy' && row.identity)
-  ) {
+  if (!row) {
     return null
   }
   return {

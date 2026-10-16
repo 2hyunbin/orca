@@ -205,7 +205,9 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
       const result = await callRuntimeResult<{
         worktree: Worktree & { lineage?: WorktreeLineage | null }
       }>('worktree.set', {
-        worktree: toRuntimeWorktreeSelector(worktreeId),
+        worktree: worktreeId.startsWith('identity:')
+          ? worktreeId
+          : toRuntimeWorktreeSelector(worktreeId),
         parentWorktree: parentWorktreeId,
         noParent
       })

@@ -47,6 +47,26 @@ function buildFixture(childCount: number): {
 }
 
 describe('worktree lineage projection cache', () => {
+  it.each(['valid', 'missing', 'child', 'parent'])('scopes combined stores: %s', (variant) => {
+    const rows = (['runtime:E', 'runtime:F'] as const).flatMap((hostId) =>
+      ['root', 'child'].map((id): Worktree => ({ ...makeWorktree(id), hostId }))
+    )
+    if (variant === 'missing') {
+      rows.splice(0, 1)
+    }
+    if (variant === 'child' || variant === 'parent') {
+      rows.push({ ...rows[variant === 'child' ? 1 : 0], id: 'duplicate' })
+    }
+    for (const ordered of [rows, rows.toReversed()]) {
+      const children = getProjectedWorktreeLineageChildrenByParentId(
+        { child: makeLineage('child', 'root') },
+        new Map(ordered.map((row) => [`${row.hostId}|${row.id}`, row]))
+      )
+      expect(children.get('runtime:E|root')?.length ?? 0).toBe(variant === 'valid' ? 1 : 0)
+      expect(children.get('runtime:F|root')).toHaveLength(1)
+    }
+  })
+
   it('reuses the cyclic-id scan for an unchanged input pair', () => {
     const { lineageById, worktreeMap } = buildFixture(8)
     const first = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)

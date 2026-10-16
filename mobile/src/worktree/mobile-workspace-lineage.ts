@@ -1,4 +1,5 @@
 import { selectResolvedWorktreeLineage } from '../../../src/shared/resolved-worktree-lineage'
+import { projectedWorktreeAuthority } from '../../../src/shared/worktree/projected-worktree-authority'
 import {
   buildWorktreeOccurrencePlan,
   getExpandedWorktreeOccurrences,
@@ -22,7 +23,7 @@ export function getMobileWorkspaceLineageChildren(
     id: row.worktreeId,
     instanceId: row.worktreeInstanceId ?? getWorktreeRowIdentity(row)
   }))
-  const { selected } = selectResolvedWorktreeLineage(rows, (child) => {
+  const getLineage = (child: (typeof rows)[number]) => {
     if (!child.parentWorktreeId) {
       return null
     }
@@ -37,7 +38,10 @@ export function getMobileWorkspaceLineageChildren(
       capture: { source: 'manual-action', confidence: 'explicit' },
       createdAt: 0
     }
-  })
+  }
+  const { selected } = selectResolvedWorktreeLineage(rows, getLineage, (row, instance) =>
+    JSON.stringify([projectedWorktreeAuthority(row), instance])
+  )
   const children = new Map<string, Worktree[]>()
   for (const row of rows) {
     const parent = selected.get(getWorktreeRowIdentity(row))?.parent
