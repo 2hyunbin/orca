@@ -38,9 +38,26 @@ const MAX_STORES = 256
 // 7f (the last store PR) flips this; until then no move may leave `destination-committed`.
 export const WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE: boolean = false
 
+let registryComplete = WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE
+
+/** The journal and the driver both refuse `client-rewritten` while this is false. */
+export function isWslMoveDesktopRewriteRegistryComplete(): boolean {
+  return registryComplete
+}
+
+/** Returns the previous value, so a fixture can restore it. */
+export function setWslMoveDesktopRewriteRegistryCompleteForTests(complete: boolean): boolean {
+  const previous = registryComplete
+  registryComplete = complete
+  return previous
+}
+
 const stores: WslMoveDesktopRewriteStore[] = []
 
-/** Registration order is run order. */
+/**
+ * Registration order is run order among main-side stores. Renderer-side stores are independent of
+ * it: the renderer records them whenever it finishes, before or after any main store.
+ */
 export function registerWslMoveDesktopRewriteStore(store: WslMoveDesktopRewriteStore): void {
   if (!STORE_ID_PATTERN.test(store.id)) {
     throw new Error('wsl_move_rewrite_store_id_invalid')
@@ -68,4 +85,5 @@ export function pendingWslMoveDesktopRewriteStores(
 
 export function resetWslMoveDesktopRewriteStoresForTests(): void {
   stores.length = 0
+  registryComplete = WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE
 }

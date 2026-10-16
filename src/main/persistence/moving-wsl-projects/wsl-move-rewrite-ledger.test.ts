@@ -7,7 +7,8 @@ import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-s
 import { listWslMoveCutovers, writeWslMoveCutover } from './wsl-move-cutover-journal'
 import {
   registerWslMoveDesktopRewriteStore,
-  resetWslMoveDesktopRewriteStoresForTests
+  resetWslMoveDesktopRewriteStoresForTests,
+  setWslMoveDesktopRewriteRegistryCompleteForTests
 } from './wsl-move-desktop-rewrite-stores'
 
 let userDataPath: string
@@ -56,6 +57,7 @@ describe('WSL move rewrite ledger', () => {
   })
 
   it('advances to client-rewritten only once every registered store is recorded', () => {
+    setWslMoveDesktopRewriteRegistryCompleteForTests(true)
     registerWslMoveDesktopRewriteStore({ id: 'a', side: 'main', run: () => {}, flush: () => {} })
     registerWslMoveDesktopRewriteStore({ id: 'b', side: 'renderer' })
     seedWslMoveCutover(userDataPath, committed(['a']))
@@ -71,5 +73,24 @@ describe('WSL move rewrite ledger', () => {
       cutover('move-1', 'client-rewritten', { rewrittenStores: ['a', 'b'] })
     )
     expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('client-rewritten')
+  })
+
+  it('refuses client-rewritten while the store registry is incomplete', () => {
+    seedWslMoveCutover(userDataPath, committed([]))
+    expect(() => writeWslMoveCutover(userDataPath, cutover('move-1', 'client-rewritten'))).toThrow(
+      'wsl_move_rewrite_incomplete'
+    )
+    setWslMoveDesktopRewriteRegistryCompleteForTests(true)
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'client-rewritten'))
+    expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('client-rewritten')
+  })
+
+  it('re-seeds a committed record to a later phase without dropping its ledger', () => {
+    seedWslMoveCutover(userDataPath, committed(['a', 'b']))
+    seedWslMoveCutover(userDataPath, cutover('move-1', 'retained'))
+    expect(listWslMoveCutovers(userDataPath)[0]).toMatchObject({
+      phase: 'retained',
+      rewrittenStores: ['a', 'b']
+    })
   })
 })

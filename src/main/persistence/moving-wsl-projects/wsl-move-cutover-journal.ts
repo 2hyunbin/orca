@@ -14,7 +14,10 @@ import {
   createMigrationJournalDirectory,
   orderMigrationJournalChain
 } from '../migrating-orcad-catalog/migration-journal-directory'
-import { pendingWslMoveDesktopRewriteStores } from './wsl-move-desktop-rewrite-stores'
+import {
+  isWslMoveDesktopRewriteRegistryComplete,
+  pendingWslMoveDesktopRewriteStores
+} from './wsl-move-desktop-rewrite-stores'
 
 export class WslMoveJournalUnreadableError extends Error {
   constructor(detail: string) {
@@ -151,7 +154,7 @@ function assertWslMoveUpdate(
 /**
  * The rewrite ledger only grows, and only while the desktop rewrites (`destination-committed`):
  * append-only and without duplicates, so a stale writer cannot drop another's entry. Leaving that
- * phase needs every registered store recorded.
+ * phase needs a complete registry and every registered store recorded.
  */
 function assertWslMoveLedgerUpdate(existing: WslMoveCutover, next: WslMoveCutover): void {
   const before = existing.rewrittenStores
@@ -169,7 +172,8 @@ function assertWslMoveLedgerUpdate(existing: WslMoveCutover, next: WslMoveCutove
   if (
     existing.phase === 'destination-committed' &&
     next.phase === 'client-rewritten' &&
-    pendingWslMoveDesktopRewriteStores(after).length > 0
+    (!isWslMoveDesktopRewriteRegistryComplete() ||
+      pendingWslMoveDesktopRewriteStores(after).length > 0)
   ) {
     throw new Error('wsl_move_rewrite_incomplete')
   }

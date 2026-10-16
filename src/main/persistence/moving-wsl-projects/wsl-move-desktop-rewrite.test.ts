@@ -15,22 +15,15 @@ import {
 import {
   registerWslMoveDesktopRewriteStore,
   resetWslMoveDesktopRewriteStoresForTests,
+  setWslMoveDesktopRewriteRegistryCompleteForTests,
   type WslMoveDesktopRewriteContext
 } from './wsl-move-desktop-rewrite-stores'
-
-const registry = vi.hoisted(() => ({ complete: true }))
-vi.mock('./wsl-move-desktop-rewrite-stores', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  get WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE() {
-    return registry.complete
-  }
-}))
 
 let userDataPath: string
 beforeEach(() => {
   userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-rewrite-'))
   vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
-  registry.complete = true
+  setWslMoveDesktopRewriteRegistryCompleteForTests(true)
 })
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -121,7 +114,7 @@ describe('WSL move desktop rewrite', () => {
   )
 
   it('stays in the rewrite phase while the store registry is incomplete', async () => {
-    registry.complete = false
+    setWslMoveDesktopRewriteRegistryCompleteForTests(false)
     const trace: Trace = { events: [], failAt: new Set() }
     mainStore('a', trace)
     registerWslMoveDesktopRewriteStore({ id: 'r', side: 'renderer' })
@@ -131,8 +124,28 @@ describe('WSL move desktop rewrite', () => {
     expect(record()?.rewrittenStores).toEqual(['a', 'r'])
     expect(record()?.phase).toBe('destination-committed')
 
-    registry.complete = true
+    setWslMoveDesktopRewriteRegistryCompleteForTests(true)
     await runWslMoveDesktopRewritePass({ userDataPath })
+    expect(record()?.phase).toBe('client-rewritten')
+  })
+
+  it('times out a hung store like a failure, without blocking the next pass', async () => {
+    let hang = true
+    registerWslMoveDesktopRewriteStore({
+      id: 'slow',
+      side: 'main',
+      run: () => (hang ? new Promise<void>(() => {}) : undefined),
+      flush: () => {}
+    })
+    seedWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+    const warn = vi.fn()
+    await runWslMoveDesktopRewritePass({ userDataPath, warn, storeTimeoutMs: 10 })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('slow run timed out'))
+    expect(record()?.rewrittenStores).toEqual([])
+
+    hang = false
+    await runWslMoveDesktopRewritePass({ userDataPath, warn, storeTimeoutMs: 10 })
+    expect(record()?.rewrittenStores).toEqual(['slow'])
     expect(record()?.phase).toBe('client-rewritten')
   })
 

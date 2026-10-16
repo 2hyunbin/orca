@@ -13,15 +13,20 @@ import type {
 import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
 import { listWslMoveCutovers, writeWslMoveCutover } from './wsl-move-cutover-journal'
 import {
-  WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE,
+  isWslMoveDesktopRewriteRegistryComplete,
   listWslMoveDesktopRewriteStores,
   pendingWslMoveDesktopRewriteStores,
   type WslMoveDesktopRewriteContext
 } from './wsl-move-desktop-rewrite-stores'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
 
+// Passes are serialized, so one hung store would otherwise stall every later pass in the process.
+export const WSL_MOVE_REWRITE_STORE_TIMEOUT_MS = 30_000
+
 export type WslMoveDesktopRewritePassOptions = {
   userDataPath: string
+  /** Per `run` and per `flush`; defaults to WSL_MOVE_REWRITE_STORE_TIMEOUT_MS. */
+  storeTimeoutMs?: number
   warn?: (message: string) => void
 }
 
@@ -52,7 +57,7 @@ function appendLedgerEntry(userDataPath: string, cutover: WslMoveCutover, storeI
 /** Advances once every registered store, main and renderer, is in the ledger. */
 function advanceWhenRewritten(userDataPath: string, migrationId: string): void {
   // Stores not registered yet would never run on a move that already left the rewrite phase.
-  if (!WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE) {
+  if (!isWslMoveDesktopRewriteRegistryComplete()) {
     return
   }
   const cutover = readCommittedCutover(userDataPath, migrationId)
@@ -64,6 +69,23 @@ function advanceWhenRewritten(userDataPath: string, migrationId: string): void {
     phase: 'client-rewritten',
     updatedAt: new Date().toISOString()
   })
+}
+
+/** A timed-out step fails like a thrown one; its late result is ignored, never recorded. */
+async function withStoreTimeout(
+  step: () => Promise<void> | void,
+  timeoutMs: number,
+  label: string
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs)
+  })
+  try {
+    await Promise.race([Promise.resolve().then(step), timeout])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function rewriteMainStores(
@@ -83,8 +105,9 @@ async function rewriteMainStores(
     if (!before || before.rewrittenStores.includes(store.id)) {
       continue
     }
-    await store.run(rewriteContext(before))
-    await store.flush()
+    const timeoutMs = options.storeTimeoutMs ?? WSL_MOVE_REWRITE_STORE_TIMEOUT_MS
+    await withStoreTimeout(() => store.run(rewriteContext(before)), timeoutMs, `${store.id} run`)
+    await withStoreTimeout(() => store.flush(), timeoutMs, `${store.id} flush`)
     const current = readCommittedCutover(userDataPath, migrationId)
     if (!current) {
       throw new Error('wsl_move_record_missing')
@@ -172,7 +195,10 @@ export function listPendingWslMoveRendererRewrites(
   }
 }
 
-/** The renderer finished (and persisted) one of its stores for a committed move. */
+/**
+ * The renderer finished (and persisted) one of its stores for a committed move. Independent of
+ * main-store order: it may land before, between or after the main pass's entries.
+ */
 export function recordWslMoveRendererStoreRewritten(
   userDataPath: string,
   request: WslMoveRecordStoreRewrittenRequest

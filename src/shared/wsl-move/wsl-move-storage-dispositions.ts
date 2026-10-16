@@ -150,10 +150,10 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
         'journal_set_aside',
         'queued_messages'
       ],
-      moveDisposition(52, {
-        newManifestSection: true,
-        note: 'Native chat journal: scoped records move to the host, location rewritten.'
-      })
+      notApplicableDisposition(
+        52,
+        'Native chat journal: chats stay local on the desktop (owner decision C), never moved.'
+      )
     ),
     ...tables(
       'orchestration',
