@@ -1,0 +1,2408 @@
+diff --git a/src/main/claude/claude-agent-sdk-process-spawn.ts b/src/main/claude/claude-agent-sdk-process-spawn.ts
+index a48b3e8a210..4948b85b6e4 100644
+--- a/src/main/claude/claude-agent-sdk-process-spawn.ts
++++ b/src/main/claude/claude-agent-sdk-process-spawn.ts
+@@ -45,7 +45,8 @@ function definedEnv(env: Record<string, string | undefined>): Record<string, str
+ export function createClaudeCodeProcessSpawn(
+   spawnImpl: PipedProcessSpawner = spawnProcess,
+   platform: NodeJS.Platform = process.platform,
+-  onOutput?: () => void
++  onOutput?: () => void,
++  onSpawned?: (managed: ManagedProviderProcess) => void
+ ): ClaudeCodeProcessSpawn {
+   let managed: ManagedProviderProcess | null = null
+   return {
+@@ -67,6 +68,7 @@ export function createClaudeCodeProcessSpawn(
+           ...(onOutput ? { onOutput } : {})
+         }
+       )
++      onSpawned?.(managed)
+       // The SDK drains stderr only for its own local spawn; the managed process drains it here.
+       return managed.child
+     },
+diff --git a/src/main/claude/claude-stream-json-connection.ts b/src/main/claude/claude-stream-json-connection.ts
+index 828a58e043a..af1b0ace289 100644
+--- a/src/main/claude/claude-stream-json-connection.ts
++++ b/src/main/claude/claude-stream-json-connection.ts
+@@ -3,6 +3,12 @@ import { providerDiagnostic, withProviderDiagnostic } from '../../shared/agent-s
+ import type * as ClaudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
+ import type { CanUseTool, OnUserDialog, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+ import { spawnProcess } from '@orca/process-host'
++import {
++  AgentSessionAcquisitionExitUnprovenError,
++  AgentSessionAcquisitionRootExitObservedError,
++  AgentSessionPreSpawnError
++} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
++import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+ import { buildClaudeChildProcessEnv } from './claude-child-process-environment'
+ import { withoutInheritedClaudeConfigDir } from './claude-config-dir-pin'
+ import {
+@@ -66,6 +72,7 @@ function withoutKeys(env: Record<string, string>, keys: readonly string[]): Reco
+ }
+ 
+ export type ClaudeStreamJsonConnectionHandlers = {
++  onSpawned?: (resource: ClaudeChildResource) => void
+   onMessage?: (message: Record<string, unknown>) => void
+   /**
+    * The SDK owns inbound permission control: it hands `can_use_tool` to this callback with
+@@ -97,6 +104,8 @@ export type ClaudeChildExitVerdict = {
+   processless?: boolean
+ }
+ 
++export type ClaudeChildResource = Pick<ClaudeStreamJsonConnection, 'close' | 'exitVerdict'>
++
+ export type ClaudeStreamJsonConnection = ClaudeControlSurface & {
+   readonly pid: number | undefined
+   readonly closed: boolean
+@@ -136,40 +145,87 @@ export async function openClaudeStreamJsonConnection(
+   launch: ClaudeStreamJsonLaunch,
+   handlers: ClaudeStreamJsonConnectionHandlers = {},
+   spawnImpl: PipedProcessSpawner = spawnProcess,
+-  queryImpl?: typeof ClaudeAgentSdk.query
++  queryImpl?: typeof ClaudeAgentSdk.query,
++  signal?: AbortSignal
+ ): Promise<ClaudeStreamJsonConnection> {
+-  const { query } = await loadClaudeAgentSdk()
+-  const spawner = createClaudeCodeProcessSpawn(spawnImpl, process.platform, handlers.onOutput)
+-  const inbox = createClaudeUserMessageQueue()
+-  const session = (queryImpl ?? query)({
+-    prompt: inbox.messages,
+-    options: {
+-      ...launch.options,
+-      cwd: launch.cwd,
+-      // Why env is never omitted: the SDK inherits process.env when it is, which is
+-      // exactly the ambient ANTHROPIC_* auth leak this lane already shipped once.
+-      // Orca's own CLAUDE_CONFIG_DIR is dropped for the same reason the launch drops the
+-      // shell's: the record's pin in `launch.env` must be the only home the child sees.
+-      env: withoutKeys(
+-        buildClaudeChildProcessEnv(launch.env, {
+-          inheritedEnv: withoutInheritedClaudeConfigDir(process.env),
+-          scrubConfiguredChildSessionStamps: true
+-        }),
+-        launch.envToDelete ?? []
+-      ),
+-      pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
+-      spawnClaudeCodeProcess: spawner.spawn,
+-      ...(handlers.canUseTool ? { canUseTool: handlers.canUseTool } : {}),
+-      ...(handlers.onUserDialog ? { onUserDialog: handlers.onUserDialog } : {})
++  const { query } = await waitForPromiseWithSignal(loadClaudeAgentSdk(), signal)
++  // The SDK load is the last await before query synchronously creates the child.
++  throwIfSignalAborted(signal)
++  let closing = false
++  let resource: ClaudeChildResource | undefined
++  let childTree: ReturnType<typeof createClaudeChildTreeReaper> | undefined
++  const spawner = createClaudeCodeProcessSpawn(
++    spawnImpl,
++    process.platform,
++    handlers.onOutput,
++    (managed) => {
++      const tree = createClaudeChildTreeReaper(managed.child, {
++        exited: () => managed.rootVerdict === 'exited'
++      })
++      childTree = tree
++      let proof: Promise<boolean> | null = null
++      resource = {
++        close: () => {
++          closing = true
++          proof ??= (async () => {
++            await (tree.refresh?.() ?? tree.capture())
++            const proven = await proveClaudeChildExit({ tree, managed })
++            if (!proven) proof = null
++            return proven
++          })()
++          return proof
++        },
++        get exitVerdict() {
++          return {
++            root: managed.rootVerdict,
++            tree: tree.treeVerdict,
++            ...(managed.processless ? { processless: true } : {})
++          }
++        }
++      }
++      handlers.onSpawned?.(resource)
+     }
+-  })
++  )
++  const inbox = createClaudeUserMessageQueue()
++  let session: ReturnType<typeof ClaudeAgentSdk.query>
++  try {
++    session = (queryImpl ?? query)({
++      prompt: inbox.messages,
++      options: {
++        ...launch.options,
++        cwd: launch.cwd,
++        // Why env is never omitted: the SDK inherits process.env when it is, which is
++        // exactly the ambient ANTHROPIC_* auth leak this lane already shipped once.
++        // Orca's own CLAUDE_CONFIG_DIR is dropped for the same reason the launch drops the
++        // shell's: the record's pin in `launch.env` must be the only home the child sees.
++        env: withoutKeys(
++          buildClaudeChildProcessEnv(launch.env, {
++            inheritedEnv: withoutInheritedClaudeConfigDir(process.env),
++            scrubConfiguredChildSessionStamps: true
++          }),
++          launch.envToDelete ?? []
++        ),
++        pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
++        spawnClaudeCodeProcess: spawner.spawn,
++        ...(handlers.canUseTool ? { canUseTool: handlers.canUseTool } : {}),
++        ...(handlers.onUserDialog ? { onUserDialog: handlers.onUserDialog } : {})
++      }
++    })
++  } catch (error) {
++    const managed = spawner.managed
++    if (!managed) throw new AgentSessionPreSpawnError(error)
++    const proven = await resource?.close()
++    if (!proven) throw new AgentSessionAcquisitionExitUnprovenError(error)
++    throw managed.processless
++      ? new AgentSessionPreSpawnError(error)
++      : new AgentSessionAcquisitionRootExitObservedError(error)
++  }
+   const managed = spawner.managed
+   const child = managed?.child
+   if (!child || !managed) {
+     throw new Error('the claude agent SDK returned without spawning a child')
+   }
+   let exitStatus: ExitStatus | null = null
+-  let closing = false
+   let terminalError: Error | null = null
+   let faultReported = false
+   let exitReported = false
+@@ -192,8 +248,9 @@ export async function openClaudeStreamJsonConnection(
+   }
+   const waitUntilReadable = (): Promise<void> => readingBarrier ?? Promise.resolve()
+   // One reaper per child: every close attempt and error-path reap shares its proof.
+-  const rootSettled = (): boolean => managed.rootVerdict === 'exited'
+-  const tree = createClaudeChildTreeReaper(child, { exited: rootSettled })
++  const tree = childTree
++  if (!tree || !resource) throw new Error('claude child cleanup was not registered')
++  const cleanup = resource
+ 
+   // Arm lazily on actual child output instead of issuing a process-table scan for
+   // every session at startup. A natural SDK exit can race a later close, while
+@@ -308,12 +365,8 @@ export async function openClaudeStreamJsonConnection(
+       resumeReading()
+       // Arm the descendant proof before the stop. The root may exit immediately;
+       // a post-exit walk cannot recover descendants that reparented.
+-      await (tree.refresh?.() ?? tree.capture())
+       inbox.end()
+-      const proven = await proveClaudeChildExit({
+-        tree,
+-        managed
+-      })
++      const proven = await cleanup.close()
+       inbox.fail(new Error('claude stream-json connection closed'))
+       if (!proven) {
+         if (managed.lastCloseResult?.root === 'exited' && managed.lastCloseResult.tree === 'live') {
+diff --git a/src/main/claude/claude-structured-acquisition-launch.ts b/src/main/claude/claude-structured-acquisition-launch.ts
+index 809a81d7026..64b6a4c289d 100644
+--- a/src/main/claude/claude-structured-acquisition-launch.ts
++++ b/src/main/claude/claude-structured-acquisition-launch.ts
+@@ -1,4 +1,5 @@
+ import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
++import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+ import {
+   AgentSessionAcquisitionExitUnprovenError,
+   AgentSessionPreSpawnError,
+@@ -88,12 +89,14 @@ export async function resolveClaudeAcquisitionLaunch(args: {
+           )
+         }
+       : input.identity
+-    const launch = await deps
+-      .resolveLaunch({
++    const launch = await waitForPromiseWithSignal(
++      deps.resolveLaunch({
+         identity: launchIdentity,
+         spawnToken: input.spawnToken,
+         ...(input.permissionMode ? { permissionMode: input.permissionMode } : {})
+-      })
++      }),
++      input.signal
++    )
+       .catch((error: unknown) => {
+         throw error instanceof AgentSessionPreSpawnError
+           ? error
+diff --git a/src/main/claude/claude-structured-event-delivery.ts b/src/main/claude/claude-structured-event-delivery.ts
+index 5430eb82f8c..1cf0691b8c9 100644
+--- a/src/main/claude/claude-structured-event-delivery.ts
++++ b/src/main/claude/claude-structured-event-delivery.ts
+@@ -26,6 +26,7 @@ export function emitClaudeStructuredSessionEvent({
+   deps,
+   publishChildWork
+ }: ClaudeEventDelivery): void {
++  if (session?.effectSignal?.aborted) return
+   // Host evidence follows the journal; the tracker's roster remains available to contract tests.
+   if (event.type === 'ended') {
+     session?.childWork.clear()
+diff --git a/src/main/claude/claude-structured-resume-point.ts b/src/main/claude/claude-structured-resume-point.ts
+index b15d2e3507c..b7d9d5fff17 100644
+--- a/src/main/claude/claude-structured-resume-point.ts
++++ b/src/main/claude/claude-structured-resume-point.ts
+@@ -14,7 +14,7 @@ export function persistClaudeTurnResumePoint(
+   session: ClaudeSession,
+   deps: Pick<ClaudeStructuredSessionAdapterDeps, 'persistResumePoint'>
+ ): void {
+-  if (session.closeFinalization || session.closeFinalized) {
++  if (session.effectSignal?.aborted || session.closeFinalization || session.closeFinalized) {
+     return
+   }
+   session.turnEndLeafUuid = session.leafUuid
+@@ -34,7 +34,8 @@ export function persistClaudeTurnResumePoint(
+           sessionId,
+           providerSessionId: session.providerSessionId,
+           leafUuid,
+-          fence: session.fence
++          fence: session.fence,
++          authority: session.effectSignal
+         })
+       )
+       .catch((error: unknown) => {
+diff --git a/src/main/claude/claude-structured-session-acquisition-processless.test.ts b/src/main/claude/claude-structured-session-acquisition-processless.test.ts
+index 4dc2824ddc7..b52606a1615 100644
+--- a/src/main/claude/claude-structured-session-acquisition-processless.test.ts
++++ b/src/main/claude/claude-structured-session-acquisition-processless.test.ts
+@@ -17,6 +17,45 @@ const IDENTITY: AgentSessionJournalIdentity = {
+ }
+ 
+ describe('Claude structured processless acquisition', () => {
++  it('settles an aborted launch wait and leaves a late resolution unable to spawn', async () => {
++    let releaseLaunch = (): void => {}
++    const held = new Promise<void>((resolve) => {
++      releaseLaunch = resolve
++    })
++    const openConnection = vi.fn(async (): Promise<ClaudeStreamJsonConnection> => {
++      throw new Error('a cancelled attempt must not spawn')
++    })
++    const adapter = new ClaudeStructuredSessionAdapter({
++      resolveLaunch: async () => {
++        await held
++        return {
++          pathToClaudeCodeExecutable: 'claude',
++          options: {},
++          cwd: '/work/repo',
++          claudeConfigDir: '/accounts/claude',
++          providerSessionId: PROVIDER_SESSION_ID,
++          resumeLeafUuid: null,
++          resumesTranscript: false,
++          continuesChain: false
++        }
++      },
++      openConnection
++    })
++    const controller = new AbortController()
++    const acquiring = adapter.acquire({
++      identity: IDENTITY,
++      fence: 7,
++      spawnToken: 'spawn-9',
++      signal: controller.signal
++    })
++    await vi.waitFor(() => expect(adapter['acquisitions'].size).toBe(1))
++    controller.abort(new Error('closed by quit'))
++    await expect(acquiring).rejects.toThrow('closed by quit')
++    releaseLaunch()
++    await Promise.resolve()
++    expect(openConnection).not.toHaveBeenCalled()
++  })
++
+   it('classifies pre-pid error and close as processless with idempotent cleanup', async () => {
+     const fault = new Error('spawn claude ENOENT')
+     const close = vi.fn(async () => true)
+diff --git a/src/main/claude/claude-structured-session-acquisition.ts b/src/main/claude/claude-structured-session-acquisition.ts
+index c797ca15173..672b1a87527 100644
+--- a/src/main/claude/claude-structured-session-acquisition.ts
++++ b/src/main/claude/claude-structured-session-acquisition.ts
+@@ -1,3 +1,4 @@
++import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+ import type {
+   AgentSessionAcquisition,
+   StructuredAgentSessionAcquireInput
+@@ -56,6 +57,12 @@ export async function acquireClaudeSession({
+   const sessionId = input.identity.sessionId
+   const prompts = new ClaudePromptRegistry()
+   const { previous, attempt } = acquisitions.start(sessionId, prompts)
++  const abortAttempt = (): void => {
++    attempt.cancelled = true
++    void (attempt.resource ?? attempt.connection)?.close().catch(() => false)
++  }
++  input.signal?.addEventListener('abort', abortAttempt, { once: true })
++  if (input.signal?.aborted) abortAttempt()
+   let unbindReadingControl: (() => void) | undefined
+   let liveSession: ClaudeSession | null = null
+   let observedLeafUuid: string | null = null,
+@@ -81,6 +88,7 @@ export async function acquireClaudeSession({
+   )
+ 
+   const onMessage = (message: Record<string, unknown>): void => {
++    if (input.effectSignal?.aborted) return
+     const init = readClaudeInit(message)
+     if (readClaudeFrameString(message, 'session_id') !== expectedProviderSessionId) {
+       // An init proof for another (or unnamed) provider must fail the start or end the session
+@@ -164,47 +172,57 @@ export async function acquireClaudeSession({
+     attempt.account = launch.account
+     observedLeafUuid = launch.resumeLeafUuid
+     const open = deps.openConnection ?? openClaudeStreamJsonConnection
+-    const connection = await withAgentSessionCreatePhase('spawn', input.recordPhase, () =>
+-      open(
+-        {
+-          pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
+-          options: launch.options,
+-          cwd: launch.cwd,
+-          env: {
+-            ...launch.env,
+-            // Compared against what the child would otherwise inherit, so the record's
+-            // account home still wins over a diverging overlay without a needless pin.
+-            // (`process` is shadowed by a local later in this function, so it is not named here.)
+-            ...claudeConfigDirEnvPatch(
+-              launch.claudeConfigDir,
+-              launch.env ? { env: launch.env } : {}
+-            )
+-          },
+-          ...(launch.envToDelete ? { envToDelete: launch.envToDelete } : {})
+-        },
+-        {
+-          onMessage,
+-          canUseTool,
+-          onUserDialog,
+-          ...(input.onOutput ? { onOutput: input.onOutput } : {}),
+-          onFault: (error) => {
+-            childEnded ??= error
+-            initProof.reject(error)
++    const connection = await waitForPromiseWithSignal(
++      withAgentSessionCreatePhase('spawn', input.recordPhase, () =>
++        open(
++          {
++            pathToClaudeCodeExecutable: launch.pathToClaudeCodeExecutable,
++            options: launch.options,
++            cwd: launch.cwd,
++            env: {
++              ...launch.env,
++              // Compared against what the child would otherwise inherit, so the record's
++              // account home still wins over a diverging overlay without a needless pin.
++              // (`process` is shadowed by a local later in this function, so it is not named here.)
++              ...claudeConfigDirEnvPatch(
++                launch.claudeConfigDir,
++                launch.env ? { env: launch.env } : {}
++              )
++            },
++            ...(launch.envToDelete ? { envToDelete: launch.envToDelete } : {})
+           },
+-          onExit: (error, exit) => {
+-            if (exit?.expected) {
+-              // The end of a close Orca began; that close settles it, or finishes it now.
+-              callbacks.finishClose(sessionId, attempt)
+-              return
++          {
++            onMessage,
++            onSpawned: (resource) => {
++              attempt.resource = resource
++              if (attempt.cancelled) void resource.close().catch(() => false)
++            },
++            canUseTool,
++            onUserDialog,
++            ...(input.onOutput ? { onOutput: input.onOutput } : {}),
++            onFault: (error) => {
++              childEnded ??= error
++              initProof.reject(error)
++            },
++            onExit: (error, exit) => {
++              if (exit?.expected) {
++                // The end of a close Orca began; that close settles it, or finishes it now.
++                callbacks.finishClose(sessionId, attempt)
++                return
++              }
++              // The child exited on its own; marked in place, as the fault report may hold this error.
++              withObservedProviderExit(error)
++              childEnded ??= error
++              initProof.reject(error)
++              callbacks.handleExit(sessionId, attempt, error)
+             }
+-            // The child exited on its own; marked in place, as the fault report may hold this error.
+-            withObservedProviderExit(error)
+-            childEnded ??= error
+-            initProof.reject(error)
+-            callbacks.handleExit(sessionId, attempt, error)
+-          }
+-        }
+-      )
++          },
++          undefined,
++          undefined,
++          input.signal
++        )
++      ),
++      input.signal
+     )
+     attempt.connection = connection
+     unbindReadingControl = bindClaudeConnectionJournalControls(
+@@ -216,11 +234,11 @@ export async function acquireClaudeSession({
+     acquisitions.assertCurrent(sessionId, attempt)
+     if (connection.pid === undefined) {
+       // A pid-less spawn always reports its error next; surface that, not the missing pid.
+-      await initProof.promise
++      await waitForPromiseWithSignal(initProof.promise, input.signal)
+     }
+-    const process = await claudeProcessIdentity(
+-      { ...input, pid: connection.pid },
+-      deps.readProcessStartTime
++    const process = await waitForPromiseWithSignal(
++      claudeProcessIdentity({ ...input, pid: connection.pid }, deps.readProcessStartTime),
++      input.signal
+     ).catch((error: unknown) => {
+       // A child that already ended explains a missing pid or a failed read.
+       throw childEnded ?? error
+@@ -256,12 +274,14 @@ export async function acquireClaudeSession({
+       observedAt: deps.now?.() ?? Date.now()
+     })
+     const session = publication.session
++    session.effectSignal = input.effectSignal
+     liveSession = session
+     adoptClaudeStructuredSpawnOptions(session, launch.savedOptions)
+-    acquisitions.deleteIfCurrent(sessionId, attempt)
+     await withAgentSessionCreatePhase('publish', input.recordPhase, async () => {
++      acquisitions.assertCurrent(sessionId, attempt)
+       sessions.set(sessionId, session)
+       attempt.published = true
++      acquisitions.deleteIfCurrent(sessionId, attempt)
+       for (const event of attempt.buffered.splice(0)) {
+         event()
+       }
+@@ -285,9 +305,12 @@ export async function acquireClaudeSession({
+       translator,
+       prompts
+     })
+-    acquisitions.deleteIfCurrent(sessionId, attempt)
++    if (!attempt.resource || attempt.resource.exitVerdict.root === 'exited') {
++      acquisitions.deleteIfCurrent(sessionId, attempt)
++    }
+     throw acquisitionError
+   } finally {
++    input.signal?.removeEventListener('abort', abortAttempt)
+     attempt.finish()
+   }
+ }
+diff --git a/src/main/claude/claude-structured-session-adapter.ts b/src/main/claude/claude-structured-session-adapter.ts
+index d4c9689d863..de5b8944c06 100644
+--- a/src/main/claude/claude-structured-session-adapter.ts
++++ b/src/main/claude/claude-structured-session-adapter.ts
+@@ -107,6 +107,7 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
+   }
+ 
+   private deliver(attempt: ClaudeAcquisitionAttempt, sessionId: string, event: () => void): void {
++    if (attempt.cancelled) return
+     if (!attempt.published) {
+       attempt.buffered.push(event)
+       return
+diff --git a/src/main/claude/claude-structured-session-close.ts b/src/main/claude/claude-structured-session-close.ts
+index 316d90b0a50..36eb68cc400 100644
+--- a/src/main/claude/claude-structured-session-close.ts
++++ b/src/main/claude/claude-structured-session-close.ts
+@@ -1,3 +1,5 @@
++import { withTimeout } from '../../shared/promise-timeout-fallback'
++import { SUPERVISED_GRACEFUL_EXIT_MS } from './claude-child-exit-proof-ladder'
+ import type {
+   ClaudeAcquisitionAttempt,
+   ClaudeAcquisitionRegistry,
+@@ -12,7 +14,10 @@ import {
+   AgentSessionAcquisitionRootExitObservedError,
+   AgentSessionPreSpawnError
+ } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+-import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
++import type {
++  ClaudeChildResource,
++  ClaudeStreamJsonConnection
++} from './claude-stream-json-connection'
+ import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
+ import type { ClaudePromptRegistry } from './claude-structured-prompt-replies'
+ import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
+@@ -24,14 +29,14 @@ import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-
+ /** The root's own exit was seen first-hand. The lease follows the root, so a descendant
+  *  left unverified or seen alive does not hold it. A failed spawn had no process to exit. */
+ export function claudeRootExitObserved(
+-  connection: ClaudeStreamJsonConnection | null | undefined
++  connection: ClaudeChildResource | null | undefined
+ ): boolean {
+   const verdict = connection?.exitVerdict
+   return verdict?.root === 'exited' && verdict.processless !== true
+ }
+ 
+ export function claudeAcquisitionCleanupError(
+-  connection: ClaudeStreamJsonConnection | null | undefined,
++  connection: ClaudeChildResource | null | undefined,
+   cause: unknown
+ ): Error {
+   const verdict = connection?.exitVerdict
+@@ -57,11 +62,14 @@ export async function resolveClaudeAcquisitionError(input: {
+     for (const prompt of input.prompts.clear()) {
+       prompt.settle(null)
+     }
+-    const closed = (await input.attempt.connection?.close()) ?? true
+-    if (input.attempt.connection?.exitVerdict.processless === true) {
++    const resource = input.attempt.resource ?? input.attempt.connection
++    const closed = resource
++      ? await withTimeout(resource.close(), SUPERVISED_GRACEFUL_EXIT_MS, false)
++      : true
++    if (resource?.exitVerdict.processless === true) {
+       acquisitionError = new AgentSessionPreSpawnError(input.error)
+     } else if (!closed) {
+-      acquisitionError = claudeAcquisitionCleanupError(input.attempt.connection, input.error)
++      acquisitionError = claudeAcquisitionCleanupError(resource, input.error)
+     }
+   }
+   return acquisitionError
+@@ -86,6 +94,7 @@ type CloseClaudePublishedSessionInput = {
+     providerSessionId: string
+     leafUuid: string | null
+     fence: number
++    authority?: AbortSignal
+   }) => Promise<void>
+   onEvent?: (event: ClaudeStructuredSessionEvent) => void
+   logger?: StructuredAgentSessionLogger
+@@ -118,6 +127,7 @@ async function finalizeClaudePublishedSession(
+     }
+     rootExitVerdict = cleanupError
+   }
++  if (session.effectSignal?.aborted) return true
+   // Queues the session's ending for the host's child records; the adapter delivers it after close.
+   // Even a proven close is Orca losing contact, not a Stop the CLI accepted: what still ran ends
+   // with no outcome anyone reported.
+@@ -183,9 +193,12 @@ async function persistClosedClaudeSession(
+       sessionId: input.sessionId,
+       providerSessionId: session.providerSessionId,
+       leafUuid,
+-      fence: session.fence
++      fence: session.fence,
++      authority: session.effectSignal
+     }
++    session.effectSignal?.throwIfAborted()
+     await input.persistHandle?.(handle)
++    session.effectSignal?.throwIfAborted()
+     input.onEvent?.({ type: 'handle', ...handle })
+   } catch (error) {
+     input.logger?.warn("saving a closed Claude session's resume point failed", {
+@@ -271,6 +284,7 @@ export async function closeClaudeSession(input: {
+     providerSessionId: string
+     leafUuid: string | null
+     fence: number
++    authority?: AbortSignal
+   }) => Promise<void>
+   onEvent?: (event: ClaudeStructuredSessionEvent) => void
+   logger?: StructuredAgentSessionLogger
+diff --git a/src/main/claude/claude-structured-session-exit-lifecycle.ts b/src/main/claude/claude-structured-session-exit-lifecycle.ts
+index 3936ed89cb1..0a272741806 100644
+--- a/src/main/claude/claude-structured-session-exit-lifecycle.ts
++++ b/src/main/claude/claude-structured-session-exit-lifecycle.ts
+@@ -65,7 +65,7 @@ export function settleClaudeUnexpectedExit(
+   const { exits, deps } = lifecycle
+   exit.settlementPromise ??= (async () => {
+     exit.session.unbindReadingControl?.()
+-    if (exits.get(sessionId) !== exit) {
++    if (exit.session.effectSignal?.aborted || exits.get(sessionId) !== exit) {
+       settleClaudeExitedSession(exit.session)
+       return
+     }
+@@ -75,7 +75,7 @@ export function settleClaudeUnexpectedExit(
+       // Recovery still publishes: the record keeps its last durable point, and the loss is logged.
+       console.warn('[claude-resume-point] exit cursor was not persisted:', { sessionId, error })
+     })
+-    if (exits.get(sessionId) !== exit) {
++    if (exit.session.effectSignal?.aborted || exits.get(sessionId) !== exit) {
+       settleClaudeExitedSession(exit.session)
+       return
+     }
+@@ -132,10 +132,12 @@ export async function persistClaudeSessionHandle(
+   deps: Pick<ClaudeStructuredSessionAdapterDeps, 'persistHandle'>
+ ): Promise<void> {
+   const leafUuid = await settledClaudeTurnEndLeaf(session)
++  session.effectSignal?.throwIfAborted()
+   await deps.persistHandle?.({
+     sessionId,
+     providerSessionId: session.providerSessionId,
+     leafUuid,
+-    fence: session.fence
++    fence: session.fence,
++    authority: session.effectSignal
+   })
+ }
+diff --git a/src/main/claude/claude-structured-session-state.ts b/src/main/claude/claude-structured-session-state.ts
+index c454ad63e67..8006ef91a2d 100644
+--- a/src/main/claude/claude-structured-session-state.ts
++++ b/src/main/claude/claude-structured-session-state.ts
+@@ -6,6 +6,7 @@ import type { StructuredAgentSessionEventSink } from '../native-chat/agent-sessi
+ import type { StructuredAgentSessionOptionsReportedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+ import type {
+   ClaudeStreamJsonConnection,
++  ClaudeChildResource,
+   openClaudeStreamJsonConnection
+ } from './claude-stream-json-connection'
+ import type { ClaudeStructuredLaunch } from './claude-structured-launch-resolution'
+@@ -105,6 +106,7 @@ export type ClaudeStructuredSessionAdapterDeps = {
+     providerSessionId: string
+     leafUuid: string | null
+     fence: number
++    authority?: AbortSignal
+   }) => Promise<void>
+   /** Where bookkeeping a close or exit does after the child is gone reports a failure. */
+   logger?: StructuredAgentSessionLogger
+@@ -114,6 +116,7 @@ export type ClaudeStructuredSessionAdapterDeps = {
+     providerSessionId: string
+     leafUuid: string
+     fence: number
++    authority?: AbortSignal
+   }) => Promise<void>
+ }
+ 
+@@ -139,6 +142,7 @@ export type ClaudeDispatchWaiter = {
+ }
+ 
+ export type ClaudeSession = {
++  effectSignal?: AbortSignal
+   connection: ClaudeStreamJsonConnection
+   providerSessionId: string
+   /** Latest main-chain message seen on the live stream, mid-turn included. */
+@@ -230,6 +234,7 @@ export type ClaudeSessionExit = {
+ }
+ 
+ export type ClaudeAcquisitionAttempt = {
++  resource?: ClaudeChildResource
+   connection: ClaudeStreamJsonConnection | null
+   prompts: ClaudePromptRegistry
+   buffered: (() => void)[]
+@@ -330,7 +335,7 @@ export async function cancelClaudeAcquisitionAttempt(
+     cancel: () => {
+       attempt.cancelled = true
+     },
+-    connection: () => attempt.connection,
++    connection: () => attempt.resource ?? attempt.connection,
+     exitProven: () => attempt.exitProven,
+     finished: attempt.finished
+   })
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-acquire-aborts.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-acquire-aborts.ts
+index c5c0d3a06f8..bc89edf6284 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-acquire-aborts.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-acquire-aborts.ts
+@@ -2,9 +2,23 @@
+ 
+ export class StructuredAgentSessionAcquireAborts {
+   private readonly inFlight = new Map<string, Set<AbortController>>()
++  private readonly effects = new AbortController()
++  private readonly maintenance = new AbortController()
+   /** Set by quit: the host is going away, so an attach that begins after it starts aborted. */
+   private quitReason: Error | null = null
+ 
++  get effectSignal(): AbortSignal {
++    return this.effects.signal
++  }
++
++  seal(): void {
++    this.effects.abort(new Error('host effects sealed'))
++  }
++
++  get maintenanceSignal(): AbortSignal {
++    return this.maintenance.signal
++  }
++
+   /** For the attach about to run; `end` once it settles. */
+   begin(sessionId: string): { signal: AbortSignal; end: () => void } {
+     const controller = new AbortController()
+@@ -35,6 +49,7 @@ export class StructuredAgentSessionAcquireAborts {
+   /** Quit: every start under way stops, and so does any the attach drain still runs. */
+   abortAll(reason: string): void {
+     this.quitReason ??= new Error(reason)
++    this.maintenance.abort(this.quitReason)
+     for (const waits of this.inFlight.values()) {
+       for (const controller of waits) {
+         controller.abort(this.quitReason)
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-acquisition.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-acquisition.ts
+index 01dc212ccdf..ccb91bbb868 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-acquisition.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-acquisition.ts
+@@ -68,7 +68,10 @@ export async function acquireOwner(
+     } catch (error) {
+       throw new AgentSessionPreSpawnError(error)
+     }
+-    const permissionMode = await input.launchPermissionMode?.(record)
++    const permissionMode = await waitForPromiseWithSignal(
++      Promise.resolve(input.launchPermissionMode?.(record)),
++      input.acquireSignal
++    )
+     const attempt = mintStructuredAgentSessionStartupAttempt({
+       record,
+       identity: journalIdentityFor(record, input.params),
+@@ -81,18 +84,23 @@ export async function acquireOwner(
+     const progress = input.onStartupAttempt?.(attempt)
+     const acquired = await input.adapter.acquire({
+       ...attempt,
++      effectSignal: input.effectSignal,
+       ...(progress ? { onOutput: progress.output } : {}),
+       ...(input.recordPhase ? { recordPhase: input.recordPhase } : {}),
+       onSpawned: async (process) => {
+         progress?.spawned()
+-        record = await input.store.commitProcessIdentity({
+-          sessionId: record.sessionId,
+-          fence,
+-          process,
+-          now: input.now()
+-        })
++        record = await input.store.commitProcessIdentity(
++          {
++            sessionId: record.sessionId,
++            fence,
++            process,
++            now: input.now()
++          },
++          input.effectSignal
++        )
+       }
+     })
++    input.acquireSignal?.throwIfAborted()
+     const providerChildPhase = acquired.providerChildPhase ?? 'ready'
+     // A starting child has proven nothing: the record keeps the reservation's saved options as
+     // intent, never a catalog guess, and the `started` event persists what the child reports.
+@@ -115,23 +123,31 @@ export async function acquireOwner(
+               input.acquireSignal
+             )
+           })
++    input.acquireSignal?.throwIfAborted()
+     if (record.lease.ownerProcess === null) {
+-      await input.store.commitProcessIdentity({
+-        sessionId: record.sessionId,
+-        fence,
+-        process: acquired.process,
+-        now: input.now()
+-      })
++      await input.store.commitProcessIdentity(
++        {
++          sessionId: record.sessionId,
++          fence,
++          process: acquired.process,
++          now: input.now()
++        },
++        input.effectSignal
++      )
+     } else if (!sameOwnerProcess(record.lease.ownerProcess, acquired.process)) {
+       throw new Error('agent_session_ownership_unknown')
+     }
+-    const proved = await input.store.proveOwner({
+-      sessionId: record.sessionId,
+-      fence,
+-      ...(acquired.link ? { link: acquired.link } : {}),
+-      now: input.now(),
+-      ...(options ? { options } : {})
+-    })
++    input.acquireSignal?.throwIfAborted()
++    const proved = await input.store.proveOwner(
++      {
++        sessionId: record.sessionId,
++        fence,
++        ...(acquired.link ? { link: acquired.link } : {}),
++        now: input.now(),
++        ...(options ? { options } : {})
++      },
++      input.acquireSignal
++    )
+     if (providerChildPhase === 'ready' && acquired.catalogListing) {
+       handOverStartCatalogListing(input, record.sessionId, acquired.catalogListing)
+     }
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-adapter.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-adapter.ts
+index 5810fa60d12..06deab879f0 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-adapter.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-adapter.ts
+@@ -253,6 +253,8 @@ export type StructuredAgentSessionAcquireInput = Pick<
+ > &
+   Partial<Omit<StructuredAgentSessionStartupAttempt, 'identity' | 'fence' | 'spawnToken'>> & {
+     recordPhase?: AgentSessionCreatePhaseRecorder
++    /** Retained cleanup may write matching proof until the host seals its effects. */
++    effectSignal?: AbortSignal
+     /** Durably records the child's identity the moment it exists, before any handshake, so a crash
+      *  mid-start leaves an owner recovery can stop. The acquisition's `process` must match it. */
+     onSpawned?: (process: AgentSessionProcessIdentity) => Promise<void>
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-agent-start.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-agent-start.ts
+index 2c180c121b3..4ea5275d73e 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-agent-start.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-agent-start.ts
+@@ -10,6 +10,7 @@ import {
+   type AgentSessionArgumentProblem,
+   type ProviderDiagnostic
+ } from '../../../shared/agent-session-failure'
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ import { argumentProblemOf } from '../structured-agent-arguments-error'
+ import {
+   agentSessionRefusalFromReference,
+@@ -70,16 +71,32 @@ export async function ensureStructuredAgentSessionAgent(
+   sessionId: string,
+   startedFor?: string
+ ): Promise<StructuredAgentSessionResumeOutcome> {
++  const acquire = context.runtimeState.acquireAborts.begin(sessionId)
++  return context.tasks
++    .trackAttach(ensureUnderOwner(context, sessionId, startedFor, acquire.signal))
++    .finally(acquire.end)
++}
++
++async function ensureUnderOwner(
++  context: StructuredAgentSessionAttachContext,
++  sessionId: string,
++  startedFor: string | undefined,
++  signal: AbortSignal
++): Promise<StructuredAgentSessionResumeOutcome> {
++  signal.throwIfAborted()
+   // A child a stop began closing takes no input, and none may start beside it: the start waits on
+   // that close, and is refused while its exit stays unverifiable.
+-  const closed = await joinClosingStructuredAgentSessionChild(context, sessionId)
++  const closed = await waitForPromiseWithSignal(
++    joinClosingStructuredAgentSessionChild(context, sessionId),
++    signal
++  )
+   if (!closed.ok) {
+     return closed
+   }
+   if (context.sessions.get(sessionId)?.child) {
+     return { ok: true }
+   }
+-  const started = await startStructuredAgentSessionAgent(context, sessionId, startedFor)
++  const started = await startStructuredAgentSessionAgent(context, sessionId, startedFor, signal)
+   if (!started.ok || context.sessions.get(sessionId)?.child) {
+     return started
+   }
+@@ -115,20 +132,22 @@ export function ensureStructuredAgentSessionAgentForOperation(
+ async function startStructuredAgentSessionAgent(
+   context: StructuredAgentSessionAttachContext,
+   sessionId: string,
+-  startedFor: string | undefined
++  startedFor: string | undefined,
++  signal: AbortSignal
+ ): Promise<StructuredAgentSessionResumeOutcome> {
+   const callerKey = AGENT_START_CALLER_KEY
+   // The record is read only once this host has adjudicated it and recovery resolution has
+   // concluded about any owner a failed attempt left in `recovering`, so the eligibility below sees
+   // the lease the resolver handed back.
+-  const unreconciled = await context.reconcileLeases(sessionId)
++  const unreconciled = await waitForPromiseWithSignal(context.reconcileLeases(sessionId), signal)
+   if (unreconciled) {
+     return { ok: false, refusal: unreconciled }
+   }
+-  await context.runtimeState.resolveRecovery(sessionId)
++  await context.runtimeState.resolveRecovery(sessionId, signal)
+   // A start needs the lease released; a release the exit's own wind-down could not write is
+   // re-derived from this host's proof of that exit, never refused on.
+   await releaseLeaseOfEndedStructuredAgentSessionChild(context, sessionId)
++  signal.throwIfAborted()
+   const record = context.deps.store.getRecord(sessionId)
+   if (!record) {
+     return refuseResume(
+@@ -173,6 +192,7 @@ async function startStructuredAgentSessionAgent(
+   let expired = false
+   try {
+     attached = await attachStructuredAgentSessionUnderSerialize(context, callerKey, params, {
++      acquireSignal: signal,
+       ...(startedFor === undefined ? {} : { startedFor }),
+       onAcquisitionFailed: (error) => {
+         acquisitionError = error
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-failure.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-failure.ts
+index a8368d06789..e0b34f2f5b2 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-failure.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-failure.ts
+@@ -28,23 +28,27 @@ export async function settlePostAcquisitionAttachFailure(
+           ? 'root-exit-observed'
+           : 'exit-proven'
+   }
++  input.effectSignal?.throwIfAborted()
+   input.onAcquisitionReleased?.(cause, { rootGone: exitProof !== 'unproven' })
+   try {
+-    await input.store.settleFailedPostAcquisitionAttachment({
+-      sessionId: record.sessionId,
+-      fence: record.lease.runtimeFence,
+-      spawnToken: record.lease.reservedSpawnToken ?? '',
+-      callerKey: input.callerKey,
+-      operationId: input.params.envelope.clientOperationId,
+-      outcome: {
+-        status: 'failed',
+-        code: 'agent_session_operation_invalid',
+-        details: { reason: 'attachFailed' },
+-        message: cause instanceof Error ? cause.message : String(cause)
++    await input.store.settleFailedPostAcquisitionAttachment(
++      {
++        sessionId: record.sessionId,
++        fence: record.lease.runtimeFence,
++        spawnToken: record.lease.reservedSpawnToken ?? '',
++        callerKey: input.callerKey,
++        operationId: input.params.envelope.clientOperationId,
++        outcome: {
++          status: 'failed',
++          code: 'agent_session_operation_invalid',
++          details: { reason: 'attachFailed' },
++          message: cause instanceof Error ? cause.message : String(cause)
++        },
++        exitProof,
++        now: input.now()
+       },
+-      exitProof,
+-      now: input.now()
+-    })
++      input.effectSignal
++    )
+   } catch (settlementError) {
+     throw new AggregateError(
+       [cleanupError, settlementError],
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-flow.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-flow.ts
+index c8bd949b561..3a7e0095d12 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-flow.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-flow.ts
+@@ -1,3 +1,4 @@
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ import { refuse } from '../../../shared/agent-session-wire-refusals'
+ import { settlePostAcquisitionAttachFailure } from './structured-agent-session-attach-failure'
+ import {
+@@ -71,6 +72,7 @@ export type AttachFlowInput = {
+   recordPhase?: AgentSessionCreatePhaseRecorder
+   /** Aborted when a close, or a Stop admitted now, must not wait behind this attach's acquire. */
+   acquireSignal?: AbortSignal
++  effectSignal?: AbortSignal
+   /** The attempt this attach's acquire runs under, minted before the adapter is called; what it
+    *  answers learns of the child's spawn and output. */
+   onStartupAttempt?: (
+@@ -145,21 +147,25 @@ export async function performAttach(
+   let providerHistoryWindow: ProviderHistoryWindow | null = null
+   const preparedTranscript = store.getRecord(sessionId)
+     ? { ok: true as const, items: null }
+-    : await prepareAdoptedTranscript(params)
++    : await waitForPromiseWithSignal(prepareAdoptedTranscript(params), input.acquireSignal)
+   if (!preparedTranscript.ok) {
+     return preparedTranscript
+   }
+   try {
+     const reserved = await withAgentSessionCreatePhase('reserve_owner', input.recordPhase, () =>
+       store.reserveOwner(
+-        reserveRequestFor({
+-          sessionId,
+-          params,
+-          authority: input.authority,
+-          callerKey: input.callerKey,
+-          fingerprint: admitted.fingerprint,
+-          now: input.now()
+-        })
++        reserveRequestFor(
++          {
++            sessionId,
++            params,
++            authority: input.authority,
++            callerKey: input.callerKey,
++            fingerprint: admitted.fingerprint,
++            now: input.now()
++          },
++          input.effectSignal
++        ),
++        input.acquireSignal
+       )
+     )
+     record = reserved.record
+@@ -196,12 +202,15 @@ export async function performAttach(
+     // Sample provider history before a new child is acquired. Once acquireOwner
+     // starts the child, the adapter's liveness signal intentionally becomes
+     // conservative and an absent prompt can no longer prove non-delivery.
+-    providerHistoryWindow = await readProviderHistoryWindow({
+-      adapter: input.adapter,
+-      identity: journalIdentityFor(record, params),
+-      accountHome: record.accountHome,
+-      ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
+-    })
++    providerHistoryWindow = await waitForPromiseWithSignal(
++      readProviderHistoryWindow({
++        adapter: input.adapter,
++        identity: journalIdentityFor(record, params),
++        accountHome: record.accountHome,
++        ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
++      }),
++      input.acquireSignal
++    )
+     if (!agentSessionLeaseAdmitsWriter(record.lease)) {
+       const acquired = await withAgentSessionCreatePhase('acquire_owner', input.recordPhase, () =>
+         acquireOwner(input, record)
+@@ -220,15 +229,18 @@ export async function performAttach(
+     if (reservedRecord && spawnToken && !unsupportedReservationSettlementAttempted) {
+       // Settle processless proof and failed operation atomically.
+       try {
+-        await store.settleFailedAcquisition({
+-          sessionId,
+-          fence: reservedRecord.lease.runtimeFence,
+-          spawnToken,
+-          callerKey: input.callerKey,
+-          operationId: params.envelope.clientOperationId,
+-          ...failedAcquisitionSettlement(error, wording),
+-          now: input.now()
+-        })
++        await store.settleFailedAcquisition(
++          {
++            sessionId,
++            fence: reservedRecord.lease.runtimeFence,
++            spawnToken,
++            callerKey: input.callerKey,
++            operationId: params.envelope.clientOperationId,
++            ...failedAcquisitionSettlement(error, wording),
++            now: input.now()
++          },
++          input.effectSignal
++        )
+       } catch (settlementError) {
+         throw new AggregateError(
+           [error, settlementError],
+@@ -261,6 +273,7 @@ export async function performAttach(
+ 
+   let attached: AttachedJournal
+   try {
++    input.acquireSignal?.throwIfAborted()
+     await input.beforeJournalOpen?.()
+     attached = await attachJournal({
+       record,
+@@ -269,13 +282,17 @@ export async function performAttach(
+       openConversation: input.openConversation,
+       providerHistoryWindow
+     })
++    input.acquireSignal?.throwIfAborted()
+     await importAdoptedTranscript(params, attached, record, preparedTranscript.items)
+     await input.onAttached(attached, acquisitionGeneration, owner, providerChildPhase)
+-    await store.recordOperationOutcome({
+-      callerKey: input.callerKey,
+-      operationId: params.envelope.clientOperationId,
+-      outcome: { status: 'succeeded', sessionId }
+-    })
++    await store.recordOperationOutcome(
++      {
++        callerKey: input.callerKey,
++        operationId: params.envelope.clientOperationId,
++        outcome: { status: 'succeeded', sessionId }
++      },
++      input.acquireSignal
++    )
+   } catch (error) {
+     return settlePostAcquisitionAttachFailure(input, record, error)
+   }
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-orchestration.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-orchestration.ts
+index 324f1c0acbc..cbe1b5e0ff2 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-attach-orchestration.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-attach-orchestration.ts
+@@ -7,6 +7,7 @@ import { recoverStructuredRewind } from './structured-rewind-recovery'
+ // state; this owns the ordering between them.
+ 
+ import { randomUUID } from 'node:crypto'
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+ import type {
+   AgentSessionAttachResult,
+@@ -44,6 +45,7 @@ import {
+ } from '../../observability/agent-session-instrumentation'
+ 
+ export type StructuredAgentSessionAttachOptions = {
++  acquireSignal?: AbortSignal
+   hostLaunchDirectory?: string
+   recordPhase?: AgentSessionCreatePhaseRecorder
+   onAcquisitionFailed?: AttachFlowInput['onAcquisitionFailed']
+@@ -79,14 +81,23 @@ export function attachStructuredAgentSession(
+   options: StructuredAgentSessionAttachOptions = {}
+ ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
+   const sessionId = params.envelope.sessionId
++  const acquire = context.runtimeState.acquireAborts.begin(sessionId)
+   // Tracked from enqueue, not from its turn on the queue: a quit drains a queued attach before it
+   // evicts, so no child is spawned behind the eviction and orphaned.
+   const run = (recordPhase?: AgentSessionCreatePhaseRecorder) =>
+-    context.tasks.trackAttach(
+-      context.serialize(sessionId, () =>
+-        runAttach(context, callerKey, params, { ...options, recordPhase })
++    context.tasks
++      .trackAttach(
++        context.serialize(sessionId, () =>
++          runAttachUnderAbort(
++            context,
++            callerKey,
++            params,
++            { ...options, recordPhase },
++            acquire.signal
++          )
++        )
+       )
+-    )
++      .finally(() => finishAcquire(acquire, options))
+   if (params.envelope.expectedRuntimeFence !== null) {
+     return run()
+   }
+@@ -111,16 +122,25 @@ async function runAttach(
+   options: StructuredAgentSessionAttachOptions
+ ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
+   // Begun first, so a close or Stop during any phase below still stops the start.
+-  const acquire = context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
++  const acquire = options.acquireSignal
++    ? { signal: options.acquireSignal, end: () => {} }
++    : context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
+   try {
+     return await runAttachUnderAbort(context, callerKey, params, options, acquire.signal)
+   } finally {
+-    acquire.end()
+-    if (isStructuredAgentSessionStartupExpired(acquire.signal.reason)) {
+-      options.onStartupExpired?.()
+-    } else if (acquire.signal.aborted) {
+-      options.onAborted?.()
+-    }
++    finishAcquire(acquire, options)
++  }
++}
++
++function finishAcquire(
++  acquire: { signal: AbortSignal; end: () => void },
++  options: StructuredAgentSessionAttachOptions
++): void {
++  acquire.end()
++  if (isStructuredAgentSessionStartupExpired(acquire.signal.reason)) {
++    options.onStartupExpired?.()
++  } else if (acquire.signal.aborted) {
++    options.onAborted?.()
+   }
+ }
+ 
+@@ -137,17 +157,23 @@ async function runAttachUnderAbort(
+   const fenceBefore = context.sessions.has(sessionId)
+     ? structuredAgentSessionConversationFence(context.deps.store, sessionId)
+     : null
+-  const unreconciled = await withAgentSessionCreatePhase('reconcile_leases', recordPhase, () =>
+-    context.reconcileLeases(sessionId)
++  const unreconciled = await waitForPromiseWithSignal(
++    withAgentSessionCreatePhase('reconcile_leases', recordPhase, () =>
++      context.reconcileLeases(sessionId)
++    ),
++    acquireSignal
+   )
+   if (unreconciled) {
+     return refuseAgentSessionMutation(unreconciled)
+   }
+   await withAgentSessionCreatePhase('resolve_recovery', recordPhase, () =>
+-    context.runtimeState.resolveRecovery(sessionId)
++    context.runtimeState.resolveRecovery(sessionId, acquireSignal)
+   )
+-  const probe = await withAgentSessionCreatePhase('probe_owner', recordPhase, () =>
+-    context.runtimeState.probeOwner(sessionId)
++  const probe = await waitForPromiseWithSignal(
++    withAgentSessionCreatePhase('probe_owner', recordPhase, () =>
++      context.runtimeState.probeOwner(sessionId)
++    ),
++    acquireSignal
+   )
+   // Read before the reserve clears it: how the previous generation ended decides how whatever it
+   // left running is settled.
+@@ -156,7 +182,10 @@ async function runAttachUnderAbort(
+   const launchDirectory =
+     !priorRecord && isFloatingWorkspaceId(params.location.workspaceId)
+       ? (options.hostLaunchDirectory ??
+-        (await context.deps.resolveWorkspacePath?.(params.location.workspaceId)))
++        (await waitForPromiseWithSignal(
++          Promise.resolve(context.deps.resolveWorkspacePath?.(params.location.workspaceId)),
++          acquireSignal
++        )))
+       : undefined
+   if (!priorRecord && isFloatingWorkspaceId(params.location.workspaceId) && !launchDirectory) {
+     throw new Error('floating_agent_session_launch_directory_unavailable')
+@@ -191,14 +220,21 @@ async function runAttachUnderAbort(
+         claimKeyId: context.deps.claimKeyId,
+         handoffOperationId: params.envelope.clientOperationId,
+         probe,
+-        ...(await pinnedAgentSessionLaunchArgs(context.deps.resolveLaunchArgs, params)),
+-        ...(await pinnedAgentSessionLaunchEnv(context.deps.resolveLaunchEnv, params))
++        ...(await waitForPromiseWithSignal(
++          pinnedAgentSessionLaunchArgs(context.deps.resolveLaunchArgs, params),
++          acquireSignal
++        )),
++        ...(await waitForPromiseWithSignal(
++          pinnedAgentSessionLaunchEnv(context.deps.resolveLaunchEnv, params),
++          acquireSignal
++        ))
+       },
+       callerKey,
+       params,
+       now: () => context.now(),
+       recordPhase,
+       acquireSignal,
++      effectSignal: context.runtimeState.acquireAborts.effectSignal,
+       onStartCatalogListing: (listing) =>
+         context.deps.modelCatalog?.recordLiveListing(sessionId, listing),
+       onStartupAttempt: (startup) => {
+@@ -242,9 +278,11 @@ async function runAttachUnderAbort(
+             failureTextContext: structuredAgentSessionFailureWordsContext(priorRecord)
+           })
+         }
+-        await bindAndDrain(eventSink, attached.journal, fence, (activity) =>
+-          context.subscribers.publish(sessionId, attached.journal, activity)
+-        )
++        acquireSignal.throwIfAborted()
++        await bindAndDrain(eventSink, attached.journal, fence, (activity) => {
++          if (!context.runtimeState.acquireAborts.effectSignal.aborted)
++            context.subscribers.publish(sessionId, attached.journal, activity)
++        })
+         attempt.candidate = {
+           sink: eventSink,
+           child: {
+@@ -268,6 +306,7 @@ async function runAttachUnderAbort(
+             context.now
+           )
+         }
++        acquireSignal.throwIfAborted()
+         if (fenceBefore !== null && fence !== fenceBefore) {
+           context.subscribers.snapshot(sessionId, attached.journal, fence)
+         } else {
+@@ -277,6 +316,7 @@ async function runAttachUnderAbort(
+     })
+     const { candidate } = attempt
+     const conversation = context.sessions.get(sessionId)
++    acquireSignal.throwIfAborted()
+     if (attached.ok && candidate && conversation) {
+       context.runtimeState.adoptEventSink(sessionId, candidate.sink)
+       attempt.committed = candidate.sink === attemptSink
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-claude-opening-send-hold.test.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-claude-opening-send-hold.test.ts
+index 62f983e9ddd..0e93824e82b 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-claude-opening-send-hold.test.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-claude-opening-send-hold.test.ts
+@@ -21,8 +21,12 @@ import {
+ } from '../../claude/claude-structured-session-test-support'
+ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
+ import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
++import { readPersistedTestAgentSessionStore } from '../../runtime/agent-session-record-store-test-harness'
+ import { structuredClaudeLifecycleEvent } from '../../runtime/structured-claude-runtime-adapter'
+-import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
++import {
++  closeTestJournalHostDatabase,
++  openTestJournalHostDatabase
++} from '../agent-session-journal/journal-host-database-test-support'
+ import { StructuredAgentSessionHost } from './structured-agent-session-host'
+ import {
+   HOST_TEST_NOW as NOW,
+@@ -110,6 +114,113 @@ afterEach(async () => {
+ const eventually = <T>(assertion: () => T | Promise<T>) =>
+   vi.waitFor(assertion, { timeout: 10_000 })
+ 
++it.each([false, true])(
++  'orders a send behind reconciliation (quit while held: %s)',
++  async (quitHeld) => {
++    const admittedId = await send('ADMITTED before restart')
++    await host.flushAllStreamedEvents({ trigger: 'quit' })
++    closeTestJournalHostDatabase(root)
++    store = await openTestAgentSessionRecordStore(root)
++    expect(store.getRecord(SESSION)?.lease.unreconciled).toBe(true)
++    let releaseProbe: (value: { outcome: 'pid-absent' }) => void = () => {}
++    const probe = new Promise<{ outcome: 'pid-absent' }>((resolve) => {
++      releaseProbe = resolve
++    })
++    const probing = vi.fn(() => probe)
++    host = new StructuredAgentSessionHost({
++      agents: claudeAndCodexDeclared(),
++      store,
++      adapter: Object.assign(adapter, { supportsCreate: () => true }),
++      journalDatabase: openTestJournalHostDatabase(root),
++      claimKeyId: 'key-1',
++      mintSpawnToken: () => 'spawn-b',
++      logger: recordingStructuredAgentSessionLogger().logger,
++      probeOwner: probing,
++      now: () => NOW
++    })
++    const attached = host
++      .attach(
++        CALLER,
++        hostTestAttachParams(store.getRecord(SESSION)!.lease.runtimeFence, {
++          provider: 'claude',
++          agent: 'claude',
++          accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'claude-home') },
++          providerHandle: { kind: 'claude', sessionId: PROVIDER_SESSION_ID, leafUuid: null }
++        })
++      )
++      .catch((error: unknown) => error)
++    await eventually(() => expect(probing).toHaveBeenCalled())
++    const baseline = await readPersistedTestAgentSessionStore(root)
++    const rows = () =>
++      openTestJournalHostDatabase(root)
++        .db.prepare('SELECT row_json FROM journal_rows ORDER BY session_id, epoch, seq')
++        .all()
++    const receipts = () =>
++      openTestJournalHostDatabase(root)
++        .db.prepare('SELECT * FROM agent_session_command_receipts ORDER BY rowid')
++        .all()
++    const beforeRows = rows(),
++      beforeReceipts = receipts()
++    const death = vi.fn(),
++      publication = vi.fn()
++    const unsubscribe = store.onDeathEvidence(death)
++    const status = host.subscribeStatus(publication)
++    publication.mockClear()
++    const body = hostTestMessage('WAITING behind opening'),
++      operationId = hostTestOperationId()
++    let settled = false
++    const pending = host
++      .send(CALLER, {
++        envelope: {
++          sessionId: SESSION,
++          clientOperationId: operationId,
++          expectedRuntimeFence: store.getRecord(SESSION)!.lease.runtimeFence,
++          payloadFingerprint: computeAgentSessionPayloadFingerprint({
++            method: 'agentSession.send',
++            sessionId: SESSION,
++            fields: { body }
++          })
++        },
++        body
++      })
++      .then((result) => {
++        settled = true
++        return result
++      })
++    await new Promise<void>((resolve) => setImmediate(resolve))
++    expect(settled).toBe(false)
++    expect(receipts()).toEqual(beforeReceipts)
++    const spawned = claude.connections.length
++    if (quitHeld) {
++      await host.flushAllStreamedEvents({ trigger: 'quit' })
++      expect(await pending).toMatchObject({ ok: false })
++      expect(await readPersistedTestAgentSessionStore(root)).toEqual(baseline)
++    }
++    const sealedRows = rows()
++    releaseProbe({ outcome: 'pid-absent' })
++    await attached
++    const result = await pending
++    if (quitHeld) {
++      expect(claude.connections).toHaveLength(spawned)
++      expect(death).not.toHaveBeenCalled()
++      expect(publication).not.toHaveBeenCalled()
++      closeTestJournalHostDatabase(root)
++      expect(await readPersistedTestAgentSessionStore(root)).toEqual(baseline)
++      expect(rows()).toEqual(sealedRows)
++      expect(JSON.stringify(beforeRows)).toContain(admittedId)
++      expect(JSON.stringify(receipts())).toContain(admittedId)
++      expect(receipts()).toEqual(beforeReceipts)
++    } else {
++      expect(result).toMatchObject({ ok: true })
++      expect(JSON.stringify(rows())).toContain('WAITING behind opening')
++      expect(receipts()).toHaveLength(beforeReceipts.length + 1)
++      expect(JSON.stringify(receipts())).toContain(operationId)
++    }
++    unsubscribe()
++    status()
++  }
++)
++
+ async function send(text: string): Promise<string> {
+   const body = hostTestMessage(text)
+   const sent = await host.send(CALLER, {
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-conversation-open.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-conversation-open.ts
+index 85738139603..e32cbb99cdb 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-conversation-open.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-conversation-open.ts
+@@ -50,6 +50,7 @@ export type StructuredAgentSessionConversationOpenOptions = {
+ }
+ 
+ export type StructuredAgentSessionConversationOpenContext = {
++  effectSignal?: AbortSignal
+   deps: StructuredAgentSessionConversationOpenDeps
+   sessions: Map<string, StructuredAgentSessionHostSession>
+   /** Indexes a conversation that just became open; the host publishes it and wakes delivery. */
+@@ -66,6 +67,7 @@ export async function openStructuredAgentSessionConversation(
+   sessionId: string,
+   options: StructuredAgentSessionConversationOpenOptions = {}
+ ): Promise<StructuredAgentSessionHostSession | null> {
++  context.effectSignal?.throwIfAborted()
+   const open = context.sessions.get(sessionId)
+   if (open) {
+     return open
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-host-delivery.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-host-delivery.ts
+index dc1baf9fa0f..1c49d67f1a4 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-host-delivery.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-host-delivery.ts
+@@ -65,6 +65,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
+     startedFor: string
+   ) => Promise<StructuredAgentSessionResumeOutcome>
+   deliveryOrder: StructuredAgentSessionDeliveryOrder
++  effectSignal?: AbortSignal
+   readiness: (
+     sessionId: string,
+     child: StructuredAgentSessionProviderChildIdentity
+@@ -144,6 +145,10 @@ export function createStructuredAgentSessionConversationDelivery(input: {
+     opened: OpenedStructuredAgentSessionConversation
+   ): Promise<void> => {
+     const { session } = opened
++    if (input.effectSignal?.aborted) {
++      await session.journal.close()
++      input.effectSignal.throwIfAborted()
++    }
+     sessions.set(sessionId, session)
+     input.clientDelivery.publishRestored(sessionId)
+     await settleInterruptedCommands(deps, sessionId, session)
+@@ -210,7 +215,11 @@ export function createStructuredAgentSessionConversationDelivery(input: {
+       stopResettling()
+     },
+     open: (sessionId, options) =>
+-      openStructuredAgentSessionConversation({ deps, sessions, adoptOpened }, sessionId, options)
++      openStructuredAgentSessionConversation(
++        { deps, sessions, adoptOpened, effectSignal: input.effectSignal },
++        sessionId,
++        options
++      )
+   }
+ }
+ 
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-host-runtime-state.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-host-runtime-state.ts
+index 04a1ade9f10..8b4cd3e65c2 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-host-runtime-state.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-host-runtime-state.ts
+@@ -151,12 +151,16 @@ export class StructuredAgentSessionHostRuntimeState {
+   }
+ 
+   /** Exit from a latched recovery stage when present-time evidence permits one. */
+-  resolveRecovery(sessionId: string): Promise<'resolved' | 'unresolved' | 'not-applicable'> {
++  resolveRecovery(
++    sessionId: string,
++    authority?: AbortSignal
++  ): Promise<'resolved' | 'unresolved' | 'not-applicable'> {
+     return resolveStructuredSessionRecovery(
+       {
+         store: this.deps.store,
+         probeRecord: (record) => this.probeRecord(record),
+         now: () => this.deps.now?.() ?? Date.now(),
++        authority,
+         ...(this.deps.stopOwnerProcess ? { stopOwnerProcess: this.deps.stopOwnerProcess } : {})
+       },
+       sessionId
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-host-teardown.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-host-teardown.ts
+index 75907563959..d8f4addb0f9 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-host-teardown.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-host-teardown.ts
+@@ -60,7 +60,7 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
+   runtimeState: {
+     stopLeaseRenewal: () => Promise<void> | void
+     flushAllEventSinks: () => Promise<void>
+-    acquireAborts: { abortAll: (reason: string) => void }
++    acquireAborts: { abortAll: (reason: string) => void; seal?: () => void }
+   }
+   tasks: { drainAttaches: () => Promise<void> }
+   evictOwnedSessions: () => Promise<void>
+@@ -83,13 +83,17 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
+       }
+     },
+     { name: 'dispose-idle-sweep', run: () => collaborators.idleSweep.dispose() },
+-    { name: 'stop-lease-renewal', run: () => collaborators.runtimeState.stopLeaseRenewal() },
+     // Before the drain, which would otherwise wait out a start the provider never answers.
+     {
+       name: 'abort-acquires',
+       run: () => collaborators.runtimeState.acquireAborts.abortAll('closed by quit')
+     },
+-    { name: 'drain-attaches', run: () => collaborators.tasks.drainAttaches() },
++    { name: 'stop-lease-renewal', run: () => collaborators.runtimeState.stopLeaseRenewal() },
++    {
++      name: 'drain-attaches',
++      run: () =>
++        withPhaseTimeout(() => collaborators.tasks.drainAttaches(), CHILD_EVICTION_TIMEOUT_MS)
++    },
+     {
+       name: 'evict-owned-sessions',
+       run: () => withPhaseTimeout(collaborators.evictOwnedSessions, CHILD_EVICTION_TIMEOUT_MS)
+@@ -105,6 +109,7 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
+           }
+         )
+     },
++    { name: 'seal-effects', run: () => collaborators.runtimeState.acquireAborts.seal?.() },
+     { name: 'flush-event-sinks', run: () => collaborators.runtimeState.flushAllEventSinks() }
+   ]
+ }
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-host.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-host.ts
+index ae9a1eaf087..07238d233cc 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-host.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-host.ts
+@@ -58,6 +58,7 @@ export class StructuredAgentSessionHost {
+   )
+   private readonly sessions = new StructuredAgentSessionConversations({
+     deliver: (sessionId, journal) => {
++      if (this.runtimeState.acquireAborts.effectSignal.aborted) return
+       this.subscribers.publish(sessionId, journal)
+       this.conversationDelivery.afterCommit(sessionId, journal)
+     },
+@@ -113,7 +114,8 @@ export class StructuredAgentSessionHost {
+       store: deps.store,
+       probe: (record) => this.runtimeState.probeRecord(record),
+       ...(deps.probeOwners ? { probeMany: deps.probeOwners } : {}),
+-      now: () => this.now()
++      now: () => this.now(),
++      maintenanceSignal: this.runtimeState.acquireAborts.maintenanceSignal
+     })
+     this.conversationDelivery = conversation.createStructuredAgentSessionConversationDelivery({
+       deps,
+@@ -124,6 +126,7 @@ export class StructuredAgentSessionHost {
+       ensureProviderChild: (sessionId, startedFor) =>
+         agentStart.ensureStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
+       deliveryOrder: this.runtimeState.deliveryOrder,
++      effectSignal: this.runtimeState.acquireAborts.effectSignal,
+       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
+       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
+       stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
+@@ -132,7 +135,11 @@ export class StructuredAgentSessionHost {
+     })
+     this.restore = reveal.createStructuredAgentSessionHostRestore(deps, {
+       reconcileLeases: this.reconcileLeases,
+-      resolveRecovery: (sessionId) => this.runtimeState.resolveRecovery(sessionId),
++      resolveRecovery: (sessionId) =>
++        this.runtimeState.resolveRecovery(
++          sessionId,
++          this.runtimeState.acquireAborts.maintenanceSignal
++        ),
+       serialize: (sessionId, task) => this.serialize(sessionId, task),
+       hasSession: this.hasSession,
+       // Site 10: cannot overwrite a live entry — the restorer returns early on
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-lease-renewer.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-lease-renewer.ts
+index f969c65428f..d69977e24cd 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-lease-renewer.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-lease-renewer.ts
+@@ -5,6 +5,7 @@ import {
+   type AgentSessionRecordStore
+ } from '../../runtime/agent-session-record-store'
+ import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ 
+ const RENEW_INTERVAL_MS = Math.floor(AGENT_SESSION_LEASE_TTL_MS / 3)
+ 
+@@ -16,6 +17,7 @@ const HELD_CHILD: AgentSessionOwnerProbe = {
+ export class StructuredAgentSessionLeaseRenewer {
+   private timer: ReturnType<typeof setInterval> | null = null
+   private running = false
++  private readonly lifetime = new AbortController()
+   /** The tick in flight. Never rejects: the timer path logs renewal failures,
+    *  and stopping must not turn one into a teardown failure as well. */
+   private inFlight: Promise<void> = Promise.resolve()
+@@ -51,6 +53,7 @@ export class StructuredAgentSessionLeaseRenewer {
+       clearInterval(this.timer)
+       this.timer = null
+     }
++    this.lifetime.abort(new Error('host lease renewal stopped'))
+     return this.inFlight
+   }
+ 
+@@ -86,7 +89,9 @@ export class StructuredAgentSessionLeaseRenewer {
+     const held = records.filter(holds)
+     const unheld = records.filter((record) => !held.includes(record))
+     const probes =
+-      unheld.length > 0 ? await this.probe(unheld) : new Map<string, AgentSessionOwnerProbe>()
++      unheld.length > 0
++        ? await waitForPromiseWithSignal(this.probe(unheld), this.lifetime.signal)
++        : new Map<string, AgentSessionOwnerProbe>()
+     for (const record of held) {
+       // Re-read after the probes: an exit received meanwhile ends the child's proof.
+       if (holds(record)) {
+@@ -116,12 +121,14 @@ export class StructuredAgentSessionLeaseRenewer {
+     // retrying individually preserves isolation.
+     let results: PromiseSettledResult<AgentSessionRecord>[]
+     try {
+-      const renewed = await this.input.store.renewLeases(renewals)
++      const renewed = await this.input.store.renewLeases(renewals, this.lifetime.signal)
+       results = renewed.map((record) => ({ status: 'fulfilled', value: record }) as const)
+     } catch {
+-      results = await Promise.allSettled(
+-        renewals.map((renewal) => this.input.store.renewLease(renewal))
+-      )
++      results = this.lifetime.signal.aborted
++        ? []
++        : await Promise.allSettled(
++            renewals.map((renewal) => this.input.store.renewLease(renewal, this.lifetime.signal))
++          )
+     }
+     results.forEach((result, index) => {
+       if (result.status === 'rejected') {
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-mutation-admission.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-mutation-admission.ts
+index d50ae450616..315be9b0f8d 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-mutation-admission.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-mutation-admission.ts
+@@ -260,8 +260,11 @@ async function answerRecordedOperation<TValue>(
+ }
+ 
+ /** The recorded answer from the journal, or `rerun` when the plan says nothing durable landed. */
+-function replayRecordedOperation<TValue>(
+-  { plan, envelope }: AgentSessionMutationRequest<TValue>,
++export function replayRecordedOperation<TValue>(
++  { plan, envelope }: {
++    plan: Pick<MutationPlan<TValue>, 'replay' | 'rerunWhenReplayMissing' | 'recoverUnknownFromDurableState'>
++    envelope: AgentSessionMutationEnvelope
++  },
+   context: AgentSessionTurnContext,
+   row: AgentSessionOperationRow
+ ): AgentSessionMutationResult<TValue> | 'rerun' {
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-ready-operation.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-ready-operation.ts
+index de87449c26d..3436afad4f4 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-ready-operation.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-ready-operation.ts
+@@ -19,8 +19,12 @@ import {
+   rewindInDoubt
+ } from './structured-agent-session-send-preparation'
+ import { agentSessionOperationOutcomeUnknown } from './structured-agent-session-replay-outcome'
+-import type { AgentSessionMutationSessionPreparation } from './structured-agent-session-mutation-admission'
++import {
++  replayRecordedOperation,
++  type AgentSessionMutationSessionPreparation
++} from './structured-agent-session-mutation-admission'
+ import type { MutationPlan } from './structured-agent-session-mutation-plans'
++import { mutationTurnContext } from './structured-agent-session-mutation-turn-context'
+ import { commandReceiptScope } from '../agent-session-journal/command-receipt-schema'
+ import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
+ import { waitForStructuredAgentSessionStart } from './structured-agent-session-start-readiness'
+@@ -29,7 +33,13 @@ import type { StructuredAgentSessionStartReadiness } from './structured-agent-se
+ 
+ type ReadyOperationPlan<T> = Pick<
+   MutationPlan<T>,
+-  'method' | 'fields' | 'operationIdScope' | 'commandReceipt'
++  | 'method'
++  | 'fields'
++  | 'operationIdScope'
++  | 'commandReceipt'
++  | 'replay'
++  | 'rerunWhenReplayMissing'
++  | 'recoverUnknownFromDurableState'
+ >
+ type QueuedReadyOperation<T> =
+   | { result: AgentSessionMutationResult<T> }
+@@ -148,12 +158,34 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
+           now: context.now(),
+           ...(plan.operationIdScope ? { operationIdScope: plan.operationIdScope } : {})
+         })
+-        if (!evaluated || evaluated.decision.decision !== 'admit') {
++        if (evaluated?.decision.decision === 'replay') {
++          const opened = await openForWrite(context, envelope)()
++          const journal = context.sessions.get(envelope.sessionId)?.journal
++          if (!opened.ok || !journal) {
++            return { result: await run({ ok: true, child: null, replay: true }) }
++          }
++          const request = {
++            store: context.deps.store,
++            adapter: context.deps.adapter,
++            agents: context.deps.agents,
++            logger: context.deps.logger,
++            callerKey,
++            envelope,
++            plan,
++            journal: () => journal,
++            publish: () => undefined,
++            now: () => context.now()
++          }
++          const turn = mutationTurnContext(request, journal, evaluated.record)
++          const answer = replayRecordedOperation(request, turn, evaluated.decision.row)
++          if (answer !== 'rerun') {
++            return { result: await run({ ok: true, child: null, replay: true }) }
++          }
++        } else if (!evaluated || evaluated.decision.decision !== 'admit') {
+           return {
+             result: await run({
+               ok: true,
+-              child: null,
+-              ...(evaluated?.decision.decision === 'replay' ? { replay: true as const } : {})
++              child: null
+             })
+           }
+         }
+@@ -230,6 +262,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
+       return operationDidNotRun(true)
+     }
+     return await context.serialize(envelope.sessionId, () =>
++      // Admission re-reads the journal here after readiness and answers a competing settlement.
+       run({ ok: true, child: selected.child, deadline })
+     )
+   } finally {
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-recovery-resolution.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-recovery-resolution.ts
+index 257072f7c23..c3919728891 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-recovery-resolution.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-recovery-resolution.ts
+@@ -19,6 +19,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+ import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
+ import { releaseUnprovenAgentSessionOwner } from '../../runtime/agent-session-lease-transitions'
+ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ 
+ export type StructuredSessionRecoveryStopSignal = 'SIGTERM' | 'SIGKILL'
+ 
+@@ -26,6 +27,7 @@ export type StructuredSessionRecoveryResolutionDeps = {
+   store: AgentSessionRecordStore
+   probeRecord: (record: AgentSessionRecord) => Promise<AgentSessionOwnerProbe>
+   now: () => number
++  authority?: AbortSignal
+   stopOwnerProcess?: (pid: number, signal: StructuredSessionRecoveryStopSignal) => void
+   delay?: (ms: number) => Promise<void>
+   platform?: NodeJS.Platform
+@@ -55,7 +57,7 @@ export async function resolveStructuredSessionRecovery(
+   if (record?.lease.handoffStage !== 'recovering') {
+     return 'not-applicable'
+   }
+-  let probe = await deps.probeRecord(record)
++  let probe = await waitForPromiseWithSignal(deps.probeRecord(record), deps.authority)
+   const owner = record.lease.ownerProcess
+   if (owner && record.lease.claimStatus === 'conflicted' && !isProvenDeadProbe(probe)) {
+     // A terminal agent keeps its transport across a restart, so only proof of its exit is a way in.
+@@ -71,19 +73,25 @@ export async function resolveStructuredSessionRecovery(
+   }
+   try {
+     await (owner && !isProvenDeadProbe(probe)
+-      ? deps.store.transitionHandoff(sessionId, (latest) =>
+-          releaseUnprovenAgentSessionOwner({
+-            record: latest,
++      ? deps.store.transitionHandoff(
++          sessionId,
++          (latest) =>
++            releaseUnprovenAgentSessionOwner({
++              record: latest,
++              expectedFence: record.lease.runtimeFence,
++              now: deps.now()
++            }),
++          deps.authority
++        )
++      : deps.store.evictProvenDeadOwner(
++          {
++            sessionId,
+             expectedFence: record.lease.runtimeFence,
++            probe,
+             now: deps.now()
+-          })
+-        )
+-      : deps.store.evictProvenDeadOwner({
+-          sessionId,
+-          expectedFence: record.lease.runtimeFence,
+-          probe,
+-          now: deps.now()
+-        }))
++          },
++          deps.authority
++        ))
+     return 'resolved'
+   } catch (error) {
+     const code = error instanceof Error ? error.message : String(error)
+@@ -106,11 +114,11 @@ async function stopOwnerAndReprobe(
+   for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+     stop(pid, signal)
+     for (let attempt = 0; attempt < STOP_PROBES[signal]; attempt += 1) {
+-      probe = await deps.probeRecord(record)
++      probe = await waitForPromiseWithSignal(deps.probeRecord(record), deps.authority)
+       if (isProvenDeadProbe(probe)) {
+         return probe
+       }
+-      await delay(STOP_PROBE_INTERVAL_MS)
++      await waitForPromiseWithSignal(delay(STOP_PROBE_INTERVAL_MS), deps.authority)
+     }
+   }
+   return probe
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-repeat-press.test.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-repeat-press.test.ts
+index 830fa9b812e..f2ded4c2d3f 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-repeat-press.test.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-repeat-press.test.ts
+@@ -185,6 +185,21 @@ describe('a press sent again', () => {
+     expect(changeThreadGoal).toHaveBeenCalledTimes(3)
+   })
+ 
++  it('reruns a same-envelope goal whose provider threw before applying it', async () => {
++    const change = { kind: 'set' as const, objective: 'Ship the parser' }
++    const params = {
++      envelope: envelope('agentSession.threadGoal', { change }, hostTestOperationId()),
++      change
++    }
++    changeThreadGoal.mockRejectedValueOnce(new Error('provider did not apply goal'))
++
++    await expect(host.changeThreadGoal(CALLER, params)).rejects.toThrow('provider did not apply goal')
++    expect(await host.changeThreadGoal(CALLER, params)).toMatchObject({ ok: true, replayed: false })
++    expect(changeThreadGoal).toHaveBeenCalledTimes(2)
++    const page = await host.history({ sessionId: SESSION, direction: 'tail' })
++    expect(page.ok && page.page.items.filter((item) => item.body.kind === 'message')).toHaveLength(1)
++  })
++
+   it('stops a background task only under a new id once the first Stop ran', async () => {
+     const fields = { turnId: 'background-tasks', scope: 'background-tasks', taskId: 'task-1' }
+     const stop = (id = hostTestOperationId()) =>
+diff --git a/src/main/native-chat/agent-session-wire/structured-agent-session-restart-reconcile.ts b/src/main/native-chat/agent-session-wire/structured-agent-session-restart-reconcile.ts
+index 29f0c9f1047..e6f0c9cdb7b 100644
+--- a/src/main/native-chat/agent-session-wire/structured-agent-session-restart-reconcile.ts
++++ b/src/main/native-chat/agent-session-wire/structured-agent-session-restart-reconcile.ts
+@@ -8,6 +8,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+ import type { AgentSessionWireRefusal } from '../../../shared/agent-session-wire'
+ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
+ import { classifyStoreFailure } from './structured-agent-session-attach'
++import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+ import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+ 
+ const MAX_RECONCILIATION_PASSES = 8
+@@ -21,6 +22,7 @@ export function createRestartReconciler(deps: {
+     records: readonly AgentSessionRecord[]
+   ) => Promise<Map<string, AgentSessionOwnerProbe>>
+   now: () => number
++  maintenanceSignal?: AbortSignal
+ }): (sessionId: string) => Promise<AgentSessionWireRefusal | null> {
+   let pending: Promise<void> | null = null
+   return async (sessionId) => {
+@@ -34,7 +36,7 @@ export function createRestartReconciler(deps: {
+       })
+     }
+     try {
+-      await pending
++      await waitForPromiseWithSignal(pending, deps.maintenanceSignal)
+       return null
+     } catch (error) {
+       return classifyStoreFailure(
+@@ -120,13 +122,14 @@ async function reconcileCurrentLeases(deps: {
+     records: readonly AgentSessionRecord[]
+   ) => Promise<Map<string, AgentSessionOwnerProbe>>
+   now: () => number
++  maintenanceSignal?: AbortSignal
+ }): Promise<void> {
+   for (let pass = 0; pass < MAX_RECONCILIATION_PASSES; pass += 1) {
+     await deps.store.reconcileOnRestart({
+       probe: deps.probe,
+       ...(deps.probeMany ? { probeMany: deps.probeMany } : {}),
+       now: deps.now()
+-    })
++    }, deps.maintenanceSignal)
+     if (!deps.store.listRecords().some((record) => record.lease.unreconciled)) {
+       return
+     }
+diff --git a/src/main/runtime/agent-session-record-store.test.ts b/src/main/runtime/agent-session-record-store.test.ts
+index 0bd72c8f2cc..a40304982dd 100644
+--- a/src/main/runtime/agent-session-record-store.test.ts
++++ b/src/main/runtime/agent-session-record-store.test.ts
+@@ -156,6 +156,52 @@ afterEach(async () => {
+ })
+ 
+ describe('acquisition path', () => {
++  it('keeps an admitted reservation while revoking a queued one and settling a processless stop', async () => {
++    const store = await open()
++    const authority = new AbortController()
++    const operation = { callerKey: 'client-1', operationId: operationId(), fingerprint: 'fp-1' }
++    const { record } = await store.reserveOwner(
++      reserveRequest({ operation, handoffOperationId: operation.operationId }), authority.signal
++    )
++    const revoked = store.reserveOwner(
++      reserveRequest({
++        sessionId: 'session-revoked',
++        operation: {
++          callerKey: 'client-1',
++          operationId: operationId(),
++          fingerprint: 'fp-revoked'
++        }
++      }),
++      authority.signal
++    )
++    authority.abort(new Error('stopped before commit'))
++    await expect(revoked).rejects.toThrow('stopped before commit')
++    expect(store.getRecord('session-revoked')).toBeNull()
++
++    const cleanup = new AbortController()
++    await store.settleFailedAcquisition({
++      sessionId: record.sessionId,
++      fence: record.lease.runtimeFence,
++      spawnToken: record.lease.reservedSpawnToken!,
++      callerKey: 'client-1',
++      operationId: operation.operationId,
++      outcome: {
++        status: 'failed',
++        code: 'agent_session_ownership_unknown',
++        message: 'Stopped before starting.'
++      },
++      exitProof: 'processless',
++      now: NOW
++    }, cleanup.signal)
++    cleanup.abort(new Error('host effects sealed'))
++    await expect(store.transitionHandoff(record.sessionId, (latest) => latest, cleanup.signal))
++      .rejects.toThrow('host effects sealed')
++    const persisted = await readPersistedTestAgentSessionStore(directory)
++    expect(persisted.records['session-revoked']).toBeUndefined()
++    expect(Object.values(persisted.operations)).toHaveLength(1)
++    expect(store.getRecord(record.sessionId)?.lease.claimStatus).toBe('released')
++  })
++
+   it('admits a writer only after reservation, observed identity, and a proved handle', async () => {
+     const store = await open()
+     const reserved = await store.reserveOwner(reserveRequest())
+diff --git a/src/main/runtime/agent-session-record-store.ts b/src/main/runtime/agent-session-record-store.ts
+index 572234b3a23..2060e0ae0b9 100644
+--- a/src/main/runtime/agent-session-record-store.ts
++++ b/src/main/runtime/agent-session-record-store.ts
+@@ -3,6 +3,7 @@
+ 
+ import { backfillAgentSessionPermissionModes } from './agent-session-permission-backfill'
+ import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
++import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+ import { createAgentSessionConversationReceipts } from './agent-session-conversation-receipts'
+ import { commitConversationCommandRecord } from './agent-session-conversation-command-record'
+ import { pinAgentSessionRecordLaunchDirectory } from './agent-session-record-launch-directory'
+@@ -198,69 +199,107 @@ export class AgentSessionRecordStore {
+   isClaimKeyVerifiable = (keyId: string, now: number): boolean =>
+     isAgentSessionClaimKeyVerifiable(this.state, keyId, now)
+ 
+-  reserveOwner = (request: AgentSessionReserveRequest): Promise<AgentSessionReserveResult> =>
+-    this.transact((draft) =>
+-      commitAgentSessionReservation(draft, request, AGENT_SESSION_LEASE_TTL_MS)
++  reserveOwner = (
++    request: AgentSessionReserveRequest,
++    authority?: AbortSignal
++  ): Promise<AgentSessionReserveResult> =>
++    this.transact(
++      (draft) => commitAgentSessionReservation(draft, request, AGENT_SESSION_LEASE_TTL_MS),
++      { authority }
+     )
+ 
+   readonly founding: ReturnType<typeof createAgentSessionFoundingStore>
+ 
+-  commitProcessIdentity = (args: AgentSessionProcessIdentityCommit): Promise<AgentSessionRecord> =>
+-    this.mutate(args.sessionId, (record) => commitAgentSessionProcessIdentity({ ...args, record }))
+-
+-  async proveOwner(args: {
+-    sessionId: string
+-    fence: number
+-    link?: AgentSessionProviderHandleLink
+-    now: number
+-    leaseTtlMs?: number
+-    options?: Readonly<Record<string, string>>
+-  }): Promise<AgentSessionRecord> {
+-    return this.mutate(args.sessionId, (record) => {
+-      const proved = proveAgentSessionOwner({
+-        record,
+-        fence: args.fence,
+-        ...(args.link ? { link: args.link } : {}),
+-        now: args.now,
+-        leaseTtlMs: args.leaseTtlMs ?? AGENT_SESSION_LEASE_TTL_MS
+-      })
+-      return args.options
+-        ? replaceAgentSessionRecordOptions(proved, { ...args, options: args.options })
+-        : proved
+-    })
++  commitProcessIdentity = (
++    args: AgentSessionProcessIdentityCommit,
++    authority?: AbortSignal
++  ): Promise<AgentSessionRecord> =>
++    this.mutate(
++      args.sessionId,
++      (record) => commitAgentSessionProcessIdentity({ ...args, record }),
++      authority
++    )
++
++  async proveOwner(
++    args: {
++      sessionId: string
++      fence: number
++      link?: AgentSessionProviderHandleLink
++      now: number
++      leaseTtlMs?: number
++      options?: Readonly<Record<string, string>>
++    },
++    authority?: AbortSignal
++  ): Promise<AgentSessionRecord> {
++    return this.mutate(
++      args.sessionId,
++      (record) => {
++        const proved = proveAgentSessionOwner({
++          record,
++          fence: args.fence,
++          ...(args.link ? { link: args.link } : {}),
++          now: args.now,
++          leaseTtlMs: args.leaseTtlMs ?? AGENT_SESSION_LEASE_TTL_MS
++        })
++        return args.options
++          ? replaceAgentSessionRecordOptions(proved, { ...args, options: args.options })
++          : proved
++      },
++      authority
++    )
+   }
+ 
+   /** Settle the failed attach and its reservation in one durable transaction. */
+-  settleFailedAcquisition = (args: AgentSessionFailedAcquisitionSettlement) =>
+-    this.transact((draft) => settleFailedAgentSessionAcquisition(draft, args))
++  settleFailedAcquisition = (
++    args: AgentSessionFailedAcquisitionSettlement,
++    authority?: AbortSignal
++  ) => this.transact((draft) => settleFailedAgentSessionAcquisition(draft, args), { authority })
+ 
+   settleFailedPostAcquisitionAttachment = (
+-    args: AgentSessionFailedPostAcquisitionAttachmentSettlement
+-  ) => this.transact((draft) => settleFailedAgentSessionPostAcquisitionAttachment(draft, args))
+-
+-  renewLease = (args: AgentSessionLeaseRenewal): Promise<AgentSessionRecord> =>
+-    this.renewLeases([args]).then(([renewed]) => renewed)
++    args: AgentSessionFailedPostAcquisitionAttachmentSettlement,
++    authority?: AbortSignal
++  ) =>
++    this.transact((draft) => settleFailedAgentSessionPostAcquisitionAttachment(draft, args), {
++      authority
++    })
+ 
+-  async renewLeases(renewals: readonly AgentSessionLeaseRenewal[]): Promise<AgentSessionRecord[]> {
+-    return this.transact((draft) =>
+-      renewAgentSessionLeases(draft, renewals, AGENT_SESSION_LEASE_TTL_MS)
++  renewLease = (
++    args: AgentSessionLeaseRenewal,
++    authority?: AbortSignal
++  ): Promise<AgentSessionRecord> => this.renewLeases([args], authority).then(([renewed]) => renewed)
++
++  async renewLeases(
++    renewals: readonly AgentSessionLeaseRenewal[],
++    authority?: AbortSignal
++  ): Promise<AgentSessionRecord[]> {
++    return this.transact(
++      (draft) => renewAgentSessionLeases(draft, renewals, AGENT_SESSION_LEASE_TTL_MS),
++      { authority }
+     )
+   }
+ 
+-  async evictProvenDeadOwner(args: {
+-    sessionId: string
+-    expectedFence: number
+-    probe: AgentSessionOwnerProbe
+-    now: number
+-  }): Promise<AgentSessionRecord> {
+-    return this.mutate(args.sessionId, (record) => evictAgentSessionOwner({ ...args, record }))
++  async evictProvenDeadOwner(
++    args: {
++      sessionId: string
++      expectedFence: number
++      probe: AgentSessionOwnerProbe
++      now: number
++    },
++    authority?: AbortSignal
++  ): Promise<AgentSessionRecord> {
++    return this.mutate(
++      args.sessionId,
++      (record) => evictAgentSessionOwner({ ...args, record }),
++      authority
++    )
+   }
+ 
+   async transitionHandoff(
+     sessionId: string,
+-    transition: (record: AgentSessionRecord) => AgentSessionRecord
++    transition: (record: AgentSessionRecord) => AgentSessionRecord,
++    authority?: AbortSignal
+   ): Promise<AgentSessionRecord> {
+-    return this.mutate(sessionId, transition)
++    return this.mutate(sessionId, transition, authority)
+   }
+ 
+   /**
+@@ -269,12 +308,17 @@ export class AgentSessionRecordStore {
+    * start, and none grants a writer there, since every grant is a write.
+    */
+   async reconcileOnRestart(
+-    args: AgentSessionRestartProbeArgs
++    args: AgentSessionRestartProbeArgs,
++    authority?: AbortSignal
+   ): Promise<Map<string, AgentSessionRecord>> {
+     const pending = this.listRecords().filter((record) => record.lease.unreconciled)
+-    const probes = await collectAgentSessionRestartProbes(pending, args)
++    const probes = await waitForPromiseWithSignal(
++      collectAgentSessionRestartProbes(pending, args),
++      authority
++    )
+     return this.transact((draft) => applyAgentSessionRestartProbes(draft, probes, args.now), {
+-      inMemoryWhenReadOnly: true
++      inMemoryWhenReadOnly: true,
++      authority
+     })
+   }
+ 
+@@ -308,8 +352,10 @@ export class AgentSessionRecordStore {
+   ) => this.transact((draft) => admitAndClaimAgentSessionOperationInto(draft, args, claimAfter))
+ 
+   recordOperationOutcome = (
+-    args: Parameters<typeof settleAgentSessionOperationInto>[1]
+-  ): Promise<void> => this.transact((draft) => settleAgentSessionOperationInto(draft, args))
++    args: Parameters<typeof settleAgentSessionOperationInto>[1],
++    authority?: AbortSignal
++  ): Promise<void> =>
++    this.transact((draft) => settleAgentSessionOperationInto(draft, args), { authority })
+ 
+   /** That settlement, or an accepted row inserted if absent, committed by the journal write that
+    *  makes it true. It changes only the ledger, so no record listener is owed. */
+@@ -331,19 +377,27 @@ export class AgentSessionRecordStore {
+ 
+   private async mutate(
+     sessionId: string,
+-    apply: (record: AgentSessionRecord) => AgentSessionRecord
++    apply: (record: AgentSessionRecord) => AgentSessionRecord,
++    authority?: AbortSignal
+   ): Promise<AgentSessionRecord> {
+-    return this.transact((draft) => {
+-      const record = draft.records.get(sessionId)
+-      if (!record) {
+-        throw draft.unreadableRecords.has(sessionId)
+-          ? agentSessionRefusalError('execution_owner_reconciling', { reason: 'recordUnreadable' })
+-          : agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
+-      }
+-      const next = apply(record)
+-      draft.records.set(sessionId, next)
+-      return next
+-    })
++    return this.transact(
++      (draft) => {
++        const record = draft.records.get(sessionId)
++        if (!record) {
++          throw draft.unreadableRecords.has(sessionId)
++            ? agentSessionRefusalError('execution_owner_reconciling', {
++                reason: 'recordUnreadable'
++              })
++            : agentSessionRefusalError('agent_session_identity_required', {
++                reason: 'recordMissing'
++              })
++        }
++        const next = apply(record)
++        draft.records.set(sessionId, next)
++        return next
++      },
++      { authority }
++    )
+   }
+ 
+   /** Told, once committed, of each session a transaction wrote a proof of death for — whichever
+@@ -363,7 +417,7 @@ export class AgentSessionRecordStore {
+    *  once its rows have committed. */
+   private transact = async <T>(
+     apply: (draft: AgentSessionStoreState) => T,
+-    options?: { inMemoryWhenReadOnly?: boolean }
++    options?: { inMemoryWhenReadOnly?: boolean; authority?: AbortSignal }
+   ): Promise<T> => {
+     let proven: string[] = []
+     let heldBefore = true
+@@ -381,6 +435,7 @@ export class AgentSessionRecordStore {
+         .map(([id]) => id)
+       return applied
+     }, options)
++    options?.authority?.throwIfAborted()
+     for (const sessionId of proven) {
+       this.deathEvidenceListeners.forEach((listener) => listener(sessionId))
+     }
+diff --git a/src/main/runtime/agent-session-store-transactions.ts b/src/main/runtime/agent-session-store-transactions.ts
+index f68b9a1b6a8..2d9fdf527cf 100644
+--- a/src/main/runtime/agent-session-store-transactions.ts
++++ b/src/main/runtime/agent-session-store-transactions.ts
+@@ -10,6 +10,7 @@
+ import type { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
+ import type { JournalOperationReceipt } from '../native-chat/agent-session-journal/journal-row-writer'
+ import { journalOpenRefusalError } from '../native-chat/agent-session-journal/journal-open-failure'
++import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
+ import { AgentSessionJournalError } from '../native-chat/agent-session-journal/journal-write-guards'
+ import type { AgentSessionStoreState } from './agent-session-store-state'
+ import {
+@@ -135,9 +136,12 @@ export class AgentSessionStoreTransactions {
+    */
+   transact<T>(
+     apply: (draft: AgentSessionStoreState) => T,
+-    options: { inMemoryWhenReadOnly?: boolean } = {}
++    options: { inMemoryWhenReadOnly?: boolean; authority?: AbortSignal } = {}
+   ): Promise<T> {
+-    const run = this.queue.then(() => this.commit(apply, options.inMemoryWhenReadOnly === true))
++    const run = this.queue.then(() => {
++      throwIfSignalAborted(options.authority)
++      return this.commit(apply, options.inMemoryWhenReadOnly === true)
++    })
+     this.queue = run.catch(() => {})
+     return run
+   }
+diff --git a/src/main/runtime/structured-claude-runtime-adapter.ts b/src/main/runtime/structured-claude-runtime-adapter.ts
+index cdbc9af0e0b..ce9d68ece64 100644
+--- a/src/main/runtime/structured-claude-runtime-adapter.ts
++++ b/src/main/runtime/structured-claude-runtime-adapter.ts
+@@ -89,32 +89,37 @@ export function createStructuredClaudeRuntimeAdapter(
+       resolveWorkspacePath: deps.resolveWorkspacePath
+     }),
+     resolveLaunch: deps.resolveLaunch,
+-    persistHandle: async ({ sessionId, providerSessionId, leafUuid, fence }) => {
+-      const currentFence = store.getRecord(sessionId)?.lease.runtimeFence ?? fence
++    persistHandle: async ({ sessionId, providerSessionId, leafUuid, fence, authority }) => {
+       const observedAt = Date.now()
+-      await store.transitionHandoff(sessionId, (record: AgentSessionRecord) =>
+-        recordAgentSessionProviderHandle({
+-          record,
+-          fence: currentFence,
+-          link: claudeProviderHandleLink({
+-            sessionId: providerSessionId,
+-            leafUuid,
+-            resumed: true,
+-            fence: currentFence,
+-            observedAt
++      await store.transitionHandoff(
++        sessionId,
++        (record: AgentSessionRecord) =>
++          recordAgentSessionProviderHandle({
++            record,
++            fence,
++            link: claudeProviderHandleLink({
++              sessionId: providerSessionId,
++              leafUuid,
++              resumed: true,
++              fence,
++              observedAt
++            }),
++            now: observedAt
+           }),
+-          now: observedAt
+-        })
++        authority
+       )
+     },
+-    persistResumePoint: async ({ sessionId, providerSessionId, leafUuid, fence }) => {
+-      await store.transitionHandoff(sessionId, (record: AgentSessionRecord) =>
+-        reviseAgentSessionProviderResumePoint({
+-          record,
+-          fence,
+-          handle: claudeProviderHandle(providerSessionId, leafUuid),
+-          now: Date.now()
+-        })
++    persistResumePoint: async ({ sessionId, providerSessionId, leafUuid, fence, authority }) => {
++      await store.transitionHandoff(
++        sessionId,
++        (record: AgentSessionRecord) =>
++          reviseAgentSessionProviderResumePoint({
++            record,
++            fence,
++            handle: claudeProviderHandle(providerSessionId, leafUuid),
++            now: Date.now()
++          }),
++        authority
+       )
+     },
+     onEvent: (event) => {
+diff --git a/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.test.tsx b/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.test.tsx
+index d470b723c0b..437ce83af28 100644
+--- a/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.test.tsx
++++ b/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.test.tsx
+@@ -1,6 +1,7 @@
+ // @vitest-environment happy-dom
+ 
+ import { act, renderHook, waitFor } from '@testing-library/react'
++import { useRef } from 'react'
+ import { beforeEach, describe, expect, it, vi } from 'vitest'
+ import type { StructuredAgentSessionState } from '../../../../shared/structured-agent-session-reducer'
+ import type * as LaunchIntentModule from '@/lib/launch-structured-agent-session'
+@@ -55,6 +56,15 @@ import { resetStructuredAgentLaunchRegistryForTests } from '@/lib/structured-age
+ import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
+ import { useStructuredAgentSession } from './use-structured-agent-session'
+ import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
++import { CLAUDE_SESSION_OPTION_CATALOG } from '../../../../shared/agent-session-option-catalog-claude-codex'
++import {
++  applyStructuredAgentSessionModelCatalog,
++  createStructuredAgentSessionOptionState,
++  structuredAgentSessionOptionSnapshot
++} from '../../../../shared/structured-agent-session-options'
++import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
++import { getStructuredAgentSessionLaunchSelection } from '@/lib/structured-agent-session-launch-options'
++import { useStructuredAgentSessionSendOptions } from './use-structured-agent-session-send-options'
+ 
+ const LOCAL_TARGET = { kind: 'local' } as const
+ // The account's saved list: the picker names a saved pick only from a list the host gave.
+@@ -142,6 +152,70 @@ describe('a chat pane over its own launch', () => {
+     resetHostModelCatalogSnapshotsForTests()
+   })
+ 
++  it('keeps a saved Claude choice for the picker and first send after publication retires the launch', async () => {
++    useAppStore.setState({
++      settings: {
++        ...getDefaultSettings('/tmp/orca-workspaces'),
++        nativeChatSessionOptions: {
++          claude: { model: 'sonnet', valuesByModel: { sonnet: { effort: 'low' } } }
++        }
++      }
++    })
++    let created!: (receipt: { sessionId: string; fence: number }) => void
++    mocks.launch.mockReturnValue(new Promise((resolve) => (created = resolve)))
++    const launch = startStructuredAgentLaunch('wt-claude', 'claude', { requestId: 'request-claude' })
++    const state = applyStructuredAgentSessionModelCatalog(
++      createStructuredAgentSessionOptionState('claude', CLAUDE_SESSION_OPTION_CATALOG),
++      CLAUDE_SESSION_OPTION_CATALOG,
++      {
++        origin: 'probe',
++        fetchedAt: 1,
++        models: [
++          {
++            id: 'sonnet',
++            label: 'Sonnet',
++            efforts: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }]
++          },
++          {
++            id: 'opus',
++            label: 'Opus',
++            isDefault: true,
++            efforts: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }]
++          }
++        ]
++      },
++      { newLaunch: true }
++    )
++    const { result, rerender } = renderHook(() => {
++      const provisional = useNativeChatProvisionalLaunch('wt-claude', launch.sessionId)
++      const optionStateRef = useRef(state)
++      const pendingOptionsRef = useRef<Record<string, string>>({})
++      const sendOptions = useStructuredAgentSessionSendOptions(launch.sessionId, provisional.launch, {
++        optionStateRef,
++        pendingOptionsRef,
++        optionView: structuredAgentSessionOptionView,
++        takesSendOptions: true
++      })
++      return {
++        seed: provisional.launch?.seedOptions,
++        shown: structuredAgentSessionOptionSnapshot(
++          structuredAgentSessionOptionView(state, provisional.launch?.seedOptions, {}, true)
++        ),
++        sendOptions
++      }
++    })
++    publishedTabs = [publishedSnapshot('wt-claude', launch.sessionId)]
++    await act(async () => {
++      created({ sessionId: launch.sessionId, fence: 1 })
++      await launch.launchResult
++    })
++    rerender()
++    await waitFor(() => expect(getStructuredAgentSessionLaunchSelection(launch.sessionId)).toBeNull())
++    expect(result.current.seed).toMatchObject({ model: 'sonnet', effort: 'low' })
++    expect(currentModel(result.current.shown)).toBe('sonnet')
++    expect(result.current.sendOptions()).toEqual({ model: 'sonnet', effort: 'low' })
++  })
++
+   it('keeps the selection its create seeded when a pick in another chat saves a new one', async () => {
+     saveSelection('gpt-5.5')
+     startStructuredAgentLaunch('wt-first', 'codex', { requestId: 'request-1' })
+diff --git a/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.ts b/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.ts
+index 84707aaddbc..00982749615 100644
+--- a/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.ts
++++ b/src/renderer/src/components/native-chat/use-native-chat-provisional-launch.ts
+@@ -29,21 +29,39 @@ function useLaunchView(
+   launching: boolean
+ ): StructuredAgentSessionLaunchView | undefined {
+   const selection = useStructuredAgentSessionLaunchSelection(sessionId)
+-  const [kind] = useState<StructuredAgentSessionLaunchView['kind'] | null>(() =>
+-    launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null
++  const [intent, setIntent] = useState<{
++    sessionId: string
++    kind: StructuredAgentSessionLaunchView['kind'] | null
++    seed: Readonly<Record<string, string>> | undefined
++  }>(() =>
++    ({
++      sessionId,
++      kind: launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null,
++      seed: selection?.seed
++    })
+   )
++  if (intent.sessionId !== sessionId) {
++    setIntent({
++      sessionId,
++      kind: launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null,
++      seed: selection?.seed
++    })
++  } else if (selection?.seed && selection.seed !== intent.seed) {
++    // Accepted launch picks become this conversation's intent before registry retirement.
++    setIntent({ ...intent, seed: selection.seed })
++  }
+   const held = selection?.held ?? NO_HELD_OPTIONS
+   return useMemo(
+     () =>
+-      kind
++      intent.kind
+         ? {
+-            kind,
+-            ...(selection?.seed ? { seedOptions: selection.seed } : {}),
++            kind: intent.kind,
++            ...(intent.seed ? { seedOptions: intent.seed } : {}),
+             heldOptions: held,
+             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
+           }
+         : undefined,
+-    [held, kind, selection?.seed, worktreeId]
++    [held, intent, worktreeId]
+   )
+ }
+ 
