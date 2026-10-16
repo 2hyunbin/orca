@@ -117,4 +117,18 @@ describe('resolveOwnerUsageRateLimits', () => {
     expect(neverAnswered.grok).toBeNull()
     expect(neverAnswered.codex?.status).toBe('error')
   })
+
+  it('stops a slot the host was still fetching from loading through an outage', () => {
+    const lastKnown = createEmptyRateLimitState({
+      grok: { ...provider('grok', 0), session: null, status: 'fetching' },
+      grokAuthConfigured: true
+    })
+    const lost = resolveOwnerUsageRateLimits(local, {
+      kind: 'remote-unverifiable',
+      ownerLabel: 'devbox',
+      reason: 'unreachable',
+      lastKnown
+    })
+    expect(lost.grok?.status).toBe('error')
+  })
 })

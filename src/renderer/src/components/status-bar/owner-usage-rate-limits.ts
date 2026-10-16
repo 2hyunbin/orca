@@ -126,8 +126,14 @@ export function resolveOwnerUsageRateLimits(
     ...base,
     ...mapProviders((key) => {
       const provider = base[key]
-      // Why: stamping a blank, unconfigured slot 'error' would invent a bar the host never had.
-      if (!provider || (!isProviderConfigured(provider) && !hasUsageData(provider))) {
+      // Why: stamping a slot the host reported unconfigured would invent a bar it never had;
+      // a still-fetching slot was real and must not keep loading through the outage.
+      if (
+        !provider ||
+        (!isProviderConfigured(provider) &&
+          !hasUsageData(provider) &&
+          provider.status !== 'fetching')
+      ) {
         return provider
       }
       return stamp(key)
