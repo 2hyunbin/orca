@@ -18,9 +18,9 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
   /** Splits main is taking back now; a record waits, so it sees the outcome. */
   private readonly withdrawingSplits = new Map<string, Promise<void>>()
 
-  /** Settles once main is done taking back this split, if it is. */
-  protected async splitWithdrawalSettled(leafId: string): Promise<void> {
-    await this.withdrawingSplits.get(leafId)
+  /** Settles once main is done taking back this split; undefined when it is not. */
+  protected splitWithdrawal(leafId: string): Promise<void> | undefined {
+    return this.withdrawingSplits.get(leafId)
   }
 
   /**
