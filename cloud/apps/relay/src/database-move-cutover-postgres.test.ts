@@ -555,6 +555,37 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     expect(await loginCode(sides.primary.app.url)).toBeNull()
   }, 60_000)
 
+  it('aborts when a process has sessions only on the target, naming it', async () => {
+    const fleet = await startFleet(sides, store)
+    await sleep(300)
+    // A marked relay process seen on the target but with no session on the source.
+    const stray = new pg.Client({
+      connectionString: sides.dedicated.app.url,
+      application_name: markRelayDatabaseMoveCapability('orca-relay/cell/stray', '0000000f')
+    })
+    await stray.connect()
+    const refusal = await runCutover({
+      databases: ctx.databases,
+      to: 'dedicated',
+      pointerStore: store,
+      timings: TIMINGS
+    }).catch((error: unknown) => error)
+    await stray.end()
+    expect(refusal).toMatchObject({
+      reason: 'processes_only_on_the_target',
+      details: { ids: ['0000000f'] }
+    })
+    await sleep(500)
+    await fleet.stop()
+    expect(fleet.failures).toEqual([])
+    expect(fleet.processes.map((database) => database.activeTargetName())).toEqual([
+      'primary',
+      'primary'
+    ])
+    expect(store.current()?.quiesce).toBeUndefined()
+    expect(await loginCode(sides.primary.app.url)).toBeNull()
+  }, 60_000)
+
   it('refuses a dry run whose copy predates the current tracking', async () => {
     await uninstallTrackingCommand(ctx, 'primary')
     await withPgClient(sides.primary.app.url, (client) =>

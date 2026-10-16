@@ -439,16 +439,23 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
         readRelayProcesses(gateApp, targetUser)
       ])
       const missing = [...onSource.ids].filter((id) => !onTarget.ids.has(id)).sort()
+      // Seen only on the target: a process with no old-side session to read, which the fence
+      // cannot vouch for (it could reach a reopened old side later).
+      const targetOnly = [...onTarget.ids].filter((id) => !onSource.ids.has(id)).sort()
       quietScans = onSource.busy.length === 0 ? quietScans + 1 : 0
       const sinceStart = Date.now() - startsAt
       if (missing.length > 0 && sinceStart >= timings.reachableByMs) {
         throw new MoveRefusal('processes_without_a_target_session', { ids: missing })
       }
-      if (missing.length === 0 && quietScans >= 2) {
+      if (targetOnly.length > 0 && sinceStart >= timings.reachableByMs) {
+        throw new MoveRefusal('processes_only_on_the_target', { ids: targetOnly })
+      }
+      const reachable = missing.length === 0 && targetOnly.length === 0
+      if (reachable && quietScans >= 2) {
         logMoveEvent('gate_open', { processes: onSource.ids.size, sinceStartMs: sinceStart })
         break
       }
-      if (missing.length === 0 && sinceStart >= timings.quietCapMs) {
+      if (reachable && sinceStart >= timings.quietCapMs) {
         logMoveEvent('gate_cap_reached', { busy: onSource.busy, sinceStartMs: sinceStart })
         break
       }
