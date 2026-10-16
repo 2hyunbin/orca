@@ -27,7 +27,9 @@ export function capturePublishedWork(
   snapshot: AgentJournalSnapshot,
   work: StructuredAgentSessionCurrentWork | undefined
 ) {
-  if (!work) return undefined
+  if (!work) {
+    return undefined
+  }
   const fields = publishedWorkFields(snapshotLatestTurn(snapshot), work)
   const view = work.viewKey()
   return {

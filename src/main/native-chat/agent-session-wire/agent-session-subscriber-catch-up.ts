@@ -62,7 +62,9 @@ export function deliverToSubscriber(
   }
 ): void {
   const { subscriber, journal, hostNow, emitCheckpoint, activity, publication } = input
-  if (!port.isActive(subscriber)) return
+  if (!port.isActive(subscriber)) {
+    return
+  }
   const checkpointActivity = emitCheckpoint ? port.activity(subscriber.sessionId) : undefined
   const publishedActivity = activity !== undefined ? activity : checkpointActivity
   const shared = {
@@ -73,7 +75,7 @@ export function deliverToSubscriber(
     journal.snapshot(), port.hooks.readCurrentWork?.(subscriber.sessionId, journal)
   )
   // Caught up, so there are no rows to read: every publish behind a commit's own delivery.
-  if (sameJournalCursor(subscriber.cursor, publication?.history.snapshot.cursor ?? journal.cursor())) {
+  if (sameJournalCursor(subscriber.cursor, publication?.cursor ?? journal.cursor())) {
     emitCaughtUp(port, subscriber, emitCheckpoint, shared, { journal, work })
     return
   }
@@ -113,7 +115,7 @@ export function deliverToSubscriber(
     // arrives as the newest page instead; older rows load on scroll.
     if (page.hasNewer && subscriber.boundedFrames) {
       const tail = withPublishedWork(
-        readAgentSessionHydrationPage(journal, subscriber.fence, reader, publication?.history.snapshot),
+        readAgentSessionHydrationPage(journal, subscriber.fence, reader, publication?.history?.snapshot),
         work
       )
       port.emit(subscriber, {
