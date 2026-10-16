@@ -17964,6 +17964,13 @@
           "deleteTable": "删除表格"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "无法连接到你的 Orca 主机",
+        "description": "没有任何内容丢失。主机响应后 Orca 会重新加载，在此之前不会保存更改。",
+        "retry": "立即重试"
+      }
     }
   },
   "components": {

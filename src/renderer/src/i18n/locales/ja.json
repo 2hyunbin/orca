@@ -17964,6 +17964,13 @@
           "deleteTable": "テーブルを削除"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Orca ホストに接続できませんでした",
+        "description": "失われたものはありません。ホストが応答すると Orca は再読み込みされます。それまで変更は保存されません。",
+        "retry": "今すぐ再試行"
+      }
     }
   },
   "components": {

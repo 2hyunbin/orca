@@ -18068,6 +18068,13 @@
           "deleteTable": "Supprimer le tableau"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Impossible de joindre votre hôte Orca",
+        "description": "Rien n'a été perdu. Orca se rechargera lorsque l'hôte répondra et n'enregistrera aucune modification d'ici là.",
+        "retry": "Réessayer maintenant"
+      }
     }
   },
   "components": {

@@ -17960,6 +17960,13 @@
           "deleteTable": "Eliminar tabla"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "No se pudo contactar con tu host de Orca",
+        "description": "No se perdió nada. Orca se recargará cuando el host responda y no guardará cambios hasta entonces.",
+        "retry": "Reintentar ahora"
+      }
     }
   },
   "components": {

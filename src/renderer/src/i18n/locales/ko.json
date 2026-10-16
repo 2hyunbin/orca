@@ -17964,6 +17964,13 @@
           "deleteTable": "표 삭제"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Orca 호스트에 연결할 수 없습니다",
+        "description": "손실된 내용은 없습니다. 호스트가 응답하면 Orca가 다시 로드되며, 그때까지 변경사항은 저장되지 않습니다.",
+        "retry": "지금 다시 시도"
+      }
     }
   },
   "components": {

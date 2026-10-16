@@ -18146,6 +18146,13 @@
           "deleteTable": "Delete table"
         }
       }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Couldn't reach your Orca host",
+        "description": "Nothing was lost. Orca will reload when the host answers, and won't save changes until then.",
+        "retry": "Retry now"
+      }
     }
   },
   "components": {
