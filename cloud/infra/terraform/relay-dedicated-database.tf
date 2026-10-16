@@ -258,18 +258,10 @@ resource "google_project_iam_custom_role" "relay_database_move_password" {
 resource "google_project_iam_member" "relay_database_move_password" {
   count = local.relay_dedicated_database_count
 
+  # Project-wide: Cloud SQL users.update refused (403) with a resource.name condition on staging.
   project = var.project_id
   role    = google_project_iam_custom_role.relay_database_move_password[0].id
   member  = google_service_account.relay_database_move[0].member
-
-  condition {
-    title       = "relay_database_instances"
-    description = "The shared and dedicated instances only."
-    expression = join(" || ", [
-      "resource.name == 'projects/${var.project_id}/instances/${local.relay_database_instance_name}'",
-      "resource.name == 'projects/${var.project_id}/instances/${google_sql_database_instance.relay_dedicated[0].name}'"
-    ])
-  }
 }
 
 # The cutover writes the quiesce window into the pointer, and nothing else in the bucket.
