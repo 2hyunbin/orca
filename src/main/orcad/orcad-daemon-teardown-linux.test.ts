@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readAgentProcess } from '../../shared/agent-process-presence-probe'
 import type { LinuxStatEvidence } from '../daemon/daemon-incarnation-evidence-types'
 import { DaemonEndpointOwnershipError } from '../daemon/daemon-endpoint-adoption'
@@ -204,6 +204,10 @@ describe('profile daemon cleanup after loss of contact', () => {
       'Daemon cleanup aborted: the expected daemon could not be verified'
     )
 
+  // Why: the real Windows table read never settles under the fake timers some cases install.
+  beforeEach(() => __setDaemonProcessTableReaderForTests(async () => null))
+  afterEach(() => __setDaemonProcessTableReaderForTests())
+
   async function exitedChildPid(): Promise<number> {
     const child = spawnProcess({ program: process.execPath, args: ['-e', ''], timeoutMs: null })
     const pid = child.pid
@@ -287,7 +291,6 @@ describe('profile daemon cleanup after loss of contact', () => {
     let childReads = 3
     const reader = vi.fn(async () => (childReads-- > 0 ? [child] : []))
     __setDaemonProcessTableReaderForTests(reader)
-    onTestFinished(() => __setDaemonProcessTableReaderForTests())
     vi.mocked(cleanupDaemonForProtocol).mockResolvedValueOnce({ cleaned: true, killedCount: 1 })
     await killProfileDaemons(profile(daemonPid, onTestFinished))
     expect(childReads).toBeLessThan(0)
@@ -297,7 +300,6 @@ describe('profile daemon cleanup after loss of contact', () => {
     const daemonPid = await exitedChildPid()
     const child = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 1 }
     __setDaemonProcessTableReaderForTests(async () => [child])
-    onTestFinished(() => __setDaemonProcessTableReaderForTests())
     vi.mocked(cleanupDaemonForProtocol).mockResolvedValueOnce({ cleaned: true, killedCount: 1 })
     vi.useFakeTimers()
     try {
