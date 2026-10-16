@@ -7,7 +7,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
+import { removeTree } from '../../shared/windows-transient-lock-removal'
 import { readDaemonPidRecord } from '../daemon/daemon-endpoint-incarnation'
 import type { spawnProcess } from '@orca/process-host'
 
@@ -77,7 +77,7 @@ export async function killProfileDaemons(userData: string): Promise<void> {
 export async function removeTestRoot(root: string): Promise<void> {
   for (let attempt = 1; ; attempt += 1) {
     try {
-      removeTreeSync(root)
+      await removeTree(root)
       return
     } catch (error) {
       if (
