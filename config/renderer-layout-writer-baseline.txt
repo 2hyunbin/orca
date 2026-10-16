@@ -118,3 +118,4 @@
 2 src/renderer/src/store/terminals/workspace-terminal-hydration.ts
 2 src/renderer/src/store/terminals/workspace-terminal-reconnect.ts
 4 src/renderer/src/store/workspace-layout-frame-slices.ts
+12 src/renderer/src/store/workspace-layout-frame-store-patch.ts
