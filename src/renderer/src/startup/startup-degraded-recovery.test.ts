@@ -149,6 +149,15 @@ describe('recoverFromDegradedStartup', () => {
       expect(relaunch).toHaveBeenCalledTimes(1)
     })
 
+    it.each([
+      'Timed out while connecting to the remote Orca runtime.',
+      'Remote Orca runtime connection interrupted.'
+    ])('treats "%s" as an unreachable host', async (message) => {
+      await recoverFrom(new Error(message))
+
+      expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Couldn't reach your Orca host")
+    })
+
     it('keeps the session-restore warning when the host was connected', async () => {
       currentTransport = 'ready'
       await recoverFrom(new Error('Timed out waiting for the remote Orca runtime.'))

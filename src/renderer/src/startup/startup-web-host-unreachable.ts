@@ -7,14 +7,19 @@ import {
 } from '../../../shared/remote-runtime-client-error-classification'
 import type { RuntimeHostStatusSnapshot } from '../../../shared/runtime-host-status'
 
-// The web connection waiter's own deadline message, which the shared classifier doesn't list.
-const WEB_CONNECT_TIMEOUT_FRAGMENT = 'timed out while connecting to the remote orca runtime'
+// Web transport messages the shared classifier doesn't list: the connection waiter's deadline and
+// a socket that dropped mid-request.
+const WEB_CONNECTION_FAILURE_FRAGMENTS = [
+  'timed out while connecting to the remote orca runtime',
+  'remote orca runtime connection interrupted'
+]
 
 function isConnectionFailure(error: unknown): boolean {
   const like = toRemoteRuntimeClientErrorLike(error)
+  const message = like.message.toLowerCase()
   return (
     isRecoverableRemoteRuntimeConnectionError(like) ||
-    like.message.toLowerCase().includes(WEB_CONNECT_TIMEOUT_FRAGMENT)
+    WEB_CONNECTION_FAILURE_FRAGMENTS.some((fragment) => message.includes(fragment))
   )
 }
 
