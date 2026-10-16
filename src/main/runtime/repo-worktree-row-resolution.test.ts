@@ -46,6 +46,7 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
   listFolderWorkspaces: ReturnType<typeof vi.fn<RepoWorktreeRowDeps['listFolderWorkspaces']>>
 } {
   const metaById: Record<string, WorktreeMeta> = {}
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Scoped resolution reads only the methods supplied by this store double.
   const store = {
     getRepos: () => repos.map((owner) => ({ ...owner })),
     getAllWorktreeMeta: () => metaById,
