@@ -14,6 +14,11 @@ afterEach(() => {
   useAppStore.setState(initialAppStoreState, true)
 })
 
+function setStoreState(partial: Record<string, unknown>): void {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures set only the slices the wake sweep reads; the rest stay at the real initial state.
+  useAppStore.setState(partial as Partial<ReturnType<typeof useAppStore.getState>>)
+}
+
 function makeRecord(
   overrides: Partial<SleepingAgentSessionRecord> = {}
 ): SleepingAgentSessionRecord {
@@ -57,14 +62,14 @@ function makeLayout(leafId: string, ptyId: string | null): Record<string, unknow
 describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktree ids', () => {
   it('treats a leaf bound to an ssh pty as pane-owned while its target is disconnected', () => {
     const record = makeRecord()
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
       terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
       sshConnectionStates: new Map([['ssh-target-1', { status: 'disconnected' }]]),
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -74,14 +79,14 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
 
   it('resumes a leaf whose ssh pty is gone while its target is connected', () => {
     const record = makeRecord({ origin: 'worktree-sleep' })
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
       terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
       sshConnectionStates: new Map([['ssh-target-1', { status: 'connected' }]]),
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -90,7 +95,7 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
 
   it("does not credit a split leaf with another leaf's ssh pty", () => {
     const record = makeRecord()
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [{ ...makeTerminalTab('tab-1', 'wt-1'), ptyId: SSH_PTY_ID }] },
       terminalLayoutsByTabId: {
@@ -109,7 +114,7 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
       ptyIdsByTabId: {},
       sshConnectionStates: new Map([['ssh-target-1', { status: 'disconnected' }]]),
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -118,13 +123,13 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
 
   it('still resumes when the preserved pane has no pty binding and cannot own recovery', () => {
     const record = makeRecord()
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
       terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, null) },
       ptyIdsByTabId: {},
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -133,13 +138,13 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
 
   it('finds the preserved tab when the record worktreeId is stale', () => {
     const record = makeRecord()
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-1', 'wt-2')] },
       terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -155,13 +160,13 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
       worktreeId: 'wt-2',
       providerSession: { key: 'session_id', id: 'sess-9' }
     })
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
       terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
       sleepingAgentSessionsByPaneKey: { [stale.paneKey]: stale, [owned.paneKey]: owned }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
@@ -181,13 +186,13 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
       state: 'done',
       providerSession: { key: 'session_id', id: 'sess-9' }
     })
-    useAppStore.setState({
+    setStoreState({
       activeWorktreeId: 'wt-other',
       tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
       terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, null) },
       ptyIdsByTabId: {},
       sleepingAgentSessionsByPaneKey: { [active.paneKey]: active, [finished.paneKey]: finished }
-    } as never)
+    })
 
     const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
 
