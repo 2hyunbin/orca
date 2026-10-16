@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ServingModule from '../ssh/orcad-managed-serving'
+import type { ManagedOrcadStartListener } from '../ssh/orcad-managed-serving'
+import type { SshTarget } from '../../shared/ssh-types'
 
 const mocks = vi.hoisted(() => {
+  const startListener: { current: ManagedOrcadStartListener | null } = { current: null }
   const environments: Record<string, Record<string, unknown>> = {}
   const reads: Record<string, number> = {}
   return {
@@ -12,7 +16,9 @@ const mocks = vi.hoisted(() => {
     rebuildTunnel: vi.fn(async () => {}),
     verify: vi.fn(),
     restoreUpdate: vi.fn(() => null),
-    redeploy: vi.fn(async () => true)
+    redeploy: vi.fn(async () => true),
+    forgetVerdict: vi.fn(),
+    startListener
   }
 })
 
@@ -47,9 +53,21 @@ vi.mock('../ssh/ssh-host-server-status', () => ({ setSshHostServerStatus: vi.fn(
 vi.mock('../ssh/ssh-target-registry', () => ({ getSshTargetRegistryStore: () => null }))
 vi.mock('./ssh-ipc-context', () => ({ connectionManager: null, getCurrentMainWindow: () => null }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: vi.fn() }))
+vi.mock('./ssh-host-launch-session-note', () => ({
+  forgetLaunchSessionVerdict: mocks.forgetVerdict
+}))
+vi.mock('../ssh/orcad-managed-serving', async (importOriginal) => ({
+  ...(await importOriginal<typeof ServingModule>()),
+  setManagedOrcadStartListener: (listener: ManagedOrcadStartListener | null) => {
+    mocks.startListener.current = listener
+  }
+}))
 
 import { MANAGED_ORCAD_NOT_ACTIVATED_DETAIL } from '../ssh/orcad-managed-serving'
-import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
+import {
+  installManagedOrcadStartStatus,
+  resolveManagedRuntimeEnvironment
+} from './runtime-environment-managed-tunnel'
 import { WSL_HOSTS_GATED_OFF_MESSAGE } from '../wsl/wsl-host-gate'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../shared/wsl-host-internal-gate'
 
@@ -67,6 +85,28 @@ describe('resolving a managed runtime for a call', () => {
     // The forward is rebuilt for the port the redeployed server bound, not reused.
     expect(mocks.ensureTunnel).toHaveBeenCalledTimes(1)
     expect(mocks.rebuildTunnel).toHaveBeenCalledWith('/u', 'env-1')
+  })
+
+  it('forgets a cached ended launch session once this client redeployed the server', async () => {
+    mocks.verify.mockResolvedValue({
+      state: 'unverifiable',
+      detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+    })
+    await resolveManagedRuntimeEnvironment('/u', 'env-1')
+    expect(mocks.forgetVerdict).toHaveBeenCalledWith('ssh-1')
+    expect(mocks.forgetVerdict.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.rebuildTunnel.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('keeps the verdict when the redeploy did not start a server', async () => {
+    mocks.verify.mockResolvedValue({
+      state: 'unverifiable',
+      detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+    })
+    mocks.redeploy.mockResolvedValueOnce(false)
+    await resolveManagedRuntimeEnvironment('/u', 'env-1')
+    expect(mocks.forgetVerdict).not.toHaveBeenCalled()
   })
 
   it('leaves a serving server to the once-per-session update check', async () => {
@@ -132,5 +172,25 @@ describe('resolving a runtime for a call, by host kind', () => {
     expect(mocks.verify).toHaveBeenCalledWith('/u', 'paired-1')
     expect(mocks.restoreUpdate).toHaveBeenCalledWith('paired-1', expect.any(Function))
     expect(mocks.ensureForRuntimeCall).not.toHaveBeenCalled()
+  })
+})
+
+describe('a managed server start shown on the status line', () => {
+  const target: SshTarget = { id: 'ssh-1', label: 'mac', host: 'mac', port: 22, username: 'u' }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    installManagedOrcadStartStatus()
+  })
+
+  it('forgets a cached ended launch session once this client started the server', async () => {
+    mocks.startListener.current?.settled(target, 'env-1', { state: 'started', boundPort: 1 })
+    await vi.waitFor(() => expect(mocks.forgetVerdict).toHaveBeenCalledWith('ssh-1'))
+  })
+
+  it('keeps the verdict when no start happened', async () => {
+    mocks.startListener.current?.settled(target, 'env-1', { state: 'unverifiable', detail: 'x' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mocks.forgetVerdict).not.toHaveBeenCalled()
   })
 })

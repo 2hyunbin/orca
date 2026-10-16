@@ -141,7 +141,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   })
 
   it('replaces stale registrations and keeps one binary listener when registered again', async () => {
-    const channels = new Set(['runtimeEnvironments:list'])
+    const channels = new Set(['runtimeEnvironments:list', 'runtimeEnvironments:restartOrcad'])
     const listeners = new EventEmitter()
     listeners.on('runtimeEnvironments:subscriptionBinary', vi.fn())
     handleMock.mockImplementation((channel: string) => {
@@ -166,6 +166,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       registerRuntimeEnvironmentHandlers(store as never)
 
       expect(listeners.listenerCount('runtimeEnvironments:subscriptionBinary')).toBe(1)
+      expect(channels.has('runtimeEnvironments:restartOrcad')).toBe(true)
       const list = handler<undefined, unknown[]>('runtimeEnvironments:list')
       expect(await list(null, undefined)).toEqual([])
     } finally {
