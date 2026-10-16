@@ -119,6 +119,21 @@ const CreateTerminalTabCommand = z.object({
   initial: z.literal('activation').optional()
 })
 
+/** The tab bar's rename: a title as the window stores it today; null clears it. */
+const RenameTabCommand = z.object({
+  type: z.literal('renameTab'),
+  ...OnTab,
+  kind: z.literal('custom'),
+  title: z.union([z.string(), z.null()])
+})
+
+const SetTabPropsCommand = z.object({
+  type: z.literal('setTabProps'),
+  ...OnTab,
+  color: z.union([z.string(), z.null()]).optional(),
+  isPinned: z.boolean().optional()
+})
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id but a created tab's (see CreateTerminalTabCommand).
@@ -135,6 +150,8 @@ export const LayoutApplyParams = z.object({
     MoveTabCommand,
     SplitGroupCommand,
     SetGroupRatiosCommand,
-    CloseTabsCommand
+    CloseTabsCommand,
+    RenameTabCommand,
+    SetTabPropsCommand
   ])
 })
