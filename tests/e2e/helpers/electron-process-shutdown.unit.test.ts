@@ -8,6 +8,9 @@ import type { ChildProcess } from 'node:child_process'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './electron-process-shutdown'
+import { registerElectronBrowserTransportShutdownTests } from './electron-browser-transport-shutdown.test-fixture'
+
+registerElectronBrowserTransportShutdownTests()
 
 function exitedAppFixture() {
   const proc = Object.assign(new EventEmitter(), {
@@ -124,6 +127,60 @@ afterEach(async () => {
 })
 
 describe('Electron shutdown with inherited pipes', () => {
+  it.skipIf(process.platform !== 'linux')(
+    'releases the exited browser transport and still awaits public cleanup',
+    async () => {
+      const { proc, app, close } = exitedAppFixture()
+      let finishPublicCleanup: () => void = () => {}
+      const publicCleanup = new Promise<void>((resolve) => {
+        finishPublicCleanup = resolve
+      })
+      let transportReleased = false
+      let shutdownFinished = false
+      const implementation = {
+        _process: proc,
+        _nodeConnection: { _closed: true },
+        _browserContext: {
+          _browser: {
+            options: { browserProcess: { process: proc } },
+            _connection: {
+              _closed: false,
+              _sessions: new Map([['', { _callbacks: new Map() }]]),
+              _transport: {
+                _ws: {
+                  readyState: 1,
+                  terminate: () => {
+                    transportReleased = true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      Object.assign(app, { _connection: { toImpl: () => implementation } })
+      close.mockImplementation(async () => {
+        await publicCleanup
+        return []
+      })
+      const closing = closeElectronAppForE2E(app).then(() => {
+        shutdownFinished = true
+      })
+      expect(transportReleased).toBe(false)
+      proc.exitCode = 0
+      proc.emit('exit', 0, null)
+      expect(transportReleased).toBe(false)
+      proc.emit('close', 0, null)
+      expect(transportReleased).toBe(true)
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(shutdownFinished).toBe(false)
+      finishPublicCleanup()
+      await closing
+      expect(close).toHaveBeenCalledOnce()
+      expect(proc.listenerCount('close')).toBe(0)
+    }
+  )
+
   it('releases retained pipes only after Electron exits, settling Playwright cleanup', async () => {
     const { proc, app, close } = exitedAppFixture()
     const closing = closeElectronAppForE2E(app)
