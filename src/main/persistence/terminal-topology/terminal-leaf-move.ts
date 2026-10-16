@@ -10,6 +10,8 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import { retireLeavesFromTerminalLayout } from '../../runtime/mobile-session-terminal-retirement'
 import { createMinimalPersistedTerminalTab } from '../restoring-sessions/session-owner-fields'
 import { layoutContainsLeafId } from '../restoring-sessions/terminal-layout-normalization'
+import { writeRestorable } from './restorable-write'
+import type { TerminalTopologyCommitContext } from './terminal-topology-commit'
 import {
   advanceTerminalTopologyRevision,
   isTerminalOwnerPartition,
@@ -236,4 +238,35 @@ export function rekeyMovedLeafProfileRecords(
         }
       : {})
   }
+}
+
+/** Pane-keyed UI marks and SSH leases follow a moved leaf; returns their restores. */
+export function writeMovedLeafProfileRecords(
+  request: TerminalLeafMoveRequest,
+  context: TerminalTopologyCommitContext
+): (() => void)[] {
+  const { state } = context
+  const restores: (() => void)[] = []
+  const rekeyed = rekeyMovedLeafProfileRecords(state, request)
+  if (rekeyed.ui) {
+    restores.push(
+      writeRestorable(
+        () => state.ui,
+        (ui) => (state.ui = ui),
+        rekeyed.ui
+      )
+    )
+    context.markDirty('ui')
+  }
+  if (rekeyed.sshRemotePtyLeases) {
+    restores.push(
+      writeRestorable(
+        () => state.sshRemotePtyLeases,
+        (leases) => (state.sshRemotePtyLeases = leases),
+        rekeyed.sshRemotePtyLeases
+      )
+    )
+    context.markDirty('sshRemotePtyLeases')
+  }
+  return restores
 }

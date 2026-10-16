@@ -29,7 +29,8 @@ import type {
   StoreRuntimeState
 } from '../loading-store/store-runtime-state'
 import type { SessionHostPartitionOperations } from '../loading-store/session-host-partitions'
-import { planTerminalLeafMove, rekeyMovedLeafProfileRecords } from './terminal-leaf-move'
+import { planTerminalLeafMove, writeMovedLeafProfileRecords } from './terminal-leaf-move'
+import { writeRestorable } from './restorable-write'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
 import { keepWslMoveFrozenSessionsForStore } from '../moving-wsl-projects/wsl-move-session-freeze'
 import { resolveWindowPaneDetach, type WindowPaneDetachCommand } from './window-pane-detach'
@@ -198,7 +199,6 @@ export function topologyCommitContext({
   }
 }
 
-/** Writes `next`, returning a restore that puts the prior value back unless a later write replaced it. */
 // A paused WSL move keeps its local rows as the quiesce left them.
 function keepFrozen(
   hostId: ExecutionHostId,
@@ -208,16 +208,6 @@ function keepFrozen(
   return hostId === LOCAL_EXECUTION_HOST_ID
     ? keepWslMoveFrozenSessionsForStore(session, context.getSession(hostId))
     : session
-}
-
-function writeRestorable<V>(read: () => V, write: (value: V) => void, next: V): () => void {
-  const prior = read()
-  write(next)
-  return () => {
-    if (read() === next) {
-      write(prior)
-    }
-  }
 }
 
 function commitLeafMove(
@@ -244,37 +234,6 @@ function commitLeafMove(
     value: planned.result,
     rollback: () => restores.forEach((restore) => restore())
   }
-}
-
-/** Pane-keyed UI marks and SSH leases follow a moved leaf; returns their restores. */
-function writeMovedLeafProfileRecords(
-  request: TerminalLeafMoveRequest,
-  context: TerminalTopologyCommitContext
-): (() => void)[] {
-  const { state } = context
-  const restores: (() => void)[] = []
-  const rekeyed = rekeyMovedLeafProfileRecords(state, request)
-  if (rekeyed.ui) {
-    restores.push(
-      writeRestorable(
-        () => state.ui,
-        (ui) => (state.ui = ui),
-        rekeyed.ui
-      )
-    )
-    context.markDirty('ui')
-  }
-  if (rekeyed.sshRemotePtyLeases) {
-    restores.push(
-      writeRestorable(
-        () => state.sshRemotePtyLeases,
-        (leases) => (state.sshRemotePtyLeases = leases),
-        rekeyed.sshRemotePtyLeases
-      )
-    )
-    context.markDirty('sshRemotePtyLeases')
-  }
-  return restores
 }
 
 /** A window's drag-out: checked across every partition, then moved in each holder as one write. */
