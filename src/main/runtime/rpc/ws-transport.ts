@@ -43,6 +43,8 @@ export type WebSocketTransportOptions = {
   fallbackPort?: number
   // Why: serve --port clients dial the pinned port; prefer it first so a stale fallback can't steal the pin (issue #8535). Default keeps fallback-first (STA-1511).
   preferPinnedPort?: boolean
+  // Why: an explicit `orca serve --port` must fail when that port is taken, not move elsewhere (#26603).
+  requirePinnedPort?: boolean
   // Why: deterministic ports tried before an OS-assigned one, so a fallback stays stable across reboots.
   fallbackLadder?: readonly number[]
 }
@@ -57,6 +59,7 @@ export class WebSocketTransport implements RpcTransport {
   private readonly staticRoot: string | undefined
   private readonly fallbackPort: number | undefined
   private readonly preferPinnedPort: boolean
+  private readonly requirePinnedPort: boolean
   private readonly fallbackLadder: readonly number[]
   private persistedFallbackBindFailed = false
   private httpServer: HttpsServer | HttpServer | null = null
@@ -80,6 +83,7 @@ export class WebSocketTransport implements RpcTransport {
     staticRoot,
     fallbackPort,
     preferPinnedPort,
+    requirePinnedPort,
     fallbackLadder
   }: WebSocketTransportOptions) {
     this.host = host
@@ -95,6 +99,7 @@ export class WebSocketTransport implements RpcTransport {
     this.staticRoot = staticRoot
     this.fallbackPort = fallbackPort
     this.preferPinnedPort = preferPinnedPort === true
+    this.requirePinnedPort = requirePinnedPort === true
     this.fallbackLadder = fallbackLadder ?? []
   }
 
@@ -150,6 +155,14 @@ export class WebSocketTransport implements RpcTransport {
 
   async start(): Promise<void> {
     if (this.wss) {
+      return
+    }
+    if (this.requirePinnedPort) {
+      await this.tryListen(this.port).catch((error: unknown) => {
+        throw isPortListenFallbackError(error, this.port)
+          ? new PinnedPortUnavailableError(this.host, this.port, error)
+          : error
+      })
       return
     }
     // Why: bind a persisted fallback first so devices paired to it aren't stranded (STA-1511); serve --port flips to pinned-first (issue #8535); then the deterministic ladder, and only then an OS-assigned port 0.
@@ -263,6 +276,19 @@ export class WebSocketTransport implements RpcTransport {
       getMessageHandler: () => this.messageHandler,
       getConnectionCloseHandler: () => this.connectionCloseHandler
     })
+  }
+}
+
+export class PinnedPortUnavailableError extends Error {
+  readonly code = 'pinned_port_unavailable'
+
+  constructor(host: string, port: number, cause: unknown) {
+    const reason = cause instanceof Error && 'code' in cause ? String(cause.code) : 'unavailable'
+    super(
+      `Port ${port} on ${host} is unavailable (${reason}). Stop whatever is using it, or pass a different --port.`,
+      { cause }
+    )
+    this.name = 'PinnedPortUnavailableError'
   }
 }
 
