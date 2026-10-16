@@ -192,7 +192,7 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
           terminalHandlesByPtyId
         })
         // Why: the stops were acknowledged and their hook rows are gone; a retry has nothing to capture.
-        this.sleepResumeRecords.persist(worktree.id, resumeCapture, successfulStopPtyIds)
+        await this.sleepResumeRecords.persist(worktree.id, resumeCapture, successfulStopPtyIds)
         if (failedStopIndex !== -1) {
           const failedStop = stopResults[failedStopIndex]
           throw Object.assign(new Error('terminal_worktree_sleep_failed'), {
@@ -220,7 +220,7 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
         committedPtyIds,
         terminalHandlesByPtyId
       })
-      this.sleepResumeRecords.persist(worktree.id, resumeCapture, provenStoppedPtyIds)
+      await this.sleepResumeRecords.persist(worktree.id, resumeCapture, provenStoppedPtyIds)
       if (failedStopIndex !== -1 && remainingLivePtyIds.size > 0) {
         const failedStop = stopResults[failedStopIndex]
         console.error('[runtime] worktree terminal sleep physical stop failed', {

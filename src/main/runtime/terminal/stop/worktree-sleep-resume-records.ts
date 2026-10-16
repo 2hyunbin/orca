@@ -19,7 +19,11 @@ export type WorktreeSleepResumeCapture = Map<
 /** Captures before a host-driven sleep stops its PTYs and persists for the ones proven stopped. */
 export type WorktreeSleepResumeRecorder = {
   capture(worktreeId: string, ptyIds: ReadonlySet<string>): Promise<WorktreeSleepResumeCapture>
-  persist(worktreeId: string, capture: WorktreeSleepResumeCapture, stoppedPtyIds: string[]): void
+  persist(
+    worktreeId: string,
+    capture: WorktreeSleepResumeCapture,
+    stoppedPtyIds: string[]
+  ): Promise<void>
 }
 
 /**
@@ -120,4 +124,37 @@ export function applyWorktreeSleepResumeRecords(
     }
   }
   return changed ? { ...session, sleepingAgentSessionsByPaneKey: next } : null
+}
+
+/** The session with a closed worktree's resume records dropped; an Error while its terminals remain. */
+export function clearClosedWorktreeResumeRecords(
+  session: WorkspaceSessionState,
+  worktreeId: string,
+  closedTabIds: readonly string[]
+): WorkspaceSessionState | Error | null {
+  const sleepingAgentSessionsByPaneKey = Object.fromEntries(
+    Object.entries(session.sleepingAgentSessionsByPaneKey ?? {}).filter(
+      ([, record]) => record.worktreeId !== worktreeId
+    )
+  )
+  const terminalPtyIncarnationsByPaneKey = Object.fromEntries(
+    Object.entries(session.terminalPtyIncarnationsByPaneKey ?? {}).filter(
+      ([paneKey]) => !closedTabIds.some((tabId) => paneKey.startsWith(`${tabId}:`))
+    )
+  )
+  const remainingTerminalRows = session.tabsByWorktree[worktreeId] ?? []
+  const remainingUnifiedTerminalTabs = (session.unifiedTabs?.[worktreeId] ?? []).filter(
+    (tab) => tab.contentType === 'terminal'
+  )
+  if (remainingTerminalRows.length > 0 || remainingUnifiedTerminalTabs.length > 0) {
+    return new Error('terminal_close_incomplete')
+  }
+  const hasChanges =
+    Object.keys(sleepingAgentSessionsByPaneKey).length !==
+      Object.keys(session.sleepingAgentSessionsByPaneKey ?? {}).length ||
+    Object.keys(terminalPtyIncarnationsByPaneKey).length !==
+      Object.keys(session.terminalPtyIncarnationsByPaneKey ?? {}).length
+  return hasChanges
+    ? { ...session, sleepingAgentSessionsByPaneKey, terminalPtyIncarnationsByPaneKey }
+    : null
 }

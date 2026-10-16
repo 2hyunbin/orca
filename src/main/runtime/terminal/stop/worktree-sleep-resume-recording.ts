@@ -23,13 +23,12 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
         checkAgentPresence: this.checkHookAgentPresenceFn,
         capturedAt: Date.now()
       }),
-    persist: (worktreeId, capture, stoppedPtyIds) => {
+    persist: async (worktreeId, capture, stoppedPtyIds) => {
       try {
-        const session = this.getWorkspaceSessionForWorktree(worktreeId)
-        const next = session && applyWorktreeSleepResumeRecords(session, capture, stoppedPtyIds)
-        if (next) {
-          this.setWorkspaceSessionForWorktree(worktreeId, next)
-        }
+        await this.commitWorkspaceSessionEdit(
+          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+          (session) => applyWorktreeSleepResumeRecords(session, capture, stoppedPtyIds)
+        )
       } catch (error) {
         // Why: the PTYs already stopped; a lost record costs the resume, not the sleep.
         console.error('[runtime] could not record slept agent sessions', { worktreeId, error })

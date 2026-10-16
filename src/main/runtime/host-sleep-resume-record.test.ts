@@ -109,6 +109,24 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
 
     expect(spawn).toHaveBeenCalledTimes(2)
     expect(spawnCommand(spawn, 1).includes(SESSION_ID)).toBe(resumes)
+    // A hand-typed `claude` recorded no recipe; the settings default bypass must not widen it.
+    expect(spawnCommand(spawn, 1)).not.toContain('--dangerously-skip-permissions')
+  })
+
+  it('resumes an Orca-launched session with the recipe its launch recorded', async () => {
+    const { runtime, spawn, reportAgent } = makeRuntime(null)
+    await userActivate(runtime)
+    reportAgent()
+    const launchConfig = { agentArgs: '--dangerously-skip-permissions', agentEnv: {} }
+    const pty = [...runtime['ptysById'].values()][0]!
+    pty.launchAgent = 'claude'
+    pty.launchConfig = launchConfig
+
+    await runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`)
+    await userActivate(runtime)
+
+    expect(spawnCommand(spawn, 1)).toContain('--dangerously-skip-permissions')
+    expect(spawnCommand(spawn, 1)).toContain(SESSION_ID)
   })
 
   it.each([
@@ -153,20 +171,19 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     ['codex', false]
   ] as const)('keeps a %s-launched PTY recipe: %s', async (launchAgent, kept) => {
     const config = { agentCommand: '/opt/claude-custom', agentArgs: '--x', agentEnv: {} }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
+    const launchedRow = {
+      paneKey: PANE_KEY,
+      agentType: 'claude',
+      providerSession: { key: 'session_id', id: SESSION_ID },
+      prompt: '',
+      receivedAt: 1
+    } as AgentStatusIpcPayload
     const capture = await captureWorktreeSleepResumeRecords({
       worktreeId: TEST_WORKTREE_ID,
       paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
       launchByPtyId: new Map([['pty', { agent: launchAgent, config }]]),
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
-      readRows: () => [
-        {
-          paneKey: PANE_KEY,
-          agentType: 'claude',
-          providerSession: { key: 'session_id', id: SESSION_ID },
-          prompt: '',
-          receivedAt: 1
-        } as AgentStatusIpcPayload
-      ],
+      readRows: () => [launchedRow],
       checkAgentPresence: null,
       capturedAt: 2
     })
