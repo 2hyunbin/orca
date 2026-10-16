@@ -173,7 +173,7 @@ export function createTerminalPaneHibernationActions(
           snapshot.commit?.()
         }
       }
-      // Switch point: main records the sleep this window decided, once the terminal stopped.
+      // Switch point: main records the sleep this window decided, once the stop settled.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
         recordPaneSleepThroughLayoutOwner(get(), worktreeId, sleepingAgentSessionRecords)
       }
