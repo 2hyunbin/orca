@@ -15,10 +15,8 @@ import type {
 import type { AgentSessionJournalBatch } from '../../../shared/agent-session-wire'
 import { isStructuredAgentSessionStopNote } from './structured-agent-session-command-turn'
 import { findSequenceGap } from '../agent-session-journal/journal-cursor'
-import {
-  isJournalStopOrResumeRow,
-  type JournalRow
-} from '../agent-session-journal/journal-row-schema'
+import { isJournalStopOrResumeRow } from '../agent-session-journal/journal-row-schema'
+import type { JournalProjectionRow } from '../agent-session-journal/journal-committed-changes'
 
 export type JournalBatchProjection =
   | { ok: true; batch: AgentSessionJournalBatch }
@@ -27,7 +25,7 @@ export type JournalBatchProjection =
   | { ok: false; reset: 'journal_gap' }
 
 export function projectJournalBatch(input: {
-  rows: readonly JournalRow[]
+  rows: readonly JournalProjectionRow[]
   snapshot: AgentJournalSnapshot
   /** Sequence the subscriber has already applied. */
   afterSequence: number

@@ -27,6 +27,7 @@ import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import { rememberSessionActivity } from './structured-agent-session-activity-retention'
 import { refreshDerivedStopNotes } from './agent-session-stop-note-refresh'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
+import { captureLivePublication, type AgentSessionLivePublication } from './agent-session-live-publication'
 
 export type AgentSessionSubscriberEmit = (event: AgentSessionSubscribeEvent) => void
 export type AgentSessionSubscribeInput = {
@@ -56,12 +57,7 @@ export type Subscriber = {
   workView?: string
 }
 
-export type AgentSessionSubscribersHooks = {
-  readCommands?: (sessionId: string) => AgentSessionSlashCommand[] | undefined
-  /** Revision-stable per emit: an unchanged list keeps its reference, so token
-   *  streams never re-serialize it; any draft-table write changes it. */
-  readQueuePublication?: (sessionId: string) => QueuePublication | undefined
-  readBackgroundTasks?: SubscriberFieldHooks['readBackgroundTasks']
+export type AgentSessionSubscribersHooks = SubscriberFieldHooks & {
   /** Fires after publications that can change journal content. */
   onJournalPublished?: (sessionId: string, journal: AgentSessionJournal) => void
   /** The host's projection of current work (`structuredAgentSessionCurrentWork`), which every
@@ -87,14 +83,9 @@ export class AgentSessionSubscribers {
     return this.bySession.get(sessionId)?.size ?? 0
   }
 
-  open(input: {
-    id: string
-    sessionId: string
+  open(input: AgentSessionSubscribeInput & {
     journal: AgentSessionJournal
     fence: number
-    emit: AgentSessionSubscriberEmit
-    cursor?: AgentJournalCursor
-    boundedFrames?: boolean
   }): () => void {
     const liveCursor = input.journal.cursor()
     const subscriber: Subscriber = {
@@ -191,8 +182,11 @@ export class AgentSessionSubscribers {
     activity?: AgentSessionTurnActivity | null
   ): void {
     const hostNow = this.now()
-    for (const subscriber of this.subscribers(sessionId)) {
-      this.deliver(subscriber, journal, hostNow, false, activity)
+    const subscribers = this.subscribers(sessionId)
+    if (subscribers.length === 0) return
+    const publication = captureLivePublication(sessionId, journal, this.hooks, subscribers)
+    for (const subscriber of subscribers) {
+      this.deliver(subscriber, journal, hostNow, false, activity, publication)
     }
   }
 
@@ -281,16 +275,18 @@ export class AgentSessionSubscribers {
     journal: AgentSessionJournal,
     hostNow: number,
     emitCheckpoint = false,
-    activity?: AgentSessionTurnActivity | null
+    activity?: AgentSessionTurnActivity | null,
+    publication?: AgentSessionLivePublication
   ): void {
     deliverToSubscriber(
       {
-        hooks: this.hooks,
-        emit: (target, event, options) => this.emit(target, event, options),
-        isActive: (target) => this.isActive(target),
+        hooks: { ...this.hooks, ...publication?.fields },
+        emit: (target, event, options) => this.emit(target, event, options, publication?.fields),
+        isActive: (target) => this.isActive(target) &&
+          (!publication || journal.epoch === publication.history.snapshot.cursor.epoch),
         activity: (sessionId) => this.activityField(sessionId).activity
       },
-      { subscriber, journal, hostNow, emitCheckpoint, activity }
+      { subscriber, journal, hostNow, emitCheckpoint, activity, publication }
     )
   }
 
@@ -304,11 +300,12 @@ export class AgentSessionSubscribers {
   private emit(
     subscriber: Subscriber,
     event: AgentSessionSubscribeEvent,
-    options?: { withholdQueued?: boolean }
+    options?: { withholdQueued?: boolean },
+    fields = this.hooks
   ): void {
     try {
       const built = buildSubscriberFrame(
-        this.hooks,
+        fields,
         subscriber,
         event,
         options?.withholdQueued === true

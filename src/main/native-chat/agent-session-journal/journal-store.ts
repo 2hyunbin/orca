@@ -25,6 +25,7 @@ import {
 } from '../../../shared/structured-agent-session-live-turn'
 import type { JournalReplacementItem } from './journal-epoch-replacement'
 import { readJournalSince } from './journal-cursor'
+import { journalPublication, JournalCommittedChanges } from './journal-committed-changes'
 import type { JournalHostDatabase } from './journal-host-database'
 import { journalRowsAfterReader, type JournalLoad } from './journal-open'
 import {
@@ -87,6 +88,7 @@ export class AgentSessionJournal {
   private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: (() => void) | null = null
+  private readonly committedChanges = new JournalCommittedChanges()
   private readonly queue: JournalWriteQueue
   private readonly rowWriter: JournalRowWriter
   private readonly epochController: JournalEpochController
@@ -121,6 +123,7 @@ export class AgentSessionJournal {
       readOnly: () => this.database.readOnly,
       cursor: this.cursor,
       adopt: (loaded) => {
+        this.committedChanges.clear()
         this.adoptLoadedJournal(loaded)
         this.onCommitted?.()
       },
@@ -128,6 +131,7 @@ export class AgentSessionJournal {
         for (const row of rows) {
           applyJournalRow(this.state, row, savedAt)
         }
+        this.committedChanges.append(rows)
         this.onCommitted?.()
       },
       notifyCommitted: () => this.onCommitted?.(),
@@ -181,7 +185,7 @@ export class AgentSessionJournal {
   close(): Promise<void> {
     this.queuedMessages.editLeases.dispose()
     this.queue.markClosed()
-    return this.queue.drain()
+    return this.queue.drain().finally(() => this.committedChanges.clear())
   }
 
   /** Told of every durable change, epoch replacements included, so a reader learns of a write
@@ -196,6 +200,8 @@ export class AgentSessionJournal {
   })
 
   snapshot = (): AgentJournalSnapshot => renderJournalState(this.state)
+
+  capturePublication = () => journalPublication(this.committedChanges, this.state)
 
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (

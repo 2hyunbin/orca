@@ -6,6 +6,7 @@ import type {
   AgentSessionHistoryResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
 import { snapshotLatestTurn } from './agent-session-history-page'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
@@ -20,6 +21,22 @@ type PublishedWorkFields = Pick<
   AgentSessionHistoryPage,
   'latestTurn' | 'actionablePromptIds' | 'working'
 >
+
+/** Materialize before any transport callback can advance the journal behind this view. */
+export function capturePublishedWork(
+  snapshot: AgentJournalSnapshot,
+  work: StructuredAgentSessionCurrentWork | undefined
+) {
+  if (!work) return undefined
+  const fields = publishedWorkFields(snapshotLatestTurn(snapshot), work)
+  const view = work.viewKey()
+  return {
+    publishedLatestTurn: () => fields.latestTurn ?? null,
+    actionablePromptIds: () => fields.actionablePromptIds ?? [],
+    working: () => fields.working ?? false,
+    viewKey: () => view
+  }
+}
 
 function publishedWorkFields(
   latestTurn: AgentSessionHistoryPage['latestTurn'],

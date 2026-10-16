@@ -1,3 +1,5 @@
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
+import { isSubagentBlock } from '../../../shared/native-chat-types'
 import {
   agentJournalSubmissionKey,
   boundJournalKeyComponent
@@ -8,10 +10,17 @@ import type {
 } from '../../../shared/agent-session-journal-types'
 import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../shared/remote-runtime-memory-limits'
 import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
+import { AGENT_SESSION_HISTORY_DEFAULT_LIMIT, AGENT_SESSION_HISTORY_MAX_LIMIT } from '../../../shared/agent-session-wire'
 import { agentSessionHostStatusBody } from '../../../shared/agent-session-host-status-rows'
 import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-subagent-items'
 
 export const AGENT_SESSION_HISTORY_MAX_PAGE_BYTES = REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES / 2
+
+/** Clamping lets a reader keep paging instead of rejecting an excessive request. */
+export function resolveHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return AGENT_SESSION_HISTORY_DEFAULT_LIMIT
+  return Math.min(AGENT_SESSION_HISTORY_MAX_LIMIT, Math.max(1, Math.floor(limit)))
+}
 
 const HISTORY_PAGE_ENVELOPE_RESERVE_BYTES = 64 * 1024
 
@@ -176,4 +185,37 @@ export function wholeSubagentGroupsStart(
     }
   }
   return whole
+}
+
+/**
+ * The newest `limit` of the session's own rows, in whole sequence groups, and every
+ * row after the oldest of them: a subagent's rows, and each subagent's own row, ride
+ * along with the conversation they happened in, so a burst or a fan-out cannot crowd
+ * the conversation off the page. The page stays contiguous and starts at its first
+ * item, as the cursor means; the byte budget still bounds it. Fewer own rows than
+ * `limit` reach back to the start. With no subagent rows this is the newest `limit`
+ * rows, as before. A page reaches back to the first sibling of each subagent group it holds
+ * part of, so loading an older page does not renumber a group's ordinals or move its row.
+ */
+export function conversationWindow(
+  items: readonly AgentJournalRenderItem[],
+  limit: number
+): AgentJournalRenderItem[] {
+  const own = items.filter((item) => isRootAgentJournalItem(item) && !isSubagentRow(item))
+  if (own.length === items.length) {
+    return newestWholeSequenceGroups(items, limit)
+  }
+  const ownWindow = newestWholeSequenceGroups(own, limit)
+  const start = ownWindow.length < own.length ? ownWindow[0]?.sequence : undefined
+  if (start === undefined) {
+    return [...items]
+  }
+  const reach = newestWholeSequenceGroups(own, 2 * limit)
+  const floor = reach.length < own.length ? reach[0]!.sequence : Number.NEGATIVE_INFINITY
+  const whole = wholeSubagentGroupsStart(items, start, floor)
+  return items.filter((item) => item.sequence >= whole)
+}
+
+function isSubagentRow(item: AgentJournalRenderItem): boolean {
+  return item.body.kind === 'message' && item.body.blocks.some(isSubagentBlock)
 }
