@@ -138,6 +138,10 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     return this.worktreeLineage.hydrate()
   }
 
+  listLineageEdges() {
+    return this.worktreeLineage.listLineageEdges()
+  }
+
   listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {
     return this.worktreeLineage.listWorktreeLineage()
   }

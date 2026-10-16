@@ -1,9 +1,9 @@
+import { removeCanonicalLineage } from '../loading-store/canonical-workspace-lineage'
 import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import { getRepoKind } from '../../../shared/repo-kind'
 import { sshRemotePtyLeaseAllowsReattach } from '../../../shared/ssh-types'
-import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import { FOLDER_WORKSPACE_INSTANCE_SEPARATOR, splitWorktreeId } from '../../../shared/worktree/id'
 import { isWslUncPath } from '../../../shared/wsl-paths'
 import { isFinalAutomationRunStatus } from '../../../shared/automations-types'
@@ -186,8 +186,7 @@ export function pruneSessionlessMissingLocalWorktreeMetadataForRepo(
     ) {
       continue
     }
-    delete state.worktreeLineageById[worktreeId]
-    delete state.workspaceLineageByChildKey[worktreeWorkspaceKey(worktreeId)]
+    removeCanonicalLineage(state, expectation.expectedLegacy.expectedInstanceId)
     removedIds.push(worktreeId)
   }
   if (removedIds.length > 0) {

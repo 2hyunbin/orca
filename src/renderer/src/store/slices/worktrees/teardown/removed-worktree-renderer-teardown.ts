@@ -1,3 +1,4 @@
+import { removedOwnerTabIds } from './worktree-removal-owner'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import type { WorktreeCatalogVersion } from '../../../../../../shared/worktree/catalog-version'
@@ -48,8 +49,12 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   // Why the captured keys: closing a structured chat keeps its conversation's draft, and a listing
   // refresh may already have dropped these tabs.
   deleteWorkspaceChatDrafts(beforeRemoval.chatDraftKeys)
+  const tabIds = new Set([
+    ...(beforeRemoval.tabIds ?? []),
+    ...removedOwnerTabIds(get(), worktreeId, requiredExecutionHostId ?? hostId)
+  ])
   for (const tab of get().unifiedTabsByWorktree[worktreeId] ?? []) {
-    if (tab.contentType === 'agent-session') {
+    if (tabIds.has(tab.id) && tab.contentType === 'agent-session') {
       get().closeUnifiedTab(tab.id, {
         preserveWorktreeSelection: true,
         recordInteraction: false
@@ -58,8 +63,9 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   }
   // Why: renderer state follows the successful backend result, so blocked dirty deletes keep their terminals intact.
   // Why browsers first: unregister Chromium guests before other teardown can intercept them (avoids a browser-state race).
-  await get().shutdownWorktreeBrowsers(worktreeId)
+  await get().shutdownWorktreeBrowsers(worktreeId, tabIds)
   await get().shutdownWorktreeTerminals(worktreeId, {
+    tabIds,
     shutdownReason: 'remove-worktree',
     // The backend removal above already killed the workspace's PTYs.
     backendOwnsPtyTeardown: true
@@ -76,11 +82,15 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   )
   // Remove the orphaned project for the destroyed SSH target so it can't surface as a dead project in the composer.
   await purgeOrphanedRuntimeSshProjects(get, runtimeCleanup.destroyedSshTargetIds)
-  const tabs = get().tabsByWorktree[worktreeId] ?? []
-  const tabIds = new Set(tabs.map((t) => t.id))
 
   // Why: this path deletes tabsByWorktree wholesale (not via closeTab), so purge the module-level tab maps here too.
-  detachedHeadAutoDerivedDisplayNames.delete(worktreeId)
+  if (
+    !get()
+      .allWorktrees()
+      .some((row) => row.id === worktreeId && row.hostId !== (requiredExecutionHostId ?? hostId))
+  ) {
+    detachedHeadAutoDerivedDisplayNames.delete(worktreeId)
+  }
   forgetForegroundTerminalTabs(tabIds)
   forgetAgentStartupDeliveriesForTabs(tabIds)
 

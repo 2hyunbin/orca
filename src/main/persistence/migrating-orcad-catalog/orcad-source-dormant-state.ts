@@ -1,3 +1,9 @@
+import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import {
+  edgeToWorktreeLineage,
+  edgeToWorkspaceLineage
+} from '../../../shared/worktree/lineage-edge'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type {
   OrcadMigrationCatalogPayload,
   OrcadMigrationDormantStatePayload,
@@ -95,10 +101,7 @@ export function collectOrcadMigrationSourceDormantState(
         return []
       }
       // Cross-host history belongs to the desktop and stays in its retained source profile.
-      if (
-        !orcadMigrationOwnerMatchesScope(lineage.worktreeId, scope) ||
-        !orcadMigrationOwnerMatchesScope(lineage.parentWorktreeId, scope)
-      ) {
+      if (!orcadMigrationOwnerMatchesScope(lineage.worktreeId, scope)) {
         return []
       }
       return [{ sourceKey, worktreeId, lineage: structuredClone(lineage) }]
@@ -119,10 +122,7 @@ export function collectOrcadMigrationSourceDormantState(
         blockedCounts['workspace-lineage'] += 1
         return []
       }
-      if (
-        !orcadMigrationOwnerMatchesScope(lineage.childWorkspaceKey, scope) ||
-        !orcadMigrationOwnerMatchesScope(lineage.parentWorkspaceKey, scope)
-      ) {
+      if (!orcadMigrationOwnerMatchesScope(lineage.childWorkspaceKey, scope)) {
         return []
       }
       return [
@@ -178,12 +178,54 @@ export function collectOrcadMigrationSourceDormantState(
     ...Array.from({ length: clientState.blockedCount }, () => 'a browser page close saved twice')
   )
   blockedCounts['workspace-session'] = blockedSessionItems.length
+  const edges = Object.values(state.lineageByChildInstance ?? {}).filter(
+    (edge) =>
+      edge.child.hostId &&
+      orcadMigrationOwnerMatchesScope(
+        composeWorktreeHostIdentity(edge.child.hostId, edge.child.locator),
+        scope
+      )
+  )
+  for (const edge of edges) {
+    const child = parseWorkspaceKey(edge.child.locator)
+    if (child?.type !== 'worktree') {
+      continue
+    }
+    const sourceKey = composeWorktreeHostIdentity(edge.child.hostId, child.worktreeId)
+    const projected = edgeToWorktreeLineage(edge)
+    const oldWorktree = worktreeLineage.findIndex((entry) => entry.worktreeId === child.worktreeId)
+    if (oldWorktree !== -1) {
+      worktreeLineage.splice(oldWorktree, 1)
+    }
+    if (projected) {
+      worktreeLineage.push({ sourceKey, worktreeId: child.worktreeId, lineage: projected })
+    }
+    const oldWorkspace = workspaceLineage.findIndex(
+      (entry) => entry.childWorkspaceKey === edge.child.locator
+    )
+    if (oldWorkspace !== -1) {
+      workspaceLineage.splice(oldWorkspace, 1)
+    }
+    workspaceLineage.push({
+      sourceKey: composeWorktreeHostIdentity(edge.child.hostId, edge.child.locator),
+      childWorkspaceKey: edge.child.locator,
+      lineage: {
+        ...edgeToWorkspaceLineage(edge),
+        childInstanceId: edge.child.instanceId,
+        parentInstanceId: edge.parent.instanceId ?? null
+      }
+    })
+  }
   return {
     payload: {
       version: 1,
       worktreeMeta: worktreeMeta.sort((left, right) =>
         compareKeys(left.worktreeId, right.worktreeId)
       ),
+      edges: edges.map((edge) => ({
+        ...structuredClone(edge),
+        child: { ...edge.child, hostId: 'local' as const }
+      })),
       worktreeLineage: worktreeLineage.sort((left, right) =>
         compareKeys(left.worktreeId, right.worktreeId)
       ),

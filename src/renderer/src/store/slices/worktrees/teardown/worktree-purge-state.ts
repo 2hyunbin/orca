@@ -1,3 +1,4 @@
+import { removedOwnerTabIds, removalActiveHost } from './worktree-removal-owner'
 import {
   composeWorktreeHostIdentity,
   getWorktreeIdFromHostIdentity
@@ -40,7 +41,21 @@ export function buildWorktreePurgeState(
   const normalizedTargets: WorktreePurgeTarget[] = worktreeTargets.map((target) =>
     typeof target === 'string' ? { id: target } : target
   )
-  const worktreeIdSet = new Set(normalizedTargets.map((target) => target.id))
+  const requestedIds = new Set(normalizedTargets.map((target) => target.id))
+  const ownerTabIds = new Set(
+    normalizedTargets.flatMap((target) => [...removedOwnerTabIds(s, target.id, target.hostId)])
+  )
+  const worktreeIdSet = new Set(
+    normalizedTargets
+      .filter(
+        (target) =>
+          !target.hostId ||
+          !Object.values(s.worktreesByRepo)
+            .flat()
+            .some((row) => row.id === target.id && row.hostId !== target.hostId)
+      )
+      .map((target) => target.id)
+  )
   const lineageKeys = Object.keys(s.worktreeLineageById).filter((key) =>
     normalizedTargets.some((target) =>
       target.hostId
@@ -60,7 +75,12 @@ export function buildWorktreePurgeState(
   for (const launch of structuredLaunchStates()) {
     const worktreeId = launch.intent.worktreeId
     if (
-      worktreeIdSet.has(worktreeId) &&
+      requestedIds.has(worktreeId) &&
+      normalizedTargets.some(
+        (target) =>
+          target.id === worktreeId &&
+          (!target.hostId || target.hostId === launch.intent.executionHostId)
+      ) &&
       shouldRetainStructuredAgentSessionLaunchTab(worktreeId, launch.intent.sessionId)
     ) {
       markStructuredAgentSessionLaunchCancelledSilently(
@@ -78,14 +98,17 @@ export function buildWorktreePurgeState(
       cancelledSessionIds.add(launch.intent.sessionId)
     }
   }
-  for (const worktreeId of worktreeIdSet) {
+  for (const worktreeId of requestedIds) {
     // A launch tab that never spawned has no spawn left to answer its prompt's wait.
     for (const tab of s.tabsByWorktree[worktreeId] ?? []) {
-      if (tab.agentLaunchPane) {
+      if (ownerTabIds.has(tab.id) && tab.agentLaunchPane) {
         settleAgentLaunchPaneStart(tab.id, tab.agentLaunchPane.leafId, null)
       }
     }
     for (const tab of s.unifiedTabsByWorktree[worktreeId] ?? []) {
+      if (!ownerTabIds.has(tab.id)) {
+        continue
+      }
       if (tab.contentType === 'agent-session') {
         const target = structuredAgentSessionTargetForTab(s, tab)
         if (target) {
@@ -122,7 +145,7 @@ export function buildWorktreePurgeState(
   forgetHugeRepoWarningDismissalsForWorktrees(worktreeIdSet)
   forgetAmbiguousOwnerWarnings(worktreeIdSet)
 
-  const doomed = collectWorktreePurgeDoomedIds(s, worktreeIdSet)
+  const doomed = collectWorktreePurgeDoomedIds(s, requestedIds, ownerTabIds, normalizedTargets)
   const {
     omitByWorktree,
     pruneRightSidebarTabByWorktree,
@@ -134,7 +157,10 @@ export function buildWorktreePurgeState(
     omitByFileId
   } = createWorktreePurgeOmitters(s, worktreeIdSet, doomed)
 
-  const removedActive = s.activeWorktreeId != null && worktreeIdSet.has(s.activeWorktreeId)
+  const removedActive = normalizedTargets.some(
+    (target) =>
+      target.id === s.activeWorktreeId && (!target.hostId || target.hostId === removalActiveHost(s))
+  )
   const activeFileCleared = s.activeFileId != null && doomed.removedFileIds.has(s.activeFileId)
 
   const nextEverActivatedWorktreeIds = (() => {
@@ -160,7 +186,8 @@ export function buildWorktreePurgeState(
     ...removeWorktreeLayout(s, {
       worktreeIds: worktreeIdSet,
       tabIds: doomed.doomedTabIds,
-      activeFileCleared
+      activeFileCleared,
+      fileIds: doomed.removedFileIds
     }),
     // Worktree-scoped terminal/tab state
     worktreeLineageById: omitRecordKeys(s.worktreeLineageById, lineageKeys),
@@ -274,7 +301,7 @@ export function buildWorktreePurgeState(
     activeWorktreeId: removedActive ? null : s.activeWorktreeId,
     activeWorkspaceExecutionHostId: removedActive ? null : s.activeWorkspaceExecutionHostId,
     activeWorkspaceKey: (() => {
-      if (s.activeWorkspaceKey && worktreeIdSet.has(s.activeWorkspaceKey)) {
+      if (removedActive) {
         return null
       }
       const activeScope = s.activeWorkspaceKey ? parseWorkspaceKey(s.activeWorkspaceKey) : null

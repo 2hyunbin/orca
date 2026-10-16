@@ -51,7 +51,16 @@ export function computeVisibleWorktrees(
 
   // Why: sidebar lineage is structural. Archived workspaces stay hidden, but
   // every other valid ancestor can bypass filters so children never orphan.
-  const lineageAncestorById = getLineageAncestorIndex(worktreesByRepo)
+  const boundaryFilters = sidebarWorkspaceRowFilters(opts)
+  const facts = buildDesktopWorkspaceRowFactReader(opts)
+  const lineageAncestorById = new Map(
+    [...getLineageAncestorIndex(worktreesByRepo)].filter(
+      ([, row]) =>
+        (!boundaryFilters.visibleHostIds ||
+          boundaryFilters.visibleHostIds.includes(facts.hostId(row)!)) &&
+        (opts.filterRepoIds.length === 0 || opts.filterRepoIds.includes(row.repoId))
+    )
+  )
   const selectedRepoIds = opts.filterRepoIds.length > 0 ? new Set(opts.filterRepoIds) : null
 
   all = filterWorkspaceRows(
@@ -64,7 +73,11 @@ export function computeVisibleWorktrees(
     const includedIds = new Set(all.map((worktree) => worktree.id))
     for (const worktreeId of opts.forcedVisibleWorktreeIds) {
       const worktree = getIndexedWorktreeById(worktreesByRepo, worktreeId)
-      if (worktree && !includedIds.has(worktreeId)) {
+      if (
+        worktree &&
+        lineageAncestorById.has(getWorktreeHostIdentity(worktree)) &&
+        !includedIds.has(worktreeId)
+      ) {
         includedIds.add(worktreeId)
         all.push(worktree)
       }

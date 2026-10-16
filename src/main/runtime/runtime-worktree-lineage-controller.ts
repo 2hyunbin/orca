@@ -5,11 +5,9 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../shared/workspace-scope'
-import {
-  indexWorktreesByInstance,
-  isValidResolvedWorktreeLineageEdge
-} from '../../shared/resolved-worktree-lineage'
+import { indexWorktreesByInstance } from '../../shared/resolved-worktree-lineage'
 import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
+import { readSavedLineageEdges, readSavedWorktreeOwners } from '../saved-worktree-lineage-catalog'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
@@ -90,35 +88,37 @@ export class RuntimeWorktreeLineageController {
   }
 
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
-    const rows = new Map(
-      (this.deps.getCachedWorktrees() ?? []).map((row) => [getWorktreeHostIdentity(row), row])
-    )
-    rows.set(getWorktreeHostIdentity(child), child)
-    rows.set(getWorktreeHostIdentity(parent), parent)
-    const byInstance = indexWorktreesByInstance(rows.values())
-    if (parent.instanceId && byInstance.get(parent.instanceId) === null) {
+    const store = this.deps.getStore()
+    if (!store || !child.instanceId || !parent.instanceId) {
+      return
+    }
+    const owners = readSavedWorktreeOwners(store)
+    const byInstance = indexWorktreesByInstance(owners)
+    const edges = new Map(readSavedLineageEdges(store).map((edge) => [edge.child.instanceId, edge]))
+    if (byInstance.get(parent.instanceId) === null) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_CONFLICT',
         'Parent instance identity is ambiguous.'
       )
     }
-    let cursor: ResolvedWorktree | null | undefined = parent
-    const visited = new Set<string>([getWorktreeHostIdentity(child)])
+    let cursor: string | undefined = parent.instanceId
+    const visited = new Set<string>()
     while (cursor) {
-      const key = getWorktreeHostIdentity(cursor)
-      if (visited.has(key)) {
+      if (cursor === child.instanceId) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CYCLE',
           'Parent selector would create a lineage cycle.'
         )
       }
-      visited.add(key)
-      const lineage = this.deps.getStore()?.getWorktreeLineage?.(cursor.id)
-      const next = lineage ? byInstance.get(lineage.parentWorktreeInstanceId) : undefined
-      cursor =
-        lineage && next && isValidResolvedWorktreeLineageEdge(cursor, next, lineage)
-          ? next
-          : undefined
+      if (visited.has(cursor)) {
+        break
+      }
+      visited.add(cursor)
+      // Resolved endpoints remain authoritative; intermediate owners come only from saved metadata.
+      if (cursor !== parent.instanceId && !byInstance.get(cursor)) {
+        break
+      }
+      cursor = edges.get(cursor)?.parent.instanceId
     }
   }
 
@@ -148,7 +148,8 @@ export class RuntimeWorktreeLineageController {
     }
     for (const worktree of await this.deps.listResolvedWorktrees()) {
       if (
-        store.getWorktreeLineage(worktree.id) ||
+        store.getWorktreeLineage(worktree.id, worktree.instanceId) ||
+        store.getLineageEdges?.().some((edge) => edge.child.instanceId === worktree.instanceId) ||
         !worktree.instanceId ||
         isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
@@ -182,6 +183,11 @@ export class RuntimeWorktreeLineageController {
         createdAt: Date.now()
       })
     }
+  }
+
+  async listLineageEdges() {
+    await this.hydrate()
+    return this.deps.getStore()?.getLineageEdges?.() ?? []
   }
 
   async listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {

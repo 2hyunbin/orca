@@ -1,4 +1,3 @@
-import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
 import type { BrowserPage, BrowserWorkspace } from '../../../shared/browser-workspace-types'
 import { remapBrowserPageDocLocation } from '../../../shared/browser-page-doc-location'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
@@ -282,41 +281,6 @@ export function migrateWorktreeIdentity(
     const prior = newMeta.priorWorktreeIds ?? []
     if (!prior.includes(oldWorktreeId)) {
       newMeta.priorWorktreeIds = [...prior, oldWorktreeId]
-      changed = true
-    }
-  }
-
-  changed = moveKey(state.worktreeLineageById) || changed
-  const movedLineage = state.worktreeLineageById[newWorktreeId]
-  if (movedLineage && movedLineage.worktreeId === oldWorktreeId) {
-    movedLineage.worktreeId = newWorktreeId
-    // Why: moveKey reports nothing when the record already sat under the new key, so flag the repair
-    // ourselves or the caller skips the save and the stale id comes back on reload.
-    changed = true
-  }
-  // Why: children carry this as parentWorktreeId; keep the denormalized path-derived id consistent (parentWorktreeInstanceId is stable).
-  for (const lineage of Object.values(state.worktreeLineageById)) {
-    if (lineage.parentWorktreeId === oldWorktreeId) {
-      lineage.parentWorktreeId = newWorktreeId
-      changed = true
-    }
-  }
-
-  if (oldWorkspaceKey in state.workspaceLineageByChildKey) {
-    const lineage = state.workspaceLineageByChildKey[oldWorkspaceKey]
-    state.workspaceLineageByChildKey[newWorkspaceKey] = {
-      ...lineage,
-      childWorkspaceKey: newWorkspaceKey
-    }
-    delete state.workspaceLineageByChildKey[oldWorkspaceKey]
-    changed = true
-  }
-  for (const [childKey, lineage] of Object.entries(state.workspaceLineageByChildKey)) {
-    if (lineage.parentWorkspaceKey === oldWorkspaceKey) {
-      state.workspaceLineageByChildKey[childKey as WorkspaceKey] = {
-        ...lineage,
-        parentWorkspaceKey: newWorkspaceKey
-      }
       changed = true
     }
   }

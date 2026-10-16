@@ -1,3 +1,7 @@
+import {
+  readSavedWorktreeLineage,
+  readSavedWorktreeOwners
+} from '../saved-worktree-lineage-catalog'
 import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-path'
 import {
   splitWorktreeId,
@@ -41,6 +45,7 @@ type RepoWorktreeRowStore = Pick<
   | 'getWorktreeMetaForHost'
   | 'setWorktreeMeta'
   | 'setWorktreeMetaForHost'
+  | 'getLineageEdges'
   | 'getAllWorktreeLineage'
   | 'getAllWorkspaceLineage'
   | 'removeWorktreeLineage'
@@ -240,8 +245,21 @@ export async function resolveScopedWorktreeIdRow(
   if (!target) {
     return null
   }
-  const lineageById = store.getAllWorktreeLineage?.() ?? {}
+  const savedOwners = readSavedWorktreeOwners(store)
+  const lineageById = readSavedWorktreeLineage(store, savedOwners)
   const relatedIds = getConnectedWorktreeLineageIds([target.id], lineageById)
+  const relatedInstances = new Set(
+    Object.values(lineageById).flatMap((edge) =>
+      relatedIds.has(edge.worktreeId) || relatedIds.has(edge.parentWorktreeId)
+        ? [edge.worktreeInstanceId, edge.parentWorktreeInstanceId]
+        : []
+    )
+  )
+  for (const owner of savedOwners) {
+    if (relatedInstances.has(owner.instanceId)) {
+      relatedIds.add(owner.id)
+    }
+  }
   const relatedRepoIds = new Set(
     [...relatedIds]
       .map((id) => splitWorktreeIdForFilesystem(id)?.repoId)

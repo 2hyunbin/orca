@@ -29,7 +29,9 @@ export function createTerminalShutdownActions(
       const keepIdentifiers = opts?.keepIdentifiers ?? false
       const shutdownReason: AgentStatusWorktreeShutdownReason =
         opts?.shutdownReason ?? (keepIdentifiers ? 'manual-sleep' : 'remove-worktree')
-      const tabs = get().tabsByWorktree[worktreeId] ?? []
+      const tabs = (get().tabsByWorktree[worktreeId] ?? []).filter(
+        (tab) => !opts?.tabIds || opts.tabIds.has(tab.id)
+      )
       const rendererShutdownPtyIds = sortedUniquePtyIds(
         tabs.flatMap((tab) => get().ptyIdsByTabId[tab.id] ?? [])
       )

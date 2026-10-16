@@ -1,35 +1,35 @@
+import { removeOwnedWorktreeMetadata } from './worktree-metadata-removal'
+import {
+  initializeCanonicalLineage,
+  ownedLineageEdges,
+  refreshLegacyLineage,
+  removeCanonicalLineage,
+  renameOwnedLineage,
+  writeCanonicalLineage
+} from './canonical-workspace-lineage'
+import {
+  edgeToWorktreeLineage,
+  workspaceLineageToEdge,
+  worktreeLineageToEdge
+} from '../../../shared/worktree/lineage-edge'
 import type { WorkspaceAttachmentMutation } from '../../../shared/workspace-attachment-mutation'
 import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../shared/worktree/lineage-types'
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import type { Repo } from '../../../shared/repo-types'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
-import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
-import { hasWorktreeRemovalRepoOwnerOnOtherHost } from '../../worktree-removal-repo-owner'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
-import {
-  workspaceSessionOwnerPartitionForHost,
-  workspaceSessionPartitionIdsForHost
-} from '../restoring-sessions/session-owner-removal'
+
 import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteSchedulingOperations } from './write-scheduling'
 import type { SessionHostPartitionOperations } from './session-host-partitions'
-import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
 import { scheduleSave } from './write-scheduling'
-import {
-  hasPersistedWorkspaceSession,
-  partitionOwnsWorktreeTabs,
-  partitionHasOtherRepoWorktreeTabs,
-  removeWorkspaceSessionOwnerInPartition
-} from './session-host-partitions'
+
 import { migrateWorktreeIdentity as migrateWorktreeIdentityOperation } from '../tracking-repos/worktree-identity-migration'
 import {
   getAllWorktreeMetaForHost as getAllWorktreeMetaForHostOperation,
   getWorktreeMetaForHost as getWorktreeMetaForHostOperation,
   migrateWorktreeMetadataLocator,
-  removeWorktreeMetadataForHost,
-  setWorktreeMetaForHost as setWorktreeMetaForHostOperation,
-  WORKTREE_METADATA_DOMAINS
+  setWorktreeMetaForHost as setWorktreeMetaForHostOperation
 } from './worktree-identity-metadata'
 import { mergeWorktreeMetaForWrite } from './worktree-meta-write-normalization'
 import {
@@ -80,13 +80,15 @@ export class MetadataLineageOperations {
     executionHostId: ExecutionHostId,
     meta: Partial<WorktreeMeta> & WorkspaceAttachmentMutation
   ): WorktreeMeta {
-    return setWorktreeMetaForHostOperation(
+    const updated = setWorktreeMetaForHostOperation(
       this[metadataLineageOperationsContext].runtime,
       this[metadataLineageOperationsContext].scheduling,
       worktreeId,
       executionHostId,
       meta
     )
+    refreshLegacyLineage(this[metadataLineageOperationsContext].runtime.state)
+    return updated
   }
 
   getAllWorktreeMeta(): Record<string, WorktreeMeta> {
@@ -117,97 +119,18 @@ export class MetadataLineageOperations {
     const stored = state.worktreeMeta[worktreeId]
     const executionHostId = meta.hostId ?? stored?.hostId
     if (executionHostId) {
-      return setWorktreeMetaForHostOperation(
-        this[metadataLineageOperationsContext].runtime,
-        this[metadataLineageOperationsContext].scheduling,
-        worktreeId,
-        executionHostId,
-        meta
-      )
+      return this.setWorktreeMetaForHost(worktreeId, executionHostId, meta)
     }
     const updated = mergeWorktreeMetaForWrite(stored, meta)
     state.worktreeMeta[worktreeId] = updated
+    refreshLegacyLineage(state)
     scheduleSave(this[metadataLineageOperationsContext].scheduling, ['worktreeMeta'])
     return updated
   }
 
   removeWorktreeMeta(worktreeId: string, hostId?: ExecutionHostId | null): void {
-    // A host-qualified removal names the owner; the persisted host is the fallback.
-    const persistedOwner =
-      this[metadataLineageOperationsContext].runtime.state.worktreeMeta[worktreeId]?.hostId
-    const owner = hostId ?? persistedOwner
-    const preservesDifferentPersistedOwner = Boolean(
-      hostId && persistedOwner && persistedOwner !== hostId
-    )
-    const ownerPartition = workspaceSessionOwnerPartitionForHost(owner)
-    const preservesSameIdSessionOwner = Boolean(
-      preservesDifferentPersistedOwner ||
-      (owner &&
-        hasWorktreeRemovalRepoOwnerOnOtherHost(
-          { getRepos: () => this[metadataLineageOperationsContext].runtime.state.repos },
-          getRepoIdFromWorktreeId(worktreeId),
-          ownerPartition
-        ))
-    )
-    // Mirror the legacy delete's scope below: a full removal takes every host's identity rows,
-    // otherwise the surviving owner keeps its own.
-    removeWorktreeMetadataForHost(
-      this[metadataLineageOperationsContext].runtime.state,
-      worktreeId,
-      hostId === undefined ? undefined : (hostId ?? undefined)
-    )
-    // Skip partitions main never wrote: materializing one fences every sibling worktree of the repo.
-    const partitions = new Set<ExecutionHostId>(
-      workspaceSessionPartitionIdsForHost(owner).filter(
-        (partition) =>
-          hasPersistedWorkspaceSession(
-            this[metadataLineageOperationsContext].sessions,
-            partition
-          ) &&
-          // The local partition can be a remote spill surface or a same-id owner.
-          // Preserve it whenever another owner may still use the bare id.
-          (!preservesSameIdSessionOwner || partition === ownerPartition)
-      )
-    )
-    // A repo-wide fence must not rebase a sibling's unpersisted tabs onto main's copy, and a spill
-    // partition that never held this worktree has no claim on the repo at all.
-    const fencedPartitions = new Set(
-      [...partitions].filter(
-        (partition) =>
-          partitionOwnsWorktreeTabs(
-            this[metadataLineageOperationsContext].sessions,
-            worktreeId,
-            partition
-          ) ||
-          (partition === ownerPartition &&
-            !partitionHasOtherRepoWorktreeTabs(
-              this[metadataLineageOperationsContext].sessions,
-              worktreeId,
-              partition
-            ))
-      )
-    )
-    if (!preservesDifferentPersistedOwner) {
-      delete this[metadataLineageOperationsContext].runtime.state.worktreeMeta[worktreeId]
-      delete this[metadataLineageOperationsContext].runtime.state.worktreeLineageById[worktreeId]
-      delete this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
-        worktreeWorkspaceKey(worktreeId)
-      ]
-    }
-    for (const partition of partitions) {
-      removeWorkspaceSessionOwnerInPartition(
-        this[metadataLineageOperationsContext].sessions,
-        worktreeId,
-        partition,
-        {
-          advanceTerminalTopologyRevision: fencedPartitions.has(partition)
-        }
-      )
-    }
-    // Why: dropping a row can free the identity key that was vetoing an unrelated row's removal, so
-    // the metadata prune needs to look again — it is otherwise waiting on evidence (#17775).
-    invalidateLocalWorktreeMetadataPruneInputs()
-    scheduleSave(this[metadataLineageOperationsContext].scheduling)
+    const { runtime, scheduling, sessions } = this[metadataLineageOperationsContext]
+    removeOwnedWorktreeMetadata(runtime, scheduling, sessions, worktreeId, hostId)
   }
 
   selectProbeableLocalWorktreeMetadataCandidates(
@@ -234,7 +157,17 @@ export class MetadataLineageOperations {
     return removed
   }
 
-  getWorktreeLineage(worktreeId: string): WorktreeLineage | undefined {
+  getLineageEdges() {
+    const state = this[metadataLineageOperationsContext].runtime.state
+    initializeCanonicalLineage(state)
+    return ownedLineageEdges(state)
+  }
+
+  getWorktreeLineage(worktreeId: string, instanceId?: string): WorktreeLineage | undefined {
+    if (instanceId) {
+      const edge = this.getLineageEdges().find((edge) => edge.child.instanceId === instanceId)
+      return edge ? edgeToWorktreeLineage(edge) : undefined
+    }
     return this[metadataLineageOperationsContext].runtime.state.worktreeLineageById[worktreeId]
   }
 
@@ -243,13 +176,17 @@ export class MetadataLineageOperations {
   }
 
   setWorktreeLineage(worktreeId: string, lineage: WorktreeLineage): WorktreeLineage {
-    this[metadataLineageOperationsContext].runtime.state.worktreeLineageById[worktreeId] = lineage
+    const edge = worktreeLineageToEdge(lineage)
+    if (edge) {
+      writeCanonicalLineage(this[metadataLineageOperationsContext].runtime.state, edge)
+    }
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
     return lineage
   }
 
-  removeWorktreeLineage(worktreeId: string): void {
-    delete this[metadataLineageOperationsContext].runtime.state.worktreeLineageById[worktreeId]
+  removeWorktreeLineage(worktreeId: string, instanceId?: string): void {
+    const state = this[metadataLineageOperationsContext].runtime.state
+    removeCanonicalLineage(state, instanceId ?? state.worktreeMeta[worktreeId]?.instanceId)
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
   }
 
@@ -261,6 +198,7 @@ export class MetadataLineageOperations {
     const state = this[metadataLineageOperationsContext].runtime.state
     const persistedOwner = state.worktreeMeta[oldWorktreeId]?.hostId
     const mover = executionHostId ?? persistedOwner ?? LOCAL_EXECUTION_HOST_ID
+    renameOwnedLineage(state, oldWorktreeId, newWorktreeId, mover)
     const legacyChanged =
       executionHostId !== undefined &&
       persistedOwner !== undefined &&
@@ -273,12 +211,10 @@ export class MetadataLineageOperations {
       newWorktreeId,
       mover
     )
+    refreshLegacyLineage(state)
     if (legacyChanged || canonicalChanged) {
       // Legacy identity moves also re-key sessions, lineage, mobile selections, and UI state.
-      scheduleSave(
-        this[metadataLineageOperationsContext].scheduling,
-        legacyChanged ? undefined : WORKTREE_METADATA_DOMAINS
-      )
+      scheduleSave(this[metadataLineageOperationsContext].scheduling, undefined)
     }
   }
 
@@ -293,17 +229,22 @@ export class MetadataLineageOperations {
   }
 
   setWorkspaceLineage(lineage: WorkspaceLineage): WorkspaceLineage {
-    this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
-      lineage.childWorkspaceKey
-    ] = lineage
+    const edge = workspaceLineageToEdge(lineage)
+    if (edge) {
+      writeCanonicalLineage(this[metadataLineageOperationsContext].runtime.state, edge)
+    }
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
     return lineage
   }
 
-  removeWorkspaceLineage(childWorkspaceKey: WorkspaceKey): void {
-    delete this[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
-      childWorkspaceKey
-    ]
+  removeWorkspaceLineage(childWorkspaceKey: WorkspaceKey, instanceId?: string): void {
+    const state = this[metadataLineageOperationsContext].runtime.state
+    removeCanonicalLineage(
+      state,
+      instanceId ??
+        state.workspaceLineageByChildKey[childWorkspaceKey]?.childInstanceId ??
+        undefined
+    )
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
   }
 }
@@ -312,14 +253,7 @@ export function removeWorkspaceLineageForFolderParent(
   owner: MetadataLineageOperations,
   folderWorkspaceId: string
 ): void {
-  const parentKey = folderWorkspaceKey(folderWorkspaceId)
-  for (const [childKey, lineage] of Object.entries(
-    owner[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey
-  )) {
-    if (lineage.parentWorkspaceKey === parentKey) {
-      delete owner[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
-        childKey as WorkspaceKey
-      ]
-    }
-  }
+  // Parent removal leaves child-owned edges inert.
+  void owner
+  void folderWorkspaceId
 }

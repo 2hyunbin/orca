@@ -1,6 +1,7 @@
 import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
 import {
   composeWorktreeHostIdentity,
+  isWorktreeHostIdentity,
   getExecutionHostIdFromWorktreeHostIdentity
 } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { AppState } from '../../../types'
@@ -64,8 +65,11 @@ export function mergeLineageForHost(
   for (const [worktreeId, incoming] of Object.entries(lineage)) {
     const childHost = hostId.startsWith('runtime:')
       ? hostId
-      : (getWorktreeHostId(state, worktreeId, incoming.worktreeInstanceId) ?? hostId)
-    const key = composeWorktreeHostIdentity(childHost, worktreeId)
+      : (getWorktreeHostId(state, incoming.worktreeId, incoming.worktreeInstanceId) ?? hostId)
+    const key =
+      isWorktreeHostIdentity(worktreeId) && hostId === 'local'
+        ? worktreeId
+        : composeWorktreeHostIdentity(childHost, incoming.worktreeId)
     if (!writtenSinceRequestStart(key)) {
       next[key] = incoming
     }
@@ -103,7 +107,10 @@ export function mergeWorkspaceLineageForHost(
         ? (getWorktreeHostId(state, childScope.worktreeId, incoming.childInstanceId ?? undefined) ??
           hostId)
         : hostId
-    const key = composeWorktreeHostIdentity(childHost, childKey)
+    const key =
+      isWorktreeHostIdentity(childKey) && hostId === 'local'
+        ? childKey
+        : composeWorktreeHostIdentity(childHost, incoming.childWorkspaceKey)
     if (!writtenSinceRequestStart(key)) {
       next[key] = incoming
     }

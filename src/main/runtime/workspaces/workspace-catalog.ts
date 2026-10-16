@@ -1,3 +1,4 @@
+import { readSavedWorktreeLineage } from '../../saved-worktree-lineage-catalog'
 import { RuntimeWorkspaceSelectors } from './workspace-selectors'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -114,7 +115,7 @@ export abstract class RuntimeWorkspaceCatalog extends RuntimeWorkspaceSelectors 
         async (repo) => await resolveRepoWorktreeRows(deps, repo, metaById, projectRuntimeByRepoId)
       )
     )
-    const lineageById = this.store?.getAllWorktreeLineage?.() ?? {}
+    const lineageById = this.store ? readSavedWorktreeLineage(this.store) : {}
     const worktrees = projectResolvedWorktreeLineage(perRepoWorktrees.flat(), lineageById)
     return { worktrees, platformByRepoId }
   }

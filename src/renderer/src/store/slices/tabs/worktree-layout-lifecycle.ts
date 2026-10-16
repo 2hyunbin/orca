@@ -3,6 +3,7 @@ import type { BrowserWorkspace } from '../../../../../shared/browser-workspace-t
 import type { TerminalTab } from '../../../../../shared/terminal-tab-types'
 import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 import { getTerminalActivationSpawnSuppression } from '../terminal-activation-spawn-suppression'
+import { sanitizeRecentTabIds } from '../tab-group-state'
 
 // Layout transitions that worktree, repo and SSH lifecycle code folds into its own store update.
 // Pure patches, not actions: each caller's update is one atomic set that also clears non-layout state.
@@ -36,36 +37,99 @@ export function removeWorktreeLayout(
     worktreeIds: ReadonlySet<string>
     tabIds: ReadonlySet<string>
     activeFileCleared: boolean
+    fileIds?: ReadonlySet<string>
   }
 ): WorktreeLayoutPatch {
   const { worktreeIds, tabIds, activeFileCleared } = removed
   const omitByWorktree = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, worktreeIds)
   const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
+  const filterTabs = <T extends { id: string }>(map: Record<string, T[]>) => {
+    let next = omitByWorktree(map)
+    for (const [id, tabs] of Object.entries(next)) {
+      if (!tabs.some((tab) => tabIds.has(tab.id))) {
+        continue
+      }
+      if (next === map) {
+        next = { ...map }
+      }
+      const kept = tabs.filter((tab) => !tabIds.has(tab.id))
+      if (kept.length > 0) {
+        next[id] = kept
+      } else {
+        delete next[id]
+      }
+    }
+    return next
+  }
+  const ownsFile = (file: (typeof s.openFiles)[number]) =>
+    worktreeIds.has(file.worktreeId) || removed.fileIds?.has(file.id)
+  const clearRemovedSelection = (map: Record<string, string | null>, ids: ReadonlySet<string>) =>
+    Object.fromEntries(
+      Object.entries(omitByWorktree(map)).map(([id, selected]) => [
+        id,
+        selected && ids.has(selected) ? null : selected
+      ])
+    )
+  const groupsByWorktree = Object.values(s.groupsByWorktree ?? {}).some((groups) =>
+    groups.some((group) => group.tabOrder.some((id) => tabIds.has(id)))
+  )
+    ? Object.fromEntries(
+        Object.entries(omitByWorktree(s.groupsByWorktree)).map(([id, groups]) => [
+          id,
+          groups.map((group) => {
+            const tabOrder = group.tabOrder.filter((tabId) => !tabIds.has(tabId))
+            if (tabOrder.length === group.tabOrder.length) {
+              return group
+            }
+            return {
+              ...group,
+              tabOrder,
+              recentTabIds: sanitizeRecentTabIds(group.recentTabIds, tabOrder),
+              activeTabId:
+                group.activeTabId && tabIds.has(group.activeTabId)
+                  ? (tabOrder[0] ?? null)
+                  : group.activeTabId
+            }
+          })
+        ])
+      )
+    : omitByWorktree(s.groupsByWorktree)
   const removedActiveWorktree = s.activeWorktreeId != null && worktreeIds.has(s.activeWorktreeId)
   return {
-    tabsByWorktree: omitByWorktree(s.tabsByWorktree),
+    tabsByWorktree: filterTabs(s.tabsByWorktree),
     terminalLayoutsByTabId: omitByTabId(s.terminalLayoutsByTabId),
     ptyIdsByTabId: omitByTabId(s.ptyIdsByTabId),
     // Why: split-tab layout/group state is worktree-owned; leaving it makes a deleted worktree look restorable.
-    unifiedTabsByWorktree: omitByWorktree(s.unifiedTabsByWorktree),
-    groupsByWorktree: omitByWorktree(s.groupsByWorktree),
+    unifiedTabsByWorktree: filterTabs(s.unifiedTabsByWorktree),
+    groupsByWorktree,
     layoutByWorktree: omitByWorktree(s.layoutByWorktree),
     activeGroupIdByWorktree: omitByWorktree(s.activeGroupIdByWorktree),
     // Why: the tab strip persists visual order per worktree; drop the entry so stale tab IDs aren't retained.
-    tabBarOrderByWorktree: omitByWorktree(s.tabBarOrderByWorktree),
-    browserTabsByWorktree: omitByWorktree(s.browserTabsByWorktree),
+    tabBarOrderByWorktree: Object.fromEntries(
+      Object.entries(omitByWorktree(s.tabBarOrderByWorktree)).map(([id, order]) => [
+        id,
+        order.filter((tabId) => !tabIds.has(tabId))
+      ])
+    ),
+    browserTabsByWorktree: filterTabs(s.browserTabsByWorktree),
     // Why guarded: a removed worktree usually has no open file, and an unconditional
     // filter would hand openFiles a new identity anyway.
-    openFiles: s.openFiles.some((f) => worktreeIds.has(f.worktreeId))
-      ? s.openFiles.filter((f) => !worktreeIds.has(f.worktreeId))
+    openFiles: s.openFiles.some(ownsFile)
+      ? s.openFiles.filter((file) => !ownsFile(file))
       : s.openFiles,
-    activeTabIdByWorktree: omitByWorktree(s.activeTabIdByWorktree),
-    activeFileIdByWorktree: omitByWorktree(s.activeFileIdByWorktree),
-    activeBrowserTabIdByWorktree: omitByWorktree(s.activeBrowserTabIdByWorktree),
+    activeTabIdByWorktree: clearRemovedSelection(s.activeTabIdByWorktree, tabIds),
+    activeFileIdByWorktree: clearRemovedSelection(
+      s.activeFileIdByWorktree,
+      removed.fileIds ?? new Set()
+    ),
+    activeBrowserTabIdByWorktree: clearRemovedSelection(s.activeBrowserTabIdByWorktree, tabIds),
     activeTabTypeByWorktree: omitByWorktree(s.activeTabTypeByWorktree),
     activeTabId: s.activeTabId && tabIds.has(s.activeTabId) ? null : s.activeTabId,
     activeFileId: activeFileCleared ? null : s.activeFileId,
-    activeBrowserTabId: removedActiveWorktree ? null : s.activeBrowserTabId,
+    activeBrowserTabId:
+      removedActiveWorktree || (s.activeBrowserTabId && tabIds.has(s.activeBrowserTabId))
+        ? null
+        : s.activeBrowserTabId,
     activeTabType: removedActiveWorktree || activeFileCleared ? 'terminal' : s.activeTabType
   }
 }

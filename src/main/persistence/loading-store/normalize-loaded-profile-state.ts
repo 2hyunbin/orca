@@ -6,7 +6,7 @@ import { normalizeFolderWorkspaces } from '../../../shared/folder-workspaces'
 import { normalizeOrcadMigrationEvictedReceipts } from '../../../shared/orcad-migration-evicted-receipts'
 import { normalizeOrcadMigrationImportReceipts } from '../../../shared/orcad-migration-manifest-validation'
 import { normalizeOrcadMigrationStagedCatalogs } from '../../../shared/orcad-migration-staged-catalog-validation'
-import { normalizeWorkspaceLineageByChildKey } from '../applying-settings/ui-interaction-merge'
+import { initializeCanonicalLineage } from './canonical-workspace-lineage'
 import {
   normalizeSshRemotePtyLease,
   normalizeSshTarget
@@ -41,6 +41,14 @@ export function normalizeLoadedProfileState(
   // Ordered: the host partitions drop the global fields this slice already owns.
   const workspaceSession = normalizeLoadedLocalSession(parsed, defaults, markNeedsSave)
 
+  const lineageState = {
+    ...parsed,
+    worktreeMetaByIdentity: hydrateWorktreeMetaAliasProjection(parsed)
+  }
+  if (initializeCanonicalLineage(lineageState)) {
+    markNeedsSave()
+  }
+
   return {
     ...defaults,
     ...parsed,
@@ -63,13 +71,13 @@ export function normalizeLoadedProfileState(
     ...(parsed.worktreeMetaByIdentity === undefined
       ? {}
       : { worktreeMetaByIdentity: hydrateWorktreeMetaAliasProjection(parsed) }),
-    worktreeLineageById: parsed.worktreeLineageById ?? {},
+    lineageByChildInstance: lineageState.lineageByChildInstance,
+    legacyLineageRemainder: lineageState.legacyLineageRemainder,
+    worktreeLineageById: lineageState.worktreeLineageById,
     mobileClientTabSelectionsByDeviceId: normalizePersistedMobileClientTabSelections(
       parsed.mobileClientTabSelectionsByDeviceId
     ),
-    workspaceLineageByChildKey: normalizeWorkspaceLineageByChildKey(
-      parsed.workspaceLineageByChildKey
-    ),
+    workspaceLineageByChildKey: lineageState.workspaceLineageByChildKey,
     settings: normalizeLoadedGlobalSettings(parsed, terminal, profile),
     // Why: legacy 'recent' meant the smart sort; migrate once on the raw value so a fresh 'recent' default isn't remigrated.
     ui: normalizeLoadedUiState(

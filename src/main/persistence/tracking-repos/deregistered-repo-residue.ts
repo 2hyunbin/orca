@@ -95,11 +95,8 @@ export function collectDeregisteredRepoIds(state: PersistedState): Set<string> {
   for (const alias of Object.keys(state.worktreeIdentityAliases ?? {})) {
     addWorktreeId(getWorktreeIdFromHostIdentity(alias))
   }
-  for (const childId of Object.keys(state.worktreeLineageById)) {
-    addWorktreeId(childId)
-  }
-  for (const childKey of Object.keys(state.workspaceLineageByChildKey)) {
-    addOwnerKey(childKey)
+  for (const edge of Object.values(state.lineageByChildInstance ?? {})) {
+    addOwnerKey(edge.child.locator)
   }
   for (const selections of Object.values(state.mobileClientTabSelectionsByDeviceId ?? {})) {
     for (const worktreeId of Object.keys(selections)) {

@@ -1,8 +1,4 @@
-import {
-  getCyclicChildKeys,
-  indexWorktreesByInstance,
-  isValidResolvedWorktreeLineageEdge
-} from '../../../../shared/resolved-worktree-lineage'
+import { selectResolvedWorktreeLineage } from '../../../../shared/resolved-worktree-lineage'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -27,9 +23,7 @@ export function getProjectedWorktreeLineage(
   return legacy?.worktreeInstanceId === worktree.instanceId ? legacy : worktree.lineage
 }
 
-type LineageProjection = {
-  byInstance?: Map<string, Worktree | null>
-  cyclicLineageIds?: Set<string>
+type LineageProjection = ReturnType<typeof selectResolvedWorktreeLineage<Worktree>> & {
   childrenByParentId?: Map<string, Worktree[]>
 }
 
@@ -57,7 +51,9 @@ function getLineageProjection(
   }
   let projection = byWorktreeMap.get(worktreeMap)
   if (!projection) {
-    projection = {}
+    projection = selectResolvedWorktreeLineage([...worktreeMap.values()], (child) =>
+      getProjectedWorktreeLineage(child, lineageById)
+    )
     byWorktreeMap.set(worktreeMap, projection)
   }
   return projection
@@ -67,25 +63,7 @@ export function getCyclicProjectedWorktreeLineageIds(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   worktreeMap: ReadonlyMap<string, Worktree>
 ): Set<string> {
-  const projection = getLineageProjection(lineageById, worktreeMap)
-  if (projection.cyclicLineageIds) {
-    return projection.cyclicLineageIds
-  }
-  const validParentByChild = new Map<string, string>()
-  const byInstance = (projection.byInstance ??= indexWorktreesByInstance(worktreeMap.values()))
-  for (const worktree of worktreeMap.values()) {
-    const lineage = getProjectedWorktreeLineage(worktree, lineageById)
-    if (!lineage) {
-      continue
-    }
-    const parent = byInstance.get(lineage.parentWorktreeInstanceId)
-    if (parent && isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)) {
-      validParentByChild.set(getWorktreeHostIdentity(worktree), getWorktreeHostIdentity(parent))
-    }
-  }
-  const cyclicLineageIds = getCyclicChildKeys(validParentByChild)
-  projection.cyclicLineageIds = cyclicLineageIds
-  return cyclicLineageIds
+  return getLineageProjection(lineageById, worktreeMap).suppressed
 }
 
 export function getLineageRenderInfo(
@@ -98,17 +76,13 @@ export function getLineageRenderInfo(
   if (!lineage) {
     return { state: 'none' }
   }
-  const projection = getLineageProjection(lineageById, worktreeMap)
-  const byInstance = (projection.byInstance ??= indexWorktreesByInstance(worktreeMap.values()))
-  const parent = byInstance.get(lineage.parentWorktreeInstanceId)
-  if (
-    cyclicLineageIds.has(getWorktreeHostIdentity(worktree)) ||
-    !parent ||
-    !isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)
-  ) {
+  const edge = getLineageProjection(lineageById, worktreeMap).selected.get(
+    getWorktreeHostIdentity(worktree)
+  )
+  if (cyclicLineageIds.has(getWorktreeHostIdentity(worktree)) || !edge) {
     return { state: 'missing', lineage }
   }
-  return { state: 'valid', lineage, parent }
+  return { state: 'valid', lineage, parent: edge.parent }
 }
 
 export function getProjectedWorktreeLineageChildrenByParentId(
@@ -181,18 +155,9 @@ export function getSidebarLineageParent(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   rowsByHostIdentity: ReadonlyMap<string, Worktree>
 ): Worktree | undefined {
-  const lineage = getProjectedWorktreeLineage(worktree, lineageById)
-  if (!lineage) {
-    return undefined
-  }
-  const projection = getLineageProjection(lineageById, rowsByHostIdentity)
-  const byInstance = (projection.byInstance ??= indexWorktreesByInstance(
-    rowsByHostIdentity.values()
-  ))
-  const parent = byInstance.get(lineage.parentWorktreeInstanceId)
-  return parent && isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)
-    ? parent
-    : undefined
+  return getLineageProjection(lineageById, rowsByHostIdentity).selected.get(
+    getWorktreeHostIdentity(worktree)
+  )?.parent
 }
 
 /** The rows a worktree nests under in the sidebar, nearest first; a lineage cycle nests nothing. */

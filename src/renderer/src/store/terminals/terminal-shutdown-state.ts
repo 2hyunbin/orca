@@ -46,7 +46,9 @@ export function commitTerminalShutdownState({
         : {
             ...state.tabsByWorktree,
             [worktreeId]: (state.tabsByWorktree[worktreeId] ?? []).map((tab, index) =>
-              clearTransientTerminalState(tab, index)
+              tabs.some((removed) => removed.id === tab.id)
+                ? clearTransientTerminalState(tab, index)
+                : tab
             )
           }
       // Why copy-on-write everywhere below: a worktree whose panes already exited hits

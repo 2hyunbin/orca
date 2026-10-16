@@ -67,6 +67,11 @@ export const PERSISTED_STATE_DISPOSITIONS = {
     item: 15,
     note: 'The destination mints its own canonical identities for the moved metadata.'
   },
+  lineageByChildInstance: moveDisposition(16),
+  legacyLineageRemainder: notApplicableDisposition(
+    16,
+    'Read-only migration diagnostics stay on the source.'
+  ),
   worktreeLineageById: moveDisposition(16),
   workspaceLineageByChildKey: moveDisposition(17),
   settings: notApplicableDisposition(62, 'Desktop-global; see SETTINGS_KEYS_NAMING_A_PATH.'),

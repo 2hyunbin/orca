@@ -147,6 +147,7 @@ export type TerminalActions = {
       shutdownReason?: AgentStatusWorktreeShutdownReason
       sleepingPaneKeys?: string[]
       expectedRuntimePtyIds?: string[]
+      tabIds?: ReadonlySet<string>
       backendOwnsPtyTeardown?: boolean
     }
   ) => Promise<void>

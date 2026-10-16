@@ -197,10 +197,17 @@ describe('pruneLineageForMissingRepoWorktrees', () => {
       { preservedMetadataCandidateIds: new Set([liveParentId, liveChildId]) }
     )
 
-    expect(store.removeWorktreeLineage).toHaveBeenCalledWith(missingChildId)
+    expect(store.removeWorktreeLineage).toHaveBeenCalledWith(
+      missingChildId,
+      `${missingChildId}-instance`
+    )
     expect(store.removeWorktreeLineage).not.toHaveBeenCalledWith(liveChildId)
-    expect(store.removeWorkspaceLineage).toHaveBeenCalledWith(worktreeWorkspaceKey(missingChildId))
+    expect(store.removeWorkspaceLineage).toHaveBeenCalledWith(
+      worktreeWorkspaceKey(missingChildId),
+      `${missingChildId}-instance`
+    )
     expect(store.setWorktreeMeta).toHaveBeenCalledWith(missingParentId, {
+      hostId: 'local',
       instanceId: expect.any(String)
     })
     expect(store.setWorktreeMeta).not.toHaveBeenCalledWith(liveParentId, expect.anything())

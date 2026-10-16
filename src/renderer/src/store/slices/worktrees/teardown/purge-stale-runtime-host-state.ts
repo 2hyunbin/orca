@@ -196,17 +196,6 @@ export function createPurgeStaleRuntimeHostState(
               }
             }
           }
-          // Why: bare-id state follows an exact survivor unless the restored-session partition proves it belonged to the removed host.
-          for (const rows of [
-            ...Object.values(worktreeDrop.rowsByRepo),
-            ...Object.values(detectedDrop.rowsByRepo)
-          ]) {
-            for (const row of rows) {
-              if (!sessionWorktreeIdsOwnedByRemovedHosts.has(row.id)) {
-                removedWorktreeIds.delete(row.id)
-              }
-            }
-          }
           const purgeTargets = [...removedWorktreeIds].flatMap((worktreeId) => {
             const targets = removedWorktreeTargets.filter((target) => target.id === worktreeId)
             return targets.length > 0 ? targets : [{ id: worktreeId }]

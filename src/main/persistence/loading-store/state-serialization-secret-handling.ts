@@ -1,3 +1,4 @@
+import { refreshLegacyLineage } from './canonical-workspace-lineage'
 import {
   serializeCompleteProfileStateDomains,
   serializeSelectiveProfileStateDomains
@@ -32,6 +33,7 @@ export class StateSerializationSecretHandlingOperations {
   constructor(private readonly runtime: StateSerializationSecretHandlingOperationsRuntime) {}
 
   getDurableState(): Omit<PersistedState, 'githubCache'> {
+    refreshLegacyLineage(this.runtime.state)
     const { githubCache: _memoryOnly, ...durable } = this.runtime.state
     return durable
   }
@@ -56,7 +58,13 @@ export class StateSerializationSecretHandlingOperations {
       }
       return encrypted.blob
     }
-    for (const domain of domains) {
+    refreshLegacyLineage(this.runtime.state)
+    const coupledDomains = new Set(domains)
+    if (domains.has('worktreeMeta')) {
+      coupledDomains.add('worktreeLineageById')
+      coupledDomains.add('workspaceLineageByChildKey')
+    }
+    for (const domain of coupledDomains) {
       switch (domain) {
         case 'settings':
           stateToSave[domain] = this.buildSettingsToSave(encrypt)
@@ -94,6 +102,12 @@ export class StateSerializationSecretHandlingOperations {
             )
           }
           break
+        case 'lineageByChildInstance':
+        case 'legacyLineageRemainder':
+        case 'worktreeLineageById':
+        case 'workspaceLineageByChildKey':
+          stateToSave[domain] = this.runtime.state[domain]
+          break
         case 'worktreeIdentityAliases':
           if (this.runtime.state.worktreeIdentityAliases !== undefined) {
             stateToSave[domain] = this.runtime.state.worktreeIdentityAliases
@@ -118,7 +132,7 @@ export class StateSerializationSecretHandlingOperations {
       }
     }
     return {
-      replacements: serializeSelectiveProfileStateDomains(stateToSave, domains),
+      replacements: serializeSelectiveProfileStateDomains(stateToSave, coupledDomains),
       protectedSecretUpdates
     }
   }
@@ -136,6 +150,7 @@ export class StateSerializationSecretHandlingOperations {
     // ciphertext), which would substitute the wrong site and let two DISTINCT
     // states normalize equal → a silently dropped write (data loss), reachable
     // on deterministic-IV platforms (macOS/legacy-Linux OSCrypt). A per-slot
+    refreshLegacyLineage(this.runtime.state)
     // random UUID can't occur anywhere else in the serialized state (the user
     // sets their data before it is minted), so it appears exactly once.
     const secretSubs: SecretSentinelSubstitution[] = []

@@ -38,7 +38,9 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   const worktree = await args.ports.resolveWorktree(args.selector)
   const { lineage, ...metaUpdates } = args.updates
   const previousParentRepoId = lineage
-    ? splitWorktreeId(args.store.getWorktreeLineage?.(worktree.id)?.parentWorktreeId ?? '')?.repoId
+    ? splitWorktreeId(
+        args.store.getWorktreeLineage?.(worktree.id, worktree.instanceId)?.parentWorktreeId ?? ''
+      )?.repoId
     : undefined
   let nextParentRepoId: string | undefined
   const executionHostId = worktree.identity?.executionHostId ?? worktree.hostId
@@ -74,8 +76,8 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
     persisted.pushTarget = undefined
   }
   if (lineage?.noParent === true) {
-    args.store.removeWorktreeLineage?.(worktree.id)
-    args.store.removeWorkspaceLineage?.(worktreeWorkspaceKey(worktree.id))
+    args.store.removeWorktreeLineage?.(worktree.id, worktree.instanceId)
+    args.store.removeWorkspaceLineage?.(worktreeWorkspaceKey(worktree.id), worktree.instanceId)
   } else if (lineage?.parentWorktree) {
     const parent = await args.ports.resolveWorktree(lineage.parentWorktree)
     args.ports.validateParent(worktree, parent)
@@ -132,7 +134,7 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
       }
     }
   }
-  return args.ports.showWorktree(`id:${worktree.id}`)
+  return args.ports.showWorktree(args.selector)
 }
 
 export function persistRuntimeManagedWorktreeSortOrder(args: {

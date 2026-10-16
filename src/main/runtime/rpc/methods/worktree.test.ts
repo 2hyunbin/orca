@@ -844,10 +844,12 @@ describe('worktree RPC methods', () => {
         createdAt: 1
       }
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher only calls the lineage methods supplied by this runtime stub.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
       listWorktreeLineage: vi.fn().mockResolvedValue(lineage),
+      listLineageEdges: vi.fn().mockResolvedValue([]),
       listWorkspaceLineage: vi.fn().mockResolvedValue({})
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
@@ -855,7 +857,6 @@ describe('worktree RPC methods', () => {
     const response = await dispatcher.dispatch(makeRequest('worktree.lineageList'))
 
     expect(runtime.listWorktreeLineage).toHaveBeenCalled()
-    expect(runtime.listWorkspaceLineage).toHaveBeenCalled()
     expect(response).toMatchObject({ ok: true, result: { lineage, workspaceLineage: {} } })
   })
 

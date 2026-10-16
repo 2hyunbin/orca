@@ -1,3 +1,5 @@
+import { initializeCanonicalLineage } from '../persistence/loading-store/canonical-workspace-lineage'
+import { hydrateWorktreeMetaAliasProjection } from '../persistence/loading-store/worktree-meta-alias-projection'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
@@ -124,7 +126,7 @@ export function normalizeProfileProjectState(
   parsed: Partial<PersistedState>
 ): TransferProfileState {
   const defaults = getDefaultPersistedState(homedir())
-  return rebuildRepoBackedProjectState({
+  const state = rebuildRepoBackedProjectState({
     ...defaults,
     ...parsed,
     repos: arrayOrEmpty<Repo>(parsed.repos),
@@ -144,6 +146,7 @@ export function normalizeProfileProjectState(
       parsed.retiredWorktreeNamesByNamespace
     ),
     worktreeMeta: recordOrEmpty(parsed.worktreeMeta),
+    lineageByChildInstance: parsed.lineageByChildInstance,
     worktreeLineageById: recordOrEmpty(parsed.worktreeLineageById),
     workspaceLineageByChildKey: recordOrEmpty(parsed.workspaceLineageByChildKey),
     settings: isRecord(parsed.settings)
@@ -175,6 +178,9 @@ export function normalizeProfileProjectState(
       ? parsed.featureInteractionTelemetryBuckets
       : defaults.featureInteractionTelemetryBuckets
   })
+  state.worktreeMetaByIdentity = hydrateWorktreeMetaAliasProjection(state)
+  initializeCanonicalLineage(state)
+  return state
 }
 
 function isRecord<T>(value: unknown): value is Record<string, T> {

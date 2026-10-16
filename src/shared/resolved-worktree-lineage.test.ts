@@ -65,8 +65,7 @@ describe('projectResolvedWorktreeLineage', () => {
 
   it.each([
     ['stale child instance', lineage({ worktreeInstanceId: 'old-child' })],
-    ['stale parent instance', lineage({ parentWorktreeInstanceId: 'old-parent' })],
-    ['mismatched child record', lineage({ worktreeId: 'other-child' })]
+    ['stale parent instance', lineage({ parentWorktreeInstanceId: 'old-parent' })]
   ])('rejects %s', (_label, candidate) => {
     const projected = projectResolvedWorktreeLineage([child, parent], { child: candidate })
 
@@ -135,7 +134,7 @@ describe('projectResolvedWorktreeLineage', () => {
     })
   })
 
-  it('rejects every edge in a multi-node cycle without hiding valid descendants', () => {
+  it('suppresses only the newest edge in a multi-node cycle without hiding valid descendants', () => {
     const grandchild = worktree('grandchild', 'grandchild-instance')
     const parentToChild = lineage({
       worktreeId: parent.id,
@@ -155,12 +154,12 @@ describe('projectResolvedWorktreeLineage', () => {
     })
 
     expect(projected).toMatchObject([
-      { id: 'child', parentWorktreeId: null, childWorktreeIds: [], lineage: null },
+      { id: 'child', parentWorktreeId: null, childWorktreeIds: ['parent'], lineage: null },
       {
         id: 'parent',
-        parentWorktreeId: null,
+        parentWorktreeId: 'child',
         childWorktreeIds: ['grandchild'],
-        lineage: null
+        lineage: parentToChild
       },
       { id: 'grandchild', parentWorktreeId: 'parent', lineage: grandchildToParent }
     ])

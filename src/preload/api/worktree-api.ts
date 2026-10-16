@@ -28,7 +28,11 @@ import type {
   RemoveWorktreeResult,
   SparsePreset
 } from '../../shared/worktree/create-types'
-import type { WorkspaceLineage, WorktreeLineage } from '../../shared/worktree/lineage-types'
+import type {
+  LineageEdge,
+  WorkspaceLineage,
+  WorktreeLineage
+} from '../../shared/worktree/lineage-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type {
   DetectedWorktreeListResult,
@@ -125,6 +129,7 @@ export type WorktreeApi = {
     updates: Partial<WorktreeMeta>
   }) => Promise<Worktree | null>
   listLineage: () => Promise<{
+    edges?: LineageEdge[]
     lineage: Record<string, WorktreeLineage>
     workspaceLineage?: Record<string, WorkspaceLineage>
   }>

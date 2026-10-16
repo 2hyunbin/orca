@@ -46,6 +46,8 @@ export const ORCAD_MIGRATION_PATH_FIELDS: readonly {
   { at: 'folderWorkspaces[].diffComments[].oldPath', kind: 'relative' },
 
   { at: 'dormantState.worktreeMeta[].worktreeId', kind: 'worktree-id' },
+  { at: 'dormantState.edges[].child.locator', kind: 'owner-key' },
+  { at: 'dormantState.edges[].parent.locator', kind: 'owner-key' },
   { at: 'dormantState.worktreeMeta[].meta.priorWorktreeIds[]', kind: 'worktree-id' },
   { at: 'dormantState.worktreeMeta[].meta.sparseDirectories[]', kind: 'relative' },
   { at: 'dormantState.worktreeMeta[].meta.diffComments[].worktreeId', kind: 'worktree-id' },

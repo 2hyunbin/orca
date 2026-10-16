@@ -119,8 +119,8 @@ describe('worktree lineage projection cache', () => {
       b: makeLineage('b', 'a')
     }
     const cyclic = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
-    expect([...cyclic].sort()).toEqual(['|a', '|b'])
+    expect([...cyclic].sort()).toEqual(['|a'])
     expect(getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)).toBe(cyclic)
-    expect(getProjectedWorktreeLineageChildrenByParentId(lineageById, worktreeMap).size).toBe(0)
+    expect(getProjectedWorktreeLineageChildrenByParentId(lineageById, worktreeMap).size).toBe(1)
   })
 })

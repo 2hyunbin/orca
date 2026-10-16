@@ -1,3 +1,4 @@
+import { parseOrcadLineageEdge } from './orcad-migration-lineage-edges'
 import type { OrcadMigrationDormantStatePayload } from './orcad-migration-manifest'
 import { getRepoIdFromWorktreeId } from './worktree/id'
 import { parseWorkspaceKey } from './workspace-scope'
@@ -46,6 +47,9 @@ export function parseOrcadMigrationDormantState(value: unknown): OrcadMigrationD
   }
   const payload: OrcadMigrationDormantStatePayload = {
     version: ORCAD_MIGRATION_DORMANT_STATE_VERSION,
+    ...(record.edges === undefined
+      ? {}
+      : { edges: boundedArray(record.edges, parseOrcadLineageEdge, 'lineage_edges') }),
     worktreeMeta: boundedArray(record.worktreeMeta, parseWorktreeMetaEntry, 'worktree_meta'),
     worktreeLineage: boundedArray(
       record.worktreeLineage,
@@ -89,6 +93,7 @@ export function parseOrcadMigrationDormantState(value: unknown): OrcadMigrationD
       ? {}
       : { clientState: parseOrcadMigrationClientState(record.clientState) })
   }
+  assertUnique(payload.edges ?? [], (edge) => edge.child.instanceId, 'lineage_edge')
   assertUnique(payload.worktreeMeta, (entry) => entry.worktreeId, 'worktree_meta')
   assertUnique(payload.worktreeMeta, (entry) => entry.sourceKey, 'worktree_meta_source')
   assertUnique(payload.worktreeLineage, (entry) => entry.worktreeId, 'worktree_lineage')
@@ -118,25 +123,25 @@ export function assertOrcadMigrationDormantStateReferences(args: {
     const worktreeId = parsed?.type === 'worktree' ? parsed.worktreeId : value
     return args.repositoryIds.has(getRepoIdFromWorktreeId(worktreeId))
   }
+  for (const edge of args.dormantState.edges ?? []) {
+    if (!owns(edge.child.locator)) {
+      throw new Error('orcad_migration_lineage_child_scope_invalid')
+    }
+  }
   for (const entry of args.dormantState.worktreeMeta) {
     if (!owns(entry.worktreeId) || entry.meta.hostId !== 'local') {
       throw new Error('orcad_migration_dormant_worktree_meta_scope_invalid')
     }
   }
   for (const entry of args.dormantState.worktreeLineage) {
-    if (
-      entry.worktreeId !== entry.lineage.worktreeId ||
-      !owns(entry.worktreeId) ||
-      !owns(entry.lineage.parentWorktreeId)
-    ) {
+    if (entry.worktreeId !== entry.lineage.worktreeId || !owns(entry.worktreeId)) {
       throw new Error('orcad_migration_dormant_worktree_lineage_scope_invalid')
     }
   }
   for (const entry of args.dormantState.workspaceLineage) {
     if (
       entry.childWorkspaceKey !== entry.lineage.childWorkspaceKey ||
-      !owns(entry.childWorkspaceKey) ||
-      !owns(entry.lineage.parentWorkspaceKey)
+      !owns(entry.childWorkspaceKey)
     ) {
       throw new Error('orcad_migration_dormant_workspace_lineage_scope_invalid')
     }

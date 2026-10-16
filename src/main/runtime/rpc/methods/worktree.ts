@@ -48,15 +48,6 @@ export const WORKTREE_METHODS = [
       )
   }),
   defineMethod({
-    name: 'worktree.lineageList',
-    permission: 'workspace',
-    params: null,
-    handler: async (_params, { runtime }) => ({
-      lineage: await runtime.listWorktreeLineage(),
-      workspaceLineage: await runtime.listWorkspaceLineage()
-    })
-  }),
-  defineMethod({
     name: 'worktree.show',
     permission: 'workspace',
     params: WorktreeSelector,

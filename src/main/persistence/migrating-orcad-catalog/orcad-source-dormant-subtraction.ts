@@ -1,3 +1,7 @@
+import {
+  initializeCanonicalLineage,
+  refreshLegacyLineage
+} from '../loading-store/canonical-workspace-lineage'
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import { subtractOrcadSourceWorktreeMetadata } from './orcad-source-worktree-metadata'
@@ -10,6 +14,7 @@ export function subtractOrcadMigrationSourceDormantState(
   state: PersistedState,
   manifest: OrcadMigrationManifest
 ): void {
+  initializeCanonicalLineage(state)
   // By scope, even with no dormant state: a downgraded build may have added some since.
   subtractOrcadSourceWorktreeMetadata(state, manifest)
   subtractOrcadMigrationSourceAutomationState(state, manifest)
@@ -17,10 +22,16 @@ export function subtractOrcadMigrationSourceDormantState(
   if (!dormant) {
     return
   }
-  dormant.worktreeLineage.forEach((entry) => delete state.worktreeLineageById[entry.sourceKey])
-  dormant.workspaceLineage.forEach(
-    (entry) => delete state.workspaceLineageByChildKey[entry.sourceKey]
-  )
+  const movedInstances = dormant.edges?.map((edge) => edge.child.instanceId) ?? [
+    ...dormant.worktreeLineage.map((entry) => entry.lineage.worktreeInstanceId),
+    ...dormant.workspaceLineage.flatMap((entry) =>
+      entry.lineage.childInstanceId ? [entry.lineage.childInstanceId] : []
+    )
+  ]
+  for (const instance of movedInstances) {
+    delete state.lineageByChildInstance?.[instance]
+  }
+  refreshLegacyLineage(state)
   for (const preset of dormant.sparsePresets) {
     const remaining = (state.sparsePresetsByRepo[preset.repoId] ?? []).filter(
       (entry) => entry.id !== preset.id

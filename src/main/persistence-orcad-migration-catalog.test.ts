@@ -1,9 +1,11 @@
+import { worktreeLineageToEdge } from '../shared/worktree/lineage-edge'
+import { subtractOrcadMigrationSourceDormantState } from './persistence/migrating-orcad-catalog/orcad-source-dormant-subtraction'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MAX_ORCAD_MIGRATION_STAGED_CATALOGS } from '../shared/orcad-migration-manifest'
-import { getDefaultWorkspaceSession } from '../shared/constants'
+import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../shared/constants'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
 import { MAX_RETIREMENT_NAMESPACES } from './worktree-retirement-namespace'
 import {
@@ -18,6 +20,7 @@ import {
   manifest
 } from './persistence-orcad-migration-catalog-fixture'
 import {
+  closeTestStores,
   createStore,
   makeRepo,
   readDataFile,
@@ -57,7 +60,8 @@ describe('orcad migration catalog persistence', () => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-catalog-'))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
@@ -131,7 +135,15 @@ describe('orcad migration catalog persistence', () => {
 
   it('stages durably without publishing rows, then commits catalog and receipt together', async () => {
     const store = createStore()
-    const input = manifest()
+    const dormant = dormantState()
+    const edge = worktreeLineageToEdge(dormant.worktreeLineage[0].lineage)
+    if (!edge) {
+      throw new Error('missing lineage')
+    }
+    edge.parent.locator = worktreeWorkspaceKey('external::/parent')
+    dormant.edges = [edge]
+    const base = manifest()
+    const input = manifest({ payload: { ...base.payload, dormantState: dormant } })
 
     expect(
       store.stageOrcadMigrationCatalog(input, {
@@ -162,6 +174,13 @@ describe('orcad migration catalog persistence', () => {
       receipt: { repositoryIds: ['repo-1'] }
     })
     expect(readDataFile()).not.toHaveProperty('orcadMigrationStagedCatalogs.0')
+    expect(committed.getLineageEdges()[0]?.parent).toEqual(edge.parent)
+    const delta = getDefaultPersistedState(testState.dir)
+    delta.lineageByChildInstance = Object.fromEntries(
+      committed.getLineageEdges().map((row) => [row.child.instanceId, row])
+    )
+    subtractOrcadMigrationSourceDormantState(delta, input)
+    expect(delta.lineageByChildInstance).toEqual({})
   })
 
   it('commits dormant metadata, lineage, presets, and retirement state with the receipt', async () => {
@@ -179,7 +198,7 @@ describe('orcad migration catalog persistence', () => {
       comment: 'Preserve me',
       hostId: 'local'
     })
-    expect(store.getWorktreeLineage(DORMANT_WORKTREE_ID)?.parentWorktreeId).toBe(REPOSITORY.id)
+    expect(store.getWorktreeLineage(DORMANT_WORKTREE_ID)).toBeUndefined()
     expect(
       store.getWorkspaceLineage(worktreeWorkspaceKey(DORMANT_WORKTREE_ID))?.parentWorkspaceKey
     ).toBe(folderWorkspaceKey(FOLDER_WORKSPACE.id))

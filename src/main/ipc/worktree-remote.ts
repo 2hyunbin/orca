@@ -1,3 +1,4 @@
+import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
 /* eslint-disable max-lines */
 // Why: worktree create helpers (local + remote) split out of worktrees.ts; the cohesive create flow runs this file just over the per-file line limit.
 
@@ -196,8 +197,23 @@ function resolveCreatedParentWorkspace(store: Store, selector: string) {
       : null
   }
   const identity = selector.slice('identity:'.length)
-  for (const hostId of new Set(store.getRepos().map(getRepoExecutionHostId))) {
-    for (const [worktreeId, meta] of Object.entries(readAllWorktreeMetaForHost(store, hostId))) {
+  const repos = store.getRepos()
+  const counts = new Map<string, number>()
+  for (const repo of repos) {
+    counts.set(repo.id, (counts.get(repo.id) ?? 0) + 1)
+  }
+  for (const hostId of new Set(repos.map(getRepoExecutionHostId))) {
+    const snapshot = readAllWorktreeMetaForHost(store, hostId)
+    const owners = new Map(
+      repos.filter((repo) => getRepoExecutionHostId(repo) === hostId).map((repo) => [repo.id, repo])
+    )
+    for (const [worktreeId] of Object.entries(snapshot)) {
+      const repo = owners.get(getRepoIdFromWorktreeId(worktreeId))
+      const meta =
+        repo && getRepoOwnedWorktreeMeta(repo, worktreeId, snapshot, counts.get(repo.id) ?? 0)
+      if (!meta) {
+        continue
+      }
       if (
         meta.instanceId &&
         canonicalWorktreeIdentity({

@@ -1,3 +1,5 @@
+export { listWorktreeLineageForRuntime } from './worktree-lineage-list'
+import { listWorktreeLineageForRuntime } from './worktree-lineage-list'
 import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
@@ -38,43 +40,6 @@ function captureLineageAtRequestStart(
   }
 }
 
-export async function listWorktreeLineageForRuntime(
-  target: RuntimeClientTarget,
-  options: BackgroundRuntimeRefreshOptions = {}
-): Promise<{
-  worktreeLineageById: Readonly<Record<string, WorktreeLineage>>
-  workspaceLineageByChildKey: Readonly<Record<string, WorkspaceLineage>>
-}> {
-  type LineageListResponse = {
-    lineage?: Record<string, WorktreeLineage>
-    workspaceLineage?: Record<string, WorkspaceLineage>
-  }
-  const normalizeLineageResponse = (
-    value: Record<string, WorktreeLineage> | LineageListResponse
-  ) =>
-    Object.hasOwn(value, 'lineage') || Object.hasOwn(value, 'workspaceLineage')
-      ? {
-          worktreeLineageById: (value as LineageListResponse).lineage ?? {},
-          workspaceLineageByChildKey: (value as LineageListResponse).workspaceLineage ?? {}
-        }
-      : {
-          worktreeLineageById: value as Record<string, WorktreeLineage>,
-          workspaceLineageByChildKey: {}
-        }
-  if (target.kind === 'local') {
-    return normalizeLineageResponse(await window.api.worktrees.listLineage())
-  }
-  return normalizeLineageResponse(
-    await callRuntimeRpc<{
-      lineage: Record<string, WorktreeLineage>
-      workspaceLineage?: Record<string, WorkspaceLineage>
-    }>(target, 'worktree.lineageList', undefined, {
-      timeoutMs: 15_000,
-      reuseRecentCompatibilityFailure: options.reuseRecentCompatibilityFailure
-    })
-  )
-}
-
 export function projectWorktreeLineageToWorkspaceLineage(
   worktreeId: string,
   lineage: WorktreeLineage | null,
@@ -109,19 +74,23 @@ export function projectWorktreeLineageToWorkspaceLineage(
 export async function setWorktreeLineageForRuntime(
   target: RuntimeClientTarget,
   worktreeId: string,
-  args: { parentWorktreeId?: string; noParent?: boolean }
+  args: { parentWorktreeId?: string; noParent?: boolean },
+  childSelector?: string
 ): Promise<WorktreeLineageUpdateResult> {
   if (target.kind === 'local') {
     return {
       target,
-      lineage: await window.api.worktrees.updateLineage({ worktreeId, ...args })
+      lineage: await window.api.worktrees.updateLineage({
+        worktreeId: childSelector ?? worktreeId,
+        ...args
+      })
     }
   }
   const result = await callRuntimeRpc<{ worktree: WorktreeWithLineage }>(
     target,
     'worktree.set',
     {
-      worktree: toRuntimeWorktreeSelector(worktreeId),
+      worktree: childSelector ?? toRuntimeWorktreeSelector(worktreeId),
       ...(args.parentWorktreeId
         ? {
             parentWorktree: args.parentWorktreeId.startsWith('identity:')

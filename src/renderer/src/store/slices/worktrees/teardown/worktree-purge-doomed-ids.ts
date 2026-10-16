@@ -1,3 +1,5 @@
+import { isOpenFileOwnedByWorktree } from '@/lib/unified-tab-host-ownership'
+import type { WorktreePurgeTarget } from '../../worktree-helpers'
 import type { AppState } from '../../../types'
 import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-activity'
 import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
@@ -15,10 +17,12 @@ export type WorktreePurgeDoomedIds = {
 
 export function collectWorktreePurgeDoomedIds(
   s: AppState,
-  worktreeIdSet: Set<string>
+  worktreeIdSet: Set<string>,
+  ownerTabIds?: ReadonlySet<string>,
+  ownerTargets?: readonly WorktreePurgeTarget[]
 ): WorktreePurgeDoomedIds {
   // Collect every tab id (and removed file id) we are about to orphan.
-  const doomedTabIds = new Set<string>()
+  const doomedTabIds = new Set<string>(ownerTabIds)
   // Why: some terminal/agent maps are keyed by ptyId, not tabId; collect durable wake hints too since slept panes have left the live index.
   const doomedPtyIds = new Set<string>()
   const addDoomedPtyId = (ptyId: string | null | undefined): void => {
@@ -42,6 +46,9 @@ export function collectWorktreePurgeDoomedIds(
   const removedFileIds = new Set<string>()
   for (const id of worktreeIdSet) {
     for (const tab of s.tabsByWorktree[id] ?? []) {
+      if (ownerTabIds && !ownerTabIds.has(tab.id)) {
+        continue
+      }
       doomedTabIds.add(tab.id)
       // Null-tolerant like the omit* helpers below: some callers pass partial state omitting this slice (production store always inits to {}).
       addDoomedTabPtyIds(tab.id, tab.ptyId)
@@ -49,7 +56,9 @@ export function collectWorktreePurgeDoomedIds(
       forgetAgentHibernationTabOutput(tab.id)
     }
     for (const workspace of s.browserTabsByWorktree[id] ?? []) {
-      doomedBrowserWorkspaceIds.add(workspace.id)
+      if (!ownerTabIds || ownerTabIds.has(workspace.id)) {
+        doomedBrowserWorkspaceIds.add(workspace.id)
+      }
     }
     // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.
     forgetDetachedHeadAutoDerivedDisplayName(id)
@@ -67,7 +76,15 @@ export function collectWorktreePurgeDoomedIds(
     }
   }
   for (const file of s.openFiles) {
-    if (worktreeIdSet.has(file.worktreeId)) {
+    if (
+      ownerTargets
+        ? ownerTargets.some((target) =>
+            target.hostId
+              ? isOpenFileOwnedByWorktree(file, { id: target.id, hostId: target.hostId })
+              : file.worktreeId === target.id
+          )
+        : worktreeIdSet.has(file.worktreeId)
+    ) {
       removedFileIds.add(file.id)
       if (file.markdownPreviewSourceFileId) {
         removedFileIds.add(file.markdownPreviewSourceFileId)

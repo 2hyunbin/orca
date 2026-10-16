@@ -226,8 +226,10 @@ export function createBrowserCloseActions(
       }
     },
 
-    shutdownWorktreeBrowsers: async (worktreeId) => {
-      const workspaces = get().browserTabsByWorktree[worktreeId] ?? []
+    shutdownWorktreeBrowsers: async (worktreeId, tabIds) => {
+      const workspaces = (get().browserTabsByWorktree[worktreeId] ?? []).filter(
+        (workspace) => !tabIds || tabIds.has(workspace.id)
+      )
       // Why: snapshot before the loop — closeBrowserTab empties the array, so set() below couldn't recompute hadBrowserTabs.
       const hadBrowserTabs = workspaces.length > 0
       for (const workspace of workspaces) {
@@ -236,7 +238,8 @@ export function createBrowserCloseActions(
         destroyWorkspaceWebviews(browserPagesByWorkspace, workspace.id)
       }
       set((s) => {
-        const removedWorktreeIds = [worktreeId]
+        const removedWorktreeIds =
+          (s.browserTabsByWorktree[worktreeId] ?? []).length === 0 ? [worktreeId] : []
         const nextBrowserTabsByWorktree = omitRecordKeys(
           s.browserTabsByWorktree,
           removedWorktreeIds
@@ -246,7 +249,8 @@ export function createBrowserCloseActions(
           removedWorktreeIds
         )
         // Why: reset the global browser surface only when the shut-down worktree is the active one AND had tabs.
-        const shouldResetGlobalBrowser = s.activeWorktreeId === worktreeId && hadBrowserTabs
+        const shouldResetGlobalBrowser =
+          s.activeWorktreeId === worktreeId && hadBrowserTabs && removedWorktreeIds.length > 0
         return {
           browserTabsByWorktree: nextBrowserTabsByWorktree,
           activeBrowserTabIdByWorktree: nextActiveBrowserTabIdByWorktree,

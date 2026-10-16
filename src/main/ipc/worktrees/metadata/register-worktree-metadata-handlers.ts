@@ -5,7 +5,6 @@ import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { stripOrcaProvenanceMetaUpdates } from '../../../worktree-removal-safety'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { notifyWorktreesChanged } from '../../worktree-remote'
-import { parseWorktreeId } from '../../worktree-logic'
 import { planWorktreeSortOrderUpdates } from '../../../../shared/worktree/sort-order-update'
 import { readBranchRenameFailureOutputForDisplay } from '../../../agent-hooks/branch-rename-failure-output'
 import { normalizeLinkedWorkItemFields } from '../ipc-context-schemas'
@@ -78,6 +77,7 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
   ipcMain.handle('worktrees:listLineage', async () => {
     await runtime.hydrateInferredWorktreeLineage()
     return {
+      edges: store.getLineageEdges(),
       lineage: store.getAllWorktreeLineage(),
       workspaceLineage: store.getAllWorkspaceLineage()
     }
@@ -86,7 +86,7 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
   ipcMain.handle(
     'worktrees:updateLineage',
     async (_event, args: { worktreeId: string; parentWorktreeId?: string; noParent?: boolean }) => {
-      await runtime.updateManagedWorktreeMeta(args.worktreeId, {
+      const updated = await runtime.updateManagedWorktreeMeta(args.worktreeId, {
         lineage:
           args.noParent === true
             ? { noParent: true }
@@ -98,8 +98,8 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
                 }
               : undefined
       })
-      notifyWorktreesChanged(mainWindow, parseWorktreeId(args.worktreeId).repoId)
-      return store.getWorktreeLineage(args.worktreeId) ?? null
+      notifyWorktreesChanged(mainWindow, updated.repoId)
+      return store.getWorktreeLineage(updated.id, updated.instanceId) ?? null
     }
   )
 

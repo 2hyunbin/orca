@@ -242,3 +242,5 @@ export const NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY = 'notifications.remot
 
 export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const
+
+export const WORKTREE_LINEAGE_EDGES_RUNTIME_CAPABILITY = 'worktree.lineage-edges.v1' as const

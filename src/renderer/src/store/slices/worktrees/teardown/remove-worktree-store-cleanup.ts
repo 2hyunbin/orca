@@ -1,3 +1,4 @@
+import { isOpenFileOwnedByWorktree } from '@/lib/unified-tab-host-ownership'
 import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
@@ -7,6 +8,7 @@ import { removeWorktreeVisitEntries } from '@/lib/worktree-visit-recency'
 import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings'
 import { omitRecordKeys } from './record-key-omission'
 import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
+import { removalActiveHost } from './worktree-removal-owner'
 
 /** Clears worktree-owned renderer state after successful removal so a reused identity cannot inherit stale preferences. */
 export function applyRemoveWorktreeSuccessState(
@@ -19,7 +21,17 @@ export function applyRemoveWorktreeSuccessState(
   // re-arms the once-per-workspace warning if this id is ever added back.
   forgetAmbiguousOwnerWarnings([worktreeId])
   set((s) => {
-    const worktreeIds = [worktreeId]
+    const survivor = Object.values(s.worktreesByRepo)
+      .flat()
+      .some(
+        (row) =>
+          row.id === worktreeId && executionHostId !== undefined && row.hostId !== executionHostId
+      )
+    const worktreeIds = survivor ? [] : [worktreeId]
+    const ownsFile = (file: (typeof s.openFiles)[number]) =>
+      executionHostId === undefined
+        ? file.worktreeId === worktreeId
+        : isOpenFileOwnedByWorktree(file, { id: worktreeId, hostId: executionHostId })
     const omitByWorktree = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, worktreeIds)
     const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
     const nextWorktreesByRepo = { ...s.worktreesByRepo }
@@ -32,7 +44,7 @@ export function applyRemoveWorktreeSuccessState(
     // Why: clean up per-file editor state for the removed worktree so stale drafts/view modes don't accumulate.
     const removedFileIds = new Set<string>()
     for (const file of s.openFiles) {
-      if (file.worktreeId !== worktreeId) {
+      if (!ownsFile(file)) {
         continue
       }
       removedFileIds.add(file.id)
@@ -43,14 +55,17 @@ export function applyRemoveWorktreeSuccessState(
     const omitByFileId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, removedFileIds)
     // If the active file belonged to the removed worktree, clear it
     const activeFileCleared = s.activeFileId
-      ? s.openFiles.some((f) => f.id === s.activeFileId && f.worktreeId === worktreeId)
+      ? s.openFiles.some((f) => f.id === s.activeFileId && ownsFile(f))
       : false
-    const removedActiveWorktree = s.activeWorktreeId === worktreeId
+    const removedActiveWorktree =
+      s.activeWorktreeId === worktreeId &&
+      (executionHostId === undefined || removalActiveHost(s) === executionHostId)
     return {
       ...removeWorktreeLayout(s, {
         worktreeIds: new Set(worktreeIds),
         tabIds,
-        activeFileCleared
+        activeFileCleared,
+        fileIds: removedFileIds
       }),
       worktreesByRepo: nextWorktreesByRepo,
       worktreeLineageById: omitRecordKeys(s.worktreeLineageById, [
@@ -85,6 +100,7 @@ export function applyRemoveWorktreeSuccessState(
       defaultTerminalTabsAppliedByWorktreeId: omitByWorktree(
         s.defaultTerminalTabsAppliedByWorktreeId
       ),
+      activeWorkspaceKey: removedActiveWorktree ? null : s.activeWorkspaceKey,
       activeWorktreeId: removedActiveWorktree ? null : s.activeWorktreeId,
       activeWorkspaceExecutionHostId: removedActiveWorktree
         ? null
@@ -118,12 +134,13 @@ export function applyRemoveWorktreeSuccessState(
       gitBranchCompareRequestStatusHeadByWorktree: omitByWorktree(
         s.gitBranchCompareRequestStatusHeadByWorktree
       ),
-      everActivatedWorktreeIds: s.everActivatedWorktreeIds.has(worktreeId)
-        ? new Set([...s.everActivatedWorktreeIds].filter((id) => id !== worktreeId))
-        : s.everActivatedWorktreeIds,
+      everActivatedWorktreeIds:
+        !survivor && s.everActivatedWorktreeIds.has(worktreeId)
+          ? new Set([...s.everActivatedWorktreeIds].filter((id) => id !== worktreeId))
+          : s.everActivatedWorktreeIds,
       lastVisitedAtByWorktreeId: removeWorktreeVisitEntries(
         s.lastVisitedAtByWorktreeId,
-        new Set(worktreeIds),
+        new Set([worktreeId]),
         executionHostId
       ),
       sortEpoch: s.sortEpoch + 1

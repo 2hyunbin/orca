@@ -4,7 +4,7 @@ import type { OrcadMigrationManifestVersion } from './orcad-migration-manifest-v
 import type { ProjectGroup } from './project-group-types'
 import type { Repo } from './repo-types'
 import type { SparsePreset } from './worktree/create-types'
-import type { WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
+import type { LineageEdge, WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
 import type { WorktreeMeta } from './worktree/meta-types'
 import type { RetiredNameRegistry } from './worktree/retired-name-registry'
 import type { WorkspaceSessionState } from './workspace-session-state-types'
@@ -98,6 +98,7 @@ export type OrcadMigrationDormantRetirementNamespace = {
 }
 
 export type OrcadMigrationDormantStatePayload = {
+  edges?: LineageEdge[]
   version: 1
   worktreeMeta: OrcadMigrationDormantWorktreeMeta[]
   worktreeLineage: OrcadMigrationDormantWorktreeLineage[]

@@ -1,3 +1,4 @@
+import { removedOwnerTabIds } from './worktree-removal-owner'
 import type { AppState } from '../../../types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { NativeChatComposerDraftOwner } from '@/components/native-chat/native-chat-composer-draft-storage'
@@ -27,7 +28,8 @@ export type WorkspaceChatDraftKeys = {
  * and the listing refresh that starts can drop the tab lists these keys are found through.
  */
 export function captureWorkspaceChatDraftKeys(
-  state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree'>,
+  state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree'> &
+    Partial<Pick<AppState, 'worktreesByRepo'>>,
   workspaces: readonly {
     readonly workspaceId: string
     readonly executionHostId: ExecutionHostId | null | undefined
@@ -40,13 +42,16 @@ export function captureWorkspaceChatDraftKeys(
     if (executionHostId) {
       owners.push({ workspaceId, executionHostId })
     }
+    const tabIds = removedOwnerTabIds(state, workspaceId, executionHostId ?? undefined)
     for (const tab of state.unifiedTabsByWorktree[workspaceId] ?? []) {
-      if (tab.contentType === 'agent-session') {
+      if (tabIds.has(tab.id) && tab.contentType === 'agent-session') {
         conversations.push(structuredAgentSessionDraftScopeKey(tab.entityId))
       }
     }
     for (const tab of state.tabsByWorktree[workspaceId] ?? []) {
-      terminalTabIds.push(tab.id)
+      if (tabIds.has(tab.id)) {
+        terminalTabIds.push(tab.id)
+      }
     }
   }
   return { owners, conversations, terminalTabIds }
