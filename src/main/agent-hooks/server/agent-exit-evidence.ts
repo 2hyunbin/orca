@@ -1,5 +1,6 @@
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import { opensNewTurn } from '../../../shared/agent-hook-cancel-verdict-latch'
+import { isNewTurnEvent } from '../../../shared/agent-hook-listener/provider-event-routing'
 import {
   isSameAgentProcess,
   readAgentProcessIdentity,
@@ -25,7 +26,11 @@ export function recordAgentExit(
   process: AgentProcessIdentity | undefined,
   at = Date.now()
 ): void {
-  const exit: AgentExitEvidence = { at, paneKeys: new Set(paneKeys), ...(process ? { process } : {}) }
+  const exit: AgentExitEvidence = {
+    at,
+    paneKeys: new Set(paneKeys),
+    ...(process ? { process } : {})
+  }
   for (const key of exit.paneKeys) {
     forgetAgentExit(exits, key)
   }
@@ -53,7 +58,10 @@ export function claimsPaneAfterExit(
     return !exit.process || !isSameAgentProcess(sender, exit.process)
   }
   // Why: an unidentified late hook from the ended session (a Stop) is no evidence of a successor.
-  return opensNewTurn(event)
+  return (
+    opensNewTurn(event) ||
+    (event.source !== undefined && isNewTurnEvent(event.source, event.hookEventName))
+  )
 }
 
 export function serializeAgentExits(

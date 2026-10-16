@@ -478,6 +478,48 @@ describe('retained agent exit', () => {
     expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
   })
 
+  it('drops the exit when a provider-specific new turn starts in the pane', async () => {
+    const server = await createServer()
+    const attachedAt = Date.now() - 1
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    const response = await postHookEvent(
+      server,
+      buildBody({ hook_event_name: 'before_agent_start', prompt: 'next' }),
+      '/hook/pi'
+    )
+    expect(response.status).toBe(204)
+    expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBeNull()
+  })
+
+  it('keeps a persisted exit through a spooled start written before it', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-spool-'))
+    const first = new AgentHookServer()
+    servers.push(first)
+    await first.start({ env: 'production', userDataPath })
+    const attachedAt = Date.now() - 1
+    const spooledAt = Date.now() - 1
+    await hook(first, 'SessionStart')
+    await hook(first, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    first.flushStatusPersistSync()
+    first.stop()
+    const spoolDir = join(userDataPath, 'agent-hooks', 'spool')
+    mkdirSync(spoolDir, { recursive: true })
+    writeFileSync(
+      join(spoolDir, 'pane-spooled.jsonl'),
+      `\n${JSON.stringify({
+        paneKey: PANE,
+        source: 'claude',
+        receivedAt: spooledAt,
+        payload: { hook_event_name: 'SessionStart', session_id: 'session-old', source: 'startup' }
+      })}\n`
+    )
+    const restarted = new AgentHookServer()
+    servers.push(restarted)
+    await restarted.start({ env: 'production', userDataPath })
+    expect(await restarted.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
+  })
+
   it('keeps the exit readable after the hook store restarts', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-'))
     const first = new AgentHookServer()

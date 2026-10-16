@@ -8,6 +8,7 @@ import {
 } from '../../../shared/agent-hook-listener/opencode-session-registry'
 import type { NormalizedLocalHook } from './server-types'
 import { AgentHookServerTmuxStatus } from './server-tmux-status'
+import { recordAgentExit } from './agent-exit-evidence'
 
 export abstract class AgentHookServerIngestNormalization extends AgentHookServerTmuxStatus {
   protected setClaudeBackgroundEvidence(
@@ -129,7 +130,17 @@ export abstract class AgentHookServerIngestNormalization extends AgentHookServer
       this.observations.rebind(event.paneKey)
     }
     this.recordCurrentAuthorityObservation(event)
+    const exitBefore = this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(event.paneKey))
     this.applyNormalizedStatus(event, normalized.onAccepted)
+    // Why: a spooled hook written before the exit is no evidence of a successor, so it keeps the exit.
+    if (exitBefore && record.receivedAt <= exitBefore.at) {
+      recordAgentExit(
+        this.agentExitedAtByPaneKey,
+        exitBefore.paneKeys,
+        exitBefore.process,
+        exitBefore.at
+      )
+    }
     if (event.payload.state !== 'done') {
       this.withdrawReplayObservation(this.resolvePaneKeyAlias(event.paneKey))
     }

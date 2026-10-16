@@ -81,7 +81,10 @@ export abstract class AgentHookServerState {
   /** A new agent (or a new worker attach) claimed the pane; the previous exit no longer describes it. */
   forgetAgentExit(paneKey: string): void {
     const forgotten = forgetAgentExit(this.agentExitedAtByPaneKey, paneKey)
-    if (forgetAgentExit(this.agentExitedAtByPaneKey, this.resolvePaneKeyAlias(paneKey)) || forgotten) {
+    if (
+      forgetAgentExit(this.agentExitedAtByPaneKey, this.resolvePaneKeyAlias(paneKey)) ||
+      forgotten
+    ) {
       this.scheduleStatusPersist()
     }
   }
