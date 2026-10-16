@@ -229,23 +229,19 @@ export async function attachLegacyRelayPane(ptyId: string): Promise<LegacyRelayB
     void bridge.refresh()
     return { status: 'unverifiable' }
   }
-  const result = await bridge.attach(ptyId)
-  if (result.status === 'attached') {
-    hiddenOutput?.screenSent(ptyId)
-  }
-  return result
+  return bridge.attach(ptyId, () => hiddenOutput?.screenSent(ptyId))
 }
 
 /** Re-reads a live pane's screen through the same attach a reconnect uses. */
-async function rereadLegacyRelayScreen(ptyId: string): Promise<string | null> {
+async function rereadLegacyRelayScreen(
+  ptyId: string,
+  atSnapshot: (replay: string) => void
+): Promise<void> {
   const bridge = bridgeForPty(ptyId)
-  const result = bridge ? await bridge.attach(ptyId) : null
-  if (!bridge || result?.status !== 'attached') {
-    return null
+  if ((await bridge?.attach(ptyId, atSnapshot))?.status === 'attached') {
+    // The attach counted a viewer; this re-read is not one.
+    bridge?.detach(ptyId)
   }
-  // The attach counted a viewer; this re-read is not one.
-  bridge.detach(ptyId)
-  return result.replay
 }
 
 async function waitForConnection(targetId: string): Promise<boolean> {
