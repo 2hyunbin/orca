@@ -94,10 +94,8 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
       return '"<unserializable>"'
     }
   }
-  let closeSync
   let diagnosticFileDescriptor
-  let openSync
-  let writeSync
+  let closeSync, openSync, writeSync
   try {
     const fs = require('node:fs')
     closeSync = fs.closeSync

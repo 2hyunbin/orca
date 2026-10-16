@@ -19,7 +19,7 @@ import { I18nProvider } from './i18n/I18nProvider'
 import { useAppStore } from './store'
 
 function SpaceWindowRoot(): React.JSX.Element {
-  useTranslation()
+  const { t } = useTranslation()
   const settings = useAppStore((state) => state.settings)
   const activeModal = useAppStore((state) => state.activeModal)
 
@@ -71,8 +71,11 @@ function SpaceWindowRoot(): React.JSX.Element {
     <RecoverableRenderErrorBoundary
       boundaryId="space-window.root"
       surface="app-root"
-      title="Space hit an error."
-      description="Close and reopen Space to try again."
+      title={t('workspaceSpace.window.errorTitle', 'Space hit an error.')}
+      description={t(
+        'workspaceSpace.window.errorDescription',
+        'Close and reopen Space to try again.'
+      )}
     >
       <TooltipProvider delayDuration={400}>
         <ConfirmationDialogProvider>
