@@ -16,7 +16,7 @@ const MODIFIED_TEST_INPUTS = new Set([
   'src/main/native-chat/agent-session-journal/journal-host-database-test-support.ts'
 ])
 
-function isRepositoryPath(file) {
+export function isRepositoryPath(file) {
   return (
     typeof file === 'string' &&
     file.length > 0 &&

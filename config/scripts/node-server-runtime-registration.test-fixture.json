@@ -1,0 +1,13 @@
+{
+  "pullRequest": 29721,
+  "base": "d5e5815dc6f719ad9cc9cfe0ab59604d8d89d1cc",
+  "testedMerge": "8abc2bb1e8f5056b82fa977d3af8c22d41c66d5d",
+  "changedFiles": [
+    "src/main/runtime/orca-runtime-tests/repository-project-operations.spec.ts",
+    "src/main/runtime/rpc/methods/files-read-dir-remote-budget.test.ts",
+    "src/main/runtime/rpc/methods/pairing.test.ts",
+    "src/main/runtime/rpc/methods/repo.test.ts",
+    "src/main/runtime/rpc/runtime-source-admission.test.ts"
+  ],
+  "rawDiff": ":100644 100644 31294118b604886a00c1f01b81f847695c0eb800 8c9f018f97a97402ac5d609d22db8758f0ba6f4f M\u0000src/main/runtime/orca-runtime-tests/repository-project-operations.spec.ts\u0000:100644 100644 42b04ba07d6b658ea49386b27ddbe569c5720993 554323dffebf151d36dec453f13a92cd6a7e9e50 M\u0000src/main/runtime/rpc/methods/files-read-dir-remote-budget.test.ts\u0000:100644 100644 05f896dec4cdf775376fe4629a23146909abeb42 95cef0c8a4b0cce9ed05f6767e9647246f25568d M\u0000src/main/runtime/rpc/methods/pairing.test.ts\u0000:100644 100644 7b97d225554e6b0ac10b1943460afc71cfd5648f 77e504faff4126522db8325a342771f33b812fd1 M\u0000src/main/runtime/rpc/methods/repo.test.ts\u0000:100644 100644 1cfaca8ffdfdcbb7fe80a031d0f7e3fb25375b7d e588c56cf2550487de815286f0b4533704e429bc M\u0000src/main/runtime/rpc/runtime-source-admission.test.ts\u0000"
+}
