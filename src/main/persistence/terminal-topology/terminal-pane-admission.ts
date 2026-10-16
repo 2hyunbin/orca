@@ -72,9 +72,12 @@ export function withdrawPaneFromSession(
 function touchedRecordsWrite(
   session: WorkspaceSessionState,
   loaded: LoadedWorkspaceLayout
-): ((after: WorkspaceSessionState) => WorkspaceSessionState) | undefined {
+): ((after: WorkspaceSessionState) => WorkspaceSessionState | null) | undefined {
   return ORCA_LAYOUT_OWNER_IS_MAIN
-    ? (after) => patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+    ? (after) => {
+        const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+        return patched === session ? null : patched
+      }
     : undefined
 }
 
