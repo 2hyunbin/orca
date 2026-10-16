@@ -8,8 +8,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
-  statSync,
-  writeFileSync
+  statSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
@@ -209,66 +208,6 @@ function isLiveProcess(pid: number): boolean {
   } catch (error) {
     // EPERM: alive, owned by someone else.
     return errorCode(error) === 'EPERM'
-  }
-}
-
-const LOCK_WAIT_MS = 15_000
-
-function tryTakeLock(statePath: string, lock: string): 'taken' | 'held' | 'failed' {
-  // Why stage then link: the lock appears with its PID already written, never empty.
-  const staging = `${statePath}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
-  try {
-    writeFileSync(staging, String(process.pid), { mode: 0o600 })
-    linkSync(staging, lock)
-    return 'taken'
-  } catch (error) {
-    return errorCode(error) === 'EEXIST' ? 'held' : 'failed'
-  } finally {
-    rmSync(staging, { force: true })
-  }
-}
-
-/**
- * Runs `task` holding this record's lock, so concurrent starts cannot each replace the record.
- * Resolves 'unlocked' when the lock cannot be taken, or another live start keeps it too long.
- */
-export async function withRecordLock<T>(
-  statePath: string,
-  task: () => Promise<T>
-): Promise<T | 'unlocked'> {
-  const lock = `${statePath}.lock`
-  const deadline = Date.now() + LOCK_WAIT_MS
-  for (;;) {
-    const taken = tryTakeLock(statePath, lock)
-    if (taken === 'taken') {
-      break
-    }
-    if (taken === 'failed') {
-      return 'unlocked'
-    }
-    let holder = Number.NaN
-    try {
-      holder = Number(readFileSync(lock, 'utf8'))
-    } catch {
-      // Gone (retry now) or unreadable (wait for the deadline below).
-    }
-    if (Number.isInteger(holder) && holder > 0 && !isLiveProcess(holder)) {
-      try {
-        rmSync(lock, { force: true })
-        continue
-      } catch {
-        // Not ours to remove; wait like for a live holder.
-      }
-    }
-    if (Date.now() > deadline) {
-      return 'unlocked'
-    }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
-  }
-  try {
-    return await task()
-  } finally {
-    rmSync(lock, { force: true })
   }
 }
 

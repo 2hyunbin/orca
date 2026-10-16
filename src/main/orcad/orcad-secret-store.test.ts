@@ -1,11 +1,13 @@
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
 import { randomBytes } from 'node:crypto'
@@ -257,8 +259,10 @@ describe('createOrcadSecretStore', () => {
 
   it('takes over a migration lock its crashed holder left behind', async () => {
     const { encodedKey, sealed } = legacyKeyringHost()
-    // Far above any real PID, so no process holds it.
-    writeFileSync(join(keyDir, `${STATE_A}.lock`), '2147483646', { mode: 0o600 })
+    // A lock a crashed start left behind, older than the lock's staleness window.
+    const lock = join(keyDir, `${STATE_A}.lock`)
+    mkdirSync(lock)
+    utimesSync(lock, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000))
     const { store, ready } = await prepare({
       legacyKeyring: fakeLegacyKeyring({ key: encodedKey }).read
     })

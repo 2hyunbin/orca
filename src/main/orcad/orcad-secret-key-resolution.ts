@@ -2,6 +2,7 @@
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import process from 'node:process'
+import { withFileTransactionLock } from '../file-transaction-lock'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import {
   resolveOrcadLegacyKeyringReader,
@@ -15,7 +16,6 @@ import {
   readStoredRecord,
   replaceRecord,
   restrictExistingRecord,
-  withRecordLock,
   type StoredKeyState
 } from './orcad-secret-key-record'
 import {
@@ -122,18 +122,25 @@ async function loadStoredRecord(
   context: Context
 ): Promise<StoreState | 'reload'> {
   if (stored.backend === 'os-keyring') {
-    const migrated = await withRecordLock(context.statePath, async () => {
-      // Why re-read under the lock: another start may have migrated it while this one waited.
-      const current = readStoredRecord(context.statePath)
-      return current.kind === 'record' &&
-        current.stored.backend === 'os-keyring' &&
-        current.stored.check === stored.check
-        ? migrateKeyringRecord(current.stored, context)
-        : 'reload'
-    })
-    return migrated === 'unlocked'
-      ? context.unavailable('its key record could not be locked against another server')
-      : migrated
+    // Why a lock: concurrent starts must not each replace the record with a different key.
+    // Why 4 retries: about 15s of backoff, longer than one bounded keyring read.
+    return withFileTransactionLock(
+      context.statePath,
+      async () => {
+        // Why re-read under the lock: another start may have migrated it while this one waited.
+        const current = readStoredRecord(context.statePath)
+        return current.kind === 'record' &&
+          current.stored.backend === 'os-keyring' &&
+          current.stored.check === stored.check
+          ? migrateKeyringRecord(current.stored, context)
+          : 'reload'
+      },
+      { retries: 4 }
+    ).catch((error: unknown) =>
+      context.unavailable(
+        `its key record could not be locked against another server (${String(error)})`
+      )
+    )
   }
   const { unavailable } = context
   if (!(await restrictExistingRecord(context.statePath))) {
