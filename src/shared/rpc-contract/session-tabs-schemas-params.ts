@@ -194,6 +194,14 @@ export const CreateTerminalTab = WorktreeTabSelector.extend({
       message: 'Agent prompt cannot be combined with a startup command'
     })
   }
+  // Why: agent launches plan their own shell, which would silently replace the pick.
+  if (value.shell !== undefined && (value.agent || value.launchAgent || value.launchConfig)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['shell'],
+      message: 'A shell pick cannot be combined with an agent launch'
+    })
+  }
 })
 
 export const MoveTabBase = {

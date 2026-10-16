@@ -50,6 +50,18 @@ describe('session.tabs.createTerminal shell selection', () => {
     expect(opts).not.toHaveProperty('shellOverride')
   })
 
+  it('refuses a shell pick combined with an agent launch, whose plan picks its own shell', async () => {
+    const runtime = makeRuntime()
+    const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest({ worktree: 'id:wt-1', shell: 'cmd.exe', agent: 'claude' })
+    )
+
+    expect(response.ok).toBe(false)
+    expect(runtime.createMobileSessionTerminal).not.toHaveBeenCalled()
+  })
+
   it('refuses a shell outside the Windows allowlist before creating a terminal', async () => {
     const runtime = makeRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
