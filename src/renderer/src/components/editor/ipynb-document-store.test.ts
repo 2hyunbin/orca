@@ -283,7 +283,9 @@ describe('notebook document store', () => {
     result.current.bridge.isApplyingLargePasteRef.current = false
     act(() => result.current.onChange(file, original))
     expect(draft()).toBe(original)
-    expect(getNotebookDocumentView(FILE_ID)?.document?.cells[0]?.source).toEqual(['print(1)'])
+    expect(getNotebookDocumentView(FILE_ID)?.document?.cells[0]).toHaveProperty('source', [
+      'print(1)'
+    ])
   })
 
   it('keeps a no-output completion count through an unrelated Source edit', async () => {
