@@ -12,7 +12,9 @@ import {
   type DesktopBrowserBridgeResultParams
 } from '../../../shared/desktop-browser-bridge-protocol'
 
-const MAX_PENDING_PER_ATTACHMENT = 64
+// Why below 32: the desktop answers over one subscription that holds at most 32 unacknowledged
+// requests (remote-runtime-subscription-request-channel), so more would strand finished results.
+export const MAX_PENDING_PER_ATTACHMENT = 16
 
 type Attachment = {
   attachmentId: string
