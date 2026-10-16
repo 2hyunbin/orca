@@ -111,6 +111,25 @@ describe('a resume launch seeds the pane identity', () => {
     expect(row).toMatchObject({ state: 'working', providerSession: RESUMED })
   })
 
+  it('keeps the seeded identity when terminal evidence starts the first turn', async () => {
+    const server = await startServer()
+    server.recordLaunchResumeIdentity({
+      paneKey: PANE,
+      agentType: 'opencode2',
+      providerSession: RESUMED,
+      launchedAt: Date.now()
+    })
+    server.ingestTerminalStatus({
+      paneKey: PANE,
+      origin: 'process',
+      payload: { state: 'working', prompt: '', agentType: 'opencode2' }
+    })
+    expect(server.getStatusSnapshotForPane(PANE)[0]).toMatchObject({
+      state: 'working',
+      providerSession: RESUMED
+    })
+  })
+
   it('keeps the seeded identity across a host restart', async () => {
     const server = await startServer()
     server.recordLaunchResumeIdentity({

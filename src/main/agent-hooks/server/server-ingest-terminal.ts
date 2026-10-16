@@ -206,10 +206,13 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       event.payload.agentType && event.payload.agentType !== 'unknown'
         ? event.payload.agentType
         : undefined
+    // A launch seed's `done` is a placeholder, not a finished turn, so its session carries over.
     const preservedProviderSession =
       previous?.providerSession &&
       (claimedAgentType === undefined || claimedAgentType === previous.payload.agentType) &&
-      (previous.payload.state !== 'done' || event.payload.state === 'done')
+      (previous.payload.state !== 'done' ||
+        event.payload.state === 'done' ||
+        previous.observation?.origin === 'launch')
         ? previous.providerSession
         : undefined
     // Why: OSC carries no main agent fact. While it repaints the state the hook row already holds, the
