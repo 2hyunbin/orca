@@ -121,7 +121,7 @@ describe('ExternalFileChangeBanner', () => {
     // Why: after a real reload the tab is clean with no draft — the undo
     // guard only restores over that untouched state.
     mockStoreState({}, [{ ...file, isDirty: false, externalMutation: undefined } as OpenFile])
-    setEditorDraft.mockImplementation(() => expect(cancel).toHaveBeenCalledWith('file-1'))
+    setEditorDraft.mockImplementationOnce(() => expect(cancel).toHaveBeenCalledWith('file-1'))
 
     options.action.onClick()
 
