@@ -9,6 +9,7 @@ import {
   hardenExistingSecureFile,
   writeSecureFile
 } from '../../shared/secure-file'
+import { restrictWindowsPathSync } from '../../shared/secure-path-windows-acl'
 import { ORCAD_MASTER_KEY_BYTES } from './orcad-secret-sealing'
 
 export type StoredKeyState =
@@ -163,8 +164,12 @@ export function withdrawRecord(path: string, check: string): void {
 
 export function restrictExistingRecord(path: string): boolean {
   try {
+    // Why verify on Windows: the hardening helper does not report a failed ACL restriction.
+    if (process.platform === 'win32') {
+      return restrictWindowsPathSync(path, false)
+    }
     hardenExistingSecureFile(path)
-    return process.platform === 'win32' || (statSync(path).mode & 0o077) === 0
+    return (statSync(path).mode & 0o077) === 0
   } catch {
     return false
   }

@@ -52,6 +52,8 @@ export type OrcadSecretStorePrepareOptions = {
   keyring?: OrcadOsKeyring | null
   machineIdentity?: () => string | null
   isTemporaryKeyDir?: (keyDir: string) => boolean
+  /** How long to wait for a concurrent first start to finish storing its keyring key. */
+  claimSettleMs?: number
 }
 
 export type OrcadSecretStore = SecretStore & {
@@ -59,19 +61,23 @@ export type OrcadSecretStore = SecretStore & {
   prepare(options: OrcadSecretStorePrepareOptions): Promise<boolean>
 }
 
+// A claimant's keyring store and read-back can each take the full 5s keyring timeout.
+const CLAIM_SETTLE_MS = 12_000
+
 type Paths = { statePath: string; unavailable: (reason: string) => StoreState }
 
 type KeyContext = {
   platform: NodeJS.Platform
   keyring: OrcadOsKeyring | null
   machineId: string | null
+  claimSettleMs?: number
 }
 
 async function loadStoredRecord(
   stored: StoredKeyState,
   paths: Paths,
   context: KeyContext
-): Promise<StoreState> {
+): Promise<StoreState | 'record-changed'> {
   const { unavailable } = paths
   if (stored.backend === 'os-keyring') {
     const { keyring } = context
@@ -79,9 +85,15 @@ async function loadStoredRecord(
       return unavailable('the OS keyring that holds its key is not reachable from this session')
     }
     let found = await keyring.lookup(stored.account)
-    // Why retry: a concurrent first start may have claimed the record but not stored the key yet.
-    for (let attempt = 0; found.kind === 'missing' && attempt < 5; attempt += 1) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 200))
+    // Why wait: a concurrent first start may have claimed the record and still be storing the key
+    // (one keyring store plus one lookup), or may withdraw the claim and switch to the file.
+    const deadline = Date.now() + (context.claimSettleMs ?? CLAIM_SETTLE_MS)
+    while (found.kind === 'missing' && Date.now() < deadline) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250))
+      const current = readStoredRecord(paths.statePath)
+      if (current.kind !== 'record' || current.stored.check !== stored.check) {
+        return 'record-changed'
+      }
       found = await keyring.lookup(stored.account)
     }
     if (found.kind !== 'found') {
@@ -130,12 +142,21 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
       message: describeOrcadSealingUnavailable(reason, statePath)
     })
   }
-  const context: KeyContext = { platform, keyring, machineId }
+  const context: KeyContext = {
+    platform,
+    keyring,
+    machineId,
+    claimSettleMs: options.claimSettleMs
+  }
   // Why loop: losing an exclusive-create race means another start's record is the one to load.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const existing = readStoredRecord(paths.statePath)
     if (existing.kind === 'record') {
-      return loadStoredRecord(existing.stored, paths, context)
+      const loaded = await loadStoredRecord(existing.stored, paths, context)
+      if (loaded !== 'record-changed') {
+        return loaded
+      }
+      continue
     }
     if (existing.kind === 'unreadable') {
       return paths.unavailable(existing.reason)

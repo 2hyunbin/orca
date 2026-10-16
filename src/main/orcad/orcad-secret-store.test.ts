@@ -71,6 +71,7 @@ describe('createOrcadSecretStore', () => {
       machine?: string | null
       env?: NodeJS.ProcessEnv
       temporaryProfile?: boolean
+      claimSettleMs?: number
     } = {}
   ) => {
     const store = createOrcadSecretStore()
@@ -80,7 +81,8 @@ describe('createOrcadSecretStore', () => {
       env: options.env ?? {},
       keyring: options.keyring ?? null,
       machineIdentity: () => (options.machine === undefined ? MACHINE_A : options.machine),
-      isTemporaryKeyDir: () => options.temporaryProfile ?? false
+      isTemporaryKeyDir: () => options.temporaryProfile ?? false,
+      claimSettleMs: options.claimSettleMs ?? 0
     })
     return { store, ready }
   }
@@ -224,6 +226,21 @@ describe('createOrcadSecretStore', () => {
     expect((await prepare({ keyring })).store.decryptString(second.store.encryptString('b'))).toBe(
       'b'
     )
+
+    // A slow keyring write: the losing start must wait for it rather than give up.
+    rmSync(join(keyDir, STATE_A))
+    keyring.items.clear()
+    const slowStore = keyring.store.bind(keyring)
+    keyring.store = async (account, value) => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_500))
+      return slowStore(account, value)
+    }
+    const slow = await Promise.all([
+      prepare({ keyring, claimSettleMs: 12_000 }),
+      prepare({ keyring, claimSettleMs: 12_000 })
+    ])
+    expect(slow.map(({ ready }) => ready)).toEqual([true, true])
+    expect(slow[1].store.decryptString(slow[0].store.encryptString('s'))).toBe('s')
 
     const [fileA, fileB] = await Promise.all([
       prepare({ machine: MACHINE_B }),
