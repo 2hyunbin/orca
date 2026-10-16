@@ -15,8 +15,8 @@ export type BrowserRouteSessionHandle = Readonly<{
 export type BrowserRoutePreparePageInput = Readonly<{
   profileMetadata?: BrowserClientProfileMetadata
   identity: BrowserRoutePartitionIdentity
-  /** Pre-migration identity, so an existing partition keeps serving this route. */
-  legacyIdentity?: BrowserRoutePartitionIdentity
+  /** Pre-migration identities, most recent first, so an existing partition keeps serving this route. */
+  legacyIdentities?: readonly BrowserRoutePartitionIdentity[]
   storageScope: string
   browserPageId: string
   pageHostGeneration: number
