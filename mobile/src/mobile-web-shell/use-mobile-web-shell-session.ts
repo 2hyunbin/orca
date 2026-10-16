@@ -211,21 +211,17 @@ export function useMobileWebShellSession(args: {
         case 'remount':
           send({ type: 'remounted', flow, sessionId: runtime.mintSessionId() })
           return
-        case 'await-page-ready': {
-          const cancel = runtime.setTimer(() => {
-            timersRef.current.delete(cancel)
-            send({ type: 'page-ready-deadline', flow })
-          }, PAGE_READY_DEADLINE_MS)
-          timersRef.current.add(cancel)
-          return
-        }
+        case 'await-page-ready':
         case 'await-document-load': {
-          const cancel = runtime.setTimer(() => {
-            timersRef.current.delete(cancel)
-            send({ type: 'document-load-deadline', flow })
-          }, DOCUMENT_LOAD_DEADLINE_MS)
+          const pageReady = effect.kind === 'await-page-ready'
+          const cancel = runtime.setTimer(
+            () => {
+              timersRef.current.delete(cancel)
+              send({ type: pageReady ? 'page-ready-deadline' : 'document-load-deadline', flow })
+            },
+            pageReady ? PAGE_READY_DEADLINE_MS : DOCUMENT_LOAD_DEADLINE_MS
+          )
           timersRef.current.add(cancel)
-          return
         }
       }
     },
