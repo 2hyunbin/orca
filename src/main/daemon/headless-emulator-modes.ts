@@ -14,17 +14,20 @@ export function readKittyKeyboardFlags(terminal: Terminal): number {
 
 // Why a side table: xterm.js has no XTMODKEYS, so without it a snapshot drops pi's fallback
 // request and a reattached pane goes back to the ambiguous `ESC CR` Shift+Enter (STA-7701).
-const modifyOtherKeysByTerminal = new WeakMap<Terminal, { level: number }>()
+// `armed` once ever nonzero: from then on the snapshot states the level, 0 included, so a client
+// that missed the disarm is corrected while panes that never used it keep identical snapshots.
+const modifyOtherKeysByTerminal = new WeakMap<Terminal, { level: number; armed: boolean }>()
 
 /** Tracks the xterm modifyOtherKeys level (`CSI > 4 ; n m`) for readTerminalModes. */
 export function trackModifyOtherKeys(terminal: Terminal): void {
-  const state = { level: 0 }
+  const state = { level: 0, armed: false }
   modifyOtherKeysByTerminal.set(terminal, state)
   // Return false so xterm's own handlers (none for XTMODKEYS; RIS for ESC c) still run.
   terminal.parser.registerCsiHandler({ prefix: '>', final: 'm' }, (params) => {
     if (params[0] === 4) {
       const value = params[1]
       state.level = typeof value === 'number' ? value : 0
+      state.armed ||= state.level > 0
     }
     return false
   })
@@ -39,7 +42,7 @@ export function readTerminalModes(terminal: Terminal): TerminalModes {
   const buffer = terminal.buffer.active
   const mouseTrackingMode = terminal.modes.mouseTrackingMode
   const mouseEncoding = readTerminalMouseEncoding(terminal)
-  const modifyOtherKeys = modifyOtherKeysByTerminal.get(terminal)?.level ?? 0
+  const modifyOtherKeys = modifyOtherKeysByTerminal.get(terminal)
   return {
     bracketedPaste: terminal.modes.bracketedPasteMode,
     mouseTracking: mouseTrackingMode !== 'none',
@@ -49,6 +52,6 @@ export function readTerminalModes(terminal: Terminal): TerminalModes {
     applicationCursor: buffer.type === 'normal' ? terminal.modes.applicationCursorKeysMode : false,
     alternateScreen: buffer.type === 'alternate',
     kittyKeyboardFlags: readKittyKeyboardFlags(terminal),
-    ...(modifyOtherKeys > 0 ? { modifyOtherKeys } : {})
+    ...(modifyOtherKeys?.armed ? { modifyOtherKeys: modifyOtherKeys.level } : {})
   }
 }

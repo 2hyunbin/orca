@@ -19,7 +19,7 @@ export function buildRehydrateSequences(modes: TerminalModes): string {
   }
   // Why: a reattached pane's input mirror reads this to keep pi's modified Enter unambiguous;
   // xterm itself ignores XTMODKEYS, so older clients are unaffected.
-  if (modes.modifyOtherKeys !== undefined && modes.modifyOtherKeys > 0) {
+  if (modes.modifyOtherKeys !== undefined) {
     seqs.push(`\x1b[>4;${modes.modifyOtherKeys}m`)
   }
   // Why: mobile alt-screen scroll gestures need xterm's mouse mode restored

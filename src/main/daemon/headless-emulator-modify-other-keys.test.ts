@@ -37,8 +37,16 @@ describe('HeadlessEmulator modifyOtherKeys snapshot (STA-7701)', () => {
       expect(emulator.getSnapshot().modes.modifyOtherKeys).toBe(2)
       await emulator.write(disarm)
       const snapshot = emulator.getSnapshot()
-      expect(snapshot.modes.modifyOtherKeys).toBeUndefined()
-      expect(snapshot.rehydrateSequences).not.toContain('\x1b[>4;')
+      // An explicit zero corrects a client that missed the disarm.
+      expect(snapshot.modes.modifyOtherKeys).toBe(0)
+      expect(snapshot.rehydrateSequences).toContain('\x1b[>4;0m')
     }
+  })
+
+  it('leaves snapshots of panes that never armed the mode unchanged', () => {
+    emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
+    const snapshot = emulator.getSnapshot()
+    expect(snapshot.modes.modifyOtherKeys).toBeUndefined()
+    expect(snapshot.rehydrateSequences).not.toContain('\x1b[>4')
   })
 })
