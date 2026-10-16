@@ -4,7 +4,7 @@ import type { OpenFile } from '@/store/slices/editor'
 import { editorModelRegistry } from '@/lib/editor-model-registry'
 import {
   disposeClosedEditorModels,
-  disposeClosedEditorTabCaches,
+  disposeClosedCheckDetailsReadingCache,
   type ClosedEditorTab
 } from './closed-editor-tab-disposal'
 import type { MonacoModelRegistry, DisposableMonacoModel } from './diff-monaco-model-disposal'
@@ -99,7 +99,7 @@ export function attachClosedEditorTabCleanup(
 
   const flush = (): void => {
     const cacheGeneration = generation
-    disposeClosedEditorTabCaches(
+    disposeClosedCheckDetailsReadingCache(
       [...pendingFiles.values()].filter((file) => file.mode === 'check-details'),
       (file) =>
         active &&
