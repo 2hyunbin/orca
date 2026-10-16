@@ -93,16 +93,20 @@ describe('Windows CLI launcher', () => {
     try {
       const hookScript = join('config', 'scripts', 'build-windows-agent-hook.mjs')
       const crate = join('native', 'windows-agent-hook')
-      const outputPath = join(root, crate, '.build', 'orca-agent-hook.exe')
+      const outputFile = join(crate, '.build', 'orca-agent-hook.exe')
+      const outputPath = join(root, outputFile)
       const fingerprintPath = `${outputPath}.sha256`
+      // Why the default output: it reuses a warm canonical prebuild; Cargo runs only when that is missing or stale.
       const first = runProcessSync({
         program: process.execPath,
-        args: [hookScript, '--output', outputPath],
+        args: [hookScript],
         cwd: projectRoot,
         timeoutMs: 300_000
       })
       expect(first.code, `${first.stdout}\n${first.stderr}`).toBe(0)
       for (const file of [
+        outputFile,
+        `${outputFile}.sha256`,
         'package.json',
         hookScript,
         join('config', 'scripts', 'windows-rust-executable-build.mjs'),
