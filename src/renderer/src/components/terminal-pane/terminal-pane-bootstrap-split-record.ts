@@ -24,15 +24,29 @@ export function recordingBootstrapSplits(
       const sourceLeafId = manager.getLeafId(paneId)
       const created = manager.splitPane(paneId, direction, options)
       if (created && sourceLeafId) {
-        recordLayoutApply(useAppStore.getState(), worktreeId, {
-          type: 'splitPane',
-          tabId,
-          leafId: sourceLeafId,
-          direction,
-          newLeafId: created.leafId
-        })
+        recordDrawnPaneSplit(worktreeId, tabId, sourceLeafId, direction, created.leafId)
       }
       return created
     }
   }
+}
+
+/**
+ * Records a split the window drew under its pane id. Main finds the pane it already holds and
+ * changes nothing, or writes it again (one main took back while the window mounted it late).
+ */
+export function recordDrawnPaneSplit(
+  worktreeId: string,
+  tabId: string,
+  sourceLeafId: string,
+  direction: 'vertical' | 'horizontal',
+  newLeafId: string
+): void {
+  recordLayoutApply(useAppStore.getState(), worktreeId, {
+    type: 'splitPane',
+    tabId,
+    leafId: sourceLeafId,
+    direction,
+    newLeafId
+  })
 }

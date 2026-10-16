@@ -33,6 +33,11 @@ export function noteArmsHibernatedPaneWake(record: SleepingAgentSessionRecord): 
 }
 
 /** PTY exit handling, hibernated-pane wake targets, and post-exit focus transfer. */
+/** A tab's sole pane keeps a dead terminal it freshly spawned and the user never typed into. */
+function keepsUntouchedFreshPane(session: ConnectPanePtySession, ptyId: string): boolean {
+  return session.spawnedFreshPtyId === ptyId && !Number.isFinite(session.lastTerminalInputAt)
+}
+
 export function installPtyExitHibernate(session: ConnectPanePtySession): void {
   type ProcessExitState = {
     startup: PtyPaneStartup
@@ -323,7 +328,7 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
       // for this ptyId — reattach/coldRestore skip it) that the user never typed
       // into, so a reattached-dead session or an explicit `exit` still tears
       // down as before.
-      if (session.spawnedFreshPtyId === ptyId && !Number.isFinite(session.lastTerminalInputAt)) {
+      if (keepsUntouchedFreshPane(session, ptyId)) {
         return
       }
       session.deps.onPtyExitRef.current(ptyId, exitCode)
@@ -354,14 +359,9 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
         manager: session.manager,
         paneId: session.pane.id,
         closeTab: () => {
-          // The sole-pane rule above: a fresh terminal the user never typed into keeps its pane.
-          if (
-            session.spawnedFreshPtyId === ptyId &&
-            !Number.isFinite(session.lastTerminalInputAt)
-          ) {
-            return
+          if (!keepsUntouchedFreshPane(session, ptyId)) {
+            session.deps.onPtyExitRef.current(ptyId, exitCode)
           }
-          session.deps.onPtyExitRef.current(ptyId, exitCode)
         }
       })
     ) {

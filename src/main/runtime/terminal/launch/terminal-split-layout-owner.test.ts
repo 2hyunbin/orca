@@ -1,85 +1,68 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
-import type { WindowLayoutCommand } from '../../runtime-layout-apply'
-import { splitWindowLeafThroughLayoutOwner } from './terminal-split-layout-owner'
+import { OrcaRuntimeService, makePaneKey } from '../../orca-runtime-test-mocks.spec'
+import {
+  HEADLESS_LEAF_ID,
+  TEST_WORKTREE_ID,
+  makeRuntimeStoreWithWorkspaceSession,
+  makeWorkspaceSessionWithHeadlessTerminal
+} from '../../orca-runtime-test-fixtures.spec'
+import { createMobileCreateTestNotifier } from '../../orca-runtime-test-scenario-builders.spec'
+import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
 
-const LEAF = { worktreeId: 'wt-1', tabId: 'tab-1', leafId: 'leaf-1' }
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
-function deps(
-  reply: LayoutApplyReply | Error,
-  mount: (leafId: string) => Promise<string>,
-  mounted = false
-) {
+const TAB_ID = 'host-tab'
+
+function graph(leafIds: string[]) {
   return {
-    apply: vi.fn(async (_command: WindowLayoutCommand): Promise<LayoutApplyReply> => {
-      if (reply instanceof Error) {
-        throw reply
+    tabs: [
+      {
+        tabId: TAB_ID,
+        worktreeId: TEST_WORKTREE_ID,
+        title: 'shell',
+        activeLeafId: leafIds[0]!,
+        layout: null
       }
-      return reply
-    }),
-    mintLeafId: () => 'minted-leaf',
-    mount: vi.fn(mount),
-    isMounted: () => mounted
+    ],
+    leaves: leafIds.map((leafId, index) => ({
+      tabId: TAB_ID,
+      worktreeId: TEST_WORKTREE_ID,
+      leafId,
+      paneRuntimeId: index + 1,
+      ptyId: `pty-${index}`,
+      paneTitle: null
+    }))
   }
 }
 
-describe('splitWindowLeafThroughLayoutOwner', () => {
-  it('writes the split in main first, then has the window mount main’s pane', async () => {
-    const d = deps({ ok: true, result: { leafId: 'main-leaf' } }, async () => 'term_new')
-
-    const split = await splitWindowLeafThroughLayoutOwner(LEAF, 'vertical', d)
-
-    expect(d.apply).toHaveBeenCalledWith({
-      type: 'splitPane',
-      workspace: 'wt-1',
-      tabId: 'tab-1',
-      leafId: 'leaf-1',
-      direction: 'vertical'
-    })
-    expect(d.mount).toHaveBeenCalledWith('main-leaf')
-    expect(split).toEqual({ handle: 'term_new', leafId: 'main-leaf' })
-  })
-
-  it.each([
-    ['refuses', { ok: false, code: 'tab_not_found' } as const],
-    ['throws', new Error('layout_store_unavailable')]
-  ])('splits as today under a fresh id when main %s', async (_name, reply) => {
-    const d = deps(reply, async () => 'term_new')
-
-    const split = await splitWindowLeafThroughLayoutOwner(LEAF, 'horizontal', d)
-
-    expect(d.mount).toHaveBeenCalledWith('minted-leaf')
-    expect(split.leafId).toBe('minted-leaf')
-    expect(d.apply).toHaveBeenCalledOnce()
-  })
-
-  it('takes main’s pane back when the window never mounts it', async () => {
-    const d = deps({ ok: true, result: { leafId: 'main-leaf' } }, async () => {
-      throw new Error('timeout')
-    })
-
-    await expect(splitWindowLeafThroughLayoutOwner(LEAF, 'vertical', d)).rejects.toThrow('timeout')
-
-    expect(d.apply).toHaveBeenLastCalledWith({
-      type: 'closePane',
-      workspace: 'wt-1',
-      tabId: 'tab-1',
-      leafId: 'main-leaf',
-      automatic: true
-    })
-  })
-
-  it('keeps main’s pane when the window mounted it but its terminal is still starting', async () => {
-    const d = deps(
-      { ok: true, result: { leafId: 'main-leaf' } },
-      async () => {
-        throw new Error('timeout')
-      },
-      true
+describe('a split of a pane the window draws, in a layout-owner build', () => {
+  it('writes the new pane in main before the window mounts it, and takes back one never mounted', async () => {
+    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal()
     )
+    const notifier = createMobileCreateTestNotifier(vi.fn())
+    const splitTerminal = vi.mocked(notifier.splitTerminal)
+    const runtime = new OrcaRuntimeService(runtimeStore)
+    runtime.setNotifier(notifier)
+    runtime.syncWindowGraph(1, graph([HEADLESS_LEAF_ID]))
+    const handle = runtime.getTerminalHandleForPaneKey(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))
+    const leafIds = () =>
+      collectLayoutLeafIdsInOrder(getSession().terminalLayoutsByTabId[TAB_ID]!.root!)
 
-    await expect(splitWindowLeafThroughLayoutOwner(LEAF, 'vertical', d)).rejects.toThrow('timeout')
+    vi.useFakeTimers()
+    try {
+      const split = runtime.splitTerminal(handle!, { direction: 'vertical' })
+      const rejected = expect(split).rejects.toThrow('Timed out waiting for split pane handle')
+      await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+      const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+      // Main holds the pane before the window has mounted it.
+      expect(leafIds()).toEqual([HEADLESS_LEAF_ID, newLeafId])
 
-    expect(d.apply).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(11_000)
+      await rejected
+      expect(leafIds()).toEqual([HEADLESS_LEAF_ID])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

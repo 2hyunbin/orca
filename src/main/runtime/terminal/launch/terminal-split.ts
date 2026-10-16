@@ -4,10 +4,9 @@ import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from '../../session-tabs/e
 import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
+import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import type { WindowLayoutCommand } from '../../runtime-layout-apply'
-import { splitWindowLeafThroughLayoutOwner } from './terminal-split-layout-owner'
+import { startInAdmittedPane } from '../../runtime-pane-admission'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
@@ -16,8 +15,6 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     opts?: TerminalSplitOptions,
     createdWorktree?: Worktree
   ): Promise<RuntimeTerminalSplit>
-
-  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
 
   protected abstract waitForLeafInTab(
     tabId: string,
@@ -49,11 +46,24 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     const { leaf } = this.getLiveLeafForHandle(handle)
     const direction = opts.direction ?? 'horizontal'
     // Switch point: main writes the split first; the window then mounts main's pane.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      const split = await splitWindowLeafThroughLayoutOwner(leaf, direction, {
-        apply: (command) => this.applyLayoutCommand(command),
-        mintLeafId: randomUUID,
-        mount: (newLeafId) => {
+    const [hostId] = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
+      : []
+    if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
+      const newLeafId = randomUUID()
+      const { result: newHandle } = await startInAdmittedPane(
+        this.store,
+        {
+          type: 'splitPane',
+          workspace: leaf.worktreeId,
+          tabId: leaf.tabId,
+          leafId: leaf.leafId,
+          direction,
+          newLeafId
+        },
+        hostId,
+        // A refused or failed write splits as today; the window records the pane it mounts.
+        () => {
           this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
             direction,
             command: opts.command,
@@ -64,13 +74,17 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           })
           return this.waitForLeafInTab(leaf.tabId, newLeafId)
         },
-        isMounted: (newLeafId) => this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId))
-      })
+        {
+          // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
+          shown: () => this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
+          startIfWriteFails: true
+        }
+      )
       return {
-        handle: split.handle,
+        handle: newHandle,
         tabId: leaf.tabId,
         paneRuntimeId: leaf.paneRuntimeId,
-        leafId: split.leafId
+        leafId: newLeafId
       }
     }
 
