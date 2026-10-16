@@ -16,10 +16,34 @@ import { admitStructuredLaunchOnHost } from './structured-agent-session-host-adm
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: vi.fn()
 }))
+const hostPermission = vi.hoisted(() =>
+  vi.fn<() => Promise<{ kind: string; hostMode?: null }>>(async () => ({ kind: 'allowed' }))
+)
+vi.mock('@/runtime/structured-chat-host-permission', () => ({
+  readStructuredChatHostPermissionVerdict: hostPermission
+}))
 
 describe('structured agent session launch', () => {
   beforeEach(() => {
     vi.mocked(callStructuredAgentSession).mockReset()
+  })
+
+  // The chat opens before its host answers, so the create is the last thing that can say no.
+  it('issues no create to a host held for its access, or after its chat closed', async () => {
+    vi.mocked(callStructuredAgentSession).mockResolvedValue({ supported: true })
+    const held = createStructuredAgentSessionLaunchIntent('workspace-1', 'claude')
+    hostPermission.mockResolvedValueOnce({ kind: 'refused', hostMode: null })
+    await expect(launchStructuredAgentSession(held)).rejects.toMatchObject({
+      code: 'structured_agent_session_host_permission'
+    })
+    const closed = createStructuredAgentSessionLaunchIntent('workspace-1', 'claude')
+    await expect(launchStructuredAgentSession(closed, undefined, false, () => true)).rejects.toThrow(
+      'cancelled before create'
+    )
+    expect(vi.mocked(callStructuredAgentSession).mock.calls.map(([, method]) => method)).toEqual([
+      'agentSession.createSupport',
+      'agentSession.createSupport'
+    ])
   })
 
   it('creates a native session with a host-verifiable launch intent', async () => {

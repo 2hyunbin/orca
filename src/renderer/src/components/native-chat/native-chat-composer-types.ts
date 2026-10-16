@@ -63,6 +63,8 @@ export type NativeChatStructuredComposerTransport = {
   sessionId: string
   /** Owning runtime for that report; null is the local runtime. */
   runtimeEnvironmentId: string | null
+  /** The chat is still starting on its host: uploads wait for it. */
+  sessionPending?: boolean
 }
 
 export type NativeChatOptimisticSendOutcome = {

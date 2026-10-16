@@ -86,7 +86,8 @@ export function useNativeChatStructuredComposerTransport(args: {
       runtime: props.target.kind === 'local' ? 'local' : 'remote',
       sessionId: props.sessionId,
       runtimeEnvironmentId:
-        props.target.kind === 'local' ? null : (props.target.environmentId ?? null)
+        props.target.kind === 'local' ? null : (props.target.environmentId ?? null),
+      ...(starting ? { sessionPending: true } : {})
     }
   }, [
     acceptsImages,

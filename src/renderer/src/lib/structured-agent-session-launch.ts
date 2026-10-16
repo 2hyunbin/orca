@@ -109,7 +109,8 @@ function adoptPairedHostSeed(
   state: StructuredLaunchState,
   seedOptions: StructuredLaunchState['selection']['seed']
 ): void {
-  if (JSON.stringify(seedOptions) === JSON.stringify(state.intent.seedOptions)) {
+  const { seedPending, ...selection } = state.selection
+  if (!seedPending && JSON.stringify(seedOptions) === JSON.stringify(state.intent.seedOptions)) {
     return
   }
   if (seedOptions) {
@@ -117,7 +118,7 @@ function adoptPairedHostSeed(
   } else {
     delete state.intent.seedOptions
   }
-  state.selection = { ...state.selection, seed: seedOptions }
+  state.selection = { ...selection, seed: seedOptions }
   notifyStructuredLaunchListeners()
 }
 
@@ -223,7 +224,11 @@ function structuredAgentLaunchState(
     cancelled: false,
     onVisibilityChanged: notifyStructuredLaunchListeners,
     callers,
-    selection: { seed: intent.seedOptions, held: {} }
+    selection: {
+      seed: intent.seedOptions,
+      held: {},
+      ...(intent.target.kind !== 'local' && !intent.seedOptions ? { seedPending: true } : {})
+    }
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)

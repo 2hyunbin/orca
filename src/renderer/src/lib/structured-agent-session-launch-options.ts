@@ -35,6 +35,8 @@ export type StructuredLaunchSelection = {
   seed?: Readonly<Record<string, string>>
   /** Encoded picks made before publish; the launch applies them before it publishes. */
   held: Readonly<Record<string, string>>
+  /** A paired server has not yet said what create seeds, so nothing can be picked against it. */
+  seedPending?: true
 }
 
 export type StructuredLaunchOptionOutcome =

@@ -125,6 +125,8 @@ export type NativeChatStructuredAttachmentSession = {
   sessionId: string
   /** Null: the chat runs on this machine. */
   runtimeEnvironmentId: string | null
+  /** The host has not created this chat yet, so nothing can be uploaded into it. */
+  sessionPending?: boolean
 }
 
 /** A structured chat on a paired server owns its attachments by where it runs, not by worktree. */
