@@ -12,7 +12,8 @@ import {
   placeNewTab,
   refuse,
   updateTab,
-  type Applied
+  type Applied,
+  type TabPlacement
 } from './workspace-layout-command-steps'
 import type {
   CommandOf,
@@ -243,7 +244,7 @@ export function placeContentTab(
   model: WorkspaceLayoutModel,
   key: string,
   tab: LayoutContentTab,
-  placement: { groupId?: string; dirtyTabIds?: string[] },
+  placement: TabPlacement & { dirtyTabIds?: string[] },
   context: LayoutContext
 ): { model: WorkspaceLayoutModel; refused: RefusedClose[] } {
   let workspace = workspaceOrEmpty(model, key)
@@ -271,7 +272,16 @@ export function placeContentTab(
     }
   }
   return {
-    model: withWorkspace(model, key, placeNewTab(workspace, tab, { groupId: group?.id }, context)),
+    model: withWorkspace(
+      model,
+      key,
+      placeNewTab(
+        workspace,
+        tab,
+        { groupId: group?.id, afterTabId: placement.afterTabId, index: placement.index },
+        context
+      )
+    ),
     refused
   }
 }

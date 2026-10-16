@@ -11,7 +11,7 @@ import type {
   LayoutRefusalCode
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
-/** The commands a window sends `layout.apply`; main mints any new id. */
+/** The commands a window sends `layout.apply`; main mints any new id but a browser tab's. */
 export type WindowLayoutCommand =
   | { type: 'splitPane'; tabId: string; leafId: string; direction: 'vertical' | 'horizontal' }
   | { type: 'closePane'; tabId: string; leafId: string }
@@ -23,6 +23,25 @@ export type WindowLayoutCommand =
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
   | { type: 'closeTabs'; tabIds: [string]; recordClose: 'user' | 'cleanup' }
+  | {
+      type: 'openBrowserTab'
+      tabId: string
+      browserTabId: string
+      pageId: string
+      profileId: string | null
+      sessionPartition: string | null
+      groupId?: string
+      afterTabId?: string
+      index?: number
+    }
+  | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
+  | { type: 'replaceBrowserPage'; browserTabId: string; pageId: string; newPageId: string }
+  | {
+      type: 'setBrowserTabProfile'
+      browserTabId: string
+      profileId: string | null
+      sessionPartition: string | null
+    }
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void

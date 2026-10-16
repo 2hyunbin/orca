@@ -89,9 +89,51 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup'])
 })
 
+const Id = z.string().min(1)
+
+/**
+ * A browser tab under the ids the window drew it with: its pages and the tab's own callers need
+ * them at once. Main refuses an id another tab or page holds; the same open again changes nothing.
+ */
+const OpenBrowserTabCommand = z.object({
+  type: z.literal('openBrowserTab'),
+  workspace: OnPane.workspace,
+  tabId: Id,
+  browserTabId: Id,
+  pageId: Id,
+  profileId: Id.nullable().optional(),
+  sessionPartition: Id.nullable().optional(),
+  groupId: Id.optional(),
+  afterTabId: Id.optional(),
+  index: z.number().int().nonnegative().optional()
+})
+
+const OnBrowserPage = { workspace: OnPane.workspace, browserTabId: Id, pageId: Id }
+
+/** A page the window added to a browser tab, under its own id. */
+const OpenBrowserPageCommand = z.object({ type: z.literal('openBrowserPage'), ...OnBrowserPage })
+
+const CloseBrowserPageCommand = z.object({ type: z.literal('closeBrowserPage'), ...OnBrowserPage })
+
+/** A converted page: the window's new page takes the old one's place. */
+const ReplaceBrowserPageCommand = z.object({
+  type: z.literal('replaceBrowserPage'),
+  ...OnBrowserPage,
+  newPageId: Id
+})
+
+const SetBrowserTabProfileCommand = z.object({
+  type: z.literal('setBrowserTabProfile'),
+  workspace: OnPane.workspace,
+  browserTabId: Id,
+  profileId: Id.nullable(),
+  sessionPartition: Id.nullable()
+})
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
- * names what it acts on; main mints every new id, so no new id is accepted here.
+ * names what it acts on; main mints every new id but a browser tab's and page's, which the window
+ * already shows (see OpenBrowserTabCommand).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
@@ -104,6 +146,11 @@ export const LayoutApplyParams = z.object({
     MoveTabCommand,
     SplitGroupCommand,
     SetGroupRatiosCommand,
-    CloseTabsCommand
+    CloseTabsCommand,
+    OpenBrowserTabCommand,
+    OpenBrowserPageCommand,
+    CloseBrowserPageCommand,
+    ReplaceBrowserPageCommand,
+    SetBrowserTabProfileCommand
   ])
 })

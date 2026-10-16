@@ -6,9 +6,17 @@ import type {
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import type { RuntimeStore } from './runtime-store-contract'
 
-/** A window's layout command: one on a tab, which names its partitions, or on the group tree. */
+/**
+ * A window's layout command: one on a tab, which names its partitions, or on the group tree or a
+ * browser tab's record, which go to the workspace's routed partition.
+ */
 export type WindowLayoutCommand = LayoutCommand &
-  ({ tabId: string } | { type: 'setGroupRatios' } | { type: 'closeTabs'; tabIds: [string] })
+  (
+    | { tabId: string }
+    | { type: 'setGroupRatios' }
+    | { type: 'closeTabs'; tabIds: [string] }
+    | { browserTabId: string }
+  )
 
 /**
  * `layout.apply`: the window's command on the partitions holding its tab, routed partition first;
@@ -21,7 +29,11 @@ export async function applyWindowLayoutCommand(
   command: WindowLayoutCommand
 ): Promise<LayoutApplyReply> {
   const routedTabId =
-    'tabId' in command ? command.tabId : command.type === 'closeTabs' ? command.tabIds[0] : null
+    'tabId' in command
+      ? (command.tabId ?? null)
+      : command.type === 'closeTabs'
+        ? command.tabIds[0]
+        : null
   const hostIds = hostIdsFor(command.workspace, routedTabId)
   // Why: a paired server's workspaces keep today's mirrored layout until that server owns it.
   if (!hostIds[0] || parseExecutionHostId(hostIds[0])?.kind === 'runtime') {
