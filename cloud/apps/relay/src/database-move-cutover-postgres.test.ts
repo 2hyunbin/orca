@@ -182,6 +182,14 @@ function moveEvents(event: string): Array<Record<string, unknown>> {
     )
 }
 
+async function readSuperseded(url: string): Promise<boolean> {
+  return await withPgClient(url, async (client) =>
+    Boolean(
+      (await client.query(`SELECT superseded FROM relay_database_authority`)).rows[0]?.superseded
+    )
+  )
+}
+
 async function loginCode(url: string): Promise<string | null> {
   try {
     await withPgClient(url, async () => undefined)
@@ -380,22 +388,47 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     await syncCommand(ctx, 'dedicated', { stopAtBacklog: 0, idleMs: 5 })
     expect(await verifyCommand(ctx, {})).toBe(true)
 
+    // The superseded mark: primary may not serve again until a cutover back clears it.
+    expect(await readSuperseded(sides.primary.move.url)).toBe(true)
+    expect(await readSuperseded(sides.dedicated.move.url)).toBe(false)
+    const reopenPrimary = async (): Promise<void> => {
+      await withPgClient(adminUrl ?? '', (admin) =>
+        admin.query(`ALTER ROLE ${sides.primary.app.user} PASSWORD '${sides.primary.app.password}'`)
+      )
+    }
+    const rollback = {
+      databases: ctx.databases,
+      to: 'primary' as const,
+      pointerStore: store,
+      timings: TIMINGS,
+      restoreTargetPassword: reopenPrimary
+    }
+
+    // Dedicated's tracking re-armed with writes in between: primary is no longer level with it.
+    await uninstallTrackingCommand(ctx, 'dedicated')
+    await withPgClient(sides.dedicated.app.url, (client) =>
+      client.query(`UPDATE relay_cells SET capacity_requests = 7 WHERE cell_id = 'c0'`)
+    )
+    await installTrackingCommand(ctx, 'dedicated')
+    await expect(runCutover({ ...rollback, dryRun: true })).rejects.toThrow('target_not_current')
+    await copyCommand(ctx, 'dedicated', { restart: true, maxBytesPerSecond: 1e9 })
+    expect(await loginCode(sides.primary.app.url)).toBe('28P01')
+
     // And back: the rollback cutover reopens the fenced primary itself, then moves the fleet.
     const returning = await startFleet(sides, store)
     await sleep(300)
-    const back = await runCutover({
-      databases: ctx.databases,
-      to: 'primary',
-      pointerStore: store,
-      timings: TIMINGS,
-      restoreTargetPassword: async () => {
-        await withPgClient(adminUrl ?? '', (admin) =>
-          admin.query(
-            `ALTER ROLE ${sides.primary.app.user} PASSWORD '${sides.primary.app.password}'`
-          )
-        )
-      }
-    })
+    // Interrupted right after the reopen: primary is fenced again and stays superseded.
+    await expect(
+      runCutover({
+        ...rollback,
+        interrupted: () => moveEvents('target_password_restored').length > 0
+      })
+    ).rejects.toThrow('interrupted')
+    expect(await loginCode(sides.primary.app.url)).toBe('28P01')
+    expect(await readSuperseded(sides.primary.move.url)).toBe(true)
+    expect(store.current()?.quiesce).toBeUndefined()
+
+    const back = await runCutover(rollback)
     await sleep(300)
     await returning.stop()
     expect(returning.failures).toEqual([])
@@ -406,6 +439,8 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     ])
     expect(store.current()?.generation).toBe(2)
     expect(await loginCode(sides.dedicated.app.url)).toBe('28P01')
+    expect(await readSuperseded(sides.primary.move.url)).toBe(false)
+    expect(await readSuperseded(sides.dedicated.move.url)).toBe(true)
   }, 90_000)
 
   it('aborts when a process cannot reach the target, naming it, with no failed operation', async () => {
@@ -452,6 +487,19 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     expect(await verifyCommand(ctx, {})).toBe(true)
   }, 60_000)
 
+  it('refuses a dry run after one table lost its triggers and was tracked again', async () => {
+    await withPgClient(sides.primary.app.url, async (client) => {
+      for (const suffix of ['ins', 'upd', 'del', 'trunc']) {
+        await client.query(`DROP TRIGGER relay_move_track_${suffix} ON relay_cells`)
+      }
+      await client.query(`UPDATE relay_cells SET capacity_requests = 9`)
+    })
+    await installTrackingCommand(ctx, 'primary')
+    await expect(
+      runCutover({ databases: ctx.databases, to: 'dedicated', pointerStore: store, dryRun: true })
+    ).rejects.toThrow('copy_predates_tracking')
+  }, 60_000)
+
   it('aborts on a hot-table difference and leaves the processes on the restored source', async () => {
     // A row only the dedicated copy has, written by the tool role so no trigger marks it.
     await withPgClient(sides.dedicated.move.url, async (client) => {
@@ -482,6 +530,9 @@ describePostgres('database move cutover against two PostgreSQL targets', () => {
     ])
     expect(store.current()?.quiesce).toBeUndefined()
     expect(await loginCode(sides.primary.app.url)).toBeNull()
+    // Marked superseded just before the fence, and cleared again by the abort.
+    expect(await readSuperseded(sides.primary.move.url)).toBe(false)
+    expect(moveEvents('source_supersede_cleared').length).toBe(1)
     const generation = await withPgClient(sides.dedicated.move.url, (client) =>
       readAuthorityGeneration(client)
     )

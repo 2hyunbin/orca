@@ -29,6 +29,7 @@ import {
   type MoveSyncSessions
 } from './database-move-sync.js'
 import {
+  readTrackingArm,
   MOVE_CLAIMED_TABLE,
   MOVE_COPY_PROGRESS_TABLE,
   readAuthorityGeneration,
@@ -273,6 +274,10 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
   // Unknown after a lost reply: the pointer's generation is then left for the operator.
   let authorityConfirmed = false
   let heldSession: pg.Client | null = null
+  let targetSession: pg.Client | null = null
+  let targetReopened = false
+  let supersededSource = false
+  let sourceSessionForUndo: pg.Client | null = null
   let newGeneration = 0
   try {
     const sourceLogin = await databases.login(from, 'app')
@@ -286,6 +291,7 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       source: await open(from, 'move', 'cutover-sync'),
       target: await open(to, 'move', 'cutover-sync')
     }
+    sourceSessionForUndo = sessions.source
     // The processes will log in there next; prove the relay's password works first. The session
     // stays open to see which processes reach the target during the window.
     let targetApp = await open(to, 'app', 'cutover-gate').catch((error: unknown) => error)
@@ -359,7 +365,9 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       checkpoint()
     }
     // A copy made before tracking was last installed missed the changes in between.
-    await requireCurrentCopy(sessions)
+    await requireCurrentCopy(sessions, tables, 'apply')
+    // Recorded with the authority, so a move back can tell the copy kept in step.
+    const targetArm = await readTrackingArm(sessions.target)
     if (to === 'dedicated') {
       // The dedicated copy got its rows from `copy`; a stopped one would leave big tables short.
       const progress = await sessions.target.query(
@@ -374,9 +382,14 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     if (writers.length > 0) throw new MoveRefusal('other_roles_can_write_relay_rows', { writers })
     if (targetPasswordRestore === 'needed' && !dryRun && input.restoreTargetPassword) {
       phase = 'reopen-target'
+      // From here an abort must fence the target again: it stays superseded meanwhile, so no
+      // process may use it, but its login is open.
+      targetReopened = true
       await input.restoreTargetPassword()
       logMoveEvent('target_password_restored', { side: to })
-      targetApp = await open(to, 'app', 'cutover-gate')
+      const reopenedSession = await open(to, 'app', 'cutover-gate')
+      targetApp = reopenedSession
+      targetSession = reopenedSession
     }
     const unmarked = await readUnmarkedRelaySessions(held, sourceLogin.user)
     if (unmarked.length > 0) {
@@ -446,6 +459,12 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
       await sleep(timings.quietScanSpacingMs)
     }
 
+    // Superseded before the fence: a process that boots from here on never picks the source, even
+    // when it cannot read the pointer. Undone on abort.
+    phase = 'supersede'
+    supersededSource = true
+    await setSuperseded(sessions.source, true, sourceGeneration)
+
     phase = 'fence'
     fenced = true
     const fence = await fenceWithSession(held)
@@ -485,10 +504,12 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
     phase = 'authority'
     try {
       await sessions.target.query(
-        `INSERT INTO ${RELAY_DATABASE_AUTHORITY_TABLE} (singleton, generation, written_at)
-         VALUES (TRUE, $1, $2)
-         ON CONFLICT (singleton) DO UPDATE SET generation = EXCLUDED.generation, written_at = EXCLUDED.written_at`,
-        [generation, Date.now()]
+        `INSERT INTO ${RELAY_DATABASE_AUTHORITY_TABLE}
+           (singleton, generation, written_at, superseded, tracking_arm)
+         VALUES (TRUE, $1, $2, FALSE, $3)
+         ON CONFLICT (singleton) DO UPDATE SET generation = EXCLUDED.generation,
+           written_at = EXCLUDED.written_at, superseded = FALSE, tracking_arm = EXCLUDED.tracking_arm`,
+        [generation, Date.now(), targetArm]
       )
     } catch (error) {
       // A lost reply may hide a commit. Undo only on proof that it did not land.
@@ -528,8 +549,17 @@ export async function runCutover(input: CutoverInput): Promise<CutoverResult> {
           }
         : {})
     })
-    if (!committed) await undoCutover(input, heldSession, fenced, quiesceId, written)
-    else if (quiesceId) {
+    if (!committed) {
+      await undoCutover(input, {
+        held: heldSession,
+        fenced,
+        quiesceId,
+        written,
+        source: supersededSource ? sourceSessionForUndo : null,
+        target: targetReopened ? targetSession : null,
+        reopened: targetReopened
+      })
+    } else if (quiesceId) {
       const recorded = authorityConfirmed ? newGeneration : undefined
       await clearQuiesce(input.pointerStore, quiesceId, written, recorded).catch(
         (clearError: unknown) => logMoveEvent('quiesce_clear_failed', describeMoveError(clearError))
@@ -573,14 +603,57 @@ async function checkAuthorityWrite(
   }
 }
 
+// As the tool role. A side with no authority row yet gets one at its current generation.
+async function setSuperseded(
+  client: pg.Client,
+  superseded: boolean,
+  generation: number
+): Promise<void> {
+  await client.query(
+    `INSERT INTO ${RELAY_DATABASE_AUTHORITY_TABLE} (singleton, generation, written_at, superseded)
+     VALUES (TRUE, $1, $2, $3)
+     ON CONFLICT (singleton) DO UPDATE SET superseded = EXCLUDED.superseded`,
+    [generation, Date.now(), superseded]
+  )
+}
+
 async function undoCutover(
   input: CutoverInput,
-  held: pg.Client | null,
-  fenced: boolean,
-  quiesceId: string | null,
-  written: StoredDatabaseTargetPointer | null
+  undo: {
+    held: pg.Client | null
+    fenced: boolean
+    quiesceId: string | null
+    written: StoredDatabaseTargetPointer | null
+    // Set when the source was marked superseded: the session to clear it with.
+    source: pg.Client | null
+    // Set when a rollback reopened its target: the relay-role session to fence it again with.
+    target: pg.Client | null
+    reopened: boolean
+  }
 ): Promise<void> {
   const from = otherMoveSide(input.to)
+  const { held, fenced, quiesceId, written } = undo
+  if (undo.reopened) {
+    try {
+      if (!undo.target) throw new MoveRefusal('target_session_missing')
+      await fenceWithSession(undo.target)
+      logMoveEvent('target_fenced_again', { side: input.to })
+    } catch (error) {
+      logMoveEvent('target_left_open', {
+        side: input.to,
+        run: `fence --side ${input.to}`,
+        ...describeMoveError(error)
+      })
+    }
+  }
+  if (undo.source) {
+    try {
+      await setSuperseded(undo.source, false, 0)
+      logMoveEvent('source_supersede_cleared', { side: from })
+    } catch (error) {
+      logMoveEvent('source_supersede_not_cleared', { side: from, ...describeMoveError(error) })
+    }
+  }
   if (fenced) {
     try {
       if (!held) throw new MoveRefusal('held_session_missing')
