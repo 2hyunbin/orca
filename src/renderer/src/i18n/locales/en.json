@@ -20207,7 +20207,8 @@
     },
     "chart": {
       "folderSizes": "Folder sizes",
-      "workspaceSizes": "Workspace sizes"
+      "workspaceSizes": "Workspace sizes",
+      "clickToZoom": "Click a workspace to zoom"
     },
     "window": {
       "close": "Close",
