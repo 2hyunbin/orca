@@ -76,7 +76,7 @@ export function WorkspaceSpaceWorktreeRow({
         onInspect()
       }}
       className={cn(
-        'grid w-full cursor-pointer grid-cols-[1.75rem_minmax(0,1.25fr)_minmax(9rem,0.55fr)_8rem_9.5rem] items-center gap-3 border-b border-border/45 px-3 py-2.5 text-left text-sm transition-colors last:border-b-0 hover:bg-accent/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'grid w-full cursor-pointer grid-cols-[1.75rem_minmax(0,1.25fr)_minmax(9rem,0.55fr)_8rem_9.5rem] items-center gap-3 border-b border-border/45 px-3 py-1.5 text-left text-sm transition-colors last:border-b-0 hover:bg-accent/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         inspected && 'bg-accent/55',
         isDeleting && 'cursor-wait opacity-50 grayscale hover:bg-transparent'
       )}
@@ -107,12 +107,14 @@ export function WorkspaceSpaceWorktreeRow({
             </Badge>
           ) : null}
         </div>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <GitBranch className="size-3 shrink-0" />
-          <span className="truncate">{getWorkspaceSpaceBranchLabel(worktree)}</span>
-        </div>
-        <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-          {worktree.path}
+          <span className="max-w-32 shrink-0 truncate">
+            {getWorkspaceSpaceBranchLabel(worktree)}
+          </span>
+          <span className="min-w-0 truncate font-mono text-2xs" title={worktree.path}>
+            {worktree.path}
+          </span>
         </div>
         {deleteError ? (
           <div className="mt-2 flex min-w-0 items-start gap-2 rounded-md border border-destructive/35 bg-destructive/8 px-2 py-1.5 text-[11px] text-destructive">

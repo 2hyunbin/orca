@@ -17,11 +17,11 @@ export function Metric({
   title?: string
 }): React.JSX.Element {
   return (
-    <div className="min-w-0 px-4 py-3">
-      <div className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="min-w-0 px-3 py-2">
+      <div className="truncate text-2xs font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 truncate text-lg font-semibold tabular-nums" title={title}>
+      <div className="mt-0.5 truncate text-base font-semibold tabular-nums" title={title}>
         {value}
       </div>
     </div>
