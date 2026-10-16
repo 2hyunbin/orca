@@ -68,6 +68,10 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       })
       return undefined
     }
+    if (payload.source !== undefined || payload.agentPresence?.process) {
+      // A hook (not a late terminal repaint) means an agent claimed the pane after the last exit.
+      this.forgetAgentExit(payload.paneKey)
+    }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; the shared view declares their base event type.
     const previous = this.state.lastStatusByPaneKey.get(payload.paneKey) as
       | EnrichedAgentHookEventPayload
@@ -102,7 +106,8 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
               agentType: previous.payload.agentType,
               state: previous.payload.state,
               updatedAt: previous.receivedAt,
-              restoredUnconfirmed: previous.restoredUnconfirmed
+              restoredUnconfirmed: previous.restoredUnconfirmed,
+              agentPresence: previous.providerSessionOnly ? undefined : previous.agentPresence
             }
           : undefined,
       incoming: terminalOwnedPayload.payload.agentType,

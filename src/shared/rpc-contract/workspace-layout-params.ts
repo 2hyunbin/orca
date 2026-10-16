@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
+import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -55,6 +56,39 @@ const EqualizePanesCommand = z.object({
   tabId: OnPane.tabId
 })
 
+const OnTab = { workspace: OnPane.workspace, tabId: OnPane.tabId }
+
+/** Within one group too: a reorder is a move to the tab's own group. */
+const MoveTabCommand = z.object({
+  type: z.literal('moveTab'),
+  ...OnTab,
+  toGroupId: z.string().min(1),
+  index: z.number().int().nonnegative()
+})
+
+/** Main mints the new group's id, or moves a lone tab's group whole. */
+const SplitGroupCommand = z.object({
+  type: z.literal('splitGroup'),
+  ...OnTab,
+  besideGroupId: z.string().min(1),
+  direction: z.enum(['left', 'right', 'up', 'down'])
+})
+
+/** The workspace's group tree with its new ratios; main refuses one whose groups differ. */
+const SetGroupRatiosCommand = z.object({
+  type: z.literal('setGroupRatios'),
+  workspace: OnPane.workspace,
+  groupLayout: TerminalOrphanGroupLayout
+})
+
+/** The window's close of one tab it already closed; main records it, the window's reason kept. */
+const CloseTabsCommand = z.object({
+  type: z.literal('closeTabs'),
+  workspace: OnPane.workspace,
+  tabIds: z.tuple([z.string().min(1)]),
+  recordClose: z.enum(['user', 'cleanup'])
+})
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id, so no new id is accepted here.
@@ -66,6 +100,10 @@ export const LayoutApplyParams = z.object({
     RenamePaneCommand,
     EqualizePanesCommand,
     MovePaneCommand,
-    SetPaneRatiosCommand
+    SetPaneRatiosCommand,
+    MoveTabCommand,
+    SplitGroupCommand,
+    SetGroupRatiosCommand,
+    CloseTabsCommand
   ])
 })

@@ -3,6 +3,7 @@
 import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetSshConfigPassiveSyncForTests } from '../../lib/ssh-config-passive-sync'
 import type { SshTarget } from '../../../../shared/ssh-types'
 import { setRendererUiLanguage } from '@/i18n/i18n'
 import { SshPane } from './SshPane'
@@ -54,6 +55,7 @@ afterEach(async () => {
   container = null
   root = null
   Reflect.deleteProperty(window, 'api')
+  resetSshConfigPassiveSyncForTests()
   vi.clearAllMocks()
   await setRendererUiLanguage('en')
 })

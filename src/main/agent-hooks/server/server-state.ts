@@ -74,6 +74,21 @@ export abstract class AgentHookServerState {
     return this.canonicalStatusStoreInstance
   }
   protected readonly canonicalListingOrder = new Map<string, number>()
+  /** When this host proved a pane's agent process ended; outlives the row the exit reconciles. */
+  protected readonly agentExitedAtByPaneKey = new Map<
+    string,
+    { at: number; paneKeys: Set<string> }
+  >()
+
+  /** A new agent claimed the pane, so the previous agent's exit no longer describes it. */
+  protected forgetAgentExit(paneKey: string): void {
+    const exit =
+      this.agentExitedAtByPaneKey.get(paneKey) ??
+      this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(paneKey))
+    for (const key of exit?.paneKeys ?? []) {
+      this.agentExitedAtByPaneKey.delete(key)
+    }
+  }
   protected readonly canonicalSubjectsByPane = new Map<string, Map<string, AgentStatusSubject>>()
   private statusListingOrder = 0
   protected nextStatusListingOrder = (): number => ++this.statusListingOrder
@@ -93,6 +108,7 @@ export abstract class AgentHookServerState {
   protected onStartupPromptClaim: ((body: unknown) => boolean | 'pending') | null = null
   protected clearStartupPromptClaims: (() => void) | null = null
   protected statusHooksEnabled = true
+  protected statusHookGeneration = 0
   protected onPaneStatusCleared: PaneStatusClearListener | null = null
   protected paneStatusClearListeners = new Set<PaneStatusClearListener>()
   protected statusDropListeners = new Set<StatusDropListener>()
@@ -181,7 +197,7 @@ export abstract class AgentHookServerState {
   ): EnrichedAgentHookEventPayload | undefined
   protected abstract clearTmuxInnerSubjects(paneKey: string): void
   protected abstract clearTmuxTabSubjects(tabId: string): void
-  protected abstract ingestSpoolRecord(record: SpoolRecord): void
+  protected abstract ingestSpoolRecord(record: SpoolRecord): Promise<void> | void
   protected abstract emitPaneStatusCleared(clear: AgentStatusClearIpcPayload): void
   protected abstract buildStatusChangeNotification(): {
     statuses: AgentHookStatusChangeEntry[]
