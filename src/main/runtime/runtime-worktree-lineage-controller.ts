@@ -107,20 +107,21 @@ export class RuntimeWorktreeLineageController {
       if (id === child.id || id === parent.id) {
         return id === child.id ? child.instanceId : parent.instanceId
       }
-      const meta =
-        hostId && store?.getWorktreeMetaForHost
-          ? store.getWorktreeMetaForHost(id, hostId)
-          : store?.getWorktreeMeta(id)
-      return meta?.instanceId
+      const meta = hostId ? store?.getWorktreeMetaForHost?.(id, hostId) : undefined
+      return (meta ?? store?.getWorktreeMeta(id))?.instanceId
     }
     let cursor: string | undefined = parent.id
-    const visited = new Set<string>([child.id])
+    const visited = new Set<string>()
     while (cursor) {
-      if (visited.has(cursor)) {
+      if (cursor === child.id) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CYCLE',
           'Parent selector would create a lineage cycle.'
         )
+      }
+      // Why: a loop saved before this walk read saved data must not block unrelated parents.
+      if (visited.has(cursor)) {
+        break
       }
       visited.add(cursor)
       const lineage = store?.getWorktreeLineage?.(cursor)

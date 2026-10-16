@@ -104,9 +104,13 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('refuses a reparent that closes a three-workspace loop through saved lineage', async () => {
-    const [aId, bId, cId] = ['a', 'b', 'c'].map((name) => `${TEST_REPO_ID}::/tmp/worktree-${name}`)
+    const names = ['a', 'b', 'c', 'd', 'e']
+    const [aId, bId, cId, dId, eId] = names.map((name) => `${TEST_REPO_ID}::/tmp/worktree-${name}`)
     const metaById: Record<string, WorktreeMeta> = Object.fromEntries(
-      [aId, bId, cId].map((id) => [id, makeWorktreeMeta({ instanceId: `${id}-instance` })])
+      [aId, bId, cId, dId, eId].map((id) => [
+        id,
+        makeWorktreeMeta({ instanceId: `${id}-instance` })
+      ])
     )
     const edge = (child: string, parent: string): WorktreeLineage => ({
       worktreeId: child,
@@ -117,9 +121,12 @@ describe('OrcaRuntimeService', () => {
       capture: { source: 'manual-action', confidence: 'explicit' },
       createdAt: 1
     })
+    // d <-> e is a loop saved by an older build.
     const lineageById: Record<string, WorktreeLineage> = {
       [aId]: edge(aId, bId),
-      [bId]: edge(bId, cId)
+      [bId]: edge(bId, cId),
+      [dId]: edge(dId, eId),
+      [eId]: edge(eId, dId)
     }
     const setWorktreeLineage = vi.fn()
     const runtimeStore = {
@@ -130,7 +137,7 @@ describe('OrcaRuntimeService', () => {
       setWorktreeLineage
     }
     vi.mocked(listWorktrees).mockResolvedValue(
-      ['a', 'b', 'c'].map((name) => makeWorktreeInfo(`/tmp/worktree-${name}`))
+      names.map((name) => makeWorktreeInfo(`/tmp/worktree-${name}`))
     )
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -139,6 +146,14 @@ describe('OrcaRuntimeService', () => {
       runtime.updateManagedWorktreeMeta(`id:${cId}`, { lineage: { parentWorktree: `id:${aId}` } })
     ).rejects.toThrow('lineage cycle')
     expect(setWorktreeLineage).not.toHaveBeenCalled()
+
+    await runtime.updateManagedWorktreeMeta(`id:${cId}`, {
+      lineage: { parentWorktree: `id:${dId}` }
+    })
+    expect(setWorktreeLineage).toHaveBeenCalledWith(
+      cId,
+      expect.objectContaining({ parentWorktreeId: dId })
+    )
   })
 
   it('rejects lineage updates when upgraded metadata is missing a parent instance id', async () => {
