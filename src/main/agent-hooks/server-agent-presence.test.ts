@@ -390,6 +390,21 @@ describe('retained agent exit', () => {
     expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
   })
 
+  it('keeps the exit through a late terminal status from another provider', async () => {
+    const server = await createServer()
+    const attachedAt = Date.now() - 1
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-1',
+      worktreeId: 'wt-1',
+      connectionId: null,
+      payload: { state: 'done', prompt: '', agentType: 'codex' }
+    })
+    expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBe('exited')
+  })
+
   it('carries the exit with the pane when its authority moves', async () => {
     const server = await createServer()
     const attachedAt = Date.now() - 1
@@ -526,6 +541,12 @@ describe('retained agent exit', () => {
         paneKey: PANE,
         source: 'claude',
         receivedAt: spooledAt,
+        // An obsolete owner identity must not be installed over the proven exit.
+        agentProcess: JSON.stringify({
+          pid: 4009,
+          platform: process.platform,
+          startTime: 'birth-4009'
+        }),
         payload: { hook_event_name: 'SessionStart', session_id: 'session-old', source: 'startup' }
       })}\n`
     )

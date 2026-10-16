@@ -64,7 +64,13 @@ export function claimsPaneAfterExit(
   }
   const agent = event.agentPresence?.agent ?? event.payload.agentType
   // Why: only Claude hooks carry a process identity, so another provider reporting is the successor.
-  if (exit.agent && agent && agent !== 'unknown' && agent !== exit.agent) {
+  if (
+    event.source !== undefined &&
+    exit.agent &&
+    agent &&
+    agent !== 'unknown' &&
+    agent !== exit.agent
+  ) {
     return true
   }
   // Why: an unidentified late hook from the ended session (a Stop) is no evidence of a successor.

@@ -8,7 +8,6 @@ import {
 } from '../../../shared/agent-hook-listener/opencode-session-registry'
 import type { NormalizedLocalHook } from './server-types'
 import { AgentHookServerTmuxStatus } from './server-tmux-status'
-import { recordAgentExit } from './agent-exit-evidence'
 
 export abstract class AgentHookServerIngestNormalization extends AgentHookServerTmuxStatus {
   protected setClaudeBackgroundEvidence(
@@ -114,6 +113,12 @@ export abstract class AgentHookServerIngestNormalization extends AgentHookServer
     if (!normalized.event) {
       return
     }
+    const exit = this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(normalized.event.paneKey))
+    // Why: a hook spooled a full second before a proven exit (stamps are whole seconds) describes
+    // the dead agent; replaying it would install an obsolete owner. A same-second one may not.
+    if (exit && record.receivedAt + 1000 <= exit.at) {
+      return
+    }
     const replay = { ...normalized.event, isReplay: true as const }
     const statusDisposition = this.getAgentStatusDisposition(replay.paneKey, {
       source: record.source,
@@ -130,13 +135,7 @@ export abstract class AgentHookServerIngestNormalization extends AgentHookServer
       this.observations.rebind(event.paneKey)
     }
     this.recordCurrentAuthorityObservation(event)
-    const exitBefore = this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(event.paneKey))
     this.applyNormalizedStatus(event, normalized.onAccepted)
-    // Why: a hook spooled a full second before the exit (spool stamps are whole seconds) is no
-    // evidence of a successor, so it keeps the exit; a same-second one may be the successor.
-    if (exitBefore && record.receivedAt + 1000 <= exitBefore.at) {
-      recordAgentExit(this.agentExitedAtByPaneKey, exitBefore.paneKeys, exitBefore, exitBefore.at)
-    }
     if (event.payload.state !== 'done') {
       this.withdrawReplayObservation(this.resolvePaneKeyAlias(event.paneKey))
     }
