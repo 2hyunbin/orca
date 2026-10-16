@@ -82,7 +82,6 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
   incarnation?: (pid: number) => OrcadProcessIncarnation | null
   ownerUid?: (pid: number) => number | null
   processName?: (pid: number) => string | null
-  platform?: NodeJS.Platform
   /** Only `differs` frees a live holder's PID; anything less proves nothing. */
   holderIdentity?: (record: OrcadLockRecord) => OrcadProcessIdentityVerdict
   /**
