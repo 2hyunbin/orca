@@ -35,7 +35,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
       // Switch point: main keeps its own pane trees over the window's.
       store.setWorkspaceSession(
         ORCA_LAYOUT_OWNER_IS_MAIN
-          ? windowSaveForMain(store.getWorkspaceSession(hostId), args)
+          ? windowSaveForMain(store.getWorkspaceSession(hostId), args, hostId)
           : args,
         hostId
       )
@@ -46,7 +46,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
     if (!isFenced(hostId)) {
       store.patchWorkspaceSession(
         ORCA_LAYOUT_OWNER_IS_MAIN
-          ? windowSaveForMain(store.getWorkspaceSession(hostId), args)
+          ? windowSaveForMain(store.getWorkspaceSession(hostId), args, hostId)
           : args,
         hostId
       )

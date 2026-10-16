@@ -56,7 +56,7 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
           store.stageWorkspaceSessionBeforeUnload(
             // Switch point: main keeps its own pane trees over the window's.
             ORCA_LAYOUT_OWNER_IS_MAIN
-              ? windowSaveForMain(store.getWorkspaceSession(hostId), state)
+              ? windowSaveForMain(store.getWorkspaceSession(hostId), state, hostId)
               : state,
             hostId
           )

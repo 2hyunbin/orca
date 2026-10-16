@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
+import { endLayoutFramePositions, noteLayoutFramePosition } from '@/runtime/layout-frame-position'
 import {
   _resetLayoutOwnerPaneIntentsForTests,
   takeTabRowFields
@@ -44,6 +45,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 beforeEach(() => {
   _resetLayoutOwnerPaneIntentsForTests()
+  endLayoutFramePositions()
   mocks.pairedServer = null
   mocks.callRuntimeRpc.mockReset()
   mocks.callRuntimeRpc.mockImplementation(
@@ -65,12 +67,23 @@ describe('createInitialTerminalThroughLayoutOwner', () => {
       workspace: WORKTREE,
       initial: 'activation'
     })
+    noteLayoutFramePosition(1)
     mocks.reply?.({ ok: true, result: { tabId: command.tabId, leafId: command.leafId } })
     await settle()
 
     expect(create).not.toHaveBeenCalled()
     // Kept for the frame, however late an owed write lets it in.
     expect(takeTabRowFields(command.tabId)).toEqual({ pendingActivationSpawn: true })
+  })
+
+  it('draws main’s tab itself, under main’s ids, when no frame is coming', async () => {
+    const { create, command } = start()
+
+    mocks.reply?.({ ok: true, result: { tabId: command.tabId, leafId: command.leafId } })
+    await settle()
+
+    expect(create).toHaveBeenCalledWith({ tabId: command.tabId, leafId: command.leafId })
+    expect(takeTabRowFields(command.tabId)).toBeNull()
   })
 
   it('draws nothing when main’s copy already has a tab there', async () => {

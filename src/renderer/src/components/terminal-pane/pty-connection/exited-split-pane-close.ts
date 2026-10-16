@@ -1,4 +1,5 @@
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
+import { panesLeftAfterPendingCloses } from '@/runtime/layout-owner-pane-intents'
 import { sendPaneCloseToLayoutOwner } from '../layout-owner-pane-close-command'
 
 /**
@@ -24,8 +25,13 @@ export function closeExitedSplitPaneThroughLayoutOwner(args: {
     if (manager.getLeafId(paneId) !== leafId) {
       return
     }
-    // A sibling went while main answered: this pane is now the tab's last.
-    if (manager.getPanes().length <= 1) {
+    // A sibling went, or is going, while main answered: this pane is now the tab's last.
+    if (
+      panesLeftAfterPendingCloses(
+        args.tabId,
+        manager.getPanes().map((pane) => pane.leafId)
+      ) <= 1
+    ) {
       args.closeTab()
       return
     }
@@ -34,6 +40,6 @@ export function closeExitedSplitPaneThroughLayoutOwner(args: {
   // Main holds this pane alone while the window has more: its copy lags, so close as today.
   return sendPaneCloseToLayoutOwner(
     { worktreeId: args.worktreeId, tabId: args.tabId, leafId, kind: 'exit' },
-    { asToday: close, lastPane: close }
+    { asToday: close, lastPane: close, closeHere: close }
   )
 }

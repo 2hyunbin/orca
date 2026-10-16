@@ -39,6 +39,7 @@ describe('reconcileMountedPanesToLayout', () => {
   let manager: InstanceType<typeof PaneManager>
   let onPaneCreated: Mock<NonNullable<PaneManagerOptions['onPaneCreated']>>
   const closePane = vi.fn()
+  const closeTab = vi.fn()
 
   const reconcile = (layout: TerminalPaneLayoutNode, isExpanded = false): boolean =>
     reconcileMountedPanesToLayout({
@@ -46,6 +47,7 @@ describe('reconcileMountedPanesToLayout', () => {
       manager,
       layout: { root: layout, activeLeafId: null, expandedLeafId: null },
       closePane,
+      closeTab,
       isExpanded
     })
   const serialized = (): TerminalPaneLayoutNode | null => {
@@ -57,6 +59,7 @@ describe('reconcileMountedPanesToLayout', () => {
   beforeEach(() => {
     _resetLayoutOwnerPaneIntentsForTests()
     closePane.mockReset()
+    closeTab.mockReset()
     recordCreatedTerminalPaneSplit.mockReset()
     vi.stubGlobal('requestAnimationFrame', () => 1)
     vi.stubGlobal('cancelAnimationFrame', () => {})
@@ -114,6 +117,16 @@ describe('reconcileMountedPanesToLayout', () => {
     expect(reconcile(leaf(A))).toBe(true)
 
     expect(closePane).toHaveBeenCalledWith(manager.getNumericIdForLeaf(B), B, 'exit')
+  })
+
+  it('closes the tab instead when the pane main dropped is the window’s last', () => {
+    expectPaneToClose(TAB, B, 'exit')
+    manager.closePane(manager.getNumericIdForLeaf(A)!)
+
+    expect(reconcile(leaf(A))).toBe(true)
+
+    expect(closePane).not.toHaveBeenCalled()
+    expect(closeTab).toHaveBeenCalledOnce()
   })
 
   it('ignores an intent for another tab', () => {

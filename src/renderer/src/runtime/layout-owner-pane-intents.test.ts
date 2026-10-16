@@ -6,7 +6,9 @@ import {
   expectTabRowFields,
   holdTabPaneTree,
   isTabPaneTreeHeld,
-  onTabPaneTreeRelease,
+  onTabPaneTreeRedraw,
+  panesLeftAfterPendingCloses,
+  requestTabPaneTreeRedraw,
   takePaneAppearIntent,
   takePaneCloseIntent,
   takeTabRowFields
@@ -59,7 +61,7 @@ describe('layout-owner pane intents', () => {
 
   it('holds a tab until its last hold is released, then tells the listener once', () => {
     const listener = vi.fn()
-    onTabPaneTreeRelease(listener)
+    onTabPaneTreeRedraw(listener)
     const first = holdTabPaneTree('tab-1')
     const second = holdTabPaneTree('tab-1')
 
@@ -71,5 +73,15 @@ describe('layout-owner pane intents', () => {
     second()
     expect(isTabPaneTreeHeld('tab-1')).toBe(false)
     expect(listener).toHaveBeenCalledExactlyOnceWith('tab-1')
+
+    requestTabPaneTreeRedraw('tab-2')
+    expect(listener).toHaveBeenLastCalledWith('tab-2')
+  })
+
+  it('counts the panes no pending close of this tab takes', () => {
+    expectPaneToClose('tab-1', 'a', 'exit')
+    expectPaneToClose('tab-2', 'b', 'user')
+
+    expect(panesLeftAfterPendingCloses('tab-1', ['a', 'b', 'c'])).toBe(2)
   })
 })

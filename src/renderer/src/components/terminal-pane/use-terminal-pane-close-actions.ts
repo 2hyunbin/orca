@@ -20,8 +20,7 @@ import { capturePendingTerminalPaneClose } from './terminal-pane-close-admission
 import { commitTerminalSurfaceClose } from '@/store/terminals/terminal-surface-close-intent'
 import { noteAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { closeAfterLastPaneRefusal } from './layout-owner-last-pane-refusal'
-import { sendPaneCloseToLayoutOwner } from './layout-owner-pane-close-command'
+import { sendUserPaneCloseToLayoutOwner } from './layout-owner-pane-close-command'
 
 export function useTerminalPaneCloseActions(controller: TerminalPaneBindingController) {
   const confirmedCloseRef = useRef<(() => void) | null>(null)
@@ -119,13 +118,9 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       if (
         ORCA_LAYOUT_OWNER_IS_MAIN &&
         leafId &&
-        sendPaneCloseToLayoutOwner(
-          { worktreeId, tabId, leafId, kind: 'user' },
-          {
-            asToday: () => closePaneLocally(paneId),
-            lastPane: () =>
-              closeAfterLastPaneRefusal(managerRef.current, onCloseTab, closePaneLocally, paneId)
-          }
+        sendUserPaneCloseToLayoutOwner(
+          { worktreeId, tabId, leafId, paneId },
+          { getManager: () => managerRef.current, closeTab: onCloseTab, closePaneLocally }
         )
       ) {
         return

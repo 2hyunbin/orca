@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { LayoutApplyHandlers } from '@/runtime/layout-apply-send'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { endLayoutFramePositions, noteLayoutFramePosition } from '@/runtime/layout-frame-position'
 import {
   _resetLayoutOwnerPaneIntentsForTests,
+  expectPaneToClose,
   takePaneCloseIntent
 } from '@/runtime/layout-owner-pane-intents'
 import { closeExitedSplitPaneThroughLayoutOwner } from './exited-split-pane-close'
@@ -20,13 +22,17 @@ const LEAF = '11111111-1111-4111-8111-111111111111'
 function fakeManager(paneCount: number) {
   const leaves = new Map<number, string>([[1, LEAF]])
   let panes = paneCount
+  const leafIds = (): { leafId: string }[] =>
+    Array.from({ length: panes }, (_, index) => ({
+      leafId: index === 0 ? LEAF : `sibling-${index}`
+    }))
   const closePane = vi.fn((paneId: number) => {
     leaves.delete(paneId)
     panes -= 1
   })
   const manager = {
     getLeafId: (paneId: number) => leaves.get(paneId) ?? null,
-    getPanes: () => Array.from({ length: panes }),
+    getPanes: leafIds,
     closePane
   }
   return {
@@ -70,10 +76,31 @@ describe('closeExitedSplitPaneThroughLayoutOwner', () => {
       { type: 'closePane', tabId: 'tab-1', leafId: LEAF, automatic: true },
       expect.any(Object)
     )
+    noteLayoutFramePosition(1)
     c.handlers().apply({})
+    endLayoutFramePositions()
 
     expect(c.closePane).not.toHaveBeenCalled()
     expect(takePaneCloseIntent('tab-1', LEAF)).toBe('exit')
+  })
+
+  it('closes the pane itself when main closed it and no frame is coming', () => {
+    const c = close()
+
+    c.handlers().apply({})
+
+    expect(c.closePane).toHaveBeenCalledWith(1)
+    expect(takePaneCloseIntent('tab-1', LEAF)).toBeNull()
+  })
+
+  it('closes the tab when main calls the pane its last while a sibling’s exit close is pending', () => {
+    const c = close()
+    expectPaneToClose('tab-1', 'sibling-1', 'exit')
+
+    c.handlers().refused?.('last_pane')
+
+    expect(c.closePane).not.toHaveBeenCalled()
+    expect(c.closeTab).toHaveBeenCalledOnce()
   })
 
   it('closes the tab instead when main refuses the pane as its last and the window agrees', () => {

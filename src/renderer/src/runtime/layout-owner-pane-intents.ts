@@ -58,6 +58,11 @@ export function expectPaneToClose(tabId: string, leafId: string, kind: PaneClose
   }
 }
 
+/** Of these panes, how many no close of this window's is about to take. */
+export function panesLeftAfterPendingCloses(tabId: string, leafIds: readonly string[]): number {
+  return leafIds.filter((leafId) => closing.get(leafId)?.tabId !== tabId).length
+}
+
 export function takePaneCloseIntent(tabId: string, leafId: string): PaneCloseKind | null {
   const intent = closing.get(leafId)
   if (intent?.tabId !== tabId) {
@@ -88,7 +93,7 @@ export function takeTabRowFields(tabId: string): TabRowFields | null {
 }
 
 const heldTabs = new Map<string, number>()
-const holdListeners = new Set<(tabId: string) => void>()
+const redrawListeners = new Set<(tabId: string) => void>()
 
 /** Keeps the tab's drawn tree from frames until the release; releasing twice is a no-op. */
 export function holdTabPaneTree(tabId: string): () => void {
@@ -105,9 +110,14 @@ export function holdTabPaneTree(tabId: string): () => void {
       return
     }
     heldTabs.delete(tabId)
-    for (const listener of holdListeners) {
-      listener(tabId)
-    }
+    requestTabPaneTreeRedraw(tabId)
+  }
+}
+
+/** Shows main's tree for the tab again, as the frames hold it: after a hold, or a zoom ends. */
+export function requestTabPaneTreeRedraw(tabId: string): void {
+  for (const listener of redrawListeners) {
+    listener(tabId)
   }
 }
 
@@ -115,10 +125,9 @@ export function isTabPaneTreeHeld(tabId: string): boolean {
   return heldTabs.has(tabId)
 }
 
-/** Called when a tab's last hold ends, so frames it skipped are shown. */
-export function onTabPaneTreeRelease(listener: (tabId: string) => void): () => void {
-  holdListeners.add(listener)
-  return () => holdListeners.delete(listener)
+export function onTabPaneTreeRedraw(listener: (tabId: string) => void): () => void {
+  redrawListeners.add(listener)
+  return () => redrawListeners.delete(listener)
 }
 
 export function _resetLayoutOwnerPaneIntentsForTests(): void {
@@ -126,5 +135,5 @@ export function _resetLayoutOwnerPaneIntentsForTests(): void {
   closing.clear()
   rowFields.clear()
   heldTabs.clear()
-  holdListeners.clear()
+  redrawListeners.clear()
 }

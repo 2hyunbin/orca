@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
-import { isTabPaneTreeHeld, onTabPaneTreeRelease } from '@/runtime/layout-owner-pane-intents'
+import {
+  isTabPaneTreeHeld,
+  onTabPaneTreeRedraw,
+  requestTabPaneTreeRedraw
+} from '@/runtime/layout-owner-pane-intents'
 import { isHostAuthoritativeLayout } from './terminal-live-layout-reconciliation'
 import { reconcileMountedPanesToLayout } from './terminal-pane-frame-reconciliation'
 import type { TerminalPaneCloseController } from './use-terminal-pane-close-actions'
@@ -16,20 +20,30 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
     expandedPaneIdRef,
     isolatedPaneKey,
     managerRef,
+    onCloseTab,
     persistLayoutSnapshot,
     restoredLayout,
     tabId
   } = controller
-  const [releases, setReleases] = useState(0)
+  const [redraws, setRedraws] = useState(0)
   useEffect(
     () =>
-      onTabPaneTreeRelease((releasedTabId) => {
-        if (releasedTabId === tabId) {
-          setReleases((count) => count + 1)
+      onTabPaneTreeRedraw((redrawnTabId) => {
+        if (redrawnTabId === tabId) {
+          setRedraws((count) => count + 1)
         }
       }),
     [tabId]
   )
+  const zoomed = restoredLayout.expandedLeafId != null || isolatedPaneKey !== null
+  const wasZoomed = useRef(zoomed)
+  useEffect(() => {
+    // Collapsing writes the window's pre-zoom tree to the store; main's comes back from frames.
+    if (wasZoomed.current && !zoomed) {
+      requestTabPaneTreeRedraw(tabId)
+    }
+    wasZoomed.current = zoomed
+  }, [zoomed, tabId])
   useEffect(() => {
     const manager = managerRef.current
     if (
@@ -54,11 +68,12 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
           manager.closePane(paneId)
         }
       },
-      isExpanded: expandedPaneIdRef.current !== null || isolatedPaneKey !== null
+      closeTab: onCloseTab,
+      isExpanded: expandedPaneIdRef.current !== null || zoomed
     })
     if (changed) {
       persistLayoutSnapshot()
     }
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Refs and stable callbacks.
-  }, [restoredLayout, releases, isolatedPaneKey, tabId])
+  }, [restoredLayout, redraws, zoomed, tabId])
 }

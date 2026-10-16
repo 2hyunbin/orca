@@ -33,6 +33,11 @@ export function noteLayoutFramePosition(seq: number | undefined): void {
   release((waiter) => waiter.seq <= reached)
 }
 
+/** Whether main's frames are arriving; false before the stream opens and after it ends. */
+export function layoutFramesFlowing(): boolean {
+  return position !== null
+}
+
 /** The stream ended: no frame will come, so every waiter runs now. */
 export function endLayoutFramePositions(): void {
   position = null

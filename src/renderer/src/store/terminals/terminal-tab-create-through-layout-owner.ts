@@ -4,6 +4,7 @@
 // (select, retitle, anchor, mount, launch). Main's copy reaches the window through layout frames.
 
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { expectTabRowFields } from '@/runtime/layout-owner-pane-intents'
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
@@ -81,19 +82,21 @@ export function recordCreatedTerminalTabInLayoutOwner(
 /**
  * A workspace's first terminal on activation (F23). Main creates it only into a workspace its copy
  * holds no tab of, so this window and the runtime asking at once still make one tab. Main's frame
- * draws it, with the window's own row fields; the window never draws main's tab itself, so the two
- * cannot place it in different groups. False when a paired server owns the workspace's layout.
- * `create` opens the terminal as today: main holds no partition for the workspace.
+ * draws it, with the window's own row fields; the window draws main's tab itself, under main's
+ * ids, only when no frame is coming (the stream is down). False when a paired server owns the
+ * workspace's layout. `create` with no ids opens the terminal as today: main holds no partition
+ * for the workspace.
  */
 export function createInitialTerminalThroughLayoutOwner(
   getState: () => AppState,
   worktreeId: string,
-  create: () => void
+  create: (ids?: { tabId: string; leafId: string }) => void
 ): boolean {
   if (getExplicitRuntimeEnvironmentIdForWorktree(getState(), worktreeId)) {
     return false
   }
   const tabId = createBrowserUuid()
+  const leafId = createBrowserUuid()
   // Today's create, only while the workspace is still shown and still empty, as before the await.
   const createAsToday = (): void => {
     const state = getState()
@@ -108,13 +111,17 @@ export function createInitialTerminalThroughLayoutOwner(
       type: 'createTerminalTab',
       workspace: worktreeId,
       tabId,
-      leafId: createBrowserUuid(),
+      leafId,
       initial: 'activation'
     }
   })
     .then(
       (reply) => {
         if (reply.ok && reply.result.tabId === tabId) {
+          if (!layoutFramesFlowing()) {
+            release()
+            create({ tabId, leafId })
+          }
           return
         }
         // No tab id: main's copy already shows a tab here, which its frames bring.

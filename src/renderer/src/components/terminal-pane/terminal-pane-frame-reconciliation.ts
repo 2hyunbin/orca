@@ -1,6 +1,7 @@
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import {
+  expectPaneToAppear,
   type PaneCloseKind,
   takePaneAppearIntent,
   takePaneCloseIntent
@@ -21,6 +22,8 @@ export function reconcileMountedPanesToLayout(args: {
   layout: TerminalLayoutSnapshot
   /** The window's own close of a pane main closed: its terminal, status and pane go. */
   closePane: (paneId: number, leafId: string, kind: PaneCloseKind) => void
+  /** Main never drops a tab's last pane; the window has lost the rest, so the tab goes. */
+  closeTab: () => void
   /** A zoomed pane hides its siblings; their shape and ratios wait until it collapses. */
   isExpanded: boolean
 }): boolean {
@@ -34,6 +37,10 @@ export function reconcileMountedPanesToLayout(args: {
 
   for (const pane of manager.getPanes()) {
     const kind = target.has(pane.leafId) ? null : takePaneCloseIntent(tabId, pane.leafId)
+    if (kind && manager.getPanes().length <= 1) {
+      args.closeTab()
+      return true
+    }
     if (kind) {
       args.closePane(pane.id, pane.leafId, kind)
       changed = true
@@ -68,8 +75,12 @@ export function reconcileMountedPanesToLayout(args: {
         ...(intent.cwdPromise ? { cwdPromise: intent.cwdPromise } : {})
       }
     )
+    if (!created) {
+      expectPaneToAppear(insertion.newLeafId, intent)
+      continue
+    }
     recordCreatedTerminalPaneSplit(created, intent.telemetry)
-    changed ||= created !== null
+    changed = true
   }
 
   if (args.isExpanded) {

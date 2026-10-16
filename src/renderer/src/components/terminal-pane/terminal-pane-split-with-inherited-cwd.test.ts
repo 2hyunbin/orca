@@ -5,6 +5,7 @@ import type { PaneCwdMap } from './resolve-split-cwd'
 import { splitTerminalPaneWithInheritedCwd } from './terminal-pane-split-with-inherited-cwd'
 import { createDeferred } from './pty-connection-test-async'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { endLayoutFramePositions, noteLayoutFramePosition } from '@/runtime/layout-frame-position'
 import {
   _resetLayoutOwnerPaneIntentsForTests,
   takePaneAppearIntent
@@ -282,7 +283,9 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
       direction: 'vertical',
       newLeafId: expect.any(String)
     })
+    noteLayoutFramePosition(1)
     handlers?.apply({})
+    endLayoutFramePositions()
     expect(splitPane).not.toHaveBeenCalled()
 
     const newLeafId = command?.type === 'splitPane' ? (command.newLeafId ?? '') : ''
@@ -291,6 +294,18 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
       cwd: '/cached',
       telemetry: { source: 'keyboard', direction: 'vertical' }
     })
+  })
+
+  it('in a layout-owner build, draws main’s pane itself when no frame is coming', () => {
+    const splitPane = vi.fn(() => ({ id: 2 }))
+    splitInLayoutOwnerBuild(makeManager(splitPane))
+    const [, command, handlers] = mocks.sendLayoutCommandToOwner.mock.calls[0] ?? []
+    const newLeafId = command?.type === 'splitPane' ? (command.newLeafId ?? '') : ''
+
+    handlers?.apply({})
+
+    expect(splitPane).toHaveBeenCalledWith(1, 'vertical', { cwd: '/cached', leafId: newLeafId })
+    expect(takePaneAppearIntent('tab-1', newLeafId)).toBeNull()
   })
 
   it.each(['unapplied', 'refused'] as const)(

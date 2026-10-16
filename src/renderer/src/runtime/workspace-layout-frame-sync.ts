@@ -38,7 +38,7 @@ import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame
 import { provideLayoutFrameTerminalPanes } from './layout-frame-terminal-panes'
 import {
   isTabPaneTreeHeld,
-  onTabPaneTreeRelease,
+  onTabPaneTreeRedraw,
   takeTabRowFields
 } from './layout-owner-pane-intents'
 import { subscribeRuntimeLayout } from './runtime-layout-client'
@@ -281,7 +281,11 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
     (seq) => queueMicrotask(() => streamOpen && noteLayoutFramePosition(seq))
   )
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
-  const stopReleaseListener = onTabPaneTreeRelease(scheduleFlush)
+  // Against the store, so every workspace's trees: the window may have drawn over main's since.
+  const stopReleaseListener = onTabPaneTreeRedraw(() => {
+    paneTreeKeys = new Set(Object.keys(cache))
+    scheduleFlush()
+  })
 
   return {
     start: () => {

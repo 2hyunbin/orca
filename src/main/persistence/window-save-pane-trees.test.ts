@@ -32,9 +32,11 @@ describe('windowSaveForMain', () => {
       ptyIdsByLeafId: { [A]: 'pty-a' }
     }
 
-    const save = windowSaveForMain(stored({ 'tab-1': mains }), {
-      terminalLayoutsByTabId: { 'tab-1': windows }
-    })
+    const save = windowSaveForMain(
+      stored({ 'tab-1': mains }),
+      { terminalLayoutsByTabId: { 'tab-1': windows } },
+      'local'
+    )
 
     expect(save.terminalLayoutsByTabId?.['tab-1']).toEqual({ ...windows, root: mains.root })
   })
@@ -47,14 +49,29 @@ describe('windowSaveForMain', () => {
     }
     const save = { terminalLayoutsByTabId: { 'tab-new': windows } }
 
-    expect(windowSaveForMain(stored({ 'tab-1': mains }), save)).toBe(save)
+    expect(windowSaveForMain(stored({ 'tab-1': mains }), save, 'local')).toBe(save)
   })
 
   it('passes a save with no pane layouts, or matching trees, through unchanged', () => {
     const noLayouts = { activeWorktreeId: 'wt-1' }
-    expect(windowSaveForMain(stored({ 'tab-1': mains }), noLayouts)).toBe(noLayouts)
+    expect(windowSaveForMain(stored({ 'tab-1': mains }), noLayouts, 'local')).toBe(noLayouts)
 
     const same = { terminalLayoutsByTabId: { 'tab-1': { ...mains, activeLeafId: B } } }
-    expect(windowSaveForMain(stored({ 'tab-1': mains }), same)).toBe(same)
+    expect(windowSaveForMain(stored({ 'tab-1': mains }), same, 'local')).toBe(same)
+  })
+
+  it('keeps the window’s trees in a paired server’s partition, where main applies no pane command', () => {
+    const save = {
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: { type: 'leaf' as const, leafId: A },
+          activeLeafId: A,
+          expandedLeafId: null
+        }
+      }
+    }
+
+    expect(windowSaveForMain(stored({ 'tab-1': mains }), save, 'runtime:env-1')).toBe(save)
+    expect(windowSaveForMain(stored({ 'tab-1': mains }), save, 'ssh:target-1')).not.toBe(save)
   })
 })
