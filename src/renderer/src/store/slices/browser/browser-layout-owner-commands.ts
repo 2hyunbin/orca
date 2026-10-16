@@ -10,14 +10,17 @@ import type { AppState } from '../../types'
 type BrowserCommandState = Parameters<typeof sendLayoutApply>[0] &
   Pick<AppState, 'unifiedTabsByWorktree' | 'groupsByWorktree'>
 
-const keep = (): void => {}
+const windowSaveCarriesIt = (): void => {}
 
 export function sendBrowserLayoutCommand(
   state: BrowserCommandState,
   worktreeId: string,
   command: WindowLayoutCommand
 ): void {
-  sendLayoutApply(state, worktreeId, command, { apply: keep, asToday: keep })
+  sendLayoutApply(state, worktreeId, command, {
+    apply: windowSaveCarriesIt,
+    asToday: windowSaveCarriesIt
+  })
 }
 
 /** The open of a browser tab the window just drew, placed where the window drew it. */
