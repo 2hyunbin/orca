@@ -41,7 +41,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   if (rows.length === 0) {
     return projectResolvedWorktreeLineage(rows, {})
   }
-  const edges = readSavedLineageEdges(store)
+  const edges = readSavedLineageEdges(store, 'stored')
   const endpoints = new Set(
     edges.flatMap((edge) => [edge.child.instanceId, edge.parent.instanceId])
   )

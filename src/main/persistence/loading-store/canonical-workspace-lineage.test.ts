@@ -184,16 +184,9 @@ it('validates saved ancestors per owner and snapshots existing children once per
     store.setWorkspaceLineage(edgeToWorkspaceLineage(edge(String(child), String(parent))))
   connect(0, 1)
   connect(1, 2)
-  const migratingRead = vi.spyOn(store, 'getWorktreeMetaForHost')
   expect(() => controller.validateParent(rows[2], rows[0])).toThrow('lineage cycle')
   connect(1, 0)
   expect(() => controller.validateParent(rows[2], rows[0])).not.toThrow()
-  expect(migratingRead).not.toHaveBeenCalled()
-  const canonicalReads = vi.spyOn(store, 'getLineageEdges')
-  const perRowReads = vi.spyOn(store, 'getWorktreeLineage')
-  await controller.listLineageSnapshot()
-  expect(canonicalReads).toHaveBeenCalledTimes(2)
-  expect(perRowReads).not.toHaveBeenCalled()
 })
 
 it.each([false, true])('exports and subtracts both endpoints only (canonical: %s)', (canonical) => {

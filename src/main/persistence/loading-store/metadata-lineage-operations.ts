@@ -157,16 +157,21 @@ export class MetadataLineageOperations {
     return removed
   }
 
-  getLineageEdges() {
+  getLineageEdges(mode?: 'stored') {
     const state = this[metadataLineageOperationsContext].runtime.state
     if (state.lineageByChildInstance && Object.keys(state.lineageByChildInstance).length === 0) {
       return []
     }
-    const owners = savedLineageOwners(state)
+    const owners =
+      mode === 'stored' && state.lineageByChildInstance !== undefined
+        ? undefined
+        : savedLineageOwners(state)
     if (state.lineageByChildInstance === undefined) {
       initializeCanonicalLineage(state, owners)
     }
-    return ownedLineageEdges(state, owners)
+    return mode === 'stored'
+      ? Object.values(state.lineageByChildInstance ?? {})
+      : ownedLineageEdges(state, owners)
   }
 
   getWorktreeLineage(worktreeId: string, instanceId?: string): WorktreeLineage | undefined {

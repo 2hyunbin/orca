@@ -56,10 +56,11 @@ export function readSavedWorktreeOwners(store: CatalogStore) {
 }
 
 export function readSavedLineageEdges(
-  store: Pick<CatalogStore, 'getLineageEdges' | 'getAllWorktreeLineage'>
+  store: Pick<CatalogStore, 'getLineageEdges' | 'getAllWorktreeLineage'>,
+  mode?: 'stored'
 ) {
   return (
-    store.getLineageEdges?.() ??
+    store.getLineageEdges?.(mode) ??
     Object.values(store.getAllWorktreeLineage?.() ?? {}).flatMap((lineage) => {
       const edge = worktreeLineageToEdge(lineage)
       return edge ? [edge] : []
@@ -79,12 +80,13 @@ export function readSavedWorktreeLineage(
   return Object.fromEntries(
     edges.flatMap((edge) => {
       const owner = owners.get(edge.child.instanceId)
+      const parent = edge.parent.instanceId && owners.get(edge.parent.instanceId)
       const lineage = edgeToWorktreeLineage(edge)
-      return owner && lineage
+      return owner && parent && lineage
         ? [
             [
               composeWorktreeHostIdentity(owner.hostId, owner.id),
-              { ...lineage, worktreeId: owner.id }
+              { ...lineage, worktreeId: owner.id, parentWorktreeId: parent.id }
             ]
           ]
         : []
