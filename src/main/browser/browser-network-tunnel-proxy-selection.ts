@@ -7,6 +7,7 @@ import {
   type NetworkProxySettings
 } from '../../shared/network-proxy'
 import type { BrowserNetworkTunnelOpen } from '../../shared/browser-network-tunnel-protocol'
+import { isEligibleLocalCertificateHost } from '../../shared/browser-url'
 
 export type BrowserNetworkTunnelProxy =
   | { kind: 'direct' }
@@ -34,7 +35,8 @@ export function selectBrowserNetworkTunnelProxy(
     ? normalizeProxyBypassRules(settings?.httpProxyBypassRules)
     : getProxyBypassRulesFromEnvironment(env)
   if (
-    isLoopbackHost(target.host) ||
+    // Why: Chromium never proxies loopback, and the host's own browser sessions follow it.
+    isEligibleLocalCertificateHost(target.host) ||
     matchesProxyBypassRules(target, bypassRules, fromSettings ? 'chromium' : 'no-proxy')
   ) {
     return { kind: 'direct' }
@@ -51,18 +53,7 @@ export function selectBrowserNetworkTunnelProxy(
 
 function normalizeHost(host: string): string {
   const lower = host.trim().toLowerCase()
-  return lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower
-}
-
-// Why: Chromium never proxies loopback, and the host's own browser sessions follow it.
-function isLoopbackHost(host: string): boolean {
-  const normalized = normalizeHost(host)
-  return (
-    normalized === 'localhost' ||
-    normalized.endsWith('.localhost') ||
-    normalized === '::1' ||
-    (isIP(normalized) === 4 && normalized.startsWith('127.'))
-  )
+  return stripTrailingDot(lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower)
 }
 
 /**
@@ -106,19 +97,27 @@ function matchesBypassRule(
   if (rulePort !== undefined && Number(rulePort) !== port) {
     return false
   }
-  if (ruleHost.startsWith('*') && !ruleHost.startsWith('*.')) {
-    // Chromium `*foo.com`: any host ending in the text, the bare domain included.
-    return ruleHost.length > 1 && host.endsWith(ruleHost.slice(1))
+  const pattern = stripTrailingDot(ruleHost.startsWith('.') ? `*${ruleHost}` : ruleHost)
+  if (pattern.includes('*')) {
+    // NO_PROXY also reads `.corp` and `*.corp` as the domain itself; Chromium does not.
+    return (
+      matchesHostGlob(host, pattern) ||
+      (style === 'no-proxy' && pattern.startsWith('*.') && host === pattern.slice(2))
+    )
   }
-  const wildcard = ruleHost.startsWith('.') || ruleHost.startsWith('*.')
-  const domain = ruleHost.replace(/^\*?\./, '')
-  if (!domain) {
-    return false
-  }
-  if (style === 'chromium') {
-    return wildcard ? host.endsWith(`.${domain}`) : host === domain
-  }
-  return host === domain || host.endsWith(`.${domain}`)
+  return style === 'chromium' ? host === pattern : host === pattern || host.endsWith(`.${pattern}`)
+}
+
+function matchesHostGlob(host: string, pattern: string): boolean {
+  const source = pattern
+    .split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*')
+  return new RegExp(`^${source}$`).test(host)
+}
+
+function stripTrailingDot(host: string): string {
+  return host.endsWith('.') ? host.slice(0, -1) : host
 }
 
 function matchesIpv4Cidr(host: string, network: string, prefix: number): boolean {
