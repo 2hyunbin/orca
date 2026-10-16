@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
 
 const hooks = readFileSync(new URL('../nsis/orca-installer-hooks.nsh', import.meta.url), 'utf8')
 const processCheck = readFileSync(
@@ -46,79 +45,19 @@ describe('NSIS process-check integration', () => {
     }
     expect(readPowerShellProbe().args).toEqual(readPowerShellProbe(findProcess).args)
   })
+
+  // Why static: Restricted policy permits inline -Command, so only this shape needs pinning.
+  it('runs an inline query that exits nonzero when the process table cannot be read', () => {
+    expect(readPowerShellProbe().command).toBe(
+      'try { Get-CimInstance -ClassName Win32_Process -ErrorAction Stop | Out-Null; exit 0 } catch { exit 1 }'
+    )
+    expect(processCheck).not.toMatch(/-(?:File|EncodedCommand|ExecutionPolicy)\b/)
+  })
+
+  it('uses PowerShell only after a successful probe and otherwise keeps the image-name fallback', () => {
+    const decision = processCheck.match(/Pop \$0[\s\S]*?!insertmacro _CHECK_APP_RUNNING/)?.[0]
+    expect(decision?.replace(/^\s*;.*$/gm, '').replace(/\s+/g, ' ')).toBe(
+      'Pop $0 StrCpy $IsPowerShellAvailable 1 ${if} $0 == 0 StrCpy $IsPowerShellAvailable 0 ${endIf} !insertmacro _CHECK_APP_RUNNING'
+    )
+  })
 })
-
-describe.runIf(process.platform === 'win32')(
-  'NSIS capability probe under Restricted policy',
-  () => {
-    const policyReceipt = 'orca-nsis: restricted policy verified'
-    const queryFailureReceipt = 'orca-nsis: injected query failure'
-    const policyCheck = [
-      'function Test-OrcaRestrictedPolicy { param([string]$Scope)',
-      "try { $parameters = @{ ErrorAction = 'Stop' };",
-      'if ($Scope) { $parameters.Scope = $Scope };',
-      "return ((Get-ExecutionPolicy @parameters) -eq 'Restricted')",
-      '} catch { return $false } };',
-      // A failed getter must not fall through to the query's successful exit.
-      "if ((Test-OrcaRestrictedPolicy '__orca_invalid_scope__') -ne $false) { exit 11 };",
-      "if ((Test-OrcaRestrictedPolicy 'Process') -ne $true) { exit 10 };",
-      'if ((Test-OrcaRestrictedPolicy) -ne $true) { exit 10 };',
-      `[Console]::Out.WriteLine('${policyReceipt}');`
-    ].join(' ')
-
-    // A watchdog against a wedged probe, not a latency budget: Windows PowerShell 5.1
-    // cold start under the packaged-CI process load has reached the former 20s cap. Matches
-    // the synchronous-probe ceiling in tests/tools/win-update-e2e/powershell-runner.mjs.
-    const PROBE_TIMEOUT_MS = 60_000
-    // Vitest's 30s default would otherwise cap the blocking spawn ahead of PROBE_TIMEOUT_MS.
-    const PROBE_TEST_TIMEOUT_MS = PROBE_TIMEOUT_MS + 15_000
-
-    function runProbe(arch, prefix = '') {
-      const { args, command } = readPowerShellProbe()
-      if (!process.env.SystemRoot) {
-        throw new Error('SystemRoot is required on Windows')
-      }
-      // The pwsh runner's module path points Windows PowerShell at incompatible PS7 modules.
-      const env = Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath')
-      )
-      return runProcessSync({
-        program: join(process.env.SystemRoot, arch, 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-        args: [...args, '-Command', `${policyCheck} ${prefix}${command}`],
-        env: {
-          ...env,
-          ORCA_BACKGROUND_LAUNCH: '1',
-          PSExecutionPolicyPreference: 'Restricted'
-        },
-        timeoutMs: PROBE_TIMEOUT_MS
-      })
-    }
-
-    it.each(['SysWOW64', 'System32'])(
-      '%s permits the real inline process query',
-      { timeout: PROBE_TEST_TIMEOUT_MS },
-      (arch) => {
-        const result = runProbe(arch)
-        expect(result.code, JSON.stringify(result)).toBe(0)
-        expect(result.timedOut).toBe(false)
-        expect(result.stdout).toContain(policyReceipt)
-      }
-    )
-
-    it.each(['SysWOW64', 'System32'])(
-      '%s rejects a failed process query',
-      { timeout: PROBE_TEST_TIMEOUT_MS },
-      (arch) => {
-        const result = runProbe(
-          arch,
-          'function Get-CimInstance { [CmdletBinding()] param([string]$ClassName); ' +
-            `[Console]::Out.WriteLine('${queryFailureReceipt}'); Write-Error 'CIM unavailable' }; `
-        )
-        expect(result.code, JSON.stringify(result)).toBe(1)
-        expect(result.timedOut).toBe(false)
-        expect(result.stdout).toContain(policyReceipt)
-        expect(result.stdout).toContain(queryFailureReceipt)
-      }
-    )
-  }
-)

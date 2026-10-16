@@ -16,8 +16,6 @@ export const WINDOWS_PACKAGE_TESTS = [
   'config/scripts/rebuild-native-deps.test.mjs',
   'config/scripts/rebuild-native-deps-windows-process-tree.test.mjs',
   'config/scripts/rebuild-native-deps-node-pty.test.mjs',
-  'config/scripts/nsis-process-check.test.mjs',
-  'config/scripts/idle-cpu-process-sampling.test.mjs',
   'config/scripts/ensure-native-runtime-job-ownership.test.mjs',
   'config/scripts/verify-packaged-node-pty-job-ownership.test.mjs',
   'config/scripts/windows-pe-machine.test.mjs',

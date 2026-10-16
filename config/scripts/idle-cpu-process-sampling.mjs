@@ -69,13 +69,27 @@ export function cimCpuSeconds(entry) {
     : null
 }
 
+// Why UTF-8: the default OEM code page best-fits characters such as `•` or `→` in any
+// process's command line to raw control bytes (0x07, 0x1A), which JSON.parse rejects.
+export const WINDOWS_PROCESS_QUERY =
+  '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
+  'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize,UserModeTime,KernelModeTime,CommandLine | ConvertTo-Json -Compress'
+
+export function parseWindowsProcessJson(stdout) {
+  const parsed = JSON.parse(stdout || '[]')
+  const entries = Array.isArray(parsed) ? parsed : [parsed]
+  return entries.map((entry) => ({
+    pid: Number(entry.ProcessId),
+    ppid: Number(entry.ParentProcessId),
+    percentCpu: 0,
+    cpuTimeSeconds: cimCpuSeconds(entry),
+    rssBytes: Number(entry.WorkingSetSize) || 0,
+    command: String(entry.CommandLine || '')
+  }))
+}
+
 function readWindowsProcesses() {
-  // Why UTF-8: the default OEM code page best-fits characters such as `•` or `→` in any
-  // process's command line to raw control bytes (0x07, 0x1A), which JSON.parse rejects.
-  const script =
-    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
-    'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize,UserModeTime,KernelModeTime,CommandLine | ConvertTo-Json -Compress'
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', WINDOWS_PROCESS_QUERY], {
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024,
     // Bounds a wedged query; a cold first PowerShell start alone has reached 48 s on CI.
@@ -87,16 +101,7 @@ function readWindowsProcesses() {
   if (result.status !== 0) {
     throw new Error(result.stderr || 'PowerShell process enumeration failed')
   }
-  const parsed = JSON.parse(result.stdout || '[]')
-  const entries = Array.isArray(parsed) ? parsed : [parsed]
-  return entries.map((entry) => ({
-    pid: Number(entry.ProcessId),
-    ppid: Number(entry.ParentProcessId),
-    percentCpu: 0,
-    cpuTimeSeconds: cimCpuSeconds(entry),
-    rssBytes: Number(entry.WorkingSetSize) || 0,
-    command: String(entry.CommandLine || '')
-  }))
+  return parseWindowsProcessJson(result.stdout)
 }
 
 export function readProcessRows() {

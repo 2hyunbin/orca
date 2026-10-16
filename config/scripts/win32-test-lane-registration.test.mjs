@@ -69,10 +69,7 @@ import { classifyPrJobs } from './pr-code-change-scope.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
 const WINDOWS_LANE_JOB = 'package_windows'
-const WINDOWS_LANE_STEPS = [
-  'Test Windows-specific boundaries',
-  'Test Windows installer process probe'
-]
+const WINDOWS_LANE_STEPS = ['Test Windows-specific boundaries']
 const WINDOWS_LANE_RUNNER = 'windows-2022'
 
 /**

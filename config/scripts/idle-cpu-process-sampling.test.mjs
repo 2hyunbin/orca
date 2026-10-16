@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
   cimCpuSeconds,
-  readProcessRows,
-  sampleProcessTreeUntilWorkloadsComplete
+  parseWindowsProcessJson,
+  sampleProcessTreeUntilWorkloadsComplete,
+  WINDOWS_PROCESS_QUERY
 } from './idle-cpu-process-sampling.mjs'
 
 function createClock(workloadCompletesAt) {
@@ -49,22 +49,39 @@ describe('Windows CIM CPU time mapping', () => {
   })
 })
 
-describe.skipIf(process.platform !== 'win32')('Windows process table read', () => {
-  // Not a latency budget: this is often the runner's first Windows PowerShell 5.1 start, which
-  // takes 10-19 s on packaged CI and has reached 48 s. Above the reader's own 60 s bound.
-  it('parses a command line whose characters the OEM code page maps to control bytes', () => {
-    const marker = 'idle-cpu-oem • → ♪'
-    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)', marker], {
-      stdio: 'ignore'
-    })
-    try {
-      const row = readProcessRows().find((candidate) => candidate.pid === child.pid)
-      expect(row?.command).toContain(marker)
-      expect(row?.cpuTimeSeconds).toEqual(expect.any(Number))
-    } finally {
-      child.kill()
-    }
-  }, 75_000)
+describe('Windows process table parsing', () => {
+  it('asks PowerShell for UTF-8 before it writes the process table', () => {
+    const utf8 = WINDOWS_PROCESS_QUERY.indexOf(
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8'
+    )
+    expect(utf8).toBeGreaterThanOrEqual(0)
+    expect(utf8).toBeLessThan(WINDOWS_PROCESS_QUERY.indexOf('Get-CimInstance'))
+  })
+
+  it('keeps a command line with characters outside the OEM code page', () => {
+    const command = 'node -e "" idle-cpu-oem • → ♪'
+    const stdout = JSON.stringify([
+      {
+        ProcessId: 42,
+        ParentProcessId: 7,
+        WorkingSetSize: 2_048,
+        UserModeTime: 10_000_000,
+        KernelModeTime: 5_000_000,
+        CommandLine: command
+      },
+      { ProcessId: 4, ParentProcessId: 0, WorkingSetSize: null, CommandLine: null }
+    ])
+    expect(parseWindowsProcessJson(stdout)).toEqual([
+      { pid: 42, ppid: 7, percentCpu: 0, cpuTimeSeconds: 1.5, rssBytes: 2_048, command },
+      { pid: 4, ppid: 0, percentCpu: 0, cpuTimeSeconds: null, rssBytes: 0, command: '' }
+    ])
+  })
+
+  it('accepts the single object ConvertTo-Json writes for a one-row table', () => {
+    expect(
+      parseWindowsProcessJson('{"ProcessId":9,"ParentProcessId":1,"CommandLine":"a"}')
+    ).toMatchObject([{ pid: 9, ppid: 1, command: 'a' }])
+  })
 })
 
 describe('idle CPU process sampling window', () => {

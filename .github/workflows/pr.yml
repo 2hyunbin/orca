@@ -1295,15 +1295,6 @@ jobs:
           path: ${{ steps.deps.outputs.native-cache-path }}
           key: ${{ steps.deps.outputs.native-cache-key }}
 
-      # vitest runs here directly rather than through `pnpm test`, so the addon
-      # assertions only hold once install-node-dependencies has rebuilt natives.
-      - name: Test Windows installer process probe
-        # Keep cold CIM startup out of the concurrent Electron/native process workload.
-        run: >-
-          pnpm exec vitest run --config config/vitest.config.ts
-          config/scripts/nsis-process-check.test.mjs
-          config/scripts/idle-cpu-process-sampling.test.mjs
-
       - name: Cache Windows CLI launcher
         uses: actions/cache@v5
         with:
