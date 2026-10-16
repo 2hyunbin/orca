@@ -102,7 +102,7 @@ describe('agent sleep planner', () => {
     expect(plannedWorktrees(snapshot({ foregroundTerminalTabIds: ['tab-1'] }))).toEqual([])
   })
 
-  it('never plans a floating-workspace pane, which has no wake path', () => {
+  it('never plans automatic hibernation for a floating-workspace pane', () => {
     expect(plannedWorktrees(snapshot())).toEqual(['wt-bg'])
     const floating = entry({ worktreeId: FLOATING_TERMINAL_WORKTREE_ID })
     expect(

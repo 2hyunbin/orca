@@ -120,8 +120,7 @@ export function planAgentHibernationCandidates(
     if (!worktreeId || tabs.length === 0) {
       continue
     }
-    // Why: the hibernation wake path is mounted per worktree and the floating workspace is not
-    // one, so a parked floating pane would never come back — it would sit on dead output.
+    // Floating terminals stay running when idle; the user must not need a hibernation resume.
     if (worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
       continue
     }
