@@ -87,6 +87,20 @@ describe('a bridged pane no visible view shows', () => {
     expect(sent.at(-1)).toBe('data:c')
   })
 
+  it('still sends kitty, window-size and capability queries', () => {
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, 'a\x1b[?ub\x1b[18tc\x1bP+q544e\x1b\\d')
+    expect(sent).toEqual(['data:\x1b[?u\x1b[18t\x1bP+q544e\x1b\\'])
+  })
+
+  it('reopens an oversized OSC a reveal cut, so its payload never prints', async () => {
+    reread.mockRejectedValueOnce(new Error('ssh down'))
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, `\x1b]1337;File=${'x'.repeat(5000)}`)
+    subject.setPaused(PTY, false)
+    await vi.waitFor(() => expect(sent).toEqual(['data:\x1b]']))
+  })
+
   it('finishes a query a shown pane started before it was hidden', () => {
     subject.onData(PTY, 'shown\x1b[')
     subject.setPaused(PTY, true)

@@ -1,14 +1,14 @@
 /**
  * What a hidden bridged pane's dropped output must still deliver: terminal queries the window's
- * xterm answers, OSC sequences (command marks, titles, cwd, notifications) and bells. None paint,
+ * xterm answers (and the mode-2031 toggles its colour-scheme registry reads), OSC sequences (command marks, titles, cwd, notifications) and bells. None paint,
  * and main holds no model of these terminals to stand in for the window.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
 import {
   findCsiFinalByteIndex,
-  isStatefulRendererReplyCsiQuery,
-  isStatelessRendererReplyCsiQuery
+  isStatefulRendererReplyCsiQuery
 } from '../../../shared/terminal-reply-query-extraction'
+import { isReplayableCsi } from '../../../shared/terminal-reply-query-scan'
 
 const MAX_CSI_CHARS = 64
 // Why bounded: an inline image is one huge OSC, and it paints.
@@ -90,10 +90,10 @@ export function salvageHiddenOutput(data: string, state: OutputSalvageState): Ou
         }
       }
       const sequence = input.slice(escape, final + 1)
-      if (isStatelessRendererReplyCsiQuery(sequence)) {
-        kept += sequence
-      } else if (isStatefulRendererReplyCsiQuery(sequence)) {
+      if (isStatefulRendererReplyCsiQuery(sequence) || sequence === '\x1b[?6n') {
         stateful += sequence
+      } else if (isReplayableCsi(sequence)) {
+        kept += sequence
       }
       offset = final + 1
       continue
@@ -114,6 +114,27 @@ export function salvageHiddenOutput(data: string, state: OutputSalvageState): Ou
         kept += input.slice(escape, osc.end)
       }
       offset = osc.end
+      continue
+    }
+    if (introducer === 'P') {
+      const terminator = input.indexOf('\x1b\\', escape + 2)
+      if (terminator === -1) {
+        const tail = input.slice(escape)
+        return {
+          kept,
+          stateful,
+          state: { tail: tail.length <= MAX_OSC_CHARS ? tail : '', skippingOsc: false }
+        }
+      }
+      const body = input.slice(escape + 2, terminator)
+      const sequence = input.slice(escape, terminator + 2)
+      // DECRQSS reads the pen and margins; XTGETTCAP reads only capabilities.
+      if (body.startsWith('$q')) {
+        stateful += sequence
+      } else if (body.startsWith('+q')) {
+        kept += sequence
+      }
+      offset = terminator + 2
       continue
     }
     offset = escape + 2

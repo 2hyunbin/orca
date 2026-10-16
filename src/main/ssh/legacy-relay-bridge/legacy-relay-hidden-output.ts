@@ -148,9 +148,11 @@ export class LegacyRelayHiddenOutput {
       this.deps.onReplay(ptyId, replay)
     }
     this.flushHeld(ptyId, pane)
-    if (pane.salvage.tail && !pane.salvage.skippingOsc) {
-      // A sequence split where output was dropped; the next live chunk finishes it.
-      this.deps.onData(ptyId, pane.salvage.tail)
+    // A sequence split where output was dropped; the next live chunk finishes it. An oversized OSC
+    // is reopened so its remaining payload parses as one instead of printing as text.
+    const open = (pane.salvage.skippingOsc ? '\x1b]' : '') + pane.salvage.tail
+    if (open) {
+      this.deps.onData(ptyId, open)
       this.openSequences.set(ptyId, pane.salvage)
     }
   }
