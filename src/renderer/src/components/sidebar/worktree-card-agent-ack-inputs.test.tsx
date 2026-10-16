@@ -75,6 +75,16 @@ describe('selectAcknowledgedAgentTimes', () => {
     expect(shallow(after, before)).toBe(true)
   })
 
+  it('reuses the projection across status-only publications and handles a different row list', () => {
+    const state = { acknowledgedAgentsByPaneKey: { 'tab-a:leaf-a': 11, 'tab-a:leaf-b': 22 } }
+    const first = selectAcknowledgedAgentTimes(state, AGENTS)
+    expect(selectAcknowledgedAgentTimes({ ...state }, AGENTS)).toBe(first)
+    expect(selectAcknowledgedAgentTimes(state, [AGENTS[1], AGENTS[0]])).toEqual([22, 11])
+    expect(selectAcknowledgedAgentTimes({ acknowledgedAgentsByPaneKey: {} }, AGENTS)).toEqual([
+      0, 0
+    ])
+  })
+
   it('updates when one of this card rows is acknowledged', () => {
     const initialTimes = selectedTimes
     act(() => {
