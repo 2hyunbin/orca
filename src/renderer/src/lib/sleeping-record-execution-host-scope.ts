@@ -165,7 +165,7 @@ function ownerExecutionHostIdForRecord(
   if (workspaceScope?.type === 'folder') {
     const folder = findFolderWorkspaceOwner(state, workspaceScope.folderWorkspaceId)
     const group = folder?.projectGroupId
-      ? state.projectGroups?.find((candidate) => candidate.id === folder.projectGroupId)
+      ? findIndexedProjectGroupOwner(state.projectGroups, folder.projectGroupId)
       : undefined
     const explicit = parseExecutionHostId(folder?.executionHostId ?? group?.executionHostId)?.id
     const connectionId = folder?.connectionId?.trim() || group?.connectionId?.trim()

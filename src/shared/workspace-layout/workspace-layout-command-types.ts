@@ -117,9 +117,26 @@ export type LayoutCommand =
   | (On & {
       type: 'openBrowserTab'
       profileId?: string | null
+      sessionPartition?: string | null
       groupId?: string
+      /** Placement in the group: after this tab, else at this index, else at its end. */
+      afterTabId?: string
+      index?: number
       /** The id of a page that already runs; it names the tab too, as a host's page names its row. */
       pageId?: string
+      /** The window's own ids for a tab it drew: its tab-bar entry and its browser record. */
+      tabId?: string
+      browserTabId?: string
+    })
+  | (On & { type: 'openBrowserPage'; browserTabId: string; pageId: string })
+  | (On & { type: 'closeBrowserPage'; browserTabId: string; pageId: string })
+  /** A page the address bar converted: the new page takes the old one's place. */
+  | (On & { type: 'replaceBrowserPage'; browserTabId: string; pageId: string; newPageId: string })
+  | (On & {
+      type: 'setBrowserTabProfile'
+      browserTabId: string
+      profileId: string | null
+      sessionPartition: string | null
     })
   | (On & {
       type: 'openAgentSessionTab'
@@ -166,6 +183,7 @@ export type LayoutRefusalCode =
   /** A window's drag-out: another tab holds the pane, or no copy binds the window's terminal. */
   | 'pane_in_other_tab'
   | 'pty_mismatch'
+  | 'page_exists'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }

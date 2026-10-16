@@ -199,6 +199,55 @@ describe('layout.apply', () => {
     ).toBe(false)
   })
 
+  it('takes a browser tab under the window’s ids, and its page and profile changes', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const open = {
+      type: 'openBrowserTab',
+      workspace: WORKTREE,
+      tabId: 'entry-1',
+      browserTabId: 'browser-1',
+      pageId: 'page-1',
+      profileId: null,
+      sessionPartition: null,
+      groupId: 'g1',
+      afterTabId: 'tab-1'
+    }
+    const page = { workspace: WORKTREE, browserTabId: 'browser-1', pageId: 'page-1' }
+
+    expect(parse(open)?.success).toBe(true)
+    expect(parse({ ...open, pageId: undefined })?.success).toBe(false)
+    expect(parse({ ...open, browserTabId: '' })?.success).toBe(false)
+    expect(parse({ ...open, index: -1 })?.success).toBe(false)
+    expect(parse({ type: 'openBrowserPage', ...page })?.success).toBe(true)
+    expect(parse({ type: 'closeBrowserPage', ...page })?.success).toBe(true)
+    expect(parse({ type: 'replaceBrowserPage', ...page, newPageId: 'page-2' })?.success).toBe(true)
+    expect(parse({ type: 'replaceBrowserPage', ...page })?.success).toBe(false)
+    expect(
+      parse({
+        type: 'setBrowserTabProfile',
+        workspace: WORKTREE,
+        browserTabId: 'browser-1',
+        profileId: 'p1',
+        sessionPartition: null
+      })?.success
+    ).toBe(true)
+  })
+
+  it('applies a browser tab’s record change to the workspace’s routed partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const page = {
+      type: 'openBrowserPage',
+      workspace: WORKTREE,
+      browserTabId: 'browser-1',
+      pageId: 'page-2'
+    } as const
+
+    await runtime.applyLayoutCommand(page)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(page, ['local'])
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {

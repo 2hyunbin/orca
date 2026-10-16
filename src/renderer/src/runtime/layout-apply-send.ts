@@ -11,7 +11,7 @@ import type {
   LayoutRefusalCode
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
-/** The commands a window sends `layout.apply`; main mints any new id. */
+/** The commands a window sends `layout.apply`; main mints any new id but a browser tab's. */
 export type WindowLayoutCommand =
   | { type: 'splitPane'; tabId: string; leafId: string; direction: 'vertical' | 'horizontal' }
   | { type: 'closePane'; tabId: string; leafId: string }
@@ -32,6 +32,25 @@ export type WindowLayoutCommand =
       groupId: string
       index?: number
       windowDetach: { ptyId: string | null }
+    }
+  | {
+      type: 'openBrowserTab'
+      tabId: string
+      browserTabId: string
+      pageId: string
+      profileId: string | null
+      sessionPartition: string | null
+      groupId?: string
+      afterTabId?: string
+      index?: number
+    }
+  | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
+  | { type: 'replaceBrowserPage'; browserTabId: string; pageId: string; newPageId: string }
+  | {
+      type: 'setBrowserTabProfile'
+      browserTabId: string
+      profileId: string | null
+      sessionPartition: string | null
     }
 
 export type LayoutApplyHandlers = {
@@ -85,6 +104,17 @@ export function sendLayoutApply(
       console.warn(`[layout-owner] ${command.type} handler threw:`, errorMessage(error))
     })
   return true
+}
+
+const keepWindowCopy = (): void => {}
+
+/** Records a change the window already made; any answer leaves it, since the window's save carries it. */
+export function recordLayoutApply(
+  state: Parameters<typeof sendLayoutApply>[0],
+  worktreeId: string,
+  command: WindowLayoutCommand
+): void {
+  sendLayoutApply(state, worktreeId, command, { apply: keepWindowCopy, asToday: keepWindowCopy })
 }
 
 function mainLacksTarget(code: LayoutRefusalCode): boolean {

@@ -21,6 +21,7 @@ import { makeWorktree, TEST_REPO } from '../store/slices/worktrees-slice-test-fi
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 import {
   agentResumeOriginNamesAnotherExecutionHost,
+  sleepingRecordHostAllowsSessionClaim,
   sleepingRecordNamesAnotherExecutionHost
 } from './sleeping-record-execution-host-scope'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
@@ -139,6 +140,26 @@ describe('sleepingRecordNamesAnotherExecutionHost', () => {
         runtimeEnvironments: [{ id: 'unrelated' }]
       })
     ).toBe(true)
+  })
+})
+
+describe('folder-owned SSH with conflicting inherited group owners', () => {
+  it.each(['local first', 'SSH first'] as const)('uses the folder target with %s', (order) => {
+    const groups = [
+      { id: 'group', executionHostId: 'local' },
+      { id: 'group', executionHostId: 'ssh:other-target' }
+    ] as const
+    const state: WorktreeRuntimeOwnerState = {
+      folderWorkspaces: [{ id: 'folder', projectGroupId: 'group', connectionId: TARGET_ID }],
+      projectGroups: order === 'local first' ? groups : groups.toReversed()
+    }
+    const local = makeRecord({ worktreeId: 'folder:folder', connectionId: null })
+    const matching = makeRecord({ worktreeId: 'folder:folder', connectionId: TARGET_ID })
+
+    expect(sleepingRecordNamesAnotherExecutionHost(local, state)).toBe(true)
+    expect(sleepingRecordNamesAnotherExecutionHost(matching, state)).toBe(false)
+    expect(sleepingRecordHostAllowsSessionClaim(local, matching, state)).toBe(false)
+    expect(sleepingRecordHostAllowsSessionClaim(matching, matching, state)).toBe(true)
   })
 })
 

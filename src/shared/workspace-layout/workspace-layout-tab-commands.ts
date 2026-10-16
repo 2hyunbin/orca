@@ -12,7 +12,8 @@ import {
   placeNewTab,
   refuse,
   updateTab,
-  type Applied
+  type Applied,
+  type TabPlacement
 } from './workspace-layout-command-steps'
 import type {
   CommandOf,
@@ -243,12 +244,16 @@ export function placeContentTab(
   model: WorkspaceLayoutModel,
   key: string,
   tab: LayoutContentTab,
-  placement: { groupId?: string; dirtyTabIds?: string[] },
+  placement: TabPlacement & { dirtyTabIds?: string[] },
   context: LayoutContext
 ): { model: WorkspaceLayoutModel; refused: RefusedClose[] } {
   let workspace = workspaceOrEmpty(model, key)
+  const anchor = placement.afterTabId
+  // A named group this copy lacks falls back to the anchor's.
   const group =
-    workspace.groups.find((entry) => entry.id === placement.groupId) ?? workspace.groups[0]
+    workspace.groups.find((entry) => entry.id === placement.groupId) ??
+    (anchor ? workspace.groups.find((entry) => entry.tabOrder.includes(anchor)) : undefined) ??
+    workspace.groups[0]
   const preview = tab.isPreview
     ? workspace.tabs.find(
         (entry) =>
@@ -271,7 +276,16 @@ export function placeContentTab(
     }
   }
   return {
-    model: withWorkspace(model, key, placeNewTab(workspace, tab, { groupId: group?.id }, context)),
+    model: withWorkspace(
+      model,
+      key,
+      placeNewTab(
+        workspace,
+        tab,
+        { groupId: group?.id, afterTabId: placement.afterTabId, index: placement.index },
+        context
+      )
+    ),
     refused
   }
 }
