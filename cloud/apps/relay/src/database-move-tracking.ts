@@ -45,12 +45,9 @@ export const AUTHORITY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS ${RELAY_DATABASE_
   written_at BIGINT NOT NULL
 )`
 
-// The move tool's own columns; the relay reads `superseded` but never writes either.
-// superseded: a cutover moved authority away from this side, so no process may serve it again
-// until a cutover back. tracking_arm: this side's tracking arming when it became the target, so
-// a move back can tell whether the copy kept in step since.
+// The move tool's own column, which the relay never reads: this side's tracking arming when it
+// became the target, so a move back can tell whether the copy kept in step since.
 const AUTHORITY_MOVE_COLUMNS_SQL = [
-  `ALTER TABLE ${RELAY_DATABASE_AUTHORITY_TABLE} ADD COLUMN IF NOT EXISTS superseded BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE ${RELAY_DATABASE_AUTHORITY_TABLE} ADD COLUMN IF NOT EXISTS tracking_arm TEXT`
 ]
 

@@ -2,6 +2,12 @@ import { randomBytes } from 'node:crypto'
 import pg from 'pg'
 import { applyRelayPostgresSchema, openRelayPostgresPool } from '../database.js'
 import { MoveDatabases, type MoveSide } from '../database-move-connections.js'
+import {
+  PointerGenerationConflict,
+  type DatabaseTargetPointerStore,
+  type StoredDatabaseTargetPointer
+} from '../database-move-pointer-store.js'
+import type { DatabaseTargetPointer } from '../relay-database-target-pointer.js'
 
 // Two databases on one test server stand in for the shared and the dedicated instance. Each side
 // has its own app and tool role, as the two Cloud SQL instances would; roles are cluster-wide
@@ -107,4 +113,39 @@ export async function createMoveTestSides(
       })
     }
   }
+}
+
+// The pointer object in memory, with the same generation preconditions as Cloud Storage.
+export class MemoryPointerStore implements DatabaseTargetPointerStore {
+  private generation = 1
+  constructor(private stored: StoredDatabaseTargetPointer | null) {}
+  current(): DatabaseTargetPointer | null {
+    return this.stored ? structuredClone(this.stored.pointer) : null
+  }
+  async read(): Promise<StoredDatabaseTargetPointer | null> {
+    return this.stored ? structuredClone(this.stored) : null
+  }
+  async write(pointer: DatabaseTargetPointer, ifGenerationMatch: string): Promise<string> {
+    if (this.stored?.generation !== ifGenerationMatch) throw new PointerGenerationConflict()
+    this.generation += 1
+    this.stored = { pointer: structuredClone(pointer), generation: String(this.generation) }
+    return this.stored.generation
+  }
+  async delete(ifGenerationMatch: string): Promise<void> {
+    if (this.stored?.generation !== ifGenerationMatch) throw new PointerGenerationConflict()
+    this.stored = null
+  }
+}
+
+export function testPointerStore(): MemoryPointerStore {
+  return new MemoryPointerStore({
+    generation: '1',
+    pointer: {
+      version: 1,
+      dedicated: {
+        instanceConnectionName: 'test-project:us-central1:relay-db',
+        databaseUrlSecret: 'projects/test-project/secrets/relay-db-url/versions/latest'
+      }
+    }
+  })
 }

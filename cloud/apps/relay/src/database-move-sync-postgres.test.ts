@@ -14,6 +14,8 @@ import {
 import { verifyMoveTables, verdictsEqual } from './database-move-verify.js'
 import {
   createMoveTestSides,
+  MemoryPointerStore,
+  testPointerStore,
   withPgClient,
   type MoveTestSides
 } from './test-fixtures/database-move-sides.js'
@@ -68,7 +70,11 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
     sides = await createMoveTestSides(adminUrl ?? '')
     databases = sides.databases()
-    await prepareTargetCommand({ databases, google: null })
+    await prepareTargetCommand({
+      databases,
+      google: null,
+      pointerStore: async () => testPointerStore()
+    })
     app = await connect(sides.primary.app.url)
     tables = await readMoveTables(app)
     sessions = {
@@ -88,6 +94,16 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     databases?.close()
     await sides?.drop()
     vi.restoreAllMocks()
+  })
+
+  it('refuses to prepare the target before the pointer exists', async () => {
+    await expect(
+      prepareTargetCommand({
+        databases,
+        google: null,
+        pointerStore: async () => new MemoryPointerStore(null)
+      })
+    ).rejects.toThrow('pointer_absent')
   })
 
   it('covers every schema table except the authority, move and retired tables', () => {
@@ -250,7 +266,11 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
       'copy_predates_tracking'
     )
     await expect(
-      syncCommand({ databases, google: null }, 'primary', { stopAtBacklog: 0 })
+      syncCommand(
+        { databases, google: null, pointerStore: async () => testPointerStore() },
+        'primary',
+        { stopAtBacklog: 0 }
+      )
     ).rejects.toThrow('copy_predates_tracking')
     expect(await equal(['relay_audit_events'])).toBe(false)
     const redone = await runCopy(sessions, tables, { restart: true, maxBytesPerSecond: 1e9 })
@@ -280,7 +300,11 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
   it('refuses to sync into a target with no finished copy under the current arming', async () => {
     await track()
     await expect(
-      syncCommand({ databases, google: null }, 'primary', { stopAtBacklog: 0 })
+      syncCommand(
+        { databases, google: null, pointerStore: async () => testPointerStore() },
+        'primary',
+        { stopAtBacklog: 0 }
+      )
     ).rejects.toThrow('target_not_current')
   })
 

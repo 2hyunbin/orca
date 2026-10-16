@@ -17,6 +17,7 @@ import {
   type MoveCommandContext
 } from './database-move-commands.js'
 import { describeMoveError, logMoveEvent, MoveRefusal } from './database-move-events.js'
+import { gcsDatabaseTargetPointerStore } from './database-move-pointer-store.js'
 import { googleMetadataAccess } from './google-metadata-access-token.js'
 
 // node apps/relay/dist/database-move-cli.js <command> [flags]; runs as a Cloud Run job on the
@@ -45,7 +46,8 @@ const OPTIONS = {
   'primary-app-secret': { type: 'string' },
   'primary-move-secret': { type: 'string' },
   'dedicated-app-secret': { type: 'string' },
-  'dedicated-move-secret': { type: 'string' }
+  'dedicated-move-secret': { type: 'string' },
+  'pointer-bucket': { type: 'string' }
 } as const
 
 type ParsedFlags = ReturnType<
@@ -95,7 +97,15 @@ export async function runMoveCli(
     const command = positionals[0]
     const google = googleMetadataAccess()
     databases = new MoveDatabases(credentialSources(flags, env), google)
-    const ctx: MoveCommandContext = { databases, google }
+    const ctx: MoveCommandContext = {
+      databases,
+      google,
+      pointerStore: async () =>
+        gcsDatabaseTargetPointerStore({
+          bucket: flags['pointer-bucket'] ?? `${await google.projectId()}-relay-control`,
+          google
+        })
+    }
     // Only the long-running commands stop cleanly; the rest keep Node's default.
     const stop = { requested: false }
     if (command === 'sync' || command === 'copy') {
