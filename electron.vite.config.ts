@@ -8,6 +8,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { createBootstrapFatalExitBanner } from './config/build-plugins/bootstrap-fatal-exit-banner'
 import { createPdfjsViewerAssetsPlugin } from './config/build-plugins/pdfjs-viewer-assets'
 import { createProcessHostDevRebuildPlugin } from './config/build-plugins/process-host-dev-rebuild'
+import { createViteCacheRetentionPlugin } from './config/build-plugins/vite-cache-retention'
 import { MAIN_BUILD_ENTRY_POINTS } from './config/build-plugins/main-build-entry-points'
 import { createPlainNodeEntryGuardPlugin } from './config/build-plugins/plain-node-entry-guard'
 import { resolveBuildSourceCommit } from './config/scripts/build-source-commit.mjs'
@@ -294,6 +295,8 @@ export const electronViteConfig: UserConfig = {
     }
   },
   renderer: {
+    // Shared node_modules installs must not share dependency optimization state across worktrees.
+    cacheDir: resolve('.cache/vite/renderer'),
     define: {
       ORCA_BUILD_COMMIT: ORCA_BUILD_COMMIT_LITERAL,
       ORCA_LAYOUT_OWNER: ORCA_LAYOUT_OWNER_LITERAL
@@ -305,12 +308,18 @@ export const electronViteConfig: UserConfig = {
         '@': resolve('src/renderer/src')
       }
     },
-    plugins: [react(), tailwindcss(), createPdfjsViewerAssetsPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      createPdfjsViewerAssetsPlugin(),
+      createViteCacheRetentionPlugin()
+    ],
     worker: {
       format: 'es'
     },
     build: {
       manifest: true,
+      reportCompressedSize: false,
       modulePreload: { polyfill: true },
       minify: 'oxc',
       target: 'es2020',
@@ -334,14 +343,22 @@ export const electronViteConfig: UserConfig = {
 }
 
 export default defineConfig(({ command }) => {
-  if (command !== 'serve' || process.env.ORCA_DEV_MAIN_SOURCEMAPS !== '0') {
+  if (command !== 'serve') {
     return electronViteConfig
   }
+  // Electron Vite also uses Vite's build command for the development main process.
   return {
     ...electronViteConfig,
     main: {
       ...electronViteConfig.main,
-      build: { ...electronViteConfig.main?.build, sourcemap: false }
+      build: {
+        ...electronViteConfig.main?.build,
+        minify: false,
+        sourcemap:
+          process.env.ORCA_DEV_MAIN_SOURCEMAPS === '0'
+            ? false
+            : electronViteConfig.main?.build?.sourcemap
+      }
     }
   }
 })
