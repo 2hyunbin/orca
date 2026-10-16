@@ -120,11 +120,12 @@ export class MobileRelayHostCatalog {
         host.environmentId
       )
     return {
-      worktrees: worktrees
-        .filter((row) => row.removing !== true)
-        .map((row) =>
-          stampDesktopSidebarView(row, host.environmentId, desktopDeviceIds, sessionActivity)
-        )
+      worktrees:
+        worktrees
+          ?.filter((row) => row.removing !== true)
+          .map((row) =>
+            stampDesktopSidebarView(row, host.environmentId, desktopDeviceIds, sessionActivity)
+          ) ?? null
     }
   }
 
@@ -209,12 +210,12 @@ export class MobileRelayHostCatalog {
 function savedSessionWorktreeRows(
   session: WorkspaceSessionState | null,
   environmentId: string
-): MobileRelayServerWorktreeRow[] {
+): MobileRelayServerWorktreeRow[] | null {
   if (!session) {
-    return []
+    return null
   }
   const hostId = toRuntimeExecutionHostId(environmentId)
-  return [...workspaceIdsNamedByPartition(session)].flatMap((worktreeId) => {
+  const rows = [...workspaceIdsNamedByPartition(session)].flatMap((worktreeId) => {
     const parsed = splitWorktreeIdForFilesystem(worktreeId)
     if (!parsed || !parsed.repoId || !parsed.worktreePath) {
       return []
@@ -238,6 +239,7 @@ function savedSessionWorktreeRows(
       }
     ]
   })
+  return rows.length > 0 ? rows : null
 }
 
 function fenceOf(identity: DescribedHost['identity']): string {
