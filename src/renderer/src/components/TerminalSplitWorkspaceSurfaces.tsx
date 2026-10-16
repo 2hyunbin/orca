@@ -2,6 +2,7 @@ import { useAnyBrowserGuestNeedsPaint } from './browser-pane/host-guest/browser-
 import { WorktreeSplitSurface } from './TerminalWorktreeSplitSurface'
 import { selectParkedEquivalentMountTabIds } from './terminal/startup-terminal-tab-hold'
 import type { TerminalController } from './use-terminal-controller'
+import { useParkedRevealHold } from './terminal/use-parked-reveal-hold'
 
 export function TerminalSplitWorkspaceSurfaces({
   controller
@@ -29,11 +30,20 @@ export function TerminalSplitWorkspaceSurfaces({
   // remote controller needs each to drop `hidden` — the per-worktree surface hatch below cannot
   // override an ancestor that stopped compositing.
   const retainBrowserGuestPaint = useAnyBrowserGuestNeedsPaint(!effectiveActiveLayout)
+  const { hold, releaseHold } = useParkedRevealHold({
+    selectedWorktreeId: activeView === 'terminal' ? renderedActiveWorktreeId : null,
+    parkedWorktreeIds: effectiveParkedTerminalWorktreeIds,
+    mountedWorktreeIds: mountedWorktreeIdsRef.current
+  })
   if (!anyMountedWorktreeHasLayout) {
     return null
   }
   return (
     <div
+      // Why: input belongs to the selected workspace, so it ends any hold on the outgoing one.
+      onKeyDownCapture={hold ? releaseHold : undefined}
+      onPointerDownCapture={hold ? releaseHold : undefined}
+      onWheelCapture={hold ? releaseHold : undefined}
       className={`relative flex flex-1 min-w-0 min-h-0 overflow-hidden${
         effectiveActiveLayout
           ? ''
@@ -64,6 +74,13 @@ export function TerminalSplitWorkspaceSurfaces({
               layout={layout}
               focusedGroupId={activeGroupIdByWorktree[workspace.id]}
               isVisible={isVisible}
+              revealHold={
+                hold?.from === workspace.id
+                  ? 'outgoing'
+                  : hold?.to === workspace.id
+                    ? 'incoming'
+                    : undefined
+              }
               shouldMeasureHiddenWorktree={shouldMeasureHiddenWorktree}
               shouldColdParkTerminalPanes={shouldColdParkTerminalPanes}
               isForceParked={forceParkedTerminalWorktreeIds.has(workspace.id)}

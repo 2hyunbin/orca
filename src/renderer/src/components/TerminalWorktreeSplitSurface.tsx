@@ -18,6 +18,7 @@ export const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   layout,
   focusedGroupId,
   isVisible,
+  revealHold,
   shouldMeasureHiddenWorktree,
   shouldColdParkTerminalPanes,
   isForceParked,
@@ -30,6 +31,8 @@ export const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   layout: TabGroupLayoutNode
   focusedGroupId?: string
   isVisible: boolean
+  /** While a parked reveal remounts: the outgoing surface stays painted, the incoming one lays out unseen. */
+  revealHold?: 'outgoing' | 'incoming'
   shouldMeasureHiddenWorktree: boolean
   shouldColdParkTerminalPanes: boolean
   isForceParked: boolean
@@ -37,6 +40,8 @@ export const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   backgroundMountTabIds: ReadonlySet<string> | null
   activationDeferredMountTabIds: ReadonlySet<string> | null
 }): React.JSX.Element {
+  // Why: the outgoing workspace keeps its renderers painted during a hold; inert keeps input off it.
+  const isRendered = isVisible || revealHold === 'outgoing'
   const browserPageIds = useWorktreeBrowserPageIds(worktreeId)
   const needsBrowserGuestPaint = useBrowserGuestPaintRetention(browserPageIds)
   const shouldKeepPaintable = shouldKeepHiddenWorktreeSurfacePaintable({
@@ -47,11 +52,13 @@ export const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   return (
     <div
       className={
-        isVisible
-          ? 'absolute inset-0 flex'
-          : shouldKeepPaintable
-            ? 'absolute inset-0 flex opacity-0 pointer-events-none'
-            : 'absolute inset-0 hidden'
+        revealHold === 'incoming'
+          ? 'absolute inset-0 flex opacity-0 pointer-events-none'
+          : isRendered
+            ? 'absolute inset-0 flex'
+            : shouldKeepPaintable
+              ? 'absolute inset-0 flex opacity-0 pointer-events-none'
+              : 'absolute inset-0 hidden'
       }
       inert={!isVisible}
       aria-hidden={!isVisible}
@@ -60,12 +67,13 @@ export const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         layout={layout}
         worktreeId={worktreeId}
         focusedGroupId={focusedGroupId}
-        isWorktreeActive={isVisible}
+        isWorktreeActive={isRendered}
       />
       <WorkspacePaneOverlayLayers
         worktreeId={worktreeId}
         worktreePath={worktreePath}
-        isVisible={isVisible}
+        isVisible={isRendered}
+        ownsNativeChatToggleShortcut={isVisible}
         shouldMeasureHiddenWorktree={shouldMeasureHiddenWorktree}
         shouldColdParkTerminalPanes={shouldColdParkTerminalPanes}
         isForceParked={isForceParked}

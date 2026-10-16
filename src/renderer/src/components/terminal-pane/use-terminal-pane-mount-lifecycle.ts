@@ -10,6 +10,7 @@ import { restoreTerminalPaneLayout } from './terminal-pane-layout-restore'
 import { runTerminalPaneBootstrapSplits } from './terminal-pane-mount-bootstrap'
 import { installTerminalPaneMountEvents } from './terminal-pane-mount-events'
 import { cleanupTerminalPaneMount } from './terminal-pane-mount-cleanup'
+import { trackParkedRevealPaint } from './parked-reveal-paint-tracking'
 import type { UseTerminalPaneLifecycleDeps } from './terminal-pane-lifecycle-types'
 import type { TerminalPaneLifecycleRefs } from './use-terminal-pane-lifecycle-refs'
 
@@ -84,6 +85,9 @@ export function useTerminalPaneMountLifecycle(
       ptyDeps,
       initialLayoutHadBuffers: preparation.initialLayoutHadBuffers
     })
+    const settleParkedRevealPaint = mountFollowsTerminalPark
+      ? trackParkedRevealPaint(manager, deps.worktreeId)
+      : null
     runTerminalPaneBootstrapSplits({
       manager,
       ptyDeps,
@@ -112,6 +116,7 @@ export function useTerminalPaneMountLifecycle(
       ptyDeps
     })
     return () => {
+      settleParkedRevealPaint?.()
       removeMountEvents()
       cleanupTerminalPaneMount({
         manager,
