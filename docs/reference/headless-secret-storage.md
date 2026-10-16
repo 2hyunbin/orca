@@ -8,16 +8,18 @@ has no Electron, so it seals them itself, on the machine it runs on
 ## Where the key lives
 
 Each credential is encrypted with AES-256-GCM. The master key is created on first start and
-stored in one of two places. The choice is recorded in `orcad-secret-store.json` in the server's
-profile directory (`$ORCA_USER_DATA`, `$XDG_DATA_HOME/Orca`, or `~/.orca`):
+stored in one of two places. The choice is recorded in `~/.orca/orcad-secret-store-<machine>.json`.
+That is the directory the credentials live in, whatever `ORCA_USER_DATA` says, so the key lasts
+exactly as long as the credentials it seals. There is one record per machine, so hosts that share
+a home each keep their own key.
 
 | Host | Where the key goes |
 | --- | --- |
 | macOS | The login Keychain (through `/usr/bin/security`) if the server can reach it on first start |
 | Linux | The Secret Service keyring (`secret-tool`) if the session has a D-Bus session bus and a keyring answers |
-| Otherwise, and on Windows | `orcad-secret-store.json` itself, mode `0600` (an owner-only ACL on Windows), mixed with the machine ID (`/etc/machine-id`, macOS hardware UUID, Windows `MachineGuid`) |
+| Otherwise, and on Windows | the record file itself, mode `0600` (an owner-only ACL on Windows), mixed with the machine ID (`/etc/machine-id`, macOS hardware UUID, Windows `MachineGuid`) |
 
-The keyring is never used for a profile under the system temp directory (tests and smoke runs),
+The keyring is never used for a key directory under the system temp directory or `/tmp` (tests),
 or when `ORCA_HEADLESS_SECRET_STORE=file` is set. That setting suits a macOS host reached only
 over SSH, where the login Keychain is often locked.
 
@@ -26,14 +28,18 @@ PowerShell for each operation is an EDR signal.
 
 ## Limitations
 
-- **The profile key file is weaker than a keychain.** It means a credential file, or a copy of the
-  profile taken to another machine, can't be read. It does not stop anyone who can already read
-  this account's files on this host. The server logs this gap once with the `[secrets]` prefix.
+- **The key file is weaker than a keychain.** The key sits next to the credentials, and the
+  machine ID it is mixed with is not secret. Profile-state records include it, for example. So the
+  key file mainly stops a single credential file from opening on another machine. Anyone who can
+  read this account's files, or a backup of `~/.orca`, can unseal the credentials. Treat the key
+  file like the credentials themselves. The server logs this gap once with the `[secrets]` prefix.
   A keychain does not protect against other processes running as the same unlocked user either.
 - **The key belongs to the host.** If the recorded keyring is locked or can't be reached, or the
-  machine ID changes, the server does not fall back to plaintext. It leaves the saved credentials
-  alone and refuses new saves until the key loads again. If the key is gone for good, deleting
-  `orcad-secret-store.json` starts over, and every integration has to be connected again.
+  record is unreadable, the server does not fall back to plaintext. It leaves the saved credentials
+  alone and refuses new saves until the key loads again. If the key is gone for good, deleting the
+  record starts over, and every integration has to be connected again. A new machine ID counts as
+  a new machine, so it gets a new key, and credentials sealed under the old one have to be
+  connected again.
 - **Shared home directories.** Integration credentials live in `~/.orca` under the login home.
   Hosts that share that home (over NFS, for example), or a desktop app on the same machine, each
   seal with their own key, so a credential one of them saves can't be read by the others. To keep

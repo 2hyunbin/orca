@@ -18,20 +18,19 @@ export function describeOrcadPlaintextOptOut(): string {
 }
 
 /**
- * Why not null: a key kept beside the profile stops a copied credential file or backup from
- * being read elsewhere, but not someone who can already read this account's files here.
+ * Why not null: the machine ID is not a secret, so a key kept beside the credentials only stops
+ * a lone copied file from opening elsewhere — not someone with this account's files or a backup.
  */
 export function describeOrcadHostKeyGap(platform: NodeJS.Platform, hostBound: boolean): string {
   const why =
     platform === 'win32'
       ? `does not use ${keychainName(platform)}`
       : `could not reach ${keychainName(platform)} when it created its key`
-  const binding = hostBound
-    ? 'bound to this machine, so copies taken to another machine stay sealed'
-    : 'not bound to this machine (it has no stable machine ID), so a copy of the whole profile can be unsealed elsewhere'
+  const binding = hostBound ? ', mixed with this machine ID' : ''
   return (
-    `Orca's headless server ${why}, so it seals credentials with a key in its private profile ` +
-    `directory, ${binding}. Anyone who can read this account's files on this host can unseal them.`
+    `Orca's headless server ${why}, so it seals credentials with a key kept beside them in its ` +
+    `private credential directory${binding}. Anyone who can read this account's files on this ` +
+    'host, or a backup of them, can unseal them.'
   )
 }
 

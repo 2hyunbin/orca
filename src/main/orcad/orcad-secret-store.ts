@@ -1,14 +1,14 @@
 /**
  * orcad's SecretStore: credentials are sealed on the execution host, with a master key the
  * host owns — in the OS keyring when one is reachable when the key is first created, else in
- * a private file in the profile directory, bound to the machine ID.
+ * a private file beside the credentials in `~/.orca`, mixed with the machine ID.
  *
  * Why always "available": answering false makes every credential writer fall back to plaintext.
  * When the recorded key cannot be loaded (locked keyring, changed machine), seal and unseal
  * throw instead, so saves fail closed and existing sealed files are left untouched.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
@@ -30,8 +30,6 @@ import {
   sealOrcadSecret
 } from './orcad-secret-sealing'
 
-export const ORCAD_SECRET_STATE_FILE = 'orcad-secret-store.json'
-
 type StoredKeyState =
   | { version: 1; backend: 'os-keyring'; account: string; check: string }
   | { version: 1; backend: 'host-file'; key: string; hostBound: boolean; check: string }
@@ -43,12 +41,13 @@ type StoreState =
   | { kind: 'unavailable'; message: string }
 
 export type OrcadSecretStorePrepareOptions = {
-  userDataPath: string
+  /** Orca's credential directory (`~/.orca`), so the key lives exactly as long as what it seals. */
+  keyDir: string
   platform?: NodeJS.Platform
   env?: NodeJS.ProcessEnv
   keyring?: OrcadOsKeyring | null
   machineIdentity?: () => string | null
-  isTemporaryProfile?: (userDataPath: string) => boolean
+  isTemporaryKeyDir?: (keyDir: string) => boolean
 }
 
 export type OrcadSecretStore = SecretStore & {
@@ -94,15 +93,50 @@ function decodeMasterKey(encoded: string): Buffer | null {
   return key.length === ORCAD_MASTER_KEY_BYTES ? key : null
 }
 
-function keyringAccount(userDataPath: string): string {
-  // Why per profile: two orcad profiles under one account must not share or clobber a key.
-  return `profile-${createHash('sha256').update(resolve(userDataPath)).digest('hex').slice(0, 16)}`
+function machineTag(machineId: string | null): string {
+  return createHash('sha256')
+    .update(machineId ?? 'no-machine-id')
+    .digest('hex')
+    .slice(0, 16)
 }
 
-/** A throwaway profile (tests, smoke runs) must not leave an item in the user's keyring. */
-function isTemporaryProfile(userDataPath: string): boolean {
-  const fromTemp = relative(resolve(tmpdir()), resolve(userDataPath))
-  return !fromTemp.startsWith('..') && !isAbsolute(fromTemp)
+/**
+ * Why one record per machine: hosts sharing a home (NFS) each keep their own key instead of
+ * overwriting one another's, and a credential sealed elsewhere fails to unseal rather than
+ * being silently re-keyed.
+ */
+export function orcadSecretStateFileName(machineId: string | null): string {
+  return `orcad-secret-store-${machineTag(machineId)}.json`
+}
+
+function keyringAccount(keyDir: string, machineId: string | null): string {
+  const digest = createHash('sha256')
+    .update(`${resolve(keyDir)}\0${machineTag(machineId)}`)
+    .digest('hex')
+  return `home-${digest.slice(0, 16)}`
+}
+
+function isInside(root: string, path: string): boolean {
+  const fromRoot = relative(root, path)
+  return !fromRoot.startsWith('..') && !isAbsolute(fromRoot)
+}
+
+/** A throwaway key directory (tests, smoke runs) must not leave an item in the user's keyring. */
+function isTemporaryKeyDir(keyDir: string): boolean {
+  const roots = [tmpdir(), '/tmp', '/var/tmp'].flatMap((root) => {
+    try {
+      return [resolve(root), realpathSync(root)]
+    } catch {
+      return [resolve(root)]
+    }
+  })
+  let target = resolve(keyDir)
+  try {
+    target = realpathSync(target)
+  } catch {
+    // Not created yet; the lexical path is what will be created.
+  }
+  return roots.some((root) => isInside(root, target) || isInside(root, resolve(keyDir)))
 }
 
 async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<StoreState> {
@@ -114,7 +148,8 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
   const keyring =
     options.keyring === undefined ? resolveOrcadOsKeyring(platform, env) : options.keyring
   const machineIdentity = options.machineIdentity ?? profileStateAccessMachineIdentity
-  const statePath = join(options.userDataPath, ORCAD_SECRET_STATE_FILE)
+  const machineId = machineIdentity()
+  const statePath = join(options.keyDir, orcadSecretStateFileName(machineId))
   const unavailable = (reason: string): StoreState => ({
     kind: 'unavailable',
     message: describeOrcadSealingUnavailable(reason, statePath)
@@ -151,7 +186,7 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
       return { kind: 'ready', key, gap: null }
     }
     const master = decodeMasterKey(stored.key)
-    const binding = stored.hostBound ? machineIdentity() : ''
+    const binding = stored.hostBound ? machineId : ''
     if (!master || binding === null) {
       return unavailable('this machine no longer reports the machine ID its key is bound to')
     }
@@ -164,9 +199,9 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
 
   const mayCreateKeyringKey =
     env[ORCAD_PLAINTEXT_SECRETS_ENV] !== 'file' &&
-    !(options.isTemporaryProfile ?? isTemporaryProfile)(options.userDataPath)
+    !(options.isTemporaryKeyDir ?? isTemporaryKeyDir)(options.keyDir)
   if (keyring && mayCreateKeyringKey) {
-    const account = keyringAccount(options.userDataPath)
+    const account = keyringAccount(options.keyDir, machineId)
     let found = await keyring.lookup(account)
     if (found.kind === 'missing') {
       const candidate = randomBytes(ORCAD_MASTER_KEY_BYTES).toString('base64')
@@ -191,7 +226,7 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
     }
   }
 
-  const binding = machineIdentity()
+  const binding = machineId
   const master = randomBytes(ORCAD_MASTER_KEY_BYTES)
   const key = deriveOrcadSealingKey(master, binding ?? '')
   const record: StoredKeyState = {

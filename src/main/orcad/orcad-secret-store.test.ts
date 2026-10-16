@@ -1,4 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,10 +14,11 @@ import { classifyUnenvelopedCredential } from '../../shared/secret-at-rest-prote
 import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 import { readStoredCredentialToken, writeEncryptedCredential } from '../integration-credential-file'
 import type { OrcadKeyringLookup, OrcadOsKeyring } from './orcad-os-keyring'
-import { createOrcadSecretStore, ORCAD_SECRET_STATE_FILE } from './orcad-secret-store'
+import { createOrcadSecretStore, orcadSecretStateFileName } from './orcad-secret-store'
 
 const MACHINE_A = '0123456789abcdef0123456789abcdef'
 const MACHINE_B = 'fedcba9876543210fedcba9876543210'
+const STATE_A = orcadSecretStateFileName(MACHINE_A)
 
 type FakeKeyring = OrcadOsKeyring & {
   items: Map<string, string>
@@ -42,15 +51,15 @@ function fakeKeyring(): FakeKeyring {
 }
 
 describe('createOrcadSecretStore', () => {
-  let userDataPath: string
+  let keyDir: string
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orcad-secret-store-'))
+    keyDir = mkdtempSync(join(tmpdir(), 'orcad-secret-store-'))
   })
 
   afterEach(() => {
     _resetSecretStoreForTests()
-    rmSync(userDataPath, { recursive: true, force: true })
+    rmSync(keyDir, { recursive: true, force: true })
     vi.restoreAllMocks()
   })
 
@@ -64,12 +73,12 @@ describe('createOrcadSecretStore', () => {
   ) => {
     const store = createOrcadSecretStore()
     const ready = await store.prepare({
-      userDataPath,
+      keyDir,
       platform: 'linux',
       env: options.env ?? {},
       keyring: options.keyring ?? null,
       machineIdentity: () => (options.machine === undefined ? MACHINE_A : options.machine),
-      isTemporaryProfile: () => options.temporaryProfile ?? false
+      isTemporaryKeyDir: () => options.temporaryProfile ?? false
     })
     return { store, ready }
   }
@@ -82,9 +91,9 @@ describe('createOrcadSecretStore', () => {
     expect(sealed.includes(Buffer.from('lin_api_secret'))).toBe(false)
     expect(classifyUnenvelopedCredential(sealed)).toBe('sealed')
     expect(store.decryptString(sealed)).toBe('lin_api_secret')
-    expect(store.describeProtectionGap()).toContain('bound to this machine')
+    expect(store.describeProtectionGap()).toContain('mixed with this machine ID')
 
-    const statePath = join(userDataPath, ORCAD_SECRET_STATE_FILE)
+    const statePath = join(keyDir, STATE_A)
     if (process.platform !== 'win32') {
       expect(statSync(statePath).mode & 0o777).toBe(0o600)
     }
@@ -92,16 +101,26 @@ describe('createOrcadSecretStore', () => {
     expect(reopened.decryptString(sealed)).toBe('lin_api_secret')
   })
 
-  it('refuses to seal or unseal, rather than downgrading, once the machine ID changes', async () => {
+  it('gives another machine sharing the home its own key, leaving this one intact', async () => {
     const sealed = (await prepare()).store.encryptString('lin_api_secret')
-    const stateBefore = readFileSync(join(userDataPath, ORCAD_SECRET_STATE_FILE))
+    const stateBefore = readFileSync(join(keyDir, STATE_A))
 
     const { store, ready } = await prepare({ machine: MACHINE_B })
-    expect(ready).toBe(false)
-    expect(store.isEncryptionAvailable()).toBe(true)
-    expect(() => store.encryptString('new')).toThrow(/different machine ID/)
-    expect(() => store.decryptString(sealed)).toThrow(/different machine ID/)
-    expect(readFileSync(join(userDataPath, ORCAD_SECRET_STATE_FILE))).toEqual(stateBefore)
+    expect(ready).toBe(true)
+    expect(() => store.decryptString(sealed)).toThrow()
+    expect(readFileSync(join(keyDir, STATE_A))).toEqual(stateBefore)
+    expect((await prepare()).store.decryptString(sealed)).toBe('lin_api_secret')
+  })
+
+  it('refuses to seal or unseal when its record was bound to a different machine ID', async () => {
+    const sealed = (await prepare()).store.encryptString('lin_api_secret')
+    // A record copied in under this machine's name from another host.
+    renameSync(join(keyDir, STATE_A), join(keyDir, orcadSecretStateFileName(MACHINE_B)))
+    const moved = await prepare({ machine: MACHINE_B })
+    expect(moved.ready).toBe(false)
+    expect(() => moved.store.encryptString('new')).toThrow(/different machine ID/)
+    expect(() => moved.store.decryptString(sealed)).toThrow(/different machine ID/)
+    expect(moved.store.isEncryptionAvailable()).toBe(true)
   })
 
   it('keeps the master key in the OS keyring when one is reachable', async () => {
@@ -111,14 +130,9 @@ describe('createOrcadSecretStore', () => {
     expect(store.describeProtectionGap()).toBeNull()
     expect(keyring.items.size).toBe(1)
     const [masterKey] = [...keyring.items.values()]
-    expect(readFileSync(join(userDataPath, ORCAD_SECRET_STATE_FILE), 'utf8')).not.toContain(
-      masterKey
-    )
+    expect(readFileSync(join(keyDir, STATE_A), 'utf8')).not.toContain(masterKey)
     const sealed = store.encryptString('lin_api_secret')
-    // A different machine ID does not matter for a keyring-held key.
-    expect((await prepare({ keyring, machine: MACHINE_B })).store.decryptString(sealed)).toBe(
-      'lin_api_secret'
-    )
+    expect((await prepare({ keyring })).store.decryptString(sealed)).toBe('lin_api_secret')
   })
 
   it.each([
@@ -143,23 +157,46 @@ describe('createOrcadSecretStore', () => {
   it('never creates a keyring item for a temporary profile or when told to use the file', async () => {
     const keyring = fakeKeyring()
     const temporary = await prepare({ keyring, temporaryProfile: true })
-    expect(temporary.store.describeProtectionGap()).toContain('private profile directory')
+    expect(temporary.store.describeProtectionGap()).toContain('private credential directory')
     expect(keyring.items.size).toBe(0)
-    rmSync(join(userDataPath, ORCAD_SECRET_STATE_FILE))
+    rmSync(join(keyDir, STATE_A))
     await prepare({ keyring, env: { ORCA_HEADLESS_SECRET_STORE: 'file' } })
     expect(keyring.items.size).toBe(0)
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'treats /tmp and the OS temp dir as disposable, by either spelling',
+    async () => {
+      const keyring = fakeKeyring()
+      for (const dir of [
+        mkdtempSync('/tmp/orcad-key-'),
+        realpathSync(mkdtempSync('/tmp/orcad-key-')),
+        keyDir
+      ]) {
+        await createOrcadSecretStore().prepare({
+          keyDir: dir,
+          env: {},
+          keyring,
+          machineIdentity: () => MACHINE_A
+        })
+        if (dir !== keyDir) {
+          rmSync(dir, { recursive: true, force: true })
+        }
+      }
+      expect(keyring.items.size).toBe(0)
+    }
+  )
 
   it('falls back to the profile key when the keyring cannot store one', async () => {
     const keyring = fakeKeyring()
     keyring.storeWorks = false
     const { store, ready } = await prepare({ keyring })
     expect(ready).toBe(true)
-    expect(store.describeProtectionGap()).toContain('private profile directory')
+    expect(store.describeProtectionGap()).toContain('private credential directory')
   })
 
   it('never regenerates over an unreadable key record', async () => {
-    const statePath = join(userDataPath, ORCAD_SECRET_STATE_FILE)
+    const statePath = join(keyDir, STATE_A)
     writeFileSync(statePath, '{"version":1,"backend":"host-file"', 'utf8')
     const { store, ready } = await prepare()
     expect(ready).toBe(false)
@@ -169,9 +206,9 @@ describe('createOrcadSecretStore', () => {
 
   it('records an unbound key when the host has no machine ID', async () => {
     const { store } = await prepare({ machine: null })
-    expect(store.describeProtectionGap()).toContain('not bound to this machine')
+    expect(store.describeProtectionGap()).not.toContain('machine ID')
     const sealed = store.encryptString('t')
-    expect((await prepare({ machine: MACHINE_B })).store.decryptString(sealed)).toBe('t')
+    expect((await prepare({ machine: null })).store.decryptString(sealed)).toBe('t')
   })
 
   it('keeps the explicit plaintext opt-out for shared homes', async () => {
@@ -184,12 +221,12 @@ describe('createOrcadSecretStore', () => {
   it('makes integration credential saves seal, and still reads legacy plaintext', async () => {
     const { store } = await prepare()
     setSecretStore(store)
-    const legacy = join(userDataPath, 'legacy.enc')
+    const legacy = join(keyDir, 'legacy.enc')
     writeFileSync(legacy, 'lin_api_legacy', 'utf8')
     expect(readStoredCredentialToken('Linear', readFileSync(legacy))).toBe('lin_api_legacy')
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const saved = join(userDataPath, 'saved.enc')
+    const saved = join(keyDir, 'saved.enc')
     writeEncryptedCredential('Linear', saved, 'lin_api_new')
     expect(warn).not.toHaveBeenCalled()
     expect(readFileSync(saved).includes(Buffer.from('lin_api_new'))).toBe(false)
@@ -197,12 +234,14 @@ describe('createOrcadSecretStore', () => {
   })
 
   it('fails a save closed when the key cannot load, keeping the sealed file', async () => {
-    const saved = join(userDataPath, 'saved.enc')
-    setSecretStore((await prepare()).store)
+    const saved = join(keyDir, 'saved.enc')
+    const keyring = fakeKeyring()
+    setSecretStore((await prepare({ keyring })).store)
     writeEncryptedCredential('Linear', saved, 'lin_api_original')
     const before = readFileSync(saved)
 
-    setSecretStore((await prepare({ machine: MACHINE_B })).store)
+    keyring.failure = { kind: 'unreachable', reason: 'locked' }
+    setSecretStore((await prepare({ keyring })).store)
     expect(() => writeEncryptedCredential('Linear', saved, 'lin_api_replacement')).toThrow()
     expect(readFileSync(saved)).toEqual(before)
   })

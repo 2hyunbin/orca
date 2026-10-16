@@ -100,8 +100,10 @@ export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandl
 async function prepareOrcadSecretStoreAndMigrate(userDataPath: string): Promise<void> {
   const { getSecretStore } = await import('../../shared/secret-store')
   const { reportSecretProtectionGap } = await import('../host/secret-protection-report')
-  if (await prepareOrcadSecretStore(userDataPath)) {
-    const { migratePlaintextCredentials } = await import('./orcad-plaintext-credential-migration')
+  const { migratePlaintextCredentials, orcadCredentialRoot } =
+    await import('./orcad-plaintext-credential-migration')
+  // Why the credential root, not userData: a disposable ORCA_USER_DATA would take the key with it.
+  if (await prepareOrcadSecretStore(orcadCredentialRoot())) {
     migratePlaintextCredentials(getSecretStore())
   }
   reportSecretProtectionGap({ dataFile: join(userDataPath, 'orca-data.json') })
