@@ -52,6 +52,7 @@ import { useStructuredAgentSessionDeliveryNotices } from './use-structured-agent
 import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
 import { useNativeChatHostOutage } from './use-native-chat-host-outage'
 import { useNativeChatHostOutageNotice } from './use-native-chat-host-outage-notice'
+import { useNativeChatHostPermissionGate } from './use-native-chat-host-permission-gate'
 import { useNativeChatAvailabilityNotice } from './use-native-chat-availability-notice'
 import { useStructuredAgentSessionStartFailureFacts } from './use-structured-agent-session-start-failure-facts'
 import { pendingPromptsAllUnanswerableHere } from '../../../../shared/agent-session-approval-subject'
@@ -134,6 +135,7 @@ export function NativeChatStructuredSession(
   const { revealLatest } = submits
   const promptResponse = useStructuredPromptResponseHold(submits.respond)
   const agentLabel = structuredAgentLabel(props.agent)
+  const hostPermission = useNativeChatHostPermissionGate(props.target, props.agent, agentLabel)
   const continuation = useNativeChatInterruptedContinuation({
     target: props.target,
     sessionId: props.sessionId,
@@ -220,7 +222,8 @@ export function NativeChatStructuredSession(
     optionPickerRequest,
     setOptionPickerRequest,
     onError: reportComposerError,
-    onSubmitted: revealLatest
+    onSubmitted: revealLatest,
+    sendBlockedReason: hostPermission.sendBlockedReason
   })
 
   // Said once: on the pane when the failure took it, else in the composer's notices.
@@ -248,7 +251,8 @@ export function NativeChatStructuredSession(
     sessionError,
     composerError: composerError ?? continuation.continueError,
     claudeSignIn,
-    availability
+    availability,
+    hostPermission: hostPermission.notice
   })
   if (hostNotice) {
     notices.push(hostNotice)
