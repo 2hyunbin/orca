@@ -1127,8 +1127,13 @@ export function createRemoteRuntimePtyTransport(
       terminal.leafId === leafId &&
       (!terminal.worktreeId || terminal.worktreeId === worktreeId)
     let resolvedPane = await earlyPaneResolution
-    if (!matchesHostHandle(resolvedPane)) {
-      // Why: a pending surface only materializes through the activation, so re-read once it has.
+    const activationIncarnationId = authoritativePtyIncarnationId
+    if (
+      !matchesHostHandle(resolvedPane) ||
+      (activationIncarnationId !== null &&
+        (resolvedPane.incarnationId ?? null) !== activationIncarnationId)
+    ) {
+      // Why: activation can materialize the surface or learn its incarnation, so an earlier read may be stale.
       resolvedPane = await resolveHostSessionPane(hostTabId)
     }
     if (matchesHostHandle(resolvedPane)) {

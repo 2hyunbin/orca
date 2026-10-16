@@ -129,4 +129,51 @@ describe('web mirror reveal: resolvePane overlaps the activation', () => {
       'terminal.resolvePane'
     ])
   })
+
+  it('re-reads a pane answered before the activation learned its incarnation', async () => {
+    const defaultCall = runtimeCall.getMockImplementation()!
+    let activated = false
+    let earlyReadAnswered: () => void = () => {}
+    const earlyRead = new Promise<void>((resolve) => {
+      earlyReadAnswered = resolve
+    })
+    runtimeCall.mockImplementation(async (request: { method: string }) => {
+      if (request.method === 'session.tabs.activate') {
+        await earlyRead
+        activated = true
+        const response = await defaultCall(request)
+        return {
+          ...response,
+          result: {
+            ...response.result,
+            tabs: response.result.tabs.map((tab: object) => ({
+              ...tab,
+              incarnationId: 'incarnation-learned'
+            }))
+          }
+        }
+      }
+      if (request.method === 'terminal.resolvePane') {
+        const response = await defaultCall(request)
+        if (!activated) {
+          queueMicrotask(earlyReadAnswered)
+          return response
+        }
+        return {
+          ...response,
+          result: {
+            terminal: { ...response.result.terminal, incarnationId: 'incarnation-learned' }
+          }
+        }
+      }
+      return defaultCall(request)
+    })
+
+    // The same handle answered early without an incarnation must not erase the learned one.
+    await expect(attachMirror()).resolves.toMatchObject({
+      id: 'remote:env-1@@terminal-1',
+      incarnationId: 'incarnation-learned'
+    })
+    expect(calledMethods().filter((method) => method === 'terminal.resolvePane')).toHaveLength(2)
+  })
 })
