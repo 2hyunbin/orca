@@ -84,23 +84,27 @@ if (artifact) {
 
   // Why a scratch home: the plan must start from no installed copy, whatever the runner holds.
   const skillHome = mkdtempSync(join(tmpdir(), 'orcad-cli-skills-'))
-  const cli = runProcessSync({
-    program: runtimePath,
-    args: [
-      join(packageDir, ORCAD_CLI_ENTRY_FILENAME),
-      'skills',
-      'install',
-      '--skill',
-      'orca-cli',
-      '--agent',
-      'universal',
-      '--dry-run'
-    ],
-    cwd: root,
-    env: { ...env, HOME: skillHome, USERPROFILE: skillHome },
-    timeoutMs: 90_000
-  })
-  rmSync(skillHome, { recursive: true, force: true })
+  let cli
+  try {
+    cli = runProcessSync({
+      program: runtimePath,
+      args: [
+        join(packageDir, ORCAD_CLI_ENTRY_FILENAME),
+        'skills',
+        'install',
+        '--skill',
+        'orca-cli',
+        '--agent',
+        'universal',
+        '--dry-run'
+      ],
+      cwd: root,
+      env: { ...env, HOME: skillHome, USERPROFILE: skillHome },
+      timeoutMs: 90_000
+    })
+  } finally {
+    rmSync(skillHome, { recursive: true, force: true })
+  }
   if (
     cli.code !== 0 ||
     cli.timedOut ||
