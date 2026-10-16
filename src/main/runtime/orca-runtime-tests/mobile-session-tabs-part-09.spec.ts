@@ -339,6 +339,25 @@ describe('OrcaRuntimeService', () => {
       expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
     })
 
+    it('does not resume while the other holder has no host terminal record yet', async () => {
+      const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
+      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
+        deps: {
+          getAgentProviderSessionSnapshot: () => [
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only paneKey and providerSession.
+            {
+              paneKey: `other-tab:${HEADLESS_SECOND_LEAF_ID}`,
+              providerSession: { key: 'session_id', id: 'provider-session-1' }
+            } as never
+          ]
+        }
+      })
+
+      await userActivate(runtime)
+
+      expect(firstSpawnArgs(spawn).command ?? '').not.toContain('provider-session-1')
+    })
+
     it('resumes once the other pane holding the session has proven exited', async () => {
       const { runtime, spawn } = makeRuntimeWithOtherPaneHolder([])
       runtime.onPtyExit('other-pty', 0)

@@ -183,7 +183,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     }
   }
 
-  /** The host's hook store places this conversation in another pane whose PTY is not proven exited. */
+  /** The host's hook store places this conversation in another pane not proven exited. */
   private isProviderSessionLiveInAnotherPane(record: SleepingAgentSessionRecord): boolean {
     const otherPaneKeys = new Set(
       (this.getAgentProviderSessionSnapshotFn?.() ?? [])
@@ -196,13 +196,18 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     if (otherPaneKeys.size === 0) {
       return false
     }
+    // Why: only a proven exit clears a holder; an unverifiable PTY (dropped SSH relay) or one not
+    // yet hydrated after a restart may still be writing the transcript.
+    const provenExitedPaneKeys = new Set<string>()
     for (const pty of this.ptysById.values()) {
-      // Why: an unverifiable PTY (e.g. a dropped SSH relay) may still be writing the transcript.
-      if (pty.paneKey && otherPaneKeys.has(pty.paneKey) && !this.isPtyKnownExited(pty.ptyId)) {
-        return true
+      if (pty.paneKey && otherPaneKeys.has(pty.paneKey)) {
+        if (!this.isPtyKnownExited(pty.ptyId)) {
+          return true
+        }
+        provenExitedPaneKeys.add(pty.paneKey)
       }
     }
-    return false
+    return [...otherPaneKeys].some((paneKey) => !provenExitedPaneKeys.has(paneKey))
   }
 
   /** The pane moved on to another conversation after the record was saved; the hook store is authoritative. */
