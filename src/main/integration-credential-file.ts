@@ -10,6 +10,7 @@ import {
   writeSync
 } from 'node:fs'
 import { getSecretStore } from '../shared/secret-store'
+import { restrictWindowsPathSync } from '../shared/secure-path-windows-acl'
 import {
   credentialDecryptionMessage,
   type IntegrationCredentialService
@@ -69,6 +70,9 @@ export function writeCredentialFileAtomic(
     fsyncSync(handle)
     closeSync(handle)
     handle = null
+    // Why before the rename: a sibling inherits the directory's DACL, so the replacement would
+    // otherwise drop the owner-only ACL the previous credential file had.
+    restrictCredentialFileToOwner(tempPath)
     if (shouldPublish && !shouldPublish()) {
       unlinkSync(tempPath)
       return false
@@ -95,9 +99,13 @@ export function writeCredentialFileAtomic(
 
 // Why: writeFileSync's `mode` only applies when it creates the file, so
 // rewriting an existing credential would silently keep looser permissions.
-// Best-effort: Windows has no POSIX modes, so chmod is a documented no-op there.
+// Best-effort: Windows has no POSIX modes, so it gets an owner-only ACL instead.
 export function restrictCredentialFileToOwner(path: string): void {
   try {
+    if (process.platform === 'win32') {
+      restrictWindowsPathSync(path, false)
+      return
+    }
     chmodSync(path, 0o600)
   } catch {
     // Best-effort hardening; the write itself already succeeded.
