@@ -1,12 +1,13 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   getStructuredAgentSessionLaunchResumes,
   relaunchFailedStructuredAgentSessionForMessage,
   retryStructuredAgentSessionLaunch,
   useStructuredAgentSessionLaunchFailure,
-  useStructuredAgentSessionLaunchLifecycle,
-  useStructuredAgentSessionLaunchSelection
+  useStructuredAgentSessionLaunchLifecycle
 } from '@/lib/structured-agent-session-launch'
+import { getStructuredAgentSessionLaunchSelection } from '@/lib/structured-agent-session-launch-options'
+import { subscribeStructuredAgentLaunchStatus } from '@/lib/structured-agent-session-launch-registry'
 import { relaunchFailedStructuredAgentSessionWithMessage } from '@/lib/structured-agent-session-launch-message'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 
@@ -28,22 +29,57 @@ function useLaunchView(
   worktreeId: string | null | undefined,
   launching: boolean
 ): StructuredAgentSessionLaunchView | undefined {
-  const selection = useStructuredAgentSessionLaunchSelection(sessionId)
-  const [kind] = useState<StructuredAgentSessionLaunchView['kind'] | null>(() =>
-    launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null
-  )
+  const owner = useMemo(() => {
+    let snapshot = getStructuredAgentSessionLaunchSelection(sessionId)
+    const read = () => {
+      const current = getStructuredAgentSessionLaunchSelection(sessionId)
+      if (current) {
+        snapshot = current
+      } else if (snapshot && snapshot.held !== NO_HELD_OPTIONS) {
+        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS }
+      }
+      return snapshot
+    }
+    return {
+      read,
+      subscribe: (notify: () => void) =>
+        subscribeStructuredAgentLaunchStatus(() => {
+          // Capture accepted picks even when retirement happens before React renders.
+          read()
+          notify()
+        })
+    }
+  }, [sessionId])
+  const selection = useSyncExternalStore(owner.subscribe, owner.read, () => null)
+  const [intent, setIntent] = useState<{
+    sessionId: string
+    kind: StructuredAgentSessionLaunchView['kind'] | null
+  }>(() => ({
+    sessionId,
+    kind: launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null
+  }))
+  if (intent.sessionId !== sessionId) {
+    setIntent({
+      sessionId,
+      kind: launching
+        ? getStructuredAgentSessionLaunchResumes(sessionId)
+          ? 'resume'
+          : 'new'
+        : null
+    })
+  }
   const held = selection?.held ?? NO_HELD_OPTIONS
   return useMemo(
     () =>
-      kind
+      intent.kind
         ? {
-            kind,
+            kind: intent.kind,
             ...(selection?.seed ? { seedOptions: selection.seed } : {}),
             heldOptions: held,
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, kind, selection?.seed, worktreeId]
+    [held, intent.kind, selection?.seed, worktreeId]
   )
 }
 

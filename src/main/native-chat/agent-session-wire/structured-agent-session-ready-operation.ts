@@ -19,8 +19,12 @@ import {
   rewindInDoubt
 } from './structured-agent-session-send-preparation'
 import { agentSessionOperationOutcomeUnknown } from './structured-agent-session-replay-outcome'
-import type { AgentSessionMutationSessionPreparation } from './structured-agent-session-mutation-admission'
+import {
+  replayRecordedOperation,
+  type AgentSessionMutationSessionPreparation
+} from './structured-agent-session-mutation-admission'
 import type { MutationPlan } from './structured-agent-session-mutation-plans'
+import { mutationTurnContext } from './structured-agent-session-mutation-turn-context'
 import { commandReceiptScope } from '../agent-session-journal/command-receipt-schema'
 import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
 import { waitForStructuredAgentSessionStart } from './structured-agent-session-start-readiness'
@@ -30,7 +34,10 @@ import type { StructuredAgentSessionStartReadiness } from './structured-agent-se
 type ReadyOperationPlan<T> = Pick<
   MutationPlan<T>,
   'method' | 'fields' | 'operationIdScope' | 'commandReceipt'
->
+> &
+  Partial<
+    Pick<MutationPlan<T>, 'replay' | 'rerunWhenReplayMissing' | 'recoverUnknownFromDurableState'>
+  >
 type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
   | {
@@ -148,12 +155,50 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
           now: context.now(),
           ...(plan.operationIdScope ? { operationIdScope: plan.operationIdScope } : {})
         })
-        if (!evaluated || evaluated.decision.decision !== 'admit') {
+        if (evaluated?.decision.decision === 'replay') {
+          if (!plan.replay) {
+            return { result: await run({ ok: true, child: null, replay: true }) }
+          }
+          const opened = await openForWrite(context, envelope)()
+          const journal = context.sessions.get(envelope.sessionId)?.journal
+          if (!opened.ok || !journal) {
+            return { result: await run({ ok: true, child: null, replay: true }) }
+          }
+          const request = {
+            store: context.deps.store,
+            adapter: context.deps.adapter,
+            agents: context.deps.agents,
+            logger: context.deps.logger,
+            callerKey,
+            envelope,
+            journal: () => journal,
+            publish: () => undefined,
+            now: () => context.now()
+          }
+          const current = context.deps.store.evaluateMutationOperation({
+            callerKey,
+            envelope,
+            hostFingerprint,
+            now: context.now(),
+            ...(plan.operationIdScope ? { operationIdScope: plan.operationIdScope } : {})
+          })
+          if (current?.decision.decision !== 'replay') {
+            return { result: await run({ ok: true, child: null, replay: true }) }
+          }
+          const turn = mutationTurnContext(request, journal, current.record)
+          const answer = replayRecordedOperation(
+            { envelope, plan: { ...plan, replay: plan.replay } },
+            turn,
+            current.decision.row
+          )
+          if (answer !== 'rerun') {
+            return { result: await run({ ok: true, child: null, replay: true }) }
+          }
+        } else if (!evaluated || evaluated.decision.decision !== 'admit') {
           return {
             result: await run({
               ok: true,
-              child: null,
-              ...(evaluated?.decision.decision === 'replay' ? { replay: true as const } : {})
+              child: null
             })
           }
         }
@@ -230,6 +275,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       return operationDidNotRun(true)
     }
     return await context.serialize(envelope.sessionId, () =>
+      // Admission re-reads the journal here after readiness and answers a competing settlement.
       run({ ok: true, child: selected.child, deadline })
     )
   } finally {
