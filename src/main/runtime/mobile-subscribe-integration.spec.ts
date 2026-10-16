@@ -2,51 +2,8 @@
  * Integration tests for the server-authoritative mobile subscribe lifecycle.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import type * as GitUsernameModule from '../git/git-username'
+import { listWorktrees } from '../git/worktree'
 import { OrcaRuntimeService } from './orca-runtime'
-
-vi.mock('../git/worktree', () => ({
-  listWorktrees: vi.fn().mockResolvedValue([
-    {
-      path: '/tmp/worktree-a',
-      head: 'abc',
-      branch: 'feature/foo',
-      isBare: false,
-      isMainWorktree: false
-    }
-  ]),
-  listWorktreesStrict: vi.fn().mockResolvedValue([])
-}))
-
-vi.mock('../hooks', () => ({
-  getEffectiveHooks: vi.fn().mockReturnValue(null),
-  runHook: vi.fn().mockResolvedValue({ success: true, output: '' })
-}))
-vi.mock('../worktree-runner-script', () => ({ createSetupRunnerScript: vi.fn() }))
-
-vi.mock('../ipc/worktree-logic', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return { ...actual, computeWorktreePath: vi.fn(), ensurePathWithinWorkspace: vi.fn() }
-})
-
-vi.mock('../ipc/registered-worktree-roots-cache', () => ({
-  invalidateAuthorizedRootsCache: vi.fn(),
-  invalidateAuthorizedRootsCacheForRepo: vi.fn()
-}))
-
-vi.mock('../git/repo', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return {
-    ...actual,
-    getDefaultBaseRef: vi.fn().mockReturnValue('origin/main'),
-    getBranchConflictKind: vi.fn().mockResolvedValue(null)
-  }
-})
-
-vi.mock('../git/git-username', async () => {
-  const actual = await vi.importActual<typeof GitUsernameModule>('../git/git-username')
-  return { ...actual, resolveLocalGitUsername: vi.fn(async () => '') }
-})
 
 // Why: default the mock store to the clamp floor (5_000ms) so legacy "restore fires after delay" assertions hold; the real default is indefinite/null.
 const LEGACY_RESTORE_MS = 5_000
@@ -105,6 +62,15 @@ class ObservableRuntime extends OrcaRuntimeService {
 }
 
 function createRuntime() {
+  vi.mocked(listWorktrees).mockResolvedValue([
+    {
+      path: '/tmp/worktree-a',
+      head: 'abc',
+      branch: 'feature/foo',
+      isBare: false,
+      isMainWorktree: false
+    }
+  ])
   const runtime = new ObservableRuntime(store)
   const ptySizes = new Map<string, { cols: number; rows: number }>()
   ptySizes.set('pty-1', { cols: 150, rows: 40 })

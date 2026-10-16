@@ -34,6 +34,7 @@ import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layo
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
+import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
 import { provideLayoutFrameTerminalPanes } from './layout-frame-terminal-panes'
 import { subscribeRuntimeLayout } from './runtime-layout-client'
 
@@ -120,6 +121,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
   let live = false
   let snapshotReceived = false
   let flushQueued = false
+  let streamOpen = true
 
   const rebuild = (state: AppState, keys: string[]): void => {
     // The view and content facts are this window's: read them back out of what it saves.
@@ -217,7 +219,13 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       if (status.state === 'lost' || status.state === 'refused') {
         console.warn('[layout-owner] layout stream stopped:', status)
       }
-    }
+      if (status.state !== 'connecting' && status.state !== 'live') {
+        streamOpen = false
+        endLayoutFramePositions()
+      }
+    },
+    // After the frame's flush: a waiting reply runs once the store shows the frame, unless held.
+    (seq) => queueMicrotask(() => streamOpen && noteLayoutFramePosition(seq))
   )
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
 
