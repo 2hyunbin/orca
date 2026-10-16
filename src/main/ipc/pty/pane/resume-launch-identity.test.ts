@@ -20,6 +20,7 @@ function seed(overrides: Partial<Parameters<typeof seedResumeLaunchIdentityFromS
     connectionId: null,
     worktreeId: 'wt-1',
     launchedAt: LAUNCHED_AT,
+    resumeArgvDropped: false,
     result: { id: 'pty-1' },
     ...overrides
   })
@@ -43,6 +44,7 @@ describe('seedResumeLaunchIdentityFromSpawn', () => {
 
   it.each([
     ['a reattached process', { result: { id: 'pty-1', isReattach: true } }],
+    ['a Codex resume that fell back to a fresh session', { resumeArgvDropped: true }],
     ['an SSH pane, whose relay owns its rows', { connectionId: 'ssh-1' }],
     ['a launch with no resume', { resumeProviderSession: undefined }],
     ['a malformed resume id', { resumeProviderSession: { key: 'session_id', id: '-rf' } }],

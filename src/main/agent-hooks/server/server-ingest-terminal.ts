@@ -8,6 +8,7 @@ import {
   type AgentProviderSessionMetadata
 } from '../../../shared/agent-session-resume'
 import type { EnrichedAgentHookEventPayload } from './server-types'
+import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import { isAgentStatusHeldOpenByChildWork } from '../../../shared/agent-lead-status-fold'
 import { AgentHookServerIngestNormalization } from './server-ingest-normalization'
 
@@ -45,19 +46,19 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     ) {
       return
     }
-    this.applyNormalizedStatus(
-      {
-        paneKey,
-        tabId: parsedPaneKey.tabId,
-        ...(event.worktreeId?.trim() ? { worktreeId: event.worktreeId.trim() } : {}),
-        connectionId: null,
-        providerSession: event.providerSession,
-        providerSessionOnly: true,
-        payload: { state: 'done', prompt: '', agentType: event.agentType }
-      },
-      undefined,
-      'launch'
-    )
+    const identity: AgentHookEventPayload &
+      Pick<EnrichedAgentHookEventPayload, 'retainedForLiveness'> = {
+      paneKey,
+      tabId: parsedPaneKey.tabId,
+      ...(event.worktreeId?.trim() ? { worktreeId: event.worktreeId.trim() } : {}),
+      connectionId: null,
+      providerSession: event.providerSession,
+      providerSessionOnly: true,
+      // Why: hydration keeps only marked identity rows; a host restart before the first turn must not lose it.
+      retainedForLiveness: true,
+      payload: { state: 'done', prompt: '', agentType: event.agentType }
+    }
+    this.applyNormalizedStatus(identity, undefined, 'launch')
   }
 
   ingestTerminalStatus(event: {

@@ -111,6 +111,28 @@ describe('a resume launch seeds the pane identity', () => {
     expect(row).toMatchObject({ state: 'working', providerSession: RESUMED })
   })
 
+  it('keeps the seeded identity across a host restart', async () => {
+    const server = await startServer()
+    server.recordLaunchResumeIdentity({
+      paneKey: PANE,
+      worktreeId: 'wt-1',
+      agentType: 'codex',
+      providerSession: RESUMED,
+      launchedAt: Date.now()
+    })
+    // Synchronous flush via stop() captures the trailing-debounced write.
+    server.stop()
+    servers.length = 0
+    const restarted = await startServer()
+    expect(restarted.getStatusSnapshotForPane(PANE)).toEqual([
+      expect.objectContaining({
+        agentType: 'codex',
+        providerSession: RESUMED,
+        providerSessionOnly: true
+      })
+    ])
+  })
+
   it('ignores a pane key that is not a stable tab:leaf key', async () => {
     const server = await startServer()
     server.recordLaunchResumeIdentity({

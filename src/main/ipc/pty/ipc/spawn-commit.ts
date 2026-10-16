@@ -159,6 +159,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
     connectionId: args.connectionId,
     worktreeId: args.worktreeId,
     launchedAt: ctx.codexHomeLaunchStartedAt,
+    resumeArgvDropped: ctx.codexResumeLaunch.droppedResumeArgv,
     result: ctx.result
   })
   // Why: record the spawn-result pid once here so the memory module needn't reach back into ipc/pty on a hot path (works for in-process and daemon-hosted PTYs).

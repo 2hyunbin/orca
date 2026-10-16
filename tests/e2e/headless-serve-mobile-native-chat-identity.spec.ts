@@ -170,7 +170,7 @@ async function expectPhoneChatReadsTranscript(args: {
   sessionId: string
 }): Promise<void> {
   const { phone, worktree, parentTabId, agent, sessionId } = args
-  let agentStatus: AgentStatusEntry | undefined
+  let agentStatus: AgentStatusEntry | null | undefined
   await expect
     .poll(
       async () => {
