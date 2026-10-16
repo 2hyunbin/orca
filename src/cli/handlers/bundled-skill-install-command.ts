@@ -14,15 +14,18 @@ import {
   resolveDetectedTuiAgentIds
 } from '../../shared/tui-agent-detection-commands'
 import {
-  describeBundledSkillInstallResult,
-  describeSkillConflictReason
-} from '../../shared/bundled-orca-skill-install-report'
+  bundledSkillLeftLocations,
+  bundledSkillVerdict,
+  type BundledSkillLeaveReason,
+  type BundledSkillLocationAction,
+  type BundledSkillPlan
+} from '../../shared/skill-freshness'
+import { describeBundledSkillInstallResult } from '../../shared/bundled-orca-skill-install-report'
 import {
   installBundledOrcaSkills,
   planBundledOrcaSkills,
   resolveEnvironmentSkillProviderRoots,
-  type BundledOrcaSkillInstallInput,
-  type BundledOrcaSkillPlan
+  type BundledOrcaSkillInstallInput
 } from '../../main/skills/bundled-orca-skill-cli-entry'
 
 export type SkillMutationVerb = 'install' | 'update'
@@ -30,6 +33,9 @@ export type SkillMutationVerb = 'install' | 'update'
 // Why: receipts carry no host meaning for Orca's own skills; this only labels who wrote one.
 const CLI_HOST_IDENTITY = 'orca-cli'
 const SHARED_FOLDER_ONLY = 'universal'
+const NOTHING_TO_UPDATE =
+  'No Orca skills are installed here, so there is nothing to update. ' +
+  'Install one with: orca skills install --skill <name>'
 // Why: earlier releases took the skills CLI's key for Claude Code; scripts still pass it.
 const PROVIDER_ALIASES: Readonly<Record<string, string>> = { 'claude-code': 'claude' }
 
@@ -100,40 +106,49 @@ function installInput(flags: Map<string, string | boolean>): BundledOrcaSkillIns
   }
 }
 
-function describePlan(plan: BundledOrcaSkillPlan): string {
-  if (plan.state !== 'unchanged' && !plan.replacesCanonical) {
-    const kind =
-      plan.state === 'external-link' || plan.state === 'name-collision' ? plan.state : undefined
-    return `${plan.name}: would not change, ${describeSkillConflictReason(kind)} (${plan.canonicalPath})`
-  }
-  const steps = [
-    ...(plan.replacesCanonical
-      ? [`would ${plan.state === 'missing' ? 'install' : 'update'} ${plan.canonicalPath}`]
-      : []),
-    ...plan.placements.flatMap((placement) =>
-      placement.action === 'link'
-        ? [`would link ${placement.path}`]
-        : placement.action === 'replace'
-          ? [`would replace ${placement.path}`]
-          : []
-    )
-  ]
-  const skipped = plan.placements
-    .filter((placement) => placement.action === 'skip')
-    .map((placement) => `${plan.name}: would leave ${placement.path}, which Orca did not install`)
-  return [
-    steps.length > 0
-      ? `${plan.name}: ${steps.join('; ')}`
-      : `${plan.name}: already up to date (${plan.canonicalPath})`,
-    ...skipped
-  ].join('\n')
+const LEAVE_REASON_TEXT: Readonly<Record<BundledSkillLeaveReason, string>> = {
+  'local-changes': 'it has changes Orca did not make',
+  'not-installed-by-orca': 'Orca did not install it',
+  'link-not-managed': 'it is a link Orca does not manage',
+  'name-in-use': 'another file or folder already uses this name',
+  'read-only': 'its folder is read-only',
+  unreadable: 'Orca could not read it'
 }
 
-// Why: update refreshes copies already here, including an Orca-owned copy in an agent home;
-// install is the verb that adds a skill.
-function isInstalledHere(plan: BundledOrcaSkillPlan): boolean {
-  return (
-    plan.state !== 'missing' || plan.placements.some((placement) => placement.action === 'replace')
+const PLAN_STEP_TEXT: Partial<Record<BundledSkillLocationAction, string>> = {
+  install: 'would install',
+  update: 'would update',
+  link: 'would link',
+  replace: 'would replace'
+}
+
+function describePlan(plan: BundledSkillPlan): string {
+  const steps = plan.locations.flatMap((location) => {
+    const step = PLAN_STEP_TEXT[location.action]
+    return step ? [`${step} ${location.path}`] : []
+  })
+  const shared = plan.locations.find((location) => location.role === 'shared')
+  const left = bundledSkillLeftLocations(plan).map(
+    (location) =>
+      `${plan.name}: would leave ${location.path}, ${LEAVE_REASON_TEXT[location.reason ?? 'unreadable']}`
+  )
+  const head =
+    steps.length > 0
+      ? [`${plan.name}: ${steps.join('; ')}`]
+      : left.length === 0
+        ? [`${plan.name}: already up to date (${shared?.path ?? plan.name})`]
+        : []
+  return [...head, ...left].join('\n')
+}
+
+// Why: only a copy the user can tell Orca to overwrite; a link or a colliding name stays.
+function forceWouldHelp(plans: readonly BundledSkillPlan[]): boolean {
+  return plans.some((plan) =>
+    bundledSkillLeftLocations(plan).some(
+      (location) =>
+        location.role === 'shared' &&
+        (location.reason === 'local-changes' || location.reason === 'not-installed-by-orca')
+    )
   )
 }
 
@@ -226,62 +241,77 @@ export function createSkillMutationHandler(verb: SkillMutationVerb): CommandHand
     const input = installInput(flags)
     const global = input.scope === 'global'
     const dryRun = flags.get('dry-run') === true
-    const fullPlan =
-      verb === 'update' || dryRun ? await planBundledOrcaSkills(skillNames, input) : null
-    const plan = verb === 'update' ? (fullPlan ?? []).filter(isInstalledHere) : fullPlan
-    const targetNames = plan && verb === 'update' ? plan.map((entry) => entry.name) : skillNames
-    const notInstalled = skillNames.filter((name) => !targetNames.includes(name))
+    const plans = verb === 'update' || dryRun ? await planBundledOrcaSkills(skillNames, input) : []
+    const verdictOf = new Map(plans.map((plan) => [plan.name, bundledSkillVerdict(plan)]))
+    // Why: update runs the same verdict the app's Update skills dialog shows; install adds.
+    const runNames =
+      verb === 'update'
+        ? skillNames.filter((name) => {
+            const verdict = verdictOf.get(name)
+            return verdict === 'update' || verdict === 'current'
+          })
+        : skillNames
+    const leftAsIs =
+      verb === 'update' ? plans.filter((plan) => verdictOf.get(plan.name) === 'attention') : []
+    const notInstalled =
+      verb === 'update' ? skillNames.filter((name) => verdictOf.get(name) === 'absent') : []
     // Why: --all names every bundled skill, so skipping the absent ones is expected there.
-    const reportNotInstalled = !selectsAll(flags)
-    if (reportNotInstalled && notInstalled.length > 0) {
+    const notInstalledLines = selectsAll(flags) ? [] : notInstalled.map(describeNotInstalled)
+    if (notInstalledLines.length > 0 || leftAsIs.length > 0) {
       process.exitCode = 1
     }
-    const notInstalledJson = notInstalled.length > 0 ? { notInstalled } : {}
-    const notInstalledLines = reportNotInstalled ? notInstalled.map(describeNotInstalled) : []
-    if (targetNames.length === 0 && !json) {
-      writeStdoutLine(
-        notInstalledLines.length > 0
-          ? notInstalledLines.join('\n')
-          : 'No Orca skills are installed here, so there is nothing to update. ' +
-              'Install one with: orca skills install --skill <name>'
-      )
-      return
+    const extraJson = {
+      ...(notInstalled.length > 0 ? { notInstalled } : {}),
+      ...(leftAsIs.length > 0 ? { leftAsIs } : {})
     }
+    const forceHint = forceWouldHelp(leftAsIs)
+      ? ['', 'Rerun with --force to replace a copy that has local changes.']
+      : []
 
     if (dryRun) {
+      const shown = plans.filter(
+        (plan) => verb === 'install' || verdictOf.get(plan.name) !== 'absent'
+      )
       writeStdoutLine(
         json
           ? JSON.stringify(
-              { skills: targetNames, global, executed: false, plan, ...notInstalledJson },
+              { skills: runNames, global, executed: false, plan: shown, ...extraJson },
               null,
               2
             )
-          : `${[...(plan ?? []).map(describePlan), ...notInstalledLines].join('\n')}\n\n` +
+          : shown.length === 0 && notInstalledLines.length === 0
+            ? NOTHING_TO_UPDATE
+            : `${[...shown.map(describePlan), ...notInstalledLines].join('\n')}\n\n` +
               `Rerun without --dry-run to ${verb} now.`
       )
       return
     }
 
-    const results = targetNames.length > 0 ? await installBundledOrcaSkills(targetNames, input) : []
-    const failed = results.some((result) => !landed(result))
-    if (failed) {
+    if (runNames.length === 0 && leftAsIs.length === 0 && !json) {
+      writeStdoutLine(
+        notInstalledLines.length > 0 ? notInstalledLines.join('\n') : NOTHING_TO_UPDATE
+      )
+      return
+    }
+    const results = runNames.length > 0 ? await installBundledOrcaSkills(runNames, input) : []
+    if (results.some((result) => !landed(result))) {
       process.exitCode = 1
     }
     if (json) {
       writeStdoutLine(
-        JSON.stringify(
-          { skills: targetNames, global, executed: true, results, ...notInstalledJson },
-          null,
-          2
-        )
+        JSON.stringify({ skills: runNames, global, executed: true, results, ...extraJson }, null, 2)
       )
       return
     }
-    const lines = [...results.map(describeBundledSkillInstallResult), ...notInstalledLines]
+    const lines = [
+      ...results.map(describeBundledSkillInstallResult),
+      ...leftAsIs.map(describePlan),
+      ...notInstalledLines
+    ]
     const replaceable = results.some(
       (result) => result.conflict?.kind === 'modified' || result.conflict?.kind === 'unowned'
     )
-    if (replaceable) {
+    if (replaceable || forceHint.length > 0) {
       lines.push('', 'Rerun with --force to replace a copy that has local changes.')
     }
     writeStdoutLine(lines.join('\n'))

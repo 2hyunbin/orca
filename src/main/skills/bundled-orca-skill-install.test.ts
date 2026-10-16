@@ -251,7 +251,12 @@ describe('bundled Orca skill install', () => {
 
       packages.value = [entry(NEW_TEXT, [OLD_DIGEST, NEW_DIGEST])]
       const [plan] = await planBundledOrcaSkills(['test-skill'], input)
-      expect(plan.placements).toEqual([{ path: claudeLink, action: 'link' }])
+      expect(plan.locations[1]).toEqual({
+        path: claudeLink,
+        role: 'agent',
+        action: 'link',
+        exists: true
+      })
       const [result] = await installBundledOrcaSkills(['test-skill'], input)
       expect(result.status).toBe('updated')
       expect(await readFile(join(claudeLink, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
@@ -288,39 +293,34 @@ describe('bundled Orca skill install', () => {
     const { home, canonical, input } = await fixture({ 'test-skill': { source: 'stablyai/orca' } })
     const claudePath = join(home, '.claude', 'skills', 'test-skill')
     await placeCopy(canonical, OLD_TEXT)
+    const actions = async () =>
+      (await planBundledOrcaSkills(['test-skill'], input))[0].locations.map((location) => [
+        location.path,
+        location.action,
+        location.reason
+      ])
 
-    expect(await planBundledOrcaSkills(['test-skill'], input)).toEqual([
-      {
-        name: 'test-skill',
-        canonicalPath: canonical,
-        state: 'unowned',
-        replacesCanonical: true,
-        placements: [{ path: claudePath, action: 'link' }],
-        willWrite: true
-      }
+    expect(await actions()).toEqual([
+      [canonical, 'update', undefined],
+      [claudePath, 'link', undefined]
     ])
 
     // Current shared copy but an old real folder in the agent home: still work to do.
     await writeFile(join(canonical, 'SKILL.md'), NEW_TEXT)
     await placeCopy(claudePath, OLD_TEXT)
-    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
-      state: 'unchanged',
-      replacesCanonical: false,
-      placements: [{ path: claudePath, action: 'replace' }],
-      willWrite: true
-    })
+    expect(await actions()).toEqual([
+      [canonical, 'keep', undefined],
+      [claudePath, 'replace', undefined]
+    ])
 
     await writeFile(join(claudePath, 'SKILL.md'), 'mine\n')
-    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
-      placements: [{ path: claudePath, action: 'skip' }],
-      willWrite: false
-    })
+    expect(await actions()).toEqual([
+      [canonical, 'keep', undefined],
+      [claudePath, 'leave', 'not-installed-by-orca']
+    ])
 
     await writeFile(join(canonical, 'SKILL.md'), 'mine\n')
-    expect((await planBundledOrcaSkills(['test-skill'], input))[0]).toMatchObject({
-      replacesCanonical: false,
-      willWrite: false
-    })
+    expect(await actions()).toEqual([[canonical, 'leave', 'not-installed-by-orca']])
     expect(await readFile(join(canonical, 'SKILL.md'), 'utf8')).toBe('mine\n')
   })
 

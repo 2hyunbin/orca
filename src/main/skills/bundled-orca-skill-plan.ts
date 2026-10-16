@@ -1,5 +1,12 @@
-import { join } from 'node:path'
+import { constants } from 'node:fs'
+import { access } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
+import type {
+  BundledSkillLeaveReason,
+  BundledSkillLocationPlan,
+  BundledSkillPlan
+} from '../../shared/skill-freshness'
 import {
   bundledInstallContext,
   prepareBundledSkill,
@@ -7,102 +14,170 @@ import {
   type BundledOrcaSkillInstallInput,
   type PreparedBundledSkill
 } from './bundled-orca-skill-install'
+import { BUNDLED_ORCA_SKILL_PACKAGES } from './bundled-orca-skill-packages'
 import { nativeSkillInstallFilesystem } from './skill-install-filesystem'
 import { inspectSkillCanonicalState, type SkillCanonicalState } from './skill-install-planner'
 import { skillInstallReplacementAllowed } from './skill-install-transaction-result'
 import { resolveSkillProviderDestinations } from './skill-provider-destinations'
 import { decideSkillProviderPlacement } from './skill-placement-decision'
 
-export type BundledOrcaSkillPlacementPlan = {
-  path: string
-  /** link: create one; replace: rewrite an owned copy; keep: already current; skip: not ours. */
-  action: 'link' | 'replace' | 'keep' | 'skip'
+const PLACEMENT_SKIP_REASONS: Readonly<Record<string, BundledSkillLeaveReason>> = {
+  'skill-placement-modified-copy': 'local-changes',
+  'skill-placement-unowned': 'not-installed-by-orca',
+  'skill-placement-unowned-link': 'link-not-managed'
 }
 
-export type BundledOrcaSkillPlan = {
-  name: string
-  canonicalPath: string
-  state: SkillCanonicalState['kind']
-  /** Whether a run would write the shared copy. */
-  replacesCanonical: boolean
-  placements: BundledOrcaSkillPlacementPlan[]
-  /** Whether a run would change anything on disk for this skill. */
-  willWrite: boolean
+function canonicalLeaveReason(state: SkillCanonicalState): BundledSkillLeaveReason {
+  switch (state.kind) {
+    case 'external-link':
+      return 'link-not-managed'
+    case 'name-collision':
+      return 'name-in-use'
+    case 'modified':
+    case 'unowned':
+      // Why: a copy Orca cannot hash is not one it can call edited or foreign.
+      if (state.digest === undefined) {
+        return 'unreadable'
+      }
+      return state.kind === 'modified' ? 'local-changes' : 'not-installed-by-orca'
+    // Why: replaceable states only land here when the caller cancels conflicts.
+    case 'missing':
+    case 'unchanged':
+    case 'clean-update':
+      return 'unreadable'
+  }
 }
 
-const PLAN_ACTION = {
-  create: 'link',
-  relink: 'link',
-  'replace-copy': 'replace',
-  keep: 'keep',
-  skip: 'skip'
-} as const
-
-async function planPlacement(
-  prepared: PreparedBundledSkill,
-  destination: { provider: string; rootPath: string }
-): Promise<BundledOrcaSkillPlacementPlan> {
-  const path = join(destination.rootPath, prepared.entry.name)
-  const decision = await decideSkillProviderPlacement({
-    canonicalPath: prepared.canonicalPath,
-    destinationPath: path,
-    provider: destination.provider,
-    previousReceipt: prepared.receipt,
-    packageDigest: prepared.manifest.packageDigest,
-    filesystem: prepared.request.filesystem ?? nativeSkillInstallFilesystem,
-    fileModes: prepared.manifest.files,
-    adoptableDigests: prepared.local.adoptableDigests
-  })
-  return { path, action: PLAN_ACTION[decision.action] }
+// Why: a write the transaction would attempt into a read-only folder fails half-way, so the
+// plan says so up front. Only the native filesystem can answer; WSL writes report on failure.
+async function writable(path: string, prepared: PreparedBundledSkill): Promise<boolean> {
+  if (prepared.request.filesystem) {
+    return true
+  }
+  for (let directory = dirname(path); ; directory = dirname(directory)) {
+    const result = await access(directory, constants.W_OK).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => (error.code === 'ENOENT' ? null : false)
+    )
+    if (result !== null || dirname(directory) === directory) {
+      return result ?? false
+    }
+  }
 }
 
-async function planBundledSkill(prepared: PreparedBundledSkill): Promise<BundledOrcaSkillPlan> {
+async function leaveIfReadOnly(
+  location: BundledSkillLocationPlan,
+  prepared: PreparedBundledSkill
+): Promise<BundledSkillLocationPlan> {
+  if (location.action === 'keep' || location.action === 'leave') {
+    return location
+  }
+  return (await writable(location.path, prepared))
+    ? location
+    : { ...location, action: 'leave', reason: 'read-only' }
+}
+
+async function planSharedCopy(prepared: PreparedBundledSkill): Promise<BundledSkillLocationPlan> {
   const state = await inspectSkillCanonicalState({
     canonicalPath: prepared.canonicalPath,
     manifest: prepared.manifest,
     receipt: prepared.receipt,
     filesystem: prepared.request.filesystem
   })
-  const replacesCanonical =
-    state.kind !== 'unchanged' &&
+  const base = {
+    path: prepared.canonicalPath,
+    role: 'shared' as const,
+    exists: state.kind !== 'missing'
+  }
+  if (state.kind === 'unchanged') {
+    return { ...base, action: 'keep' }
+  }
+  const replaceable =
     skillInstallReplacementAllowed(state, prepared.local) &&
     // Same refusal the transaction makes before it would move an unreadable copy aside.
     (state.kind === 'missing' || ('digest' in state && state.digest !== undefined))
-  const canonicalReady = state.kind === 'unchanged' || replacesCanonical
-  const { request } = prepared
-  const destinations = canonicalReady
-    ? resolveSkillProviderDestinations({
-        scope: request.scope,
-        homeDirectory: request.homeDirectory,
-        workspaceDirectory: request.workspaceDirectory,
-        detectedProviders: request.detectedProviders.filter(isSkillInstallProviderId),
-        providerRootOverrides:
-          request.scope === 'global' ? request.providerRootOverrides : undefined
-      }).filter((destination) => !destination.readsCanonicalRoot)
-    : []
-  const placements = await Promise.all(
-    destinations.map((destination) => planPlacement(prepared, destination))
+  if (!replaceable) {
+    return { ...base, action: 'leave', reason: canonicalLeaveReason(state) }
+  }
+  return leaveIfReadOnly(
+    { ...base, action: state.kind === 'missing' ? 'install' : 'update' },
+    prepared
   )
-  return {
-    name: prepared.entry.name,
+}
+
+async function planAgentCopy(
+  prepared: PreparedBundledSkill,
+  rootPath: string,
+  provider: string
+): Promise<BundledSkillLocationPlan> {
+  const path = join(rootPath, prepared.entry.name)
+  const decision = await decideSkillProviderPlacement({
     canonicalPath: prepared.canonicalPath,
-    state: state.kind,
-    replacesCanonical,
-    placements,
-    willWrite:
-      replacesCanonical ||
-      placements.some((placement) => placement.action === 'link' || placement.action === 'replace')
+    destinationPath: path,
+    provider,
+    previousReceipt: prepared.receipt,
+    packageDigest: prepared.manifest.packageDigest,
+    filesystem: prepared.request.filesystem ?? nativeSkillInstallFilesystem,
+    fileModes: prepared.manifest.files,
+    adoptableDigests: prepared.local.adoptableDigests
+  })
+  const base = { path, role: 'agent' as const, exists: decision.action !== 'create' }
+  switch (decision.action) {
+    case 'create':
+    case 'relink':
+      return leaveIfReadOnly({ ...base, action: 'link' }, prepared)
+    case 'replace-copy':
+      return leaveIfReadOnly({ ...base, action: 'replace' }, prepared)
+    case 'keep':
+      return { ...base, action: 'keep' }
+    case 'skip':
+      return {
+        ...base,
+        action: 'leave',
+        reason: PLACEMENT_SKIP_REASONS[decision.code] ?? 'not-installed-by-orca'
+      }
   }
 }
 
-/** What a run would do, read without writing anything. */
+async function planBundledSkill(prepared: PreparedBundledSkill): Promise<BundledSkillPlan> {
+  const shared = await planSharedCopy(prepared)
+  const { request } = prepared
+  // Why: agent folders are only touched once the shared copy they point at is Orca's.
+  const destinations =
+    shared.action === 'leave'
+      ? []
+      : resolveSkillProviderDestinations({
+          scope: request.scope,
+          homeDirectory: request.homeDirectory,
+          workspaceDirectory: request.workspaceDirectory,
+          detectedProviders: request.detectedProviders.filter(isSkillInstallProviderId),
+          providerRootOverrides:
+            request.scope === 'global' ? request.providerRootOverrides : undefined
+        }).filter((destination) => !destination.readsCanonicalRoot)
+  const agents = await Promise.all(
+    destinations.map((destination) =>
+      planAgentCopy(prepared, destination.rootPath, destination.provider)
+    )
+  )
+  return {
+    name: prepared.entry.name,
+    packageDigest: prepared.manifest.packageDigest,
+    locations: [shared, ...agents]
+  }
+}
+
+/** What an install would do to each location, read without writing anything. */
 export async function planBundledOrcaSkills(
   names: readonly string[],
   input: BundledOrcaSkillInstallInput
-): Promise<BundledOrcaSkillPlan[]> {
+): Promise<BundledSkillPlan[]> {
   const entries = requireBundledPackages(names)
   const context = await bundledInstallContext(input)
   return Promise.all(
     entries.map(async (entry) => planBundledSkill(await prepareBundledSkill(context, entry)))
   )
+}
+
+export function bundledOrcaSkillNames(): string[] {
+  return BUNDLED_ORCA_SKILL_PACKAGES.map((entry) => entry.name)
 }
