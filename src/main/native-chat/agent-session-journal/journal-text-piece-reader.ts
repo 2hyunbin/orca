@@ -91,13 +91,13 @@ WHERE session_id = ? AND epoch = ? AND generation = ? AND seq = ?`)
     }
     const lineage = cached ? reusableParent(cached, target) : null
     let decoded: DecodedText | null = cached && lineage ? { ...cached, lineage } : null
-    // SQLite owns the transient reverse walk; retain only the active path's compact metadata.
+    // Child-first lookup keeps each ancestor step on its full primary key instead of scanning the generation.
     const records = decoded && record ? [record] : this.db.prepare(`WITH RECURSIVE path AS (
  SELECT seq, parent_seq, prefix_length, prefix_units, text_length, text_units, suffix
  FROM journal_text_pieces WHERE session_id = ? AND epoch = ? AND generation = ? AND seq = ?
  UNION ALL
  SELECT p.seq, p.parent_seq, p.prefix_length, p.prefix_units, p.text_length, p.text_units, p.suffix
- FROM path child JOIN journal_text_pieces p ON p.session_id = ? AND p.epoch = ?
+ FROM path child CROSS JOIN journal_text_pieces p ON p.session_id = ? AND p.epoch = ?
  AND p.generation = ? AND p.seq = child.parent_seq AND p.seq < child.seq
 ) SELECT seq, parent_seq, prefix_length, prefix_units, text_length, text_units, suffix
 FROM path ORDER BY seq`).iterate(sessionId, epoch, generation, sequence, sessionId, epoch, generation)
