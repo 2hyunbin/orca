@@ -7,6 +7,7 @@ const SURVIVING_ID = 'repo-1::/repos/one/kept'
 
 /** Only the maps this test asserts on; the cleanup reads them defensively. */
 function buildState(): AppState {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the cleanup reads only the maps listed here and tolerates the rest being absent.
   return {
     worktreesByRepo: { 'repo-1': [] },
     tabsByWorktree: { [REMOVED_ID]: [], [SURVIVING_ID]: [] },

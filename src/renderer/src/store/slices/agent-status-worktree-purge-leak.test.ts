@@ -15,6 +15,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { AppState } from '../types'
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import type * as AgentStatusModule from '@/lib/agent-status'
 
 vi.mock('sonner', () => ({
@@ -66,6 +67,23 @@ function liveEntry(paneKey: string): AgentStatusEntry {
     stateStartedAt: 0,
     paneKey,
     stateHistory: []
+  }
+}
+
+function launchEntry(): AppState['agentLaunchConfigByPaneKey'][string] {
+  return { launchConfig: { agentArgs: '', agentEnv: {} }, registeredAt: 0, identity: {} }
+}
+
+function sleepingRecord(paneKey: string, worktreeId: string): SleepingAgentSessionRecord {
+  return {
+    paneKey,
+    worktreeId,
+    agent: 'claude',
+    providerSession: { key: 'session_id', id: paneKey },
+    prompt: '',
+    state: 'working',
+    capturedAt: 1,
+    updatedAt: 1
   }
 }
 
@@ -161,13 +179,13 @@ describe('bulk worktree purge evicts pane-scoped agent/unread/input maps (leak r
       },
       tabsByWorktree: { [WT]: [], [OTHER]: [] },
       agentLaunchConfigByPaneKey: {
-        [ORPHAN_PANE]: { launchConfig: {}, registeredAt: 0, identity: {} },
-        [OTHER_PANE]: { launchConfig: {}, registeredAt: 0, identity: {} }
-      } as unknown as AppState['agentLaunchConfigByPaneKey'],
+        [ORPHAN_PANE]: launchEntry(),
+        [OTHER_PANE]: launchEntry()
+      },
       sleepingAgentSessionsByPaneKey: {
-        [ORPHAN_PANE]: { paneKey: ORPHAN_PANE, worktreeId: WT },
-        [OTHER_PANE]: { paneKey: OTHER_PANE, worktreeId: OTHER }
-      } as unknown as AppState['sleepingAgentSessionsByPaneKey']
+        [ORPHAN_PANE]: sleepingRecord(ORPHAN_PANE, WT),
+        [OTHER_PANE]: sleepingRecord(OTHER_PANE, OTHER)
+      }
     })
 
     store.getState().purgeWorktreeTerminalState([WT])
