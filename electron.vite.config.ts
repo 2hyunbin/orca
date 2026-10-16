@@ -233,6 +233,12 @@ export const electronViteConfig: UserConfig = {
       // bundle never references maps that packaging strips out. Release CI
       // uploads them so minified crash traces stay decodable.
       sourcemap: 'hidden',
+      // PR fixtures discard maps; official releases must always retain them.
+      ...(process.env.ORCA_CI_MAIN_SOURCEMAPS === '0' &&
+      orcaBuildIdentity !== 'stable' &&
+      orcaBuildIdentity !== 'rc'
+        ? { sourcemap: false }
+        : {}),
       // Why: daemon-entry.js is asar-unpacked so child_process.fork() can
       // execute it from disk. Node's module resolution from the unpacked
       // directory cannot reach into app.asar; startup-critical pure JS must

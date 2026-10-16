@@ -150,6 +150,7 @@ export type LayoutRefusalCode =
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
+  | 'tab_exists'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }

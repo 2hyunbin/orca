@@ -191,6 +191,43 @@ describe('layout.apply', () => {
     expect(applyLayoutCommand).toHaveBeenCalledWith(ratios, ['local'])
   })
 
+  it('takes a terminal tab create under valid window ids, and only an activation initial', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const create = {
+      type: 'createTerminalTab',
+      workspace: WORKTREE,
+      tabId: 'tab-2',
+      leafId: '22222222-2222-4222-8222-222222222222'
+    }
+    const accepts = (command: Record<string, unknown>): boolean | undefined =>
+      apply?.params?.safeParse({ command }).success
+
+    expect(
+      apply?.params?.parse({
+        command: { ...create, creation: { launchAgent: 'claude', startupCwd: '/work' }, index: 0 }
+      })
+    ).toEqual({ command: { ...create, creation: { launchAgent: 'claude', startupCwd: '/work' } } })
+    expect(accepts({ ...create, initial: 'activation' })).toBe(true)
+    expect(accepts({ ...create, initial: 'restore' })).toBe(false)
+    expect(accepts({ ...create, tabId: 'web:surface' })).toBe(false)
+    expect(accepts({ ...create, leafId: 'leaf-2' })).toBe(false)
+    expect(accepts({ ...create, creation: { launchAgent: 'not-an-agent' } })).toBe(false)
+  })
+
+  it('creates a new tab in the workspace’s own partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const create = {
+      type: 'createTerminalTab',
+      workspace: WORKTREE,
+      tabId: 'tab-new',
+      leafId: '22222222-2222-4222-8222-222222222222'
+    } as const
+
+    await runtime.applyLayoutCommand(create)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(create, ['local'])
+  })
+
   it('applies to the partition that holds the tab, such as an SSH host’s', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
 

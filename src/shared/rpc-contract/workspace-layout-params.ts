@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { isTerminalLeafId } from '../stable-pane-id'
+import { isValidHostTerminalTabId } from '../terminal-tab-id'
+import type { TuiAgent } from '../tui-agent'
+import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 
@@ -90,11 +94,38 @@ const CloseTabsCommand = z.object({
 })
 
 /**
+ * A terminal tab under the ids the window drew it with: its callers and the pane's terminal need
+ * them at once. Main refuses an id another tab holds; the same create again changes nothing.
+ */
+const CreateTerminalTabCommand = z.object({
+  type: z.literal('createTerminalTab'),
+  workspace: OnPane.workspace,
+  tabId: z.string().refine(isValidHostTerminalTabId),
+  leafId: z.string().refine(isTerminalLeafId),
+  groupId: z.string().min(1).optional(),
+  viewMode: z.enum(['terminal', 'chat']).optional(),
+  creation: z
+    .object({
+      defaultTitle: z.string().min(1).optional(),
+      shellOverride: z.string().min(1).optional(),
+      startupCwd: z.string().min(1).optional(),
+      forceHostRuntime: z.literal(true).optional(),
+      launchAgent: z
+        .custom<TuiAgent>((value) => typeof value === 'string' && isTuiAgent(value))
+        .optional()
+    })
+    .optional(),
+  /** Only into a workspace with no tab in main's copy; otherwise nothing is created. */
+  initial: z.literal('activation').optional()
+})
+
+/**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
- * names what it acts on; main mints every new id, so no new id is accepted here.
+ * names what it acts on; main mints every new id but a created tab's (see CreateTerminalTabCommand).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
+    CreateTerminalTabCommand,
     SplitPaneCommand,
     ClosePaneCommand,
     RenamePaneCommand,

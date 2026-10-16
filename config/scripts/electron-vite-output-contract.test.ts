@@ -79,6 +79,34 @@ const electronBuilderConfig = require('../electron-builder.config.cjs')
 const { FileMatcher } = require('app-builder-lib/out/fileMatcher')
 
 describe('Electron Vite output contract', () => {
+  it('skips main maps only for explicit check builds and always keeps official release maps', async () => {
+    try {
+      for (const [setting, identity, expected] of [
+        [undefined, undefined, 'hidden'],
+        ['false', undefined, 'hidden'],
+        ['1', undefined, 'hidden'],
+        ['0', undefined, false],
+        ['0', 'stable', 'hidden'],
+        ['0', 'rc', 'hidden']
+      ] as const) {
+        vi.stubEnv('ORCA_CI_MAIN_SOURCEMAPS', setting)
+        vi.stubEnv('ORCA_BUILD_IDENTITY', identity)
+        vi.resetModules()
+        const { electronViteConfig: configured } = await import('../../electron.vite.config')
+        expect(configured.main?.build?.sourcemap).toBe(expected)
+        expect(configured.main?.build?.minify).toBe(electronViteConfig.main?.build?.minify)
+        expect(configured.main?.build?.rollupOptions?.input).toEqual(
+          electronViteConfig.main?.build?.rollupOptions?.input
+        )
+        expect(configured.renderer?.build).toEqual(electronViteConfig.renderer?.build)
+        expect(configured.preload?.build).toEqual(electronViteConfig.preload?.build)
+      }
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
   it('can skip main source maps during development without changing build output settings', () => {
     try {
       vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', undefined)

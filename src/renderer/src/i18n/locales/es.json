@@ -12,7 +12,14 @@
     }
   },
   "githubChecks": {
-    "retrying": "Reintentando…"
+    "retrying": "Reintentando…",
+    "logsNotYetAvailable": "La salida del registro aún no está disponible.",
+    "logsLoadErrorDetails": "No se pudieron cargar los registros. Usa Actualizar para reintentarlo.",
+    "logsLoadErrorSidebar": "No se pudieron cargar los registros. Abre Ver detalles completos y usa Actualizar para reintentarlo.",
+    "logsEmpty": "No se devolvió ninguna salida del registro.",
+    "logsNotRequested": "No se solicitó el extracto del registro. Se cargan como máximo cinco extractos de trabajos fallidos por comprobación.",
+    "noLogExcerpt": "No hay ningún extracto del registro disponible.",
+    "refreshingDetails": "Actualizando los detalles de la comprobación…"
   },
   "settings": {
     "chat": {
@@ -13298,7 +13305,6 @@
                 "a6de3e5a20": "Limpiar comentarios en cola",
                 "49ea0937e4": "Agregar comentario a la lista de resolución",
                 "9fecebb29d": "Agregar",
-                "b8c4e2a1f7": "Ver logs completos",
                 "f8a2c91d04": "Poner en cola para el agente",
                 "b4e8a1c902": "En cola",
                 "7c1f0a2b11": "Abrir",
