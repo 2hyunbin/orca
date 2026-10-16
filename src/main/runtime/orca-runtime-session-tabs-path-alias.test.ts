@@ -299,7 +299,7 @@ describe('session tab workspace path aliases', () => {
         expect.objectContaining({
           result: expect.objectContaining({
             type: 'updated',
-            worktree: WORKTREE,
+            worktree: ALIAS,
             tabs: expect.arrayContaining([expect.objectContaining({ id: TAB })])
           })
         })
@@ -310,6 +310,37 @@ describe('session tab workspace path aliases', () => {
         result: expect.objectContaining({ type: 'updated', worktree: ALIAS, tabs: [] })
       })
     )
+    runtime.cleanupSubscriptionsForConnection('alias-connection')
+  })
+
+  // Why: clients file frames by their `worktree`, so one stream switching spellings splits a
+  // workspace's tabs across two keys.
+  it('names an early alias subscriber stream by one spelling for its whole life', async () => {
+    const runtime = new OrcaRuntimeService()
+    runtime.attachWindow(1)
+    const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
+    const frames: { type?: string; worktree?: string; tabs?: unknown[] }[] = []
+    await dispatcher.dispatchStreaming(
+      {
+        id: 'sub-early',
+        authToken: 'token',
+        method: 'session.tabs.subscribe',
+        params: { worktree: `id:${ALIAS}` }
+      },
+      (message) => {
+        const result = JSON.parse(message).result
+        if (result?.type === 'snapshot' || result?.type === 'updated') {
+          frames.push(result)
+        }
+      },
+      { connectionId: 'alias-connection' }
+    )
+
+    publishGraph(runtime)
+
+    await vi.waitFor(() => expect(frames.some((frame) => frame.type === 'updated')).toBe(true))
+    expect(frames.map((frame) => frame.worktree)).toEqual(frames.map(() => ALIAS))
+    expect(frames.at(-1)?.tabs).toContainEqual(expect.objectContaining({ id: TAB }))
     runtime.cleanupSubscriptionsForConnection('alias-connection')
   })
 
