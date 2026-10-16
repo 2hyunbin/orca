@@ -9,7 +9,8 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import type { SecretStore } from '../../shared/secret-store'
 import { writeSecureFile } from '../../shared/secure-file'
@@ -47,6 +48,7 @@ export type OrcadSecretStorePrepareOptions = {
   env?: NodeJS.ProcessEnv
   keyring?: OrcadOsKeyring | null
   machineIdentity?: () => string | null
+  isTemporaryProfile?: (userDataPath: string) => boolean
 }
 
 export type OrcadSecretStore = SecretStore & {
@@ -95,6 +97,12 @@ function decodeMasterKey(encoded: string): Buffer | null {
 function keyringAccount(userDataPath: string): string {
   // Why per profile: two orcad profiles under one account must not share or clobber a key.
   return `profile-${createHash('sha256').update(resolve(userDataPath)).digest('hex').slice(0, 16)}`
+}
+
+/** A throwaway profile (tests, smoke runs) must not leave an item in the user's keyring. */
+function isTemporaryProfile(userDataPath: string): boolean {
+  const fromTemp = relative(resolve(tmpdir()), resolve(userDataPath))
+  return !fromTemp.startsWith('..') && !isAbsolute(fromTemp)
 }
 
 async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<StoreState> {
@@ -154,7 +162,10 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
     return { kind: 'ready', key, gap: describeOrcadHostKeyGap(platform, stored.hostBound) }
   }
 
-  if (keyring) {
+  const mayCreateKeyringKey =
+    env[ORCAD_PLAINTEXT_SECRETS_ENV] !== 'file' &&
+    !(options.isTemporaryProfile ?? isTemporaryProfile)(options.userDataPath)
+  if (keyring && mayCreateKeyringKey) {
     const account = keyringAccount(options.userDataPath)
     let found = await keyring.lookup(account)
     if (found.kind === 'missing') {

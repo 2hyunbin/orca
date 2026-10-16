@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
   closeSync,
@@ -50,7 +51,8 @@ export function writeCredentialFileAtomic(
   data: Buffer,
   shouldPublish?: () => boolean
 ): boolean {
-  const tempPath = `${path}.tmp`
+  // Why unique: a concurrent writer sharing one temp name could truncate the bytes we publish.
+  const tempPath = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   let handle: number | null = null
   try {
     handle = openSync(tempPath, 'w', 0o600)

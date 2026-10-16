@@ -17,6 +17,10 @@ profile directory (`$ORCA_USER_DATA`, `$XDG_DATA_HOME/Orca`, or `~/.orca`):
 | Linux | The Secret Service keyring (`secret-tool`) if the session has a D-Bus session bus and a keyring answers |
 | Otherwise, and on Windows | `orcad-secret-store.json` itself, mode `0600` (an owner-only ACL on Windows), mixed with the machine ID (`/etc/machine-id`, macOS hardware UUID, Windows `MachineGuid`) |
 
+The keyring is never used for a profile under the system temp directory (tests and smoke runs),
+or when `ORCA_HEADLESS_SECRET_STORE=file` is set. That setting suits a macOS host reached only
+over SSH, where the login Keychain is often locked.
+
 Windows does not use DPAPI. Reaching it from Node takes PowerShell or a native addon, and running
 PowerShell for each operation is an EDR signal.
 

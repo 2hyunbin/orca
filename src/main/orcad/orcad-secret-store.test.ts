@@ -59,6 +59,7 @@ describe('createOrcadSecretStore', () => {
       keyring?: OrcadOsKeyring | null
       machine?: string | null
       env?: NodeJS.ProcessEnv
+      temporaryProfile?: boolean
     } = {}
   ) => {
     const store = createOrcadSecretStore()
@@ -67,7 +68,8 @@ describe('createOrcadSecretStore', () => {
       platform: 'linux',
       env: options.env ?? {},
       keyring: options.keyring ?? null,
-      machineIdentity: () => (options.machine === undefined ? MACHINE_A : options.machine)
+      machineIdentity: () => (options.machine === undefined ? MACHINE_A : options.machine),
+      isTemporaryProfile: () => options.temporaryProfile ?? false
     })
     return { store, ready }
   }
@@ -136,6 +138,16 @@ describe('createOrcadSecretStore', () => {
 
     keyring.failure = null
     expect((await prepare({ keyring })).store.decryptString(sealed)).toBe('lin_api_secret')
+  })
+
+  it('never creates a keyring item for a temporary profile or when told to use the file', async () => {
+    const keyring = fakeKeyring()
+    const temporary = await prepare({ keyring, temporaryProfile: true })
+    expect(temporary.store.describeProtectionGap()).toContain('private profile directory')
+    expect(keyring.items.size).toBe(0)
+    rmSync(join(userDataPath, ORCAD_SECRET_STATE_FILE))
+    await prepare({ keyring, env: { ORCA_HEADLESS_SECRET_STORE: 'file' } })
+    expect(keyring.items.size).toBe(0)
   })
 
   it('falls back to the profile key when the keyring cannot store one', async () => {

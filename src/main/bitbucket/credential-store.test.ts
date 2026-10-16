@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs'
 import type * as Fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import type * as Os from 'node:os'
@@ -235,7 +235,7 @@ describe('Bitbucket credential store', () => {
     ).toThrow(/disk full/)
 
     expect(readFileSync(join(tempHome, '.orca', 'bitbucket-credential.enc'))).toEqual(before)
-    expect(existsSync(join(tempHome, '.orca', 'bitbucket-credential.enc.tmp'))).toBe(false)
+    expect(readdirSync(join(tempHome, '.orca')).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('authenticates from the envelope when metadata is stale (STA-3941)', async () => {
