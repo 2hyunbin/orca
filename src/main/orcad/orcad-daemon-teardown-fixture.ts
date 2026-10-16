@@ -8,7 +8,10 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
+import { parseLinuxStartTicks } from '../agent-hooks/managed-hook-owner-identity'
+import { parseLinuxProcessState } from '../daemon/daemon-incarnation-evidence'
 import { readDaemonPidRecord } from '../daemon/daemon-endpoint-incarnation'
+import { readLinuxStat } from '../daemon/daemon-process-inspection'
 import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
 import type { spawnProcess } from '@orca/process-host'
 
@@ -16,6 +19,12 @@ const EXIT_WAIT_MS = 10_000
 const POLL_MS = 50
 const REMOVE_ATTEMPTS = 8
 const REMOVE_RETRY_MS = 150
+
+type ProcessExitDependencies = {
+  platform?: NodeJS.Platform
+  signalProcess?: (pid: number) => void
+  readStat?: typeof readLinuxStat
+}
 
 const sleep = (ms: number): Promise<void> => new Promise((settle) => setTimeout(settle, ms))
 
@@ -28,24 +37,56 @@ function errorCode(error: unknown): string | undefined {
     : undefined
 }
 
-function hasExited(pid: number): boolean {
+async function hasExited(pid: number, dependencies: ProcessExitDependencies): Promise<boolean> {
+  const signalProcess = dependencies.signalProcess ?? ((pid) => process.kill(pid, 0))
   try {
-    process.kill(pid, 0)
-    return false
+    signalProcess(pid)
   } catch (error) {
     // EPERM still proves the process exists.
     return errorCode(error) === 'ESRCH'
   }
+  if ((dependencies.platform ?? process.platform) !== 'linux') {
+    return false
+  }
+  const stat = await (dependencies.readStat ?? readLinuxStat)(pid)
+  // An unreaped zombie has exited even though kill(pid, 0) still succeeds.
+  return (
+    stat.status === 'present' &&
+    stat.value.startsWith(`${pid} (`) &&
+    /^\d+$/.test(parseLinuxStartTicks(stat.value) ?? '') &&
+    parseLinuxProcessState(stat.value) === 'Z'
+  )
 }
 
-/** Waits, bounded, until the OS no longer knows every pid. */
-export async function waitForProcessExit(pids: Iterable<number>): Promise<void> {
-  const pending = [...pids]
+/** Requires process exit; Linux zombies have exited but still await their parent's reaper. */
+export async function waitForProcessExit(
+  pids: Iterable<number>,
+  dependencies: ProcessExitDependencies = {}
+): Promise<void> {
+  let remaining = [...pids]
   const deadline = Date.now() + EXIT_WAIT_MS
-  while (pending.some((pid) => !hasExited(pid)) && Date.now() < deadline) {
-    await sleep(POLL_MS)
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<null>((settle) => {
+    deadlineTimer = setTimeout(() => settle(null), EXIT_WAIT_MS)
+  })
+  try {
+    while (remaining.length > 0) {
+      const exited = await Promise.race([
+        Promise.all(remaining.map((pid) => hasExited(pid, dependencies))),
+        timedOut
+      ])
+      if (exited === null) {
+        break
+      }
+      remaining = remaining.filter((_pid, index) => !exited[index])
+      if (remaining.length === 0 || Date.now() >= deadline) {
+        break
+      }
+      await sleep(Math.min(POLL_MS, Math.max(0, deadline - Date.now())))
+    }
+  } finally {
+    clearTimeout(deadlineTimer)
   }
-  const remaining = pending.filter((pid) => !hasExited(pid))
   if (remaining.length > 0) {
     throw new Error(`Processes did not exit: ${remaining.join(', ')}`)
   }
