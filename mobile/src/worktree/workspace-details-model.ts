@@ -1,5 +1,8 @@
 import type { CheckStatus } from '../../../src/shared/github/pull-request-types'
-import { getWorkspaceAttachmentKey } from '../../../src/shared/workspace-attachment-normalization'
+import {
+  getWorkspaceAttachmentKey,
+  getWorkspaceAttachmentUrlScope
+} from '../../../src/shared/workspace-attachment-normalization'
 import {
   getWorkspaceAttachments,
   workspaceAttachmentReferenceLabel
@@ -55,7 +58,7 @@ function toDetailLink(item: WorkspaceAttachment): WorkspaceDetailLink {
  */
 export function buildWorkspaceDetailLinks(row: Worktree): WorkspaceDetailLink[] {
   const pr = row.linkedPR
-  const links = getWorkspaceAttachments({
+  const items = getWorkspaceAttachments({
     // Rows arrive unvalidated; the shared reader drops entries it cannot place.
     linkedItems: row.linkedItems,
     linkedPR: pr?.number ?? null,
@@ -63,22 +66,51 @@ export function buildWorkspaceDetailLinks(row: Worktree): WorkspaceDetailLink[] 
     linkedGitLabMR: row.linkedGitLabMR ?? null,
     linkedGitLabIssue: row.linkedGitLabIssue ?? null,
     linkedLinearIssue: optionalText(row.linkedLinearIssue) ?? null
-  }).map((item): WorkspaceDetailLink => {
-    const link = toDetailLink(item)
-    const isBranchPR =
-      pr && link.provider === 'github' && link.type === 'pr' && link.number === pr.number
-    return isBranchPR
-      ? {
-          ...link,
-          title: optionalText(pr.title) ?? link.title,
-          url: webUrl(pr.url) ?? link.url,
-          state: pr.state,
-          checks: pr.checksStatus
-        }
-      : link
   })
+  const links = items.map(toDetailLink)
+  if (pr) {
+    const branchPR: WorkspaceAttachment = {
+      provider: 'github',
+      type: 'pr',
+      number: pr.number,
+      url: webUrl(pr.url)
+    }
+    const enrich = (link: WorkspaceDetailLink): WorkspaceDetailLink => ({
+      ...link,
+      title: optionalText(pr.title) ?? link.title,
+      url: branchPR.url ?? link.url,
+      state: pr.state,
+      checks: pr.checksStatus
+    })
+    const index = items.findIndex((item) => isBranchPRAttachment(item, branchPR, row.repoId))
+    if (index !== -1) {
+      links[index] = enrich(links[index])
+    } else {
+      // A same-numbered PR from another repo absorbed the legacy entry; the branch PR still shows.
+      links.push(enrich(toDetailLink(branchPR)))
+    }
+  }
   // Stable: the host's own order holds within reviews and within tasks.
   return links.sort((a, b) => Number(a.type === 'issue') - Number(b.type === 'issue'))
+}
+
+// Same number is not enough: a linked PR from another repo must not take the branch PR's details.
+function isBranchPRAttachment(
+  item: WorkspaceAttachment,
+  branchPR: WorkspaceAttachment,
+  repoId: string
+): boolean {
+  if (item.provider !== 'github' || item.type !== 'pr' || item.number !== branchPR.number) {
+    return false
+  }
+  if (item.repoId && item.repoId !== repoId) {
+    return false
+  }
+  return (
+    !item.url ||
+    !branchPR.url ||
+    getWorkspaceAttachmentUrlScope(item) === getWorkspaceAttachmentUrlScope(branchPR)
+  )
 }
 
 export function buildWorkspaceOrigin(row: Worktree): WorkspaceOrigin | null {

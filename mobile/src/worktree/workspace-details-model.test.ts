@@ -66,7 +66,7 @@ describe('buildWorkspaceDetailLinks', () => {
     expect(links[0]).toMatchObject({ label: 'Issue #4', title: 'Bug' })
   })
 
-  it("carries the row's PR state, title, link and checks onto its entry, matched by number", () => {
+  it("carries the row's PR state, title, link and checks onto its entry", () => {
     const [pr, other] = buildWorkspaceDetailLinks(
       row({
         linkedItems: [{ provider: 'github', type: 'pr', number: 9, title: 'Older linked PR' }],
@@ -90,6 +90,59 @@ describe('buildWorkspaceDetailLinks', () => {
       state: 'merged',
       checks: 'failure'
     })
+  })
+
+  it('enriches a linked entry for the same repo and PR', () => {
+    const links = buildWorkspaceDetailLinks(
+      row({
+        linkedItems: [
+          {
+            provider: 'github',
+            type: 'pr',
+            number: 12,
+            repoId: 'repo',
+            url: 'https://github.com/o/r/pull/12'
+          }
+        ],
+        linkedPR: {
+          number: 12,
+          state: 'open',
+          title: 'Branch PR',
+          url: 'https://github.com/o/r/pull/12'
+        }
+      })
+    )
+    expect(links).toEqual([
+      expect.objectContaining({ label: 'PR #12', title: 'Branch PR', state: 'open' })
+    ])
+  })
+
+  it('keeps a same-numbered PR from another repo apart from the branch PR', () => {
+    const links = buildWorkspaceDetailLinks(
+      row({
+        linkedItems: [
+          {
+            provider: 'github',
+            type: 'pr',
+            number: 12,
+            title: 'Other repo',
+            url: 'https://github.com/o/other/pull/12'
+          },
+          { provider: 'github', type: 'pr', number: 12, title: 'Other id', repoId: 'other-repo' }
+        ],
+        linkedPR: {
+          number: 12,
+          state: 'merged',
+          title: 'Branch PR',
+          url: 'https://github.com/o/r/pull/12'
+        }
+      })
+    )
+    expect(links.map((link) => [link.title, link.url, link.state])).toEqual([
+      ['Other repo', 'https://github.com/o/other/pull/12', undefined],
+      ['Other id', undefined, undefined],
+      ['Branch PR', 'https://github.com/o/r/pull/12', 'merged']
+    ])
   })
 
   it('never opens a non-web link the host sends for the branch PR', () => {
