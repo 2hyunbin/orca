@@ -118,12 +118,10 @@ export function createSupportFollowsHostSetting(
 }
 
 /** This host's resolved preference; session audience remains independent of new launches. */
-export async function isStructuredNativeChatDefaultFor(
+export function isStructuredNativeChatDefaultFor(
   runtime: Parameters<typeof readAgentLaunchModeSettings>[0],
   agent: string
-): Promise<boolean> {
-  const settings = await readAgentLaunchModeSettings(runtime, agent)
-  return isTuiAgent(agent)
-    ? isNativeChatDefaultFor(settings, agent, null)
-    : isNativeChatEnabled(settings)
+): boolean {
+  const settings = readAgentLaunchModeSettings(runtime)
+  return isTuiAgent(agent) ? isNativeChatDefaultFor(settings, agent) : isNativeChatEnabled(settings)
 }

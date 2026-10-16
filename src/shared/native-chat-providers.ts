@@ -1,7 +1,6 @@
 /**
- * Chat providers: which agents open as a chat when Chat UI is on. Only the user's own choices are
- * saved; an agent never chosen starts on when it is Claude or Codex, or when its CLI is installed
- * on this computer. Whether an agent appears at all stays with Settings → Agents.
+ * Unchosen agents route to chat when Chat UI is on; only explicit choices are saved.
+ * Settings displays unchosen non-built-ins from this computer's native installation inventory.
  */
 
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
@@ -26,20 +25,16 @@ export function normalizeNativeChatProviderChoices(value: unknown): NativeChatPr
   return choices
 }
 
-/**
- * Whether `agent` opens as a chat. `installedHere` lists this computer's detected agents; null
- * while it has not loaded; only known native installations enable other unchosen providers.
- */
-export function isNativeChatProviderOn(
+/** The switch's displayed value, independent of launch feasibility. */
+export function isNativeChatProviderDisplayedOn(
   settings: Partial<NativeChatProviderSettings> | null | undefined,
   agent: TuiAgent,
   installedHere: readonly TuiAgent[] | null
 ): boolean {
-  const chosen = settings?.nativeChatProviders?.[agent]
-  if (chosen !== undefined) {
-    return chosen
-  }
-  return isAgentSessionHandleProvider(agent) || installedHere?.includes(agent) === true
+  return (
+    settings?.nativeChatProviders?.[agent] ??
+    (isAgentSessionHandleProvider(agent) || installedHere?.includes(agent) === true)
+  )
 }
 
 export function buildNativeChatProviderUpdate(

@@ -106,7 +106,6 @@ describe('buildAgentLaunchRouteInput', () => {
     expect(input).toEqual({
       agent: 'codex',
       settings: STRUCTURED_SETTINGS,
-      installedHere: null,
       executionHostId: 'local',
       hostCapabilities: [STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY],
       workspaceKind: 'git-worktree',
