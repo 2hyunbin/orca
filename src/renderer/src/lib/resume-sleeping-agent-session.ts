@@ -250,7 +250,12 @@ export function resumeSleepingAgentSessionsForWorktree(
     (record) => !activationTreatsNoteAsFinished(record)
   )
   const activeClaimKeys = new Set(activeWorktreeRecords.map(getProviderSessionClaimKey))
-  const claimRepresentativeByKey = getClaimRepresentativeRecords(activeWorktreeRecords)
+  // Why: a record this host may not resume must not outrank, and so delete, one it may.
+  const claimRepresentativeByKey = getClaimRepresentativeRecords(
+    activeWorktreeRecords.filter(
+      (record) => !sleepingRecordNamesAnotherExecutionHost(record, state)
+    )
+  )
   const freshlyLaunchedClaimKeys = new Set<string>()
 
   let launched = 0

@@ -26,11 +26,11 @@ const ENV_ID = 'env-closed-elsewhere'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const CLIENT_TAB_ID = 'client-created-tab'
 
-function seedPairedWorkspace(): string {
+function seedPairedWorkspace(paired = true): string {
   const worktree: Worktree = {
     ...makeCreatedAgentWorktree(),
     createdWithAgent: undefined,
-    hostId: `runtime:${encodeURIComponent(ENV_ID)}`
+    ...(paired ? { hostId: `runtime:${encodeURIComponent(ENV_ID)}` } : {})
   }
   const seed: Partial<AppState> = {
     repos: [
@@ -169,5 +169,20 @@ describe('a tab closed on another paired client', () => {
 
     expectNoAutomaticResume(worktreeId)
     expectNoAutomaticResume(worktreeId)
+  })
+
+  it('still recovers a local native record when the mirror names another execution host', () => {
+    const worktreeId = seedPairedWorkspace(false)
+    seedRecord({
+      ...makeRecord(worktreeId, toWebTerminalSurfaceTabId('host-tab')),
+      connectionId: 'other-ssh-target'
+    })
+    const native = { ...makeRecord(worktreeId, 'native-tab'), connectionId: null, capturedAt: 2 }
+    seedRecord(native)
+
+    expect(resumeSleepingAgentSessionsForWorktree(worktreeId)).toBe(1)
+    expect(Object.values(useAppStore.getState().pendingStartupByTabId)).toMatchObject([
+      { resumeProviderSession: native.providerSession }
+    ])
   })
 })
