@@ -1,3 +1,4 @@
+import { applyClaudeTerminalImageViewerEnv } from '../../terminal-image-viewer-env'
 import type { MobileTerminalCommandOptions, MobileTerminalCommand } from './mobile-terminal-startup'
 import type { OwnedMobileTerminalCreateOptions } from './mobile-terminal-owned-create'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
@@ -17,11 +18,14 @@ import {
 } from '../../orca-runtime-core'
 import { rendererPublicationThrottle } from '../../../window/renderer-publication-throttle'
 import { deterministicAgentSessionUuid } from '../../runtime-agent-launch-resolution'
+import { assertMobileTerminalShellSupported } from './mobile-terminal-shell-refusal'
 
 export type MobileTerminalCreateOptions = {
+  terminalImageViewerSupported?: boolean
   afterTabId?: string
   targetGroupId?: string
   command?: string
+  shellOverride?: string
   cwd?: string
   env?: Record<string, string>
   envToDelete?: string[]
@@ -97,6 +101,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector)
     const worktreeId = workspace.id
     const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
+    assertMobileTerminalShellSupported(this.store, workspace, opts.shellOverride, cwd)
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     // Older mobile clients append their optimistic tab, so make the host append too until the
     // client advertises the grouped placement contract.
@@ -116,7 +121,10 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
         afterDesktopTabId = anchor.type === 'terminal' ? anchor.parentTabId : anchor.id
       }
     }
-    const startupCommand = await this.resolveMobileSessionTerminalCommand(workspace, opts)
+    const startupCommand = applyClaudeTerminalImageViewerEnv(
+      await this.resolveMobileSessionTerminalCommand(workspace, opts),
+      opts.terminalImageViewerSupported
+    )
     this.assertStableReadyGraph(graphEpoch)
     if (opts.signal?.aborted) {
       throw new Error('client_disconnected')
@@ -152,6 +160,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
         afterTabId,
         {
           command: startupCommand.command,
+          ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
           cwd,
           env: startupCommand.env,
           envToDelete: startupCommand.envToDelete,
@@ -212,6 +221,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           afterTabId: afterDesktopTabId,
           targetGroupId: opts.targetGroupId,
           command: startupCommand.command,
+          ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
           cwd,
           ...(startupCommand.env ? { env: startupCommand.env } : {}),
           ...(startupCommand.envToDelete ? { envToDelete: startupCommand.envToDelete } : {}),
@@ -278,6 +288,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           afterTabId,
           {
             command: startupCommand.command,
+            ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
             cwd,
             env: startupCommand.env,
             envToDelete: startupCommand.envToDelete,

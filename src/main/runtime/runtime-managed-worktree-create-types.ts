@@ -42,6 +42,9 @@ export type RuntimeManagedWorktreeCreateArgs = {
   telemetrySource?: WorkspaceCreateTelemetrySource
   workspaceStatus?: string
   manualOrder?: number
+  nestWorkspaces?: boolean
+  refreshLocalBaseRefOnWorktreeCreate?: boolean
+  localBaseRefSuggestionDismissed?: boolean
   sparseCheckout?: { directories: string[]; presetId?: string }
   pushTarget?: GitPushTarget
   runHooks?: boolean
@@ -55,6 +58,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   onWorkspaceCreated?: (worktreeId: string) => void
   onPreTerminalFailure?: (worktreeId: string, error: unknown) => void
   startupAgent?: TuiAgent
+  terminalImageViewerSupported?: boolean
   startupLaunchPreferences?: AgentLaunchPreferences
   startupPrompt?: string
   /** Main-internal: set by a caller that delivers an uncarried `startupPrompt` itself, so the text

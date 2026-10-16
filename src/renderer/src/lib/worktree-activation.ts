@@ -227,7 +227,7 @@ export function activateAndRevealWorktree(
     state.recordWorktreeVisit(worktreeId)
   }
 
-  const ownedNavigation = activateOwnedWorktreeNavigation(worktreeId, opts, postActivationState)
+  const ownedNavigation = activateOwnedWorktreeNavigation(worktreeId, opts)
 
   // Why: the gate is decided BEFORE resuming. A sleeping session must defer seeding until startup
   // restoration is ready (STA-1111) — resuming first would leave nothing to gate on. Structured
