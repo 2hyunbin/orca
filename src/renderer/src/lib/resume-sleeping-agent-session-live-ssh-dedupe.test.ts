@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
+import { makeWorktree, TEST_REPO } from '../store/slices/worktrees-slice-test-fixtures'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 
 const initialAppStoreState = useAppStore.getState()
@@ -174,6 +175,46 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     const records = useAppStore.getState().sleepingAgentSessionsByPaneKey
     expect(records[stale.paneKey]).toBeUndefined()
     expect(records[owned.paneKey]).toBe(owned)
+  })
+
+  // The other record's host moved, so it can't resume the session; letting it claim the session
+  // would delete the only record that can, and nothing would resume.
+  it('ignores a claim from a record whose worktree now routes to another host', () => {
+    const remotePath = '/home/neil/projects/wt-2'
+    const remoteWorktreeId = `repo-2::${remotePath}`
+    const local = makeRecord({ providerSession: { key: 'session_id', id: 'sess-9' } })
+    const moved = makeRecord({
+      paneKey: makePaneKey('tab-2', OTHER_LEAF_ID),
+      tabId: 'tab-2',
+      worktreeId: remoteWorktreeId,
+      connectionId: null,
+      providerSession: { key: 'session_id', id: 'sess-9' }
+    })
+    setStoreState({
+      activeWorktreeId: 'wt-other',
+      repos: [
+        { ...TEST_REPO, id: 'repo-2', path: '/home/neil/projects', connectionId: 'ssh-target-1' }
+      ],
+      worktreesByRepo: {
+        'repo-2': [
+          makeWorktree({
+            id: remoteWorktreeId,
+            repoId: 'repo-2',
+            path: remotePath,
+            hostId: 'ssh:ssh-target-1'
+          })
+        ]
+      },
+      tabsByWorktree: {
+        'wt-1': [],
+        [remoteWorktreeId]: [makeTerminalTab('tab-2', remoteWorktreeId)]
+      },
+      terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, SSH_PTY_ID) },
+      ptyIdsByTabId: {},
+      sleepingAgentSessionsByPaneKey: { [local.paneKey]: local, [moved.paneKey]: moved }
+    })
+
+    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
   })
 
   it('does not let a finished note in another worktree clear an active record', () => {

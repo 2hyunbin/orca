@@ -179,13 +179,15 @@ function providerSessionOwnedElsewhere(
   record: SleepingAgentSessionRecord,
   state: ReturnType<typeof useAppStore.getState>
 ): boolean {
-  // Same-worktree duplicates are handled by claim keys; finished notes never claim a session.
+  // Same-worktree duplicates are handled by claim keys; finished notes never claim a session, and
+  // a record whose host moved can't resume it, so it can't claim it either.
   return Object.values(state.sleepingAgentSessionsByPaneKey).some(
     (other) =>
       other.worktreeId !== record.worktreeId &&
       other.agent === record.agent &&
       !isInvalidWorktreeActivationRecord(other) &&
       !activationTreatsNoteAsFinished(other) &&
+      !sleepingRecordNamesAnotherExecutionHost(other, state) &&
       agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession) &&
       recordPaneIsOwnedByPreservedPane(other, state)
   )
