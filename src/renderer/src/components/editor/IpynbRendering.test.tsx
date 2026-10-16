@@ -133,10 +133,10 @@ describe('notebook outputs', () => {
       }
       expect(stable.every((span) => span?.isConnected)).toBe(true)
       expect(document.querySelector('pre span:last-child')?.getAttribute('style')).toBe(red)
-      for (const spy of [parse, ranges]) {
-        expect(Math.max(...spy.mock.calls.map(([input]) => input.length))).toBeLessThanOrEqual(
-          chain ? 17 : 8192
-        )
+      const parseSizes = parse.mock.calls.map(([input]) => input.length)
+      const rangeSizes = ranges.mock.calls.map(([input]) => input.length)
+      for (const sizes of [parseSizes, rangeSizes]) {
+        expect(Math.max(...sizes)).toBeLessThanOrEqual(chain ? 17 : 8192)
       }
     } finally {
       parse.mockRestore()
