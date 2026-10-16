@@ -107,7 +107,7 @@ export async function callRuntimeEnvironment(
           markEnvironmentUsedFromResponse(userDataPath, currentEnvironment.id, response)
           return response
         }
-        if (shouldRouteCallBySupport(method)) {
+        if (shouldRouteCallBySupport(method, currentEnvironment.id)) {
           return executeSupportRoutedCall({
             userDataPath,
             environment: currentEnvironment,
