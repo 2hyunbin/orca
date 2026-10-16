@@ -8738,7 +8738,8 @@
           "addDescription": "SSH でログインできる永続的なマシンを追加します。",
           "editingPrefix": "編集中",
           "allowRemoteCliControl": "このホストの orca CLI による Orca の操作を許可する",
-          "allowRemoteCliControlHelp": "オフの場合、このホストで実行される orca コマンドは、このホスト自身のターミナルにのみアクセスできます。オンにすると、このコンピュータ上の他のホスト、オーケストレーション、ファイル、連携にもアクセスできるようになります。"
+          "allowRemoteCliControlHelp": "オンにすると、このホストで実行される orca コマンドは、このホストのワークスペース内に限り、接続中のみ、このデスクトップの Orca ブラウザのタブを開いて操作できます。ファイル、クリップボード、Cookie は読み取れません。オフの場合、このホスト自身の Orca サーバーにのみアクセスします。",
+          "allowRemoteCliControlReset": "アップデート後に Orca がこれをオフにしました。この設定でこのホストがデスクトップのブラウザを操作できるようになったためです。必要な場合のみ再度オンにしてください。"
         },
         "TasksPane": {
           "f71d8a9dd3": "タスクプロバイダー",
@@ -12424,6 +12425,10 @@
           "detailsUnavailable": "プランの認証情報の詳細は、Orca を実行しているコンピュータでのみ読み取ることができます。",
           "siteUnavailable": "ホストプランサイトが利用できない"
         },
+        "sshManagedHostRemove": {
+          "description": "{{label}} では管理対象の Orca サーバーが実行されています。管理対象サーバーで「停止…」を使ってホストからサーバーを削除するか、ホストがもう存在しない場合は「登録を解除…」を使ってください。その後、この SSH ホストを削除できます。",
+          "open": "管理対象サーバーを開く"
+        },
         "managedServers": {
           "row": {
             "notRunning": "実行していません",
@@ -12465,7 +12470,11 @@
             "target": "SSH ホスト経由で接続",
             "port": "サーバーポート",
             "link": "SSH を使用",
-            "linking": "接続中…"
+            "linking": "接続中…",
+            "pendingLink": "SSH 経由の接続が完了しませんでした。",
+            "pendingUnlink": "SSH アクセスの停止が完了しませんでした。",
+            "retry": "再試行",
+            "cancelLink": "キャンセル"
           },
           "search": {
             "title": "管理対象サーバー",
@@ -17963,6 +17972,13 @@
           "deleteColumn": "列を削除",
           "deleteTable": "テーブルを削除"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Orca ホストに接続できませんでした",
+        "description": "失われたものはありません。ホストが応答すると Orca は再読み込みされます。それまで変更は保存されません。",
+        "retry": "今すぐ再試行"
       }
     }
   },

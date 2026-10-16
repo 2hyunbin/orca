@@ -8712,7 +8712,8 @@
           "addDescription": "Agrega una máquina persistente en la que puedas iniciar sesión por SSH.",
           "editingPrefix": "Editando",
           "allowRemoteCliControl": "Permitir que la orca CLI de este host controle Orca",
-          "allowRemoteCliControlHelp": "Cuando está desactivado, los comandos orca ejecutados en este host solo llegan a sus propios terminales. Actívalo para que lleguen a otros hosts, la orquestación, los archivos y las integraciones de este equipo."
+          "allowRemoteCliControlHelp": "Cuando está activado, los comandos orca ejecutados en este host pueden abrir y controlar pestañas del navegador de Orca en este escritorio, solo en los espacios de trabajo de este host y solo mientras esté conectado. No pueden leer tus archivos, tu portapapeles ni tus cookies. Cuando está desactivado, solo llegan al propio servidor de Orca de este host.",
+          "allowRemoteCliControlReset": "Orca lo desactivó tras una actualización, porque ahora permite que este host controle el navegador de tu escritorio. Vuelve a activarlo solo si lo deseas."
         },
         "TasksPane": {
           "f71d8a9dd3": "Proveedores de tareas",
@@ -12420,6 +12421,10 @@
         "UnsealedCredentialNotice": {
           "body": "{{credential}} se almacena sin cifrar: este sistema no tiene ningún conjunto de claves del sistema operativo que Orca pueda usar. Cualquiera que pueda leer su disco o una copia de seguridad del mismo puede leer la credencial. Instale y desbloquee gnome-keyring o kwallet, luego guárdelo nuevamente para sellarlo."
         },
+        "sshManagedHostRemove": {
+          "description": "{{label}} ejecuta un servidor Orca gestionado. En Servidores gestionados, usa Detener… para quitar el servidor del host, u Olvidar… si el host ya no existe. Después podrás eliminar este host SSH.",
+          "open": "Abrir Servidores gestionados"
+        },
         "managedServers": {
           "row": {
             "notRunning": "No está en ejecución",
@@ -12461,7 +12466,11 @@
             "target": "Conectar a través del host SSH",
             "port": "Puerto del servidor",
             "link": "Usar SSH",
-            "linking": "Conectando…"
+            "linking": "Conectando…",
+            "pendingLink": "La conexión por SSH no terminó.",
+            "pendingUnlink": "La desactivación del acceso SSH no terminó.",
+            "retry": "Reintentar",
+            "cancelLink": "Cancelar"
           },
           "search": {
             "title": "Servidores gestionados",
@@ -17959,6 +17968,13 @@
           "deleteColumn": "Eliminar columna",
           "deleteTable": "Eliminar tabla"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "No se pudo contactar con tu host de Orca",
+        "description": "No se perdió nada. Orca se recargará cuando el host responda y no guardará cambios hasta entonces.",
+        "retry": "Reintentar ahora"
       }
     }
   },

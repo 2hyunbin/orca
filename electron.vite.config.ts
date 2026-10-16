@@ -1,5 +1,5 @@
 import { markdownParserAliases } from './config/build-plugins/markdown-parser-exports'
-import { createRequire, isBuiltin } from 'node:module'
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { defineConfig, type UserConfig } from 'electron-vite'
 import type { Plugin } from 'vite'
@@ -10,7 +10,6 @@ import { createPdfjsViewerAssetsPlugin } from './config/build-plugins/pdfjs-view
 import { createProcessHostDevRebuildPlugin } from './config/build-plugins/process-host-dev-rebuild'
 import { MAIN_BUILD_ENTRY_POINTS } from './config/build-plugins/main-build-entry-points'
 import { createPlainNodeEntryGuardPlugin } from './config/build-plugins/plain-node-entry-guard'
-import packageJson from './package.json' with { type: 'json' }
 import { resolveBuildSourceCommit } from './config/scripts/build-source-commit.mjs'
 
 const BUNDLED_MAIN_DEPENDENCIES = new Set([
@@ -24,19 +23,6 @@ const BUNDLED_MAIN_DEPENDENCIES = new Set([
   // not race the later resources/node_modules copy.
   'zod'
 ])
-const EXTERNAL_MAIN_DEPENDENCIES = Object.keys(packageJson.dependencies).filter(
-  (dependency) => !BUNDLED_MAIN_DEPENDENCIES.has(dependency)
-)
-
-function isExternalMainModule(source: string): boolean {
-  if (isBuiltin(source) || source === 'electron' || source.startsWith('electron/')) {
-    return true
-  }
-  return EXTERNAL_MAIN_DEPENDENCIES.some(
-    (dependency) => source === dependency || source.startsWith(`${dependency}/`)
-  )
-}
-
 // Why: the telemetry transport is gated by two compile-time constants that
 // only the official CI release workflow sets. Contributor / `pnpm dev` /
 // third-party rebuilds must substitute literal `null` at these sites so
@@ -215,6 +201,9 @@ function createMainBootstrapPlugin() {
       if (!mainChunk || mainChunk.type !== 'chunk') {
         return
       }
+      if (!mainChunk.moduleIds.some((id) => resolve(id) === MAIN_BUILD_ENTRY_POINTS.index)) {
+        throw new Error('Main startup must stay in index.js so __dirname resolves app assets')
+      }
 
       // Why: source guards and diagnostics run after Rollup's generated require
       // prelude, too late to handle a missing bootstrap dependency.
@@ -252,10 +241,9 @@ export const electronViteConfig: UserConfig = {
         exclude: [...BUNDLED_MAIN_DEPENDENCIES]
       },
       rollupOptions: {
-        // Why: native dependencies must resolve from packaged node_modules,
-        // while the unpacked daemon needs its pure-JS xterm graph bundled.
-        external: isExternalMainModule,
         input: MAIN_BUILD_ENTRY_POINTS,
+        // CLI builds replace exported entries; keep their internals separate without moving startup paths.
+        preserveEntrySignatures: 'exports-only',
         // Why: Rolldown's SSR default is ESM, but Electron and sidecar launchers
         // consume these stable CommonJS paths.
         output: {

@@ -173,7 +173,13 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
     return applyWindowLayoutCommand(
       this.requireStore(),
-      (worktreeId, tabId) => this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId),
+      (worktreeId, tabId) => {
+        if (tabId !== null) {
+          return this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
+        }
+        const routed = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
+        return routed ? [routed] : []
+      },
       command
     )
   }

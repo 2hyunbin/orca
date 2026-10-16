@@ -8,6 +8,7 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+      - converted_to_draft
 
 concurrency:
   group: pr-checks-${{ github.event.pull_request.number }}
@@ -24,6 +25,7 @@ jobs:
   # Per-job outputs also skip git-compat/xterm/packaging/shell when those
   # inputs are unchanged; empty diffs fail closed and run everything.
   code_paths:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     name: detect changes and check repository guards
     # Start routing without waiting behind the GitHub-hosted test queue.
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -1515,7 +1517,7 @@ jobs:
   verify:
     name: PR checks passed
     # Publish an explicit result after every required dependency settles.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
     needs:
       - code_paths
       - preflight
