@@ -63,7 +63,7 @@ describe('timing-weighted shard selection', () => {
     expect(new Set(selected)).toEqual(new Set(specs))
   })
 
-  it('keeps global sharding and runs the Node measurement after ordinary projects', async () => {
+  it('keeps global sharding and isolates measurements after ordinary projects', async () => {
     vi.stubEnv('ORCA_BALANCE_UNIT_SHARDS', '1')
     const { default: config } = await import('../vitest.config')
     expect(config.test.sequence.sequencer).toBe(TimingSequencer)
@@ -72,7 +72,12 @@ describe('timing-weighted shard selection', () => {
       'src/main/foreign-sqlite-readers/foreign-sqlite-reader-event-loop.test.ts'
     const projects = config.test.projects
     const measurement = projects.filter((project) => project.test.name === 'node-measurement')
-    const ordinary = projects.filter((project) => project.test.name !== 'node-measurement')
+    const paletteMeasurementFile =
+      'src/renderer/src/lib/palette-match/palette-match-performance.test.ts'
+    const paletteMeasurement = projects.filter(
+      (project) => project.test.name === 'palette-measurement'
+    )
+    const ordinary = projects.filter((project) => project.test.sequence.groupOrder === 1)
     expect(measurement).toHaveLength(1)
     expect(ordinary).toHaveLength(process.versions.bun ? 2 : 1)
     expect(measurement[0].test).toMatchObject({
@@ -84,9 +89,21 @@ describe('timing-weighted shard selection', () => {
       pool: process.versions.bun ? 'node-runtime' : 'forks'
     })
     expect(measurement[0].test.poolRunner).toBe(process.versions.bun ? nodeRuntimePool : undefined)
+    expect(paletteMeasurement).toHaveLength(1)
+    expect(paletteMeasurement[0].test).toMatchObject({
+      include: [paletteMeasurementFile],
+      exclude: UNIT_EXCLUDE,
+      maxWorkers: 1,
+      sequence: { groupOrder: 3 },
+      env: { ORCA_VITEST_RUNTIME: process.versions.bun ? 'bun' : 'node' },
+      pool: 'forks'
+    })
+    expect(paletteMeasurement[0].test.poolRunner).toBeUndefined()
     for (const project of ordinary) {
       expect(project.test.sequence.groupOrder).toBe(1)
-      expect(project.test.exclude).toContain(measurementFile)
+      expect(project.test.exclude).toEqual(
+        expect.arrayContaining([measurementFile, paletteMeasurementFile])
+      )
     }
     const ordinaryNode = ordinary.find((project) => project.test.name !== 'bun')
     expect(ordinaryNode.test.include).toEqual(
