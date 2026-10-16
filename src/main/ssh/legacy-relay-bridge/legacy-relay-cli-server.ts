@@ -8,7 +8,6 @@
  * no grants (the desktop browser bridge's shape), after legacy-relay-cli-caller.ts bound them.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { isDurableMutation } from '../../../shared/orchestration-rpc-contract'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import type { RpcResponse } from '../../runtime/rpc/core'
@@ -28,6 +27,12 @@ import {
   stringFlag
 } from './legacy-relay-cli-args'
 import type { LegacyRelayCliServer } from './legacy-relay-client'
+import {
+  cappedWait,
+  isExactLegacyRelayCliReplay,
+  optionalAskTimeout,
+  runLegacyRelayCliCall
+} from './legacy-relay-cli-call-limits'
 import { formatLegacyRelayCliResult, isRecord } from './legacy-relay-cli-output'
 import type { LegacyRelayLivePane } from './legacy-relay-bridge-leases'
 
@@ -115,7 +120,7 @@ function buildCall(
           run: flag('run'),
           ack: flag('ack'),
           wait: has('wait') ? true : undefined,
-          timeoutMs: numberFlag(flags, 'timeout-ms')
+          timeoutMs: cappedWait(numberFlag(flags, 'timeout-ms'))
         }
       }
     case 'orchestration inbox':
@@ -149,7 +154,7 @@ function buildCall(
           question: flag('question'),
           resume: flag('resume'),
           options: flag('options'),
-          timeoutMs: numberFlag(flags, 'timeout-ms'),
+          timeoutMs: optionalAskTimeout(numberFlag(flags, 'timeout-ms')),
           compatibilityCliCommand: 'orca'
         }
       }
@@ -189,17 +194,6 @@ async function dispatchAsCaller(
   call: LegacyRelayCliCall,
   requestId: string
 ): Promise<RpcResponse> {
-  const db = runtime.getOrchestrationDb()
-  // Why: a mutation this caller already committed replays as-is, even after its assignment moved
-  // on; the executor refuses a retry whose payload differs. Reads are always scoped.
-  const receipt = db.getMutationReceipt(fingerprint, requestId)
-  const replaying =
-    receipt?.state === 'completed' &&
-    receipt.method === call.method &&
-    isDurableMutation(call.method, call.params)
-  if (!replaying) {
-    assertLegacyRelayCliScope(db, caller, call, deps.livePane)
-  }
   // Why: the runtime no longer hosts this terminal, so the attachment carries its verified identity.
   const authority = runtime.registerOrchestrationCompatibilitySshAttachment(
     deps.targetId,
@@ -211,6 +205,11 @@ async function dispatchAsCaller(
     }
   )
   try {
+    // A mutation this caller committed with this exact payload replays even after its assignment
+    // moved on; everything else, and every read, is scoped.
+    const exactReplay = isExactLegacyRelayCliReplay(runtime, fingerprint, requestId, call)
+    const db = runtime.getOrchestrationDb()
+    assertLegacyRelayCliScope(db, caller, call, deps.livePane, exactReplay)
     const launchToken = env.ORCA_AGENT_LAUNCH_TOKEN?.trim()
     return await dispatcherFor(runtime).dispatch(
       {
@@ -253,60 +252,78 @@ function admit(
 
 export function createLegacyRelayCliServer(deps: LegacyRelayCliServerDeps): LegacyRelayCliServer {
   return {
-    cli: async (params, signal) => {
-      const env = stringRecord(params.env)
-      const argv = Array.isArray(params.argv)
-        ? params.argv.filter((item): item is string => typeof item === 'string')
-        : []
-      const { command, flags } = parseLegacyRelayCliArgs(argv)
-      // Why before anything runs: `--help` on a valid command must never apply its effects.
-      if (flags.has('help') || argv.includes('-h')) {
-        return { stdout: `${LEGACY_RELAY_CLI_HELP}\n`, stderr: '', exitCode: 0 }
-      }
-      if (!COMMANDS.has(command)) {
-        throw new Error(LEGACY_RELAY_CLI_UNSUPPORTED)
-      }
-      const retryRequestId = retryRequestFlag(flags)
-      const invocation = admit(deps, env, signal, retryRequestId)
-      const call = buildCall(command, flags, invocation.caller)
-      const requestId = retryRequestId ?? randomUUID()
-      const response = await dispatchAsCaller(deps, invocation, call, requestId)
-      return formatLegacyRelayCliResult(call, response, invocation.caller, flags)
-    },
-    postOutput: async (params, signal) => {
-      const env = stringRecord(params.env)
-      const invocation = admit(deps, env, signal)
-      const { caller } = invocation
-      const post = isRecord(params.postOutput) ? params.postOutput : {}
-      const ack =
-        post.kind === 'legacy_check_ack' && Array.isArray(post.messageIds)
-          ? {
-              compatibilityAck: JSON.stringify({
-                messageIds: post.messageIds.filter((id) => typeof id === 'string'),
-                ...(Array.isArray(post.types)
-                  ? { types: post.types.filter((type) => typeof type === 'string') }
-                  : {})
-              })
-            }
-          : post.kind === 'legacy_question_ack' &&
-              typeof post.questionId === 'string' &&
-              typeof post.answerMessageId === 'string'
-            ? {
-                compatibilityQuestionAck: JSON.stringify({
-                  questionId: post.questionId,
-                  answerMessageId: post.answerMessageId
-                })
-              }
-            : null
-      if (!ack) {
-        throw new Error('Invalid SSH CLI post-output action.')
-      }
-      const call = { method: 'orchestration.check', params: { terminal: caller.handle, ...ack } }
-      const response = await dispatchAsCaller(deps, invocation, call, randomUUID())
-      if (!response.ok) {
-        throw new Error(response.error.message)
-      }
-      return { acknowledged: true }
-    }
+    cli: (params, relaySignal) =>
+      runLegacyRelayCliCall(deps.targetId, deps.remoteCliControl, relaySignal, (signal) =>
+        serveCli(deps, params, signal)
+      ),
+    postOutput: (params, relaySignal) =>
+      runLegacyRelayCliCall(deps.targetId, deps.remoteCliControl, relaySignal, (signal) =>
+        servePostOutput(deps, params, signal)
+      )
   }
+}
+
+async function serveCli(
+  deps: LegacyRelayCliServerDeps,
+  params: Record<string, unknown>,
+  signal: AbortSignal
+): Promise<unknown> {
+  const env = stringRecord(params.env)
+  const argv = Array.isArray(params.argv)
+    ? params.argv.filter((item): item is string => typeof item === 'string')
+    : []
+  const { command, flags } = parseLegacyRelayCliArgs(argv)
+  // Why before anything runs: `--help` on a valid command must never apply its effects.
+  if (flags.has('help') || argv.includes('-h')) {
+    return { stdout: `${LEGACY_RELAY_CLI_HELP}\n`, stderr: '', exitCode: 0 }
+  }
+  if (!COMMANDS.has(command)) {
+    throw new Error(LEGACY_RELAY_CLI_UNSUPPORTED)
+  }
+  const retryRequestId = retryRequestFlag(flags)
+  const invocation = admit(deps, env, signal, retryRequestId)
+  const call = buildCall(command, flags, invocation.caller)
+  const requestId = retryRequestId ?? randomUUID()
+  const response = await dispatchAsCaller(deps, invocation, call, requestId)
+  return formatLegacyRelayCliResult(call, response, invocation.caller, flags)
+}
+
+async function servePostOutput(
+  deps: LegacyRelayCliServerDeps,
+  params: Record<string, unknown>,
+  signal: AbortSignal
+): Promise<unknown> {
+  const env = stringRecord(params.env)
+  const invocation = admit(deps, env, signal)
+  const { caller } = invocation
+  const post = isRecord(params.postOutput) ? params.postOutput : {}
+  const ack =
+    post.kind === 'legacy_check_ack' && Array.isArray(post.messageIds)
+      ? {
+          compatibilityAck: JSON.stringify({
+            messageIds: post.messageIds.filter((id) => typeof id === 'string'),
+            ...(Array.isArray(post.types)
+              ? { types: post.types.filter((type) => typeof type === 'string') }
+              : {})
+          })
+        }
+      : post.kind === 'legacy_question_ack' &&
+          typeof post.questionId === 'string' &&
+          typeof post.answerMessageId === 'string'
+        ? {
+            compatibilityQuestionAck: JSON.stringify({
+              questionId: post.questionId,
+              answerMessageId: post.answerMessageId
+            })
+          }
+        : null
+  if (!ack) {
+    throw new Error('Invalid SSH CLI post-output action.')
+  }
+  const call = { method: 'orchestration.check', params: { terminal: caller.handle, ...ack } }
+  const response = await dispatchAsCaller(deps, invocation, call, randomUUID())
+  if (!response.ok) {
+    throw new Error(response.error.message)
+  }
+  return { acknowledged: true }
 }

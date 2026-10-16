@@ -172,15 +172,29 @@ export abstract class OrcaRuntimeWithSerializeHeadlessTerminalBuffer extends Orc
     this.orchestrationCompatibilitySshTerminals.delete(attachmentId)
   }
 
-  /** Only while an attachment holds it, and only for a handle this runtime does not host. */
+  /**
+   * Only while an attachment holds it, and only for a handle this runtime does not host. Two hosts
+   * claiming one handle name nobody: neither may borrow the other's pane or process.
+   */
   protected getOrchestrationCompatibilitySshTerminal(
     handle: string
   ): OrchestrationCompatibilitySshTerminal | undefined {
-    for (const terminal of this.orchestrationCompatibilitySshTerminals.values()) {
-      if (terminal.handle === handle) {
-        return terminal
+    let found: { targetId: string; terminal: OrchestrationCompatibilitySshTerminal } | undefined
+    for (const [attachmentId, terminal] of this.orchestrationCompatibilitySshTerminals) {
+      const targetId = this.orchestrationCompatibilitySshAttachments.get(attachmentId)?.targetId
+      if (terminal.handle !== handle || !targetId) {
+        continue
       }
+      if (
+        found &&
+        (found.targetId !== targetId ||
+          found.terminal.paneKey !== terminal.paneKey ||
+          found.terminal.processIncarnation !== terminal.processIncarnation)
+      ) {
+        return undefined
+      }
+      found = { targetId, terminal }
     }
-    return undefined
+    return found?.terminal
   }
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +8,7 @@ import Database from '../../sqlite/sync-database'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { OrchestrationDb } from '../../runtime/orchestration/db'
 import { createRootDispatch } from '../../runtime/orchestration/db/root-dispatch-test-fixture'
+import { LEGACY_RELAY_CLI_UNVERIFIED } from './legacy-relay-cli-caller'
 import { createLegacyRelayCliServer } from './legacy-relay-cli-server'
 
 const TARGET = 'target-1'
@@ -16,6 +18,33 @@ const PTY_ID = toAppSshPtyId(TARGET, 'pty-7')
 const COORDINATOR = 'term_legacy_coord'
 const COORDINATOR_PANE = 'tab_c:44444444-4444-4444-8444-444444444444'
 const COORDINATOR_PTY = toAppSshPtyId(TARGET, 'pty-8')
+const UNRELATED_PANE = 'tab_u:66666666-6666-4666-8666-666666666666'
+const coordinatorEnv = () => ({
+  ORCA_TERMINAL_HANDLE: COORDINATOR,
+  ORCA_PANE_KEY: COORDINATOR_PANE,
+  ORCA_AGENT_LAUNCH_TOKEN: 'coordinator-token'
+})
+const escalationArgv = (taskId: string, dispatchId: string) => [
+  'orchestration',
+  'send',
+  '--to',
+  COORDINATOR,
+  '--type',
+  'escalation',
+  '--subject',
+  'blocked',
+  '--task-id',
+  taskId,
+  '--dispatch-id',
+  dispatchId,
+  '--json'
+]
+const messageId = (sent: { body: Record<string, unknown> }): string => {
+  const result = sent.body.result
+  const message =
+    result && typeof result === 'object' && 'message' in result ? result.message : null
+  return message && typeof message === 'object' && 'id' in message ? String(message.id) : ''
+}
 const WORKER_ENV = {
   ORCA_TERMINAL_HANDLE: WORKER,
   ORCA_PANE_KEY: WORKER_PANE,
@@ -73,7 +102,8 @@ function legacyRuntime(): {
 function serverFor(runtime: OrcaRuntimeService) {
   const panes = new Map([
     [WORKER_PANE, { ptyId: PTY_ID, incarnationId: 'inc-1', terminalHandle: WORKER }],
-    [COORDINATOR_PANE, { ptyId: COORDINATOR_PTY, incarnationId: 'inc-2' }]
+    [COORDINATOR_PANE, { ptyId: COORDINATOR_PTY, incarnationId: 'inc-2' }],
+    [UNRELATED_PANE, { ptyId: toAppSshPtyId(TARGET, 'pty-9'), incarnationId: 'inc-3' }]
   ])
   return createLegacyRelayCliServer({
     targetId: TARGET,
@@ -106,35 +136,45 @@ describe('the relay-era orca CLI on migrated legacy orchestration records', () =
     })
   })
 
-  it('admits the retained legacy coordinator and lets the worker report to it', async () => {
-    const { runtime, taskId, dispatchId } = legacyRuntime()
-    const coordinatorEnv = {
-      ORCA_TERMINAL_HANDLE: COORDINATOR,
-      ORCA_PANE_KEY: COORDINATOR_PANE,
-      ORCA_AGENT_LAUNCH_TOKEN: 'coordinator-token'
-    }
-    const coordinatorCheck = await run(
-      runtime,
-      ['orchestration', 'check', '--json'],
-      coordinatorEnv
-    )
-    expect(coordinatorCheck.body).toMatchObject({ ok: true })
-    const escalation = await run(runtime, [
-      'orchestration',
-      'send',
-      '--to',
-      COORDINATOR,
-      '--type',
-      'escalation',
-      '--subject',
-      'blocked',
-      '--task-id',
-      taskId,
-      '--dispatch-id',
-      dispatchId,
-      '--json'
-    ])
+  it('never lets a host pane adopt the unbound legacy coordinator by naming its handle', async () => {
+    const { runtime, database, taskId, dispatchId } = legacyRuntime()
+    const escalation = await run(runtime, escalationArgv(taskId, dispatchId))
     expect(escalation.body).toMatchObject({ ok: true })
+    const adoptedRunId = database.getLegacyAdoption()?.adopted_run_id ?? ''
+    // The real coordinator pane, still unbound after migration, and an unrelated leased pane alike.
+    for (const paneKey of [COORDINATOR_PANE, UNRELATED_PANE]) {
+      const env = { ...coordinatorEnv(), ORCA_PANE_KEY: paneKey }
+      await expect(run(runtime, ['orchestration', 'check', '--json'], env)).rejects.toThrow(
+        LEGACY_RELAY_CLI_UNVERIFIED
+      )
+      const answer = ['orchestration', 'reply', '--id', messageId(escalation), '--body', 'go']
+      await expect(run(runtime, answer, env)).rejects.toThrow(LEGACY_RELAY_CLI_UNVERIFIED)
+    }
+    expect(database.getLegacyCoordinatorPrincipal(adoptedRunId)).toBeUndefined()
+  })
+
+  it('admits a legacy coordinator bound to this pane, and the worker reports to it', async () => {
+    const { runtime, database, taskId, dispatchId } = legacyRuntime()
+    database.commitLegacyCompatibilityPrincipal({
+      runId: database.getLegacyAdoption()?.adopted_run_id ?? '',
+      role: 'coordinator',
+      hostScope: JSON.stringify({ kind: 'ssh', targetId: TARGET }),
+      terminalHandle: COORDINATOR,
+      paneKey: COORDINATOR_PANE,
+      launchTokenHash: createHash('sha256').update('coordinator-token').digest('hex'),
+      processIncarnation: `${COORDINATOR_PTY}:inc-2`
+    })
+    const escalation = await run(runtime, escalationArgv(taskId, dispatchId))
+    expect(escalation.body).toMatchObject({ ok: true })
+    const check = await run(runtime, ['orchestration', 'check', '--json'], coordinatorEnv())
+    expect(check.body).toMatchObject({ ok: true })
+    // Bound to its own pane only: the same handle from an unrelated pane is still refused.
+    await expect(
+      run(runtime, ['orchestration', 'check', '--json'], {
+        ...coordinatorEnv(),
+        ORCA_PANE_KEY: UNRELATED_PANE
+      })
+    ).rejects.toThrow(LEGACY_RELAY_CLI_UNVERIFIED)
   })
 
   it("replays a legacy worker's completed worker_done after it settled", async () => {

@@ -110,7 +110,11 @@ function settledLegacyDispatch(
     : undefined
 }
 
-/** The Run this pane coordinates, including a migrated Run's retained legacy coordinator. */
+/**
+ * The Run this pane coordinates. A migrated Run's legacy coordinator counts only once a committed
+ * principal binds it to this exact pane: the unbound "first caller wins" adoption would let any
+ * host pane claim the coordinator's handle, so a host-attested caller never takes that path.
+ */
 function resolveCoordinatedRun(
   db: OrchestrationDb,
   handle: string,
@@ -121,7 +125,11 @@ function resolveCoordinatedRun(
     return bound.coordinator_handle === handle ? bound : undefined
   }
   const adopted = db.getLegacyAdoption()?.adopted_run_id
+  const principal = adopted ? db.getLegacyCoordinatorPrincipal(adopted) : undefined
   return adopted &&
+    principal?.status === 'committed' &&
+    principal.terminal_handle === handle &&
+    samePane(principal.pane_key, paneKey) &&
     db.resolveLegacyCoordinatorCandidate({ runId: adopted, terminalHandle: handle, paneKey })
     ? db.getRun(adopted)
     : undefined
@@ -210,21 +218,26 @@ function isAllowedRecipient(
   return Boolean(worker && isPartyDispatch(db, caller, worker.id, livePane))
 }
 
-/** Throws unless the call stays inside the caller's own orchestration. */
+/**
+ * Throws unless the call stays inside the caller's own orchestration. `exactReplay`: a mutation
+ * this caller committed with this exact payload, which passed these checks then; only its sender,
+ * Run and recipient may have since moved on.
+ */
 export function assertLegacyRelayCliScope(
   db: OrchestrationDb,
   caller: LegacyRelayCliCaller,
   call: LegacyRelayCliCall,
-  livePane: (paneKey: string) => LegacyRelayLivePane | null
+  livePane: (paneKey: string) => LegacyRelayLivePane | null,
+  exactReplay = false
 ): void {
   const { method, params } = call
   const selfParam = method === 'orchestration.check' || method === 'orchestration.inbox'
   const named = stringParam(params, selfParam ? 'terminal' : 'from')
-  if (named !== caller.handle) {
+  if (named !== caller.handle && (selfParam || !exactReplay)) {
     throw outside(`terminal '${named ?? ''}'`)
   }
   const run = stringParam(params, 'run')
-  if (run && run !== caller.dispatch?.run_id && run !== caller.run?.id) {
+  if (run && !exactReplay && run !== caller.dispatch?.run_id && run !== caller.run?.id) {
     throw outside(`run '${run}'`)
   }
   if (method === 'orchestration.reply') {
@@ -235,7 +248,7 @@ export function assertLegacyRelayCliScope(
     }
     return
   }
-  if (method !== 'orchestration.send' && method !== 'orchestration.ask') {
+  if ((method !== 'orchestration.send' && method !== 'orchestration.ask') || exactReplay) {
     return
   }
   const dispatchId = payloadDispatchId(stringParam(params, 'payload'))
