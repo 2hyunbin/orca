@@ -79,7 +79,9 @@ export abstract class AgentHookServerPersistence extends AgentHookServerHydratio
       }
     }
     // Why: only a successor claim forgets an exit, so a pane that never runs another agent would keep it.
-    pruneAgentExits(this.agentExitedAtByPaneKey, Date.now() - HYDRATE_MAX_AGE_MS)
+    pruneAgentExits(this.agentExitedAtByPaneKey, Date.now() - HYDRATE_MAX_AGE_MS, (paneKey) =>
+      this.state.lastStatusByPaneKey.has(paneKey)
+    )
     const agentExits = serializeAgentExits(this.agentExitedAtByPaneKey)
     const file: LastStatusFile = {
       version: LAST_STATUS_FILE_VERSION,

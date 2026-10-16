@@ -90,10 +90,15 @@ export function releaseAgentExitKey(
   return exits.delete(paneKey)
 }
 
-/** Drops exits proven before `notBefore`, the age hydrate would discard anyway. */
-export function pruneAgentExits(exits: Map<string, AgentExitEvidence>, notBefore: number): void {
+/** Drops exits proven before `notBefore` unless a retained row still names one of their panes. */
+export function pruneAgentExits(
+  exits: Map<string, AgentExitEvidence>,
+  notBefore: number,
+  isPaneRowRetained: (paneKey: string) => boolean
+): void {
   for (const [key, exit] of exits) {
-    if (exit.at < notBefore) {
+    // Why: a kept resume row without its exit would read as a live session holder.
+    if (exit.at < notBefore && ![...exit.paneKeys].some(isPaneRowRetained)) {
       exits.delete(key)
     }
   }

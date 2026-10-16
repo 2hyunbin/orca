@@ -676,13 +676,21 @@ describe('retained agent exit lifetime', () => {
     await hook(server, 'SessionStart')
     await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
     expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
-    const now = Date.now()
-    const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 8 * 24 * 60 * 60 * 1000)
-    try {
-      server.flushStatusPersistSync()
-    } finally {
-      clock.mockRestore()
+    const saveEightDaysLater = (): void => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 8 * 24 * 60 * 60 * 1000)
+      try {
+        server.flushStatusPersistSync()
+      } finally {
+        clock.mockRestore()
+      }
     }
+    // The retained resume row still names the session, so its exit must stay with it.
+    expect(server.getStatusSnapshot().some((row) => row.paneKey === PANE)).toBe(true)
+    saveEightDaysLater()
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+    server.clearPaneState(PANE)
+    saveEightDaysLater()
     expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
   })
 })
