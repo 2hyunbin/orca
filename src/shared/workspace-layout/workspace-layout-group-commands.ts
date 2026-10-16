@@ -138,8 +138,9 @@ type NewGroupOpen = CommandOf<'createTerminalTab' | 'openEditorTab' | 'openBrows
 
 /**
  * `open` into a new group `command.groupId` beside `split.besideGroupId`, as the window's split
- * does: the group joins the tree empty and `open` fills it in the same apply, so the new group
- * holds no preview to replace and no other tab for the file. Without a split, just `open`.
+ * does, or as the workspace's only group where main holds none. The group is added empty and
+ * `open` fills it in the same apply, so it holds no preview to replace and no other tab for the
+ * file. A group main already holds here takes the tab without a split; no split, just `open`.
  */
 export function openInNewGroup(
   model: WorkspaceLayoutModel,
