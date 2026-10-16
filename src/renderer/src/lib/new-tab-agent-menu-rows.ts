@@ -1,5 +1,5 @@
 import type { GlobalSettings } from '../../../shared/global-settings-types'
-import { isNativeChatProviderOn } from '../../../shared/native-chat-providers'
+import { isNativeChatProviderDisplayedOn } from '../../../shared/native-chat-providers'
 import {
   isNativeChatEnabled,
   type NativeChatDefaultSettings
@@ -26,8 +26,6 @@ export type NewTabAgentMenuSettings = NativeChatDefaultSettings &
 
 export function buildNewTabAgentMenuRows(args: {
   settings: NewTabAgentMenuSettings | null | undefined
-  /** This computer's detected agents, which pick an unchosen provider's default. */
-  installedHere: readonly TuiAgent[] | null
   /** The agents detected on the workspace's machine. */
   detectedOnHost: readonly TuiAgent[] | null
   /** The agents Orca can open as a chat. */
@@ -48,7 +46,7 @@ export function buildNewTabAgentMenuRows(args: {
     ...new Set([...args.chatAgents, ...(args.catalogLoaded === false ? installed : [])])
   ]
   for (const agent of filterEnabledTuiAgents(candidates, settings?.disabledTuiAgents)) {
-    if (!isNativeChatProviderOn(settings, agent, args.installedHere)) {
+    if (!isNativeChatProviderDisplayedOn(settings, agent, args.detectedOnHost)) {
       continue
     }
     const answer = args.hostChatAnswer(agent)

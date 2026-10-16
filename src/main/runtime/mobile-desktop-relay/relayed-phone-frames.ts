@@ -53,11 +53,11 @@ const LAUNCH_METHODS_READING_CHAT_DEFAULT = new Set(['agent.launch', 'agent.laun
 
 // Why: a server picks a launch's surface from its own chat setting, but a relayed phone's user is
 // this desktop's, so the desktop's default rides along. Older servers strip the field.
-export async function withRelayedLaunchChatDefault(
+export function withRelayedLaunchChatDefault(
   frame: string,
   method: string,
-  nativeChatDefaultFor: (agent: string) => boolean | Promise<boolean>
-): Promise<string> {
+  nativeChatDefaultFor: (agent: string) => boolean
+): string {
   if (!LAUNCH_METHODS_READING_CHAT_DEFAULT.has(method)) {
     return frame
   }
@@ -68,7 +68,7 @@ export async function withRelayedLaunchChatDefault(
   const agent = typeof parsed.params.agent === 'string' ? parsed.params.agent : ''
   return JSON.stringify({
     ...parsed,
-    params: { ...parsed.params, nativeChatDefault: await nativeChatDefaultFor(agent) }
+    params: { ...parsed.params, nativeChatDefault: nativeChatDefaultFor(agent) }
   })
 }
 

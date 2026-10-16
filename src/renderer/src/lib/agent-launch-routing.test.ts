@@ -91,7 +91,6 @@ describe('new agent launch routing', () => {
     expect(
       route({
         agent: 'grok',
-        installedHere: ['grok'],
         hostCapabilities: [
           STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
           STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
@@ -110,10 +109,12 @@ describe('new agent launch routing', () => {
       ],
       hostStructuredAgents: ['grok']
     }
-    // Never chosen: Claude and Codex on; another agent on only when installed on this computer.
-    expect(route({ agent: 'claude', installedHere: [] })).toBe('structured-native-chat')
-    expect(route({ ...grokHost, installedHere: ['grok'] })).toBe('structured-native-chat')
-    expect(route({ ...grokHost, installedHere: [] })).toBe('terminal-tui')
+    // Routing does not depend on native installation inventory.
+    expect(route({ agent: 'claude' })).toBe('structured-native-chat')
+    expect(route(grokHost)).toBe('structured-native-chat')
+    expect(
+      route({ ...grokHost, settings: { ...settings, nativeChatProviders: { grok: false } } })
+    ).toBe('terminal-tui')
     // A saved choice wins either way.
     expect(route({ settings: { ...settings, nativeChatProviders: { codex: false } } })).toBe(
       'terminal-tui'
@@ -121,7 +122,6 @@ describe('new agent launch routing', () => {
     expect(
       route({
         ...grokHost,
-        installedHere: [],
         settings: { ...settings, nativeChatProviders: { grok: true } }
       })
     ).toBe('structured-native-chat')

@@ -7,9 +7,8 @@ import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-statu
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
-import { isNativeChatProviderOn } from '../../../../shared/native-chat-providers'
+import { isNativeChatProviderDisplayedOn } from '../../../../shared/native-chat-providers'
 import { useAppStore } from '@/store'
-import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import {
   structuredAgentLaunchSupport,
   type AgentLaunchRoutingInput
@@ -89,7 +88,6 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
     readLocalRuntimeCapabilitiesOrUnknown
   )
   const settings = useAppStore((state) => state.settings)
-  const installedHere = useAppStore(readNativeDetectedAgents)
   const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
   const facts = useAppStore(
     useShallow((state) => {
@@ -139,7 +137,7 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
   ]
   const enabled = (agent: TuiAgent) =>
     !settings?.disabledTuiAgents?.includes(agent) &&
-    isNativeChatProviderOn(settings, agent, installedHere)
+    isNativeChatProviderDisplayedOn(settings, agent, detection.detectedIds)
   const eligible =
     isNativeChatEnabled(settings) && catalogLoaded && input.hostCapabilities !== null
       ? chatAgents
@@ -158,24 +156,12 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
     owner: typeof owner
     values: Map<TuiAgent, HostChatAnswer>
   } | null>(null)
-  const needsNativeInventory =
-    installedHere === null &&
-    chatAgents.some(
-      (agent) =>
-        !settings?.disabledTuiAgents?.includes(agent) &&
-        agent !== 'claude' &&
-        agent !== 'codex' &&
-        settings?.nativeChatProviders?.[agent] === undefined
-    )
   const chatEnabled = isNativeChatEnabled(settings)
   useEffect(() => {
     if (!open || !chatEnabled) {
       return
     }
     const state = useAppStore.getState()
-    if (needsNativeInventory) {
-      void state.ensureNativeDetectedAgents()
-    }
     if (!catalogLoaded) {
       const input = buildAgentLaunchRouteInput(state, {
         agent: 'claude',
@@ -187,7 +173,7 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
         state.runtimeStatusByEnvironmentId
       )
     }
-  }, [open, chatEnabled, facts, worktreeId, catalogLoaded, needsNativeInventory])
+  }, [open, chatEnabled, facts, worktreeId, catalogLoaded])
   useEffect(() => {
     const target = structuredAgentSessionTargetForHost(owner.executionHostId)
     if (!owner.open || !target || !owner.eligible) {
@@ -242,7 +228,6 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
   }, [owner, worktreeId])
   const rows = buildNewTabAgentMenuRows({
     settings,
-    installedHere: installedHere,
     detectedOnHost: detection.detectedIds,
     chatAgents,
     catalogLoaded,

@@ -17,8 +17,7 @@ export type NativeChatGlobalSettings = {
   nativeChatAppearance?: NativeChatAppearanceSettings
   /** Off keeps chats unnamed without running a naming agent. Absent means on. */
   nativeChatAutoName?: boolean
-  /** Agents the user turned on or off as chat providers. Unlisted: Claude and Codex on, others
-   *  on when installed on this computer (`shared/native-chat-providers.ts`). */
+  /** Explicit chat provider choices; unlisted agents retain the chat launch default. */
   nativeChatProviders?: Partial<Record<TuiAgent, boolean>>
 }
 

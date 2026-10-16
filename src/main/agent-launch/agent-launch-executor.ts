@@ -98,7 +98,7 @@ export async function executeAgentLaunch(
       },
       settings: execution.terminalOnly
         ? undefined
-        : await readAgentLaunchModeSettings(runtime, intent.agent, intent.nativeChatDefault),
+        : readAgentLaunchModeSettings(runtime, intent.nativeChatDefault),
       ...(execution.terminalOnly ? { terminalOnly: true } : {}),
       vocabulary
     })
