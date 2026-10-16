@@ -22,7 +22,7 @@ function hasChangedLineageAncestor(
     getIndexedAllWorktrees(state.worktreesByRepo).map((row) => [getWorktreeHostIdentity(row), row])
   )
   return getWorktreeLineageAncestors(child, state.worktreeLineageById, rows).some((parent) =>
-    changedWorktreeIds.has(parent.id)
+    changedWorktreeIds.has(getWorktreeHostIdentity(parent))
   )
 }
 
@@ -47,7 +47,7 @@ export function createSetWorktreesPinnedAndReveal(
         continue
       }
       didChange = true
-      changedWorktreeIds.add(worktreeId)
+      changedWorktreeIds.add(getWorktreeHostIdentity(current))
       const workspaceScope = parseWorkspaceKey(worktreeId)
       if (workspaceScope?.type === 'folder') {
         void get().updateWorktreeMeta(

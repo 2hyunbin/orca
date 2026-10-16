@@ -185,7 +185,7 @@ function getFolderWorkspaceSubtreeIds(
     // would offer a parent whose whole branch the folder never actually shows.
     const rootWorktree = getLineageChildWorktree(lineage, worktreeById)
     if (rootWorktree) {
-      rootIds.add(rootWorktree.id)
+      rootIds.add(getWorktreeHostIdentity(rootWorktree))
     }
   }
 
@@ -196,7 +196,7 @@ function getFolderWorkspaceSubtreeIds(
     rootIds
   ).values()) {
     for (const child of children) {
-      subtreeIds.add(child.id)
+      subtreeIds.add(getWorktreeHostIdentity(child))
     }
   }
   return subtreeIds
@@ -242,7 +242,7 @@ function ParentWorktreeCandidateList({
           (getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId)) === childHostId ||
             (!childHostId.startsWith('runtime:') && !candidate.hostId?.startsWith('runtime:'))) &&
           !cyclicLineageIds.has(getWorktreeHostIdentity(candidate)) &&
-          (folderSubtreeIds === null || folderSubtreeIds.has(candidate.id))
+          (folderSubtreeIds === null || folderSubtreeIds.has(getWorktreeHostIdentity(candidate)))
       )
       .sort(compareWorktreeDisplayName)
   }, [
