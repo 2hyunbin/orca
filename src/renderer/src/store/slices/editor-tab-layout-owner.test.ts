@@ -274,8 +274,6 @@ describe('editor tabs in a layout-owner build', () => {
         ]
       }
     }))
-    const before = main
-
     openFile('/b.ts', { targetGroupId: 'g3' })
     const [command] = sentCommands()
     expect(
@@ -284,7 +282,9 @@ describe('editor tabs in a layout-owner build', () => {
       ok: false,
       code: 'group_not_found'
     })
-    expect(main).toBe(before)
+    expect(
+      tabIn('g3', store.getState().openFiles.find((file) => file.filePath === '/b.ts')!.id)
+    ).toBe(command!.type === 'openEditorTab' ? command.tabId : undefined)
   })
 
   it("sends an edit-mode file's record exactly as the window's session save keeps it", () => {
