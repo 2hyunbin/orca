@@ -148,7 +148,7 @@ describe.skipIf(skip)('orca serve on orcad', () => {
       await new Promise((settle) => setTimeout(settle, 1_000))
     } finally {
       await diagnostics.capture('beforeServeKill')
-      recordProfileDaemons(userData)
+      await recordProfileDaemons(userData)
       try {
         await killChildAndWait(child)
       } finally {
@@ -264,7 +264,7 @@ async function stopServe(userData: string): Promise<void> {
   if (!child || child.exitCode !== null) {
     return
   }
-  recordProfileDaemons(userData)
+  await recordProfileDaemons(userData)
   const exited = new Promise((settle) => child.once('exit', settle))
   child.kill('SIGTERM')
   await exited

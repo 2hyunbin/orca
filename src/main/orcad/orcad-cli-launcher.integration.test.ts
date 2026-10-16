@@ -149,7 +149,7 @@ it.skipIf(skip)(
         'Unknown environment: stale-shell-selection'
       )
     } finally {
-      recordProfileDaemons(userData)
+      await recordProfileDaemons(userData)
       await killChildAndWait(child)
       await killProfileDaemons(userData)
       await removeTestRoot(root)

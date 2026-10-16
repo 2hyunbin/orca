@@ -8,6 +8,7 @@ import type { LinuxStatEvidence } from '../daemon/daemon-incarnation-evidence-ty
 import { DaemonEndpointOwnershipError } from '../daemon/daemon-endpoint-adoption'
 import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
 import {
+  __setDaemonProcessTableReaderForTests,
   killAndAwaitExit,
   killProfileDaemons,
   recordProfileDaemons,
@@ -270,12 +271,51 @@ describe('profile daemon cleanup after loss of contact', () => {
     })
     onTestFinished(() => closed)
     const root = profile(retiring.pid!, onTestFinished)
-    recordProfileDaemons(root)
+    await recordProfileDaemons(root)
     rmSync(join(root, 'daemon', 'daemon-v1.pid'))
     vi.mocked(cleanupDaemonForProtocol).mockClear()
     await killProfileDaemons(root)
     expect(() => process.kill(retiring.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
     expect(cleanupDaemonForProtocol).not.toHaveBeenCalled()
+  })
+
+  it('waits for a daemon child that outlives the daemon in the profile directory', async ({
+    onTestFinished
+  }) => {
+    const daemonPid = await exitedChildPid()
+    const child = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 1 }
+    let childReads = 3
+    const reader = vi.fn(async () => (childReads-- > 0 ? [child] : []))
+    __setDaemonProcessTableReaderForTests(reader)
+    onTestFinished(() => __setDaemonProcessTableReaderForTests())
+    vi.mocked(cleanupDaemonForProtocol).mockResolvedValueOnce({ cleaned: true, killedCount: 1 })
+    await killProfileDaemons(profile(daemonPid, onTestFinished))
+    expect(childReads).toBeLessThan(0)
+  })
+
+  it('names a daemon child still alive at the exit deadline', async ({ onTestFinished }) => {
+    const daemonPid = await exitedChildPid()
+    const child = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 1 }
+    __setDaemonProcessTableReaderForTests(async () => [child])
+    onTestFinished(() => __setDaemonProcessTableReaderForTests())
+    vi.mocked(cleanupDaemonForProtocol).mockResolvedValueOnce({ cleaned: true, killedCount: 1 })
+    vi.useFakeTimers()
+    try {
+      const result = killProfileDaemons(profile(daemonPid, onTestFinished)).then(
+        () => null,
+        (error: unknown) => error
+      )
+      await vi.advanceTimersByTimeAsync(10_100)
+      expect(await result).toMatchObject({
+        errors: [
+          expect.objectContaining({
+            message: 'Daemon descendants did not exit: OpenConsole.exe 77'
+          })
+        ]
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it.for([

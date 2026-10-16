@@ -101,7 +101,7 @@ describe.skipIf(skip)('packaged orcad stop request', () => {
     expect(lock?.startedAtMs).toEqual(expect.any(Number))
     expect(Math.abs(lock!.startedAtMs! - launchedAt)).toBeLessThan(30_000)
 
-    recordProfileDaemons(userData)
+    await recordProfileDaemons(userData)
     const requestedAt = Date.now()
     writeFileSync(join(slotDir, ORCAD_STOP_REQUEST_FILENAME), '')
     const code = await exited
