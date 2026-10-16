@@ -158,7 +158,7 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
       paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
       launchByPtyId: new Map([['pty', { agent: launchAgent, config }]]),
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
-      rows: [
+      readRows: () => [
         {
           paneKey: PANE_KEY,
           agentType: 'claude',

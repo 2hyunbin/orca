@@ -19,7 +19,7 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
             return [ptyId, { agent: pty?.launchAgent ?? null, config: pty?.launchConfig ?? null }]
           })
         ),
-        rows: this.getAgentProviderSessionSnapshotFn?.() ?? [],
+        readRows: () => this.getAgentProviderSessionSnapshotFn?.() ?? [],
         checkAgentPresence: this.checkHookAgentPresenceFn,
         capturedAt: Date.now()
       }),

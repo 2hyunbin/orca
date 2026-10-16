@@ -36,7 +36,8 @@ export async function captureWorktreeSleepResumeRecords(args: {
     string,
     { agent: string | null; config: SleepingAgentLaunchConfig | null }
   >
-  rows: readonly AgentStatusIpcPayload[]
+  /** Read after each presence probe, so a conversation started during it is the one captured. */
+  readRows: () => readonly AgentStatusIpcPayload[]
   checkAgentPresence:
     | ((paneKey: string, exitedSince?: number) => Promise<AgentProcessVerdict | null>)
     | null
@@ -57,7 +58,7 @@ export async function captureWorktreeSleepResumeRecords(args: {
         exitedPaneKeys.push(paneKey)
         continue
       }
-      const row = args.rows.find((candidate) => candidate.paneKey === paneKey)
+      const row = args.readRows().find((candidate) => candidate.paneKey === paneKey)
       const agent = row?.agentType
       const providerSession = normalizeAgentProviderSession(row?.providerSession)
       if (!row || !isResumableTuiAgent(agent) || !providerSession) {
