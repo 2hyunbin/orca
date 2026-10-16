@@ -2,7 +2,7 @@ import { useAppStore } from '@/store'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import {
-  remotePlatformFromHostFact,
+  sshHostPlatformFromFact,
   resolveAgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
 import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
@@ -83,15 +83,9 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
       worktreePath: session.worktree?.path,
       terminalWindowsShell: state.settings?.terminalWindowsShell,
       tabShellOverride: session.shellOverride,
-      remotePlatform:
-        session.transport.getRemotePlatform?.() ??
-        remotePlatformFromHostFact(
-          resolveWorktreeExecutionHostPlatform(
-            state,
-            session.deps.worktreeId,
-            session.worktree?.path
-          )
-        )
+      remotePlatform: sshHostPlatformFromFact(
+        resolveWorktreeExecutionHostPlatform(state, session.deps.worktreeId, session.worktree?.path)
+      )
     })
     const startupPlan = buildAgentResumeStartupPlan({
       agent,

@@ -4,7 +4,7 @@ import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import {
-  remotePlatformFromHostFact,
+  sshHostPlatformFromFact,
   resolveAgentResumeLaunchTarget,
   type AgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
@@ -41,7 +41,7 @@ function getResumeLaunchTarget(worktreeId: string): AgentResumeLaunchTarget {
     executionHostId: getExecutionHostIdForWorktree(state, worktreeId),
     worktreePath: worktree?.path,
     terminalWindowsShell: state.settings?.terminalWindowsShell,
-    remotePlatform: remotePlatformFromHostFact(
+    remotePlatform: sshHostPlatformFromFact(
       resolveWorktreeExecutionHostPlatform(state, worktreeId, worktree?.path)
     )
   })

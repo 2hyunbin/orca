@@ -1,7 +1,7 @@
 import { useAppStore } from '@/store'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import {
-  remotePlatformFromHostFact,
+  sshHostPlatformFromFact,
   resolveAgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
 import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
@@ -67,7 +67,7 @@ export function buildCodexAccountRestartStartup(args: {
     worktreePath: worktree?.path,
     terminalWindowsShell: state.settings?.terminalWindowsShell,
     tabShellOverride: args.shellOverride,
-    remotePlatform: remotePlatformFromHostFact(
+    remotePlatform: sshHostPlatformFromFact(
       resolveWorktreeExecutionHostPlatform(state, args.worktreeId, worktree?.path)
     )
   })

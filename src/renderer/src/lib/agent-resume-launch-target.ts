@@ -27,7 +27,7 @@ export type AgentResumeLaunchTargetArgs = {
   terminalWindowsShell: string | null | undefined
   /** Per-tab Windows shell override, which beats the global setting at spawn time. */
   tabShellOverride?: string | null
-  /** OS a non-local execution host reported; null/undefined when unknown. */
+  /** OS the SSH execution host reported; null/undefined when unknown. */
   remotePlatform?: NodeJS.Platform | null
 }
 
@@ -35,11 +35,12 @@ function isRemoteResumeTarget(args: AgentResumeLaunchTargetArgs): boolean {
   return Boolean(args.connectionId) || parseExecutionHostId(args.executionHostId)?.kind !== 'local'
 }
 
-/** The reported OS of a non-local host, or null for a local or not-yet-reported host. */
-export function remotePlatformFromHostFact(
-  fact: ExecutionHostPlatformFact
-): NodeJS.Platform | null {
-  return fact.kind === 'known' && fact.hostKind !== 'local' ? fact.platform : null
+/**
+ * The reported OS of an SSH host, else null. Why SSH only: a paired Orca server applies its own
+ * Windows shell setting, which this client cannot see, so its resumes keep the old quoting.
+ */
+export function sshHostPlatformFromFact(fact: ExecutionHostPlatformFact): NodeJS.Platform | null {
+  return fact.kind === 'known' && fact.hostKind === 'ssh' ? fact.platform : null
 }
 
 function resolveResumeLaunchPlatform(args: AgentResumeLaunchTargetArgs): NodeJS.Platform {
