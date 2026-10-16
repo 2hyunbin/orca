@@ -62,7 +62,12 @@ async function resolveSavedAgentOverride(
   if (!savedAgent) {
     return { kind: 'launch-default' }
   }
-  const detectedAgents = await ensureDetectedAgentsForRepo(useAppStore.getState(), repo ?? {})
+  const pendingAgents = ensureDetectedAgentsForRepo(useAppStore.getState(), repo ?? {})
+  if (!pendingAgents) {
+    // Why: a paired server answers per workspace; the direct launch checks this on the new one.
+    return { kind: 'agent', agent: savedAgent }
+  }
+  const detectedAgents = await pendingAgents
   if (!isAgentAvailable(savedAgent, detectedAgents)) {
     toast.error(
       translate(

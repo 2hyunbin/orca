@@ -104,31 +104,35 @@ export async function loadDetectedAgentsForWorktree(
 export type RepoHostFields = { connectionId?: string | null; executionHostId?: string | null }
 
 /**
- * A project's agents from its execution host, for launches that run before the workspace exists:
- * a paired server's project (including one on that server's SSH target) asks the server.
+ * A project's agents, for launches that run before the workspace exists. Null for a paired
+ * server's project: that server resolves agents per workspace (its SSH target, a WSL project),
+ * so only the new workspace can be asked — and never this client in its place.
  */
 export function ensureDetectedAgentsForRepo(
   state: DetectionActionState,
   repo: RepoHostFields
-): Promise<TuiAgent[]> {
+): Promise<TuiAgent[]> | null {
   const host = parseExecutionHostId(getRepoExecutionHostId(repo))
   if (host?.kind === 'runtime') {
-    return state.ensureRuntimeDetectedAgents(host.environmentId)
+    return null
   }
-  if (host?.kind === 'ssh') {
-    return state.ensureRemoteDetectedAgents(host.targetId)
-  }
-  return state.ensureDetectedAgents()
+  return host?.kind === 'ssh'
+    ? state.ensureRemoteDetectedAgents(host.targetId)
+    : state.ensureDetectedAgents()
 }
 
-/** A just-created workspace's agents; uses its project's host while the new row hydrates. */
+/** A just-created workspace's agents; names it to its project's host while the new row hydrates. */
 export function ensureDetectedAgentsForNewWorktree(
   state: WorktreeAgentInventoryState,
   worktreeId: string,
   repo: RepoHostFields
 ): Promise<TuiAgent[]> {
   const target = detectionTargetForWorktree(state, worktreeId)
-  return target
-    ? ensureDetectedAgentsForTarget(state, target)
-    : ensureDetectedAgentsForRepo(state, repo)
+  if (target) {
+    return ensureDetectedAgentsForTarget(state, target)
+  }
+  const host = parseExecutionHostId(getRepoExecutionHostId(repo))
+  return host?.kind === 'runtime'
+    ? state.ensureRuntimeDetectedAgents(host.environmentId, worktreeId)
+    : (ensureDetectedAgentsForRepo(state, repo) ?? Promise.resolve([]))
 }
