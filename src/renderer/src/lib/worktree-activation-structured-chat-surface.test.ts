@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store'
+import * as activationGate from './worktree-agent-activation-gate'
 import { activateAndRevealWorktree } from './worktree-activation'
 import { ensureWorktreeHasInitialTerminal } from './worktree-initial-terminal-seeding'
 import {
@@ -70,6 +72,21 @@ describe('seeding beside a caller-provided chat surface', () => {
     expect(store.queueTabSetupSplit).toHaveBeenCalledWith('tab-1', expect.anything())
   })
 
+  it('keeps the split Setup anchor when revealing a renderer-created chat', () => {
+    const worktree = makeWorktree()
+    seedEmptyActivatableWorktree(worktree)
+    setSetupScriptLaunchMode('split-vertical')
+    const queueSplit = vi.spyOn(useAppStore.getState(), 'queueTabSetupSplit')
+    const setupError = vi.spyOn(toast, 'error').mockReturnValue('setup-error')
+    const result = activateAndRevealWorktree(worktree.id, { providesInitialSurface: true, setup })
+
+    expect(result).not.toBe(false)
+    const tabs = useAppStore.getState().tabsByWorktree[worktree.id]
+    expect(tabs).toHaveLength(1)
+    expect(queueSplit).toHaveBeenCalledWith(tabs[0].id, expect.anything())
+    expect(setupError).not.toHaveBeenCalled()
+  })
+
   it('still seeds a shell for issue automation, which splits from it', () => {
     let createdIndex = 0
     const createTab = vi.fn(() => ({ id: `tab-${++createdIndex}` }))
@@ -119,4 +136,26 @@ describe('seeding beside a caller-provided chat surface', () => {
     expect(result === false ? 'unused' : result.primaryTabId).toBeNull()
     expect(useAppStore.getState().tabsByWorktree[worktree.id]).toHaveLength(1)
   })
+})
+
+it('runs independent Setup immediately and never seeds when it closes before discovery', async () => {
+  const worktree = makeWorktree()
+  seedEmptyActivatableWorktree(worktree)
+  let resolveGate!: (outcome: activationGate.WorktreeAgentActivationOutcome) => void
+  vi.spyOn(activationGate, 'gateWorktreeAgentActivation').mockReturnValue(
+    new Promise((resolve) => {
+      resolveGate = resolve
+    })
+  )
+  activateAndRevealWorktree(worktree.id, {
+    providesInitialSurface: true,
+    creationOwnsFirstSurface: true,
+    notifyHostRuntime: false,
+    setup
+  })
+  expect(useAppStore.getState().tabsByWorktree[worktree.id]).toHaveLength(1)
+  useAppStore.setState({ tabsByWorktree: { [worktree.id]: [] } })
+  resolveGate('empty')
+  await Promise.resolve()
+  expect(useAppStore.getState().tabsByWorktree[worktree.id]).toEqual([])
 })

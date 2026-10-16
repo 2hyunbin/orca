@@ -125,14 +125,15 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
           notifyWorktreesChanged: (repoId) => this.notifyWorktreesChanged(repoId),
           emitCreated: (event) => this.emitWorktreeLifecycle(event),
           launchOwnsFirstSurface,
-          activate: (repoId, worktreeId, setup, startup) =>
+          activate: (repoId, worktreeId, setup, startup, providesInitialSurface) =>
             this.notifyActivateWorktree(
               repoId,
               worktreeId,
               setup,
               startup,
               undefined,
-              args.navigation
+              args.navigation,
+              providesInitialSurface
             )
         }
       })
@@ -240,24 +241,26 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         sendFollowup: (handle, followup) => this.sendStartupFollowupWhenReady(handle, followup),
         provision: (options) => this.provisionManagedWorktreeTerminals(options, worktree),
         launchOwnsFirstSurface,
-        activate: (repoId, worktreeId, startup, failedSetup, failedDefaultTabs) =>
+        activate: (
+          repoId,
+          worktreeId,
+          startup,
+          failedSetup,
+          failedDefaultTabs,
+          providesInitialSurface
+        ) =>
           this.notifyActivateWorktree(
             repoId,
             worktreeId,
             failedSetup,
             startup,
             failedDefaultTabs,
-            args.navigation
+            args.navigation,
+            providesInitialSurface
           )
       }
-    })
+    }).finally(() => this.notifyCreatedWorktreeLifecycle(worktree))
     warning = terminalWarning
-    this.emitWorktreeLifecycle({
-      kind: 'created',
-      worktreeId: worktree.id,
-      path: worktree.path,
-      branch: worktree.branch
-    })
     return {
       worktree: {
         ...worktree,

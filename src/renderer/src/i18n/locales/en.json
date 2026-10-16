@@ -1037,7 +1037,8 @@
           }
         },
         "activation": {
-          "cannotOpenFolderWorkspace": "Cannot open folder workspace"
+          "cannotOpenFolderWorkspace": "Cannot open folder workspace",
+          "setupCouldNotRun": "Setup could not run. Open a terminal and retry Setup."
         },
         "creation": {
           "flow": {

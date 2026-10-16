@@ -222,6 +222,9 @@ export async function runWorktreeAgentActivationGate(
         declinedPtyIds: adoption.declinedPtyIds
       })
     }
+    if (adoption.declinedPtyIds.length > 0) {
+      return 'blocked'
+    }
     if (liveSurfaceAdopted && !workspaceHasSleepingAgentSessions(deps.getState(), worktreeId)) {
       return 'adopted'
     }
@@ -259,7 +262,9 @@ export async function runWorktreeAgentActivationGate(
       ? 'adopted'
       : structured
         ? 'structured'
-        : 'empty'
+        : liveWorkspacePtyIds.size > 0
+          ? 'blocked'
+          : 'empty'
 }
 
 export function gateWorktreeAgentActivation(

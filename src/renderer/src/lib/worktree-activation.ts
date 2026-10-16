@@ -35,6 +35,7 @@ import {
   type WorktreeActivationSurfaceSelection
 } from './worktree-activation-surface-selection'
 import { gateAndReseedEmptyWorkspace } from './worktree-activation-gated-empty-reseed'
+import { activateOwnedWorktreeNavigation } from './worktree-owned-navigation'
 import { liftSidebarFiltersHidingWorktree } from './worktree-activation-sidebar-filters'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { getWorktreeVisitTimestamp } from './worktree-visit-recency'
@@ -233,18 +234,21 @@ export function activateAndRevealWorktree(
     state.recordWorktreeVisit(worktreeId)
   }
 
+  const ownedNavigation = activateOwnedWorktreeNavigation(worktreeId, opts, postActivationState)
+
   // Why: the gate is decided BEFORE resuming. A sleeping session must defer seeding until startup
   // restoration is ready (STA-1111) — resuming first would leave nothing to gate on. Structured
   // agent inventory hydrates asynchronously too, so an empty tab model can otherwise authorize a
   // fallback terminal beside a chat that is about to appear.
   const shouldGateAgentActivation =
+    !ownedNavigation &&
     !hasActivationWork &&
     (workspaceHasSleepingAgentSessions(postActivationState, worktreeId) ||
       (canInspectAgentActivationInventory() &&
         shouldAutoCreateInitialTerminal(
           postActivationState.reconcileWorktreeTabModel(worktreeId).renderableTabCount
         )))
-  if (!shouldGateAgentActivation) {
+  if (!shouldGateAgentActivation && !ownedNavigation) {
     // Why: sleeping destroys the local PTY but preserves the provider session id, so waking should
     // restore those CLI sessions. Ordering is load-bearing: resuming synchronously creates the
     // session's tab first, so the seeding below doesn't add a bare shell next to it.
@@ -259,9 +263,8 @@ export function activateAndRevealWorktree(
   }
 
   // 4. Ensure a focusable surface exists for externally-created worktrees
-  const primaryTabId = shouldGateAgentActivation
-    ? null
-    : providesInitialSurface && !hasActivationWork
+  const primaryTabId =
+    shouldGateAgentActivation || ownedNavigation || (providesInitialSurface && !hasActivationWork)
       ? null
       : ensureWorktreeHasInitialTerminal(
           useAppStore.getState(),

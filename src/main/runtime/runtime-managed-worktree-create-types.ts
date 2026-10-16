@@ -53,6 +53,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   createdWithAgent?: TuiAgent
   /** Main-internal launch registration before catalog notification or activation. */
   onWorkspaceCreated?: (worktreeId: string) => void
+  onPreTerminalFailure?: (worktreeId: string, error: unknown) => void
   startupAgent?: TuiAgent
   startupLaunchPreferences?: AgentLaunchPreferences
   startupPrompt?: string

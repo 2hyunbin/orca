@@ -80,7 +80,7 @@ describe('default tabs beside the agent a create started', () => {
     host.setTabTitle.mockRejectedValue(new Error('terminal_tab_unresolved'))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    await expect(provision(host, true)).resolves.toEqual({
+    await expect(provision(host, true)).resolves.toMatchObject({
       setupSpawned: false,
       setupTerminalHandle: null
     })
@@ -207,7 +207,7 @@ describe('provisionWorktreeTerminals with a cleared creation choice', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       await expect(
         provisionWithSetup(host, true, true, undefined, callerProvidesSurface)
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         setupSpawned: false,
         setupTerminalHandle: null
       })

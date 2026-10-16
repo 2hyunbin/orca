@@ -29,6 +29,7 @@ function harness(options: {
   terminalPromptDelivered?: boolean
   /** Whether the surface reports that its typed line took the offered prompt. */
   lineCarriesPrompt?: boolean
+  preTerminalFailureProven?: boolean
   worktreeCreateError?: Error
   onStructuredCreate?: () => void
   onStructuredPromptDelivery?: () => void
@@ -123,9 +124,15 @@ function harness(options: {
           deliverStructuredPrompt,
           deliverTerminalPrompt
         },
-        workspaces: options.worktreeOnlyFactory
-          ? { createWorktree, createRecoveryShell }
-          : { createWorktree, createFolderWorkspace, createRecoveryShell },
+        workspaces: {
+          createWorktree,
+          createRecoveryShell,
+          failureProvesNoSurface: (error, id) =>
+            options.preTerminalFailureProven === true &&
+            error === options.worktreeCreateError &&
+            id === 'wt-new',
+          ...(!options.worktreeOnlyFactory ? { createFolderWorkspace } : {})
+        },
         ...(options.onSurfacePublished ? { onSurfacePublished: options.onSurfacePublished } : {})
       })
   }
@@ -151,14 +158,17 @@ describe('a structured launch that creates its own worktree', () => {
     expect(readCreatedWorkspaceLaunch(h.runtime, 'wt-new')).toBeUndefined()
   })
 
-  it('recovers once and releases intent when creation fails after metadata registration', async () => {
-    const failure = new Error('materialization failed')
-    const h = harness({ worktreeCreateError: failure })
-    await expect(h.run(CREATE_INTENT)).rejects.toBe(failure)
-    expect(h.createRecoveryShell).toHaveBeenCalledExactlyOnceWith('wt-new')
-    expect(h.createStructuredSession).not.toHaveBeenCalled()
-    expect(readCreatedWorkspaceLaunch(h.runtime, 'wt-new')).toBeUndefined()
-  })
+  it.each([false, true])(
+    'recovers only proven pre-terminal metadata failure (%s)',
+    async (preTerminalFailureProven) => {
+      const failure = new Error('materialization failed')
+      const h = harness({ worktreeCreateError: failure, preTerminalFailureProven })
+      await expect(h.run(CREATE_INTENT)).rejects.toBe(failure)
+      expect(h.createRecoveryShell).toHaveBeenCalledTimes(preTerminalFailureProven ? 1 : 0)
+      expect(h.createStructuredSession).not.toHaveBeenCalled()
+      expect(readCreatedWorkspaceLaunch(h.runtime, 'wt-new')).toBeUndefined()
+    }
+  )
 
   it('creates the worktree with no startup agent, then asks the host, then opens a session', async () => {
     const h = harness({})
@@ -289,10 +299,10 @@ describe('a structured launch that creates its own worktree', () => {
       },
       1
     ]
-  ] as const)('leaves a shell after %s', async (_label, options, agentStarts) => {
+  ] as const)('leaves no shell after unproven %s', async (_label, options, agentStarts) => {
     const h = harness(options)
     await expect(h.run(CREATE_INTENT)).rejects.toThrow()
-    expect(h.createRecoveryShell).toHaveBeenCalledWith('wt-new')
+    expect(h.createRecoveryShell).not.toHaveBeenCalled()
     expect(h.createTerminalAgent).toHaveBeenCalledTimes(agentStarts)
   })
 
