@@ -133,14 +133,18 @@ function pointer(
   }
 }
 
-function switchingDatabase(targets: { old: Target; new: Target }, poolMax: number) {
+function switchingDatabase(
+  targets: { old: Target; new: Target },
+  poolMax: number,
+  firstPointer: () => Promise<DatabaseTargetPointer | null> = async () => pointer()
+) {
   const applicationName = markRelayDatabaseMoveCapability('orca-relay/cell/step4-test', 'c0ffee01')
   const settings = { poolMax, applicationName }
   const database = new SwitchingRelayDatabase({
     primary: openPrimaryRelayDatabaseTarget(databaseUrl(targets.old.role, targets.old), settings),
     openDedicated: () =>
       openPrimaryRelayDatabaseTarget(databaseUrl(targets.new.role, targets.new), settings),
-    firstPointer: async () => pointer(),
+    firstPointer,
     // Short, so the tests below run past the boot window's refusal re-selection.
     bootSelectionCapMs: 100
   })
@@ -250,6 +254,31 @@ describePostgres('switching relay database against two PostgreSQL targets', () =
       (await client.query(`SELECT id FROM step4_load WHERE id = 'queued'`)).rows
     )
     expect(onNew).toEqual([{ id: 'queued' }])
+    await database.close()
+  }, 30_000)
+
+  it('refuses a superseded primary when the pointer cannot be read, and reads the old row shape', async () => {
+    const targets = await freshTargets()
+    const old = databaseUrl(targets.old.role, targets.old)
+    // The authority table from before the column existed still reads: no pointer serves primary.
+    const plain = switchingDatabase(targets, 2, async () => null).database
+    expect(await plain.query('SELECT 1 AS one')).toEqual([{ one: 1 }])
+    await plain.close()
+
+    await withClient(old, async (client) => {
+      await client.query(
+        `ALTER TABLE relay_database_authority ADD COLUMN superseded BOOLEAN NOT NULL DEFAULT false`
+      )
+      await client.query(`UPDATE relay_database_authority SET superseded = true`)
+    })
+    const { database } = switchingDatabase(targets, 2, async () => null)
+    const insert = `INSERT INTO step4_load (id, worker, at) VALUES ('stray', 0, 0)`
+    await expect(database.query(insert)).rejects.toMatchObject({ code: '57P03' })
+    await expect(database.query(insert)).rejects.toMatchObject({ code: '57P03' })
+    const stray = await withClient(old, async (client) =>
+      (await client.query(`SELECT id FROM step4_load WHERE id = 'stray'`)).rows
+    )
+    expect(stray).toEqual([])
     await database.close()
   }, 30_000)
 })
