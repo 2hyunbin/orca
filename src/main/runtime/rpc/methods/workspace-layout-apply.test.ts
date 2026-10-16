@@ -160,6 +160,24 @@ describe('layout.apply', () => {
     ).toBe(false)
   })
 
+  it('accepts the close of one tab with the window’s reason, but no force or refusals', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const close = { type: 'closeTabs', workspace: WORKTREE, recordClose: 'user' }
+
+    expect(
+      apply?.params?.parse({
+        command: { ...close, tabIds: ['tab-1'], force: false, refusePinned: true }
+      })
+    ).toEqual({ command: { ...close, tabIds: ['tab-1'] } })
+    expect(apply?.params?.safeParse({ command: { ...close, tabIds: ['a', 'b'] } }).success).toBe(
+      false
+    )
+    expect(
+      apply?.params?.safeParse({ command: { ...close, tabIds: ['a'], recordClose: 'pty-exit' } })
+        .success
+    ).toBe(false)
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {
@@ -171,6 +189,43 @@ describe('layout.apply', () => {
     await runtime.applyLayoutCommand(ratios)
 
     expect(applyLayoutCommand).toHaveBeenCalledWith(ratios, ['local'])
+  })
+
+  it('takes a terminal tab create under valid window ids, and only an activation initial', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const create = {
+      type: 'createTerminalTab',
+      workspace: WORKTREE,
+      tabId: 'tab-2',
+      leafId: '22222222-2222-4222-8222-222222222222'
+    }
+    const accepts = (command: Record<string, unknown>): boolean | undefined =>
+      apply?.params?.safeParse({ command }).success
+
+    expect(
+      apply?.params?.parse({
+        command: { ...create, creation: { launchAgent: 'claude', startupCwd: '/work' }, index: 0 }
+      })
+    ).toEqual({ command: { ...create, creation: { launchAgent: 'claude', startupCwd: '/work' } } })
+    expect(accepts({ ...create, initial: 'activation' })).toBe(true)
+    expect(accepts({ ...create, initial: 'restore' })).toBe(false)
+    expect(accepts({ ...create, tabId: 'web:surface' })).toBe(false)
+    expect(accepts({ ...create, leafId: 'leaf-2' })).toBe(false)
+    expect(accepts({ ...create, creation: { launchAgent: 'not-an-agent' } })).toBe(false)
+  })
+
+  it('creates a new tab in the workspace’s own partition', async () => {
+    const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
+    const create = {
+      type: 'createTerminalTab',
+      workspace: WORKTREE,
+      tabId: 'tab-new',
+      leafId: '22222222-2222-4222-8222-222222222222'
+    } as const
+
+    await runtime.applyLayoutCommand(create)
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith(create, ['local'])
   })
 
   it('takes a tab’s custom title, color and pin, and no other tab kind or property', async () => {

@@ -58,6 +58,11 @@ export type LayoutCommand =
       refusePinned?: boolean
       /** Editor tabs whose view reported an unsaved draft (rule 10). */
       dirtyTabIds?: string[]
+      /**
+       * Records each terminal tab closed, or not listed, as closed for this reason, so a start
+       * that commits later is refused. Main sets it on a window's close.
+       */
+      recordClose?: 'user' | 'cleanup'
     })
   | (On & { type: 'moveTab'; tabId: string; toGroupId: string; index: number })
   | (On & { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide })
@@ -145,6 +150,7 @@ export type LayoutRefusalCode =
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
+  | 'tab_exists'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }

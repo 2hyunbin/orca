@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store'
 import { findRenamableUnifiedTab } from '@/store/terminals/renamable-unified-tab'
-import { sendLayoutCommandToOwner, type WindowLayoutCommand } from '@/runtime/layout-owner-command'
+import type { WindowLayoutCommand } from '@/runtime/layout-apply-send'
+import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 
 type TabPropsActions<Item extends { unifiedTabId: string; isPinned: boolean }> = {
   setCustomTitle: (tabId: string, title: string | null) => void
