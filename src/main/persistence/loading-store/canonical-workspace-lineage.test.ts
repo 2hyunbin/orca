@@ -247,7 +247,6 @@ it('prunes only the derived owner even when saved hints name another host', () =
   pruneWorktreeStateForRepo(state, 'repo', 'local', () => {})
   expect(Object.keys(state.lineageByChildInstance)).toEqual(['remote'])
 })
-
 it('reuses the saved graph and preserves live overlays that break a cached cycle', () => {
   const state = registeredState()
   state.worktreeMeta = Object.fromEntries([0, 1, 2].map((i) => [`repo::/${i}`, meta(String(i))]))
@@ -286,7 +285,6 @@ it('reuses the saved graph and preserves live overlays that break a cached cycle
   expect(raw).toHaveLength(3)
   expect(Object.isFrozen(raw[0].child)).toBe(true)
 })
-
 it('refuses ambiguous metadata before migration and refreshes the activity-ranked alias', async () => {
   const state = registeredState()
   state.worktreeIdentityAliases = { [`local|${id}`]: ['a', 'b'] }
