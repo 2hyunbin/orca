@@ -15,7 +15,11 @@ import {
 import type { RuntimeTerminalProjection } from '../../orca-runtime-core'
 import { DEFAULT_TERMINAL_READ_LIMIT } from '../../terminal-tail-limits'
 import { HeadlessEmulator } from '../../../daemon/headless-emulator'
-import { projectTerminalTailLines } from '../../orca-runtime-terminal-projection'
+import {
+  projectTerminalTailLines,
+  projectTerminalVisibleLines
+} from '../../orca-runtime-terminal-projection'
+import { VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from '../../orca-runtime-postlude'
 import { isNativeWindowsConptyPty } from '../../terminal-model-query-authority'
 
 export abstract class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWithSerializeTerminalBufferFromAvailableState {
@@ -202,9 +206,17 @@ export abstract class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaR
     limit: number | undefined,
     providerSnapshot: RuntimeProviderSnapshotReadOptions
   ): Promise<RuntimeTerminalProjection> {
+    // Why over-fetch by a screen: the projection drops blank grid rows after taking its rows, so
+    // the empty rows below the prompt would otherwise eat into the requested line count.
+    const rowLimit =
+      terminalReadLimit(limit, DEFAULT_TERMINAL_READ_LIMIT) +
+      (this.getTerminalSize(ptyId)?.rows ?? 0)
     const state = this.readWholeScreenModel(ptyId)
     if (!state) {
-      return this.readProviderTerminalTailLines(ptyId, limit, providerSnapshot)
+      return this.readProviderTerminalTailLines(ptyId, rowLimit, {
+        timeoutMs: VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS,
+        ...providerSnapshot
+      })
     }
     const generation = this.getPtyLifecycleGeneration(ptyId)
     await state.writeChain
@@ -214,10 +226,9 @@ export abstract class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaR
     ) {
       return { lines: [] }
     }
-    return projectTerminalTailLines(
-      state.emulator,
-      terminalReadLimit(limit, DEFAULT_TERMINAL_READ_LIMIT)
-    )
+    return providerSnapshot.visibleScreenOnly
+      ? projectTerminalVisibleLines(state.emulator)
+      : projectTerminalTailLines(state.emulator, rowLimit)
   }
 
   protected async readProviderTerminalTailLines(
