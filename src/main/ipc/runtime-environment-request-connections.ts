@@ -19,6 +19,10 @@ import { isRuntimeEnvironmentCapabilityPaused } from './runtime-environment-capa
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { publishRuntimeEnvironmentDiagnostics } from './runtime-environment-diagnostics-broadcast'
 import {
+  clearSharedControlAnswerSource,
+  setSharedControlAnswerSource
+} from './runtime-environment-shared-control-answers'
+import {
   advanceRuntimeEnvironmentTransportGeneration,
   getRuntimeEnvironmentTransportGeneration
 } from './runtime-environment-transport-generation'
@@ -165,6 +169,7 @@ export function subscribeRemoteRuntimeSharedControlRequest<TResult>(
 export function closeRemoteRuntimeSharedControlConnection(environmentId: string): void {
   const cached = sharedControlConnections.get(environmentId)
   sharedControlConnections.delete(environmentId)
+  clearSharedControlAnswerSource(environmentId)
   cached?.connection.close()
 }
 
@@ -172,13 +177,6 @@ export function getRemoteRuntimeSharedControlDiagnostics(
   environmentId: string
 ): RemoteRuntimeSharedConnectionDiagnostics | null {
   return sharedControlConnections.get(environmentId)?.connection.getDiagnostics() ?? null
-}
-
-/** When the ready control socket last heard from its server; null while it is not ready. */
-export function getRemoteRuntimeSharedControlAnsweredAt(environmentId: string): number | null {
-  const cached = sharedControlConnections.get(environmentId)
-  // Why ready is enough: a socket reaches ready only on its own server frame, which stamps it.
-  return cached?.connection.getDiagnostics().state === 'ready' ? cached.answeredAt() : null
 }
 
 export function reconnectRemoteRuntimeSharedControlConnection(environmentId: string): void {
@@ -254,6 +252,11 @@ function getSharedControlConnection(
       })
     }
     sharedControlConnections.set(environmentId, cached)
+    const entry = cached
+    // Why ready is enough: a socket reaches ready only on its own server frame, which stamps it.
+    setSharedControlAnswerSource(environmentId, () =>
+      entry.connection.getDiagnostics().state === 'ready' ? entry.answeredAt() : null
+    )
   }
   return cached.connection
 }

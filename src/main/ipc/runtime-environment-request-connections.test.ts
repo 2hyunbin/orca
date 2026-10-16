@@ -15,13 +15,13 @@ import {
 import {
   closeRemoteRuntimeRequestConnection,
   ensureRemoteRuntimeSharedControlConnection,
-  getRemoteRuntimeSharedControlAnsweredAt,
   getRemoteRuntimeSharedControlDiagnostics,
   pauseRemoteRuntimeSharedControlRetry,
   reconnectRemoteRuntimeSharedControlConnection,
   sendRemoteRuntimeSharedControlRequest,
   subscribeRemoteRuntimeSharedControlRequest
 } from './runtime-environment-request-connections'
+import { getRemoteRuntimeSharedControlAnsweredAt } from './runtime-environment-shared-control-answers'
 
 const ENVIRONMENT_ID = 'standing-intent-test'
 
