@@ -19,7 +19,7 @@ WHERE session_id = ? AND epoch = ?`)
   return typeof seq === 'number' ? seq : 0
 }
 
-/** A continuing epoch scan; validate each frozen suffix before consuming obsolete payloads. */
+/** A continuing epoch scan from the saved frontier; each slice commits its frontier with its work. */
 export class JournalPrunePass {
   private readonly state: JournalPruneState
   private readonly policy: JournalPrunePolicy
@@ -37,15 +37,7 @@ export class JournalPrunePass {
   }
 
   refuse(transaction: JournalTransaction): void {
-    transaction(() => this.state.abandon(true), 'DEFERRED')
-  }
-
-  coversPendingRows(db: Database.Database): boolean {
-    return (
-      this.state.progress().refused ||
-      (journalPruneUpper(db, this.sessionId, this.epoch) <= this.initialUpper &&
-        this.state.next() === null)
-    )
+    transaction(() => this.state.refuse(), 'DEFERRED')
   }
 
   step(
@@ -56,12 +48,12 @@ export class JournalPrunePass {
     compacted: number
     scanned: number
   } {
+    // A replaced epoch's bookkeeping is collected as garbage.
     if (readJournalSessionEpoch(db, this.sessionId) !== this.epoch) {
-      transaction(() => this.state.abandon(), 'DEFERRED')
       return { done: true, compacted: 0, scanned: 0 }
     }
     if (!this.initialized) {
-      transaction(() => this.state.initialize(this.initialUpper), 'DEFERRED')
+      transaction(() => this.state.initialize(), 'DEFERRED')
       this.initialized = true
     }
     const progress = this.state.progress()
@@ -73,7 +65,10 @@ export class JournalPrunePass {
       throw new JournalPruneRefusal('journal pruning refused a shortened epoch')
     }
     if (progress.scanned < upper) {
-      const scanned = this.scanSuffix(db, transaction, progress.scanned, upper)
+      const scanned = transaction(
+        () => this.scanSuffix(db, progress.scanned, upper),
+        'DEFERRED'
+      )
       return { done: false, compacted: 0, scanned }
     }
     const obsolete = this.state.next()
@@ -84,12 +79,7 @@ export class JournalPrunePass {
     return { done: false, compacted: Number(compacted), scanned: 0 }
   }
 
-  private scanSuffix(
-    db: Database.Database,
-    transaction: JournalTransaction,
-    after: number,
-    upper: number
-  ): number {
+  private scanSuffix(db: Database.Database, after: number, upper: number): number {
     const started = performance.now()
     let scanned = 0
     let bytes = 0
@@ -105,14 +95,10 @@ export class JournalPrunePass {
       if (after === 0 && parsed.row.kind !== 'epoch') {
         throw new JournalPruneRefusal('journal pruning refused a missing epoch row')
       }
-      // Finish the main read before the TEMP-only transaction; discovery takes no main write lock.
-      transaction(() => {
-        const obsolete = this.policy.observe(parsed.row, stored.ts)
-        if (obsolete !== null) {
-          this.state.enqueue(obsolete)
-        }
-        this.state.advance(stored.seq, upper)
-      }, 'DEFERRED')
+      const obsolete = this.policy.observe(parsed.row, stored.ts)
+      if (obsolete !== null) {
+        this.state.enqueue(obsolete)
+      }
       after = stored.seq
       scanned++
       bytes += Buffer.byteLength(stored.rowJson, 'utf8')
@@ -120,6 +106,7 @@ export class JournalPrunePass {
         break
       }
     }
+    this.state.advance(after)
     return scanned
   }
 }

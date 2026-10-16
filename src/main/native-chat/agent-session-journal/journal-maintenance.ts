@@ -1,22 +1,28 @@
 import type Database from '../../sqlite/sync-database'
 import { journalPragmaNumber, type JournalTransaction } from './journal-database'
 import { JournalPrunePass } from './journal-prune-pass'
-import { collectJournalPruneGarbage, JournalPruneRefusal } from './journal-prune-state'
-import { readJournalSessionEpoch } from './journal-row-table'
+import {
+  collectJournalPruneGarbage,
+  JournalPruneRefusal,
+  readOwedJournalPruneEpochs
+} from './journal-prune-state'
 
 const QUIET_DELAY_MS = 30_000
 const PASS_DELAY_MS = 10
 const VACUUM_PAGES = 1
 
-/** Host-owned frontiers outlive individual passes; only unread suffixes wake discovery. */
+/** Owed work is derived from saved frontiers, so a restart resumes instead of rescanning. */
 export class JournalMaintenance {
   private timer: ReturnType<typeof setTimeout> | null = null
+  /** Round-robin position: a chat that finishes a pass waits behind every other owed chat. */
   private sessionAfter = ''
-  private sweeping = true
+  /** Scheduling only, not an obligation: a chat still streaming waits until it has been quiet. */
+  private readonly quietUntil = new Map<string, number>()
   private current: JournalPrunePass | null = null
   private closed = false
   private vacuumPending = true
   private garbageTurn = true
+  private idle = false
 
   constructor(
     private readonly database: () => Database.Database,
@@ -30,20 +36,13 @@ export class JournalMaintenance {
     if (this.closed) {
       return
     }
-    try {
-      this.database()
-        .prepare(`INSERT OR IGNORE INTO temp.journal_prune_pending
-(session_id, ready_at) VALUES (?, ?)`)
-        .run(sessionId, Date.now() + QUIET_DELAY_MS)
-      this.changed()
-    } catch (error) {
-      // The append already committed; optional cleanup must never reject its acknowledgement.
-      this.stop(error)
-    }
+    this.quietUntil.set(sessionId, Date.now() + QUIET_DELAY_MS)
+    this.changed()
   }
 
   changed(): void {
     this.vacuumPending = true
+    this.idle = false
     this.schedule(QUIET_DELAY_MS)
   }
 
@@ -78,18 +77,21 @@ export class JournalMaintenance {
       if (!collected) {
         this.step(db)
       }
-      const garbage = db
-        .prepare('SELECT 1 AS pending FROM temp.journal_prune_epochs WHERE garbage = 1 LIMIT 1')
-        .get()
-      if (this.current || this.sweeping || this.vacuumPending || garbage) {
+      // Idle still collects retired bookkeeping before sleeping, so every leftover can die.
+      if (
+        collected ||
+        this.current ||
+        !this.idle ||
+        this.vacuumPending ||
+        collectJournalPruneGarbage(db, this.transaction)
+      ) {
         this.schedule(PASS_DELAY_MS)
-      } else {
-        const ready = db
-          .prepare('SELECT ready_at FROM temp.journal_prune_pending ORDER BY ready_at LIMIT 1')
-          .get()?.ready_at
-        if (typeof ready === 'number') {
-          this.schedule(Math.max(PASS_DELAY_MS, ready - Date.now()))
-        }
+        return
+      }
+      const now = Date.now()
+      const waking = [...this.quietUntil.values()].filter((at) => at > now)
+      if (waking.length > 0) {
+        this.schedule(Math.max(PASS_DELAY_MS, Math.min(...waking) - now))
       }
     } catch (error) {
       this.stop(error)
@@ -122,44 +124,28 @@ export class JournalMaintenance {
         reason: error.message
       })
     }
-    const epoch = readJournalSessionEpoch(db, pass.sessionId)
-    if (epoch === null || (epoch === pass.epoch && pass.coversPendingRows(db))) {
-      db.prepare('DELETE FROM temp.journal_prune_pending WHERE session_id = ?').run(pass.sessionId)
-    } else {
-      db.prepare(`INSERT INTO temp.journal_prune_pending (session_id, ready_at)
-VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET ready_at = excluded.ready_at`).run(
-        pass.sessionId,
-        Date.now() + QUIET_DELAY_MS
-      )
-    }
     this.current = null
   }
 
+  /** The next owed, quiet chat after the round-robin position; marks idle when none is owed. */
   private nextSession(db: Database.Database): JournalPrunePass | null {
-    if (this.sweeping) {
-      const row = db
-        .prepare(`SELECT session_id, epoch FROM journal_sessions
-WHERE session_id > ? ORDER BY session_id LIMIT 1`)
-        .get(this.sessionAfter)
-      if (typeof row?.session_id === 'string' && typeof row.epoch === 'string') {
-        this.sessionAfter = row.session_id
-        return new JournalPrunePass(db, row.session_id, row.epoch)
+    const now = Date.now()
+    const owed = readOwedJournalPruneEpochs(db).filter(
+      ({ sessionId }) => (this.quietUntil.get(sessionId) ?? 0) <= now
+    )
+    for (const [sessionId, at] of this.quietUntil) {
+      if (at <= now) {
+        this.quietUntil.delete(sessionId)
       }
-      this.sweeping = false
     }
-    const row = db
-      .prepare(`SELECT session_id FROM temp.journal_prune_pending
-WHERE ready_at <= ? ORDER BY ready_at, session_id LIMIT 1`)
-      .get(Date.now())
-    if (typeof row?.session_id !== 'string') {
+    const next = owed.find(({ sessionId }) => sessionId > this.sessionAfter) ?? owed[0]
+    if (!next) {
+      this.idle = true
       return null
     }
-    const epoch = readJournalSessionEpoch(db, row.session_id)
-    if (epoch === null) {
-      db.prepare('DELETE FROM temp.journal_prune_pending WHERE session_id = ?').run(row.session_id)
-      return null
-    }
-    return new JournalPrunePass(db, row.session_id, epoch)
+    this.idle = false
+    this.sessionAfter = next.sessionId
+    return new JournalPrunePass(db, next.sessionId, next.epoch)
   }
 
   private reclaim(db: Database.Database): boolean {

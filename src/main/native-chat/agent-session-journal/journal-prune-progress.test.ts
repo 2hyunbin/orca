@@ -11,6 +11,7 @@ import {
 import { JournalMaintenance } from './journal-maintenance'
 import { replayJournal } from './journal-open'
 import { JournalPrunePass } from './journal-prune-pass'
+import { readOwedJournalPruneEpochs } from './journal-prune-state'
 import { renderJournalState } from './journal-reducer'
 import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
 
@@ -234,10 +235,6 @@ it('schedules a replacement epoch even without an append notification', async ()
         item(revision + 1, 'reply', revision, 'chat', 'replacement')
       }
     })
-    await vi.advanceTimersByTimeAsync(10)
-    expect(
-      db.prepare('SELECT ready_at FROM temp.journal_prune_pending').get()?.ready_at
-    ).toBeGreaterThan(Date.now())
     await vi.runAllTimersAsync()
     expect(bodyAt(3)).toMatchObject({ blocks: [] })
     expect(vi.getTimerCount()).toBe(0)
@@ -289,10 +286,38 @@ WHERE session_id = 'a-bad' AND seq = 6`).run()
     await vi.runAllTimersAsync()
     expect(bodyAt(3, 'a-bad')).toMatchObject({ blocks: [] })
     expect(
-      db.prepare("SELECT epoch FROM temp.journal_prune_epochs WHERE session_id = 'a-bad'").all()
+      db.prepare("SELECT epoch FROM journal_prune_progress_v1 WHERE session_id = 'a-bad'").all()
     ).toEqual([{ epoch: 'replacement' }])
     expect(vi.getTimerCount()).toBe(0)
   } finally {
     maintenance.close()
   }
+})
+
+it('resumes from the saved frontier after a reopen, including payloads still owed', () => {
+  transaction(() => {
+    start()
+    for (let ordinal = 1; ordinal <= 300; ordinal++) {
+      item(ordinal + 1, `earlier-${ordinal}`, 1)
+    }
+    for (let revision = 1; revision <= 3; revision++) {
+      item(301 + revision, 'reply', revision)
+    }
+  })
+  const pass = new JournalPrunePass(db, 'chat', 'epoch')
+  let scanned = 0
+  while (scanned < 304) {
+    scanned += pass.step(db, transaction).scanned
+  }
+  db.close()
+  db = openJournalDatabase(join(root, 'journal.db')).db
+  expect(readOwedJournalPruneEpochs(db)).toEqual([{ sessionId: 'chat', epoch: 'epoch' }])
+  expect(drain()).toEqual({ scanned: 0, compacted: 1 })
+  expect(readOwedJournalPruneEpochs(db)).toEqual([])
+  transaction(() => {
+    for (let revision = 4; revision <= 7; revision++) {
+      item(301 + revision, 'reply', revision)
+    }
+  })
+  expect(drain()).toEqual({ scanned: 4, compacted: 4 })
 })
