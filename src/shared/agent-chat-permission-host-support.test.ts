@@ -29,7 +29,7 @@ describe('what a host predating per-chat modes runs', () => {
   })
 
   it('names no mode for an agent without chat modes', () => {
-    expect(legacyHostChatPermissionMode('grok', {})).toBeNull()
+    expect(legacyHostChatPermissionMode('aider', {})).toBeNull()
   })
 })
 
@@ -93,7 +93,7 @@ describe('the verdict on a chat start or turn', () => {
     ).toBe('allowed')
     expect(
       chatPermissionHostVerdict({
-        agent: 'grok',
+        agent: 'aider',
         hostAppliesModes: false,
         legacyMode: null,
         requested: 'ask'
