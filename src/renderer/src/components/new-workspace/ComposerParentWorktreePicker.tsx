@@ -354,13 +354,16 @@ function ParentWorktreeCandidateList({
             if (rowIndex !== 0 && !candidate) {
               return null
             }
+            const selectionValue = candidate?.identity
+              ? `identity:${candidate.identity.key}`
+              : (candidate?.id ?? null)
             const isHighlighted = rowIndex === activeIndex
             return (
               <div
                 key={virtualRow.key}
                 id={`${optionIdPrefix}-${rowIndex}`}
                 role="option"
-                aria-selected={(candidate?.id ?? null) === value}
+                aria-selected={selectionValue === value}
                 data-selected={isHighlighted || undefined}
                 // Why `jump-palette-item`: selection chrome lives in main.css — flat accent is invisible on light popovers.
                 className="jump-palette-item absolute left-0 top-0 flex w-full cursor-default select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-2 text-sm outline-none"
@@ -369,19 +372,10 @@ function ParentWorktreeCandidateList({
                   transform: `translateY(${virtualRow.start}px)`
                 }}
                 onPointerMove={() => setHighlightedIndex(rowIndex)}
-                onClick={() =>
-                  onSelect(
-                    candidate?.identity
-                      ? `identity:${candidate.identity.key}`
-                      : (candidate?.id ?? null)
-                  )
-                }
+                onClick={() => onSelect(selectionValue)}
               >
                 <Check
-                  className={cn(
-                    'size-3.5 shrink-0',
-                    (candidate?.id ?? null) !== value && 'opacity-0'
-                  )}
+                  className={cn('size-3.5 shrink-0', selectionValue !== value && 'opacity-0')}
                 />
                 {candidate ? (
                   <div className="min-w-0 flex-1">
