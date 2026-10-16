@@ -15,7 +15,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 export type WindowLayoutCommand = LayoutCommand &
   (
     | { tabId: string }
-    // `automatic`: not the user's close (its terminal ended, or a split the window never showed).
+    // `automatic`: not the user's close; its terminal ended.
     | { type: 'closePane'; tabId: string; automatic?: true }
     | { type: 'setGroupRatios' }
     | { type: 'closeTabs'; tabIds: [string] }
