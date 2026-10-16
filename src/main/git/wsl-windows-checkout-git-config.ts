@@ -132,8 +132,8 @@ export function parseHostAutocrlf(showOriginOutput: string): 'true' | 'other' {
 /**
  * Classifies a bounded `ls-files --eol` sample of LF blobs with no eol attribute.
  *
- * Whole-tree rather than top-level: root files are the ones formatters re-save as LF, the ones
- * attributes pin, and absent in some repos. Majority of CRLF working files means Windows Git
+ * The first index entries, not just top-level files: root files are the ones formatters re-save
+ * as LF, the ones attributes pin, and absent in some repos. Majority of CRLF working files means Windows Git
  * (autocrlf=true) wrote this checkout; one CRLF README in a Linux checkout does not.
  */
 export function classifyLineEndingSample(
