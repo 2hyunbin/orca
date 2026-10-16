@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  _resetLayoutFramePositionForTests,
   afterLayoutFrame,
   endLayoutFramePositions,
+  layoutFramesFlowing,
   noteLayoutFramePosition
 } from './layout-frame-position'
 
 describe('afterLayoutFrame', () => {
   afterEach(() => endLayoutFramePositions())
 
-  it('runs at once while no sequenced stream is open, or for a reply that names no frame', () => {
+  it('runs at once once the stream ended, or for a reply that names no frame', () => {
+    endLayoutFramePositions()
     const run = vi.fn()
     afterLayoutFrame(9, run)
     expect(run).toHaveBeenCalledTimes(1)
@@ -16,6 +19,23 @@ describe('afterLayoutFrame', () => {
     noteLayoutFramePosition(3)
     afterLayoutFrame(undefined, run)
     expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for a stream not yet open: its first frame, or its end', () => {
+    _resetLayoutFramePositionForTests()
+    const framed = vi.fn()
+    afterLayoutFrame(2, framed)
+    expect(framed).not.toHaveBeenCalled()
+    noteLayoutFramePosition(2)
+    expect(framed).toHaveBeenCalledOnce()
+
+    _resetLayoutFramePositionForTests()
+    const ended = vi.fn()
+    afterLayoutFrame(2, ended)
+    expect(layoutFramesFlowing()).toBe(true)
+    endLayoutFramePositions()
+    expect(ended).toHaveBeenCalledOnce()
+    expect(layoutFramesFlowing()).toBe(false)
   })
 
   it('runs once the window holds the named frame, in the order frames come in', () => {

@@ -4,7 +4,7 @@
 // (select, retitle, anchor, mount, launch). Main's copy reaches the window through layout frames.
 
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
+import { afterLayoutFrame, layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { expectTabRowFields } from '@/runtime/layout-owner-pane-intents'
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
@@ -116,25 +116,27 @@ export function createInitialTerminalThroughLayoutOwner(
     }
   })
     .then(
-      (reply) => {
-        if (reply.ok && reply.result.tabId === tabId) {
-          // Why the store check: a frame may have drawn it before the stream ended.
-          if (!layoutFramesFlowing()) {
-            release()
-            if (!holdsTerminalTab(getState(), tabId)) {
-              create({ tabId, leafId })
+      (reply) =>
+        // After the frame with main's tab: the stream may end first, and the window draws it then.
+        afterLayoutFrame(reply.frameSeq, () => {
+          if (reply.ok && reply.result.tabId === tabId) {
+            // Why the store check: a frame may have drawn it before the stream ended.
+            if (!layoutFramesFlowing()) {
+              release()
+              if (!holdsTerminalTab(getState(), tabId)) {
+                create({ tabId, leafId })
+              }
             }
+            return
           }
-          return
-        }
-        // No tab id: main's copy already shows a tab here, which its frames bring.
-        release()
-        if (!reply.ok && reply.code === 'host_not_owned') {
-          createAsToday()
-        } else if (!reply.ok) {
-          console.warn('[layout-owner] initial createTerminalTab refused:', reply.code)
-        }
-      },
+          // No tab id: main's copy already shows a tab here, which its frames bring.
+          release()
+          if (!reply.ok && reply.code === 'host_not_owned') {
+            createAsToday()
+          } else if (!reply.ok) {
+            console.warn('[layout-owner] initial createTerminalTab refused:', reply.code)
+          }
+        }),
       (error: unknown) => {
         release()
         // Why as today: a thrown write is rolled back, so main holds no such tab.

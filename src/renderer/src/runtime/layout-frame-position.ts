@@ -50,12 +50,19 @@ export function endLayoutFramePositions(): void {
 
 /**
  * Runs `run` once this window holds the frame at `seq`: at once when it already does, when the
- * reply names no position (an older host), or when no sequenced stream is open.
+ * reply names no position (an older host), or when the stream ended. A stream not yet open is
+ * still coming, so the wait holds until its first frame or its end.
  */
 export function afterLayoutFrame(seq: number | undefined, run: () => void): void {
-  if (seq === undefined || position === null || position >= seq) {
+  if (seq === undefined || ended || (position !== null && position >= seq)) {
     run()
     return
   }
   waiters.push({ seq, run })
+}
+
+export function _resetLayoutFramePositionForTests(): void {
+  position = null
+  ended = false
+  waiters = []
 }

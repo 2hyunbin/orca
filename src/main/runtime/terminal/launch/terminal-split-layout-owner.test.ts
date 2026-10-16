@@ -115,16 +115,33 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
   })
 
   it.each([
-    ['took back unshown', true],
-    ['still holds, or a client closed', false]
+    // [case, how the split goes, whether the record may write the pane]
+    ['took it back unshown', 'taken-back', true],
+    ['still holds it', 'held', false],
+    ['found it gone when taking it back (a client closed it)', 'closed-meanwhile', false],
+    ['split as today, writing nothing', 'unwritten', true]
   ] as const)(
-    'lets the window’s record of a split main asked for write it only when main %s',
-    async (_, takenBack) => {
+    'lets the window’s record of a split main asked for write it when main %s',
+    async (_, path, writes) => {
       const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
         makeWorkspaceSessionWithHeadlessTerminal()
       )
       const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
       Reflect.set(runtimeStore, 'applyLayoutCommand', applyLayoutCommand)
+      if (path === 'closed-meanwhile') {
+        Reflect.set(
+          runtimeStore,
+          'withdrawTerminalPane',
+          vi.fn(async () => 'pane_not_found')
+        )
+      }
+      if (path === 'unwritten') {
+        Reflect.set(
+          runtimeStore,
+          'admitTerminalPane',
+          vi.fn(async () => 'pane_not_found')
+        )
+      }
       const notifier = createMobileCreateTestNotifier(vi.fn())
       const splitTerminal = vi.mocked(notifier.splitTerminal)
       const runtime = new OrcaRuntimeService(runtimeStore)
@@ -138,7 +155,7 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
         const rejected = expect(split).rejects.toThrow()
         await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
         const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
-        if (takenBack) {
+        if (path !== 'held') {
           await vi.advanceTimersByTimeAsync(11_000)
           await rejected
         }
@@ -156,10 +173,10 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
 
         const { mainAsked: _mainAsked, ...plain } = record
         expect(applyLayoutCommand).toHaveBeenLastCalledWith(
-          takenBack ? plain : record,
+          writes ? plain : record,
           expect.anything()
         )
-        if (!takenBack) {
+        if (path === 'held') {
           await vi.advanceTimersByTimeAsync(11_000)
           await rejected
         }

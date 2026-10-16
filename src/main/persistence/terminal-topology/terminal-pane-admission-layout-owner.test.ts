@@ -120,6 +120,16 @@ describe('a runtime pane in a layout-owner build', () => {
     ).resolves.toMatchObject({ ok: false, code: 'pane_closed' })
     expect(leafIds(root(store))).toEqual([LEAF])
 
+    // A record routed where the tab is not is no word on the pane: not called closed.
+    await expect(
+      store.applyLayoutCommand({
+        ...split,
+        tabId: 'tab-elsewhere',
+        newLeafId: NEW_LEAF,
+        mainAsked: true
+      })
+    ).resolves.not.toMatchObject({ code: 'pane_closed' })
+
     // A main-asked record of a pane main still holds changes nothing.
     await store.admitTerminalPane(admission)
     await expect(
