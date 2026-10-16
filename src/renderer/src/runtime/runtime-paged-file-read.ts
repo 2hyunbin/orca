@@ -115,7 +115,8 @@ export function pagedTextFileResult(bytes: Uint8Array): RuntimeFilePreviewResult
   if (bytes.subarray(0, BINARY_PROBE_BYTES).includes(0)) {
     return { content: '', isBinary: true }
   }
-  return { content: new TextDecoder('utf-8').decode(bytes), isBinary: false }
+  // Why: keep a BOM like the host's Buffer decode, or a save would silently drop it.
+  return { content: new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes), isBinary: false }
 }
 
 /** Mirrors the host's RUNTIME_PREVIEWABLE_BINARY_MIME_TYPES, which drives `files.readPreview`. */

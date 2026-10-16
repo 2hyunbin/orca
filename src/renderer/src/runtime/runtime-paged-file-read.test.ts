@@ -142,6 +142,16 @@ describe('remote reads larger than one RPC reply', () => {
     expect(methodCalls('files.readChunk').length).toBe(Math.ceil(bytes.length / (384 * 1024)))
   })
 
+  it('keeps a UTF-8 BOM so a save does not drop it', async () => {
+    const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), htmlBytes(MB)])
+    serveRemoteFile('table.csv', { bytes })
+
+    const result = await readRuntimeFileContent(remote('table.csv'))
+
+    expect(result.content.charCodeAt(0)).toBe(0xfeff)
+    expect(Buffer.from(result.content, 'utf8').equals(bytes)).toBe(true)
+  })
+
   it.each([2, 5, 20])('opens a %i MB PDF in the editor', async (sizeMb) => {
     const bytes = patternedBytes(sizeMb * MB)
     serveRemoteFile('paper.pdf', { bytes })
