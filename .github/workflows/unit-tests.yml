@@ -91,6 +91,20 @@ jobs:
       - name: Install Electron package binary for tests
         run: node config/scripts/install-electron-package-binary.mjs
 
+      # The image resets HOME during login; shell fixtures intentionally use temporary homes.
+      - name: Preserve explicit login-shell homes on Blacksmith
+        if: startsWith(inputs.runner, 'blacksmith-')
+        run: |
+          sudo python3 - <<'PYTHON'
+          from pathlib import Path
+          profile = Path('/etc/profile.d/blacksmith.sh')
+          if profile.exists():
+              original = profile.read_text()
+              updated = original.replace('export HOME="$RUNNER_HOME"', 'export HOME="${HOME:-$RUNNER_HOME}"')
+              if updated != original:
+                  profile.write_text(updated)
+          PYTHON
+
       - name: Verify Blacksmith unit runner environment
         if: startsWith(inputs.runner, 'blacksmith-')
         run: |
