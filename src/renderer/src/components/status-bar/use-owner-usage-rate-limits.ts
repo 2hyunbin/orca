@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { translate } from '@/i18n/i18n'
-import { defaultScopeHost } from '@/lib/default-creation-host'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 import {
@@ -9,6 +8,7 @@ import {
 } from '@/runtime/runtime-provider-accounts-client'
 import { useActiveAccountOwner } from '@/runtime/use-worktree-runtime-target'
 import type { RateLimitState } from '../../../../shared/rate-limit-types'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { useAppStore } from '../../store'
 import {
   resolveOwnerUsageRateLimits,
@@ -21,6 +21,7 @@ const REMOTE_USAGE_REFRESH_TIMEOUT_MS = 30_000
 // Matches the desktop's own usage poll cadence.
 const REMOTE_USAGE_STALE_REOPEN_MS = 5 * 60_000
 const REMOTE_USAGE_RECONNECT_DELAY_MS = 5_000
+const LOCAL_TARGET: RuntimeClientTarget = { kind: 'local' }
 
 /** A snapshot only counts under the owner it came from, so A's numbers never render as B's. */
 type OwnedUsage = {
@@ -42,8 +43,8 @@ export type OwnerUsageRateLimits = {
  * usage comes from its own accounts snapshot, so it is read on the execution host.
  */
 export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLimits {
-  const settings = useAppStore((s) => s.settings)
-  const { target } = useActiveAccountOwner(defaultScopeHost(settings))
+  // Why: route by the focused workspace's owner, never by the Active Server setting.
+  const { target } = useActiveAccountOwner(LOCAL_TARGET)
   const ownerId = runtimeTargetEnvironmentId(target)
   const ownerName = useAppStore(
     (s) => s.runtimeEnvironments.find((environment) => environment.id === ownerId)?.name ?? null

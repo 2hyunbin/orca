@@ -130,9 +130,9 @@ export function resolveOwnerUsageRateLimits(
       // a still-fetching slot was real and must not keep loading through the outage.
       if (
         !provider ||
-        (!isProviderConfigured(provider) &&
-          !hasUsageData(provider) &&
-          provider.status !== 'fetching')
+        (provider.status !== 'fetching' &&
+          !isProviderConfigured(provider) &&
+          !hasUsageData(provider))
       ) {
         return provider
       }
