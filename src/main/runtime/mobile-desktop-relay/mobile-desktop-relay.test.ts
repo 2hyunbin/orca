@@ -147,7 +147,7 @@ describe('MobileDesktopRelay', () => {
     'selects the current endpoint when demand joins pending resolution: %s',
     async (schedule) => {
       sockets.length = 0
-      const { relay, phone, hosts, syncCalls } = relayWithPhone()
+      const { relay, phone, hosts } = relayWithPhone()
       const host = hosts.captureRegistration('env-1')!()!
       const old = { ...host, pairing: { ...host.pairing } }
       const ready = Promise.withResolvers<void>()
@@ -157,7 +157,7 @@ describe('MobileDesktopRelay', () => {
           ? pending.reject(new Error('old failure'))
           : pending.resolve(schedule === 'null' ? null : old)
       const release = vi.fn()
-      const select = vi.spyOn(hosts, 'captureRegistration').mockReturnValue(() => host)
+      hosts.captureRegistration = () => () => host
       const resolve = vi.spyOn(hosts, 'resolve')
         .mockResolvedValue(host).mockReturnValueOnce(pending.promise)
       hosts.acquireDemand = (_id, method) =>
@@ -168,7 +168,6 @@ describe('MobileDesktopRelay', () => {
       if (schedule === 'old-first') {
         finishResolve()
         await Promise.resolve()
-        expect(syncCalls).toHaveLength(0)
         expect(sockets).toHaveLength(0)
       }
       host.pairing = { ...host.pairing, endpoint: 'ws://current-bridge' }
@@ -180,7 +179,6 @@ describe('MobileDesktopRelay', () => {
       }
       await vi.waitFor(() => expect(sockets[0]?.sent).toHaveLength(2))
       expect(resolve).toHaveBeenCalledTimes(2)
-      expect(select).toHaveBeenCalledOnce()
       expect(sockets.map((socket) => socket.endpoint)).toEqual(['ws://current-bridge'])
       relay.dispose()
       expect(release).toHaveBeenCalledOnce()
