@@ -1,3 +1,4 @@
+import { readNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import type { AppState } from '../store/types'
 import type { NativeChatComposerDraftOwner } from '@/components/native-chat/native-chat-composer-draft-storage'
 import {
@@ -34,6 +35,9 @@ export function resolveNativeChatDraftOwner(
   state: AppState,
   scopeKey: string
 ): NativeChatComposerDraftOwner | undefined {
+  const sessionId = structuredAgentSessionIdOfDraftScope(scopeKey)
+  const local = sessionId ? readNativeChatNewDraft(sessionId) : undefined
+  if (local) return local.owner
   const workspaceId = workspaceOfDraftScope(state, scopeKey)
   const executionHostId = workspaceId
     ? resolveWorktreeOperationRoute(state, workspaceId)?.executionHostId

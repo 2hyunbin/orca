@@ -56,15 +56,19 @@ import {
   resetStructuredAgentLaunchPersistenceForTests,
   readStructuredAgentLaunchRecord
 } from './structured-agent-session-launch-persistence'
+import { confirmStructuredLaunchFirstMessagePublication } from './structured-agent-session-launch-publication-confirmation'
+import { createMemoryNativeChatComposerDraftStorage, setNativeChatComposerDraftStorageForTests } from '@/components/native-chat/native-chat-composer-draft-storage'
+import { submitNativeChatLocalDraft } from './native-chat-first-submission'
+import { allocateNativeChatNewDraft, readNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import { newAgentLaunchRequestId } from './agent-launch-request-id'
 import { markStructuredAgentSessionLaunchPublished } from './structured-agent-session-launch-publication'
-import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
+import { StructuredAgentSessionSubmissionEndedError, StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
 import {
   getStructuredAgentSessionReadOwner,
   findStructuredAgentSessionReadOwner,
   resetStructuredAgentSessionReadOwnersForTests
 } from '@/components/native-chat/structured-agent-session-read-owner'
-import { resetStructuredAgentSessionSendsForTests } from '@/components/native-chat/structured-agent-session-message-sender'
+import { reserveStructuredAgentSessionSend, resetStructuredAgentSessionSendsForTests } from '@/components/native-chat/structured-agent-session-message-sender'
 import { getStructuredAgentSessionPendingSends } from '@/components/native-chat/structured-agent-session-pending-sends'
 import { structuredAgentSessionStopControl } from '@/components/native-chat/structured-agent-session-stop-control'
 import {
@@ -72,7 +76,8 @@ import {
   readNativeChatDraftCache,
   writeNativeChatDraftCache
 } from '@/components/native-chat/native-chat-draft-cache'
-import { structuredAgentSessionDraftScopeKey } from '@/components/native-chat/native-chat-composer-draft-store'
+import { structuredAgentSessionDraftScopeKey, updateNativeChatComposerDraft, readNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
+import { stageStructuredLaunchPrompt, discardStructuredLaunchPrompts } from './structured-agent-session-launch-prompt'
 
 function deferred<T>() {
   let resolve = (_value: T): void => {}
@@ -153,6 +158,151 @@ describe('the first message owned by create', () => {
     resetStructuredAgentSessionSendsForTests()
     resetStructuredAgentSessionReadOwnersForTests()
     vi.useRealTimers()
+  })
+
+  it.each(['held', 'closed', 'releasedAfterUpload', 'expiredDiscovery', 'legacyClosed', 'legacySuperseded'] as const)(
+    'keeps the original first submission authoritative through preparation: %s', async (scenario) => {
+      const source = { text: 'opening with images', document: { type: 'doc' }, images: [
+        { id: 'one', path: '/source/one.png' }, { id: 'two', path: '/source/two.png' }
+      ] }
+      const sessionId = 'codex_reserved_first_send'
+      const scope = structuredAgentSessionDraftScopeKey(sessionId)
+      const upload = deferred<void>()
+      const discovery = deferred<boolean>()
+      const create = deferred<unknown>()
+      const legacy = scenario.startsWith('legacy')
+      mocks.supports.mockReturnValue(scenario === 'expiredDiscovery' ? discovery.promise : Promise.resolve(!legacy))
+      mocks.call.mockReturnValue(create.promise)
+      allocateNativeChatNewDraft(sessionId, { owner: { workspaceId: 'workspace-1', executionHostId: 'local' }, agent: 'codex', groupId: 'group-1', options: {} })
+      const prompt = stageStructuredLaunchPrompt(sessionId, source.text, {
+        sourceDraft: source, options: legacy ? {} : { model: 'picked' },
+        attachments: source.images.map((image) => ({ path: image.path, previewUri: image.path }))
+      })
+      const prepareUpload = vi.fn(async () => {
+        await upload.promise
+        prompt.slot?.setAttachments(source.images.map((image) => ({
+          path: image.path.replace('/source/', '/stored/'), previewUri: image.path
+        })))
+      })
+      if (legacy) prompt.beforeSend = prepareUpload
+      else prompt.beforeCreate = prepareUpload
+      const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+        requestId: newAgentLaunchRequestId(), executionHostId: 'local', reservedSessionId: sessionId,
+        stagedPrompt: prompt, prompt: source.text, firstSubmissionOptions: legacy ? {} : { model: 'picked' }
+      })
+      const result = launch.launchResult.catch((error: unknown) => error)
+      expect(readStructuredAgentLaunchRecord(sessionId)?.firstSubmission?.draft).toEqual(source)
+      expect(reserveStructuredAgentSessionSend({ sessionId, text: 'duplicate' })).toBeNull()
+      if (scenario === 'expiredDiscovery') {
+        await vi.advanceTimersByTimeAsync(30_000)
+        expect(readNativeChatComposerDraft(scope)).toEqual(source)
+        discovery.resolve(true)
+      } else {
+        if (legacy) {
+          mocks.inventory.mockResolvedValue([{ worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId }] }])
+          await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
+          create.resolve(created())
+        }
+        await vi.waitFor(() => expect(prepareUpload).toHaveBeenCalledOnce())
+        if (!legacy) expect(getStructuredAgentSessionLaunchLifecycle('workspace-1', sessionId)).toBe('pending')
+        if (scenario === 'held') {
+          await vi.advanceTimersByTimeAsync(45_000)
+          expect(mocks.call).not.toHaveBeenCalled()
+          expect(readNativeChatComposerDraft(scope).text).toBe('')
+        } else if (scenario === 'releasedAfterUpload') {
+          upload.resolve()
+          queueMicrotask(() => discardStructuredLaunchPrompts(sessionId))
+        } else if (scenario === 'legacySuperseded') {
+          upload.reject(new Error('upload failed'))
+        } else {
+          discardStructuredLaunchPrompts(sessionId)
+        }
+      }
+      upload.resolve()
+      if (scenario === 'held') {
+        await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
+        const params = createParams()
+        expect(params.firstMessage).toEqual({ clientMessageId: prompt.slot?.clientMessageId, body: { kind: 'message', role: 'user', blocks: [
+          { type: 'text', text: source.text },
+          { type: 'image-ref', path: '/stored/one.png' }, { type: 'image-ref', path: '/stored/two.png' }
+        ] } })
+        expect(params.options).toEqual({ model: 'picked' })
+        updateNativeChatComposerDraft(scope, { text: 'newer edit' }, 'immediate')
+        await vi.advanceTimersByTimeAsync(29_999)
+        expect(getStructuredAgentSessionPendingSends(sessionId)[0]?.phase).toBe('sending')
+        create.resolve(created())
+        await result
+        await expect(launch.promptDeliveryResult).resolves.toMatchObject({ delivered: true })
+        expect(readNativeChatComposerDraft(scope).text).toBe('newer edit')
+      } else if (!legacy) {
+        expect(await result).toBeInstanceOf(StructuredAgentSessionSubmissionEndedError)
+        expect(mocks.call).not.toHaveBeenCalled()
+        expect(getStructuredAgentSessionLaunchLifecycle('workspace-1', sessionId)).toBeNull()
+      } else {
+        await result
+        await expect(launch.promptDeliveryResult).resolves.toMatchObject({ delivered: false })
+        expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual(['agentSession.create'])
+        if (scenario === 'legacySuperseded') {
+          expect(readNativeChatComposerDraft(scope)).toEqual(source)
+          resetStructuredAgentLaunchRegistryForTests()
+          resetStructuredAgentLaunchPersistenceForTests()
+          updateNativeChatComposerDraft(scope, { text: 'newer edit' }, 'immediate')
+          mocks.call.mockImplementation(async (_target, method, params) => {
+            expect(method).toBe('agentSession.send')
+            const sent = SendParams.parse(params)
+            return { ok: true, value: { clientMessageId: sent.envelope.clientOperationId,
+              submission: submission(sent.envelope.clientOperationId) } }
+          })
+          expect(submitNativeChatLocalDraft(sessionId, 'later explicit send', [], {}, true)).toBe(true)
+          await vi.waitFor(() => expect(readNativeChatNewDraft(sessionId)).toBeUndefined())
+          expect(readStructuredAgentLaunchRecord(sessionId)).toBeUndefined()
+          expect(readNativeChatComposerDraft(scope).text).toBe('newer edit')
+          expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual(['agentSession.create', 'agentSession.send'])
+        }
+      }
+    }
+  )
+
+  it('confirms a closed-tab opening through paged history and retains evidence until metadata removal commits', async () => {
+    const storage = createMemoryNativeChatComposerDraftStorage()
+    setNativeChatComposerDraftStorageForTests(storage)
+    const sessionId = 'codex_paged_reload'
+    const source = { text: 'original', images: [] }
+    allocateNativeChatNewDraft(sessionId, { owner: { workspaceId: 'workspace-1', executionHostId: 'local' }, agent: 'codex', groupId: 'group-1', options: {} })
+    const prompt = stageStructuredLaunchPrompt(sessionId, source.text, { sourceDraft: source })
+    mocks.call.mockReturnValue(new Promise(() => {}))
+    const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+      requestId: newAgentLaunchRequestId(), executionHostId: 'local', reservedSessionId: sessionId,
+      stagedPrompt: prompt, prompt: source.text
+    })
+    await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
+    const response = created()
+    const recorded = response.value.page.submissions
+    await vi.advanceTimersByTimeAsync(30_000)
+    await launch.promptDeliveryResult
+    resetStructuredAgentLaunchRegistryForTests()
+    resetStructuredAgentLaunchPersistenceForTests()
+    storage.refuseWrites = true
+    let page = 0
+    mocks.call.mockImplementation(async (_target, method) => {
+      expect(method).toBe('agentSession.history')
+      page += 1
+      return { ok: true, page: { ...response.value.page, submissions: page % 2 ? [] : recorded,
+        hasOlder: page % 2 === 1, window: { ...response.value.page.window, oldest: { epoch: 'epoch-1', sequence: 1 } } } }
+    })
+    confirmStructuredLaunchFirstMessagePublication('workspace-1', sessionId)
+    await vi.waitFor(() => expect(page).toBe(2))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(readNativeChatNewDraft(sessionId)).toBeDefined()
+    expect(readStructuredAgentLaunchRecord(sessionId)?.firstSubmission).toBeDefined()
+    storage.refuseWrites = false
+    updateNativeChatComposerDraft(structuredAgentSessionDraftScopeKey(sessionId), { text: 'newer typing' }, 'immediate')
+    confirmStructuredLaunchFirstMessagePublication('workspace-1', sessionId)
+    await vi.waitFor(() => expect(readNativeChatNewDraft(sessionId)).toBeUndefined())
+    expect(readStructuredAgentLaunchRecord(sessionId)).toBeUndefined()
+    expect(readNativeChatComposerDraft(structuredAgentSessionDraftScopeKey(sessionId)).text).toBe('newer typing')
+    expect(mocks.inventory).not.toHaveBeenCalled()
+    expect(mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.create')).toHaveLength(1)
   })
 
   it('freezes the message and held options in create and publishes without another read or send', async () => {

@@ -114,13 +114,14 @@ export function sendStructuredAgentSessionMessage(
 export type StructuredAgentSessionReservedSend = {
   clientMessageId: string
   setAttachments: (attachments: NonNullable<StructuredAgentSessionSendInput['attachments']>) => void
+  prepare: () => boolean
   outcome: Promise<StructuredAgentSessionSendOutcome>
   /** Older creates wait for acquisition; their send budget still begins at send. */
   legacy: () => void
   /** Sends it once the chat exists; null when the reservation was released or dropped meanwhile. */
   send: (target: RuntimeClientTarget) => StructuredAgentSessionSent | null
   /** The same message, owned by create instead of a later send request. */
-  create: (target: RuntimeClientTarget) => StructuredAgentSessionCreateSend | null
+  create: (target: RuntimeClientTarget, prepared?: true) => StructuredAgentSessionCreateSend | null
   /** Gives the slot back unsent. */
   release: () => void
 }
@@ -154,6 +155,7 @@ export function reserveStructuredAgentSessionSend(
   })
   const held = (): StructuredAgentSessionPendingSend | undefined =>
     sent ? undefined : findStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId)
+  let preparing = false
   const deadline = setTimeout(() => {
     const current = held()
     if (current) {
@@ -163,6 +165,18 @@ export function reserveStructuredAgentSessionSend(
   }, STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS)
   return {
     clientMessageId: entry.clientMessageId,
+    prepare: () => {
+      const current = held()
+      if (!current) return false
+      if (!preparing && Date.now() - current.queuedAt >= STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS) {
+        handBack(current, ['unreachable', ...agentSessionWriteNotDoneParts('composer-send')])
+        settleReservation('returned')
+        return false
+      }
+      preparing = true
+      clearTimeout(deadline)
+      return true
+    },
     setAttachments: (attachments) => {
       const current = held()
       if (current) updateStructuredAgentSessionPendingSend(entry.sessionId, entry.clientMessageId, {
@@ -185,14 +199,14 @@ export function reserveStructuredAgentSessionSend(
       }
       return sending
     },
-    create: (target) => {
+    create: (target, prepared) => {
       const current = held()
       if (!current) {
         return null
       }
       sent = true
       clearTimeout(deadline)
-      const remaining = STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS - (Date.now() - current.queuedAt)
+      const remaining = prepared ? STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS : STRUCTURED_AGENT_SESSION_SEND_BUDGET_MS - (Date.now() - current.queuedAt)
       if (remaining <= 0) {
         handBack(current, ['unreachable', ...agentSessionWriteNotDoneParts('composer-send')])
         settleReservation('returned')

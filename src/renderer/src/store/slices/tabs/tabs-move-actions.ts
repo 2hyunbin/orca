@@ -1,3 +1,4 @@
+import { updateNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { buildActiveSurfacePatch } from './tabs-surface'
@@ -123,6 +124,10 @@ export function createTabsMoveActions(
             : {})
         }
       })
+      if (moved) {
+        const movedTab = findTabAndWorktree(get().unifiedTabsByWorktree, tabId)?.tab
+        if (movedTab?.contentType === 'agent-session') updateNativeChatNewDraft(movedTab.entityId, { groupId: targetGroupId })
+      }
       if (moved && opts?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('tab-splits')
       }

@@ -95,7 +95,7 @@ export function useNativeChatProvisionalLaunch(
       if (starting) {
         return false
       }
-      if (localDraft) return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {})
+      if (draft) return submitNativeChatLocalDraft(sessionId, text, submission?.attachments ?? [], submission?.options ?? {}, lifecycle === 'published')
       if (lifecycle !== 'failed' || !worktreeId) {
         return send()
       }
@@ -106,7 +106,7 @@ export function useNativeChatProvisionalLaunch(
       relaunchFailedStructuredAgentSessionForMessage(worktreeId, sessionId)
       return false
     },
-    [lifecycle, localDraft, sessionId, starting, worktreeId]
+    [draft, lifecycle, sessionId, starting, worktreeId]
   )
   return {
     lifecycle,

@@ -43,3 +43,6 @@ export class StructuredAgentSessionOwnerUnresolvedError extends Error {
     this.name = 'StructuredAgentSessionOwnerUnresolvedError'
   }
 }
+
+/** A local submission ended before any create was issued. */
+export class StructuredAgentSessionSubmissionEndedError extends Error {}

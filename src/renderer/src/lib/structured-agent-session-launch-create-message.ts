@@ -3,8 +3,7 @@ import type { StructuredLaunchState } from './structured-agent-session-launch-re
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
 import {
   prepareStructuredLaunchPromptForCreate,
-  prepareStructuredLaunchPromptAttachments,
-  structuredLaunchPromptNeedsLegacySend,
+  prepareStructuredLaunchFirstSubmission,
   prepareLegacyStructuredLaunchPrompts
 } from './structured-agent-session-launch-prompt'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
@@ -20,39 +19,43 @@ import {
 } from './structured-agent-session-launch-options'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload. */
-export async function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): Promise<void> {
+export async function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): Promise<void | (() => void)> {
   const { intent } = state
   if (intent.createPrepared) {
     return
   }
-  await prepareStructuredLaunchPromptAttachments(intent.sessionId)
-  if (intent.createMessageSupport !== true) {
-    prepareLegacyStructuredLaunchPrompts(intent.sessionId)
+  const opening = intent.firstSubmission
+  const takeMessage = opening ? await prepareStructuredLaunchFirstSubmission(
+    intent.sessionId, opening.clientMessageId, intent.target, intent.createMessageSupport === true
+  ) : null
+  return () => {
+    const reservedMessage = takeMessage?.()
+    if (intent.createMessageSupport !== true) {
+      prepareLegacyStructuredLaunchPrompts(intent.sessionId)
+      intent.createPrepared = true
+      notifyStructuredLaunchListeners()
+      return
+    }
+    const firstMessage = takeMessage ? reservedMessage : prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
+    const options = structuredLaunchCreateOptions(state)
+    const params = {
+      ...intent.params,
+      ...(firstMessage ? { firstMessage } : {}),
+      ...(options ? { options } : {})
+    }
+    intent.params = {
+      ...params,
+      envelope: {
+        ...params.envelope,
+        payloadFingerprint: structuredAgentSessionCreateFingerprint({
+          sessionId: intent.sessionId,
+          ...params
+        })
+      }
+    }
     intent.createPrepared = true
     notifyStructuredLaunchListeners()
-    return
   }
-  const needsLegacySend = structuredLaunchPromptNeedsLegacySend(intent.sessionId)
-  if (needsLegacySend) prepareLegacyStructuredLaunchPrompts(intent.sessionId)
-  const firstMessage = needsLegacySend ? undefined : prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
-  const options = structuredLaunchCreateOptions(state)
-  const params = {
-    ...intent.params,
-    ...(firstMessage ? { firstMessage } : {}),
-    ...(options ? { options } : {})
-  }
-  intent.params = {
-    ...params,
-    envelope: {
-      ...params.envelope,
-      payloadFingerprint: structuredAgentSessionCreateFingerprint({
-        sessionId: intent.sessionId,
-        ...params
-      })
-    }
-  }
-  intent.createPrepared = true
-  notifyStructuredLaunchListeners()
 }
 
 /** Picks held so far, and the model and effort the chat shows: a first message starts its turn

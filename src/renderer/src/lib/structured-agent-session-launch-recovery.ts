@@ -1,3 +1,4 @@
+import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import type { AgentSessionHistoryResult } from '../../../shared/agent-session-wire'
 import type {
   AgentJournalCursor,
@@ -121,7 +122,7 @@ async function retrySameIntent(
     if (state.cancelled) {
       throw new StructuredAgentSessionLaunchCancelledError()
     }
-    if (error instanceof StructuredAgentSessionCreateRefusalError) {
+    if (error instanceof StructuredAgentSessionCreateRefusalError || error instanceof StructuredAgentSessionSubmissionEndedError) {
       throw error
     }
     try {
@@ -148,7 +149,7 @@ export async function launchAndReconcile(
     if (state.cancelled) {
       throw new StructuredAgentSessionLaunchCancelledError()
     }
-    if (error instanceof StructuredAgentSessionCreateRefusalError) {
+    if (error instanceof StructuredAgentSessionCreateRefusalError || error instanceof StructuredAgentSessionSubmissionEndedError) {
       throw error
     }
     try {
@@ -180,7 +181,11 @@ export async function reconcileUnknownLaunch(
   try {
     return await recoverPublishedSessionReceipt(state)
   } catch (error) {
-    if (state.intent.firstSubmission) throw error
+    if (state.intent.firstSubmission) {
+      state.visibilityUnknown = true
+      state.onVisibilityChanged?.()
+      throw error
+    }
     return retrySameIntent(state, error)
   }
 }

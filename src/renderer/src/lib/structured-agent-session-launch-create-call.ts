@@ -1,3 +1,4 @@
+import { ensureRuntimeEnvironmentCompatible } from '@/runtime/runtime-rpc-client'
 import type {
   AgentSessionAttachResult,
   AgentSessionMutationResult
@@ -19,6 +20,7 @@ import {
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import {
   StructuredAgentSessionCreateError,
+  StructuredAgentSessionSubmissionEndedError,
   StructuredAgentSessionCreateRefusalError,
   StructuredAgentSessionCreateUnknownOutcomeError
 } from './structured-agent-session-launch-errors'
@@ -81,10 +83,20 @@ export async function launchStructuredAgentSession(
   onHostSeed?: StructuredLaunchHostSeedListener,
   priorCreateOutcomeUnknown = false
 ): Promise<StructuredAgentLaunchReceipt> {
-  const hostSeed = await requireHostCreateSupport(intent)
+  let hostSeed: LaunchSeed
+  try {
+    hostSeed = await requireHostCreateSupport(intent)
+  } catch (error) {
+    if (!intent.firstSubmission || error instanceof StructuredAgentSessionCreateRefusalError) throw error
+    throw new StructuredAgentSessionCreateRefusalError(
+      error instanceof Error ? error.message : 'The chat host is unavailable.',
+      'structured_agent_session_unsupported'
+    )
+  }
   if (intent.target.kind !== 'local') {
     onHostSeed?.(hostSeed)
   }
+  let issue: void | (() => void) = undefined
   if (!intent.createPrepared) {
     let supported = false
     try {
@@ -95,25 +107,39 @@ export async function launchStructuredAgentSession(
     if (!intent.createPrepared) {
       intent.createMessageSupport = supported
       try {
-        await intent.prepareCreate?.()
+        issue = await intent.prepareCreate?.()
       } catch (error) {
         // Preparation failed before create was issued, so its sources remain safe to submit again.
+        if (error instanceof StructuredAgentSessionSubmissionEndedError) throw error
         if (intent.firstSubmission) throw new StructuredAgentSessionCreateRefusalError(
           error instanceof Error ? error.message : 'The message could not be prepared.',
           'agent_session_attachment_unavailable'
         )
         throw error
       }
-      intent.createPrepared = true
+    }
+  }
+  if (intent.firstSubmission && intent.target.kind === 'environment') {
+    try {
+      await ensureRuntimeEnvironmentCompatible(intent.target.environmentId)
+    } catch (error) {
+      throw new StructuredAgentSessionCreateRefusalError(
+        error instanceof Error ? error.message : 'The chat host is unavailable.',
+        'structured_agent_session_unsupported'
+      )
     }
   }
   let result: AgentSessionMutationResult<AgentSessionAttachResult>
   try {
-    result = await callStructuredAgentSession<AgentSessionMutationResult<AgentSessionAttachResult>>(
-      intent.target,
-      'agentSession.create',
-      intent.params
-    )
+    issue?.()
+    intent.createPrepared = true
+    result = intent.firstSubmission && intent.target.kind === 'environment'
+      ? await callStructuredAgentSession<AgentSessionMutationResult<AgentSessionAttachResult>>(
+          intent.target, 'agentSession.create', intent.params, { skipCompatibilityCheck: true }
+        )
+      : await callStructuredAgentSession<AgentSessionMutationResult<AgentSessionAttachResult>>(
+          intent.target, 'agentSession.create', intent.params
+        )
   } catch (error) {
     const code = definitiveStructuredAgentSessionCreateErrorCode(error)
     if (code) {

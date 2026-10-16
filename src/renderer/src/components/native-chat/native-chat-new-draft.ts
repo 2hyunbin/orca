@@ -22,6 +22,10 @@ export function readNativeChatNewDraft(sessionId: string): NativeChatNewDraft | 
   return drafts.get(nativeChatNewDraftKey(sessionId))
 }
 
+export function nativeChatNewDrafts(): [string, NativeChatNewDraft][] {
+  return [...drafts].map<[string, NativeChatNewDraft]>(([key, draft]) => [key.slice(PREFIX.length), draft])
+}
+
 function notify(key: string): void {
   notifyScope(key)
   notifyScope(`agent-session:${key.slice(PREFIX.length)}`)

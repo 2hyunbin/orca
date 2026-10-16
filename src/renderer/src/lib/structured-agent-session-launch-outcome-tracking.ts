@@ -1,5 +1,6 @@
+import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
-import { retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
+import { readNativeChatNewDraft, retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import { clearNativeChatComposerDraftIfUnchanged } from '@/components/native-chat/native-chat-composer-draft-store'
 import {
   settleStructuredLaunchCallers,
@@ -8,11 +9,14 @@ import {
 import type { StructuredAgentLaunchReceipt } from '@/lib/structured-agent-session-launch-recovery'
 import { structuredLaunchFailure } from './structured-agent-session-launch-failure'
 import {
+  getStructuredLaunchStateBySessionId,
   deleteStructuredLaunchStateIfCurrent,
   notifyStructuredLaunchListeners,
   retireStructuredAgentSessionLaunchCancellationTombstone,
   type StructuredLaunchState
 } from './structured-agent-session-launch-registry'
+
+import { restorePersistedStructuredLaunchState } from './structured-agent-session-launch-reload'
 
 // How a launch's create outcome settles its callers: published, refused, failed or unknown.
 
@@ -23,6 +27,13 @@ function cleanupLaunchState(state: StructuredLaunchState): void {
 }
 
 const finalizing = new WeakMap<StructuredLaunchState, Promise<void>>()
+
+export async function finalizeStructuredLaunchConfirmedSubmission(sessionId: string): Promise<void> {
+  const draft = readNativeChatNewDraft(sessionId)
+  const state = getStructuredLaunchStateBySessionId(sessionId) ??
+    (draft ? restorePersistedStructuredLaunchState(draft.owner.workspaceId, sessionId) : undefined)
+  if (state?.intent.firstSubmission && !state.cancelled) await finalizeStructuredLaunchFirstSubmission(state)
+}
 
 export function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchState): Promise<void> {
   const active = finalizing.get(state)
@@ -37,6 +48,7 @@ async function finalizeFirstSubmission(state: StructuredLaunchState): Promise<vo
   if (!submission || !(await retireNativeChatNewDraft(state.intent.sessionId))) return
   clearNativeChatComposerDraftIfUnchanged(`agent-session:${state.intent.sessionId}`, submission.draft)
   delete state.intent.firstSubmission
+  settleStructuredLaunchCallers(state.callers, 'published')
   maybeCleanupLaunchState(state)
   notifyStructuredLaunchListeners()
 }
@@ -91,6 +103,11 @@ export function trackLaunchSettlement(
             state.intent.sessionId
           )
         }
+        return
+      }
+      if (error instanceof StructuredAgentSessionSubmissionEndedError) {
+        delete state.intent.firstSubmission
+        cleanupLaunchState(state)
         return
       }
       // The chat's Retry line owns the failed start's guidance.
