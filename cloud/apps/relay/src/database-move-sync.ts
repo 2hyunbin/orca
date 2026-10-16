@@ -16,6 +16,8 @@ import {
   MOVE_COPY_PROGRESS_TABLE,
   MOVE_SENTINEL_TABLE_NAME,
   readDirtyBacklog,
+  readAuthorityTrackingArm,
+  readCurrentCopiedTables,
   readStaleCopyProgress,
   readTrackingArm,
   readTrackingState,
@@ -60,12 +62,27 @@ export async function requireTracking(source: pg.Client, tables: MoveTable[]): P
 }
 
 // Tracking that was removed and installed again missed every change in between, so a copy
-// made under the earlier arming no longer counts.
-export async function requireCurrentCopy(sessions: MoveSyncSessions): Promise<void> {
-  const stale = await readStaleCopyProgress(sessions.target, await readTrackingArm(sessions.source))
+// made under the earlier arming no longer counts. Applying changes (sync, cutover) also needs the
+// target to be level with the source as a whole: a finished copy under this arming, or this
+// arming unchanged since the source itself became the target (a move back after a cutover).
+export async function requireCurrentCopy(
+  sessions: MoveSyncSessions,
+  tables: MoveTable[],
+  purpose: 'copy' | 'apply'
+): Promise<void> {
+  const arm = await readTrackingArm(sessions.source)
+  const stale = await readStaleCopyProgress(sessions.target, arm)
   if (stale.length > 0) {
     throw new MoveRefusal('copy_predates_tracking', { tables: stale, run: 'copy --restart' })
   }
+  if (purpose === 'copy') return
+  const copied = await readCurrentCopiedTables(sessions.target, arm)
+  if (tables.every((table) => copied.has(table.name))) return
+  if (arm !== null && (await readAuthorityTrackingArm(sessions.source)) === arm) return
+  throw new MoveRefusal('target_not_current', {
+    uncopied: tables.filter((table) => !copied.has(table.name)).map((table) => table.name),
+    run: 'copy --restart from this source'
+  })
 }
 
 // Both sides still have the tables the run started with. A drifted table's copy position is
