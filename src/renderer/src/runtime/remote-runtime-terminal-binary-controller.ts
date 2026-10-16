@@ -13,7 +13,6 @@ import {
 } from './remote-runtime-terminal-e2e-control'
 import { RemoteRuntimeTerminalBinarySnapshots } from './remote-runtime-terminal-binary-snapshots'
 import type { RemoteRuntimeMultiplexedTerminalState } from './remote-runtime-terminal-multiplexer-types'
-import { settleSubscribeSnapshot } from './remote-runtime-terminal-snapshot-state'
 
 export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntimeTerminalBinarySnapshots {
   protected handleBinary(bytes: Uint8Array<ArrayBufferLike>): void {
@@ -56,10 +55,6 @@ export abstract class RemoteRuntimeTerminalBinaryController extends RemoteRuntim
       return
     }
     if (isOutput) {
-      if (stream.initialSnapshotReceived) {
-        // Why: live output past the subscribe image makes it stale for any caller that has not claimed it yet.
-        settleSubscribeSnapshot(stream, null)
-      }
       this.handleOutputFrame(frame, stream)
       return
     }

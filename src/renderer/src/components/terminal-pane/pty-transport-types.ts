@@ -189,9 +189,6 @@ export type PtyTransport = {
     claimReplacedPtyId?: () => string | null
     /** Reject a stale pane after any pre-spawn test gate but before creating a PTY. */
     shouldContinue?: () => boolean
-    /** Park reveal: ask the subscribe snapshot for these history rows so the reveal needs no
-     *  second snapshot. Remote-runtime only; older hosts ignore it and the reveal requests one. */
-    subscribeSnapshotScrollbackRows?: number
     callbacks: PtyCallbacks
   }) => void | Promise<void | string | PtyConnectResult>
   attach: (options: {

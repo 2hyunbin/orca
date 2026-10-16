@@ -1,19 +1,15 @@
 import {
   sendSnapshotFrames,
-  serializeBudgetedMobileSnapshot,
-  serializeBudgetedRequestedSnapshot
+  serializeBudgetedMobileSnapshot
 } from './terminal-snapshot-publication'
-import {
-  getOutputAfterSnapshotSeq,
-  normalizeMultiplexSnapshotScrollbackRows
-} from './terminal-stream-replay'
+import { getOutputAfterSnapshotSeq } from './terminal-stream-replay'
 import { getTerminalInputSequenceLedger } from './terminal-input-sequence-ledger'
 import {
   isMultiplexStreamAttached,
   type MultiplexSubscribeRequest,
   type TerminalMultiplexConnection
 } from './terminal-multiplex-connection'
-import type { SerializedSnapshot, TerminalMultiplexStream } from './terminal-stream-types'
+import type { TerminalMultiplexStream } from './terminal-stream-types'
 
 export type MultiplexPublishedInitialState = {
   isMobile: boolean
@@ -21,66 +17,18 @@ export type MultiplexPublishedInitialState = {
   displayMode: string
 }
 
-function requestedInitialScrollbackRows(request: MultiplexSubscribeRequest): number | undefined {
-  return request.client?.type === 'mobile'
-    ? undefined
-    : normalizeMultiplexSnapshotScrollbackRows(request.snapshotScrollbackRows)
-}
-
-/** Why early: the stream's output buffer is live once initialization starts, so the image can be
- *  built while the viewport registration awaits instead of after it (a parallel SnapshotRequest did). */
-export function startRequestedInitialSnapshot(
-  state: TerminalMultiplexConnection,
-  request: MultiplexSubscribeRequest,
-  ptyId: string
-): Promise<SerializedSnapshot> | undefined {
-  const rows = requestedInitialScrollbackRows(request)
-  if (rows === undefined) {
-    return undefined
-  }
-  const image = serializeBudgetedRequestedSnapshot(state.runtime, ptyId, rows)
-  image.catch(() => {})
-  return image
-}
-
-function readTailData(read: { tail: string[] }): string {
-  return read.tail.length > 0 ? `${read.tail.join('\r\n')}\r\n` : ''
-}
-
 export async function publishMultiplexInitialSnapshot(
   state: TerminalMultiplexConnection,
   request: MultiplexSubscribeRequest,
-  stream: TerminalMultiplexStream,
-  earlyRequestedImage?: Promise<SerializedSnapshot>
+  stream: TerminalMultiplexStream
 ): Promise<MultiplexPublishedInitialState | null> {
   const { runtime, emit } = state
   const { ptyId } = stream
   const isMobile = stream.isMobile
   const forcedInitialSnapshotTruncated =
     process.env.ORCA_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
-  const requestedScrollbackRows = requestedInitialScrollbackRows(request)
-  let servesScrollbackRequest = false
-  let earlyImage = earlyRequestedImage
-  // Why: the requested image is exactly what a follow-up SnapshotRequest would return; without one
-  // (or with nothing authoritative to serialize) keep the default image and let the client ask.
-  const serializeInitial = async () => {
-    if (requestedScrollbackRows !== undefined) {
-      const requested = await (earlyImage ??
-        serializeBudgetedRequestedSnapshot(runtime, ptyId, requestedScrollbackRows))
-      // An overflow retry must serialize afresh.
-      earlyImage = undefined
-      servesScrollbackRequest = requested !== null
-      if (requested) {
-        return requested
-      }
-    }
-    return serializeBudgetedMobileSnapshot(runtime, ptyId)
-  }
-  // Why lazy on a served request: the text read is only the null-image fallback, and on a long
-  // transcript it costs tens of ms ahead of the image (a SnapshotRequest never paid it).
-  const readFallback = () => runtime.readTerminal(request.terminal)
-  let read = requestedScrollbackRows === undefined ? await readFallback() : null
-  let serialized = await serializeInitial()
+  let read = await runtime.readTerminal(request.terminal)
+  let serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
   if (!isMultiplexStreamAttached(state, stream)) {
     return null
   }
@@ -89,8 +37,8 @@ export async function publishMultiplexInitialSnapshot(
     stream.pendingOutput.splice(0)
     stream.pendingOutputBytes = 0
     stream.pendingOutputOverflowed = false
-    read = requestedScrollbackRows === undefined ? await readFallback() : null
-    serialized = await serializeInitial()
+    read = await runtime.readTerminal(request.terminal)
+    serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
     if (!isMultiplexStreamAttached(state, stream)) {
       return null
     }
@@ -100,10 +48,6 @@ export async function publishMultiplexInitialSnapshot(
       stream.pendingOutputBytes = 0
       stream.pendingOutputOverflowed = false
     }
-  }
-  const fallbackData = serialized ? '' : readTailData(read ?? (await readFallback()))
-  if (!isMultiplexStreamAttached(state, stream)) {
-    return null
   }
   const size = runtime.getTerminalSize(ptyId)
   const displayMode = runtime.getMobileDisplayMode(ptyId)
@@ -140,14 +84,13 @@ export async function publishMultiplexInitialSnapshot(
     truncated: initialOutputOverflowed,
     truncatedByByteBudget: serialized?.truncatedByByteBudget,
     scrollbackRows: serialized?.scrollbackRows,
-    ...(servesScrollbackRequest && !initialOutputOverflowed ? { requestedScrollbackRows } : {}),
     source: serialized?.source,
     kittyKeyboardFlags: serialized?.kittyKeyboardFlags,
     alternateScreen: serialized?.alternateScreen,
     terminalOwner: serialized?.terminalOwner,
     oscLinks: serialized?.oscLinks,
     pendingEscapeTailAnsi: serialized?.pendingEscapeTailAnsi,
-    data: serialized?.data ?? fallbackData
+    data: serialized?.data ?? (read.tail.length > 0 ? `${read.tail.join('\r\n')}\r\n` : '')
   })
   // Why: baseline for resize re-stream gating; the client already rewrapped to these cols via the initial snapshot replay.
   stream.lastResizeCols = serialized?.cols ?? size?.cols

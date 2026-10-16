@@ -10,14 +10,12 @@ import { RemoteRuntimeTerminalResponseController } from './remote-runtime-termin
 import {
   MAX_REMOTE_TERMINAL_SNAPSHOT_BYTES,
   REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE,
-  buildSnapshotOutcome,
   classifySnapshotAvailability,
   clearPendingSnapshotRequest,
   clearResyncTimer,
   clearSnapshot,
   concatBytes,
-  decodeSnapshotInfo,
-  settleSubscribeSnapshot
+  decodeSnapshotInfo
 } from './remote-runtime-terminal-snapshot-state'
 import type {
   RemoteRuntimeMultiplexedTerminalCallbacks,
@@ -41,8 +39,6 @@ export abstract class RemoteRuntimeTerminalBinarySnapshots extends RemoteRuntime
             ? 'recovery'
             : 'initial'
       if (stream.snapshotTarget === 'recovery') {
-        // Why: a recovery image supersedes the subscribe one; restoring the older image would drop output.
-        settleSubscribeSnapshot(stream, null)
         this.noteResyncSnapshotProgress(stream)
       }
       return
@@ -102,7 +98,22 @@ export abstract class RemoteRuntimeTerminalBinarySnapshots extends RemoteRuntime
           carriesHistory: (info?.scrollbackRows ?? 0) > 0
         }
         if (matchesPendingRequest) {
-          pendingRequest.resolve(buildSnapshotOutcome(stream, data, info, true))
+          pendingRequest.resolve({
+            availability: classifySnapshotAvailability(stream.snapshotOverflowed, info),
+            snapshot: {
+              data: data ?? '',
+              cols: info?.cols ?? 80,
+              rows: info?.rows ?? 24,
+              seq: info?.seq,
+              source: info?.source,
+              kittyKeyboardFlags: info?.kittyKeyboardFlags,
+              alternateScreen: info?.alternateScreen,
+              terminalOwner: info?.terminalOwner,
+              pendingEscapeTailAnsi: info?.pendingEscapeTailAnsi,
+              // The host folds the normal buffer into `data` (see terminal-snapshot-publication.ts).
+              carriesNormalBuffer: true
+            }
+          })
           clearPendingSnapshotRequest(stream)
         } else if (target === 'initial') {
           stream.callbacks.onSnapshot(data ?? '', pushedMeta)
@@ -125,16 +136,6 @@ export abstract class RemoteRuntimeTerminalBinarySnapshots extends RemoteRuntime
           snapshot: null
         })
         clearPendingSnapshotRequest(stream)
-      }
-      if (target === 'initial' && stream.subscribeSnapshot) {
-        // Why: only an explicit echo proves the host served the request; older hosts send their default image.
-        const served =
-          info?.requestedScrollbackRows === stream.subscribeSnapshot.scrollbackRows &&
-          info.truncated !== true
-        settleSubscribeSnapshot(
-          stream,
-          served ? buildSnapshotOutcome(stream, data, info, snapshotApplied) : null
-        )
       }
       clearSnapshot(stream)
       if (target === 'initial') {

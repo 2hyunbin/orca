@@ -377,8 +377,6 @@ export function createRemoteRuntimePtyTransport(
   let agentSessionRequiresHostAuthorityReplay = false
   let terminalCreateUnknownOutcomeError: unknown = null
   let lastConnectOptions: Parameters<PtyTransport['connect']>[0] | null = null
-  // Consumed by the connect's first subscribe; recovery resubscribes keep the host's default image.
-  let pendingSubscribeSnapshotScrollbackRows: number | undefined
   let lastAttachOptions: Parameters<PtyTransport['attach']>[0] | null = null
   let resolvePaneUnavailable = false
   let recoveringPaneHandle: string | null = null
@@ -2377,8 +2375,6 @@ export function createRemoteRuntimePtyTransport(
     let subscriptionSnapshotHadContent = false
     // Why: viewport handed to subscribe; a resize during the round-trip falls back to the refresh-only one-shot RPC, replayed through the stream below once current.
     const subscribedViewport = desiredViewport
-    const snapshotScrollbackRows = pendingSubscribeSnapshotScrollbackRows
-    pendingSubscribeSnapshotScrollbackRows = undefined
     const isCurrentSubscription = (): boolean =>
       !transportClosed &&
       generation === subscriptionGeneration &&
@@ -2395,7 +2391,6 @@ export function createRemoteRuntimePtyTransport(
       client: { id: clientId, type: 'desktop' },
       viewport: subscribedViewport ?? undefined,
       inputSessionId: inputJournal.sessionId,
-      ...(snapshotScrollbackRows !== undefined ? { snapshotScrollbackRows } : {}),
       callbacks: {
         onData: (data, meta) => {
           if (isCurrentSubscription()) {
@@ -2637,7 +2632,6 @@ export function createRemoteRuntimePtyTransport(
     resetSameHandleEndReuse()
     clearPublishedHandleWait()
     lastAttachOptions = options
-    pendingSubscribeSnapshotScrollbackRows = undefined
     storedCallbacks = options.callbacks
     terminalEnded = false
     connecting = true
@@ -2797,7 +2791,6 @@ export function createRemoteRuntimePtyTransport(
     const createEnvironmentId = currentRuntimeEnvironmentId
     lastConnectOptions = options
     lastAttachOptions = null
-    pendingSubscribeSnapshotScrollbackRows = options.subscribeSnapshotScrollbackRows
     storedCallbacks = options.callbacks
     resetRecoveryReplacementPolicy()
     resetSameHandleEndReuse()

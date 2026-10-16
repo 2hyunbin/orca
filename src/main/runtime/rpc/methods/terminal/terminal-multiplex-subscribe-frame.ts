@@ -3,11 +3,7 @@ import { TerminalMultiplexSubscribeFrame } from './stream-schemas'
 import type { TerminalMultiplexConnection } from './terminal-multiplex-connection'
 import { resolveMultiplexSubscribePty } from './terminal-multiplex-subscribe-resolution'
 import { initializeMultiplexStream } from './terminal-multiplex-stream-initialization'
-import {
-  publishMultiplexInitialSnapshot,
-  startRequestedInitialSnapshot,
-  type MultiplexPublishedInitialState
-} from './terminal-multiplex-initial-snapshot'
+import { publishMultiplexInitialSnapshot } from './terminal-multiplex-initial-snapshot'
 import { activateMultiplexStream } from './terminal-multiplex-live-stream'
 import type { TerminalMultiplexStream } from './terminal-stream-types'
 
@@ -27,28 +23,10 @@ export function installMultiplexSubscribeFrame(state: TerminalMultiplexConnectio
     }
     let stream: TerminalMultiplexStream | null = null
     let installedStream: TerminalMultiplexStream | null = null
-    let earlyPublication: Promise<MultiplexPublishedInitialState | null> | undefined
     try {
-      const initializing = initializeMultiplexStream(state, request, ptyId, (installed) => {
+      stream = await initializeMultiplexStream(state, request, ptyId, (installed) => {
         installedStream = installed
       })
-      // After the synchronous part of initialization, so output from here on is already buffered.
-      const early: TerminalMultiplexStream | null = installedStream
-      const earlyRequestedImage = early
-        ? startRequestedInitialSnapshot(state, request, ptyId)
-        : undefined
-      if (early && earlyRequestedImage) {
-        // Why: a SnapshotRequest was answered while viewport registration still awaited; the
-        // served image must not wait on it either, or a long-history reveal pays it serially.
-        earlyPublication = publishMultiplexInitialSnapshot(
-          state,
-          request,
-          early,
-          earlyRequestedImage
-        )
-        earlyPublication.catch(() => {})
-      }
-      stream = await initializing
     } catch (error) {
       if (!installedStream) {
         throw error
@@ -68,8 +46,7 @@ export function installMultiplexSubscribeFrame(state: TerminalMultiplexConnectio
       return
     }
     try {
-      const published = await (earlyPublication ??
-        publishMultiplexInitialSnapshot(state, request, stream))
+      const published = await publishMultiplexInitialSnapshot(state, request, stream)
       if (!published) {
         return
       }

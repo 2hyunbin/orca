@@ -7,7 +7,6 @@ import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 import { RemoteRuntimeTerminalBinaryController } from './remote-runtime-terminal-binary-controller'
 import {
   CONTROL_STREAM_ID,
-  createSubscribeSnapshotSlot,
   disposeRemoteTerminalStreamState
 } from './remote-runtime-terminal-snapshot-state'
 import type {
@@ -24,8 +23,6 @@ export class RemoteRuntimeTerminalMultiplexer extends RemoteRuntimeTerminalBinar
     viewport?: { cols: number; rows: number }
     /** Stable across this pane's reattaches so the host can dedupe replayed input. */
     inputSessionId?: string
-    /** Fold a bounded authoritative image into the subscribe snapshot (park reveal); older hosts ignore it. */
-    snapshotScrollbackRows?: number
     callbacks: RemoteRuntimeMultiplexedTerminalCallbacks
   }): Promise<RemoteRuntimeMultiplexedTerminal> {
     const streamId = this.allocateStreamId()
@@ -52,10 +49,6 @@ export class RemoteRuntimeTerminalMultiplexer extends RemoteRuntimeTerminalBinar
       snapshotInfo: null,
       initialSnapshotReceived: false,
       pendingSnapshotRequest: null,
-      subscribeSnapshot:
-        args.snapshotScrollbackRows === undefined
-          ? null
-          : createSubscribeSnapshotSlot(args.snapshotScrollbackRows),
       expectedSeq: undefined,
       commandProbeBaselineSeq: undefined,
       recoverySnapshotSeq: undefined,
@@ -125,7 +118,7 @@ export class RemoteRuntimeTerminalMultiplexer extends RemoteRuntimeTerminalBinar
       },
       setOutputPaused: (paused) => this.setOutputPaused(state, paused),
       serializeBuffer: (opts) => this.requestSnapshot(state, opts),
-      serializeBufferOutcome: (opts) => this.claimSubscribeOrRequestSnapshotOutcome(state, opts),
+      serializeBufferOutcome: (opts) => this.requestSnapshotOutcome(state, opts),
       close: () => {
         if (this.isRegisteredStream(state)) {
           // Why after: a failed write closes the transport, whose message the pending snapshot must carry.
@@ -158,10 +151,7 @@ export class RemoteRuntimeTerminalMultiplexer extends RemoteRuntimeTerminalBinar
             ...(args.client.type === 'desktop' ? { desktopViewportClaims: 1 } : {}),
             ...(args.inputSessionId ? { inputAck: 1 } : {})
           },
-          ...(args.inputSessionId ? { inputSessionId: args.inputSessionId } : {}),
-          ...(args.snapshotScrollbackRows !== undefined
-            ? { snapshotScrollbackRows: args.snapshotScrollbackRows }
-            : {})
+          ...(args.inputSessionId ? { inputSessionId: args.inputSessionId } : {})
         })
       )
       if (!sent) {

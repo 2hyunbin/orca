@@ -11,8 +11,8 @@ import {
 
 // A parked remote pane's reveal used to run terminal.create, THEN open the shared
 // stream, THEN subscribe: two serial round trips before the Subscribe frame left.
-// The stream open has no data dependency on the create, so it now overlaps it,
-// and the reveal's history budget rides on the Subscribe frame itself.
+// The stream open has no data dependency on the create, so it now overlaps it.
+// A reveal also claimed the same viewport several times; one claim now suffices.
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
@@ -65,7 +65,6 @@ describe('remote pane reveal round trips', () => {
     const connected = transport.connect({
       url: '',
       sessionId: toRemoteRuntimePtyId('terminal-1', 'env-1'),
-      subscribeSnapshotScrollbackRows: 5000,
       callbacks: {}
     })
     await vi.waitFor(() =>
@@ -77,14 +76,7 @@ describe('remote pane reveal round trips', () => {
     answerCreate({ ok: true, result: { terminal: { handle: 'terminal-1', isReattach: true } } })
     await connected
     expect(runtimeSubscribe).toHaveBeenCalledTimes(1)
-    expect(latestSubscribePayload()).toMatchObject({ snapshotScrollbackRows: 5000 })
-  })
-
-  it('asks for no subscribe-time history on an ordinary connect', async () => {
-    const transport = await createRevealTransport()
-    await transport.connect({ url: '', callbacks: {} })
-    await vi.waitFor(() => expect(latestSubscribePayload()).toBeDefined())
-    expect(latestSubscribePayload()).not.toHaveProperty('snapshotScrollbackRows')
+    expect(latestSubscribePayload()).toMatchObject({ terminal: 'terminal-1' })
   })
 
   it('closes a warmed stream when the create fails and nothing subscribes', async () => {

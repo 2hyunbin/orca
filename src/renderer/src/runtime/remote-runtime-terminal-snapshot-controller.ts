@@ -14,8 +14,7 @@ import {
   clearPendingSnapshotRequest,
   clearResyncTimer,
   disposeRemoteTerminalStreamState,
-  retryWorthySnapshotOutcome,
-  settleSubscribeSnapshot
+  retryWorthySnapshotOutcome
 } from './remote-runtime-terminal-snapshot-state'
 import type {
   RemoteRuntimeMultiplexedTerminalState,
@@ -163,50 +162,6 @@ export abstract class RemoteRuntimeTerminalSnapshotController extends RemoteRunt
       throw new Error('Remote terminal snapshot already in flight.')
     }
     return outcome.snapshot
-  }
-
-  /** One image per reveal: a subscribe that already asked for these rows answers instead of a second request. */
-  protected async claimSubscribeOrRequestSnapshotOutcome(
-    stream: RemoteRuntimeMultiplexedTerminalState,
-    opts?: { scrollbackRows?: number }
-  ): Promise<RemoteRuntimeSnapshotOutcome> {
-    const slot = stream.subscribeSnapshot
-    if (slot && !slot.claimed && slot.scrollbackRows === opts?.scrollbackRows) {
-      slot.claimed = true
-      const outcome = await this.awaitSubscribeSnapshot(stream, slot.outcome)
-      if (stream.subscribeSnapshot === slot) {
-        stream.subscribeSnapshot = null
-      }
-      if (outcome && this.streams.get(stream.streamId) === stream) {
-        return outcome
-      }
-    } else if (slot) {
-      // Why: any other first caller would read an image it never asked for; fall back for good.
-      settleSubscribeSnapshot(stream, null)
-    }
-    return this.requestSnapshotOutcome(stream, opts)
-  }
-
-  private awaitSubscribeSnapshot(
-    stream: RemoteRuntimeMultiplexedTerminalState,
-    outcome: Promise<RemoteRuntimeSnapshotOutcome | null>
-  ): Promise<RemoteRuntimeSnapshotOutcome | null> {
-    return new Promise((resolve, reject) => {
-      // Why: same bound and recovery as a SnapshotRequest, so a silent host cannot hold the reveal open.
-      const timer = setTimeout(() => {
-        reject(new Error('Remote terminal snapshot timed out.'))
-        if (!stream.initialSnapshotReceived) {
-          this.recoverStalledStream(stream)
-        }
-      }, REMOTE_TERMINAL_SNAPSHOT_REQUEST_TIMEOUT_MS)
-      if (typeof timer.unref === 'function') {
-        timer.unref()
-      }
-      void outcome.then((settled) => {
-        clearTimeout(timer)
-        resolve(settled)
-      })
-    })
   }
 
   protected requestSnapshotOutcome(
