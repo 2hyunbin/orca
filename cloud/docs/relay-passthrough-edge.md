@@ -1,5 +1,11 @@
 # Relay passthrough edge
 
+> **Status: shelved (2026-10-16). Nothing here is applied.**
+> - **Staging proved:** the edge path, the WebSocket and header behaviour, a certificate hot swap, a
+>   cell recreate and an edge reset, all with a throwaway CA.
+> - **Staging did not prove:** a public certificate, or the DNS cutover and rollback.
+> - **Removed:** the staging edge resources were destroyed.
+
 An Orca-run TLS edge answers one relay cell's hostname with no Google proxy in the path. A VM next
 to the cell holds a static IP and runs Envoy, which terminates TLS and forwards over the VPC to
 the cell VM. It exists to test whether the Google load balancer's asia-east2 proxy tier causes the
