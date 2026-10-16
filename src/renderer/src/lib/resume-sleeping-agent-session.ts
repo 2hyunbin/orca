@@ -250,12 +250,15 @@ export function resumeSleepingAgentSessionsForWorktree(
     (record) => !activationTreatsNoteAsFinished(record)
   )
   const activeClaimKeys = new Set(activeWorktreeRecords.map(getProviderSessionClaimKey))
-  // Why: a record this host may not resume must not outrank, and so delete, one it may.
-  const claimRepresentativeByKey = getClaimRepresentativeRecords(
-    activeWorktreeRecords.filter(
-      (record) => !sleepingRecordNamesAnotherExecutionHost(record, state)
-    )
-  )
+  // Why: a record this host may not resume must not outrank, and so delete, one it may. A loop, not
+  // a filter arrow: the focus-read ratchet treats an arrow's result as this sweep's return value.
+  const electableRecords: SleepingAgentSessionRecord[] = []
+  for (const record of activeWorktreeRecords) {
+    if (!sleepingRecordNamesAnotherExecutionHost(record, state)) {
+      electableRecords.push(record)
+    }
+  }
+  const claimRepresentativeByKey = getClaimRepresentativeRecords(electableRecords)
   const freshlyLaunchedClaimKeys = new Set<string>()
 
   let launched = 0
