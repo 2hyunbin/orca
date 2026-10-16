@@ -33,8 +33,8 @@ vi.mock('@/store', () => ({
 }))
 
 const { KeychainCredentialNotice } = await import('./keychain-credential-notice')
-const { getProviderRuntimeContextKey } = await import('@/lib/provider-runtime-context')
-const CONTEXT = getProviderRuntimeContextKey({ activeRuntimeEnvironmentId: 'env-1' })
+const { getEnvironmentRuntimeContextKey } = await import('@/lib/provider-runtime-context')
+const CONTEXT = getEnvironmentRuntimeContextKey('env-1')
 
 describe('KeychainCredentialNotice', () => {
   afterEach(() => {
@@ -85,14 +85,31 @@ describe('KeychainCredentialNotice', () => {
     expect(container.textContent).toBe('')
   })
 
-  it("ignores another host's status left over while the selected host changes", () => {
-    const { container } = render(
+  it('moves the key on the host that reported the status, not the selected one', async () => {
+    mocks.callRuntimeRpc.mockResolvedValueOnce({ ok: true })
+    render(
       <KeychainCredentialNotice
-        statusContextKey={getProviderRuntimeContextKey({ activeRuntimeEnvironmentId: 'env-0' })}
+        statusContextKey={getEnvironmentRuntimeContextKey('env-0')}
         service="Linear"
-        status={{ canMoveCredentialKeyToFile: true, credentialErrorReason: 'keychain_locked' }}
+        status={{ canMoveCredentialKeyToFile: true }}
       />
     )
-    expect(container.textContent).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to file storage' }))
+    await waitFor(() => expect(mocks.callRuntimeRpc).toHaveBeenCalled())
+    expect(mocks.callRuntimeRpc.mock.calls[0][0]).toEqual({
+      kind: 'environment',
+      environmentId: 'env-0'
+    })
+  })
+
+  it('says the moved key is not tied to the machine', () => {
+    render(
+      <KeychainCredentialNotice
+        statusContextKey={CONTEXT}
+        service="Linear"
+        status={{ canMoveCredentialKeyToFile: true }}
+      />
+    )
+    expect(document.body.textContent).toContain('a backup or shared copy of ~/.orca can open')
   })
 })

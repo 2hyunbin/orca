@@ -139,7 +139,7 @@ export function LinearIntegrationCard(): React.JSX.Element {
         />
         <KeychainCredentialNotice
           service="Linear"
-          status={linearStatus}
+          status={contextMatches ? linearStatus : {}}
           statusContextKey={linearStatusContextKey}
         />
         {connected ? (

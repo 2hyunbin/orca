@@ -74,7 +74,9 @@ export function useTaskPageLinearListSelectionPrelude(model: TaskPageGitLabLoadi
       : selectedLinearCustomView?.model === 'issue'
         ? linearCustomViewContentsLoading
         : linearLoading
+  const { linearStatusContextKey } = model
   const credentialHost = useCredentialHostName(
+    linearStatusContextKey,
     linearStatus.credentialErrorReason === 'keychain_locked'
   )
   const activeLinearIssueError =

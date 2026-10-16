@@ -57,7 +57,13 @@ the master key from the Keychain, then replaces the record with an owner-only (`
 record that holds the same key, not bound to the machine ID. Keychain keys are never machine-bound,
 so every sealed credential still opens and nothing is re-sealed. The Keychain item stays where it
 is. The switch is refused while the Keychain is locked, because the key can't be read then. After
-the switch, the key file's limitations below apply.
+the switch, the key file's limitations below apply. In particular, the moved key is not bound to
+the machine ID, so a backup of `~/.orca`, or a copy on a shared (NFS) home, can open the
+credentials on another machine.
+
+On startup the server also deletes key-record staging files (`*.staging`) that a crashed write
+left in the credential directory. It deletes only this user's regular files with that name, and
+only when the process that wrote them has exited.
 
 ## Limitations
 

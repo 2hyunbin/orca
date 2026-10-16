@@ -9,6 +9,7 @@
  */
 import type { SecretStore, SecretStoreKeychainLockState } from '../../shared/secret-store'
 import { moveOrcadKeyToFile } from './orcad-secret-key-move'
+import { sweepStaleRecordStaging } from './orcad-secret-key-record'
 import {
   resolveKeyLocation,
   resolveState,
@@ -153,6 +154,7 @@ export function createOrcadSecretStore(
     },
     async prepare(next) {
       options = next
+      sweepStaleRecordStaging(next.keyDir)
       generation += 1
       adopt(await resolveState(next))
       return state.kind === 'ready'

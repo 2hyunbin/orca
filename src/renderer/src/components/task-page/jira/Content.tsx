@@ -71,7 +71,9 @@ export function TaskPageJiraContent({
     accountBackedTaskSourceHostId,
     setJiraRefreshNonce
   } = model
+  const { jiraStatusContextKey } = model
   const credentialHost = useCredentialHostName(
+    jiraStatusContextKey,
     jiraStatus.credentialErrorReason === 'keychain_locked'
   )
   const jiraCredentialError =

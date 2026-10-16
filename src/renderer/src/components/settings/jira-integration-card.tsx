@@ -141,7 +141,7 @@ export function JiraIntegrationCard(): React.JSX.Element {
         />
         <KeychainCredentialNotice
           service="Jira"
-          status={jiraStatus}
+          status={contextMatches ? jiraStatus : {}}
           statusContextKey={jiraStatusContextKey}
         />
         <ProviderHostScopeControl

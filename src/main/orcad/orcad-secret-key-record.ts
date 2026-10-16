@@ -1,8 +1,17 @@
 /** orcad's key record on disk: naming, reading, and exclusive first publication. */
 import { createHash, randomBytes } from 'node:crypto'
-import { linkSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
+import {
+  linkSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import {
   bestEffortFsyncDirectorySync,
@@ -170,6 +179,47 @@ export function replaceRecord(path: string, record: StoredKeyState, expectedChec
     return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
   } finally {
     rmSync(staging, { force: true })
+  }
+}
+
+const STAGING_NAME = /^orcad-secret-store-[0-9a-f]{16}\.json\.(\d+)\.[0-9a-f]{8}\.staging$/
+
+function isLiveProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM: alive, owned by someone else.
+    return errorCode(error) === 'EPERM'
+  }
+}
+
+/**
+ * Removes key-record staging files a crashed write left in `keyDir`; they can hold a master key.
+ * Only this user's regular files, matching the staging name, whose writer is gone.
+ */
+export function sweepStaleRecordStaging(keyDir: string): void {
+  let names: string[]
+  try {
+    names = readdirSync(keyDir)
+  } catch {
+    return
+  }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null
+  for (const name of names) {
+    const pid = STAGING_NAME.exec(name)?.[1]
+    if (!pid || Number(pid) === process.pid || isLiveProcess(Number(pid))) {
+      continue
+    }
+    const path = join(keyDir, name)
+    try {
+      const stat = lstatSync(path)
+      if (stat.isFile() && (uid === null || stat.uid === uid)) {
+        rmSync(path, { force: true })
+      }
+    } catch {
+      // Gone already, or not ours to remove.
+    }
   }
 }
 

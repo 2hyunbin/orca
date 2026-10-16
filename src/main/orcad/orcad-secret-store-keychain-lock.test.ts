@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -190,5 +190,19 @@ describe('orcad secret store with a locked macOS login Keychain', () => {
     expect(integrationCredentialKeychainFields({ saved: true, decryptFailed: false })).toEqual({
       canMoveCredentialKeyToFile: true
     })
+  })
+
+  it('sweeps key-record staging files a crashed write left behind, and nothing else', async () => {
+    const record = orcadSecretStateFileName(MACHINE)
+    const stale = join(keyDir, `${record}.999999999.0123abcd.staging`)
+    const inFlight = join(keyDir, `${record}.${process.ppid}.0123abcd.staging`)
+    const unrelated = join(keyDir, 'other.json.999999999.0123abcd.staging')
+    for (const path of [stale, inFlight, unrelated]) {
+      writeFileSync(path, '{}', { mode: 0o600 })
+    }
+    await prepare(fakeKeychain())
+    expect(existsSync(stale)).toBe(false)
+    expect(existsSync(inFlight)).toBe(true)
+    expect(existsSync(unrelated)).toBe(true)
   })
 })

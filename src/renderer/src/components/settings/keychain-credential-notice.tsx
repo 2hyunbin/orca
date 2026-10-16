@@ -3,8 +3,7 @@ import { toast } from 'sonner'
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import { defaultScopeHost } from '@/lib/default-creation-host'
-import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
+import { runtimeTargetForContextKey } from '@/lib/provider-runtime-context'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { useAppStore } from '@/store'
 import type { IntegrationCredentialErrorReason } from '../../../../shared/integration-credential-errors'
@@ -30,13 +29,13 @@ export function keychainLockedCredentialMessage(service: CredentialService, host
   )
 }
 
-/** The paired server whose credentials the provider status describes; read only when `needed`. */
-export function useCredentialHostName(needed: boolean): string {
+/** The host a provider status was read from (its context key); read only when `needed`. */
+export function useCredentialHostName(statusContextKey: string | null, needed: boolean): string {
   const name = useAppStore((state) => {
-    if (!needed) {
+    if (!needed || !statusContextKey) {
       return null
     }
-    const target = defaultScopeHost(state.settings)
+    const target = runtimeTargetForContextKey(statusContextKey)
     return target.kind === 'environment'
       ? (state.runtimeEnvironments.find((environment) => environment.id === target.environmentId)
           ?.name ?? null)
@@ -55,10 +54,11 @@ export function KeychainCredentialNotice({
 }: {
   service: CredentialService
   status: KeychainCredentialStatus
-  /** The provider runtime context `status` was read from; another host's status is ignored. */
+  /** The provider context `status` was read from; the move goes to that host, its owner. */
   statusContextKey: string | null
 }): React.JSX.Element | null {
-  return status.credentialErrorReason === 'keychain_locked' || status.canMoveCredentialKeyToFile ? (
+  return statusContextKey &&
+    (status.credentialErrorReason === 'keychain_locked' || status.canMoveCredentialKeyToFile) ? (
     <KeychainCredentialNoticeBody
       service={service}
       status={status}
@@ -74,20 +74,14 @@ function KeychainCredentialNoticeBody({
 }: {
   service: CredentialService
   status: KeychainCredentialStatus
-  /** The provider runtime context `status` was read from; another host's status is ignored. */
-  statusContextKey: string | null
+  statusContextKey: string
 }): React.JSX.Element | null {
-  const host = useCredentialHostName(true)
-  const settings = useAppStore((state) => state.settings)
+  const host = useCredentialHostName(statusContextKey, true)
   const checkLinearConnection = useAppStore((state) => state.checkLinearConnection)
   const checkJiraConnection = useAppStore((state) => state.checkJiraConnection)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
 
-  // Why: while the selected host changes, the store still holds the previous host's status.
-  if (statusContextKey !== getProviderRuntimeContextKey(settings)) {
-    return null
-  }
   if (status.credentialErrorReason === 'keychain_locked') {
     return (
       <div
@@ -101,8 +95,9 @@ function KeychainCredentialNoticeBody({
       </div>
     )
   }
-  const target = defaultScopeHost(settings)
-  // Why any target: a paired browser's local target routes to its server; desktop never sets it.
+  // Why the status's own host: it reported the flag. A paired browser's local target reaches its
+  // server; desktop never sets the flag.
+  const target = runtimeTargetForContextKey(statusContextKey)
   if (!status.canMoveCredentialKeyToFile) {
     return null
   }
@@ -145,7 +140,7 @@ function KeychainCredentialNoticeBody({
         <p className="text-xs leading-snug">
           {translate(
             'auto.components.settings.keychainCredentialNotice.offerMove',
-            '{{host}} keeps its credential key in its macOS login Keychain, which was locked after a reboot. Switch to file storage to keep Linear and Jira working when you only sign in over SSH. The key then sits in a file only this account can read, which protects it less than the Keychain.',
+            '{{host}} keeps its credential key in its macOS login Keychain, which was locked after a reboot. Switch to file storage to keep Linear and Jira working when you only sign in over SSH. The key then sits in a file only this account can read, which protects it less than the Keychain: it is not tied to this machine, so a backup or shared copy of ~/.orca can open the credentials.',
             { host }
           )}
         </p>
