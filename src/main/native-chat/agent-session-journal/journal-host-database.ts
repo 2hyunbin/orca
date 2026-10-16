@@ -15,6 +15,7 @@ import {
 import { journalOpenRefusalError } from './journal-open-failure'
 import { AgentSessionJournalError } from './journal-write-guards'
 import { withJournalTextTransaction } from './journal-text-pieces'
+import { clearJournalTextSuffixPreparations } from './journal-text-suffix-preparation'
 
 const JOURNAL_DATABASE_FILE = 'agent-session-journal.db'
 
@@ -74,6 +75,9 @@ export class JournalHostDatabase {
   /** Last, after every store has drained. A close that fails keeps the handle, so the retried
    *  teardown closes this same connection. */
   close(): void {
+    if (this.connection) {
+      clearJournalTextSuffixPreparations(this.connection)
+    }
     this.connection?.close()
     this.connection = null
   }

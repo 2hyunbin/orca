@@ -2,6 +2,7 @@ import type Database from '../../sqlite/sync-database'
 import { parseJournalRow, type JournalRowParse } from './journal-row-schema'
 import { escapeJournalText, replaceJournalStreamedText } from './journal-streamed-text-field'
 import { readAgentJournalItemBody } from '../../../shared/agent-session-journal-body-admission'
+import { prepareJournalTextSuffix } from './journal-text-suffix-preparation'
 
 export type JournalPhysicalRow = {
   seq: number
@@ -108,14 +109,8 @@ FROM path ORDER BY seq`).iterate(sessionId, epoch, generation, sequence, session
           piece.prefix > (parent?.length ?? 0) || piece.units > (parent?.unitLength ?? 0)) {
         return null
       }
-      let suffix: unknown
-      try {
-        suffix = JSON.parse(`"${piece.suffix}"`)
-      } catch {
-        return null
-      }
-      if (typeof suffix !== 'string' || piece.unitLength !== piece.units + suffix.length ||
-          escapeJournalText(suffix) !== piece.suffix) {
+      const prepared = prepareJournalTextSuffix(this.db, piece.suffix, piece.units % 256)
+      if (!prepared || piece.unitLength !== piece.units + prepared.text.length) {
         return null
       }
       const boundaries = decoded?.boundaries ?? [{ units: 0, escaped: 0 }]
@@ -128,22 +123,14 @@ FROM path ORDER BY seq`).iterate(sessionId, epoch, generation, sequence, session
       if (escapedPrefix !== piece.prefix) {
         return null
       }
-      let escapedAt = piece.prefix
-      // Fixed boundaries keep tiny checkpoints from retaining one boundary per historical row.
-      let start = 0
-      while (start < suffix.length) {
-        const end = Math.min(start + 256 - ((piece.units + start) % 256), suffix.length)
-        escapedAt += escapeJournalText(suffix.slice(start, end)).length
-        if ((piece.units + end) % 256 === 0) {
-          boundaries.push({ units: piece.units + end, escaped: escapedAt })
-        }
-        start = end
+      for (const offset of prepared.boundaries) {
+        boundaries.push({ units: piece.units + offset.units, escaped: piece.prefix + offset.escaped })
       }
       const { suffix: _suffix, ...ancestor } = piece
       const ancestry = decoded?.lineage ?? []
       ancestry.push(ancestor)
       decoded = {
-        piece, text: (decoded?.text ?? '').slice(0, piece.units) + suffix, boundaries, lineage: ancestry
+        piece, text: (decoded?.text ?? '').slice(0, piece.units) + prepared.text, boundaries, lineage: ancestry
       }
     }
     if (decoded?.piece.seq === sequence) {
