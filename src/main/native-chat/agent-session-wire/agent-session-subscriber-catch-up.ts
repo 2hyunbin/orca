@@ -13,7 +13,7 @@ import { sameJournalCursor } from '../agent-session-journal/journal-cursor'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import {
-  capturePublishedWork,
+  type AgentSessionPublishedWork,
   agentSessionPublishedWorkFields,
   withPublishedWork,
   withPublishedWorkResult
@@ -71,9 +71,9 @@ export function deliverToSubscriber(
     hostNow,
     ...(publishedActivity !== undefined ? { activity: publishedActivity } : {})
   }
-  const work = publication ? publication.work : capturePublishedWork(
-    journal.snapshot(), port.hooks.readCurrentWork?.(subscriber.sessionId, journal)
-  )
+  const work = publication
+    ? publication.work
+    : port.hooks.readCurrentWork?.(subscriber.sessionId, journal)
   // Caught up, so there are no rows to read: every publish behind a commit's own delivery.
   if (sameJournalCursor(subscriber.cursor, publication?.cursor ?? journal.cursor())) {
     emitCaughtUp(port, subscriber, emitCheckpoint, shared, { journal, work })
@@ -169,7 +169,10 @@ function emitCaughtUp(
     hostNow: number
     activity?: AgentSessionTurnActivity | null
   },
-  current: { journal: AgentSessionJournal; work: ReturnType<typeof capturePublishedWork> }
+  current: {
+    journal: AgentSessionJournal
+    work: (AgentSessionPublishedWork & Pick<StructuredAgentSessionCurrentWork, 'viewKey'>) | undefined
+  }
 ): void {
   const commandsChanged = subscriberCommandsChanged(port.hooks, subscriber)
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)
