@@ -2,8 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as TrackingDecisions from './web-session-tabs-sync/tracking-decisions'
 import {
   activateWebRuntimeSessionTab,
-  closeWebRuntimeSessionTab
+  closeWebRuntimeSessionTab,
+  replayWebSessionTabCloses
 } from './web-runtime-session-tab-lifecycle'
+import {
+  resetWebSessionCloseReplaysForTests,
+  takeDueWebSessionCloseReplays
+} from './web-session-close-replay'
 import {
   peekWebSessionFocusIntent,
   resetWebSessionFocusIntentForTests
@@ -87,7 +92,10 @@ vi.mock('./web-runtime-browser-materialization', () => ({
   hasMaterializedWebRuntimeBrowserPage: mocks.hasMaterializedWebRuntimeBrowserPage
 }))
 
-afterEach(() => resetWebSessionCloseIntentForTests())
+afterEach(() => {
+  resetWebSessionCloseIntentForTests()
+  resetWebSessionCloseReplaysForTests()
+})
 
 describe('web runtime session tab actions', () => {
   beforeEach(() => {
@@ -593,6 +601,74 @@ describe('web runtime session tab actions', () => {
       )
     ).toBe(true)
     expect(mocks.acceptReplayedWebSessionTabsSnapshot).not.toHaveBeenCalled()
+  })
+
+  // STA-6224: clearing on a dropped connection let the host's next snapshot re-add the tab.
+  it('holds a user close the host never received and sends it again once reachable', async () => {
+    const runtimeCall = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce({ id: 'close', ok: true, result: { closed: true } })
+      .mockResolvedValue({ id: 'list', ok: true, result: makeSnapshot() })
+    stubRuntimeEnvironmentBridge({ call: runtimeCall })
+    const owner = { environmentId: ENVIRONMENT_ID }
+
+    await expect(
+      closeWebRuntimeSessionTab({
+        worktreeId: WORKTREE_ID,
+        tabId: 'local-browser-unified',
+        reason: 'user'
+      })
+    ).resolves.toBe('failed')
+
+    // Durable: a reconnect long after the RPC timeout must still not re-show it.
+    expect(
+      isWebSessionCloseIntentPending(
+        owner,
+        WORKTREE_ID,
+        'host-browser-unified',
+        Date.now() + 60_000
+      )
+    ).toBe(true)
+    const due = takeDueWebSessionCloseReplays(owner, WORKTREE_ID, new Set(['host-browser-unified']))
+    expect(due.map((replay) => replay.hostTabIds[0])).toEqual(['host-browser-unified'])
+
+    await replayWebSessionTabCloses(ENVIRONMENT_ID, due)
+
+    const closeCalls = runtimeCall.mock.calls.filter(
+      ([request]: unknown[]) =>
+        typeof request === 'object' &&
+        request !== null &&
+        'method' in request &&
+        request.method === 'session.tabs.close'
+    )
+    expect(closeCalls).toHaveLength(2)
+    expect(closeCalls[1]?.[0]).toMatchObject({
+      params: { tabId: 'host-browser-unified', reason: 'user' }
+    })
+    expect(
+      takeDueWebSessionCloseReplays(owner, WORKTREE_ID, new Set(['host-browser-unified']))
+    ).toEqual([])
+  })
+
+  it('does not hold a lifecycle close the host never received', async () => {
+    stubRuntimeEnvironmentBridge({ call: vi.fn().mockRejectedValue(new Error('socket hang up')) })
+
+    await closeWebRuntimeSessionTab({
+      worktreeId: WORKTREE_ID,
+      tabId: 'local-browser-unified',
+      reason: 'cleanup',
+      publicationEpoch: 'epoch-1',
+      terminalHandle: 'term-1'
+    })
+
+    expect(
+      takeDueWebSessionCloseReplays(
+        { environmentId: ENVIRONMENT_ID },
+        WORKTREE_ID,
+        new Set(['host-browser-unified'])
+      )
+    ).toEqual([])
   })
 
   it('clears an optimistic close intent when pairing CAS rejects the host call', async () => {

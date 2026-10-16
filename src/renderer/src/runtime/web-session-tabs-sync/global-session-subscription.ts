@@ -1,5 +1,6 @@
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import { clearWebSessionCloseIntentsForOwner } from '../web-session-close-intent'
+import { clearWebSessionCloseReplaysForOwner } from '../web-session-close-replay'
 import { clearWebSessionFocusIntentsForOwner } from '../web-session-focus-intent'
 import { clearWebSessionReorderIntentsForOwner } from '../web-session-reorder-intent'
 import {
@@ -213,6 +214,7 @@ export function installGlobalSessionTabsSubscriptions({
       for (const { environmentId, expectedEnvironmentPairingRevision } of environments) {
         const owner = { environmentId, pairingRevision: expectedEnvironmentPairingRevision }
         clearWebSessionCloseIntentsForOwner(owner)
+        clearWebSessionCloseReplaysForOwner(owner)
         clearWebSessionFocusIntentsForOwner(owner)
         clearWebSessionReorderIntentsForOwner(owner)
       }

@@ -4,13 +4,22 @@ import type {
   RuntimeSessionTabCloseReason
 } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
-import { hasRuntimeRpcErrorCode, unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import {
+  hasRuntimeRpcErrorCode,
+  RuntimeRpcCallError,
+  unwrapRuntimeRpcResult
+} from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   clearWebSessionCloseIntent,
   makeWebSessionCloseIntentDurable,
   recordWebSessionCloseIntent
 } from './web-session-close-intent'
+import {
+  queueWebSessionCloseReplay,
+  settleWebSessionCloseReplay,
+  type WebSessionCloseReplay
+} from './web-session-close-replay'
 import {
   clearWebSessionFocusIntent,
   clearWebSessionFocusIntentIfMatches,
@@ -78,6 +87,55 @@ export async function closeWebRuntimeSessionTab(args: {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
 }
 
+// Why these and a bare rejection only: they mean the close never reached the host, so sending it
+// again is the user's own close. A structured refusal (e.g. a re-paired host) is an answer.
+const UNDELIVERED_CLOSE_CODES = new Set([
+  'runtime_unavailable',
+  'remote_runtime_unavailable',
+  'runtime_timeout',
+  'remote_runtime_timeout'
+])
+
+function isUndeliveredCloseFailure(error: unknown): boolean {
+  return !(error instanceof RuntimeRpcCallError) || UNDELIVERED_CLOSE_CODES.has(error.code)
+}
+
+/** Keeps a user close the host never received, hiding the tab until a replay reaches the host. */
+function holdUndeliveredUserClose(
+  intentOwner: ReturnType<typeof captureWebSessionIntentOwner>,
+  worktreeId: string,
+  hostTabIds: readonly string[]
+): void {
+  for (const hostTabId of hostTabIds) {
+    recordWebSessionCloseIntent(intentOwner, worktreeId, hostTabId, Date.now())
+    makeWebSessionCloseIntentDurable(intentOwner, worktreeId, hostTabId)
+  }
+  queueWebSessionCloseReplay(intentOwner, worktreeId, hostTabIds)
+}
+
+/** Sends again the user closes a host snapshot proved reachable; see `takeDueWebSessionCloseReplays`. */
+export async function replayWebSessionTabCloses(
+  environmentId: string,
+  replays: readonly WebSessionCloseReplay[]
+): Promise<void> {
+  for (const replay of replays) {
+    const outcome = await closeWebRuntimeSessionTab({
+      worktreeId: replay.worktreeId,
+      tabId: replay.hostTabIds[0],
+      environmentId,
+      reason: 'user'
+    })
+    if (settleWebSessionCloseReplay(replay, outcome !== 'failed') !== 'gave-up') {
+      continue
+    }
+    // The host kept failing the close; show the tab again rather than hide a live one forever.
+    for (const hostTabId of replay.hostTabIds) {
+      clearWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId)
+    }
+    await refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId)
+  }
+}
+
 function resolveTabEnvironmentId(environmentId: string | null | undefined): string | null {
   return (
     environmentId?.trim() ??
@@ -101,6 +159,11 @@ async function callWebRuntimeSessionTabMethod(
 ): Promise<WebRuntimeSessionTabCloseOutcome> {
   const environmentId = resolveTabEnvironmentId(args.environmentId)
   if (!environmentId || !isWebRuntimeSessionActive(environmentId)) {
+    if (environmentId && method === 'session.tabs.close' && args.reason === 'user') {
+      holdUndeliveredUserClose(captureWebSessionIntentOwner(environmentId), args.worktreeId, [
+        toHostSessionTabId(args.tabId)
+      ])
+    }
     return 'failed'
   }
   const intentOwner = captureWebSessionIntentOwner(environmentId)
@@ -215,11 +278,22 @@ async function callWebRuntimeSessionTabMethod(
     const hostHasNoSuchTab =
       hasRuntimeRpcErrorCode(error, 'tab_not_found') ||
       hasRuntimeRpcErrorCode(error, 'terminal_tab_not_found')
-    for (const hostTabId of closeIntentTabIds) {
-      if (hostHasNoSuchTab) {
-        makeWebSessionCloseIntentDurable(intentOwner, args.worktreeId, hostTabId)
-      } else {
-        clearWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId)
+    if (
+      isClose &&
+      args.reason === 'user' &&
+      !hostHasNoSuchTab &&
+      isUndeliveredCloseFailure(error)
+    ) {
+      // Why: clearing here let the host's next snapshot bring back a tab the user closed (STA-6224).
+      // The resolved host id was added last and is the one the host knows.
+      holdUndeliveredUserClose(intentOwner, args.worktreeId, [...closeIntentTabIds].toReversed())
+    } else {
+      for (const hostTabId of closeIntentTabIds) {
+        if (hostHasNoSuchTab) {
+          makeWebSessionCloseIntentDurable(intentOwner, args.worktreeId, hostTabId)
+        } else {
+          clearWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId)
+        }
       }
     }
     if (isLifecycleClose) {
