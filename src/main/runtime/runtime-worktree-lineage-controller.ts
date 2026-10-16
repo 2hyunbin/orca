@@ -11,6 +11,8 @@ import { sharesResolvedWorktreeLineageBoundary } from '../../shared/resolved-wor
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
+import { readAllWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
+import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
   RuntimeLineageError,
@@ -28,6 +30,34 @@ type RuntimeWorktreeLineageDependencies = {
   resolveWorktree(selector: string): Promise<ResolvedWorktree>
   listResolvedWorktrees(): Promise<ResolvedWorktree[]>
   showTerminal(handle: string): Promise<{ worktreeId: string }>
+}
+
+/**
+ * Read-only and ownership-scoped like the resolved list: the migrating per-host accessor would adopt
+ * another host's legacy row into this host just to answer a validation.
+ */
+function savedInstanceIdReader(
+  store: RuntimeStore,
+  hostId: ExecutionHostId | undefined
+): (id: string) => string | undefined {
+  if (!hostId) {
+    return (id) => store.getWorktreeMeta(id)?.instanceId
+  }
+  const repos = store.getRepos()
+  const ownerCounts = new Map<string, number>()
+  for (const repo of repos) {
+    ownerCounts.set(repo.id, (ownerCounts.get(repo.id) ?? 0) + 1)
+  }
+  const reposOnHost = new Map(
+    repos.filter((repo) => getRepoExecutionHostId(repo) === hostId).map((repo) => [repo.id, repo])
+  )
+  const metaById = readAllWorktreeMetaForHost(store, hostId)
+  return (id) => {
+    const repo = reposOnHost.get(getRepoIdFromWorktreeId(id))
+    return repo
+      ? getRepoOwnedWorktreeMeta(repo, id, metaById, ownerCounts.get(repo.id) ?? 0)?.instanceId
+      : undefined
+  }
 }
 
 export class RuntimeWorktreeLineageController {
@@ -101,23 +131,17 @@ export class RuntimeWorktreeLineageController {
       )
     }
     const store = this.deps.getStore()
-    const hostId = child.hostId ?? parent.hostId
+    let readSavedInstanceId: ((id: string) => string | undefined) | undefined
     // Why: saved metadata, not the resolved-worktree cache, which the reparent itself invalidates;
     // an unknown node would end the walk and let a longer loop through.
     const instanceIdOf = (id: string): string | undefined => {
       if (id === child.id || id === parent.id) {
         return id === child.id ? child.instanceId : parent.instanceId
       }
-      const exact = hostId ? store?.getWorktreeMetaForHost?.(id, hostId) : undefined
-      if (exact) {
-        return exact.instanceId
-      }
-      const legacy = store?.getWorktreeMeta(id)
-      const repo =
-        legacy && !legacy.hostId ? store?.getRepo(getRepoIdFromWorktreeId(id)) : undefined
-      const legacyHostId = legacy?.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
-      // Why: a locator-keyed row may be another host's; readers never follow a cross-host link.
-      return !hostId || !legacyHostId || legacyHostId === hostId ? legacy?.instanceId : undefined
+      readSavedInstanceId ??= store
+        ? savedInstanceIdReader(store, child.hostId ?? parent.hostId)
+        : () => undefined
+      return readSavedInstanceId(id)
     }
     let cursor: string | undefined = parent.id
     const visited = new Set<string>()
