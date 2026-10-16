@@ -123,7 +123,7 @@ describe('modified Enter for an app that armed modifyOtherKeys (STA-7701)', () =
     expect(resolveForPane(enter({ altKey: true }), plain)).toBeNull()
   })
 
-  it('drops the mode when the app disarms it, the terminal resets, or a snapshot replaces state', () => {
+  it('drops the mode on disarm or terminal reset and keeps it across a snapshot', () => {
     const modes = new TerminalKittyKeyboardModeTracker()
     for (const disarm of ['\x1b[>4;0m', '\x1b[>4;m', '\x1b[>4m', '\x1bc']) {
       modes.scan('\x1b[>4;2m')
@@ -134,12 +134,15 @@ describe('modified Enter for an app that armed modifyOtherKeys (STA-7701)', () =
     modes.scan('\x1b[>4;')
     modes.scan('2m')
     expect(modes.modifyOtherKeys).toBe(2)
+    // An older host's snapshot cannot restate the mode, so a snapshot keeps what live output proved.
     modes.resetForSnapshot()
-    expect(modes.modifyOtherKeys).toBe(0)
-    modes.scanReplay('\x1b[>4;2m')
     expect(modes.modifyOtherKeys).toBe(2)
+    modes.scanReplay('\x1b[>4;1m')
+    expect(modes.modifyOtherKeys).toBe(1)
+    modes.reset()
+    expect(modes.modifyOtherKeys).toBe(0)
     // Other `CSI > Pp ; Pv m` resources are not modifyOtherKeys.
     modes.scan('\x1b[>1;2m')
-    expect(modes.modifyOtherKeys).toBe(2)
+    expect(modes.modifyOtherKeys).toBe(0)
   })
 })

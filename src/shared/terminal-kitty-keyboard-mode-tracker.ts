@@ -125,7 +125,11 @@ export class TerminalKittyKeyboardModeTracker {
    * or explicit application output proves them again.
    */
   resetForSnapshot(): void {
+    // Why kept: an older host's snapshot cannot restate modifyOtherKeys, so absence proves nothing.
+    // A dead app's level is cleared by the shell and process-boundary grounds instead.
+    const modifyOtherKeys = this.modifyOtherKeysState
     this.reset()
+    this.modifyOtherKeysState = modifyOtherKeys
     this.baselineProven = false
     this.currentKnown = false
     this.mainKnown = false
