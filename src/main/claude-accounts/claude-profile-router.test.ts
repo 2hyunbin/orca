@@ -408,7 +408,7 @@ describe('ClaudeProfileRouter', () => {
     expect(f.router.preparation().envPatch).not.toHaveProperty('CLAUDE_CONFIG_DIR')
   })
 
-  it('carries the user’s own value beside an account terminal’s injected one', () => {
+  it('carries the user’s own value in every host terminal, beside an injected one too', () => {
     const f = fixture({ CLAUDE_CONFIG_DIR: resolve('/user/own') })
     mkdirSync(f.home('a'), { recursive: true })
     expect(f.router.terminalEnv()).toEqual({
@@ -419,7 +419,10 @@ describe('ClaudeProfileRouter', () => {
     })
     expect(f.router.preparation().envPatch).not.toHaveProperty('ORCA_CLAUDE_USER_CONFIG_DIR')
     f.settings.activeClaudeManagedAccountId = null
-    expect(f.router.terminalEnv()).toEqual({ ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath })
+    expect(f.router.terminalEnv()).toEqual({
+      ORCA_CLAUDE_PROFILE_POINTER: f.router.pointerPath,
+      ORCA_CLAUDE_USER_CONFIG_DIR: resolve('/user/own')
+    })
     const none = fixture()
     mkdirSync(none.home('a'), { recursive: true })
     expect(none.router.terminalEnv()).not.toHaveProperty('ORCA_CLAUDE_USER_CONFIG_DIR')
@@ -450,6 +453,39 @@ describe('ClaudeProfileRouter', () => {
         f.router.publish()
         expect(claude(pane)).toBe(inherited.CLAUDE_CONFIG_DIR ?? 'unset')
       }
+    }
+  )
+
+  // Why not win32: runs the POSIX claude function under bash.
+  it.skipIf(process.platform === 'win32')(
+    'moves a System default terminal whose rc exports the user’s own value to a later selection',
+    () => {
+      const own = resolve('/user/own')
+      const f = fixture({ CLAUDE_CONFIG_DIR: own })
+      mkdirSync(f.home('a'), { recursive: true })
+      const bin = join(f.root, 'bin')
+      mkdirSync(bin)
+      writeFileSync(join(bin, 'claude'), '#!/bin/sh\nprintf "%s" "${CLAUDE_CONFIG_DIR-unset}"\n')
+      chmodSync(join(bin, 'claude'), 0o700)
+      const claude = (env: Record<string, string>, rc = ''): string =>
+        spawnSync(
+          '/bin/bash',
+          ['--norc', '--noprofile', '-c', `${getPosixClaudeShellFunction()}\n${rc}claude`],
+          { env: { ...env, PATH: `${bin}:/usr/bin:/bin` }, encoding: 'utf8' }
+        ).stdout
+      f.settings.activeClaudeManagedAccountId = null
+      f.router.publish()
+      const pane = { CLAUDE_CONFIG_DIR: own, ...f.router.terminalEnv() }
+      expect(claude(pane)).toBe(own)
+      f.settings.activeClaudeManagedAccountId = 'a'
+      f.router.publish()
+      expect(claude(pane)).toBe(f.home('a'))
+      // An rc export lands after Orca's injected value, and a pane's own folder still wins.
+      const injected = { ...f.router.terminalEnv() }
+      expect(claude(injected, `export CLAUDE_CONFIG_DIR='${own}'\n`)).toBe(f.home('a'))
+      expect(claude(injected, "export CLAUDE_CONFIG_DIR='/somewhere/else'\n")).toBe(
+        '/somewhere/else'
+      )
     }
   )
 

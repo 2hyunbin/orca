@@ -235,7 +235,7 @@ export class ClaudeProfileRouter {
     return existsSync(join(this.args.dataRoot, 'claude-runtime-auth', 'system-default-auth.json'))
   }
 
-  /** The user's own CLAUDE_CONFIG_DIR, which wins over the selection in their terminals. */
+  /** The user's own CLAUDE_CONFIG_DIR: System default's folder. */
   userConfigDir(): string | undefined {
     return readUserClaudeConfigDir(this.env)
   }
@@ -295,7 +295,7 @@ export class ClaudeProfileRouter {
     // Why only the pointer before the login shell's env: which home runs depends on its
     // CLAUDE_CONFIG_DIR, and the pane's `claude` reads the pointer rewritten once it arrives.
     if (!this.envResolved) {
-      return { [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath }
+      return this.withUserConfigDir({ [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath })
     }
     try {
       this.writePointer()
@@ -304,15 +304,19 @@ export class ClaudeProfileRouter {
       if (profile) {
         this.setUpInBackground(profile)
       }
-      const env = this.launchEnv()
-      const userConfigDir = this.userConfigDir()
-      // Why: the injected value replaces the user's own; the claude function restores it on System default.
-      return env.CLAUDE_CONFIG_DIR && userConfigDir
-        ? { ...env, [CLAUDE_USER_CONFIG_DIR_ENV]: userConfigDir }
-        : env
+      return this.withUserConfigDir(this.launchEnv())
     } catch {
-      return { [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath }
+      return this.withUserConfigDir({ [CLAUDE_PROFILE_POINTER_ENV]: this.pointerPath })
     }
+  }
+
+  /**
+   * Why: the claude function follows the selection over the user's own CLAUDE_CONFIG_DIR (an rc
+   * export, or the inherited value) and restores it on System default; any other value wins.
+   */
+  private withUserConfigDir(env: ClaudeEnvPatch): ClaudeEnvPatch {
+    const userConfigDir = this.userConfigDir()
+    return userConfigDir ? { ...env, [CLAUDE_USER_CONFIG_DIR_ENV]: userConfigDir } : env
   }
 
   preparation(): ClaudeRuntimeAuthPreparation {

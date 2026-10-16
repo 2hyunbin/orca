@@ -165,7 +165,25 @@ describe.each(SHELLS)('the claude function in %s', (shell) => {
     expect(existsSync(join(f.a, '..', 'not-a-folder'))).toBe(false)
   })
 
-  it('lets the user’s own CLAUDE_CONFIG_DIR win silently when an account is selected', () => {
+  it('follows the selection over the user’s own CLAUDE_CONFIG_DIR, inherited or exported by an rc', () => {
+    const f = fixture()
+    const own = ['CLAUDE_CONFIG_DIR=/user/own/', 'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own']
+    writeFileSync(f.pointer, f.a)
+    expect(f.run(shell, own).stdout).toBe(`HOME=${f.a} KEY=fake TWIN=${f.a}\n`)
+    // The rc re-exported it after Orca injected another account.
+    const rc = [...own, `ORCA_CLAUDE_INJECTED_CONFIG_DIR=${f.b}`]
+    expect(f.run(shell, rc).stdout).toBe(`HOME=${f.a} KEY=fake TWIN=${f.a}\n`)
+    writeFileSync(f.pointer, '')
+    expect(f.run(shell, own).stdout).toBe('HOME=/user/own KEY=fake TWIN=none\n')
+    const deliberate = [
+      'CLAUDE_CONFIG_DIR=/somewhere/else',
+      'ORCA_CLAUDE_USER_CONFIG_DIR=/user/own'
+    ]
+    writeFileSync(f.pointer, f.a)
+    expect(f.run(shell, deliberate).stdout).toBe('HOME=/somewhere/else KEY=fake TWIN=none\n')
+  })
+
+  it('lets a CLAUDE_CONFIG_DIR win silently when Orca knows no user value', () => {
     const f = fixture()
     const own = f.run(shell, ['CLAUDE_CONFIG_DIR=/user/own'])
     expect(own.stdout).toBe('HOME=/user/own KEY=fake TWIN=none\n')
@@ -218,5 +236,13 @@ it('restores the user’s own value on PowerShell System default rather than rem
   )
   expect(script).not.toContain(
     'Remove-Item Env:CLAUDE_CONFIG_DIR, Env:ORCA_CLAUDE_INJECTED_CONFIG_DIR'
+  )
+})
+
+it('follows the PowerShell selection over the user’s own value, ignoring a trailing separator', () => {
+  const script = getPowerShellClaudeShellFunction()
+  expect(script).toContain(`$own = "$env:ORCA_CLAUDE_USER_CONFIG_DIR".TrimEnd('\\', '/')`)
+  expect(script).toContain(
+    `(-not $own -or "$env:CLAUDE_CONFIG_DIR".TrimEnd('\\', '/') -ne $own)) {`
   )
 })
