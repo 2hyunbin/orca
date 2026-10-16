@@ -288,6 +288,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           afterTabId,
           {
             command: startupCommand.command,
+            ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
             cwd,
             env: startupCommand.env,
             envToDelete: startupCommand.envToDelete,
