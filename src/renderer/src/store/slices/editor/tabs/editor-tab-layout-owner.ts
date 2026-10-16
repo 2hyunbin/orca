@@ -5,17 +5,13 @@
 
 import type { Tab } from '../../../../../../shared/tab-types'
 import type { LayoutEditorFile } from '../../../../../../shared/workspace-layout/workspace-layout-model'
-import { sendLayoutApply, type LayoutApplyHandlers } from '@/runtime/layout-apply-send'
+import { recordLayoutApply } from '@/runtime/layout-apply-send'
 import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
 import { isEditorTabContentType } from './editor-tab-content-type'
 
-type EditorOwnerState = Parameters<typeof sendLayoutApply>[0] &
+type EditorOwnerState = Parameters<typeof recordLayoutApply>[0] &
   Pick<AppState, 'openFiles' | 'unifiedTabsByWorktree' | 'groupsByWorktree'>
-
-// Nothing to undo on any answer: when main cannot record it, the window's session save carries
-// the change, as today.
-const RECORD_ONLY: LayoutApplyHandlers = { apply: () => {}, asToday: () => {} }
 
 /** A new editor tab the window just drew. */
 export function recordOpenedEditorTabInLayoutOwner(state: EditorOwnerState, tab: Tab): void {
@@ -25,21 +21,16 @@ export function recordOpenedEditorTabInLayoutOwner(state: EditorOwnerState, tab:
   const file = state.openFiles.find(
     (candidate) => candidate.id === tab.entityId && candidate.worktreeId === tab.worktreeId
   )
-  sendLayoutApply(
-    state,
-    tab.worktreeId,
-    {
-      type: 'openEditorTab',
-      tabId: tab.id,
-      fileId: tab.entityId,
-      contentType: tab.contentType,
-      groupId: tab.groupId,
-      ...(tab.isPreview ? { preview: true } : {}),
-      // Only edit-mode files are restored after restart; the window saves no other.
-      ...(file?.mode === 'edit' ? { file: restorableEditorFile(file) } : {})
-    },
-    RECORD_ONLY
-  )
+  recordLayoutApply(state, tab.worktreeId, {
+    type: 'openEditorTab',
+    tabId: tab.id,
+    fileId: tab.entityId,
+    contentType: tab.contentType,
+    groupId: tab.groupId,
+    ...(tab.isPreview ? { preview: true } : {}),
+    // Only edit-mode files are restored after restart; the window saves no other.
+    ...(file?.mode === 'edit' ? { file: restorableEditorFile(file) } : {})
+  })
 }
 
 /** Preview tabs the window just made permanent (activation, an edit, a pin). */
@@ -48,12 +39,7 @@ export function recordPromotedEditorTabsInLayoutOwner(
   tabs: readonly Pick<Tab, 'id' | 'worktreeId'>[]
 ): void {
   for (const tab of tabs) {
-    sendLayoutApply(
-      state,
-      tab.worktreeId,
-      { type: 'promotePreviewTab', tabId: tab.id },
-      RECORD_ONLY
-    )
+    recordLayoutApply(state, tab.worktreeId, { type: 'promotePreviewTab', tabId: tab.id })
   }
 }
 
@@ -80,7 +66,7 @@ export function recordClosedEditorTabInLayoutOwner(
   tab: Pick<Tab, 'id' | 'worktreeId' | 'contentType'>
 ): void {
   if (isEditorTabContentType(tab.contentType)) {
-    sendLayoutApply(state, tab.worktreeId, { type: 'closeTabs', tabIds: [tab.id] }, RECORD_ONLY)
+    recordLayoutApply(state, tab.worktreeId, { type: 'closeTabs', tabIds: [tab.id] })
   }
 }
 
@@ -102,12 +88,12 @@ export function recordReopenedEditorTabPositionInLayoutOwner(
     : undefined
   const index = tab && group ? group.tabOrder.indexOf(tab.id) : -1
   if (tab && group && index !== -1) {
-    sendLayoutApply(
-      state,
-      worktreeId,
-      { type: 'moveTab', tabId: tab.id, toGroupId: group.id, index },
-      RECORD_ONLY
-    )
+    recordLayoutApply(state, worktreeId, {
+      type: 'moveTab',
+      tabId: tab.id,
+      toGroupId: group.id,
+      index
+    })
   }
 }
 

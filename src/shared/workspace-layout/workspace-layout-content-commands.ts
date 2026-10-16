@@ -120,12 +120,20 @@ export function openBrowserTab(
   context: LayoutContext
 ): Applied {
   const key = command.workspace
-  // The tab-bar id and the browser tab record share one id, as the window mints them.
-  const browserTabId = command.pageId ?? context.mintId()
+  // A host's tab is named by its page; a window names its tab-bar entry and record itself.
+  const browserTabId = command.browserTabId ?? command.pageId ?? context.mintId()
+  const tabId = command.tabId ?? browserTabId
   const pageId = command.pageId ?? context.mintId()
+  // Only a window's open names its record; a host's is checked against its saved pages first.
+  const taken = command.browserTabId
+    ? takenBrowserTabIds(model, key, { tabId, browserTabId, pageId })
+    : null
+  if (taken) {
+    return taken
+  }
   const tab = contentTab(context, {
     kind: 'browser',
-    id: browserTabId,
+    id: tabId,
     entityId: browserTabId
   })
   const next = placeContentTab(model, key, tab, command, context).model
@@ -133,6 +141,7 @@ export function openBrowserTab(
   const browserTab = {
     id: browserTabId,
     sessionProfileId: command.profileId ?? null,
+    ...(command.sessionPartition ? { sessionPartition: command.sessionPartition } : {}),
     pageIds: [pageId],
     createdAt: tab.createdAt
   }
@@ -142,6 +151,42 @@ export function openBrowserTab(
       browserTabs: [...(workspace.browserTabs ?? []), browserTab]
     }),
     { tabId: tab.id, pageId }
+  )
+}
+
+/**
+ * The same open again (a window's create resent) changes nothing; an id another tab or page holds
+ * refuses it. Null when every id is free.
+ */
+function takenBrowserTabIds(
+  model: WorkspaceLayoutModel,
+  key: string,
+  ids: { tabId: string; browserTabId: string; pageId: string }
+): Applied | null {
+  const own = model.workspaces[key]
+  const record = own?.browserTabs?.find((entry) => entry.id === ids.browserTabId)
+  if (
+    record?.pageIds?.includes(ids.pageId) &&
+    own?.tabs.some((tab) => tab.id === ids.tabId && tab.entityId === ids.browserTabId)
+  ) {
+    return applied(model, { tabId: ids.tabId, pageId: ids.pageId })
+  }
+  const workspaces = Object.values(model.workspaces)
+  if (
+    workspaces.some((workspace) =>
+      workspace.tabs.some((tab) =>
+        [tab.id, tab.entityId].some((id) => id === ids.tabId || id === ids.browserTabId)
+      )
+    )
+  ) {
+    return refuse('tab_exists')
+  }
+  return holdsBrowserPage(model, ids.pageId) ? refuse('page_exists') : null
+}
+
+export function holdsBrowserPage(model: WorkspaceLayoutModel, pageId: string): boolean {
+  return Object.values(model.workspaces).some((workspace) =>
+    workspace.browserTabs?.some((entry) => entry.pageIds?.includes(pageId))
   )
 }
 
