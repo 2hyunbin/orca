@@ -23,6 +23,10 @@ import { translate } from '@/i18n/i18n'
 import { getKeybindingContext } from './terminal-workspace-model'
 import { resolveTerminalAgentTabShortcut } from './terminal-agent-tab-shortcut'
 import { getDetectionTargetIdentityForWorktree } from '@/lib/agent-detection-target-inventory'
+import {
+  captureAgentTabLaunchContext,
+  type AgentTabLaunchContext
+} from './agent-tab-launch-context'
 import { handleTerminalWorkspaceEditorShortcut } from './terminal-workspace-editor-shortcuts'
 import type { TerminalActivationController } from './use-terminal-activation-actions'
 
@@ -83,9 +87,9 @@ export function handleTerminalWorkspaceKeyDown(
     if (agentShortcut.actionId) {
       event.preventDefault()
       notifyTerminalCapture(agentShortcut.actionId)
-      const launchOrReport = (agent: TuiAgent | null): void => {
+      const launchOrReport = (agent: TuiAgent | null, context?: AgentTabLaunchContext): void => {
         if (agent) {
-          handleNewAgentTab(agent)
+          handleNewAgentTab(agent, context)
           return
         }
         toast.message(
@@ -100,6 +104,8 @@ export function handleTerminalWorkspaceKeyDown(
           useAppStore.getState(),
           activeWorktreeId
         )
+        // Why: the tab belongs in the pane the shortcut was pressed in, not one focused while waiting.
+        const launchContext = captureAgentTabLaunchContext(activeWorktreeId)
         void agentShortcut.pendingAgent.then((agent) => {
           // Why: a slow host probe must not open a tab in a workspace (or on a host) the user left.
           const latest = useAppStore.getState()
@@ -107,7 +113,7 @@ export function handleTerminalWorkspaceKeyDown(
             latest.activeWorktreeId === activeWorktreeId &&
             getDetectionTargetIdentityForWorktree(latest, activeWorktreeId) === detectionTarget
           ) {
-            launchOrReport(agent)
+            launchOrReport(agent, launchContext)
           }
         })
       } else {
