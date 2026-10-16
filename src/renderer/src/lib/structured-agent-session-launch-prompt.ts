@@ -290,7 +290,7 @@ export function settleStructuredAgentLaunchPrompt(args: {
         prompt,
         receipt,
         args.target
-      ).catch(() => {
+      ).catch((): StagedDelivery => {
         failStagedStructuredLaunchPrompt(prompt)
         return { delivered: false, inComposer: true }
       })

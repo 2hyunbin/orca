@@ -171,6 +171,7 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
   options?: Readonly<Record<string, string>>
   createMessageSupport?: boolean
 }): StructuredAgentSessionLaunchIntent {
+  const state = useAppStore.getState()
   const { target } = structuredAgentSessionOwnerTarget(args.worktreeId, args.executionHostId)
   return {
     sessionId: args.sessionId,
