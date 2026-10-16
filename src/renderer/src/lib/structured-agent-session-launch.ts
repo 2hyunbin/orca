@@ -128,7 +128,7 @@ function resetStructuredLaunchCallers(state: StructuredLaunchState): void {
 
 function restartStructuredLaunchState(state: StructuredLaunchState): void {
   const wasVisibilityUnknown = state.visibilityUnknown
-  if (!wasVisibilityUnknown) {
+  if (!wasVisibilityUnknown && !state.intent.firstSubmission) {
     state.intent = retryStructuredAgentSessionLaunchIntent(state.intent)
   }
   resetStructuredLaunchCallers(state)
@@ -140,7 +140,7 @@ function restartStructuredLaunchState(state: StructuredLaunchState): void {
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   state.promise = publishWithHeldOptions(
     state,
-    wasVisibilityUnknown ? reconcileUnknownLaunch(state) : launchAndReconcile(state)
+    (wasVisibilityUnknown || state.intent.firstSubmission) ? reconcileUnknownLaunch(state) : launchAndReconcile(state)
   )
   trackLaunchSettlement(state, state.promise)
   trackStructuredLaunchConfirmationDeadline(state, state.promise)
@@ -235,6 +235,7 @@ function structuredAgentLaunchState(
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)
+  setStructuredLaunchState(state)
   state.promise = publishWithHeldOptions(state, launchAndReconcile(state))
   const caller = addStructuredLaunchCaller({
     group: state.callers,

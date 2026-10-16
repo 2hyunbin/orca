@@ -1,3 +1,4 @@
+import { reportNativeChatNewDraftSaveFailure } from '@/components/native-chat/native-chat-new-draft'
 import {
   validRecord,
   type StructuredAgentLaunchPersistedRecord
@@ -115,7 +116,10 @@ function writeRecords(): void {
     } else {
       localStorage.setItem(LAUNCH_STORAGE_KEY, JSON.stringify([...records.values()]))
     }
-  } catch {
+  } catch (error) {
+    for (const record of records.values()) {
+      if (record.firstSubmission) reportNativeChatNewDraftSaveFailure(record.sessionId, error)
+    }
     // Why: persistence is recovery bookkeeping and must never block a launch.
     console.warn('[structured-agent-launch] could not persist launch state')
   }

@@ -22,7 +22,17 @@ function cleanupLaunchState(state: StructuredLaunchState): void {
   }
 }
 
-export async function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchState): Promise<void> {
+const finalizing = new WeakMap<StructuredLaunchState, Promise<void>>()
+
+export function finalizeStructuredLaunchFirstSubmission(state: StructuredLaunchState): Promise<void> {
+  const active = finalizing.get(state)
+  if (active) return active
+  const finalized = finalizeFirstSubmission(state).finally(() => finalizing.delete(state))
+  finalizing.set(state, finalized)
+  return finalized
+}
+
+async function finalizeFirstSubmission(state: StructuredLaunchState): Promise<void> {
   const submission = state.intent.firstSubmission
   if (!submission || !(await retireNativeChatNewDraft(state.intent.sessionId))) return
   clearNativeChatComposerDraftIfUnchanged(`agent-session:${state.intent.sessionId}`, submission.draft)

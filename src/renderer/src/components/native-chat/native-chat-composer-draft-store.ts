@@ -4,7 +4,7 @@
 // skipped write is repaired by the next one.
 
 import type { JSONContent } from '@tiptap/react'
-import { deleteNativeChatNewDraftsOwnedBy, resetNativeChatNewDraftsForTests } from './native-chat-new-draft'
+import { deleteNativeChatNewDraftsOwnedBy, resetNativeChatNewDraftsForTests, nativeChatNewDraftKey } from './native-chat-new-draft'
 import {
   sameNativeChatComposerDraftDocument,
   sameNativeChatComposerDraftImages
@@ -120,7 +120,9 @@ export function markNativeChatComposerDraftVerified(scopeKey: string): void {
 
 /** A draft storage refused to save: it is kept in memory only until a later write lands. */
 export function isNativeChatComposerDraftUnsaved(scopeKey: string): boolean {
-  return refusedScopes.has(scopeKey) && records.has(scopeKey)
+  const sessionId = structuredAgentSessionIdOfDraftScope(scopeKey)
+  return (refusedScopes.has(scopeKey) && records.has(scopeKey)) ||
+    (sessionId !== null && refusedScopes.has(nativeChatNewDraftKey(sessionId)))
 }
 
 function isEmptyDraft(draft: NativeChatComposerDraft): boolean {

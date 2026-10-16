@@ -94,7 +94,16 @@ export async function launchStructuredAgentSession(
     }
     if (!intent.createPrepared) {
       intent.createMessageSupport = supported
-      intent.prepareCreate?.()
+      try {
+        await intent.prepareCreate?.()
+      } catch (error) {
+        // Preparation failed before create was issued, so its sources remain safe to submit again.
+        if (intent.firstSubmission) throw new StructuredAgentSessionCreateRefusalError(
+          error instanceof Error ? error.message : 'The message could not be prepared.',
+          'agent_session_attachment_unavailable'
+        )
+        throw error
+      }
       intent.createPrepared = true
     }
   }

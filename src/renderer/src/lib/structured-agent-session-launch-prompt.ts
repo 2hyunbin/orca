@@ -17,7 +17,7 @@ import { agentSessionWriteNoticeText } from '@/components/native-chat/agent-sess
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { StructuredAgentSessionSendInput } from '@/components/native-chat/structured-agent-session-send-slot'
 import type { NativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-storage'
-import { appendToNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
+import { readNativeChatComposerDraft, updateNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 
 export type StructuredPromptDeliveryResult = {
   delivered: boolean
@@ -50,6 +50,7 @@ export type StagedStructuredLaunchPrompt = {
   text: string
   slot: StructuredAgentSessionReservedSend | null
   sourceDraft?: NativeChatComposerDraft
+  beforeCreate?: () => Promise<void>
   beforeSend?: () => Promise<void>
   /** Its sender keeps the text if it comes back (notes), instead of the chat's composer. */
   callerKeepsText?: true
@@ -96,7 +97,7 @@ export function stageStructuredLaunchPrompt(
   forSession.add(prompt)
   staged.set(sessionId, forSession)
   void prompt.slot?.outcome.then((outcome) => {
-    if (prompt.sourceDraft && (outcome === 'returned' || outcome === 'unconfirmed')) handBackStagedPrompt(prompt)
+    if (!prompt.discarded && prompt.sourceDraft && (outcome === 'returned' || outcome === 'unconfirmed')) handBackStagedPrompt(prompt)
     const result: StagedDelivery = {
       delivered: outcome === 'recorded',
       inComposer: !prompt.callerKeepsText && (outcome === 'returned' || outcome === 'unconfirmed'),
@@ -144,8 +145,8 @@ export function takeBackLegacyStructuredLaunchPrompts(sessionId: string): void {
       continue
     }
     unstage(prompt)
-    prompt.discarded = true
     handBackStagedPrompt(prompt)
+    prompt.discarded = true
     prompt.discard()
   }
 }
@@ -196,12 +197,16 @@ export function hasStagedStructuredLaunchPrompt(sessionId: string): boolean {
 /** Puts a launch's text in its chat's composer, unless its sender keeps it. True when it did; a
  *  draft write that throws is reported in the chat instead, and never stops its caller. */
 function handBackStagedPrompt(prompt: StagedStructuredLaunchPrompt): boolean {
-  if (prompt.callerKeepsText) {
+  if (prompt.callerKeepsText || prompt.discarded) {
     return false
   }
   try {
     if (prompt.sourceDraft) {
-      return appendToNativeChatComposerDraft(`agent-session:${prompt.sessionId}`, prompt.sourceDraft)
+      const scopeKey = `agent-session:${prompt.sessionId}`
+      const current = readNativeChatComposerDraft(scopeKey)
+      if (current.text || current.images.length) return false
+      updateNativeChatComposerDraft(scopeKey, prompt.sourceDraft, 'immediate')
+      return true
     }
     handBackStructuredAgentSessionMessage(
       prompt.sessionId,
@@ -250,6 +255,12 @@ function sendStagedPrompt(
     }
   })()
   return prompt.delivery
+}
+
+export async function prepareStructuredLaunchPromptAttachments(sessionId: string): Promise<void> {
+  for (const prompt of staged.get(sessionId) ?? []) {
+    await prompt.beforeCreate?.()
+  }
 }
 
 export function structuredLaunchPromptNeedsLegacySend(sessionId: string): boolean {
@@ -315,8 +326,8 @@ export function settleStructuredAgentLaunchPrompt(args: {
       // The chat never started: its text waits in the chat's composer for the person's own Send.
       if (prompt && !prompt.discarded && !prompt.delivery) {
         unstage(prompt)
-        prompt.discarded = true
         handBackStagedPrompt(prompt)
+        prompt.discarded = true
       }
       throw error
     }

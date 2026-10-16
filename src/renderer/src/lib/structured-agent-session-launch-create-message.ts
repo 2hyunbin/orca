@@ -3,6 +3,7 @@ import type { StructuredLaunchState } from './structured-agent-session-launch-re
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
 import {
   prepareStructuredLaunchPromptForCreate,
+  prepareStructuredLaunchPromptAttachments,
   structuredLaunchPromptNeedsLegacySend,
   prepareLegacyStructuredLaunchPrompts
 } from './structured-agent-session-launch-prompt'
@@ -19,11 +20,12 @@ import {
 } from './structured-agent-session-launch-options'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload. */
-export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): void {
+export async function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): Promise<void> {
   const { intent } = state
   if (intent.createPrepared) {
     return
   }
+  await prepareStructuredLaunchPromptAttachments(intent.sessionId)
   if (intent.createMessageSupport !== true) {
     prepareLegacyStructuredLaunchPrompts(intent.sessionId)
     intent.createPrepared = true
@@ -59,6 +61,7 @@ function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
+  if (intent.firstSubmission) return intent.firstSubmission.options
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,

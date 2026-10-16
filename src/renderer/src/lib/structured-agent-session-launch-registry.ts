@@ -227,6 +227,7 @@ function markStructuredAgentSessionLaunchCancelledInternal(
   executionHostId: ExecutionHostId,
   notify: boolean
 ): boolean {
+  void retireNativeChatNewDraft(sessionId)
   const alreadyCancelled = hasStructuredAgentLaunchCancellationTombstonePersisted(sessionId)
   const state = getStructuredLaunchStateBySessionId(sessionId)
   if (matchesLaunchWorktree(state, worktreeId) && state) {

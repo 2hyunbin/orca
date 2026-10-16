@@ -1,3 +1,4 @@
+import { restorePersistedStructuredLaunchState } from './structured-agent-session-launch-reload'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { deleteStructuredAgentLaunchRecord } from './structured-agent-session-launch-persistence'
@@ -28,11 +29,16 @@ export function markStructuredAgentSessionLaunchPublished(
   sessionId: string,
   executionHostId: ExecutionHostId
 ): boolean {
-  const state = getStructuredLaunchStateBySessionId(sessionId)
+  let state = getStructuredLaunchStateBySessionId(sessionId)
   if (!state) {
     const persisted = getPersistedStructuredAgentLaunchRecord(sessionId)
     if (persisted?.executionHostId !== executionHostId) {
       return false
+    }
+    if (persisted.firstSubmission) {
+      state = restorePersistedStructuredLaunchState(worktreeId, sessionId)
+      if (state) state.hostPublished = true
+      notifyStructuredLaunchListeners()
     }
     if (persisted.firstMessage || persisted.firstSubmission) {
       confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
@@ -50,6 +56,7 @@ export function markStructuredAgentSessionLaunchPublished(
     return false
   }
   state.hostPublished = true
+  notifyStructuredLaunchListeners()
   if (state.callers.outcome === 'published') {
     return true
   }

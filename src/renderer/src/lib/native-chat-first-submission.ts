@@ -3,8 +3,7 @@ import {
 } from '@/components/native-chat/native-chat-new-draft'
 import { readNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import {
-  stageStructuredLaunchPrompt,
-  failStagedStructuredLaunchPrompt
+  stageStructuredLaunchPrompt
 } from './structured-agent-session-launch-prompt'
 import { startStructuredAgentLaunch } from './structured-agent-session-launch'
 import { newAgentLaunchRequestId } from './agent-launch-request-id'
@@ -37,7 +36,7 @@ export function submitNativeChatLocalDraft(
   const sourceDraft = readNativeChatComposerDraft(`agent-session:${sessionId}`)
   const stagedPrompt = stageStructuredLaunchPrompt(sessionId, text, { attachments, options, sourceDraft })
   if (!stagedPrompt.slot) return false
-  void (async () => {
+  stagedPrompt.beforeCreate = async () => {
     const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
     if (!target) throw new Error('The chat host is unavailable.')
     if (target.kind === 'environment' && attachments.length > 0) {
@@ -59,15 +58,13 @@ export function submitNativeChatLocalDraft(
     }
     // Close before issue is local discard, even if an upload or capability read finished late.
     if (!readNativeChatNewDraft(sessionId) || stagedPrompt.discarded) {
-      stagedPrompt.slot?.release()
-      return
+      throw new Error('The draft was closed before sending.')
     }
-    const launch = startStructuredAgentLaunch(draft.owner.workspaceId, draft.agent, {
+  }
+  const launch = startStructuredAgentLaunch(draft.owner.workspaceId, draft.agent, {
       requestId: newAgentLaunchRequestId(), executionHostId: draft.owner.executionHostId,
       reservedSessionId: sessionId, stagedPrompt, prompt: text, firstSubmissionOptions: options
     })
-    void launch.promptDeliveryResult?.catch(() => failStagedStructuredLaunchPrompt(stagedPrompt))
-    void launch.launchResult.catch(() => {})
-  })().catch(() => failStagedStructuredLaunchPrompt(stagedPrompt))
+  void launch.launchResult.catch(() => {})
   return true
 }

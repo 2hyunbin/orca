@@ -247,7 +247,7 @@ export function useStructuredAgentSessionOptions(args: {
       }
       if (!transportEnabled || fence === null) {
         const draft = readNativeChatNewDraft(sessionId)
-        if (draft) {
+        if (draft && !getStructuredAgentSessionLaunchSelection(sessionId)) {
           const options = id === 'model'
             ? { ...(draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] } : {}), [id]: encoded }
             : { ...draft.options, [id]: encoded }
@@ -282,7 +282,7 @@ export function useStructuredAgentSessionOptions(args: {
     async (id: string, value: string | boolean) => {
       await setStructuredOption(id, value)
       // Read, not rendered: a pick the launch just took is not in this render's props yet.
-      const currentHeld = getStructuredAgentSessionLaunchSelection(sessionId)?.held
+      const currentHeld = readNativeChatNewDraft(sessionId)?.options ?? getStructuredAgentSessionLaunchSelection(sessionId)?.held
       return {
         snapshot: structuredAgentSessionOptionSnapshot(
           optionView(optionStateRef.current, launchSeedOptions, currentHeld ?? NO_HELD_OPTIONS)
