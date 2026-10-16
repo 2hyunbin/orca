@@ -70,17 +70,35 @@ export function resolveProjectCompiler(config, root = repoRoot) {
   return resolveProjectCompilerInfo(config, root).program
 }
 
-export function parseTypecheckOptions(args) {
-  const options = { compiler: 'native', bunConcurrency: 1, bunThreads: 4 }
+export function parseTypecheckOptions(args, env = process.env) {
+  const threads = env.ORCA_BUILD_THREADS === undefined ? undefined : Number(env.ORCA_BUILD_THREADS)
+  const options = {
+    compiler: 'native',
+    concurrency:
+      env.ORCA_BUILD_CONCURRENCY === undefined ? undefined : Number(env.ORCA_BUILD_CONCURRENCY),
+    threads,
+    bunConcurrency: 1,
+    bunThreads: Math.min(4, threads ?? 4)
+  }
   for (const argument of args) {
     if (argument === '--compiler=bun' || argument === '--compiler=native') {
       options.compiler = argument.slice('--compiler='.length)
+    } else if (argument.startsWith('--concurrency=')) {
+      options.concurrency = Number(argument.slice('--concurrency='.length))
     } else if (argument.startsWith('--bun-concurrency=')) {
       options.bunConcurrency = Number(argument.slice('--bun-concurrency='.length))
     } else if (argument.startsWith('--bun-threads=')) {
       options.bunThreads = Number(argument.slice('--bun-threads='.length))
     } else {
       throw new Error(`Unknown typecheck option: ${argument}`)
+    }
+  }
+  for (const [name, value] of [
+    ['concurrency', options.concurrency],
+    ['threads', options.threads]
+  ]) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
+      throw new Error(`Typecheck ${name} must be a positive safe integer`)
     }
   }
   for (const value of [options.bunConcurrency, options.bunThreads]) {
@@ -91,17 +109,24 @@ export function parseTypecheckOptions(args) {
   return options
 }
 
-export function typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism }) {
+export function typecheckBatches(
+  projects,
+  { compiler, concurrency = Infinity, bunConcurrency, memoryBytes, parallelism }
+) {
   return planTypecheckBatches(
     compiler === 'bun' ? projects.map((project) => ({ ...project, heapGib: 4 })) : projects,
     {
       budgetGib: admissibleHeapGib(memoryBytes),
-      parallelism: compiler === 'bun' ? Math.min(parallelism, bunConcurrency) : parallelism
+      parallelism: Math.min(
+        parallelism,
+        concurrency,
+        compiler === 'bun' ? bunConcurrency : Infinity
+      )
     }
   )
 }
 
-function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
+function checkProject(config, { compiler, bunThreads, root, spawnCompiler, env }) {
   return new Promise((resolve, reject) => {
     const installedCompiler = resolveProjectCompilerInfo(config, root)
     // Bun 1.4.3 targets TypeScript 7.0.2; compiler upgrades require a new parity comparison.
@@ -117,6 +142,7 @@ function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
           ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
           : [installedCompiler.program, '--noEmit', '-p', config],
       cwd: root,
+      env,
       stdio: 'inherit'
     })
     child.on('error', reject)
@@ -134,15 +160,34 @@ function checkProject(config, { compiler, bunThreads, root, spawnCompiler }) {
 
 export async function runTypecheckProjects({
   compiler = 'native',
+  concurrency,
+  threads,
   bunConcurrency = 1,
   bunThreads = 4,
   root = repoRoot,
   projects = TYPECHECK_PROJECTS,
   spawnCompiler = spawnProcess,
+  env = process.env,
   memoryBytes = totalmem(),
   parallelism = availableParallelism()
 } = {}) {
-  const batches = typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism })
+  const batches = typecheckBatches(projects, {
+    compiler,
+    concurrency,
+    bunConcurrency,
+    memoryBytes,
+    parallelism
+  })
+  const compilerOptions = {
+    compiler,
+    bunThreads,
+    root,
+    spawnCompiler,
+    env:
+      threads !== undefined && env.GOMAXPROCS === undefined
+        ? { ...env, GOMAXPROCS: String(threads) }
+        : env
+  }
   if (compiler === 'bun') {
     // Equal Bun reservations let a freed slot start the next project without waiting for peers.
     const pending = batches.flat()
@@ -153,7 +198,7 @@ export async function runTypecheckProjects({
         while (next < pending.length) {
           const index = next++
           try {
-            await checkProject(pending[index].config, { compiler, bunThreads, root, spawnCompiler })
+            await checkProject(pending[index].config, compilerOptions)
           } catch (reason) {
             failures.push({ index, reason })
           }
@@ -166,9 +211,7 @@ export async function runTypecheckProjects({
   const failures = []
   for (const batch of batches) {
     const results = await Promise.allSettled(
-      batch.map((project) =>
-        checkProject(project.config, { compiler, bunThreads, root, spawnCompiler })
-      )
+      batch.map((project) => checkProject(project.config, compilerOptions))
     )
     for (const result of results) {
       if (result.status === 'rejected') {

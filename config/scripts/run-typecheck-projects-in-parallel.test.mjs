@@ -133,22 +133,21 @@ describe('workspace package test typecheck', () => {
 
 describe('CI compiler selection', () => {
   it('keeps native incremental checking as the local default', () => {
-    expect(parseTypecheckOptions([]).compiler).toBe('native')
+    expect(parseTypecheckOptions([], {}).compiler).toBe('native')
   })
 
   it.each(['--compiler=typo', '--bun-concurrency=0', '--bun-threads=NaN', '--bun-concurrency=5'])(
     'rejects unsafe or unknown options: %s',
     (argument) => {
-      expect(() => parseTypecheckOptions([argument])).toThrow()
+      expect(() => parseTypecheckOptions([argument], {})).toThrow()
     }
   )
 
   it('bounds Bun project concurrency and reserves memory for overlapping checks', () => {
-    const options = parseTypecheckOptions([
-      '--compiler=bun',
-      '--bun-concurrency=2',
-      '--bun-threads=2'
-    ])
+    const options = parseTypecheckOptions(
+      ['--compiler=bun', '--bun-concurrency=2', '--bun-threads=2'],
+      {}
+    )
     const batches = typecheckBatches(TYPECHECK_PROJECTS, {
       ...options,
       memoryBytes: CI_RUNNER.totalBytes,

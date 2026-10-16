@@ -8,6 +8,11 @@ import { nodeRuntimePool } from './scripts/vitest-node-runtime-pool'
 import { createWorkspaceSourceResolver } from './scripts/workspace-source-exports.mjs'
 
 const balancedShards = process.env.ORCA_BALANCE_UNIT_SHARDS === '1'
+const requestedWorkers = process.env.ORCA_TEST_MAX_WORKERS
+const maxWorkers = requestedWorkers === undefined ? undefined : Number(requestedWorkers)
+if (maxWorkers !== undefined && (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1)) {
+  throw new Error('ORCA_TEST_MAX_WORKERS must be a positive integer')
+}
 const measurementFile = 'src/main/foreign-sqlite-readers/foreign-sqlite-reader-event-loop.test.ts'
 const transforms = {
   define: {
@@ -29,6 +34,7 @@ const transforms = {
 const testOptions = {
   environment: 'node',
   clearMocks: false,
+  ...(maxWorkers !== undefined ? { maxWorkers } : {}),
   ...(balancedShards ? { silent: 'passed-only' as const } : {}),
   // Persistent transforms can miss source additions; only explicit cache experiments opt in.
   fsModuleCache: Boolean(process.env.ORCA_UNIT_MODULE_CACHE_PATH),
@@ -109,6 +115,6 @@ export default defineConfig({
         }
       : {}),
     projects,
-    ...(process.platform === 'win32' ? { maxWorkers: 4 } : {})
+    ...(maxWorkers === undefined && process.platform === 'win32' ? { maxWorkers: 4 } : {})
   }
 })

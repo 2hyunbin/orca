@@ -26,6 +26,11 @@ pnpm install
 pnpm dev
 ```
 
+For machines running many agents, `pnpm lean dev --watch`, `pnpm lean test <file>`,
+and `pnpm lean tc` limit CPU and memory pressure per command. See the
+[local development performance guide](../docs/readme/development-performance.md)
+for budgets, targeted checks, and Vite cache behavior.
+
 Ordinary installs include native optional dependencies for the current OS and CPU only.
 Before a cross-architecture build (including `pnpm build:mac`, which produces both x64 and
 arm64 artifacts by default), run `pnpm install:release` to add the other CPU's variants.

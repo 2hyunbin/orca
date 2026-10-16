@@ -15,5 +15,12 @@ export function appendBuildOldSpaceOption(existingNodeOptions, totalMemoryBytes 
   const requestedNodeOptions = `--max-old-space-size=${getBuildOldSpaceSizeMb(totalMemoryBytes)}`
   const trimmedNodeOptions = existingNodeOptions?.trim()
 
+  if (
+    trimmedNodeOptions &&
+    /(?:^|[\s"'])--max[-_]old[-_]space[-_]size(?:=|\s)/.test(trimmedNodeOptions)
+  ) {
+    return trimmedNodeOptions
+  }
+
   return trimmedNodeOptions ? `${trimmedNodeOptions} ${requestedNodeOptions}` : requestedNodeOptions
 }
