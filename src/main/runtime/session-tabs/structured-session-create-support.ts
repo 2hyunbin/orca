@@ -4,6 +4,7 @@ import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-li
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   resolveCommittedStructuredAgentSessionAdoptionIntent,
+  requireUnownedStructuredAgentSessionAdoption,
   resolveStructuredAgentSessionAdoptionForCreate
 } from '../structured-agent-session-create-adoption'
 import { isNativeLocalLocation, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
@@ -13,7 +14,7 @@ import {
   resolveHostStructuredAgentCreateSupport,
   resolveHostStructuredAgentLaunchEnvironment
 } from '../structured-agent-launch-support'
-import { structuredAgentRuntimeRegistration } from '../structured-agent-runtime-registrations'
+import { structuredAgentRuntimeMetadata } from '../structured-agent-runtime-metadata'
 import { structuredLaunchSeedOptions } from '../../../shared/native-chat-session-option-defaults'
 import { hasPersistedStructuredAgentSessionStore as hasPersistedStructuredAgentSessionStoreOnDisk } from '../structured-agent-session-runtime'
 import { ensureStructuredAgentSessionHostUnlessRefused } from '../structured-agent-session-host-refusal'
@@ -57,7 +58,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     purpose: 'launch' | 'read',
     hostLaunchDirectory?: string
   ) {
-    const registration = structuredAgentRuntimeRegistration(agent)
+    const registration = structuredAgentRuntimeMetadata(agent)
     if (!registration) {
       return null
     }
@@ -87,7 +88,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
   /** The definition this runtime registers for `agent`: what its account home pins. Read from the
    *  registration list, so neither create nor a catalog read installs the host to learn it. */
   protected requireRegisteredStructuredAgent(agent: StructuredAgentId) {
-    const definition = structuredAgentRuntimeRegistration(agent)?.definition
+    const definition = structuredAgentRuntimeMetadata(agent)?.definition
     if (!definition) {
       throw agentSessionRefusalError('structured_agent_session_unsupported', {
         reason: 'hostUnsupported'
@@ -151,6 +152,14 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     callerKey?: string
     resumeFrom?: { providerSessionId: string }
   }): Promise<AgentSessionAttachParams & { hostLaunchDirectory?: string }> {
+    if (input.resumeFrom) {
+      requireUnownedStructuredAgentSessionAdoption({
+        host: getStructuredAgentSessionHost(),
+        agent: input.agent,
+        providerSessionId: input.resumeFrom.providerSessionId,
+        selfSessionId: input.envelope.sessionId
+      })
+    }
     const hostLaunchDirectory = isFloatingWorkspaceSelector(input.worktree)
       ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path
       : undefined
@@ -208,7 +217,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     const support = await this.getStructuredAgentSessionCreateSupport(input.worktree, input.agent)
     // Adopting a conversation reads the agent's own transcript, so only an agent registered with an
     // importer adopts.
-    const transcriptImport = structuredAgentRuntimeRegistration(input.agent)?.transcriptImport
+    const transcriptImport = structuredAgentRuntimeMetadata(input.agent)?.transcriptImport
     if (!support.supported || (input.resumeFrom && !transcriptImport)) {
       throw agentSessionRefusalError('structured_agent_session_unsupported', {
         reason: 'hostUnsupported'
@@ -237,12 +246,10 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     const adoption =
       input.resumeFrom && transcriptImport
         ? await resolveStructuredAgentSessionAdoptionForCreate({
-            host,
             settings,
             agent: input.agent,
             transcriptImport,
             providerSessionId: input.resumeFrom.providerSessionId,
-            selfSessionId: input.envelope.sessionId,
             selectedAccountHome,
             launchEnv: await resolveHostStructuredAgentLaunchEnvironment(input.agent, settings),
             workspaceCwd: (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path

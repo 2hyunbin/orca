@@ -14,11 +14,13 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault/session-scanner-unlimited-dedup.test.ts',
   // Disk checkpoints require Node's iterable writeFile semantics.
   'src/main/ai-vault/session-parse-cache-checkpoint.test.ts',
+  'src/main/ai-vault/session-parse-cache-large-scan.test.ts',
   'src/main/ai-vault/session-parse-cache-save-lane.test.ts',
   'src/main/ai-vault/session-parse-cache-metadata-checkpoint.test.ts',
   // Electron main bridges streams with Node's implementation.
   'src/main/host/electron-http-client.test.ts',
   'src/main/daemon/daemon-init-provider-installation.test.ts',
+  'src/main/orcad/orcad-daemon-teardown-linux.test.ts',
   'src/renderer/src/components/terminal-pane/pty-input-write-queue.test.ts',
   'src/renderer/src/lib/react-commit-cascade-observer.test.ts',
   'src/renderer/src/lib/react-commit-cascade-telemetry.test.ts',
@@ -47,6 +49,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/runtime/terminal-tail-redraw-wall-time.test.ts',
   'src/main/agent-hooks/server-transport-interference.test.ts',
   'src/main/plugins/plugin-worker-supervision.integration.test.ts',
+  // Reconciliation loads the real native Parcel watcher; Bun can abort on Linux ARM.
+  'src/main/plugins/plugin-service-reconciliation.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',
   // Asserts Node's spawn-failure close signal and that a dead worker closes its children's pipes.
   'src/main/worker-thread-child-process/worker-thread-child-process.test.ts',
@@ -99,7 +103,6 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/codex/codex-shared-server-probe.test.ts',
   'src/main/opencode/opencode-launch-model-context-supervision.test.ts',
   'src/main/hermes/hermes-config-remote-adapter.test.ts',
-  'src/renderer/src/lib/monaco-languages/monarch-upstream-mdx-recursion.test.ts',
   'src/main/ipc/orca-profiles-switch-persistence.test.ts',
   'src/main/ipc/settings-delayed-response.test.ts',
   'src/main/runtime/structured-agent-session-startup-tab-restore.test.ts',

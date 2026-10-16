@@ -12,6 +12,7 @@ import type {
   AgentJournalSubmission
 } from '../../../src/shared/agent-session-journal-types'
 import { agentSessionVisibleFailureFacts } from '../../../src/shared/agent-session-visible-failures'
+import { mapSettledWithConcurrency } from '../../../src/shared/map-with-concurrency'
 import type {
   AgentSessionQueuedMessageDeleteResult,
   AgentSessionQueuedMessagesResumeResult,
@@ -33,6 +34,8 @@ import {
   type MobileQueuedMessageInlineEditor
 } from './use-mobile-structured-queued-edit'
 
+const CLEAR_DELETE_CONCURRENCY = 8
+
 /** `onCopied` runs once the card's text is in the composer, before its Delete leaves. */
 export type MobileQueuedMessageEdit = (messageId: string, onCopied?: () => void) => Promise<boolean>
 
@@ -43,6 +46,7 @@ export type MobileStructuredQueuedMessageControls = {
   send: (messageId: string) => Promise<boolean>
   /** Discard the draft. */
   delete: (messageId: string) => Promise<boolean>
+  clear: (messageIds: string[]) => Promise<boolean>
   /** Edit in the card; an older host falls back to the composer copy. */
   edit?: MobileQueuedMessageEdit
   editor?: MobileQueuedMessageInlineEditor
@@ -154,6 +158,40 @@ export function useMobileStructuredQueuedMessageControls(args: {
     (messageId: string) => deleteQueued(messageId, false),
     [deleteQueued]
   )
+  const clear = useCallback(
+    async (messageIds: string[]): Promise<boolean> => {
+      if (messageIds.length === 0) {
+        return false
+      }
+      const results = await mapSettledWithConcurrency(
+        messageIds,
+        CLEAR_DELETE_CONCURRENCY,
+        (messageId) =>
+          mutate<AgentSessionQueuedMessageDeleteResult>(
+            'agentSession.queuedMessageDelete',
+            'agentSession.queuedMessageDelete',
+            { messageId }
+          )
+      )
+      const dispatched = results.some(
+        (result) =>
+          result.status === 'fulfilled' &&
+          result.value.status === 'accepted' &&
+          !result.value.value.deleted &&
+          result.value.value.disposition === 'dispatched'
+      )
+      if (dispatched) {
+        onSendError('This message was already sent.')
+      }
+      return resolved(
+        !dispatched &&
+          results.every(
+            (result) => result.status === 'fulfilled' && result.value.status === 'accepted'
+          )
+      )
+    },
+    [mutate, onSendError, resolved]
+  )
   const edit = useCallback<MobileQueuedMessageEdit>(
     async (messageId, onCopied) => {
       if (args.editCapable) {
@@ -206,6 +244,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
     cards,
     send,
     delete: deleteDraft,
+    clear,
     edit: args.editCapable === null ? undefined : edit,
     editor,
     pause,

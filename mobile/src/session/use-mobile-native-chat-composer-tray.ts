@@ -36,7 +36,8 @@ export function useMobileNativeChatComposerTray({
   backgroundTasks: MobileStructuredBackgroundTasks | null
 }): MobileNativeChatComposerTray {
   const { composerInputRef, editQueuedMessage } = useMobileNativeChatQueuedEditFocus(queued.onEdit)
-  const { cards, onSend, onDelete, editor, pause, onResume, sessionKey, steerHeld } = queued
+  const { cards, onSend, onDelete, onClearAll, editor, pause, onResume, sessionKey, steerHeld } =
+    queued
   return useMemo(
     () => ({
       content: createElement(
@@ -56,6 +57,7 @@ export function useMobileNativeChatComposerTray({
           cards,
           onSend,
           onDelete,
+          onClearAll,
           onEdit: editQueuedMessage,
           editor,
           pause,
@@ -72,6 +74,7 @@ export function useMobileNativeChatComposerTray({
       editQueuedMessage,
       editor,
       onDelete,
+      onClearAll,
       onResume,
       onSend,
       pause,
