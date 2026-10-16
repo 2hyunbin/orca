@@ -127,6 +127,12 @@ async function doConnect(
     }
     // COMPAT(legacy-relay-bridge): panes an older relay still runs are known before the host is.
     await startLegacyRelayBridge(targetId)
+    // A disconnect or shutdown during the bridge wait already published; "connected" would be stale.
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
     const published = publishManagedServerConnect(
       targetId,
       server.environmentId,
