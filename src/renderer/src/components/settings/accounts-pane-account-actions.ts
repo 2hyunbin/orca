@@ -30,7 +30,7 @@ import {
   isCodexAccountCancellation
 } from './accounts-pane-action-errors'
 import { getClaudeAccountLabel } from './accounts-pane-runtime'
-import { offerToMoveRunningClaudeSessions } from '@/lib/claude-session-move-prompt'
+import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
 
 type CodexActionContext = {
   settings: GlobalSettings
@@ -217,13 +217,16 @@ export function createClaudeAccountActionRunner(
         )
       }
       if (switched) {
-        // Why: the move prompt already names the new account; a second toast would repeat it.
-        void offerToMoveRunningClaudeSessions({
+        // Why: the restart dialog and confirmation already name the new account.
+        void handleRunningClaudeSessionsAfterSwitch({
           owner: accountOwner,
           target: actionRuntime,
+          previousAccountId: previousActiveAccountId,
+          previousAccountLabel: getClaudeAccountLabel(claudeAccounts, previousActiveAccountId),
+          nextAccountId: nextActiveAccountId,
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
-        }).then((offer) => {
-          if (offer === 'none') {
+        }).then((outcome) => {
+          if (outcome === 'none' || outcome === 'kept') {
             showUpdatedToast()
           }
         })

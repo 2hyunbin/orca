@@ -19907,7 +19907,7 @@
     "claude": {
       "added": "Account added. Select it to use it for the next Claude you start.",
       "nextLaunch": "{{value0}} → {{value1}}. The next Claude you start uses it. Running sessions keep their account.",
-      "profileSwitching": "Switching applies to the next Claude you start in any tab. Running sessions keep their account.",
+      "profileSwitching": "Switching applies to the next Claude you start in any tab.",
       "systemDefaultNamed": "System default: {{value0}}",
       "systemDefaultIsSaved": "System default is signed in as {{value0}}, which is also a saved account. An earlier Orca version may have copied that login there. If it is not your own login, select System default and run claude /login.",
       "systemDefaultIsSavedDismiss": "Dismiss",
@@ -19920,12 +19920,25 @@
       "copySignInLink": "Copy sign-in link instead",
       "signInLinkCopied": "Sign-in link copied. Open it in a private window to sign in with a different account.",
       "signInLinkCopyFailed": "Could not copy the link.",
-      "moveSessions": {
-        "titleOne": "Move 1 running Claude session to {{account}}?",
-        "titleOther": "Move {{count}} running Claude sessions to {{account}}?",
-        "description": "Each session restarts and resumes its conversation. A session that's mid-turn moves when its turn ends.",
-        "action": "Move sessions",
-        "dismiss": "Not now"
+      "switchSessions": {
+        "title": "Switched to {{account}}",
+        "bodyOne": "1 Claude session is still running on {{previous}}. Restarting continues the conversation on {{next}}. A session that's replying restarts when it finishes.",
+        "bodyOther": "{{count}} Claude sessions are still running on {{previous}}. Restarting continues each conversation on {{next}}. A session that's replying restarts when it finishes.",
+        "remember": "Remember my choice",
+        "keep": "Keep as is",
+        "restartOne": "Restart session",
+        "restartOther": "Restart {{count}} sessions",
+        "settingTitle": "When you switch accounts while Claude is running",
+        "settingDescription": "Restarting continues each running conversation on the new account.",
+        "keyword": {
+          "restart": "restart",
+          "running": "running"
+        },
+        "settingAsk": "Ask",
+        "settingRestart": "Always restart",
+        "settingKeep": "Never restart",
+        "restartingOne": "Restarting 1 Claude session on {{account}}",
+        "restartingOther": "Restarting {{count}} Claude sessions on {{account}}"
       }
     },
     "managedData": {

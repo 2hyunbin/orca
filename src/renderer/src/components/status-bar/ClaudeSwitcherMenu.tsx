@@ -37,7 +37,7 @@ import {
   resolveClaudeStatusAccountState
 } from './status-bar-claude-accounts'
 import { getClaudeAccountLabel } from '../settings/accounts-pane-runtime'
-import { offerToMoveRunningClaudeSessions } from '@/lib/claude-session-move-prompt'
+import { handleRunningClaudeSessionsAfterSwitch } from '@/lib/claude-account-switch-sessions'
 import { AccountRuntimeToggle } from './StatusBarAccountControls'
 import {
   InlineUsageBars,
@@ -192,9 +192,12 @@ export function ClaudeSwitcherMenu({
       }
       const nextActiveAccountId = getClaudeStatusActiveId(next, target)
       if (previousActiveAccountId !== nextActiveAccountId) {
-        void offerToMoveRunningClaudeSessions({
+        void handleRunningClaudeSessionsAfterSwitch({
           owner: runtimeTarget,
           target,
+          previousAccountId: previousActiveAccountId,
+          previousAccountLabel: getClaudeAccountLabel(accountState, previousActiveAccountId),
+          nextAccountId: nextActiveAccountId,
           nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
         })
       }
