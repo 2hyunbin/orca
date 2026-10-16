@@ -260,4 +260,38 @@ describe('DesktopBrowserBridgeManager', () => {
       expect.any(Number)
     )
   })
+
+  it('bounds a long browser error and falls back when the host refuses a result', async () => {
+    const h = harness()
+    h.execute.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'browser_error', message: 'x'.repeat(10_000) }
+    })
+    h.manager.reconcile()
+    await vi.waitFor(() => expect(h.subscriptions).toHaveLength(1))
+    const socket = h.subscriptions[0]!
+    socket.sendRequest.mockResolvedValueOnce({
+      id: 'r',
+      ok: false,
+      error: { code: 'invalid_argument', message: 'refused' },
+      _meta: { runtimeId: 'orcad' }
+    })
+    socket.callbacks.onResponse(event({ type: 'ready', attachmentId: 'att-1' }))
+
+    socket.callbacks.onResponse(
+      event({ type: 'request', requestId: 'long', method: 'browser.eval', params: {} })
+    )
+
+    await vi.waitFor(() => expect(socket.sendRequest).toHaveBeenCalledTimes(2))
+    expect(socket.sendRequest.mock.calls[0]?.[1]).toMatchObject({
+      error: { code: 'browser_error', message: 'x'.repeat(4096) }
+    })
+    expect(socket.sendRequest).toHaveBeenLastCalledWith(
+      'desktopBrowserBridge.result',
+      expect.objectContaining({
+        error: expect.objectContaining({ code: 'desktop_browser_bridge_result_undeliverable' })
+      }),
+      expect.any(Number)
+    )
+  })
 })

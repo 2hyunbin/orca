@@ -13,6 +13,9 @@ import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import type { DesktopBrowserBridgeOutcome } from './desktop-browser-bridge-executor'
 
 const RESULT_TIMEOUT_MS = 30_000
+// Why: orcad's result schema bounds both; an over-long browser error must still reach the CLI.
+const MAX_ERROR_CODE_LENGTH = 128
+const MAX_ERROR_MESSAGE_LENGTH = 4096
 
 export type DesktopBrowserBridgeSubscribe = (callbacks: {
   onResponse(response: RuntimeRpcResponse<unknown>): void
@@ -110,35 +113,52 @@ export class DesktopBrowserBridgeConnection {
     }
     const params: DesktopBrowserBridgeResultParams = outcome.ok
       ? { attachmentId, requestId: request.requestId, ok: true, result: outcome.result }
-      : { attachmentId, requestId: request.requestId, ok: false, error: outcome.error }
-    try {
-      await sendRequest('desktopBrowserBridge.result', params, RESULT_TIMEOUT_MS)
+      : {
+          attachmentId,
+          requestId: request.requestId,
+          ok: false,
+          error: {
+            code: outcome.error.code.slice(0, MAX_ERROR_CODE_LENGTH),
+            message: outcome.error.message.slice(0, MAX_ERROR_MESSAGE_LENGTH)
+          }
+        }
+    if (await this.sendResult(sendRequest, params)) {
       return
+    }
+    // Why: the command already ran; the host must hear that now, not at its own timeout.
+    await this.sendResult(sendRequest, {
+      attachmentId,
+      requestId: request.requestId,
+      ok: false,
+      error: {
+        code: 'desktop_browser_bridge_result_undeliverable',
+        message:
+          'The desktop ran the command but could not send its result back (it may be too large, such as a full-page screenshot).'
+      }
+    })
+  }
+
+  /** True only when orcad accepted the result; a thrown or refused submission is false. */
+  private async sendResult(
+    sendRequest: NonNullable<RemoteRuntimeSubscription['sendRequest']>,
+    params: DesktopBrowserBridgeResultParams
+  ): Promise<boolean> {
+    try {
+      const response = await sendRequest('desktopBrowserBridge.result', params, RESULT_TIMEOUT_MS)
+      if (response.ok) {
+        return true
+      }
+      console.warn(
+        '[desktop-browser-bridge] The host refused a result:',
+        `${response.error.code}: ${response.error.message}`
+      )
     } catch (error) {
       console.warn(
         '[desktop-browser-bridge] Could not return a result to the host:',
         error instanceof Error ? error.message : String(error)
       )
     }
-    // Why: the command already ran; the host must hear that now, not at its own timeout.
-    try {
-      await sendRequest(
-        'desktopBrowserBridge.result',
-        {
-          attachmentId,
-          requestId: request.requestId,
-          ok: false,
-          error: {
-            code: 'desktop_browser_bridge_result_undeliverable',
-            message:
-              'The desktop ran the command but could not send its result back (it may be too large, such as a full-page screenshot).'
-          }
-        },
-        RESULT_TIMEOUT_MS
-      )
-    } catch {
-      // The transport is gone; orcad fails the request when the attachment detaches.
-    }
+    return false
   }
 
   private lose(error: Error): void {
