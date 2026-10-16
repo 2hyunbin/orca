@@ -6,6 +6,7 @@ import { isMobileWebBundleTransportFailure } from './mobile-web-bundle-operation
 import type { RpcClient } from './rpc-client'
 import { RpcClientRequestTracker } from './rpc-client-request-tracker'
 import type { RpcRequestFrame } from './rpc-envelope-fields'
+import type { RpcResponse } from './types'
 
 // Hashed before it resolves, as the native module's synchronous digest is.
 vi.mock('expo-crypto', async () => {
@@ -98,7 +99,12 @@ function slowLinkHost(files: Record<string, Uint8Array>, bytesPerSecond: number)
     getState: () => 'connected',
     waitForConnected: async () => {},
     sendFrame: (frame) => {
-      const response = { id: frame.id, ok: true, result: answer(frame), _meta: { runtimeId: 'r' } }
+      const response: RpcResponse = {
+        id: frame.id,
+        ok: true,
+        result: answer(frame),
+        _meta: { runtimeId: 'r' }
+      }
       const isManifest = frame.method === 'mobileWeb.bundle.manifest'
       if (!isManifest && bytesPerSecond === 0) {
         return true
@@ -129,7 +135,7 @@ function slowLinkHost(files: Record<string, Uint8Array>, bytesPerSecond: number)
     notifyForeground: vi.fn(),
     close: vi.fn()
   }
-  return { client, delivered: () => delivered }
+  return { client, delivered: () => delivered, pending: () => tracker.size() }
 }
 
 /** Twelve 384 KiB windows: four assets of three, the shape of the bundle's larger images. */
@@ -184,5 +190,9 @@ describe('fetchMobileWebBundle over a slow link', () => {
     // The manifest's round trip, then the stall budget; not the ten-minute per-read backstop.
     expect(outcome.settledAt - startedAt).toBeLessThan(MOBILE_WEB_BUNDLE_WINDOW_STALL_MS + 1_000)
     expect(host.delivered()).toBe(1)
+    // The stalled reads still pending afterwards hold the reassembly buffers, so they must not
+    // outlive the fetch by long either.
+    expect(host.pending()).toBe(0)
+    expect(Date.now() - startedAt).toBeLessThanOrEqual(6 * MOBILE_WEB_BUNDLE_WINDOW_STALL_MS)
   })
 })

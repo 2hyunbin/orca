@@ -25,8 +25,11 @@ const MAX_CONCURRENT_WINDOW_READS = 4
  *  read's reply queues behind the others in flight, so on a slow link (Tailscale through a relay) a
  *  per-read 30s clock failed downloads that were still moving (#29697). */
 export const MOBILE_WEB_BUNDLE_WINDOW_STALL_MS = 30_000
-/** Only a backstop for the pending entry; the stall clock above is what fails a fetch. */
-const WINDOW_READ_BACKSTOP_MS = 10 * 60_000
+/** A read's reply waits behind at most the other in-flight replies, each landing within the stall
+ *  budget or the fetch fails, so a moving fetch should not reach it. Kept that tight because a
+ *  stalled fetch's pending reads hold its reassembly buffers until they settle. */
+const WINDOW_READ_BACKSTOP_MS =
+  (MAX_CONCURRENT_WINDOW_READS + 1) * MOBILE_WEB_BUNDLE_WINDOW_STALL_MS
 
 export type MobileWebBundleFetchProgress = {
   readonly completedAssets: number
