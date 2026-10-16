@@ -126,14 +126,15 @@ it('prefers explicit instances, preserves conflicts, and ignores key order in ag
   })
   initializeCanonicalLineage(state)
   expect(state.legacyLineageRemainder).toEqual({})
-  expect(state.lineageByChildInstance?.child.createdAt).toBe(2)
-  expect(state.lineageByChildInstance?.child.capture).toEqual(explicit.capture)
+  expect(state.lineageByChildInstance).toEqual({
+    child: expect.objectContaining({ createdAt: 2, capture: explicit.capture })
+  })
   delete state.lineageByChildInstance
   state.workspaceLineageByChildKey = {
     [worktreeWorkspaceKey(id)]: {
       ...edgeToWorkspaceLineage(explicit),
       childInstanceId: null,
-      parentWorkspaceKey: `folder:${FOLDER_WORKSPACE.id}`,
+      parentWorkspaceKey: `folder:${FOLDER_WORKSPACE.id}` as const,
       parentInstanceId: null,
       createdAt: 99
     }
@@ -141,7 +142,7 @@ it('prefers explicit instances, preserves conflicts, and ignores key order in ag
   state.folderWorkspaces = [FOLDER_WORKSPACE]
   state.worktreeLineageById.wrong = lineage
   initializeCanonicalLineage(state)
-  expect(state.lineageByChildInstance?.child).toMatchObject(explicit)
+  expect(state.lineageByChildInstance).toMatchObject({ child: explicit })
   expect(Object.keys(state.legacyLineageRemainder ?? {})).toHaveLength(2)
   state.lineageByChildInstance = {}
   state.worktreeLineageById.wrong = lineage

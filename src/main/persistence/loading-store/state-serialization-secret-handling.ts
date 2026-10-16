@@ -1,4 +1,5 @@
 import { refreshLegacyLineage } from './canonical-workspace-lineage'
+import { WORKTREE_METADATA_DOMAINS } from './worktree-identity-metadata'
 import {
   serializeCompleteProfileStateDomains,
   serializeSelectiveProfileStateDomains
@@ -58,9 +59,20 @@ export class StateSerializationSecretHandlingOperations {
       }
       return encrypted.blob
     }
-    refreshLegacyLineage(this.runtime.state)
     const coupledDomains = new Set(domains)
-    if (domains.has('worktreeMeta')) {
+    if (domains.has('repos') || domains.has('folderWorkspaces')) {
+      return undefined
+    }
+    if (
+      [
+        ...WORKTREE_METADATA_DOMAINS,
+        'lineageByChildInstance',
+        'legacyLineageRemainder',
+        'worktreeLineageById',
+        'workspaceLineageByChildKey'
+      ].some((domain) => domains.has(domain))
+    ) {
+      refreshLegacyLineage(this.runtime.state)
       coupledDomains.add('worktreeLineageById')
       coupledDomains.add('workspaceLineageByChildKey')
     }
@@ -150,7 +162,6 @@ export class StateSerializationSecretHandlingOperations {
     // ciphertext), which would substitute the wrong site and let two DISTINCT
     // states normalize equal → a silently dropped write (data loss), reachable
     // on deterministic-IV platforms (macOS/legacy-Linux OSCrypt). A per-slot
-    refreshLegacyLineage(this.runtime.state)
     // random UUID can't occur anywhere else in the serialized state (the user
     // sets their data before it is minted), so it appears exactly once.
     const secretSubs: SecretSentinelSubstitution[] = []

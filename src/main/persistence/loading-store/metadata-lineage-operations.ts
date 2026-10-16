@@ -159,8 +159,13 @@ export class MetadataLineageOperations {
 
   getLineageEdges() {
     const state = this[metadataLineageOperationsContext].runtime.state
+    if (state.lineageByChildInstance && Object.keys(state.lineageByChildInstance).length === 0) {
+      return []
+    }
     const owners = savedLineageOwners(state)
-    initializeCanonicalLineage(state, owners)
+    if (state.lineageByChildInstance === undefined) {
+      initializeCanonicalLineage(state, owners)
+    }
     return ownedLineageEdges(state, owners)
   }
 

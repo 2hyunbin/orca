@@ -28,8 +28,13 @@ export function readSavedWorktreeOwners(store: CatalogStore) {
       .map((repo) => repo.id)
   )
   const counts = new Map<string, number>()
+  const ownersByHost = new Map<ExecutionHostId, Map<string, Repo | null>>()
   for (const repo of repos) {
     counts.set(repo.id, (counts.get(repo.id) ?? 0) + 1)
+    const hostId = getRepoExecutionHostId(repo)
+    const owners = ownersByHost.get(hostId) ?? new Map<string, Repo | null>()
+    owners.set(repo.id, owners.has(repo.id) || invalidRepoIds.has(repo.id) ? null : repo)
+    ownersByHost.set(hostId, owners)
   }
   const rows: (WorktreeMeta & {
     id: string
@@ -37,17 +42,7 @@ export function readSavedWorktreeOwners(store: CatalogStore) {
     hostId: ExecutionHostId
     repo: Repo
   })[] = []
-  for (const hostId of new Set(repos.map(getRepoExecutionHostId))) {
-    const hostRepos = repos.filter((repo) => getRepoExecutionHostId(repo) === hostId)
-    const owners = new Map(
-      hostRepos
-        .filter(
-          (repo) =>
-            !invalidRepoIds.has(repo.id) &&
-            hostRepos.filter((candidate) => candidate.id === repo.id).length === 1
-        )
-        .map((repo) => [repo.id, repo])
-    )
+  for (const [hostId, owners] of ownersByHost) {
     const snapshot = readAllWorktreeMetaForHost(store, hostId)
     for (const [id] of Object.entries(snapshot)) {
       const repo = owners.get(getRepoIdFromWorktreeId(id))
@@ -74,14 +69,15 @@ export function readSavedLineageEdges(
 
 export function readSavedWorktreeLineage(
   store: CatalogStore,
-  rows = readSavedWorktreeOwners(store)
+  rows = readSavedWorktreeOwners(store),
+  edges = readSavedLineageEdges(store)
 ) {
   if (!store.getLineageEdges) {
     return store.getAllWorktreeLineage?.() ?? {}
   }
   const owners = indexWorktreesByInstance(rows)
   return Object.fromEntries(
-    readSavedLineageEdges(store).flatMap((edge) => {
+    edges.flatMap((edge) => {
       const owner = owners.get(edge.child.instanceId)
       const lineage = edgeToWorktreeLineage(edge)
       return owner && lineage
