@@ -235,8 +235,8 @@ describe('an open chat receives each row once', () => {
     await host.flushStreamedEvents(SESSION)
 
     expect(pane.received().statuses).toEqual(['streamed row'])
-    // The frame's publish finds the reader caught up and reads no rows: streaming stays one read.
-    expect(readSince).toHaveBeenCalledOnce()
+    // Committed publication serves the row; the frame's caught-up publish reads no saved rows.
+    expect(readSince).not.toHaveBeenCalled()
   })
 
   it('when a writer publishes the row it appended', async () => {
