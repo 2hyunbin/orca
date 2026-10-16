@@ -16,6 +16,8 @@ export type StoredDatabaseTargetPointer = { pointer: DatabaseTargetPointer; gene
 export type DatabaseTargetPointerStore = {
   read(): Promise<StoredDatabaseTargetPointer | null>
   write(pointer: DatabaseTargetPointer, ifGenerationMatch: string): Promise<string>
+  // Ends the move: processes read the pointer as absent and serve DATABASE_URL alone.
+  delete(ifGenerationMatch: string): Promise<void>
 }
 
 export class PointerGenerationConflict extends MoveRefusal {
@@ -62,6 +64,14 @@ export function gcsDatabaseTargetPointerStore(input: {
       const parsed = parseDatabaseTargetPointer(await response.json().catch(() => null))
       if (!parsed?.flags) throw new MoveRefusal('pointer_malformed')
       return { pointer: parsed.flags, generation }
+    },
+    delete: async (ifGenerationMatch) => {
+      const url = new URL(`${STORAGE_ROOT}/storage/v1/b/${bucket}/o/${object}`)
+      url.searchParams.set('ifGenerationMatch', ifGenerationMatch)
+      const response = await request(url.toString(), { method: 'DELETE' })
+      void response.body?.cancel().catch(() => undefined)
+      if (response.status === 412) throw new PointerGenerationConflict()
+      if (!response.ok) throw new MoveRefusal('pointer_delete_failed', { status: response.status })
     },
     write: async (pointer, ifGenerationMatch) => {
       const url = new URL(`${STORAGE_ROOT}/upload/storage/v1/b/${bucket}/o`)

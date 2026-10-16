@@ -27,11 +27,13 @@ import {
   uninstallTracking
 } from './database-move-tracking.js'
 import { verifyMoveTables, verdictsEqual, type MoveVerifyOptions } from './database-move-verify.js'
+import type { DatabaseTargetPointerStore } from './database-move-pointer-store.js'
 import type { GoogleMetadataAccess } from './google-metadata-access-token.js'
 
 export type MoveCommandContext = {
   databases: MoveDatabases
   google: GoogleMetadataAccess | null
+  pointerStore: () => Promise<DatabaseTargetPointerStore>
 }
 
 export async function withClients<T>(
@@ -141,7 +143,11 @@ export async function uninstallTrackingCommand(
 
 // The dedicated side gets the relay schema exactly as a director applies it; both sides get the
 // authority and progress tables and the tool role's grants; then the two schemas must agree.
+// Creating the authority table on primary starts the period in which a process serves only after
+// reading the pointer, so the pointer must already be there and readable (`finish` ends it).
 export async function prepareTargetCommand(ctx: MoveCommandContext): Promise<void> {
+  const stored = await (await ctx.pointerStore()).read()
+  if (!stored) throw new MoveRefusal('pointer_absent', { run: 'write database-target.json first' })
   const connection = await ctx.databases.connection('dedicated', 'app')
   const applicationName = moveApplicationName('prepare-target')
   const { database } = openRelayPostgresPool(connection, { applicationName, poolMax: 1 })

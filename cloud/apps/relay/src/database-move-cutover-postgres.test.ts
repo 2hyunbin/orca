@@ -19,16 +19,11 @@ import {
   type CutoverTimings
 } from './database-move-cutover.js'
 import { readAuthorityGeneration } from './database-move-tracking.js'
-import {
-  PointerGenerationConflict,
-  type DatabaseTargetPointerStore,
-  type StoredDatabaseTargetPointer
-} from './database-move-pointer-store.js'
-import type { DatabaseTargetPointer } from './relay-database-target-pointer.js'
 import { openPrimaryRelayDatabaseTarget } from './relay-database-targets.js'
 import { SwitchingRelayDatabase } from './switching-relay-database.js'
 import {
   createMoveTestSides,
+  MemoryPointerStore,
   withPgClient,
   type MoveTestSides
 } from './test-fixtures/database-move-sides.js'
@@ -48,22 +43,6 @@ const TIMINGS: CutoverTimings = {
 const POLL_MS = 100
 const CELLS = ['c0', 'c1', 'c2', 'c3']
 
-class MemoryPointerStore implements DatabaseTargetPointerStore {
-  private generation = 1
-  constructor(private stored: StoredDatabaseTargetPointer | null) {}
-  current(): DatabaseTargetPointer | null {
-    return this.stored ? structuredClone(this.stored.pointer) : null
-  }
-  async read(): Promise<StoredDatabaseTargetPointer | null> {
-    return this.stored ? structuredClone(this.stored) : null
-  }
-  async write(pointer: DatabaseTargetPointer, ifGenerationMatch: string): Promise<string> {
-    if (this.stored?.generation !== ifGenerationMatch) throw new PointerGenerationConflict()
-    this.generation += 1
-    this.stored = { pointer: structuredClone(pointer), generation: String(this.generation) }
-    return this.stored.generation
-  }
-}
 
 type Fleet = {
   processes: SwitchingRelayDatabase[]
