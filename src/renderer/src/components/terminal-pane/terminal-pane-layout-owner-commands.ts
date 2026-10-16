@@ -1,6 +1,7 @@
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 
 /** Equalizes a tab's panes, then `then` runs (focus); in a layout-owner build main equalizes. */
 export function equalizeTerminalPanes(
@@ -21,9 +22,12 @@ export function equalizeTerminalPanes(
       pane.worktreeId,
       { type: 'equalizePanes', tabId: pane.tabId },
       {
+        // No frame is coming (the stream is down): the window equalizes itself, as main did.
         apply: () => {
           const manager = pane.getManager()
-          if (manager) {
+          if (!layoutFramesFlowing()) {
+            equalize()
+          } else if (manager) {
             then(manager)
           }
         },
