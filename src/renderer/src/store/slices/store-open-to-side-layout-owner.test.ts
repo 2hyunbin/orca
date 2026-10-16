@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
+import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
 import type { TabGroupLayoutNode } from '../../../../shared/tab-types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { LayoutApplyParams } from '../../../../shared/rpc-contract/workspace-layout-params'
@@ -205,5 +206,34 @@ describe('open to the side in a layout-owner build', () => {
     })
 
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('newGroupSplitOf', () => {
+  it('finds no split beside a sibling that is itself split, so main gets none', () => {
+    const group = (id: string, tabOrder: string[]) => ({
+      id,
+      worktreeId: WT,
+      activeTabId: null,
+      tabOrder
+    })
+    const state = {
+      groupsByWorktree: { [WT]: [group('A', ['a']), group('M', ['m']), group('N', ['n'])] },
+      layoutByWorktree: {
+        [WT]: {
+          type: 'split' as const,
+          direction: 'horizontal' as const,
+          first: {
+            type: 'split' as const,
+            direction: 'vertical' as const,
+            first: { type: 'leaf' as const, groupId: 'A' },
+            second: { type: 'leaf' as const, groupId: 'M' }
+          },
+          second: { type: 'leaf' as const, groupId: 'N' }
+        }
+      }
+    }
+
+    expect(newGroupSplitOf(state, WT, 'N', 'n')).toBeNull()
   })
 })
