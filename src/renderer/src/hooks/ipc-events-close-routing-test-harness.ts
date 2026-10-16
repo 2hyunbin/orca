@@ -200,6 +200,7 @@ export async function useIpcEventsForCloseRouting({
         },
         respondSessionTabClose,
         onMoveSessionTab: () => () => {},
+        onSetSessionTabAppearance: () => () => {},
         onOpenFileFromMobile: () => () => {},
         onOpenDiffFromMobile: () => () => {},
         onCloseTerminal: (listener: CloseTerminalListener) => {

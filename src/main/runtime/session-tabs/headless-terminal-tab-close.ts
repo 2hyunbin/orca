@@ -5,6 +5,7 @@ import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './structured-sess
 import type {
   RuntimeMobileSessionTabMove,
   RuntimeMobileSessionTabMoveResult,
+  RuntimeMobileSessionTabAppearance,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../../shared/runtime-types'
@@ -252,25 +253,28 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
   // was never persisted. Persist to the workspace session + live snapshot.
   async setMobileSessionTabProps(
     worktreeSelector: string,
-    args: {
-      tabId: string
-      color?: string | null
-      isPinned?: boolean
-      viewMode?: 'terminal' | 'chat'
-    }
+    args: RuntimeMobileSessionTabAppearance & { viewMode?: 'terminal' | 'chat' }
   ): Promise<{ updated: true }> {
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
-    // Why: a renderer-authoritative host owns + republishes tab props, so a
-    // headless write would be overwritten. Persist only when headless.
-    if (this.getAvailableAuthoritativeWindow()) {
-      return { updated: true }
-    }
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     const hostTabId = snapshot
       ? (this.resolveMobileSessionHostTabId(snapshot, args.tabId) ?? args.tabId)
       : args.tabId
+    // Why: a renderer-authoritative host owns + republishes tab props, so a
+    // headless write would be overwritten; the window applies them instead.
+    // viewMode is not forwarded: a phone's chat toggle must not flip the desktop pane.
+    if (this.getAvailableAuthoritativeWindow()) {
+      if (args.color !== undefined || args.isPinned !== undefined) {
+        this.notifier?.setSessionTabAppearance?.(worktreeId, {
+          tabId: hostTabId,
+          ...(args.color !== undefined ? { color: args.color } : {}),
+          ...(args.isPinned !== undefined ? { isPinned: args.isPinned } : {})
+        })
+      }
+      return { updated: true }
+    }
     this.persistHeadlessSessionTabProps(worktreeId, hostTabId, args)
     this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, hostTabId, args)
     return { updated: true }

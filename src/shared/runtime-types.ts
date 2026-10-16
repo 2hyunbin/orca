@@ -127,6 +127,7 @@ export type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabMove,
   RuntimeMobileSessionTabMoveResult,
+  RuntimeMobileSessionTabAppearance,
   RuntimeMobileSessionTabsRemovedResult,
   RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,

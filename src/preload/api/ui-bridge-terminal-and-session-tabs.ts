@@ -16,6 +16,7 @@ import type { TuiAgent } from '../../shared/tui-agent'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import type {
   RuntimeMobileSessionTabMove,
+  RuntimeMobileSessionTabAppearance,
   RuntimeTerminalCreateRequestPayload,
   RuntimeTerminalPresentation
 } from '../../shared/runtime-types'
@@ -225,6 +226,16 @@ export const uiTerminalAndSessionTabsApi = {
     ) => callback(data)
     ipcRenderer.on('ui:moveSessionTab', listener)
     return () => ipcRenderer.removeListener('ui:moveSessionTab', listener)
+  },
+  onSetSessionTabAppearance: (
+    callback: (data: { worktreeId: string } & RuntimeMobileSessionTabAppearance) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: { worktreeId: string } & RuntimeMobileSessionTabAppearance
+    ) => callback(data)
+    ipcRenderer.on('ui:setSessionTabAppearance', listener)
+    return () => ipcRenderer.removeListener('ui:setSessionTabAppearance', listener)
   },
   onOpenFileFromMobile: (
     callback: (data: {

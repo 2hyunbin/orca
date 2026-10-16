@@ -121,6 +121,10 @@ export function buildMobileTerminalSurfaceTabs(
           }
         : {}),
       parentLayout,
+      // Why: a headless host publishes these too; without them a client that loads while a
+      // window is open never sees the tab's color or pin.
+      color: terminal.color ?? null,
+      isPinned: terminal.isPinned === true,
       isActive: isDesktopTabActive && leafId === activeLeafId
     }
   })

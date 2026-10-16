@@ -62,6 +62,7 @@ export function buildWindowApi(args: {
         onSessionTabCloseRequest: () => () => {},
         respondSessionTabClose: () => {},
         onMoveSessionTab: () => () => {},
+        onSetSessionTabAppearance: () => () => {},
         onOpenFileFromMobile: () => () => {},
         onOpenDiffFromMobile: () => () => {},
         onCloseTerminal: () => () => {},

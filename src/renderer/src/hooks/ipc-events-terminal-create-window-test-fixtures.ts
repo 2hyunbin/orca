@@ -120,6 +120,7 @@ export function buildTerminalCreateWindow(args: {
         onSessionTabCloseRequest: () => () => {},
         respondSessionTabClose: () => {},
         onMoveSessionTab: () => () => {},
+        onSetSessionTabAppearance: () => () => {},
         onOpenFileFromMobile: () => () => {},
         onOpenDiffFromMobile: () => () => {},
         onCloseTerminal: () => () => {},

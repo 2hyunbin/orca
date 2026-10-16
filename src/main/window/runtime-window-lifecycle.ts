@@ -179,6 +179,8 @@ export function registerRuntimeWindowLifecycle(
       requestSessionTabCloseFromRenderer(mainWindow, tabId, worktreeId),
     moveSessionTab: (worktreeId: string, move: RuntimeMobileSessionTabMove) =>
       send('ui:moveSessionTab', { worktreeId, ...move }),
+    setSessionTabAppearance: (worktreeId, props) =>
+      send('ui:setSessionTabAppearance', { worktreeId, ...props }),
     openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId?, navigation?, position?) =>
       send('ui:openFileFromMobile', {
         worktreeId,

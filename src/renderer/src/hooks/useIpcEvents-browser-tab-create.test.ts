@@ -175,6 +175,7 @@ describe('useIpcEvents browser tab create routing', () => {
           onSessionTabCloseRequest: () => () => {},
           respondSessionTabClose: () => {},
           onMoveSessionTab: () => () => {},
+          onSetSessionTabAppearance: () => () => {},
           onOpenFileFromMobile: () => () => {},
           onOpenDiffFromMobile: () => () => {},
           onCloseTerminal: () => () => {},

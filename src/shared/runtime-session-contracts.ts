@@ -210,6 +210,13 @@ export type RuntimeMobileSessionTabMove =
 
 export type RuntimeMobileSessionTabMoveResult = { moved: true }
 
+/** Tab look a paired client sets on a host tab: color and pin, never the view mode. */
+export type RuntimeMobileSessionTabAppearance = {
+  tabId: string
+  color?: string | null
+  isPinned?: boolean
+}
+
 export type RuntimeMobileSessionTabCloseResult = {
   closed: true
   refused?: true

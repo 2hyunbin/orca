@@ -126,6 +126,7 @@ describe('useIpcEvents updater integration', () => {
           onSessionTabCloseRequest: () => () => {},
           respondSessionTabClose: () => {},
           onMoveSessionTab: () => () => {},
+          onSetSessionTabAppearance: () => () => {},
           onOpenFileFromMobile: () => () => {},
           onOpenDiffFromMobile: () => () => {},
           onCloseTerminal: () => () => {},

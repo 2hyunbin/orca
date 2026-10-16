@@ -124,4 +124,33 @@ export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
       })
     })
   )
+
+  unsubs.push(
+    window.api.ui.onSetSessionTabAppearance(({ worktreeId, tabId, color, isPinned }) => {
+      const localTabId = resolveWindowTabIdForHostTab(worktreeId, tabId)
+      const store = useAppStore.getState()
+      const tabs = store.unifiedTabsByWorktree[worktreeId] ?? []
+      // A browser row is named by its page, which is the unified tab's entity.
+      const tab =
+        tabs.find((candidate) => candidate.id === localTabId) ??
+        tabs.find((candidate) => candidate.entityId === localTabId)
+      if (!tab) {
+        return
+      }
+      if (color !== undefined && color !== tab.color) {
+        if (tab.contentType === 'terminal') {
+          store.setTabColor(tab.entityId, color)
+        } else {
+          store.setUnifiedTabColor(tab.id, color)
+        }
+      }
+      if (isPinned !== undefined && isPinned !== Boolean(tab.isPinned)) {
+        if (isPinned) {
+          store.pinTab(tab.id)
+        } else {
+          store.unpinTab(tab.id)
+        }
+      }
+    })
+  )
 }
