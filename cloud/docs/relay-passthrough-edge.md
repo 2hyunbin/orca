@@ -28,8 +28,15 @@ Everything is in `infra/terraform/relay-gce-passthrough-edge.tf`, keyed by
 
 ## Turn on (each step needs the owner's go in production)
 
-1. **Targeted apply.** Read the plan first. It must be creates only, with no `relay_gce_cell`, URL
-   map or global address in it. The targets:
+1. **Targeted apply of the ACME zone only:** `-target=google_dns_managed_zone.relay_edge_acme`
+   and `-target=google_dns_managed_zone_iam_member.relay_edge_acme_admin`. This comes first because
+   Cloudflare needs the zone's name servers, and an edge booted before the delegation logs a renewal
+   failure every 15 minutes.
+2. **Cloudflare, two records.** The values are in the Terraform outputs:
+   - an NS record delegating `relay_gce_edge_acme_domain` to `relay_gce_edge_acme_name_servers`;
+   - `_acme-challenge.<host> CNAME <hostname>.<relay_gce_edge_acme_domain>`.
+3. **Targeted apply of the edge.** Read the plan first. It must be creates only, with no
+   `relay_gce_cell`, URL map or global address in it. The targets:
    - `google_compute_instance.relay_edge`
    - `google_compute_firewall.relay_edge_public`
    - `google_compute_firewall.relay_edge_iap_ssh`
@@ -40,21 +47,18 @@ Everything is in `infra/terraform/relay-gce-passthrough-edge.tf`, keyed by
 
    The log-metric alert can 404 on its first apply while the metric propagates; re-run the same
    targets.
-2. **Cloudflare, two records** (the values are in the Terraform outputs):
-   - an NS record delegating `relay_gce_edge_acme_domain` to `relay_gce_edge_acme_name_servers`;
-   - the `acme_cname` record from `relay_gce_passthrough_edges`.
-3. **Wait** for `[orca-relay-edge] certificate published` in the `orca-relay-edge-acme` log.
-4. **Probe** with the cell's name pinned to the edge IP. For example,
+4. **Wait** for `[orca-relay-edge] certificate published` in the `orca-relay-edge-acme` log.
+5. **Probe** with the cell's name pinned to the edge IP. For example,
    `curl --resolve <host>:443:<edge IP> https://<host>/health` must return 200 with a certificate
    that validates against system roots.
-5. **Cut over:** Cloudflare `<host> A <edge IP>`, TTL 60, DNS-only. It overrides the wildcard for
+6. **Cut over:** Cloudflare `<host> A <edge IP>`, TTL 60, DNS-only. It overrides the wildcard for
    that one name.
 
 ## Roll back
 
 Delete the `<host>` A record. Within its 60 s TTL, new resolutions return to the wildcard and the
 load balancer. Streams already on the edge stay up until they reconnect. To remove the edge, run a
-targeted destroy of the step-1 targets and delete the two Cloudflare records.
+targeted destroy of the step-1 and step-3 targets and delete the two Cloudflare records.
 
 ## Watch
 

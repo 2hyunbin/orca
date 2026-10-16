@@ -309,7 +309,12 @@ resource "google_monitoring_alert_policy" "relay_edge_certificate_expiry" {
     display_name = "Certificate served for an edge cell hostname expires within 21 days"
 
     condition_threshold {
-      filter          = "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\""
+      # Scoped to these checks: the project's other uptime checks are not edge certificates.
+      filter = join(" AND ", [
+        "resource.type=\"uptime_url\"",
+        "metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\"",
+        "metric.label.\"check_id\"=one_of(${join(",", [for check in google_monitoring_uptime_check_config.relay_edge_cell : "\"${check.uptime_check_id}\""])})"
+      ])
       comparison      = "COMPARISON_LT"
       threshold_value = 21
       duration        = "600s"
