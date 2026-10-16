@@ -24,6 +24,17 @@ export type PagedRemoteFileRead =
   | { kind: 'unsupported' }
   | { kind: 'too_large'; size: number }
 
+/** Captures the pairing once, before the first call, so a re-pair cannot switch hosts mid-read. */
+export function pinRemoteFileAddress(address: RuntimeRemoteFileAddress): RuntimeRemoteFileAddress {
+  return {
+    ...address,
+    expectedEnvironmentPairingRevision: captureRuntimeEnvironmentRequestRevision(
+      address.target.environmentId,
+      address.expectedEnvironmentPairingRevision
+    )
+  }
+}
+
 /**
  * Reads a whole remote file with `files.readChunk`, for files too large for one RPC reply
  * (`files.read` stops at 512 KiB, `files.readPreview` at about 3 MB). No wire change: both
@@ -32,13 +43,7 @@ export type PagedRemoteFileRead =
 export async function readRemoteFileInChunks(
   address: RuntimeRemoteFileAddress
 ): Promise<PagedRemoteFileRead> {
-  const remote: RuntimeRemoteFileAddress = {
-    ...address,
-    expectedEnvironmentPairingRevision: captureRuntimeEnvironmentRequestRevision(
-      address.target.environmentId,
-      address.expectedEnvironmentPairingRevision
-    )
-  }
+  const remote = pinRemoteFileAddress(address)
   const before = await nullWhenUnsupported(() => statRemoteRuntimeFile(remote))
   if (!before) {
     return { kind: 'unsupported' }
@@ -85,15 +90,19 @@ export async function readRemoteFileInChunks(
 
 /** `files.readPreview`, falling back to a chunked read when the file is too large for one reply. */
 export async function readRemoteFilePreview(
-  remote: RuntimeRemoteFileAddress,
+  address: RuntimeRemoteFileAddress,
   options: { pageOversized: boolean }
 ): Promise<RuntimeFilePreviewResult> {
+  const remote = pinRemoteFileAddress(address)
   try {
     return await callRuntimeRpc<RuntimeFilePreviewResult>(
       remote.target,
       'files.readPreview',
       { worktree: remote.worktree, relativePath: remote.relativePath },
-      { timeoutMs: 15_000 }
+      {
+        timeoutMs: 15_000,
+        expectedEnvironmentPairingRevision: remote.expectedEnvironmentPairingRevision
+      }
     )
   } catch (error) {
     if (

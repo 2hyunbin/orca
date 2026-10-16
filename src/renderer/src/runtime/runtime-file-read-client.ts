@@ -24,6 +24,7 @@ import type { LocalFileAccess } from '../../../shared/local-file-access'
 import { readRuntimeTerminalArtifactContent } from './runtime-terminal-artifact-read'
 import {
   pagedTextFileResult,
+  pinRemoteFileAddress,
   readRemoteFileInChunks,
   readRemoteFilePreview
 } from './runtime-paged-file-read'
@@ -78,14 +79,21 @@ export async function readRuntimeFileContent({
     throw new Error('Remote file is outside the owning runtime worktree')
   }
 
-  const worktree = scratch?.worktreeSelector ?? toRuntimeWorktreeSelector(worktreeId)
+  const remote = pinRemoteFileAddress({
+    target,
+    worktree: scratch?.worktreeSelector ?? toRuntimeWorktreeSelector(worktreeId),
+    relativePath: readPath
+  })
   let result: RuntimeFileReadResult
   try {
     result = await callRuntimeRpc<RuntimeFileReadResult>(
       target,
       'files.read',
-      { worktree, relativePath: readPath },
-      { timeoutMs: 15_000 }
+      { worktree: remote.worktree, relativePath: readPath },
+      {
+        timeoutMs: 15_000,
+        expectedEnvironmentPairingRevision: remote.expectedEnvironmentPairingRevision
+      }
     )
   } catch (err) {
     // Why: files.read rejects binary paths with the typed 'binary_file' error; fall
@@ -93,17 +101,14 @@ export async function readRuntimeFileContent({
     // Match the exact typed error so an unrelated failure can't spoof the fallback.
     if (err instanceof RuntimeRpcCallError && err.message === 'binary_file') {
       // Why: baseline checks call this too and discard binary content, so paging is opt-in.
-      return readRemoteFilePreview(
-        { target, worktree, relativePath: readPath },
-        { pageOversized: pageOversizedBinary === true }
-      )
+      return readRemoteFilePreview(remote, { pageOversized: pageOversizedBinary === true })
     }
     throw err
   }
   if (result.truncated) {
     // Why: files.read stops at 512 KiB to fit one reply; a truncated payload saved as
     // editable content would drop the rest of the file, so read the whole file in chunks.
-    const paged = await readRemoteFileInChunks({ target, worktree, relativePath: readPath })
+    const paged = await readRemoteFileInChunks(remote)
     if (paged.kind === 'ok') {
       return pagedTextFileResult(paged.bytes)
     }

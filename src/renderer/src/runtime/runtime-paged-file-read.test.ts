@@ -275,6 +275,24 @@ describe('remote reads larger than one RPC reply', () => {
     expect(paged.every((call) => call.expectedEnvironmentPairingRevision === 7)).toBe(true)
   })
 
+  it('keeps the pairing of the first read when a re-pair lands during it', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 7 }])
+    serveRemoteFile('report.html', { bytes: htmlBytes(2 * MB) })
+    const serve = runtimeEnvironmentCall.getMockImplementation()
+    runtimeEnvironmentCall.mockImplementation((request: RuntimeRpcRequest) => {
+      if (request.method === 'files.read') {
+        replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 8 }])
+      }
+      return serve?.(request)
+    })
+
+    await readRuntimeFileContent(remote('report.html'))
+
+    const calls = runtimeEnvironmentCall.mock.calls.map(([request]) => request)
+    expect(calls.length).toBeGreaterThan(3)
+    expect(calls.every((call) => call.expectedEnvironmentPairingRevision === 7)).toBe(true)
+  })
+
   it('stops when the host never reports EOF', async () => {
     const bytes = htmlBytes(2 * MB)
     serveRemoteFile('report.html', {
