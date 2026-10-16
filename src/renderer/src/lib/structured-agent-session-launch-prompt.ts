@@ -6,7 +6,7 @@ import { agentSessionWriteNoticeText } from '@/components/native-chat/agent-sess
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import type { StructuredAgentSessionFirstMessage } from '../../../shared/structured-agent-session-create'
 import { StructuredAgentSessionCreateRefusalError, StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
-import { agentSessionThrownFailure } from '../../../shared/agent-session-write-failure'
+import { structuredLaunchFailure } from './structured-agent-session-launch-failure'
 import {
   dropStructuredAgentSessionSends,
   reserveStructuredAgentSessionSend,
@@ -306,7 +306,7 @@ export function settleStructuredAgentLaunchPrompt(args: {
       if (prompt?.createOwned) {
         prompt.createSend?.settle(
           error instanceof StructuredAgentSessionCreateRefusalError
-            ? { kind: 'refused', failure: agentSessionThrownFailure(error, error.code) }
+            ? { kind: 'refused', failure: structuredLaunchFailure(error) ?? { kind: 'failed' } }
             : { kind: 'unconfirmed' }
         )
       }

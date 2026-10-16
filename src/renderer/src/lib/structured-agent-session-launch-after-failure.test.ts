@@ -144,7 +144,12 @@ const fresh = launchIntent('session-new')
 
 async function refuseFirstLaunch(): Promise<void> {
   mocks.createIntent.mockReturnValueOnce(failed).mockReturnValueOnce(fresh)
-  mocks.launch.mockRejectedValueOnce(new StructuredAgentSessionCreateRefusalError('unsupported'))
+  mocks.launch.mockImplementationOnce(async (intent: StructuredAgentSessionLaunchIntent) => {
+    await Promise.resolve()
+    const issue = await intent.prepareCreate?.()
+    issue?.()
+    throw new StructuredAgentSessionCreateRefusalError('unsupported')
+  })
   startStructuredAgentLaunch(WORKTREE_ID, 'codex', { requestId: 'request-1', prompt: 'first task' })
   await flushLaunchSettlement()
   expect(getStructuredAgentSessionLaunchLifecycle(WORKTREE_ID, failed.sessionId)).toBe('failed')
@@ -153,6 +158,8 @@ async function refuseFirstLaunch(): Promise<void> {
 describe('a new launch after a failed one', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    delete failed.createPrepared
+    delete fresh.createPrepared
     localStorage.clear()
     resetStructuredAgentLaunchPersistenceForTests()
     resetStructuredAgentLaunchRegistryForTests()

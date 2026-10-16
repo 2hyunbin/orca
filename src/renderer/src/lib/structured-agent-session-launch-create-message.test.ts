@@ -174,7 +174,11 @@ describe('the first message owned by create', () => {
       const create = deferred<unknown>()
       const legacy = scenario.startsWith('legacy')
       mocks.supports.mockReturnValue(scenario === 'expiredDiscovery' ? discovery.promise : Promise.resolve(!legacy))
-      mocks.call.mockReturnValue(create.promise)
+      let issuedAt = 0
+      mocks.call.mockImplementation(() => {
+        issuedAt = Date.now()
+        return create.promise
+      })
       allocateNativeChatNewDraft(sessionId, { owner: { workspaceId: 'workspace-1', executionHostId: 'local' }, agent: 'codex', groupId: 'group-1', options: {} })
       const storedSource = { ...source, savedAt: 123, owner: { workspaceId: 'workspace-1', executionHostId: 'local' as const }, unsavedText: 'bookkeeping' }
       const prompt = stageStructuredLaunchPrompt(sessionId, source.text, {
@@ -246,7 +250,7 @@ describe('the first message owned by create', () => {
         ] } })
         expect(params.options).toEqual({ model: 'picked' })
         updateNativeChatComposerDraft(scope, { text: 'newer edit' }, 'immediate')
-        await vi.advanceTimersByTimeAsync(29_999)
+        await vi.advanceTimersByTimeAsync(issuedAt + 29_999 - Date.now())
         expect(getStructuredAgentSessionPendingSends(sessionId)[0]?.phase).toBe('sending')
         create.resolve(created())
         await result
