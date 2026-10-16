@@ -751,12 +751,12 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       // The surviving tail of `echo hi; rm -rf x`: reaching the fresh shell would
       // let the user's own Enter run `rm -rf x` (#10065 follow-up).
       sendTerminalInputThroughPane(pane, 'cho hi; rm -rf x')
-      expect(transport.sendInput).not.toHaveBeenCalledWith('cho hi; rm -rf x')
+      expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('cho hi; rm -rf x')
       // A program that queries during reattach hangs if its reply is dropped.
       sendTerminalInputThroughPane(pane, '\x1b[3;1R')
       expect(transport.sendInputImmediate).toHaveBeenCalledWith('\x1b[3;1R')
       sendTerminalInputThroughPane(pane, '\r')
-      expect(transport.sendInput).not.toHaveBeenCalledWith('\r')
+      expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\r')
       // The terminator disarmed it, so the next real command reaches the shell.
       sendTerminalInputThroughPane(pane, 'ls\r')
       expect(transport.sendInput).toHaveBeenCalledWith('ls\r', 'query-reply')
