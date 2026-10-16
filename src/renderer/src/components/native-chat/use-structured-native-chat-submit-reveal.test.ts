@@ -40,7 +40,7 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
 })
 
 // STA-10671: an older host held for its permission mode would run a queued card unprompted.
-it('sends no queued card on a host held for its permission mode', async () => {
+it('sends no queued card and retries no start on a host held for its permission mode', async () => {
   const queuedMessages = {
     queueCapable: true,
     clearCapable: true,
@@ -57,8 +57,9 @@ it('sends no queued card on a host held for its permission mode', async () => {
     steerNewest: vi.fn(() => true)
   }
   const controller = { respond: vi.fn(async () => null), queuedMessages }
+  const retryLaunch = vi.fn()
   const { result } = renderHook(() =>
-    useStructuredNativeChatSubmitReveal(controller, () => undefined, true)
+    useStructuredNativeChatSubmitReveal(controller, retryLaunch, true)
   )
 
   await act(() => result.current.queuedMessages.resume())
@@ -67,4 +68,6 @@ it('sends no queued card on a host held for its permission mode', async () => {
   expect(queuedMessages.resume).not.toHaveBeenCalled()
   expect(queuedMessages.steer).not.toHaveBeenCalled()
   expect(queuedMessages.steerNewest).not.toHaveBeenCalled()
+  act(() => result.current.retryLaunch())
+  expect(retryLaunch).not.toHaveBeenCalled()
 })

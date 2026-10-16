@@ -16,6 +16,8 @@ import { subscribeRuntimeHostContactRegained } from './runtime-host-contact-rega
 export type StructuredChatHostPermissionVerdict = ChatPermissionHostVerdict | { kind: 'unverified' }
 
 const HOST_PERMISSION_READ_TIMEOUT_MS = 15_000
+/** How often a held chat asks again: the host's Agent Permissions can change with no reconnect. */
+const HELD_RECHECK_MS = 30_000
 
 /** The mode this client asks new chats to start in; on a paired host that predates per-chat modes
  *  it is the only stated intent, since that host keeps none. */
@@ -60,8 +62,8 @@ export async function readStructuredChatHostPermissionVerdict(
   })
 }
 
-/** `checking` until the host has answered; asked again on each regained contact and change of
- *  the requested mode, so an updated host is let through without a reload. */
+/** `checking` until the host has answered; asked again on each regained contact, change of the
+ *  requested mode and, while held, every 30s, so an updated host is let through without a reload. */
 export function useStructuredChatHostPermissionVerdict(
   target: RuntimeClientTarget,
   agent: string
@@ -77,6 +79,16 @@ export function useStructuredChatHostPermissionVerdict(
     key: string
     verdict: StructuredChatHostPermissionVerdict
   } | null>(null)
+  // Not in the key: a held chat stays held while it asks again.
+  const [recheck, setRecheck] = useState(0)
+  const held = answer?.key === key && answer.verdict.kind !== 'allowed'
+  useEffect(() => {
+    if (!held) {
+      return
+    }
+    const timer = setTimeout(() => setRecheck((n) => n + 1), HELD_RECHECK_MS)
+    return () => clearTimeout(timer)
+  }, [answer, held])
   useEffect(() => {
     if (!gated || environmentId === null) {
       return
@@ -100,7 +112,7 @@ export function useStructuredChatHostPermissionVerdict(
     return () => {
       cancelled = true
     }
-  }, [agent, contact, environmentId, gated, key, requested])
+  }, [agent, contact, environmentId, gated, key, recheck, requested])
   if (!gated) {
     return { kind: 'allowed' }
   }

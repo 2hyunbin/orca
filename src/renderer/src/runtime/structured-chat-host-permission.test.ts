@@ -126,3 +126,25 @@ describe('the permission verdict a chat holds', () => {
     expect(result.current).toEqual({ kind: 'checking' })
   })
 })
+
+describe('a held chat', () => {
+  it('asks again while held, so a host switched to Manual lets it through', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.callRuntimeRpc.mockResolvedValue({ settings: { agentDefaultArgs: {} } })
+      const { result } = renderHook(() => useStructuredChatHostPermissionVerdict(PAIRED, 'claude'))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(result.current.kind).toBe('refused')
+
+      mocks.callRuntimeRpc.mockResolvedValue({ settings: { agentDefaultArgs: { claude: '' } } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(result.current).toEqual({ kind: 'allowed' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

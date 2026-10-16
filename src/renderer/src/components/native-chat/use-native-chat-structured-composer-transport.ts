@@ -39,7 +39,10 @@ export function useNativeChatStructuredComposerTransport(args: {
   return useMemo((): NativeChatStructuredComposerTransport => {
     const threadGoal = controller.threadGoal
     const setThreadGoalObjective = threadGoal?.hostChanges
-      ? (objective: string) => threadGoal.change({ kind: 'set', objective })
+      ? (objective: string) =>
+          sendBlockedReason === null
+            ? threadGoal.change({ kind: 'set', objective })
+            : Promise.resolve(false)
       : null
     return {
       send: (text, attachments) =>
