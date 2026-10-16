@@ -218,12 +218,12 @@ export function setWorktreeMetaForHost(
   meta: Partial<WorktreeMeta> & WorkspaceAttachmentMutation
 ): WorktreeMeta {
   const state = runtime.state
-  migrateLegacyWorktreeMetadata(state, worktreeId, executionHostId)
   const alias = composeWorktreeHostIdentity(executionHostId, worktreeId)
   const identityKeys = state.worktreeIdentityAliases?.[alias] ?? []
   if (identityKeys.length > 1 && meta.instanceId === undefined) {
     throw new Error('Worktree identity is ambiguous for this host and locator.')
   }
+  migrateLegacyWorktreeMetadata(state, worktreeId, executionHostId)
   const existingIdentityKey = resolveAliasIdentityKey(state, alias)
   const existingIdentityMeta = existingIdentityKey
     ? state.worktreeMetaByIdentity?.[existingIdentityKey]

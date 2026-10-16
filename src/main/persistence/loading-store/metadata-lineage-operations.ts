@@ -2,7 +2,6 @@ import { removeOwnedWorktreeMetadata } from './worktree-metadata-removal'
 import {
   initializeCanonicalLineage,
   ownedLineageEdges,
-  savedLineageOwners,
   refreshLegacyLineage,
   removeCanonicalLineage,
   writeCanonicalLineage
@@ -14,10 +13,18 @@ import {
 } from '../../../shared/worktree/lineage-edge'
 import type { WorkspaceAttachmentMutation } from '../../../shared/workspace-attachment-mutation'
 import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
-import type { WorkspaceLineage, WorktreeLineage } from '../../../shared/worktree/lineage-types'
+import type {
+  LineageEdge,
+  WorkspaceLineage,
+  WorktreeLineage
+} from '../../../shared/worktree/lineage-types'
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import type { Repo } from '../../../shared/repo-types'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  getRepoExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 
 import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteSchedulingOperations } from './write-scheduling'
@@ -40,7 +47,15 @@ import {
   type NativeLocalWorktreeMetadataScanExpectation
 } from '../tracking-repos/missing-local-worktree-metadata-pruning'
 
-type MetadataLineageOperationsRuntime = Pick<StoreRuntimeState, 'state'>
+export type LineageSnapshot = {
+  stored: readonly LineageEdge[]
+  owned: readonly LineageEdge[]
+  incident: ReadonlyMap<string, readonly LineageEdge[]>
+}
+type MetadataLineageOperationsRuntime = Pick<
+  StoreRuntimeState,
+  'state' | 'lineageSnapshot' | 'durableMutationPhase'
+>
 
 const metadataLineageOperationsContext = Symbol('MetadataLineageOperations')
 type MetadataLineageOperationsContext = {
@@ -157,21 +172,59 @@ export class MetadataLineageOperations {
     return removed
   }
 
-  getLineageEdges(mode?: 'stored') {
-    const state = this[metadataLineageOperationsContext].runtime.state
-    if (state.lineageByChildInstance && Object.keys(state.lineageByChildInstance).length === 0) {
-      return []
+  getLineageSnapshot(): LineageSnapshot {
+    const { runtime } = this[metadataLineageOperationsContext]
+    if (!runtime.durableMutationPhase && runtime.lineageSnapshot) {
+      return runtime.lineageSnapshot
     }
-    const owners =
-      mode === 'stored' && state.lineageByChildInstance !== undefined
-        ? undefined
-        : savedLineageOwners(state)
+    const state = runtime.state
     if (state.lineageByChildInstance === undefined) {
-      initializeCanonicalLineage(state, owners)
+      initializeCanonicalLineage(state)
     }
-    return mode === 'stored'
-      ? Object.values(state.lineageByChildInstance ?? {})
-      : ownedLineageEdges(state, owners)
+    const freeze = (edge: LineageEdge) =>
+      Object.freeze({
+        ...edge,
+        child: Object.freeze({ ...edge.child }),
+        parent: Object.freeze({ ...edge.parent }),
+        capture: Object.freeze({ ...edge.capture })
+      })
+    const stored = Object.freeze(Object.values(state.lineageByChildInstance ?? {}).map(freeze))
+    const owned = Object.freeze(stored.length ? ownedLineageEdges(state).map(freeze) : [])
+    const incident = new Map<string, LineageEdge[]>()
+    for (const edge of owned) {
+      for (const key of new Set(
+        [edge.child.locator, edge.parent.locator]
+          .filter((locator) => locator.startsWith('worktree:'))
+          .map((locator) =>
+            JSON.stringify([locator.slice('worktree:'.length).split('::')[0], edge.child.hostId])
+          )
+      )) {
+        const slice = incident.get(key) ?? []
+        slice.push(edge)
+        incident.set(key, slice)
+      }
+    }
+    for (const slice of incident.values()) {
+      Object.freeze(slice)
+    }
+    const snapshot = Object.freeze({ stored, owned, incident })
+    if (!runtime.durableMutationPhase) {
+      runtime.lineageSnapshot = snapshot
+    }
+    return snapshot
+  }
+
+  getLineageEdges(mode?: 'stored') {
+    const snapshot = this.getLineageSnapshot()
+    return mode === 'stored' ? snapshot.stored : snapshot.owned
+  }
+
+  getRepoLineageEdges(repo: Repo) {
+    return (
+      this.getLineageSnapshot().incident.get(
+        JSON.stringify([repo.id, getRepoExecutionHostId(repo)])
+      ) ?? []
+    )
   }
 
   getWorktreeLineage(worktreeId: string, instanceId?: string): WorktreeLineage | undefined {

@@ -41,6 +41,8 @@ export type RuntimeStore = {
   getWorktreeMetaForHost?: Store['getWorktreeMetaForHost']
   removeWorktreeMeta: Store['removeWorktreeMeta']
   getLineageEdges?: Store['getLineageEdges']
+  getLineageSnapshot?: Store['getLineageSnapshot']
+  getRepoLineageEdges?: Store['getRepoLineageEdges']
   getWorktreeLineage?: Store['getWorktreeLineage']
   getAllWorktreeLineage?: Store['getAllWorktreeLineage']
   setWorktreeLineage?: Store['setWorktreeLineage']

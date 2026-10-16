@@ -12,6 +12,7 @@ const SAVE_MAX_WAIT_MS = 5_000
 
 type WriteSchedulingOperationsRuntime = Pick<
   StoreRuntimeState,
+  | 'lineageSnapshot'
   | 'activeViewPreference'
   | 'automationListProjectionCache'
   | 'dirtyProfileStateDomains'
@@ -60,6 +61,7 @@ export function scheduleSave(
   writtenHostId?: ExecutionHostId
 ): void {
   const { runtime, writes } = owner[writeSchedulingOperationsContext]
+  runtime.lineageSnapshot = null
   notifyWorkspaceSessionWritten(runtime, dirtyDomains, writtenHostId)
   runtime.automationListProjectionCache = null
   const trackedDomains = runtime.dirtyProfileStateDomains

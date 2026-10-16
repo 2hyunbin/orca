@@ -211,10 +211,12 @@ describe('selective profile domain serialization', () => {
       }
     })
     const domains = new Set(['workspaceSession', 'automations', 'worktreeIdentityAliases'])
-    const serialization = new StateSerializationSecretHandlingOperations({
+    const runtime = {
       state,
+      lineageSnapshot: { stored: [], owned: [], incident: new Map() },
       protectedSecrets: new ProtectedSecretPersistence()
-    })
+    }
+    const serialization = new StateSerializationSecretHandlingOperations(runtime)
 
     expect(serialization.buildStateDomainsToSave(domains)?.replacements).toEqual([
       { domain: 'workspaceSession', payload: '"session"' },

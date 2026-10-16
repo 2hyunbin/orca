@@ -2,6 +2,7 @@ import type { StoreRuntimeState } from './store-runtime-state'
 
 export type PrimaryStateWriteOperationsRuntime = Pick<
   StoreRuntimeState,
+  | 'lineageSnapshot'
   | 'activeViewPreference'
   | 'dataFile'
   | 'dirtyProfileStateDomains'

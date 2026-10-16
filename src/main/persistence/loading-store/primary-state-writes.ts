@@ -106,10 +106,12 @@ export class PrimaryStateWriteOperations {
   private runAdmittedMutationCallback<T>(phase: 'mutate' | 'rollback', callback: () => T): T {
     const { runtime } = this[primaryStateWriteOperationsContext]
     // Finalization drains admitted mutations; the disk wait must not admit new snapshots.
+    runtime.lineageSnapshot = null
     runtime.durableMutationPhase = phase
     try {
       return callback()
     } finally {
+      runtime.lineageSnapshot = null
       runtime.durableMutationPhase = null
       // Durable writers may edit sessions without scheduling a save; a rollback republishes.
       notifyWorkspaceSessionWritten(runtime)

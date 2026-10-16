@@ -16,6 +16,7 @@ type WorktreeLineagePruningStore = Pick<Store, 'getRepos' | 'getWorktreeMeta' | 
     Pick<
       Store,
       | 'getLineageEdges'
+      | 'getRepoLineageEdges'
       | 'getAllWorktreeMeta'
       | 'getAllWorktreeMetaForHost'
       | 'setWorktreeMetaForHost'
@@ -72,9 +73,9 @@ export function pruneLineageForMissingRepoWorktrees(
   ) {
     return
   }
-  const ownEdges = store
-    .getLineageEdges?.()
-    .filter((edge) => edge.child.hostId === getRepoExecutionHostId(repo))
+  const ownEdges =
+    store.getRepoLineageEdges?.(repo) ??
+    store.getLineageEdges?.().filter((edge) => edge.child.hostId === getRepoExecutionHostId(repo))
   const worktreeLineage = ownEdges
     ? Object.fromEntries(
         ownEdges.flatMap((edge) => {

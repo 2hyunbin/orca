@@ -23,6 +23,10 @@ import { initializeCanonicalLineage } from './canonical-workspace-lineage'
 import { closeTestStores, createSqliteTestStore, makeRepo } from '../../persistence-test-harness'
 import { Store } from './store'
 import { RuntimeWorktreeLineageController } from '../../runtime/runtime-worktree-lineage-controller'
+import { projectWorktreeLineageWithHostPeers } from '../../worktree-lineage-host-peers'
+import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
+import { readSavedWorktreeLineage } from '../../saved-worktree-lineage-catalog'
+import { getWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import { mergeWorktree } from '../../ipc/worktree-metadata-merge'
 
 vi.mock('electron', () => ({
@@ -44,7 +48,9 @@ function edge(instanceId: string, parent: string, createdAt = 1): LineageEdge {
 function savedStore(state = getDefaultPersistedState(tmpdir())) {
   const dataFile = join(mkdtempSync(join(tmpdir(), 'lineage-')), 'orca-data.json')
   writeFileSync(dataFile, JSON.stringify(state))
-  return { store: createSqliteTestStore(Store, { dataFile }), dataFile }
+  const store = createSqliteTestStore(Store, { dataFile })
+  store.getLineageSnapshot()
+  return { store, dataFile }
 }
 const hosts = ['local', 'ssh:remote', 'ssh:third'] as const
 function registeredState() {
@@ -240,4 +246,66 @@ it('prunes only the derived owner even when saved hints name another host', () =
   }
   pruneWorktreeStateForRepo(state, 'repo', 'local', () => {})
   expect(Object.keys(state.lineageByChildInstance)).toEqual(['remote'])
+})
+
+it('reuses the saved graph and preserves live overlays that break a cached cycle', () => {
+  const state = registeredState()
+  state.worktreeMeta = Object.fromEntries([0, 1, 2].map((i) => [`repo::/${i}`, meta(String(i))]))
+  state.lineageByChildInstance = Object.fromEntries(
+    [0, 1, 2].map((i) => [String(i), edge(String(i), String((i + 1) % 3), i)])
+  )
+  const { store } = savedStore(state)
+  const rows = [0, 1, 2].map((i) =>
+    mergeWorktree(
+      'repo',
+      { path: `/${i}`, head: '', branch: '', isBare: false, isMainWorktree: false },
+      meta(String(i))
+    )
+  )
+  const snapshot = store.getLineageSnapshot()
+  for (const input of [
+    [rows[0]],
+    [{ ...rows[0], instanceId: 'rotated' }, rows[1]],
+    [{ ...rows[0], instanceId: undefined }, rows[1]],
+    [rows[0], rows[0]],
+    [{ ...rows[0], id: 'repo:://0' }],
+    [rows[2], rows[0]]
+  ]) {
+    const keys = new Set(input.map(getWorktreeHostIdentity))
+    const expected = projectResolvedWorktreeLineage(
+      input,
+      readSavedWorktreeLineage(store),
+      rows.filter((row) => !keys.has(getWorktreeHostIdentity(row)))
+    )
+    expect(projectWorktreeLineageWithHostPeers(store, store.getRepos()[0], input)).toEqual(expected)
+    expect(store.getLineageSnapshot()).toBe(snapshot)
+  }
+  store.updateSettings({ theme: 'dark' })
+  expect(store.getLineageSnapshot()).not.toBe(snapshot)
+  const raw = store.getLineageEdges('stored')
+  expect(raw).toHaveLength(3)
+  expect(Object.isFrozen(raw[0].child)).toBe(true)
+})
+
+it('refuses ambiguous metadata before migration and refreshes the activity-ranked alias', async () => {
+  const state = registeredState()
+  state.worktreeIdentityAliases = { [`local|${id}`]: ['a', 'b'] }
+  state.worktreeMetaByIdentity = { a: meta('a'), b: meta('b') }
+  const { store } = savedStore(state)
+  store.getAllWorktreeMeta()[id] = mergeWorktreeMetaForWrite(undefined, {})
+  const before = structuredClone(store.getAllWorktreeMeta())
+  const snapshot = store.getLineageSnapshot()
+  expect(() => store.setWorktreeMetaForHost(id, 'local', { displayName: 'refused' })).toThrow(
+    'ambiguous'
+  )
+  expect(store.getAllWorktreeMeta()).toEqual(before)
+  expect(store.getLineageSnapshot()).toBe(snapshot)
+  const winner = store.getWorktreeMetaForHost(id, 'local')
+  await store.runDurableMutation(() => {
+    if (winner) {
+      winner.lastActivityAt = -1
+    }
+    return { value: undefined, persist: false }
+  })
+  expect(store.getWorktreeMetaForHost(id, 'local')?.instanceId).toBe('a')
 })

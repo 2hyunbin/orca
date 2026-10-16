@@ -1,3 +1,4 @@
+import type { LineageSnapshot } from './metadata-lineage-operations'
 import { removeStaleDurableWriteTempFiles } from '../../durable-file-write'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -50,6 +51,7 @@ export class StoreRuntimeState {
   readonly paneShellPath: (defaultShell: string | undefined) => string
   /** Worktrees whose moved shell history waits for their live shells to exit. */
   readonly deferredShellHistoryWorktreeIds = new Set<string>()
+  lineageSnapshot: LineageSnapshot | null = null
   automationListProjectionCache: AutomationListProjectionCache | null = null
   activeViewPreference!: ActiveViewPreference
   readonly terminalScrollbackSnapshotStorage: TerminalScrollbackSnapshotStorage

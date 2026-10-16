@@ -11,6 +11,7 @@ import type { PendingProfileStateFlushOptions } from './profile-state-flush-life
 
 type WriteFlushBarrierOperationsRuntime = Pick<
   StoreRuntimeState,
+  | 'lineageSnapshot'
   | 'activeViewPreference'
   | 'automationListProjectionCache'
   | 'dataFile'
@@ -49,6 +50,7 @@ export class WriteFlushBarrierOperations {
 
   flush(): void {
     const { runtime, writes } = this[writeFlushBarrierOperationsContext]
+    runtime.lineageSnapshot = null
     runtime.automationListProjectionCache = null
     if (runtime.quitFlushStarted || runtime.profileMaintenancePending) {
       return
