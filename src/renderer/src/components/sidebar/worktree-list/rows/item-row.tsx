@@ -57,8 +57,8 @@ export type WorktreeItemRowContext = {
   ) => void
   onCardDragStart: (
     event: React.DragEvent<HTMLDivElement>,
-    worktreeId: string,
-    draggedIds: readonly string[]
+    worktree: Worktree,
+    draggedWorktrees: readonly Worktree[]
   ) => void
   onCardDragEnd: () => void
 }
@@ -121,8 +121,8 @@ export function renderWorktreeItemRow(
   const worktreeIdentity = getWorktreeHostIdentity(itemRow.worktree)
   const isLineageDropTarget =
     ctx.worktreeDragState.draggingWorktreeId &&
-    (ctx.worktreeDragState.lineageDropTargetId === itemRow.worktree.id ||
-      ctx.nativeLineageDropTargetId === itemRow.worktree.id)
+    (ctx.worktreeDragState.lineageDropTargetId === worktreeIdentity ||
+      ctx.nativeLineageDropTargetId === worktreeIdentity)
   const isActiveWorktree =
     ctx.activeWorktreeId === itemRow.worktree.id &&
     (!ctx.activeWorkspaceExecutionHostId ||

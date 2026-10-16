@@ -146,10 +146,16 @@ export class RuntimeWorktreeLineageController {
     if (!store?.getWorktreeLineage || !store.setWorktreeLineage) {
       return
     }
+    const existing = new Set([
+      ...(store.getLineageEdges?.() ?? []).map((edge) => edge.child.instanceId),
+      ...Object.values(store.getAllWorktreeLineage?.() ?? {}).map((row) => row.worktreeInstanceId),
+      ...Object.values(store.getAllWorkspaceLineage?.() ?? {}).flatMap((row) =>
+        row.childInstanceId ? [row.childInstanceId] : []
+      )
+    ])
     for (const worktree of await this.deps.listResolvedWorktrees()) {
       if (
-        store.getWorktreeLineage(worktree.id, worktree.instanceId) ||
-        store.getLineageEdges?.().some((edge) => edge.child.instanceId === worktree.instanceId) ||
+        existing.has(worktree.instanceId ?? '') ||
         !worktree.instanceId ||
         isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
@@ -185,18 +191,25 @@ export class RuntimeWorktreeLineageController {
     }
   }
 
-  async listLineageEdges() {
+  async listLineageSnapshot() {
     await this.hydrate()
-    return this.deps.getStore()?.getLineageEdges?.() ?? []
+    const store = this.deps.getStore()
+    return {
+      edges: store?.getLineageEdges?.() ?? [],
+      lineage: store?.getAllWorktreeLineage?.() ?? {},
+      workspaceLineage: store?.getAllWorkspaceLineage?.() ?? {}
+    }
+  }
+
+  async listLineageEdges() {
+    return (await this.listLineageSnapshot()).edges
   }
 
   async listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {
-    await this.hydrate()
-    return this.deps.getStore()?.getAllWorktreeLineage?.() ?? {}
+    return (await this.listLineageSnapshot()).lineage
   }
 
   async listWorkspaceLineage(): Promise<Record<WorkspaceKey, WorkspaceLineage>> {
-    await this.hydrate()
-    return this.deps.getStore()?.getAllWorkspaceLineage?.() ?? {}
+    return (await this.listLineageSnapshot()).workspaceLineage
   }
 }

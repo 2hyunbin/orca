@@ -4,12 +4,13 @@ import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { getIndexedAllWorktrees, getIndexedWorktreeById } from '@/store/worktree-repo-index'
+import { getIndexedAllWorktrees, getIndexedWorktreesById } from '@/store/worktree-repo-index'
 import { filterWorkspaceRows } from '../../../../shared/workspace-view/workspace-row-filters'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   getFilteredLineageAncestorIndex,
+  getLineageAncestorIndex,
   getSortedWorktreeRankIndex
 } from './visible-worktree-indexes'
 import {
@@ -54,8 +55,7 @@ export function computeVisibleWorktrees(
 ): Worktree[] {
   let all: Worktree[] = getIndexedAllWorktrees(worktreesByRepo)
 
-  // Why: sidebar lineage is structural. Archived workspaces stay hidden, but
-  // every other valid ancestor can bypass filters so children never orphan.
+  // Ancestors obey host and project boundaries; the explicit send target can bypass them.
   const boundaryFilters = sidebarWorkspaceRowFilters(opts)
   const facts = buildDesktopWorkspaceRowFactReader(opts)
   const lineageAncestorById = getFilteredLineageAncestorIndex(worktreesByRepo, {
@@ -74,15 +74,13 @@ export function computeVisibleWorktrees(
   )
 
   if (opts.forcedVisibleWorktreeIds && opts.forcedVisibleWorktreeIds.length > 0) {
-    const includedIds = new Set(all.map((worktree) => worktree.id))
+    const unfiltered = getLineageAncestorIndex(worktreesByRepo)
+    const includedIds = new Set(all.map(getWorktreeHostIdentity))
     for (const worktreeId of opts.forcedVisibleWorktreeIds) {
-      const worktree = getIndexedWorktreeById(worktreesByRepo, worktreeId)
-      if (
-        worktree &&
-        lineageAncestorById.has(getWorktreeHostIdentity(worktree)) &&
-        !includedIds.has(worktreeId)
-      ) {
-        includedIds.add(worktreeId)
+      const rows = getIndexedWorktreesById(worktreesByRepo, worktreeId)
+      const worktree = unfiltered.get(worktreeId) ?? (rows.length === 1 ? rows[0] : undefined)
+      if (worktree && !worktree.isArchived && !includedIds.has(getWorktreeHostIdentity(worktree))) {
+        includedIds.add(getWorktreeHostIdentity(worktree))
         all.push(worktree)
       }
     }

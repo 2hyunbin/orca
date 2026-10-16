@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
+import { computeVisibleWorktreeIds, computeVisibleWorktrees } from './compute-visible-worktrees'
 import { getPairedDeviceIdsByEnvironment } from '../../../../shared/workspace-creator-visibility'
 import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -908,4 +908,24 @@ describe('computeVisibleWorktreeIds', () => {
 
     expect(result).toEqual([parent.id, child.id])
   })
+})
+
+it('forces only the explicit send target across project and host filters', () => {
+  const local = { ...makeWorktree('same'), hostId: 'local' as const }
+  const remote = {
+    ...makeWorktree('same', 'repo2'),
+    hostId: 'ssh:remote' as const,
+    instanceId: 'remote'
+  }
+  const child = makeWorktree('child')
+  const rows = { repo1: [local, child], repo2: [remote] }
+  const opts = visibleOptions({
+    filterRepoIds: ['repo1'],
+    visibleWorkspaceHostIds: ['local'],
+    worktreeLineageById: { 'local|child': makeWorktreeLineage(child, remote) }
+  })
+  expect(computeVisibleWorktrees(rows, [], opts)).toEqual([local, child])
+  expect(
+    computeVisibleWorktrees(rows, [], { ...opts, forcedVisibleWorktreeIds: ['ssh:remote|same'] })
+  ).toEqual([local, child, remote])
 })

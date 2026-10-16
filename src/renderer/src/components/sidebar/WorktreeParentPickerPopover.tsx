@@ -1,3 +1,6 @@
+import type { WorktreeIdentity } from '../../../../shared/worktree/identity'
+import type { AppState } from '@/store/types'
+import { getIndexedWorktreeByIdentity } from '@/store/worktree-repo-index'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, {
@@ -14,7 +17,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Command, CommandInput, CommandList } from '@/components/ui/command'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useAppStore } from '@/store'
-import { useAllWorktrees, useRepoMap, useWorktreeMap } from '@/store/selectors'
+import { useAllWorktrees, useRepoMap } from '@/store/selectors'
 import { cn } from '@/lib/utils'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { useWorktreeActivityStatuses } from './use-worktree-activity-statuses'
@@ -37,6 +40,7 @@ import { translate } from '@/i18n/i18n'
 type WorktreeParentPickerPopoverProps = {
   open: boolean
   childWorktreeId: string | null
+  childIdentity: WorktreeIdentity | undefined
   anchorElement: HTMLElement | null
   onOpenChange: (open: boolean) => void
 }
@@ -45,8 +49,9 @@ type AnchorRect = Pick<DOMRect, 'height' | 'left' | 'top' | 'width'>
 
 type SelectParentArgs = {
   childWorktreeId: string | null
+  childIdentity: WorktreeIdentity | undefined
   parentWorktreeId: string
-  assignWorktreeParent: (worktreeId: string, args: { parentWorktreeId: string }) => Promise<void>
+  assignWorktreeParent: AppState['assignWorktreeParent']
   close: () => void
   showError: (message: string) => void
 }
@@ -79,6 +84,7 @@ export function getWorktreeParentPickerFocusRestoreTarget(
 
 export function selectWorktreeParent({
   childWorktreeId,
+  childIdentity,
   parentWorktreeId,
   assignWorktreeParent,
   close,
@@ -88,15 +94,17 @@ export function selectWorktreeParent({
     return
   }
   close()
-  void assignWorktreeParent(childWorktreeId, { parentWorktreeId }).catch((error) => {
-    console.error('Failed to set parent worktree:', error)
-    showError(
-      translate(
-        'auto.components.sidebar.WorktreeParentPickerPopover.failedSetParent',
-        'Failed to set parent worktree'
+  void assignWorktreeParent(childWorktreeId, { identity: childIdentity, parentWorktreeId }).catch(
+    (error) => {
+      console.error('Failed to set parent worktree:', error)
+      showError(
+        translate(
+          'auto.components.sidebar.WorktreeParentPickerPopover.failedSetParent',
+          'Failed to set parent worktree'
+        )
       )
-    )
-  })
+    }
+  )
 }
 
 export function handleWorktreeParentPickerKeyDown({
@@ -127,7 +135,7 @@ export function handleWorktreeParentPickerKeyDown({
     if (candidate) {
       event.preventDefault()
       event.stopPropagation()
-      selectParent(candidate.identity ? `identity:${candidate.identity.key}` : candidate.id)
+      selectParent(`identity:${candidate.identity?.key ?? ''}`)
     }
   }
 }
@@ -135,11 +143,12 @@ export function handleWorktreeParentPickerKeyDown({
 export function WorktreeParentPickerPopover({
   open,
   childWorktreeId,
+  childIdentity,
   anchorElement,
   onOpenChange
 }: WorktreeParentPickerPopoverProps): React.JSX.Element | null {
   const worktrees = useAllWorktrees()
-  const byId = useWorktreeMap()
+  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
   const worktreeMap = useMemo(
     () => new Map(worktrees.map((row) => [getWorktreeHostIdentity(row), row])),
     [worktrees]
@@ -158,7 +167,9 @@ export function WorktreeParentPickerPopover({
     getAnchorRect(anchorElement)
   )
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight)
-  const child = childWorktreeId ? byId.get(childWorktreeId) : undefined
+  const child = childIdentity
+    ? getIndexedWorktreeByIdentity(worktreesByRepo, childIdentity.key)
+    : undefined
   const candidates = useMemo(
     () =>
       child
@@ -204,17 +215,30 @@ export function WorktreeParentPickerPopover({
     return () => window.clearTimeout(timerId)
   }, [open])
 
+  useEffect(() => {
+    if (open && !child) {
+      toast.error(
+        translate(
+          'auto.components.sidebar.WorktreeParentPickerPopover.failedSetParent',
+          'Failed to set parent worktree'
+        )
+      )
+      onOpenChange(false)
+    }
+  }, [child, onOpenChange, open])
+
   const handleSelect = useCallback(
     (parentWorktreeId: string) => {
       selectWorktreeParent({
         childWorktreeId,
+        childIdentity,
         parentWorktreeId,
         assignWorktreeParent,
         close: () => onOpenChange(false),
         showError: toast.error
       })
     },
-    [assignWorktreeParent, childWorktreeId, onOpenChange]
+    [assignWorktreeParent, childIdentity, childWorktreeId, onOpenChange]
   )
 
   // Why: a `position: fixed` anchor element would be laid out against the
@@ -247,7 +271,7 @@ export function WorktreeParentPickerPopover({
     getScrollElement: () => listRef.current,
     estimateSize: () => PICKER_ROW_HEIGHT,
     overscan: PICKER_ROW_OVERSCAN,
-    getItemKey: (index) => filtered[index]?.id ?? index,
+    getItemKey: (index) => filtered[index]?.identity?.key ?? index,
     // Why: the list mounts inside a popover that measures on the next frame, so
     // seed the viewport with max-h-72 to avoid a blank first paint.
     initialRect: { width: 0, height: PICKER_LIST_MAX_HEIGHT }
@@ -384,7 +408,7 @@ export function WorktreeParentPickerPopover({
                   const isHighlighted = virtualRow.index === activeIndex
                   return (
                     <div
-                      key={candidate.id}
+                      key={candidate.identity?.key}
                       id={`${optionIdPrefix}-${virtualRow.index}`}
                       role="option"
                       aria-selected={isHighlighted}
@@ -398,11 +422,7 @@ export function WorktreeParentPickerPopover({
                         transform: `translateY(${virtualRow.start}px)`
                       }}
                       onPointerMove={() => setHighlightedIndex(virtualRow.index)}
-                      onClick={() =>
-                        handleSelect(
-                          candidate.identity ? `identity:${candidate.identity.key}` : candidate.id
-                        )
-                      }
+                      onClick={() => handleSelect(`identity:${candidate.identity?.key ?? ''}`)}
                     >
                       <WorktreeParentPickerRow
                         candidate={candidate}

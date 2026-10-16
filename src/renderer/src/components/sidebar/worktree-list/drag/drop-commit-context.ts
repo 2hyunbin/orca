@@ -1,5 +1,6 @@
 import type React from 'react'
 import type {
+  Worktree,
   WorkspaceStatus,
   WorkspaceStatusDefinition
 } from '../../../../../../shared/worktree/types'
@@ -31,11 +32,14 @@ export type WorktreeDropCommitContext = {
   refreshWorktreeDragSession: () => boolean
   getEligibleLineageDropTarget: (
     target: WorktreeSidebarLineageDropTarget,
-    draggedIds: readonly string[]
+    draggedWorktrees: readonly Worktree[]
   ) => WorktreeSidebarLineageDropTarget
-  commitWorktreeLineageParentDrop: (draggedIds: readonly string[], parentId: string) => boolean
+  commitWorktreeLineageParentDrop: (
+    draggedWorktrees: readonly Worktree[],
+    target: WorktreeSidebarLineageDropTarget
+  ) => boolean
   clearReorderedWorktreeParents: (args: {
-    draggedIds: readonly string[]
+    draggedWorktrees: readonly Worktree[]
     sourceGroupKey: string
   }) => void
   clearWorktreeDrag: () => void

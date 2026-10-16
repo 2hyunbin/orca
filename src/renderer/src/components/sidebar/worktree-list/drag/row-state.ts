@@ -1,3 +1,5 @@
+import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { WorktreeIdentity } from '../../../../../../shared/worktree/identity'
 import type { WorkspaceKanbanCardTrackedDropTarget } from '../../workspace-kanban-card-pointer-drag-dom'
 import type { WorktreeSidebarDragRect } from '../../worktree-sidebar-drag-autoscroll'
 import type {
@@ -37,6 +39,7 @@ export type WorktreePointerDrag = {
   currentY: number
   worktreeId: string
   draggedIds: readonly string[]
+  draggedWorktrees: readonly Worktree[]
   reorderDraggedIds: readonly string[]
   reorderUnitDraggedIds: readonly string[]
   sourceGroupKey: string
@@ -54,6 +57,7 @@ export type WorktreePointerDrag = {
 
 export type WorktreeSidebarLineageDropTarget = WorktreeSidebarStatusDropTarget & {
   lineageParentId: string | null
+  lineageParentIdentity?: WorktreeIdentity
 }
 
 export const NO_WORKTREE_SIDEBAR_DROP_TARGET: WorktreeSidebarLineageDropTarget = {

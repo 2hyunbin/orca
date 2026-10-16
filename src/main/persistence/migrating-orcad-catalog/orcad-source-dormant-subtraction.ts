@@ -1,6 +1,13 @@
 import {
+  worktreeLineageToEdge,
+  workspaceLineageToEdge
+} from '../../../shared/worktree/lineage-edge'
+import { createOrcadMigrationSourceScope } from './orcad-source-scope'
+import { orcadSourceLineageInScope } from './orcad-source-lineage-edges'
+import {
   initializeCanonicalLineage,
-  refreshLegacyLineage
+  refreshLegacyLineage,
+  savedLineageOwners
 } from '../loading-store/canonical-workspace-lineage'
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -14,20 +21,31 @@ export function subtractOrcadMigrationSourceDormantState(
   state: PersistedState,
   manifest: OrcadMigrationManifest
 ): void {
-  initializeCanonicalLineage(state)
+  const owners = savedLineageOwners(state)
+  initializeCanonicalLineage(state, owners)
+  const scope = createOrcadMigrationSourceScope({
+    source: manifest.source,
+    catalog: manifest.payload,
+    repos: state.repos
+  })
+  const dormant = manifest.payload.dormantState
+  const transferred = dormant?.edges ?? [
+    ...(dormant?.worktreeLineage ?? []).flatMap(
+      (entry) => worktreeLineageToEdge(entry.lineage) ?? []
+    ),
+    ...(dormant?.workspaceLineage ?? []).flatMap(
+      (entry) => workspaceLineageToEdge(entry.lineage) ?? []
+    )
+  ]
+  const movedInstances = transferred
+    .filter((edge) => orcadSourceLineageInScope(state, scope, edge, owners))
+    .map((edge) => edge.child.instanceId)
   // By scope, even with no dormant state: a downgraded build may have added some since.
   subtractOrcadSourceWorktreeMetadata(state, manifest)
   subtractOrcadMigrationSourceAutomationState(state, manifest)
-  const dormant = manifest.payload.dormantState
   if (!dormant) {
     return
   }
-  const movedInstances = dormant.edges?.map((edge) => edge.child.instanceId) ?? [
-    ...dormant.worktreeLineage.map((entry) => entry.lineage.worktreeInstanceId),
-    ...dormant.workspaceLineage.flatMap((entry) =>
-      entry.lineage.childInstanceId ? [entry.lineage.childInstanceId] : []
-    )
-  ]
   for (const instance of movedInstances) {
     delete state.lineageByChildInstance?.[instance]
   }

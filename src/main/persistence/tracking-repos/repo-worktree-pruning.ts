@@ -1,9 +1,9 @@
 import {
   initializeCanonicalLineage,
-  refreshLegacyLineage
+  refreshLegacyLineage,
+  savedLineageOwners
 } from '../loading-store/canonical-workspace-lineage'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
-import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import {
@@ -23,15 +23,12 @@ export function pruneWorktreeStateForRepo(
   hostId: ExecutionHostId | null,
   pruneMobileClientTabSelections: (matchesWorktreeId: (worktreeId: string) => boolean) => void
 ): void {
-  initializeCanonicalLineage(state)
-  for (const [instance, edge] of Object.entries(state.lineageByChildInstance ?? {})) {
-    const child = parseWorkspaceKey(edge.child.locator)
-    if (
-      child?.type === 'worktree' &&
-      child.worktreeId.startsWith(`${id}::`) &&
-      (hostId === null || edge.child.hostId === hostId)
-    ) {
+  const owners = savedLineageOwners(state)
+  initializeCanonicalLineage(state, owners)
+  for (const [instance, owner] of owners) {
+    if (owner?.locator.startsWith(`${id}::`) && (hostId === null || owner.hostId === hostId)) {
       delete state.lineageByChildInstance?.[instance]
+      owners.delete(instance)
     }
   }
   const prefix = `${id}::`
@@ -138,6 +135,6 @@ export function pruneWorktreeStateForRepo(
       }
     }
   }
-  refreshLegacyLineage(state)
+  refreshLegacyLineage(state, owners)
   pruneMobileClientTabSelections(belongsToHost)
 }

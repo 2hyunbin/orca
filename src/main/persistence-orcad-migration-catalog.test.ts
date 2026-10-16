@@ -180,7 +180,7 @@ describe('orcad migration catalog persistence', () => {
       committed.getLineageEdges().map((row) => [row.child.instanceId, row])
     )
     subtractOrcadMigrationSourceDormantState(delta, input)
-    expect(delta.lineageByChildInstance).toEqual({})
+    expect(Object.keys(delta.lineageByChildInstance ?? {})).toEqual([edge.child.instanceId])
   })
 
   it('commits dormant metadata, lineage, presets, and retirement state with the receipt', async () => {

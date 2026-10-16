@@ -2,9 +2,9 @@ import { removeOwnedWorktreeMetadata } from './worktree-metadata-removal'
 import {
   initializeCanonicalLineage,
   ownedLineageEdges,
+  savedLineageOwners,
   refreshLegacyLineage,
   removeCanonicalLineage,
-  renameOwnedLineage,
   writeCanonicalLineage
 } from './canonical-workspace-lineage'
 import {
@@ -159,8 +159,9 @@ export class MetadataLineageOperations {
 
   getLineageEdges() {
     const state = this[metadataLineageOperationsContext].runtime.state
-    initializeCanonicalLineage(state)
-    return ownedLineageEdges(state)
+    const owners = savedLineageOwners(state)
+    initializeCanonicalLineage(state, owners)
+    return ownedLineageEdges(state, owners)
   }
 
   getWorktreeLineage(worktreeId: string, instanceId?: string): WorktreeLineage | undefined {
@@ -198,7 +199,6 @@ export class MetadataLineageOperations {
     const state = this[metadataLineageOperationsContext].runtime.state
     const persistedOwner = state.worktreeMeta[oldWorktreeId]?.hostId
     const mover = executionHostId ?? persistedOwner ?? LOCAL_EXECUTION_HOST_ID
-    renameOwnedLineage(state, oldWorktreeId, newWorktreeId, mover)
     const legacyChanged =
       executionHostId !== undefined &&
       persistedOwner !== undefined &&

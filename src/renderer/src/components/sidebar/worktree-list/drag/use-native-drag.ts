@@ -1,3 +1,4 @@
+import type { Worktree } from '../../../../../../shared/worktree/types'
 import { useCallback } from 'react'
 import type React from 'react'
 import { getWorkspaceKanbanSidebarDropTarget } from '../../workspace-kanban-sidebar-drop'
@@ -41,9 +42,16 @@ export function useWorktreeNativeDrag(args: {
   })
 
   const handleWorktreeCardDragStart = useCallback(
-    (event: React.DragEvent<HTMLDivElement>, worktreeId: string, draggedIds: readonly string[]) => {
+    (
+      event: React.DragEvent<HTMLDivElement>,
+      worktree: Worktree,
+      draggedWorktrees: readonly Worktree[]
+    ) => {
+      const worktreeId = worktree.id
+      const draggedIds = draggedWorktrees.map((row) => row.id)
       const sourceGroupKey =
-        ctx.worktreeDragGroups.find((group) => group.worktreeIds.includes(worktreeId))?.key ?? null
+        event.currentTarget.closest<HTMLElement>('[data-worktree-drag-group-key]')?.dataset
+          .worktreeDragGroupKey ?? null
       if (!sourceGroupKey) {
         return
       }
@@ -60,6 +68,7 @@ export function useWorktreeNativeDrag(args: {
         draggingWorktreeId: worktreeId,
         sourceGroupKey,
         draggedIds,
+        draggedWorktrees,
         reorderDraggedIds,
         reorderUnitDraggedIds,
         rects,
@@ -79,7 +88,7 @@ export function useWorktreeNativeDrag(args: {
         pointerY: null
       })
     },
-    [ctx.worktreeDragGroups, scrollRef, session, setWorktreeDragState]
+    [scrollRef, session, setWorktreeDragState]
   )
 
   const handleWorktreeDragOver = useCallback(
@@ -100,7 +109,7 @@ export function useWorktreeNativeDrag(args: {
           x: event.clientX,
           y: event.clientY
         }),
-        dragSession.draggedIds
+        dragSession.draggedWorktrees ?? []
       )
       if (target.lineageParentId) {
         event.preventDefault()
@@ -173,13 +182,13 @@ export function useWorktreeNativeDrag(args: {
               y: event.clientY
             })
           : NO_WORKTREE_SIDEBAR_DROP_TARGET,
-        dragSession.draggedIds
+        dragSession.draggedWorktrees ?? []
       )
 
       if (target.lineageParentId) {
         event.preventDefault()
         event.stopPropagation()
-        ctx.commitWorktreeLineageParentDrop(dragSession.draggedIds, target.lineageParentId)
+        ctx.commitWorktreeLineageParentDrop(dragSession.draggedWorktrees ?? [], target)
         clearWorktreeDrag()
         return
       }
@@ -220,7 +229,7 @@ export function useWorktreeNativeDrag(args: {
         })
       })
       ctx.clearReorderedWorktreeParents({
-        draggedIds: dragSession.draggedIds,
+        draggedWorktrees: dragSession.draggedWorktrees ?? [],
         sourceGroupKey: dragSession.sourceGroupKey
       })
       clearWorktreeDrag()

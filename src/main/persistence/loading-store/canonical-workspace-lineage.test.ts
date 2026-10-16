@@ -1,7 +1,13 @@
+import {
+  FOLDER_WORKSPACE,
+  PROJECT_GROUP,
+  manifest
+} from '../../persistence-orcad-migration-catalog-fixture'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { getDefaultPersistedState } from '../../../shared/constants'
 import { mergeWorktreeMetaForWrite } from './worktree-meta-write-normalization'
 import type { LineageEdge } from '../../../shared/worktree/lineage-types'
@@ -10,6 +16,9 @@ import {
   edgeToWorktreeLineage
 } from '../../../shared/worktree/lineage-edge'
 import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import { pruneWorktreeStateForRepo } from '../tracking-repos/repo-worktree-pruning'
+import { collectOrcadMigrationSourceDormantState } from '../migrating-orcad-catalog/orcad-source-dormant-state'
+import { subtractOrcadMigrationSourceDormantState } from '../migrating-orcad-catalog/orcad-source-dormant-subtraction'
 import { initializeCanonicalLineage } from './canonical-workspace-lineage'
 import { closeTestStores, createSqliteTestStore, makeRepo } from '../../persistence-test-harness'
 import { Store } from './store'
@@ -20,8 +29,9 @@ vi.mock('electron', () => ({
   app: { getPath: () => tmpdir(), getName: () => 'orca-test', getVersion: () => '0.0.0' }
 }))
 afterEach(closeTestStores)
-
 const id = 'repo::/workspace/child'
+const meta = (instanceId: string, hostId: ExecutionHostId = 'local') =>
+  mergeWorktreeMetaForWrite(undefined, { instanceId, hostId })
 function edge(instanceId: string, parent: string, createdAt = 1): LineageEdge {
   return {
     child: { instanceId, locator: worktreeWorkspaceKey(id) },
@@ -31,128 +41,126 @@ function edge(instanceId: string, parent: string, createdAt = 1): LineageEdge {
     createdAt
   }
 }
-
-it('keeps same-id owners independent through writes, real reload, rename and removal', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-canonical-lineage-'))
-  const dataFile = join(directory, 'orca-data.json')
-  const state = getDefaultPersistedState(directory)
-  state.repos = [
-    makeRepo({ id: 'repo', path: '/workspace', executionHostId: 'local' }),
-    makeRepo({
-      id: 'repo',
-      path: '/workspace',
-      connectionId: 'remote',
-      executionHostId: 'ssh:remote'
-    })
-  ]
+function savedStore(state = getDefaultPersistedState(tmpdir())) {
+  const dataFile = join(mkdtempSync(join(tmpdir(), 'lineage-')), 'orca-data.json')
   writeFileSync(dataFile, JSON.stringify(state))
-  let store = createSqliteTestStore(Store, { dataFile })
-  store.setWorktreeMetaForHost(id, 'local', { instanceId: 'local-child' })
-  store.setWorktreeMetaForHost(id, 'ssh:remote', { instanceId: 'remote-child' })
-  for (const candidate of [
-    edge('local-child', 'local-parent'),
-    edge('remote-child', 'remote-parent')
-  ]) {
-    const lineage = edgeToWorktreeLineage(candidate)
-    if (!lineage) {
-      throw new Error('missing lineage')
-    }
-    store.setWorktreeLineage(id, lineage)
+  return { store: createSqliteTestStore(Store, { dataFile }), dataFile }
+}
+const hosts = ['local', 'ssh:remote', 'ssh:third'] as const
+function registeredState() {
+  const state = getDefaultPersistedState(tmpdir())
+  state.repos = hosts.map((executionHostId) => makeRepo({ id: 'repo', executionHostId }))
+  return state
+}
+
+it('persists a captured clear without attaching the next occupant or clearing its same-id sibling', async () => {
+  const { store, dataFile } = savedStore(registeredState())
+  for (const host of ['local', 'ssh:remote'] as const) {
+    store.setWorktreeMetaForHost(id, host, { instanceId: host })
+    store.setWorkspaceLineage(edgeToWorkspaceLineage(edge(host, 'parent')))
   }
-  store.setWorkspaceLineage(edgeToWorkspaceLineage(edge('remote-child', 'changed-parent')))
+  store.removeWorktreeLineage(id, 'ssh:remote')
   store.flushOrThrow()
   await closeTestStores()
-  store = createSqliteTestStore(Store, { dataFile })
+  const restarted = createSqliteTestStore(Store, { dataFile })
+  expect(restarted.getLineageEdges().map((row) => row.child.instanceId)).toEqual(['local'])
+  restarted.removeWorktreeMeta(id, 'ssh:remote')
+  restarted.setWorktreeMetaForHost(id, 'ssh:remote', { instanceId: 'replacement' })
+  restarted.flushOrThrow()
+  await closeTestStores()
   expect(
-    store
+    createSqliteTestStore(Store, { dataFile })
       .getLineageEdges()
-      .map((row) => [row.child.instanceId, row.parent.instanceId])
-      .sort()
-  ).toEqual([
-    ['local-child', 'local-parent'],
-    ['remote-child', 'changed-parent']
-  ])
-  expect(store.getAllWorktreeLineage()[id]?.worktreeInstanceId).toBe(
-    store.getWorktreeMeta(id)?.instanceId
-  )
-  const renamed = 'repo::/workspace/renamed'
-  store.migrateWorktreeIdentity(id, renamed, 'ssh:remote')
-  expect(
-    store.getLineageEdges().find((row) => row.child.instanceId === 'remote-child')?.child.locator
-  ).toBe(worktreeWorkspaceKey(renamed))
-  expect(
-    store.getLineageEdges().find((row) => row.child.instanceId === 'local-child')?.child.locator
-  ).toBe(worktreeWorkspaceKey(id))
-  store.removeWorktreeMeta(renamed, 'ssh:remote')
-  store.setWorktreeMetaForHost(renamed, 'ssh:remote', { instanceId: 'new-occupant' })
-  store.flushOrThrow()
-  await closeTestStores()
-  store = createSqliteTestStore(Store, { dataFile })
-  expect(store.getLineageEdges().map((row) => row.child.instanceId)).toEqual(['local-child'])
-  expect(store.getWorktreeLineage(renamed, 'new-occupant')).toBeUndefined()
-  store.removeWorktreeMeta(id, 'local')
-  expect(store.getLineageEdges()).toEqual([])
+      .map((row) => row.child.instanceId)
+  ).toEqual(['local'])
 })
 
-it('migrates raw child identities once, preserving conflicts and inert source rows', () => {
-  const state = getDefaultPersistedState(tmpdir())
+it.each([false, true])(
+  'freezes only a uniquely owned legacy folder child once (ambiguous: %s)',
+  async (ambiguous) => {
+    const state = registeredState()
+    delete state.lineageByChildInstance
+    state.folderWorkspaces = [FOLDER_WORKSPACE]
+    state.projectGroups = [PROJECT_GROUP]
+    state.worktreeMeta[id] = meta('child', 'local')
+    if (ambiguous) {
+      state.worktreeIdentityAliases = { [`ssh:remote|${id}`]: ['remote'] }
+      state.worktreeMetaByIdentity = {
+        remote: meta('remote', 'ssh:remote')
+      }
+    }
+    const legacy = {
+      ...edgeToWorkspaceLineage(edge('child', 'parent')),
+      childInstanceId: null,
+      parentWorkspaceKey: `folder:${FOLDER_WORKSPACE.id}` as const,
+      parentInstanceId: null
+    }
+    state.workspaceLineageByChildKey['worktree:wrong-map-key'] = legacy
+    const { store, dataFile } = savedStore(state)
+    expect(store.getLineageEdges()).toHaveLength(ambiguous ? 0 : 1)
+    expect(store.getWorkspaceLineage(worktreeWorkspaceKey(id))?.childInstanceId).toBe(
+      ambiguous ? undefined : 'child'
+    )
+    store.removeWorkspaceLineage(worktreeWorkspaceKey(id), 'child')
+    store.setWorktreeMetaForHost(id, 'local', { instanceId: 'replacement' })
+    store.flushOrThrow()
+    await closeTestStores()
+    expect(createSqliteTestStore(Store, { dataFile }).getLineageEdges()).toEqual([])
+  }
+)
+
+it('prefers explicit instances, preserves conflicts, and ignores key order in agreeing duplicates', () => {
+  const state = registeredState()
   delete state.lineageByChildInstance
-  state.repos = [makeRepo({ id: 'repo', path: '/workspace' })]
-  state.worktreeMeta[id] = mergeWorktreeMetaForWrite(undefined, {
-    instanceId: 'child',
-    hostId: 'local'
-  })
-  const worktree = edgeToWorktreeLineage(edge('child', 'worktree-parent', 2))
-  if (!worktree) {
+  state.worktreeMeta[id] = meta('child', 'local')
+  const explicit = edge('child', 'parent')
+  const lineage = edgeToWorktreeLineage(explicit)
+  if (!lineage) {
     throw new Error('missing lineage')
   }
-  state.worktreeLineageById['wrong-map-key'] = worktree
-  state.workspaceLineageByChildKey[worktreeWorkspaceKey('wrong-key')] = edgeToWorkspaceLineage(
-    edge('child', 'workspace-parent', 2)
-  )
-  state.workspaceLineageByChildKey[worktreeWorkspaceKey('inert')] = {
-    ...edgeToWorkspaceLineage(edge('missing-owner', 'parent')),
-    childInstanceId: undefined
-  }
-  const orphan = edgeToWorktreeLineage(edge('unowned-instance', 'parent'))
-  if (orphan) {
-    state.worktreeLineageById.orphan = orphan
-  }
-  expect(initializeCanonicalLineage(state)).toBe(true)
-  expect(state).toMatchObject({
-    lineageByChildInstance: { child: { parent: { instanceId: 'workspace-parent' } } }
+  state.worktreeLineageById.wrong = lineage
+  state.workspaceLineageByChildKey['worktree:wrong'] = edgeToWorkspaceLineage({
+    ...explicit,
+    parent: { locator: explicit.parent.locator, instanceId: 'parent' },
+    createdAt: 2
   })
-  expect(state.lineageByChildInstance?.['unowned-instance']).toBeDefined()
-  expect(Object.keys(state.legacyLineageRemainder ?? {})).toHaveLength(3)
-  expect(Object.keys(state.worktreeLineageById)).toEqual([id])
+  initializeCanonicalLineage(state)
+  expect(state.legacyLineageRemainder).toEqual({})
+  expect(state.lineageByChildInstance?.child.createdAt).toBe(2)
+  expect(state.lineageByChildInstance?.child.capture).toEqual(explicit.capture)
+  delete state.lineageByChildInstance
+  state.workspaceLineageByChildKey = {
+    [worktreeWorkspaceKey(id)]: {
+      ...edgeToWorkspaceLineage(explicit),
+      childInstanceId: null,
+      parentWorkspaceKey: `folder:${FOLDER_WORKSPACE.id}`,
+      parentInstanceId: null,
+      createdAt: 99
+    }
+  }
+  state.folderWorkspaces = [FOLDER_WORKSPACE]
+  state.worktreeLineageById.wrong = lineage
+  initializeCanonicalLineage(state)
+  expect(state.lineageByChildInstance?.child).toMatchObject(explicit)
+  expect(Object.keys(state.legacyLineageRemainder ?? {})).toHaveLength(2)
   state.lineageByChildInstance = {}
-  state.worktreeLineageById[id] = worktree
-  expect(initializeCanonicalLineage(state)).toBe(false)
+  state.worktreeLineageById.wrong = lineage
+  initializeCanonicalLineage(state)
   expect(state.lineageByChildInstance).toEqual({})
-  expect(state.worktreeLineageById).toEqual({})
 })
 
-it('validates saved ancestors across owners without adopting metadata or consulting caches', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-lineage-ancestors-'))
-  const dataFile = join(directory, 'orca-data.json')
-  const state = getDefaultPersistedState(directory)
-  const hosts = ['local', 'ssh:remote', 'ssh:third'] as const
-  state.repos = hosts.map((host) =>
-    makeRepo({ id: 'repo', path: '/workspace', executionHostId: host })
-  )
-  writeFileSync(dataFile, JSON.stringify(state))
-  const store = createSqliteTestStore(Store, { dataFile })
+it('validates saved ancestors per owner and snapshots existing children once per response', async () => {
+  const { store } = savedStore(registeredState())
   const rows = hosts.map((host, index) => {
-    const instance = String(index)
-    const locator = `repo::/workspace/${instance}`
-    const meta = store.setWorktreeMetaForHost(locator, host, { instanceId: instance })
+    const instanceId = String(index)
     const git = {
-      path: `/workspace/${instance}`,
+      path: `/workspace/${index}`,
       head: '',
       branch: '',
       isBare: false,
       isMainWorktree: false
     }
+    const meta = store.setWorktreeMetaForHost(`repo::${git.path}`, host, { instanceId })
     return {
       ...mergeWorktree('repo', git, meta),
       git,
@@ -172,15 +180,7 @@ it('validates saved ancestors across owners without adopting metadata or consult
     showTerminal: async () => ({ worktreeId: rows[0].id })
   })
   const connect = (child: number, parent: number) =>
-    store.setWorktreeLineage(rows[child].id, {
-      worktreeId: rows[child].id,
-      worktreeInstanceId: String(child),
-      parentWorktreeId: rows[parent].id,
-      parentWorktreeInstanceId: String(parent),
-      origin: 'manual',
-      capture: { source: 'manual-action', confidence: 'explicit' },
-      createdAt: child
-    })
+    store.setWorkspaceLineage(edgeToWorkspaceLineage(edge(String(child), String(parent))))
   connect(0, 1)
   connect(1, 2)
   const migratingRead = vi.spyOn(store, 'getWorktreeMetaForHost')
@@ -188,4 +188,62 @@ it('validates saved ancestors across owners without adopting metadata or consult
   connect(1, 0)
   expect(() => controller.validateParent(rows[2], rows[0])).not.toThrow()
   expect(migratingRead).not.toHaveBeenCalled()
+  const canonicalReads = vi.spyOn(store, 'getLineageEdges')
+  const perRowReads = vi.spyOn(store, 'getWorktreeLineage')
+  await controller.listLineageSnapshot()
+  expect(canonicalReads).toHaveBeenCalledTimes(2)
+  expect(perRowReads).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('exports and subtracts both endpoints only (canonical: %s)', (canonical) => {
+  const state = registeredState()
+  const repo = makeRepo({ id: 'repo', executionHostId: 'ssh:remote' })
+  const parentId = 'repo::/parent-renamed'
+  state.worktreeMeta[id] = meta('child', 'ssh:remote')
+  state.worktreeMeta[parentId] = meta('parent', 'ssh:remote')
+  const relationship = edge('child', 'parent')
+  state.worktreeLineageById[id] = edgeToWorktreeLineage(relationship)!
+  state.workspaceLineageByChildKey[worktreeWorkspaceKey(id)] = edgeToWorkspaceLineage(relationship)
+  if (canonical) {
+    state.lineageByChildInstance = { child: relationship }
+  } else {
+    delete state.lineageByChildInstance
+  }
+  const source = { sshTargetId: 'remote', sshTargetGeneration: 1, targetLabel: 'Remote' }
+  const catalog = { repositories: [repo], folderWorkspaces: [], projectGroups: [] }
+  const collect = () => collectOrcadMigrationSourceDormantState(state, source, catalog).payload
+  expect(collect().edges?.[0].parent.locator).toBe(worktreeWorkspaceKey(parentId))
+  const complete = structuredClone(state)
+  const moved = collect()
+  subtractOrcadMigrationSourceDormantState(
+    complete,
+    manifest({ source, payload: { ...catalog, dormantState: moved } })
+  )
+  expect(complete.lineageByChildInstance).toEqual({})
+  state.worktreeMeta[parentId].hostId = 'local'
+  const excluded = collect()
+  expect(excluded).toMatchObject({ edges: [], worktreeLineage: [], workspaceLineage: [] })
+  subtractOrcadMigrationSourceDormantState(
+    state,
+    manifest({ source, payload: { ...catalog, dormantState: excluded } })
+  )
+  expect(state.lineageByChildInstance?.child).toMatchObject(relationship)
+})
+
+it('prunes only the derived owner even when saved hints name another host', () => {
+  const state = registeredState()
+  state.worktreeMeta[id] = meta('child', 'local')
+  state.worktreeIdentityAliases = { [`ssh:remote|${id}`]: ['remote'] }
+  state.worktreeMetaByIdentity = {
+    remote: meta('remote', 'ssh:remote')
+  }
+  state.lineageByChildInstance = {
+    child: edge('child', 'parent'),
+    remote: {
+      ...edge('remote', 'parent'),
+      child: { instanceId: 'remote', locator: worktreeWorkspaceKey(id), hostId: 'local' }
+    }
+  }
+  pruneWorktreeStateForRepo(state, 'repo', 'local', () => {})
+  expect(Object.keys(state.lineageByChildInstance)).toEqual(['remote'])
 })

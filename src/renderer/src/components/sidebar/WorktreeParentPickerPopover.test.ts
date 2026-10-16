@@ -1,3 +1,4 @@
+import { createWorktreeIdentity } from '../../../../shared/worktree/identity'
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -46,6 +47,12 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
+const childIdentity = createWorktreeIdentity({
+  worktreeId: 'child',
+  executionHostId: 'ssh:remote',
+  instanceId: 'ssh-child'
+})
+
 describe('selectWorktreeParent', () => {
   it('closes and assigns the selected parent to the captured child', () => {
     const assignWorktreeParent = vi.fn().mockResolvedValue(undefined)
@@ -53,6 +60,7 @@ describe('selectWorktreeParent', () => {
     const showError = vi.fn()
 
     selectWorktreeParent({
+      childIdentity,
       childWorktreeId: 'child',
       parentWorktreeId: 'parent',
       assignWorktreeParent,
@@ -61,7 +69,10 @@ describe('selectWorktreeParent', () => {
     })
 
     expect(close).toHaveBeenCalledTimes(1)
-    expect(assignWorktreeParent).toHaveBeenCalledWith('child', { parentWorktreeId: 'parent' })
+    expect(assignWorktreeParent).toHaveBeenCalledWith('child', {
+      identity: childIdentity,
+      parentWorktreeId: 'parent'
+    })
     expect(showError).not.toHaveBeenCalled()
   })
 
@@ -72,6 +83,7 @@ describe('selectWorktreeParent', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     selectWorktreeParent({
+      childIdentity,
       childWorktreeId: 'child',
       parentWorktreeId: 'parent',
       assignWorktreeParent,
@@ -89,6 +101,7 @@ describe('selectWorktreeParent', () => {
     const close = vi.fn()
 
     selectWorktreeParent({
+      childIdentity,
       childWorktreeId: null,
       parentWorktreeId: 'parent',
       assignWorktreeParent,

@@ -1,3 +1,4 @@
+import type { Worktree } from '../../../../shared/worktree/types'
 import type { WorktreeDragGroup } from './worktree-manual-order'
 import type { WorktreeDragUnitGroup } from './worktree-drag-units'
 import type {
@@ -27,6 +28,7 @@ export type WorktreeSidebarDragSession = {
   draggingWorktreeId: string
   sourceGroupKey: string
   draggedIds: readonly string[]
+  draggedWorktrees?: readonly Worktree[]
   reorderDraggedIds: readonly string[]
   reorderUnitDraggedIds: readonly string[]
   // Why: one live coordinate space for both hit testing and rendering. Stability

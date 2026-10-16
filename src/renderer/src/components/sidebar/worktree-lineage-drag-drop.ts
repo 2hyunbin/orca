@@ -55,7 +55,7 @@ export function getWorktreeLineageDropTargetId(args: {
     return null
   }
 
-  return rowTarget.getAttribute('data-worktree-drag-id')
+  return rowTarget.getAttribute('data-worktree-host-identity')
 }
 
 export function getReorderedWorktreeIdsToUnnest(args: {

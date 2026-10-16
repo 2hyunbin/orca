@@ -42,6 +42,7 @@ function setup() {
       currentY: 300,
       worktreeId: 'child',
       draggedIds: ['child'],
+      draggedWorktrees: [],
       reorderDraggedIds: ['child'],
       reorderUnitDraggedIds: ['child'],
       sourceGroupKey: 'repo',

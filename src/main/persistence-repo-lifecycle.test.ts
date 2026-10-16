@@ -417,8 +417,8 @@ describe('Store', () => {
     store.removeProjectForHost('r1', 'local')
 
     expect(store.getWorktreeLineage('r1::/path/child')).toBeUndefined()
-    expect(store.getWorktreeLineage('r2::/other-child')).toBeDefined()
-    expect(store.getWorktreeLineage('r2::/other')).toBeDefined()
+    expect(store.getWorktreeLineage('r2::/other-child', 'other-child-instance')).toBeDefined()
+    expect(store.getWorktreeLineage('r2::/other', 'other-instance')).toBeDefined()
   })
 
   // ── 6b. removeProjectForHost is host-scoped ───────────────────────────

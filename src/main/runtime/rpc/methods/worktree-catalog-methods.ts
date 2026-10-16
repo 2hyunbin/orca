@@ -19,11 +19,7 @@ export const WORKTREE_CATALOG_METHODS = [
     name: 'worktree.lineageList',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => ({
-      edges: await runtime.listLineageEdges(),
-      lineage: await runtime.listWorktreeLineage(),
-      workspaceLineage: await runtime.listWorkspaceLineage()
-    })
+    handler: async (_params, { runtime }) => runtime.listLineageSnapshot()
   }),
 
   defineMethod({

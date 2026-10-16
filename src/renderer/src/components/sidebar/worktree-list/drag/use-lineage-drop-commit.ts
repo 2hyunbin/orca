@@ -1,5 +1,6 @@
+import { getIndexedWorktreeByIdentity } from '@/store/worktree-repo-index'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
@@ -23,7 +24,7 @@ export function useWorktreeLineageDropCommit(args: {
   worktreeDragGroups: readonly WorktreeDragGroup[]
   worktrees: readonly Worktree[]
 }) {
-  const { repoMap, worktreeMap, worktreeLineageById, worktreeDragGroups } = args
+  const { repoMap, worktreeLineageById, worktreeDragGroups } = args
   const assignWorktreeParent = useAppStore((s) => s.assignWorktreeParent)
   const updateWorktreeLineage = useAppStore((s) => s.updateWorktreeLineage)
   const lineageWorktreeMap = useMemo(
@@ -35,56 +36,84 @@ export function useWorktreeLineageDropCommit(args: {
     [worktreeLineageById, lineageWorktreeMap]
   )
 
+  const hoveredParent = useRef<{
+    children: readonly Worktree[]
+    hostKey: string
+    identity: Worktree['identity']
+  } | null>(null)
   const getEligibleLineageDropTarget = useCallback(
     (
       target: WorktreeSidebarLineageDropTarget,
-      draggedIds: readonly string[]
+      draggedWorktrees: readonly Worktree[]
     ): WorktreeSidebarLineageDropTarget => {
       const parentId = target.lineageParentId
       if (!parentId) {
+        hoveredParent.current = null
         return target
       }
-      const canAssignAll = draggedIds.every((draggedId) => {
-        const child = worktreeMap.get(draggedId)
-        if (!child) {
-          return false
+      if (
+        hoveredParent.current?.children !== draggedWorktrees ||
+        hoveredParent.current.hostKey !== parentId
+      ) {
+        hoveredParent.current = {
+          children: draggedWorktrees,
+          hostKey: parentId,
+          identity: target.lineageParentIdentity ?? lineageWorktreeMap.get(parentId)?.identity
         }
-        const candidateParent = worktreeMap.get(parentId)
-        return Boolean(
-          candidateParent &&
-          isEligibleWorktreeParent({
-            child,
-            candidateParent,
-            lineageById: worktreeLineageById,
-            worktreeMap: lineageWorktreeMap,
-            repoMap,
-            cyclicLineageIds
-          })
+      }
+      const identity = hoveredParent.current.identity
+      const candidateParent =
+        identity &&
+        getIndexedWorktreeByIdentity(useAppStore.getState().worktreesByRepo, identity.key)
+      const children = draggedWorktrees.map(
+        (captured) =>
+          captured.identity &&
+          getIndexedWorktreeByIdentity(
+            useAppStore.getState().worktreesByRepo,
+            captured.identity.key
+          )
+      )
+      if (!candidateParent?.identity || children.some((child) => !child)) {
+        return { ...target, lineageParentIdentity: undefined }
+      }
+      const canAssignAll =
+        children.length > 0 &&
+        children.every(
+          (child) =>
+            child &&
+            isEligibleWorktreeParent({
+              child,
+              candidateParent,
+              lineageById: worktreeLineageById,
+              worktreeMap: lineageWorktreeMap,
+              repoMap,
+              cyclicLineageIds
+            })
         )
-      })
-      return canAssignAll ? target : { ...target, lineageParentId: null }
+      return canAssignAll
+        ? { ...target, lineageParentIdentity: candidateParent.identity }
+        : { ...target, lineageParentId: null }
     },
-    [cyclicLineageIds, repoMap, worktreeLineageById, worktreeMap, lineageWorktreeMap]
+    [cyclicLineageIds, repoMap, worktreeLineageById, lineageWorktreeMap]
   )
 
   const commitWorktreeLineageParentDrop = useCallback(
-    (draggedIds: readonly string[], parentId: string): boolean => {
-      const target = getEligibleLineageDropTarget(
-        { status: null, isPinDrop: false, lineageParentId: parentId },
-        draggedIds
-      )
-      if (!target.lineageParentId) {
-        return false
-      }
-      void Promise.all(
-        draggedIds.map((id) =>
-          assignWorktreeParent(id, {
-            parentWorktreeId: worktreeMap.get(parentId)?.identity
-              ? `identity:${worktreeMap.get(parentId)?.identity?.key}`
-              : parentId
-          })
+    (draggedWorktrees: readonly Worktree[], target: WorktreeSidebarLineageDropTarget): boolean => {
+      const checked = getEligibleLineageDropTarget(target, draggedWorktrees)
+      const parent = checked.lineageParentIdentity
+      void (async () => {
+        if (!checked.lineageParentId || !parent) {
+          throw new Error('selector_not_found')
+        }
+        await Promise.all(
+          draggedWorktrees.map((row) =>
+            assignWorktreeParent(row.id, {
+              identity: row.identity,
+              parentWorktreeId: `identity:${parent.key}`
+            })
+          )
         )
-      ).catch((err) => {
+      })().catch((err) => {
         console.error('Failed to nest workspace:', err)
         toast.error(
           translate(
@@ -93,13 +122,13 @@ export function useWorktreeLineageDropCommit(args: {
           )
         )
       })
-      return true
+      return Boolean(checked.lineageParentId && parent)
     },
-    [assignWorktreeParent, getEligibleLineageDropTarget, worktreeMap]
+    [assignWorktreeParent, getEligibleLineageDropTarget]
   )
 
   const clearReorderedWorktreeParents = useCallback(
-    (unnestArgs: { draggedIds: readonly string[]; sourceGroupKey: string }) => {
+    (unnestArgs: { draggedWorktrees: readonly Worktree[]; sourceGroupKey: string }) => {
       const sourceGroup = worktreeDragGroups.find(
         (group) => group.key === unnestArgs.sourceGroupKey
       )
@@ -107,19 +136,30 @@ export function useWorktreeLineageDropCommit(args: {
         return
       }
       const ids = getReorderedWorktreeIdsToUnnest({
-        draggedIds: unnestArgs.draggedIds,
-        sourceGroupIds: sourceGroup.worktreeIds,
+        draggedIds: unnestArgs.draggedWorktrees.map(getWorktreeHostIdentity),
+        sourceGroupIds: unnestArgs.draggedWorktrees
+          .filter((row) => sourceGroup.worktreeIds.includes(row.id))
+          .map(getWorktreeHostIdentity),
         lineageById: worktreeLineageById,
-        worktreeMap,
+        worktreeMap: lineageWorktreeMap,
         cyclicLineageIds
       })
       if (ids.length === 0) {
         return
       }
       // Why: dropping a nested card on a reorder line is the un-nest escape hatch; clear only the dragged children.
-      void unnestWorktrees(ids, updateWorktreeLineage)
+      void unnestWorktrees(
+        unnestArgs.draggedWorktrees.filter((row) => ids.includes(getWorktreeHostIdentity(row))),
+        updateWorktreeLineage
+      )
     },
-    [cyclicLineageIds, updateWorktreeLineage, worktreeDragGroups, worktreeLineageById, worktreeMap]
+    [
+      cyclicLineageIds,
+      updateWorktreeLineage,
+      worktreeDragGroups,
+      worktreeLineageById,
+      lineageWorktreeMap
+    ]
   )
 
   return {

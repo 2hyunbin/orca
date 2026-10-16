@@ -1,3 +1,4 @@
+import type { WorktreeIdentity } from '../../../../../../shared/worktree/identity'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
@@ -73,6 +74,7 @@ export type RepoHostSummary = {
 
 export type WorktreeLineageUpdateResult = {
   target: RuntimeClientTarget
+  identity: WorktreeIdentity
   lineage: WorktreeLineage | null
   updatedRemoteWorktree?: WorktreeWithLineage
 }

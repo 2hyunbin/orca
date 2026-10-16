@@ -105,6 +105,9 @@ describe('Store', () => {
       displayName: 'child',
       instanceId: lineage.worktreeInstanceId
     })
+    store.setWorktreeMeta(lineage.parentWorktreeId, {
+      instanceId: lineage.parentWorktreeInstanceId
+    })
     store.setWorktreeLineage(lineage.worktreeId, lineage)
 
     expect(store.getWorktreeLineage(lineage.worktreeId)).toEqual(lineage)
@@ -125,6 +128,9 @@ describe('Store', () => {
       displayName: 'child',
       instanceId: lineage.worktreeInstanceId
     })
+    store.setWorktreeMeta(lineage.parentWorktreeId, {
+      instanceId: lineage.parentWorktreeInstanceId
+    })
     store.setWorktreeLineage(lineage.worktreeId, lineage)
 
     store.removeWorktreeMeta(lineage.worktreeId)
@@ -144,8 +150,8 @@ describe('Store', () => {
     })
     store.setWorkspaceLineage(lineage)
 
-    expect(store.getWorkspaceLineage(lineage.childWorkspaceKey)).toEqual(lineage)
-    expect(store.getAllWorkspaceLineage()).toEqual({ [lineage.childWorkspaceKey]: lineage })
+    expect(store.getLineageEdges()[0]?.child.instanceId).toBe(lineage.childInstanceId)
+    expect(store.getAllWorkspaceLineage()).toEqual({})
 
     store.removeWorktreeMeta('r1::/path/child')
 
@@ -186,7 +192,9 @@ describe('Store', () => {
     store.removeFolderWorkspace(workspace.id)
 
     expect(store.getWorkspaceLineage(folderLineage.childWorkspaceKey)).toEqual(folderLineage)
-    expect(store.getWorkspaceLineage(unrelatedLineage.childWorkspaceKey)).toEqual(unrelatedLineage)
+    expect(store.getLineageEdges().map((row) => row.child.instanceId)).toContain(
+      unrelatedLineage.childInstanceId
+    )
   })
 
   // ── Live Claude PTY session ids (STA-1246) ─────────────────────────

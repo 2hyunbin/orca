@@ -15,10 +15,9 @@ import {
   worktreeLineageToEdge
 } from '../../../shared/worktree/lineage-edge'
 
-export function savedLineageOwners(
-  state: PersistedState
-): Map<string, { locator: string; hostId: ExecutionHostId } | null> {
+export function savedLineageOwners(state: PersistedState) {
   const owners = new Map<string, { locator: string; hostId: ExecutionHostId } | null>()
+  const byLocator = new Map<string, Set<string>>()
   const reposById = new Map<string, typeof state.repos>()
   for (const repo of state.repos ?? []) {
     reposById.set(repo.id, [...(reposById.get(repo.id) ?? []), repo])
@@ -26,12 +25,15 @@ export function savedLineageOwners(
   const add = (instance: string | undefined, locator: string, hostId: ExecutionHostId) => {
     if (
       !instance ||
-      !reposById
+      reposById
         .get(getRepoIdFromWorktreeId(locator))
-        ?.some((repo) => getRepoExecutionHostId(repo) === hostId)
+        ?.filter((repo) => getRepoExecutionHostId(repo) === hostId).length !== 1
     ) {
       return
     }
+    const candidates = byLocator.get(locator) ?? new Set<string>()
+    candidates.add(instance)
+    byLocator.set(locator, candidates)
     const previous = owners.get(instance)
     if (previous === undefined) {
       owners.set(instance, { locator, hostId })
@@ -62,18 +64,26 @@ export function savedLineageOwners(
       add(meta.instanceId, id, owner)
     }
   }
-  return owners
+  return Object.assign(owners, { byLocator })
 }
 
-export function refreshLegacyLineage(state: PersistedState): void {
+export function refreshLegacyLineage(
+  state: PersistedState,
+  owners = savedLineageOwners(state)
+): void {
   const worktree: PersistedState['worktreeLineageById'] = {}
   const workspace: PersistedState['workspaceLineageByChildKey'] = {}
-  const owners = savedLineageOwners(state)
-  for (const edge of Object.values(state.lineageByChildInstance ?? {})) {
-    if (!owners.get(edge.child.instanceId)) {
+  for (const edge of ownedLineageEdges(state, owners)) {
+    const child = parseWorkspaceKey(edge.child.locator)
+    const folder = parseWorkspaceKey(edge.parent.locator)
+    if (
+      edge.parent.instanceId
+        ? !owners.get(edge.parent.instanceId)
+        : folder?.type !== 'folder' ||
+          !state.folderWorkspaces?.some((row) => row.id === folder.folderWorkspaceId)
+    ) {
       continue
     }
-    const child = parseWorkspaceKey(edge.child.locator)
     if (
       child?.type !== 'worktree' ||
       state.worktreeMeta?.[child.worktreeId]?.instanceId !== edge.child.instanceId
@@ -90,31 +100,40 @@ export function refreshLegacyLineage(state: PersistedState): void {
   state.workspaceLineageByChildKey = workspace
 }
 
-export function ownedLineageEdges(state: PersistedState): LineageEdge[] {
-  const owners = savedLineageOwners(state)
-  return Object.values(state.lineageByChildInstance ?? {}).flatMap((edge) => {
-    const owner = owners.get(edge.child.instanceId)
-    return owner
-      ? [
-          {
-            ...edge,
-            child: {
-              ...edge.child,
-              locator: worktreeWorkspaceKey(owner.locator),
-              hostId: owner.hostId
-            }
-          }
-        ]
-      : []
-  })
+export function ownedLineageEdges(
+  state: PersistedState,
+  owners = savedLineageOwners(state)
+): LineageEdge[] {
+  return Object.values(state.lineageByChildInstance ?? {}).flatMap(
+    (edge) => projectOwnedLineageEdge(state, edge, owners) ?? []
+  )
 }
 
-export function initializeCanonicalLineage(state: PersistedState): boolean {
+export function projectOwnedLineageEdge(
+  state: PersistedState,
+  edge: LineageEdge,
+  owners = savedLineageOwners(state)
+): LineageEdge | undefined {
+  const child = owners.get(edge.child.instanceId)
+  const parent = edge.parent.instanceId ? owners.get(edge.parent.instanceId) : undefined
+  if (!child) {
+    return undefined
+  }
+  return {
+    ...edge,
+    child: { ...edge.child, locator: worktreeWorkspaceKey(child.locator), hostId: child.hostId },
+    parent: parent ? { ...edge.parent, locator: worktreeWorkspaceKey(parent.locator) } : edge.parent
+  }
+}
+
+export function initializeCanonicalLineage(
+  state: PersistedState,
+  owners = savedLineageOwners(state)
+): boolean {
   if (state.lineageByChildInstance !== undefined) {
-    refreshLegacyLineage(state)
+    refreshLegacyLineage(state, owners)
     return false
   }
-  const owners = savedLineageOwners(state)
   const edges: Record<string, LineageEdge> = {}
   const remainder: NonNullable<PersistedState['legacyLineageRemainder']> = {}
   const sources = [
@@ -131,7 +150,22 @@ export function initializeCanonicalLineage(state: PersistedState): boolean {
   ].sort((a, b) => a.key.localeCompare(b.key))
   const sourceByInstance = new Map<string, (typeof sources)[number]>()
   for (const source of sources) {
-    const edge = source.edge
+    let edge = source.edge
+    const value = source.value
+    if (!edge && value && 'childWorkspaceKey' in value && !value.childInstanceId) {
+      const child = parseWorkspaceKey(value.childWorkspaceKey)
+      const parent = parseWorkspaceKey(value.parentWorkspaceKey)
+      const matches =
+        child?.type === 'worktree' ? [...(owners.byLocator.get(child.worktreeId) ?? [])] : []
+      if (
+        matches.length === 1 &&
+        owners.get(matches[0]) &&
+        parent?.type === 'folder' &&
+        state.folderWorkspaces?.some((row) => row.id === parent.folderWorkspaceId)
+      ) {
+        edge = workspaceLineageToEdge({ ...value, childInstanceId: matches[0] })
+      }
+    }
     if (!edge) {
       remainder[source.key] = source.value
       continue
@@ -147,16 +181,21 @@ export function initializeCanonicalLineage(state: PersistedState): boolean {
     const previous = sourceByInstance.get(edge.child.instanceId)
     if (previous) {
       const prior = edges[edge.child.instanceId]
-      if (JSON.stringify(prior.parent) !== JSON.stringify(edge.parent)) {
+      if (
+        prior.parent.instanceId !== edge.parent.instanceId ||
+        prior.parent.locator !== edge.parent.locator
+      ) {
         remainder[previous.key] = previous.value
         remainder[source.key] = source.value
       }
-      // Timestamps arbitrate conflicts; workspace records win equal timestamps.
+      // Explicit instances outrank inferred attachments; timestamps arbitrate equivalent sources.
       if (
-        prior.createdAt > edge.createdAt ||
-        (prior.createdAt === edge.createdAt &&
-          previous.key.startsWith('workspace:') &&
-          source.key.startsWith('worktree:'))
+        (previous.edge && !source.edge) ||
+        (Boolean(previous.edge) === Boolean(source.edge) &&
+          (prior.createdAt > edge.createdAt ||
+            (prior.createdAt === edge.createdAt &&
+              previous.key.startsWith('workspace:') &&
+              source.key.startsWith('worktree:'))))
       ) {
         continue
       }
@@ -166,31 +205,27 @@ export function initializeCanonicalLineage(state: PersistedState): boolean {
   }
   state.lineageByChildInstance = edges
   state.legacyLineageRemainder = remainder
-  refreshLegacyLineage(state)
+  refreshLegacyLineage(state, owners)
   return true
 }
 
 export function writeCanonicalLineage(state: PersistedState, edge: LineageEdge): void {
-  initializeCanonicalLineage(state)
-  const owner = savedLineageOwners(state).get(edge.child.instanceId)
-  state.lineageByChildInstance![edge.child.instanceId] = owner
-    ? {
-        ...edge,
-        child: { ...edge.child, locator: worktreeWorkspaceKey(owner.locator), hostId: owner.hostId }
-      }
-    : edge
-  refreshLegacyLineage(state)
+  const owners = savedLineageOwners(state)
+  initializeCanonicalLineage(state, owners)
+  state.lineageByChildInstance![edge.child.instanceId] = edge
+  refreshLegacyLineage(state, owners)
 }
 
 export function removeCanonicalLineage(
   state: PersistedState,
   instanceId: string | undefined
 ): void {
-  initializeCanonicalLineage(state)
+  const owners = savedLineageOwners(state)
+  initializeCanonicalLineage(state, owners)
   if (instanceId) {
     delete state.lineageByChildInstance?.[instanceId]
   }
-  refreshLegacyLineage(state)
+  refreshLegacyLineage(state, owners)
 }
 
 export function removeOwnedLineage(
@@ -198,29 +233,13 @@ export function removeOwnedLineage(
   id: string,
   hostId?: ExecutionHostId
 ): void {
-  initializeCanonicalLineage(state)
   const owners = savedLineageOwners(state)
+  initializeCanonicalLineage(state, owners)
   for (const edge of Object.values(state.lineageByChildInstance ?? {})) {
     const owner = owners.get(edge.child.instanceId)
     if (owner?.locator === id && (hostId === undefined || owner.hostId === hostId)) {
       delete state.lineageByChildInstance?.[edge.child.instanceId]
     }
   }
-  refreshLegacyLineage(state)
-}
-
-export function renameOwnedLineage(
-  state: PersistedState,
-  id: string,
-  nextId: string,
-  hostId: ExecutionHostId
-): void {
-  initializeCanonicalLineage(state)
-  const owners = savedLineageOwners(state)
-  for (const edge of Object.values(state.lineageByChildInstance ?? {})) {
-    const owner = owners.get(edge.child.instanceId)
-    if (owner?.locator === id && owner.hostId === hostId) {
-      edge.child.locator = worktreeWorkspaceKey(nextId)
-    }
-  }
+  refreshLegacyLineage(state, owners)
 }

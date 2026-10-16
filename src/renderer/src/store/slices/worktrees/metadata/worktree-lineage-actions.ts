@@ -1,3 +1,4 @@
+import { getIndexedWorktreeByIdentity } from '@/store/worktree-repo-index'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -58,22 +59,25 @@ export function createUpdateWorktreeLineage(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['updateWorktreeLineage'] {
-  return async (worktreeId, args) => {
+  return async (_worktreeId, args) => {
     // Why: an unresolvable owner route (ambiguous or missing) rejects rather than skipping — this is a
     // user-initiated action, and both callers toast the failure. Don't swallow it into a silent no-op.
     const state = get()
-    const hostId =
-      state.activeWorktreeId === worktreeId
-        ? (state.activeWorkspaceExecutionHostId ?? undefined)
-        : undefined
-    const child = state.getKnownWorktreeById(worktreeId, hostId)
-    const selector = child?.identity ? `identity:${child.identity.key}` : undefined
-    const ownerTarget = runtimeTargetForWorktreeOwner(state, worktreeId, hostId)
+    const child =
+      args.identity && getIndexedWorktreeByIdentity(state.worktreesByRepo, args.identity.key)
+    if (!child?.identity) {
+      throw new Error('selector_not_found')
+    }
+    const ownerTarget = runtimeTargetForWorktreeOwner(
+      state,
+      child.id,
+      child.identity.executionHostId
+    )
     try {
       applyWorktreeLineageUpdate(
         set,
-        worktreeId,
-        await setWorktreeLineageForRuntime(ownerTarget, worktreeId, args, selector)
+        child.id,
+        await setWorktreeLineageForRuntime(ownerTarget, child.id, args, child.identity)
       )
     } catch (err) {
       console.error('Failed to update worktree lineage:', err)
@@ -87,26 +91,5 @@ export function createAssignWorktreeParent(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['assignWorktreeParent'] {
-  return async (worktreeId, args) => {
-    const state = get()
-    const hostId =
-      state.activeWorktreeId === worktreeId
-        ? (state.activeWorkspaceExecutionHostId ?? undefined)
-        : undefined
-    const child = state.getKnownWorktreeById(worktreeId, hostId)
-    const selector = child?.identity ? `identity:${child.identity.key}` : undefined
-    const ownerTarget = runtimeTargetForWorktreeOwner(state, worktreeId, hostId)
-    try {
-      applyWorktreeLineageUpdate(
-        set,
-        worktreeId,
-        await setWorktreeLineageForRuntime(ownerTarget, worktreeId, args, selector)
-      )
-    } catch (err) {
-      console.error('Failed to assign worktree parent:', err)
-      // Unlike the update path this rethrows, so the recovery refresh must not mask the original cause.
-      await refreshWorktreeLineageBestEffort(ownerTarget, set, get)
-      throw err
-    }
-  }
+  return createUpdateWorktreeLineage(set, get)
 }

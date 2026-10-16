@@ -1,5 +1,13 @@
+import {
+  ownedLineageEdges,
+  projectOwnedLineageEdge,
+  savedLineageOwners
+} from '../loading-store/canonical-workspace-lineage'
+import type { LineageEdge } from '../../../shared/worktree/lineage-types'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import {
+  worktreeLineageToEdge,
+  workspaceLineageToEdge,
   edgeToWorktreeLineage,
   edgeToWorkspaceLineage
 } from '../../../shared/worktree/lineage-edge'
@@ -15,16 +23,24 @@ export function collectOrcadSourceLineageEdges(
   state: PersistedState,
   scope: OrcadMigrationSourceScope,
   worktreeLineage: OrcadMigrationDormantStatePayload['worktreeLineage'],
-  workspaceLineage: OrcadMigrationDormantStatePayload['workspaceLineage']
+  workspaceLineage: OrcadMigrationDormantStatePayload['workspaceLineage'],
+  owners = savedLineageOwners(state)
 ) {
-  const edges = Object.values(state.lineageByChildInstance ?? {}).filter(
-    (edge) =>
-      edge.child.hostId &&
-      orcadMigrationOwnerMatchesScope(
-        composeWorktreeHostIdentity(edge.child.hostId, edge.child.locator),
-        scope
-      )
-  )
+  const candidates =
+    state.lineageByChildInstance === undefined
+      ? [
+          ...worktreeLineage.flatMap((row) => worktreeLineageToEdge(row.lineage) ?? []),
+          ...workspaceLineage.flatMap((row) => workspaceLineageToEdge(row.lineage) ?? [])
+        ]
+      : ownedLineageEdges(state, owners)
+  const edges = [
+    ...new Map(
+      candidates.flatMap((edge) => {
+        const projected = orcadSourceLineageInScope(state, scope, edge, owners)
+        return projected ? [[projected.child.instanceId, projected] as const] : []
+      })
+    ).values()
+  ]
   for (const edge of edges) {
     const child = parseWorkspaceKey(edge.child.locator)
     if (child?.type !== 'worktree') {
@@ -56,4 +72,32 @@ export function collectOrcadSourceLineageEdges(
     })
   }
   return edges
+}
+
+export function orcadSourceLineageInScope(
+  state: PersistedState,
+  scope: OrcadMigrationSourceScope,
+  edge: LineageEdge | undefined,
+  owners: ReturnType<typeof savedLineageOwners>
+): LineageEdge | undefined {
+  const projected = edge && projectOwnedLineageEdge(state, edge, owners)
+  if (!projected) {
+    return undefined
+  }
+  const parent = projected.parent.instanceId ? owners.get(projected.parent.instanceId) : undefined
+  if (projected.parent.instanceId && !parent) {
+    return undefined
+  }
+  const folder = parseWorkspaceKey(projected.parent.locator)
+  if (
+    !projected.parent.instanceId &&
+    (folder?.type !== 'folder' ||
+      !state.folderWorkspaces.some((row) => row.id === folder.folderWorkspaceId))
+  ) {
+    return undefined
+  }
+  return orcadMigrationOwnerMatchesScope(projected.child.locator, scope, projected.child.hostId) &&
+    orcadMigrationOwnerMatchesScope(projected.parent.locator, scope, parent?.hostId)
+    ? projected
+    : undefined
 }

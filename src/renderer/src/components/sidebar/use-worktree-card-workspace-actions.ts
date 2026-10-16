@@ -133,14 +133,17 @@ export function useWorktreeCardWorkspaceActions({
         event.preventDefault()
         return
       }
-      const dragIds =
+      const draggedWorktrees =
         isMultiSelected && selectedWorktrees && selectedWorktrees.length > 1
-          ? selectedWorktrees.map((item) => item.id)
-          : worktree.id
-      writeWorkspaceDragData(event.dataTransfer, dragIds)
-      onCardDragStart?.(event, worktree.id, Array.isArray(dragIds) ? dragIds : [dragIds])
+          ? [...selectedWorktrees]
+          : [worktree]
+      writeWorkspaceDragData(
+        event.dataTransfer,
+        draggedWorktrees.map((row) => row.id)
+      )
+      onCardDragStart?.(event, worktree, draggedWorktrees)
     },
-    [isDeleting, isMultiSelected, onCardDragStart, selectedWorktrees, worktree.id]
+    [isDeleting, isMultiSelected, onCardDragStart, selectedWorktrees, worktree]
   )
 
   const handleDragEnd = useCallback(

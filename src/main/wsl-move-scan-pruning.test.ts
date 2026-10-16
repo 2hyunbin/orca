@@ -78,7 +78,7 @@ describe('lineage pruning under a WSL move', () => {
     })
     store.setWorktreeLineage(childId, lineage(childId, `${target.id}::${target.path}`))
     pruneLineageForMissingRepoWorktrees(store, target, [gitRow(target.path)])
-    return store.getWorktreeLineage(childId)
+    return store.getWorktreeLineage(childId, `${childId}#instance`)
   }
 
   it('keeps the moving project lineage a mid-move scan cannot see', () => {
@@ -96,8 +96,8 @@ describe('lineage pruning under a WSL move', () => {
 
 describe('authoritative metadata pruning under a WSL move', () => {
   const pruneMissingRow = async (repoId: string): Promise<string[]> => {
-    const target = repo(repoId)
-    const goneId = `${repoId}::/ws/${repoId}/gone`
+    const target = store.getRepos().find((row) => row.id === repoId)!
+    const goneId = `${repoId}::${join(tmpdir(), repoId, 'gone')}`
     store.setWorktreeMeta(goneId, { displayName: 'gone' })
     const result = await pruneMetadataMissingFromAuthoritativeLocalScan({
       store,
@@ -105,7 +105,6 @@ describe('authoritative metadata pruning under a WSL move', () => {
       gitWorktrees: [gitRow(target.path)],
       scan: store.captureNativeLocalWorktreeMetadataScanExpectation(target),
       scanGeneration: getLocalWorktreeScanGeneration(repoId),
-      platform: 'linux',
       pathsExistOrAreUnverifiable: async (paths) => new Map(paths.map((path) => [path, false]))
     })
     return [...result.removedWorktreeIds]
@@ -113,11 +112,13 @@ describe('authoritative metadata pruning under a WSL move', () => {
 
   it('removes nothing from the moving project', async () => {
     expect(await pruneMissingRow(MOVING)).toEqual([])
-    expect(store.getWorktreeMeta(`${MOVING}::/ws/${MOVING}/gone`)).toBeDefined()
+    expect(store.getWorktreeMeta(`${MOVING}::${join(tmpdir(), MOVING, 'gone')}`)).toBeDefined()
   })
 
   it('prunes a project the move is not taking', async () => {
-    expect(await pruneMissingRow(STAYING)).toEqual([`${STAYING}::/ws/${STAYING}/gone`])
+    expect(await pruneMissingRow(STAYING)).toEqual([
+      `${STAYING}::${join(tmpdir(), STAYING, 'gone')}`
+    ])
   })
 })
 

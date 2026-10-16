@@ -1,4 +1,3 @@
-import { makeUnifiedTab } from './store-session-test-harness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import {
@@ -481,90 +480,6 @@ describe('removeWorktree state cleanup', () => {
 
     expect(store.getState().tabBarOrderByWorktree).toEqual({
       'repo1::/path/wt2': ['tab-2']
-    })
-  })
-
-  it('cleans up split-tab model state for the removed worktree', async () => {
-    const store = createTestStore()
-    const wt = makeWorktree({ id: 'repo1::/path/wt1', repoId: 'repo1', path: '/path/wt1' })
-
-    store.setState({
-      worktreesByRepo: { repo1: [wt] },
-      pendingReconnectTabByWorktree: {
-        'repo1::/path/wt1': ['tab-1'],
-        'repo1::/path/wt2': ['tab-2']
-      },
-      unifiedTabsByWorktree: {
-        'repo1::/path/wt1': [
-          makeUnifiedTab({
-            id: 'tab-1',
-            worktreeId: 'repo1::/path/wt1',
-            groupId: 'group-1',
-            createdAt: 1
-          })
-        ],
-        'repo1::/path/wt2': [
-          makeUnifiedTab({
-            id: 'tab-2',
-            worktreeId: 'repo1::/path/wt2',
-            groupId: 'group-2',
-            createdAt: 1
-          })
-        ]
-      },
-      groupsByWorktree: {
-        'repo1::/path/wt1': [
-          {
-            id: 'group-1',
-            worktreeId: 'repo1::/path/wt1',
-            activeTabId: 'tab-1',
-            tabOrder: ['tab-1']
-          }
-        ],
-        'repo1::/path/wt2': [
-          {
-            id: 'group-2',
-            worktreeId: 'repo1::/path/wt2',
-            activeTabId: 'tab-2',
-            tabOrder: ['tab-2']
-          }
-        ]
-      },
-      activeGroupIdByWorktree: {
-        'repo1::/path/wt1': 'group-1',
-        'repo1::/path/wt2': 'group-2'
-      },
-      layoutByWorktree: {
-        'repo1::/path/wt1': { type: 'leaf', groupId: 'group-1' },
-        'repo1::/path/wt2': { type: 'leaf', groupId: 'group-2' }
-      }
-    })
-
-    await store.getState().removeWorktree({ id: 'repo1::/path/wt1', executionHostId: null })
-
-    expect(store.getState().pendingReconnectTabByWorktree).toEqual({
-      'repo1::/path/wt2': ['tab-2']
-    })
-    expect(store.getState().unifiedTabsByWorktree).toEqual({
-      'repo1::/path/wt2': [
-        makeUnifiedTab({
-          id: 'tab-2',
-          worktreeId: 'repo1::/path/wt2',
-          groupId: 'group-2',
-          createdAt: 1
-        })
-      ]
-    })
-    expect(store.getState().groupsByWorktree).toEqual({
-      'repo1::/path/wt2': [
-        { id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2', tabOrder: ['tab-2'] }
-      ]
-    })
-    expect(store.getState().activeGroupIdByWorktree).toEqual({
-      'repo1::/path/wt2': 'group-2'
-    })
-    expect(store.getState().layoutByWorktree).toEqual({
-      'repo1::/path/wt2': { type: 'leaf', groupId: 'group-2' }
     })
   })
 

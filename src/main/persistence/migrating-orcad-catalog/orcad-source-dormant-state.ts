@@ -1,9 +1,19 @@
+import { savedLineageOwners } from '../loading-store/canonical-workspace-lineage'
+import {
+  edgeToWorktreeLineage,
+  edgeToWorkspaceLineage,
+  worktreeLineageToEdge,
+  workspaceLineageToEdge
+} from '../../../shared/worktree/lineage-edge'
 import type {
   OrcadMigrationCatalogPayload,
   OrcadMigrationDormantStatePayload,
   OrcadMigrationManifestSource
 } from '../../../shared/orcad-migration-manifest'
-import { collectOrcadSourceLineageEdges } from './orcad-source-lineage-edges'
+import {
+  collectOrcadSourceLineageEdges,
+  orcadSourceLineageInScope
+} from './orcad-source-lineage-edges'
 import type { OrcadMigrationDependencyKind } from '../../../shared/orcad-migration-preflight'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalScrollbackSnapshotStorage } from '../../terminal-scrollback-snapshots'
@@ -16,7 +26,6 @@ import { collectOrcadMigrationSourceAutomationState } from './orcad-source-autom
 import { collectOrcadMigrationSourceWorkspaceSession } from './orcad-source-workspace-session'
 import {
   createOrcadMigrationSourceScope,
-  orcadMigrationOwnerMatchesScope,
   unqualifyOrcadMigrationOwnerKey
 } from './orcad-source-scope'
 import { collectOrcadMigrationSourceClientState } from './orcad-source-client-state'
@@ -91,21 +100,19 @@ export function collectOrcadMigrationSourceDormantState(
     (entry) => entry.worktreeId,
     () => (blockedCounts['worktree-metadata'] += 1)
   )
+  const owners = savedLineageOwners(state)
   const worktreeLineage = uniqueDestinationRows(
-    Object.entries(state.worktreeLineageById).flatMap(([sourceKey, lineage]) => {
-      const touches = [sourceKey, lineage.worktreeId, lineage.parentWorktreeId].some((value) =>
-        orcadMigrationOwnerMatchesScope(value, scope)
-      )
-      if (!touches) {
+    Object.entries(
+      state.lineageByChildInstance === undefined ? state.worktreeLineageById : {}
+    ).flatMap(([sourceKey, stored]) => {
+      const edge = orcadSourceLineageInScope(state, scope, worktreeLineageToEdge(stored), owners)
+      const lineage = edge && edgeToWorktreeLineage(edge)
+      if (!lineage) {
         return []
       }
       const worktreeId = unqualifyOrcadMigrationOwnerKey(sourceKey)
       if (worktreeId !== lineage.worktreeId) {
         blockedCounts['worktree-lineage'] += 1
-        return []
-      }
-      // Cross-host history belongs to the desktop and stays in its retained source profile.
-      if (!orcadMigrationOwnerMatchesScope(lineage.worktreeId, scope)) {
         return []
       }
       return [{ sourceKey, worktreeId, lineage: structuredClone(lineage) }]
@@ -114,19 +121,17 @@ export function collectOrcadMigrationSourceDormantState(
     () => (blockedCounts['worktree-lineage'] += 1)
   )
   const workspaceLineage = uniqueDestinationRows(
-    Object.entries(state.workspaceLineageByChildKey).flatMap(([sourceKey, lineage]) => {
-      const touches = [sourceKey, lineage.childWorkspaceKey, lineage.parentWorkspaceKey].some(
-        (value) => orcadMigrationOwnerMatchesScope(value, scope)
-      )
-      if (!touches) {
+    Object.entries(
+      state.lineageByChildInstance === undefined ? state.workspaceLineageByChildKey : {}
+    ).flatMap(([sourceKey, stored]) => {
+      const edge = orcadSourceLineageInScope(state, scope, workspaceLineageToEdge(stored), owners)
+      if (!edge) {
         return []
       }
+      const lineage = edgeToWorkspaceLineage(edge)
       const childWorkspaceKey = unqualifyOrcadMigrationOwnerKey(sourceKey)
       if (childWorkspaceKey !== lineage.childWorkspaceKey) {
         blockedCounts['workspace-lineage'] += 1
-        return []
-      }
-      if (!orcadMigrationOwnerMatchesScope(lineage.childWorkspaceKey, scope)) {
         return []
       }
       return [
@@ -189,7 +194,13 @@ export function collectOrcadMigrationSourceDormantState(
   // is what can't be left behind (an unsaved draft), so it keeps blocking.
   ;(leaveBehind ? leftBehindItems : blockedSessionItems).push(...duplicateCloses)
   blockedCounts['workspace-session'] = blockedSessionItems.length
-  const edges = collectOrcadSourceLineageEdges(state, scope, worktreeLineage, workspaceLineage)
+  const edges = collectOrcadSourceLineageEdges(
+    state,
+    scope,
+    worktreeLineage,
+    workspaceLineage,
+    owners
+  )
   if (leaveBehind) {
     // Every row these counts name is already out of the payload. Saved port forwards never block,
     // and the server itself refuses duplicate ports.

@@ -339,10 +339,12 @@ describe('Store.migrateWorktreeIdentity', () => {
 
     expect(store.getWorktreeLineage(OLD)).toBeUndefined()
     expect(store.getWorkspaceLineage(OLD_WORKSPACE_KEY)).toBeUndefined()
-    expect(store.getWorkspaceLineage(NEW_WORKSPACE_KEY)?.childWorkspaceKey).toBe(NEW_WORKSPACE_KEY)
+    expect(store.getLineageEdges().some((edge) => edge.child.locator === NEW_WORKSPACE_KEY)).toBe(
+      true
+    )
     expect(
       store.getWorkspaceLineage(worktreeWorkspaceKey('repo1::/ws/child'))?.parentWorkspaceKey
-    ).toBe(OLD_WORKSPACE_KEY)
+    ).toBe(NEW_WORKSPACE_KEY)
 
     // The live session's tab keeps its frozen ptyId but now belongs to the new id.
     expect(store.getWorktreeIdForTab('tab1')).toBe(NEW)
@@ -388,7 +390,7 @@ describe('Store.migrateWorktreeIdentity', () => {
     expect(hostSession.terminalSurfaceTombstonesByPaneKey).toEqual({})
   })
 
-  it('preserves parent instance and locator hint when the parent is renamed', async () => {
+  it('derives the renamed parent locator while preserving its instance', async () => {
     const store = await createStore()
     store.addRepo(makeRepo({ id: 'repo1', path: '/ws/main' }))
     store.setWorktreeMeta(OLD, { displayName: 'Cunner', instanceId: 'parent-instance' })
@@ -401,7 +403,7 @@ describe('Store.migrateWorktreeIdentity', () => {
 
     store.migrateWorktreeIdentity(OLD, NEW)
 
-    expect(store.getWorktreeLineage(CHILD)?.parentWorktreeId).toBe(OLD)
+    expect(store.getWorktreeLineage(CHILD)?.parentWorktreeId).toBe(NEW)
     expect(store.getWorktreeLineage(CHILD)?.parentWorktreeInstanceId).toBe(
       store.getWorktreeMeta(NEW)?.instanceId
     )

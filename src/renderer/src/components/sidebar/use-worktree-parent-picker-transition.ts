@@ -1,10 +1,15 @@
+import type { WorktreeIdentity } from '../../../../shared/worktree/identity'
 import { useCallback } from 'react'
 import {
   getWorktreeParentPickerAnchor,
   PARENT_PICKER_EXIT_ANIMATION_MS
 } from './worktree-context-menu-policy'
 
-type PendingParentPicker = { childWorktreeId: string; anchorElement: HTMLElement }
+export type PendingParentPicker = {
+  childWorktreeId: string
+  childIdentity: WorktreeIdentity | undefined
+  anchorElement: HTMLElement
+}
 
 export function useWorktreeParentPickerTransition(args: {
   fallbackTimerRef: React.MutableRefObject<number | null>
@@ -15,6 +20,7 @@ export function useWorktreeParentPickerTransition(args: {
   setParentPickerOpen: (open: boolean) => void
   unmountTimerRef: React.MutableRefObject<number | null>
   worktreeId: string
+  childIdentity: WorktreeIdentity | undefined
 }) {
   const openPendingParentPicker = useCallback(() => {
     const pending = args.pendingRef.current
@@ -53,7 +59,11 @@ export function useWorktreeParentPickerTransition(args: {
       if (!anchorElement) {
         return
       }
-      args.pendingRef.current = { childWorktreeId: args.worktreeId, anchorElement }
+      args.pendingRef.current = {
+        childWorktreeId: args.worktreeId,
+        childIdentity: args.childIdentity,
+        anchorElement
+      }
       args.setMenuOpenState(false)
       args.fallbackTimerRef.current = window.setTimeout(openPendingParentPicker, 50)
     },

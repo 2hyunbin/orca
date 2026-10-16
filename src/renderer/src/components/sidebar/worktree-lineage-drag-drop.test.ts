@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { renderHook } from '@testing-library/react'
+import { makeIdentifiedWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { useWorktreeLineageDropCommit } from './worktree-list/drag/use-lineage-drop-commit'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { getCyclicProjectedWorktreeLineageIds } from './worktree-lineage-projection'
@@ -124,6 +127,7 @@ describe('getWorktreeLineageDropTargetId', () => {
     const { container, target } = makeTarget({ worktreeId: 'child', top: 100, bottom: 200 })
     const parentRow = document.createElement('div')
     parentRow.setAttribute('data-worktree-drag-id', 'parent')
+    parentRow.setAttribute('data-worktree-host-identity', 'parent')
     parentRow.append(container.firstElementChild!)
     container.append(parentRow)
 
@@ -264,6 +268,7 @@ function makeTarget(args: {
   const container = document.createElement('div')
   const row = document.createElement('div')
   row.setAttribute('data-worktree-drag-id', args.worktreeId)
+  row.setAttribute('data-worktree-host-identity', args.worktreeId)
   const content = document.createElement('div')
   content.setAttribute('data-worktree-card-parent-content', '')
   content.getBoundingClientRect = () => ({ top: args.top, bottom: args.bottom }) as DOMRect
@@ -283,3 +288,60 @@ function makeTarget(args: {
   }
   return { container, target }
 }
+
+const dragStore = vi.hoisted(() => {
+  const worktreesByRepo: Record<string, Worktree[]> = {}
+  return {
+    worktreesByRepo,
+    assignWorktreeParent: vi.fn().mockResolvedValue(undefined),
+    updateWorktreeLineage: vi.fn().mockResolvedValue(undefined)
+  }
+})
+vi.mock('@/store', () => ({
+  useAppStore: Object.assign((select: (s: typeof dragStore) => unknown) => select(dragStore), {
+    getState: () => dragStore
+  })
+}))
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+
+it.each([1, 2])(
+  'commits exactly %s captured drag occupants and rejects a replaced parent',
+  async (count) => {
+    vi.clearAllMocks()
+    const rows = (['local', 'ssh:remote', 'ssh:parent'] as const).map((host, index) =>
+      makeIdentifiedWorktree(host, String(index), 'repo::/same')
+    )
+    dragStore.worktreesByRepo = { repo: rows }
+    const { result, unmount } = renderHook(() =>
+      useWorktreeLineageDropCommit({
+        repoMap: new Map(),
+        worktreeMap: new Map(),
+        worktrees: rows,
+        worktreeLineageById: {},
+        worktreeDragGroups: []
+      })
+    )
+    const dragged = count === 1 ? [rows[1]] : rows.slice(0, 2)
+    const target = { status: null, isPinDrop: false, lineageParentId: 'ssh:parent|repo::/same' }
+    const captured = result.current.getEligibleLineageDropTarget(target, dragged)
+    expect(result.current.commitWorktreeLineageParentDrop(dragged, captured)).toBe(true)
+    expect(dragStore.assignWorktreeParent.mock.calls).toEqual(
+      dragged.map((row) => [
+        row.id,
+        {
+          identity: row.identity,
+          parentWorktreeId: `identity:${rows[2].identity.key}`
+        }
+      ])
+    )
+    dragStore.assignWorktreeParent.mockClear()
+    dragStore.worktreesByRepo = {
+      repo: [...rows.slice(0, 2), makeIdentifiedWorktree('ssh:parent', 'replacement', rows[2].id)]
+    }
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(result.current.commitWorktreeLineageParentDrop(dragged, captured)).toBe(false)
+    await Promise.resolve()
+    expect(dragStore.assignWorktreeParent).not.toHaveBeenCalled()
+    unmount()
+  }
+)

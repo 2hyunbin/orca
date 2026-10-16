@@ -48,8 +48,8 @@ export type WorktreeCardProps = {
   onAssignWorkspaceStatus?: (worktreeIds: readonly string[], status: WorkspaceStatus) => void
   onCardDragStart?: (
     event: React.DragEvent<HTMLDivElement>,
-    worktreeId: string,
-    draggedIds: readonly string[]
+    worktree: Worktree,
+    draggedWorktrees: readonly Worktree[]
   ) => void
   onCardDragEnd?: (event: React.DragEvent<HTMLDivElement>) => void
   nativeDragEnabled?: boolean

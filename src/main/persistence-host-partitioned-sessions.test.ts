@@ -566,8 +566,8 @@ describe('Store host-partitioned workspace sessions', () => {
     store.removeWorktreeMeta(worktreeId, 'runtime:env-b')
 
     expect(store.getWorktreeMeta(worktreeId)?.hostId).toBe('local')
-    expect(store.getWorktreeLineage(worktreeId)).toEqual(worktreeLineage)
-    expect(store.getWorkspaceLineage(workspaceLineage.childWorkspaceKey)).toEqual(workspaceLineage)
+    expect(store.getWorktreeLineage(worktreeId, 'child-instance')).toEqual(worktreeLineage)
+    expect(store.getLineageEdges()[0]?.parent.instanceId).toBe(workspaceLineage.parentInstanceId)
     expect(store.getWorkspaceSession('local').tabsByWorktree[worktreeId]).toHaveLength(1)
     expect(store.getWorkspaceSession('runtime:env-b').tabsByWorktree[worktreeId]).toBeUndefined()
   })
