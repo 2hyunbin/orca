@@ -17,7 +17,10 @@ import {
   openDedicatedRelayDatabaseTarget,
   openPrimaryRelayDatabaseTarget
 } from './relay-database-targets.js'
-import { SwitchingRelayDatabase } from './switching-relay-database.js'
+import {
+  RelayDatabaseTargetUnavailableError,
+  SwitchingRelayDatabase
+} from './switching-relay-database.js'
 import { retryTransientDatabaseStartup } from './database-startup-retry.js'
 import {
   isPostgresPoolConnectFailure,
@@ -32,7 +35,13 @@ import { postgresErrorCodeCategory } from './postgres-query-failure.js'
 // terminal at boot even though the request path calls them transient.
 function isBootDatabaseUnreachable(error: unknown): boolean {
   const code = postgresErrorCodeCategory(error)
-  return isPostgresPoolConnectFailure(error) || code === '08001' || code === '08006'
+  return (
+    isPostgresPoolConnectFailure(error) ||
+    code === '08001' ||
+    code === '08006' ||
+    // No target may serve yet (no pointer read during a move); the switcher keeps probing.
+    error instanceof RelayDatabaseTargetUnavailableError
+  )
 }
 
 // A cell boots beside a cloud-sql-proxy that is itself still dialling, so the

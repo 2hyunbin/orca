@@ -119,8 +119,6 @@ export class SwitchingRelayDatabase implements RelayDatabase {
   private bootWithoutPointer = false
   private selecting: Promise<void> | null = null
   private unavailable = false
-  // From primary's last answer; a superseded primary is never served, pointer or not.
-  private primarySuperseded = false
   private reprobing = false
   private readonly blockers = new Set<Promise<void>>()
   private readonly releases = new Set<() => void>()
@@ -222,9 +220,9 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     return this.pointer?.generation ?? 0
   }
 
-  // Answered, not superseded, and at or above the pointer's generation.
+  // Answered, and at or above the pointer's generation.
   private eligible(result: RelayDatabaseProbeResult | null): result is RelayDatabaseProbeResult {
-    return result !== null && !result.superseded && result.generation >= this.floor()
+    return result !== null && result.generation >= this.floor()
   }
 
   // A serving process moves only onto an eligible target above what its own target last
@@ -317,7 +315,6 @@ export class SwitchingRelayDatabase implements RelayDatabase {
       this.probe(this.input.primary, timeoutMs),
       dedicated ? this.probe(dedicated, timeoutMs) : null
     ])
-    if (primary) this.primarySuperseded = primary.superseded
     if (this.eligible(other) && other.generation > (primary?.generation ?? 0)) {
       return { name: 'dedicated', ...other, reason: 'higher-generation' }
     }
@@ -334,7 +331,6 @@ export class SwitchingRelayDatabase implements RelayDatabase {
   private adopt(choice: Choice, phase: Phase): void {
     this.unavailable = false
     this.active = { name: choice.name, opened: choice.opened, generation: choice.generation }
-    if (choice.name === 'primary' && choice.generation !== null) this.primarySuperseded = false
     log('orca_relay_database_target_selected', {
       target: choice.name,
       generation: choice.generation,
@@ -402,7 +398,7 @@ export class SwitchingRelayDatabase implements RelayDatabase {
       if (Date.now() >= deadline) break
       await sleep(Math.min(this.probeIntervalMs, deadline - Date.now()))
     }
-    if (this.floor() === 0 && !this.primarySuperseded) {
+    if (this.floor() === 0) {
       const opened = this.input.primary.opened
       this.adopt({ name: 'primary', opened, generation: null, reason: 'none-eligible' }, phase)
       return
@@ -410,28 +406,31 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     this.becomeUnavailable(phase)
   }
 
-  // With no pointer, primary serves exactly as before the pointer existed, unless its own row
-  // says the move tool left it behind: a process that cannot read the pointer must not write
-  // there while the fleet writes elsewhere.
+  // With no pointer read, primary serves exactly as before the pointer existed only while it has
+  // no authority table. Once a move has begun there, serving needs the pointer: a guess could
+  // write to a reopened old copy while the fleet writes to the other one.
   private async serveWithoutPointer(phase: Phase): Promise<boolean> {
     const primary = await this.probe(this.input.primary)
     if (this.closed) return false
-    if (primary?.superseded) {
-      this.primarySuperseded = true
+    if (!primary || primary.moveBegun) {
+      const reason = primary ? 'move-begun' : 'primary-unanswered'
+      if (!this.unavailable) log('orca_relay_database_pointer_required', { phase, reason })
       this.becomeUnavailable(phase)
       return false
     }
     const opened = this.input.primary.opened
-    const generation = primary?.generation ?? null
-    this.adopt({ name: 'primary', opened, generation, reason: 'no-pointer' }, phase)
+    this.adopt({ name: 'primary', opened, generation: 0, reason: 'no-pointer' }, phase)
     return true
   }
 
   private becomeUnavailable(phase: Phase): void {
+    if (!this.unavailable) {
+      log('orca_relay_database_target_unavailable', { floor: this.floor(), phase })
+    }
     this.unavailable = true
-    log('orca_relay_database_target_unavailable', { floor: this.floor(), phase })
     this.startReprobe()
   }
+
 
   private startReprobe(): void {
     if (this.reprobing) return

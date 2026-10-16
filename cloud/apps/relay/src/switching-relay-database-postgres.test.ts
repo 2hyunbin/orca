@@ -257,21 +257,25 @@ describePostgres('switching relay database against two PostgreSQL targets', () =
     await database.close()
   }, 30_000)
 
-  it('refuses a superseded primary when the pointer cannot be read, and reads the old row shape', async () => {
+  it('needs a pointer read once primary has the authority table, and serves as today without it', async () => {
     const targets = await freshTargets()
     const old = databaseUrl(targets.old.role, targets.old)
-    // The authority table from before the column existed still reads: no pointer serves primary.
+    await withClient(old, async (client) => await client.query(`DROP TABLE relay_database_authority`))
+    // No table, no pointer: today's behaviour.
     const plain = switchingDatabase(targets, 2, async () => null).database
     expect(await plain.query('SELECT 1 AS one')).toEqual([{ one: 1 }])
     await plain.close()
 
+    // The move has begun; the pointer cannot be read yet.
     await withClient(old, async (client) => {
-      await client.query(
-        `ALTER TABLE relay_database_authority ADD COLUMN superseded BOOLEAN NOT NULL DEFAULT false`
-      )
-      await client.query(`UPDATE relay_database_authority SET superseded = true`)
+      await client.query(AUTHORITY_TABLE)
+      await client.query(`INSERT INTO relay_database_authority (generation, written_at) VALUES (0, 0)`)
     })
-    const { database } = switchingDatabase(targets, 2, async () => null)
+    const bucket: { pointer: DatabaseTargetPointer | null } = { pointer: null }
+    const { database } = switchingDatabase(targets, 2, async () => {
+      if (bucket.pointer) database.applyPointer(bucket.pointer)
+      return bucket.pointer
+    })
     const insert = `INSERT INTO step4_load (id, worker, at) VALUES ('stray', 0, 0)`
     await expect(database.query(insert)).rejects.toMatchObject({ code: '57P03' })
     await expect(database.query(insert)).rejects.toMatchObject({ code: '57P03' })
@@ -279,6 +283,10 @@ describePostgres('switching relay database against two PostgreSQL targets', () =
       (await client.query(`SELECT id FROM step4_load WHERE id = 'stray'`)).rows
     )
     expect(stray).toEqual([])
+    bucket.pointer = pointer()
+    await sleep(1_500)
+    expect(await database.query(`SELECT 1 AS one`)).toEqual([{ one: 1 }])
+    expect(database.activeTargetName()).toBe('primary')
     await database.close()
   }, 30_000)
 })
