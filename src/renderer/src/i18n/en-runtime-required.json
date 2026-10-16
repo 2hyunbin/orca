@@ -3226,6 +3226,11 @@
       "resumed_other": "{{count}} agent sessions resumed."
     }
   },
+  "workspaceSpace": {
+    "chart": {
+      "workspaceSizes": "Workspace sizes"
+    }
+  },
   "worktreeJumpPalette": {
     "filter": {
       "chipOverflow": "+{{value0}}",
