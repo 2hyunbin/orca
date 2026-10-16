@@ -213,9 +213,13 @@ async function readPathConfigured(
     )
     return output.trim() === 'yes'
   } catch (error) {
-    // Why null, not throw: a blocking ~/.profile (#14288) must not hide whether
-    // the command file exists; null is "unknown", never "not on PATH".
-    if (error instanceof WslCliLoginPathUnavailableError) {
+    // Why null, not throw: the distro already answered the calls before this,
+    // so a blocking ~/.profile (#14288) must not hide whether the command file
+    // exists; null is "unknown", never "not on PATH".
+    if (
+      error instanceof WslCliLoginPathUnavailableError ||
+      error instanceof WslCliUnreachableError
+    ) {
       return null
     }
     throw error

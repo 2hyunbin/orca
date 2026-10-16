@@ -290,9 +290,10 @@ async function runWslCommand(
   command: string,
   options: WslCliRunOptions = {}
 ): Promise<string> {
-  // Install/remove keep the login PATH; status reads opt out so a slow
-  // ~/.profile or cold distro cannot spend their budget (#14288, #29497).
-  const loginPath = options.loginPath ?? 'preferred'
+  // Why 'none' by default: these scripts use absolute paths and coreutils only;
+  // a login-PATH probe would let a slow ~/.profile or cold distro spend their
+  // budget (#14288, #29497). Only the `$PATH` check opts in.
+  const loginPath = options.loginPath ?? 'none'
   const result = await runWslProcess({
     distro,
     loginPath,
