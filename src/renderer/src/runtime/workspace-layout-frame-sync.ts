@@ -13,7 +13,10 @@ import type { AppState } from '@/store/types'
 import { applyLayoutFrame, EMPTY_WORKSPACE_LAYOUT_CACHE } from '@/store/workspace-layout-cache'
 import type { WorkspaceLayoutCache } from '@/store/workspace-layout-cache'
 import { buildLayoutFrameSlices, shownLiveTitle } from '@/store/workspace-layout-frame-slices'
-import { buildLayoutFrameStorePatch } from '@/store/workspace-layout-frame-store-patch'
+import {
+  buildLayoutFrameStorePatch,
+  terminalLayoutsPatch
+} from '@/store/workspace-layout-frame-store-patch'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { buildHostIdByWorktreeId } from '@/lib/workspace-session-host-persistence'
 import {
@@ -195,8 +198,9 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
       }
     }
     paneTreeKeys = waiting
-    if (layouts !== state.terminalLayoutsByTabId) {
-      store.setState({ terminalLayoutsByTabId: layouts })
+    const patch = terminalLayoutsPatch(state, layouts)
+    if (Object.keys(patch).length > 0) {
+      store.setState(patch)
     }
   }
 

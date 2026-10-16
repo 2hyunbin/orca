@@ -202,9 +202,7 @@ export function buildLayoutFrameStorePatch(
     terminalLayouts =
       setKey(terminalLayouts, tabId, built.terminalLayoutsByTabId[tabId]) ?? terminalLayouts
   }
-  if (terminalLayouts !== state.terminalLayoutsByTabId) {
-    patch.terminalLayoutsByTabId = terminalLayouts
-  }
+  Object.assign(patch, terminalLayoutsPatch(state, terminalLayouts))
 
   const keySet = new Set(keys)
   // An open file's editor state is this window's; a frame decides only which files are open.
@@ -253,4 +251,12 @@ export function buildLayoutFrameStorePatch(
     patch.remoteBrowserPageHandlesByPageId = { ...handles, ...Object.fromEntries(addedHandles) }
   }
   return patch
+}
+
+/** The patch that shows `layouts` as the store's pane trees; empty when they are the store's. */
+export function terminalLayoutsPatch(
+  state: Pick<LayoutFrameStoreState, 'terminalLayoutsByTabId'>,
+  layouts: LayoutFrameStoreState['terminalLayoutsByTabId']
+): Partial<LayoutFrameStoreState> {
+  return layouts === state.terminalLayoutsByTabId ? {} : { terminalLayoutsByTabId: layouts }
 }
