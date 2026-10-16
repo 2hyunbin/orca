@@ -323,7 +323,7 @@ export function AccountsPane({
     recordFeatureInteraction
   })
   const runClaudeAccountAction = createClaudeAccountActionRunner({
-    settings,
+    accountOwner,
     isCurrentAccountOwner,
     accountRuntime,
     isRemoteAccountScope,

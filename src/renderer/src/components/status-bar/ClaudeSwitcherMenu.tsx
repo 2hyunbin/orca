@@ -32,9 +32,12 @@ import {
 } from './status-bar-runtime-targets'
 import {
   buildClaudeStatusSwitchGroups,
+  getClaudeStatusActiveId,
   normalizeClaudeStatusRuntimeTarget,
   resolveClaudeStatusAccountState
 } from './status-bar-claude-accounts'
+import { getClaudeAccountLabel } from '../settings/accounts-pane-runtime'
+import { offerToMoveRunningClaudeSessions } from '@/lib/claude-session-move-prompt'
 import { AccountRuntimeToggle } from './StatusBarAccountControls'
 import {
   InlineUsageBars,
@@ -168,6 +171,7 @@ export function ClaudeSwitcherMenu({
     if (isSwitching) {
       return
     }
+    const previousActiveAccountId = getClaudeStatusActiveId(accountState, target)
     setIsSwitching(true)
     try {
       const next = await selectClaudeProviderAccount(runtimeTarget, {
@@ -185,6 +189,14 @@ export function ClaudeSwitcherMenu({
       }
       if (mountedRef.current) {
         setAccountsExpanded(false)
+      }
+      const nextActiveAccountId = getClaudeStatusActiveId(next, target)
+      if (previousActiveAccountId !== nextActiveAccountId) {
+        void offerToMoveRunningClaudeSessions({
+          owner: runtimeTarget,
+          target,
+          nextAccountLabel: getClaudeAccountLabel(next, nextActiveAccountId)
+        })
       }
     } catch (error) {
       console.error('Failed to switch Claude account from status bar:', error)

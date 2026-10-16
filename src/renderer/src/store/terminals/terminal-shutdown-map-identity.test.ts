@@ -23,6 +23,7 @@ const UNTOUCHED_FIELDS = [
 ] as const
 
 function buildState(overrides: Partial<AppState> = {}): AppState {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shutdown helper reads only these terminal maps and calls only the stubbed actions.
   return {
     tabsByWorktree: { [WORKTREE]: [tab] },
     // The tab already exited: its pty list is present and empty.

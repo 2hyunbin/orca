@@ -19919,7 +19919,14 @@
       "moreSignInOptions": "More sign-in options",
       "copySignInLink": "Copy sign-in link instead",
       "signInLinkCopied": "Sign-in link copied. Open it in a private window to sign in with a different account.",
-      "signInLinkCopyFailed": "Could not copy the link."
+      "signInLinkCopyFailed": "Could not copy the link.",
+      "moveSessions": {
+        "titleOne": "Move 1 running Claude session to {{account}}?",
+        "titleOther": "Move {{count}} running Claude sessions to {{account}}?",
+        "description": "Each session restarts and resumes its conversation. A session that is still replying moves when it finishes.",
+        "action": "Move sessions",
+        "dismiss": "Not now"
+      }
     },
     "managedData": {
       "description": "Add accounts by running this command in a terminal on the Orca host. Selection applies to new explicit agent launches on that host; direct SSH relay and Windows-hosted WSL launches use their own credentials.",
