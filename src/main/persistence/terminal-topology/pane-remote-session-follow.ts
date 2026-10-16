@@ -31,3 +31,32 @@ export function followRemoteSessionAfterPaneClose(
   }
   return { ...written, remoteSessionIdsByTabId: next }
 }
+
+/** A window's drag-out: the source tab's remote session id follows the moved pane's terminal. */
+export function followRemoteSessionAfterPaneDetach(
+  command: LayoutCommand,
+  written: WorkspaceSessionState
+): WorkspaceSessionState {
+  const targetTabId = command.type === 'movePaneToNewTab' && command.windowDetach?.tabId
+  const remoteSessionIds = written.remoteSessionIdsByTabId
+  if (!targetTabId || !remoteSessionIds) {
+    return written
+  }
+  const sourceTabId =
+    written.unifiedTabs?.[command.workspace]?.find((entry) => entry.id === command.tabId)
+      ?.entityId ?? command.tabId
+  const ptyId = written.terminalLayoutsByTabId[targetTabId]?.ptyIdsByLeafId?.[command.leafId]
+  if (!ptyId || remoteSessionIds[sourceTabId] !== ptyId) {
+    return written
+  }
+  const remaining = Object.values(
+    written.terminalLayoutsByTabId[sourceTabId]?.ptyIdsByLeafId ?? {}
+  )[0]
+  const next = { ...remoteSessionIds, [targetTabId]: ptyId }
+  if (remaining) {
+    next[sourceTabId] = remaining
+  } else {
+    delete next[sourceTabId]
+  }
+  return { ...written, remoteSessionIdsByTabId: next }
+}
