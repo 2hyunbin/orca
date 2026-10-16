@@ -13,6 +13,13 @@ import { ORCAD_LOCK_FILE_NAME, readOrcadInstanceLockRecord } from './orcad-insta
 const ROW_LIMIT = 128
 const SNAPSHOT_LIMIT = 12
 
+type CleanupDiagnosticError = Error & {
+  code?: unknown
+  syscall?: unknown
+  path?: unknown
+  dest?: unknown
+}
+
 function boundedText(value: string, limit = 2_048): string {
   const tail =
     value.length > limit
@@ -30,12 +37,11 @@ function errorDetails(error: unknown): Record<string, unknown> {
     return { message: boundedText(String(error)) }
   }
   const details: Record<string, unknown> = { name: error.name, message: boundedText(error.message) }
-  for (const key of ['code', 'syscall', 'path', 'dest']) {
-    if (key in error) {
-      const value = Reflect.get(error, key)
-      if (typeof value === 'string') {
-        details[key] = boundedText(value)
-      }
+  const diagnosticError: CleanupDiagnosticError = error
+  for (const key of ['code', 'syscall', 'path', 'dest'] as const) {
+    const value = diagnosticError[key]
+    if (typeof value === 'string') {
+      details[key] = boundedText(value)
     }
   }
   return details
@@ -126,7 +132,6 @@ export class ServeCleanupDiagnostics {
         lock?.role === 'orcad' &&
         lock.pid === this.child?.pid &&
         lock.startedAtMs !== null &&
-        lock?.startedAtMs !== undefined &&
         lock.startedAtMs >= this.launchedAt - 1_000
       ) {
         this.serveStartedAtMs ??= lock.startedAtMs
