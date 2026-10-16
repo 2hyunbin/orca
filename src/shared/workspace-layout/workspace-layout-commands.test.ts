@@ -411,6 +411,30 @@ describe('layout command effects', () => {
     )
     expect(stale.results[0]).toEqual({ tabId: 'tab-main', ptyId: 'pty-live' })
     expect(stale.model.workspaces[WS]!.leaves?.[leafA2]).toEqual({ ptyId: 'pty-live' })
+    // A copy that never bound the pane keeps its incarnation, as the desktop's move does.
+    const unbound = applyLayoutCommand(
+      {
+        ...model,
+        workspaces: {
+          [WS]: {
+            ...workspace,
+            leaves: { ...workspace.leaves, [leafA2]: { incarnationId: 'inc' } }
+          }
+        }
+      },
+      {
+        type: 'movePaneToNewTab',
+        workspace: WS,
+        tabId: tabA,
+        leafId: leafA2,
+        windowDetach: { ptyId: 'pty-live', tabId: 'tab-main' }
+      },
+      ctx
+    )
+    expect(unbound.ok && unbound.model.workspaces[WS]!.leaves?.[leafA2]).toEqual({
+      ptyId: 'pty-live',
+      incarnationId: 'inc'
+    })
 
     // Main's copy lacks the window's other panes, so the tab stays for them (no rule check: to
     // main's copy alone it reads as the tab re-ided).

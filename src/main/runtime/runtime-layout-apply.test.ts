@@ -153,19 +153,25 @@ describe('applyWindowLayoutCommand', () => {
       'ssh:t',
       'local'
     ])
-    expect(onPaneMoved).toHaveBeenCalledWith(
-      {
-        worktreeId: 'wt-1',
-        sourceTabId: 'term-1',
-        targetTabId: 'tab-new',
-        leafId: 'leaf-1',
-        ptyId: 'pty-1'
-      },
-      'pty-1'
-    )
+    expect(onPaneMoved).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+      sourceTabId: 'term-1',
+      targetTabId: 'tab-new',
+      leafId: 'leaf-1',
+      ptyId: 'pty-1'
+    })
     applyLayoutCommand.mockResolvedValueOnce({ ok: false, code: 'pty_mismatch' })
     await applyWindowLayoutCommand(withSession, () => ['local'], move, onPaneMoved)
     expect(onPaneMoved).toHaveBeenCalledTimes(1)
+    // A committed move still answers ok when re-keying throws.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    applyLayoutCommand.mockResolvedValueOnce({ ok: true, result: { tabId: 'tab-2', ptyId: null } })
+    onPaneMoved.mockImplementationOnce(() => {
+      throw new Error('rekey failed')
+    })
+    await expect(
+      applyWindowLayoutCommand(withSession, () => ['local'], move, onPaneMoved)
+    ).resolves.toMatchObject({ ok: true })
   })
 
   it('refuses a tab a paired server routes, touching nothing', async () => {

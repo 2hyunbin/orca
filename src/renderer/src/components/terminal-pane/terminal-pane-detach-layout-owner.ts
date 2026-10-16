@@ -7,7 +7,7 @@ import type {
 /**
  * A layout-owner build's drag-out: main moves the pane under the desktop's move rules and names the
  * new tab. Today's move runs instead when main cannot act on it (a paired server's workspace, or a
- * tab or pane main's copy lacks).
+ * tab or pane main's copy lacks, such as a legacy tab whose tab-bar id differs from its terminal's).
  */
 export function moveLeafThroughLayoutOwner(
   request: TerminalLeafMoveRequest,

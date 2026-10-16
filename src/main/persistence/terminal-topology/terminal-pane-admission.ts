@@ -21,7 +21,7 @@ import { patchStoredSession } from '../../../shared/workspace-layout/workspace-l
 import {
   followRemoteSessionAfterPaneClose,
   followRemoteSessionAfterPaneDetach
-} from './pane-close-remote-session'
+} from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */

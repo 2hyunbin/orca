@@ -21,7 +21,7 @@ export async function applyWindowLayoutCommand(
   hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
   command: WindowLayoutCommand,
   /** Agent status and orchestration records follow a pane moved into a new tab. */
-  onPaneMoved: (move: TerminalLeafMoveRequest, ptyId: string | null) => void = () => {}
+  onPaneMoved: (move: TerminalLeafMoveRequest) => void = () => {}
 ): Promise<LayoutApplyReply> {
   const routedTabId =
     'tabId' in command ? command.tabId : command.type === 'closeTabs' ? command.tabIds[0] : null
@@ -56,16 +56,19 @@ export async function applyWindowLayoutCommand(
       holders
     )
     if (reply.ok && reply.result.tabId) {
-      onPaneMoved(
-        {
-          worktreeId: command.workspace,
-          sourceTabId,
-          targetTabId: reply.result.tabId,
-          leafId: command.leafId,
-          ptyId: reply.result.ptyId ?? null
-        },
-        reply.result.ptyId ?? null
-      )
+      const move = {
+        worktreeId: command.workspace,
+        sourceTabId,
+        targetTabId: reply.result.tabId,
+        leafId: command.leafId,
+        ptyId: reply.result.ptyId ?? null
+      }
+      // Why: the move is committed; a throw here would send the window to today's move as well.
+      try {
+        onPaneMoved(move)
+      } catch (error) {
+        console.warn('[layout] moved pane kept some of its old keys:', error)
+      }
     }
     return reply
   }

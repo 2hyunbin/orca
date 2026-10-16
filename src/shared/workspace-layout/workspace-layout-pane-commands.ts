@@ -235,6 +235,9 @@ function bindDetachedLeaf(
   if (!detach?.ptyId || leaf?.ptyId === detach.ptyId) {
     return workspace
   }
-  const { incarnationId: _stale, ...rest } = leaf ?? {}
+  if (!leaf?.ptyId) {
+    return setLeaf(workspace, leafId, { ...leaf, ptyId: detach.ptyId })
+  }
+  const { incarnationId: _stale, ...rest } = leaf
   return setLeaf(workspace, leafId, { ...rest, ptyId: detach.ptyId })
 }
