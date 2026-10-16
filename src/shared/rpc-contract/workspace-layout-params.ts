@@ -218,6 +218,27 @@ const SetBrowserTabProfileCommand = z.object({
 
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
+/**
+ * Restored editor tabs the window moved to the workspace that owns their file (F42): the window
+ * resolved that owner. Main refuses it when the two workspaces are in different partitions.
+ */
+const MoveTabToWorkspaceCommand = z.object({
+  type: z.literal('moveTabToWorkspace'),
+  workspace: OnPane.workspace,
+  toWorkspace: z.string().min(1),
+  tabs: z
+    .array(
+      z.object({
+        tabId: z.string().min(1),
+        newTabId: z.string().min(1),
+        newEntityId: z.string().min(1)
+      })
+    )
+    .min(1),
+  groupId: z.string().min(1),
+  file: EditorFileRecord.optional()
+})
+
 /** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
 function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolean {
   return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
@@ -273,6 +294,7 @@ export const LayoutApplyParams = z.object({
     SetBrowserTabProfileCommand,
     OpenEditorTabCommand,
     PromotePreviewTabCommand,
+    MoveTabToWorkspaceCommand,
     SleepCommand,
     WakeCommand
   ])
