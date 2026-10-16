@@ -105,14 +105,6 @@ export function applyCommandToSession(
   if (taken) {
     return { value: taken, session: null }
   }
-  // Gone and not taken back by main (a client closed it): a late record must not bring it back.
-  if (
-    command.type === 'splitPane' &&
-    command.mainAsked &&
-    loaded.layout.workspaces[command.workspace]?.tabs.some((tab) => tab.id === command.tabId)
-  ) {
-    return { value: { ok: false, code: 'pane_closed' }, session: null }
-  }
   return applyToSession(loaded, command, (after) => {
     const patched = touchedRecords(session, loaded, after)
     return patched

@@ -11,12 +11,14 @@ import {
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 const sendLayoutApply = vi.hoisted(() => vi.fn())
-vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply, recordLayoutApply: vi.fn() }))
+vi.mock('@/runtime/layout-apply-send', () => ({
+  sendLayoutApply,
+  recordLayoutApply: sendLayoutApply
+}))
 const storeState = vi.hoisted(() => ({ recordFeatureInteraction: () => {} }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => storeState } }))
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
 
-const closePane = vi.hoisted(() => vi.fn())
 const SOURCE = '11111111-1111-4111-8111-111111111111'
 const NEW = '22222222-2222-4222-8222-222222222222'
 
@@ -29,8 +31,6 @@ function mountedTab(): { manager: PaneManager; splitPane: ReturnType<typeof vi.f
   })
   const manager = {
     splitPane,
-    closePane,
-    getPanes: () => [...leafById.keys()].map((id) => ({ id })),
     getLeafId: (paneId: number) => leafById.get(paneId) ?? null,
     getNumericIdForLeaf: (leafId: string) =>
       [...leafById].find(([, id]) => id === leafId)?.[0] ?? null
@@ -62,7 +62,7 @@ describe('a split main asked for, mounted in a layout-owner build', () => {
     _resetTerminalPaneSplitRequestRoutingForTests()
   })
 
-  it('records the mounted pane in main, so a pane main took back meanwhile returns', () => {
+  it('mounts the pane under main’s id and records nothing: main already holds it', () => {
     const { manager, splitPane } = mountedTab()
     const uninstall = install(manager)
 
@@ -76,52 +76,6 @@ describe('a split main asked for, mounted in a layout-owner build', () => {
     })
 
     expect(splitPane).toHaveBeenCalledWith(1, 'vertical', { leafId: NEW })
-    expect(sendLayoutApply).toHaveBeenCalledWith(
-      storeState,
-      'wt-1',
-      {
-        type: 'splitPane',
-        tabId: 'tab-1',
-        leafId: SOURCE,
-        direction: 'vertical',
-        newLeafId: NEW,
-        mainAsked: true
-      },
-      expect.any(Object)
-    )
-    uninstall()
-  })
-
-  it('removes the mounted pane when main says a client closed it meanwhile', () => {
-    const { manager } = mountedTab()
-    const uninstall = install(manager)
-    dispatchTerminalPaneSplitRequest({
-      tabId: 'tab-1',
-      worktreeId: 'wt-1',
-      paneRuntimeId: 1,
-      sourceLeafId: SOURCE,
-      direction: 'vertical',
-      newLeafId: NEW
-    })
-
-    sendLayoutApply.mock.calls[0]![3].refused('pane_closed')
-
-    expect(closePane).toHaveBeenCalledWith(2)
-    uninstall()
-  })
-
-  it('records nothing for a split that names no pane id', () => {
-    const { manager } = mountedTab()
-    const uninstall = install(manager)
-
-    dispatchTerminalPaneSplitRequest({
-      tabId: 'tab-1',
-      worktreeId: 'wt-1',
-      paneRuntimeId: 1,
-      sourceLeafId: SOURCE,
-      direction: 'horizontal'
-    })
-
     expect(sendLayoutApply).not.toHaveBeenCalled()
     uninstall()
   })

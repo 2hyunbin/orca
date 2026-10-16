@@ -15,8 +15,6 @@ import {
   resolveTerminalPaneSplitSourceId
 } from './terminal-pane-split-request-routing'
 import type { PtyConnectionDeps } from './pty-connection-types'
-import { recordMountedMainSplit } from './terminal-pane-bootstrap-split-record'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 export function installTerminalPaneMountEvents(args: {
   manager: PaneManager
@@ -49,23 +47,6 @@ export function installTerminalPaneMountEvents(args: {
       if (sourcePaneId < 0) {
         return
       }
-      const recordMainSplitMounted = (leafId: string | undefined): void => {
-        const sourceLeafId = mgr.getLeafId(sourcePaneId)
-        if (leafId && leafId === detail.newLeafId && sourceLeafId) {
-          const { tabId } = deps
-          recordMountedMainSplit(
-            deps.worktreeId,
-            { tabId, sourceLeafId, direction: detail.direction, newLeafId: leafId },
-            // A client closed it while the window mounted it late: the window's copy goes too.
-            () => {
-              const paneId = mgr.getNumericIdForLeaf(leafId)
-              if (paneId !== null && mgr.getPanes().length > 1) {
-                mgr.closePane(paneId)
-              }
-            }
-          )
-        }
-      }
       const splitOptions = {
         ...(detail.newLeafId ? { leafId: detail.newLeafId } : {}),
         ...(detail.ptyId ? { ptyId: detail.ptyId } : {})
@@ -74,19 +55,12 @@ export function installTerminalPaneMountEvents(args: {
         const createdPane = splitPaneWithOneShotStartup(ptyDeps, { command: detail.command }, () =>
           mgr.splitPane(sourcePaneId, detail.direction, splitOptions)
         )
-        // Switch point: main may have taken back a pane the window mounted late; record it again.
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-          recordMainSplitMounted(createdPane?.leafId)
-        }
         recordRuntimeCreatedTerminalPaneSplit(createdPane, {
           source: detail.telemetrySource ?? 'command',
           direction: detail.direction
         })
       } else {
         const createdPane = mgr.splitPane(sourcePaneId, detail.direction, splitOptions)
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-          recordMainSplitMounted(createdPane?.leafId)
-        }
         const telemetrySuppressed = createdPane
           ? consumePendingWebRuntimeSplitMirrorTelemetry(detail.sourcePtyId, detail.direction)
           : false

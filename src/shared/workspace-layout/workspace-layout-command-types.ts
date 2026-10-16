@@ -50,8 +50,6 @@ export type LayoutCommand =
       ratio?: number
       /** The new pane's id, when the runtime minted it before applying. */
       newLeafId?: string
-      /** The window's record of a split main asked for: written only if main took it back. */
-      mainAsked?: true
     })
   | (On & {
       type: 'closePane'
@@ -208,8 +206,6 @@ export type LayoutRefusalCode =
   | 'pane_in_other_tab'
   | 'pty_mismatch'
   | 'page_exists'
-  /** A main-asked split's record: a client closed the pane since; main did not take it back. */
-  | 'pane_closed'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }

@@ -3,7 +3,6 @@ import type {
   TerminalPaneAdmission,
   TerminalPaneAdmissionOutcome
 } from '../persistence/terminal-topology/terminal-pane-admission'
-import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -55,15 +54,14 @@ export async function withdrawRuntimePane(
   await withdrawAdmittedPane(store, admissionFor(args), hostIdOf(args))
 }
 
-/** Never the user's close: main stops no launch for it, unlike a window's closePane. Null when
- *  the pane was taken back. */
+/** Never the user's close: main stops no launch for it, unlike a window's closePane. */
 async function withdrawAdmittedPane(
   store: RuntimeStore | null | undefined,
   admission: TerminalPaneAdmission,
   hostId: string | undefined
-): Promise<LayoutRefusalCode | null | undefined> {
+): Promise<void> {
   const leafId = admission.type === 'createTerminalTab' ? admission.leafId : admission.newLeafId
-  return await store?.withdrawTerminalPane?.(
+  await store?.withdrawTerminalPane?.(
     { type: 'closePane', workspace: admission.workspace, tabId: admission.tabId, leafId },
     hostId
   )
@@ -82,8 +80,6 @@ export async function startInAdmittedPane<T>(
     shown?: () => boolean
     /** A thrown write is rolled back, so the start may go ahead without the pane. */
     startIfWriteFails?: true
-    /** The pane this wrote was taken back after the start failed. */
-    onWithdrawn?: () => void
   } = {}
 ): Promise<{ outcome: TerminalPaneAdmissionOutcome | undefined; result: T }> {
   let outcome: TerminalPaneAdmissionOutcome | undefined
@@ -98,12 +94,8 @@ export async function startInAdmittedPane<T>(
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
-    if (
-      outcome === 'admitted' &&
-      !options.shown?.() &&
-      (await withdrawAdmittedPane(store, admission, hostId)) === null
-    ) {
-      options.onWithdrawn?.()
+    if (outcome === 'admitted' && !options.shown?.()) {
+      await withdrawAdmittedPane(store, admission, hostId)
     }
     throw error
   }

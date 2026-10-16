@@ -20,7 +20,7 @@ function storeAnswering(admit: TerminalPaneAdmissionOutcome | Error) {
       }
       return admit
     }),
-    withdrawTerminalPane: vi.fn(async (): Promise<string | null> => null)
+    withdrawTerminalPane: vi.fn(async () => null)
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the admission path calls only these two store methods.
   return { store, runtimeStore: store as unknown as RuntimeStore }
@@ -51,26 +51,6 @@ describe('startInAdmittedPane', () => {
       { type: 'closePane', workspace: 'wt-1', tabId: 'tab-1', leafId: 'leaf-new' },
       undefined
     )
-  })
-
-  it('says when it took the pane back, and not when the store found it already gone', async () => {
-    const taken = storeAnswering('admitted')
-    const onWithdrawn = vi.fn()
-    const fail = async (): Promise<never> => {
-      throw new Error('mount timed out')
-    }
-    await expect(
-      startInAdmittedPane(taken.runtimeStore, SPLIT, undefined, fail, { onWithdrawn })
-    ).rejects.toThrow()
-    expect(onWithdrawn).toHaveBeenCalledOnce()
-
-    const gone = storeAnswering('admitted')
-    gone.store.withdrawTerminalPane.mockResolvedValue('pane_not_found')
-    const notWithdrawn = vi.fn()
-    await expect(
-      startInAdmittedPane(gone.runtimeStore, SPLIT, undefined, fail, { onWithdrawn: notWithdrawn })
-    ).rejects.toThrow()
-    expect(notWithdrawn).not.toHaveBeenCalled()
   })
 
   it('keeps a pane a client already shows, and one it did not write', async () => {

@@ -29,8 +29,7 @@ const SplitPaneCommand = z.object({
   type: z.literal('splitPane'),
   ...OnPane,
   direction: z.enum(['horizontal', 'vertical']),
-  newLeafId: z.string().refine(isTerminalLeafId).optional(),
-  mainAsked: z.literal(true).optional()
+  newLeafId: z.string().refine(isTerminalLeafId).optional()
 })
 
 /** Main marks a close as the user's; the window cannot send that mark. `automatic`: not the

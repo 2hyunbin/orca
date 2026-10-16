@@ -1,6 +1,6 @@
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { useAppStore } from '@/store'
-import { recordLayoutApply, sendLayoutApply } from '@/runtime/layout-apply-send'
+import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 export type BootstrapSplitManager = Pick<
   PaneManager,
@@ -31,10 +31,7 @@ export function recordingBootstrapSplits(
   }
 }
 
-/**
- * Records a split the window drew under its pane id; main writes it, or finds the pane it already
- * holds and changes nothing.
- */
+/** Records a split the window drew under its pane id; main writes it, or finds it already held. */
 export function recordDrawnPaneSplit(
   worktreeId: string,
   tabId: string,
@@ -49,35 +46,4 @@ export function recordDrawnPaneSplit(
     direction,
     newLeafId
   })
-}
-
-/**
- * Records a split main asked for, once the window mounted it. Main writes it again only if it took
- * it back while the window mounted it late; a pane a client closed meanwhile stays closed, and
- * `gone` removes the window's copy.
- */
-export function recordMountedMainSplit(
-  worktreeId: string,
-  split: {
-    tabId: string
-    sourceLeafId: string
-    direction: 'vertical' | 'horizontal'
-    newLeafId: string
-  },
-  gone: () => void
-): void {
-  const keep = (): void => {}
-  sendLayoutApply(
-    useAppStore.getState(),
-    worktreeId,
-    {
-      type: 'splitPane',
-      tabId: split.tabId,
-      leafId: split.sourceLeafId,
-      direction: split.direction,
-      newLeafId: split.newLeafId,
-      mainAsked: true
-    },
-    { apply: keep, asToday: keep, refused: (code) => code === 'pane_closed' && gone() }
-  )
 }

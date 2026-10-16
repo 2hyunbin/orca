@@ -10,30 +10,6 @@ import { startInAdmittedPane } from '../../runtime-pane-admission'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
-  /** Pane id of each split main wrote and awaits → whether the window already recorded it. */
-  private readonly awaitedSplitLeafIds = new Map<string, boolean>()
-
-  /** Splits main wrote and did not take back itself: gone, a client closed it. */
-  private readonly writtenSplitLeafIds = new Set<string>()
-  /** Splits main is taking back now; a record waits, so it sees the outcome. */
-  private readonly withdrawingSplits = new Map<string, Promise<void>>()
-
-  /** Settles once main is done taking back this split; undefined when it is not. */
-  protected splitWithdrawal(leafId: string): Promise<void> | undefined {
-    return this.withdrawingSplits.get(leafId)
-  }
-
-  /**
-   * The window recorded a split it mounted: one main awaits counts as shown before its graph says
-   * so. True when main wrote that split and did not take it back, so a record must not re-add it.
-   */
-  protected noteWindowMountedSplit(leafId: string): boolean {
-    if (this.awaitedSplitLeafIds.has(leafId)) {
-      this.awaitedSplitLeafIds.set(leafId, true)
-    }
-    return this.writtenSplitLeafIds.has(leafId)
-  }
-
   protected abstract splitPtyBackedTerminal(
     pty: RuntimePtyWorktreeRecord,
     opts?: TerminalSplitOptions,
@@ -74,8 +50,6 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       const [hostId] = this.getWorkspaceSessionHostIdsForTab(leaf.worktreeId, leaf.tabId)
       if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
         const newLeafId = randomUUID()
-        this.awaitedSplitLeafIds.set(newLeafId, false)
-        const withdrawn = Promise.withResolvers<void>()
         const { result: newHandle } = await startInAdmittedPane(
           this.store,
           {
@@ -87,10 +61,10 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             newLeafId
           },
           hostId,
-          // A refused or failed write splits as today; the window's record of it writes the pane.
+          // No pane written, no split: nothing else would put it in main's copy.
           (outcome) => {
-            if (outcome === 'admitted') {
-              rememberWritten(this.writtenSplitLeafIds, newLeafId)
+            if (outcome !== 'admitted' && outcome !== 'exists') {
+              throw new Error(`split_not_written: ${outcome ?? 'unknown'}`)
             }
             this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
               direction,
@@ -102,26 +76,10 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             })
             return this.waitForLeafInTab(leaf.tabId, newLeafId)
           },
-          {
-            // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
-            shown: () => {
-              const shown =
-                this.awaitedSplitLeafIds.get(newLeafId) === true ||
-                this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId))
-              if (!shown) {
-                this.withdrawingSplits.set(newLeafId, withdrawn.promise)
-              }
-              return shown
-            },
-            startIfWriteFails: true,
-            // Taken back unshown: the window's late record may write it again.
-            onWithdrawn: () => this.writtenSplitLeafIds.delete(newLeafId)
-          }
-        ).finally(() => {
-          this.awaitedSplitLeafIds.delete(newLeafId)
-          this.withdrawingSplits.delete(newLeafId)
-          withdrawn.resolve()
-        })
+          // Main keeps the pane however its start goes. One whose terminal never starts is a dead
+          // pane, as any.
+          { shown: () => true }
+        )
         return {
           handle: newHandle,
           tabId: leaf.tabId,
@@ -149,13 +107,5 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       paneRuntimeId: leaf.paneRuntimeId,
       leafId: newLeafId
     }
-  }
-}
-
-/** Kept only for the newest few: a record comes within one mount of the window. */
-function rememberWritten(written: Set<string>, leafId: string): void {
-  written.add(leafId)
-  if (written.size > 64) {
-    written.delete(written.values().next().value!)
   }
 }

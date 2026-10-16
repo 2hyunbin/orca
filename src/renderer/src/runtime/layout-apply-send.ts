@@ -26,8 +26,6 @@ export type WindowLayoutCommand =
       direction: 'vertical' | 'horizontal'
       /** A pane the window already split under its own id. */
       newLeafId?: string
-      /** A split main asked for: main writes it again only if it took it back. */
-      mainAsked?: true
     }
   | { type: 'closePane'; tabId: string; leafId: string; automatic?: true }
   | { type: 'renamePane'; tabId: string; leafId: string; title: string | null }
