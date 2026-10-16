@@ -236,4 +236,28 @@ describe('DesktopBrowserBridgeManager', () => {
     await vi.waitFor(() => expect(h.execute).toHaveBeenCalled())
     expect(socket.close).not.toHaveBeenCalled()
   })
+
+  it('tells the host at once when a finished command result cannot be delivered', async () => {
+    const h = harness()
+    h.manager.reconcile()
+    await vi.waitFor(() => expect(h.subscriptions).toHaveLength(1))
+    const socket = h.subscriptions[0]!
+    socket.sendRequest.mockRejectedValueOnce(new Error('outbound_message_too_large'))
+    socket.callbacks.onResponse(event({ type: 'ready', attachmentId: 'att-1' }))
+
+    socket.callbacks.onResponse(
+      event({ type: 'request', requestId: 'big', method: 'browser.fullScreenshot', params: {} })
+    )
+
+    await vi.waitFor(() => expect(socket.sendRequest).toHaveBeenCalledTimes(2))
+    expect(socket.sendRequest).toHaveBeenLastCalledWith(
+      'desktopBrowserBridge.result',
+      expect.objectContaining({
+        requestId: 'big',
+        ok: false,
+        error: expect.objectContaining({ code: 'desktop_browser_bridge_result_undeliverable' })
+      }),
+      expect.any(Number)
+    )
+  })
 })

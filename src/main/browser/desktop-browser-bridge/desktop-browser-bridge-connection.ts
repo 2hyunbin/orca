@@ -113,11 +113,31 @@ export class DesktopBrowserBridgeConnection {
       : { attachmentId, requestId: request.requestId, ok: false, error: outcome.error }
     try {
       await sendRequest('desktopBrowserBridge.result', params, RESULT_TIMEOUT_MS)
+      return
     } catch (error) {
       console.warn(
         '[desktop-browser-bridge] Could not return a result to the host:',
         error instanceof Error ? error.message : String(error)
       )
+    }
+    // Why: the command already ran; the host must hear that now, not at its own timeout.
+    try {
+      await sendRequest(
+        'desktopBrowserBridge.result',
+        {
+          attachmentId,
+          requestId: request.requestId,
+          ok: false,
+          error: {
+            code: 'desktop_browser_bridge_result_undeliverable',
+            message:
+              'The desktop ran the command but could not send its result back (it may be too large, such as a full-page screenshot).'
+          }
+        },
+        RESULT_TIMEOUT_MS
+      )
+    } catch {
+      // The transport is gone; orcad fails the request when the attachment detaches.
     }
   }
 
