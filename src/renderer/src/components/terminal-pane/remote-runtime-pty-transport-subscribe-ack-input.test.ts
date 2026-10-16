@@ -181,6 +181,29 @@ describe('remote recovery input at the subscribed ack', () => {
     transport.destroy?.()
   })
 
+  it('keeps recovering when replaying a claim on an ackless host fails its write', async () => {
+    const { transport, streamId } = await recoveringTransport((outage) => {
+      expect(outage.claimViewport?.(100, 30)).toBe(true)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    subscriptionSendBinary.mockImplementation((bytes) => {
+      const opcode = decodeTerminalStreamFrame(bytes)?.opcode
+      // The link is gone: the replayed claim and the immediate resubscribe both fail to write.
+      if (
+        opcode === TerminalStreamOpcode.ClaimViewport ||
+        opcode === TerminalStreamOpcode.Subscribe
+      ) {
+        throw new Error('socket closed')
+      }
+    })
+    // An older host never sends the subscribed ack; its snapshot end is the first readiness signal.
+    emitSnapshot(streamId, 'prompt$ ')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(transport.isConnected()).toBe(false)
+    expect(['recovering', 'backoff']).toContain(transport.getRecoveryState?.().phase)
+    transport.destroy?.()
+  })
+
   it('sends a claim made after the subscribed ack instead of dropping it', async () => {
     const { transport, streamId } = await recoveringTransport()
     acknowledgeSubscribe(streamId)

@@ -2647,6 +2647,9 @@ export function createRemoteRuntimePtyTransport(
               getCurrentMultiplexedStream(subscribedHandle) === installedStream
             ) {
               replayRecoveryDeferredViewport(installedStream)
+              if (!isCurrentSubscription()) {
+                return
+              }
             }
             releaseHeldInput()
           }
@@ -2654,6 +2657,14 @@ export function createRemoteRuntimePtyTransport(
         onSubscribed: () => {
           if (!isCurrentSubscription()) {
             return
+          }
+          if (installedStream) {
+            // Why: hosts without a subscribed ack never reach the ack replay.
+            replayRecoveryDeferredViewport(installedStream)
+            // Why: a failed replay write closes the stream and begins recovery; marking healthy would cancel it.
+            if (!isCurrentSubscription()) {
+              return
+            }
           }
           storedCallbacks.onOutputPauseChanged?.(
             desiredOutputPaused,
@@ -2666,10 +2677,6 @@ export function createRemoteRuntimePtyTransport(
           subscriptionAttached = true
           setAttachmentReady(true)
           connecting = false
-          if (installedStream) {
-            // Why: hosts without a subscribed ack never reach the ack replay.
-            replayRecoveryDeferredViewport(installedStream)
-          }
           resetRecoveryReplacementPolicy()
           markRecoveryHealthy()
           emitRecoveryState()
