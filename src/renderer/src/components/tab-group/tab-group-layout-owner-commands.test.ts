@@ -68,10 +68,8 @@ beforeEach(() => {
 describe('dropTabThroughLayoutOwner', () => {
   it('moves the tab only once main has, then selects it in its new group', () => {
     const { right } = seeded()
-    const settle = vi.fn()
-
     expect(
-      dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right, index: 0 }, settle)
+      dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right, index: 0 })
     ).toBe(true)
     expect(mocks.send).toHaveBeenCalledWith(
       WT,
@@ -84,12 +82,11 @@ describe('dropTabThroughLayoutOwner', () => {
 
     expect(orderOf(right)).toEqual(['a', 'c'])
     expect(store().getState().activeGroupIdByWorktree[WT]).toBe(right)
-    expect(settle).toHaveBeenCalledWith(true)
   })
 
   it('only selects the tab when main’s frame already moved it', () => {
     const { left, right } = seeded()
-    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right }, vi.fn())
+    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
     // Main's frame lands first: the tab is in its group, the window's selection unchanged.
     store().getState().dropUnifiedTab('a', { groupId: right, index: 1 })
     store().getState().focusGroup(WT, left)
@@ -108,11 +105,7 @@ describe('dropTabThroughLayoutOwner', () => {
   it('splits off a group under main’s id when the window makes the move itself', () => {
     const { left } = seeded()
 
-    dropTabThroughLayoutOwner(
-      WT,
-      { kind: 'split', tabId: 'b', groupId: left, direction: 'down' },
-      vi.fn()
-    )
+    dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'b', groupId: left, direction: 'down' })
     expect(mocks.send.mock.calls[0]![1]).toEqual({
       type: 'splitGroup',
       tabId: 'b',
@@ -128,11 +121,7 @@ describe('dropTabThroughLayoutOwner', () => {
   it('moves a lone tab’s group whole when main kept its id', () => {
     const { left, right } = seeded()
 
-    dropTabThroughLayoutOwner(
-      WT,
-      { kind: 'split', tabId: 'c', groupId: left, direction: 'left' },
-      vi.fn()
-    )
+    dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'c', groupId: left, direction: 'left' })
     lastHandlers().apply({ groupId: right })
 
     expect(
@@ -154,11 +143,12 @@ describe('dropTabThroughLayoutOwner', () => {
     const { left, right } = seeded()
 
     expect(
-      dropTabThroughLayoutOwner(
-        WT,
-        { kind: 'split', tabId: 'c', groupId: left, direction: 'right' },
-        vi.fn()
-      )
+      dropTabThroughLayoutOwner(WT, {
+        kind: 'split',
+        tabId: 'c',
+        groupId: left,
+        direction: 'right'
+      })
     ).toBe(false)
     expect(mocks.send).not.toHaveBeenCalled()
     expect(groupOf('c')).toBe(right)
@@ -167,11 +157,12 @@ describe('dropTabThroughLayoutOwner', () => {
   it('reorders within a group at the index main got', () => {
     const { left } = seeded()
 
-    dropTabThroughLayoutOwner(
-      WT,
-      { kind: 'reorder', tabId: 'a', groupId: left, tabOrder: ['b', 'a'] },
-      vi.fn()
-    )
+    dropTabThroughLayoutOwner(WT, {
+      kind: 'reorder',
+      tabId: 'a',
+      groupId: left,
+      tabOrder: ['b', 'a']
+    })
     expect(mocks.send.mock.calls[0]![1]).toEqual({
       type: 'moveTab',
       tabId: 'a',
@@ -185,17 +176,25 @@ describe('dropTabThroughLayoutOwner', () => {
 
   it('moves as today when main cannot act, and not at all when main refuses', () => {
     const { right } = seeded()
-    const settle = vi.fn()
 
-    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right }, settle)
+    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
     lastHandlers().refused?.('invalid_params')
-    expect(settle).toHaveBeenLastCalledWith(false)
     expect(groupOf('a')).not.toBe(right)
 
-    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right }, settle)
+    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
     lastHandlers().asToday()
-    expect(settle).toHaveBeenLastCalledWith(true)
     expect(orderOf(right)).toEqual(['c', 'a'])
+  })
+
+  it('splits as today when main moved a group whole that holds more tabs here', () => {
+    const { left } = seeded()
+
+    dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'b', groupId: left, direction: 'down' })
+    // Main had only `b` in that group, so it kept the group's id and moved it.
+    lastHandlers().apply({ groupId: left })
+
+    expect(orderOf(left)).toEqual(['a'])
+    expect(groupOf('b')).not.toBe(left)
   })
 })
 

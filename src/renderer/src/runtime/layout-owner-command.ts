@@ -26,8 +26,9 @@ export type WindowLayoutCommand =
 /**
  * A layout command in a layout-owner build: main applies it first, then `apply` shows main's
  * result. `asToday` runs instead when main cannot act on it: a paired server holds the tab
- * (#18202), main's copy lacks the workspace, tab, pane or group, or the call threw. `refused` on any other refusal. False
- * when a paired server owns the workspace's layout; the caller acts as today.
+ * (#18202), main's copy lacks the workspace, tab, pane or group, or the call threw. `refused` on
+ * any other refusal. False when a paired server owns the workspace's layout; the caller acts as
+ * today.
  */
 export function sendLayoutCommandToOwner(
   worktreeId: string,

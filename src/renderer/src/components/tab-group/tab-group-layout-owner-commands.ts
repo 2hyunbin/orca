@@ -1,7 +1,7 @@
 // A layout-owner build's tab moves and group sizes. A move: main places the tab first, then the
 // window shows main's answer. Main's frame usually shows the move before main answers; while this
 // window owes main a save the frame waits, so the window then makes the same move itself, with
-// main's new group id. Group sizes: already drawn while dragging, main saves them at the drag's end.
+// main's new group id. Group sizes: drawn while dragging, main saves them when the drag ends.
 
 import { useAppStore } from '@/store'
 import type { TabSplitDirection } from '@/store/slices/tabs'
@@ -18,22 +18,18 @@ export type TabDrop =
   | { kind: 'split'; tabId: string; groupId: string; direction: TabSplitDirection }
 
 /**
- * Sends a tab drop to main; `settle(moved)` runs once the window shows the outcome. False when a
- * paired server owns the workspace's layout; the caller then moves the tab as today.
+ * Sends a tab drop to main, which the window then shows; a refused drop moves nothing. False when
+ * the window skips the drop or a paired server owns the workspace's layout: the caller moves the
+ * tab as today.
  */
-export function dropTabThroughLayoutOwner(
-  worktreeId: string,
-  drop: TabDrop,
-  settle: (moved: boolean) => void
-): boolean {
+export function dropTabThroughLayoutOwner(worktreeId: string, drop: TabDrop): boolean {
   const command = commandFor(worktreeId, drop)
   if (!command) {
     return false
   }
   return sendLayoutCommandToOwner(worktreeId, command, {
-    apply: ({ groupId }) => settle(showMainMove(worktreeId, drop, groupId)),
-    asToday: () => settle(moveAsToday(worktreeId, drop)),
-    refused: () => settle(false)
+    apply: ({ groupId }) => showMainMove(worktreeId, drop, groupId),
+    asToday: () => moveAsToday(worktreeId, drop)
   })
 }
 
@@ -107,32 +103,38 @@ function moveAsToday(worktreeId: string, drop: TabDrop, newGroupId?: string): bo
   return moved
 }
 
-/** Shows main's placement, as main's frame already did or by making it here, and selects the tab. */
-function showMainMove(worktreeId: string, drop: TabDrop, mainGroupId: string | undefined): boolean {
+/** Shows main's placement (main's frame may already have) and selects the tab. */
+function showMainMove(worktreeId: string, drop: TabDrop, mainGroupId: string | undefined): void {
   const state = useAppStore.getState()
   const { tabId } = drop
+  const groups = state.groupsByWorktree[worktreeId] ?? []
   if (drop.kind === 'reorder') {
-    const order = state.groupsByWorktree[worktreeId]?.find((g) => g.id === drop.groupId)?.tabOrder
+    const order = groups.find((group) => group.id === drop.groupId)?.tabOrder
     if (order?.indexOf(tabId) !== drop.tabOrder.indexOf(tabId)) {
       moveAsToday(worktreeId, drop)
     }
-    return true
+    return
   }
   const groupId = drop.kind === 'split' ? mainGroupId : drop.groupId
   const tab = state.unifiedTabsByWorktree[worktreeId]?.find((candidate) => candidate.id === tabId)
   if (!tab || !groupId) {
-    return false
+    return
   }
   if (tab.groupId !== groupId) {
-    return moveAsToday(worktreeId, drop, groupId)
+    moveAsToday(worktreeId, drop, groupId)
+    return
   }
   if (drop.kind === 'split') {
     // Main moved the tab's lone group whole, keeping its id; a no-op once main's frame showed it.
+    // Why the window's count: main may not have this window's newer tabs in that group yet.
+    if (groups.find((group) => group.id === groupId)?.tabOrder.length !== 1) {
+      moveAsToday(worktreeId, drop)
+      return
+    }
     placeGroupBeside(worktreeId, groupId, drop.groupId, drop.direction)
   }
   state.activateTab(tabId, { worktreeId, preservePreview: true, recordFocus: false })
   useAppStore.getState().focusGroup(worktreeId, groupId)
-  return true
 }
 
 function placeGroupBeside(

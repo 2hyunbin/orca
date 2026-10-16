@@ -53,16 +53,12 @@ export function moveTabToNewPaneColumn(args: {
   // Switch point: main places the tab beside its group first.
   if (
     ORCA_LAYOUT_OWNER_IS_MAIN &&
-    dropTabThroughLayoutOwner(
-      worktreeId,
-      {
-        kind: 'split',
-        tabId: args.unifiedTabId,
-        groupId: args.groupId,
-        direction: args.direction
-      },
-      () => {}
-    )
+    dropTabThroughLayoutOwner(worktreeId, {
+      kind: 'split',
+      tabId: args.unifiedTabId,
+      groupId: args.groupId,
+      direction: args.direction
+    })
   ) {
     return true
   }

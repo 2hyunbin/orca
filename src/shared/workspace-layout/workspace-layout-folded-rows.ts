@@ -6,7 +6,11 @@
 
 import type { TerminalTab } from '../terminal-tab-types'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
-import { readCanonicalPtyOwners, resolveCanonicalPtyClaim } from './legacy-terminal-row-claims'
+import {
+  readCanonicalPtyOwners,
+  readPersistedTerminalPtyIds,
+  resolveCanonicalPtyClaim
+} from './legacy-terminal-row-claims'
 import { stableJson } from './workspace-layout-load-report'
 
 /**
@@ -30,7 +34,7 @@ export function adoptTouchedFoldedRows(
       if (claim.kind === 'retained' && claim.releasedPtyIds.size === 0) {
         continue
       }
-      const claimants = ptyIdsOf(stored, row.id, row).flatMap(
+      const claimants = ptyIdsOf(stored, row).flatMap(
         (ptyId) => canonical.tabIdByPtyId.get(ptyId) ?? []
       )
       const touched = [row.id, ...claimants].some(
@@ -44,16 +48,17 @@ export function adoptTouchedFoldedRows(
   return adopted
 }
 
-function ptyIdsOf(session: WorkspaceSessionState, tabId: string, row?: TerminalTab): string[] {
-  const bindings = Object.values(session.terminalLayoutsByTabId?.[tabId]?.ptyIdsByLeafId ?? {})
-  return [row?.ptyId, ...bindings].filter((ptyId): ptyId is string => Boolean(ptyId))
+/** The terminals a row names, as the claim rule reads them (the row's own and its panes'). */
+function ptyIdsOf(session: WorkspaceSessionState, row: TerminalTab): string[] {
+  const { owned, orphaned } = readPersistedTerminalPtyIds(session, row)
+  return [...owned, ...orphaned]
 }
 
 /** What a tab claims with: whether it has a row and a tab-bar entry, and the terminals it names. */
 function claimOf(session: WorkspaceSessionState, key: string, tabId: string): string {
   const row = session.tabsByWorktree?.[key]?.find((candidate) => candidate.id === tabId)
   const entry = session.unifiedTabs?.[key]?.some((candidate) => candidate.entityId === tabId)
-  return stableJson({ row: Boolean(row), entry, ptyIds: ptyIdsOf(session, tabId, row).sort() })
+  return stableJson({ row: Boolean(row), entry, ptyIds: row ? ptyIdsOf(session, row).sort() : [] })
 }
 
 function withLoadedRow(
@@ -66,14 +71,11 @@ function withLoadedRow(
   const rows = (session.tabsByWorktree[key] ?? []).flatMap((row) =>
     row.id !== tabId ? [row] : loadedRow ? [loadedRow] : []
   )
-  const loadedLayout = loaded.terminalLayoutsByTabId?.[tabId]
-  const { [tabId]: storedLayout, ...layouts } = session.terminalLayoutsByTabId ?? {}
   const next: WorkspaceSessionState = {
     ...session,
     tabsByWorktree: { ...session.tabsByWorktree, [key]: rows },
-    ...(storedLayout || loadedLayout
-      ? { terminalLayoutsByTabId: loadedLayout ? { ...layouts, [tabId]: loadedLayout } : layouts }
-      : {})
+    ...withLoadedEntry(session, loaded, 'terminalLayoutsByTabId', tabId),
+    ...withLoadedEntry(session, loaded, 'remoteSessionIdsByTabId', tabId)
   }
   if (!loadedRow && next.activeTabId === tabId) {
     next.activeTabId = loaded.activeTabId
@@ -85,4 +87,23 @@ function withLoadedRow(
     }
   }
   return next
+}
+
+/** The session map `field` with the tab's entry as loaded; nothing when neither side has one. */
+function withLoadedEntry<F extends 'terminalLayoutsByTabId' | 'remoteSessionIdsByTabId'>(
+  session: WorkspaceSessionState,
+  loaded: WorkspaceSessionState,
+  field: F,
+  tabId: string
+): Pick<WorkspaceSessionState, F> | Record<string, never> {
+  const { [tabId]: stored, ...rest } = session[field] ?? {}
+  const value = loaded[field]?.[tabId]
+  if (stored === undefined && value === undefined) {
+    return {}
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `rest` and `value` come from this same field's map.
+  return { [field]: value === undefined ? rest : { ...rest, [tabId]: value } } as Pick<
+    WorkspaceSessionState,
+    F
+  >
 }

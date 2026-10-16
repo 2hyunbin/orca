@@ -10,6 +10,7 @@ import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import { WORKSPACE_LAYOUT_PROFILES } from './workspace-layout-profile.test-fixture'
 import { patchStoredSession } from './workspace-layout-record-patch'
 import { saveWorkspaceLayout } from './workspace-layout-save'
+import type { WorkspaceSessionState } from '../workspace-session-state-types'
 
 const CONTEXT = {
   mintId: () => 'minted-id',
@@ -156,11 +157,27 @@ describe('patchStoredSession', () => {
       const before = saveWorkspaceLayout(loaded)
       const normalizedAtLoad = diffStoredSession(stored, before).length > 0
       let applied = 0
-      // A folded legacy row may be written in the load's form (workspace-layout-folded-rows).
-      const loadForms = changedRecords(diffStoredSession(stored, before)).filter(
-        (record) =>
-          /^(row|layout)\//.test(record) ||
-          ['session/activeTabId', 'session/activeTabIdByWorktree'].includes(record)
+      // Legacy rows the load folds into a tab-bar tab (dropped, or terminals taken off them).
+      const entryIds = new Set(
+        Object.values(stored.unifiedTabs ?? {})
+          .flat()
+          .map((entry) => entry.entityId)
+      )
+      const loadChanged = changedRecords(diffStoredSession(stored, before))
+      const foldedIds = Object.values(stored.tabsByWorktree)
+        .flat()
+        .map((row) => row.id)
+        .filter(
+          (id) =>
+            !entryIds.has(id) &&
+            loadChanged.some((record) => record.endsWith(`|${id}`) || record === `layout/${id}`)
+        )
+      const isFolded = (record: string) =>
+        foldedIds.some((id) => record.endsWith(`|${id}`) || record === `layout/${id}`)
+      const selectionNamesFolded = foldedIds.some(
+        (id) =>
+          stored.activeTabId === id ||
+          Object.values(stored.activeTabIdByWorktree ?? {}).includes(id)
       )
       for (const command of commandsFor(loaded.layout)) {
         const result = applyLayoutCommand(loaded.layout, command, CONTEXT)
@@ -185,6 +202,15 @@ describe('patchStoredSession', () => {
         })
         expect(stableJson(reloaded(patched)), label).toBe(stableJson(reloaded(after)))
         const written = changedRecords(diffStoredSession(stored, patched))
+        // A folded row may be written only in its loaded form, and a selection naming it with it.
+        const notLoadForm = new Set(changedRecords(diffStoredSession(before, patched)))
+        const loadForms = written.filter(
+          (record) =>
+            !notLoadForm.has(record) &&
+            (isFolded(record) ||
+              (selectionNamesFolded &&
+                ['session/activeTabId', 'session/activeTabIdByWorktree'].includes(record)))
+        )
         const commanded = withListConsequences([
           ...changedRecords(diffStoredSession(before, after)),
           ...loadForms
@@ -199,9 +225,14 @@ describe('patchStoredSession', () => {
   )
 
   describe('a legacy row the load folds into a tab-bar tab', () => {
-    const patchedBy = (name: string, command: (workspace: string) => LayoutCommand) => {
+    const patchedBy = (
+      name: string,
+      command: (workspace: string) => LayoutCommand,
+      edit: (stored: WorkspaceSessionState) => void = () => {}
+    ) => {
       const profile = LEGACY_WORKSPACE_LAYOUT_PROFILES.find((candidate) => candidate.name === name)!
       const stored = profile.build()
+      edit(stored)
       const loaded = loadWorkspaceLayout(profile.hostId, stored, nameBasedLoadContext())
       const workspace = Object.keys(stored.tabsByWorktree)[0]!
       const result = applyLayoutCommand(loaded.layout, command(workspace), CONTEXT)
@@ -221,6 +252,25 @@ describe('patchStoredSession', () => {
       expect(Object.values(patched.tabsByWorktree)[0]!.map((row) => row.id)).toEqual(['tab-b'])
       expect(patched.terminalLayoutsByTabId['tab-legacy']).toBeUndefined()
       expect(patched.activeTabId).not.toBe('tab-legacy')
+    })
+
+    it('goes with the tab it repeats when they share only a remote session', () => {
+      const { patched } = patchedBy(
+        'legacy row repeating a tab-bar tab’s terminal',
+        (workspace) => ({ type: 'closeTabs', workspace, tabIds: ['tab-a'], force: true }),
+        (stored) => {
+          for (const row of Object.values(stored.tabsByWorktree).flat()) {
+            if (row.id !== 'tab-b') {
+              row.ptyId = null
+              stored.terminalLayoutsByTabId[row.id]!.ptyIdsByLeafId = {}
+            }
+          }
+          stored.remoteSessionIdsByTabId = { 'tab-a': 'remote-1', 'tab-legacy': 'remote-1' }
+        }
+      )
+
+      expect(Object.values(patched.tabsByWorktree)[0]!.map((row) => row.id)).toEqual(['tab-b'])
+      expect(patched.terminalLayoutsByTabId['tab-legacy']).toBeUndefined()
     })
 
     it('keeps its loaded terminals when it gains a tab-bar entry, so the shared one stays put', () => {
