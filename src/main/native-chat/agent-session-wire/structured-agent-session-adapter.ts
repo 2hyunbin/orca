@@ -136,6 +136,7 @@ export type AgentSessionPreSpawnReason = Extract<
   | 'claudeAccountFolderMissing'
   | 'claudeAccountSetupFailed'
   | 'agentCommandNotRunnable'
+  | 'runtimeNotInstalled'
 >
 
 /** Acquisition failed with first-hand proof that no provider process existed. */
