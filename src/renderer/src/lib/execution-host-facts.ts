@@ -172,21 +172,29 @@ export function refineLocalLaunchPlatform(
 export function resolveRepoWorktreeLaunchPlatform(
   state: WorktreeHostFactsState,
   repo: { connectionId?: string | null; executionHostId?: string | null; path: string },
-  worktree: { id: string; path?: string | null; hostId?: string | null }
+  worktree: {
+    id: string
+    path?: string | null
+    hostId?: string | null
+    runtimeOwnerEnvironmentId?: string | null
+  }
 ): NodeJS.Platform | undefined {
-  const worktreeHost = parseExecutionHostId(worktree.hostId)
-  const repoHostId = getRepoExecutionHostId(repo)
+  const repoHost = parseExecutionHostId(getRepoExecutionHostId(repo))
+  const ownHost = parseExecutionHostId(worktree.hostId)
   // Why: a per-worktree host (e.g. a local checkout of a server project) outranks the repo's.
-  const owner =
-    worktreeHost && worktreeHost.id !== repoHostId
-      ? { executionHostId: worktreeHost.id, path: repo.path }
-      : repo
-  const fact = resolveRepoExecutionHostPlatform(
-    state,
-    owner,
-    () => getLocalProjectExecutionRuntimeContext(state, worktree.id),
-    worktree.path ?? repo.path
-  )
+  const host = ownHost && ownHost.id !== repoHost?.id ? ownHost : repoHost
+  const serverOwner =
+    worktree.runtimeOwnerEnvironmentId?.trim() ||
+    (repoHost?.kind === 'runtime' ? repoHost.environmentId : null)
+  const fact = resolveHostPlatform(state, {
+    host,
+    nestedSshTargetId:
+      host?.kind === 'runtime' && host === repoHost ? repo.connectionId?.trim() || null : null,
+    // Why: a server-projected SSH worktree is reached through that server's own connection.
+    sshOwnerEnvironmentId: host?.kind === 'ssh' ? serverOwner : null,
+    workspacePath: worktree.path ?? repo.path,
+    projectRuntime: () => getLocalProjectExecutionRuntimeContext(state, worktree.id)
+  })
   return fact.kind === 'known' ? fact.platform : undefined
 }
 

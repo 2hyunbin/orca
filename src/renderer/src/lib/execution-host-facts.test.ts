@@ -66,6 +66,43 @@ describe('resolveRepoWorktreeLaunchPlatform from a Windows client', () => {
     ).toBe('win32')
   })
 
+  it("reads a server-projected SSH worktree through that server's connection", () => {
+    const nested = {
+      ...state(),
+      sshStateByEnvironment: new Map([
+        [
+          'linux-box',
+          {
+            connectionStates: new Map([
+              [
+                'box',
+                {
+                  targetId: 'box',
+                  status: 'connected' as const,
+                  error: null,
+                  reconnectAttempt: 0,
+                  remotePlatform: 'linux' as const
+                }
+              ]
+            ]),
+            targetLabels: new Map(),
+            targetGenerations: new Map(),
+            removedTargetLabels: new Map(),
+            targetsHydrated: true
+          }
+        ]
+      ])
+    }
+    expect(
+      resolveRepoWorktreeLaunchPlatform(nested, serverRepo, {
+        id: 'wt',
+        path: '/home/a/wt',
+        hostId: 'ssh:box',
+        runtimeOwnerEnvironmentId: 'linux-box'
+      })
+    ).toBe('linux')
+  })
+
   it('is undefined when the server has not reported its OS', () => {
     const withheld = { ...state(), runtimeStatusByEnvironmentId: new Map() }
     expect(
