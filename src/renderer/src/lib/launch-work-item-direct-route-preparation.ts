@@ -10,6 +10,8 @@ import {
 } from '@/lib/execution-host-facts'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
+import { resolveLocalWindowsTerminalShellOverrideForTab } from '../../../shared/local-windows-terminal-runtime'
+import { isWslUncPath } from '../../../shared/wsl-paths'
 import type {
   AgentSessionLaunchPlan,
   planAgentSessionLaunch
@@ -32,7 +34,7 @@ export type DirectWorkItemAgentLaunchPreparation = {
   plan: AgentSessionLaunchPlan | null
 }
 
-function resolveDirectWorkItemLaunchHost(args: {
+type DirectLaunchHostArgs = {
   latestStore: AppState
   worktreeId: string
   worktreePath: string
@@ -40,21 +42,40 @@ function resolveDirectWorkItemLaunchHost(args: {
   launchPlatform?: NodeJS.Platform
   repoLaunchHost: KnownExecutionHostPlatform
   repoProjectRuntime?: ProjectExecutionRuntimeResolution
-}): KnownExecutionHostPlatform {
+}
+
+function directLaunchProjectRuntime(
+  args: DirectLaunchHostArgs
+): ProjectExecutionRuntimeResolution | undefined {
+  return (
+    getLocalProjectExecutionRuntimeContext(args.latestStore, args.worktreeId, CLIENT_PLATFORM) ??
+    args.repoProjectRuntime
+  )
+}
+
+function resolveDirectWorkItemLaunchHost(args: DirectLaunchHostArgs): KnownExecutionHostPlatform {
   // Why the repo's owner: the worktree was created on that host and may not be hydrated yet; its
   // own path and runtime still refine the OS (a WSL worktree on a Windows host runs in Linux).
   const fact = resolveRepoExecutionHostPlatform(
     args.latestStore,
     args.repoHost,
-    () =>
-      getLocalProjectExecutionRuntimeContext(args.latestStore, args.worktreeId, CLIENT_PLATFORM) ??
-      args.repoProjectRuntime,
+    () => directLaunchProjectRuntime(args),
     args.worktreePath
   )
   return refineLocalLaunchPlatform(
     fact.kind === 'known' ? fact : args.repoLaunchHost,
     args.launchPlatform
   )
+}
+
+/** The shell the local tab actually spawns, which a project runtime can override (e.g. WSL setting, Windows runtime). */
+function resolveDirectWorkItemTabShell(args: DirectLaunchHostArgs): string | undefined {
+  return resolveLocalWindowsTerminalShellOverrideForTab({
+    explicitShellOverride: undefined,
+    defaultWindowsShell: args.latestStore.settings?.terminalWindowsShell ?? undefined,
+    isWslWorktree: isWslUncPath(args.worktreePath),
+    projectRuntime: directLaunchProjectRuntime(args)
+  })
 }
 
 export async function prepareDirectWorkItemAgentLaunch(args: {
@@ -117,7 +138,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     promptDelivery: args.promptDelivery,
     settings: args.settings,
     launchHost: resolveDirectWorkItemLaunchHost(args),
-    terminalWindowsShell: args.settings?.terminalWindowsShell,
+    terminalWindowsShell: resolveDirectWorkItemTabShell(args),
     launchConnectionId
   })
 
