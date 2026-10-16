@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusEntry } from '../../../shared/agent-status-types'
 import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../shared/stable-pane-id'
+import { getDefaultSettings } from '../../../shared/constants'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
 import {
@@ -186,6 +187,44 @@ describe('buildAgentAccountRestartStartup for Claude', () => {
     expect(startup.launchAgent).toBe('claude')
     expect(startup.startupCommandDelivery).toBe('shell-ready')
     expect(startup.resumeProviderSession?.id).toBe(SESSION_ID)
+  })
+
+  it('resumes a hand-started Claude without the configured default arguments', () => {
+    seedAgentStatus({
+      agentType: 'claude',
+      state: 'done',
+      providerSession: { key: 'session_id', id: SESSION_ID }
+    })
+    useAppStore.setState({
+      settings: {
+        ...getDefaultSettings('/home/dev'),
+        agentDefaultArgs: { claude: '--dangerously-skip-permissions' },
+        agentDefaultEnv: { claude: { CLAUDE_DEFAULT_ONLY: '1' } }
+      }
+    })
+
+    const startup = buildAgentAccountRestartStartup('claude', pane)
+    expect(startup.command).not.toContain('--dangerously-skip-permissions')
+    expect(startup.env?.CLAUDE_DEFAULT_ONLY).toBeUndefined()
+
+    const withDefaults = resolveAgentAccountRestartResumeStartup('claude', pane, {
+      unrecordedLaunchUsesDefaults: true
+    })
+    expect(withDefaults?.command).toContain('--dangerously-skip-permissions')
+  })
+
+  it('keeps a recorded Claude launch config on resume', () => {
+    seedAgentStatus({
+      agentType: 'claude',
+      state: 'done',
+      providerSession: { key: 'session_id', id: SESSION_ID }
+    })
+    useAppStore.getState().registerAgentLaunchConfig(makePaneKey(TAB_ID, LEAF_ID), {
+      agentArgs: '--model opus',
+      agentEnv: {}
+    })
+
+    expect(buildAgentAccountRestartStartup('claude', pane).command).toContain('--model')
   })
 
   it('reports no resume when the Claude pane has no session id', () => {

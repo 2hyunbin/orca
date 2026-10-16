@@ -19923,7 +19923,7 @@
       "moveSessions": {
         "titleOne": "Move 1 running Claude session to {{account}}?",
         "titleOther": "Move {{count}} running Claude sessions to {{account}}?",
-        "description": "Each session restarts and resumes its conversation. A session that is still replying moves when it finishes.",
+        "description": "Each session restarts and resumes its conversation. A session that's mid-turn moves when its turn ends.",
         "action": "Move sessions",
         "dismiss": "Not now"
       }

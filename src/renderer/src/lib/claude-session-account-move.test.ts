@@ -207,6 +207,16 @@ describe('moveClaudeSessionsToSelectedAccount', () => {
     expect(getPendingClaudeSessionMovePtyIdsForTests()).toEqual([])
   })
 
+  it('holds a session at a permission prompt until its turn ends', () => {
+    seedPanes([{ n: 1, agentType: 'claude', state: 'blocked' }])
+
+    moveClaudeSessionsToSelectedAccount([candidate(1)])
+    expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
+
+    setPaneState(1, 'done')
+    expect(useAppStore.getState().pendingPaneAccountRestarts[ptyId(1)]).toBe('claude')
+  })
+
   it('drops a waiting session whose pane closes', () => {
     seedPanes([{ n: 1, agentType: 'claude', state: 'working' }])
     moveClaudeSessionsToSelectedAccount([candidate(1)])

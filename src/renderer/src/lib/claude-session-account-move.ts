@@ -36,7 +36,7 @@ export type ClaudeSessionMoveCandidate = {
   leafId: string
 }
 
-type ClaudeSessionMoveState = 'gone' | 'working' | 'ready'
+type ClaudeSessionMoveState = 'gone' | 'mid-turn' | 'ready'
 
 // Panes the user asked to move that were mid-turn; each restarts once its turn ends.
 const awaitingTurnEndByPtyId = new Map<string, ClaudeSessionMoveCandidate>()
@@ -85,7 +85,8 @@ function readClaudeSessionMoveState(
   if (entry?.agentType !== 'claude' || !normalizeAgentProviderSession(entry.providerSession)) {
     return 'gone'
   }
-  return entry.state === 'working' ? 'working' : 'ready'
+  // Why 'blocked': a permission prompt is mid-turn, and a restart drops the pending tool call.
+  return entry.state === 'working' || entry.state === 'blocked' ? 'mid-turn' : 'ready'
 }
 
 /**
@@ -161,7 +162,7 @@ export function cancelPendingClaudeSessionMoves(): void {
 /**
  * Restarts idle sessions now and mid-turn sessions when their turn ends.
  *
- * Why wait on 'working': killing Claude mid-reply loses the in-flight turn.
+ * Why wait on 'working' and 'blocked': killing Claude mid-turn loses the in-flight turn.
  */
 export function moveClaudeSessionsToSelectedAccount(
   candidates: readonly ClaudeSessionMoveCandidate[]
@@ -178,7 +179,7 @@ function flushAwaitingTurnEnd(state: AppState): void {
   const ready: string[] = []
   for (const [ptyId, candidate] of awaitingTurnEndByPtyId) {
     const moveState = readClaudeSessionMoveState(state, candidate)
-    if (moveState === 'working') {
+    if (moveState === 'mid-turn') {
       continue
     }
     awaitingTurnEndByPtyId.delete(ptyId)

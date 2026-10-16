@@ -62,8 +62,10 @@ export function getBareAccountRestartStartup(
  */
 export function resolveAgentAccountRestartResumeStartup(
   agent: AccountRestartAgent,
-  args: AccountRestartPane
+  args: AccountRestartPane,
+  options: { unrecordedLaunchUsesDefaults?: boolean } = {}
 ): AgentAccountRestartStartup | null {
+  const unrecordedLaunchUsesDefaults = options.unrecordedLaunchUsesDefaults ?? true
   const state = useAppStore.getState()
   const paneKey = makePaneKey(args.tabId, args.leafId)
   const entry = state.agentStatusByPaneKey[paneKey]
@@ -108,11 +110,15 @@ export function resolveAgentAccountRestartResumeStartup(
     agentArgs:
       launchConfig !== undefined
         ? launchConfig.agentArgs
-        : resolveTuiAgentLaunchArgs(agent, state.settings?.agentDefaultArgs),
+        : unrecordedLaunchUsesDefaults
+          ? resolveTuiAgentLaunchArgs(agent, state.settings?.agentDefaultArgs)
+          : null,
     agentEnv:
       launchConfig !== undefined
         ? launchConfig.agentEnv
-        : resolveTuiAgentLaunchEnv(agent, state.settings?.agentDefaultEnv),
+        : unrecordedLaunchUsesDefaults
+          ? resolveTuiAgentLaunchEnv(agent, state.settings?.agentDefaultEnv)
+          : null,
     ...(launchConfig?.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
     ...(launchConfig?.ompResumeFilePath
       ? { ompResumeFilePath: launchConfig.ompResumeFilePath }
@@ -139,7 +145,12 @@ export function buildAgentAccountRestartStartup(
   agent: AccountRestartAgent,
   args: AccountRestartPane
 ): AgentAccountRestartStartup {
-  return resolveAgentAccountRestartResumeStartup(agent, args) ?? getBareAccountRestartStartup(agent)
+  // Why: a hand-started Claude must not come back with configured defaults such as a permission bypass.
+  return (
+    resolveAgentAccountRestartResumeStartup(agent, args, {
+      unrecordedLaunchUsesDefaults: agent !== 'claude'
+    }) ?? getBareAccountRestartStartup(agent)
+  )
 }
 
 export function buildCodexAccountRestartStartup(

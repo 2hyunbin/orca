@@ -53,7 +53,7 @@ export async function offerToMoveRunningClaudeSessions(args: {
     id: CLAUDE_SESSION_MOVE_TOAST_ID,
     description: translate(
       'accounts.claude.moveSessions.description',
-      'Each session restarts and resumes its conversation. A session that is still replying moves when it finishes.'
+      "Each session restarts and resumes its conversation. A session that's mid-turn moves when its turn ends."
     ),
     duration: Number.POSITIVE_INFINITY,
     action: {
