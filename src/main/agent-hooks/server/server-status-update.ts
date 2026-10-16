@@ -246,7 +246,12 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     }
     // Why carried forward only within one host: main's OSC parse resolves the handle, so a later
     // hook must not erase its terminal join; a connection change must not inherit another host's.
-    const { claudeRunningNonAgentTask: _unpaired, ...unpairedPayload } = effectivePayload
+    // Why drop the settled list: it vouches for this replay's transition only, not for the stored row.
+    const {
+      claudeRunningNonAgentTask: _unpaired,
+      claudeSettledRequests: _settled,
+      ...unpairedPayload
+    } = effectivePayload
     const runningNonAgentTask = pairedClaudeNonAgentWork(previous, effectivePayload)
     const pairedPayload =
       runningNonAgentTask === undefined
