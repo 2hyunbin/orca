@@ -71,7 +71,13 @@ export function refusingStructuredAgentSessionCreatesClosedFirst<
       }
       // Any answer, a refusal or a throw past commit included, may have left the chat made.
       if (closedFirst) {
-        await closeCreatedChat(ctx, sessionId)
+        // Logged, not thrown: the client must still hear that the chat was closed first.
+        await closeCreatedChat(ctx, sessionId).catch((error: unknown) =>
+          console.warn(
+            '[structured-agent-session] closing a chat closed before create failed',
+            error
+          )
+        )
       }
     }
   }
