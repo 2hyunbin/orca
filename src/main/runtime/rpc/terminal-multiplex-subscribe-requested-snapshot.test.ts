@@ -22,6 +22,7 @@ type SubscribeOptions = {
   clientType?: 'desktop' | 'mobile'
   snapshotScrollbackRows?: number
   authoritative?: 'image' | 'none'
+  viewport?: { cols: number; rows: number }
 }
 
 async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
@@ -30,6 +31,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   snapshotStarts: number
   defaultSerializes: number
   authoritativeRows: (number | undefined)[]
+  serializedBeforeViewportApplied: boolean
 }> {
   const handlers = new Map<
     number,
@@ -39,9 +41,12 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
   const cleanups = new Map<string, () => void>()
   const serializeTerminalBuffer = vi.fn(async () => ({ data: 'DEFAULT', cols: 80, rows: 24 }))
   const authoritativeRows: (number | undefined)[] = []
+  let viewportApplied = false
+  let serializedBeforeViewportApplied = false
   const serializeAuthoritativeTerminalBuffer = vi.fn(
     async (_ptyId: string, opts?: { scrollbackRows?: number }) => {
       authoritativeRows.push(opts?.scrollbackRows)
+      serializedBeforeViewportApplied ||= !viewportApplied
       return options.authoritative === 'none'
         ? null
         : { data: 'SCREEN', scrollbackAnsi: 'HISTORY|', cols: 80, rows: 24, seq: 7 }
@@ -65,6 +70,12 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     getTerminalFitOverride: vi.fn().mockReturnValue(null),
     getDriver: vi.fn().mockReturnValue({ kind: 'idle' }),
     handleMobileSubscribe: vi.fn().mockResolvedValue(undefined),
+    updateRemoteDesktopViewer: vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      viewportApplied = true
+      return true
+    }),
+    unregisterRemoteDesktopViewers: vi.fn(),
     handleMobileUnsubscribe: vi.fn(),
     registerSubscriptionCleanup: vi.fn((id: string, cleanup: () => void) => {
       cleanups.set(id, cleanup)
@@ -105,6 +116,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
           streamId: 5,
           terminal: 'terminal-1',
           client: { id: 'client-1', type: options.clientType ?? 'desktop' },
+          ...(options.viewport ? { viewport: options.viewport } : {}),
           ...(options.snapshotScrollbackRows === undefined
             ? {}
             : { snapshotScrollbackRows: options.snapshotScrollbackRows })
@@ -113,7 +125,7 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     )!
   )
   for (let i = 0; i < 5; i += 1) {
-    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(50)
   }
   const frames = binaryFrames.map((frame) => decodeTerminalStreamFrame(frame)!)
   const starts = frames.filter((frame) => frame.opcode === TerminalStreamOpcode.SnapshotStart)
@@ -128,7 +140,8 @@ async function subscribeAndCollectSnapshot(options: SubscribeOptions): Promise<{
     data,
     snapshotStarts: starts.length,
     defaultSerializes: serializeTerminalBuffer.mock.calls.length,
-    authoritativeRows
+    authoritativeRows,
+    serializedBeforeViewportApplied
   }
 }
 
@@ -187,6 +200,22 @@ describe('terminal.multiplex subscribe-time scrollback request', () => {
       })
       expect(result.authoritativeRows).toEqual([])
       expect(result.meta).not.toHaveProperty('requestedScrollbackRows')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('builds the requested image while the viewport registration is still in flight', async () => {
+    vi.useFakeTimers()
+    try {
+      const result = await subscribeAndCollectSnapshot({
+        snapshotScrollbackRows: 5000,
+        viewport: { cols: 120, rows: 40 }
+      })
+      expect(result.snapshotStarts).toBe(1)
+      expect(result.authoritativeRows).toEqual([5000])
+      expect(result.serializedBeforeViewportApplied).toBe(true)
+      expect(result.meta).toMatchObject({ requestedScrollbackRows: 5000 })
     } finally {
       vi.useRealTimers()
     }

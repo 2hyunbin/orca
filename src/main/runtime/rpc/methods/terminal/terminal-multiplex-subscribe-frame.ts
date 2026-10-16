@@ -3,7 +3,10 @@ import { TerminalMultiplexSubscribeFrame } from './stream-schemas'
 import type { TerminalMultiplexConnection } from './terminal-multiplex-connection'
 import { resolveMultiplexSubscribePty } from './terminal-multiplex-subscribe-resolution'
 import { initializeMultiplexStream } from './terminal-multiplex-stream-initialization'
-import { publishMultiplexInitialSnapshot } from './terminal-multiplex-initial-snapshot'
+import {
+  publishMultiplexInitialSnapshot,
+  startRequestedInitialSnapshot
+} from './terminal-multiplex-initial-snapshot'
 import { activateMultiplexStream } from './terminal-multiplex-live-stream'
 import type { TerminalMultiplexStream } from './terminal-stream-types'
 
@@ -23,10 +26,16 @@ export function installMultiplexSubscribeFrame(state: TerminalMultiplexConnectio
     }
     let stream: TerminalMultiplexStream | null = null
     let installedStream: TerminalMultiplexStream | null = null
+    let earlyRequestedImage: ReturnType<typeof startRequestedInitialSnapshot>
     try {
-      stream = await initializeMultiplexStream(state, request, ptyId, (installed) => {
+      const initializing = initializeMultiplexStream(state, request, ptyId, (installed) => {
         installedStream = installed
       })
+      // After the synchronous part of initialization, so output from here on is already buffered.
+      earlyRequestedImage = installedStream
+        ? startRequestedInitialSnapshot(state, request, ptyId)
+        : undefined
+      stream = await initializing
     } catch (error) {
       if (!installedStream) {
         throw error
@@ -46,7 +55,12 @@ export function installMultiplexSubscribeFrame(state: TerminalMultiplexConnectio
       return
     }
     try {
-      const published = await publishMultiplexInitialSnapshot(state, request, stream)
+      const published = await publishMultiplexInitialSnapshot(
+        state,
+        request,
+        stream,
+        earlyRequestedImage
+      )
       if (!published) {
         return
       }

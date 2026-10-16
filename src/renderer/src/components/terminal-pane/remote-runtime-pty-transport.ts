@@ -2529,9 +2529,9 @@ export function createRemoteRuntimePtyTransport(
           }
         },
         onFitOverrideChanged: (event) => {
-          // Why: the host's answer to our own claim echoes its grid; only a hold elsewhere re-arms one.
+          // Why: desktop-fit at our grid answers our claim; any hold (a peer owns it) re-arms one.
           if (
-            event.mode === 'mobile-fit' ||
+            event.mode !== 'desktop-fit' ||
             event.cols !== unconfirmedClaim?.cols ||
             event.rows !== unconfirmedClaim?.rows
           ) {

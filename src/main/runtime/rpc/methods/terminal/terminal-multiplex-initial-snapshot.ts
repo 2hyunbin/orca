@@ -13,7 +13,7 @@ import {
   type MultiplexSubscribeRequest,
   type TerminalMultiplexConnection
 } from './terminal-multiplex-connection'
-import type { TerminalMultiplexStream } from './terminal-stream-types'
+import type { SerializedSnapshot, TerminalMultiplexStream } from './terminal-stream-types'
 
 export type MultiplexPublishedInitialState = {
   isMobile: boolean
@@ -21,29 +21,50 @@ export type MultiplexPublishedInitialState = {
   displayMode: string
 }
 
+function requestedInitialScrollbackRows(request: MultiplexSubscribeRequest): number | undefined {
+  return request.client?.type === 'mobile'
+    ? undefined
+    : normalizeMultiplexSnapshotScrollbackRows(request.snapshotScrollbackRows)
+}
+
+/** Why early: the stream's output buffer is live once initialization starts, so the image can be
+ *  built while the viewport registration awaits instead of after it (a parallel SnapshotRequest did). */
+export function startRequestedInitialSnapshot(
+  state: TerminalMultiplexConnection,
+  request: MultiplexSubscribeRequest,
+  ptyId: string
+): Promise<SerializedSnapshot> | undefined {
+  const rows = requestedInitialScrollbackRows(request)
+  if (rows === undefined) {
+    return undefined
+  }
+  const image = serializeBudgetedRequestedSnapshot(state.runtime, ptyId, rows)
+  image.catch(() => {})
+  return image
+}
+
 export async function publishMultiplexInitialSnapshot(
   state: TerminalMultiplexConnection,
   request: MultiplexSubscribeRequest,
-  stream: TerminalMultiplexStream
+  stream: TerminalMultiplexStream,
+  earlyRequestedImage?: Promise<SerializedSnapshot>
 ): Promise<MultiplexPublishedInitialState | null> {
   const { runtime, emit } = state
   const { ptyId } = stream
   const isMobile = stream.isMobile
   const forcedInitialSnapshotTruncated =
     process.env.ORCA_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
-  const requestedScrollbackRows = isMobile
-    ? undefined
-    : normalizeMultiplexSnapshotScrollbackRows(request.snapshotScrollbackRows)
+  const requestedScrollbackRows = requestedInitialScrollbackRows(request)
   let servesScrollbackRequest = false
+  let earlyImage = earlyRequestedImage
   // Why: the requested image is exactly what a follow-up SnapshotRequest would return; without one
   // (or with nothing authoritative to serialize) keep the default image and let the client ask.
   const serializeInitial = async () => {
     if (requestedScrollbackRows !== undefined) {
-      const requested = await serializeBudgetedRequestedSnapshot(
-        runtime,
-        ptyId,
-        requestedScrollbackRows
-      )
+      const requested = await (earlyImage ??
+        serializeBudgetedRequestedSnapshot(runtime, ptyId, requestedScrollbackRows))
+      // An overflow retry must serialize afresh.
+      earlyImage = undefined
       servesScrollbackRequest = requested !== null
       if (requested) {
         return requested
