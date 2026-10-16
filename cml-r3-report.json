@@ -1,0 +1,2150 @@
+{
+  "taskId": "task_90d49c794e8a",
+  "dispatchId": "ctx_502ad2af04fd",
+  "outcome": "failed",
+  "reason": "Stopped before hard ceiling: remaining approved work exceeds current line allocation",
+  "base": "da099c3201f09600b3246756a8758cd11abd4d7d",
+  "head": "9a12ca8fe320a8282b584942d54ed2ae1325f16b",
+  "branch": "brennanb2025/cross-machine-lineage-identity",
+  "newCommit": null,
+  "pushed": false,
+  "totals": {
+    "initialProduction": 2428,
+    "initialTests": 989,
+    "workingProduction": 2573.0,
+    "workingTests": 989.0,
+    "productionCeiling": 2600,
+    "testCeiling": 1000,
+    "preExistingLockfileExcluded": true,
+    "untrackedReferenceIncluded": true
+  },
+  "filesModified": [
+    "src/main/persistence/loading-store/metadata-lineage-operations.ts",
+    "src/main/persistence/loading-store/state-serialization-secret-handling.ts",
+    "src/main/saved-worktree-lineage-catalog.ts",
+    "src/main/worktree-lineage-host-peers.ts",
+    "src/renderer/src/components/sidebar/WorktreeContextMenuOverlays.tsx",
+    "src/renderer/src/components/sidebar/WorktreeParentPickerPopover.tsx",
+    "src/renderer/src/components/sidebar/use-worktree-context-menu-model.tsx",
+    "src/renderer/src/components/sidebar/use-worktree-context-menu-secondary-actions.ts",
+    "src/renderer/src/components/sidebar/use-worktree-parent-picker-transition.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/drop-commit-context.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/row-state.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/use-drop-commit-context.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/use-lineage-drop-commit.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/use-native-drag.ts",
+    "src/renderer/src/components/sidebar/worktree-list/drag/use-pointer-drag.ts",
+    "src/renderer/src/components/sidebar/worktree-parent-candidates.ts",
+    "src/renderer/src/components/sidebar/worktree-sidebar-drop-preview.ts",
+    "src/renderer/src/components/sidebar/worktree-unnest.ts",
+    "src/renderer/src/store/slices/worktree-helpers.ts",
+    "src/renderer/src/store/slices/worktrees/listing/worktree-slice-types.ts",
+    "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-actions.ts",
+    "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-refresh.ts",
+    "src/renderer/src/store/worktree-repo-index.ts",
+    "src/renderer/src/lib/selected-worktree-reference.ts"
+  ],
+  "initialPerFileLedger": [
+    {
+      "path": "config/main-layout-writer-baseline.txt",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "mobile/src/worktree/mobile-workspace-lineage.ts",
+      "added": 30,
+      "deleted": 39,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ipc/worktree-create-lineage.test.ts",
+      "added": 33,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/ipc/worktree-remote.ts",
+      "added": 66,
+      "deleted": 24,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ipc/worktrees-canonical-ssh-listing.test.ts",
+      "added": 0,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/ipc/worktrees/metadata/register-worktree-metadata-handlers.ts",
+      "added": 9,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-source-removal.ts",
+      "added": 17,
+      "deleted": 14,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-state-file.ts",
+      "added": 7,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-transfer-payload.ts",
+      "added": 65,
+      "deleted": 72,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence-cohort-and-identity-migration.test.ts",
+      "added": 20,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-host-partitioned-sessions.test.ts",
+      "added": 9,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-orcad-migration-catalog.test.ts",
+      "added": 23,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-repo-lifecycle.test.ts",
+      "added": 10,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-worktree-lineage-and-backups.test.ts",
+      "added": 37,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/canonical-workspace-lineage.test.ts",
+      "added": 249,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/canonical-workspace-lineage.ts",
+      "added": 245,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/metadata-lineage-operations.ts",
+      "added": 61,
+      "deleted": 127,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/normalize-loaded-profile-state.ts",
+      "added": 13,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/repo-lifecycle-operations.ts",
+      "added": 6,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/state-serialization-secret-handling.ts",
+      "added": 17,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/worktree-meta-alias-projection.test.ts",
+      "added": 4,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/worktree-metadata-removal.ts",
+      "added": 86,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-dormant-state-records.ts",
+      "added": 28,
+      "deleted": 28,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-dormant-state.ts",
+      "added": 35,
+      "deleted": 24,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-dormant-subtraction.ts",
+      "added": 34,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-legacy-key-scope.test.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-lineage-edges.ts",
+      "added": 103,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-release-upgrade.test.ts",
+      "added": 0,
+      "deleted": 41,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/moving-wsl-projects/wsl-move-state-projection.ts",
+      "added": 10,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/deregistered-repo-residue.ts",
+      "added": 2,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/missing-local-worktree-metadata-pruning.ts",
+      "added": 2,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/repo-worktree-pruning.ts",
+      "added": 14,
+      "deleted": 18,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/worktree-identity-migration.ts",
+      "added": 0,
+      "deleted": 36,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/worktree-metadata-normalization.ts",
+      "added": 8,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/lineage-and-scan-cache.spec.ts",
+      "added": 9,
+      "deleted": 15,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/mobile-creation-and-orchestration-part-04.spec.ts",
+      "added": 5,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/worktree-selector-resolution.spec.ts",
+      "added": 4,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/repo-worktree-row-resolution.test.ts",
+      "added": 10,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/repo-worktree-row-resolution.ts",
+      "added": 19,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree-catalog-methods.ts",
+      "added": 7,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree.test.ts",
+      "added": 4,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree.ts",
+      "added": 0,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-created-worktree-terminal-target.ts",
+      "added": 13,
+      "deleted": 59,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-managed-worktree-metadata.ts",
+      "added": 6,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-store-contract.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-worktree-lineage-controller.ts",
+      "added": 46,
+      "deleted": 38,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-worktree-lineage-resolution.ts",
+      "added": 0,
+      "deleted": 36,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/workspaces/workspace-catalog.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/workspaces/workspace-selectors.ts",
+      "added": 10,
+      "deleted": 6,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/worktree-ps-degraded-repo-scan.test.ts",
+      "added": 8,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/saved-worktree-lineage-catalog.ts",
+      "added": 97,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ssh/orcad-migration-path-fields.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/worktree-lineage-host-peers.ts",
+      "added": 30,
+      "deleted": 40,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/worktree-lineage-pruning.test.ts",
+      "added": 9,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/worktree-lineage-pruning.ts",
+      "added": 35,
+      "deleted": 10,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/wsl-move-scan-pruning.test.ts",
+      "added": 17,
+      "deleted": 6,
+      "kind": "test"
+    },
+    {
+      "path": "src/preload/api/worktree-api.ts",
+      "added": 6,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/NativeChatResumeOnRestartGroups.test.tsx",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/native-chat-resume-workspace-lookups.ts",
+      "added": 2,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/native-chat/structured-agent-session-send-runtime.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/new-workspace/ComposerParentWorktreePicker.test.tsx",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/new-workspace/ComposerParentWorktreePicker.tsx",
+      "added": 26,
+      "deleted": 21,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/AiVaultScanProgressStrip.test.tsx",
+      "added": 7,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/FolderWorkspaceWorktreesPanel.test.tsx",
+      "added": 3,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/FolderWorkspaceWorktreesPanel.tsx",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/folder-workspace-attached-worktrees.test.ts",
+      "added": 16,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/folder-workspace-attached-worktrees.ts",
+      "added": 23,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeContextMenuOverlays.tsx",
+      "added": 1,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeList.tsx",
+      "added": 6,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeParentPickerPopover.test.ts",
+      "added": 14,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeParentPickerPopover.tsx",
+      "added": 48,
+      "deleted": 18,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/child-workspaces-toggle-target.test.ts",
+      "added": 4,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/child-workspaces-toggle-target.ts",
+      "added": 2,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/compute-visible-worktrees.ts",
+      "added": 22,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/folder-workspace-card-pr-display.test.ts",
+      "added": 2,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/folder-workspace-card-pr-display.ts",
+      "added": 13,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/pinned-section-worktrees.ts",
+      "added": 5,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/sidebar-lineage-ancestors.test.ts",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-card-workspace-actions.ts",
+      "added": 9,
+      "deleted": 6,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-context-menu-model.tsx",
+      "added": 14,
+      "deleted": 12,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-context-menu-secondary-actions.ts",
+      "added": 1,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-parent-picker-transition.ts",
+      "added": 12,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktree-indexes.test.ts",
+      "added": 29,
+      "deleted": 21,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktree-indexes.ts",
+      "added": 49,
+      "deleted": 13,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktrees.test.ts",
+      "added": 21,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/workspace-delete-lineage.test.ts",
+      "added": 27,
+      "deleted": 21,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/workspace-delete-lineage.ts",
+      "added": 8,
+      "deleted": 27,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-card-model.ts",
+      "added": 2,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-context-menu-policy.ts",
+      "added": 4,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-drag-drop.test.ts",
+      "added": 63,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-drag-drop.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-projection.test.ts",
+      "added": 5,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-projection.ts",
+      "added": 38,
+      "deleted": 80,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list-groups-lineage-nesting.test.ts",
+      "added": 4,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/drop-commit-context.ts",
+      "added": 7,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-commit.ts",
+      "added": 4,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-flush.test.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-flush.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/row-state.ts",
+      "added": 4,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-document-drop.ts",
+      "added": 19,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-lineage-drop-commit.ts",
+      "added": 93,
+      "deleted": 41,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-native-drag.ts",
+      "added": 16,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-pointer-drag.ts",
+      "added": 6,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/grouping/row-builders.ts",
+      "added": 9,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/rows/item-row.tsx",
+      "added": 4,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/viewport/VirtualizedWorktreeViewport.tsx",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-parent-candidates.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-parent-eligibility.ts",
+      "added": 12,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-sidebar-drag-autoscroll.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-sidebar-drop-preview.ts",
+      "added": 5,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-unnest.test.ts",
+      "added": 21,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-unnest.ts",
+      "added": 9,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/hooks/ipc-events/worktree-event-lineage-refresh.test.ts",
+      "added": 6,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/browser/browser-close-actions.ts",
+      "added": 8,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/browser/browser-slice-contract.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/project-removal-owner-host.test.ts",
+      "added": 6,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/repos-host-identity-routing.test.ts",
+      "added": 3,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/settings.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/tabs/worktree-layout-lifecycle.ts",
+      "added": 75,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktree-helpers.ts",
+      "added": 6,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-create-base-status.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-create-parent-pick.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-fetch-remote-lineage.test.ts",
+      "added": 67,
+      "deleted": 98,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-hydration-purge.test.ts",
+      "added": 0,
+      "deleted": 112,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-lineage-state.test.ts",
+      "added": 89,
+      "deleted": 737,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-purge-terminal-state.test.ts",
+      "added": 0,
+      "deleted": 90,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-remote-runtime-removal.test.ts",
+      "added": 8,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-removal-state-cleanup.test.ts",
+      "added": 4,
+      "deleted": 55,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-slice-test-fixtures.ts",
+      "added": 11,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-workspace-selection-state.test.ts",
+      "added": 37,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/created-worktree-state-merge.ts",
+      "added": 4,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/worktree-create-parent-pick.ts",
+      "added": 13,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/worktree-create-payload.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/listing/worktree-slice-types.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-actions.ts",
+      "added": 16,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-host-merge.ts",
+      "added": 42,
+      "deleted": 16,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-list.ts",
+      "added": 80,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-refresh.ts",
+      "added": 54,
+      "deleted": 69,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/session/worktree-pin-reveal.ts",
+      "added": 14,
+      "deleted": 41,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/purge-stale-runtime-host-state.ts",
+      "added": 0,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/remove-worktree-store-cleanup.ts",
+      "added": 31,
+      "deleted": 12,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/removed-worktree-chat-drafts.ts",
+      "added": 8,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/removed-worktree-renderer-teardown.ts",
+      "added": 19,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-purge-doomed-ids.ts",
+      "added": 21,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-purge-state.ts",
+      "added": 62,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-removal-owner.test.ts",
+      "added": 74,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-removal-owner.ts",
+      "added": 76,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-state-before-removal.ts",
+      "added": 11,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-actions.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-shutdown-state.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-shutdown.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/worktree-repo-index.ts",
+      "added": 18,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/constants.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-dormant-state-validation.ts",
+      "added": 12,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-lineage-edges.ts",
+      "added": 27,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-manifest.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/persisted-state-types.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/protocol-version.ts",
+      "added": 3,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/resolved-worktree-lineage.test.ts",
+      "added": 16,
+      "deleted": 48,
+      "kind": "test"
+    },
+    {
+      "path": "src/shared/resolved-worktree-lineage.ts",
+      "added": 98,
+      "deleted": 88,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/runtime-capability-constants.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/structured-agent-session-send-settlement.ts",
+      "added": 3,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/create-types.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/lineage-edge.ts",
+      "added": 61,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/lineage-types.ts",
+      "added": 9,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/wsl-move/wsl-move-dispositions.ts",
+      "added": 5,
+      "deleted": 0,
+      "kind": "production"
+    }
+  ],
+  "workingPerFileLedger": [
+    {
+      "path": "config/main-layout-writer-baseline.txt",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "mobile/src/worktree/mobile-workspace-lineage.ts",
+      "added": 30,
+      "deleted": 39,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ipc/worktree-create-lineage.test.ts",
+      "added": 33,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/ipc/worktree-remote.ts",
+      "added": 66,
+      "deleted": 24,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ipc/worktrees-canonical-ssh-listing.test.ts",
+      "added": 0,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/ipc/worktrees/metadata/register-worktree-metadata-handlers.ts",
+      "added": 9,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-source-removal.ts",
+      "added": 17,
+      "deleted": 14,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-state-file.ts",
+      "added": 7,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/orca-profiles/profile-project-transfer-payload.ts",
+      "added": 65,
+      "deleted": 72,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence-cohort-and-identity-migration.test.ts",
+      "added": 20,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-host-partitioned-sessions.test.ts",
+      "added": 9,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-orcad-migration-catalog.test.ts",
+      "added": 23,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-repo-lifecycle.test.ts",
+      "added": 10,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence-worktree-lineage-and-backups.test.ts",
+      "added": 37,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/canonical-workspace-lineage.test.ts",
+      "added": 249,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/canonical-workspace-lineage.ts",
+      "added": 245,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/metadata-lineage-operations.ts",
+      "added": 64,
+      "deleted": 127,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/normalize-loaded-profile-state.ts",
+      "added": 13,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/repo-lifecycle-operations.ts",
+      "added": 6,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/state-serialization-secret-handling.ts",
+      "added": 25,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/loading-store/worktree-meta-alias-projection.test.ts",
+      "added": 4,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/loading-store/worktree-metadata-removal.ts",
+      "added": 86,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-dormant-state-records.ts",
+      "added": 28,
+      "deleted": 28,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-dormant-state.ts",
+      "added": 35,
+      "deleted": 24,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-dormant-subtraction.ts",
+      "added": 34,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-legacy-key-scope.test.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-lineage-edges.ts",
+      "added": 103,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/migrating-orcad-catalog/orcad-source-release-upgrade.test.ts",
+      "added": 0,
+      "deleted": 41,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/persistence/moving-wsl-projects/wsl-move-state-projection.ts",
+      "added": 10,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/deregistered-repo-residue.ts",
+      "added": 2,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/missing-local-worktree-metadata-pruning.ts",
+      "added": 2,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/repo-worktree-pruning.ts",
+      "added": 14,
+      "deleted": 18,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/worktree-identity-migration.ts",
+      "added": 0,
+      "deleted": 36,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/persistence/tracking-repos/worktree-metadata-normalization.ts",
+      "added": 8,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/lineage-and-scan-cache.spec.ts",
+      "added": 9,
+      "deleted": 15,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/mobile-creation-and-orchestration-part-04.spec.ts",
+      "added": 5,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/orca-runtime-tests/worktree-selector-resolution.spec.ts",
+      "added": 4,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/repo-worktree-row-resolution.test.ts",
+      "added": 10,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/repo-worktree-row-resolution.ts",
+      "added": 19,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree-catalog-methods.ts",
+      "added": 7,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree.test.ts",
+      "added": 4,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/runtime/rpc/methods/worktree.ts",
+      "added": 0,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-created-worktree-terminal-target.ts",
+      "added": 13,
+      "deleted": 59,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-managed-worktree-metadata.ts",
+      "added": 6,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-store-contract.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-worktree-lineage-controller.ts",
+      "added": 46,
+      "deleted": 38,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/runtime-worktree-lineage-resolution.ts",
+      "added": 0,
+      "deleted": 36,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/workspaces/workspace-catalog.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/workspaces/workspace-selectors.ts",
+      "added": 10,
+      "deleted": 6,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/runtime/worktree-ps-degraded-repo-scan.test.ts",
+      "added": 8,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/saved-worktree-lineage-catalog.ts",
+      "added": 93,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/ssh/orcad-migration-path-fields.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/worktree-lineage-host-peers.ts",
+      "added": 35,
+      "deleted": 41,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/worktree-lineage-pruning.test.ts",
+      "added": 9,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/main/worktree-lineage-pruning.ts",
+      "added": 35,
+      "deleted": 10,
+      "kind": "production"
+    },
+    {
+      "path": "src/main/wsl-move-scan-pruning.test.ts",
+      "added": 17,
+      "deleted": 6,
+      "kind": "test"
+    },
+    {
+      "path": "src/preload/api/worktree-api.ts",
+      "added": 6,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/native-chat-resume-workspace-lookups.ts",
+      "added": 2,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/native-chat/structured-agent-session-send-runtime.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/NativeChatResumeOnRestartGroups.test.tsx",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/new-workspace/ComposerParentWorktreePicker.test.tsx",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/new-workspace/ComposerParentWorktreePicker.tsx",
+      "added": 26,
+      "deleted": 21,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/AiVaultScanProgressStrip.test.tsx",
+      "added": 7,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/folder-workspace-attached-worktrees.test.ts",
+      "added": 16,
+      "deleted": 8,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/folder-workspace-attached-worktrees.ts",
+      "added": 23,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/FolderWorkspaceWorktreesPanel.test.tsx",
+      "added": 3,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/right-sidebar/FolderWorkspaceWorktreesPanel.tsx",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/child-workspaces-toggle-target.test.ts",
+      "added": 4,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/child-workspaces-toggle-target.ts",
+      "added": 2,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/compute-visible-worktrees.ts",
+      "added": 22,
+      "deleted": 9,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/folder-workspace-card-pr-display.test.ts",
+      "added": 2,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/folder-workspace-card-pr-display.ts",
+      "added": 13,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/pinned-section-worktrees.ts",
+      "added": 5,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/sidebar-lineage-ancestors.test.ts",
+      "added": 2,
+      "deleted": 3,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-card-workspace-actions.ts",
+      "added": 9,
+      "deleted": 6,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-context-menu-model.tsx",
+      "added": 15,
+      "deleted": 12,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-context-menu-secondary-actions.ts",
+      "added": 5,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/use-worktree-parent-picker-transition.ts",
+      "added": 10,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktree-indexes.test.ts",
+      "added": 29,
+      "deleted": 21,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktree-indexes.ts",
+      "added": 49,
+      "deleted": 13,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/visible-worktrees.test.ts",
+      "added": 21,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/workspace-delete-lineage.test.ts",
+      "added": 27,
+      "deleted": 21,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/workspace-delete-lineage.ts",
+      "added": 8,
+      "deleted": 27,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-card-model.ts",
+      "added": 2,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-context-menu-policy.ts",
+      "added": 4,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-drag-drop.test.ts",
+      "added": 63,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-drag-drop.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-projection.test.ts",
+      "added": 5,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-lineage-projection.ts",
+      "added": 38,
+      "deleted": 80,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list-groups-lineage-nesting.test.ts",
+      "added": 4,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/drop-commit-context.ts",
+      "added": 8,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-commit.ts",
+      "added": 4,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-flush.test.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/pointer-flush.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/row-state.ts",
+      "added": 4,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-document-drop.ts",
+      "added": 19,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-drop-commit-context.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-lineage-drop-commit.ts",
+      "added": 113,
+      "deleted": 41,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-native-drag.ts",
+      "added": 17,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/drag/use-pointer-drag.ts",
+      "added": 7,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/grouping/row-builders.ts",
+      "added": 9,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/rows/item-row.tsx",
+      "added": 4,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-list/viewport/VirtualizedWorktreeViewport.tsx",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-parent-candidates.ts",
+      "added": 7,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-parent-eligibility.ts",
+      "added": 12,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-sidebar-drag-autoscroll.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-sidebar-drop-preview.ts",
+      "added": 5,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-unnest.test.ts",
+      "added": 21,
+      "deleted": 5,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/worktree-unnest.ts",
+      "added": 10,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeContextMenuOverlays.tsx",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeList.tsx",
+      "added": 6,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeParentPickerPopover.test.ts",
+      "added": 14,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/components/sidebar/WorktreeParentPickerPopover.tsx",
+      "added": 45,
+      "deleted": 22,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/hooks/ipc-events/worktree-event-lineage-refresh.test.ts",
+      "added": 6,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/lib/selected-worktree-reference.ts",
+      "added": 72,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/browser/browser-close-actions.ts",
+      "added": 8,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/browser/browser-slice-contract.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/project-removal-owner-host.test.ts",
+      "added": 6,
+      "deleted": 7,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/repos-host-identity-routing.test.ts",
+      "added": 3,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/settings.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/tabs/worktree-layout-lifecycle.ts",
+      "added": 75,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktree-helpers.ts",
+      "added": 10,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-create-base-status.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-create-parent-pick.test.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-fetch-remote-lineage.test.ts",
+      "added": 67,
+      "deleted": 98,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-hydration-purge.test.ts",
+      "added": 0,
+      "deleted": 112,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-lineage-state.test.ts",
+      "added": 89,
+      "deleted": 737,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-purge-terminal-state.test.ts",
+      "added": 0,
+      "deleted": 90,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-remote-runtime-removal.test.ts",
+      "added": 8,
+      "deleted": 2,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-removal-state-cleanup.test.ts",
+      "added": 4,
+      "deleted": 55,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-slice-test-fixtures.ts",
+      "added": 11,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees-workspace-selection-state.test.ts",
+      "added": 37,
+      "deleted": 4,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/created-worktree-state-merge.ts",
+      "added": 4,
+      "deleted": 2,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/worktree-create-parent-pick.ts",
+      "added": 13,
+      "deleted": 19,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/create/worktree-create-payload.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/listing/worktree-slice-types.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-actions.ts",
+      "added": 32,
+      "deleted": 26,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-host-merge.ts",
+      "added": 42,
+      "deleted": 16,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-list.ts",
+      "added": 80,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-refresh.ts",
+      "added": 58,
+      "deleted": 71,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/session/worktree-pin-reveal.ts",
+      "added": 14,
+      "deleted": 41,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/purge-stale-runtime-host-state.ts",
+      "added": 0,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/remove-worktree-store-cleanup.ts",
+      "added": 31,
+      "deleted": 12,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/removed-worktree-chat-drafts.ts",
+      "added": 8,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/removed-worktree-renderer-teardown.ts",
+      "added": 19,
+      "deleted": 5,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-purge-doomed-ids.ts",
+      "added": 21,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-purge-state.ts",
+      "added": 62,
+      "deleted": 11,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-removal-owner.test.ts",
+      "added": 74,
+      "deleted": 0,
+      "kind": "test"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-removal-owner.ts",
+      "added": 76,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/slices/worktrees/teardown/worktree-state-before-removal.ts",
+      "added": 11,
+      "deleted": 4,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-actions.ts",
+      "added": 1,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-shutdown-state.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/terminals/terminal-shutdown.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/renderer/src/store/worktree-repo-index.ts",
+      "added": 25,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/constants.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-dormant-state-validation.ts",
+      "added": 12,
+      "deleted": 7,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-lineage-edges.ts",
+      "added": 27,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/orcad-migration-manifest.ts",
+      "added": 2,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/persisted-state-types.ts",
+      "added": 3,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/protocol-version.ts",
+      "added": 3,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/resolved-worktree-lineage.test.ts",
+      "added": 16,
+      "deleted": 48,
+      "kind": "test"
+    },
+    {
+      "path": "src/shared/resolved-worktree-lineage.ts",
+      "added": 98,
+      "deleted": 88,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/runtime-capability-constants.ts",
+      "added": 2,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/structured-agent-session-send-settlement.ts",
+      "added": 3,
+      "deleted": 3,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/create-types.ts",
+      "added": 1,
+      "deleted": 1,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/lineage-edge.ts",
+      "added": 61,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/worktree/lineage-types.ts",
+      "added": 9,
+      "deleted": 0,
+      "kind": "production"
+    },
+    {
+      "path": "src/shared/wsl-move/wsl-move-dispositions.ts",
+      "added": 5,
+      "deleted": 0,
+      "kind": "production"
+    }
+  ],
+  "partialChanges": [
+    "Renderer selected-row reference and host-qualified identity lookup extension",
+    "Lineage actions accept references and derive exact child/parent selectors; wire identity remains opaque; replies use viewer row host",
+    "Legacy success/failure refreshes captured owner rather than applying replies optimistically",
+    "Picker pending child, click/Enter, stable row keys, drag start/hover/commit and unnest migrated toward references",
+    "Listing owner multiplicity map, one edge acquisition passed to projection, empty/unrelated-row admission",
+    "Initialized empty canonical getter skips owner construction; selective metadata/alias/canonical domain admission precedes lineage projection; full serializer removes duplicate derivation"
+  ],
+  "incomplete": [
+    "No complete implementation or validation claim: source/test consumers need migration and verification",
+    "Entire send open/source/mode/card/visibility/reveal reference propagation remains pending; binding plan allocated 35 lines, while only 27 production lines remain",
+    "Coordinator additionally authorized optional captured transport through ui-slice-agent-actions -> agent-message-send -> active-agent-note-send; this remains pending",
+    "Reply row/parent projection still needs complete serving-authority scoping and paired fixture verification",
+    "Drag and picker accepted behavior, legacy races and recovery, create/CLI selector controls need integrated tests",
+    "Save dependency audit and correctness tests remain incomplete; current performance edits are provisional",
+    "No tests consolidated yet; existing tests still call former action signatures",
+    "Bounded base/reviewed/fixed production-path performance harness and runtime evidence not run",
+    "No real older-peer/duplicate-owner Electron QA or screenshots run; no readiness claim"
+  ],
+  "validation": {
+    "format": "oxfmt completed on touched files",
+    "targetedTests": "NOT RUN",
+    "typecheck": "NOT RUN",
+    "lint": "NOT RUN",
+    "ci": "No new head; not queried",
+    "performance": "NOT RUN: manual admission was not satisfied",
+    "resourcePreflight": "tc-gate unavailable as expected on Windows; coordinator authorized manual check with about 12 GB free, no competing tsc/tsgo/vitest and one named job at a time",
+    "memorySamplesKiB": [10187008, 10575968, 8362220],
+    "freeMemoryFinalKiB": 11698460,
+    "processes": [
+      {
+        "Id": 16260,
+        "ProcessName": "vmmemWSL",
+        "WS": 2581045248
+      },
+      {
+        "Id": 5892,
+        "ProcessName": "MsMpEng",
+        "WS": 648044544
+      },
+      {
+        "Id": 3368,
+        "ProcessName": "Memory Compression",
+        "WS": 634892288
+      },
+      {
+        "Id": 9692,
+        "ProcessName": "Orca",
+        "WS": 396312576
+      },
+      {
+        "Id": 17984,
+        "ProcessName": "claude",
+        "WS": 376176640
+      },
+      {
+        "Id": 24976,
+        "ProcessName": "claude",
+        "WS": 299409408
+      },
+      {
+        "Id": 32168,
+        "ProcessName": "Orca",
+        "WS": 257744896
+      },
+      {
+        "Id": 35940,
+        "ProcessName": "codex",
+        "WS": 251928576
+      },
+      {
+        "Id": 19952,
+        "ProcessName": "claude",
+        "WS": 239935488
+      },
+      {
+        "Id": 35720,
+        "ProcessName": "codex",
+        "WS": 228884480
+      }
+    ]
+  },
+  "findings": [
+    "Source inventory found terminal delivery recomputes owner from focus/bare ID after the send popover opens; coordinator authorized narrow transport propagation in the same cut, with no re-plan at that point",
+    "No user-visible behavior was exercised in an app; no new runtime behavior observed",
+    "No new saved field, wire operation, durable dirty flag or general cache mechanism introduced; selected references are renderer-only and identity lookup extends the existing snapshot index"
+  ],
+  "preservation": [
+    "Pre-existing pnpm-lock.yaml @pnpm/exe churn is preserved unstaged",
+    "Pre-existing cml-docs, reports and bun tooling are preserved untracked",
+    "All task edits remain unstaged and uncommitted for coordinator review/re-plan",
+    "No branch checkout, main merge, force push, PR update, issue/comment, app launch, process termination or credential copy performed",
+    "Frozen PR 29339 was untouched"
+  ],
+  "coordinatorDecisionNeeded": "Revise the allocation or approve a concrete consolidation plan before continuing; do not ship this partial working tree"
+}
