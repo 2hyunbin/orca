@@ -472,7 +472,6 @@ jobs:
         run: |
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots linux-x64-glibc
-          pnpm build:orcad
           node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc
           mv out/orcad-template "$RUNNER_TEMP/orcad-convert-template"
       # The Windows CLI matrix collects here too and skips: it needs a Windows host descriptor.
