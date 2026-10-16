@@ -37,6 +37,7 @@ export function selectBrowserNetworkTunnelProxy(
   if (
     // Why: Chromium never proxies loopback, and the host's own browser sessions follow it.
     isEligibleLocalCertificateHost(target.host) ||
+    isLoopbackAddress(target.host) ||
     matchesProxyBypassRules(target, bypassRules, fromSettings ? 'chromium' : 'no-proxy')
   ) {
     return { kind: 'direct' }
@@ -49,6 +50,18 @@ export function selectBrowserNetworkTunnelProxy(
     return { kind: 'socks5', url }
   }
   return { kind: 'unsupported', protocol: url.protocol }
+}
+
+// Why a BlockList: the SOCKS front end hands over IPv6 expanded (`0:0:0:0:0:0:0:1`), not as `::1`.
+const LOOPBACK_ADDRESSES = new BlockList()
+LOOPBACK_ADDRESSES.addSubnet('127.0.0.0', 8, 'ipv4')
+LOOPBACK_ADDRESSES.addAddress('::1', 'ipv6')
+LOOPBACK_ADDRESSES.addSubnet('::ffff:127.0.0.0', 104, 'ipv6')
+
+function isLoopbackAddress(host: string): boolean {
+  const address = normalizeHost(host)
+  const family = isIP(address)
+  return family !== 0 && LOOPBACK_ADDRESSES.check(address, family === 4 ? 'ipv4' : 'ipv6')
 }
 
 function normalizeHost(host: string): string {
