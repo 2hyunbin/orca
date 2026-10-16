@@ -2,21 +2,16 @@ import { pairedRuntimeConnectionFromOffer } from '../../../shared/paired-runtime
 import { randomUUID } from 'node:crypto'
 import type { RpcRequest } from '../rpc/core'
 import type { DelegatedMobileDeviceSyncParams } from '../../../shared/delegated-mobile-device-contract'
-import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { RemoteRuntimeClientError } from '../../../shared/remote-runtime-client-error'
-import {
-  openRemoteRuntimePassthroughSocket,
-  type RemoteRuntimePassthroughSocket
-} from '../../../shared/remote-runtime-passthrough-socket'
+import { openRemoteRuntimePassthroughSocket } from '../../../shared/remote-runtime-passthrough-socket'
 import { DelegatedPhoneGrantCache } from './delegated-phone-grant-cache'
 import { localHostedBrowserPageRequest } from './hosted-browser-page-route'
 import type { MobileDesktopRelayHost, MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
-import type { MobileRelayWorkDemand } from './mobile-relay-work-demand'
+import { RelayLink, type OpenedRelayLink, type RelayedPhone } from './mobile-relay-link'
 import { RELAYED_STREAM_CARRIERS } from './relayed-stream-carriers'
 import { createSupportFollowsHostSetting } from '../rpc/methods/structured-agent-session-policy'
 import {
   declareRelayedPhoneCapabilities,
-  RelayedPhoneReplies,
   relayedPhoneCapabilities,
   rewriteRelayedPhoneRequest,
   withRelayedLaunchChatDefault
@@ -24,35 +19,7 @@ import {
 
 const RELAY_CONNECT_TIMEOUT_MS = 15_000
 
-/** The phone connection a relayed request arrived on. */
-export type RelayedPhone = {
-  connectionId: string
-  deviceId: string
-  deviceToken: string
-  clientCapabilities: () => readonly RuntimeCapability[]
-  reply: (frame: string) => void
-  sendBinary: (bytes: Uint8Array<ArrayBufferLike>) => boolean | void
-}
-
-type OpenedRelayLink = { socket: RemoteRuntimePassthroughSocket; hostToken: string }
-
-class RelayLink {
-  readonly replies: RelayedPhoneReplies
-  readonly opened: Promise<OpenedRelayLink>
-  demand: MobileRelayWorkDemand | null = null
-  // Opening stays unbound until current registration and demand agree.
-  preparing = true
-
-  constructor(
-    readonly environmentId: string,
-    readonly phone: RelayedPhone,
-    allocateStreamId: () => number,
-    open: (link: RelayLink) => Promise<OpenedRelayLink>
-  ) {
-    this.replies = new RelayedPhoneReplies(allocateStreamId)
-    this.opened = open(this)
-  }
-}
+export type { RelayedPhone } from './mobile-relay-link'
 
 /**
  * Relays a phone request carrying `executionHost: runtime:<env>` to that configured server, over one

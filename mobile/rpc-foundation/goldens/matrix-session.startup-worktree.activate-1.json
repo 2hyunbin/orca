@@ -33,14 +33,6 @@
       "ordinal": 30,
       "value": {}
     },
-    "0c11a07914d9": {
-      "name": "toast",
-      "ordinal": 12,
-      "value": {
-        "durationMs": 3000,
-        "message": "Open Orca on the host to wake sleeping agents."
-      }
-    },
     "0f13cb25f551": {
       "name": "worktree.activate#2",
       "ordinal": 24,
@@ -225,14 +217,6 @@
         "allowEmptyLoaded": false
       }
     },
-    "5be78037f8c3": {
-      "name": "toast",
-      "ordinal": 26,
-      "value": {
-        "durationMs": 3000,
-        "message": "Open Orca on the host to wake sleeping agents."
-      }
-    },
     "5dbd71a7b565": {
       "name": "fetch-terminals",
       "ordinal": 26,
@@ -276,6 +260,14 @@
       "settlement": {
         "status": "pending",
         "startedAt": 2550
+      }
+    },
+    "6ae566591f34": {
+      "name": "toast",
+      "ordinal": 12,
+      "value": {
+        "durationMs": 3000,
+        "message": "Open the sleeping agent's tab to wake it."
       }
     },
     "6d3ccc8dd226": {
@@ -353,6 +345,14 @@
       "name": "clear-pending-live-input-commit",
       "ordinal": 16,
       "value": {}
+    },
+    "8d8af657f682": {
+      "name": "toast",
+      "ordinal": 26,
+      "value": {
+        "durationMs": 3000,
+        "message": "Open the sleeping agent's tab to wake it."
+      }
     },
     "909cb88cda8c": {
       "name": "worktree.activate#2",
@@ -557,14 +557,6 @@
         }
       }
     },
-    "b804d344d320": {
-      "name": "toast",
-      "ordinal": 27,
-      "value": {
-        "durationMs": 3000,
-        "message": "Open Orca on the host to wake sleeping agents."
-      }
-    },
     "be26ebfb049f": {
       "name": "clear-pending-restorations",
       "ordinal": 29,
@@ -623,6 +615,14 @@
             "$rpc": "null"
           }
         }
+      }
+    },
+    "cfcef56c4230": {
+      "name": "toast",
+      "ordinal": 27,
+      "value": {
+        "durationMs": 3000,
+        "message": "Open the sleeping agent's tab to wake it."
       }
     },
     "d000b4c837b7": {
@@ -1014,7 +1014,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1"
           ]
         }
@@ -1038,7 +1038,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1",
             "6d3ccc8dd226"
           ]
@@ -1064,7 +1064,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1",
             "6d3ccc8dd226",
             "852e16abba25",
@@ -1100,7 +1100,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1",
             "6d3ccc8dd226",
             "852e16abba25",
@@ -1113,7 +1113,7 @@
             "04cec5da2df1",
             "3ff3bd674907",
             "5dbd71a7b565",
-            "b804d344d320"
+            "cfcef56c4230"
           ]
         }
       },
@@ -1137,7 +1137,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1",
             "6d3ccc8dd226",
             "852e16abba25",
@@ -1150,7 +1150,7 @@
             "04cec5da2df1",
             "3ff3bd674907",
             "5dbd71a7b565",
-            "b804d344d320",
+            "cfcef56c4230",
             "c4b96136baf3",
             "0439d4e9a9bf"
           ]
@@ -1176,7 +1176,7 @@
             "a193ad4304cb",
             "5bd54a356841",
             "83de0c92427d",
-            "0c11a07914d9",
+            "6ae566591f34",
             "04f9f79493f1",
             "6d3ccc8dd226",
             "852e16abba25",
@@ -1189,7 +1189,7 @@
             "04cec5da2df1",
             "3ff3bd674907",
             "5dbd71a7b565",
-            "b804d344d320",
+            "cfcef56c4230",
             "c4b96136baf3",
             "0439d4e9a9bf",
             "0a48a6e4d579",
@@ -1312,7 +1312,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -1348,7 +1348,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -1386,7 +1386,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -1509,7 +1509,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -1545,7 +1545,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -1583,7 +1583,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -1706,7 +1706,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -1742,7 +1742,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -1780,7 +1780,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -1903,7 +1903,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -1939,7 +1939,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -1977,7 +1977,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -2100,7 +2100,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -2136,7 +2136,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -2174,7 +2174,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -2297,7 +2297,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -2333,7 +2333,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -2371,7 +2371,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -2494,7 +2494,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -2530,7 +2530,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -2568,7 +2568,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -2691,7 +2691,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -2727,7 +2727,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -2765,7 +2765,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -2888,7 +2888,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -2924,7 +2924,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -2962,7 +2962,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
@@ -3085,7 +3085,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3"
+            "8d8af657f682"
           ]
         }
       },
@@ -3121,7 +3121,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610"
           ]
@@ -3159,7 +3159,7 @@
             "debef2539fa3",
             "4ef57a31ee5d",
             "c03aaed85eb1",
-            "5be78037f8c3",
+            "8d8af657f682",
             "f9aa38dbf1e2",
             "19a0aa55b610",
             "be26ebfb049f",
