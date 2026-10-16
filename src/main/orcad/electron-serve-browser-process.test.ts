@@ -451,6 +451,27 @@ describe('ElectronServeBrowserProcess command routing', () => {
     })
   })
 
+  it('scopes a folder workspace through the browser-workspace resolver', async () => {
+    // The git-only selector cannot name a folder workspace; only the browser resolver can.
+    const folderHost: RuntimeBrowserCommandHost = {
+      ...host,
+      resolveWorktreeSelector: async () => {
+        throw new Error('selector_not_found')
+      },
+      resolveBrowserWorkspace: async () => ({ id: 'folder:docs' })
+    }
+    const commands = (await startProvider()).createCommands(folderHost)
+
+    const created = (await commands.browserTabCreate({ worktree: 'id:folder:docs' })) as {
+      browserPageId: string
+    }
+    await commands.browserGoto({ worktree: 'id:folder:docs', url: 'https://example.test/' })
+
+    const request = (await browserRequests()).at(-1)
+    expect(request?.method).toBe('browser.goto')
+    expect(request?.params.page).toBe(created.browserPageId)
+  })
+
   // Why this matters: the runtime advertises browser.tabCreate.known-id.v1
   // unconditionally, so a web client will send a provisional id for a page that does
   // not exist yet. Requiring it first made every such create throw.
