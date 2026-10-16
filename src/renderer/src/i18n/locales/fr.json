@@ -12573,7 +12573,11 @@
             "target": "Passer par un hôte SSH",
             "port": "Port du serveur",
             "link": "Utiliser SSH",
-            "linking": "Connexion…"
+            "linking": "Connexion…",
+            "pendingLink": "La connexion via SSH n’a pas abouti.",
+            "pendingUnlink": "L’arrêt de l’accès SSH n’a pas abouti.",
+            "retry": "Réessayer",
+            "cancelLink": "Annuler"
           },
           "search": {
             "title": "Serveurs gérés",
