@@ -3,7 +3,6 @@ import {
   parseExecutionHostId,
   toRuntimeExecutionHostId
 } from '../../../shared/execution-host'
-import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import type { AppState } from '@/store/types'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { requestsCwdOutsideWorkspaceRootForWorkspace } from '../../../shared/terminal-startup-cwd'
@@ -53,9 +52,6 @@ export type AgentLaunchRouteStore = {
    *  in the intersection so these lookups resolve to the full records. */
   worktreesByRepo?: AppState['worktreesByRepo']
   folderWorkspaces?: AppState['folderWorkspaces']
-  /** This computer's detected agents, for chat provider defaults. */
-  localDetectedAgentIdsByContext?: AppState['localDetectedAgentIdsByContext']
-  ensureNativeDetectedAgents?: AppState['ensureNativeDetectedAgents']
 } & Parameters<typeof getExecutionHostIdForWorktree>[0] &
   Parameters<typeof getLocalProjectExecutionRuntimeContext>[0] &
   Parameters<typeof getConnectionIdFromState>[0]
@@ -150,7 +146,6 @@ export function buildAgentLaunchRouteInput(
   return {
     agent,
     settings: store.settings,
-    installedHere: readNativeDetectedAgents(store),
     executionHostId,
     hostCapabilities: owner === null ? null : resolveHostCapabilities(store, executionHostId),
     ...(parseExecutionHostId(executionHostId)?.kind === 'runtime'

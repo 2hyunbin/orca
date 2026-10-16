@@ -3,7 +3,7 @@ import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import {
   buildNativeChatProviderUpdate,
-  isNativeChatProviderOn
+  isNativeChatProviderDisplayedOn
 } from '../../../../shared/native-chat-providers'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
@@ -114,7 +114,7 @@ export function NativeChatProvidersSetting({
             {visibleAgents.map((agent) => {
               const label = getAgentLabel(agent)
               const enabledInAgents = isTuiAgentEnabled(agent, settings.disabledTuiAgents)
-              const on = isNativeChatProviderOn(settings, agent, detectedIds)
+              const on = isNativeChatProviderDisplayedOn(settings, agent, detectedIds)
               return (
                 <div key={agent} className="flex items-center gap-3 py-3">
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50">
@@ -147,7 +147,7 @@ export function NativeChatProvidersSetting({
                           buildNativeChatProviderUpdate(
                             latest,
                             agent,
-                            !isNativeChatProviderOn(
+                            !isNativeChatProviderDisplayedOn(
                               latest,
                               agent,
                               readNativeDetectedAgents(useAppStore.getState())

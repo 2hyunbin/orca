@@ -1,5 +1,3 @@
-import { useAppStore } from '@/store'
-import { awaitStructuredRouteHostAnswer } from '@/lib/agent-session-launch-plan'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AppState } from '@/store/types'
 import { getConnectionId } from '@/lib/connection-context'
@@ -94,24 +92,16 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
         : undefined
   })
 
-  const request =
+  const plan =
     effectiveAgent === null
       ? null
-      : {
+      : args.planLaunch(args.latestStore, {
           requestId: args.requestId,
           agent: effectiveAgent,
-          workspace: {
-            kind: 'git-worktree' as const,
-            worktreeId: args.worktreeId,
-            repoId: args.repoId
-          },
+          workspace: { kind: 'git-worktree', worktreeId: args.worktreeId, repoId: args.repoId },
           prompt: args.draftContent,
           promptDelivery: args.promptDelivery
-        }
-  if (request) {
-    await awaitStructuredRouteHostAnswer(useAppStore.getState(), request, 3_000)
-  }
-  const plan = request ? args.planLaunch(useAppStore.getState(), request) : null
+        })
   const structuredLaunch = plan?.route === 'structured-native-chat'
 
   return {

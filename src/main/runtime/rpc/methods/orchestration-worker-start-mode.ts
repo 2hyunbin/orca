@@ -76,8 +76,7 @@ export function downgradeWorkerStartModeForHost(
 }
 
 export function readWorkerStartModeSettings(
-  runtime: Parameters<typeof readAgentLaunchModeSettings>[0],
-  agent: string
-): Promise<AgentLaunchModeSettings | null> {
-  return readAgentLaunchModeSettings(runtime, agent)
+  runtime: Parameters<typeof readAgentLaunchModeSettings>[0]
+): AgentLaunchModeSettings | null {
+  return readAgentLaunchModeSettings(runtime)
 }

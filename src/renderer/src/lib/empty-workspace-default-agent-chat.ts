@@ -2,7 +2,6 @@ import { isNativeChatEnabled } from '../../../shared/structured-native-chat-laun
 import { pickTuiAgent } from '../../../shared/tui-agent-selection'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import { useAppStore } from '@/store'
-import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import type { AppState } from '@/store/types'
 import {
   getAgentDetectionTargetKeyForWorktree,
@@ -41,11 +40,7 @@ function defaultChatDetectionTarget(
 export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): boolean {
   const state = useAppStore.getState()
   const target = defaultChatDetectionTarget(state, worktreeId)
-  return (
-    target !== undefined &&
-    (readDetectedAgentsForTarget(state, target) === null ||
-      readNativeDetectedAgents(state) === null)
-  )
+  return target !== undefined && readDetectedAgentsForTarget(state, target) === null
 }
 
 /** Loads the workspace host's agent list; resolves on success, failure, or timeout. */
@@ -56,12 +51,9 @@ export async function loadEmptyWorkspaceDefaultChatDetection(worktreeId: string)
     return
   }
   await withTimeout(
-    Promise.all([
-      ensureDetectedAgentsForTarget(state, target),
-      state.ensureNativeDetectedAgents()
-    ]).then(() => undefined),
+    ensureDetectedAgentsForTarget(state, target),
     DEFAULT_CHAT_DETECTION_TIMEOUT_MS,
-    undefined
+    []
   )
 }
 

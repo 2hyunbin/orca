@@ -11,7 +11,7 @@
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { parseExecutionHostId } from './execution-host'
 import type { GlobalSettings } from './global-settings-types'
-import { isNativeChatProviderOn, type NativeChatProviderSettings } from './native-chat-providers'
+import type { NativeChatProviderSettings } from './native-chat-providers'
 import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
 import {
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY,
@@ -70,14 +70,12 @@ export function isNativeChatEnabled(
   return settings?.experimentalNativeChat === true
 }
 
-/** The user's default for a new launch of `agent`: Chat UI on and that agent's chat provider on.
- *  `installedHere` is this computer's detected agents, null when unknown. */
+/** Unchosen agents retain the chat default, independently of installation inventory. */
 export function isNativeChatDefaultFor(
   settings: Partial<NativeChatDefaultSettings> | null | undefined,
-  agent: TuiAgent,
-  installedHere: readonly TuiAgent[] | null
+  agent: TuiAgent
 ): boolean {
-  return isNativeChatEnabled(settings) && isNativeChatProviderOn(settings, agent, installedHere)
+  return isNativeChatEnabled(settings) && (settings?.nativeChatProviders?.[agent] ?? true)
 }
 
 function clientChoosesStructuredLaunches(capabilities: readonly string[] | undefined): boolean {

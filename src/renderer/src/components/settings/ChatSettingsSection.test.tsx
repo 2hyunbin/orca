@@ -77,6 +77,16 @@ function renderChat(
 }
 
 describe('Chat settings page', () => {
+  it.each([false, true])('displays saved provider choice %s when disabled in Agents', (on) => {
+    renderChat(true, true, false, {
+      nativeChatProviders: { claude: on },
+      disabledTuiAgents: ['claude']
+    })
+    const toggle = screen.getByRole('switch', { name: 'Open Claude as a chat' })
+    expect(toggle.getAttribute('aria-checked')).toBe(String(on))
+    expect(toggle.hasAttribute('disabled')).toBe(true)
+  })
+
   it('keeps Chat appearance on paired web without ineffective host naming controls or search results', () => {
     const { container } = renderChat(true, false)
     expect(screen.getByRole('spinbutton', { name: 'Text size' })).toBeTruthy()

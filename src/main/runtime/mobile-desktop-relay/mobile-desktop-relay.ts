@@ -70,7 +70,7 @@ export class MobileDesktopRelay {
       listPhones: () => DelegatedMobileDeviceSyncParams['phones']
       allocateStreamId: () => number
       /** Whether this desktop's settings open `agent` as a chat. */
-      nativeChatDefault: (agent: string) => boolean | Promise<boolean>
+      nativeChatDefault: (agent: string) => boolean
     }
   ) {
     this.grants = new DelegatedPhoneGrantCache(options.hosts, options.listPhones)
@@ -114,32 +114,25 @@ export class MobileDesktopRelay {
     }
     const link = this.linkFor(phone, environmentId)
     link.replies.noteForwarded(request.id)
-    link.opened
-      .then(
-        async ({ socket, hostToken }) => {
-          // Why: a link ended while opening already answered this request; never send it late.
-          if (!this.isCurrent(link)) {
-            return
-          }
-          const outgoing = await withRelayedLaunchChatDefault(
-            rewriteRelayedPhoneRequest(frame, phone.deviceToken, hostToken),
-            request.method,
-            this.options.nativeChatDefault
-          )
-          if (!this.isCurrent(link)) {
-            return
-          }
-          if (!socket.send(outgoing)) {
-            this.endLink(link, unavailable('The server connection could not take the request.'))
-          }
-        },
-        () => {
-          // The open failure already answered every request queued on this link.
+    link.opened.then(
+      ({ socket, hostToken }) => {
+        // Why: a link ended while opening already answered this request; never send it late.
+        if (!this.isCurrent(link)) {
+          return
         }
-      )
-      .catch(() => {
-        this.endLink(link, unavailable('The server request could not be forwarded.'))
-      })
+        const outgoing = withRelayedLaunchChatDefault(
+          rewriteRelayedPhoneRequest(frame, phone.deviceToken, hostToken),
+          request.method,
+          this.options.nativeChatDefault
+        )
+        if (!socket.send(outgoing)) {
+          this.endLink(link, unavailable('The server connection could not take the request.'))
+        }
+      },
+      () => {
+        // The open failure already answered every request queued on this link.
+      }
+    )
   }
 
   /** Mirrors a phone's capability update to every server socket that phone has open. */
@@ -152,7 +145,7 @@ export class MobileDesktopRelay {
       const id = `relay-capabilities:${randomUUID()}`
       link.replies.noteForwarded(id, { swallowReplies: true })
       link.opened.then(
-        async ({ socket, hostToken }) => {
+        ({ socket, hostToken }) => {
           if (
             this.isCurrent(link) &&
             !socket.send(
