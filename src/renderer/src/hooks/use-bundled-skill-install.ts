@@ -22,7 +22,7 @@ export type BundledSkillInstallState =
 export type BundledSkillInstall = {
   state: BundledSkillInstallState
   ready: boolean
-  /** Resolves to the settled state, or null when no install started. */
+  /** Resolves to the settled state, or null when this target's install is already running. */
   install: (skillNames: readonly string[]) => Promise<BundledSkillInstallState | null>
   /** Reruns the last requested install. */
   retry: () => void
@@ -70,13 +70,18 @@ export function useBundledSkillInstall(options: {
     targetKey,
     state: IDLE
   })
-  const runningRef = useRef(false)
+  // Why per target: an install still running on the previous machine must not block this one.
+  const runningTargetKeysRef = useRef(new Set<string>())
   const lastSkillNamesRef = useRef<readonly string[]>([])
   const mountedRef = useMountedRef()
 
   const install = useCallback(
     async (skillNames: readonly string[]): Promise<BundledSkillInstallState | null> => {
-      if (runningRef.current || skillNames.length === 0) {
+      if (skillNames.length === 0) {
+        return null
+      }
+      if (runningTargetKeysRef.current.has(targetKey)) {
+        setEntry({ targetKey, state: { kind: 'installing' } })
         return null
       }
       lastSkillNamesRef.current = skillNames
@@ -88,7 +93,7 @@ export function useBundledSkillInstall(options: {
         setEntry({ targetKey, state: pending })
         return pending
       }
-      runningRef.current = true
+      runningTargetKeysRef.current.add(targetKey)
       setEntry({ targetKey, state: { kind: 'installing' } })
       let next: BundledSkillInstallState
       try {
@@ -103,7 +108,7 @@ export function useBundledSkillInstall(options: {
       } catch (error) {
         next = { kind: 'failed', message: bundledSkillInstallErrorMessage(error) }
       } finally {
-        runningRef.current = false
+        runningTargetKeysRef.current.delete(targetKey)
       }
       if (mountedRef.current) {
         setEntry({ targetKey, state: next })

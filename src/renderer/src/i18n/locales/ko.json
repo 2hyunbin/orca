@@ -1072,7 +1072,6 @@
                 "environmentMismatch": "이 컴퓨터는 WSL에 스킬을 설치할 수 없습니다.",
                 "wslDetectionFailed": "Orca가 WSL에 설치된 에이전트를 확인하지 못했습니다. 배포판이 시작되는지 확인한 후 다시 시도하세요.",
                 "homeUnavailable": "Orca가 스킬을 설치할 홈 폴더를 찾지 못했습니다.",
-                "busy": "다른 스킬 설치가 진행 중입니다. 완료된 후 다시 시도하세요.",
                 "cancelled": "스킬 설치가 취소되었습니다.",
                 "unknown": "Orca가 스킬을 설치하지 못했습니다.",
                 "targetPending": "Orca가 아직 에이전트가 실행되는 컴퓨터를 찾고 있습니다. 잠시 후 다시 시도하세요."

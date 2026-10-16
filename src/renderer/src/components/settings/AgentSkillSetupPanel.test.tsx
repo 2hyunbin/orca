@@ -362,7 +362,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('shows Retry in place of Install after a failure', async () => {
-    mocks.install.mockRejectedValueOnce(new Error('skill-install-busy'))
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
 
     await clickButton('Install')
@@ -375,7 +375,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('clears a failure when the machine that runs the agents changes', async () => {
-    mocks.install.mockRejectedValueOnce(new Error('skill-install-busy'))
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
     await clickButton('Install')
     expect(container?.textContent).toContain('Setup failed')

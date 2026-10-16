@@ -6,11 +6,6 @@ const homeUnavailable = (): string =>
     'auto.lib.bundled.skill.install.error.message.homeUnavailable',
     'Orca could not find the home folder to install the skills into.'
   )
-const busy = (): string =>
-  translate(
-    'auto.lib.bundled.skill.install.error.message.busy',
-    'Another skill install is running. Retry when it finishes.'
-  )
 
 const KNOWN_FAILURE_MESSAGES: ReadonlyMap<string, () => string> = new Map([
   [
@@ -39,8 +34,6 @@ const KNOWN_FAILURE_MESSAGES: ReadonlyMap<string, () => string> = new Map([
   ],
   ['skill-install-wsl-home-unavailable', homeUnavailable],
   ['skill-install-home-unavailable', homeUnavailable],
-  ['skill-install-busy', busy],
-  ['skill-install-operation-in-progress', busy],
   [
     'skill-install-cancelled',
     () =>

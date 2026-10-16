@@ -1072,7 +1072,6 @@
                 "environmentMismatch": "此设备无法将技能安装到 WSL 中。",
                 "wslDetectionFailed": "Orca 无法检查 WSL 中安装了哪些智能体。请确认该发行版可以启动，然后重试。",
                 "homeUnavailable": "Orca 找不到用于安装技能的主文件夹。",
-                "busy": "另一个技能安装正在进行。完成后请重试。",
                 "cancelled": "技能安装已取消。",
                 "unknown": "Orca 无法安装技能。",
                 "targetPending": "Orca 仍在查找运行智能体的设备。请稍后重试。"

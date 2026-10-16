@@ -1072,7 +1072,6 @@
                 "environmentMismatch": "Este equipo no puede instalar skills en WSL.",
                 "wslDetectionFailed": "Orca no pudo comprobar qué agentes están instalados en WSL. Asegúrate de que la distribución se inicia y vuelve a intentarlo.",
                 "homeUnavailable": "Orca no encontró la carpeta de inicio donde instalar las skills.",
-                "busy": "Hay otra instalación de skills en curso. Vuelve a intentarlo cuando termine.",
                 "cancelled": "Se canceló la instalación de skills.",
                 "unknown": "Orca no pudo instalar las skills.",
                 "targetPending": "Orca todavía está buscando el equipo donde se ejecutan tus agentes. Vuelve a intentarlo en un momento."

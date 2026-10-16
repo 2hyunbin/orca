@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBundledSkillInstall, type BundledSkillInstall } from './use-bundled-skill-install'
 
-type MockRuntimeTarget = { kind: 'local' } | null
+type MockRuntimeTarget = { kind: 'local' } | { kind: 'environment'; environmentId: string } | null
 
 const mocks = vi.hoisted(() => {
   const localRuntimeTarget = (): MockRuntimeTarget => ({ kind: 'local' })
@@ -71,8 +71,61 @@ describe('useBundledSkillInstall', () => {
     expect(mocks.install).not.toHaveBeenCalled()
   })
 
+  it('installs on a newly focused machine while the previous one is still installing', async () => {
+    let finishFirst: (() => void) | null = null
+    mocks.install.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = () => resolve({ kind: 'installed', results: [] })
+      })
+    )
+    const hook = await renderHarness()
+    let first: Promise<unknown> = Promise.resolve()
+    await act(async () => {
+      first = hook.install(['orca-cli'])
+    })
+    expect(latest?.state.kind).toBe('installing')
+
+    mocks.runtimeTarget = { kind: 'environment', environmentId: 'env-2' }
+    await act(async () => {
+      root?.render(<Harness />)
+    })
+    expect(latest?.state.kind).toBe('idle')
+
+    let second: Awaited<ReturnType<BundledSkillInstall['install']>> = null
+    await act(async () => {
+      second = (await latest?.install(['orca-cli'])) ?? null
+    })
+    expect(mocks.install).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'env-2' },
+      { names: ['orca-cli'] }
+    )
+    expect(second).toEqual({ kind: 'idle' })
+
+    await act(async () => {
+      finishFirst?.()
+      await first
+    })
+  })
+
+  it('shows the running install instead of ignoring a repeated click', async () => {
+    mocks.install.mockReturnValueOnce(new Promise(() => {}))
+    const hook = await renderHarness()
+    await act(async () => {
+      void hook.install(['orca-cli'])
+    })
+
+    let repeat: Awaited<ReturnType<BundledSkillInstall['install']>> = { kind: 'idle' }
+    await act(async () => {
+      repeat = (await latest?.install(['orca-cli'])) ?? null
+    })
+
+    expect(repeat).toBeNull()
+    expect(mocks.install).toHaveBeenCalledOnce()
+    expect(latest?.state.kind).toBe('installing')
+  })
+
   it('retries the last requested skills', async () => {
-    mocks.install.mockRejectedValueOnce(new Error('skill-install-busy'))
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-home-unavailable'))
     const hook = await renderHarness()
 
     await act(async () => {
