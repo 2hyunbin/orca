@@ -1,3 +1,4 @@
+import { makeUnifiedTab } from './store-session-test-harness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import {
@@ -254,7 +255,7 @@ describe('removeWorktree state cleanup', () => {
         [`local|${wt.id}`]: childLineage,
         'local|repo1::/path/wt2': siblingLineage
       }
-    } as Partial<AppState>)
+    })
 
     await store.getState().removeWorktree({ id: wt.id, executionHostId: null })
 
@@ -494,8 +495,22 @@ describe('removeWorktree state cleanup', () => {
         'repo1::/path/wt2': ['tab-2']
       },
       unifiedTabsByWorktree: {
-        'repo1::/path/wt1': [{ id: 'tab-1', worktreeId: 'repo1::/path/wt1' }],
-        'repo1::/path/wt2': [{ id: 'tab-2', worktreeId: 'repo1::/path/wt2' }]
+        'repo1::/path/wt1': [
+          makeUnifiedTab({
+            id: 'tab-1',
+            worktreeId: 'repo1::/path/wt1',
+            groupId: 'group-1',
+            createdAt: 1
+          })
+        ],
+        'repo1::/path/wt2': [
+          makeUnifiedTab({
+            id: 'tab-2',
+            worktreeId: 'repo1::/path/wt2',
+            groupId: 'group-2',
+            createdAt: 1
+          })
+        ]
       },
       groupsByWorktree: {
         'repo1::/path/wt1': [
@@ -523,7 +538,7 @@ describe('removeWorktree state cleanup', () => {
         'repo1::/path/wt1': { type: 'leaf', groupId: 'group-1' },
         'repo1::/path/wt2': { type: 'leaf', groupId: 'group-2' }
       }
-    } as unknown as Partial<AppState>)
+    })
 
     await store.getState().removeWorktree({ id: 'repo1::/path/wt1', executionHostId: null })
 
@@ -531,7 +546,14 @@ describe('removeWorktree state cleanup', () => {
       'repo1::/path/wt2': ['tab-2']
     })
     expect(store.getState().unifiedTabsByWorktree).toEqual({
-      'repo1::/path/wt2': [{ id: 'tab-2', worktreeId: 'repo1::/path/wt2' }]
+      'repo1::/path/wt2': [
+        makeUnifiedTab({
+          id: 'tab-2',
+          worktreeId: 'repo1::/path/wt2',
+          groupId: 'group-2',
+          createdAt: 1
+        })
+      ]
     })
     expect(store.getState().groupsByWorktree).toEqual({
       'repo1::/path/wt2': [

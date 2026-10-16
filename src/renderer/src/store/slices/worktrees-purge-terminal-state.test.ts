@@ -1,3 +1,4 @@
+import { makeTab, makeBrowserTab, makeUnifiedTab } from './store-session-test-harness'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -177,13 +178,24 @@ describe('purgeWorktreeTerminalState direct (design §4.4)', () => {
 
     store.setState({
       tabsByWorktree: {
-        [staleId]: [{ id: 'tab-1', worktreeId: staleId }],
+        [staleId]: [makeTab({ id: 'tab-1', worktreeId: staleId, createdAt: 1 })],
         [FLOATING_TERMINAL_WORKTREE_ID]: [
-          { id: 'floating-terminal-tab', worktreeId: FLOATING_TERMINAL_WORKTREE_ID }
+          makeTab({
+            id: 'floating-terminal-tab',
+            worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+            createdAt: 1
+          })
         ]
       },
       browserTabsByWorktree: {
-        [FLOATING_TERMINAL_WORKTREE_ID]: [{ id: 'floating-browser', url: 'https://orca.test' }]
+        [FLOATING_TERMINAL_WORKTREE_ID]: [
+          makeBrowserTab({
+            id: 'floating-browser',
+            worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+            url: 'https://orca.test',
+            createdAt: 1
+          })
+        ]
       },
       openFiles: [
         floatingFile,
@@ -204,14 +216,23 @@ describe('purgeWorktreeTerminalState direct (design §4.4)', () => {
       },
       unifiedTabsByWorktree: {
         [FLOATING_TERMINAL_WORKTREE_ID]: [
-          {
+          makeUnifiedTab({
             id: 'floating-unified-tab',
-            type: 'editor',
+            contentType: 'editor',
             worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
-            fileId: 'floating-file'
-          }
+            entityId: 'floating-file',
+            groupId: 'floating-group',
+            createdAt: 1
+          })
         ],
-        [staleId]: [{ id: 'stale-unified-tab', worktreeId: staleId }]
+        [staleId]: [
+          makeUnifiedTab({
+            id: 'stale-unified-tab',
+            worktreeId: staleId,
+            groupId: 'stale-group',
+            createdAt: 1
+          })
+        ]
       },
       groupsByWorktree: {
         [FLOATING_TERMINAL_WORKTREE_ID]: [
@@ -235,17 +256,26 @@ describe('purgeWorktreeTerminalState direct (design §4.4)', () => {
         [FLOATING_TERMINAL_WORKTREE_ID]: { type: 'leaf', groupId: 'floating-group' },
         [staleId]: { type: 'leaf', groupId: 'stale-group' }
       }
-    } as unknown as Partial<AppState>)
+    })
 
     store.getState().purgeWorktreeTerminalState([staleId, FLOATING_TERMINAL_WORKTREE_ID])
 
     expect(store.getState().tabsByWorktree).toEqual({
       [FLOATING_TERMINAL_WORKTREE_ID]: [
-        { id: 'floating-terminal-tab', worktreeId: FLOATING_TERMINAL_WORKTREE_ID }
+        makeTab({
+          id: 'floating-terminal-tab',
+          worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+          createdAt: 1
+        })
       ]
     })
     expect(store.getState().browserTabsByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toEqual([
-      { id: 'floating-browser', url: 'https://orca.test' }
+      makeBrowserTab({
+        id: 'floating-browser',
+        worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+        url: 'https://orca.test',
+        createdAt: 1
+      })
     ])
     expect(store.getState().openFiles).toEqual([floatingFile])
     expect(store.getState().activeFileIdByWorktree).toEqual({
