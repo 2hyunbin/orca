@@ -62,10 +62,12 @@ export function resolveDefaultAgentForNewTab(args: {
 
 /** The new-tab default agent for a workspace, from the agents its own host reports. */
 export async function resolveDefaultAgentForWorktreeNewTab(
-  state: WorktreeAgentInventoryState & Pick<AppState, 'settings'>,
+  getState: () => WorktreeAgentInventoryState & Pick<AppState, 'settings'>,
   worktreeId: string
 ): Promise<TuiAgent | null> {
-  const detectedAgentIds = await loadDetectedAgentsForWorktree(state, worktreeId)
+  const detectedAgentIds = await loadDetectedAgentsForWorktree(getState(), worktreeId)
+  // Why: settings may change while the host answers; pick with the current ones.
+  const state = getState()
   return resolveDefaultAgentForNewTab({
     defaultTuiAgent: state.settings?.defaultTuiAgent,
     detectedAgentIds,

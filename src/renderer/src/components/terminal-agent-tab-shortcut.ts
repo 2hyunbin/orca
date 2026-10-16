@@ -38,7 +38,7 @@ export function resolveTerminalAgentTabShortcut({
       : {
           actionId: 'tab.newAgent',
           agent: null,
-          pendingAgent: resolveDefaultAgentForWorktreeNewTab(state, activeWorktreeId)
+          pendingAgent: resolveDefaultAgentForWorktreeNewTab(useAppStore.getState, activeWorktreeId)
         }
   }
   for (const bound of listBoundAgentTabActions(keybindings, state.settings?.disabledTuiAgents)) {

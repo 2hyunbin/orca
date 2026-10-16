@@ -266,7 +266,7 @@ async function explainCommitWithDefaultAgent(
   item: GitHistoryItem
 ): Promise<void> {
   const detectionTarget = getDetectionTargetIdentityForWorktree(useAppStore.getState(), worktreeId)
-  const agent = await resolveDefaultAgentForWorktreeNewTab(useAppStore.getState(), worktreeId)
+  const agent = await resolveDefaultAgentForWorktreeNewTab(useAppStore.getState, worktreeId)
   // Why: the agent was picked from that host's list; never launch it on a host the workspace moved to.
   if (
     getDetectionTargetIdentityForWorktree(useAppStore.getState(), worktreeId) !== detectionTarget
