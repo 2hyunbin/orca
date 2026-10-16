@@ -292,6 +292,62 @@ describe('which server an SSH host runs on connect', () => {
     warn.mockRestore()
   })
 
+  it('keeps a host connected for the bridge when only its relay terminals stop the link (STA-10604)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    for (const code of ['linked_project_terminals', 'linked_project_unowned_terminals']) {
+      const d = deps({
+        relayTerminals: vi.fn(async () => ({
+          verdict: 'live' as const,
+          count: 1,
+          bridged: true as const
+        })),
+        convert: async () => {
+          throw new Error(`orcad_migration_${code}:/root/my repo`)
+        }
+      })
+      const result = await resolveHostServerOnConnect(target, d)
+      expect(result).toMatchObject({
+        route: 'unserved',
+        reason: 'relay_terminals_live',
+        terminals: 1,
+        bridged: true
+      })
+      expect(result.route === 'unserved' ? result.detail : '').toContain('/root/my repo')
+      // The fence goes, so the next connect after the terminal exits links the project.
+      expect(d.abandonConversion).toHaveBeenCalledWith(target)
+    }
+    warn.mockRestore()
+  })
+
+  it('never keeps a host connected for the bridge on any other refusal or a held move', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const bridgedTerminals = vi.fn(async () => ({
+      verdict: 'live' as const,
+      count: 1,
+      bridged: true as const
+    }))
+    const conflict = deps({
+      relayTerminals: bridgedTerminals,
+      convert: async () => {
+        throw new Error('orcad_migration_repository_path_conflict:/root/migrepo')
+      }
+    })
+    const refused = await resolveHostServerOnConnect(target, conflict)
+    expect(refused).toMatchObject({ route: 'unserved', reason: 'refused' })
+    expect(refused).not.toHaveProperty('bridged')
+    const held = deps({
+      relayTerminals: bridgedTerminals,
+      hasUnfinishedConversion: () => true,
+      convert: async () => {
+        throw new Error('orcad_migration_linked_project_terminals:/root/my repo')
+      }
+    })
+    const heldResult = await resolveHostServerOnConnect(target, held)
+    expect(heldResult).toMatchObject({ route: 'unserved', reason: 'refused', held: true })
+    expect(heldResult).not.toHaveProperty('bridged')
+    warn.mockRestore()
+  })
+
   it('never pins a relay terminal of unknown project on the linked one, and offers the way out', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const d = deps({
