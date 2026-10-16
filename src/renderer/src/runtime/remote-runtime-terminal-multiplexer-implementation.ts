@@ -63,6 +63,7 @@ export class RemoteRuntimeTerminalMultiplexer extends RemoteRuntimeTerminalBinar
       resyncPendingSend: false,
       resyncTimer: null,
       resyncAttempts: 0,
+      resyncUnansweredTimeouts: 0,
       capacityRejected: false,
       watchdog: createRemoteTerminalStreamWatchdog((stall) => {
         if (e2eDisableRemoteTerminalStallRecovery) {

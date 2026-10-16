@@ -43,6 +43,7 @@ export abstract class RemoteRuntimeTerminalBinarySnapshots extends RemoteRuntime
       if (stream.snapshotTarget === 'recovery') {
         // Why: a recovery image supersedes the subscribe one; restoring the older image would drop output.
         settleSubscribeSnapshot(stream, null)
+        this.noteResyncSnapshotProgress(stream)
       }
       return
     }
@@ -59,6 +60,9 @@ export abstract class RemoteRuntimeTerminalBinarySnapshots extends RemoteRuntime
         return
       }
       stream.snapshotChunks.push(frame.payload)
+      if (stream.snapshotTarget === 'recovery') {
+        this.noteResyncSnapshotProgress(stream)
+      }
       return
     }
     if (frame.opcode === TerminalStreamOpcode.SnapshotEnd) {
