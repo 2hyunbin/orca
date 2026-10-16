@@ -523,6 +523,12 @@ variable "relay_dedicated_database_tier" {
   default     = "db-perf-optimized-N-2"
 }
 
+variable "relay_dedicated_database_edition" {
+  type        = string
+  description = "ENTERPRISE_PLUS by design; ENTERPRISE only where Enterprise Plus is out of capacity (staging, 10-16)."
+  default     = "ENTERPRISE_PLUS"
+}
+
 variable "relay_dedicated_database_name" {
   type        = string
   description = "Instance name override. Cloud SQL reserves a deleted instance's name for about a week."

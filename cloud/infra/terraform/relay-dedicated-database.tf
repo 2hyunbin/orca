@@ -20,7 +20,7 @@ resource "google_sql_database_instance" "relay_dedicated" {
     # Enterprise Plus: planned maintenance and scale-up drop connections for under a second, so the
     # relay's own database adds no maintenance outages of its own.
     tier              = var.relay_dedicated_database_tier
-    edition           = "ENTERPRISE_PLUS"
+    edition           = var.relay_dedicated_database_edition
     availability_type = "REGIONAL"
     disk_type         = "PD_SSD"
     disk_size         = 50
