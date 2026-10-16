@@ -51,6 +51,7 @@ import type {
   StatusRowMutationListener
 } from './server-types'
 import { RevisionedMap } from './revisioned-map'
+import { forgetAgentExit, type AgentExitEvidence } from './agent-exit-evidence'
 
 /** Shared mutable state for the layered hook-server implementation. */
 export abstract class AgentHookServerState {
@@ -74,6 +75,19 @@ export abstract class AgentHookServerState {
     return this.canonicalStatusStoreInstance
   }
   protected readonly canonicalListingOrder = new Map<string, number>()
+  /** When this host proved a pane's agent process ended; outlives the row the exit reconciles. */
+  protected readonly agentExitedAtByPaneKey = new Map<string, AgentExitEvidence>()
+
+  /** A new agent (or a new worker attach) claimed the pane; the previous exit no longer describes it. */
+  forgetAgentExit(paneKey: string): void {
+    const forgotten = forgetAgentExit(this.agentExitedAtByPaneKey, paneKey)
+    if (
+      forgetAgentExit(this.agentExitedAtByPaneKey, this.resolvePaneKeyAlias(paneKey)) ||
+      forgotten
+    ) {
+      this.scheduleStatusPersist()
+    }
+  }
   protected readonly canonicalSubjectsByPane = new Map<string, Map<string, AgentStatusSubject>>()
   private statusListingOrder = 0
   protected nextStatusListingOrder = (): number => ++this.statusListingOrder
