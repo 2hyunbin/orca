@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, it } from 'vitest'
 import { runProcess } from '@orca/process-host'
-import { planE2e, verifyE2eSelection } from './ci-e2e-shard-plan.mjs'
+import { discoverE2eFiles, planE2e, verifyE2eSelection } from './ci-e2e-shard-plan.mjs'
 
 const require = createRequire(import.meta.url)
 
@@ -71,3 +71,28 @@ it('native Playwright test-list preserves full discovery, serial suites, skips a
     rmSync(directory, { recursive: true, force: true })
   }
 }, 60000)
+
+it('leaves dedicated orcad coverage to its template-building lane', () => {
+  const report = {
+    suites: [
+      {
+        specs: [
+          {
+            file: 'workspace-layout-oracle-headless.spec.ts',
+            id: 'layout',
+            tests: [{ projectName: 'electron-headless' }]
+          },
+          {
+            file: 'ordinary.spec.ts',
+            id: 'ordinary',
+            tests: [{ projectName: 'electron-headless' }]
+          }
+        ]
+      }
+    ]
+  }
+
+  expect(discoverE2eFiles(report, { generalOnly: true })).toEqual({
+    'ordinary.spec.ts': ['electron-headless:ordinary']
+  })
+})

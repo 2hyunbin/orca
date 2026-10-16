@@ -246,9 +246,9 @@ jobs:
           mkdir -p ci-shards
           pnpm exec playwright test --config tests/playwright.config.ts --project=electron-headless --list --reporter=json > ci-shards/discovery.json
           export ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
-          node config/scripts/ci-e2e-shard-plan.mjs ci-shards/discovery.json '${{ matrix.shard }}' ci-shards
+          node config/scripts/ci-e2e-shard-plan.mjs --general-only ci-shards/discovery.json '${{ matrix.shard }}' ci-shards
           pnpm exec playwright test --config tests/playwright.config.ts --project=electron-headless --test-list=ci-shards/selected.txt --list --reporter=json > ci-shards/selected-discovery.json
-          node config/scripts/ci-e2e-shard-plan.mjs --verify ci-shards/assignment.json ci-shards/selected-discovery.json
+          node config/scripts/ci-e2e-shard-plan.mjs --verify ci-shards/assignment.json ci-shards/selected-discovery.json --general-only
 
       - name: Run E2E tests (${{ matrix.shard_name }})
         env:

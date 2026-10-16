@@ -7,8 +7,9 @@ import {
   readTimingBaseline,
   writeAssignment
 } from './ci-shard-assignment.mjs'
+import { isDedicatedE2eSpec } from './ci-e2e-job-selection.mjs'
 
-export function discoverE2eFiles(report) {
+export function discoverE2eFiles(report, { generalOnly = false } = {}) {
   if (report.errors?.length) {
     throw new Error('Playwright discovery reported errors')
   }
@@ -18,6 +19,9 @@ export function discoverE2eFiles(report) {
       const file = spec.file.replaceAll('\\', '/')
       if (file.startsWith('/') || file.split('/').includes('..') || /[\n\r>›]/.test(file)) {
         throw new Error(`Unsafe test-list path: ${file}`)
+      }
+      if (generalOnly && isDedicatedE2eSpec(`tests/e2e/${file}`)) {
+        continue
       }
       for (const test of spec.tests) {
         const id = `${test.projectName}:${spec.id}`
@@ -43,8 +47,8 @@ export function discoverE2eFiles(report) {
   return Object.fromEntries([...files.entries()].sort(([a], [b]) => compareIds(a, b)))
 }
 
-export function planE2e(report, count, baseline) {
-  const testsByFile = discoverE2eFiles(report)
+export function planE2e(report, count, baseline, options) {
+  const testsByFile = discoverE2eFiles(report, options)
   const timings = Object.fromEntries(
     Object.entries(baseline.timings).map(([file, duration]) => [
       file.replace(/^tests\/e2e\//, ''),
@@ -55,8 +59,8 @@ export function planE2e(report, count, baseline) {
   return { ...assignment, testsByFile, baselineSha256: baseline.baselineSha256 }
 }
 
-export function verifyE2eSelection(assignment, report) {
-  const actual = Object.values(discoverE2eFiles(report)).flat().sort(compareIds)
+export function verifyE2eSelection(assignment, report, options) {
+  const actual = Object.values(discoverE2eFiles(report, options)).flat().sort(compareIds)
   const expected = assignment.shards[assignment.selectedShard - 1].files
     .flatMap((file) => assignment.testsByFile[file])
     .sort(compareIds)
@@ -67,12 +71,17 @@ export function verifyE2eSelection(assignment, report) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === '--verify') {
+    const generalOnly = process.argv.includes('--general-only')
     verifyE2eSelection(
       JSON.parse(readFileSync(process.argv[3], 'utf8')),
-      JSON.parse(readFileSync(process.argv[4], 'utf8'))
+      JSON.parse(readFileSync(process.argv[4], 'utf8')),
+      { generalOnly }
     )
   } else {
-    const [input, shard, directory] = process.argv.slice(2)
+    const generalOnly = process.argv.includes('--general-only')
+    const [input, shard, directory] = process.argv
+      .slice(2)
+      .filter((argument) => argument !== '--general-only')
     const match = shard?.match(/^(\d+)\/(\d+)$/)
     if (!input || !directory || !match) {
       throw new Error('Usage: ci-e2e-shard-plan.mjs DISCOVERY INDEX/COUNT OUTPUT_DIRECTORY')
@@ -85,7 +94,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const assignment = planE2e(
       JSON.parse(readFileSync(input, 'utf8')),
       count,
-      readTimingBaseline('e2e')
+      readTimingBaseline('e2e'),
+      { generalOnly }
     )
     const selected = assignment.shards[index - 1].files
     if (!selected.length) {
