@@ -50,7 +50,7 @@ describe('SkillUpdateRow', () => {
 
     expect(container?.textContent).toContain('Update available')
     expect(container?.textContent).toContain('Will update')
-    expect(container?.textContent).toContain('Current')
+    expect(container?.textContent).toContain('No change')
   })
 
   it('says why a location is left as it is, beside an update too', async () => {

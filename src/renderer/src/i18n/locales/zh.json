@@ -4705,7 +4705,6 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "有更新",
           "statusCantUpdate": "无法更新",
-          "chipCurrent": "最新",
           "chipInaccessible": "无法访问",
           "chipReadOnly": "只读"
         },
@@ -5148,7 +5147,8 @@
                 "linkNotManaged": "此链接不是 Orca 创建的，因此更新会保持原样。",
                 "nameInUse": "已有其他文件或文件夹使用此技能名称，因此更新会保持原样。",
                 "readOnly": "此位置为只读，更新无法修改它。请更改其权限以允许 Orca 更新。",
-                "unreadable": "Orca 无法读取此副本，因此更新会保持原样。"
+                "unreadable": "Orca 无法读取此副本，因此更新会保持原样。",
+                "keep": "无更改"
               }
             }
           }

@@ -4705,7 +4705,6 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "更新があります",
           "statusCantUpdate": "スキップ済み",
-          "chipCurrent": "現在",
           "chipInaccessible": "アクセス不可",
           "chipReadOnly": "読み取り専用"
         },
@@ -5148,7 +5147,8 @@
                 "linkNotManaged": "これは Orca が作成したリンクではないため、更新では変更されません。",
                 "nameInUse": "別のファイルまたはフォルダーがこのスキル名をすでに使用しているため、更新では変更されません。",
                 "readOnly": "この場所は読み取り専用のため、更新で変更できません。Orca が更新できるように権限を変更してください。",
-                "unreadable": "Orca がこのコピーを読み取れなかったため、更新では変更されません。"
+                "unreadable": "Orca がこのコピーを読み取れなかったため、更新では変更されません。",
+                "keep": "変更なし"
               }
             }
           }
