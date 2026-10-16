@@ -136,8 +136,16 @@ export class RuntimeAccountController {
    *  briefly), then a refresh of the selected Claude folder, as the desktop's launches do. */
   async prepareHostAgentLaunch(agent: string | null | undefined): Promise<void> {
     await this.firstHostLaunchEnv.wait()
-    if (agent === 'claude' && this.hostLaunchEnv && this.refreshClaudeProfile) {
-      await this.refreshClaudeProfile(this.hostLaunchEnv)
+    if (agent !== 'claude' || !this.refreshClaudeProfile) {
+      return
+    }
+    // Why twice at most: a switch during the refresh would launch on a folder never refreshed.
+    for (let pass = 0, env = this.hostLaunchEnv; env && pass < 2; pass++) {
+      await this.refreshClaudeProfile(env)
+      if (this.hostLaunchEnv === env) {
+        return
+      }
+      env = this.hostLaunchEnv
     }
   }
 

@@ -40,7 +40,13 @@ export function createWslHostClaudeProfileRefresh(
       return
     }
     const accountId = posix.basename(posix.dirname(configDir))
-    const { profile } = wslClaudeProfile(userHome, launchEnv.wslDistro, accountId)
+    let profile: ReturnType<typeof wslClaudeProfile>['profile']
+    try {
+      profile = wslClaudeProfile(userHome, launchEnv.wslDistro, accountId).profile
+    } catch {
+      // Not an Orca account folder (its id does not parse): nothing of ours to refresh.
+      return
+    }
     // Why both: only Orca's own folder for this account is rewritten, and only one the desktop
     // already set up; a missing folder is the desktop's to create when the account is added.
     if (profile.home !== configDir || !hasMarker(claudeProfileMarkerPath(profile))) {
