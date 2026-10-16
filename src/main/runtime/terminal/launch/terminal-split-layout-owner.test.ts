@@ -56,7 +56,8 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
 
   it('writes the new pane in main before the window mounts it, and keeps it however the start goes', async () => {
     const { runtime, runtimeStore, handle, splitTerminal, leafIds } = setup()
-    const withdraw = vi.spyOn(runtimeStore, 'withdrawTerminalPane')
+    const withdraw = vi.fn(async () => null)
+    Reflect.set(runtimeStore, 'withdrawTerminalPane', withdraw)
 
     vi.useFakeTimers()
     try {
