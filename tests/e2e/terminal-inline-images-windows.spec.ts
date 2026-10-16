@@ -14,12 +14,13 @@ import {
 } from './helpers/terminal-inline-image-proof'
 import { getFirstWslDistro, useWslRuntimeForActiveProject } from './helpers/wsl-golden-stub-agent'
 import { nodeTerminalCommand } from './terminal-node-command'
+import { proveWindowsKittyFileImage } from './helpers/terminal-kitty-file-image-proof'
 
 test.skip(process.platform !== 'win32', 'Native Windows and WSL PTY coverage')
 
 for (const runtime of ['native', 'wsl'] as const) {
   for (const acceleration of ['off', 'on'] as const) {
-    test(`${runtime}, ${acceleration}: PTY images and Kitty placeholders render on Windows`, async ({
+    test(`@headful ${runtime}, ${acceleration}: PTY images and Kitty placeholders render on Windows`, async ({
       orcaPage
     }, testInfo) => {
       await waitForSessionReady(orcaPage)
@@ -83,6 +84,12 @@ for (const runtime of ['native', 'wsl'] as const) {
       await assertKittyPlaceholderPixels(
         orcaPage,
         testInfo.outputPath('windows-inline-placeholders.png')
+      )
+      await proveWindowsKittyFileImage(
+        orcaPage,
+        ptyId,
+        runtime,
+        testInfo.outputPath('windows-file-placeholders.png')
       )
     })
   }
