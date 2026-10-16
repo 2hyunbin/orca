@@ -20,7 +20,8 @@ import { describeOrcadBindExposure, resolveOrcadBindHost } from './orcad-bind-ad
 import {
   flushOrcadProfileStoreForShutdown,
   installOrcadShutdownSignals,
-  startOrcadWithHost
+  startOrcadWithHost,
+  type OrcadShutdownTrigger
 } from './orcad-lifecycle'
 import { ORCAD_USAGE, parseArgs } from './orcad-command-arguments'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
@@ -35,6 +36,7 @@ import {
 } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
+import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
 
 export { parseArgs }
 
@@ -364,8 +366,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     console.log(ORCAD_USAGE)
     return
   }
+  let shutdownTrigger: OrcadShutdownTrigger | null = null
+  // Before startup: its fire-and-forget chains can reject before the first await settles.
+  installOrcadProcessErrorGuards(() => shutdownTrigger)
   const startup = startOrcad(options)
   const requestShutdown = installOrcadShutdownSignals(async () => (await startup).stop())
+  shutdownTrigger = requestShutdown
   const handle = await startup
   // Why after startup: a managed request must name the runtime and instance this run became.
   installOrcadStopRequestListeners(() => requestShutdown('stop request'), {

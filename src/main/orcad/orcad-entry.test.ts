@@ -72,6 +72,10 @@ describe('orcad profile-state shutdown', () => {
       installOrcadShutdownSignals(async () => {})('idle', notFailed)
       await vi.waitFor(() => expect(exit).toHaveBeenLastCalledWith(0))
       expect(notFailed).not.toHaveBeenCalled()
+
+      // A fatal fault's completed stop must still read as a failure to a supervisor.
+      installOrcadShutdownSignals(async () => {})('uncaught exception', undefined, 1)
+      await vi.waitFor(() => expect(exit).toHaveBeenLastCalledWith(1))
     } finally {
       vi.restoreAllMocks()
     }
