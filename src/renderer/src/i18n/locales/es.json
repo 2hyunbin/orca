@@ -14130,6 +14130,18 @@
             "sourceMissing": "La transcripción ya no está disponible",
             "metadataMatch": "Coincidencia en los metadatos de la sesión",
             "sourceActionsUnavailable": "La fuente de la transcripción no está disponible."
+          },
+          "AiVaultScanProgressStrip": {
+            "fileCount_one": "{{value0}} archivo",
+            "fileCount_other": "{{value0}} archivos",
+            "databaseCount_one": "{{value0}} base de datos",
+            "databaseCount_other": "{{value0}} bases de datos",
+            "scanning": "Analizando {{value0}}",
+            "reading": "Leyendo {{value0}} archivos",
+            "stoppedAfter": "Detenido tras {{value0}}",
+            "scanned": "Analizados {{value0}}",
+            "stoppedAt": "detenido en {{value0}}",
+            "refresh": "Actualizar"
           }
         }
       },
@@ -18455,15 +18467,7 @@
         "withdrawnHold": "Detenido antes de enviarse",
         "pausedSendFailed": "No se pudo enviar. Pulsa Enviar para reintentar.",
         "paused": "En pausa",
-        "queuePausedStopped": "Cola en pausa porque interrumpiste",
-        "queuePaused": "Cola en pausa",
         "resume": "Reanudar",
-        "sendConfirmTitle": "¿Enviar mensaje?",
-        "sendConfirmBody": "Estás a punto de enviar un mensaje. ¿Quieres borrar los {{count}} mensajes que había en cola?",
-        "sendConfirmBody_one": "Estás a punto de enviar un mensaje. ¿Quieres borrar {{count}} mensaje que había en cola?",
-        "sendConfirmBody_other": "Estás a punto de enviar un mensaje. ¿Quieres borrar los {{count}} mensajes que había en cola?",
-        "sendConfirmClear": "Vaciar cola",
-        "sendConfirmSend": "Enviar mensaje",
         "fromSender": "De",
         "pausedSendFailedWaiting": "No se pudo enviar. Cuando el agente termine, pulsa Enviar para reintentar.",
         "save": "Guardar",
@@ -18473,7 +18477,11 @@
         "editChangedPrompt": "Este mensaje cambió mientras lo editabas. Tu edición estará en el cuadro de chat cuando respondas al agente.",
         "editFailed": "Este mensaje no se puede editar.",
         "editGone": "Este mensaje ya se envió o se eliminó. Tu edición está en el cuadro de chat.",
-        "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente."
+        "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente.",
+        "collapse": "Contraer",
+        "expand": "Expandir",
+        "queued": "En cola",
+        "clearAll": "Borrar todo"
       },
       "thought": "Pensó",
       "thoughtForDuration": "Pensó durante {{duration}}",

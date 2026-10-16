@@ -14130,6 +14130,18 @@
             "sourceMissing": "成绩单不再可用",
             "metadataMatch": "会话元数据中的匹配",
             "sourceActionsUnavailable": "转录来源不可用。"
+          },
+          "AiVaultScanProgressStrip": {
+            "fileCount_one": "{{value0}} 个文件",
+            "fileCount_other": "{{value0}} 个文件",
+            "databaseCount_one": "{{value0}} 个数据库",
+            "databaseCount_other": "{{value0}} 个数据库",
+            "scanning": "正在扫描 {{value0}}",
+            "reading": "正在读取 {{value0}} 个文件",
+            "stoppedAfter": "扫描 {{value0}} 后停止",
+            "scanned": "已扫描 {{value0}}",
+            "stoppedAt": "停在 {{value0}}",
+            "refresh": "刷新"
           }
         }
       },
@@ -18597,15 +18609,7 @@
         "withdrawnHold": "在发送前已停止",
         "pausedSendFailed": "无法发送。点按发送以重试。",
         "paused": "已暂停",
-        "queuePausedStopped": "因你中断了操作，队列已暂停",
-        "queuePaused": "队列已暂停",
         "resume": "继续",
-        "sendConfirmTitle": "发送消息？",
-        "sendConfirmBody": "你即将发送一条消息。是否清除之前排队的 {{count}} 条消息？",
-        "sendConfirmBody_one": "你即将发送一条消息。是否清除之前排队的 {{count}} 条消息？",
-        "sendConfirmBody_other": "你即将发送一条消息。是否清除之前排队的 {{count}} 条消息？",
-        "sendConfirmClear": "清空队列",
-        "sendConfirmSend": "发送消息",
         "fromSender": "来自",
         "pausedSendFailedWaiting": "无法发送。智能体完成后，点按发送以重试。",
         "save": "保存",
@@ -18615,7 +18619,11 @@
         "editChangedPrompt": "你编辑时此消息已更改。回答智能体后，你编辑的内容会出现在聊天输入框中。",
         "editFailed": "此消息无法编辑。",
         "editGone": "此消息已发送或移除。你编辑的内容已放入聊天输入框。",
-        "editGonePrompt": "此消息已发送或移除。回答智能体后，你编辑的内容会出现在聊天输入框中。"
+        "editGonePrompt": "此消息已发送或移除。回答智能体后，你编辑的内容会出现在聊天输入框中。",
+        "collapse": "收起",
+        "expand": "展开",
+        "queued": "已排队",
+        "clearAll": "全部清除"
       },
       "thought": "已思考",
       "thoughtForDuration": "思考了 {{duration}}",
