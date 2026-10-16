@@ -4,10 +4,12 @@ import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import {
+  remotePlatformFromHostFact,
   resolveAgentResumeLaunchTarget,
   type AgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import {
   resolveTuiAgentLaunchArgs,
@@ -38,7 +40,10 @@ function getResumeLaunchTarget(worktreeId: string): AgentResumeLaunchTarget {
     connectionId: repo?.connectionId,
     executionHostId: getExecutionHostIdForWorktree(state, worktreeId),
     worktreePath: worktree?.path,
-    terminalWindowsShell: state.settings?.terminalWindowsShell
+    terminalWindowsShell: state.settings?.terminalWindowsShell,
+    remotePlatform: remotePlatformFromHostFact(
+      resolveWorktreeExecutionHostPlatform(state, worktreeId, worktree?.path)
+    )
   })
 }
 

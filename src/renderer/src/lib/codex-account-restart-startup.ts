@@ -1,6 +1,10 @@
 import { useAppStore } from '@/store'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
-import { resolveAgentResumeLaunchTarget } from '@/lib/agent-resume-launch-target'
+import {
+  remotePlatformFromHostFact,
+  resolveAgentResumeLaunchTarget
+} from '@/lib/agent-resume-launch-target'
+import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { makePaneKey } from '../../../shared/stable-pane-id'
@@ -62,7 +66,10 @@ export function buildCodexAccountRestartStartup(args: {
     executionHostId: getExecutionHostIdForWorktree(state, args.worktreeId),
     worktreePath: worktree?.path,
     terminalWindowsShell: state.settings?.terminalWindowsShell,
-    tabShellOverride: args.shellOverride
+    tabShellOverride: args.shellOverride,
+    remotePlatform: remotePlatformFromHostFact(
+      resolveWorktreeExecutionHostPlatform(state, args.worktreeId, worktree?.path)
+    )
   })
   const startupPlan = buildAgentResumeStartupPlan({
     agent: 'codex',
