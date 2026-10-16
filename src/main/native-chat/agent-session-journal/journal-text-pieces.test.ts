@@ -16,6 +16,8 @@ import { JournalTextPieceReader } from './journal-text-piece-reader'
 import { renderJournalState } from './journal-reducer'
 import type { JournalItemRow, JournalRow } from './journal-row-schema'
 import { boundInlineText, DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
+import { escapeJournalText } from './journal-streamed-text-field'
+import { prepareJournalTextSuffix } from './journal-text-suffix-preparation'
 
 const SESSION = 'piece-session'
 const EPOCH = 'piece-epoch'
@@ -55,7 +57,7 @@ afterEach(async () => {
 
 describe('piece storage through the existing journal contract', () => {
   it('replays interleaved text, rollback/retry, attribution and authoritative replacements through logical reads', () => {
-    const prefix = `quotes "\\\n\0 combining e\u0301 astral 😀 ${'a'.repeat(64)}`
+    const prefix = `${'a'.repeat(255)}😀 quotes "\\\n\0 combining e\u0301 astral 😀`
     const writes = [item(2, `${prefix}\ud83d`), item(3, 'reasoning', 'other'),
       item(4, `${prefix}😀 continued`), item(5, 'reasoning continued', 'other')]
     for (const row of writes) {
@@ -166,6 +168,71 @@ WHEN NEW.seq = 6 BEGIN SELECT RAISE(ABORT, 'refused piece'); END`)
 AND epoch IS NOT (SELECT epoch FROM journal_sessions WHERE session_id = ?)`)
       .run(SESSION, 'unpublished-session')
     expect(host.db.prepare('SELECT COUNT(*) AS n FROM journal_text_pieces').get()?.n).toBe(0)
+  })
+
+  it('uses current required ancestors after separate reads prepare their Unicode suffixes', () => {
+    const prefix = 'a'.repeat(255)
+    const original = escapeJournalText(`${prefix}left`)
+    const tail = '😀\0"\\\ud83d'
+    const target = item(3, `${prefix}${tail}`)
+    put(item(2, `${prefix}left`))
+    put(target)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([target])
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([target])
+    const rewrite = (suffix: string) =>
+      host.db.prepare('UPDATE journal_text_pieces SET suffix = ? WHERE seq = 2').run(suffix)
+    rewrite(`b${original.slice(1)}`)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2))
+      .toEqual([item(3, `b${prefix.slice(1)}${tail}`)])
+    const invalid = `\\q${original.slice(2)}`
+    rewrite(invalid)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([])
+    expect(replayJournal(host.db, SESSION)?.damage?.sequence).toBe(2)
+    host.close()
+    host = JournalHostDatabase.open(root)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([])
+    expect(host.db.prepare('SELECT suffix FROM journal_text_pieces WHERE seq = 2').get()?.suffix)
+      .toBe(invalid)
+    rewrite(original)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([target])
+    host.db.prepare('DELETE FROM journal_text_pieces WHERE seq = 2').run()
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 2)).toEqual([])
+  })
+
+  it('bounds shared suffix retention and returns unchanged text after eviction or oversized input', () => {
+    const db = host.db
+    const first = prepareJournalTextSuffix(db, 'first', 0)
+    expect(prepareJournalTextSuffix(db, 'first', 0)).toBe(first)
+    for (let index = 0; index < 4096; index += 1) {
+      prepareJournalTextSuffix(db, `suffix-${index}`, index % 256)
+    }
+    const evicted = prepareJournalTextSuffix(db, 'first', 0)
+    expect(evicted).not.toBe(first)
+    expect(evicted).toEqual(first)
+    const large = 'x'.repeat(2 * 1024 * 1024)
+    const charged = prepareJournalTextSuffix(db, large, 0)
+    for (let alignment = 1; alignment <= 4; alignment += 1) {
+      expect(prepareJournalTextSuffix(db, large, alignment)?.text).toBe(large)
+    }
+    expect(prepareJournalTextSuffix(db, large, 0)).not.toBe(charged)
+    const oversized = 'y'.repeat(8 * 1024 * 1024)
+    const uncached = prepareJournalTextSuffix(db, oversized, 255)
+    expect(uncached?.text).toBe(oversized)
+    expect(prepareJournalTextSuffix(db, oversized, 255)).not.toBe(uncached)
+    put(item(2, 'first'))
+    expect(readJournalRowsAfterCursor(db, SESSION, EPOCH, 1)).toEqual([item(2, 'first')])
+    const beforeClose = prepareJournalTextSuffix(db, 'first', 0)
+    const close = vi.spyOn(db, 'close').mockImplementationOnce(() => {
+      throw new Error('close failed')
+    })
+    expect(() => host.close()).toThrow('close failed')
+    expect(host.db).toBe(db)
+    expect(prepareJournalTextSuffix(db, 'first', 0)).not.toBe(beforeClose)
+    expect(readJournalRowsAfterCursor(db, SESSION, EPOCH, 1)).toEqual([item(2, 'first')])
+    close.mockRestore()
+    host.close()
+    host = JournalHostDatabase.open(root)
+    expect(readJournalRowsAfterCursor(host.db, SESSION, EPOCH, 1)).toEqual([item(2, 'first')])
   })
 })
 
