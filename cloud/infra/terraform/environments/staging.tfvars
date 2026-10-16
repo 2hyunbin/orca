@@ -137,3 +137,9 @@ relay_region_rehome_source_cell_ids = [
 
 # Push is currently provisioned only in production.
 push_gateway_enabled = false
+
+relay_dedicated_database_enabled = true
+# The first staging create hit an Enterprise Plus stockout and its name is reserved after deletion.
+relay_dedicated_database_name           = "orca-cloud-staging-relay-db2"
+relay_dedicated_database_zone           = "us-central1-a"
+relay_dedicated_database_secondary_zone = "us-central1-c"
