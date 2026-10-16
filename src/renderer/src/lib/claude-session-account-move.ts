@@ -24,6 +24,7 @@ import { isClientOnlyUnverifiableInspection } from '../../../shared/terminal-pro
 import type { CodexAccountSelectionTarget } from '../../../shared/codex-selection-lane'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { resolveAgentAccountRestartResumeStartup } from './agent-account-restart-startup'
+import { recordClaudePaneAccount } from './claude-pane-account-tracker'
 import {
   getCodexAccountSwitchLaneMatcher,
   isForeignMachineCodexPtyId,
@@ -40,6 +41,7 @@ type ClaudeSessionMoveState = 'gone' | 'mid-turn' | 'ready'
 
 // Panes the user asked to move that were mid-turn; each restarts once its turn ends.
 const awaitingTurnEndByPtyId = new Map<string, ClaudeSessionMoveCandidate>()
+let awaitingTargetAccountId: string | null = null
 let unsubscribeAwaitingTurnEnd: (() => void) | null = null
 
 function isClaudeProcess(processName: string | null): boolean {
@@ -165,9 +167,11 @@ export function cancelPendingClaudeSessionMoves(): void {
  * Why wait on 'working' and 'blocked': killing Claude mid-turn loses the in-flight turn.
  */
 export function moveClaudeSessionsToSelectedAccount(
-  candidates: readonly ClaudeSessionMoveCandidate[]
+  candidates: readonly ClaudeSessionMoveCandidate[],
+  targetAccountId: string | null
 ): void {
   awaitingTurnEndByPtyId.clear()
+  awaitingTargetAccountId = targetAccountId
   for (const candidate of candidates) {
     awaitingTurnEndByPtyId.set(candidate.ptyId, candidate)
   }
@@ -184,6 +188,10 @@ function flushAwaitingTurnEnd(state: AppState): void {
     }
     awaitingTurnEndByPtyId.delete(ptyId)
     if (moveState === 'ready') {
+      recordClaudePaneAccount(
+        makePaneKey(candidate.tabId, candidate.leafId),
+        awaitingTargetAccountId
+      )
       ready.push(ptyId)
     }
   }

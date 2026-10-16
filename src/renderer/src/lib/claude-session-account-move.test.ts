@@ -193,7 +193,7 @@ describe('moveClaudeSessionsToSelectedAccount', () => {
       { n: 3, agentType: 'claude', state: 'working' }
     ])
 
-    moveClaudeSessionsToSelectedAccount([candidate(1), candidate(2), candidate(3)])
+    moveClaudeSessionsToSelectedAccount([candidate(1), candidate(2), candidate(3)], null)
 
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({
       [ptyId(1)]: 'claude',
@@ -210,7 +210,7 @@ describe('moveClaudeSessionsToSelectedAccount', () => {
   it('holds a session at a permission prompt until its turn ends', () => {
     seedPanes([{ n: 1, agentType: 'claude', state: 'blocked' }])
 
-    moveClaudeSessionsToSelectedAccount([candidate(1)])
+    moveClaudeSessionsToSelectedAccount([candidate(1)], null)
     expect(useAppStore.getState().pendingPaneAccountRestarts).toEqual({})
 
     setPaneState(1, 'done')
@@ -219,7 +219,7 @@ describe('moveClaudeSessionsToSelectedAccount', () => {
 
   it('drops a waiting session whose pane closes', () => {
     seedPanes([{ n: 1, agentType: 'claude', state: 'working' }])
-    moveClaudeSessionsToSelectedAccount([candidate(1)])
+    moveClaudeSessionsToSelectedAccount([candidate(1)], null)
 
     useAppStore.setState({ ptyIdsByTabId: { [tabId(1)]: [] } })
     setPaneState(1, 'done')
@@ -230,7 +230,7 @@ describe('moveClaudeSessionsToSelectedAccount', () => {
 
   it('drops a waiting session when the user switches again', () => {
     seedPanes([{ n: 1, agentType: 'claude', state: 'working' }])
-    moveClaudeSessionsToSelectedAccount([candidate(1)])
+    moveClaudeSessionsToSelectedAccount([candidate(1)], null)
 
     cancelPendingClaudeSessionMoves()
     setPaneState(1, 'done')
