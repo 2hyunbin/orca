@@ -86,6 +86,12 @@ describe('WSL host Claude folder refresh', () => {
       terminal: {}
     })
     await refresh({ wslDistro: DISTRO, claude: {}, terminal: {} })
+    // An id that is not an Orca account id is skipped, never a failed launch.
+    await refresh({
+      wslDistro: DISTRO,
+      claude: { CLAUDE_CONFIG_DIR: '/home/u/my.profile/home' },
+      terminal: {}
+    })
 
     expect(provision).not.toHaveBeenCalled()
   })
@@ -106,6 +112,28 @@ describe('WSL host Claude folder refresh', () => {
       provision: () => Promise.reject(new Error('disk full'))
     })
     await expect(failing(launchEnvFor(home))).resolves.toBeUndefined()
+  })
+
+  it('refreshes the newly selected account when the desktop switches during a refresh', async () => {
+    const home = guestHome()
+    const refreshed: string[] = []
+    const accounts = new RuntimeAccountController()
+    const switched = launchEnvFor(home, 'acct-2')
+    accounts.restoreHostLaunchEnv(launchEnvFor(home), () => {}, {
+      refreshClaudeProfile: async (launchEnv) => {
+        refreshed.push(launchEnv.claude.CLAUDE_CONFIG_DIR ?? '')
+        if (refreshed.length === 1) {
+          accounts.setHostLaunchEnv(switched)
+        }
+      }
+    })
+
+    await accounts.prepareHostAgentLaunch('claude')
+
+    expect(refreshed).toEqual([
+      launchEnvFor(home).claude.CLAUDE_CONFIG_DIR,
+      switched.claude.CLAUDE_CONFIG_DIR
+    ])
   })
 
   it('refreshes before a Claude launch the host starts, and not for other launches', async () => {
