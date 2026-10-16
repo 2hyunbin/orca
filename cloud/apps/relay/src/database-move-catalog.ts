@@ -135,23 +135,27 @@ function orderParentsFirst(tables: MoveTable[]): MoveTable[] {
   return ordered
 }
 
+// What a row's copy depends on, independent of column position.
+export function moveTableShape(table: MoveTable): string {
+  return JSON.stringify({
+    columns: [...table.columns]
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((column) => [column.name, column.type, column.notNull]),
+    primaryKey: table.primaryKey,
+    uniqueKeys: table.uniqueKeys.map((key) => key.join(',')).sort(),
+    foreignKeys: table.foreignKeys
+      .map((key) => `${key.columns.join(',')}>${key.parent}(${key.parentColumns.join(',')})`)
+      .sort()
+  })
+}
+
 // Names, types, nullability, keys and the database collation (which orders text keys): what the
 // copy, the sync and the range hashes depend on being the same on both sides.
 export async function compareMoveSchemas(
   primary: { client: pg.Client; tables: MoveTable[] },
   dedicated: { client: pg.Client; tables: MoveTable[] }
 ): Promise<void> {
-  const shape = (table: MoveTable): string =>
-    JSON.stringify({
-      columns: [...table.columns]
-        .sort((left, right) => left.name.localeCompare(right.name))
-        .map((column) => [column.name, column.type, column.notNull]),
-      primaryKey: table.primaryKey,
-      uniqueKeys: table.uniqueKeys.map((key) => key.join(',')).sort(),
-      foreignKeys: table.foreignKeys
-        .map((key) => `${key.columns.join(',')}>${key.parent}(${key.parentColumns.join(',')})`)
-        .sort()
-    })
+  const shape = moveTableShape
   const dedicatedShapes = new Map(dedicated.tables.map((table) => [table.name, shape(table)]))
   const drifted = primary.tables
     .filter((table) => dedicatedShapes.get(table.name) !== shape(table))

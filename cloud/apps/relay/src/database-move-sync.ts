@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type pg from 'pg'
-import type { MoveTable } from './database-move-catalog.js'
+import { moveTableShape, readMoveTables, type MoveTable } from './database-move-catalog.js'
 import { logMoveEvent, MoveRefusal, sleep } from './database-move-events.js'
 import {
   addReferencedParents,
@@ -13,10 +13,15 @@ import {
   markSourceDirty,
   MOVE_CLAIMED_TABLE,
   MOVE_DIRTY_TABLE,
+  MOVE_COPY_PROGRESS_TABLE,
   MOVE_SENTINEL_TABLE_NAME,
   readDirtyBacklog,
+  readTrackingState,
   sentinelPresent
 } from './database-move-tracking.js'
+
+// A director boot can add a column mid-run; rows copied without it would silently drop it.
+export const MOVE_SCHEMA_CHECK_EVERY_MS = 30_000
 
 // One syncer per source: the claimed journal is replayed on start, which is only safe when no
 // other syncer is mid-batch. The cutover takes the same lock.
@@ -41,6 +46,47 @@ export async function requireSentinel(source: pg.Client): Promise<void> {
   if (!(await sentinelPresent(source))) {
     throw new MoveRefusal('dirty_set_was_emptied_recopy_needed')
   }
+}
+
+// Every source table must still carry its triggers: a key changed on one without them is lost.
+export async function requireTracking(source: pg.Client, tables: MoveTable[]): Promise<void> {
+  const state = await readTrackingState(source, tables)
+  if (!state.sentinel) throw new MoveRefusal('dirty_set_was_emptied_recopy_needed')
+  if (state.untracked.length > 0) {
+    throw new MoveRefusal('tables_without_tracking', { tables: state.untracked })
+  }
+}
+
+// Both sides still have the tables the run started with. A drifted table's copy position is
+// reset, because rows already copied may lack a column.
+export async function requireUnchangedMoveState(
+  sessions: MoveSyncSessions,
+  tables: MoveTable[]
+): Promise<void> {
+  const [source, target] = await Promise.all([
+    readMoveTables(sessions.source),
+    readMoveTables(sessions.target)
+  ])
+  const started = new Map(tables.map((table) => [table.name, moveTableShape(table)]))
+  const targetShapes = new Map(target.map((table) => [table.name, moveTableShape(table)]))
+  const drifted = source
+    .filter((table) => {
+      const shape = moveTableShape(table)
+      return started.get(table.name) !== shape || targetShapes.get(table.name) !== shape
+    })
+    .map((table) => table.name)
+  if (drifted.length > 0) {
+    await sessions.target.query(
+      `DELETE FROM ${MOVE_COPY_PROGRESS_TABLE} WHERE table_name = ANY($1)`,
+      [drifted]
+    )
+    throw new MoveRefusal('schema_changed_during_run', {
+      tables: drifted,
+      copyProgressReset: true,
+      run: 'prepare-target, then copy and sync again'
+    })
+  }
+  await requireTracking(sessions.source, tables)
 }
 
 // Reads every claimed key's current source row in one snapshot, then applies the lot in one
@@ -138,6 +184,7 @@ export type MoveSyncOptions = {
   deadline?: number
   shouldStop?: () => boolean
   label?: Record<string, unknown>
+  schemaCheckEveryMs?: number
 }
 
 // Keys a writer holds are skipped (SKIP LOCKED) and stay in the backlog, so a drain to 0 also
@@ -156,10 +203,18 @@ export async function runSyncLoop(
   let lastReportAt = 0
   let lastLoopMs = 0
   let windowKeys = 0
+  let schemaCheckedAt = Date.now()
   for (;;) {
     if (options.shouldStop?.()) return { keys, batches }
     if (options.deadline !== undefined && Date.now() > options.deadline) {
       throw new MoveRefusal('sync_deadline_passed', { keys })
+    }
+    if (
+      Date.now() - schemaCheckedAt >=
+      (options.schemaCheckEveryMs ?? MOVE_SCHEMA_CHECK_EVERY_MS)
+    ) {
+      await requireUnchangedMoveState(sessions, tables)
+      schemaCheckedAt = Date.now()
     }
     await requireSentinel(sessions.source)
     const startedAt = Date.now()

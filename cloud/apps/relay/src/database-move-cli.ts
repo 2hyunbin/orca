@@ -118,6 +118,7 @@ export async function runMoveCli(
           restart: flags.restart ?? false,
           batchRows: count(flags['batch-rows'], 'batch-rows'),
           maxBytesPerSecond: count(flags['max-bytes-per-second'], 'max-bytes-per-second'),
+          maxRowsPerSecond: count(flags['max-rows-per-second'], 'max-rows-per-second'),
           shouldStop: () => stop.requested
         })
         return stopped ? 3 : 0
