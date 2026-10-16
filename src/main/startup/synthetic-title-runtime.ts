@@ -1,7 +1,11 @@
 import { registerPaneKeyTeardownListener, getPtyIdForPaneKey } from '../ipc/pty/pane/key-state'
 import { agentHookServer } from '../agent-hooks/server'
 import type { AgentStatusState } from '../../shared/agent-status-types'
-import type { SyntheticAgentTitleProfile } from '../../shared/synthetic-agent-title'
+import {
+  getSyntheticAgentTitleProfile,
+  shouldDriveSyntheticAgentTitleFromHook,
+  type SyntheticAgentTitleProfile
+} from '../../shared/synthetic-agent-title'
 import {
   advanceSyntheticTitleSpinnerEntries,
   getSyntheticTitleSpinnerPaneKeyToStop,
@@ -27,10 +31,6 @@ function isSyntheticTitleWindowVisible(): boolean {
 }
 
 function sendSyntheticTitle(ptyId: string, data: string, options: { force?: boolean } = {}): void {
-  const window = state.mainWindow
-  if (!window || window.isDestroyed()) {
-    return
-  }
   // Why: throttle decorative spinner frames (up to 80ms/agent); final/permission frames are forced because they drive BEL.
   if (
     !shouldSendSyntheticTitleFrame({
@@ -41,7 +41,12 @@ function sendSyntheticTitle(ptyId: string, data: string, options: { force?: bool
     return
   }
   // Why: feed the per-PTY tracker directly, never onPtyData — emulator/tails/transcripts/stats must not see fabricated bytes.
+  // Why before the window check: headless serve has no window, yet readiness (e.g. Hermes) waits on this tracker.
   state.runtime?.ingestSyntheticTitleFrame(ptyId, data)
+  const window = state.mainWindow
+  if (!window || window.isDestroyed()) {
+    return
+  }
   // Why: only the kill-switch-off renderer byte-parses synthetic frames; under main authority the copy mints phantom ACKs (see synthetic-title-frame-routing.ts).
   if (shouldCopySyntheticTitleFrameToPtyData(state.store?.getSettings())) {
     window.webContents.send('pty:data', { id: ptyId, data })
@@ -159,4 +164,26 @@ export function initializeSyntheticTitleRuntime(): void {
     }
   })
   agentHookServer.subscribeStatusDrop(stopSyntheticTitleSpinner)
+  // Why not the window listener: headless serve never opens a window, so titles bound to it never settled.
+  agentHookServer.subscribeEnrichedStatus(driveSyntheticTitleFromHookStatus)
+}
+
+export function driveSyntheticTitleFromHookStatus(event: {
+  paneKey: string
+  payload: { state: AgentStatusState; agentType?: string }
+  providerSessionOnly?: boolean
+  structuredHost?: unknown
+}): void {
+  // Why: session-identity refreshes carry no turn state, and structured rows have no PTY title.
+  if (event.providerSessionOnly || event.structuredHost) {
+    return
+  }
+  // Why: native OSC titles miss some idle/permission frames, so inject hook-derived ones to keep the title tracker in sync.
+  const profile = getSyntheticAgentTitleProfile(event.payload.agentType)
+  if (
+    profile &&
+    shouldDriveSyntheticAgentTitleFromHook(event.payload.agentType, event.payload.state)
+  ) {
+    driveSyntheticTitleFromHook(event.paneKey, event.payload.state, profile)
+  }
 }

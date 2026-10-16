@@ -2,25 +2,11 @@ import type { BrowserWindow } from 'electron'
 import { agentHookServer } from '../agent-hooks/server'
 import { setMigrationUnsupportedPtyListener } from '../agent-hooks/migration-unsupported-pty-state'
 import { getDashboardPopoutWindow } from '../window/dashboard-popout-window'
-import {
-  getSyntheticAgentTitleProfile,
-  shouldDriveSyntheticAgentTitleFromHook
-} from '../../shared/synthetic-agent-title'
-import {
-  driveSyntheticTitleFromHook,
-  stopAllSyntheticTitleSpinners
-} from './synthetic-title-runtime'
+import { stopAllSyntheticTitleSpinners } from './synthetic-title-runtime'
 import { mainProcessState as state } from './main-process-state'
 
 export type MainWindowAgentStatusOptions = {
   window: BrowserWindow
-  maybeAutoRenameBranchOnFirstWork: (event: {
-    paneKey: string
-    tabId: string | undefined
-    worktreeId: string | undefined
-    payload: { state: string; prompt?: string; lastAssistantMessage?: string }
-    isReplay: boolean | undefined
-  }) => void
   onRecordAgentState: (agentType: string, status: string) => void
 }
 
@@ -72,9 +58,6 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
         })
         return
       }
-      if (!restoredUnconfirmed) {
-        options.maybeAutoRenameBranchOnFirstWork({ paneKey, tabId, worktreeId, payload, isReplay })
-      }
       const runtime = state.runtime
       const orchestration = runtime?.getAgentStatusOrchestrationContextForPaneKey(paneKey)
       const terminalHandle = runtime?.getAgentStatusTerminalHandleForPaneKey(paneKey)
@@ -100,11 +83,6 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
       state.mainWindow?.webContents.send('agentStatus:set', statusEvent)
       getDashboardPopoutWindow()?.webContents.send('agentStatus:set', statusEvent)
       options.onRecordAgentState(payload.agentType ?? 'unknown', payload.state)
-      // Why: native OSC titles miss some idle/permission frames, so inject hook-derived ones to keep the renderer title tracker in sync.
-      const profile = getSyntheticAgentTitleProfile(payload.agentType)
-      if (profile && shouldDriveSyntheticAgentTitleFromHook(payload.agentType, payload.state)) {
-        driveSyntheticTitleFromHook(paneKey, payload.state, profile)
-      }
     }
   )
   agentHookServer.setPaneStatusClearListener((clear) => {
