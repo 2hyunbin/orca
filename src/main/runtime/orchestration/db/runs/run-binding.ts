@@ -17,6 +17,7 @@ export function bindRun(
   params: {
     processIncarnation?: string | null
     recordReceipt?: (run: RunRow) => void
+    onUnchangedWorker?: () => void
     takeover?: boolean
     probed?: { consumerGeneration: number; liveLabel: string | null }
     runId: string
@@ -156,6 +157,7 @@ export function bindRun(
         throw new Error('Confirmed Run is missing')
       }
       params.recordReceipt?.(confirmed)
+      params.onUnchangedWorker?.()
       this.db.exec('COMMIT')
       return confirmed
     }

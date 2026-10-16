@@ -106,31 +106,40 @@ export const ORCHESTRATION_RUN_METHODS = [
       assertCallerHandleMatchesEvidence(runtime, params.from, orchestrationCompatibilityEvidence)
       const db = runtime.getOrchestrationDb()
       const priorRun = db.getCurrentRunForCoordinator(caller)
-      const run = await bindAfterProbe(runtime, db, () => ({
-        runId: params.id,
-        coordinatorHandle: caller.terminalHandle,
-        coordinatorPaneKey: caller.paneKey,
-        coordinatorOrcaSessionId: caller.orcaSessionId,
-        processIncarnation: resolveRunCallerKey(runtime, caller).processIncarnation,
-        recordReceipt: (run) =>
-          recordMutationReceipt?.({
-            run: { ...exposeRun(run), ownership: exposeRunOwnership(getRunAuthority(db, run.id)) }
-          }),
-        takeover: params.takeover,
-        takeoverLegacy: params.takeoverLegacy,
-        legacyCoordinatorAuthority
-      }))
+      let unchangedWorker = false
+      const run = await bindAfterProbe(runtime, db, () => {
+        const key = resolveRunCallerKey(runtime, caller)
+        return {
+          onUnchangedWorker: () => {
+            unchangedWorker = true
+          },
+          runId: params.id,
+          coordinatorHandle: caller.terminalHandle,
+          coordinatorPaneKey: key.paneKey,
+          coordinatorOrcaSessionId: caller.orcaSessionId,
+          processIncarnation: key.processIncarnation,
+          recordReceipt: (run) =>
+            recordMutationReceipt?.({
+              run: { ...exposeRun(run), ownership: exposeRunOwnership(getRunAuthority(db, run.id)) }
+            }),
+          takeover: params.takeover,
+          takeoverLegacy: params.takeoverLegacy,
+          legacyCoordinatorAuthority
+        }
+      })
       if (!run) {
         throw new OrchestrationError(
           'run_not_found',
           `Run ${params.id} was not found or is inspect-only.`
         )
       }
-      runtime.cancelMessageWaiters(params.from)
-      cancelBoundDispatchWaiters(runtime, caller, run.id)
-      runtime.cancelMessageWaiters(`run:${params.id}`)
-      if (priorRun && priorRun.id !== params.id) {
-        runtime.cancelMessageWaiters(`run:${priorRun.id}`)
+      if (!unchangedWorker) {
+        runtime.cancelMessageWaiters(params.from)
+        cancelBoundDispatchWaiters(runtime, caller, run.id)
+        runtime.cancelMessageWaiters(`run:${params.id}`)
+        if (priorRun && priorRun.id !== params.id) {
+          runtime.cancelMessageWaiters(`run:${priorRun.id}`)
+        }
       }
       return {
         run: { ...exposeRun(run), ownership: exposeRunOwnership(getRunAuthority(db, run.id)) }

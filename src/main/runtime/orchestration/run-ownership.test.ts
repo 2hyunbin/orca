@@ -322,6 +322,21 @@ describe('Run ownership', () => {
       )
       .run(next.processIncarnation, 'ctx_remote')
     expect(() => bind(child.id, next)).toThrow('explicit hand-over')
+    const local = caller('local')
+    bind('run_remote_home', local)
+    const owner = caller('local-owner')
+    const { task } = worker('run_remote_home', owner)
+    bind(child.id, recovery)
+    issueRunHandover(db, { runId: child.id, caller: recovery, target: { taskId: task.id } })
+    bind(child.id, owner)
+    const nested = db.createTask({ runId: child.id, spec: 'nested local work' })
+    expect(() =>
+      issueRunHandover(db, {
+        runId: 'run_remote_home',
+        caller: local,
+        target: { taskId: nested.id }
+      })
+    ).toThrow('own Run or an ancestor')
   })
 
   it('migrates old occupied seats without inventing Task ownership or process proof', () => {

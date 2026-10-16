@@ -35,7 +35,7 @@ function assertNotAncestor(db: OrchestrationDb, start: ScopedRun, target: string
       }
       if (authority.owner_task_id && authority.owner_home_peer === null) {
         const task = db.getTask(authority.owner_task_id)
-        if (task && task.run_id !== authority.parent_run_id) {
+        if (task) {
           visit({ id: task.run_id, home: null })
         }
       }
