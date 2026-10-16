@@ -26,7 +26,7 @@ export class JournalHostDatabase {
   private connection: Database.Database | null
   /** A newer Orca wrote the database: every chat's history reads, and no chat writes. */
   readonly readOnly: boolean
-  /** A failed transaction's ROLLBACK failed too, so the transaction may still be open. */
+  /** Recovery must end a stranded transaction and restore foreground durability before reuse. */
   private stranded = false
   private readonly maintenance: JournalMaintenance | null
 
@@ -41,7 +41,7 @@ export class JournalHostDatabase {
       ? null
       : new JournalMaintenance(
           () => this.db,
-          (run, mode) => this.runTransaction(run, mode)
+          (run, mode) => this.runMaintenanceTransaction(run, mode)
         )
   }
 
@@ -89,6 +89,23 @@ export class JournalHostDatabase {
     )
   }
 
+  private runMaintenanceTransaction<T>(
+    run: (db: Database.Database) => T,
+    mode?: 'IMMEDIATE' | 'DEFERRED'
+  ): T {
+    const connection = this.db
+    // Cleanup is re-derivable: an OS-crash rollback only repeats cleanup work.
+    connection.pragma('synchronous = NORMAL')
+    try {
+      return this.runTransaction(run, mode)
+    } finally {
+      if (!connection.isTransaction) {
+        this.stranded = true
+        this.rollBackStrandedTransaction(connection)
+      }
+    }
+  }
+
   journalAppended(sessionId: string): void {
     this.maintenance?.appended(sessionId)
   }
@@ -103,16 +120,17 @@ export class JournalHostDatabase {
 
   /**
    * A failed transaction whose ROLLBACK failed too is still open: every later BEGIN would fail
-   * inside it and every read would see rows that never committed. Each use retries the ROLLBACK,
+   * inside it and every read would see rows that never committed. Each use retries rollback and FULL,
    * and until one goes through every chat is refused the way a journal that will not open is.
    */
   private rollBackStrandedTransaction(connection: Database.Database): void {
-    if (connection.isTransaction) {
-      try {
+    try {
+      if (connection.isTransaction) {
         connection.exec('ROLLBACK')
-      } catch (error) {
-        throw journalOpenRefusalError(error)
       }
+      connection.pragma('synchronous = FULL')
+    } catch (error) {
+      throw journalOpenRefusalError(error)
     }
     this.stranded = false
   }

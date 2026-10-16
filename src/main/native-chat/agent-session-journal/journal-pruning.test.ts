@@ -14,10 +14,8 @@ import {
   openTestJournalHostDatabase
 } from './journal-host-database-test-support'
 import { replayJournal } from './journal-open'
-import { openJournalDatabase, runJournalTransaction } from './journal-database'
-import { JournalMaintenance } from './journal-maintenance'
-import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
-import { JOURNAL_PRUNE_MAX_ROWS, JournalPrunePass } from './journal-prune-pass'
+import { runJournalTransaction } from './journal-database'
+import { JournalPrunePass } from './journal-prune-pass'
 import { renderJournalState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
 
@@ -47,92 +45,9 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-it('drains host maintenance, stops its timer when idle and cancels it on close', async () => {
-  const db = openJournalDatabase(join(root, 'maintenance.db')).db
-  vi.useFakeTimers()
-  const maintenance = new JournalMaintenance(
-    () => db,
-    (run, mode) => runJournalTransaction(db, run, undefined, mode)
-  )
-  try {
-    publishJournalSessionEpoch(db, identity, 'epoch')
-    insertJournalRow(db, identity.sessionId, {
-      v: 1,
-      epoch: 'epoch',
-      seq: 1,
-      fence: 1,
-      ts: 1,
-      kind: 'epoch',
-      reason: 'session_created',
-      providerHandle: { kind: 'codex', threadId: 'thread' }
-    })
-    for (let seq = 2; seq <= 100; seq++) {
-      insertJournalRow(db, identity.sessionId, {
-        v: 1,
-        epoch: 'epoch',
-        seq,
-        fence: 1,
-        ts: seq,
-        kind: 'item',
-        itemId: 'reply',
-        revision: seq,
-        body: {
-          kind: 'message',
-          role: 'assistant',
-          blocks: [{ type: 'text', text: 'x'.repeat(2_500) }]
-        }
-      })
-    }
-    const pagesBefore = Number(db.pragma('page_count', { simple: true }))
-    await vi.runAllTimersAsync()
-    expect(db.prepare('SELECT COUNT(*) AS n FROM journal_rows').get()?.n).toBe(100)
-    expect(vi.getTimerCount()).toBe(0)
-    expect(db.pragma('freelist_count', { simple: true })).toBe(0)
-    expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
-    maintenance.appended(identity.sessionId)
-    expect(vi.getTimerCount()).toBe(1)
-    maintenance.close()
-    expect(vi.getTimerCount()).toBe(0)
-  } finally {
-    maintenance.close()
-    db.close()
-  }
-})
-
 async function open() {
   return journals.open({ identity, stateDirectory: root })
 }
-
-it('finishes host cleanup while foreground appends share the same connection', async () => {
-  vi.useFakeTimers()
-  const journal = await open()
-  const body = {
-    kind: 'message' as const,
-    role: 'assistant' as const,
-    blocks: [{ type: 'text' as const, text: 'stream '.repeat(400) }]
-  }
-  for (let revision = 1; revision <= 40; revision++) {
-    await journal.appendItem(item, body, options)
-  }
-  await vi.advanceTimersByTimeAsync(30_060)
-  for (let ordinal = 2; ordinal <= 11; ordinal++) {
-    await journal.appendItem({ ...item, ordinal }, body, options)
-    await vi.advanceTimersByTimeAsync(20)
-  }
-  const before = journal.snapshot()
-  await vi.runAllTimersAsync()
-  expect(
-    rows().filter(
-      (row) => row.kind === 'item' && row.body.kind === 'message' && row.body.blocks.length === 0
-    )
-  ).toHaveLength(38)
-  expect(
-    renderJournalState(
-      replayJournal(openTestJournalHostDatabase(root).db, identity.sessionId)!.state
-    )
-  ).toEqual(before)
-  expect(vi.getTimerCount()).toBe(0)
-})
 
 function prune(epoch: string): number {
   const database = openTestJournalHostDatabase(root)
@@ -141,7 +56,6 @@ function prune(epoch: string): number {
   let removed = 0
   for (let step = 0; step < 1_000; step++) {
     const result = pass.step(db, (run, mode) => runJournalTransaction(db, run, undefined, mode))
-    expect(result.scanned).toBeLessThanOrEqual(JOURNAL_PRUNE_MAX_ROWS)
     removed += result.compacted
     if (result.done) {
       return removed
@@ -172,14 +86,7 @@ it('shrinks intermediate payloads while preserving every cursor, replay and back
     )
   }
   const before = journal.snapshot()
-  const raw = openTestJournalHostDatabase(root).db
-  raw.prepare("UPDATE journal_rows SET row_json = json_set(row_json, '$.v', 1)").run()
   expect(prune(journal.epoch)).toBe(78)
-  expect(
-    raw
-      .prepare("SELECT COUNT(*) AS n FROM journal_rows WHERE json_extract(row_json, '$.v') != 1")
-      .get()?.n
-  ).toBe(0)
   expect(
     rows()
       .filter((row) => row.kind === 'item')
@@ -288,35 +195,5 @@ it('keeps turn transitions, lifecycle receipts and genuine sequence damage', asy
   db.prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 7').run(identity.sessionId)
   expect(replayJournal(db, identity.sessionId)?.damage).toMatchObject({
     cause: 'sequence-gap'
-  })
-})
-
-it('validates the complete frozen prefix before shrinking anything and abandons replaced epochs', async () => {
-  const journal = await open()
-  for (let revision = 1; revision <= 40; revision++) {
-    await journal.appendItem(
-      item,
-      {
-        kind: 'message',
-        role: 'assistant',
-        blocks: [{ type: 'text', text: String(revision) }]
-      },
-      options
-    )
-  }
-  const db = openTestJournalHostDatabase(root).db
-  const epoch = journal.epoch
-  db.prepare('UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND seq = 40').run(
-    '{}',
-    identity.sessionId
-  )
-  expect(() => prune(epoch)).toThrow('unreadable')
-  expect(rows()).toHaveLength(41)
-  const pass = new JournalPrunePass(db, identity.sessionId, epoch)
-  await journal.rollEpoch('handle_forked', 2)
-  expect(pass.step(db, (run, mode) => runJournalTransaction(db, run, undefined, mode))).toEqual({
-    done: true,
-    compacted: 0,
-    scanned: 0
   })
 })

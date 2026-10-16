@@ -3,8 +3,12 @@ import { journalPragmaNumber, type JournalTransaction } from './journal-database
 import { JournalPrunePass } from './journal-prune-pass'
 import {
   collectJournalPruneGarbage,
+  journalPruneEpochLookup,
   JournalPruneRefusal,
-  readOwedJournalPruneEpochs
+  readJournalPruneBounds,
+  readJournalPruneSessionPage,
+  type JournalPruneCursor,
+  type JournalPruneEpoch
 } from './journal-prune-state'
 
 const QUIET_DELAY_MS = 30_000
@@ -14,21 +18,21 @@ const VACUUM_PAGES = 1
 /** Owed work is derived from saved frontiers, so a restart resumes instead of rescanning. */
 export class JournalMaintenance {
   private timer: ReturnType<typeof setTimeout> | null = null
-  /** Round-robin position: a chat that finishes a pass waits behind every other owed chat. */
-  private sessionAfter = ''
-  /** Scheduling only, not an obligation: a chat still streaming waits until it has been quiet. */
-  private readonly quietUntil = new Map<string, number>()
+  private sweepAt: number | null
+  private readonly readyAt = new Map<string, number>()
+  private sessions: JournalPruneCursor<string> | null = null
+  private garbage: JournalPruneCursor<JournalPruneEpoch> | null = null
   private current: JournalPrunePass | null = null
   private closed = false
   private vacuumPending = true
   private garbageTurn = true
-  private idle = false
 
   constructor(
     private readonly database: () => Database.Database,
     private readonly transaction: JournalTransaction,
     initialDelayMs = QUIET_DELAY_MS
   ) {
+    this.sweepAt = Date.now() + initialDelayMs
     this.schedule(initialDelayMs)
   }
 
@@ -36,13 +40,18 @@ export class JournalMaintenance {
     if (this.closed) {
       return
     }
-    this.quietUntil.set(sessionId, Date.now() + QUIET_DELAY_MS)
+    if (!this.readyAt.has(sessionId)) {
+      this.readyAt.set(sessionId, Date.now() + QUIET_DELAY_MS)
+    }
     this.changed()
   }
 
   changed(): void {
+    if (this.closed) {
+      return
+    }
     this.vacuumPending = true
-    this.idle = false
+    this.sweepAt ??= Date.now() + QUIET_DELAY_MS
     this.schedule(QUIET_DELAY_MS)
   }
 
@@ -53,6 +62,9 @@ export class JournalMaintenance {
     }
     this.timer = null
     this.current = null
+    this.sessions = null
+    this.garbage = null
+    this.readyAt.clear()
   }
 
   private stop(error: unknown): void {
@@ -72,26 +84,32 @@ export class JournalMaintenance {
     this.timer = null
     try {
       const db = this.database()
-      const collected = this.garbageTurn && collectJournalPruneGarbage(db, this.transaction)
-      this.garbageTurn = !this.garbageTurn
-      if (!collected) {
+      if (
+        !this.current &&
+        !this.sessions &&
+        !this.garbage &&
+        this.sweepAt !== null &&
+        this.sweepAt <= Date.now()
+      ) {
+        this.sweepAt = null
+        this.startSweep(db)
+        if (this.vacuumPending) {
+          this.vacuumPending = this.reclaim(db)
+        }
+      } else if (this.garbageTurn && this.garbage) {
+        const result = collectJournalPruneGarbage(db, this.transaction, this.garbage)
+        this.vacuumPending ||= result.collected
+        if (!result.more) {
+          this.garbage = null
+        }
+      } else {
         this.step(db)
       }
-      // Idle still collects retired bookkeeping before sleeping, so every leftover can die.
-      if (
-        collected ||
-        this.current ||
-        !this.idle ||
-        this.vacuumPending ||
-        collectJournalPruneGarbage(db, this.transaction)
-      ) {
+      this.garbageTurn = !this.garbageTurn
+      if (this.current || this.sessions || this.garbage || this.vacuumPending) {
         this.schedule(PASS_DELAY_MS)
-        return
-      }
-      const now = Date.now()
-      const waking = [...this.quietUntil.values()].filter((at) => at > now)
-      if (waking.length > 0) {
-        this.schedule(Math.max(PASS_DELAY_MS, Math.min(...waking) - now))
+      } else if (this.sweepAt !== null) {
+        this.schedule(Math.max(PASS_DELAY_MS, this.sweepAt - Date.now()))
       }
     } catch (error) {
       this.stop(error)
@@ -99,17 +117,18 @@ export class JournalMaintenance {
   }
 
   private step(db: Database.Database): void {
-    this.current ??= this.nextSession(db)
     const pass = this.current
     if (!pass) {
-      if (this.vacuumPending) {
+      if (this.sessions) {
+        this.nextSession(db)
+      } else if (this.vacuumPending) {
         this.vacuumPending = this.reclaim(db)
       }
       return
     }
     try {
       const result = pass.step(db, this.transaction)
-      this.vacuumPending ||= result.compacted > 0
+      this.vacuumPending ||= !result.done
       if (!result.done) {
         return
       }
@@ -125,27 +144,49 @@ export class JournalMaintenance {
       })
     }
     this.current = null
+    if (journalPruneEpochLookup(db)(pass.sessionId) !== null) {
+      const at = this.readyAt.get(pass.sessionId) ?? Date.now() + QUIET_DELAY_MS
+      this.readyAt.set(pass.sessionId, at)
+      this.sweepAt = Math.min(this.sweepAt ?? at, at)
+    } else {
+      this.readyAt.delete(pass.sessionId)
+    }
   }
 
-  /** The next owed, quiet chat after the round-robin position; marks idle when none is owed. */
-  private nextSession(db: Database.Database): JournalPrunePass | null {
-    const now = Date.now()
-    const owed = readOwedJournalPruneEpochs(db).filter(
-      ({ sessionId }) => (this.quietUntil.get(sessionId) ?? 0) <= now
-    )
-    for (const [sessionId, at] of this.quietUntil) {
-      if (at <= now) {
-        this.quietUntil.delete(sessionId)
+  private startSweep(db: Database.Database): void {
+    const { session, progress } = readJournalPruneBounds(db)
+    this.sessions = session === null ? null : { after: null, through: session }
+    this.garbage = progress === null ? null : { after: null, through: progress }
+  }
+
+  /** Raw healthy keys count toward the page budget, and admitted chats wait behind the cursor. */
+  private nextSession(db: Database.Database): void {
+    const cursor = this.sessions
+    if (!cursor) {
+      return
+    }
+    const page = readJournalPruneSessionPage(db, cursor)
+    const lookup = journalPruneEpochLookup(db)
+    for (const sessionId of page) {
+      cursor.after = sessionId
+      const epoch = lookup(sessionId)
+      if (epoch === null) {
+        this.readyAt.delete(sessionId)
+        continue
       }
+      const at = this.readyAt.get(sessionId) ?? 0
+      if (at > Date.now()) {
+        this.sweepAt = Math.min(this.sweepAt ?? at, at)
+        continue
+      }
+      this.readyAt.delete(sessionId)
+      this.sweepAt ??= Date.now() + QUIET_DELAY_MS
+      this.current = new JournalPrunePass(db, sessionId, epoch)
+      return
     }
-    const next = owed.find(({ sessionId }) => sessionId > this.sessionAfter) ?? owed[0]
-    if (!next) {
-      this.idle = true
-      return null
+    if (page.length < 32 || cursor.after === cursor.through) {
+      this.sessions = null
     }
-    this.idle = false
-    this.sessionAfter = next.sessionId
-    return new JournalPrunePass(db, next.sessionId, next.epoch)
   }
 
   private reclaim(db: Database.Database): boolean {

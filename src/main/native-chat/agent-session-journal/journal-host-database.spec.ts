@@ -21,6 +21,8 @@ import {
 } from './journal-host-database-test-support'
 import type Database from '../../sqlite/sync-database'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { replayJournal } from './journal-open'
+import { renderJournalState } from './journal-reducer'
 
 export function registerJournalHostDatabaseTests(): void {
   const IDENTITY: AgentSessionJournalIdentity = {
@@ -227,15 +229,61 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       expect(readTestJournalRows(connection, OTHER.sessionId, other.epoch)).not.toHaveLength(0)
     })
 
+    const appendOptions = { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+
+    it('uses NORMAL only for maintenance and restores FULL after success or error', async () => {
+      vi.useFakeTimers()
+      const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+      const database = openTestJournalHostDatabase(root)
+      const connection = database.db
+      const exec = connection.exec.bind(connection)
+      const commits: number[] = []
+      let failMaintenance = false
+      vi.spyOn(connection, 'exec').mockImplementation((sql) => {
+        if (sql === 'COMMIT') {
+          const mode = Number(connection.pragma('synchronous', { simple: true }))
+          commits.push(mode)
+          if (mode === 1 && failMaintenance) {
+            throw new Error('maintenance commit failed')
+          }
+        }
+        exec(sql)
+      })
+      const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      for (let revision = 1; revision <= 3; revision++) {
+        await journal.appendItem(item(1), text(`revision ${revision}`), appendOptions)
+      }
+      expect(commits.every((mode) => mode === 2)).toBe(true)
+      commits.length = 0
+      await vi.advanceTimersByTimeAsync(30_020)
+      expect(commits.every((mode) => mode === 1)).toBe(true)
+      await journal.appendItem(item(2), text('interleaved'), appendOptions)
+      expect(commits.at(-1)).toBe(2)
+      const before = journal.snapshot()
+      commits.length = 0
+      await vi.runAllTimersAsync()
+      expect(commits.length).toBeGreaterThan(0)
+      expect(commits.every((mode) => mode === 1)).toBe(true)
+      expect(renderJournalState(replayJournal(connection, IDENTITY.sessionId)!.state)).toEqual(
+        before
+      )
+      expect(vi.getTimerCount()).toBe(0)
+      expect(connection.pragma('synchronous', { simple: true })).toBe(2)
+      failMaintenance = true
+      await journal.appendItem(item(1), text('next'), appendOptions)
+      await vi.runAllTimersAsync()
+      expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
+      expect(connection.isTransaction).toBe(false)
+      expect(connection.pragma('synchronous', { simple: true })).toBe(2)
+      expect(database.transaction((db) => db.pragma('synchronous', { simple: true }))).toBe(2)
+    })
+
     it('recovers another chat after maintenance COMMIT and ROLLBACK both fail', async () => {
       vi.useFakeTimers()
       const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
       const other = await journals.open({ identity: OTHER, stateDirectory: root })
       for (let revision = 1; revision <= 3; revision++) {
-        await journal.appendItem(item(1), text(`revision ${revision}`), {
-          fence: 1,
-          turnScope: AGENT_JOURNAL_THREAD_SCOPE
-        })
+        await journal.appendItem(item(1), text(`revision ${revision}`), appendOptions)
       }
       const database = openTestJournalHostDatabase(root)
       const connection = database.db
@@ -243,6 +291,9 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       const exec = connection.exec.bind(connection)
       let rollbackFails = true
       vi.spyOn(connection, 'exec').mockImplementation((sql) => {
+        if (sql === 'COMMIT' && !rollbackFails) {
+          expect(connection.pragma('synchronous', { simple: true })).toBe(2)
+        }
         if (sql === 'ROLLBACK' && rollbackFails) {
           throw Object.assign(new Error('disk I/O error'), {
             code: 'ERR_SQLITE_ERROR',
@@ -257,26 +308,40 @@ setTimeout(() => { db.exec('COMMIT'); db.close() }, 200)`,
       await vi.runAllTimersAsync()
       expect(warned).toHaveBeenCalledWith('[journal-maintenance] stopped:', expect.any(Error))
       expect(connection.isTransaction).toBe(true)
+      expect(connection.pragma('synchronous', { simple: true })).toBe(1)
       expect(vi.getTimerCount()).toBe(0)
-      await expect(
-        other.appendItem(item(1), text('refused'), {
-          fence: 1,
-          turnScope: AGENT_JOURNAL_THREAD_SCOPE
-        })
-      ).rejects.toMatchObject({
-        refusal: { details: { reason: 'journalUnavailable' } }
-      })
+      await expect(other.appendItem(item(1), text('refused'), appendOptions)).rejects.toMatchObject(
+        {
+          refusal: { details: { reason: 'journalUnavailable' } }
+        }
+      )
 
       rollbackFails = false
+      const pragma = connection.pragma.bind(connection)
+      let restorationFails = true
+      vi.spyOn(connection, 'pragma').mockImplementation((sql, options) => {
+        if (sql === 'synchronous = FULL' && restorationFails) {
+          throw new Error('FULL restoration failed')
+        }
+        return pragma(sql, options)
+      })
+      expect(() => database.db).toThrow()
+      expect(connection.isTransaction).toBe(false)
+      expect(pragma('synchronous', { simple: true })).toBe(1)
+      const commandsBefore = vi.mocked(connection.exec).mock.calls.length
+      const published = vi.fn()
+      other.observeCommits(published)
+      await expect(
+        other.appendItem(item(1), text('still refused'), appendOptions)
+      ).rejects.toMatchObject({ refusal: { details: { reason: 'journalUnavailable' } } })
+      expect(vi.mocked(connection.exec).mock.calls.slice(commandsBefore)).toEqual([])
+      expect(published).not.toHaveBeenCalled()
+      restorationFails = false
       expect(database.db.isTransaction).toBe(false)
+      expect(connection.pragma('synchronous', { simple: true })).toBe(2)
       stopFailing()
       expect(readTestJournalRows(connection, IDENTITY.sessionId, journal.epoch)).toEqual(before)
-      await expect(
-        other.appendItem(item(1), text('served'), {
-          fence: 1,
-          turnScope: AGENT_JOURNAL_THREAD_SCOPE
-        })
-      ).resolves.toBeDefined()
+      await expect(other.appendItem(item(1), text('served'), appendOptions)).resolves.toBeDefined()
       expect(other.snapshot().items.map((entry) => entry.body)).toEqual([text('served')])
     })
 

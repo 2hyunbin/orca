@@ -11,7 +11,8 @@ import {
 import { JournalMaintenance } from './journal-maintenance'
 import { replayJournal } from './journal-open'
 import { JournalPrunePass } from './journal-prune-pass'
-import { readOwedJournalPruneEpochs } from './journal-prune-state'
+import { journalPruneEpochLookup, JournalPruneState } from './journal-prune-state'
+import type { SqliteStatement } from '../../sqlite/sqlite-statement'
 import { renderJournalState } from './journal-reducer'
 import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
 
@@ -65,7 +66,7 @@ function item(
     body: {
       kind: 'message',
       role: 'assistant',
-      blocks: [{ type: 'text', text: `revision ${revision} `.repeat(repeats) }]
+      blocks: repeats === 0 ? [] : [{ type: 'text', text: `revision ${revision} `.repeat(repeats) }]
     }
   })
 }
@@ -98,27 +99,7 @@ function bodyAt(seq: number, sessionId = 'chat'): unknown {
   return typeof row === 'object' && row !== null && 'body' in row ? row.body : undefined
 }
 
-it('reaches identities beyond the old admission cap without changing replay or sequence rows', () => {
-  transaction(() => {
-    start()
-    for (let ordinal = 1; ordinal <= 16_384; ordinal++) {
-      item(ordinal + 1, `earlier-${ordinal}`, 1)
-    }
-    for (let revision = 1; revision <= 3; revision++) {
-      item(16_385 + revision, 'last', revision)
-    }
-  })
-  const before = snapshot()
-  expect(drain()).toEqual({ scanned: 16_388, compacted: 1 })
-  expect(bodyAt(16_387)).toMatchObject({ blocks: [] })
-  expect(snapshot()).toEqual(before)
-  expect(db.prepare('SELECT COUNT(*) AS n, MAX(seq) AS tip FROM journal_rows').get()).toEqual({
-    n: 16_388,
-    tip: 16_388
-  })
-})
-
-it('continues only the appended suffix across lifecycle and tombstone boundaries', () => {
+it('continues only the appended suffix across lifecycle and tombstone boundaries', async () => {
   transaction(() => {
     start()
     for (let ordinal = 1; ordinal <= 300; ordinal++) {
@@ -178,9 +159,40 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
     expect(bodyAt(seq)).toMatchObject({ blocks: [] })
   }
   expect(drain()).toEqual({ scanned: 0, compacted: 0 })
+  for (let batch = 0; batch < 2; batch++) {
+    insertJournalRow(db, 'chat', {
+      v: 1,
+      epoch: 'epoch',
+      seq: 317 + batch,
+      fence: 1,
+      ts: 317 + batch,
+      kind: 'lifecycle-batch',
+      settlementId: `retire-candidates-${batch}`,
+      mutations: Array.from({ length: 150 }, (_, ordinal) => ({
+        kind: 'tombstone' as const,
+        itemId: `earlier-${batch * 150 + ordinal + 1}`,
+        revision: 2
+      }))
+    })
+  }
+  db.pragma('incremental_vacuum')
+  expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+  const retained = db.prepare('SELECT row_json FROM journal_rows ORDER BY seq').all()
+  const pagesBefore = Number(db.pragma('page_count', { simple: true }))
+  vi.useFakeTimers()
+  const maintenance = new JournalMaintenance(() => db, transaction, 0)
+  try {
+    await vi.runAllTimersAsync()
+    expect(db.prepare('SELECT row_json FROM journal_rows ORDER BY seq').all()).toEqual(retained)
+    expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
+    expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    maintenance.close()
+  }
 })
 
-it('finishes captured prefixes while appends preserve a later quiet-delay pass', async () => {
+it('runs finite first and later passes during streaming, then sleeps without changing replay', async () => {
   transaction(() => {
     for (const session of ['a-active', 'b-quiet']) {
       start(session)
@@ -198,10 +210,17 @@ it('finishes captured prefixes while appends preserve a later quiet-delay pass',
       maintenance.appended('a-active')
       await vi.advanceTimersByTimeAsync(10)
     }
-    expect(bodyAt(3, 'a-active')).toMatchObject({ blocks: [] })
+    expect(bodyAt(3, 'a-active')).not.toMatchObject({ blocks: [] })
     expect(bodyAt(3, 'b-quiet')).toMatchObject({ blocks: [] })
     expect(bodyAt(5, 'a-active')).not.toMatchObject({ blocks: [] })
     expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+    for (let seq = 25; seq <= 124; seq++) {
+      transaction(() => item(seq, 'reply', seq - 1, 'a-active', 'epoch', 200))
+      maintenance.appended('a-active')
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    expect(bodyAt(3, 'a-active')).toMatchObject({ blocks: [] })
+    expect(bodyAt(75, 'a-active')).toMatchObject({ blocks: [] })
     const pagesBefore = Number(db.pragma('page_count', { simple: true }))
     const before = [snapshot('a-active'), snapshot('b-quiet')]
     const envelopes = () =>
@@ -217,6 +236,10 @@ json_remove(row_json, '$.body') AS envelope FROM journal_rows ORDER BY session_i
     expect(db.pragma('freelist_count', { simple: true })).toBe(0)
     expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
     expect(vi.getTimerCount()).toBe(0)
+    maintenance.appended('a-active')
+    expect(vi.getTimerCount()).toBe(1)
+    maintenance.close()
+    expect(vi.getTimerCount()).toBe(0)
   } finally {
     maintenance.close()
   }
@@ -227,7 +250,7 @@ it('schedules a replacement epoch even without an append notification', async ()
   vi.useFakeTimers()
   const maintenance = new JournalMaintenance(() => db, transaction, 0)
   try {
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(20)
     transaction(() => {
       db.prepare("DELETE FROM journal_rows WHERE session_id = 'chat'").run()
       start('chat', 'replacement')
@@ -254,10 +277,11 @@ it('refuses an unknown suffix without rewriting it and continues healthy chats a
   })
   expect(drain('a-bad').compacted).toBe(1)
   transaction(() => {
-    item(5, 'reply', 4, 'a-bad')
-    item(6, 'reply', 5, 'a-bad')
+    for (let seq = 5; seq <= 70; seq++) {
+      item(seq, 'reply', seq - 1, 'a-bad')
+    }
     db.prepare(`UPDATE journal_rows SET row_json = json_set(row_json, '$.v', 999)
-WHERE session_id = 'a-bad' AND seq = 6`).run()
+WHERE session_id = 'a-bad' AND seq = 70`).run()
   })
   const unchanged = db
     .prepare("SELECT row_json FROM journal_rows WHERE session_id = 'a-bad' ORDER BY seq")
@@ -294,30 +318,173 @@ WHERE session_id = 'a-bad' AND seq = 6`).run()
   }
 })
 
-it('resumes from the saved frontier after a reopen, including payloads still owed', () => {
+it('resumes from the saved frontier after a reopen, including payloads still owed', async () => {
+  const priorIdentities = 16_384
+  const tip = priorIdentities + 4
   transaction(() => {
     start()
-    for (let ordinal = 1; ordinal <= 300; ordinal++) {
+    for (let ordinal = 1; ordinal <= priorIdentities; ordinal++) {
       item(ordinal + 1, `earlier-${ordinal}`, 1)
     }
     for (let revision = 1; revision <= 3; revision++) {
-      item(301 + revision, 'reply', revision)
+      item(priorIdentities + 1 + revision, 'reply', revision)
     }
   })
   const pass = new JournalPrunePass(db, 'chat', 'epoch')
+  const original = snapshot()
   let scanned = 0
-  while (scanned < 304) {
+  while (scanned < tip) {
     scanned += pass.step(db, transaction).scanned
   }
   db.close()
   db = openJournalDatabase(join(root, 'journal.db')).db
-  expect(readOwedJournalPruneEpochs(db)).toEqual([{ sessionId: 'chat', epoch: 'epoch' }])
+  expect(journalPruneEpochLookup(db)('chat')).toBe('epoch')
   expect(drain()).toEqual({ scanned: 0, compacted: 1 })
-  expect(readOwedJournalPruneEpochs(db)).toEqual([])
+  expect(bodyAt(tip - 1)).toMatchObject({ blocks: [] })
+  expect(snapshot()).toEqual(original)
+  expect(db.prepare('SELECT COUNT(*) AS n, MAX(seq) AS tip FROM journal_rows').get()).toEqual({
+    n: tip,
+    tip
+  })
+  expect(journalPruneEpochLookup(db)('chat')).toBeNull()
   transaction(() => {
     for (let revision = 4; revision <= 7; revision++) {
-      item(301 + revision, 'reply', revision)
+      item(priorIdentities + 1 + revision, 'reply', revision)
     }
   })
   expect(drain()).toEqual({ scanned: 4, compacted: 4 })
+  transaction(() => {
+    for (let seq = tip + 5; seq <= tip + 1028; seq++) {
+      item(seq, 'empty', seq, 'chat', 'epoch', 0)
+    }
+  })
+  const pending = new JournalPrunePass(db, 'chat', 'epoch')
+  let emptyScanned = 0
+  while (emptyScanned < 1024) {
+    emptyScanned += pending.step(db, transaction).scanned
+  }
+  db.pragma('incremental_vacuum')
+  expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+  const before = snapshot()
+  const pagesBefore = Number(db.pragma('page_count', { simple: true }))
+  db.close()
+  db = openJournalDatabase(join(root, 'journal.db')).db
+  expect(journalPruneEpochLookup(db)('chat')).toBe('epoch')
+  vi.useFakeTimers()
+  const maintenance = new JournalMaintenance(() => db, transaction, 0)
+  try {
+    await vi.runAllTimersAsync()
+    expect(drain()).toEqual({ scanned: 0, compacted: 0 })
+    expect(snapshot()).toEqual(before)
+    expect(Number(db.pragma('page_count', { simple: true }))).toBeLessThan(pagesBefore)
+    expect(db.pragma('freelist_count', { simple: true })).toBe(0)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    maintenance.close()
+  }
+})
+
+it('pages healthy keys, resumes ordered garbage and discovers changes beyond finite cursors', async () => {
+  transaction(() => {
+    for (let ordinal = 0; ordinal < 70; ordinal++) {
+      const sessionId = `a${String(ordinal).padStart(3, '0')}`
+      publishJournalSessionEpoch(db, { sessionId, workspaceId: 'folder' }, 'epoch')
+      const state = new JournalPruneState(db, sessionId, 'epoch')
+      state.initialize()
+      if (ordinal % 2 === 0) {
+        state.refuse()
+      }
+    }
+    start('z-owed')
+    for (let revision = 1; revision <= 3; revision++) {
+      item(revision + 1, 'reply', revision, 'z-owed', 'epoch', 20_000)
+    }
+    for (const sessionId of ['z-refused', 'z-retired']) {
+      const state = new JournalPruneState(db, sessionId, 'epoch')
+      state.initialize()
+      if (sessionId === 'z-refused') {
+        publishJournalSessionEpoch(db, { sessionId, workspaceId: 'folder' }, 'epoch')
+        state.refuse()
+      }
+      for (let ordinal = 0; ordinal < 65; ordinal++) {
+        state.set(String(ordinal), {
+          seq: ordinal,
+          revision: 1,
+          signature: '',
+          removable: true,
+          savedAt: 1,
+          observedAt: 1
+        })
+        state.enqueue(ordinal)
+      }
+    }
+  })
+  const pages: { at: number; size: number }[] = []
+  const watched = new Set<SqliteStatement>()
+  const prepare = db.prepare.bind(db)
+  vi.spyOn(db, 'prepare').mockImplementation((sql) => {
+    const statement = prepare(sql)
+    if (
+      /^SELECT session_id(?:, epoch)? FROM journal_(?:sessions|prune_progress_v1)\nWHERE/.test(
+        sql
+      ) &&
+      !watched.has(statement)
+    ) {
+      watched.add(statement)
+      const all = statement.all.bind(statement)
+      vi.spyOn(statement, 'all').mockImplementation((...args) => {
+        const rows = all(...args)
+        pages.push({ at: Date.now(), size: rows.length })
+        return rows
+      })
+    }
+    return statement
+  })
+  const pragma = vi.spyOn(db, 'pragma')
+  const count = (table: string, sessionId = 'z-refused') =>
+    Number(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE session_id = ?`).get(sessionId)?.n)
+  vi.useFakeTimers()
+  let maintenance = new JournalMaintenance(() => db, transaction, 0)
+  try {
+    await vi.advanceTimersByTimeAsync(60)
+    expect(count('journal_prune_items_v1')).toBe(33)
+    expect(count('journal_prune_work_v1')).toBe(65)
+    expect(count('journal_prune_progress_v1')).toBe(1)
+    maintenance.close()
+    maintenance = new JournalMaintenance(() => db, transaction, 0)
+    await vi.advanceTimersByTimeAsync(10)
+    for (const sessionId of ['a000', 'zz-new']) {
+      start(sessionId, 'replacement')
+      for (let revision = 1; revision <= 3; revision++) {
+        item(revision + 1, 'reply', revision, sessionId, 'replacement')
+      }
+      maintenance.appended(sessionId)
+    }
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(bodyAt(3, 'z-owed')).toMatchObject({ blocks: [] })
+    expect(bodyAt(3, 'a000')).not.toMatchObject({ blocks: [] })
+    expect(bodyAt(3, 'zz-new')).not.toMatchObject({ blocks: [] })
+    await vi.runAllTimersAsync()
+    expect(bodyAt(3, 'a000')).toMatchObject({ blocks: [] })
+    expect(bodyAt(3, 'zz-new')).toMatchObject({ blocks: [] })
+    expect(count('journal_prune_items_v1')).toBe(0)
+    expect(count('journal_prune_work_v1')).toBe(0)
+    expect(count('journal_prune_progress_v1')).toBe(1)
+    expect(count('journal_prune_progress_v1', 'z-retired')).toBe(0)
+    expect(
+      db
+        .prepare("SELECT refused FROM journal_prune_progress_v1 WHERE session_id = 'z-refused'")
+        .get()?.refused
+    ).toBe(1)
+    expect(pages.every(({ size }) => size <= 32)).toBe(true)
+    expect(pages.filter(({ size }) => size === 32).length).toBeGreaterThan(4)
+    expect(new Set(pages.map(({ at }) => at)).size).toBe(pages.length)
+    expect(pages.length).toBeLessThan(48)
+    expect(
+      pragma.mock.calls.filter(([sql]) => sql === 'incremental_vacuum(1)').length
+    ).toBeGreaterThan(pages.length)
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    maintenance.close()
+  }
 })

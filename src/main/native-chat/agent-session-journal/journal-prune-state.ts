@@ -35,24 +35,55 @@ CREATE TABLE IF NOT EXISTS ${WORK} (
   }
 }
 
-/** Live epochs with rows past their saved frontier or queued payloads, in session order. */
-export function readOwedJournalPruneEpochs(
+export type JournalPruneEpoch = { sessionId: string; epoch: string }
+export type JournalPruneCursor<T> = { after: T | null; through: T }
+
+export function readJournalPruneBounds(db: Database.Database): {
+  session: string | null
+  progress: JournalPruneEpoch | null
+} {
+  const session = db
+    .prepare('SELECT session_id FROM journal_sessions ORDER BY session_id DESC LIMIT 1')
+    .get()
+  const progress = db
+    .prepare(`SELECT session_id, epoch FROM ${PROGRESS}
+ORDER BY session_id DESC, epoch DESC LIMIT 1`)
+    .get()
+  return {
+    session: typeof session?.session_id === 'string' ? session.session_id : null,
+    progress:
+      typeof progress?.session_id === 'string' && typeof progress.epoch === 'string'
+        ? { sessionId: progress.session_id, epoch: progress.epoch }
+        : null
+  }
+}
+
+/** Eligibility is a point lookup, shared by raw discovery and finite-pass completion. */
+export function journalPruneEpochLookup(
   db: Database.Database
-): { sessionId: string; epoch: string }[] {
-  return db
-    .prepare(`SELECT s.session_id, s.epoch FROM journal_sessions s
+): (sessionId: string) => string | null {
+  const statement = db.prepare(`SELECT s.epoch FROM journal_sessions s
 LEFT JOIN ${PROGRESS} p ON p.session_id = s.session_id AND p.epoch = s.epoch
-WHERE COALESCE(p.refused, 0) = 0 AND (
-  COALESCE(p.scanned, 0) < COALESCE((SELECT MAX(r.seq) FROM journal_rows r
-    WHERE r.session_id = s.session_id AND r.epoch = s.epoch), 0)
-  OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = s.session_id AND w.epoch = s.epoch))
-ORDER BY s.session_id`)
-    .all()
-    .flatMap((row) =>
-      typeof row.session_id === 'string' && typeof row.epoch === 'string'
-        ? [{ sessionId: row.session_id, epoch: row.epoch }]
-        : []
-    )
+WHERE s.session_id = ? AND COALESCE(p.refused, 0) = 0 AND (
+  COALESCE(p.scanned, 0) < COALESCE((SELECT r.seq FROM journal_rows r
+    WHERE r.session_id = s.session_id AND r.epoch = s.epoch ORDER BY r.seq DESC LIMIT 1), 0)
+  OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = s.session_id AND w.epoch = s.epoch))`)
+  return (sessionId) => {
+    const row = statement.get(sessionId)
+    return typeof row?.epoch === 'string' ? row.epoch : null
+  }
+}
+
+export function readJournalPruneSessionPage(
+  db: Database.Database,
+  cursor: JournalPruneCursor<string>
+): string[] {
+  return db
+    .prepare(`SELECT session_id FROM journal_sessions
+WHERE ${cursor.after === null ? '' : 'session_id > ? AND '}session_id <= ?
+ORDER BY session_id LIMIT 32`)
+    .all(...(cursor.after === null ? [cursor.through] : [cursor.after, cursor.through]))
+    .flatMap((row) => (typeof row.session_id === 'string' ? [row.session_id] : []))
 }
 
 export class JournalPruneRefusal extends Error {}
@@ -174,40 +205,61 @@ WHERE session_id = ? AND epoch = ? AND seq = ?`)
  *  payloads, then the frontier last, so a refusal outlives its own cleanup. */
 export function collectJournalPruneGarbage(
   db: Database.Database,
-  transaction: JournalTransaction
-): boolean {
-  const row = db
-    .prepare(`SELECT p.session_id, p.epoch, p.refused, s.epoch AS live FROM ${PROGRESS} p
-LEFT JOIN journal_sessions s ON s.session_id = p.session_id
-WHERE s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
-  EXISTS (SELECT 1 FROM ${ITEMS} i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
-  OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = p.session_id AND w.epoch = p.epoch)))
-ORDER BY p.session_id, p.epoch LIMIT 1`)
-    .get()
-  if (typeof row?.session_id !== 'string' || typeof row.epoch !== 'string') {
-    return false
-  }
-  const sessionId = row.session_id
-  const epoch = row.epoch
-  const retired = row.live !== epoch
-  transaction(() => {
-    const items = db
-      .prepare(`DELETE FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id IN (
-SELECT item_id FROM ${ITEMS} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
-      .run(sessionId, epoch, sessionId, epoch)
-    if (items.changes > 0) {
-      return
-    }
-    const work = db
-      .prepare(`DELETE FROM ${WORK} WHERE session_id = ? AND epoch = ? AND seq IN (
-SELECT seq FROM ${WORK} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
-      .run(sessionId, epoch, sessionId, epoch)
-    if (work.changes === 0 && retired) {
-      db.prepare(`DELETE FROM ${PROGRESS} WHERE session_id = ? AND epoch = ?`).run(
-        sessionId,
-        epoch
+  transaction: JournalTransaction,
+  cursor: JournalPruneCursor<JournalPruneEpoch>
+): { collected: boolean; more: boolean } {
+  return transaction(() => {
+    const { after, through } = cursor
+    const rows = db
+      .prepare(`SELECT session_id, epoch FROM ${PROGRESS}
+WHERE ${after === null ? '' : '(session_id, epoch) > (?, ?) AND '}(session_id, epoch) <= (?, ?)
+ORDER BY session_id, epoch LIMIT 32`)
+      .all(
+        ...(after === null ? [] : [after.sessionId, after.epoch]),
+        through.sessionId,
+        through.epoch
       )
+    const eligible = db.prepare(`SELECT s.epoch AS live FROM ${PROGRESS} p
+LEFT JOIN journal_sessions s ON s.session_id = p.session_id
+WHERE p.session_id = ? AND p.epoch = ? AND (s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
+  EXISTS (SELECT 1 FROM ${ITEMS} i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
+  OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = p.session_id AND w.epoch = p.epoch))))`)
+    for (const row of rows) {
+      if (typeof row.session_id !== 'string' || typeof row.epoch !== 'string') {
+        throw new Error('journal pruning lost its garbage key')
+      }
+      const sessionId = row.session_id
+      const epoch = row.epoch
+      const garbage = eligible.get(sessionId, epoch)
+      if (!garbage) {
+        cursor.after = { sessionId, epoch }
+        continue
+      }
+      const items = db
+        .prepare(`DELETE FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id IN (
+SELECT item_id FROM ${ITEMS} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
+        .run(sessionId, epoch, sessionId, epoch)
+      if (items.changes > 0) {
+        return { collected: true, more: true }
+      }
+      const work = db
+        .prepare(`DELETE FROM ${WORK} WHERE session_id = ? AND epoch = ? AND seq IN (
+SELECT seq FROM ${WORK} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
+        .run(sessionId, epoch, sessionId, epoch)
+      if (work.changes === 0 && garbage.live !== epoch) {
+        db.prepare(`DELETE FROM ${PROGRESS} WHERE session_id = ? AND epoch = ?`).run(
+          sessionId,
+          epoch
+        )
+      }
+      return { collected: true, more: true }
+    }
+    const last = rows.at(-1)
+    return {
+      collected: false,
+      more:
+        rows.length === 32 &&
+        (last?.session_id !== through.sessionId || last?.epoch !== through.epoch)
     }
   }, 'DEFERRED')
-  return true
 }
