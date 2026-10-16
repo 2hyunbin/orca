@@ -23,7 +23,10 @@ import {
   type UnhydratedHostMirror
 } from './host-mirrored-pane-liveness'
 import { parkUntilHostMirrorHandleLands } from './host-mirror-handle-gap-wait'
-import { sleepingRecordNamesAnotherExecutionHost } from './sleeping-record-execution-host-scope'
+import {
+  sleepingRecordNamesAnotherExecutionHost,
+  sleepingRecordsNameDifferentExecutionHosts
+} from './sleeping-record-execution-host-scope'
 import { resolveWorkspaceTerminalHostAuthority } from './workspace-terminal-host-authority'
 import { parkUntilHostSessionMirrorHydrates } from '@/runtime/host-session-mirror-hydration'
 
@@ -180,7 +183,7 @@ function providerSessionOwnedElsewhere(
   state: ReturnType<typeof useAppStore.getState>
 ): boolean {
   // Same-worktree duplicates are handled by claim keys; finished notes never claim a session, and
-  // a record whose host moved can't resume it, so it can't claim it either.
+  // neither does a record whose host moved or that names a different machine than this record.
   return Object.values(state.sleepingAgentSessionsByPaneKey).some(
     (other) =>
       other.worktreeId !== record.worktreeId &&
@@ -188,6 +191,7 @@ function providerSessionOwnedElsewhere(
       !isInvalidWorktreeActivationRecord(other) &&
       !activationTreatsNoteAsFinished(other) &&
       !sleepingRecordNamesAnotherExecutionHost(other, state) &&
+      !sleepingRecordsNameDifferentExecutionHosts(record, other, state) &&
       agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession) &&
       recordPaneIsOwnedByPreservedPane(other, state)
   )

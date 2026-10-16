@@ -74,3 +74,26 @@ export function sleepingRecordNamesAnotherExecutionHost(
     getKnownExecutionHostIdForWorktree(state, record.worktreeId)
   )
 }
+
+/**
+ * Do two records positively name different machines? Locators are machine-scoped, so a pane on one
+ * machine never owns a session recorded on another, even when the ids match (a copied state dir).
+ * Fails open on the same unknowns as above: only a known disagreement counts.
+ */
+export function sleepingRecordsNameDifferentExecutionHosts(
+  a: SleepingAgentSessionRecord,
+  b: SleepingAgentSessionRecord,
+  state: WorktreeRuntimeOwnerState
+): boolean {
+  if (a.connectionId !== undefined && b.connectionId !== undefined) {
+    if ((a.connectionId?.trim() || null) !== (b.connectionId?.trim() || null)) {
+      return true
+    }
+  }
+  const aHost = getKnownExecutionHostIdForWorktree(state, a.worktreeId)
+  const bHost = getKnownExecutionHostIdForWorktree(state, b.worktreeId)
+  if (!aHost || !bHost || parseExecutionHostId(aHost)?.kind === 'runtime') {
+    return false
+  }
+  return parseExecutionHostId(bHost)?.kind !== 'runtime' && aHost !== bHost
+}

@@ -217,6 +217,30 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
   })
 
+  // Matching ids on two machines (a copied state dir) are two sessions, not one.
+  it('ignores a claim from a pane on a different machine than this record', () => {
+    const local = makeRecord({
+      connectionId: null,
+      providerSession: { key: 'session_id', id: 'sess-9' }
+    })
+    const remote = makeRecord({
+      paneKey: makePaneKey('tab-2', OTHER_LEAF_ID),
+      tabId: 'tab-2',
+      worktreeId: 'wt-2',
+      connectionId: 'ssh-target-1',
+      providerSession: { key: 'session_id', id: 'sess-9' }
+    })
+    setStoreState({
+      activeWorktreeId: 'wt-other',
+      tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
+      terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, SSH_PTY_ID) },
+      ptyIdsByTabId: {},
+      sleepingAgentSessionsByPaneKey: { [local.paneKey]: local, [remote.paneKey]: remote }
+    })
+
+    expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
+  })
+
   it('does not let a finished note in another worktree clear an active record', () => {
     const active = makeRecord({ providerSession: { key: 'session_id', id: 'sess-9' } })
     const finished = makeRecord({
