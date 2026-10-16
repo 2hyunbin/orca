@@ -1,6 +1,7 @@
 import { clearPaneCacheState } from '../../../shared/agent-hook-listener/listener-state'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { AgentHookServerAuthorityAliases } from './server-authority-aliases'
+import { forgetAgentExit } from './agent-exit-evidence'
 import type {
   EnrichedAgentHookEventPayload,
   RetiredPaneAlias,
@@ -48,6 +49,7 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
       return row ? [row] : []
     })
     const hadStatus = retiredRows.length > 0
+    let exitsChanged = false
     for (const key of paneKeys) {
       this.clearTmuxInnerSubjects(key)
       this.markPaneClosedForAgentStatus(key)
@@ -60,6 +62,7 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
       this.currentAuthorityObservations.delete(key)
       this.promptSentDedupeByPaneKey.delete(key)
       this.observations.forget(key)
+      exitsChanged = forgetAgentExit(this.agentExitedAtByPaneKey, key) || exitsChanged
     }
     if (aliasChanged) {
       this.notifyPaneKeyAliasPersistenceListener()
@@ -70,6 +73,8 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
     if (hadStatus || authorityChanged) {
       this.scheduleStatusPersist()
       this.notifyStatusChangeListeners()
+    } else if (exitsChanged) {
+      this.scheduleStatusPersist()
     }
   }
 

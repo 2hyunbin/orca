@@ -80,6 +80,15 @@ export function claimsPaneAfterExit(
   )
 }
 
+/** Drops exits proven before `notBefore`, the age hydrate would discard anyway. */
+export function pruneAgentExits(exits: Map<string, AgentExitEvidence>, notBefore: number): void {
+  for (const [key, exit] of exits) {
+    if (exit.at < notBefore) {
+      exits.delete(key)
+    }
+  }
+}
+
 export function serializeAgentExits(
   exits: ReadonlyMap<string, AgentExitEvidence>
 ): PersistedAgentExitEvidence[] {
