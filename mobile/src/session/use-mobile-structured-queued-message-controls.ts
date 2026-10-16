@@ -157,6 +157,10 @@ export function useMobileStructuredQueuedMessageControls(args: {
   const edit = useCallback<MobileQueuedMessageEdit>(
     async (messageId, onCopied) => {
       if (args.editCapable) {
+        if (!args.enabled) {
+          onSendError('Reconnect to edit.')
+          return false
+        }
         return beginInlineEdit(messageId)
       }
       const card = cards.find((candidate) => candidate.messageId === messageId)
@@ -172,7 +176,15 @@ export function useMobileStructuredQueuedMessageControls(args: {
       onCopied?.()
       return deleteQueued(messageId, true)
     },
-    [appendComposerText, args.editCapable, beginInlineEdit, cards, deleteQueued]
+    [
+      appendComposerText,
+      args.editCapable,
+      args.enabled,
+      beginInlineEdit,
+      cards,
+      deleteQueued,
+      onSendError
+    ]
   )
   // Through the same mutation seam as Delete: a refusal reaches the send-error banner.
   const resume = useCallback(

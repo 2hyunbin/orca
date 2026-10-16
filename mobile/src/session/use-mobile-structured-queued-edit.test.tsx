@@ -372,6 +372,17 @@ describe('mobile in-place queued Edit', () => {
     ).toEqual(['renew', 'acquire'])
     expect(error).not.toHaveBeenCalled()
     expect(append).not.toHaveBeenCalled()
+    await act(async () => hook!.queued.editor!.cancel())
+    await act(async () =>
+      renderer?.update(createElement(Harness, { connected: false, transport: null }))
+    )
+    const calls = reconnectedRequest.mock.calls.length
+    await act(async () => {
+      expect(await hook!.queued.edit!('reconnect-card')).toBe(false)
+    })
+    expect(error).toHaveBeenCalledExactlyOnceWith('Reconnect to edit.')
+    expect(hook!.queued.editor).toBeUndefined()
+    expect(reconnectedRequest).toHaveBeenCalledTimes(calls)
   })
 
   it('submits Save while hold acquisition is still pending', async () => {
