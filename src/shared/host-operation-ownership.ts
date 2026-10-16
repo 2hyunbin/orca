@@ -24,6 +24,7 @@ export const HOST_OPERATION_OWNERSHIP = {
   clipboard: 'host',
   computer: 'host',
   diagnostics: 'host',
+  desktopBrowserBridge: 'host',
   emulator: 'host',
   files: 'host',
   folderWorkspace: 'host',
@@ -71,6 +72,7 @@ export const HOST_OPERATION_OWNERSHIP = {
 
 /** Methods whose owner differs from their namespace: row-less forge reads use the source picker. */
 const HOST_OPERATION_METHOD_OWNERSHIP = {
+  'desktopBrowserBridge.attach': 'stream',
   'github.project.listAccessible': 'scope-picked',
   'github.project.listViews': 'scope-picked',
   'github.project.resolveRef': 'scope-picked',

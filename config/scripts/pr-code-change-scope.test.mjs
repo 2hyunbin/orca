@@ -615,9 +615,9 @@ describe('PR Checks skip wiring', () => {
     expect(installStep.run).toContain('--frozen-lockfile')
   })
 
-  it('keeps the root and README guards on docs-only PRs without another runner', () => {
+  it('keeps the root and README guards on ready docs-only PRs without another runner', () => {
     const detector = prWorkflow.jobs.code_paths
-    expect(detector.if).toBeUndefined()
+    expect(detector.if).toContain('draft != true')
     expect(detector.needs).toBeUndefined()
     for (const name of ['Reject new root-level files and folders', 'Check README local links']) {
       const step = detector.steps.find((candidate) => candidate.name === name)
