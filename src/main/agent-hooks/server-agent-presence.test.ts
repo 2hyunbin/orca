@@ -562,6 +562,17 @@ describe('retained agent exit', () => {
     expect(await restarted.checkAgentPresenceSince(PANE, attachedAt)).not.toBe('exited')
   })
 
+  it('lets a replacement process clear the exit after a late unidentified hook', async () => {
+    const server = await createServer()
+    const attachedAt = Date.now() - 1
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    await hook(server, 'Stop', 'session-a', undefined, null)
+    probe.mockResolvedValue('live')
+    await hook(server, 'PreToolUse', 'replacement', undefined, 4002)
+    expect(await server.checkAgentPresenceSince(PANE, attachedAt)).not.toBe('exited')
+  })
+
   it('keeps the exit readable after the hook store restarts', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-'))
     const first = new AgentHookServer()

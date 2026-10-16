@@ -72,7 +72,11 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     const priorExit =
       this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(payload.paneKey)) ??
       this.agentExitedAtByPaneKey.get(payload.paneKey)
-    if (priorExit && claimsPaneAfterExit(payload, priorExit)) {
+    // Why the incoming presence: the transition may stamp a stale owner over the sender's own identity.
+    if (
+      priorExit &&
+      claimsPaneAfterExit({ ...payload, agentPresence: incoming.agentPresence }, priorExit)
+    ) {
       this.forgetAgentExit(payload.paneKey)
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; the shared view declares their base event type.
