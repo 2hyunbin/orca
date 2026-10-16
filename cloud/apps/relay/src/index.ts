@@ -18,7 +18,10 @@ import {
   reconcileCellAdmissionAtStartup,
   roleOwnsAssignmentMaintenance
 } from './cell-admission-startup.js'
-import { openRelayDatabaseAtBoot } from './boot-database-open.js'
+import {
+  openRelayDatabaseAtBoot,
+  openSwitchingRelayDatabaseAtBoot
+} from './boot-database-open.js'
 import {
   consumeRelayCellInventoryHold,
   consumeRelayDatabasePoolPressure,
@@ -44,14 +47,21 @@ process.on('unhandledRejection', (reason) =>
   handleRelayUnhandledRejection(reason, cellFlagsApplied?.().rejectionFence ?? true)
 )
 const config = loadRelayConfig()
-const database = await openRelayDatabaseAtBoot({
-  databaseUrl: config.databaseUrl,
+const databaseOpenInput = {
   dataDir: config.dataDir,
   poolMax: config.databasePoolMax,
   applicationName: `orca-relay/${config.role}/${config.cellId}`,
   appliesPostgresSchema: config.role !== 'cell',
   readTimeoutMarginOverrideMs: () => cellFlagsApplied?.().readTimeoutMarginMs
-})
+}
+// Only GCP roles can read the control bucket; a combined (local) relay keeps one target.
+const switchingDatabase =
+  config.databaseUrl && config.role !== 'combined'
+    ? await openSwitchingRelayDatabaseAtBoot({ ...databaseOpenInput, databaseUrl: config.databaseUrl })
+    : null
+const database =
+  switchingDatabase?.database ??
+  (await openRelayDatabaseAtBoot({ ...databaseOpenInput, databaseUrl: config.databaseUrl }))
 await reconcileCellAdmissionAtStartup(config, new RelayAssignmentStore(database))
 // Never awaited: the cell listens on defaults (all off) until the first read lands.
 const cellFlagChannel =
@@ -188,6 +198,7 @@ const shutdown = (): void => {
   regionalRehomeWorker?.stop()
   shadowSeatPoller?.stop()
   cellFlagChannel?.stop()
+  switchingDatabase?.stop()
   sessions.drain(0)
   server.close(() => void database.close().catch(() => undefined))
 }

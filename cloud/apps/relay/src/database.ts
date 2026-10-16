@@ -92,6 +92,8 @@ export interface RelayDatabase {
   ): Promise<T>
   // Only on a PostgreSQL transaction handle; see commitWithFinalWrite.
   commitWithFinal?(sql: string, params?: unknown[]): Promise<boolean>
+  // Only on a database that routes between targets: the one new work goes to now.
+  activeRelayDatabase?(): RelayDatabase
   close(): Promise<void>
 }
 
@@ -1379,12 +1381,17 @@ export class PostgresDatabase implements RelayDatabase {
   }
 }
 
+function servingPostgresDatabase(database: RelayDatabase): PostgresDatabase | null {
+  const serving = database.activeRelayDatabase?.() ?? database
+  return serving instanceof PostgresDatabase ? serving : null
+}
+
 export function consumeRelayDatabasePoolPressure(
   database: RelayDatabase
 ): PostgresPoolPressureCounts {
-  return database instanceof PostgresDatabase
-    ? database.consumePoolPressure()
-    : emptyPostgresPoolPressureCounts()
+  return (
+    servingPostgresDatabase(database)?.consumePoolPressure() ?? emptyPostgresPoolPressureCounts()
+  )
 }
 
 export function consumeRelayCellInventoryHold(
@@ -1397,14 +1404,12 @@ export function consumeRelayCellInventoryHold(
 export function readRelayDatabasePoolPressure(
   database: RelayDatabase
 ): PostgresPoolPressureCounts {
-  return database instanceof PostgresDatabase
-    ? database.peekPoolPressure()
-    : emptyPostgresPoolPressureCounts()
+  return servingPostgresDatabase(database)?.peekPoolPressure() ?? emptyPostgresPoolPressureCounts()
 }
 
 // How long the longest-waiting pooled query has queued so far; 0 when none waits.
 export function readRelayDatabasePoolOldestWaitMs(database: RelayDatabase): number {
-  return database instanceof PostgresDatabase ? database.poolOldestWaitMs() : 0
+  return servingPostgresDatabase(database)?.poolOldestWaitMs() ?? 0
 }
 
 // pg-pool swaps its own listeners on checkout and release; this one never leaves, so no gap
@@ -1466,13 +1471,13 @@ async function applySchema(database: RelayDatabase): Promise<void> {
 // short-lived connection of its own, ended before the serving pool opens, keeps
 // the untimed session off the request path entirely.
 async function applySchemaOnUntimedPool(
-  databaseUrl: string,
+  connection: RelayPostgresConnection,
   applicationName: string | undefined
 ): Promise<void> {
   const pool = new pg.Pool({
-    connectionString: databaseUrl,
+    ...connection,
     max: 1,
-    application_name: applicationName ? `${applicationName}/schema` : undefined,
+    application_name: applicationName ? markedSchemaApplicationName(applicationName) : undefined,
     connectionTimeoutMillis: POSTGRES_CONNECTION_TIMEOUT_MS,
     statement_timeout: 0,
     // Kept: a DDL blocked behind another director's ACCESS EXCLUSIVE lock must
@@ -1507,67 +1512,120 @@ async function backfillRelayCellRegions(database: RelayDatabase): Promise<void> 
   )
 }
 
-export type RelayDatabaseOpenInput = {
-  databaseUrl?: string
-  dataDir: string
+// Where a pool's sessions go: a URL, or a socket factory plus credentials.
+export type RelayPostgresConnection = Pick<
+  pg.PoolConfig,
+  'connectionString' | 'stream' | 'user' | 'password' | 'database'
+>
+
+export type RelayPostgresPoolSettings = {
   poolMax?: number
   applicationName?: string
   statementTimeoutMs?: number
   readTimeoutMarginMs?: number
   // Read per query, so a cell's switch moves the margin without a restart.
   readTimeoutMarginOverrideMs?: () => number | undefined
+}
+
+export type RelayDatabaseOpenInput = RelayPostgresPoolSettings & {
+  databaseUrl?: string
+  dataDir: string
   // Directors own the PostgreSQL schema. A cell skips it and never touches the database
   // at boot, so it starts listening while the database is down and stays unready until
   // its first successful query.
   appliesPostgresSchema?: boolean
 }
 
-export async function openRelayDatabase(input: RelayDatabaseOpenInput): Promise<RelayDatabase> {
-  let database: RelayDatabase
-  const appliesPostgresSchema = input.appliesPostgresSchema !== false
-  if (input.databaseUrl) {
-    if (appliesPostgresSchema) {
-      await applySchemaOnUntimedPool(input.databaseUrl, input.applicationName)
-    }
-    const statementTimeoutMs = input.statementTimeoutMs ?? relayPostgresStatementTimeoutMs()
-    const pool = new pg.Pool({
-      connectionString: input.databaseUrl,
-      max: input.poolMax ?? 10,
-      application_name: input.applicationName,
-      connectionTimeoutMillis: POSTGRES_CONNECTION_TIMEOUT_MS,
-      statement_timeout: statementTimeoutMs,
-      // The server answers every statement within statement_timeout, as 57014 at worst, so
-      // this fires only on a lost reply, or a database or event-loop stall past the margin.
-      query_timeout:
-        statementTimeoutMs + (input.readTimeoutMarginMs ?? relayPostgresReadTimeoutMarginMs()),
-      lock_timeout: POSTGRES_LOCK_TIMEOUT_MS,
-      idle_in_transaction_session_timeout: POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS,
-      // Bounds a backend whose client was destroyed outside a transaction (after a lost
-      // reply on an autocommit write or COMMIT). pg-pool closes healthy idle clients at 10 s.
-      options: `-c idle_session_timeout=${POSTGRES_IDLE_SESSION_TIMEOUT_MS}`
-    })
-    absorbPostgresIdleClientErrors(pool)
-    keepPostgresClientErrorsHandled(pool)
-    reportPostgresIdleSessionTimeoutOnce(pool)
-    const override = input.readTimeoutMarginOverrideMs
-    database = new PostgresDatabase(
-      pool,
-      override
-        ? () => {
-            const marginMs = override()
-            return marginMs === undefined ? undefined : statementTimeoutMs + marginMs
-          }
-        : undefined
-    )
-  } else {
-    mkdirSync(input.dataDir, { recursive: true })
-    const sqlite = new DatabaseSync(join(input.dataDir, 'orca-relay.sqlite'))
-    sqlite.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
-    database = new SqliteDatabase(sqlite)
+// The serving pool every relay target uses. Opening it touches no database.
+export function openRelayPostgresPool(
+  connection: RelayPostgresConnection,
+  settings: RelayPostgresPoolSettings
+): { database: PostgresDatabase; pool: pg.Pool } {
+  const statementTimeoutMs = settings.statementTimeoutMs ?? relayPostgresStatementTimeoutMs()
+  const pool = new pg.Pool({
+    ...connection,
+    max: settings.poolMax ?? 10,
+    application_name: settings.applicationName,
+    connectionTimeoutMillis: POSTGRES_CONNECTION_TIMEOUT_MS,
+    statement_timeout: statementTimeoutMs,
+    // The server answers every statement within statement_timeout, as 57014 at worst, so
+    // this fires only on a lost reply, or a database or event-loop stall past the margin.
+    query_timeout:
+      statementTimeoutMs + (settings.readTimeoutMarginMs ?? relayPostgresReadTimeoutMarginMs()),
+    lock_timeout: POSTGRES_LOCK_TIMEOUT_MS,
+    idle_in_transaction_session_timeout: POSTGRES_IDLE_TRANSACTION_TIMEOUT_MS,
+    // Bounds a backend whose client was destroyed outside a transaction (after a lost
+    // reply on an autocommit write or COMMIT). pg-pool closes healthy idle clients at 10 s.
+    options: `-c idle_session_timeout=${POSTGRES_IDLE_SESSION_TIMEOUT_MS}`
+  })
+  absorbPostgresIdleClientErrors(pool)
+  keepPostgresClientErrorsHandled(pool)
+  reportPostgresIdleSessionTimeoutOnce(pool)
+  const override = settings.readTimeoutMarginOverrideMs
+  const database = new PostgresDatabase(
+    pool,
+    override
+      ? () => {
+          const marginMs = override()
+          return marginMs === undefined ? undefined : statementTimeoutMs + marginMs
+        }
+      : undefined
+  )
+  return { database, pool }
+}
+
+// The director's boot DDL on its own untimed session, then the backfill on the serving pool.
+export async function applyRelayPostgresSchema(
+  connection: RelayPostgresConnection,
+  applicationName: string | undefined,
+  serving: RelayDatabase
+): Promise<void> {
+  await applySchemaOnUntimedPool(connection, applicationName)
+  await backfillRelayCellRegions(serving)
+}
+
+// Marks sessions from an image that follows the database-target pointer; the move tool
+// refuses to cut over while any relay session lacks it.
+export const RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX = ' mv1'
+// PostgreSQL keeps NAMEDATALEN - 1 bytes and silently drops the rest, suffix first.
+const POSTGRES_APPLICATION_NAME_MAX_BYTES = 63
+
+export function markRelayDatabaseMoveCapability(applicationName: string): string {
+  const room = POSTGRES_APPLICATION_NAME_MAX_BYTES - RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX.length
+  let base = applicationName
+  while (Buffer.byteLength(base) > room) base = base.slice(0, -1)
+  return `${base}${RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX}`
+}
+
+function markedSchemaApplicationName(applicationName: string): string {
+  if (!applicationName.endsWith(RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX)) {
+    return `${applicationName}/schema`
   }
+  const base = applicationName.slice(0, -RELAY_DATABASE_MOVE_CAPABILITY_SUFFIX.length)
+  return markRelayDatabaseMoveCapability(`${base}/schema`)
+}
+
+export async function openRelayDatabase(input: RelayDatabaseOpenInput): Promise<RelayDatabase> {
+  if (input.databaseUrl) {
+    const connection = { connectionString: input.databaseUrl }
+    const appliesPostgresSchema = input.appliesPostgresSchema !== false
+    if (appliesPostgresSchema) await applySchemaOnUntimedPool(connection, input.applicationName)
+    const { database } = openRelayPostgresPool(connection, input)
+    try {
+      if (appliesPostgresSchema) await backfillRelayCellRegions(database)
+      return database
+    } catch (error) {
+      await database.close().catch(() => undefined)
+      throw error
+    }
+  }
+  mkdirSync(input.dataDir, { recursive: true })
+  const sqlite = new DatabaseSync(join(input.dataDir, 'orca-relay.sqlite'))
+  sqlite.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+  const database = new SqliteDatabase(sqlite)
   try {
-    if (!input.databaseUrl) await applySchema(database)
-    if (!input.databaseUrl || appliesPostgresSchema) await backfillRelayCellRegions(database)
+    await applySchema(database)
+    await backfillRelayCellRegions(database)
     return database
   } catch (error) {
     await database.close().catch(() => undefined)

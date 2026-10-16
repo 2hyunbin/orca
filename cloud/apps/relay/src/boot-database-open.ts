@@ -1,4 +1,22 @@
-import { openRelayDatabase, type RelayDatabase, type RelayDatabaseOpenInput } from './database.js'
+import {
+  markRelayDatabaseMoveCapability,
+  openRelayDatabase,
+  type RelayDatabase,
+  type RelayDatabaseOpenInput
+} from './database.js'
+import { googleMetadataAccess } from './google-metadata-access-token.js'
+import { startControlFlagChannel, type ControlFlagChannel } from './relay-control-flag-channel.js'
+import {
+  DATABASE_TARGET_POINTER_APPLIED_EVENT,
+  DATABASE_TARGET_POINTER_OBJECT,
+  parseDatabaseTargetPointer,
+  type DatabaseTargetPointer
+} from './relay-database-target-pointer.js'
+import {
+  openDedicatedRelayDatabaseTarget,
+  openPrimaryRelayDatabaseTarget
+} from './relay-database-targets.js'
+import { SwitchingRelayDatabase } from './switching-relay-database.js'
 import { retryTransientDatabaseStartup } from './database-startup-retry.js'
 import {
   isPostgresPoolConnectFailure,
@@ -40,8 +58,12 @@ export async function openRelayDatabaseAtBoot(
   input: RelayDatabaseOpenInput,
   open: (input: RelayDatabaseOpenInput) => Promise<RelayDatabase> = openRelayDatabase
 ): Promise<RelayDatabase> {
+  return await retryBootDatabaseStep(async () => await open(input))
+}
+
+async function retryBootDatabaseStep<T>(step: () => Promise<T>): Promise<T> {
   return await retryTransientDatabaseStartup(
-    async () => await open(input),
+    step,
     BOOT_OPEN_RETRY,
     {
       onRetry: ({ attempt, delayMs, error }) =>
@@ -68,4 +90,45 @@ export async function openRelayDatabaseAtBoot(
         )
     }
   )
+}
+
+// Directors and cells on GCP follow the database-target pointer; with no pointer they serve
+// DATABASE_URL exactly as openRelayDatabaseAtBoot does. Opening touches no database: the target
+// is chosen at the first operation, or before the director's schema, whichever comes first.
+export async function openSwitchingRelayDatabaseAtBoot(
+  input: RelayDatabaseOpenInput & { databaseUrl: string }
+): Promise<{ database: SwitchingRelayDatabase; stop: () => void }> {
+  const settings = {
+    ...input,
+    applicationName: markRelayDatabaseMoveCapability(input.applicationName ?? 'orca-relay')
+  }
+  const google = googleMetadataAccess()
+  let pointerChannel: ControlFlagChannel<DatabaseTargetPointer | null> | null = null
+  const database = new SwitchingRelayDatabase({
+    primary: openPrimaryRelayDatabaseTarget(input.databaseUrl, settings),
+    openDedicated: (target) => openDedicatedRelayDatabaseTarget(target, settings, google),
+    firstPointer: async () => {
+      await pointerChannel?.poll()
+      return pointerChannel?.applied().flags ?? null
+    }
+  })
+  pointerChannel = startControlFlagChannel<DatabaseTargetPointer | null>({
+    objectName: DATABASE_TARGET_POINTER_OBJECT,
+    defaults: null,
+    parse: parseDatabaseTargetPointer,
+    appliedEvent: DATABASE_TARGET_POINTER_APPLIED_EVENT,
+    google,
+    onApplied: (applied) => database.applyPointer(applied.flags)
+  })
+  const channel = pointerChannel
+  if (input.appliesPostgresSchema !== false) {
+    try {
+      await retryBootDatabaseStep(async () => await database.applySchemaToActiveTarget())
+    } catch (error) {
+      channel.stop()
+      await database.close().catch(() => undefined)
+      throw error
+    }
+  }
+  return { database, stop: () => channel.stop() }
 }

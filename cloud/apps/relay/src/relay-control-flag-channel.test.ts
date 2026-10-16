@@ -77,6 +77,25 @@ describe('control flag channel', () => {
       .filter((line) => line.includes(`"event":"${CELL_FLAGS_APPLIED_EVENT}"`))
       .map((line): unknown => JSON.parse(line))
 
+  it('hands each newly applied object to onApplied', async () => {
+    const google = fakeGoogle(cellObject(5, { readinessLocal: true }))
+    const applied: unknown[] = []
+    const channel = startControlFlagChannel({
+      objectName: cellFlagObjectName(CELL_ID),
+      defaults: CELL_FLAG_DEFAULTS,
+      parse: cellFlagParser(CELL_ID),
+      appliedEvent: CELL_FLAGS_APPLIED_EVENT,
+      onApplied: (flags) => applied.push(flags),
+      fetch: google.fetchImpl,
+      autoStart: false
+    })
+    await channel.poll()
+    await channel.poll()
+    expect(applied).toEqual([
+      { generation: 5, flags: { ...CELL_FLAG_DEFAULTS, readinessLocal: true } }
+    ])
+  })
+
   it('runs on defaults until a first read, then reads the cell object in the project bucket', async () => {
     const google = fakeGoogle(cellObject(5, { readinessLocal: true }))
     const channel = cellChannel(google.fetchImpl)
