@@ -168,6 +168,14 @@ describe('acquireOrcadInstanceLock', () => {
       expect(acquireOrcadInstanceLock(root, liveMismatch(1001)).record.nonce).not.toBe('stale')
     })
 
+    it('says "an unknown program" when the live process name cannot be read', () => {
+      const root = makeRoot()
+      writeFileSync(join(root, ORCAD_LOCK_FILE_NAME), JSON.stringify(olderRecord))
+      expect(() =>
+        acquireOrcadInstanceLock(root, { ...liveMismatch(1000), processName: () => null })
+      ).toThrow(expect.objectContaining({ message: expect.stringContaining('an unknown program') }))
+    })
+
     it('keeps the plain refusal for a record that carries a boot id', () => {
       const root = makeRoot()
       writeFileSync(

@@ -4,8 +4,8 @@
  * Runs as a short-lived command on the execution host. It never signals: it writes the
  * instance-bound request the running orcad watches for, then observes until the instance is
  * gone. `exited` needs proof — no process with that PID, or a PID whose kernel identity or owner
- * uid shows it now belongs to another process. A wall-clock disagreement, or anything the host cannot answer,
- * is `unverifiable`, never exit.
+ * uid shows it now belongs to another process. A wall-clock disagreement, or anything the host
+ * cannot answer, is `unverifiable`, never exit.
  */
 import { setTimeout as delay } from 'node:timers/promises'
 import { writeDurableSecureJsonFile } from '../../shared/secure-file'

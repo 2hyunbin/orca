@@ -20,6 +20,8 @@ vi.mock('../daemon/daemon-process-start-time', async (importOriginal) => ({
 import {
   compareOrcadProcessIdentity,
   readOrcadProcessIncarnation,
+  readOrcadProcessName,
+  readOrcadProcessOwnerUid,
   readOrcadProcessStartedAtMs
 } from './orcad-process-start-time'
 
@@ -101,6 +103,7 @@ describe('orcad process identity', () => {
   it.each([
     ['another non-root uid', 1001, 'differs'],
     ['root', 0, 'unproven'],
+    ['the overflow uid an unmapped root shows as', 65534, 'unproven'],
     ['the same uid', 1000, 'unproven'],
     ['an unreadable owner', null, 'unproven']
   ] as const)('reads that mismatch with the PID owned by %s as %s', (_owner, ownerUid, verdict) => {
@@ -159,5 +162,12 @@ describe.runIf(platform === 'linux')('orcad process incarnation on a real /proc'
 
   it('answers null for a PID that does not exist', () => {
     expect(readOrcadProcessIncarnation(2 ** 30)).toBeNull()
+    expect(readOrcadProcessOwnerUid(2 ** 30)).toBeNull()
+    expect(readOrcadProcessName(2 ** 30)).toBeNull()
+  })
+
+  it('reads its own owner uid and command name', () => {
+    expect(readOrcadProcessOwnerUid(process.pid)).toBe(process.getuid?.())
+    expect(readOrcadProcessName(process.pid)).toMatch(/^[\x20-\x7e]+$/)
   })
 })

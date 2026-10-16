@@ -84,9 +84,18 @@ export function readOrcadProcessName(pid: number): string | null {
   }
 }
 
+function readLinuxOverflowUid(): number {
+  try {
+    const uid = Number(readFileSync('/proc/sys/kernel/overflowuid', 'utf8').trim())
+    return Number.isSafeInteger(uid) ? uid : 65534
+  } catch {
+    return 65534
+  }
+}
+
 /**
- * orcad never changes uid, so a PID owned by another non-root uid is proof of reuse. Root proves
- * nothing: /proc reports a non-dumpable process as root-owned.
+ * orcad never changes uid, so a PID owned by another uid is proof of reuse. Root and the overflow
+ * uid prove nothing: /proc shows a non-dumpable process as root, and an unmapped root as overflow.
  */
 function ownerProvesAnotherProcess(
   pid: number,
@@ -97,7 +106,12 @@ function ownerProvesAnotherProcess(
     return false
   }
   const owner = (readers.ownerUid ?? readOrcadProcessOwnerUid)(pid)
-  return owner !== null && owner !== 0 && owner !== Number(recorded.identity)
+  return (
+    owner !== null &&
+    owner !== 0 &&
+    owner !== Number(recorded.identity) &&
+    owner !== readLinuxOverflowUid()
+  )
 }
 
 export function recordedOrcadProcessIncarnation(

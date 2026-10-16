@@ -232,7 +232,7 @@ export function acquireOrcadInstanceLock(
   return reclaimAndPublish(lockPath, dataRoot, existingContents, publish, record)
 }
 
-/** An older orcad's record cannot tell its holder from a PID reused after a restart; say so. */
+/** A record without a boot id cannot tell its holder from a reused PID; say so. */
 function possiblyReusedPidError(
   lockPath: string,
   existing: OrcadLockRecord,
@@ -243,10 +243,11 @@ function possiblyReusedPidError(
   return new OrcadInstanceLockError(
     'orcad_instance_lock_held',
     `The orcad instance lock at ${lockPath} names pid ${existing.pid}, which is still running ` +
-      `(as ${name ? `"${name}"` : 'an unknown program'}). An older version of ${holder} wrote ` +
-      `this lock at ${existing.acquiredAt}, so Orca cannot tell whether that process is still ` +
-      `${holder} or an unrelated program that reused the PID after a restart. If you are sure ` +
-      `${holder} is not running for this data root, delete ${lockPath} and try again.`
+      `(as ${name ? `"${name}"` : 'an unknown program'}). This lock, written by ${holder} at ` +
+      `${existing.acquiredAt}, does not record which boot it came from, so Orca cannot tell ` +
+      `whether that process is still ${holder} or an unrelated program that reused the PID. ` +
+      `If you are sure ${holder} is not running for this data root, delete ${lockPath} and ` +
+      'try again, or use a different ORCA_USER_DATA.'
   )
 }
 

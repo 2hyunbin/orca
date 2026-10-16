@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -126,6 +126,14 @@ describe('managed stop instance identity', () => {
       expect(requestWritten(request)).toBe(false)
     }
   )
+
+  it('takes no owner proof from a lock that no longer names the instance', async () => {
+    const request = running(null, { identity: '1000' })
+    const lock = JSON.parse(readFileSync(request.instance.lockPath, 'utf8'))
+    writeFileSync(request.instance.lockPath, JSON.stringify({ ...lock, nonce: 'successor' }))
+    const host = { ...linuxHost(RECORDED), ownerUid: () => 1001 }
+    expect(await completeOrcadManagedStop(request, host)).toBe('unverifiable')
+  })
 
   it('stays readable by peers on either side of the change', async () => {
     const request = running(RECORDED, { requestCarriesIncarnation: true })
