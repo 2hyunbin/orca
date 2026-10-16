@@ -3,8 +3,9 @@
 
 import type { PublishedWorkspaceLayout } from './workspace-layout-published'
 
-/** `seq`: the stream's position after this frame, rising by one per change frame for the host's
- *  life. A `layout.apply` reply names the position holding its effect. Absent from older hosts. */
+/** `seq`: the stream's position after this frame. It rises by one per change frame for the host's
+ *  life, so a subscriber to every workspace sees each one. A `layout.apply` reply names the
+ *  position holding its effect. Absent from older hosts. */
 type Sequenced = { seq?: number }
 
 export type WorkspaceLayoutEvent = (
@@ -48,9 +49,15 @@ function isPublishedWorkspaceLayout(value: unknown): value is PublishedWorkspace
   )
 }
 
-/** The frame's position, kept only when it is one: a malformed one must not move a reader's. */
-function sequenced({ seq }: Record<string, unknown>): Sequenced {
-  return typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0 ? { seq } : {}
+/** A frame's stream position, read even from a frame this build cannot read otherwise. */
+export function readWorkspaceLayoutFramePosition(value: unknown): number | undefined {
+  const seq = isRecord(value) ? value.seq : undefined
+  return typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0 ? seq : undefined
+}
+
+function sequenced(value: Record<string, unknown>): Sequenced {
+  const seq = readWorkspaceLayoutFramePosition(value)
+  return seq === undefined ? {} : { seq }
 }
 
 function isSnapshotEntry(value: unknown): value is WorkspaceLayoutSnapshotEntry {

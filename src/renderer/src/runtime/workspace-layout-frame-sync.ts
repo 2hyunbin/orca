@@ -207,8 +207,6 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
         live = started
       }
       scheduleFlush()
-      // After the flush queued above: a reply waiting on this frame then sees what one sent after it does.
-      queueMicrotask(() => streamOpen && noteLayoutFramePosition(frame.seq))
     },
     (status) => {
       if (status.state === 'lost' || status.state === 'refused') {
@@ -218,7 +216,9 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
         streamOpen = false
         endLayoutFramePositions()
       }
-    }
+    },
+    // After the frame's flush: a waiting reply runs once the store shows the frame, unless held.
+    (seq) => queueMicrotask(() => streamOpen && noteLayoutFramePosition(seq))
   )
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
 

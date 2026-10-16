@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
 import { sendLayoutCommandToOwner } from './layout-owner-command'
 
@@ -30,6 +30,8 @@ function handlers() {
 }
 
 describe('sendLayoutCommandToOwner', () => {
+  afterEach(() => endLayoutFramePositions())
+
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
     mocks.ownerEnvironmentId = null
@@ -66,7 +68,6 @@ describe('sendLayoutCommandToOwner', () => {
 
     noteLayoutFramePosition(5)
     expect(on.apply).toHaveBeenCalledWith({ leafId: 'leaf-minted' })
-    endLayoutFramePositions()
   })
 
   it('changes nothing itself after a refusal', async () => {
