@@ -5,7 +5,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import { openNativeChatLocalDraft } from './native-chat-local-draft'
 import { newAgentLaunchRequestId } from './agent-launch-request-id'
 import { allocateNativeChatNewDraft, invalidateNativeChatNewDraft, deleteNativeChatNewDraftsOwnedBy, readNativeChatNewDraft, retireNativeChatNewDraft, updateNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
-import { clearNativeChatComposerDraftsForTests, hydrateNativeChatComposerDrafts, readNativeChatComposerDraft, updateNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
+import { clearNativeChatComposerDraftsForTests, hydrateNativeChatComposerDrafts, isNativeChatComposerDraftUnsaved, readNativeChatComposerDraft, updateNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import { createMemoryNativeChatComposerDraftStorage, setNativeChatComposerDraftStorageForTests } from '@/components/native-chat/native-chat-composer-draft-storage'
 
 const mocks = vi.hoisted(() => { const tabs: Tab[] = []; return { tabs, focus: vi.fn(), call: vi.fn() } })
@@ -123,6 +123,14 @@ it('converges foreign retirement during a pick and adopts a recreated workspace 
   storage.refuseWrites = true
   allocateNativeChatNewDraft('codex_unsaved', metadata)
   invalidateNativeChatNewDraft('agent-session-new:codex_unsaved')
-  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_unsaved')).toEqual(metadata))
+  await vi.waitFor(() => expect(isNativeChatComposerDraftUnsaved('agent-session:codex_unsaved')).toBe(true))
+  expect(readNativeChatNewDraft('codex_unsaved')).toEqual(metadata)
+  storage.refuseWrites = false
+  await storage.write('agent-session-new:codex_unsaved', { ...metadata, options: { model: 'foreign committed row' } })
+  invalidateNativeChatNewDraft('agent-session-new:codex_unsaved')
+  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_unsaved')?.options.model).toBe('foreign committed row'))
+  await storage.remove(['agent-session-new:codex_unsaved'])
+  invalidateNativeChatNewDraft('agent-session-new:codex_unsaved')
+  await vi.waitFor(() => expect(readNativeChatNewDraft('codex_unsaved')).toBeUndefined())
   expect(mocks.call).not.toHaveBeenCalled()
 })

@@ -51,6 +51,7 @@ function adopt(key: string, draft: NativeChatNewDraft | null): void {
     return
   }
   if (draft) {
+    unsavedAllocations.delete(key)
     drafts.set(key, draft)
   } else if (!unsavedAllocations.has(key)) {
     drafts.delete(key)
