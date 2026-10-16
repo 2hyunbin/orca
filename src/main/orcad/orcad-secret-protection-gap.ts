@@ -17,6 +17,13 @@ export function describeOrcadPlaintextOptOut(): string {
   )
 }
 
+export function describeOrcadDisposableProfile(): string {
+  return (
+    "Orca's headless server is running from a temporary profile, so it stores credentials " +
+    'unencrypted and leaves the saved credential key and existing credentials untouched.'
+  )
+}
+
 /**
  * Why not null: the machine ID is not a secret, so a key kept beside the credentials only stops
  * a lone copied file from opening elsewhere — not someone with this account's files or a backup.

@@ -2,6 +2,7 @@ import {
   chmodSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -282,6 +283,23 @@ describe('createOrcadSecretStore', () => {
     expect(store.describeProtectionGap()).not.toContain('machine ID')
     const sealed = store.encryptString('t')
     expect((await prepare({ machine: null })).store.decryptString(sealed)).toBe('t')
+  })
+
+  it('leaves the persistent credential home alone for a temporary profile', async () => {
+    const keyring = fakeKeyring()
+    const store = createOrcadSecretStore()
+    const ready = await store.prepare({
+      keyDir,
+      userDataPath: '/tmp/orcad-smoke-profile',
+      env: {},
+      keyring,
+      machineIdentity: () => MACHINE_A
+    })
+    expect(ready).toBe(false)
+    expect(store.isEncryptionAvailable()).toBe(false)
+    expect(store.describeProtectionGap()).toContain('temporary profile')
+    expect(keyring.items.size).toBe(0)
+    expect(readdirSync(keyDir)).toEqual([])
   })
 
   it('keeps the explicit plaintext opt-out for shared homes', async () => {

@@ -54,11 +54,14 @@ function createNodeAppEnvironment(): AppEnvironment {
 let orcadSecretStore: OrcadSecretStore | null = null
 
 /** Loads the sealing key kept in `keyDir`; resolves whether sealing works. */
-export async function prepareOrcadSecretStore(keyDir: string): Promise<boolean> {
+export async function prepareOrcadSecretStore(
+  keyDir: string,
+  userDataPath: string
+): Promise<boolean> {
   if (!orcadSecretStore) {
     throw new Error('orcad_secret_store_not_installed — call installOrcadHostAdapters() first')
   }
-  return orcadSecretStore.prepare({ keyDir })
+  return orcadSecretStore.prepare({ keyDir, userDataPath })
 }
 
 /**

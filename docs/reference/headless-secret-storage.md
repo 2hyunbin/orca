@@ -23,6 +23,10 @@ The keyring is never used for a key directory under the system temp directory or
 or when `ORCA_HEADLESS_SECRET_STORE=file` is set. That setting suits a macOS host reached only
 over SSH, where the login Keychain is often locked.
 
+A server started with `ORCA_USER_DATA` under a temporary directory (tests, smoke launchers)
+keeps the old behavior. It stores credentials unencrypted and never creates a key in the real
+`~/.orca`, or re-seals what is there.
+
 Windows does not use DPAPI. Reaching it from Node takes PowerShell or a native addon, and running
 PowerShell for each operation is an EDR signal.
 

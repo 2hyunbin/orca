@@ -26,6 +26,7 @@ import {
 } from './orcad-secret-key-record'
 import {
   describeOrcadHostKeyGap,
+  describeOrcadDisposableProfile,
   describeOrcadPlaintextOptOut,
   describeOrcadSealingUnavailable,
   ORCAD_PLAINTEXT_SECRETS_ENV
@@ -40,13 +41,15 @@ import {
 
 type StoreState =
   | { kind: 'pending' }
-  | { kind: 'plaintext' }
+  | { kind: 'plaintext'; reason: string }
   | { kind: 'ready'; key: Buffer; gap: string | null }
   | { kind: 'unavailable'; message: string }
 
 export type OrcadSecretStorePrepareOptions = {
   /** Orca's credential directory (`~/.orca`), so the key lives exactly as long as what it seals. */
   keyDir: string
+  /** A temporary profile keeps the legacy behavior and leaves `keyDir` untouched. */
+  userDataPath?: string
   platform?: NodeJS.Platform
   env?: NodeJS.ProcessEnv
   keyring?: OrcadOsKeyring | null
@@ -129,7 +132,15 @@ async function resolveState(options: OrcadSecretStorePrepareOptions): Promise<St
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
   if (env[ORCAD_PLAINTEXT_SECRETS_ENV] === 'plaintext') {
-    return { kind: 'plaintext' }
+    return { kind: 'plaintext', reason: describeOrcadPlaintextOptOut() }
+  }
+  // Why: a disposable run (tests, smoke launchers) must not create keys in, or re-seal, the
+  // user's persistent ~/.orca; credentials it saves would outlive the run unreadable by others.
+  if (
+    options.userDataPath &&
+    (options.isTemporaryKeyDir ?? isTemporaryKeyDir)(options.userDataPath)
+  ) {
+    return { kind: 'plaintext', reason: describeOrcadDisposableProfile() }
   }
   const keyring =
     options.keyring === undefined ? resolveOrcadOsKeyring(platform, env) : options.keyring
@@ -258,7 +269,7 @@ export function createOrcadSecretStore(): OrcadSecretStore {
         case 'unavailable':
           return state.message
         case 'plaintext':
-          return describeOrcadPlaintextOptOut()
+          return state.reason
         case 'pending':
           return "Orca's headless server has not loaded its credential key yet."
       }
