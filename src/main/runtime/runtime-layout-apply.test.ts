@@ -206,13 +206,13 @@ describe('applyWindowLayoutCommand', () => {
 
   it('moves editor tabs between workspaces of one partition, and refuses two partitions', async () => {
     const { store, applyLayoutCommand } = storeWith()
-    const move = {
+    const move: WindowLayoutCommand = {
       type: 'moveTabToWorkspace',
       workspace: 'wt-1',
       toWorkspace: 'wt-2',
       tabs: [{ tabId: 'tab-1', newTabId: 'tab-1', newEntityId: 'file-2' }],
       groupId: 'g2'
-    } as const
+    }
     const hostIdsFor = vi.fn((_worktreeId: string, _tabId: string | null) => [
       'ssh:target-1' as const
     ])
