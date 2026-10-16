@@ -19,6 +19,10 @@ import {
 } from '../browser-client-host-protocol'
 import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata-protocol'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
+import {
+  DesktopBrowserBridgeAttachParams,
+  DesktopBrowserBridgeResultParams
+} from '../desktop-browser-bridge-protocol'
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import {
@@ -564,10 +568,12 @@ import {
   TerminalInspectProcess,
   TerminalListParams,
   TerminalRead,
+  TerminalReadKittyFile,
   TerminalRecoverPane,
   TerminalRename,
   TerminalResolveActive,
   TerminalResolvePane,
+  TerminalReveal,
   TerminalSend,
   TerminalSetViewerColors,
   TerminalSplit,
@@ -582,7 +588,11 @@ import {
   TerminalUpdateViewport
 } from './terminal-viewport-schemas-params'
 import { UpdaterCheckParams } from './updater-params'
-import { LayoutSubscribeParams, LayoutUnsubscribeParams } from './workspace-layout-params'
+import {
+  LayoutApplyParams,
+  LayoutSubscribeParams,
+  LayoutUnsubscribeParams
+} from './workspace-layout-params'
 import {
   WorkspacePortKillHostParams,
   WorkspacePortKillParams,
@@ -824,6 +834,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'desktopBrowserBridge.attach': DesktopBrowserBridgeAttachParams,
+  'desktopBrowserBridge.result': DesktopBrowserBridgeResultParams,
   'diagnostics.memory': null,
   'emulator.attach': AttachParamsOfEmulatorParams,
   'emulator.availability': EmulatorAvailabilityParams,
@@ -996,6 +1008,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'hostedReview.createStacked': HostedReviewCreate,
   'hostedReview.forBranch': HostedReviewForBranch,
   'hostedReview.getCreationEligibility': HostedReviewCreationEligibility,
+  'integrationCredentials.moveKeyToFile': null,
   'jira.addIssueComment': IssueCommentOfJiraParams,
   'jira.attachmentImage': AttachmentImage,
   'jira.cancelGenerateIssueSummary': CancelGenerateIssueSummary,
@@ -1024,6 +1037,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'jira.status': null,
   'jira.testConnection': SiteSelection,
   'jira.updateIssue': IssueUpdate,
+  'layout.apply': LayoutApplyParams,
   'layout.getRemoteSnapshots': null,
   'layout.subscribe': LayoutSubscribeParams,
   'layout.unsubscribe': LayoutUnsubscribeParams,
@@ -1273,6 +1287,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.list': TerminalListParams,
   'terminal.multiplex': TerminalMultiplex,
   'terminal.read': TerminalRead,
+  'terminal.readKittyFile': TerminalReadKittyFile,
   'terminal.recoverPane': TerminalRecoverPane,
   'terminal.rename': TerminalRename,
   'terminal.resetInputModes': TerminalHandle,
@@ -1281,6 +1296,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.resolveIdentity': TerminalHandle,
   'terminal.resolvePane': TerminalResolvePane,
   'terminal.restoreFit': TerminalHandle,
+  'terminal.reveal': TerminalReveal,
   'terminal.send': TerminalSend,
   'terminal.setAutoRestoreFit': TerminalSetAutoRestoreFit,
   'terminal.setDisplayMode': TerminalSetDisplayMode,
