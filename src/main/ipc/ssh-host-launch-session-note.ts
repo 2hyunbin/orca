@@ -8,7 +8,8 @@ import { publishHostServerStatus } from './runtime-environment-managed-tunnel'
 
 // Once per SSH session: a restore runs on every runtime call, and the answer only changes when
 // a session ends, which the next session (a new connection or reconnect generation) checks.
-const checkedGenerations = new WeakMap<object, number>()
+// The ended verdict is kept so a status a later connect replaces gets the warning back.
+const checked = new WeakMap<object, { generation: number; ended: boolean }>()
 
 /** Never blocks or fails the caller; anything but a proven exit shows nothing. */
 export async function noteEndedLaunchSshSession(
@@ -20,11 +21,18 @@ export async function noteEndedLaunchSshSession(
     return
   }
   const connection = connectionManager?.getConnection(targetId)
-  const generation = connection?.getConnectGeneration()
-  if (!connection || checkedGenerations.get(connection) === generation) {
+  if (!connection) {
     return
   }
-  checkedGenerations.set(connection, generation ?? 0)
+  const generation = connection.getConnectGeneration()
+  const prior = checked.get(connection)
+  if (prior?.generation === generation) {
+    if (prior.ended) {
+      flag(targetId, environmentId)
+    }
+    return
+  }
+  checked.set(connection, { generation, ended: false })
   try {
     const session = await readManagedOrcadLaunchSshSession(
       getAppEnvironment().getPath('userData'),
@@ -33,21 +41,39 @@ export async function noteEndedLaunchSshSession(
     const status = getSshHostServerStatus(targetId)
     if (status?.kind === 'setting-up') {
       // A start or update is still deciding; a later call checks again.
-      checkedGenerations.delete(connection)
+      checked.delete(connection)
       return
     }
-    // A restored host may have no status yet; any other server decision is left alone.
-    if (
-      session === 'exited' &&
-      (!status ||
-        (status.kind === 'managed' && status.environmentId === environmentId && !status.serving))
-    ) {
-      publishHostServerStatus(targetId, {
-        ...(status ?? { kind: 'managed', environmentId }),
-        launchSessionEnded: true
-      })
+    if (session === 'exited') {
+      checked.set(connection, { generation, ended: true })
+      flag(targetId, environmentId)
     }
   } catch (error) {
     console.warn('[ssh] Could not check which SSH session started the managed server:', error)
+  }
+}
+
+/** A restored host may have no status yet; any other server decision is left alone. */
+function flag(targetId: string, environmentId: string): void {
+  const status = getSshHostServerStatus(targetId)
+  if (
+    !status ||
+    (status.kind === 'managed' &&
+      status.environmentId === environmentId &&
+      !status.serving &&
+      !status.launchSessionEnded)
+  ) {
+    publishHostServerStatus(targetId, {
+      ...(status ?? { kind: 'managed', environmentId }),
+      launchSessionEnded: true
+    })
+  }
+}
+
+/** After a verified restart: the cached ended verdict no longer describes the host. */
+export function forgetLaunchSessionVerdict(targetId: string): void {
+  const connection = connectionManager?.getConnection(targetId)
+  if (connection) {
+    checked.delete(connection)
   }
 }

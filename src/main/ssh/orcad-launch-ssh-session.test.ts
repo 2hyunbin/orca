@@ -183,6 +183,13 @@ describe.skipIf(process.platform === 'win32')('orcad launch SSH session', () => 
     )
   })
 
+  it('leaves the attribution unknown when a live daemon’s command line can’t be read', () => {
+    writeRecord('1', '1 400 Thu Oct 9 07:59:59 2026')
+    publishDaemon(process.pid, '')
+    launchRecord()
+    expect(existsSync(join(dir, ORCAD_LAUNCH_SSH_SESSION_FILENAME))).toBe(false)
+  })
+
   it('creates the data root on a first deploy before recording', () => {
     const data = join(dir, 'fresh', 'data')
     const pidFile = join(dir, ORCAD_PID_FILENAME)

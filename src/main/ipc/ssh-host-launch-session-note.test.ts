@@ -27,7 +27,8 @@ vi.mock('./ssh-ipc-context', () => ({
 }))
 vi.mock('./runtime-environment-managed-tunnel', () => ({ publishHostServerStatus: mocks.publish }))
 
-const { noteEndedLaunchSshSession } = await import('./ssh-host-launch-session-note')
+const { forgetLaunchSessionVerdict, noteEndedLaunchSshSession } =
+  await import('./ssh-host-launch-session-note')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -73,6 +74,28 @@ describe('noteEndedLaunchSshSession', () => {
     expect(mocks.publish).not.toHaveBeenCalled()
     mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.publish).toHaveBeenCalledOnce()
+  })
+
+  it('reapplies a known ended session to a status a later connect replaced', async () => {
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.read).toHaveBeenCalledOnce()
+    expect(mocks.publish).toHaveBeenLastCalledWith('ssh-1', {
+      kind: 'managed',
+      environmentId: 'env-1',
+      launchSessionEnded: true
+    })
+  })
+
+  it('probes again after a verified restart forgets the verdict', async () => {
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    forgetLaunchSessionVerdict('ssh-1')
+    mocks.read.mockResolvedValue('live')
+    mocks.status.current = { kind: 'managed', environmentId: 'env-1' }
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.read).toHaveBeenCalledTimes(2)
     expect(mocks.publish).toHaveBeenCalledOnce()
   })
 

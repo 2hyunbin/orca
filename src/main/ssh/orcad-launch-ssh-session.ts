@@ -58,9 +58,10 @@ function recordPath(host: RemoteHostPlatform, userDataDir: string): string {
 }
 
 /**
- * True when a terminal daemon this data root published is still running. Like
- * `commandLineMatchesDaemon`, a PID counts only when its command line is this root's daemon: a
- * stale PID file after a reboot can name an unrelated process.
+ * Returns 0 when a terminal daemon this data root published is still running, 1 when none is,
+ * and 2 when a live PID's command line can't be read. Like `commandLineMatchesDaemon`, a PID
+ * counts only when its command line is this root's daemon: a stale PID file after a reboot can
+ * name an unrelated process.
  */
 function liveDaemonShellFunction(host: RemoteHostPlatform, userDataDir: string): string {
   const daemonDir = shellEscape(joinRemotePath(host, userDataDir, 'daemon'))
@@ -69,7 +70,8 @@ function liveDaemonShellFunction(host: RemoteHostPlatform, userDataDir: string):
     '[ -f "$orcad_df" ] || continue; ' +
     'orcad_dp=$(sed -n \'s/.*"pid":\\([0-9][0-9]*\\).*/\\1/p\' "$orcad_df" | head -n 1); ' +
     '[ -n "$orcad_dp" ] || continue; ' +
-    'orcad_da=$(ps -o args= -p "$orcad_dp" 2>/dev/null) || continue; ' +
+    'kill -0 "$orcad_dp" 2>/dev/null || continue; ' +
+    'orcad_da=$(ps -o args= -p "$orcad_dp" 2>/dev/null); [ -n "$orcad_da" ] || return 2; ' +
     'case "$orcad_da" in *daemon-entry*"$orcad_ddir"* | *"$orcad_ddir"*daemon-entry*) return 0;; esac; ' +
     'done; return 1; };'
   )
@@ -88,9 +90,12 @@ export function writeOrcadLaunchSshSessionCommand(
     // Why mkdir: on a first deploy the detached server may not have created its data root yet.
     `{ orcad_bg=$!; ( umask 077; mkdir -p ${shellEscape(userDataDir)} ); ` +
     `${liveDaemonShellFunction(host, userDataDir)} ` +
-    'if orcad_daemon_live; then ' +
+    'orcad_daemon_live; orcad_dl=$?; ' +
+    'if [ "$orcad_dl" = 0 ]; then ' +
     `orcad_prev=$(cat ${file}); rm -f ${file}; set -- $orcad_prev; ` +
     `[ "$#" -lt 3 ] || { shift; ( umask 077; echo "$orcad_bg" "$@" > ${file} ); }; ` +
+    // An unreadable daemon leaves the attribution unknown, never this launch's.
+    `elif [ "$orcad_dl" = 2 ]; then rm -f ${file}; ` +
     `else rm -f ${file}; [ -z "$orcad_session" ] || ` +
     `( umask 077; echo "$orcad_bg" $orcad_session > ${file} ); fi; :; } 2>/dev/null`
   )
