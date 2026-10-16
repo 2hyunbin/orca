@@ -294,6 +294,7 @@ describe('relay observability', () => {
     for (let ms = 1; ms <= 100; ms++) {
       observability.recordStickySlot({
         queueWaitMs: ms * 20,
+        borrowed: ms <= 30,
         poolWaitMs: ms,
         sqlMs: ms * 2,
         statements: 14,
@@ -306,6 +307,7 @@ describe('relay observability', () => {
 
     expect(entries[0]).toMatchObject({
       stickySlotsDelta: 100,
+      stickyBorrowedSlotsDelta: 30,
       stickyQueueWaitMsP50: 1_000,
       stickyQueueWaitMsP99: 1_980,
       stickyQueueWaitMsMax: 2_000,
@@ -340,6 +342,7 @@ describe('relay observability', () => {
     for (let id = 1; id <= STICKY_CONNECTION_LIMIT + 3; id++) {
       observability.recordStickySlot({
         queueWaitMs: 0,
+        borrowed: false,
         poolWaitMs: 0,
         sqlMs: 1,
         statements: 1,

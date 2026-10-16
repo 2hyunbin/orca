@@ -331,4 +331,85 @@ describe('public assignment admission', () => {
     first?.release()
     second?.release()
   })
+
+  it('lends a placement permit only while placement keeps one', async () => {
+    const placement = new RelayPublicAssignmentAdmission({ maxConcurrent: 2, minIntervalMs: 0 })
+    const single = new RelayPublicAssignmentAdmission({ maxConcurrent: 1, minIntervalMs: 0 })
+    expect(single.lend()).toBeNull()
+
+    const lent = placement.lend()
+    expect(lent).not.toBeNull()
+    expect(placement.lend()).toBeNull()
+    const placed = await placement.acquire('host-a')
+    expect(placed).not.toBeNull()
+    lent?.release()
+    placed?.release()
+  })
+
+  it('never lends past a placement waiter, and lends again once the queue drains', async () => {
+    const placement = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 2,
+      maxQueued: 1,
+      minIntervalMs: 0
+    })
+    const first = await placement.acquire('host-a')
+    const second = await placement.acquire('host-b')
+    const waiting = placement.acquire('host-c')
+    first?.release()
+    expect(placement.lend()).toBeNull()
+    const third = await waiting
+    second?.release()
+    const lent = placement.lend()
+    expect(lent).not.toBeNull()
+    lent?.release()
+    third?.release()
+  })
+
+  it('shares the borrowing budget between drain returns and lent permits', async () => {
+    const placement = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 2,
+      maxDrainReturnConcurrent: 1,
+      maxDrainReturnQueued: 1,
+      minIntervalMs: 0
+    })
+    const lent = placement.lend()
+    const queuedDrain = placement.acquireDrainReturn('host-d', () => undefined)
+    // A queued drain return goes before any further lending.
+    lent?.release()
+    const drain = await queuedDrain
+    expect(drain).not.toBeNull()
+    expect(placement.lend()).toBeNull()
+    drain?.release()
+  })
+
+  it('runs a borrower past its own slot and wakes its queue when a lent permit frees', async () => {
+    let borrower: RelayPublicAssignmentAdmission | undefined
+    const placement = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 2,
+      minIntervalMs: 0,
+      onPermitFreed: () => borrower?.grantWaiting()
+    })
+    borrower = new RelayPublicAssignmentAdmission({
+      maxConcurrent: 1,
+      maxQueued: 4,
+      waitMs: 60_000,
+      minIntervalMs: 0,
+      borrow: () => placement.lend()
+    })
+    const own = await borrower.acquire('host-a')
+    const borrowed = await borrower.acquire('host-b')
+    expect(own?.borrowed).toBe(false)
+    expect(borrowed?.borrowed).toBe(true)
+    const placed = await placement.acquire('host-p')
+    const queued = borrower.acquire('host-c')
+    placed?.release()
+    // Placement freed a permit, but the borrower's own lent one still counts: no second loan.
+    borrowed?.release()
+    const woken = await queued
+    expect(woken?.borrowed).toBe(true)
+    // The borrowed host is no longer in flight once its lease is gone.
+    woken?.release()
+    expect((await borrower.acquire('host-b'))?.borrowed).toBe(true)
+    own?.release()
+  })
 })

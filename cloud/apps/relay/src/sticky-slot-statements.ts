@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 
 export type StickySlotSample = {
   queueWaitMs: number
+  borrowed: boolean
   // Waiting for a pooled connection, apart from the statements run on one.
   poolWaitMs: number
   sqlMs: number
@@ -9,7 +10,7 @@ export type StickySlotSample = {
   statementMsByConnection: ReadonlyMap<number, readonly number[]>
 }
 
-type StickySlotStatementTotals = Omit<StickySlotSample, 'queueWaitMs'>
+type StickySlotStatementTotals = Omit<StickySlotSample, 'queueWaitMs' | 'borrowed'>
 
 // PostgreSQL round trips (all but ROLLBACK) made while one request holds the sticky
 // slot. Closed at release, so work the request left running is not charged to it.

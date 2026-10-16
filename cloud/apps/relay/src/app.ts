@@ -235,6 +235,7 @@ export function createRelayApp(
     drainReturnWaitMs: config.drainReturnWaitMs ?? 3_000,
     drainReturnMinIntervalMs: DRAIN_RETURN_MIN_RETRY_AFTER_SECONDS * 1_000,
     minIntervalMs: config.publicAssignmentRetryAfterSeconds * 1_000,
+    onPermitFreed: () => stickyAssignmentAdmission.grantWaiting(),
     onRejected: (reason) => operations.recordAssignmentRejectionReason?.('placement', reason)
   })
   // Runs after the database answer and never changes or fails the response.
@@ -268,6 +269,8 @@ export function createRelayApp(
     maxQueued: config.publicStickyQueueMax ?? 64,
     waitMs: config.publicStickyWaitMs ?? 2_000,
     minIntervalMs: stickyRetryAfterSeconds * 1_000,
+    // A reconnect herd meets an idle placement lane: run on its spare permit, not just our own.
+    borrow: () => publicAssignmentAdmission.lend(),
     onRejected: (reason) => operations.recordAssignmentRejectionReason?.('sticky', reason)
   })
   const rejectStickyAssignment = (context: Context): Response => {
@@ -276,7 +279,7 @@ export function createRelayApp(
   }
   // The slot's hold, not the request's latency: herd recovery is slots / this.
   const timeStickySlot = (
-    lease: { release(): void },
+    lease: { release(): void; readonly borrowed?: boolean },
     queueWaitMs: number
   ): { release(): void; measure<T>(work: () => Promise<T>): Promise<T> } => {
     const startedAt = performance.now()
@@ -288,7 +291,11 @@ export function createRelayApp(
         released = true
         try {
           operations.recordAdmissionServiceMs?.('sticky', performance.now() - startedAt)
-          operations.recordStickySlot?.({ queueWaitMs, ...statements.close() })
+          operations.recordStickySlot?.({
+            queueWaitMs,
+            borrowed: lease.borrowed === true,
+            ...statements.close()
+          })
         } finally {
           lease.release()
         }

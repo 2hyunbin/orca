@@ -1,4 +1,5 @@
-type AssignmentAdmissionLease = { release(): void }
+// borrowed: the permit is the lender's, not this lane's own.
+type AssignmentAdmissionLease = { release(): void; readonly borrowed?: boolean }
 type CancelWait = () => void
 // Per-call sink: acquire() keeps returning null so callers stay unchanged, and the
 // reason rides out of band to whoever made this particular request.
@@ -22,12 +23,13 @@ export type AssignmentAdmissionRejection =
 
 const MAX_TRACKED_HOSTS = 4_096
 
-type LeaseKind = 'placement' | 'reserved' | 'drain-return'
+type LeaseKind = 'placement' | 'reserved' | 'drain-return' | 'lent'
 
 export class RelayPublicAssignmentAdmission {
   private active = 0
   private activeReserved = 0
   private activeDrainReturn = 0
+  private activeLent = 0
   private readonly activeDrainReturnHosts = new Set<string>()
   private readonly queuedDrainReturnHosts = new Set<string>()
   private readonly lastDrainReturnAttemptByHost = new Map<string, number>()
@@ -55,6 +57,10 @@ export class RelayPublicAssignmentAdmission {
       drainReturnWaitMs?: number
       drainReturnMinIntervalMs?: number
       minIntervalMs: number
+      // The sticky lane runs past its own slots on a placement permit the lender can spare.
+      borrow?: () => AssignmentAdmissionLease | null
+      // A lender calls this when a permit frees, so a borrower's queue can take it.
+      onPermitFreed?: () => void
       now?: () => number
       schedule?: (callback: () => void, delayMs: number) => CancelWait
       onRejected?: (reason: AssignmentAdmissionRejection) => void
@@ -63,6 +69,17 @@ export class RelayPublicAssignmentAdmission {
 
   get queuedDrainReturns(): number {
     return this.pendingDrainReturns.length
+  }
+
+  // A lent permit counts against this lane's own concurrency, so lender and borrower together
+  // stay inside the pool that placement plus sticky are sized to. Every waiter here goes first.
+  lend(): AssignmentAdmissionLease | null {
+    if (!this.canBorrow() || this.pendingDrainReturns.length > 0) return null
+    return this.createLease('', 'lent')
+  }
+
+  grantWaiting(): void {
+    this.grantPendingAssignments()
   }
 
   // Rejections here are the drain lane's, so they skip the placement onRejected hook.
@@ -141,6 +158,13 @@ export class RelayPublicAssignmentAdmission {
       this.recordAttempt(this.lastAttemptByHost, relayHostId, now)
       return this.createLease(relayHostId, 'placement')
     }
+    if (this.pendingReserved === undefined && this.pendingAssignments.length === 0) {
+      const borrowed = this.options.borrow?.()
+      if (borrowed) {
+        this.recordAttempt(this.lastAttemptByHost, relayHostId, now)
+        return this.createLease(relayHostId, 'placement', borrowed)
+      }
+    }
     if (this.pendingAssignments.length >= (this.options.maxQueued ?? 0)) {
       return this.reject('queue-full', notifyRejected)
     }
@@ -214,9 +238,15 @@ export class RelayPublicAssignmentAdmission {
     })
   }
 
-  private createLease(relayHostId: string, kind: LeaseKind): AssignmentAdmissionLease {
-    this.active++
-    if (kind === 'reserved') {
+  private createLease(
+    relayHostId: string,
+    kind: LeaseKind,
+    borrowed?: AssignmentAdmissionLease
+  ): AssignmentAdmissionLease {
+    if (!borrowed) this.active++
+    if (kind === 'lent') {
+      this.activeLent++
+    } else if (kind === 'reserved') {
       this.activeReserved++
       this.activeReservedHosts.add(relayHostId)
     } else if (kind === 'drain-return') {
@@ -227,11 +257,14 @@ export class RelayPublicAssignmentAdmission {
     }
     let released = false
     return {
+      borrowed: borrowed !== undefined,
       release: () => {
         if (released) return
         released = true
-        this.active = Math.max(0, this.active - 1)
-        if (kind === 'reserved') {
+        if (!borrowed) this.active = Math.max(0, this.active - 1)
+        if (kind === 'lent') {
+          this.activeLent = Math.max(0, this.activeLent - 1)
+        } else if (kind === 'reserved') {
           this.activeReserved = Math.max(0, this.activeReserved - 1)
           this.activeReservedHosts.delete(relayHostId)
         } else if (kind === 'drain-return') {
@@ -240,16 +273,29 @@ export class RelayPublicAssignmentAdmission {
         } else {
           this.activeAssignmentHosts.delete(relayHostId)
         }
+        borrowed?.release()
         this.grantPendingReserved()
         this.grantPendingAssignments()
         this.grantPendingDrainReturns()
+        this.options.onPermitFreed?.()
       }
     }
+  }
+
+  // Drain returns and lent permits share the borrowing budget, which leaves placement one permit.
+  private canBorrow(): boolean {
+    return (
+      this.activeDrainReturn + this.activeLent < this.options.maxConcurrent - 1 &&
+      this.active < this.options.maxConcurrent &&
+      this.pendingReserved === undefined &&
+      this.pendingAssignments.length === 0
+    )
   }
 
   private canGrantDrainReturn(): boolean {
     return (
       this.activeDrainReturn < (this.options.maxDrainReturnConcurrent ?? 0) &&
+      (this.activeLent === 0 || this.canBorrow()) &&
       this.active < this.options.maxConcurrent &&
       this.pendingReserved === undefined &&
       this.pendingAssignments.length === 0
@@ -290,11 +336,10 @@ export class RelayPublicAssignmentAdmission {
   }
 
   private grantPendingAssignments(): void {
-    while (
-      this.pendingReserved === undefined &&
-      this.active < this.options.maxConcurrent &&
-      this.pendingAssignments.length > 0
-    ) {
+    while (this.pendingReserved === undefined && this.pendingAssignments.length > 0) {
+      const borrowed =
+        this.active < this.options.maxConcurrent ? undefined : (this.options.borrow?.() ?? null)
+      if (borrowed === null) return
       const pending = this.pendingAssignments.shift()!
       this.queuedAssignmentHosts.delete(pending.relayHostId)
       pending.cancelWait()
@@ -303,7 +348,7 @@ export class RelayPublicAssignmentAdmission {
         pending.relayHostId,
         (this.options.now ?? Date.now)()
       )
-      pending.resolve(this.createLease(pending.relayHostId, 'placement'))
+      pending.resolve(this.createLease(pending.relayHostId, 'placement', borrowed))
     }
   }
 

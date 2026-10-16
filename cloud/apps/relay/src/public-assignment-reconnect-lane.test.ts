@@ -232,7 +232,8 @@ describe('public assignment reconnect lane', () => {
       return assignment('cell-r', relayHostId)
     })
     const samples: StickySlotSample[] = []
-    const app = createRelayApp(config(), {
+    // One placement permit leaves none to lend, so the second reconnect waits for the slot.
+    const app = createRelayApp(config({ publicAssignmentConcurrency: 1 }), {
       store: {} as never,
       assignments: { assign, resolve } as never,
       drain: vi.fn(),
@@ -260,6 +261,51 @@ describe('public assignment reconnect lane', () => {
     expect(samples[1]).toMatchObject({ statements: 5 })
     expect(roundTrips(samples[1])).toEqual([[3, 5]])
     expect(samples[1]?.queueWaitMs).toBeGreaterThanOrEqual(40)
+    expect(samples.map((sample) => sample.borrowed)).toEqual([false, false])
+  })
+
+  it('runs a second reconnect on an idle placement permit, and only one', async () => {
+    const hosts = ['1111111111111111', '2222222222222222', '3333333333333333']
+    const newcomer = 'nnnnnnnnnnnnnnnn'
+    const pending = new Map<string, ReturnType<typeof deferred<RelayAssignment>>>()
+    const assign = vi.fn(async ({ relayHostId }: { relayHostId: string }) => {
+      const operation = deferred<RelayAssignment>()
+      pending.set(relayHostId, operation)
+      return await operation.promise
+    })
+    const resolve = vi.fn(async ({ relayHostId }: { relayHostId: string }) =>
+      assignment('cell-r', relayHostId)
+    )
+    const samples: StickySlotSample[] = []
+    const app = createRelayApp(config({ publicStickyWaitMs: 5_000 }), {
+      store: {} as never,
+      assignments: { assign, resolve } as never,
+      drain: vi.fn(),
+      ready: vi.fn(async () => true),
+      recordStickySlot: (sample) => samples.push(sample)
+    })
+
+    const own = app.request('/v1/assign', assignmentRequest(hosts[0]!, { reconnect: true }))
+    await vi.waitFor(() => expect(pending.has(hosts[0]!)).toBe(true))
+    const lent = app.request('/v1/assign', assignmentRequest(hosts[1]!, { reconnect: true }))
+    await vi.waitFor(() => expect(pending.has(hosts[1]!)).toBe(true))
+    // Placement keeps its other permit: a third reconnect queues, a newcomer is placed.
+    const queued = app.request('/v1/assign', assignmentRequest(hosts[2]!, { reconnect: true }))
+    const placed = app.request('/v1/assign', assignmentRequest(newcomer))
+    await vi.waitFor(() => expect(pending.has(newcomer)).toBe(true))
+    expect(pending.has(hosts[2]!)).toBe(false)
+
+    // The lent permit comes back first; the queued reconnect borrows it again.
+    pending.get(hosts[1]!)?.resolve(assignment('cell-r', hosts[1]!))
+    expect((await lent).status).toBe(200)
+    await vi.waitFor(() => expect(pending.has(hosts[2]!)).toBe(true))
+    for (const host of [hosts[0]!, hosts[2]!, newcomer]) {
+      pending.get(host)?.resolve(assignment('cell-r', host))
+    }
+    expect((await own).status).toBe(200)
+    expect((await queued).status).toBe(200)
+    expect((await placed).status).toBe(200)
+    expect(samples.map((sample) => sample.borrowed)).toEqual([true, false, true])
   })
 
   it('never probes for unhinted requests', async () => {

@@ -187,6 +187,7 @@ type RelayMetricDeltas = {
   drainReturnServiceMs: number[]
   stickyServiceMs: number[]
   stickySlotQueueWaitMs: number[]
+  stickySlotsBorrowed: number
   stickySlotPoolWaitMs: number[]
   stickySlotSqlMs: number[]
   stickySlotStatements: number[]
@@ -275,6 +276,7 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   drainReturnServiceMs: [],
   stickyServiceMs: [],
   stickySlotQueueWaitMs: [],
+  stickySlotsBorrowed: 0,
   stickySlotPoolWaitMs: [],
   stickySlotSqlMs: [],
   stickySlotStatements: [],
@@ -421,6 +423,7 @@ export class RelayObservability implements RelayRuntimeObserver {
   recordStickySlot(sample: StickySlotSample): void {
     const deltas = this.deltas
     deltas.stickySlotQueueWaitMs.push(sample.queueWaitMs)
+    if (sample.borrowed) deltas.stickySlotsBorrowed++
     deltas.stickySlotPoolWaitMs.push(sample.poolWaitMs)
     deltas.stickySlotSqlMs.push(sample.sqlMs)
     deltas.stickySlotStatements.push(sample.statements)
@@ -796,6 +799,8 @@ function stickySlotFields(deltas: RelayMetricDeltas): Record<string, unknown> {
   }
   return {
     stickySlotsDelta: deltas.stickySlotQueueWaitMs.length,
+    // Of those, the ones that ran on a placement permit the sticky lane borrowed.
+    stickyBorrowedSlotsDelta: deltas.stickySlotsBorrowed,
     stickyQueueWaitMsP50: queueWait.p50,
     stickyQueueWaitMsP99: queueWait.p99,
     stickyQueueWaitMsMax: queueWait.max,
