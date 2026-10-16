@@ -57,14 +57,14 @@ export function stageStructuredLaunchPrompt(
     }
     if (!prompt.delivery) {
       prompt.delivery = Promise.resolve(result)
-      unstage(prompt)
+      releaseStagedStructuredLaunchPrompt(prompt)
     }
     prompt.settleCreate(result)
   })
   return prompt
 }
 
-function unstage(prompt: StagedStructuredLaunchPrompt): void {
+export function releaseStagedStructuredLaunchPrompt(prompt: StagedStructuredLaunchPrompt): void {
   prompt.slot?.release()
   const forSession = staged.get(prompt.sessionId)
   forSession?.delete(prompt)
@@ -96,7 +96,7 @@ export function takeBackLegacyStructuredLaunchPrompts(sessionId: string): void {
     if (prompt.delivery || prompt.createOwned) {
       continue
     }
-    unstage(prompt)
+    releaseStagedStructuredLaunchPrompt(prompt)
     handBackStagedPrompt(prompt)
     prompt.discarded = true
     prompt.discard()
@@ -126,7 +126,7 @@ export function prepareStructuredLaunchPromptForCreate(
   prompt.createSend = sent ?? undefined
   prompt.delivery = sent
     ? sent.outcome.then((outcome) => {
-        unstage(prompt)
+        releaseStagedStructuredLaunchPrompt(prompt)
         return {
           delivered: outcome === 'recorded',
           inComposer:
@@ -135,7 +135,7 @@ export function prepareStructuredLaunchPromptForCreate(
         }
       })
     : Promise.resolve({ delivered: false, inComposer: !prompt.callerKeepsText }).then((outcome) => {
-        unstage(prompt)
+        releaseStagedStructuredLaunchPrompt(prompt)
         return outcome
       })
   void prompt.delivery.then(prompt.settleCreate)
@@ -162,7 +162,7 @@ function sendStagedPrompt(
       sendStructuredAgentSessionMessage({ sessionId: prompt.sessionId, target, text: prompt.text })
     if (!sent) {
       // Another send of the chat holds its slot: the launch text waits in the composer instead.
-      unstage(prompt)
+      releaseStagedStructuredLaunchPrompt(prompt)
       return { delivered: false, inComposer: handBackStagedPrompt(prompt), busy: true }
     }
     try {
@@ -174,7 +174,7 @@ function sendStagedPrompt(
         ...(outcome === 'unconfirmed' ? { unconfirmed: true as const } : {})
       }
     } finally {
-      unstage(prompt)
+      releaseStagedStructuredLaunchPrompt(prompt)
     }
   })()
   return prompt.delivery
@@ -214,7 +214,7 @@ export async function prepareStructuredLaunchFirstSubmission(
 
 export function failStagedStructuredLaunchPrompt(prompt: StagedStructuredLaunchPrompt): void {
   if (prompt.discarded) return
-  unstage(prompt)
+  releaseStagedStructuredLaunchPrompt(prompt)
   handBackStagedPrompt(prompt)
   prompt.settleCreate({ delivered: false, inComposer: true })
   publishStructuredAgentSessionSends(prompt.sessionId, { notice: agentSessionWriteNoticeText(['notDoneSend']) })
@@ -270,7 +270,7 @@ export function settleStructuredAgentLaunchPrompt(args: {
       }
       // The chat never started: its text waits in the chat's composer for the person's own Send.
       if (prompt && !prompt.discarded && !prompt.delivery) {
-        unstage(prompt)
+        releaseStagedStructuredLaunchPrompt(prompt)
         handBackStagedPrompt(prompt)
         prompt.discarded = true
       }

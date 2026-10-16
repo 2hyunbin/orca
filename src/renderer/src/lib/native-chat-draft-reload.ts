@@ -18,7 +18,7 @@ async function ownerConfirmedGone(draft: NativeChatNewDraft): Promise<boolean> {
   const { workspaceId, executionHostId } = draft.owner
   const state = useAppStore.getState()
   const host = parseExecutionHostId(executionHostId)
-  if (host?.kind === 'runtime' && state.runtimeEnvironmentCatalogSettled &&
+  if (host?.kind === 'runtime' && state.runtimeEnvironmentCatalogHydrated &&
     !state.runtimeEnvironments.some((environment) => environment.id === host.environmentId)) return true
   if (findKnownWorktreeById(state, workspaceId, executionHostId)) return false
   const scope = parseWorkspaceKey(workspaceId)

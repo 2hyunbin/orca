@@ -247,12 +247,12 @@ export function useStructuredAgentSessionOptions(args: {
       }
       if (!transportEnabled || fence === null) {
         const draft = readNativeChatNewDraft(sessionId)
-        if (draft && !getStructuredAgentSessionLaunchSelection(sessionId)) {
+        if (draft) {
           const options = id === 'model'
             ? { ...(draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] } : {}), [id]: encoded }
             : { ...draft.options, [id]: encoded }
           updateNativeChatNewDraft(sessionId, { options })
-          return true
+          if (!getStructuredAgentSessionLaunchSelection(sessionId)) return true
         }
         // No fence yet: the launch holds it and applies it before anything else is sent.
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)

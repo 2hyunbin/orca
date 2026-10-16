@@ -1,3 +1,4 @@
+import { AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY } from './agent-session-attachments'
 import { AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY } from './ai-vault-resume-preparation'
 import { JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY } from './jira-agent-capability'
 import { JIRA_STATUS_FILTER_RUNTIME_CAPABILITY } from './jira-quick-filters'
@@ -277,4 +278,3 @@ export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number] | (string 
 // still read desktop/mobile names; remove once mobile reads runtime names.
 export const DESKTOP_PROTOCOL_VERSION = RUNTIME_PROTOCOL_VERSION
 export const MIN_COMPATIBLE_MOBILE_VERSION = MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION
-import { AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY } from './agent-session-attachments'

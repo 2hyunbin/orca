@@ -4,6 +4,7 @@ import {
 import { readNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import {
   stageStructuredLaunchPrompt,
+  releaseStagedStructuredLaunchPrompt,
   deliverStructuredLaunchPromptToExistingSession
 } from './structured-agent-session-launch-prompt'
 import { startStructuredAgentLaunch } from './structured-agent-session-launch'
@@ -37,7 +38,10 @@ export function submitNativeChatLocalDraft(
   }
   const sourceDraft = readNativeChatComposerDraft(`agent-session:${sessionId}`)
   const stagedPrompt = stageStructuredLaunchPrompt(sessionId, text, { attachments, options, sourceDraft })
-  if (!stagedPrompt.slot) return false
+  if (!stagedPrompt.slot) {
+    releaseStagedStructuredLaunchPrompt(stagedPrompt)
+    return false
+  }
   const prepare = async (): Promise<void> => {
     const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
     if (!target) throw new Error('The chat host is unavailable.')
@@ -66,16 +70,24 @@ export function submitNativeChatLocalDraft(
   }
   if (hosted) {
     const target = structuredAgentSessionTargetForHost(draft.owner.executionHostId)
-    if (!target) { stagedPrompt.slot.release(); return false }
+    if (!target) {
+      releaseStagedStructuredLaunchPrompt(stagedPrompt)
+      return false
+    }
     stagedPrompt.beforeSend = prepare
     void deliverStructuredLaunchPromptToExistingSession(stagedPrompt, target)
     return true
   }
   stagedPrompt.beforeCreate = prepare
-  const launch = startStructuredAgentLaunch(draft.owner.workspaceId, draft.agent, {
+  try {
+    const launch = startStructuredAgentLaunch(draft.owner.workspaceId, draft.agent, {
       requestId: newAgentLaunchRequestId(), executionHostId: draft.owner.executionHostId,
       reservedSessionId: sessionId, stagedPrompt, prompt: text, firstSubmissionOptions: options
     })
-  void launch.launchResult.catch(() => {})
-  return true
+    void launch.launchResult.catch(() => {})
+    return true
+  } catch (error) {
+    releaseStagedStructuredLaunchPrompt(stagedPrompt)
+    throw error
+  }
 }
