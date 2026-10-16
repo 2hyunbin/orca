@@ -7,11 +7,15 @@ const mocks = vi.hoisted(() => {
   const connection: { current: { getConnectGeneration: () => number } } = {
     current: { getConnectGeneration: () => 1 }
   }
-  return { read: vi.fn(), publish: vi.fn(), os, connection, status }
+  const environments: { current: string[] } = { current: ['env-1'] }
+  return { read: vi.fn(), publish: vi.fn(), os, connection, status, environments }
 })
 
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => '/u' })
+}))
+vi.mock('../../shared/runtime-environment-store', () => ({
+  listEnvironments: () => mocks.environments.current.map((id) => ({ id }))
 }))
 vi.mock('../ssh/orcad-managed-launch-session', () => ({
   readManagedOrcadLaunchSshSession: mocks.read
@@ -35,6 +39,7 @@ beforeEach(() => {
   mocks.os.current = 'darwin'
   mocks.connection.current = { getConnectGeneration: () => 1 }
   mocks.status.current = undefined
+  mocks.environments.current = ['env-1']
   mocks.read.mockResolvedValue('exited')
 })
 
@@ -97,6 +102,34 @@ describe('noteEndedLaunchSshSession', () => {
     await noteEndedLaunchSshSession('ssh-1', 'env-1')
     expect(mocks.read).toHaveBeenCalledTimes(2)
     expect(mocks.publish).toHaveBeenCalledOnce()
+  })
+
+  it('probes again once a live verdict is old', async () => {
+    let clock = 0
+    mocks.read.mockResolvedValue('live')
+    await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
+    clock = 60_000
+    await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
+    expect(mocks.read).toHaveBeenCalledOnce()
+    clock = 11 * 60_000
+    await noteEndedLaunchSshSession('ssh-1', 'env-1', () => clock)
+    expect(mocks.read).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops an answer whose server was unlinked or whose connection changed meanwhile', async () => {
+    mocks.read.mockImplementationOnce(async () => {
+      mocks.environments.current = []
+      return 'exited'
+    })
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    mocks.read.mockImplementationOnce(async () => {
+      mocks.connection.current = { getConnectGeneration: () => 1 }
+      return 'exited'
+    })
+    mocks.environments.current = ['env-1']
+    mocks.connection.current = { getConnectGeneration: () => 1 }
+    await noteEndedLaunchSshSession('ssh-1', 'env-1')
+    expect(mocks.publish).not.toHaveBeenCalled()
   })
 
   it('never probes a Linux or Windows host', async () => {
