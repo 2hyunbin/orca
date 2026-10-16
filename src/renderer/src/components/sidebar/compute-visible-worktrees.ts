@@ -10,7 +10,6 @@ import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-fact
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   getFilteredLineageAncestorIndex,
-  getLineageAncestorIndex,
   getSortedWorktreeRankIndex
 } from './visible-worktree-indexes'
 import {
@@ -74,13 +73,16 @@ export function computeVisibleWorktrees(
   )
 
   if (opts.forcedVisibleWorktreeIds && opts.forcedVisibleWorktreeIds.length > 0) {
-    const unfiltered = getLineageAncestorIndex(worktreesByRepo)
-    const includedIds = new Set(all.map(getWorktreeHostIdentity))
+    const includedIds = new Set(all.map((worktree) => worktree.id))
     for (const worktreeId of opts.forcedVisibleWorktreeIds) {
-      const rows = getIndexedWorktreesById(worktreesByRepo, worktreeId)
-      const worktree = unfiltered.get(worktreeId) ?? (rows.length === 1 ? rows[0] : undefined)
-      if (worktree && !worktree.isArchived && !includedIds.has(getWorktreeHostIdentity(worktree))) {
-        includedIds.add(getWorktreeHostIdentity(worktree))
+      if (includedIds.has(worktreeId)) {
+        continue
+      }
+      const worktree = getIndexedWorktreesById(worktreesByRepo, worktreeId).findLast(
+        (row) => !row.isArchived
+      )
+      if (worktree) {
+        includedIds.add(worktreeId)
         all.push(worktree)
       }
     }

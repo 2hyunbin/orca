@@ -910,22 +910,24 @@ describe('computeVisibleWorktreeIds', () => {
   })
 })
 
-it('forces only the explicit send target across project and host filters', () => {
+it('preserves bare-ID send requests across hidden owners and catalog orders', () => {
   const local = { ...makeWorktree('same'), hostId: 'local' as const }
-  const remote = {
-    ...makeWorktree('same', 'repo2'),
-    hostId: 'ssh:remote' as const,
-    instanceId: 'remote'
+  const remote = { ...makeWorktree('same', 'repo2'), hostId: 'ssh:remote' as const }
+  const cases: [Worktree[], string[], Worktree[]][] = [
+    [[remote], [], [remote]],
+    [[local, remote], [], [remote]],
+    [[remote, local], [], [local]],
+    [[local, remote], ['repo1'], [local]],
+    [[local, { ...remote, isArchived: true }], [], [local]],
+    [[], [], []]
+  ]
+  for (const [rows, visibleRepoIds, expected] of cases) {
+    const catalog = Object.fromEntries(rows.map((row) => [row.repoId, [row]]))
+    const opts = visibleOptions({
+      filterRepoIds: visibleRepoIds.length ? visibleRepoIds : ['hidden'],
+      visibleWorkspaceHostIds: ['local'],
+      forcedVisibleWorktreeIds: ['same', 'same']
+    })
+    expect(computeVisibleWorktrees(catalog, [], opts)).toEqual(expected)
   }
-  const child = makeWorktree('child')
-  const rows = { repo1: [local, child], repo2: [remote] }
-  const opts = visibleOptions({
-    filterRepoIds: ['repo1'],
-    visibleWorkspaceHostIds: ['local'],
-    worktreeLineageById: { 'local|child': makeWorktreeLineage(child, remote) }
-  })
-  expect(computeVisibleWorktrees(rows, [], opts)).toEqual([local, child])
-  expect(
-    computeVisibleWorktrees(rows, [], { ...opts, forcedVisibleWorktreeIds: ['ssh:remote|same'] })
-  ).toEqual([local, child, remote])
 })

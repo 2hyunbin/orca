@@ -1,4 +1,4 @@
-import type { WorktreeIdentity } from '../../../../shared/worktree/identity'
+import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 import type { WorkspaceAttachmentMutation } from '../../../../shared/workspace-attachment-mutation'
 import type { WorkspaceReferenceTerminalContext } from '@/lib/workspace-attachment-terminal-origin'
 import type { CreateWorktreeCallOptions } from './worktrees/create/worktree-create-payload'
@@ -184,12 +184,15 @@ export type WorktreeSlice = {
     executionHostId?: ExecutionHostId
   }) => Promise<void>
   updateWorktreeLineage: (
-    worktreeId: string,
-    args: { identity: WorktreeIdentity | undefined; parentWorktreeId?: string; noParent?: boolean }
+    reference: SelectedWorktreeReference,
+    args: {
+      parent?: SelectedWorktreeReference
+      noParent?: boolean
+    }
   ) => Promise<void>
   assignWorktreeParent: (
-    worktreeId: string,
-    args: { identity: WorktreeIdentity | undefined; parentWorktreeId: string }
+    reference: SelectedWorktreeReference,
+    args: { parent: SelectedWorktreeReference }
   ) => Promise<void>
   createWorktree: (
     repoId: string,

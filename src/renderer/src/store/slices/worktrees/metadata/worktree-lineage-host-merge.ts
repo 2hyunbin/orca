@@ -1,4 +1,9 @@
 import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
+import { resolveExactWorktreeRoute } from '@/lib/worktree-owner-route'
+import {
+  getRuntimeTargetHostId,
+  runtimeTargetForOwnerEnvironment
+} from '@/runtime/runtime-client-target'
 import {
   composeWorktreeHostIdentity,
   isWorktreeHostIdentity,
@@ -58,7 +63,7 @@ export function mergeLineageForHost(
     lineageAtRequestStart[worktreeId] !== state.worktreeLineageById[worktreeId]
   const next: Record<string, WorktreeLineage> = {}
   for (const [worktreeId, existing] of Object.entries(state.worktreeLineageById)) {
-    if (!belongsToRuntimeHost(worktreeId, hostId) || writtenSinceRequestStart(worktreeId)) {
+    if (!belongsToRuntimeHost(state, worktreeId, hostId) || writtenSinceRequestStart(worktreeId)) {
       next[worktreeId] = existing
     }
   }
@@ -66,10 +71,9 @@ export function mergeLineageForHost(
     const childHost = hostId.startsWith('runtime:')
       ? hostId
       : (getWorktreeHostId(state, incoming.worktreeId, incoming.worktreeInstanceId) ?? hostId)
-    const key =
-      isWorktreeHostIdentity(worktreeId) && hostId === 'local'
-        ? worktreeId
-        : composeWorktreeHostIdentity(childHost, incoming.worktreeId)
+    const key = isWorktreeHostIdentity(worktreeId)
+      ? worktreeId
+      : composeWorktreeHostIdentity(childHost, incoming.worktreeId)
     if (!writtenSinceRequestStart(key)) {
       next[key] = incoming
     }
@@ -95,7 +99,7 @@ export function mergeWorkspaceLineageForHost(
     lineageAtRequestStart[childKey] !== state.workspaceLineageByChildKey[childKey]
   const next: Record<string, WorkspaceLineage> = {}
   for (const [childKey, existing] of Object.entries(state.workspaceLineageByChildKey)) {
-    if (!belongsToRuntimeHost(childKey, hostId) || writtenSinceRequestStart(childKey)) {
+    if (!belongsToRuntimeHost(state, childKey, hostId) || writtenSinceRequestStart(childKey)) {
       next[childKey] = existing
     }
   }
@@ -107,10 +111,9 @@ export function mergeWorkspaceLineageForHost(
         ? (getWorktreeHostId(state, childScope.worktreeId, incoming.childInstanceId ?? undefined) ??
           hostId)
         : hostId
-    const key =
-      isWorktreeHostIdentity(childKey) && hostId === 'local'
-        ? childKey
-        : composeWorktreeHostIdentity(childHost, incoming.childWorkspaceKey)
+    const key = isWorktreeHostIdentity(childKey)
+      ? childKey
+      : composeWorktreeHostIdentity(childHost, incoming.childWorkspaceKey)
     if (!writtenSinceRequestStart(key)) {
       next[key] = incoming
     }
@@ -118,7 +121,22 @@ export function mergeWorkspaceLineageForHost(
   return reuseEqualRecordMap(state.workspaceLineageByChildKey, next)
 }
 
-function belongsToRuntimeHost(key: string, hostId: ExecutionHostId): boolean {
+function belongsToRuntimeHost(
+  state: Pick<AppState, 'repos'>,
+  key: string,
+  hostId: ExecutionHostId
+): boolean {
   const owner = getExecutionHostIdFromWorktreeHostIdentity(key)
-  return hostId === 'local' ? !owner?.startsWith('runtime:') : owner === hostId
+  const id = key.slice(key.indexOf('|') + 1)
+  const scope = parseWorkspaceKey(id)
+  const route = resolveExactWorktreeRoute(state, {
+    id,
+    repoId: getRepoIdFromWorktreeId(scope?.type === 'worktree' ? scope.worktreeId : id),
+    hostId: owner ?? 'local'
+  })
+  return (
+    route.kind === 'resolved' &&
+    getRuntimeTargetHostId(runtimeTargetForOwnerEnvironment(route.route.runtimeEnvironmentId)) ===
+      hostId
+  )
 }

@@ -1,5 +1,8 @@
-import type { WorktreeIdentity } from '../../../../../../shared/worktree/identity'
-import { getIndexedWorktreeByIdentity } from '@/store/worktree-repo-index'
+import {
+  resolveSelectedWorktree,
+  selectedWorktreeTransport,
+  type SelectedWorktreeReference
+} from '@/lib/selected-worktree-reference'
 export { listWorktreeLineageForRuntime } from './worktree-lineage-list'
 import { listWorktreeLineageForRuntime } from './worktree-lineage-list'
 import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
@@ -72,16 +75,15 @@ export function projectWorktreeLineageToWorkspaceLineage(
 
 export async function setWorktreeLineageForRuntime(
   target: RuntimeClientTarget,
-  worktreeId: string,
+  reference: SelectedWorktreeReference,
   args: { parentWorktreeId?: string; noParent?: boolean },
-  identity: WorktreeIdentity
+  selector: string
 ): Promise<WorktreeLineageUpdateResult> {
   if (target.kind === 'local') {
     return {
-      target,
-      identity,
+      reference,
       lineage: await window.api.worktrees.updateLineage({
-        worktreeId: `identity:${identity.key}`,
+        worktreeId: selector,
         ...(args.parentWorktreeId ? { parentWorktreeId: args.parentWorktreeId } : {}),
         ...(args.noParent === true ? { noParent: true } : {})
       })
@@ -91,7 +93,7 @@ export async function setWorktreeLineageForRuntime(
     target,
     'worktree.set',
     {
-      worktree: `identity:${identity.key}`,
+      worktree: selector,
       ...(args.parentWorktreeId
         ? {
             parentWorktree: args.parentWorktreeId.startsWith('identity:')
@@ -104,29 +106,47 @@ export async function setWorktreeLineageForRuntime(
     { timeoutMs: 15_000 }
   )
   return {
-    target,
-    identity,
-    lineage: result.worktree.lineage ?? null,
-    updatedRemoteWorktree: result.worktree
+    reference,
+    lineage: result.worktree.lineage ?? null
   }
 }
 
 export function projectLocalWorktreeLineageUpdate(
-  worktreesByRepo: Record<string, Worktree[]>,
+  state: AppState,
   worktreeId: string,
   lineage: WorktreeLineage | null,
-  identity: WorktreeIdentity,
+  child: Worktree,
   previousParentInstanceId?: string
 ): Record<string, Worktree[]> {
+  const worktreesByRepo = state.worktreesByRepo
+  const authority = selectedWorktreeTransport(state, child)
+  const parentRow = (instance: string | undefined, id: string | undefined) => {
+    const matches = Object.values(worktreesByRepo)
+      .flat()
+      .filter((row) => {
+        const target = selectedWorktreeTransport(state, row)
+        return (
+          instance &&
+          row.instanceId === instance &&
+          row.id === id &&
+          target &&
+          authority &&
+          getRuntimeTargetHostId(target) === getRuntimeTargetHostId(authority)
+        )
+      })
+    return matches.length === 1 ? matches[0] : undefined
+  }
+  const previousChild: WorktreeWithLineage = child
+  const oldParent = parentRow(previousParentInstanceId, previousChild.parentWorktreeId ?? undefined)
+  const newParent = parentRow(lineage?.parentWorktreeInstanceId, lineage?.parentWorktreeId)
   let nextByRepo = worktreesByRepo
   for (const [repoId, worktrees] of Object.entries(worktreesByRepo)) {
     let repoChanged = false
     const projected = worktrees.map((worktree) => {
       const current: WorktreeWithLineage = worktree
       const hadChild =
-        current.childWorktreeIds?.includes(worktreeId) === true &&
-        worktree.instanceId === previousParentInstanceId
-      const isParent = Boolean(lineage && lineage.parentWorktreeInstanceId === worktree.instanceId)
+        current.childWorktreeIds?.includes(worktreeId) === true && worktree === oldParent
+      const isParent = worktree === newParent
       let childWorktreeIds = current.childWorktreeIds
       if (hadChild) {
         childWorktreeIds = childWorktreeIds?.filter((id) => id !== worktreeId)
@@ -134,7 +154,7 @@ export function projectLocalWorktreeLineageUpdate(
       if (isParent && !childWorktreeIds?.includes(worktreeId)) {
         childWorktreeIds = [...(childWorktreeIds ?? []), worktreeId]
       }
-      if (worktree.identity?.key === identity.key) {
+      if (worktree === child) {
         repoChanged = true
         return {
           ...worktree,
@@ -160,16 +180,15 @@ export function projectLocalWorktreeLineageUpdate(
 
 export function applyWorktreeLineageUpdate(
   set: Parameters<StateCreator<AppState>>[0],
-  worktreeId: string,
   result: WorktreeLineageUpdateResult
 ): void {
   set((s) => {
-    const child = getIndexedWorktreeByIdentity(s.worktreesByRepo, result.identity.key)
+    const child = resolveSelectedWorktree(s, result.reference)?.row
     if (!child?.identity) {
       throw new Error('selector_not_found')
     }
-    worktreeId = child.id
-    const hostId = child.identity.executionHostId
+    const worktreeId = child.id
+    const hostId = child.hostId
     const key = composeWorktreeHostIdentity(hostId, worktreeId)
     const next = { ...s.worktreeLineageById }
     if (result.lineage) {
@@ -179,10 +198,10 @@ export function applyWorktreeLineageUpdate(
     }
     const previous: WorktreeWithLineage = child
     const worktreesByRepo = projectLocalWorktreeLineageUpdate(
-      s.worktreesByRepo,
+      s,
       worktreeId,
       result.lineage,
-      child.identity,
+      child,
       s.worktreeLineageById[key]?.parentWorktreeInstanceId ??
         previous.lineage?.parentWorktreeInstanceId
     )

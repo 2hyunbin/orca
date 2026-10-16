@@ -38,14 +38,18 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   _repo: Repo,
   rows: readonly T[]
 ) {
-  if (readSavedLineageEdges(store).length === 0) {
+  if (rows.length === 0) {
+    return projectResolvedWorktreeLineage(rows, {})
+  }
+  const edges = readSavedLineageEdges(store)
+  const endpoints = new Set(
+    edges.flatMap((edge) => [edge.child.instanceId, edge.parent.instanceId])
+  )
+  if (!rows.some((row) => row.instanceId && endpoints.has(row.instanceId))) {
     return projectResolvedWorktreeLineage(rows, {})
   }
   const savedOwners = readSavedWorktreeOwners(store)
-  const lineageById = readSavedWorktreeLineage(store, savedOwners)
-  if (rows.length === 0) {
-    return projectResolvedWorktreeLineage(rows, lineageById)
-  }
+  const lineageById = readSavedWorktreeLineage(store, savedOwners, edges)
   const relatedInstances = getConnectedWorktreeLineageInstances(
     rows.flatMap((row) => (row.instanceId ? [row.instanceId] : [])),
     lineageById
