@@ -58,7 +58,10 @@ export function createOrcadSecretStore(
       lastRetryAt = Date.now()
       retry = resolveState(prepared)
         .then((next) => {
-          if (startedAt === generation && isLocked()) {
+          // Why ignore other failures: a timed-out lookup must not end retries while still locked.
+          const settled =
+            next.kind === 'ready' || (next.kind === 'unavailable' && next.keychainLocked)
+          if (startedAt === generation && isLocked() && settled) {
             adopt(next)
           }
         })
@@ -124,7 +127,8 @@ export function createOrcadSecretStore(
             message: 'The macOS login Keychain is locked.'
           }
         }
-        if (state.kind !== 'ready' || !state.inKeychain || !options) {
+        // Why only after a lock: the file is weaker, so no caller may downgrade a host that never needed it.
+        if (state.kind !== 'ready' || !state.inKeychain || !sawLock || !options) {
           return {
             ok: false,
             reason: 'not_in_keychain',

@@ -105,6 +105,28 @@ describe('orcad secret store with a locked macOS login Keychain', () => {
     await vi.waitFor(() => expect(store.decryptString(sealed)).toBe('lin_api_secret'))
   })
 
+  it('keeps retrying after a lookup times out while locked', async () => {
+    const { keyring, store, sealed } = await lockedAfterReboot()
+    const lookup = keyring.lookup
+    keyring.lookup = async () => ({ kind: 'unreachable', reason: 'timed out after 5s' })
+    expect(await store.keychainLock?.recover()).toBe(false)
+    expect(store.keychainLock?.state()).toBe('locked')
+    keyring.lookup = lookup
+    keyring.locked = false
+    expect(await store.keychainLock?.recover()).toBe(true)
+    expect(store.decryptString(sealed)).toBe('lin_api_secret')
+  })
+
+  it('never moves the key of a host whose Keychain was never seen locked', async () => {
+    const { store } = await prepare(fakeKeychain())
+    expect(await store.keychainLock?.moveKeyToFile()).toMatchObject({
+      ok: false,
+      reason: 'not_in_keychain'
+    })
+    const record = readFileSync(join(keyDir, orcadSecretStateFileName(MACHINE)), 'utf8')
+    expect(JSON.parse(record)).toMatchObject({ backend: 'os-keyring' })
+  })
+
   it('moves the key to the file only while unlocked, keeping every credential', async () => {
     const { keyring, store, sealed } = await lockedAfterReboot()
     const statePath = join(keyDir, orcadSecretStateFileName(MACHINE))
@@ -154,16 +176,18 @@ describe('orcad secret store with a locked macOS login Keychain', () => {
     expect(isIntegrationCredentialDecryptionError(failure)).toBe(true)
     expect(String(failure)).toContain('macOS login Keychain is locked')
     expect(cache.error('ws')).toBeDefined()
-    expect(integrationCredentialKeychainFields(true)).toEqual({
+    expect(integrationCredentialKeychainFields({ saved: true, decryptFailed: true })).toEqual({
       credentialErrorReason: 'keychain_locked'
     })
-    expect(integrationCredentialKeychainFields(false)).toEqual({})
+    // Legacy plaintext credentials still read while locked, so nothing is unavailable.
+    expect(integrationCredentialKeychainFields({ saved: true, decryptFailed: false })).toEqual({})
+    expect(integrationCredentialKeychainFields({ saved: false, decryptFailed: false })).toEqual({})
 
     keyring.locked = false
     await recoverIntegrationCredentialKey()
     expect(cache.error('ws')).toBeUndefined()
     expect(cache.read('ws')).toBe('lin_api_secret')
-    expect(integrationCredentialKeychainFields(true)).toEqual({
+    expect(integrationCredentialKeychainFields({ saved: true, decryptFailed: false })).toEqual({
       canMoveCredentialKeyToFile: true
     })
   })

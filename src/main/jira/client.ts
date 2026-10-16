@@ -76,7 +76,10 @@ export function getStatus(): JiraConnectionStatus {
     activeSiteId: activeSite?.id ?? null,
     selectedSiteId: file.selectedSiteId ?? activeSite?.id ?? null,
     ...(credentialError ? { credentialError } : {}),
-    ...integrationCredentialKeychainFields(sites.length > 0),
+    ...integrationCredentialKeychainFields({
+      saved: sites.length > 0,
+      decryptFailed: credentialError !== undefined
+    }),
     credentialProtection,
     supportsScopedTokens: true
   }

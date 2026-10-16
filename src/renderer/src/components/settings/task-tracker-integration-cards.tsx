@@ -137,7 +137,11 @@ export function LinearIntegrationCard(): React.JSX.Element {
             'Your Linear API token'
           )}
         />
-        <KeychainCredentialNotice service="Linear" status={linearStatus} />
+        <KeychainCredentialNotice
+          service="Linear"
+          status={linearStatus}
+          statusContextKey={linearStatusContextKey}
+        />
         {connected ? (
           <div className="space-y-2">
             {workspaces.map((workspace) => {

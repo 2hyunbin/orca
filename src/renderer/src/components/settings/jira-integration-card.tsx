@@ -139,7 +139,11 @@ export function JiraIntegrationCard(): React.JSX.Element {
             'Your Jira API token'
           )}
         />
-        <KeychainCredentialNotice service="Jira" status={jiraStatus} />
+        <KeychainCredentialNotice
+          service="Jira"
+          status={jiraStatus}
+          statusContextKey={jiraStatusContextKey}
+        />
         <ProviderHostScopeControl
           labelPrefix={translate(
             'auto.components.settings.task.tracker.integration.cards.account_scope_prefix',

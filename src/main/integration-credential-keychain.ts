@@ -26,15 +26,17 @@ export async function recoverIntegrationCredentialKey(): Promise<void> {
   }
 }
 
-export function integrationCredentialKeychainFields(
-  hasSavedCredentials: boolean
-): IntegrationCredentialKeychainFields {
-  if (!hasSavedCredentials) {
+export function integrationCredentialKeychainFields(credentials: {
+  saved: boolean
+  /** A saved credential failed to decrypt; legacy plaintext ones still read while locked. */
+  decryptFailed: boolean
+}): IntegrationCredentialKeychainFields {
+  if (!credentials.saved) {
     return {}
   }
   const state = keychainLock()?.state()
   if (state === 'locked') {
-    return { credentialErrorReason: 'keychain_locked' }
+    return credentials.decryptFailed ? { credentialErrorReason: 'keychain_locked' } : {}
   }
   // Why only after a lock: file storage is weaker, so offer it only to hosts that need it.
   return state === 'unlocked_after_lock' ? { canMoveCredentialKeyToFile: true } : {}

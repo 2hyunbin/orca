@@ -33,6 +33,8 @@ vi.mock('@/store', () => ({
 }))
 
 const { KeychainCredentialNotice } = await import('./keychain-credential-notice')
+const { getProviderRuntimeContextKey } = await import('@/lib/provider-runtime-context')
+const CONTEXT = getProviderRuntimeContextKey({ activeRuntimeEnvironmentId: 'env-1' })
 
 describe('KeychainCredentialNotice', () => {
   afterEach(() => {
@@ -43,6 +45,7 @@ describe('KeychainCredentialNotice', () => {
   it('names the host and the locked Keychain instead of asking to reconnect', () => {
     render(
       <KeychainCredentialNotice
+        statusContextKey={CONTEXT}
         service="Jira"
         status={{ credentialErrorReason: 'keychain_locked' }}
       />
@@ -58,7 +61,11 @@ describe('KeychainCredentialNotice', () => {
   it('offers the switch to file storage once unlocked, then refreshes both providers', async () => {
     mocks.callRuntimeRpc.mockResolvedValueOnce({ ok: true })
     render(
-      <KeychainCredentialNotice service="Linear" status={{ canMoveCredentialKeyToFile: true }} />
+      <KeychainCredentialNotice
+        statusContextKey={CONTEXT}
+        service="Linear"
+        status={{ canMoveCredentialKeyToFile: true }}
+      />
     )
     fireEvent.click(screen.getByRole('button', { name: 'Switch to file storage' }))
     await waitFor(() => expect(mocks.checkJiraConnection).toHaveBeenCalled())
@@ -72,7 +79,20 @@ describe('KeychainCredentialNotice', () => {
   })
 
   it('renders nothing for a host that reports neither field', () => {
-    const { container } = render(<KeychainCredentialNotice service="Linear" status={{}} />)
+    const { container } = render(
+      <KeychainCredentialNotice statusContextKey={CONTEXT} service="Linear" status={{}} />
+    )
+    expect(container.textContent).toBe('')
+  })
+
+  it("ignores another host's status left over while the selected host changes", () => {
+    const { container } = render(
+      <KeychainCredentialNotice
+        statusContextKey={getProviderRuntimeContextKey({ activeRuntimeEnvironmentId: 'env-0' })}
+        service="Linear"
+        status={{ canMoveCredentialKeyToFile: true, credentialErrorReason: 'keychain_locked' }}
+      />
+    )
     expect(container.textContent).toBe('')
   })
 })

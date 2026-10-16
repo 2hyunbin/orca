@@ -4,6 +4,7 @@ import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { defaultScopeHost } from '@/lib/default-creation-host'
+import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { useAppStore } from '@/store'
 import type { IntegrationCredentialErrorReason } from '../../../../shared/integration-credential-errors'
@@ -49,22 +50,32 @@ export function useCredentialHostName(needed: boolean): string {
 
 export function KeychainCredentialNotice({
   service,
-  status
+  status,
+  statusContextKey
 }: {
   service: CredentialService
   status: KeychainCredentialStatus
+  /** The provider runtime context `status` was read from; another host's status is ignored. */
+  statusContextKey: string | null
 }): React.JSX.Element | null {
   return status.credentialErrorReason === 'keychain_locked' || status.canMoveCredentialKeyToFile ? (
-    <KeychainCredentialNoticeBody service={service} status={status} />
+    <KeychainCredentialNoticeBody
+      service={service}
+      status={status}
+      statusContextKey={statusContextKey}
+    />
   ) : null
 }
 
 function KeychainCredentialNoticeBody({
   service,
-  status
+  status,
+  statusContextKey
 }: {
   service: CredentialService
   status: KeychainCredentialStatus
+  /** The provider runtime context `status` was read from; another host's status is ignored. */
+  statusContextKey: string | null
 }): React.JSX.Element | null {
   const host = useCredentialHostName(true)
   const settings = useAppStore((state) => state.settings)
@@ -73,6 +84,10 @@ function KeychainCredentialNoticeBody({
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
 
+  // Why: while the selected host changes, the store still holds the previous host's status.
+  if (statusContextKey !== getProviderRuntimeContextKey(settings)) {
+    return null
+  }
   if (status.credentialErrorReason === 'keychain_locked') {
     return (
       <div

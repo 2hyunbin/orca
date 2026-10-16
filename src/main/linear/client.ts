@@ -198,7 +198,10 @@ export function getStatus(): LinearConnectionStatus {
     activeWorkspaceId: state.activeWorkspaceId,
     selectedWorkspaceId: state.selectedWorkspaceId,
     ...(credentialError ? { credentialError } : {}),
-    ...integrationCredentialKeychainFields(state.workspaces.length > 0),
+    ...integrationCredentialKeychainFields({
+      saved: state.workspaces.length > 0,
+      decryptFailed: credentialError !== undefined
+    }),
     credentialProtection
   }
 }
