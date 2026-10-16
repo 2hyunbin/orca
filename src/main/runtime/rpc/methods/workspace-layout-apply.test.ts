@@ -270,6 +270,42 @@ describe('layout.apply', () => {
     ).toEqual({ command: { type: 'closeTabs', workspace: WORKTREE, tabIds: ['e1'] } })
   })
 
+  it('takes an open into a new split under the window’s group id, on every open kind', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const parse = (command: Record<string, unknown>) => apply?.params?.safeParse({ command })
+    const split = { besideGroupId: 'g1', direction: 'right' }
+    const opens = [
+      {
+        type: 'openEditorTab',
+        workspace: WORKTREE,
+        tabId: 'e1',
+        fileId: '/a.ts',
+        contentType: 'editor'
+      },
+      {
+        type: 'openBrowserTab',
+        workspace: WORKTREE,
+        tabId: 'b1',
+        browserTabId: 'b1',
+        pageId: 'p1'
+      },
+      {
+        type: 'createTerminalTab',
+        workspace: WORKTREE,
+        tabId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        leafId: '11111111-1111-4111-8111-111111111111'
+      }
+    ]
+
+    for (const open of opens) {
+      expect(parse({ ...open, groupId: 'g2', split })?.success).toBe(true)
+      expect(
+        parse({ ...open, groupId: 'g2', split: { ...split, direction: 'center' } })?.success
+      ).toBe(false)
+      expect(parse({ ...open, groupId: 'g2', split: { direction: 'right' } })?.success).toBe(false)
+    }
+  })
+
   it('opens an editor tab in the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const open = {

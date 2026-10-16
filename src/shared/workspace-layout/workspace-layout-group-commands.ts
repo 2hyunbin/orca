@@ -1,6 +1,7 @@
 // Commands on tab groups and the group split tree, built on the headless host's group moves so
 // the runtime and today's headless host agree on the tree. There is no empty-group command: a
-// group exists only while it holds a tab, so memory and disk never differ.
+// group exists only while it holds a tab, so memory and disk never differ. An open into a new
+// split makes its group and tab in one step (openInNewGroup).
 
 import type { TabGroupLayoutNode } from '../tab-types'
 import { buildHeadlessTabGroupMove, buildHeadlessTabGroupSplit } from './tab-group-moves'
@@ -125,4 +126,62 @@ export function setGroupRatios(
   return applied(
     withWorkspace(model, command.workspace, { ...workspace, groupLayout: command.groupLayout })
   )
+}
+
+type NewGroupOpen = CommandOf<'createTerminalTab' | 'openEditorTab' | 'openBrowserTab'>
+
+/**
+ * `open` into a new group `command.groupId` beside `split.besideGroupId`, as the window's split
+ * does: the group joins the tree empty and `open` fills it in the same apply, so the new group
+ * holds no preview to replace and no other tab for the file. Without a split, just `open`.
+ */
+export function openInNewGroup(
+  model: WorkspaceLayoutModel,
+  command: NewGroupOpen,
+  open: (model: WorkspaceLayoutModel) => Applied
+): Applied {
+  const split = command.split
+  if (!split) {
+    return open(model)
+  }
+  const workspaces = Object.values(model.workspaces)
+  // The same open again finds its tab; `open` decides between no change and a taken id.
+  if (
+    command.tabId &&
+    workspaces.some((entry) => entry.tabs.some((tab) => tab.id === command.tabId))
+  ) {
+    return open(model)
+  }
+  const groupId = command.groupId
+  if (!groupId) {
+    return refuse('invalid_params')
+  }
+  const workspace = model.workspaces[command.workspace]
+  if (!workspace?.groups.some((group) => group.id === split.besideGroupId)) {
+    return refuse('group_not_found')
+  }
+  if (workspaces.some((entry) => entry.groups.some((group) => group.id === groupId))) {
+    return refuse('group_exists')
+  }
+  const groupLayout = moveGroupLeafBeside(
+    workspace.groupLayout ?? { type: 'leaf', groupId: split.besideGroupId },
+    groupId,
+    split.besideGroupId,
+    split.direction
+  )
+  const opened = open(
+    withWorkspace(model, command.workspace, {
+      ...workspace,
+      groups: [...workspace.groups, { id: groupId, tabOrder: [] }],
+      groupLayout
+    })
+  )
+  if (!opened.ok) {
+    return opened
+  }
+  const filled = opened.model.workspaces[command.workspace]?.groups.some(
+    (group) => group.id === groupId && group.tabOrder.length > 0
+  )
+  // An open that placed nothing (an initial surface the workspace already has) adds no group.
+  return filled ? opened : applied(model, opened.result)
 }

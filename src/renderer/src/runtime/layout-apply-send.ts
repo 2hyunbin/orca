@@ -11,7 +11,8 @@ import type {
   GroupSide,
   LayoutApplyReply,
   LayoutCommandResult,
-  LayoutRefusalCode
+  LayoutRefusalCode,
+  NewGroupSplit
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
 /** What a window sends `layout.apply`; main mints any new id but a browser or editor tab's. */
@@ -46,6 +47,7 @@ export type WindowLayoutCommand =
       groupId?: string
       afterTabId?: string
       index?: number
+      split?: NewGroupSplit
     }
   | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
   | { type: 'replaceBrowserPage'; browserTabId: string; pageId: string; newPageId: string }
@@ -63,6 +65,7 @@ export type WindowLayoutCommand =
       file?: LayoutEditorFile
       groupId?: string
       preview?: true
+      split?: NewGroupSplit
     }
   | { type: 'promotePreviewTab'; tabId: string }
   | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }

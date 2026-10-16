@@ -97,6 +97,14 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup']).optional()
 })
 
+/** An open into a new group, named by the command's groupId, beside this one (NewGroupSplit). */
+const NewGroupSplit = z
+  .object({
+    besideGroupId: z.string().min(1),
+    direction: z.enum(['left', 'right', 'up', 'down'])
+  })
+  .optional()
+
 /** An edit-mode file's restorable record, as the window saves it. */
 const EditorFileRecord = z.object({
   filePath: z.string().min(1),
@@ -119,7 +127,8 @@ const OpenEditorTabCommand = z.object({
   contentType: z.enum(['editor', 'diff', 'conflict-review', 'check-details']),
   file: EditorFileRecord.optional(),
   groupId: z.string().min(1).optional(),
-  preview: z.literal(true).optional()
+  preview: z.literal(true).optional(),
+  split: NewGroupSplit
 })
 
 /** A window's drag-out of one pane into a new tab; main mints the tab's id. */
@@ -155,7 +164,8 @@ const CreateTerminalTabCommand = z.object({
     })
     .optional(),
   /** Only into a workspace with no tab in main's copy; otherwise nothing is created. */
-  initial: z.literal('activation').optional()
+  initial: z.literal('activation').optional(),
+  split: NewGroupSplit
 })
 
 /** The tab bar's rename: a title as the window stores it today; null clears it. */
@@ -187,7 +197,8 @@ const OpenBrowserTabCommand = z.object({
   sessionPartition: z.string().min(1).nullable().optional(),
   groupId: z.string().min(1).optional(),
   afterTabId: z.string().min(1).optional(),
-  index: z.number().int().nonnegative().optional()
+  index: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
 })
 
 const OnBrowserPage = {
@@ -248,7 +259,8 @@ const WakeCommand = z
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id but a created terminal tab's
  * (see CreateTerminalTabCommand), a browser tab's and page's, which the window already shows
- * (see OpenBrowserTabCommand), and an editor tab's (see OpenEditorTabCommand).
+ * (see OpenBrowserTabCommand), an editor tab's (see OpenEditorTabCommand), and the group an open
+ * into a new split makes (see NewGroupSplit).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [

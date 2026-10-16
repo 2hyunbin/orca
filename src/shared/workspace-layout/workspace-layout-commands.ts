@@ -14,7 +14,12 @@ import {
   openBrowserTab,
   openEditorTab
 } from './workspace-layout-content-commands'
-import { moveTab, setGroupRatios, splitGroup } from './workspace-layout-group-commands'
+import {
+  moveTab,
+  openInNewGroup,
+  setGroupRatios,
+  splitGroup
+} from './workspace-layout-group-commands'
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import {
@@ -68,7 +73,7 @@ function applyCommand(
   }
   switch (command.type) {
     case 'createTerminalTab':
-      return createTerminalTab(model, command, context)
+      return openInNewGroup(model, command, (next) => createTerminalTab(next, command, context))
     case 'splitPane':
       return splitPane(model, command, context)
     case 'closePane':
@@ -98,11 +103,11 @@ function applyCommand(
     case 'setChatPane':
       return setChatPane(model, command)
     case 'openEditorTab':
-      return openEditorTab(model, command, context)
+      return openInNewGroup(model, command, (next) => openEditorTab(next, command, context))
     case 'promotePreviewTab':
       return promotePreviewTab(model, command)
     case 'openBrowserTab':
-      return openBrowserTab(model, command, context)
+      return openInNewGroup(model, command, (next) => openBrowserTab(next, command, context))
     case 'openBrowserPage':
       return openBrowserPage(model, command)
     case 'closeBrowserPage':
