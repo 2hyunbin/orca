@@ -1,4 +1,5 @@
 import type { AppState } from '@/store/types'
+import { projectResolvedWorktreeLineage } from '../../../../shared/resolved-worktree-lineage'
 import {
   DASHBOARD_MAX_MAP_WORKSPACES,
   type DashboardCard,
@@ -68,7 +69,10 @@ export type DashboardSnapshotState = Pick<
   Partial<
     DashboardCardTerminalInputState &
       DashboardLaunchDetectionState &
-      Pick<AppState, 'runtimeEnvironments' | 'sshTargetLabels' | 'unifiedTabsByWorktree'>
+      Pick<
+        AppState,
+        'runtimeEnvironments' | 'sshTargetLabels' | 'unifiedTabsByWorktree' | 'worktreeLineageById'
+      >
   >
 
 /**
@@ -112,10 +116,16 @@ export function buildDashboardSnapshot(
     startWorktreeAgentRowsCachePass(options.rowsCache)
   }
 
-  for (const workspace of activeWorktrees) {
+  const projectedWorktrees = includeCardDetails
+    ? projectResolvedWorktreeLineage(
+        activeWorktrees.map(({ worktree }) => worktree),
+        state.worktreeLineageById ?? {}
+      )
+    : []
+  for (const [workspaceIndex, workspace] of activeWorktrees.entries()) {
     const { repo, worktree } = workspace
     const worktreeId = worktree.id
-    const parentWorktreeId = worktree.parentWorktreeId
+    const parentWorktreeId = projectedWorktrees[workspaceIndex]?.parentWorktreeId
     const terminalLayoutsByTabId = selectTerminalLayoutsForWorktree(state, worktreeId)
     const paneTitlesByTabId = selectRuntimePaneTitlesForWorktree(state, worktreeId)
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
@@ -582,9 +583,22 @@ describe('buildDashboardSnapshot', () => {
             {
               ...worktree(),
               workspaceStatus: 'reviewing',
-              parentWorktreeId: 'parent-worktree'
-            } as Worktree & { parentWorktreeId: string }
+              hostId: 'runtime:child-server',
+              instanceId: 'child-instance'
+            },
+            { ...worktree('parent-worktree'), hostId: 'local', instanceId: 'parent-instance' }
           ]
+        },
+        worktreeLineageById: {
+          [composeWorktreeHostIdentity('runtime:child-server', 'w1')]: {
+            worktreeId: 'w1',
+            worktreeInstanceId: 'child-instance',
+            parentWorktreeId: 'parent-before-rename',
+            parentWorktreeInstanceId: 'parent-instance',
+            origin: 'manual',
+            capture: { source: 'manual-action', confidence: 'explicit' },
+            createdAt: NOW
+          }
         },
         agentStatusByPaneKey: {
           [PANE_KEY]: entry({
