@@ -16,8 +16,8 @@ vi.mock('./terminal-pane-frame-reconciliation', () => ({
 
 const pairedServer = vi.hoisted(() => ({ mirrors: false }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
-vi.mock('@/runtime/workspace-layout-frame-sync', () => ({
-  pairedServerMirrorsWorkspace: () => pairedServer.mirrors
+vi.mock('@/runtime/paired-server-workspace', () => ({
+  pairedServerMirrors: () => () => pairedServer.mirrors
 }))
 
 const { useLayoutOwnerPaneTree } = await import('./use-layout-owner-pane-tree')

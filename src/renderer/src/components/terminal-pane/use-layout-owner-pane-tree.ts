@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import { useAppStore } from '@/store'
-import { pairedServerMirrorsWorkspace } from '@/runtime/workspace-layout-frame-sync'
+import { pairedServerMirrors } from '@/runtime/paired-server-workspace'
 import {
   isTabPaneTreeHeld,
   onTabPaneTreeRedraw,
@@ -52,7 +52,7 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
       !manager ||
       isTabPaneTreeHeld(tabId) ||
       // By host kind, as frames decide it: a paired-server tab may not have bound a remote PTY yet.
-      pairedServerMirrorsWorkspace(useAppStore.getState(), worktreeId) ||
+      pairedServerMirrors(useAppStore.getState())(worktreeId) ||
       isHostAuthoritativeLayout({
         isWebClient: isWebClientLocation(),
         ptyIdsByLeafId: restoredLayout.ptyIdsByLeafId
