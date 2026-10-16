@@ -173,6 +173,19 @@ describe('open to the side in a layout-owner build', () => {
     expect(main.workspaces[WT]!.tabs.filter((tab) => tab.isPreview)).toHaveLength(2)
   })
 
+  it('records a tab opened beside the emptied root split, whose group main makes its only one', () => {
+    const editorGroup = store.getState().createEmptySplitGroup(WT, ROOT, 'right')!
+    openFile('/a.ts', { targetGroupId: editorGroup })
+    applySent()
+
+    // The window keeps its empty root beside it; main stores no empty group.
+    expect(windowView().groups).toEqual([
+      { id: ROOT, tabOrder: [] },
+      { id: editorGroup, tabOrder: [onlyTabOf(editorGroup)] }
+    ])
+    expect(mainView()).toEqual({ groups: [windowView().groups[1]], tree: null })
+  })
+
   it('sends no split for a tab that joins a group holding others, or the only group', () => {
     openFile('/a.ts')
     openFile('/b.ts')

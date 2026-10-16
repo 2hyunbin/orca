@@ -6,7 +6,13 @@
 import type { TabGroupLayoutNode } from '../tab-types'
 import { buildHeadlessTabGroupMove, buildHeadlessTabGroupSplit } from './tab-group-moves'
 import { moveGroupLeafBeside } from './tab-group-layout-tree'
-import { applied, findTab, refuse, type Applied } from './workspace-layout-command-steps'
+import {
+  applied,
+  findTab,
+  refuse,
+  workspaceOrEmpty,
+  type Applied
+} from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import type { WorkspaceLayout, WorkspaceLayoutModel } from './workspace-layout-model'
 import { withWorkspace } from './workspace-layout-removal'
@@ -156,24 +162,33 @@ export function openInNewGroup(
   if (!groupId) {
     return refuse('invalid_params')
   }
-  const workspace = model.workspaces[command.workspace]
-  if (!workspace?.groups.some((group) => group.id === split.besideGroupId)) {
-    return refuse('group_not_found')
+  const workspace = workspaceOrEmpty(model, command.workspace)
+  // A group main already holds here (with a tab the window no longer shows) takes the tab as is.
+  if (workspace.groups.some((group) => group.id === groupId)) {
+    return open(model)
   }
   if (workspaces.some((entry) => entry.groups.some((group) => group.id === groupId))) {
     return refuse('group_exists')
   }
-  const groupLayout = moveGroupLeafBeside(
-    workspace.groupLayout ?? { type: 'leaf', groupId: split.besideGroupId },
-    groupId,
-    split.besideGroupId,
-    split.direction
-  )
+  const besideHeld = workspace.groups.some((group) => group.id === split.besideGroupId)
+  // Beside a group main lacks: refused, unless main has no group here at all (the window split off
+  // its emptied root), where the new group is the only one.
+  if (!besideHeld && workspace.groups.length > 0) {
+    return refuse('group_not_found')
+  }
+  const groupLayout = besideHeld
+    ? moveGroupLeafBeside(
+        workspace.groupLayout ?? { type: 'leaf', groupId: split.besideGroupId },
+        groupId,
+        split.besideGroupId,
+        split.direction
+      )
+    : undefined
   const opened = open(
     withWorkspace(model, command.workspace, {
       ...workspace,
       groups: [...workspace.groups, { id: groupId, tabOrder: [] }],
-      groupLayout
+      ...(groupLayout ? { groupLayout } : {})
     })
   )
   if (!opened.ok) {
