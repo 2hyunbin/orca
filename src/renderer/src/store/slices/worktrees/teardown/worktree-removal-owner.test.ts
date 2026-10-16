@@ -1,3 +1,4 @@
+import { makeUnifiedTab } from '@/components/worktree-jump-palette-test-fixtures'
 import { expect, it } from 'vitest'
 import { createTestStore } from '../../worktrees-slice-test-harness'
 import { makeTerminalTab, makeWorktree } from '../../worktrees-slice-test-fixtures'
@@ -17,15 +18,10 @@ it('removes one owner while retaining the same-id survivor resources and selecti
     tabsByWorktree: { [id]: tabs },
     unifiedTabsByWorktree: {
       [id]: tabs.map((tab, index) => ({
-        id: tab.id,
-        entityId: tab.id,
-        worktreeId: id,
+        ...makeUnifiedTab(tab.id, id, tab.id, ''),
         executionHostId: index === 0 ? 'local' : 'ssh:remote',
-        contentType: 'terminal',
         groupId: 'group',
-        label: '',
-        sortOrder: index,
-        createdAt: 0
+        sortOrder: index
       }))
     },
     ptyIdsByTabId: { 'local-tab': ['local-pty'], 'remote-tab': ['remote-pty'] },
@@ -41,16 +37,15 @@ it('removes one owner while retaining the same-id survivor resources and selecti
       ]
     },
     tabBarOrderByWorktree: { [id]: tabs.map((tab) => tab.id) },
-    openFiles: [
-      { id: 'local-file', worktreeId: id, path: '/local', name: 'local' },
-      {
-        id: 'remote-file',
-        worktreeId: id,
-        path: '/remote',
-        name: 'remote',
-        externalSshTargetId: 'remote'
-      }
-    ],
+    openFiles: ['local', 'remote'].map((owner) => ({
+      id: `${owner}-file`,
+      worktreeId: id,
+      filePath: `/${owner}`,
+      relativePath: owner,
+      language: 'plaintext',
+      isDirty: true,
+      ...(owner === 'remote' ? { externalSshTargetId: 'remote' } : {})
+    })),
     editorDrafts: { 'local-file': 'keep', 'remote-file': 'drop' },
     activeWorktreeId: id,
     activeWorkspaceExecutionHostId: 'local',

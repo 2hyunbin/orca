@@ -175,7 +175,7 @@ export class MetadataLineageOperations {
     return this[metadataLineageOperationsContext].runtime.state.worktreeLineageById
   }
 
-  setWorktreeLineage(worktreeId: string, lineage: WorktreeLineage): WorktreeLineage {
+  setWorktreeLineage(_worktreeId: string, lineage: WorktreeLineage): WorktreeLineage {
     const edge = worktreeLineageToEdge(lineage)
     if (edge) {
       writeCanonicalLineage(this[metadataLineageOperationsContext].runtime.state, edge)

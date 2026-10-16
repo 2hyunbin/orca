@@ -153,13 +153,16 @@ describe('getWorkspaceDeleteLineage', () => {
   })
 
   it('keeps colliding child ids independently nested and deletes only the resolved child', () => {
-    const parent = { ...makeWorktree('parent', '/parent'), hostId: SSH_HOST }
-    const otherParent = {
+    const parent: Worktree = { ...makeWorktree('parent', '/parent'), hostId: SSH_HOST }
+    const otherParent: Worktree = {
       ...makeWorktree('other-parent', '/other'),
       hostId: LOCAL_EXECUTION_HOST_ID
     }
-    const localChild = { ...makeWorktree('child', '/child'), hostId: LOCAL_EXECUTION_HOST_ID }
-    const sshChild = { ...localChild, hostId: SSH_HOST, instanceId: 'ssh-child-instance' }
+    const localChild: Worktree = {
+      ...makeWorktree('child', '/child'),
+      hostId: LOCAL_EXECUTION_HOST_ID
+    }
+    const sshChild: Worktree = { ...localChild, hostId: SSH_HOST, instanceId: 'ssh-child-instance' }
     const rows = [parent, otherParent, localChild, sshChild]
     const edges = {
       [getWorktreeHostIdentity(localChild)]: makeLineage(localChild, parent),

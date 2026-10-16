@@ -31,7 +31,7 @@ type HostPeerStore = Pick<
 /** Resolve connected lineage against persisted peers across execution hosts. */
 export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   store: HostPeerStore,
-  repo: Repo,
+  _repo: Repo,
   rows: readonly T[]
 ) {
   const savedOwners = readSavedWorktreeOwners(store)

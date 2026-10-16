@@ -1,4 +1,3 @@
-import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -63,7 +62,10 @@ export function createUpdateWorktreeLineage(
     // Why: an unresolvable owner route (ambiguous or missing) rejects rather than skipping — this is a
     // user-initiated action, and both callers toast the failure. Don't swallow it into a silent no-op.
     const state = get()
-    const hostId = getExecutionHostIdForWorktree(state, worktreeId) ?? undefined
+    const hostId =
+      state.activeWorktreeId === worktreeId
+        ? (state.activeWorkspaceExecutionHostId ?? undefined)
+        : undefined
     const child = state.getKnownWorktreeById(worktreeId, hostId)
     const selector = child?.identity ? `identity:${child.identity.key}` : undefined
     const ownerTarget = runtimeTargetForWorktreeOwner(state, worktreeId, hostId)
@@ -87,7 +89,10 @@ export function createAssignWorktreeParent(
 ): WorktreeSlice['assignWorktreeParent'] {
   return async (worktreeId, args) => {
     const state = get()
-    const hostId = getExecutionHostIdForWorktree(state, worktreeId) ?? undefined
+    const hostId =
+      state.activeWorktreeId === worktreeId
+        ? (state.activeWorkspaceExecutionHostId ?? undefined)
+        : undefined
     const child = state.getKnownWorktreeById(worktreeId, hostId)
     const selector = child?.identity ? `identity:${child.identity.key}` : undefined
     const ownerTarget = runtimeTargetForWorktreeOwner(state, worktreeId, hostId)

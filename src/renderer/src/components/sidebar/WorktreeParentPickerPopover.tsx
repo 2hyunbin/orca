@@ -1,3 +1,4 @@
+import type { Worktree } from '../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import React, {
   useCallback,
@@ -52,7 +53,7 @@ type SelectParentArgs = {
 
 type WorktreeParentPickerKeyboardArgs = {
   event: React.KeyboardEvent<HTMLInputElement>
-  candidates: readonly { id: string }[]
+  candidates: readonly Pick<Worktree, 'id' | 'identity'>[]
   activeIndex: number
   moveHighlight: (index: number) => void
   selectParent: (worktreeId: string) => void

@@ -484,7 +484,7 @@ describe('setWorktreesPinnedAndReveal', () => {
     expect(reveal).toHaveBeenCalledWith(child.id, { behavior: 'smooth', highlight: true })
   })
 
-  it('does not reveal through cyclic lineage rejected by rendering', () => {
+  it('does not reveal through the cycle edge suppressed by rendering', () => {
     const store = createTestStore()
     const first = makeWorktree({
       id: 'repo1::/first',
@@ -513,11 +513,11 @@ describe('setWorktreesPinnedAndReveal', () => {
           parentWorktreeInstanceId: first.instanceId
         })
       },
-      activeWorktreeId: second.id,
+      activeWorktreeId: first.id,
       revealWorktreeInSidebar: reveal
-    } as Partial<AppState>)
+    })
 
-    store.getState().setWorktreesPinnedAndReveal([first.id], true)
+    store.getState().setWorktreesPinnedAndReveal([second.id], true)
 
     expect(reveal).not.toHaveBeenCalled()
   })
@@ -526,12 +526,14 @@ describe('setWorktreesPinnedAndReveal', () => {
     const store = createTestStore()
     const local = makeWorktree({
       id: 'repo1::/parent',
+      repoId: 'repo1',
       instanceId: 'local-parent',
       hostId: 'local'
     })
     const parent = { ...local, instanceId: 'ssh-parent', hostId: 'ssh:target' as const }
     const child = makeWorktree({
       id: 'repo1::/child',
+      repoId: 'repo1',
       instanceId: 'child-instance',
       hostId: 'local'
     })

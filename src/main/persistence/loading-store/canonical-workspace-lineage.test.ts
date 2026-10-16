@@ -119,7 +119,9 @@ it('migrates raw child identities once, preserving conflicts and inert source ro
     state.worktreeLineageById.orphan = orphan
   }
   expect(initializeCanonicalLineage(state)).toBe(true)
-  expect(state.lineageByChildInstance?.child.parent.instanceId).toBe('workspace-parent')
+  expect(state).toMatchObject({
+    lineageByChildInstance: { child: { parent: { instanceId: 'workspace-parent' } } }
+  })
   expect(state.lineageByChildInstance?.['unowned-instance']).toBeDefined()
   expect(Object.keys(state.legacyLineageRemainder ?? {})).toHaveLength(3)
   expect(Object.keys(state.worktreeLineageById)).toEqual([id])

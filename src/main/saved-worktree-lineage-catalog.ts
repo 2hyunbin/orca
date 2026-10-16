@@ -1,3 +1,6 @@
+import type { ExecutionHostId } from '../shared/execution-host'
+import type { Repo } from '../shared/repo-types'
+import type { WorktreeMeta } from '../shared/worktree/meta-types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../shared/worktree/id'
 import { indexWorktreesByInstance } from '../shared/resolved-worktree-lineage'
@@ -28,7 +31,12 @@ export function readSavedWorktreeOwners(store: CatalogStore) {
   for (const repo of repos) {
     counts.set(repo.id, (counts.get(repo.id) ?? 0) + 1)
   }
-  const rows = []
+  const rows: (WorktreeMeta & {
+    id: string
+    instanceId: string
+    hostId: ExecutionHostId
+    repo: Repo
+  })[] = []
   for (const hostId of new Set(repos.map(getRepoExecutionHostId))) {
     const hostRepos = repos.filter((repo) => getRepoExecutionHostId(repo) === hostId)
     const owners = new Map(
@@ -45,7 +53,7 @@ export function readSavedWorktreeOwners(store: CatalogStore) {
       const repo = owners.get(getRepoIdFromWorktreeId(id))
       const meta = repo && getRepoOwnedWorktreeMeta(repo, id, snapshot, counts.get(repo.id) ?? 0)
       if (repo && meta?.instanceId) {
-        rows.push({ ...meta, id, hostId, repo })
+        rows.push({ ...meta, instanceId: meta.instanceId, id, hostId, repo })
       }
     }
   }
