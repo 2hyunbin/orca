@@ -99,6 +99,13 @@ export const DesktopBrowserBridgeRequest = z.object({
   type: z.literal('request'),
   requestId: Identity,
   method: z.string().refine(isDesktopBrowserBridgeMethod, 'method is not forwarded'),
+  /** How long orcad waits for this answer; the desktop never starts the command after it. */
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .max(60 * 60_000)
+    .optional(),
   /** The workspace orcad resolved the caller's selector to; absent when it named none. */
   // Why longer than an identity: a worktree id embeds the repository's absolute path.
   workspaceId: z.string().min(1).max(MAX_WORKSPACE_ID_LENGTH).optional(),

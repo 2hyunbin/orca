@@ -21,7 +21,10 @@ import {
   DesktopBrowserBridgeManager,
   type DesktopBrowserBridgeCandidate
 } from '../browser/desktop-browser-bridge/desktop-browser-bridge-manager'
-import { executeDesktopBrowserBridgeRequest } from '../browser/desktop-browser-bridge/desktop-browser-bridge-executor'
+import {
+  executeDesktopBrowserBridgeRequest,
+  isHostReachableDocument
+} from '../browser/desktop-browser-bridge/desktop-browser-bridge-executor'
 import { rendererResolveRemoteCliWorkspace } from '../browser/desktop-browser-bridge/desktop-browser-bridge-renderer-scope'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
@@ -155,7 +158,8 @@ export function installDesktopBrowserBridge(options: {
             return Boolean(
               guest &&
               !guest.isDestroyed() &&
-              localSshBrowserTargetIdForSession(guest.session) === candidate.targetId
+              localSshBrowserTargetIdForSession(guest.session) === candidate.targetId &&
+              isHostReachableDocument(guest.getURL())
             )
           },
           worktreeIdForPage: (browserPageId) =>

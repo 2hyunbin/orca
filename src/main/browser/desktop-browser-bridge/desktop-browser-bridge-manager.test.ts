@@ -294,4 +294,25 @@ describe('DesktopBrowserBridgeManager', () => {
       expect.any(Number)
     )
   })
+
+  it('never starts a command after orcad stopped waiting for it', async () => {
+    const h = harness()
+    let seen: AbortSignal | null = null
+    h.execute.mockImplementationOnce(async (_candidate, _request, signal) => {
+      seen = signal
+      return { ok: true, result: {} }
+    })
+    h.manager.reconcile()
+    await vi.waitFor(() => expect(h.subscriptions).toHaveLength(1))
+    const socket = h.subscriptions[0]!
+    socket.callbacks.onResponse(event({ type: 'ready', attachmentId: 'att-1' }))
+
+    socket.callbacks.onResponse(
+      event({ type: 'request', requestId: 'r', method: 'browser.click', timeoutMs: 20, params: {} })
+    )
+
+    await vi.waitFor(() => expect(seen).not.toBeNull())
+    expect(seen!.aborted).toBe(false)
+    await vi.waitFor(() => expect(seen!.aborted).toBe(true))
+  })
 })

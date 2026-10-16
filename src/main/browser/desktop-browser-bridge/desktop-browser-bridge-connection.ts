@@ -106,7 +106,11 @@ export class DesktopBrowserBridgeConnection {
   }
 
   private async answer(attachmentId: string, request: DesktopBrowserBridgeRequest): Promise<void> {
-    const outcome = await this.options.execute(request, this.revoked.signal)
+    // Why: once orcad has stopped waiting, a command still queued here must not run late.
+    const signal = request.timeoutMs
+      ? AbortSignal.any([this.revoked.signal, AbortSignal.timeout(request.timeoutMs)])
+      : this.revoked.signal
+    const outcome = await this.options.execute(request, signal)
     const sendRequest = this.subscription?.sendRequest
     if (this.closed || this.attachmentId !== attachmentId || !sendRequest) {
       return

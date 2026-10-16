@@ -291,3 +291,14 @@ function urlOrigin(value: unknown): string | null {
     return null
   }
 }
+
+// Why: a user can open a desktop file in a routed tab; its document is still this desktop's file.
+const HOST_REACHABLE_DOCUMENT_PROTOCOLS = new Set(['http:', 'https:', 'about:', 'blob:', 'data:'])
+
+export function isHostReachableDocument(url: string): boolean {
+  try {
+    return HOST_REACHABLE_DOCUMENT_PROTOCOLS.has(new URL(url).protocol)
+  } catch {
+    return url === ''
+  }
+}

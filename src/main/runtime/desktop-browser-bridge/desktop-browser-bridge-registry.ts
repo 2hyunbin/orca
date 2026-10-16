@@ -106,6 +106,7 @@ export class DesktopBrowserBridgeRegistry {
           requestId,
           method: request.method,
           params: request.params,
+          timeoutMs: options.timeoutMs,
           ...(request.workspaceId ? { workspaceId: request.workspaceId } : {})
         })
       } catch {

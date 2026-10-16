@@ -11,6 +11,7 @@ import {
 } from '../../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 import {
   executeDesktopBrowserBridgeRequest,
+  isHostReachableDocument,
   type DesktopBrowserBridgeAuditEntry,
   type DesktopBrowserBridgeExecutorDeps
 } from './desktop-browser-bridge-executor'
@@ -593,5 +594,19 @@ describe('captureRemoteCliBrowserRevocation guest routing', () => {
     expect(() => assertAdmitted(7)).toThrow('not browsing through the SSH host')
     // A check with no guest yet (before the queue resolves one) still only checks revocation.
     expect(() => assertAdmitted()).not.toThrow()
+  })
+})
+
+describe('isHostReachableDocument', () => {
+  it('refuses a page showing a desktop file, even in a routed tab', () => {
+    expect(isHostReachableDocument('file:///Users/me/.ssh/id_ed25519')).toBe(false)
+    expect(isHostReachableDocument('orca-doc://preview')).toBe(false)
+    expect(isHostReachableDocument('chrome://settings')).toBe(false)
+  })
+
+  it('allows web documents and a page that has not loaded yet', () => {
+    for (const url of ['https://a.test', 'http://localhost:3000', 'about:blank', '']) {
+      expect(isHostReachableDocument(url)).toBe(true)
+    }
   })
 })
