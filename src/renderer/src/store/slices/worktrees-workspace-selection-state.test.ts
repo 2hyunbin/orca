@@ -522,6 +522,37 @@ describe('setWorktreesPinnedAndReveal', () => {
     expect(reveal).not.toHaveBeenCalled()
   })
 
+  it('does not reveal a child when pinning a colliding id on another host', () => {
+    const store = createTestStore()
+    const local = makeWorktree({
+      id: 'repo1::/parent',
+      instanceId: 'local-parent',
+      hostId: 'local'
+    })
+    const parent = { ...local, instanceId: 'ssh-parent', hostId: 'ssh:target' as const }
+    const child = makeWorktree({
+      id: 'repo1::/child',
+      instanceId: 'child-instance',
+      hostId: 'local'
+    })
+    const reveal = vi.fn()
+    store.setState({
+      worktreesByRepo: { repo1: [local, parent, child] },
+      worktreeLineageById: {
+        [child.id]: makeLineage({
+          worktreeId: child.id,
+          parentWorktreeId: parent.id,
+          parentWorktreeInstanceId: parent.instanceId
+        })
+      },
+      getKnownWorktreeById: (id) => (id === child.id ? child : local),
+      activeWorktreeId: child.id,
+      revealWorktreeInSidebar: reveal
+    })
+    store.getState().setWorktreesPinnedAndReveal([local.id], true)
+    expect(reveal).not.toHaveBeenCalled()
+  })
+
   it('does not reveal a focused descendant for duplicate pinned rows', () => {
     const store = createTestStore()
     const parent = makeWorktree({
