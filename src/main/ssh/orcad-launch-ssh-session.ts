@@ -57,14 +57,21 @@ function recordPath(host: RemoteHostPlatform, userDataDir: string): string {
   return shellEscape(joinRemotePath(host, userDataDir, ORCAD_LAUNCH_SSH_SESSION_FILENAME))
 }
 
-/** True when a terminal daemon this data root published is still running. */
+/**
+ * True when a terminal daemon this data root published is still running. Like
+ * `commandLineMatchesDaemon`, a PID counts only when its command line is this root's daemon: a
+ * stale PID file after a reboot can name an unrelated process.
+ */
 function liveDaemonShellFunction(host: RemoteHostPlatform, userDataDir: string): string {
   const daemonDir = shellEscape(joinRemotePath(host, userDataDir, 'daemon'))
   return (
-    `orcad_daemon_live() { for orcad_df in ${daemonDir}/daemon-v*.pid; do ` +
+    `orcad_daemon_live() { orcad_ddir=${daemonDir}; for orcad_df in "$orcad_ddir"/daemon-v*.pid; do ` +
     '[ -f "$orcad_df" ] || continue; ' +
     'orcad_dp=$(sed -n \'s/.*"pid":\\([0-9][0-9]*\\).*/\\1/p\' "$orcad_df" | head -n 1); ' +
-    '[ -n "$orcad_dp" ] && kill -0 "$orcad_dp" 2>/dev/null && return 0; done; return 1; };'
+    '[ -n "$orcad_dp" ] || continue; ' +
+    'orcad_da=$(ps -o args= -p "$orcad_dp" 2>/dev/null) || continue; ' +
+    'case "$orcad_da" in *daemon-entry*"$orcad_ddir"* | *"$orcad_ddir"*daemon-entry*) return 0;; esac; ' +
+    'done; return 1; };'
   )
 }
 
@@ -78,7 +85,9 @@ export function writeOrcadLaunchSshSessionCommand(
 ): string {
   const file = recordPath(host, userDataDir)
   return (
-    `{ orcad_bg=$!; ${liveDaemonShellFunction(host, userDataDir)} ` +
+    // Why mkdir: on a first deploy the detached server may not have created its data root yet.
+    `{ orcad_bg=$!; ( umask 077; mkdir -p ${shellEscape(userDataDir)} ); ` +
+    `${liveDaemonShellFunction(host, userDataDir)} ` +
     'if orcad_daemon_live; then ' +
     `orcad_prev=$(cat ${file}); rm -f ${file}; set -- $orcad_prev; ` +
     `[ "$#" -lt 3 ] || { shift; ( umask 077; echo "$orcad_bg" "$@" > ${file} ); }; ` +
