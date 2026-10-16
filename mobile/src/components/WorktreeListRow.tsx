@@ -38,6 +38,8 @@ type Props = {
   agentActivityDisplayMode: AgentActivityDisplayMode
   status: WorktreeRollupStatus
   onPress: (item: Worktree) => void
+  onAgentPress?: (item: Worktree, paneKey: string) => void
+  statusLive?: boolean
   onLongPress?: (item: Worktree) => void
   onToggleLineage?: (item: Worktree) => void
 }
@@ -53,6 +55,8 @@ function WorktreeListRowComponent({
   agentActivityDisplayMode,
   status,
   onPress,
+  onAgentPress,
+  statusLive,
   onLongPress,
   onToggleLineage
 }: Props) {
@@ -187,6 +191,9 @@ function WorktreeListRowComponent({
             agents={item.agents}
             now={now}
             unvisited={item.unread}
+            statusLive={statusLive}
+            isReadOnly={isReadOnly}
+            onAgentPress={onAgentPress ? (paneKey) => onAgentPress(item, paneKey) : undefined}
             fullList={agentActivityDisplayMode === 'full'}
           />
         ) : null}
