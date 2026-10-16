@@ -153,14 +153,48 @@ export async function unsetWorktreeCreationBase(
 }
 
 /**
+ * Issue #26344: a branch created from its own remote branch (`origin/foo` -> `foo`) tracks it, as
+ * `git checkout foo` would; every other new branch stays untracked (see `--no-track` below).
+ */
+export async function trackSameNameRemoteBase(
+  worktreePath: string,
+  branch: string,
+  baseBranch: string,
+  effectiveBase: string,
+  options: AddWorktreeOptions
+): Promise<void> {
+  if (!effectiveBase.startsWith('refs/remotes/')) {
+    return
+  }
+  const parsed = parseRemoteTrackingLocalBaseRef(
+    baseBranch,
+    effectiveBase,
+    options.remoteTrackingBase
+  )
+  if (parsed?.localBranch !== branch) {
+    return
+  }
+  try {
+    // Why: `branch --set-upstream-to` (Git 1.8) maps the ref to its remote through the fetch
+    // refspecs, so a remote name containing `/` resolves without a capability probe.
+    await gitExecFileAsync(['branch', '--set-upstream-to', effectiveBase, branch], {
+      ...gitExecOptions(worktreePath, options)
+    })
+  } catch (error) {
+    console.warn(`addWorktree: failed to track ${effectiveBase} for ${branch}`, error)
+  }
+}
+
+/**
  * Create a new worktree.
  * @param repoPath - Path to the main repo (or bare repo)
  * @param worktreePath - Absolute path where the worktree will be created
  * @param branch - Branch name for the new worktree
  * @param baseBranch - Optional base branch to create from (defaults to HEAD)
  * @remarks Side effects (best-effort, warn-only): passes `--no-track`, writes
- * `branch.<branch>.base` for new-branch worktrees with a base ref, and may
- * write `push.autoSetupRemote=true` to the repo's shared config.
+ * `branch.<branch>.base` for new-branch worktrees with a base ref, tracks a
+ * same-named remote base, and may write `push.autoSetupRemote=true` to the
+ * repo's shared config.
  */
 export async function addWorktree(
   repoPath: string,
@@ -257,8 +291,9 @@ async function performAddWorktree(
     return {}
   }
 
-  if (effectiveBase) {
+  if (effectiveBase && baseBranch) {
     await persistWorktreeCreationBase(worktreePath, branch, effectiveBase, options)
+    await trackSameNameRemoteBase(worktreePath, branch, baseBranch, effectiveBase, options)
   }
 
   // Why: --no-track leaves no upstream until first push; push.autoSetupRemote=true lets a plain
