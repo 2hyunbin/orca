@@ -113,4 +113,59 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
       vi.useRealTimers()
     }
   })
+
+  it.each([
+    ['took back unshown', true],
+    ['still holds, or a client closed', false]
+  ] as const)(
+    'lets the window’s record of a split main asked for write it only when main %s',
+    async (_, takenBack) => {
+      const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+        makeWorkspaceSessionWithHeadlessTerminal()
+      )
+      const applyLayoutCommand = vi.fn(async () => ({ ok: true as const, result: {} }))
+      Reflect.set(runtimeStore, 'applyLayoutCommand', applyLayoutCommand)
+      const notifier = createMobileCreateTestNotifier(vi.fn())
+      const splitTerminal = vi.mocked(notifier.splitTerminal)
+      const runtime = new OrcaRuntimeService(runtimeStore)
+      runtime.setNotifier(notifier)
+      runtime.syncWindowGraph(1, graph([HEADLESS_LEAF_ID]))
+      const handle = runtime.getTerminalHandleForPaneKey(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))
+
+      vi.useFakeTimers()
+      try {
+        const split = runtime.splitTerminal(handle!, { direction: 'vertical' })
+        const rejected = expect(split).rejects.toThrow()
+        await vi.waitFor(() => expect(splitTerminal).toHaveBeenCalledTimes(1))
+        const newLeafId = splitTerminal.mock.calls[0]![2]!.newLeafId!
+        if (takenBack) {
+          await vi.advanceTimersByTimeAsync(11_000)
+          await rejected
+        }
+        const record = {
+          type: 'splitPane',
+          workspace: TEST_WORKTREE_ID,
+          tabId: TAB_ID,
+          leafId: HEADLESS_LEAF_ID,
+          direction: 'vertical',
+          newLeafId,
+          mainAsked: true
+        } as const
+
+        await runtime.applyLayoutCommand(record)
+
+        const { mainAsked: _mainAsked, ...plain } = record
+        expect(applyLayoutCommand).toHaveBeenLastCalledWith(
+          takenBack ? plain : record,
+          expect.anything()
+        )
+        if (!takenBack) {
+          await vi.advanceTimersByTimeAsync(11_000)
+          await rejected
+        }
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
 })

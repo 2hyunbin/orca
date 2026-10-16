@@ -243,7 +243,8 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
     if (titleUpdates.length > 0) {
       store.getState().updateTabTitles(titleUpdates)
     }
-    if (paneTreeKeys.size > 0) {
+    // A closed stream's cache is frozen: the window draws its own answers then.
+    if (streamOpen && paneTreeKeys.size > 0) {
       showPaneTrees(store.getState(), framesDrawWorkspace(store.getState()))
     }
   }

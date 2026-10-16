@@ -15,7 +15,7 @@ import {
   resolveTerminalPaneSplitSourceId
 } from './terminal-pane-split-request-routing'
 import type { PtyConnectionDeps } from './pty-connection-types'
-import { recordDrawnPaneSplit } from './terminal-pane-bootstrap-split-record'
+import { recordMountedMainSplit } from './terminal-pane-bootstrap-split-record'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 export function installTerminalPaneMountEvents(args: {
@@ -52,7 +52,18 @@ export function installTerminalPaneMountEvents(args: {
       const recordMainSplitMounted = (leafId: string | undefined): void => {
         const sourceLeafId = mgr.getLeafId(sourcePaneId)
         if (leafId && leafId === detail.newLeafId && sourceLeafId) {
-          recordDrawnPaneSplit(deps.worktreeId, deps.tabId, sourceLeafId, detail.direction, leafId)
+          const { tabId } = deps
+          recordMountedMainSplit(
+            deps.worktreeId,
+            { tabId, sourceLeafId, direction: detail.direction, newLeafId: leafId },
+            // A client closed it while the window mounted it late: the window's copy goes too.
+            () => {
+              const paneId = mgr.getNumericIdForLeaf(leafId)
+              if (paneId !== null && mgr.getPanes().length > 1) {
+                mgr.closePane(paneId)
+              }
+            }
+          )
         }
       }
       const splitOptions = {

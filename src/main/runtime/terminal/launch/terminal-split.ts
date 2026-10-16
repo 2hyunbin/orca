@@ -13,11 +13,19 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
   /** Pane id of each split main wrote and awaits → whether the window already recorded it. */
   private readonly awaitedSplitLeafIds = new Map<string, boolean>()
 
-  /** The window recorded a split it mounted: one main awaits counts as shown before its graph says so. */
-  protected noteWindowMountedSplit(leafId: string): void {
+  /** Splits main asked for but does not hold by its own doing (taken back unshown, or never
+   *  written): the window's record of one may write it. */
+  private readonly recordableSplitLeafIds = new Set<string>()
+
+  /**
+   * The window recorded a split it mounted: one main awaits counts as shown before its graph says
+   * so. True when main does not hold that split by its own doing, so the record may write it.
+   */
+  protected noteWindowMountedSplit(leafId: string): boolean {
     if (this.awaitedSplitLeafIds.has(leafId)) {
       this.awaitedSplitLeafIds.set(leafId, true)
     }
+    return this.recordableSplitLeafIds.delete(leafId)
   }
 
   protected abstract splitPtyBackedTerminal(
@@ -72,8 +80,11 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             newLeafId
           },
           hostId,
-          // A refused or failed write splits as today; the window records the pane it mounts.
-          () => {
+          // A refused or failed write splits as today; the window's record of it writes the pane.
+          (outcome) => {
+            if (outcome !== 'admitted' && outcome !== 'exists') {
+              rememberRecordable(this.recordableSplitLeafIds, newLeafId)
+            }
             this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
               direction,
               command: opts.command,
@@ -86,9 +97,16 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           },
           {
             // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
-            shown: () =>
-              this.awaitedSplitLeafIds.get(newLeafId) === true ||
-              this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
+            // Unshown, main takes the pane back; the window's late record may write it again.
+            shown: () => {
+              const shown =
+                this.awaitedSplitLeafIds.get(newLeafId) === true ||
+                this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId))
+              if (!shown) {
+                rememberRecordable(this.recordableSplitLeafIds, newLeafId)
+              }
+              return shown
+            },
             startIfWriteFails: true
           }
         ).finally(() => this.awaitedSplitLeafIds.delete(newLeafId))
@@ -119,5 +137,13 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       paneRuntimeId: leaf.paneRuntimeId,
       leafId: newLeafId
     }
+  }
+}
+
+/** Kept only for the newest few: a record comes within one mount of the window. */
+function rememberRecordable(recordable: Set<string>, leafId: string): void {
+  recordable.add(leafId)
+  if (recordable.size > 64) {
+    recordable.delete(recordable.values().next().value!)
   }
 }

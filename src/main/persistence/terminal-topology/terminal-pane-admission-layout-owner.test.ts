@@ -103,4 +103,28 @@ describe('a runtime pane in a layout-owner build', () => {
     await store.applyLayoutCommand(record)
     expect(leafIds(root(store))).toEqual([LEAF, NEW_LEAF])
   })
+
+  it('keeps closed a pane a client closed before the window’s late record of main’s split', async () => {
+    const store = await storeWithLeftovers()
+    const { newLeafId: _newLeafId, ...split } = admission
+    await store.admitTerminalPane(admission)
+    await store.applyLayoutCommand({
+      type: 'closePane',
+      workspace: WORKTREE,
+      tabId: TAB,
+      leafId: NEW_LEAF
+    })
+
+    await expect(
+      store.applyLayoutCommand({ ...split, newLeafId: NEW_LEAF, mainAsked: true })
+    ).resolves.toMatchObject({ ok: false, code: 'pane_closed' })
+    expect(leafIds(root(store))).toEqual([LEAF])
+
+    // A main-asked record of a pane main still holds changes nothing.
+    await store.admitTerminalPane(admission)
+    await expect(
+      store.applyLayoutCommand({ ...split, newLeafId: NEW_LEAF, mainAsked: true })
+    ).resolves.toMatchObject({ ok: true })
+    expect(leafIds(root(store))).toEqual([LEAF, NEW_LEAF])
+  })
 })

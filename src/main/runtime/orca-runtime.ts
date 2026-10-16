@@ -173,7 +173,12 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   /** A window's layout command (`layout.apply`), applied to the partitions that hold its tab. */
   async applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
     if (command.type === 'splitPane' && command.newLeafId) {
-      this.noteWindowMountedSplit(command.newLeafId)
+      const recordable = this.noteWindowMountedSplit(command.newLeafId)
+      // Main took it back unshown, or never wrote it: the record writes it, as any split.
+      if (recordable && command.mainAsked) {
+        const { mainAsked: _mainAsked, ...split } = command
+        command = split
+      }
     }
     const reply = await applyWindowLayoutCommand(
       this.requireStore(),

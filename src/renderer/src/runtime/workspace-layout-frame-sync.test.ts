@@ -292,9 +292,12 @@ describe('the window drawn from layout frames', () => {
   })
 
   it('keeps the window’s own pane trees once the stream has ended', async () => {
-    const { store, sync } = await bootWithFrames('local', localDesktopSession())
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
     sync.start()
     await flushMicrotasks()
+    // A frame queued behind an owed write when the stream ends.
+    reportWindowSessionWriteActivity(true)
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: structuredClone(layouts[GIT_KEY]!) })
     stream.onStatus!({ state: 'lost' })
     const drawn = { type: 'leaf' as const, leafId: 'drawn-by-the-window' }
     store.setState({
@@ -306,7 +309,12 @@ describe('the window drawn from layout frames', () => {
 
     requestTabPaneTreeRedraw('tab-shell')
     await flushMicrotasks()
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
 
+    // Nor does a later flush, such as an owed write ending.
+    reportWindowSessionWriteActivity(true)
+    reportWindowSessionWriteActivity(false)
+    await flushMicrotasks()
     expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
     sync.close()
   })

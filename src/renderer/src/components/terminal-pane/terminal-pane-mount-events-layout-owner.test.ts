@@ -10,12 +10,13 @@ import {
 } from './terminal-pane-split-request-routing'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-const recordLayoutApply = vi.hoisted(() => vi.fn())
-vi.mock('@/runtime/layout-apply-send', () => ({ recordLayoutApply }))
+const sendLayoutApply = vi.hoisted(() => vi.fn())
+vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply, recordLayoutApply: vi.fn() }))
 const storeState = vi.hoisted(() => ({ recordFeatureInteraction: () => {} }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => storeState } }))
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
 
+const closePane = vi.hoisted(() => vi.fn())
 const SOURCE = '11111111-1111-4111-8111-111111111111'
 const NEW = '22222222-2222-4222-8222-222222222222'
 
@@ -28,6 +29,8 @@ function mountedTab(): { manager: PaneManager; splitPane: ReturnType<typeof vi.f
   })
   const manager = {
     splitPane,
+    closePane,
+    getPanes: () => [...leafById.keys()].map((id) => ({ id })),
     getLeafId: (paneId: number) => leafById.get(paneId) ?? null,
     getNumericIdForLeaf: (leafId: string) =>
       [...leafById].find(([, id]) => id === leafId)?.[0] ?? null
@@ -55,7 +58,7 @@ function install(manager: PaneManager): () => void {
 
 describe('a split main asked for, mounted in a layout-owner build', () => {
   afterEach(() => {
-    recordLayoutApply.mockReset()
+    sendLayoutApply.mockReset()
     _resetTerminalPaneSplitRequestRoutingForTests()
   })
 
@@ -73,13 +76,37 @@ describe('a split main asked for, mounted in a layout-owner build', () => {
     })
 
     expect(splitPane).toHaveBeenCalledWith(1, 'vertical', { leafId: NEW })
-    expect(recordLayoutApply).toHaveBeenCalledWith(storeState, 'wt-1', {
-      type: 'splitPane',
+    expect(sendLayoutApply).toHaveBeenCalledWith(
+      storeState,
+      'wt-1',
+      {
+        type: 'splitPane',
+        tabId: 'tab-1',
+        leafId: SOURCE,
+        direction: 'vertical',
+        newLeafId: NEW,
+        mainAsked: true
+      },
+      expect.any(Object)
+    )
+    uninstall()
+  })
+
+  it('removes the mounted pane when main says a client closed it meanwhile', () => {
+    const { manager } = mountedTab()
+    const uninstall = install(manager)
+    dispatchTerminalPaneSplitRequest({
       tabId: 'tab-1',
-      leafId: SOURCE,
+      worktreeId: 'wt-1',
+      paneRuntimeId: 1,
+      sourceLeafId: SOURCE,
       direction: 'vertical',
       newLeafId: NEW
     })
+
+    sendLayoutApply.mock.calls[0]![3].refused('pane_closed')
+
+    expect(closePane).toHaveBeenCalledWith(2)
     uninstall()
   })
 
@@ -95,7 +122,7 @@ describe('a split main asked for, mounted in a layout-owner build', () => {
       direction: 'horizontal'
     })
 
-    expect(recordLayoutApply).not.toHaveBeenCalled()
+    expect(sendLayoutApply).not.toHaveBeenCalled()
     uninstall()
   })
 })
