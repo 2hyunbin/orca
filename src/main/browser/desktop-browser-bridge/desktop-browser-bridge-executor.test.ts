@@ -605,7 +605,13 @@ describe('isHostReachableDocument', () => {
   })
 
   it('allows web documents and a page that has not loaded yet', () => {
-    for (const url of ['https://a.test', 'http://localhost:3000', 'about:blank', '']) {
+    for (const url of [
+      'https://a.test',
+      'http://localhost:3000',
+      'about:blank',
+      'chrome-error://chromewebdata/',
+      ''
+    ]) {
       expect(isHostReachableDocument(url)).toBe(true)
     }
   })

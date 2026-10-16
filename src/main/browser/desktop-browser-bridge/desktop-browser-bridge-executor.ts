@@ -293,7 +293,15 @@ function urlOrigin(value: unknown): string | null {
 }
 
 // Why: a user can open a desktop file in a routed tab; its document is still this desktop's file.
-const HOST_REACHABLE_DOCUMENT_PROTOCOLS = new Set(['http:', 'https:', 'about:', 'blob:', 'data:'])
+// chrome-error: is Chromium's own load-failure page, which a host must be able to navigate away from.
+const HOST_REACHABLE_DOCUMENT_PROTOCOLS = new Set([
+  'http:',
+  'https:',
+  'about:',
+  'blob:',
+  'data:',
+  'chrome-error:'
+])
 
 export function isHostReachableDocument(url: string): boolean {
   try {

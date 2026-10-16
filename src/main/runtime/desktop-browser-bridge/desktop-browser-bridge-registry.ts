@@ -15,6 +15,8 @@ import {
 // Why below 32: the desktop answers over one subscription that holds at most 32 unacknowledged
 // requests (remote-runtime-subscription-request-channel), so more would strand finished results.
 export const MAX_PENDING_PER_ATTACHMENT = 16
+const DESKTOP_DEADLINE_MARGIN_MS = 10_000
+const MIN_DESKTOP_DEADLINE_MS = 1_000
 
 type Attachment = {
   attachmentId: string
@@ -106,7 +108,11 @@ export class DesktopBrowserBridgeRegistry {
           requestId,
           method: request.method,
           params: request.params,
-          timeoutMs: options.timeoutMs,
+          // Why shorter: the desktop must stop starting this before orcad gives up, transit included.
+          timeoutMs: Math.max(
+            MIN_DESKTOP_DEADLINE_MS,
+            options.timeoutMs - DESKTOP_DEADLINE_MARGIN_MS
+          ),
           ...(request.workspaceId ? { workspaceId: request.workspaceId } : {})
         })
       } catch {

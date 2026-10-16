@@ -20,4 +20,14 @@ describe('DesktopBrowserBridgeRegistry', () => {
     ).rejects.toMatchObject({ code: 'browser_busy' })
     expect(MAX_PENDING_PER_ATTACHMENT).toBeLessThan(32)
   })
+
+  it('gives the desktop a deadline that ends before orcad stops waiting', () => {
+    const registry = new DesktopBrowserBridgeRegistry()
+    const events: { timeoutMs?: number }[] = []
+    registry.attach({ connectionId: 'c', pairedDeviceId: 'd', emit: (event) => events.push(event) })
+
+    registry.forward({ method: 'browser.click', params: {} }, { timeoutMs: 60_000 }).catch(() => {})
+
+    expect(events[0]?.timeoutMs).toBe(50_000)
+  })
 })
