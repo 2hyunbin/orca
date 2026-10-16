@@ -13,6 +13,7 @@ function deps(overrides: Partial<ServeInitReaperDeps> = {}): ServeInitReaperDeps
     pid: 1,
     env: { ELECTRON_RUN_AS_NODE: '1' },
     execPath: '/opt/orca/orca-ide',
+    execArgv: [],
     argv: ['/opt/orca/orca-ide', '/opt/orca/resources/cli/index.js', 'serve', '--port', '6768'],
     exists: (path) => path === '/bin/bash',
     execve: vi.fn(),
@@ -40,6 +41,50 @@ describe('reexecServeUnderInitReaper', () => {
       ],
       { ELECTRON_RUN_AS_NODE: '1' }
     )
+  })
+
+  it('keeps the eval script of a `-e <cli> -- serve` launch', () => {
+    const d = deps({ execArgv: ['-e', 'require(cli)'], argv: ['/opt/orca/orca-ide', 'serve'] })
+    expect(reexecServeUnderInitReaper(d)).toBe('reexec')
+    expect(vi.mocked(d.execve!).mock.calls[0][1].slice(4)).toEqual([
+      '/opt/orca/orca-ide',
+      '-e',
+      'require(cli)',
+      '--',
+      'serve'
+    ])
+  })
+
+  it('runs a mounted AppImage afresh instead of the files its exec would unmount', () => {
+    const d = deps({
+      execPath: '/tmp/.mount_orcaX/orca-ide',
+      argv: ['/tmp/.mount_orcaX/orca-ide', '/tmp/.mount_orcaX/resources/cli/index.js', 'serve'],
+      env: {
+        APPDIR: '/tmp/.mount_orcaX',
+        APPIMAGE: '/opt/orca/orca.AppImage',
+        ELECTRON_RUN_AS_NODE: '1',
+        ORCA_NODE_OPTIONS: '--max-old-space-size=4096',
+        ORCA_NODE_REPL_EXTERNAL_MODULE: ''
+      },
+      exists: (path) => path === '/bin/bash' || path === '/opt/orca/orca.AppImage'
+    })
+    expect(reexecServeUnderInitReaper(d)).toBe('reexec')
+    const [, args, env] = vi.mocked(d.execve!).mock.calls[0]
+    expect(args.slice(4)).toEqual(['/opt/orca/orca.AppImage', 'serve'])
+    expect(env).toEqual({
+      APPDIR: '/tmp/.mount_orcaX',
+      APPIMAGE: '/opt/orca/orca.AppImage',
+      NODE_OPTIONS: '--max-old-space-size=4096'
+    })
+  })
+
+  it('warns instead of re-execing a mounted AppImage whose image cannot be found', () => {
+    const d = deps({
+      execPath: '/tmp/.mount_orcaX/orca-ide',
+      env: { APPDIR: '/tmp/.mount_orcaX' }
+    })
+    expect(reexecServeUnderInitReaper(d)).toBe('unavailable')
+    expect(d.execve).not.toHaveBeenCalled()
   })
 
   it('leaves a serve that is not PID 1, or not on Linux, alone', () => {
@@ -80,6 +125,28 @@ describe.skipIf(!bash || process.platform !== 'linux')('serve init reaper script
     const result = run('read line; echo "got $line"; exit 7', 'hello\n')
     expect(result.stdout).toBe('got hello\n')
     expect(result.status).toBe(7)
+  })
+
+  it('exits with the status the served command chose after a forwarded signal', async () => {
+    // Why repeated: the trap interrupting `wait` races the child's exit.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const child = spawn(
+        bash!,
+        [
+          '-c',
+          SERVE_INIT_REAPER_SCRIPT,
+          'init',
+          bash!,
+          '-c',
+          "trap 'exit 0' TERM; echo ready; while :; do sleep 0.01; done"
+        ],
+        { stdio: ['ignore', 'pipe', 'inherit'] }
+      )
+      await new Promise<void>((resolve) => child.stdout.once('data', () => resolve()))
+      child.kill('SIGTERM')
+      const code = await new Promise<number | null>((resolve) => child.once('exit', resolve))
+      expect(code).toBe(0)
+    }
   })
 
   it.each(['SIGINT', 'SIGTERM'] as const)('forwards %s to the served command', async (signal) => {
