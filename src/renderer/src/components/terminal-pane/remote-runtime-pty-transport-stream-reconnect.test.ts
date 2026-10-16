@@ -590,8 +590,10 @@ describe('createRemoteRuntimePtyTransport', () => {
         }
       )
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
-      const { reviveRemoteRuntimePtyRecoveriesForEnvironment } =
-        await import('./remote-runtime-pty-recovery-state')
+      const {
+        getControlReadyReviverCountForTests,
+        reviveRemoteRuntimePtyRecoveriesForEnvironment
+      } = await import('./remote-runtime-pty-recovery-state')
       const transport = createRemoteRuntimePtyTransport('env-1', {
         worktreeId: 'wt-1',
         tabId: 'tab-1',
@@ -600,6 +602,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       transport.attach({ existingPtyId: 'remote:env-1@@terminal-1', callbacks: {} })
       await vi.waitFor(() => expect(subscriptionSendBinary).toHaveBeenCalled())
       emitSnapshot(latestSubscribePayload().streamId, 'before partition')
+      expect(getControlReadyReviverCountForTests('env-1')).toBe(0)
 
       partitioned = true
       subscriptionCallbacks?.onClose?.()
@@ -616,9 +619,16 @@ describe('createRemoteRuntimePtyTransport', () => {
       await vi.advanceTimersByTimeAsync(50)
       expect(transport.isConnected()).toBe(true)
       expect(transport.getPtyId()).toBe('remote:env-1@@terminal-1')
+      // Why: a healthy pane holds no registration, so a detached-and-discarded transport is never retained.
+      expect(getControlReadyReviverCountForTests('env-1')).toBe(0)
 
+      partitioned = true
+      subscriptionCallbacks?.onClose?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(getControlReadyReviverCountForTests('env-1')).toBe(1)
+      transport.detach?.()
+      expect(getControlReadyReviverCountForTests('env-1')).toBe(0)
       transport.destroy?.()
-      expect(reviveRemoteRuntimePtyRecoveriesForEnvironment('env-1')).toBe(0)
     } finally {
       vi.useRealTimers()
     }

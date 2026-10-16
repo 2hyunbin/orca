@@ -325,7 +325,23 @@ export function createRemoteRuntimePtyTransport(
   })
   const disconnectedInputGrace = createRemoteRuntimeDisconnectedInputGrace()
   let previousRecoveryPhase: RemoteRuntimePtyRecoveryPhase = 'idle'
+  let unregisterControlReadyReviver: (() => void) | null = null
+  // Why registered only while recovering: detach and destroy go idle, so a discarded transport is never retained.
+  function syncControlReadyReviver(): void {
+    const wantsRevival = recovery.isActive || recovery.currentPhase === 'disconnected'
+    if (wantsRevival && !unregisterControlReadyReviver) {
+      // Why: a backoff advances and a latched pane replays its attach, exactly as online/resume/Reconnect would.
+      unregisterControlReadyReviver = registerRemoteRuntimePtyControlReadyReviver(
+        runtimeEnvironmentId,
+        () => !destroyed && (recovery.retryNow() || (transport.retryRecovery?.() ?? false))
+      )
+    } else if (!wantsRevival && unregisterControlReadyReviver) {
+      unregisterControlReadyReviver()
+      unregisterControlReadyReviver = null
+    }
+  }
   const recovery = new RemoteRuntimePtyRecoveryState(() => {
+    syncControlReadyReviver()
     // Why: any recovery transition after the ack (a stale send, a close, the deadline) re-holds typing.
     inputReadySubscription = null
     const leftLatchForRetry = previousRecoveryPhase === 'disconnected' && recovery.isActive
@@ -3375,15 +3391,9 @@ export function createRemoteRuntimePtyTransport(
         outputProcessor.disposePendingSideEffectGauge()
       }
       recovery.dispose()
-      unregisterControlReadyReviver()
       inputBatcher.clear()
       viewportBatcher.clear()
     }
   }
-  // Why: a backoff advances and a latched pane replays its attach, exactly as online/resume/Reconnect would.
-  const unregisterControlReadyReviver = registerRemoteRuntimePtyControlReadyReviver(
-    runtimeEnvironmentId,
-    () => !destroyed && (recovery.retryNow() || (transport.retryRecovery?.() ?? false))
-  )
   return transport
 }
