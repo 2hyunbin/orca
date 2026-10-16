@@ -45,7 +45,10 @@ it.each(['claude', 'codex', 'grok', 'opencode', 'pi'] as const)(
     expect(mocks.tabs).toHaveLength(1)
     expect(mocks.call).not.toHaveBeenCalled()
     mocks.focus.mockClear()
-    openNativeChatLocalDraft({ ...args, requestId: newAgentLaunchRequestId(), activate: false })
+    const quiet = openNativeChatLocalDraft({ ...args, requestId: newAgentLaunchRequestId(), activate: false })
+    expect(quiet?.entityId).not.toBe(tab?.entityId)
+    expect(quiet?.groupId).toBe('split-right')
+    expect(readNativeChatComposerDraft(`agent-session:${quiet?.entityId}`).text).toBe('unique marker')
     expect(mocks.focus).not.toHaveBeenCalled()
     expect(mocks.call).not.toHaveBeenCalled()
   }
