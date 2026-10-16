@@ -36,7 +36,13 @@ export async function applyWindowLayoutCommand(
     // The window already confirmed, removed the tab and stopped its terminals: main forces the
     // close, records it, and stops nothing (a terminal another tab shares must live on).
     if (command.recordClose === 'user') {
-      markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId: command.tabIds[0] })
+      // Launches go by the terminal's own id, which a legacy tab-bar entry's can differ from.
+      const tabId =
+        store
+          .getWorkspaceSession?.(hostIds[0])
+          ?.unifiedTabs?.[command.workspace]?.find((entry) => entry.id === command.tabIds[0])
+          ?.entityId ?? command.tabIds[0]
+      markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId })
     }
     const reply = await store.applyLayoutCommand({ ...command, force: true }, holders)
     // Why: a workspace main lacks records nothing; today's close records it in the routed partition.

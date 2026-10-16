@@ -101,6 +101,28 @@ describe('Store.applyLayoutCommand (layout.apply)', () => {
     expect(revision(store)).toBeGreaterThan(revisionBefore)
   })
 
+  it('prunes the partition’s expired close records when it records one, as today', async () => {
+    const { store } = await storeWithOneTab()
+    store.setWorkspaceSession({
+      ...store.getWorkspaceSession(),
+      closedTerminalTabTombstonesByTabId: {
+        'tab-old': { worktreeId: 'repo-other::/x', closedAt: 1, reason: 'user' }
+      }
+    })
+
+    await store.applyLayoutCommand({
+      type: 'closeTabs',
+      workspace: WORKTREE,
+      tabIds: [TAB],
+      force: true,
+      recordClose: 'cleanup'
+    })
+
+    expect(
+      Object.keys(store.getWorkspaceSession().closedTerminalTabTombstonesByTabId ?? {})
+    ).toEqual([TAB])
+  })
+
   it('writes a folder workspace’s split', async () => {
     const { store } = await storeWithOneTab(undefined, FIXTURE_FOLDER_WORKTREE_ID)
 

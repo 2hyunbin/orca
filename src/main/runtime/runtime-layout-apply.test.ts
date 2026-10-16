@@ -85,6 +85,26 @@ describe('applyWindowLayoutCommand', () => {
     })
   })
 
+  it('marks a user close’s launches by the terminal’s id, not its tab-bar entry’s', async () => {
+    const { store } = storeWith()
+    const session = { unifiedTabs: { 'wt-1': [{ id: 'entry-1', entityId: 'term-1' }] } }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the close reads only unifiedTabs.
+    const withSession = { ...store, getWorkspaceSession: () => session } as unknown as RuntimeStore
+    const close: WindowLayoutCommand = {
+      type: 'closeTabs',
+      workspace: 'wt-1',
+      tabIds: ['entry-1'],
+      recordClose: 'user'
+    }
+
+    await applyWindowLayoutCommand(withSession, () => ['local'], close)
+
+    expect(mocks.markAgentLaunchesClosedByUser).toHaveBeenCalledWith('wt-1', {
+      kind: 'tab',
+      tabId: 'term-1'
+    })
+  })
+
   it('leaves a cleanup close’s launches alone, and a workspace main lacks to today’s close', async () => {
     const { store, applyLayoutCommand } = storeWith()
     applyLayoutCommand.mockResolvedValueOnce({ ok: true, result: { alreadyClosed: true } })

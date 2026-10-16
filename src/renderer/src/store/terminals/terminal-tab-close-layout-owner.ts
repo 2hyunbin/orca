@@ -1,5 +1,6 @@
 import type { AppState } from '../types'
-import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import { sendLayoutApply } from '@/runtime/layout-apply-send'
 import { commitTerminalSurfaceClose } from './terminal-surface-close-intent'
 
 /**
@@ -8,7 +9,7 @@ import { commitTerminalSurfaceClose } from './terminal-surface-close-intent'
  * the workspace's layout; the caller records it as today.
  */
 export function recordTerminalTabCloseThroughLayoutOwner(
-  state: Pick<AppState, 'unifiedTabsByWorktree'>,
+  state: WorktreeRuntimeOwnerState & Pick<AppState, 'unifiedTabsByWorktree'>,
   worktreeId: string,
   tabId: string,
   reason: 'user' | 'cleanup'
@@ -19,7 +20,8 @@ export function recordTerminalTabCloseThroughLayoutOwner(
       (entry) => entry.contentType === 'terminal' && entry.entityId === tabId
     )?.id ?? tabId
   const keep = (): void => {}
-  return sendLayoutCommandToOwner(
+  return sendLayoutApply(
+    state,
     worktreeId,
     { type: 'closeTabs', tabIds: [entryId], recordClose: reason },
     {

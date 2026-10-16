@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import type { sendLayoutApply } from '@/runtime/layout-apply-send'
 import { recordTerminalTabCloseThroughLayoutOwner } from './terminal-tab-close-layout-owner'
 
 const mocks = vi.hoisted(() => ({
-  send: vi.fn<typeof sendLayoutCommandToOwner>(),
+  send: vi.fn<typeof sendLayoutApply>(),
   commit: vi.fn()
 }))
 
-vi.mock('@/runtime/layout-owner-command', () => ({ sendLayoutCommandToOwner: mocks.send }))
+vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply: mocks.send }))
 vi.mock('./terminal-surface-close-intent', () => ({ commitTerminalSurfaceClose: mocks.commit }))
 
 const WT = 'repo1::/path/wt1'
@@ -41,6 +41,7 @@ describe('recordTerminalTabCloseThroughLayoutOwner', () => {
     expect(recordTerminalTabCloseThroughLayoutOwner(STATE, WT, 'term-legacy', 'cleanup')).toBe(true)
 
     expect(mocks.send).toHaveBeenCalledWith(
+      STATE,
       WT,
       { type: 'closeTabs', tabIds: ['entry-legacy'], recordClose: 'cleanup' },
       expect.anything()
@@ -50,9 +51,9 @@ describe('recordTerminalTabCloseThroughLayoutOwner', () => {
 
   it('records the close as today when main cannot', () => {
     recordTerminalTabCloseThroughLayoutOwner(STATE, WT, 'term-new', 'user')
-    expect(mocks.send.mock.calls[0]![1]).toMatchObject({ tabIds: ['term-new'] })
+    expect(mocks.send.mock.calls[0]![2]).toMatchObject({ tabIds: ['term-new'] })
 
-    mocks.send.mock.calls[0]![2].asToday()
+    mocks.send.mock.calls[0]![3].asToday()
 
     expect(mocks.commit).toHaveBeenCalledWith(WT, { kind: 'tab', tabId: 'term-new' }, 'user')
   })

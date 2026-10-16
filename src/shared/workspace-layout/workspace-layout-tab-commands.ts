@@ -1,4 +1,3 @@
-import { pruneClosedTerminalTabTombstones } from '../closed-terminal-tab-tombstones'
 import { filterRecord, omitStoredFields, withoutKey } from './stored-record-fields'
 import { canReplacePreviewContentType, partitionPinnedTabOrder } from './tab-order'
 import { getNextTerminalOrdinal } from './terminal-tab-ordinal'
@@ -148,20 +147,10 @@ function recordClosedTerminalTabs(
   record: LayoutClosedTab
 ): WorkspaceLayoutModel {
   const workspace = model.workspaces[key]!
-  const records = { ...workspace.closedTerminalTabs }
+  const closedTerminalTabs = { ...workspace.closedTerminalTabs }
   for (const tabId of tabIds) {
-    records[tabId] = record
+    closedTerminalTabs[tabId] = record
   }
-  // Pruned as a host partition's records are when a close is recorded there.
-  const pruned = pruneClosedTerminalTabTombstones(
-    Object.fromEntries(
-      Object.entries(records).map(([id, entry]) => [id, { ...entry, worktreeId: key }])
-    ),
-    record.closedAt
-  )
-  const closedTerminalTabs = Object.fromEntries(
-    Object.entries(pruned).map(([id, { worktreeId: _key, ...entry }]) => [id, entry])
-  )
   return withWorkspace(model, key, { ...workspace, closedTerminalTabs })
 }
 
