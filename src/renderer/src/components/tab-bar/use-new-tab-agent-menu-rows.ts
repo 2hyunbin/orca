@@ -111,8 +111,14 @@ export function useNewTabAgentMenuRows(worktreeId: string, open: boolean) {
         command: input.executionHostId === 'local' ? state.settings?.agentCmdOverrides : undefined,
         args: input.executionHostId === 'local' ? state.settings?.agentDefaultArgs : undefined,
         env: input.executionHostId === 'local' ? state.settings?.agentDefaultEnv : undefined,
-        inheritShell: state.settings?.nativeChatInheritShellEnvironment,
-        shellVariables: state.settings?.nativeChatShellEnvironmentVariables
+        inheritShell:
+          input.executionHostId === 'local'
+            ? state.settings?.nativeChatInheritShellEnvironment
+            : undefined,
+        shellVariables:
+          input.executionHostId === 'local'
+            ? state.settings?.nativeChatShellEnvironmentVariables
+            : undefined
       }
     })
   )

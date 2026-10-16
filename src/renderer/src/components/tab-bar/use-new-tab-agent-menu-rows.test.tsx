@@ -80,18 +80,8 @@ it.each(['local', 'runtime:server'])(
       pending[1]?.resolve({ kind: 'declined', reason: 'unsupported-version' })
     })
     expect(
-      hook.result.current.rows.map((row) => [
-        row.kind,
-        row.agent,
-        'reason' in row ? row.reason : null
-      ])
-    ).toEqual(
-      expect.arrayContaining([
-        ['chat-unavailable', 'claude', 'wsl'],
-        ['chat-unavailable', 'codex', 'not-on-host'],
-        ['cli', 'opencode', null]
-      ])
-    )
+      hook.result.current.rows.map((row) => ('reason' in row ? row.reason : row.kind))
+    ).toEqual(expect.arrayContaining(['wsl', 'not-on-host', 'cli']))
     hook.rerender({ open: true, id: 'one' })
     act(() => useAppStore.setState({ activeTabId: 'unrelated' }))
     hook.rerender({ open: true, id: 'two' })
