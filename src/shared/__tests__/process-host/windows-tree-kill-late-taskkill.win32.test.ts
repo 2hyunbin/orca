@@ -101,7 +101,22 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
   it.skipIf(!underLoad)(
     'kills the grandchild with the real taskkill on a loaded host',
     async () => {
+      let taskkillMs: number | null = null
+      _setWindowsTaskkillLauncherForTests((rootPid) => {
+        const startedAt = Date.now()
+        const taskkill = spawnProcess({
+          program: windowsSystem32Binary('taskkill.exe'),
+          args: ['/pid', String(rootPid), '/t', '/f'],
+          stdio: 'ignore'
+        })
+        taskkill.once('close', () => {
+          taskkillMs = Date.now() - startedAt
+        })
+        return taskkill
+      })
       await expectBarrierKillsGrandchild()
+      // Evidence only: how slow this load made taskkill (about 50 ms idle).
+      console.log(`[late-taskkill] taskkill under load took ${taskkillMs} ms`)
     },
     90_000
   )

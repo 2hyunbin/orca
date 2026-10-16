@@ -6,6 +6,7 @@ import {
   startWindowsTreeKill,
   trackedWindowsTreeKill,
   waitForWindowsTreeKill,
+  WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS,
   WINDOWS_TASKKILL_DEADLINE_MS,
   WINDOWS_TASKKILL_WAIT_MS
 } from './windows-tree-kill'
@@ -123,6 +124,28 @@ describe('windows tree kill tracker', () => {
     // A late success after abandonment does not rewrite the verdict.
     launched[0].emit('close', 0)
     expect(kill.verdict()).toBe('unverifiable')
+  })
+
+  it('still proves a tree when taskkill finishes soon after killing the root', async () => {
+    const child = new FakeProcess()
+    const kill = startWindowsTreeKill(child, 1234, vi.fn())
+
+    child.emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS - 1)
+    launched[0].emit('close', 0)
+
+    await expect(kill.settled).resolves.toBe('exited')
+  })
+
+  it('abandons taskkill once the root has been gone long enough for its pid to be reissued', async () => {
+    const child = new FakeProcess()
+    const kill = startWindowsTreeKill(child, 1234, vi.fn())
+
+    child.emit('exit', 0, null)
+    await vi.advanceTimersByTimeAsync(WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS)
+
+    await expect(kill.settled).resolves.toBe('unverifiable')
+    expect(launched[0].kill).toHaveBeenCalledOnce()
   })
 
   it('never joins two children that share a reused pid', () => {

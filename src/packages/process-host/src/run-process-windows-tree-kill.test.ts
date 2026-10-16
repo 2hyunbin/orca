@@ -85,20 +85,39 @@ describe('runProcess barrier with a slow Windows taskkill', () => {
     })
 
     await vi.advanceTimersByTimeAsync(1_000)
-    // The root's pipes close while taskkill may still be walking its descendants.
+    // taskkill reached the root; its pipes close while descendants may still be dying.
     root.emit('exit', 1, null)
     root.emit('close', 1, null)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(onChildTerminated).not.toHaveBeenCalled()
-
-    // The caller stops waiting at its own deadline, still unverified.
-    await vi.advanceTimersByTimeAsync(16_000)
-    await expect(pending).resolves.toMatchObject({ timedOut: true })
+    await vi.advanceTimersByTimeAsync(1_500)
     expect(onChildTerminated).not.toHaveBeenCalled()
 
     taskkill.emit('close', 0)
     await vi.advanceTimersByTimeAsync(0)
     expect(onChildTerminated).toHaveBeenCalledOnce()
+    await expect(pending).resolves.toMatchObject({ timedOut: true })
+  })
+
+  it('abandons taskkill shortly after the root exits so it cannot walk a reissued pid', async () => {
+    const onChildTerminated = vi.fn()
+    const pending = runProcess({
+      program: 'C:\\git.exe',
+      timeoutMs: 10,
+      terminationBarrier: true,
+      onChildTerminated
+    })
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    root.emit('exit', 0, null)
+    root.emit('close', 0, null)
+    await vi.advanceTimersByTimeAsync(1_999)
+    expect(taskkill.kill).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(taskkill.kill).toHaveBeenCalledOnce()
+    // Unverifiable, so termination falls back to the root's close as before.
+    expect(onChildTerminated).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(15_000)
+    await expect(pending).resolves.toMatchObject({ timedOut: true })
   })
 
   it('releases on root close once an abandoned taskkill has killed the root', async () => {

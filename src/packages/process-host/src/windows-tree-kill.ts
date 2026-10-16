@@ -18,6 +18,14 @@ export const WINDOWS_TASKKILL_WAIT_MS = 5_000
  * about to find.
  */
 export const WINDOWS_TASKKILL_DEADLINE_MS = 60_000
+/**
+ * How long taskkill may keep running once the root has exited.
+ * Why short: Node then releases the root's handle, so Windows may reissue the
+ * pid (#10680) to a process a late-starting taskkill would walk instead. Within
+ * this window a taskkill that itself killed the root still reports success;
+ * past it the kill is abandoned as unverifiable. No longer than the old cap.
+ */
+export const WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS = 2_000
 
 export type WindowsTreeKill = {
   verdict: () => WindowsTreeKillVerdict
@@ -55,9 +63,10 @@ export function inFlightWindowsTreeKill(
 /**
  * Start one tracked `taskkill /t /f` for this child's tree.
  *
- * The taskkill outlives every caller's wait and is only abandoned at the
- * deadline; the root is killed by handle only after taskkill has failed or been
- * abandoned, never while it may still be reading the tree.
+ * The taskkill outlives every caller's wait and is abandoned only at the
+ * deadline or shortly after the root exits; the root is killed by handle only
+ * after taskkill has failed or been abandoned, never while it may still be
+ * reading the tree.
  */
 export function startWindowsTreeKill(
   child: ChildProcess,
@@ -75,19 +84,34 @@ export function startWindowsTreeKill(
   })
   const kill: WindowsTreeKill = { verdict: () => verdict, settled }
   treeKills.set(child, kill)
+  let killer: ChildProcess | undefined
   let deadline: ReturnType<typeof setTimeout> | undefined
-  const finish = (next: SettledWindowsTreeKillVerdict): void => {
+  let afterRootExit: ReturnType<typeof setTimeout> | undefined
+  const abandon = (): void => {
+    try {
+      killer?.kill()
+    } catch {
+      /* already gone */
+    }
+    finish('unverifiable')
+  }
+  const onRootExit = (): void => {
+    afterRootExit ??= setTimeout(abandon, WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS)
+    afterRootExit.unref?.()
+  }
+  function finish(next: SettledWindowsTreeKillVerdict): void {
     if (verdict !== 'live') {
       return
     }
     verdict = next
     clearTimeout(deadline)
+    clearTimeout(afterRootExit)
+    child.off('exit', onRootExit)
     if (next === 'unverifiable') {
       killRoot()
     }
     resolveSettled(next)
   }
-  let killer: ChildProcess
   try {
     killer = launchTaskkill(rootPid)
   } catch {
@@ -96,15 +120,12 @@ export function startWindowsTreeKill(
   }
   killer.once('error', () => finish('unverifiable'))
   killer.once('close', (code) => finish(code === 0 ? 'exited' : 'unverifiable'))
-  deadline = setTimeout(() => {
-    try {
-      killer.kill()
-    } catch {
-      /* already gone */
-    }
-    finish('unverifiable')
-  }, WINDOWS_TASKKILL_DEADLINE_MS)
+  deadline = setTimeout(abandon, WINDOWS_TASKKILL_DEADLINE_MS)
   deadline.unref?.()
+  child.once('exit', onRootExit)
+  if (childProcessExited(child)) {
+    onRootExit()
+  }
   return kill
 }
 
@@ -124,6 +145,10 @@ export function waitForWindowsTreeKill(
       resolve(verdict === 'exited')
     })
   })
+}
+
+function childProcessExited(child: ChildProcess): boolean {
+  return (child.exitCode ?? null) !== null || (child.signalCode ?? null) !== null
 }
 
 /** Test seam: swap the taskkill launch, e.g. for one that starts late like a loaded host's. */
