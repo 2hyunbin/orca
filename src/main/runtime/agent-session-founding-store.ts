@@ -3,6 +3,10 @@ import type { JournalOperationReceipt } from '../native-chat/agent-session-journ
 import { commitAgentSessionFounding } from './agent-session-founding-admission'
 import type { AgentSessionReserveRequest } from './agent-session-reservation-admission'
 import { draftAgentSessionStoreState } from './agent-session-store-draft'
+import {
+  adoptMovedAgentSession,
+  type MovedAgentSession
+} from './agent-session-moved-session-adoption'
 import type { AgentSessionStoreTransactions } from './agent-session-store-transactions'
 
 /** Founding shares the store's admission and publishes only after the message transaction commits. */
@@ -34,6 +38,23 @@ export function createAgentSessionFoundingStore(
             reason: 'outcomeUnknown'
           })
         }
+      })
+      return {
+        write: receipt.write,
+        committed: () => {
+          receipt.committed()
+          if (!heldBefore) {
+            firstRecordListeners.forEach((listener) => listener())
+          }
+        }
+      }
+    },
+    /** A session moved here from another host, written by the caller's journal transaction. */
+    adoptMovedReceipt: (moved: MovedAgentSession): JournalOperationReceipt => {
+      let heldBefore = true
+      const receipt = transactions.receipt((draft) => {
+        heldBefore = draft.records.size > 0 || draft.unreadableRecords.size > 0
+        adoptMovedAgentSession(draft, moved)
       })
       return {
         write: receipt.write,

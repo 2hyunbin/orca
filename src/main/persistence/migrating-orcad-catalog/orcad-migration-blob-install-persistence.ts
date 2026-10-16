@@ -5,6 +5,10 @@ import { getHistoryRoot } from '../../terminal-history-paths'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import { findOrcadMigrationImportReceipt } from './orcad-catalog-receipt-ledger'
 import { installOrcadMigrationReceivedBlobs } from './orcad-migration-blob-installers'
+import {
+  hasPendingOrcadMigrationAgentSessions,
+  type OrcadMigrationAgentSessionJournal
+} from './orcad-agent-session-installer'
 import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-file'
 
 type OrcadMigrationBlobInstallRuntime = Pick<
@@ -20,6 +24,8 @@ type ClockOptions = { now?: () => Date }
 type InstallOptions = ClockOptions & {
   /** The runtime's live-shell check; a moved history waits while a shell runs in its worktree. */
   worktreeHasLiveShells?: (worktreeId: string) => boolean
+  /** The runtime's open chat journal; moved chat sessions wait without it. */
+  agentSessionJournal?: OrcadMigrationAgentSessionJournal
 }
 
 const orcadMigrationBlobInstallContext = Symbol('OrcadMigrationBlobInstallPersistence')
@@ -72,6 +78,15 @@ export class OrcadMigrationBlobInstallPersistence {
     }
   }
 
+  /** Whether a committed migration still holds a chat session waiting for the runtime's journal. */
+  hasPendingOrcadMigrationAgentSessions(): boolean {
+    const { runtime } = this[orcadMigrationBlobInstallContext]
+    return hasPendingOrcadMigrationAgentSessions(runtime.orcadMigrationBlobRoot, [
+      ...(runtime.state.orcadMigrationImportReceipts ?? []),
+      ...(runtime.state.orcadMigrationEvictedReceipts ?? [])
+    ])
+  }
+
   /** Retries a history install that waited on this worktree's shells; a no-op for any other. */
   installDeferredOrcadMigrationShellHistory(
     worktreeId: string,
@@ -117,6 +132,7 @@ function installCommitted(
     shellHistoryRoot: getHistoryRoot(),
     paneShellPath: () => runtime.paneShellPath(runtime.state.settings?.terminalDefaultShell),
     worktreeHasLiveShells: options.worktreeHasLiveShells,
+    agentSessionJournal: options.agentSessionJournal,
     deferredShellHistoryWorktreeIds: runtime.deferredShellHistoryWorktreeIds,
     paneWorktreeId: (paneKey) => findPaneWorktreeId(runtime.state, paneKey),
     now: clock(options)

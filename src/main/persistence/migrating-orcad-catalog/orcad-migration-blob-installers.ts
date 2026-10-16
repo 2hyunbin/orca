@@ -22,6 +22,11 @@ import {
   type OrcadMigrationRequestIdentity
 } from './orcad-migration-staged-file'
 import {
+  assertOrcadMigrationAgentSessionValid,
+  installOrcadMigrationAgentSessions,
+  type OrcadMigrationAgentSessionJournal
+} from './orcad-agent-session-installer'
+import {
   assertOrcadMigrationShellHistoryValid,
   installOrcadMigrationShellHistory
 } from './orcad-shell-history-installer'
@@ -36,7 +41,15 @@ type OrcadMigrationStagedBlobFile = {
   manifest: OrcadMigrationManifest
 }
 
-type OrcadMigrationBlobContentCheck = (file: OrcadMigrationStagedBlobFile) => void
+export type OrcadMigrationBlobContentContext = {
+  /** This host's chat journal when the runtime opened it; see `assertOrcadMigrationAgentSessionValid`. */
+  agentSessionJournal?: OrcadMigrationAgentSessionJournal
+}
+
+type OrcadMigrationBlobContentCheck = (
+  file: OrcadMigrationStagedBlobFile,
+  context: OrcadMigrationBlobContentContext
+) => void
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true })
 
@@ -47,6 +60,14 @@ const BLOB_CONTENT_CHECKS: Partial<Record<OrcadMigrationBlobKind, OrcadMigration
     },
     'shell-history': ({ key, path, manifest }) => {
       assertOrcadMigrationShellHistoryValid(key, path, manifest.payload)
+    },
+    'agent-session-records': ({ key, path, manifest }, context) => {
+      assertOrcadMigrationAgentSessionValid(
+        key,
+        path,
+        manifest.payload,
+        context.agentSessionJournal
+      )
     }
   }
 
@@ -56,7 +77,8 @@ const BLOB_CONTENT_CHECKS: Partial<Record<OrcadMigrationBlobKind, OrcadMigration
  */
 export function assertOrcadMigrationBlobContentsValid(
   manifest: OrcadMigrationManifest,
-  root: string
+  root: string,
+  context: OrcadMigrationBlobContentContext = {}
 ): void {
   for (const { descriptor, path } of stagedOrcadMigrationBlobFiles(manifest, root)) {
     const check = BLOB_CONTENT_CHECKS[descriptor.blobKind]
@@ -64,7 +86,7 @@ export function assertOrcadMigrationBlobContentsValid(
       continue
     }
     try {
-      check({ key: descriptor.key, path, manifest })
+      check({ key: descriptor.key, path, manifest }, context)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       throw new Error(`orcad_migration_blob_content_invalid:${descriptor.blobKind}:${reason}`)
@@ -87,21 +109,27 @@ export type OrcadMigrationBlobInstall = {
   worktreeHasLiveShells?: (worktreeId: string) => boolean
   /** Worktrees whose history install waits for their live shells to exit. */
   deferredShellHistoryWorktreeIds: Set<string>
+  /** The runtime's open chat journal. Without it (store load, no runtime yet) sessions wait. */
+  agentSessionJournal?: OrcadMigrationAgentSessionJournal
   /** The worktree that owns the pane on this host, or null when the pane is not here. */
   paneWorktreeId: (paneKey: string) => string | null
   now: number
 }
 
 /**
- * Idempotent: a blob already installed is only deleted, and the hint store remembers installed
- * migrations so a retry never revives a hint a pane already took. A write failure keeps the blob
- * for the next retry: a commit retry, a catalog-state query, the runtime's post-attach pass, or
- * (for restore hints) the next store load.
+ * Idempotent: a blob already installed is only deleted, the hint store remembers installed
+ * migrations so a retry never revives a hint a pane already took, and the chat journal marks each
+ * session it installed. A write failure keeps the blob for the next retry: a commit retry, a
+ * catalog-state query, the runtime's post-attach pass, or (for restore hints) the next store load.
  */
 export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobInstall): void {
   let firstError: unknown = null
   // One kind's failure must not hold back the others; each keeps its own blobs for the retry.
-  for (const installKind of [installTerminalRestoreHints, installShellHistory]) {
+  for (const installKind of [
+    installTerminalRestoreHints,
+    installShellHistory,
+    installAgentSessions
+  ]) {
     try {
       installKind(install)
     } catch (error) {
@@ -125,6 +153,17 @@ function installShellHistory(install: OrcadMigrationBlobInstall): void {
     worktreeHasLiveShells: install.worktreeHasLiveShells,
     deferredWorktreeIds: install.deferredShellHistoryWorktreeIds,
     now: install.now
+  })
+}
+
+function installAgentSessions(install: OrcadMigrationBlobInstall): void {
+  if (!install.agentSessionJournal) {
+    return
+  }
+  installOrcadMigrationAgentSessions({
+    migration: install.migration,
+    root: install.root,
+    journal: install.agentSessionJournal
   })
 }
 

@@ -50,6 +50,7 @@ import {
   stageOrcadMigrationBlobChunk
 } from './orcad-migration-blob-staging'
 import { assertOrcadMigrationBlobContentsValid } from './orcad-migration-blob-installers'
+import type { OrcadMigrationAgentSessionJournal } from './orcad-agent-session-installer'
 
 type OrcadCatalogImportRuntime = Pick<
   StoreRuntimeState,
@@ -149,7 +150,11 @@ export class OrcadCatalogImportPersistence {
   /** `expectedBlobs` absent (SSH, older senders) keeps the pre-blob-set commit unchanged. */
   commitStagedOrcadMigrationCatalog(
     manifest: OrcadMigrationManifest,
-    options: { now?: () => Date; expectedBlobs?: readonly OrcadMigrationBlobDescriptor[] } = {}
+    options: {
+      now?: () => Date
+      expectedBlobs?: readonly OrcadMigrationBlobDescriptor[]
+      agentSessionJournal?: OrcadMigrationAgentSessionJournal
+    } = {}
   ): OrcadMigrationCatalogState {
     const context = this[orcadCatalogImportContext]
     const current = migrationCatalogState(context.runtime, manifest)
@@ -169,7 +174,9 @@ export class OrcadCatalogImportPersistence {
       )
     }
     assertOrcadMigrationBlobsReady(manifest, context.runtime.orcadMigrationBlobRoot)
-    assertOrcadMigrationBlobContentsValid(manifest, context.runtime.orcadMigrationBlobRoot)
+    assertOrcadMigrationBlobContentsValid(manifest, context.runtime.orcadMigrationBlobRoot, {
+      agentSessionJournal: options.agentSessionJournal
+    })
     commitOrcadMigrationSnapshots(manifest, context.runtime.terminalScrollbackSnapshotStorage)
     commitOrcadMigrationBlobs(manifest, context.runtime.orcadMigrationBlobRoot)
     const receipt = commitPreparedCatalog(context, manifest, prepared, options.now)

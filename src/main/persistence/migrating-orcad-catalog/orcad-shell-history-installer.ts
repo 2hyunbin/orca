@@ -18,10 +18,6 @@ import {
 } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { ORCAD_MIGRATION_BLOB_KIND_CONTRACTS } from '../../../shared/orcad-migration-blob-transfer'
-import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
-import { projectGroupIdFromRepoId } from '../../../shared/folder-workspace-worktree'
-import { folderWorkspaceKey } from '../../../shared/workspace-scope'
-import { splitWorktreeId } from '../../../shared/worktree/id'
 import {
   durableWriteTempPath,
   syncDirectoryDurablySync,
@@ -42,17 +38,16 @@ import {
   type OrcadMigrationShellHistoryShell
 } from './orcad-migration-shell-history-format'
 import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-file'
-
-type ShellHistoryCatalog = Pick<
-  OrcadMigrationManifest['payload'],
-  'repositories' | 'projectGroups' | 'folderWorkspaces'
->
+import {
+  orcadMigrationCatalogOwnsWorktree,
+  type OrcadMigrationWorktreeCatalog
+} from './orcad-migration-catalog-worktree-ownership'
 
 /** Throws unless the staged file is a well-formed history for a worktree this catalog moves. */
 export function assertOrcadMigrationShellHistoryValid(
   key: string,
   path: string,
-  catalog: ShellHistoryCatalog
+  catalog: OrcadMigrationWorktreeCatalog
 ): void {
   const { worktreeId } = parseOrcadMigrationShellHistoryHeader(
     key,
@@ -61,7 +56,7 @@ export function assertOrcadMigrationShellHistoryValid(
   )
   // Refused, not dropped: only a sender bug names a worktree outside the catalog, and dropping
   // the file would lose that history without anyone noticing.
-  if (!catalogOwnsWorktree(catalog, worktreeId)) {
+  if (!orcadMigrationCatalogOwnsWorktree(catalog, worktreeId)) {
     throw new Error('orcad_migration_shell_history_worktree_not_migrated')
   }
 }
@@ -264,20 +259,4 @@ function readHead(path: string, maxBytes: number): Buffer {
   } finally {
     closeSync(fd)
   }
-}
-
-function catalogOwnsWorktree(catalog: ShellHistoryCatalog, worktreeId: string): boolean {
-  if (
-    catalog.folderWorkspaces.some((workspace) => folderWorkspaceKey(workspace.id) === worktreeId)
-  ) {
-    return true
-  }
-  const parsed = splitWorktreeId(worktreeId)
-  if (!parsed?.repoId || !parsed.worktreePath) {
-    return false
-  }
-  const projectGroupId = projectGroupIdFromRepoId(parsed.repoId)
-  return projectGroupId
-    ? catalog.projectGroups.some((group) => group.id === projectGroupId)
-    : catalog.repositories.some((repo) => repo.id === parsed.repoId)
 }

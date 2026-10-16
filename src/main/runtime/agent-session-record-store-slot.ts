@@ -31,7 +31,7 @@ type RecordStoreSlot = {
   stateDirectory: string
   opened: Promise<OpenedAgentSessionRecordStore>
   /** Set once `opened` resolves, so a reader that must not wait can ask without awaiting. */
-  store?: AgentSessionRecordStore
+  resolved?: OpenedAgentSessionRecordStore
 }
 
 let opening: RecordStoreSlot | null = null
@@ -50,7 +50,7 @@ export function openAgentSessionRecordStoreOnce(
     stateDirectory: location.stateDirectory,
     opened: openRecordStore(location).then(
       (opened) => {
-        slot.store = opened.store
+        slot.resolved = opened
         return opened
       },
       (error: unknown) => {
@@ -68,7 +68,12 @@ export function openAgentSessionRecordStoreOnce(
 
 /** The store when it is already open; null while it opens or before anything asked for it. */
 export function peekOpenedAgentSessionRecordStore(): AgentSessionRecordStore | null {
-  return opening?.store ?? null
+  return opening?.resolved?.store ?? null
+}
+
+/** The store with its journal database when already open; null otherwise. */
+export function peekOpenedAgentSessionRecordStoreAndJournal(): OpenedAgentSessionRecordStore | null {
+  return opening?.resolved ?? null
 }
 
 async function openRecordStore(

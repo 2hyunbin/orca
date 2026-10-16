@@ -64,6 +64,7 @@ export type RuntimeStore = {
   installOrcadMigrationReceivedBlobs?: Store['installOrcadMigrationReceivedBlobs']
   installPendingOrcadMigrationReceivedBlobs?: Store['installPendingOrcadMigrationReceivedBlobs']
   installDeferredOrcadMigrationShellHistory?: Store['installDeferredOrcadMigrationShellHistory']
+  hasPendingOrcadMigrationAgentSessions?: Store['hasPendingOrcadMigrationAgentSessions']
   peekOrcadMigrationTerminalRestoreHint?: Store['peekOrcadMigrationTerminalRestoreHint']
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']

@@ -20,6 +20,9 @@ import {
 } from './orcad-migration-catalog-import'
 import { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
 import type { RuntimeStore } from './runtime-store-contract'
+import type { OrcadMigrationAgentSessionJournal } from '../persistence/migrating-orcad-catalog/orcad-agent-session-installer'
+import { peekOpenedAgentSessionRecordStoreAndJournal } from './agent-session-record-store-slot'
+import { createOrcadMigrationAgentSessionJournal } from './orcad-migration-agent-session-journal'
 
 type MigrationStoreKey =
   | 'stageOrcadMigrationCatalog'
@@ -56,6 +59,11 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
       signal: options.signal,
       expectedBlobs: options.expectedBlobs,
       worktreeHasLiveShells: this.migrationWorktreeHasLiveShells,
+      agentSessionJournal: options.expectedBlobs?.some(
+        (blob) => blob.blobKind === 'agent-session-records'
+      )
+        ? await this.openMigrationAgentSessionJournal()
+        : peekMigrationAgentSessionJournal(),
       onDurableCommit: () => {
         this.invalidateResolvedWorktreeCache()
         this.notifyReposChanged()
@@ -98,7 +106,8 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
     return getOrcadMigrationCatalogState({
       store: this.requireMigrationStore('getOrcadMigrationCatalogState'),
       manifest,
-      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells
+      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells,
+      agentSessionJournal: peekMigrationAgentSessionJournal()
     })
   }
 
@@ -120,8 +129,29 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
       return
     }
     store.installPendingOrcadMigrationReceivedBlobs({
-      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells
+      worktreeHasLiveShells: this.migrationWorktreeHasLiveShells,
+      // Opened only for a session that waits: startup otherwise leaves the chat journal closed.
+      agentSessionJournal: store.hasPendingOrcadMigrationAgentSessions?.()
+        ? await this.openMigrationAgentSessionJournal()
+        : peekMigrationAgentSessionJournal()
     })
+  }
+
+  /** Undefined when the journal will not open: moved sessions then wait for a later retry. */
+  private async openMigrationAgentSessionJournal(): Promise<
+    OrcadMigrationAgentSessionJournal | undefined
+  > {
+    try {
+      return createOrcadMigrationAgentSessionJournal(
+        await this.openAgentSessionRecordStoreAndJournal()
+      )
+    } catch (error) {
+      console.error(
+        '[orcad-migration] moved chat sessions wait: the chat journal did not open',
+        error
+      )
+      return undefined
+    }
   }
 
   // The last shell of a worktree exiting releases a moved history that waited on it.
@@ -154,4 +184,9 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
     }
     return this.requireStore()
   }
+}
+
+function peekMigrationAgentSessionJournal(): OrcadMigrationAgentSessionJournal | undefined {
+  const opened = peekOpenedAgentSessionRecordStoreAndJournal()
+  return opened ? createOrcadMigrationAgentSessionJournal(opened) : undefined
 }

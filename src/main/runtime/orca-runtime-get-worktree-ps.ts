@@ -27,7 +27,10 @@ import {
   createStructuredAgentSessionLogger,
   neverThrowingStructuredAgentSessionLogger
 } from '../native-chat/agent-session-wire/structured-agent-session-logger'
-import { openAgentSessionRecordStoreOnce } from './agent-session-record-store-slot'
+import {
+  openAgentSessionRecordStoreOnce,
+  type OpenedAgentSessionRecordStore
+} from './agent-session-record-store-slot'
 import type { AgentSessionRecordStore } from './agent-session-record-store'
 import { maybeAutoRenameWorkspaceOnFirstStructuredTurn } from '../agent-hooks/first-work-structured-session-rename'
 import { firstWorkRenameDeps } from '../agent-hooks/first-work-rename-runtime'
@@ -188,12 +191,16 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
   /** The durable record store alone, without the chat host: launch admission needs only its
    *  ledger. A host installed later is built on this same store. */
   async openAgentSessionRecordStore(): Promise<AgentSessionRecordStore> {
-    const { store } = await openAgentSessionRecordStoreOnce({
+    return (await this.openAgentSessionRecordStoreAndJournal()).store
+  }
+
+  /** The same store with the journal database it writes through. */
+  openAgentSessionRecordStoreAndJournal(): Promise<OpenedAgentSessionRecordStore> {
+    return openAgentSessionRecordStoreOnce({
       stateDirectory: getProfileUserDataPath(),
       hostId: LOCAL_EXECUTION_HOST_ID,
       logger: neverThrowingStructuredAgentSessionLogger(createStructuredAgentSessionLogger())
     })
-    return store
   }
 
   /**

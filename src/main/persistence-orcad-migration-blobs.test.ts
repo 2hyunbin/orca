@@ -5,7 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OrcadMigrationBlobDescriptor } from '../shared/orcad-migration-blob-transfer'
 import { getOrcadMigrationReceivedBlobPath } from './persistence/migrating-orcad-catalog/orcad-migration-blob-staging'
-import { manifest } from './persistence-orcad-migration-catalog-fixture'
+import { DORMANT_WORKTREE_ID, manifest } from './persistence-orcad-migration-catalog-fixture'
+import { encodeAgentSessionRecord } from '../shared/agent-session-record-stored-form'
+import { agentSessionRecordFixture } from './native-chat/agent-session-record-test-fixture'
+import {
+  ORCAD_MIGRATION_AGENT_SESSION_SCHEMA_VERSION,
+  ORCAD_MIGRATION_AGENT_SESSION_TABLE_NAMES
+} from './persistence/migrating-orcad-catalog/orcad-migration-agent-session-format'
 import { createStore, testState } from './persistence-test-harness'
 
 vi.mock('electron', () => ({
@@ -19,8 +25,24 @@ vi.mock('electron', () => ({
 
 vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 
-// A kind with no installer yet, so the channel's own behaviour is all that runs.
-const bytes = Buffer.from('session record one\nsession record two\n')
+// No journal is passed, so the session waits and the channel's own behaviour is all that runs.
+const bytes = Buffer.from(
+  JSON.stringify({
+    schemaVersion: ORCAD_MIGRATION_AGENT_SESSION_SCHEMA_VERSION,
+    sessionId: 'session-kept',
+    record: encodeAgentSessionRecord(
+      agentSessionRecordFixture({
+        sessionId: 'session-kept',
+        location: { workspaceId: DORMANT_WORKTREE_ID, workspaceKind: 'git-worktree' }
+      })
+    ),
+    tabId: null,
+    operations: [],
+    tables: Object.fromEntries(
+      ORCAD_MIGRATION_AGENT_SESSION_TABLE_NAMES.map((table) => [table, []])
+    )
+  })
+)
 const blob: OrcadMigrationBlobDescriptor = {
   blobKind: 'agent-session-records',
   key: 'session-kept',
