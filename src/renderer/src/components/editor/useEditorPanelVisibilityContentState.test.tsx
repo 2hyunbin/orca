@@ -38,7 +38,7 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
   findWorkspaceFileRoute: vi.fn(() => null)
 }))
 
-vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
+vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState, subscribe: vi.fn() } }))
 
 import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 import { useEditorPanelContentState } from './useEditorPanelContentState'

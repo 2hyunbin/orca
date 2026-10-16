@@ -15,6 +15,10 @@ vi.mock('@/store', () => ({
 vi.mock('@/runtime/runtime-file-read-client', () => ({
   readRuntimeFileContent: readRuntimeFileContentMock
 }))
+vi.mock('./ipynb-document-store', () => ({
+  beginNotebookReload: () => null,
+  canUndoNotebookReload: () => false
+}))
 
 vi.mock('@/lib/connection-context', () => ({
   // Why: the floating workspace is always client-local; other owners are still loading.

@@ -1,5 +1,6 @@
 import { translate } from '@/i18n/i18n'
 import type { OpenFile } from '@/store/slices/editor'
+import type { NotebookReload } from './ipynb-document-reload'
 import type { GitDiffResult } from '../../../../shared/git-diff-compare-types'
 import { getDiffContentSignature } from './diff-content-signature'
 import { DiffViewer, ImageDiffViewer, MarkdownPreview } from './editor-lazy-views'
@@ -42,7 +43,7 @@ export function EditorDiffFileSurface({
   markdownDocuments: MarkdownDocumentsController
   onContentChange: (content: string) => void
   onSave: (content: string) => Promise<boolean>
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 }): React.JSX.Element {
   if (!diffContent) {
     return (

@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import type { MarkdownViewMode, OpenFile, PendingEditorReveal } from '@/store/slices/editor'
+import type { NotebookReload } from './ipynb-document-reload'
 import type { GitDiffResult } from '../../../../shared/git-diff-compare-types'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import { CheckRunDetailsPanel } from './CheckRunDetailsPanel'
@@ -91,7 +92,7 @@ export function EditorContent({
   handleDirtyStateHint: (dirty: boolean) => void
   handleSave: (content: string) => Promise<boolean>
   handleSaveForFile: (file: OpenFile, content: string) => Promise<boolean>
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 }): React.JSX.Element {
   const editorViewStateKey =
     viewStateScopeId === activeFile.id

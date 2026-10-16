@@ -9,6 +9,7 @@ import {
   type EditorPathMutationTarget
 } from './editor-autosave'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
+import type { NotebookReload } from './ipynb-document-reload'
 import { isReloadableSingleFileDiffTab } from './editor-panel-diff-reload'
 
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
@@ -16,6 +17,7 @@ type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewM
 export type EditorPanelContentLoadOptions = {
   force?: boolean
   externalEventGeneration?: number
+  notebookReload?: NotebookReload
 }
 
 type UseEditorPanelExternalContentEventsParams = {

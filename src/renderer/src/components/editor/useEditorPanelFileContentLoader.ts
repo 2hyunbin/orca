@@ -2,7 +2,7 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import type { OpenFile } from '@/store/slices/editor'
 import { getConnectionIdForFile, isWorktreeConnectionResolved } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
-import { getDiskBaselineSignature } from './diff-content-signature'
+import { stampCleanTabDiskBaseline } from './editor-disk-baseline'
 import { getRuntimeFileReadScope } from '@/runtime/runtime-file-routing'
 import { readEditorCsvFileContent } from './csv/csv-file-content'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
@@ -27,6 +27,11 @@ import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-rou
 import { editorTabFileAccess, isClientLocalReadOnlyTab } from '@/lib/local-file-access'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
+import {
+  notebookReadEpoch,
+  notebookReloadPending,
+  settleNotebookReload
+} from './ipynb-document-store'
 
 const inFlightFileReads = new Map<string, InFlightContentRead<FileContent>>()
 
@@ -45,25 +50,6 @@ type UseEditorPanelFileContentLoaderParams = {
   openFilesRef: MutableRefObject<OpenFile[]>
   outstandingFileReadsRef: MutableRefObject<Record<string, number>>
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>
-}
-
-// Why: a clean load re-baselines what this tab's future edits are based on; a
-// dirty tab keeps its baseline (its draft still derives from the older content
-// the signature was taken over). Best-effort metadata — a failure here must
-// not convert an already-delivered load into an error view, hence the guard.
-function stampCleanTabDiskBaseline(id: string, result: FileContent): void {
-  if (result.isBinary || result.loadError || result.csvPreview) {
-    return
-  }
-  try {
-    const state = useAppStore.getState()
-    const loadedFile = state.openFiles.find((file) => file.id === id)
-    if (loadedFile && !loadedFile.isDirty) {
-      state.setLastKnownDiskSignature(id, getDiskBaselineSignature(result.content))
-    }
-  } catch (err) {
-    console.warn('[editor] failed to stamp disk baseline', err)
-  }
 }
 
 function inFlightReadKey(connectionId: string | undefined, filePath: string): string {
@@ -86,10 +72,16 @@ export function useEditorPanelFileContentLoader({
       relativePath?: string,
       options?: EditorPanelContentLoadOptions
     ): Promise<void> => {
+      if (!options?.notebookReload && notebookReloadPending(id)) {
+        return
+      }
       const generation = fileReadGenerationCounterRef.current + 1
+      const notebookEpoch = notebookReadEpoch(id)
       fileReadGenerationCounterRef.current = generation
       fileReadGenerationRef.current[id] = generation
       outstandingFileReadsRef.current[id] = generation
+      const accepted = (): boolean =>
+        fileReadGenerationRef.current[id] === generation && notebookReadEpoch(id) === notebookEpoch
       let readConnectionId: string | undefined
       try {
         const resolvedConnectionId = getConnectionIdForFile(worktreeId ?? null, filePath)
@@ -245,7 +237,7 @@ export function useEditorPanelFileContentLoader({
           })
         }
         const result = await pending.promise
-        if (fileReadGenerationRef.current[id] !== generation) {
+        if (!accepted()) {
           return
         }
         if (result.csvPreview && useAppStore.getState().editorDrafts[id] !== undefined) {
@@ -257,10 +249,20 @@ export function useEditorPanelFileContentLoader({
           useAppStore.getState().setCsvPreviewOnly(id, Boolean(result.csvPreview))
         }
         delete fileLoadRetryAttemptsRef.current[id]
+        if (options?.notebookReload) {
+          if (
+            !settleNotebookReload(options.notebookReload, result.loadError ? null : result.content)
+          ) {
+            return
+          }
+        }
         setFileContents((prev) => ({ ...prev, [id]: result }))
         stampCleanTabDiskBaseline(id, result)
       } catch (err) {
-        if (fileReadGenerationRef.current[id] !== generation) {
+        if (!accepted()) {
+          return
+        }
+        if (options?.notebookReload && !settleNotebookReload(options.notebookReload, null)) {
           return
         }
         const hostConnection = selectWorktreeHostConnectionPhase(
@@ -292,6 +294,9 @@ export function useEditorPanelFileContentLoader({
           }
         }))
       } finally {
+        if (options?.notebookReload) {
+          settleNotebookReload(options.notebookReload, null)
+        }
         if (outstandingFileReadsRef.current[id] === generation) {
           delete outstandingFileReadsRef.current[id]
         }

@@ -13,6 +13,7 @@ import {
 } from './editor-autosave'
 import {
   flushPendingEditorChange,
+  cancelEditorBufferDiscard,
   getEditorBufferVersion,
   hasPendingEditorChange
 } from './editor-buffer-owners'
@@ -70,6 +71,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     trigger: 'autosave' | 'user' = 'user'
   ): Promise<void> => {
     clearAutoSaveTimer(file.id)
+    if (trigger !== 'autosave') {
+      cancelEditorBufferDiscard(file.id)
+    }
     const queuedGeneration = saveGeneration.get(file.id) ?? 0
 
     const previousSave = saveQueue.get(file.id) ?? Promise.resolve()

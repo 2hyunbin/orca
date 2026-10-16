@@ -63,7 +63,8 @@ vi.mock('@/lib/file-owner-runtime-target', () => {
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: mocks.getState
+    getState: mocks.getState,
+    subscribe: vi.fn()
   }
 }))
 

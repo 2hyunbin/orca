@@ -12,6 +12,7 @@ import { useEditorPanelFileContentLoader } from './useEditorPanelFileContentLoad
 import { useEditorPanelDiffContentLoader } from './useEditorPanelDiffContentLoader'
 import { useEditorPanelActiveTabContentLoad } from './useEditorPanelActiveTabContentLoad'
 import { useEditorPanelContentReloadTriggers } from './useEditorPanelContentReloadTriggers'
+import type { NotebookReload } from './ipynb-document-reload'
 
 type GitStatusByWorktree = ReturnType<typeof useAppStore.getState>['gitStatusByWorktree']
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
@@ -28,7 +29,7 @@ type UseEditorPanelContentStateParams = {
 type UseEditorPanelContentStateResult = {
   fileContents: Record<string, FileContent>
   diffContents: Record<string, DiffContent>
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 }
 
 export function useEditorPanelContentState({
@@ -141,7 +142,7 @@ export function useEditorPanelContentState({
   // must refetch the diff body, not the plain file content — one entry point
   // branches on the tab mode so every consumer reloads the right store.
   const reloadContent = useCallback(
-    (file: OpenFile): void => {
+    (file: OpenFile, notebookReload?: NotebookReload): void => {
       if (file.mode === 'diff') {
         setDiffContents((prev) => {
           if (!prev[file.id]) {
@@ -156,7 +157,7 @@ export function useEditorPanelContentState({
       }
       delete fileLoadRetryAttemptsRef.current[file.id]
       setFileContents((prev) => {
-        if (!prev[file.id]) {
+        if (notebookReload || !prev[file.id]) {
           return prev
         }
         const next = { ...prev }
@@ -164,7 +165,8 @@ export function useEditorPanelContentState({
         return next
       })
       void loadFileContent(file.filePath, file.id, file.worktreeId, file.relativePath, {
-        force: true
+        force: true,
+        notebookReload
       })
     },
     [loadDiffContent, loadFileContent]

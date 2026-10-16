@@ -73,7 +73,7 @@ vi.mock('@/lib/file-owner-runtime-target', () => {
   }
 })
 
-vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
+vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState, subscribe: vi.fn() } }))
 
 vi.mock('./useEditorPanelExternalContentEvents', () => ({
   useEditorPanelExternalContentEvents: vi.fn(),

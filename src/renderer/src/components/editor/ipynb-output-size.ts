@@ -4,7 +4,7 @@ import { noticeOutput } from './ipynb-kernel-outputs'
 import { isRecord, type IpynbDocument } from './ipynb-parse'
 
 /** UTF-16 units of output a notebook records; past this its whole text no longer fits a save. */
-export const MAX_RECORDED_OUTPUT_UNITS = 256 * 1024 * 1024
+export const MAX_RECORDED_OUTPUT_UNITS = 224 * 1024 * 1024
 
 // Why weak keys: outputs and output arrays are replaced, never mutated, so a size never goes stale.
 const sizes = new WeakMap<object, number>()

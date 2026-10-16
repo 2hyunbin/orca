@@ -1,4 +1,6 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { translate } from '@/i18n/i18n'
+import { structuralValuesEqual } from '../../../../shared/structural-value-equality'
 import type { NotebookOutput } from './ipynb-kernel-outputs'
 import { isRecord, type IpynbCellKind, type IpynbDocument } from './ipynb-parse'
 
@@ -40,6 +42,55 @@ function storedOutput(output: unknown): unknown {
     : stored
 }
 
+function sameStreamText(value: unknown, stored: unknown): boolean {
+  if (typeof stored === 'string' && Array.isArray(value)) {
+    return sameStreamText(stored, value)
+  }
+  if (typeof value !== 'string' || !Array.isArray(stored)) {
+    return structuralValuesEqual(value, stored)
+  }
+  let offset = 0
+  for (const [index, line] of stored.entries()) {
+    if (
+      typeof line !== 'string' ||
+      line.length === 0 ||
+      (index < stored.length - 1 && !line.endsWith('\n')) ||
+      !value.startsWith(line, offset)
+    ) {
+      return false
+    }
+    offset += line.length
+  }
+  return offset === value.length
+}
+
+/** Compare the saved result without copying retained output strings. */
+export function sameStoredOutputs(outputs: unknown, stored: unknown): boolean {
+  if (outputs === stored) {
+    return true
+  }
+  if (!Array.isArray(outputs) || !Array.isArray(stored) || outputs.length !== stored.length) {
+    return false
+  }
+  return outputs.every((output, index) => {
+    const saved = stored[index]
+    if (!isRecord(output) || !isRecord(saved)) {
+      return false
+    }
+    const keys = Object.keys(output).filter((key) => key !== 'transient')
+    if (keys.length !== Object.keys(saved).filter((key) => key !== 'transient').length) {
+      return false
+    }
+    return keys.every(
+      (key) =>
+        Object.hasOwn(saved, key) &&
+        (key === 'text' && output.output_type === 'stream' && saved.output_type === 'stream'
+          ? sameStreamText(output[key], saved[key])
+          : structuralValuesEqual(output[key], saved[key]))
+    )
+  })
+}
+
 function storedCell(cell: unknown): unknown {
   return isRecord(cell) && Array.isArray(cell.outputs) && cell.outputs.length > 0
     ? { ...cell, outputs: cell.outputs.map(storedOutput) }
@@ -48,7 +99,19 @@ function storedCell(cell: unknown): unknown {
 
 /** The notebook's file text; live-only fields (display ids) are dropped here, never in the model. */
 export function serializeIpynbDocument(document: IpynbDocument): string {
-  return `${JSON.stringify({ ...document.root, cells: document.cells.map(storedCell) }, null, 1)}\n`
+  try {
+    return `${JSON.stringify({ ...document.root, cells: document.cells.map(storedCell) }, null, 1)}\n`
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new Error(
+        translate(
+          'auto.components.editor.IpynbViewer.tooLargeToSave',
+          'This notebook is too large to save.'
+        )
+      )
+    }
+    throw error
+  }
 }
 
 function replaceCell(

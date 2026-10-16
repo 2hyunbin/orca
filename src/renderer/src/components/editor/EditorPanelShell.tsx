@@ -2,6 +2,7 @@ import { Suspense, type JSX, type Ref } from 'react'
 import { useAppStore } from '@/store'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import type { OpenFile } from '@/store/slices/editor'
+import type { NotebookReload } from './ipynb-document-reload'
 import { EditorContent } from './EditorContent'
 import { EditorPanelHeader } from './EditorPanelHeader'
 import { UntitledFileRenameDialog } from './UntitledFileRenameDialog'
@@ -48,7 +49,7 @@ type EditorPanelShellProps = {
   onDirtyStateHint: (dirty: boolean) => void
   onSave: (content: string) => Promise<boolean>
   onSaveForFile: (file: OpenFile, content: string) => Promise<boolean>
-  onReloadContent: (file: OpenFile) => void
+  onReloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
   onCloseMarkdownTableOfContents: () => void
   onCloseRenameDialog: () => void
   onRenameConfirm: (newRelPath: string) => Promise<void>

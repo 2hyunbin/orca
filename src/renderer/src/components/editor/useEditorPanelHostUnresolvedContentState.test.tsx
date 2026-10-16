@@ -41,7 +41,7 @@ vi.mock('@/lib/runtime-workspace-file-route', () => ({
   findWorkspaceFileRoute: vi.fn(() => null)
 }))
 
-vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
+vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState, subscribe: vi.fn() } }))
 
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 import {

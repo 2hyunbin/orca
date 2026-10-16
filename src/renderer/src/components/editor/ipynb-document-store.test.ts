@@ -39,7 +39,14 @@ vi.mock('@/runtime/runtime-file-mutation-client', () => ({
 
 import { createEditorSaveQueue } from './editor-save-queue'
 import { reloadTabContentFromDisk } from './ExternalFileChangeBanner'
-import { openNotebookDocument, reconcileNotebookDocument } from './ipynb-document-store'
+import { sameStoredOutputs, updateIpynbCellSource } from './ipynb-cell-mutations'
+import {
+  beginNotebookReload,
+  editNotebookDocument,
+  getNotebookDocumentView,
+  openNotebookDocument,
+  settleNotebookReload
+} from './ipynb-document-store'
 import { runCells, trustNotebook } from './ipynb-kernel-session'
 import {
   isNotebookTestFileDirty,
@@ -112,12 +119,12 @@ describe('notebook document store', () => {
     expect(draft()).toBeUndefined()
 
     frame({ type: 'done', status: 'ok', execution_count: 1 })
-    expect(savedCell(draft())).toMatchObject({
+    expect(draft()).toBeUndefined()
+    await save()
+    expect(savedCell(disk.files.get(FILE_PATH))).toMatchObject({
       execution_count: 1,
       outputs: [{ output_type: 'stream', text: ['1\n'] }]
     })
-    await save()
-    expect(savedCell(disk.files.get(FILE_PATH))).toMatchObject({ execution_count: 1 })
     expect(isNotebookTestFileDirty(FILE_ID)).toBe(false)
   })
 
@@ -131,12 +138,15 @@ describe('notebook document store', () => {
     const saving = save()
     await vi.waitFor(() => expect(draft()).toBeDefined())
     stdout('two\n')
+    const reload = beginNotebookReload(FILE_ID)!
+    const queued = save()
+    expect(settleNotebookReload(reload, notebookText('disk'))).toBe(false)
     finishWrite()
     await saving
     expect(savedCell(disk.files.get(FILE_PATH)).outputs).toMatchObject([{ text: ['one\n'] }])
     expect(isNotebookTestFileDirty(FILE_ID)).toBe(true)
 
-    await save()
+    await queued
     expect(savedCell(disk.files.get(FILE_PATH)).outputs).toMatchObject([
       { text: ['one\n', 'two\n'] }
     ])
@@ -146,12 +156,16 @@ describe('notebook document store', () => {
   it('takes in the disk text on Reload from disk while a cell runs, keeping its live output', async () => {
     await startRun()
     stdout('live\n')
-    reloadTabContentFromDisk(notebookTestSaveQueueStore.getState().openFiles[0]!, () => {})
-    expect(draft()).toBeUndefined()
+    let reload: ReturnType<typeof beginNotebookReload> = null
+    reloadTabContentFromDisk(
+      notebookTestSaveQueueStore.getState().openFiles[0]!,
+      (_file, token) => {
+        reload = token ?? null
+      }
+    )
     stdout('more\n')
-
-    reconcileNotebookDocument(FILE_ID, notebookText('print(2)', ['b']))
     frame({ type: 'done', status: 'ok', execution_count: 1 })
+    expect(settleNotebookReload(reload!, notebookText('print(2)', ['b']))).toBe(true)
     const saved = JSON.parse(draft() ?? '{}')
     expect(saved.cells.map((cell: { id: string }) => cell.id)).toEqual(['a', 'b'])
     expect(saved.cells[0]).toMatchObject({
@@ -167,11 +181,19 @@ describe('notebook document store', () => {
     stdout('1\n')
     setMarkdownViewMode(FILE_ID, 'source')
     expect(savedCell(draft()).outputs).toMatchObject([{ text: ['1\n'] }])
+    const original = draft()!
 
     setEditorDraft(FILE_ID, '{"cells": [')
     stdout('2\n')
     frame({ type: 'done', status: 'ok', execution_count: 1 })
     expect(draft()).toBe('{"cells": [')
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(getNotebookDocumentView(FILE_ID)?.error).not.toBeNull()
+    setMarkdownViewMode(FILE_ID, 'source')
+    setEditorDraft(FILE_ID, original)
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(getNotebookDocumentView(FILE_ID)?.error).toBeNull()
+    setMarkdownViewMode(FILE_ID, 'source')
 
     const typed = notebookText('print("edited")')
     setEditorDraft(FILE_ID, typed)
@@ -183,6 +205,104 @@ describe('notebook document store', () => {
     expect(savedCell(draft())).toMatchObject({
       source: ['print("edited")'],
       outputs: [{ text: ['1\n', '2\n'] }]
+    })
+  })
+
+  it('keeps a no-output completion count through an unrelated Source edit', async () => {
+    const { setEditorDraft, setMarkdownViewMode } = notebookTestAppStore.getState()
+    await startRun()
+    setMarkdownViewMode(FILE_ID, 'source')
+    frame({ type: 'done', status: 'ok', execution_count: 7 })
+    setEditorDraft(FILE_ID, notebookText('print(1)', ['b']))
+    setMarkdownViewMode(FILE_ID, 'rich')
+    expect(savedCell(draft()).execution_count).toBe(7)
+  })
+
+  it('keeps the prior model until accepted read, then carries completed and queued results', async () => {
+    await startRun()
+    await runCells(FILE_PATH, [{ key: 'b', code: 'print(2)', fileId: FILE_ID }], '/repo')
+    const reload = beginNotebookReload(FILE_ID)!
+    stdout('first\n')
+    frame({ type: 'done', status: 'ok', execution_count: 1 })
+    await vi.waitFor(() => expect(draft()).toBeDefined())
+    stdout('second\n')
+    frame({ type: 'done', status: 'ok', execution_count: 2 })
+    expect(savedCell(draft()).source).toEqual(['print(1)'])
+    expect(settleNotebookReload(reload, notebookText('disk', ['b']))).toBe(true)
+    expect(savedCell(draft())).toMatchObject({
+      source: ['disk'],
+      execution_count: 1,
+      outputs: [{ text: ['first\n'] }]
+    })
+    expect(JSON.parse(draft() ?? '{}').cells[1]).toMatchObject({
+      execution_count: 2,
+      outputs: [{ text: ['second\n'] }]
+    })
+  })
+
+  it('keeps live stream and display identity when the accepted disk result is already saved', async () => {
+    await startRun()
+    frame({
+      type: 'display_data',
+      content: { data: { 'text/plain': 'before' }, metadata: {}, transient: { display_id: 'd' } }
+    })
+    stdout('a\nb\n')
+    const diskText = JSON.parse(notebookText('print(1)'))
+    diskText.cells[0].outputs = [
+      { output_type: 'display_data', data: { 'text/plain': 'before' }, metadata: {} },
+      { output_type: 'stream', name: 'stdout', text: ['a\n', 'b\n'] }
+    ]
+    const reload = beginNotebookReload(FILE_ID)!
+    expect(settleNotebookReload(reload, JSON.stringify(diskText))).toBe(true)
+    expect(isNotebookTestFileDirty(FILE_ID)).toBe(false)
+
+    stdout('c\n')
+    frame({
+      type: 'update_display_data',
+      content: { data: { 'text/plain': 'after' }, metadata: {}, transient: { display_id: 'd' } }
+    })
+    await save()
+    expect(savedCell(disk.files.get(FILE_PATH)).outputs).toMatchObject([
+      { data: { 'text/plain': 'after' } },
+      { text: ['a\n', 'b\n', 'c\n'] }
+    ])
+    vi.useFakeTimers()
+    try {
+      frame({ type: 'done', status: 'ok', execution_count: 4 })
+      vi.advanceTimersByTime(300)
+      editNotebookDocument(
+        FILE_ID,
+        (document) => updateIpynbCellSource(document, 0, 'edited'),
+        'debounced'
+      )
+      vi.advanceTimersByTime(100)
+      expect(savedCell(draft())).toMatchObject({ source: ['edited'], execution_count: 4 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps line breaks significant in saved stream output', () => {
+    const live = [{ output_type: 'stream', text: 'ab' }]
+    const saved = [{ output_type: 'stream', text: ['a', 'b'] }]
+    expect(sameStoredOutputs(live, saved)).toBe(false)
+  })
+
+  it('routes a running result to a new same-host document owner', async () => {
+    await startRun()
+    const file = notebookTestAppStore.getState().openFiles[0]!
+    const operationProvenance = {
+      generation: { route: { executionHostId: 'local', runtimeEnvironmentId: null } }
+    }
+    const migrating = { ...file, pendingOwnerMigration: true, operationProvenance }
+    const moved = { ...file, id: 'moved', operationProvenance }
+    notebookTestAppStore.setState({ openFiles: [migrating] })
+    notebookTestAppStore.setState({ openFiles: [moved] })
+    stdout('moved\n')
+    frame({ type: 'done', status: 'ok', execution_count: 3 })
+    expect(getNotebookDocumentView('moved')?.document?.cells[0]).toMatchObject({
+      execution_count: 3,
+      outputs: [{ text: 'moved\n' }]
     })
   })
 })

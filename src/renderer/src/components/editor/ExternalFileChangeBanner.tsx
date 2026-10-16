@@ -12,7 +12,13 @@ import type { OpenFile } from '@/store/slices/editor'
 import { ExternalFileChangeCompareDialog } from './ExternalFileChangeCompareDialog'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
-import { discardEditorBufferChanges, flushPendingEditorChange } from './editor-buffer-owners'
+import {
+  cancelEditorBufferDiscard,
+  discardEditorBufferChanges,
+  flushPendingEditorChange
+} from './editor-buffer-owners'
+import { beginNotebookReload } from './ipynb-document-store'
+import type { NotebookReload } from './ipynb-document-reload'
 
 // Why: when an external process (usually an agent) rewrites a file while the
 // tab holds unsaved edits, the reload pipeline preserves the buffer and marks
@@ -24,7 +30,7 @@ const RELOAD_UNDO_TOAST_DURATION_MS = 8_000
 
 export function reloadTabContentFromDisk(
   file: OpenFile,
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 ): void {
   // Why: a document model may hold changes newer than its draft; Undo must restore those too.
   try {
@@ -37,17 +43,32 @@ export function reloadTabContentFromDisk(
   const discardedDiskSignature = state.openFiles.find(
     (openFile) => openFile.id === file.id
   )?.lastKnownDiskSignature
-  // Why: drop the draft before reloading — the buffer shadows loaded content
-  // (editBuffers ?? fileContents), so a reload alone would keep showing the
-  // stale unsaved text.
-  discardEditorBufferChanges(file.id)
-  state.clearEditorDraft(file.id)
-  state.markFileDirty(file.id, false)
-  state.setExternalMutation(file.id, null)
-  reloadContent(file)
-  if (discardedDraft === undefined) {
-    return
+  const notebookReload = beginNotebookReload(file.id)
+  if (!notebookReload) {
+    discardEditorBufferChanges(file.id)
+    state.clearEditorDraft(file.id)
+    state.markFileDirty(file.id, false)
+    state.setExternalMutation(file.id, null)
   }
+  const showUndo = (): void => {
+    if (discardedDraft !== undefined) {
+      showReloadUndoToast(file, discardedDraft, discardedDiskSignature)
+    }
+  }
+  if (notebookReload) {
+    notebookReload.onAccepted = showUndo
+  }
+  reloadContent(file, notebookReload ?? undefined)
+  if (!notebookReload) {
+    showUndo()
+  }
+}
+
+function showReloadUndoToast(
+  file: OpenFile,
+  discardedDraft: string,
+  discardedDiskSignature: string | undefined
+): void {
   // Why: on diff tabs the reload rotates the Monaco model, destroying the undo
   // stack — without this toast a mistaken click is an unrecoverable discard.
   toast(
@@ -88,6 +109,7 @@ export function reloadTabContentFromDisk(
 }
 
 export function keepTabEditsOverExternalChange(file: OpenFile): void {
+  cancelEditorBufferDiscard(file.id)
   const state = useAppStore.getState()
   state.setExternalMutation(file.id, null)
   // Why: the dismissal must survive restart — without advancing the baseline
@@ -134,7 +156,7 @@ export function ExternalFileChangeBanner({
   currentContent: string
   /** Refetches the tab's content — file body for edit tabs, diff body for
    *  unstaged diff tabs. */
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 }): React.JSX.Element {
   const [compareOpen, setCompareOpen] = useState(false)
 

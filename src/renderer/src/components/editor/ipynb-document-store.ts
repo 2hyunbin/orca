@@ -1,14 +1,25 @@
-import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { ORCA_EDITOR_FILE_SAVED_EVENT } from './editor-autosave'
-import { notifyEditorBufferChanged, registerEditorBufferOwner } from './editor-buffer-owners'
-import { ipynbCellKey, serializeIpynbDocument, updateIpynbCodeCell } from './ipynb-cell-mutations'
+import { notifyEditorBufferChanged } from './editor-buffer-owners'
+import {
+  ipynbCellKey,
+  sameStoredOutputs,
+  serializeIpynbDocument,
+  updateIpynbCodeCell
+} from './ipynb-cell-mutations'
 import type { NotebookOutput } from './ipynb-kernel-outputs'
-import { getSession, runningCellKey } from './ipynb-kernel-store'
 import { limitRecordedOutput } from './ipynb-output-size'
 import { isRecord, parseIpynbDocument, type IpynbDocument } from './ipynb-parse'
-
-const DRAFT_WRITE_DELAY_MS = 400
+import { createNotebookReloadManager, type NotebookReload } from './ipynb-document-reload'
+import {
+  clearNotebookTimers,
+  migrateNotebookOwner,
+  registerNotebookOwner,
+  runningNotebookKeys,
+  scheduleNotebookCompletion,
+  scheduleNotebookSourceWrite,
+  supersedeReloadForForeignDrafts
+} from './ipynb-document-owner-lifecycle'
 
 /** What the viewer draws: the document, or why the newest text can't be shown. */
 export type NotebookDocumentView = {
@@ -16,7 +27,7 @@ export type NotebookDocumentView = {
   error: string | null
 }
 
-type Entry = {
+export type Entry = {
   fileId: string
   view: NotebookDocumentView
   version: number
@@ -26,9 +37,10 @@ type Entry = {
   baseText: string
   baseVersion: number
   baseDocument: IpynbDocument | null
-  /** Discard was asked for: the next disk text the viewer reports replaces the document. */
-  discardPending: boolean
+  reload: NotebookReload | null
+  readEpoch: number
   writeTimer: ReturnType<typeof setTimeout> | null
+  completionTimer: ReturnType<typeof setTimeout> | null
   listeners: Set<() => void>
   unregister: () => void
 }
@@ -47,15 +59,7 @@ function openFile(fileId: string) {
   return useAppStore.getState().openFiles.find((file) => file.id === fileId)
 }
 
-/** The cell whose run is still writing into this file's document, if any. */
-function runningKeys(fileId: string): string[] {
-  const filePath = openFile(fileId)?.filePath
-  const session = filePath === undefined ? null : getSession(filePath)
-  const key = session ? runningCellKey(session) : null
-  return key !== null && session?.runs[key]?.fileId === fileId ? [key] : []
-}
-
-/** Code cells whose output arrived after the document was last read or written. */
+/** Code cells whose execution result differs from the last text snapshot. */
 function unwrittenOutputKeys(entry: Entry): string[] {
   const base = new Map(
     (entry.baseDocument?.cells ?? []).map((cell, index) => [ipynbCellKey(cell, index), cell])
@@ -64,7 +68,11 @@ function unwrittenOutputKeys(entry: Entry): string[] {
     const before = base.get(ipynbCellKey(cell, index))
     return isRecord(cell) &&
       cell.cell_type === 'code' &&
-      !(isRecord(before) && before.outputs === cell.outputs)
+      !(
+        isRecord(before) &&
+        sameStoredOutputs(cell.outputs, before.outputs) &&
+        before.execution_count === cell.execution_count
+      )
       ? [ipynbCellKey(cell, index)]
       : []
   })
@@ -86,55 +94,42 @@ function adopt(entry: Entry, text: string, clean: boolean, carryKeys: string[]):
   entry.baseVersion = entry.version
   entry.baseDocument = next
   entry.savedVersion = clean ? entry.version : null
+  let resultsDiffer = false
   for (const key of previous ? carryKeys : []) {
     const cell = previous?.cells.find((candidate, index) => ipynbCellKey(candidate, index) === key)
     if (isRecord(cell) && Array.isArray(cell.outputs)) {
       const outputs = cell.outputs.filter(isRecord)
       const executionCount = typeof cell.execution_count === 'number' ? cell.execution_count : null
+      const onDisk = next.cells.find((candidate, index) => ipynbCellKey(candidate, index) === key)
+      if (!isRecord(onDisk) || onDisk.cell_type !== 'code') {
+        continue
+      }
+      resultsDiffer ||=
+        onDisk.execution_count !== executionCount || !sameStoredOutputs(outputs, onDisk.outputs)
+      // Keep live stream cursors and display IDs even when their saved values match disk.
       next = updateIpynbCodeCell(next, key, { outputs: () => outputs, executionCount })
     }
   }
   setView(entry, next, null)
-  if (next !== entry.baseDocument) {
+  if (resultsDiffer) {
     // Why: carried output is not in `text`, so it is unsaved even when `text` is on disk.
     entry.version += 1
     useAppStore.getState().markFileDirty(entry.fileId, true)
+  } else {
+    entry.baseDocument = next
   }
   return true
 }
 
 /** Adopts text another writer produced (Source view, an undo), keeping output it lacks. */
 function adoptForeign(entry: Entry, text: string, clean: boolean): boolean {
-  const carry = new Set([...unwrittenOutputKeys(entry), ...runningKeys(entry.fileId)])
+  const carry = new Set([...unwrittenOutputKeys(entry), ...runningNotebookKeys(entry.fileId)])
   return adopt(entry, text, clean, [...carry])
-}
-
-function clearWriteTimer(entry: Entry): void {
-  if (entry.writeTimer !== null) {
-    clearTimeout(entry.writeTimer)
-    entry.writeTimer = null
-  }
-}
-
-function serialize(document: IpynbDocument): string {
-  try {
-    return serializeIpynbDocument(document)
-  } catch (error) {
-    if (error instanceof RangeError) {
-      throw new Error(
-        translate(
-          'auto.components.editor.IpynbViewer.tooLargeToSave',
-          'This notebook is too large to save.'
-        )
-      )
-    }
-    throw error
-  }
 }
 
 /** Writes the document as the file's draft; a draft it didn't write is adopted first, never overwritten. */
 function write(entry: Entry, enteringSourceView = false): void {
-  clearWriteTimer(entry)
+  clearNotebookTimers(entry)
   // Why: Source view edits the draft text itself; a save there writes exactly what the user typed.
   if (!enteringSourceView && useAppStore.getState().markdownViewMode[entry.fileId] === 'source') {
     return
@@ -142,7 +137,7 @@ function write(entry: Entry, enteringSourceView = false): void {
   const draft = useAppStore.getState().editorDrafts[entry.fileId]
   if (
     draft !== undefined &&
-    draft !== entry.baseText &&
+    (draft !== entry.baseText || entry.view.error !== null) &&
     !adoptForeign(entry, draft, openFile(entry.fileId)?.isDirty !== true)
   ) {
     return
@@ -151,7 +146,7 @@ function write(entry: Entry, enteringSourceView = false): void {
   if (!document || entry.version === entry.baseVersion) {
     return
   }
-  const text = serialize(document)
+  const text = serializeIpynbDocument(document)
   entry.baseText = text
   entry.baseVersion = entry.version
   entry.baseDocument = document
@@ -166,6 +161,18 @@ function writeLogged(entry: Entry, enteringSourceView = false): void {
     console.error('[notebook] writing the draft failed', error)
   }
 }
+
+const reloads = createNotebookReloadManager({
+  getEntry: (fileId: string) => entries.get(fileId),
+  runningKeys: runningNotebookKeys,
+  adopt: (entry: Entry, text: string, keys: string[]) => adopt(entry, text, true, keys),
+  write: writeLogged
+})
+const cancelReload = reloads.cancel
+export const beginNotebookReload = reloads.begin
+export const notebookReadEpoch = reloads.epoch
+export const notebookReloadPending = reloads.pending
+export const settleNotebookReload = reloads.settle
 
 function change(entry: Entry, next: IpynbDocument): void {
   if (next === entry.view.document) {
@@ -192,25 +199,16 @@ export function openNotebookDocument(fileId: string, diskText: string): Notebook
     baseText: text,
     baseVersion: 0,
     baseDocument: null,
-    discardPending: false,
+    reload: null,
+    readEpoch: 0,
     writeTimer: null,
+    completionTimer: null,
     listeners: new Set(),
     unregister: () => {}
   }
   // Why: a restored unsaved draft has no saved version, so it stays dirty until saved.
   adopt(entry, text, openFile(fileId)?.isDirty !== true, [])
-  entry.unregister = registerEditorBufferOwner(fileId, {
-    flush: () => write(entry),
-    hasChange: () => entry.view.document !== null && entry.version !== entry.baseVersion,
-    version: () => entry.version,
-    discard: () => {
-      clearWriteTimer(entry)
-      entry.discardPending = true
-    },
-    cancelDiscard: () => {
-      entry.discardPending = false
-    }
-  })
+  entry.unregister = registerNotebookOwner(entry, write, cancelReload)
   entries.set(fileId, entry)
   return entry.view
 }
@@ -233,16 +231,7 @@ export function reconcileNotebookDocument(fileId: string, diskText: string): voi
   }
   const state = useAppStore.getState()
   const draft = state.editorDrafts[fileId]
-  if (entry.discardPending) {
-    entry.discardPending = false
-    // Why: a draft this store wrote while the reload was in flight holds the discarded changes.
-    if (draft === entry.baseText) {
-      state.clearEditorDraft(fileId)
-    }
-    // Output a running cell sent meanwhile re-dirtied the file; with nothing carried it is clean again.
-    if (adopt(entry, diskText, true, runningKeys(fileId)) && entry.version === entry.savedVersion) {
-      state.markFileDirty(fileId, false)
-    }
+  if (entry.reload) {
     return
   }
   if (draft !== undefined && draft !== entry.baseText) {
@@ -252,7 +241,7 @@ export function reconcileNotebookDocument(fileId: string, diskText: string): voi
     return
   }
   if (draft === undefined && diskText !== entry.baseText && openFile(fileId)?.isDirty !== true) {
-    adopt(entry, diskText, true, runningKeys(fileId))
+    adopt(entry, diskText, true, runningNotebookKeys(fileId))
   }
 }
 
@@ -267,12 +256,12 @@ export function editNotebookDocument(
   if (!entry || !document) {
     return
   }
+  cancelReload(entry)
   change(entry, edit(document))
   if (writeDraft === 'now') {
     writeLogged(entry)
   } else {
-    clearWriteTimer(entry)
-    entry.writeTimer = setTimeout(() => writeLogged(entry), DRAFT_WRITE_DELAY_MS)
+    scheduleNotebookSourceWrite(entry, writeLogged)
   }
 }
 
@@ -291,14 +280,18 @@ export function updateNotebookCellRun(
     return
   }
   const next = updateIpynbCodeCell(document, key, run)
-  change(entry, run.outputs ? limitRecordedOutput(document, next, key) : next)
+  const accepted = run.outputs ? limitRecordedOutput(document, next, key) : next
+  change(entry, accepted)
+  if (accepted !== document) {
+    entry.reload?.keys.add(key)
+  }
 }
 
-/** A run finished: its outputs become part of the draft, whether or not the notebook is shown. */
+/** A run finished: publish one snapshot for completions in this window. */
 export function writeNotebookDraft(fileId: string): void {
   const entry = entries.get(fileId)
   if (entry) {
-    writeLogged(entry)
+    scheduleNotebookCompletion(entry, entries, writeLogged)
   }
 }
 
@@ -325,7 +318,11 @@ useAppStore.subscribe((state, previous) => {
   if (state.openFiles !== previous.openFiles) {
     for (const [fileId, entry] of entries) {
       if (!state.openFiles.some((file) => file.id === fileId)) {
-        clearWriteTimer(entry)
+        if (migrateNotebookOwner(fileId, entry, entries, state, previous, cancelReload, write)) {
+          continue
+        }
+        clearNotebookTimers(entry)
+        cancelReload(entry)
         entry.unregister()
         entries.delete(fileId)
       }
@@ -340,4 +337,5 @@ useAppStore.subscribe((state, previous) => {
       }
     }
   }
+  supersedeReloadForForeignDrafts(entries, state, previous, cancelReload)
 })

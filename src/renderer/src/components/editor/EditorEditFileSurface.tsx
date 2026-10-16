@@ -21,6 +21,7 @@ import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableR
 import type { FileContent } from './editor-panel-content-types'
 import { ExternalFileChangeBanner } from './ExternalFileChangeBanner'
 import { cancelEditorBufferDiscard } from './editor-buffer-owners'
+import type { NotebookReload } from './ipynb-document-reload'
 import type { useMarkdownDocuments } from './useMarkdownDocuments'
 import { EditorMarkdownFileSurface } from './EditorMarkdownFileSurface'
 import type { MarkdownRenderState } from './markdown-render-mode'
@@ -93,7 +94,7 @@ export function EditorEditFileSurface({
   handleContentChange: (content: string) => void
   handleDirtyStateHint: (dirty: boolean) => void
   handleSave: (content: string) => Promise<boolean>
-  reloadContent: (file: OpenFile) => void
+  reloadContent: (file: OpenFile, notebookReload?: NotebookReload) => void
 }): React.JSX.Element {
   const loadError = fileContent?.loadError
   // Why: a discard waits for the reloaded disk text; when the read fails, no later text is that reload.
