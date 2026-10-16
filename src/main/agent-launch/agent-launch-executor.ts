@@ -202,7 +202,7 @@ export async function executeAgentLaunch(
       (attemptedKind !== undefined
         ? execution.surfaces.failureProvesSurfaceAbsent?.(error, attemptedKind) === true
         : createdWorktreeId !== undefined &&
-          execution.workspaces.failureProvesNoSurface?.(error, createdWorktreeId) === true)
+          execution.workspaces?.failureProvesNoSurface?.(error, createdWorktreeId) === true)
     if (!surfacePublished && absent && launch && createdWorktreeId) {
       await recoverCreatedWorkspace(execution.workspaces, createdWorktreeId)
     }

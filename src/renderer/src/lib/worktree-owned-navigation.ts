@@ -11,7 +11,7 @@ export function activateOwnedWorktreeNavigation(
   postActivationState: ReturnType<typeof useAppStore.getState>
 ): boolean {
   const ownedNavigation =
-    opts?.providesInitialSurface === true &&
+    opts?.creationOwnsFirstSurface === true &&
     !opts.startup &&
     !opts.defaultTabs &&
     !opts.issueCommand

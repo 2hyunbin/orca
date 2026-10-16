@@ -77,7 +77,7 @@ function chatCreateRuntime(args: {
   })
   runtime.setPtyController({
     spawn,
-    adoptStablePane: async () => undefined,
+    adoptStablePane: async () => null,
     write: () => true,
     kill: () => true,
     getForegroundProcess: async () => null
