@@ -8,7 +8,7 @@ import type { SkillInstallResult } from '../../../../shared/skill-install-contra
 import type { BundledOrcaSkillInstallOutcome } from '@/runtime/runtime-skills-client'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 
-type MockRuntimeTarget = { kind: 'local' } | null
+type MockRuntimeTarget = { kind: 'local' } | { kind: 'environment'; environmentId: string } | null
 
 const mocks = vi.hoisted(() => {
   const localRuntimeTarget = (): MockRuntimeTarget => ({ kind: 'local' })
@@ -333,13 +333,60 @@ describe('AgentSkillSetupPanel', () => {
     expect(container?.textContent).not.toContain('Setup failed')
   })
 
-  it('reports a thrown install error as the failure reason', async () => {
-    mocks.install.mockRejectedValueOnce(new Error('skill-install-wsl-unavailable'))
+  it('reports a known thrown install error in plain words', async () => {
+    mocks.install.mockRejectedValueOnce(
+      new Error(
+        "Error invoking remote method 'skills:installBundledOrca': Error: skill-install-wsl-unavailable"
+      )
+    )
     await renderInteractivePanel()
 
     await clickButton('Install')
 
-    expect(container?.textContent).toContain('skill-install-wsl-unavailable')
+    expect(container?.textContent).toContain(
+      'WSL is not available on this machine, so Orca could not install the skills there.'
+    )
+    expect(container?.textContent).not.toContain('Error invoking remote method')
+    expect(container?.textContent).not.toContain('skill-install-wsl-unavailable')
+  })
+
+  it('names an unknown install error code after the plain failure', async () => {
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-journal-invalid'))
+    await renderInteractivePanel()
+
+    await clickButton('Install')
+
+    expect(container?.textContent).toContain(
+      'Orca could not install the skills. (skill-install-journal-invalid)'
+    )
+  })
+
+  it('shows Retry in place of Install after a failure', async () => {
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-busy'))
+    await renderInteractivePanel()
+
+    await clickButton('Install')
+
+    const labels = Array.from(container?.querySelectorAll('button') ?? [], (button) =>
+      button.textContent?.trim()
+    )
+    expect(labels).toContain('Retry')
+    expect(labels).not.toContain('Install')
+  })
+
+  it('clears a failure when the machine that runs the agents changes', async () => {
+    mocks.install.mockRejectedValueOnce(new Error('skill-install-busy'))
+    await renderInteractivePanel()
+    await clickButton('Install')
+    expect(container?.textContent).toContain('Setup failed')
+
+    mocks.runtimeTarget = { kind: 'environment', environmentId: 'env-2' }
+    await act(async () => {
+      root?.render(<AgentSkillSetupPanel {...panelProps()} />)
+    })
+
+    expect(container?.textContent).not.toContain('Setup failed')
+    expect(findButton('Install').disabled).toBe(false)
   })
 
   it('keeps Install disabled until the runtime that runs the agents resolves', async () => {

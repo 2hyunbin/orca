@@ -29,10 +29,7 @@ export function CliSkillSetupPanel(): React.JSX.Element {
       variant="inline"
       hideHeader
       className="min-w-0"
-      title={translate(
-        'auto.components.feature.tips.CliSkillSetupTerminal.84e9576dac',
-        'Skill setup'
-      )}
+      title={translate('auto.components.feature.tips.CliSkillSetupPanel.title', 'Skill setup')}
       description={translate(
         'auto.components.feature.tips.CliSkillSetupPanel.description',
         'Install the Orca CLI and orchestration skills for your agents.'
@@ -40,11 +37,11 @@ export function CliSkillSetupPanel(): React.JSX.Element {
       skillNames={CLI_TIP_SKILL_NAMES}
       agentRuntime={agentRuntime}
       terminalTitle={translate(
-        'auto.components.feature.tips.CliSkillSetupTerminal.84e9576dac',
+        'auto.components.feature.tips.CliSkillSetupPanel.title',
         'Skill setup'
       )}
       terminalAriaLabel={translate(
-        'auto.components.feature.tips.CliSkillSetupTerminal.43b60ec5c3',
+        'auto.components.feature.tips.CliSkillSetupPanel.terminalAriaLabel',
         'Orca CLI and orchestration skill install terminal'
       )}
       terminalWorktreeId="feature-tip-cli-skills-terminal"

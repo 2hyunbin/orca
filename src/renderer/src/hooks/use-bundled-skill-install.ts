@@ -1,9 +1,13 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { SkillInstallResult } from '../../../shared/skill-install-contract'
 import { describeBundledSkillInstallResult } from '../../../shared/bundled-orca-skill-install-report'
 import type { BundledOrcaSkillInstallRequest } from '../../../shared/bundled-orca-skill-install-contract'
 import { installBundledOrcaSkillsOnRuntimeTarget } from '@/runtime/runtime-skills-client'
 import { buildLegacyNpxSkillInstallCommand } from '@/lib/legacy-npx-skill-install-command'
+import {
+  bundledSkillInstallErrorMessage,
+  bundledSkillInstallTargetPendingMessage
+} from '@/lib/bundled-skill-install-error-message'
 import type { ProjectAgentSkillRuntime } from '@/lib/project-skill-runtime'
 import { useActiveSkillDiscoveryRuntimeTarget } from './use-active-skill-discovery-runtime-target'
 import { useMountedRef } from './useMountedRef'
@@ -12,8 +16,19 @@ export type BundledSkillInstallState =
   | { kind: 'idle' }
   | { kind: 'installing' }
   | { kind: 'failed'; message: string }
-  // Delete with LegacySkillSetupTerminal once servers without the bundled installer age out.
-  | { kind: 'legacy-terminal'; command: string; attempt: number }
+  // Delete with the legacy terminal once servers without the bundled installer age out.
+  | { kind: 'legacy-terminal'; command: string }
+
+export type BundledSkillInstall = {
+  state: BundledSkillInstallState
+  ready: boolean
+  /** Resolves to the settled state, or null when no install started. */
+  install: (skillNames: readonly string[]) => Promise<BundledSkillInstallState | null>
+  /** Reruns the last requested install. */
+  retry: () => void
+}
+
+const IDLE: BundledSkillInstallState = { kind: 'idle' }
 
 const SUCCEEDED_STATUSES: ReadonlySet<SkillInstallResult['status']> = new Set([
   'installed',
@@ -24,7 +39,7 @@ const SUCCEEDED_STATUSES: ReadonlySet<SkillInstallResult['status']> = new Set([
 function settledState(results: readonly SkillInstallResult[]): BundledSkillInstallState {
   const unsettled = results.filter((result) => !SUCCEEDED_STATUSES.has(result.status))
   return unsettled.length === 0
-    ? { kind: 'idle' }
+    ? IDLE
     : { kind: 'failed', message: unsettled.map(describeBundledSkillInstallResult).join('\n') }
 }
 
@@ -45,48 +60,53 @@ function wslTarget(
 export function useBundledSkillInstall(options: {
   agentRuntime?: ProjectAgentSkillRuntime
   onFinished?: () => void
-}): {
-  state: BundledSkillInstallState
-  ready: boolean
-  /** Resolves to the settled state, or null when no install started. */
-  install: (skillNames: readonly string[]) => Promise<BundledSkillInstallState | null>
-} {
+}): BundledSkillInstall {
   const { agentRuntime, onFinished } = options
   const runtimeTarget = useActiveSkillDiscoveryRuntimeTarget()
-  const [state, setState] = useState<BundledSkillInstallState>({ kind: 'idle' })
+  const wsl = useMemo(() => wslTarget(agentRuntime), [agentRuntime])
+  // Why keyed: a result or failure belongs to the machine it ran on, not the one now focused.
+  const targetKey = JSON.stringify([runtimeTarget, wsl])
+  const [entry, setEntry] = useState<{ targetKey: string; state: BundledSkillInstallState }>({
+    targetKey,
+    state: IDLE
+  })
   const runningRef = useRef(false)
-  const attemptRef = useRef(0)
+  const lastSkillNamesRef = useRef<readonly string[]>([])
   const mountedRef = useMountedRef()
 
   const install = useCallback(
     async (skillNames: readonly string[]): Promise<BundledSkillInstallState | null> => {
-      if (!runtimeTarget || runningRef.current || skillNames.length === 0) {
+      if (runningRef.current || skillNames.length === 0) {
         return null
       }
+      lastSkillNamesRef.current = skillNames
+      if (!runtimeTarget) {
+        const pending: BundledSkillInstallState = {
+          kind: 'failed',
+          message: bundledSkillInstallTargetPendingMessage()
+        }
+        setEntry({ targetKey, state: pending })
+        return pending
+      }
       runningRef.current = true
-      setState({ kind: 'installing' })
+      setEntry({ targetKey, state: { kind: 'installing' } })
       let next: BundledSkillInstallState
       try {
         const outcome = await installBundledOrcaSkillsOnRuntimeTarget(runtimeTarget, {
           names: [...skillNames],
-          ...wslTarget(agentRuntime)
+          ...wsl
         })
-        attemptRef.current += 1
         next =
           outcome.kind === 'unsupported'
-            ? {
-                kind: 'legacy-terminal',
-                command: buildLegacyNpxSkillInstallCommand(skillNames),
-                attempt: attemptRef.current
-              }
+            ? { kind: 'legacy-terminal', command: buildLegacyNpxSkillInstallCommand(skillNames) }
             : settledState(outcome.results)
       } catch (error) {
-        next = { kind: 'failed', message: error instanceof Error ? error.message : String(error) }
+        next = { kind: 'failed', message: bundledSkillInstallErrorMessage(error) }
       } finally {
         runningRef.current = false
       }
       if (mountedRef.current) {
-        setState(next)
+        setEntry({ targetKey, state: next })
       }
       // Why also on failure: a partial run can still have placed some skills.
       if (next.kind !== 'legacy-terminal') {
@@ -94,8 +114,17 @@ export function useBundledSkillInstall(options: {
       }
       return next
     },
-    [agentRuntime, mountedRef, onFinished, runtimeTarget]
+    [mountedRef, onFinished, runtimeTarget, targetKey, wsl]
   )
 
-  return { state, ready: runtimeTarget !== null, install }
+  const retry = useCallback(() => {
+    void install(lastSkillNamesRef.current)
+  }, [install])
+
+  return {
+    state: entry.targetKey === targetKey ? entry.state : IDLE,
+    ready: runtimeTarget !== null,
+    install,
+    retry
+  }
 }

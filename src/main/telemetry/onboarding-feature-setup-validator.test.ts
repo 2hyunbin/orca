@@ -11,7 +11,7 @@ describe('onboarding feature setup telemetry validation', () => {
     vi.restoreAllMocks()
   })
 
-  it('accepts checklist, setup run, and terminal interaction events', () => {
+  it('accepts checklist and setup run events', () => {
     const selection = {
       browser_use: true,
       computer_use: false,
@@ -31,9 +31,7 @@ describe('onboarding feature setup telemetry validation', () => {
           computer_use_permissions_opened: false,
           warning_count: 0
         }
-      ],
-      ['onboarding_feature_setup_terminal_opened', selection],
-      ['onboarding_feature_setup_terminal_interacted', { ...selection, method: 'keyboard' }]
+      ]
     ] as const
 
     for (const [event, props] of cases) {
@@ -42,16 +40,6 @@ describe('onboarding feature setup telemetry validation', () => {
   })
 
   it('rejects raw strings and unknown fields', () => {
-    expect(
-      validate('onboarding_feature_setup_terminal_opened', {
-        browser_use: true,
-        computer_use: false,
-        linear_tickets: false,
-        orchestration: true,
-        selected_count: 2,
-        command: 'npx skills add https://github.com/stablyai/orca --global'
-      } as never).ok
-    ).toBe(false)
     expect(
       validate('onboarding_feature_setup_toggled', {
         feature: 'browser_use',
@@ -74,15 +62,6 @@ describe('onboarding feature setup telemetry validation', () => {
         skill_install_command_prepared: false,
         computer_use_permissions_opened: false,
         warning_count: 0
-      } as never).ok
-    ).toBe(false)
-    expect(
-      validate('onboarding_feature_setup_terminal_opened', {
-        browser_use: true,
-        computer_use: false,
-        linear_tickets: false,
-        orchestration: true,
-        selected_count: 1
       } as never).ok
     ).toBe(false)
   })

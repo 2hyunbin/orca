@@ -1062,6 +1062,24 @@
       "aiVaultResumeRefusal": {
         "openInChat": "Esta conversación de {{value0}} está abierta en un chat. Actualiza el historial de sesiones para abrirla.",
         "ownershipUnknown": "Orca no pudo confirmar quién es el propietario de esta conversación de {{value0}}. Actualiza el historial de sesiones e inténtalo de nuevo."
+      },
+      "bundled": {
+        "skill": {
+          "install": {
+            "error": {
+              "message": {
+                "wslUnavailable": "WSL no está disponible en este equipo, así que Orca no pudo instalar las skills allí.",
+                "environmentMismatch": "Este equipo no puede instalar skills en WSL.",
+                "wslDetectionFailed": "Orca no pudo comprobar qué agentes están instalados en WSL. Asegúrate de que la distribución se inicia y vuelve a intentarlo.",
+                "homeUnavailable": "Orca no encontró la carpeta de inicio donde instalar las skills.",
+                "busy": "Hay otra instalación de skills en curso. Vuelve a intentarlo cuando termine.",
+                "cancelled": "Se canceló la instalación de skills.",
+                "unknown": "Orca no pudo instalar las skills.",
+                "targetPending": "Orca todavía está buscando el equipo donde se ejecutan tus agentes. Vuelve a intentarlo en un momento."
+              }
+            }
+          }
+        }
       }
     },
     "hooks": {
@@ -12577,6 +12595,10 @@
           "remove": "Quitar",
           "turnOn": "Activar en Experimental",
           "forceUpdate": "Forzar actualización"
+        },
+        "BundledSkillInstallStatus": {
+          "terminalTitle": "Configuración de skills",
+          "terminalAriaLabel": "Comando de configuración de skills"
         }
       },
       "right": {
@@ -14173,10 +14195,6 @@
           "yoloModeLabel": "Modo Yolo",
           "yoloPermissionsDescription": "Los agentes ejecutan comandos y editan archivos sin preguntar, y algunos también omiten su sandbox. Úsalo solo en proyectos de confianza."
         },
-        "FeatureSetupInlineTerminal": {
-          "47fc6cc6dc": "Comando de configuración de skills",
-          "c767ab7061": "Configuración de skills"
-        },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea y Jira se encuentran en Configuración > Integraciones.",
           "3a3e360289": "Más fuentes de tareas",
@@ -15119,10 +15137,6 @@
             "badb4fc342": ">",
             "22e62f3bab": "Sesión de Claude Code iniciada"
           },
-          "CliSkillSetupTerminal": {
-            "43b60ec5c3": "Terminal de instalación de CLI de Orca y skill de orquestación",
-            "84e9576dac": "Configuración de skill"
-          },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "Configuración → Atajos",
             "8241897205": "Puedes reasignar el atajo en cualquier momento en"
@@ -15151,7 +15165,9 @@
             "0418f9becc": "abierto"
           },
           "CliSkillSetupPanel": {
-            "description": "Instala las habilidades de la CLI de Orca y de orquestación para tus agentes."
+            "description": "Instala las habilidades de la CLI de Orca y de orquestación para tus agentes.",
+            "title": "Configuración de skill",
+            "terminalAriaLabel": "Terminal de instalación de CLI de Orca y skill de orquestación"
           }
         }
       },

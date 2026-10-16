@@ -1062,6 +1062,24 @@
       "aiVaultResumeRefusal": {
         "openInChat": "이 {{value0}} 대화는 채팅에서 열려 있습니다. 열려면 세션 기록을 새로고침하세요.",
         "ownershipUnknown": "Orca가 이 {{value0}} 대화의 소유자를 확인할 수 없습니다. 세션 기록을 새로고침한 후 다시 시도하세요."
+      },
+      "bundled": {
+        "skill": {
+          "install": {
+            "error": {
+              "message": {
+                "wslUnavailable": "이 컴퓨터에서 WSL을 사용할 수 없어 Orca가 스킬을 설치하지 못했습니다.",
+                "environmentMismatch": "이 컴퓨터는 WSL에 스킬을 설치할 수 없습니다.",
+                "wslDetectionFailed": "Orca가 WSL에 설치된 에이전트를 확인하지 못했습니다. 배포판이 시작되는지 확인한 후 다시 시도하세요.",
+                "homeUnavailable": "Orca가 스킬을 설치할 홈 폴더를 찾지 못했습니다.",
+                "busy": "다른 스킬 설치가 진행 중입니다. 완료된 후 다시 시도하세요.",
+                "cancelled": "스킬 설치가 취소되었습니다.",
+                "unknown": "Orca가 스킬을 설치하지 못했습니다.",
+                "targetPending": "Orca가 아직 에이전트가 실행되는 컴퓨터를 찾고 있습니다. 잠시 후 다시 시도하세요."
+              }
+            }
+          }
+        }
       }
     },
     "hooks": {
@@ -12577,6 +12595,10 @@
           "remove": "제거",
           "turnOn": "실험적에서 켜기",
           "forceUpdate": "강제 업데이트"
+        },
+        "BundledSkillInstallStatus": {
+          "terminalTitle": "스킬 설정",
+          "terminalAriaLabel": "스킬 설정 명령어"
         }
       },
       "right": {
@@ -14173,10 +14195,6 @@
           "yoloModeLabel": "Yolo 모드",
           "yoloPermissionsDescription": "agents가 묻지 않고 명령을 실행하고 파일을 편집하며, 일부는 샌드박스도 우회합니다. 신뢰할 수 있는 프로젝트에서만 사용하세요."
         },
-        "FeatureSetupInlineTerminal": {
-          "47fc6cc6dc": "스킬 설정 명령어",
-          "c767ab7061": "스킬 설정"
-        },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea 및 Jira는 설정 > 연동에 있습니다.",
           "3a3e360289": "더 많은 작업 소스",
@@ -15119,10 +15137,6 @@
             "badb4fc342": ">",
             "22e62f3bab": "Claude Code 세션이 시작되었습니다."
           },
-          "CliSkillSetupTerminal": {
-            "43b60ec5c3": "Orca CLI 및 오케스트레이션 스킬 설치 terminal",
-            "84e9576dac": "스킬 설정"
-          },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "설정 → 바로가기",
             "8241897205": "언제든지 바로가기를 다시 바인딩할 수 있습니다."
@@ -15151,7 +15165,9 @@
             "0418f9becc": "열림"
           },
           "CliSkillSetupPanel": {
-            "description": "에이전트용 Orca CLI 및 오케스트레이션 스킬을 설치합니다."
+            "description": "에이전트용 Orca CLI 및 오케스트레이션 스킬을 설치합니다.",
+            "title": "스킬 설정",
+            "terminalAriaLabel": "Orca CLI 및 오케스트레이션 스킬 설치 terminal"
           }
         }
       },

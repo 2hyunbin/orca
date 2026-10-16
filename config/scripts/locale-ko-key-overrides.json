@@ -986,9 +986,6 @@
   "auto.components.emulator.pane.emulator.pane.toolbar.868c0f2938": {
     "ko": "작업 중…"
   },
-  "auto.components.feature.tips.CliSkillSetupTerminal.1953e90447": {
-    "ko": "Enter를 눌러 agents 용 Orca CLI 오케스트레이션 스킬을 설치하세요."
-  },
   "auto.components.feature.tips.CmdJPaletteFeatureTipVisual.379d776971": {
     "ko": "입력 중"
   },
@@ -5890,9 +5887,6 @@
   },
   "auto.components.settings.OrchestrationSkillAgentCoverage.fullCoverage_one": {
     "ko": "감지된 에이전트 1개에 스킬이 설치되어 있습니다."
-  },
-  "auto.components.settings.OrchestrationSkillPromptDialog.b99f375eb2": {
-    "ko": "에이전트용 오케스트레이션 스킬을 설치하려면 터미널에서 이 명령을 실행하세요."
   },
   "auto.components.settings.orchestration.search.f5d39af41e": {
     "ko": "하위 에이전트"

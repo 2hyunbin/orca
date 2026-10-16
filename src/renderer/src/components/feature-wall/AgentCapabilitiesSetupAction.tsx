@@ -7,11 +7,8 @@ import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRunti
 import { useAppStore } from '@/store'
 import { AgentCapabilityStatusNote, AgentCapabilityStatusPill } from './AgentCapabilityStatusBadges'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
-import {
-  useBundledSkillInstall,
-  type BundledSkillInstallState
-} from '@/hooks/use-bundled-skill-install'
-import { FeatureSetupSkillInstallStatus } from '../onboarding/FeatureSetupSkillInstallStatus'
+import { useBundledSkillInstall, type BundledSkillInstall } from '@/hooks/use-bundled-skill-install'
+import { BundledSkillInstallStatus } from '../settings/BundledSkillInstallStatus'
 import { getOnboardingFeatureSetupAgentRuntime } from '../onboarding/onboarding-feature-setup-runtime'
 import {
   DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION,
@@ -42,13 +39,13 @@ export function AgentCapabilitiesSetupAction(props: {
     DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION
   )
   const [setupBusyLabel, setSetupBusyLabel] = useState<string | null>(null)
-  const [requestedSkillNames, setRequestedSkillNames] = useState<string[]>([])
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const activeSkillRuntime = useActiveProjectSkillRuntime()
-  const { state: skillInstallState, install: installSkills } = useBundledSkillInstall({
+  const skillInstall = useBundledSkillInstall({
     agentRuntime: getOnboardingFeatureSetupAgentRuntime(activeSkillRuntime),
     onFinished: notifyInstalledAgentSkillsChanged
   })
+  const installSkills = skillInstall.install
   useEffect(() => {
     onBrowserUseSkillInstalledChange(readiness.browserUseSkillInstalled)
   }, [onBrowserUseSkillInstalledChange, readiness.browserUseSkillInstalled])
@@ -97,7 +94,6 @@ export function AgentCapabilitiesSetupAction(props: {
           }
         )
       }
-      setRequestedSkillNames(result.skillNames)
       const installState = await installSkills(result.skillNames)
       if (installState?.kind === 'idle') {
         toast.success(
@@ -125,8 +121,7 @@ export function AgentCapabilitiesSetupAction(props: {
       <AgentCapabilitySetupControls
         featureSetup={featureSetup}
         onFeatureSetupChange={handleFeatureSetupChange}
-        skillInstallState={skillInstallState}
-        onRetrySkillInstall={() => void installSkills(requestedSkillNames)}
+        skillInstall={skillInstall}
         setupBusyLabel={setupBusyLabel}
         onStartFeatureSetup={() => void handleStartFeatureSetup()}
         allReady={isAgentCapabilityReadinessComplete(readiness)}
@@ -197,15 +192,15 @@ const AGENT_CAPABILITY_SETUP_ROWS: readonly AgentCapabilitySetupRow[] = [
 function AgentCapabilitySetupControls(props: {
   featureSetup: OnboardingFeatureSetupSelection
   onFeatureSetupChange: (value: OnboardingFeatureSetupSelection) => void
-  skillInstallState: BundledSkillInstallState
-  onRetrySkillInstall: () => void
+  skillInstall: BundledSkillInstall
   setupBusyLabel: string | null
   onStartFeatureSetup: () => void
   allReady: boolean
   installStatus: Record<OnboardingFeatureSetupId, AgentCapabilityInstallStatus>
 }): React.JSX.Element {
   const hasSelectedFeatures = hasSelectedOnboardingFeatureSetup(props.featureSetup)
-  const showSetupAction = props.skillInstallState.kind !== 'legacy-terminal'
+  const installKind = props.skillInstall.state.kind
+  const showSetupAction = installKind !== 'failed' && installKind !== 'legacy-terminal'
   // Why: a disabled install button is noise once everything is set up.
   const showAllReady = props.allReady && !hasSelectedFeatures && !props.setupBusyLabel
 
@@ -246,11 +241,12 @@ function AgentCapabilitySetupControls(props: {
           </Button>
         </div>
       ) : null}
-      <FeatureSetupSkillInstallStatus
-        state={props.skillInstallState}
+      <BundledSkillInstallStatus
+        install={props.skillInstall}
         terminalWorktreeId="feature-wall-capabilities-skill-terminal"
-        onRetry={props.onRetrySkillInstall}
+        terminalHeightPx={180}
         onLegacyTerminalFinished={notifyInstalledAgentSkillsChanged}
+        className="mt-4"
       />
     </>
   )

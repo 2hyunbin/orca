@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '../integration-status-pill'
 import { SkillFreshnessStatusPill } from '../skills/SkillFreshnessStatusPill'
-import { LegacySkillSetupTerminal } from './LegacySkillSetupTerminal'
+import { BundledSkillInstallStatus } from './BundledSkillInstallStatus'
 import type { AgentSkillSetupPanelProps } from './agent-skill-setup-panel-props'
 import { Button } from '../ui/button'
 import { useBundledSkillInstall } from '@/hooks/use-bundled-skill-install'
@@ -53,13 +53,14 @@ export function AgentSkillSetupPanel({
     () => recheckSurfacesAfterAgentSkillInstall(onRecheck, freshnessSkillName),
     [freshnessSkillName, onRecheck]
   )
-  const { state, ready, install } = useBundledSkillInstall({
+  const skillInstall = useBundledSkillInstall({
     agentRuntime,
     onFinished: recheckAfterInstall
   })
+  const { state, ready, install } = skillInstall
   const installing = state.kind === 'installing'
   const failed = state.kind === 'failed'
-  const legacyTerminal = state.kind === 'legacy-terminal' ? state : null
+  const legacyTerminal = state.kind === 'legacy-terminal'
   const activeSkillNames = installed ? (installedSkillNames ?? skillNames) : skillNames
 
   const startInstall = (): void => {
@@ -84,7 +85,7 @@ export function AgentSkillSetupPanel({
           variant={installVariant}
           size="sm"
           onClick={startInstall}
-          disabled={installDisabled || installing || !ready || legacyTerminal !== null}
+          disabled={installDisabled || installing || !ready || legacyTerminal}
         >
           {installing ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -98,27 +99,21 @@ export function AgentSkillSetupPanel({
               : resolvedInstallLabel}
         </Button>
       ) : null}
-      {failed || !installed || showRecheckWhenInstalled ? (
+      {!installed || showRecheckWhenInstalled ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="gap-1.5"
           onClick={() => {
-            if (failed) {
-              startInstall()
-              return
-            }
             void Promise.resolve(onRecheck()).then(() => {
               syncSurfacesAfterAgentSkillRecheck(freshnessSkillName)
             })
           }}
-          disabled={failed ? installDisabled || installing : loading}
+          disabled={loading}
         >
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          {failed
-            ? translate('auto.components.settings.AgentSkillSetupPanel.retrySetup', 'Retry')
-            : translate('auto.components.settings.AgentSkillSetupPanel.c689392435', 'Re-check')}
+          {translate('auto.components.settings.AgentSkillSetupPanel.c689392435', 'Re-check')}
         </Button>
       ) : null}
     </div>
@@ -132,11 +127,7 @@ export function AgentSkillSetupPanel({
         className
       )}
     >
-      <div
-        className={
-          variant === 'card' ? cn('px-5 pt-5', legacyTerminal ? 'pb-2' : 'pb-5') : 'pt-1.5'
-        }
-      >
+      <div className={variant === 'card' ? 'p-5' : 'pt-1.5'}>
         {hideHeader ? (
           <>
             {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
@@ -201,39 +192,19 @@ export function AgentSkillSetupPanel({
             <p className="text-[13px] leading-snug text-muted-foreground">{description}</p>
           ) : null}
           {actionRow}
-          {state.kind === 'failed' ? (
-            <p className="mt-2 whitespace-pre-line text-[12px] leading-snug text-destructive">
-              {state.message}
-            </p>
-          ) : null}
+          <BundledSkillInstallStatus
+            install={skillInstall}
+            terminalTitle={terminalTitle}
+            terminalAriaLabel={terminalAriaLabel}
+            terminalWorktreeId={terminalWorktreeId}
+            terminalHeightPx={terminalHeightPx}
+            onLegacyTerminalFinished={recheckAfterInstall}
+            className="mt-2"
+          />
           {actionHint ? <div className="mt-2">{actionHint}</div> : null}
         </div>
-        {footer ? (
-          <div
-            className={cn('border-t border-border/60', legacyTerminal ? 'mt-2 pt-4' : 'mt-5 pt-5')}
-          >
-            {footer}
-          </div>
-        ) : null}
+        {footer ? <div className="mt-5 border-t border-border/60 pt-5">{footer}</div> : null}
       </div>
-      {legacyTerminal ? (
-        <div
-          className={cn(
-            'min-w-0 max-w-full overflow-hidden',
-            variant === 'card' ? 'px-5 pb-5' : 'mt-2'
-          )}
-        >
-          <LegacySkillSetupTerminal
-            key={legacyTerminal.attempt}
-            command={legacyTerminal.command}
-            title={terminalTitle}
-            ariaLabel={terminalAriaLabel}
-            worktreeId={terminalWorktreeId}
-            heightPx={terminalHeightPx}
-            onFinished={recheckAfterInstall}
-          />
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -101,8 +101,6 @@ type _OnboardingCohortRoster =
   | 'onboarding_ghostty_import_failed'
   | 'onboarding_feature_setup_toggled'
   | 'onboarding_feature_setup_run'
-  | 'onboarding_feature_setup_terminal_opened'
-  | 'onboarding_feature_setup_terminal_interacted'
 type _DerivedOnboardingCohortEvents = {
   [N in EventName]: 'cohort' extends _KnownPayloadKeys<EventMap[N]> ? N : never
 }[EventName]

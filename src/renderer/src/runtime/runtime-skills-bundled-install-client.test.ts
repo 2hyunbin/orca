@@ -44,7 +44,7 @@ describe('installBundledOrcaSkillsOnRuntimeTarget', () => {
     expect(installBundledOrca).not.toHaveBeenCalled()
   })
 
-  it('installs on a focused server without forwarding this client WSL distro', async () => {
+  it('forwards the WSL target to a focused server, as the web client does', async () => {
     runtimeEnvironmentSupportsCapability.mockResolvedValue(true)
     callRuntimeRpc.mockResolvedValue([])
 
@@ -60,7 +60,7 @@ describe('installBundledOrcaSkillsOnRuntimeTarget', () => {
     expect(callRuntimeRpc).toHaveBeenCalledWith(
       REMOTE,
       'skills.installBundledOrca',
-      { names: ['orchestration'] },
+      { names: ['orchestration'], wsl: { distro: 'Ubuntu' } },
       expect.objectContaining({ timeoutMs: expect.any(Number) })
     )
   })

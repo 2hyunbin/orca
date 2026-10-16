@@ -18,7 +18,7 @@ import {
   type LinearAgentSkillPromptSettings
 } from '../sidebar/linear-agent-skill-runtime'
 import { useIntegrationSubordinateRowClass } from './integration-card-presentation'
-import { LegacySkillSetupTerminal } from './LegacySkillSetupTerminal'
+import { BundledSkillInstallStatus } from './BundledSkillInstallStatus'
 import { recheckSurfacesAfterAgentSkillInstall } from './agent-skill-recheck-surface-sync'
 import { translate } from '@/i18n/i18n'
 
@@ -56,10 +56,11 @@ export function LinearAgentSkillInstallCta({
     () => recheckSurfacesAfterAgentSkillInstall(refresh),
     [refresh]
   )
-  const { state, ready, install } = useBundledSkillInstall({
+  const skillInstall = useBundledSkillInstall({
     agentRuntime,
     onFinished: recheckAfterInstall
   })
+  const { state, ready, install } = skillInstall
   const installing = state.kind === 'installing'
   const subordinateRowClass = useIntegrationSubordinateRowClass('space-y-1.5')
 
@@ -118,51 +119,48 @@ export function LinearAgentSkillInstallCta({
               )}
             </p>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            className="w-fit"
-            onClick={() => void install([skillName])}
-            disabled={installing || !ready || state.kind === 'legacy-terminal'}
-          >
-            {installing ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Download className="size-3" />
+          {state.kind === 'failed' || state.kind === 'legacy-terminal' ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="w-fit"
+              onClick={() => void install([skillName])}
+              disabled={installing || !ready}
+            >
+              {installing ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Download className="size-3" />
+              )}
+              {installing
+                ? translate(
+                    'auto.components.settings.AgentSkillSetupPanel.installing',
+                    'Installing...'
+                  )
+                : skill.installed
+                  ? translate('auto.components.settings.AgentSkillSetupPanel.updateLabel', 'Update')
+                  : translate(
+                      'auto.components.skills.SkillInstallDialog.39acb9e8f4',
+                      'Install skill'
+                    )}
+            </Button>
+          )}
+          <BundledSkillInstallStatus
+            install={skillInstall}
+            terminalTitle={translate(
+              'auto.components.settings.LinearAgentSkillPane.terminalTitle',
+              'Linear skill setup'
             )}
-            {installing
-              ? translate(
-                  'auto.components.settings.AgentSkillSetupPanel.installing',
-                  'Installing...'
-                )
-              : skill.installed
-                ? translate('auto.components.settings.AgentSkillSetupPanel.updateLabel', 'Update')
-                : translate(
-                    'auto.components.skills.SkillInstallDialog.39acb9e8f4',
-                    'Install skill'
-                  )}
-          </Button>
-          {state.kind === 'failed' ? (
-            <p className="whitespace-pre-line text-xs text-destructive">{state.message}</p>
-          ) : null}
-          {state.kind === 'legacy-terminal' ? (
-            <LegacySkillSetupTerminal
-              key={state.attempt}
-              command={state.command}
-              title={translate(
-                'auto.components.settings.LinearAgentSkillPane.terminalTitle',
-                'Linear skill setup'
-              )}
-              ariaLabel={translate(
-                'auto.components.settings.LinearAgentSkillPane.terminalAriaLabel',
-                'Linear skill install terminal'
-              )}
-              worktreeId="settings-linear-cta-skill-terminal"
-              heightPx={200}
-              onFinished={recheckAfterInstall}
-            />
-          ) : null}
+            terminalAriaLabel={translate(
+              'auto.components.settings.LinearAgentSkillPane.terminalAriaLabel',
+              'Linear skill install terminal'
+            )}
+            terminalWorktreeId="settings-linear-cta-skill-terminal"
+            terminalHeightPx={200}
+            onLegacyTerminalFinished={recheckAfterInstall}
+            buttonSize="xs"
+          />
           {remote || agentRuntime.runtime === 'wsl' ? (
             <p className="text-[11px] text-muted-foreground/70">
               {getLinearAgentSkillSetupInlineRuntimeCopy(remote, agentRuntime)}

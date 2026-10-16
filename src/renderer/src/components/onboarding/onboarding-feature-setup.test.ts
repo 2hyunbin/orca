@@ -17,9 +17,7 @@ import {
 import {
   DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION,
   onboardingFeatureSetupSkillNames,
-  onboardingFeatureSetupRunTelemetry,
   onboardingFeatureSetupTelemetryFeature,
-  onboardingFeatureSetupTelemetrySelection,
   runOnboardingFeatureSetup,
   type OnboardingFeatureSetupDeps,
   type OnboardingFeatureSetupSelection
@@ -113,41 +111,8 @@ describe('onboarding feature setup runner', () => {
     ).toBeUndefined()
   })
 
-  it('builds privacy-safe telemetry payloads for selected feature setup items', () => {
-    const selection: OnboardingFeatureSetupSelection = {
-      browserUse: true,
-      computerUse: false,
-      orchestration: true,
-      linearTickets: true
-    }
-
+  it('maps feature setup items to privacy-safe telemetry ids', () => {
     expect(onboardingFeatureSetupTelemetryFeature('browserUse')).toBe('browser_use')
-    expect(onboardingFeatureSetupTelemetrySelection(selection)).toEqual({
-      browser_use: true,
-      computer_use: false,
-      linear_tickets: true,
-      orchestration: true,
-      selected_count: 2
-    })
-    expect(
-      onboardingFeatureSetupRunTelemetry(selection, {
-        selectedIds: ['browserUse', 'orchestration', 'linearTickets'],
-        skillNames: [ORCHESTRATION_SKILL_NAME],
-        computerUsePermissionsOpened: false,
-        warnings: [{ featureId: 'computerUse', message: 'Helper unavailable' }]
-      })
-    ).toEqual({
-      browser_use: true,
-      computer_use: false,
-      linear_tickets: true,
-      orchestration: true,
-      selected_count: 2,
-      cli_touched: false,
-      skill_commands_copied: false,
-      skill_install_command_prepared: true,
-      computer_use_permissions_opened: false,
-      warning_count: 1
-    })
   })
 
   it('runs selected feature setup through injected deps only', async () => {

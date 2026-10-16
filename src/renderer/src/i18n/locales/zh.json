@@ -1062,6 +1062,24 @@
       "aiVaultResumeRefusal": {
         "openInChat": "此 {{value0}} 会话已在聊天中打开。请刷新会话历史以打开它。",
         "ownershipUnknown": "Orca 无法确认此 {{value0}} 会话的归属。请刷新会话历史并重试。"
+      },
+      "bundled": {
+        "skill": {
+          "install": {
+            "error": {
+              "message": {
+                "wslUnavailable": "此设备上没有可用的 WSL，因此 Orca 无法在其中安装技能。",
+                "environmentMismatch": "此设备无法将技能安装到 WSL 中。",
+                "wslDetectionFailed": "Orca 无法检查 WSL 中安装了哪些智能体。请确认该发行版可以启动，然后重试。",
+                "homeUnavailable": "Orca 找不到用于安装技能的主文件夹。",
+                "busy": "另一个技能安装正在进行。完成后请重试。",
+                "cancelled": "技能安装已取消。",
+                "unknown": "Orca 无法安装技能。",
+                "targetPending": "Orca 仍在查找运行智能体的设备。请稍后重试。"
+              }
+            }
+          }
+        }
       }
     },
     "hooks": {
@@ -12577,6 +12595,10 @@
           "remove": "移除",
           "turnOn": "在实验性中开启",
           "forceUpdate": "强制更新"
+        },
+        "BundledSkillInstallStatus": {
+          "terminalTitle": "技能设置",
+          "terminalAriaLabel": "技能设置命令"
         }
       },
       "right": {
@@ -14173,10 +14195,6 @@
           "yoloModeLabel": "Yolo 模式",
           "yoloPermissionsDescription": "智能体会在不询问的情况下运行命令和编辑文件，部分智能体还会绕过沙箱。仅在你信任的项目中使用。"
         },
-        "FeatureSetupInlineTerminal": {
-          "47fc6cc6dc": "技能设置命令",
-          "c767ab7061": "技能设置"
-        },
         "IntegrationsStep": {
           "277f30eb34": "Linear、GitLab、Bitbucket、Azure DevOps、Gitea 和 Jira 位于“设置”>“集成”中。",
           "3a3e360289": "更多任务来源",
@@ -15119,10 +15137,6 @@
             "badb4fc342": ">",
             "22e62f3bab": "Claude Code 会话已开始"
           },
-          "CliSkillSetupTerminal": {
-            "43b60ec5c3": "Orca CLI 和编排技能安装终端",
-            "84e9576dac": "技能设置"
-          },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "设置 → 快捷键",
             "8241897205": "随时重新绑定快捷方式"
@@ -15151,7 +15165,9 @@
             "0418f9becc": "打开"
           },
           "CliSkillSetupPanel": {
-            "description": "为你的智能体安装 Orca CLI 和编排技能。"
+            "description": "为你的智能体安装 Orca CLI 和编排技能。",
+            "title": "技能设置",
+            "terminalAriaLabel": "Orca CLI 和编排技能安装终端"
           }
         }
       },

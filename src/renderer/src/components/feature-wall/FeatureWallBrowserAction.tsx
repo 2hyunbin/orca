@@ -8,7 +8,7 @@ import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRunti
 import { useAppStore } from '@/store'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
 import { useBundledSkillInstall } from '@/hooks/use-bundled-skill-install'
-import { FeatureSetupSkillInstallStatus } from '../onboarding/FeatureSetupSkillInstallStatus'
+import { BundledSkillInstallStatus } from '../settings/BundledSkillInstallStatus'
 import { getOnboardingFeatureSetupAgentRuntime } from '../onboarding/onboarding-feature-setup-runtime'
 import {
   runOnboardingFeatureSetup,
@@ -96,12 +96,12 @@ const BROWSER_ONLY_FEATURE_SETUP: OnboardingFeatureSetupSelection = {
 function BrowserSkillInstallButton(): React.JSX.Element {
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const [busy, setBusy] = useState(false)
-  const [skillNames, setSkillNames] = useState<string[]>([])
   const activeSkillRuntime = useActiveProjectSkillRuntime()
-  const { state: skillInstallState, install: installSkills } = useBundledSkillInstall({
+  const skillInstall = useBundledSkillInstall({
     agentRuntime: getOnboardingFeatureSetupAgentRuntime(activeSkillRuntime),
     onFinished: notifyInstalledAgentSkillsChanged
   })
+  const installSkills = skillInstall.install
 
   const handleInstall = useCallback(async () => {
     if (busy) {
@@ -111,10 +111,9 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     try {
       const result = await runOnboardingFeatureSetup(BROWSER_ONLY_FEATURE_SETUP)
       recordFeatureInteraction('agent-browser-setup')
-      setSkillNames(result.skillNames)
       const installState = await installSkills(result.skillNames)
       if (installState?.kind === 'failed') {
-        throw new Error(installState.message)
+        return
       }
       const firstWarning = result.warnings[0]
       if (firstWarning) {
@@ -155,13 +154,14 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     }
   }, [busy, installSkills, recordFeatureInteraction])
 
-  if (skillInstallState.kind === 'legacy-terminal') {
+  if (skillInstall.state.kind === 'failed' || skillInstall.state.kind === 'legacy-terminal') {
     return (
-      <FeatureSetupSkillInstallStatus
-        state={skillInstallState}
+      <BundledSkillInstallStatus
+        install={skillInstall}
         terminalWorktreeId="feature-wall-browser-skill-terminal"
-        onRetry={() => void installSkills(skillNames)}
+        terminalHeightPx={180}
         onLegacyTerminalFinished={notifyInstalledAgentSkillsChanged}
+        className="w-full"
       />
     )
   }
