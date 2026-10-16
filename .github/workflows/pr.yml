@@ -1443,6 +1443,15 @@ jobs:
       - name: Smoke packaged CLI
         run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
 
+      # Test build only (never merge): keeps the packaged app for a real-host account check.
+      - name: Upload unpacked Windows app
+        uses: actions/upload-artifact@v7
+        with:
+          name: orca-win-unpacked
+          path: dist/win-unpacked
+          retention-days: 5
+          if-no-files-found: error
+
   e2e:
     name: e2e
     needs: [code_paths, preflight]
