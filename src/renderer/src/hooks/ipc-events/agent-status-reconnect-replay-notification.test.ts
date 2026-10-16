@@ -6,13 +6,13 @@ import { buildStoreState, type StoreLike } from '../ipc-events-agent-status-stor
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey('tab-1', LEAF_ID)
 
-const mocks = vi.hoisted(() => ({
-  observe: vi.fn(),
-  state: null as StoreLike | null
-}))
+const mocks = vi.hoisted(() => {
+  const state: { current: StoreLike | null } = { current: null }
+  return { observe: vi.fn(), state }
+})
 
 vi.mock('../../store', () => ({
-  useAppStore: { getState: () => mocks.state }
+  useAppStore: { getState: () => mocks.state.current }
 }))
 vi.mock('../agent-hook-completion-notifications', () => ({
   observeAgentHookCompletionForNotification: mocks.observe
@@ -51,7 +51,7 @@ describe('live agent-status replay notifications', () => {
   beforeEach(() => {
     mocks.observe.mockReset()
     setAgentStatus = vi.fn()
-    mocks.state = buildStoreState({
+    mocks.state.current = buildStoreState({
       setAgentStatus,
       workspaceSessionReady: true,
       tabsByWorktree: {
