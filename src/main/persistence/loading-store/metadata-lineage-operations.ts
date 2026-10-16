@@ -50,7 +50,7 @@ import {
 export type LineageSnapshot = {
   stored: readonly LineageEdge[]
   owned: readonly LineageEdge[]
-  incident: ReadonlyMap<string, readonly LineageEdge[]>
+  incident: Pick<ReadonlyMap<string, readonly LineageEdge[]>, 'get'>
 }
 type MetadataLineageOperationsRuntime = Pick<
   StoreRuntimeState,
@@ -190,7 +190,7 @@ export class MetadataLineageOperations {
       })
     const stored = Object.freeze(Object.values(state.lineageByChildInstance ?? {}).map(freeze))
     const owned = Object.freeze(stored.length ? ownedLineageEdges(state).map(freeze) : [])
-    const incident = new Map<string, LineageEdge[]>()
+    const slices = new Map<string, LineageEdge[]>()
     for (const edge of owned) {
       for (const key of new Set(
         [edge.child.locator, edge.parent.locator]
@@ -199,14 +199,15 @@ export class MetadataLineageOperations {
             JSON.stringify([locator.slice('worktree:'.length).split('::')[0], edge.child.hostId])
           )
       )) {
-        const slice = incident.get(key) ?? []
+        const slice = slices.get(key) ?? []
         slice.push(edge)
-        incident.set(key, slice)
+        slices.set(key, slice)
       }
     }
-    for (const slice of incident.values()) {
+    for (const slice of slices.values()) {
       Object.freeze(slice)
     }
+    const incident = Object.freeze({ get: slices.get.bind(slices) })
     const snapshot = Object.freeze({ stored, owned, incident })
     if (!runtime.durableMutationPhase) {
       runtime.lineageSnapshot = snapshot
