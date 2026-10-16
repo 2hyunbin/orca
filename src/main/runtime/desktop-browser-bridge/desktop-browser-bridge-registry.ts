@@ -186,7 +186,9 @@ export function isDesktopBrowserBridgeHostEnabled(): boolean {
   return hostEnabled
 }
 
-export function getDesktopBrowserBridgeRegistry(runtime: object): DesktopBrowserBridgeRegistry {
+export function getDesktopBrowserBridgeRegistry(runtime: {
+  getRuntimeId(): string
+}): DesktopBrowserBridgeRegistry {
   let registry = registries.get(runtime)
   if (!registry) {
     registry = new DesktopBrowserBridgeRegistry()
