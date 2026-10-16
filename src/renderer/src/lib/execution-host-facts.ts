@@ -165,20 +165,27 @@ export function refineLocalLaunchPlatform(
 }
 
 /**
- * Preflight platform for a worktree's agent launch, read from its repo's owner. `undefined` when
- * withheld: the launch itself resolves the worktree's own host and tells the user why it stopped.
+ * Preflight platform for a worktree's agent launch: the worktree's own host when its row names
+ * one, else its repo's owner. `undefined` when withheld: the launch itself resolves the host and
+ * tells the user why it stopped.
  */
 export function resolveRepoWorktreeLaunchPlatform(
   state: WorktreeHostFactsState,
   repo: { connectionId?: string | null; executionHostId?: string | null; path: string },
-  worktreeId: string,
-  worktreePath: string | null | undefined
+  worktree: { id: string; path?: string | null; hostId?: string | null }
 ): NodeJS.Platform | undefined {
+  const worktreeHost = parseExecutionHostId(worktree.hostId)
+  const repoHostId = getRepoExecutionHostId(repo)
+  // Why: a per-worktree host (e.g. a local checkout of a server project) outranks the repo's.
+  const owner =
+    worktreeHost && worktreeHost.id !== repoHostId
+      ? { executionHostId: worktreeHost.id, path: repo.path }
+      : repo
   const fact = resolveRepoExecutionHostPlatform(
     state,
-    repo,
-    () => getLocalProjectExecutionRuntimeContext(state, worktreeId),
-    worktreePath ?? repo.path
+    owner,
+    () => getLocalProjectExecutionRuntimeContext(state, worktree.id),
+    worktree.path ?? repo.path
   )
   return fact.kind === 'known' ? fact.platform : undefined
 }

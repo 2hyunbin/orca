@@ -219,13 +219,8 @@ export function useChecksPanelControllerState() {
   const activeWorktreePushTarget = activeWorktree?.pushTarget ?? null
   // Why: agents run on the workspace's execution host, so its OS decides quoting (#27971).
   const activeSourceControlLaunchPlatform =
-    activeWorktreeId && repo
-      ? resolveRepoWorktreeLaunchPlatform(
-          useAppStore.getState(),
-          repo,
-          activeWorktreeId,
-          activeWorktreePath
-        )
+    activeWorktree && repo
+      ? resolveRepoWorktreeLaunchPlatform(useAppStore.getState(), repo, activeWorktree)
       : undefined
   const runtimeEnvironmentId = useAppStore((s) =>
     getRuntimeEnvironmentIdForWorktree(s, activeWorktreeId)

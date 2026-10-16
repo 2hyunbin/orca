@@ -260,8 +260,7 @@ describe('startFixChecksAgent', () => {
     expect(mocks.resolveRepoWorktreeLaunchPlatform).toHaveBeenCalledWith(
       mocks.store,
       expect.objectContaining({ id: 'repo-1', connectionId: 'ssh-1' }),
-      'wt-1',
-      '/repo/wt-1'
+      expect.objectContaining({ id: 'wt-1', path: '/repo/wt-1' })
     )
   })
 

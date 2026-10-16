@@ -164,12 +164,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     const targetRepo =
       latestStore.repos.find((candidate) => candidate.id === targetWorktree.repoId) ?? repo
     const launchPlatform = targetRepo
-      ? resolveRepoWorktreeLaunchPlatform(
-          latestStore,
-          targetRepo,
-          targetWorktreeId,
-          targetWorktree.path
-        )
+      ? resolveRepoWorktreeLaunchPlatform(latestStore, targetRepo, targetWorktree)
       : undefined
     if (!launchPlatform) {
       toast.error(

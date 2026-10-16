@@ -153,8 +153,7 @@ export function useCheckRunDetailsFixWithAI(args: {
       ? resolveRepoWorktreeLaunchPlatform(
           useAppStore.getState(),
           repo,
-          args.worktreeId,
-          worktree?.path
+          worktree ?? { id: args.worktreeId }
         )
       : undefined
   const fixChecksRecipe = useMemo(

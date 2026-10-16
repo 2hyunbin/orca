@@ -130,13 +130,8 @@ export function useSourceControlWorktreeContext() {
     : null
   // Why: agents run on the workspace's execution host, so its OS decides quoting (#27971).
   const activeSourceControlLaunchPlatform =
-    activeWorktreeId && activeRepo
-      ? resolveRepoWorktreeLaunchPlatform(
-          useAppStore.getState(),
-          activeRepo,
-          activeWorktreeId,
-          worktreePath
-        )
+    activeWorktree && activeRepo
+      ? resolveRepoWorktreeLaunchPlatform(useAppStore.getState(), activeRepo, activeWorktree)
       : undefined
   // Why: the sidebar stays mounted when closed, so gate polling on tab AND open or branchCompare/PR fetch would run with no visible consumer.
   const isBranchVisible = rightSidebarTab === 'source-control' && rightSidebarOpen

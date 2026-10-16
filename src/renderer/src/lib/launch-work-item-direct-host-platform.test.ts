@@ -4,14 +4,16 @@ import type { SshConnectionState } from '../../../shared/ssh-types'
 import type * as TuiAgentStartupModule from '@/lib/tui-agent-startup'
 
 const mocks = vi.hoisted(() => {
-  const clientPlatform: NodeJS.Platform = 'win32'
-  const store: Record<string, unknown> = {}
+  // Why declared: an inferred literal `'win32'` would reject the other client platforms.
+  const mutable: { clientPlatform: NodeJS.Platform; store: Record<string, unknown> } = {
+    clientPlatform: 'win32',
+    store: {}
+  }
   return {
-    clientPlatform,
+    ...mutable,
     toastError: vi.fn(),
     createWorktree: vi.fn(),
-    activateAndRevealWorktree: vi.fn(),
-    store
+    activateAndRevealWorktree: vi.fn()
   }
 })
 
