@@ -321,14 +321,13 @@ export function NativeChatMessageList({
     beginNavigation()
     scrollToBottom()
   }, [beginNavigation, scrollToBottom])
-  const readerScrollInput = useNativeChatReaderScrollInput(scrollRef, {
+  const readerInput = useNativeChatReaderScrollInput(scrollRef, {
     onReaderScroll: beginNavigation,
     onTakeScroll: transcriptWindow.cancelAlign,
     onLeaveEnd: readerLeavesEnd,
     onScrollGesture: transcriptScroll.forwardedGesture
   })
-  const { revealFindMatch } = readerScrollInput
-  useNativeChatMessageListHandle(ref, jumpToLatest, revealFindMatch, dismiss, allSlots)
+  useNativeChatMessageListHandle(ref, jumpToLatest, readerInput.revealFindMatch, dismiss, allSlots)
   useNativeChatRailJumpLanding({
     railJump,
     slots,
@@ -380,7 +379,7 @@ export function NativeChatMessageList({
           <div
             ref={scrollRef}
             onScroll={onScroll}
-            {...readerScrollInput.scrollerProps}
+            {...readerInput.scrollerProps}
             // Named so measurement can find the scroll root without depending on
             // which utility class happens to make it scroll.
             data-native-chat-scroll
@@ -408,7 +407,7 @@ export function NativeChatMessageList({
                   context={rowContext}
                   window={transcriptWindow}
                   newRowsMarker={newRowsMarker}
-                  forwardGesture={readerScrollInput.forwardedGesture}
+                  forwardGesture={readerInput.forwardedGesture}
                 />
                 {liveLine ? (
                   <NativeChatTurnActivityLine
@@ -427,7 +426,7 @@ export function NativeChatMessageList({
             rail={rail}
             scrollRef={scrollRef}
             onSelect={selectRailItem}
-            onReaderScroll={readerScrollInput.railWheel}
+            onReaderScroll={readerInput.railWheel}
             pendingId={railHistoryJump.pendingId}
           />
           <NativeChatJumpToLatest visible={showJump} onJump={jumpToLatest} />
