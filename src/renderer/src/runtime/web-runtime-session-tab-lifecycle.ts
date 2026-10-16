@@ -114,9 +114,18 @@ function holdUndeliveredUserClose(
     makeWebSessionCloseIntentDurable(intentOwner, worktreeId, hostTabId)
   }
   queueWebSessionCloseReplay(intentOwner, worktreeId, hostTabIds)
+  scheduleWebSessionCloseReplayRelist(intentOwner.environmentId, worktreeId)
 }
 
 const WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS = 5_000
+
+// Why a re-list: subscriptions are change-driven, so an idle worktree may never publish the
+// snapshot that makes the next attempt due. The re-list's receipt does.
+function scheduleWebSessionCloseReplayRelist(environmentId: string, worktreeId: string): void {
+  setTimeout(() => {
+    void refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId)
+  }, WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS)
+}
 
 /** Sends again the user closes a host snapshot proved reachable; see `takeDueWebSessionCloseReplays`. */
 export async function replayWebSessionTabCloses(
@@ -140,11 +149,7 @@ export async function replayWebSessionTabCloses(
     })
     const settled = settleWebSessionCloseReplay(replay, outcome !== 'failed')
     if (settled === 'retry') {
-      // Why a re-list: subscriptions are change-driven, so an idle worktree may never publish the
-      // snapshot that makes the next attempt due. The re-list's receipt does.
-      setTimeout(() => {
-        void refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId)
-      }, WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS)
+      scheduleWebSessionCloseReplayRelist(environmentId, replay.worktreeId)
       continue
     }
     if (settled === 'done') {
