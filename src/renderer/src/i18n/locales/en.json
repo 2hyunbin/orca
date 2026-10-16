@@ -19925,7 +19925,10 @@
     "preferenceSaveFailed": "Could not save deletion preference",
     "alwaysForceDelete": "Always force delete",
     "moreActions": "More force delete options",
-    "alwaysForceDeleteTooltip": "Applies to all future workspace deletions."
+    "alwaysForceDeleteTooltip": "Applies to all future workspace deletions.",
+    "moreBranchActions": "More branch delete options",
+    "alwaysForceDeleteBranches": "Always delete preserved branches",
+    "alwaysForceDeleteBranchesTooltip": "Applies to branches kept after future workspace deletions."
   },
   "worktree": {
     "nestedRemoval": {
