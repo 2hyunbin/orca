@@ -66,8 +66,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     if (
       evidence.some((owner) => owner.status !== 'owned') ||
       hostOwners.length !== 1 ||
-      !meta ||
-      (!meta.instanceId && !isFolderRepo(hostOwners[0])) ||
+      !meta || (!meta.instanceId && !isFolderRepo(hostOwners[0])) ||
       (!meta.hostId && owners.length > 1)
     ) {
       continue
