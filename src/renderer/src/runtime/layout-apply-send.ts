@@ -1,6 +1,7 @@
 // Store-free so store slices can send; `layout-owner-command` reads the store for other callers.
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tree'
@@ -64,6 +65,8 @@ export type WindowLayoutCommand =
       preview?: true
     }
   | { type: 'promotePreviewTab'; tabId: string }
+  | { type: 'sleep'; tabId: string; paneKeys: string[]; records: SleepingAgentSessionRecord[] }
+  | { type: 'wake'; tabId: string; paneKeys: [string] }
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void

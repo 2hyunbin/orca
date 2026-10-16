@@ -1,10 +1,11 @@
 import { z } from 'zod'
-import { isTerminalLeafId } from '../stable-pane-id'
+import { isTerminalLeafId, parsePaneKey } from '../stable-pane-id'
 import { isValidHostTerminalTabId } from '../terminal-tab-id'
 import type { TuiAgent } from '../tui-agent'
 import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
+import { sleepingAgentSessionRecordSchema } from '../workspace-session-sleeping-agents'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -217,6 +218,32 @@ const SetBrowserTabProfileCommand = z.object({
 
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
+/** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
+function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolean {
+  return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
+}
+
+/** The window's sleep of panes of one tab it already stopped; main records how each resumes. */
+const SleepCommand = z
+  .object({
+    type: z.literal('sleep'),
+    ...OnTab,
+    paneKeys: z.array(z.string().min(1)).min(1),
+    records: z.array(sleepingAgentSessionRecordSchema)
+  })
+  .refine(paneKeysNameTab)
+  .refine((command) =>
+    command.records.every(
+      (record) =>
+        record.worktreeId === command.workspace && command.paneKeys.includes(record.paneKey)
+    )
+  )
+
+/** The window's wake of the one pane it shows; never more, so agents are not resumed in bulk. */
+const WakeCommand = z
+  .object({ type: z.literal('wake'), ...OnTab, paneKeys: z.tuple([z.string().min(1)]) })
+  .refine(paneKeysNameTab)
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id but a created terminal tab's
@@ -245,6 +272,8 @@ export const LayoutApplyParams = z.object({
     ReplaceBrowserPageCommand,
     SetBrowserTabProfileCommand,
     OpenEditorTabCommand,
-    PromotePreviewTabCommand
+    PromotePreviewTabCommand,
+    SleepCommand,
+    WakeCommand
   ])
 })
