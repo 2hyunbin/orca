@@ -120,7 +120,7 @@ function renderLaunchedChat(
   sessionId: string,
   agent: 'codex' | 'claude' = 'codex'
 ) {
-  return renderHook((selectedSessionId = sessionId) => {
+  return renderHook((selectedSessionId: string = sessionId) => {
     const provisional = useNativeChatProvisionalLaunch(worktreeId, selectedSessionId)
     const chat = useStructuredAgentSession({
       sessionId: selectedSessionId,
