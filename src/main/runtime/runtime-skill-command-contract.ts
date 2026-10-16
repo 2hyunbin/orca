@@ -16,6 +16,7 @@ import type {
   SkillUploadChunkRequest
 } from '../../shared/skill-upload-session-contract'
 import type { SkillUploadSessionService } from '../skills/skill-upload-session-service'
+import type { BundledSkillPlan } from '../../shared/skill-freshness'
 import type { RuntimeSkillCommands } from './runtime-skill-command-surface'
 import type {
   SkillCloudDownloadGrant,
@@ -100,6 +101,7 @@ export type RuntimeSkillCommandSurface = {
     names: readonly string[],
     signal?: AbortSignal
   ): Promise<SkillInstallResult[]>
+  planBundledOrcaSkills(names: readonly string[]): Promise<BundledSkillPlan[]>
   getSharedSkillInstallProgress(operationId: string): SkillBundleInstallProgress | null
   cancelSharedSkillInstall(operationId: string): boolean
   previewSharedSkillInstallRequest(

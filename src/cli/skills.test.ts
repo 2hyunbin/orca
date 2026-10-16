@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SkillInstallResult } from '../shared/skill-install-contract'
+import type {
+  BundledSkillLeaveReason,
+  BundledSkillLocationAction,
+  BundledSkillLocationPlan,
+  BundledSkillPlan
+} from '../shared/skill-freshness'
 
 const {
   detectCommandsMock,
@@ -119,7 +125,7 @@ describe('orca skills CLI', () => {
     )
     planMock.mockReset()
     planMock.mockImplementation(async (names: string[]) =>
-      names.map((name) => planEntry(name, 'unchanged'))
+      names.map((name) => planEntry(name, 'keep'))
     )
     process.exitCode = undefined
   })
@@ -418,30 +424,10 @@ describe('orca skills CLI', () => {
 
   it('prints the plan without writing for --dry-run', async () => {
     planMock.mockResolvedValue([
-      {
-        name: 'alpha',
-        canonicalPath: '/h/.agents/skills/alpha',
-        state: 'missing',
-        replacesCanonical: true,
-        placements: [{ path: '/h/.claude/skills/alpha', action: 'link' }],
-        willWrite: true
-      },
-      {
-        name: 'gamma',
-        canonicalPath: '/h/.agents/skills/gamma',
-        state: 'unchanged',
-        replacesCanonical: false,
-        placements: [{ path: '/h/.claude/skills/gamma', action: 'replace' }],
-        willWrite: true
-      },
-      {
-        name: 'zeta',
-        canonicalPath: '/h/.agents/skills/zeta',
-        state: 'modified',
-        replacesCanonical: false,
-        placements: [],
-        willWrite: false
-      }
+      planEntry('alpha', 'install', [agent('alpha', 'link')]),
+      planEntry('gamma', 'keep', [agent('gamma', 'replace')]),
+      planEntry('zeta', 'leave', [], 'local-changes'),
+      planEntry('omega', 'keep', [agent('omega', 'leave', 'link-not-managed')])
     ])
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -449,24 +435,16 @@ describe('orca skills CLI', () => {
 
     expect(installMock).not.toHaveBeenCalled()
     expect(stdoutText(stdoutSpy)).toBe(
-      'alpha: would install /h/.agents/skills/alpha; would link /h/.claude/skills/alpha\n' +
-        'gamma: would replace /h/.claude/skills/gamma\n' +
-        'zeta: would not change, the installed copy has changes Orca did not make ' +
-        '(/h/.agents/skills/zeta)\n\nRerun without --dry-run to install now.\n'
+      'alpha: would install /home/u/.agents/skills/alpha; would link /home/u/.claude/skills/alpha\n' +
+        'gamma: would replace /home/u/.claude/skills/gamma\n' +
+        'zeta: would leave /home/u/.agents/skills/zeta, it has changes Orca did not make\n' +
+        'omega: would leave /home/u/.claude/skills/omega, it is a link Orca does not manage\n' +
+        '\nRerun without --dry-run to install now.\n'
     )
   })
 
   it('gives dry-run --json and real --json stable schemas', async () => {
-    const plan = [
-      {
-        name: 'alpha',
-        canonicalPath: '/h/.agents/skills/alpha',
-        state: 'unowned',
-        replacesCanonical: true,
-        placements: [],
-        willWrite: true
-      }
-    ]
+    const plan = [planEntry('alpha', 'update')]
     planMock.mockResolvedValue(plan)
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -488,11 +466,26 @@ describe('orca skills CLI', () => {
     })
   })
 
+  it('reports a copy the plan leaves as it is instead of updating it, and points at --force', async () => {
+    planMock.mockResolvedValue([planEntry('alpha', 'leave', [], 'local-changes')])
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'update', '--skill', 'alpha'], '/tmp/repo')
+
+    expect(installMock).not.toHaveBeenCalled()
+    expect(stdoutText(stdoutSpy)).toBe(
+      'alpha: would leave /home/u/.agents/skills/alpha, it has changes Orca did not make\n\n' +
+        'Rerun with --force to replace a copy that has local changes.\n'
+    )
+    expect(process.exitCode).toBe(1)
+  })
+
   it('updates with --all only the skills already installed here', async () => {
     planMock.mockImplementation(async () => [
-      planEntry('alpha', 'unchanged'),
-      planEntry('gamma', 'missing', [{ path: '/h/.claude/skills/gamma', action: 'link' }]),
-      planEntry('zeta', 'missing', [{ path: '/h/.claude/skills/zeta', action: 'replace' }])
+      planEntry('alpha', 'update'),
+      planEntry('gamma', 'install', [agent('gamma', 'link')]),
+      // Why: the skills CLI's single-agent layout: a real folder in the agent home.
+      planEntry('zeta', 'install', [agent('zeta', 'replace')])
     ])
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -508,7 +501,7 @@ describe('orca skills CLI', () => {
 
   it('says there is nothing to update when no Orca skill is installed', async () => {
     planMock.mockImplementation(async (names: string[]) =>
-      names.map((name) => planEntry(name, 'missing'))
+      names.map((name) => planEntry(name, 'install'))
     )
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -521,7 +514,7 @@ describe('orca skills CLI', () => {
 
   it('refuses to update a named skill that is not installed, pointing at install', async () => {
     planMock.mockImplementation(async (names: string[]) =>
-      names.map((name) => planEntry(name, 'missing'))
+      names.map((name) => planEntry(name, 'install'))
     )
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -572,18 +565,39 @@ describe('orca skills CLI', () => {
   })
 })
 
+function agent(
+  name: string,
+  action: BundledSkillLocationAction,
+  reason?: BundledSkillLeaveReason
+): BundledSkillLocationPlan {
+  return {
+    path: `/home/u/.claude/skills/${name}`,
+    role: 'agent',
+    action,
+    exists: action !== 'link',
+    ...(reason ? { reason } : {})
+  }
+}
+
 function planEntry(
   name: string,
-  state: 'missing' | 'unchanged',
-  placements: { path: string; action: 'link' | 'replace' | 'keep' | 'skip' }[] = []
-) {
+  sharedAction: BundledSkillLocationAction,
+  agents: BundledSkillLocationPlan[] = [],
+  reason?: BundledSkillLeaveReason
+): BundledSkillPlan {
   return {
     name,
-    canonicalPath: `/home/u/.agents/skills/${name}`,
-    state,
-    replacesCanonical: state === 'missing',
-    placements,
-    willWrite: state === 'missing'
+    packageDigest: 'd',
+    locations: [
+      {
+        path: `/home/u/.agents/skills/${name}`,
+        role: 'shared',
+        action: sharedAction,
+        exists: sharedAction !== 'install',
+        ...(reason ? { reason } : {})
+      },
+      ...agents
+    ]
   }
 }
 
