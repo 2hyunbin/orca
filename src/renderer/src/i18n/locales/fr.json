@@ -12532,6 +12532,10 @@
           "detailsUnavailable": "Les détails des informations d'identification du plan ne sont lisibles que sur l'ordinateur exécutant Orca.",
           "siteUnavailable": "Site du plan d'hébergement indisponible"
         },
+        "sshManagedHostRemove": {
+          "description": "{{label}} exécute un serveur Orca géré. Dans Serveurs gérés, utilisez Arrêter… pour retirer le serveur de l’hôte, ou Oublier… si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
+          "open": "Ouvrir Serveurs gérés"
+        },
         "managedServers": {
           "row": {
             "notRunning": "Non démarré",
@@ -18071,6 +18075,13 @@
           "deleteColumn": "Supprimer la colonne",
           "deleteTable": "Supprimer le tableau"
         }
+      }
+    },
+    "startup": {
+      "webHostUnreachable": {
+        "title": "Impossible de joindre votre hôte Orca",
+        "description": "Rien n'a été perdu. Orca se rechargera lorsque l'hôte répondra et n'enregistrera aucune modification d'ici là.",
+        "retry": "Réessayer maintenant"
       }
     }
   },

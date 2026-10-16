@@ -14,6 +14,8 @@ import { SshTargetForm, EMPTY_FORM, type EditingTarget } from './SshTargetForm'
 import { getEditingTargetForSshTarget } from './ssh-target-draft'
 import { buildSshTargetSavePayload } from './ssh-target-save-payload'
 import { HostRemoveDialog } from '../sidebar/HostRemoveDialog'
+import { isManagedServerSshHost, SshManagedHostRemoveDialog } from './SshManagedHostRemoveDialog'
+import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { resolveSshHostRemoval } from '../sidebar/ssh-host-remove-resolution'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import { toSshExecutionHostId } from '../../../../shared/execution-host'
@@ -46,6 +48,7 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     targetId: string
     label: string
   } | null>(null)
+  const [managedHostRemoveLabel, setManagedHostRemoveLabel] = useState<string | null>(null)
   const mountedRef = useMountedRef()
 
   const setSshTargetsMetadata = useAppStore((s) => s.setSshTargetsMetadata)
@@ -147,6 +150,11 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     target: { id: string; label: string },
     requestPlainRemove: (target: { id: string; label: string }) => void
   ): void => {
+    const stored = targets.find((candidate) => candidate.id === target.id)
+    if (stored && isManagedServerSshHost(stored)) {
+      setManagedHostRemoveLabel(target.label)
+      return
+    }
     const resolution = resolveSshHostRemoval({
       targetId: target.id,
       repos: useAppStore.getState().repos,
@@ -173,9 +181,10 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     } catch (err) {
       if (mountedRef.current) {
         toast.error(
-          err instanceof Error
-            ? err.message
-            : translate('auto.components.settings.SshPane.c2a69510e3', 'Failed to remove target')
+          extractIpcErrorMessage(
+            err,
+            translate('auto.components.settings.SshPane.c2a69510e3', 'Failed to remove target')
+          )
         )
       }
     }
@@ -369,6 +378,11 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
             cancelForm()
           }
         }}
+      />
+
+      <SshManagedHostRemoveDialog
+        label={managedHostRemoveLabel}
+        onClose={() => setManagedHostRemoveLabel(null)}
       />
 
       {hostRemoveTarget ? (
