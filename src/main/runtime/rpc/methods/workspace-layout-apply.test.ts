@@ -178,6 +178,27 @@ describe('layout.apply', () => {
     ).toBe(false)
   })
 
+  it('accepts a drag-out with the window’s terminal, but no tab id from the window', async () => {
+    const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
+    const move = {
+      type: 'movePaneToNewTab',
+      workspace: WORKTREE,
+      tabId: 'tab-1',
+      leafId: 'leaf-1',
+      groupId: 'g1',
+      index: 2
+    }
+
+    expect(
+      apply?.params?.parse({ command: { ...move, windowDetach: { ptyId: 'pty-1', tabId: 'x' } } })
+    ).toEqual({ command: { ...move, windowDetach: { ptyId: 'pty-1' } } })
+    expect(apply?.params?.safeParse({ command: { ...move, windowDetach: {} } }).success).toBe(false)
+    expect(
+      apply?.params?.safeParse({ command: { ...move, windowDetach: { ptyId: null }, index: -1 } })
+        .success
+    ).toBe(false)
+  })
+
   it('applies group sizes to the workspace’s routed partition', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
     const ratios = {

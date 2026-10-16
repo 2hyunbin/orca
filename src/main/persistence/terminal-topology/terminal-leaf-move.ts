@@ -52,6 +52,21 @@ function hasTabId(session: WorkspaceSessionState, tabId: string): boolean {
   )
 }
 
+/** A tab other than the source holds the leaf; a layout left behind by a removed row owns nothing. */
+export function leafHeldByOtherTab(
+  session: WorkspaceSessionState,
+  sourceTabId: string,
+  leafId: string
+): boolean {
+  const tabIds = liveTabIds(session)
+  return Object.entries(session.terminalLayoutsByTabId ?? {}).some(
+    ([tabId, layout]) =>
+      tabId !== sourceTabId &&
+      tabIds.has(tabId) &&
+      layoutContainsLeafId(layout?.root ?? null, leafId)
+  )
+}
+
 type SourceHolder = TerminalSessionPartition & {
   sourceTab: TerminalTab
   sourceLayout: TerminalLayoutSnapshot
@@ -154,17 +169,7 @@ export function planTerminalLeafMove(
   if (partitions.some(({ session }) => hasTabId(session, request.targetTabId))) {
     return refuse('target_tab_exists')
   }
-  // A layout left behind by a removed tab row owns nothing.
-  const leafElsewhere = owners.some(({ session }) => {
-    const tabIds = liveTabIds(session)
-    return Object.entries(session.terminalLayoutsByTabId ?? {}).some(
-      ([tabId, layout]) =>
-        tabId !== sourceTabId &&
-        tabIds.has(tabId) &&
-        layoutContainsLeafId(layout?.root ?? null, leafId)
-    )
-  })
-  if (leafElsewhere) {
+  if (owners.some(({ session }) => leafHeldByOtherTab(session, sourceTabId, leafId))) {
     return refuse('leaf_in_other_tab')
   }
   const holders = owners.flatMap(({ hostId, session }) => {

@@ -16,6 +16,16 @@ import type { LayoutEditorFile, LayoutTerminalCreation } from './workspace-layou
 
 type On = { workspace: string }
 
+/**
+ * The desktop's drag-out rules: the terminal the window's pane shows outranks a stale binding
+ * here, and a tab's last pane moves too (the window holds siblings this copy lacks).
+ */
+export type WindowPaneDetach = {
+  ptyId: string | null
+  /** The new tab's id, the same in every partition holding the pane; minted when absent. */
+  tabId?: string
+}
+
 export type LayoutCommand =
   | (On & {
       type: 'createTerminalTab'
@@ -76,6 +86,8 @@ export type LayoutCommand =
       leafId: string
       groupId?: string
       index?: number
+      /** A window's drag-out, under the desktop's move rules (WindowPaneDetach). */
+      windowDetach?: WindowPaneDetach
     })
   | (On & { type: 'renameTab'; tabId: string } & TabTitle)
   | (On & { type: 'renamePane'; tabId: string; leafId: string; title: string | null })
@@ -150,6 +162,9 @@ export type LayoutRefusalCode =
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
+  /** A window's drag-out: another tab holds the pane, or no copy binds the window's terminal. */
+  | 'pane_in_other_tab'
+  | 'pty_mismatch'
 
 /** What the runtime does after applying: stop or start terminals. The reply never waits on them. */
 export type LayoutEffects = { stopPtyIds: string[]; startPaneKeys: string[] }
@@ -160,6 +175,8 @@ export type LayoutCommandResult = {
   paneKey?: string
   groupId?: string
   pageId?: string
+  /** A window's drag-out: the terminal the moved pane shows, null when unbound. */
+  ptyId?: string | null
   tabClosed?: boolean
   alreadyClosed?: boolean
   closed?: string[]

@@ -23,6 +23,14 @@ export type WindowLayoutCommand =
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
   | { type: 'closeTabs'; tabIds: [string]; recordClose: 'user' | 'cleanup' }
+  | {
+      type: 'movePaneToNewTab'
+      tabId: string
+      leafId: string
+      groupId: string
+      index?: number
+      windowDetach: { ptyId: string | null }
+    }
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void

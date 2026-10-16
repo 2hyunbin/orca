@@ -32,6 +32,7 @@ import type { SessionHostPartitionOperations } from '../loading-store/session-ho
 import { planTerminalLeafMove, rekeyMovedLeafProfileRecords } from './terminal-leaf-move'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
 import { keepWslMoveFrozenSessionsForStore } from '../moving-wsl-projects/wsl-move-session-freeze'
+import { resolveWindowPaneDetach, type WindowPaneDetachCommand } from './window-pane-detach'
 
 // The commit boundary for terminal layout (tabs, panes, pane-to-PTY bindings). Wraps the close and
 // the pane move; the close transform still lives in runtime/ and other writers move here later.
@@ -118,7 +119,14 @@ export function applyLayout(
 ): () => DurableProfileStateMutation<LayoutApplyOutcome> {
   return traced(
     'apply_layout',
-    () => commitLayoutCommand(hostIds, command, context),
+    () =>
+      command.type === 'movePaneToNewTab' && command.windowDetach
+        ? commitWindowPaneDetach(
+            hostIds,
+            { ...command, windowDetach: command.windowDetach },
+            context
+          )
+        : commitLayoutCommand(hostIds, command, context),
     (outcome) => (outcome.ok ? undefined : outcome.code)
   )
 }
@@ -231,6 +239,20 @@ function commitLeafMove(
       keepFrozen(hostId, session, context)
     )
   )
+  restores.push(...writeMovedLeafProfileRecords(request, context))
+  return {
+    value: planned.result,
+    rollback: () => restores.forEach((restore) => restore())
+  }
+}
+
+/** Pane-keyed UI marks and SSH leases follow a moved leaf; returns their restores. */
+function writeMovedLeafProfileRecords(
+  request: TerminalLeafMoveRequest,
+  context: TerminalTopologyCommitContext
+): (() => void)[] {
+  const { state } = context
+  const restores: (() => void)[] = []
   const rekeyed = rekeyMovedLeafProfileRecords(state, request)
   if (rekeyed.ui) {
     restores.push(
@@ -252,9 +274,43 @@ function commitLeafMove(
     )
     context.markDirty('sshRemotePtyLeases')
   }
+  return restores
+}
+
+/** A window's drag-out: checked across every partition, then moved in each holder as one write. */
+function commitWindowPaneDetach(
+  hostIds: readonly ExecutionHostId[],
+  command: WindowPaneDetachCommand,
+  context: TerminalTopologyCommitContext
+): DurableProfileStateMutation<LayoutApplyOutcome> {
+  const resolved = resolveWindowPaneDetach(
+    context.hostIds().map((hostId) => ({ hostId, session: context.getSession(hostId) })),
+    hostIds,
+    command
+  )
+  if (resolved && 'code' in resolved) {
+    return { value: { ok: false, code: resolved.code }, persist: false }
+  }
+  const committed = commitLayoutCommand(hostIds, resolved?.command ?? command, context)
+  if (!resolved || !committed.value.ok || committed.persist === false) {
+    return committed
+  }
+  const restores = writeMovedLeafProfileRecords(
+    {
+      worktreeId: command.workspace,
+      sourceTabId: resolved.sourceEntityId,
+      targetTabId: resolved.command.windowDetach.tabId,
+      leafId: command.leafId,
+      ptyId: resolved.command.windowDetach.ptyId
+    },
+    context
+  )
   return {
-    value: planned.result,
-    rollback: () => restores.forEach((restore) => restore())
+    value: committed.value,
+    rollback: () => {
+      restores.forEach((restore) => restore())
+      committed.rollback?.()
+    }
   }
 }
 

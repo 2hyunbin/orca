@@ -89,6 +89,16 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup'])
 })
 
+/** A window's drag-out of one pane into a new tab; main mints the tab's id. */
+const MovePaneToNewTabCommand = z.object({
+  type: z.literal('movePaneToNewTab'),
+  ...OnPane,
+  groupId: z.string().min(1),
+  index: z.number().int().nonnegative().optional(),
+  /** The terminal the window's pane shows now, when it has one. */
+  windowDetach: z.object({ ptyId: z.string().min(1).max(512).nullable() })
+})
+
 /**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id, so no new id is accepted here.
@@ -104,6 +114,7 @@ export const LayoutApplyParams = z.object({
     MoveTabCommand,
     SplitGroupCommand,
     SetGroupRatiosCommand,
-    CloseTabsCommand
+    CloseTabsCommand,
+    MovePaneToNewTabCommand
   ])
 })

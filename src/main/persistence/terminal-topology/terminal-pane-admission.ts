@@ -18,7 +18,10 @@ import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace
 import { paneKeyOf } from '../../../shared/workspace-layout/workspace-layout-model'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
 import { patchStoredSession } from '../../../shared/workspace-layout/workspace-layout-record-patch'
-import { followRemoteSessionAfterPaneClose } from './pane-close-remote-session'
+import {
+  followRemoteSessionAfterPaneClose,
+  followRemoteSessionAfterPaneDetach
+} from './pane-close-remote-session'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
@@ -70,7 +73,10 @@ export function applyCommandToSession(
     const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
     return patched === session
       ? null
-      : followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
+      : followRemoteSessionAfterPaneDetach(
+          command,
+          followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
+        )
   })
 }
 
