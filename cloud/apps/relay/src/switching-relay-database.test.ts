@@ -127,6 +127,10 @@ function setup(input: {
   const dedicated = fakeTarget('dedicated', input.dedicated)
   const openDedicated = vi.fn(() => dedicated)
   // What the bucket holds now; a read applies it, as the control flag channel does.
+  // A pointer in the bucket means a move is in progress, so both copies have the authority table.
+  const moving = typeof input.firstPointer === 'object' && input.firstPointer !== null
+  primary.moveBegun = input.firstPointer === undefined || moving
+  dedicated.moveBegun = primary.moveBegun
   const bucket = {
     pointer: input.firstPointer === undefined ? pointer() : input.firstPointer
   }
@@ -525,6 +529,24 @@ describe('switching relay database', () => {
       await sleep(120)
       expect(await servedBy(database)).toBe('dedicated')
       expect(primary.queries).toEqual([])
+    })
+
+    it('resumes on primary after the move finishes, whatever floor the deleted pointer left', async () => {
+      // Floor 2 with no eligible target: it fails fast and keeps probing.
+      const { database, primary } = setup({
+        primary: 0,
+        dedicated: null,
+        firstPointer: pointer(undefined, 2)
+      })
+      await expect(database.query('SELECT 1')).rejects.toMatchObject({ code: '57P03' })
+      // finish: the pointer is deleted (a 404 keeps the last one applied) and primary's table dropped.
+      primary.moveBegun = false
+      await sleep(80)
+      expect(await servedBy(database)).toBe('primary')
+      expect(events('orca_relay_database_target_selected').at(-1)).toMatchObject({
+        target: 'primary',
+        reason: 'no-move'
+      })
     })
   })
 })

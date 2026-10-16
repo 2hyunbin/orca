@@ -315,6 +315,11 @@ export class SwitchingRelayDatabase implements RelayDatabase {
       this.probe(this.input.primary, timeoutMs),
       dedicated ? this.probe(dedicated, timeoutMs) : null
     ])
+    // No authority table on primary: no move is in progress (the state after the tool's finish),
+    // so primary serves whatever floor a since-deleted pointer left behind.
+    if (primary && !primary.moveBegun) {
+      return { name: 'primary', opened: primary.opened, generation: 0, reason: 'no-move' }
+    }
     if (this.eligible(other) && other.generation > (primary?.generation ?? 0)) {
       return { name: 'dedicated', ...other, reason: 'higher-generation' }
     }
