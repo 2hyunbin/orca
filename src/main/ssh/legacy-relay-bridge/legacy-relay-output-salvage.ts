@@ -46,17 +46,26 @@ function bells(text: string): string {
   return kept
 }
 
-export function salvageHiddenOutput(
-  data: string,
+export type OutputSalvage = {
+  kept: string
+  /** Queries answered from cursor or mode state, which the window's dropped output left stale. */
+  stateful: string
   state: OutputSalvageState
-): { kept: string; state: OutputSalvageState } {
+}
+
+export function salvageHiddenOutput(data: string, state: OutputSalvageState): OutputSalvage {
   let input = state.tail + data
   let kept = ''
+  let stateful = ''
   let offset = 0
   if (state.skippingOsc) {
     const skipped = oscEnd(input, 0)
     if (skipped.end === -1) {
-      return { kept, state: { tail: input.endsWith('\x1b') ? '\x1b' : '', skippingOsc: true } }
+      return {
+        kept,
+        stateful,
+        state: { tail: input.endsWith('\x1b') ? '\x1b' : '', skippingOsc: true }
+      }
     }
     input = input.slice(skipped.end)
   }
@@ -67,7 +76,7 @@ export function salvageHiddenOutput(
       break
     }
     if (escape + 1 >= input.length) {
-      return { kept, state: { tail: input.slice(escape), skippingOsc: false } }
+      return { kept, stateful, state: { tail: input.slice(escape), skippingOsc: false } }
     }
     const introducer = input[escape + 1]
     if (introducer === '[') {
@@ -76,12 +85,15 @@ export function salvageHiddenOutput(
         const tail = input.slice(escape)
         return {
           kept,
+          stateful,
           state: { tail: tail.length <= MAX_CSI_CHARS ? tail : '', skippingOsc: false }
         }
       }
       const sequence = input.slice(escape, final + 1)
-      if (isStatelessRendererReplyCsiQuery(sequence) || isStatefulRendererReplyCsiQuery(sequence)) {
+      if (isStatelessRendererReplyCsiQuery(sequence)) {
         kept += sequence
+      } else if (isStatefulRendererReplyCsiQuery(sequence)) {
+        stateful += sequence
       }
       offset = final + 1
       continue
@@ -91,8 +103,12 @@ export function salvageHiddenOutput(
       if (osc.end === -1) {
         const tail = input.slice(escape)
         return tail.length <= MAX_OSC_CHARS
-          ? { kept, state: { tail, skippingOsc: false } }
-          : { kept, state: { tail: tail.endsWith('\x1b') ? '\x1b' : '', skippingOsc: true } }
+          ? { kept, stateful, state: { tail, skippingOsc: false } }
+          : {
+              kept,
+              stateful,
+              state: { tail: tail.endsWith('\x1b') ? '\x1b' : '', skippingOsc: true }
+            }
       }
       if (!osc.aborted && osc.end - escape <= MAX_OSC_CHARS) {
         kept += input.slice(escape, osc.end)
@@ -102,5 +118,5 @@ export function salvageHiddenOutput(
     }
     offset = escape + 2
   }
-  return { kept, state: EMPTY_OUTPUT_SALVAGE }
+  return { kept, stateful, state: EMPTY_OUTPUT_SALVAGE }
 }

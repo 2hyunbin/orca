@@ -58,8 +58,40 @@ describe('a bridged pane no visible view shows', () => {
 
   it('still sends a hidden program’s terminal queries so the window can answer them', () => {
     subject.setPaused(PTY, true)
-    subject.onData(PTY, 'bulk\x1b[cmore\x1b[6n')
-    expect(sent).toEqual(['data:\x1b[c\x1b[6n'])
+    subject.onData(PTY, 'bulk\x1b[cmore')
+    expect(sent).toEqual(['data:\x1b[c'])
+  })
+
+  it('brings the screen current before a cursor query, so its answer is not stale', async () => {
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, '\x1b[10;20H\x1b[6n')
+    await vi.waitFor(() => expect(sent).toEqual(['replay:SCREEN', 'data:\x1b[6n']))
+    // Still hidden: later output is dropped again.
+    subject.onData(PTY, 'more')
+    expect(sent).toHaveLength(2)
+  })
+
+  it('answers a cursor query stale rather than never when the screen cannot be read', async () => {
+    reread.mockRejectedValueOnce(new Error('ssh down'))
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, '\x1b[6n')
+    await vi.waitFor(() => expect(sent).toEqual(['data:\x1b[6n']))
+  })
+
+  it('finishes a sequence the reveal’s snapshot split', async () => {
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, 'bulk\x1b[')
+    subject.setPaused(PTY, false)
+    await vi.waitFor(() => expect(sent).toEqual(['replay:SCREEN', 'data:\x1b[']))
+    subject.onData(PTY, 'c')
+    expect(sent.at(-1)).toBe('data:c')
+  })
+
+  it('finishes a query a shown pane started before it was hidden', () => {
+    subject.onData(PTY, 'shown\x1b[')
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, 'cbulk')
+    expect(sent).toEqual(['data:shown\x1b[', 'data:\x1b[c'])
   })
 
   it('carries a query split across chunks until it completes', () => {

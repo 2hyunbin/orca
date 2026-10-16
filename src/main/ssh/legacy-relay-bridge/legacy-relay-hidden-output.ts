@@ -21,24 +21,40 @@ export type LegacyRelayHiddenOutputDeps = {
 }
 
 /** Present while output is dropped; `revealing` once a view wants it and its screen is on the way. */
-type HiddenPane = { dropped: boolean; revealing: boolean; salvage: OutputSalvageState }
+type HiddenPane = {
+  dropped: boolean
+  revealing: boolean
+  salvage: OutputSalvageState
+  /** Cursor/mode queries held until the window's screen is current enough to answer them. */
+  stateful: string
+  resyncing: boolean
+}
 
 export class LegacyRelayHiddenOutput {
   private readonly hidden = new Map<string, HiddenPane>()
+  /** A sequence a shown pane's last chunk left open, so a pause mid-sequence still finishes it. */
+  private readonly openSequences = new Map<string, OutputSalvageState>()
 
   constructor(private readonly deps: LegacyRelayHiddenOutputDeps) {}
 
   onData(ptyId: string, data: string): void {
     const hidden = this.hidden.get(ptyId)
     if (!hidden) {
+      this.trackOpenSequence(ptyId, data)
       this.deps.onData(ptyId, data)
       return
     }
     hidden.dropped = true
-    const { kept, state } = salvageHiddenOutput(data, hidden.salvage)
+    const { kept, stateful, state } = salvageHiddenOutput(data, hidden.salvage)
     hidden.salvage = state
     if (kept) {
       this.deps.onData(ptyId, kept)
+    }
+    if (stateful) {
+      hidden.stateful += stateful
+      if (!hidden.resyncing) {
+        void this.resync(ptyId, hidden)
+      }
     }
   }
 
@@ -48,7 +64,15 @@ export class LegacyRelayHiddenOutput {
       if (hidden) {
         hidden.revealing = false
       } else {
-        this.hidden.set(ptyId, { dropped: false, revealing: false, salvage: EMPTY_OUTPUT_SALVAGE })
+        const salvage = this.openSequences.get(ptyId) ?? EMPTY_OUTPUT_SALVAGE
+        this.openSequences.delete(ptyId)
+        this.hidden.set(ptyId, {
+          dropped: false,
+          revealing: false,
+          salvage,
+          stateful: '',
+          resyncing: false
+        })
       }
       return
     }
@@ -56,7 +80,7 @@ export class LegacyRelayHiddenOutput {
       return
     }
     if (!hidden.dropped) {
-      this.hidden.delete(ptyId)
+      this.show(ptyId, hidden, null)
       return
     }
     hidden.revealing = true
@@ -73,6 +97,7 @@ export class LegacyRelayHiddenOutput {
 
   forget(ptyId: string): void {
     this.hidden.delete(ptyId)
+    this.openSequences.delete(ptyId)
   }
 
   private async reveal(ptyId: string, pane: HiddenPane): Promise<void> {
@@ -81,18 +106,78 @@ export class LegacyRelayHiddenOutput {
     await this.deps
       .reread(ptyId, (replay) => {
         if (this.hidden.get(ptyId) === pane && pane.revealing) {
-          this.hidden.delete(ptyId)
-          this.deps.onReplay(ptyId, replay)
+          this.show(ptyId, pane, replay)
         }
       })
       .catch(() => {})
     if (this.hidden.get(ptyId) === pane && pane.revealing) {
       // Unreadable: the pane goes live again, and its reattach brings the whole screen.
-      this.hidden.delete(ptyId)
-      if (pane.salvage.tail && !pane.salvage.skippingOsc) {
-        // A sequence split at the drop boundary; the next live chunk finishes it.
-        this.deps.onData(ptyId, pane.salvage.tail)
-      }
+      this.show(ptyId, pane, null)
+    }
+  }
+
+  /** Brings a hidden pane's screen current so a cursor or mode query is answered truthfully. */
+  private async resync(ptyId: string, pane: HiddenPane): Promise<void> {
+    pane.resyncing = true
+    let answered = false
+    await this.deps
+      .reread(ptyId, (replay) => {
+        if (this.hidden.get(ptyId) === pane && !pane.revealing) {
+          answered = true
+          pane.dropped = false
+          this.deps.onReplay(ptyId, replay)
+          this.flushHeld(ptyId, pane)
+        }
+      })
+      .catch(() => {})
+    pane.resyncing = false
+    if (this.hidden.get(ptyId) !== pane || pane.revealing) {
+      return
+    }
+    if (!answered) {
+      // Unreadable: a stale answer beats a program waiting forever.
+      this.flushHeld(ptyId, pane)
+    } else if (pane.stateful) {
+      void this.resync(ptyId, pane)
+    }
+  }
+
+  private show(ptyId: string, pane: HiddenPane, replay: string | null): void {
+    this.hidden.delete(ptyId)
+    if (replay !== null) {
+      this.deps.onReplay(ptyId, replay)
+    }
+    this.flushHeld(ptyId, pane)
+    if (pane.salvage.tail && !pane.salvage.skippingOsc) {
+      // A sequence split where output was dropped; the next live chunk finishes it.
+      this.deps.onData(ptyId, pane.salvage.tail)
+      this.openSequences.set(ptyId, pane.salvage)
+    }
+  }
+
+  private flushHeld(ptyId: string, pane: HiddenPane): void {
+    if (pane.stateful) {
+      const queries = pane.stateful
+      pane.stateful = ''
+      this.deps.onData(ptyId, queries)
+    }
+  }
+
+  private trackOpenSequence(ptyId: string, data: string): void {
+    const open = this.openSequences.get(ptyId)
+    const lastEscape = data.lastIndexOf('\x1b')
+    if (!open && lastEscape === -1) {
+      return
+    }
+    // Only the chunk's end can leave a sequence open, unless one already spans chunks.
+    const { state } = salvageHiddenOutput(
+      open || lastEscape === -1 ? data : data.slice(lastEscape),
+      open ?? EMPTY_OUTPUT_SALVAGE
+    )
+    if (state.tail || state.skippingOsc) {
+      this.openSequences.set(ptyId, state)
+    } else {
+      this.openSequences.delete(ptyId)
     }
   }
 }
