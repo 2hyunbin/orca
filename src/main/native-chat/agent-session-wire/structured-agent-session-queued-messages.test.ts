@@ -34,7 +34,11 @@ import {
 } from './structured-agent-session-host-test-data'
 import { holdDelivery } from './structured-agent-session-delivery-hold.test-fixture'
 
+import { createStructuredSessionObservationClock } from './structured-agent-session-observation-clock.test-fixture'
+
 let rig: QueuedMessageTestRig
+const observationClock = createStructuredSessionObservationClock(() => rig.host, SESSION)
+beforeEach(() => observationClock.start())
 let host: QueuedMessageTestRig['host']
 let store: QueuedMessageTestRig['store']
 let dispatch: QueuedMessageTestRig['dispatch']
@@ -44,7 +48,7 @@ beforeEach(async () => {
   ;({ host, store, dispatch } = rig)
 })
 
-afterEach(() => rig.dispose())
+afterEach(() => rig.dispose().finally(observationClock.restore))
 
 const envelope: QueuedMessageTestRig['envelope'] = (...args) => rig.envelope(...args)
 const send: QueuedMessageTestRig['send'] = (...args) => rig.send(...args)
@@ -279,7 +283,7 @@ describe('held drafts', () => {
     expect(await rig.queuePause()).toBeNull()
     await host.close(SESSION, 'evict')
     expect(await rig.queuePause()).toBeNull()
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(await rig.handoff(draftId)).toBeUndefined()
     expect(await sendNow(draftId)).toMatchObject({
       ok: true,
@@ -296,7 +300,7 @@ describe('held drafts', () => {
     const draftId = queued.value.queued.messageId
     await rig.restartHostProcess()
     await settleAccepted(working, 'a')
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(await rig.handoff(draftId)).toBeUndefined()
     expect(await rig.queuePause()).toBeNull()
     // The user's send starting its turn lifts it.
@@ -427,7 +431,7 @@ describe('Stop and Delete', () => {
     expect(await rig.queuePause()).toBeNull()
     const reopened = host.collaboratorsForTests().sessions.get(SESSION)!.journal
     expect(structuredQueuePauses(reopened).map((pause) => pause.reason)).toContain('stopped')
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(await rig.handoff(draftId)).toBeUndefined()
     // Send-now overrides the pause — the user acting is a release.
     expect(await sendNow(draftId)).toMatchObject({
@@ -447,7 +451,7 @@ describe('Stop and Delete', () => {
     await stop()
     await settleAccepted(working, 'a')
     // Settling the stopped turn is not the user starting one: still paused.
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(await rig.handoff(draftId)).toBeUndefined()
     expect(await rig.queuePause()).toEqual({ reason: 'stopped' })
     // The host accepting the send is not yet a turn: the pause lifts when the provider accepts
@@ -473,7 +477,7 @@ describe('Stop and Delete', () => {
     // All three reach the host as a send the client send RPC did not make.
     const mail = send('coordinator mail')
     expect(await mail.result).toMatchObject({ ok: true, value: { submission: expect.anything() } })
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     // Not shown while the mail awaits the agent, and nothing sends yet.
     expect(await rig.queuePause()).toBeNull()
     expect(await rig.handoff(draftId)).toBeUndefined()
@@ -507,7 +511,7 @@ describe('Stop and Delete', () => {
     const next = send('user starts a new turn')
     await next.result
     await settleAccepted(next.id, 'b')
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(await rig.handoff(draftId)).toBeUndefined()
     const page = await host.history({ sessionId: SESSION, direction: 'tail' })
     expect(page.ok && page.page.queuedMessages?.[0]?.pausedReason).toBe(
@@ -626,7 +630,7 @@ describe('/clear', () => {
     ])
     expect(await rig.queuePause(replacementId)).toBeNull()
     // Paused from before the first carried card lands: the idle replacement auto-sends nothing.
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await observationClock.observe(250)
     expect(
       (await host.journalSnapshot(replacementId)).submissions.filter(
         (entry) => entry.queuedMessageId !== undefined
