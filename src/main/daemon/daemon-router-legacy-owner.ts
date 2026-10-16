@@ -21,9 +21,10 @@ export async function findLegacySessionOwner(
   const verdicts = await Promise.all(
     legacy.map(async (adapter) => ({
       adapter,
-      live: await adapter.probePtyLiveness(sessionId).catch(() => null)
+      live: await probeLegacyOwnership(adapter, sessionId)
     }))
   )
+  exitProof.record(legacy)
   const owner = verdicts.find(({ live }) => live === true)
   if (owner) {
     return owner.adapter
@@ -32,4 +33,25 @@ export async function findLegacySessionOwner(
     throw new TerminalSessionOwnerUnverifiedError(sessionId)
   }
   return undefined
+}
+
+const LEGACY_OWNER_INVENTORY_MS = 2_000
+
+async function probeLegacyOwnership(
+  adapter: DaemonPtyAdapter,
+  sessionId: string
+): Promise<boolean | null> {
+  const live = await adapter.probePtyLiveness(sessionId).catch(() => null)
+  if (live !== null) {
+    return live
+  }
+  // Why: the probe never reconnects, so a daemon whose startup connect failed would refuse forever.
+  try {
+    const processes = await adapter.listProcesses({
+      deadlineMs: Date.now() + LEGACY_OWNER_INVENTORY_MS
+    })
+    return processes.some((process) => process.id === sessionId)
+  } catch {
+    return null
+  }
 }
