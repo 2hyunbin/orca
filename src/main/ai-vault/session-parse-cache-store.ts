@@ -4,9 +4,16 @@ import type { SessionSidecarObservation } from './session-sidecar-stat'
 import type { TranscriptMessageChannel } from './session-transcript-channel'
 import type { SkippedTranscriptRecord } from './session-transcript-record-budget'
 
-// Sized past the default recency cap (1000) plus the in-scope cap (2000) so a
-// full steady-state result set stays resident between forced rescans.
-export const MAX_CACHE_ENTRIES = 4096
+// Rows Session History lists have no count bound: one smaller than an Unlimited
+// scan evicts that scan's own upcoming hits, so every scan re-parsed everything
+// (STA-10405). They live as long as this process; the persisted snapshot keeps
+// the newest transcripts. Rows only other readers created (search index, title
+// lookups) keep a count bound, since an index build reads the whole corpus.
+export const MAX_UNLISTED_ENTRIES = 4096
+// Live parser state is the heavy part of a row and is count-bounded even on
+// listed rows. Dropping it costs one whole re-read of a file that changed, never
+// a re-parse of one that did not.
+export const MAX_RESUME_ENTRIES = 4096
 
 export type SessionParseResumePoint = {
   state: ResumableSessionParseState
@@ -35,9 +42,18 @@ export type SessionParseCacheEntry = {
   // onto it. In-memory only: without it a sibling change costs one re-parse.
   foldSession?: AiVaultSession | null
   resume: SessionParseResumePoint | null
+  // The dropped resume point's skipped records, so its notice outlives it.
+  skippedRecords?: SkippedTranscriptRecord[]
 }
 
 const cache = new Map<string, SessionParseCacheEntry>()
+// Paths a History scan has listed. Kept apart from the rows so a forced whole
+// re-read, which drops the row, leaves it listed.
+const listedPaths = new Set<string>()
+// Rows no History scan has listed, and rows holding a resume point: the two
+// count-bounded sets.
+const unlistedPaths = new Set<string>()
+const resumePaths = new Set<string>()
 let revision = 0
 let onChange: (() => void) | null = null
 
@@ -60,6 +76,9 @@ function notifyChange(): void {
 
 export function resetSessionParseCacheForTests(): void {
   cache.clear()
+  listedPaths.clear()
+  unlistedPaths.clear()
+  resumePaths.clear()
   revision = 0
   onChange = null
 }
@@ -67,9 +86,16 @@ export function resetSessionParseCacheForTests(): void {
 // Drops one entry after its file is deleted. Cleanliness, not correctness:
 // discovery walks disk first, so a trashed file is never rediscovered anyway.
 export function invalidateSessionParseCacheEntry(path: string): void {
+  unlistedPaths.delete(path)
+  resumePaths.delete(path)
   if (cache.delete(path)) {
     notifyChange()
   }
+}
+
+export function noteSessionParseCacheListed(path: string): void {
+  listedPaths.add(path)
+  unlistedPaths.delete(path)
 }
 
 // Persisted subset of a cache entry: the non-serializable `resume` parser
@@ -96,7 +122,8 @@ export function snapshotSessionParseCacheForPersistence(): [
 
 // Seeded entries carry `resume: null`: after a restart an unchanged file is a
 // cache hit; a file that changed while the app was closed pays one full
-// (not incremental) re-parse.
+// (not incremental) re-parse. They count as listed: the file can't say which
+// reader made a row, and the unlisted bound would cut History's own rows to it.
 export function seedSessionParseCache(
   entries: Iterable<[string, PersistedSessionParseCacheEntry]>
 ): void {
@@ -107,19 +134,10 @@ export function seedSessionParseCache(
     }
     newest.delete(path)
     newest.set(path, entry)
-    if (newest.size > MAX_CACHE_ENTRIES) {
-      const oldest = newest.keys().next()
-      if (!oldest.done) {
-        newest.delete(oldest.value)
-      }
-    }
-  }
-  const available = MAX_CACHE_ENTRIES - cache.size
-  if (available <= 0) {
-    return
   }
   // In-process entries win; among persisted duplicates the newest row wins.
-  for (const [path, entry] of [...newest].slice(-available)) {
+  for (const [path, entry] of newest) {
+    listedPaths.add(path)
     cache.set(path, {
       mtimeMs: entry.mtimeMs,
       sizeBytes: entry.sizeBytes,
@@ -148,14 +166,50 @@ export function storeSessionParseCacheEntry(path: string, entry: SessionParseCac
     !sameSidecar(previous.sidecar, entry.sidecar)
   cache.delete(path)
   cache.set(path, entry)
-  if (cache.size > MAX_CACHE_ENTRIES) {
-    const oldest = cache.keys().next()
-    if (!oldest.done) {
-      cache.delete(oldest.value)
-    }
+  resumePaths.delete(path)
+  if (!listedPaths.has(path)) {
+    unlistedPaths.add(path)
+    trimOldestTranscripts(unlistedPaths, MAX_UNLISTED_ENTRIES, dropRow)
+  }
+  // Skipped when the trim above dropped this very row, so it can't cost others.
+  if (entry.resume !== null && cache.has(path)) {
+    resumePaths.add(path)
+    trimOldestTranscripts(resumePaths, MAX_RESUME_ENTRIES, dropResumePoint)
   }
   if (changed) {
     notifyChange()
+  }
+}
+
+// Over the bound, drops the tenth whose transcripts were modified longest ago.
+// Scans visit newest first, so store order would drop the most active files.
+function trimOldestTranscripts(
+  paths: Set<string>,
+  max: number,
+  drop: (path: string) => void
+): void {
+  if (paths.size <= max) {
+    return
+  }
+  const oldest = [...paths]
+    .sort((left, right) => (cache.get(left)?.mtimeMs ?? 0) - (cache.get(right)?.mtimeMs ?? 0))
+    .slice(0, paths.size - max + Math.floor(max / 10))
+  for (const path of oldest) {
+    paths.delete(path)
+    drop(path)
+  }
+}
+
+function dropRow(path: string): void {
+  resumePaths.delete(path)
+  cache.delete(path)
+}
+
+function dropResumePoint(path: string): void {
+  const entry = cache.get(path)
+  if (entry?.resume) {
+    // Same key, so the row keeps its place in the map.
+    cache.set(path, { ...entry, resume: null, skippedRecords: entry.resume.skippedRecords })
   }
 }
 
