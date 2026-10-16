@@ -23,6 +23,16 @@ export type WindowLayoutCommand =
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
   | { type: 'closeTabs'; tabIds: [string]; recordClose: 'user' | 'cleanup' }
+  | { type: 'renameTab'; tabId: string; kind: 'custom'; title: string | null }
+  | { type: 'setTabProps'; tabId: string; color?: string | null; isPinned?: boolean }
+  | {
+      type: 'movePaneToNewTab'
+      tabId: string
+      leafId: string
+      groupId: string
+      index?: number
+      windowDetach: { ptyId: string | null }
+    }
   | {
       type: 'openBrowserTab'
       tabId: string
