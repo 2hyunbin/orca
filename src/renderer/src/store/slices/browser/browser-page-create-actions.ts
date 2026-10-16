@@ -15,7 +15,7 @@ import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-clos
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { admitBrowserPageMount } from '@/components/browser-pane/host-guest/browser-page-mount-admission'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
-import { sendBrowserLayoutCommand } from './browser-layout-owner-commands'
+import { recordLayoutApply } from '@/runtime/layout-apply-send'
 
 export function createBrowserPageCreateActions(
   set: BrowserSliceSet,
@@ -89,7 +89,7 @@ export function createBrowserPageCreateActions(
 
       // Switch point: main records the page under its id before any later command names it.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        sendBrowserLayoutCommand(get(), workspace.worktreeId, {
+        recordLayoutApply(get(), workspace.worktreeId, {
           type: 'openBrowserPage',
           browserTabId: workspaceId,
           pageId: page.id
@@ -210,7 +210,7 @@ export function createBrowserPageCreateActions(
       const workspace = findWorkspace(get().browserTabsByWorktree, closedWorkspaceId)
       // Switch point: main drops the page from its tab.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && workspace) {
-        sendBrowserLayoutCommand(get(), workspace.worktreeId, {
+        recordLayoutApply(get(), workspace.worktreeId, {
           type: 'closeBrowserPage',
           browserTabId: closedWorkspaceId,
           pageId

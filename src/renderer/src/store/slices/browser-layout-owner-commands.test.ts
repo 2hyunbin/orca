@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
-import type { sendLayoutApply } from '@/runtime/layout-apply-send'
+import type { recordLayoutApply } from '@/runtime/layout-apply-send'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 
-const mocks = vi.hoisted(() => ({ send: vi.fn<typeof sendLayoutApply>() }))
+const mocks = vi.hoisted(() => ({ send: vi.fn<typeof recordLayoutApply>() }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply: mocks.send }))
+vi.mock('@/runtime/layout-apply-send', () => ({ recordLayoutApply: mocks.send }))
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
 }))
@@ -39,7 +39,6 @@ function entryOf(store: ReturnType<typeof createTestStore>, browserTabId: string
 
 beforeEach(() => {
   mocks.send.mockReset()
-  mocks.send.mockReturnValue(true)
 })
 
 describe('browser tabs in a layout-owner build', () => {

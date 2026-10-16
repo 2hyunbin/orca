@@ -96,6 +96,17 @@ export function sendLayoutApply(
   return true
 }
 
+const keepWindowCopy = (): void => {}
+
+/** Records a change the window already made; any answer leaves it, since the window's save carries it. */
+export function recordLayoutApply(
+  state: Parameters<typeof sendLayoutApply>[0],
+  worktreeId: string,
+  command: WindowLayoutCommand
+): void {
+  sendLayoutApply(state, worktreeId, command, { apply: keepWindowCopy, asToday: keepWindowCopy })
+}
+
 function mainLacksTarget(code: LayoutRefusalCode): boolean {
   return (
     code === 'workspace_not_found' ||

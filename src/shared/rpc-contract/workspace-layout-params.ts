@@ -89,8 +89,6 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup'])
 })
 
-const Id = z.string().min(1)
-
 /**
  * A browser tab under the ids the window drew it with: its pages and the tab's own callers need
  * them at once. Main refuses an id another tab or page holds; the same open again changes nothing.
@@ -98,17 +96,21 @@ const Id = z.string().min(1)
 const OpenBrowserTabCommand = z.object({
   type: z.literal('openBrowserTab'),
   workspace: OnPane.workspace,
-  tabId: Id,
-  browserTabId: Id,
-  pageId: Id,
-  profileId: Id.nullable().optional(),
-  sessionPartition: Id.nullable().optional(),
-  groupId: Id.optional(),
-  afterTabId: Id.optional(),
+  tabId: z.string().min(1),
+  browserTabId: z.string().min(1),
+  pageId: z.string().min(1),
+  profileId: z.string().min(1).nullable().optional(),
+  sessionPartition: z.string().min(1).nullable().optional(),
+  groupId: z.string().min(1).optional(),
+  afterTabId: z.string().min(1).optional(),
   index: z.number().int().nonnegative().optional()
 })
 
-const OnBrowserPage = { workspace: OnPane.workspace, browserTabId: Id, pageId: Id }
+const OnBrowserPage = {
+  workspace: OnPane.workspace,
+  browserTabId: z.string().min(1),
+  pageId: z.string().min(1)
+}
 
 /** A page the window added to a browser tab, under its own id. */
 const OpenBrowserPageCommand = z.object({ type: z.literal('openBrowserPage'), ...OnBrowserPage })
@@ -119,15 +121,15 @@ const CloseBrowserPageCommand = z.object({ type: z.literal('closeBrowserPage'), 
 const ReplaceBrowserPageCommand = z.object({
   type: z.literal('replaceBrowserPage'),
   ...OnBrowserPage,
-  newPageId: Id
+  newPageId: z.string().min(1)
 })
 
 const SetBrowserTabProfileCommand = z.object({
   type: z.literal('setBrowserTabProfile'),
   workspace: OnPane.workspace,
-  browserTabId: Id,
-  profileId: Id.nullable(),
-  sessionPartition: Id.nullable()
+  browserTabId: z.string().min(1),
+  profileId: z.string().min(1).nullable(),
+  sessionPartition: z.string().min(1).nullable()
 })
 
 /**

@@ -4,24 +4,11 @@
 // carries the change when main cannot take it.
 
 import type { BrowserWorkspace } from '../../../../../shared/browser-workspace-types'
-import { sendLayoutApply, type WindowLayoutCommand } from '@/runtime/layout-apply-send'
+import { recordLayoutApply, type sendLayoutApply } from '@/runtime/layout-apply-send'
 import type { AppState } from '../../types'
 
 type BrowserCommandState = Parameters<typeof sendLayoutApply>[0] &
   Pick<AppState, 'unifiedTabsByWorktree' | 'groupsByWorktree'>
-
-const windowSaveCarriesIt = (): void => {}
-
-export function sendBrowserLayoutCommand(
-  state: BrowserCommandState,
-  worktreeId: string,
-  command: WindowLayoutCommand
-): void {
-  sendLayoutApply(state, worktreeId, command, {
-    apply: windowSaveCarriesIt,
-    asToday: windowSaveCarriesIt
-  })
-}
 
 /** The open of a browser tab the window just drew, placed where the window drew it. */
 export function recordBrowserTabOpen(state: BrowserCommandState, tab: BrowserWorkspace): void {
@@ -35,7 +22,7 @@ export function recordBrowserTabOpen(state: BrowserCommandState, tab: BrowserWor
   )?.tabOrder
   const position = order?.indexOf(entry.id) ?? -1
   const afterTabId = position > 0 ? order?.[position - 1] : undefined
-  sendBrowserLayoutCommand(state, tab.worktreeId, {
+  recordLayoutApply(state, tab.worktreeId, {
     type: 'openBrowserTab',
     tabId: entry.id,
     browserTabId: tab.id,
@@ -56,7 +43,7 @@ export function recordBrowserTabClose(
 ): void {
   const entry = browserTabEntry(state, worktreeId, browserTabId)
   if (entry) {
-    sendBrowserLayoutCommand(state, worktreeId, {
+    recordLayoutApply(state, worktreeId, {
       type: 'closeTabs',
       tabIds: [entry.id],
       recordClose: reason
