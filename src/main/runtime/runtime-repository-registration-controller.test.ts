@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { runProcessSync } from '@orca/process-host'
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,8 +40,15 @@ function createController(): {
   return { controller, repos }
 }
 
+function runGit(args: string[]): void {
+  const result = runProcessSync({ program: 'git', args })
+  if (result.code !== 0) {
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`)
+  }
+}
+
 function gitInit(path: string): void {
-  execFileSync('git', ['init', '-q', path])
+  runGit(['init', '-q', path])
 }
 
 describe('RuntimeRepositoryRegistrationController.add through a symlink alias', () => {
@@ -101,7 +108,7 @@ describe('RuntimeRepositoryRegistrationController.add through a symlink alias', 
     await mkdir(repoPath)
     gitInit(repoPath)
     const clonePath = join(root, 'repo-copy')
-    execFileSync('git', ['clone', '-q', repoPath, clonePath])
+    runGit(['clone', '-q', repoPath, clonePath])
     const { controller, repos } = createController()
 
     const first = await controller.add(repoPath, 'git')
