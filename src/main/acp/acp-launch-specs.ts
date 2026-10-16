@@ -15,6 +15,7 @@ import { isStableCliVersionFrom, isStableCliVersionOnLine } from '../agent-cli-v
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
 import type { InitializeResponse } from './generated/acp-protocol.generated'
+import type { ManagedRuntime } from '../node-runtime/managed-runtime-release'
 import { readGrokModelCatalog } from './acp-dialects/grok-model-catalog'
 import {
   OPENCODE_MODEL_LISTING_ARGS,
@@ -64,7 +65,7 @@ export type AcpLaunchSpec = {
   /** The Orca agent id, which names the agent's records, its catalog label and its settings. */
   agent: TuiAgent
   command: string
-  /** Built per launch: `fullAccess` is the Agent Permissions setting's bypass posture;
+  /** Built per launch: `fullAccess` is the chat's own Full access permission mode;
    *  `pluginDir` is a plugin folder `visualsSkill` asked the agent to load. */
   args(input: { fullAccess: boolean; pluginDir: string | null }): string[]
   /** Laid over the child's environment last, after the account and the user's own variables. */
@@ -88,6 +89,9 @@ export type AcpLaunchSpec = {
   supportsVersion?(version: string): boolean
   /** Where the agent installs its own binary, searched after PATH. */
   installDirectories(input: { env: Readonly<Record<string, string>>; homePath: string }): string[]
+  /** A pinned copy Orca installs under its data folder when the person asks, searched last; a
+   *  start never installs it. A spec with one names no `supportsVersion`. */
+  managedRuntime?: ManagedRuntime
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
@@ -101,12 +105,14 @@ export type AcpLaunchSpec = {
   transcriptImport: StructuredAgentTranscriptImport | null
   /** How the agent's chats own the Session History rows their conversations list as. */
   sessionHistory: StructuredAgentSessionHistory
+  /** Each process gets its own temp folder: the agent's temp files collide across processes. */
+  privateTempDirectory?: true
 }
 
 const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
   agent: 'grok',
   command: 'grok',
-  // `--always-approve` only for full access, as the user's setting chooses.
+  // `--always-approve` only for full access, as the chat's permission mode chooses.
   args: ({ fullAccess, pluginDir }) => [
     'agent',
     ...(fullAccess ? ['--always-approve'] : []),

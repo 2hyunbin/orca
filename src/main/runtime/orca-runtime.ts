@@ -27,6 +27,9 @@ import { findWorkspaceReferences } from './runtime-reference-find'
 import { createReferenceAgentIndex, referenceConnectionHosts } from './runtime-reference-agents'
 import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-contracts'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
+import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-layout-command-types'
+import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
+import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
@@ -165,6 +168,24 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     listener: Parameters<WorkspaceLayoutStream['subscribe']>[0]
   ): ReturnType<WorkspaceLayoutStream['subscribe']> {
     return this.workspaceLayoutStream.subscribe(listener)
+  }
+
+  /** A window's layout command (`layout.apply`), applied to the partitions that hold its tab. */
+  async applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
+    const reply = await applyWindowLayoutCommand(
+      this.requireStore(),
+      (worktreeId, tabId) => {
+        if (tabId !== null) {
+          return this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
+        }
+        const routed = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
+        return routed ? [routed] : []
+      },
+      command,
+      (move) => rekeyMovedPaneOwners(this, move)
+    )
+    // Sent before the reply, so the window can wait for the frame that shows the change.
+    return { ...reply, frameSeq: this.workspaceLayoutStream.settledSeq() }
   }
 
   /** This desktop's display-only copy of each paired server's layout (`layout.getRemoteSnapshots`). */

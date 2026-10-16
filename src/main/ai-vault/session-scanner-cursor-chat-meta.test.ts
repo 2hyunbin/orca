@@ -78,13 +78,11 @@ import {
   createSessionParseStats,
   parseAgentSessionFileCached,
   resetSessionParseCacheForTests,
-  seedSessionParseCache,
-  snapshotSessionParseCacheForPersistence,
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import {
   getSessionParseCacheEntry,
-  type PersistedSessionParseCacheEntry
+  setSessionParseCacheColdTier
 } from './session-parse-cache-store'
 import { isolatedScanRoots } from './session-scanner-test-fixtures'
 import type { FileWithMtime } from './session-scanner-types'
@@ -185,12 +183,16 @@ describe('cursor chat meta', () => {
   it('re-indexes after a chat appears under an already indexed workspace', async () => {
     const cursorHome = await createCursorHome()
     await writeChatMeta(cursorHome, 'workspace-hash', 'chat-first')
+    const workspacePath = join(cursorHome, 'chats', 'workspace-hash')
+    // The directory update must be visible even within one filesystem clock tick.
+    await utimes(workspacePath, 1, 1)
     const firstTranscript = await writeTranscript(cursorHome, 'slug', 'chat-first', [])
     expect(await cursorChatMetaPath(firstTranscript)).toBeDefined()
 
     const laterMetaPath = await writeChatMeta(cursorHome, 'workspace-hash', 'chat-later')
     const laterTranscript = await writeTranscript(cursorHome, 'slug', 'chat-later', [])
 
+    expect((await stat(workspacePath)).mtimeMs).not.toBe(1_000)
     expect(await cursorChatMetaPath(laterTranscript)).toBe(laterMetaPath)
   })
 
@@ -459,14 +461,15 @@ describe('cursor sidecar enrichment', () => {
     await parseCursorCached(await cursorCandidate(cursorHome))
 
     // What a build older than the sidecar field wrote: no such key.
-    const persisted = snapshotSessionParseCacheForPersistence().map(
-      ([path, entry]): [string, PersistedSessionParseCacheEntry] => {
-        const { sidecar: _sidecar, ...rest } = entry
-        return [path, rest]
-      }
-    )
+    const candidate = await cursorCandidate(cursorHome)
+    const {
+      resume: _resume,
+      foldSession: _fold,
+      sidecar: _sidecar,
+      ...persisted
+    } = getSessionParseCacheEntry(candidate.path)!
     resetSessionParseCacheForTests()
-    seedSessionParseCache(persisted)
+    setSessionParseCacheColdTier({ read: () => persisted, stored: () => {}, deleted: () => {} })
 
     const { session, stats } = await parseCursorCached(await cursorCandidate(cursorHome))
     expect(stats.reused).toBe(0)

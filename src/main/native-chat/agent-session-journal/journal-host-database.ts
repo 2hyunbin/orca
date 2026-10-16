@@ -41,7 +41,7 @@ export class JournalHostDatabase {
       ? null
       : new JournalMaintenance(
           () => this.db,
-          (run, mode) => this.runMaintenanceTransaction(run, mode)
+          (run, mode) => this.runTransaction(run, mode, true)
         )
   }
 
@@ -68,38 +68,36 @@ export class JournalHostDatabase {
     return connection
   }
 
-  /** One IMMEDIATE transaction; see `runJournalTransaction`. */
-  transaction<T>(run: (db: Database.Database) => T): T {
-    const result = this.runTransaction(run)
+  /** One IMMEDIATE transaction; see `runJournalTransaction`. `streamed` commits without the per-commit
+   *  fsync: only for rows an OS crash may lose (`isJournalStreamedTextRevision`); the next FULL
+   *  commit makes them durable, so a crash can only lose a suffix of them. */
+  transaction<T>(run: (db: Database.Database) => T, streamed = false): T {
+    const result = this.runTransaction(run, 'IMMEDIATE', streamed)
     this.maintenance?.changed()
     return result
   }
 
   private runTransaction<T>(
     run: (db: Database.Database) => T,
-    mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE'
-  ): T {
-    return runJournalTransaction(
-      this.db,
-      run,
-      () => {
-        this.stranded = true
-      },
-      mode
-    )
-  }
-
-  private runMaintenanceTransaction<T>(
-    run: (db: Database.Database) => T,
-    mode?: 'IMMEDIATE' | 'DEFERRED'
+    mode: 'IMMEDIATE' | 'DEFERRED' = 'IMMEDIATE',
+    relaxed = false
   ): T {
     const connection = this.db
-    // Cleanup is re-derivable: an OS-crash rollback only repeats cleanup work.
-    connection.pragma('synchronous = NORMAL')
+    // Streamed text and re-derivable cleanup share the connection's durability owner.
+    if (relaxed) {
+      connection.pragma('synchronous = NORMAL')
+    }
     try {
-      return this.runTransaction(run, mode)
+      return runJournalTransaction(
+        connection,
+        run,
+        () => {
+          this.stranded = true
+        },
+        mode
+      )
     } finally {
-      if (!connection.isTransaction) {
+      if (relaxed && !connection.isTransaction) {
         this.stranded = true
         this.rollBackStrandedTransaction(connection)
       }
