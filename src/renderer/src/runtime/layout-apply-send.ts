@@ -17,8 +17,15 @@ import type {
 
 /** What a window sends `layout.apply`; main mints any new id but a browser or editor tab's. */
 export type WindowLayoutCommand =
-  | { type: 'splitPane'; tabId: string; leafId: string; direction: 'vertical' | 'horizontal' }
-  | { type: 'closePane'; tabId: string; leafId: string }
+  | {
+      type: 'splitPane'
+      tabId: string
+      leafId: string
+      direction: 'vertical' | 'horizontal'
+      /** A pane the window already split under its own id. */
+      newLeafId?: string
+    }
+  | { type: 'closePane'; tabId: string; leafId: string; exited?: true }
   | { type: 'renamePane'; tabId: string; leafId: string; title: string | null }
   | { type: 'equalizePanes'; tabId: string }
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }

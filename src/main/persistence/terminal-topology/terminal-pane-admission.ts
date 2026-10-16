@@ -4,7 +4,10 @@
 import { randomUUID } from 'node:crypto'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import { locatePane } from '../../../shared/workspace-layout/workspace-layout-command-steps'
+import {
+  leafIdsOf,
+  locatePane
+} from '../../../shared/workspace-layout/workspace-layout-command-steps'
 import type {
   CommandOf,
   LayoutApplyOutcome,
@@ -72,7 +75,12 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const taken = command.type === 'createTerminalTab' ? takenTabId(loaded.layout, command) : null
+  const taken =
+    command.type === 'createTerminalTab'
+      ? takenTabId(loaded.layout, command)
+      : command.type === 'splitPane'
+        ? takenLeafId(loaded.layout, command)
+        : null
   if (taken) {
     return { value: taken, session: null }
   }
@@ -143,4 +151,27 @@ function takenTabId(
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
   )
   return holds ? { ok: false, code: 'tab_exists' } : null
+}
+
+/**
+ * A window's split under its own pane id: the same split again finds its pane and changes nothing;
+ * another tab holding the id refuses it.
+ */
+function takenLeafId(
+  layout: WorkspaceLayoutModel,
+  command: CommandOf<'splitPane'>
+): LayoutApplyOutcome | null {
+  const { workspace: key, tabId, newLeafId } = command
+  const workspace = layout.workspaces[key]
+  if (!newLeafId || !workspace) {
+    return null
+  }
+  const paneKey = paneKeyOf(tabId, newLeafId)
+  if (locatePane(workspace, paneKey)) {
+    return { ok: true, result: { leafId: newLeafId, paneKey } }
+  }
+  const held = workspace.tabs.some(
+    (tab) => tab.kind === 'terminal' && leafIdsOf(tab).includes(newLeafId)
+  )
+  return held ? { ok: false, code: 'pane_in_other_tab' } : null
 }

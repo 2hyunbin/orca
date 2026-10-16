@@ -39,6 +39,15 @@ describe('applyWindowLayoutCommand', () => {
     })
   })
 
+  it('closes an exited pane with the user-close rules but stops no launch as the user’s', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+
+    await applyWindowLayoutCommand(store, () => ['local'], { ...CLOSE, exited: true })
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...CLOSE, userPaneClose: true }, ['local'])
+    expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
+  })
+
   it('applies other commands to the routed partition only', async () => {
     const { store, applyLayoutCommand } = storeWith()
     const rename = { ...CLOSE, type: 'renamePane', title: 'Pane' } as const
