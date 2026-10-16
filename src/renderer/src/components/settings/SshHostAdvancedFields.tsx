@@ -126,7 +126,7 @@ export function SshHostAdvancedFields({
                 <p className="text-muted-foreground">
                   {translate(
                     'auto.components.settings.SshTargetForm.allowRemoteCliControlReset',
-                    'Orca turned this off after an update, because it now lets this host drive your desktop browser. Turn it on again only if you want that.'
+                    'Orca turned this off after an update, because it now lets this host drive your desktop browser and lets terminals started by an older Orca on this host run orchestration commands. Turn it on again only if you want that.'
                   )}
                 </p>
               ) : null}

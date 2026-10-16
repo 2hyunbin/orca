@@ -36,6 +36,13 @@ export function optionalAskTimeout(timeoutMs: number | undefined): number | unde
   return timeoutMs === undefined ? undefined : clampOrchestrationAskTimeoutMs(timeoutMs)
 }
 
+/** The inbox handler passes `limit` straight to SQL, where a negative one means "every row". */
+const MAX_INBOX_ROWS = 100
+
+export function cappedInboxLimit(limit: number | undefined): number | undefined {
+  return limit === undefined ? undefined : Math.min(Math.max(1, Math.floor(limit)), MAX_INBOX_ROWS)
+}
+
 export const LEGACY_RELAY_CLI_BUSY =
   'This host already has too many older-terminal orca commands waiting on this desktop. ' +
   'Let some finish, then try again.'

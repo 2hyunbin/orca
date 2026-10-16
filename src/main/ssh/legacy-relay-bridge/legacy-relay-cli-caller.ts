@@ -48,6 +48,7 @@ export function resolveLegacyRelayCliCaller(
   runtime: OrcaRuntimeService,
   env: Readonly<Record<string, string>>,
   livePane: (paneKey: string) => LegacyRelayLivePane | null,
+  targetId: string,
   /** A retry of a mutation this caller already completed, which may outlive its Dispatch. */
   replay?: { fingerprint: string; requestId: string }
 ): LegacyRelayCliCaller {
@@ -76,7 +77,7 @@ export function resolveLegacyRelayCliCaller(
   const replayDispatch = replay
     ? own(settledLegacyDispatch(db, handle, paneKey, replay.requestId))
     : undefined
-  const run = resolveCoordinatedRun(db, handle, paneKey)
+  const run = resolveCoordinatedRun(db, handle, paneKey, targetId)
   if (!dispatch && !replayDispatch && !run) {
     throw new Error(LEGACY_RELAY_CLI_UNVERIFIED)
   }
@@ -123,7 +124,8 @@ function settledLegacyDispatch(
 function resolveCoordinatedRun(
   db: OrchestrationDb,
   handle: string,
-  paneKey: string
+  paneKey: string,
+  targetId: string
 ): RunRow | undefined {
   const bound = db.getCurrentRunForPane(paneKey)
   if (bound) {
@@ -135,9 +137,27 @@ function resolveCoordinatedRun(
     principal?.status === 'committed' &&
     principal.terminal_handle === handle &&
     samePane(principal.pane_key, paneKey) &&
+    principalHostTargetId(principal.host_scope) === targetId &&
     db.resolveLegacyCoordinatorCandidate({ runId: adopted, terminalHandle: handle, paneKey })
     ? db.getRun(adopted)
     : undefined
+}
+
+/** The SSH target a committed principal attested from; a pane key alone is not unique per host. */
+function principalHostTargetId(hostScope: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(hostScope)
+    return parsed &&
+      typeof parsed === 'object' &&
+      'kind' in parsed &&
+      parsed.kind === 'ssh' &&
+      'targetId' in parsed &&
+      typeof parsed.targetId === 'string'
+      ? parsed.targetId
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function outside(subject: string): Error {

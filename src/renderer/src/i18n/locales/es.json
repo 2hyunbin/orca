@@ -8720,7 +8720,7 @@
           "editingPrefix": "Editando",
           "allowRemoteCliControl": "Permitir que la orca CLI de este host controle Orca",
           "allowRemoteCliControlHelp": "Cuando está activado, los comandos orca ejecutados en este host pueden abrir y controlar pestañas del navegador de Orca en este escritorio, solo en los espacios de trabajo de este host y solo mientras esté conectado. Las terminales iniciadas por una versión anterior de Orca en este host también pueden ejecutar comandos de orquestación (check, inbox, send, ask, reply) para su propio trabajo supervisado. No pueden leer tus archivos, tu portapapeles ni tus cookies. Cuando está desactivado, solo llegan al propio servidor de Orca de este host.",
-          "allowRemoteCliControlReset": "Orca lo desactivó tras una actualización, porque ahora permite que este host controle el navegador de tu escritorio. Vuelve a activarlo solo si lo deseas."
+          "allowRemoteCliControlReset": "Orca lo desactivó tras una actualización, porque ahora permite que este host controle el navegador de tu escritorio y que las terminales iniciadas por una versión anterior de Orca en este host ejecuten comandos de orquestación. Vuelve a activarlo solo si lo deseas."
         },
         "TasksPane": {
           "f71d8a9dd3": "Proveedores de tareas",
