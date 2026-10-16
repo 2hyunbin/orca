@@ -10,7 +10,8 @@ import {
   writeSync
 } from 'node:fs'
 import { getSecretStore } from '../shared/secret-store'
-import { restrictWindowsPathSync } from '../shared/secure-path-windows-acl'
+import { fsyncFileSync } from '../shared/secure-file'
+import { writeRestrictedWindowsFile } from '../shared/secure-path-windows-acl'
 import {
   credentialDecryptionMessage,
   type IntegrationCredentialService
@@ -56,6 +57,13 @@ export function writeCredentialFileAtomic(
   const tempPath = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   let handle: number | null = null
   try {
+    if (process.platform === 'win32') {
+      // Why born restricted: a sibling would otherwise inherit the directory's DACL and replace
+      // the previous credential's owner-only ACL.
+      writeRestrictedWindowsFile(tempPath, data)
+      fsyncFileSync(tempPath)
+      return publishStagedCredential(tempPath, path, shouldPublish)
+    }
     handle = openSync(tempPath, 'w', 0o600)
     // Why: write(2) is allowed to return a short count, so a single writeSync
     // could publish a truncated credential — the very corruption this avoids.
@@ -70,16 +78,7 @@ export function writeCredentialFileAtomic(
     fsyncSync(handle)
     closeSync(handle)
     handle = null
-    // Why before the rename: a sibling inherits the directory's DACL, so the replacement would
-    // otherwise drop the owner-only ACL the previous credential file had.
-    restrictCredentialFileToOwner(tempPath)
-    if (shouldPublish && !shouldPublish()) {
-      unlinkSync(tempPath)
-      return false
-    }
-    renameSync(tempPath, path)
-    restrictCredentialFileToOwner(path)
-    return true
+    return publishStagedCredential(tempPath, path, shouldPublish)
   } catch (error) {
     if (handle !== null) {
       try {
@@ -97,15 +96,25 @@ export function writeCredentialFileAtomic(
   }
 }
 
+function publishStagedCredential(
+  tempPath: string,
+  path: string,
+  shouldPublish: (() => boolean) | undefined
+): boolean {
+  if (shouldPublish && !shouldPublish()) {
+    unlinkSync(tempPath)
+    return false
+  }
+  renameSync(tempPath, path)
+  restrictCredentialFileToOwner(path)
+  return true
+}
+
 // Why: writeFileSync's `mode` only applies when it creates the file, so
 // rewriting an existing credential would silently keep looser permissions.
-// Best-effort: Windows has no POSIX modes, so it gets an owner-only ACL instead.
+// Best-effort: Windows has no POSIX modes; its staging file is created owner-only instead.
 export function restrictCredentialFileToOwner(path: string): void {
   try {
-    if (process.platform === 'win32') {
-      restrictWindowsPathSync(path, false)
-      return
-    }
     chmodSync(path, 0o600)
   } catch {
     // Best-effort hardening; the write itself already succeeded.

@@ -48,6 +48,11 @@ PowerShell for each operation is an EDR signal.
   Hosts that share that home (over NFS, for example), or a desktop app on the same machine, each
   seal with their own key, so a credential one of them saves can't be read by the others. To keep
   the old shared plaintext behavior on such hosts, set `ORCA_HEADLESS_SECRET_STORE=plaintext`.
+- **Rolling back to an older server.** A server from before this change can't read credentials a
+  newer one sealed. An SSH or WSL rollback restores profile state, not `~/.orca`, so after a
+  rollback the old server shows "Could not decrypt saved Linear credential… reconnect Linear".
+  Connect each integration again on that server. Plaintext copies are deliberately not kept for
+  rollback.
 - **GitHub and GitLab** tokens are not stored by Orca at all. `gh` and `glab` keep them, under
   their own storage settings.
 

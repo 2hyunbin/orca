@@ -113,7 +113,7 @@ async function loadStoredRecord(
     }
     return { kind: 'ready', key, gap: null }
   }
-  if (!restrictExistingRecord(paths.statePath)) {
+  if (!(await restrictExistingRecord(paths.statePath))) {
     return unavailable(`its key record ${paths.statePath} could not be restricted to this user`)
   }
   const master = decodeMasterKey(stored.key)
