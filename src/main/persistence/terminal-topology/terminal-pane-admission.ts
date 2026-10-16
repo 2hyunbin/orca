@@ -15,10 +15,16 @@ import { applyLayoutCommand } from '../../../shared/workspace-layout/workspace-l
 import { loadWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-load'
 import type { LoadedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-load-types'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
-import { paneKeyOf } from '../../../shared/workspace-layout/workspace-layout-model'
+import {
+  paneKeyOf,
+  type WorkspaceLayoutModel
+} from '../../../shared/workspace-layout/workspace-layout-model'
 import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-save'
 import { patchStoredSession } from '../../../shared/workspace-layout/workspace-layout-record-patch'
-import { followRemoteSessionAfterPaneClose } from './pane-close-remote-session'
+import {
+  followRemoteSessionAfterPaneClose,
+  followRemoteSessionAfterPaneDetach
+} from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
@@ -66,11 +72,18 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const taken = command.type === 'createTerminalTab' ? takenTabId(loaded.layout, command) : null
+  if (taken) {
+    return { value: taken, session: null }
+  }
   return applyToSession(loaded, command, (after) => {
     const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
     return patched === session
       ? null
-      : followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
+      : followRemoteSessionAfterPaneDetach(
+          command,
+          followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
+        )
   })
 }
 
@@ -106,4 +119,28 @@ function prunedOnRecord(
         )
       }
     : session
+}
+
+/**
+ * A window's create names its own ids: the same create again (a tab main wrote first, then drew
+ * from its frame) finds its pane and changes nothing; another tab in this partition holding the
+ * id refuses it.
+ */
+function takenTabId(
+  layout: WorkspaceLayoutModel,
+  command: CommandOf<'createTerminalTab'>
+): LayoutApplyOutcome | null {
+  const { workspace: key, tabId, leafId } = command
+  if (!tabId) {
+    return null
+  }
+  const workspace = layout.workspaces[key]
+  const paneKey = leafId ? paneKeyOf(tabId, leafId) : null
+  if (workspace && paneKey && locatePane(workspace, paneKey)) {
+    return { ok: true, result: { tabId, leafId, paneKey } }
+  }
+  const holds = Object.values(layout.workspaces).some((entry) =>
+    entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
+  )
+  return holds ? { ok: false, code: 'tab_exists' } : null
 }

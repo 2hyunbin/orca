@@ -12,7 +12,14 @@
     }
   },
   "githubChecks": {
-    "retrying": "재시도 중…"
+    "retrying": "재시도 중…",
+    "logsNotYetAvailable": "로그 출력을 아직 사용할 수 없습니다.",
+    "logsLoadErrorDetails": "로그를 불러오지 못했습니다. 새로고침하여 다시 시도하세요.",
+    "logsLoadErrorSidebar": "로그를 불러오지 못했습니다. 전체 세부정보 보기를 열고 새로고침하여 다시 시도하세요.",
+    "logsEmpty": "로그 출력이 반환되지 않았습니다.",
+    "logsNotRequested": "로그 발췌를 요청하지 않았습니다. 검사마다 실패한 작업의 로그 발췌를 최대 5개 불러옵니다.",
+    "noLogExcerpt": "사용 가능한 로그 발췌가 없습니다.",
+    "refreshingDetails": "검사 세부 정보 새로 고치는 중…"
   },
   "settings": {
     "chat": {
@@ -13302,7 +13309,6 @@
                 "a6de3e5a20": "대기 중인 댓글 지우기",
                 "49ea0937e4": "댓글을 해결 목록에 추가",
                 "9fecebb29d": "추가",
-                "b8c4e2a1f7": "전체 로그 보기",
                 "f8a2c91d04": "에이전트 대기열에 추가",
                 "b4e8a1c902": "Queued",
                 "7c1f0a2b11": "열기",

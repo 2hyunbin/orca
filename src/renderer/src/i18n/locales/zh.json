@@ -12,7 +12,14 @@
     }
   },
   "githubChecks": {
-    "retrying": "正在重试..."
+    "retrying": "正在重试...",
+    "logsNotYetAvailable": "日志输出尚不可用。",
+    "logsLoadErrorDetails": "无法加载日志。请使用刷新重试。",
+    "logsLoadErrorSidebar": "无法加载日志。请打开查看完整详细信息，然后使用刷新重试。",
+    "logsEmpty": "未返回日志输出。",
+    "logsNotRequested": "未请求日志摘录。每项检查最多加载五个失败作业的日志摘录。",
+    "noLogExcerpt": "没有可用的日志摘录。",
+    "refreshingDetails": "正在刷新检查详情…"
   },
   "settings": {
     "chat": {
@@ -13302,7 +13309,6 @@
                 "a6de3e5a20": "清除已排队评论",
                 "49ea0937e4": "将评论添加到解决列表",
                 "9fecebb29d": "添加",
-                "b8c4e2a1f7": "查看完整日志",
                 "f8a2c91d04": "加入智能体队列",
                 "b4e8a1c902": "已加入队列",
                 "7c1f0a2b11": "打开",

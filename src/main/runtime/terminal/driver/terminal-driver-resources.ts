@@ -40,13 +40,6 @@ import { ServeBrowserTabs } from '../../serve-browser-tabs'
 import type { ServeBrowserPageState } from '../../serve-browser-tab-layout'
 
 export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
-  protected get canonicalFetchKeyCache(): ReadonlyMap<string, string> {
-    return this.remoteFetches.getCanonicalFetchKeyCache()
-  }
-  protected get fetchLastCompletedAt(): ReadonlyMap<string, number> {
-    return this.remoteFetches.getFetchLastCompletedAt()
-  }
-
   declare registerSubscriptionCleanup: RuntimeServiceCommandSurface['registerSubscriptionCleanup']
   declare cleanupSubscription: RuntimeServiceCommandSurface['cleanupSubscription']
 
