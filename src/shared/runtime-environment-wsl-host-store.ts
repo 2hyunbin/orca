@@ -90,7 +90,8 @@ export function addWslHostEnvironment(
   writeWslHostDeployment(userDataPath, args.id, {
     ...args.record,
     environmentId: args.id,
-    createdAt: now
+    createdAt: now,
+    pairingPublicKeyB64: offer.publicKeyB64
   })
   const persisted = PersistedRuntimeEnvironmentSchema.parse(environment)
   writeEnvironmentStore(userDataPath, {
@@ -114,11 +115,17 @@ export function refreshWslHostPairing(
   if (!record) {
     throw new RuntimeEnvironmentStoreError('invalid_argument', 'This server is not a WSL host.')
   }
-  if (record.localPort !== args.localPort || record.remotePort !== args.remotePort) {
+  // Record first, as on add: the overlay ignores it until the pairing below matches it.
+  if (
+    record.localPort !== args.localPort ||
+    record.remotePort !== args.remotePort ||
+    record.pairingPublicKeyB64 !== offer.publicKeyB64
+  ) {
     writeWslHostDeployment(userDataPath, environmentId, {
       ...record,
       localPort: args.localPort,
-      remotePort: args.remotePort
+      remotePort: args.remotePort,
+      pairingPublicKeyB64: offer.publicKeyB64
     })
   }
   const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environmentId)

@@ -103,6 +103,33 @@ describe('WSL host environment store', () => {
     })
   })
 
+  it('binds the record to the pairing key and follows a relaunch that changes it', () => {
+    addWslHostEnvironment(userDataPath, {
+      id: 'wsl:ubuntu',
+      name: 'Ubuntu (WSL)',
+      pairingCode: code(42000),
+      record,
+      now: 100
+    })
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pairingPublicKeyB64).toBe(
+      publicKeyB64
+    )
+    const rotatedKey = Buffer.alloc(32, 9).toString('base64')
+    const refreshed = refreshWslHostPairing(userDataPath, 'wsl:ubuntu', {
+      pairingCode: encodePairingOffer({
+        v: 2,
+        endpoint: 'ws://127.0.0.1:42000',
+        deviceToken: 'token-2',
+        publicKeyB64: rotatedKey
+      }),
+      localPort: 42000,
+      remotePort: 6768
+    })
+    expect(refreshed.pairingChanged).toBe(true)
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pairingPublicKeyB64).toBe(rotatedKey)
+    expect(listEnvironments(userDataPath)[0]?.orcadDeployment).toMatchObject({ kind: 'wsl' })
+  })
+
   it('removes the environment and its record', () => {
     addWslHostEnvironment(userDataPath, {
       id: 'wsl:ubuntu',
