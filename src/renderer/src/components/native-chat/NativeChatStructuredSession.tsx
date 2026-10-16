@@ -46,7 +46,7 @@ import { chatApprovalFromJournal } from './native-chat-interactive-prompt'
 import { useAppStore } from '../../store'
 import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 import { useNativeChatStructuredComposerTransport } from './use-native-chat-structured-composer-transport'
-import { NativeChatThreadGoalBanner } from './NativeChatThreadGoalBanner'
+import { NativeChatStructuredGoalStrip } from './NativeChatStructuredGoalStrip'
 import { structuredAgentSessionReadFailureNotice } from './structured-agent-session-read-failure-notice'
 import { useStructuredAgentSessionDeliveryNotices } from './use-structured-agent-session-delivery-notices'
 import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
@@ -131,17 +131,18 @@ export function NativeChatStructuredSession(
     props.agent,
     hostOutage === null
   )
-  const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry)
-  const { revealLatest } = submits
-  const promptResponse = useStructuredPromptResponseHold(submits.respond)
   const agentLabel = structuredAgentLabel(props.agent)
   const hostPermission = useNativeChatHostPermissionGate(props.target, props.agent, agentLabel)
+  const hostHeld = hostPermission.sendBlockedReason !== null
+  const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
+  const { revealLatest } = submits
+  const promptResponse = useStructuredPromptResponseHold(submits.respond)
   const continuation = useNativeChatInterruptedContinuation({
     target: props.target,
     sessionId: props.sessionId,
     journalItems: controller.journalItems,
     submissions: controller.submissions,
-    isWorking: controller.isWorking || hostPermission.sendBlockedReason !== null,
+    isWorking: controller.isWorking || hostHeld,
     reportComposerError
   })
   const needsFailureFacts =
@@ -333,7 +334,7 @@ export function NativeChatStructuredSession(
             chatWorktreeId={ownerWorktreeId ?? null}
             agentName={agentLabel}
             statedFailures={startFailures}
-            steerHeld={stopControls.stopping}
+            steerHeld={stopControls.stopping || hostHeld}
             focusComposer={focusComposer}
           />
           <NativeChatStructuredSessionStatus
@@ -343,27 +344,17 @@ export function NativeChatStructuredSession(
             backgroundTasks={controller.backgroundTasks}
             stopBackgroundTask={controller.stopBackgroundTask}
           />
-          {!prompt && controller.threadGoal?.goal ? (
-            <NativeChatThreadGoalBanner
-              key={props.sessionId}
-              goal={controller.threadGoal.goal}
-              pending={controller.threadGoal.pending}
-              hostChanges={controller.threadGoal.hostChanges}
-              sendUnavailable={structuredTransport.sendOut || controller.isWorking}
+          {prompt ? null : (
+            <NativeChatStructuredGoalStrip
+              sessionId={props.sessionId}
+              threadGoal={controller.threadGoal}
+              transport={structuredTransport}
+              isWorking={controller.isWorking}
               isVisible={props.isVisible}
-              runningTurn={
-                controller.turnId === null
-                  ? null
-                  : { startedAt: controller.workingStartedAt ?? null }
-              }
-              onChange={(change) => {
-                if (change.kind === 'clear' && !controller.threadGoal?.hostChanges) {
-                  structuredTransport.onSubmitted?.()
-                }
-                void controller.threadGoal?.change(change)
-              }}
+              turnId={controller.turnId}
+              workingStartedAt={controller.workingStartedAt}
             />
-          ) : null}
+          )}
           {/* Prompt cards take the composer's slot, below the background-task dock. */}
           {composerShown ? null : <NativeChatPromptSlotNotices notices={notices} />}
           {prompt && approval ? (

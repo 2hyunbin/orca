@@ -69,12 +69,14 @@ export function useStructuredChatHostPermissionVerdict(
   const gated = target.kind === 'environment' && agentChatPermissionModes(agent) !== null
   const environmentId = target.kind === 'environment' ? target.environmentId : null
   const requested = useAppStore((state) => state.settings?.nativeChatPermissionMode)
-  const key = `${environmentId ?? 'local'}\0${agent}\0${String(requested)}`
+  const [contact, setContact] = useState(0)
+  // Contact is part of the key: a host back from a restart may be an older build, so a verdict from
+  // before it never stands in for the fresh one.
+  const key = `${environmentId ?? 'local'}\0${agent}\0${String(requested)}\0${contact}`
   const [answer, setAnswer] = useState<{
     key: string
     verdict: StructuredChatHostPermissionVerdict
   } | null>(null)
-  const [contact, setContact] = useState(0)
   useEffect(() => {
     if (!gated || environmentId === null) {
       return

@@ -1,17 +1,33 @@
+// @vitest-environment happy-dom
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  supportsCapability: vi.fn(),
-  callRuntimeRpc: vi.fn()
-}))
+const mocks = vi.hoisted(() => {
+  const contactListeners: (() => void)[] = []
+  return { supportsCapability: vi.fn(), callRuntimeRpc: vi.fn(), contactListeners }
+})
 
 vi.mock('./runtime-rpc-client', () => ({
   runtimeEnvironmentSupportsCapability: mocks.supportsCapability,
   callRuntimeRpc: mocks.callRuntimeRpc
 }))
-vi.mock('@/store', () => ({ useAppStore: { getState: () => ({ settings: {} }) } }))
+vi.mock('@/store', () => {
+  const state = { settings: { nativeChatPermissionMode: 'ask' } }
+  const useAppStore = (select: (s: typeof state) => unknown) => select(state)
+  useAppStore.getState = () => state
+  return { useAppStore }
+})
+vi.mock('./runtime-host-contact-regained', () => ({
+  subscribeRuntimeHostContactRegained: (_id: string, listener: () => void) => {
+    mocks.contactListeners.push(listener)
+    return () => undefined
+  }
+}))
 
-import { readStructuredChatHostPermissionVerdict } from './structured-chat-host-permission'
+import {
+  readStructuredChatHostPermissionVerdict,
+  useStructuredChatHostPermissionVerdict
+} from './structured-chat-host-permission'
 import { AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY } from '../../../shared/agent-session-permission-modes-capability'
 
 const PAIRED = { kind: 'environment', environmentId: 'server-1' } as const
@@ -93,5 +109,20 @@ describe('the permission verdict on a paired host', () => {
     })
     expect(mocks.supportsCapability).not.toHaveBeenCalled()
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('the permission verdict a chat holds', () => {
+  it('checks again, holding the chat, when contact with the host returns', async () => {
+    mocks.contactListeners.length = 0
+    mocks.supportsCapability.mockResolvedValue(true)
+    const { result } = renderHook(() => useStructuredChatHostPermissionVerdict(PAIRED, 'claude'))
+    expect(result.current).toEqual({ kind: 'checking' })
+    await vi.waitFor(() => expect(result.current).toEqual({ kind: 'allowed' }))
+
+    // The host came back as an older build: its answer is still on the way.
+    mocks.supportsCapability.mockReturnValue(new Promise(() => undefined))
+    act(() => mocks.contactListeners.forEach((listener) => listener()))
+    expect(result.current).toEqual({ kind: 'checking' })
   })
 })
