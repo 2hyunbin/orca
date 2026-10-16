@@ -255,6 +255,18 @@ describe('createOrcadSecretStore', () => {
     expect(readdirSync(keyDir)).toEqual([STATE_A])
   })
 
+  it('takes over a migration lock its crashed holder left behind', async () => {
+    const { encodedKey, sealed } = legacyKeyringHost()
+    // Far above any real PID, so no process holds it.
+    writeFileSync(join(keyDir, `${STATE_A}.lock`), '2147483646', { mode: 0o600 })
+    const { store, ready } = await prepare({
+      legacyKeyring: fakeLegacyKeyring({ key: encodedKey }).read
+    })
+    expect(ready).toBe(true)
+    expect(store.decryptString(sealed)).toBe('lin_api_secret')
+    expect(readdirSync(keyDir)).toEqual([STATE_A])
+  })
+
   it('never regenerates over an unreadable key record', async () => {
     const statePath = join(keyDir, STATE_A)
     writeFileSync(statePath, '{"version":1,"backend":"host-file"', 'utf8')

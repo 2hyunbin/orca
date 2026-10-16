@@ -214,38 +214,54 @@ function isLiveProcess(pid: number): boolean {
 
 const LOCK_WAIT_MS = 15_000
 
+function tryTakeLock(statePath: string, lock: string): 'taken' | 'held' | 'failed' {
+  // Why stage then link: the lock appears with its PID already written, never empty.
+  const staging = `${statePath}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
+  try {
+    writeFileSync(staging, String(process.pid), { mode: 0o600 })
+    linkSync(staging, lock)
+    return 'taken'
+  } catch (error) {
+    return errorCode(error) === 'EEXIST' ? 'held' : 'failed'
+  } finally {
+    rmSync(staging, { force: true })
+  }
+}
+
 /**
  * Runs `task` holding this record's lock, so concurrent starts cannot each replace the record.
- * Resolves 'busy' when another live start keeps it longer than its bounded keyring read.
+ * Resolves 'unlocked' when the lock cannot be taken, or another live start keeps it too long.
  */
 export async function withRecordLock<T>(
   statePath: string,
   task: () => Promise<T>
-): Promise<T | 'busy'> {
+): Promise<T | 'unlocked'> {
   const lock = `${statePath}.lock`
   const deadline = Date.now() + LOCK_WAIT_MS
   for (;;) {
-    try {
-      writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 })
+    const taken = tryTakeLock(statePath, lock)
+    if (taken === 'taken') {
       break
-    } catch (error) {
-      if (errorCode(error) !== 'EEXIST') {
-        throw error
-      }
+    }
+    if (taken === 'failed') {
+      return 'unlocked'
     }
     let holder = Number.NaN
     try {
       holder = Number(readFileSync(lock, 'utf8'))
     } catch {
-      continue
+      // Gone (retry now) or unreadable (wait for the deadline below).
     }
-    // Why only a whole dead PID: an empty read is a holder that has not written its PID yet.
     if (Number.isInteger(holder) && holder > 0 && !isLiveProcess(holder)) {
-      rmSync(lock, { force: true })
-      continue
+      try {
+        rmSync(lock, { force: true })
+        continue
+      } catch {
+        // Not ours to remove; wait like for a live holder.
+      }
     }
     if (Date.now() > deadline) {
-      return 'busy'
+      return 'unlocked'
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
   }

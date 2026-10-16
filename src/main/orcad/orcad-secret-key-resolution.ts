@@ -131,8 +131,8 @@ async function loadStoredRecord(
         ? migrateKeyringRecord(current.stored, context)
         : 'reload'
     })
-    return migrated === 'busy'
-      ? context.unavailable('another server kept its key record locked')
+    return migrated === 'unlocked'
+      ? context.unavailable('its key record could not be locked against another server')
       : migrated
   }
   const { unavailable } = context
