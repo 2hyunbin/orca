@@ -1,9 +1,6 @@
 import { useAppStore } from '@/store'
 import { findRenamableUnifiedTab } from '@/store/terminals/renamable-unified-tab'
-import {
-  sendPaneCommandToLayoutOwner,
-  type TabPropsLayoutCommand
-} from '../terminal-pane/terminal-pane-layout-owner-commands'
+import { sendLayoutCommandToOwner, type WindowLayoutCommand } from '@/runtime/layout-owner-command'
 
 type TabPropsActions<Item extends { unifiedTabId: string; isPinned: boolean }> = {
   setCustomTitle: (tabId: string, title: string | null) => void
@@ -27,11 +24,11 @@ export function withLayoutOwnerTabProps<Item extends { unifiedTabId: string; isP
       today()
       return
     }
-    const command: TabPropsLayoutCommand =
+    const command: WindowLayoutCommand =
       'title' in props
         ? { type: 'renameTab', tabId: tabBarTabId, kind: 'custom', title: props.title }
         : { type: 'setTabProps', tabId: tabBarTabId, ...props }
-    if (!sendPaneCommandToLayoutOwner(worktreeId(), command, { apply: today, asToday: today })) {
+    if (!sendLayoutCommandToOwner(worktreeId(), command, { apply: today, asToday: today })) {
       today()
     }
   }

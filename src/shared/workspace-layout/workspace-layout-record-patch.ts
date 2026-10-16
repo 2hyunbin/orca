@@ -4,6 +4,7 @@
 // isolates the command, and only those records and fields are written.
 
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
+import { adoptTouchedFoldedRows } from './workspace-layout-folded-rows'
 
 type Json = Record<string, unknown>
 
@@ -22,21 +23,32 @@ const MAP_RECORD_DEPTH = 2
 
 /**
  * `stored` with the records the command touched (those differing between `before` and `after`)
- * written as `after` has them. A touched record the load supplied is written whole; every
- * untouched record stays as stored. `stored` itself when the command changed nothing.
+ * written as `after` has them. A touched record the load supplied is written whole, and a folded
+ * legacy row whose claim the command touched takes its loaded form; every untouched record stays
+ * as stored. `stored` itself when the command changed nothing.
  */
 export function patchStoredSession(
   stored: WorkspaceSessionState,
   before: WorkspaceSessionState,
   after: WorkspaceSessionState
 ): WorkspaceSessionState {
-  const storedFields = toJson(stored)
+  const patched = patchRecords(stored, before, after)
+  const adopted = adoptTouchedFoldedRows(stored, patched, before)
+  return adopted === stored ? patched : patchRecords(adopted, before, after)
+}
+
+function patchRecords(
+  stored: WorkspaceSessionState,
+  before: WorkspaceSessionState,
+  after: WorkspaceSessionState
+): WorkspaceSessionState {
   const beforeFields = toJson(before)
   const afterFields = toJson(after)
   const changed = changedKeys(beforeFields, afterFields)
   if (changed.length === 0) {
     return stored
   }
+  const storedFields = toJson(stored)
   const patched: Json = { ...storedFields }
   for (const field of changed) {
     const idOf = LIST_FIELDS[field]

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
+import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -57,6 +58,29 @@ const EqualizePanesCommand = z.object({
 
 const OnTab = { workspace: OnPane.workspace, tabId: OnPane.tabId }
 
+/** Within one group too: a reorder is a move to the tab's own group. */
+const MoveTabCommand = z.object({
+  type: z.literal('moveTab'),
+  ...OnTab,
+  toGroupId: z.string().min(1),
+  index: z.number().int().nonnegative()
+})
+
+/** Main mints the new group's id, or moves a lone tab's group whole. */
+const SplitGroupCommand = z.object({
+  type: z.literal('splitGroup'),
+  ...OnTab,
+  besideGroupId: z.string().min(1),
+  direction: z.enum(['left', 'right', 'up', 'down'])
+})
+
+/** The workspace's group tree with its new ratios; main refuses one whose groups differ. */
+const SetGroupRatiosCommand = z.object({
+  type: z.literal('setGroupRatios'),
+  workspace: OnPane.workspace,
+  groupLayout: TerminalOrphanGroupLayout
+})
+
 /** The tab bar's rename: a title as the window stores it today; null clears it. */
 const RenameTabCommand = z.object({
   type: z.literal('renameTab'),
@@ -84,6 +108,9 @@ export const LayoutApplyParams = z.object({
     EqualizePanesCommand,
     MovePaneCommand,
     SetPaneRatiosCommand,
+    MoveTabCommand,
+    SplitGroupCommand,
+    SetGroupRatiosCommand,
     RenameTabCommand,
     SetTabPropsCommand
   ])
