@@ -13,6 +13,19 @@ const WORK = `journal_prune_work_v${JOURNAL_PRUNE_TABLES_VERSION}`
  *  restarts, so a launch reads only rows appended since the last pass. */
 export function ensureJournalPruneTables(db: Database.Database): boolean {
   try {
+    // Changing temp_store later destroys callers' TEMP objects.
+    const forcedMemory = db
+      .prepare('PRAGMA compile_options')
+      .all()
+      .some((row) => Object.values(row).includes('TEMP_STORE=3'))
+    if (forcedMemory) {
+      throw new Error('SQLite forces in-memory temporary storage')
+    }
+    db.pragma('temp_store = FILE')
+    if (Number(db.pragma('temp_store', { simple: true })) !== 1) {
+      throw new Error('SQLite did not enable file-backed temporary storage')
+    }
+    db.pragma('temp.cache_size = -2048')
     db.exec(`CREATE TABLE IF NOT EXISTS ${PROGRESS} (
   session_id TEXT NOT NULL, epoch TEXT NOT NULL,
   scanned INTEGER NOT NULL DEFAULT 0, refused INTEGER NOT NULL DEFAULT 0,
@@ -27,6 +40,12 @@ CREATE TABLE IF NOT EXISTS ${ITEMS} (
 CREATE TABLE IF NOT EXISTS ${WORK} (
   session_id TEXT NOT NULL, epoch TEXT NOT NULL, seq INTEGER NOT NULL,
   PRIMARY KEY (session_id, epoch, seq)
+) WITHOUT ROWID;
+CREATE TEMP TABLE journal_prune_items (
+  session_id TEXT NOT NULL, epoch TEXT NOT NULL, item_id TEXT NOT NULL,
+  seq INTEGER NOT NULL, revision INTEGER NOT NULL, signature TEXT NOT NULL,
+  removable INTEGER NOT NULL, saved_at REAL NOT NULL, observed_at REAL NOT NULL,
+  PRIMARY KEY (session_id, epoch, item_id)
 ) WITHOUT ROWID;`)
     return true
   } catch (error) {
@@ -126,7 +145,7 @@ export class JournalPruneState implements JournalPruneCandidates {
   get(itemId: string): JournalPruneCandidate | undefined {
     const row = this.db
       .prepare(`SELECT seq, revision, signature, removable, saved_at, observed_at
-FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id = ?`)
+FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? AND item_id = ?`)
       .get(this.sessionId, this.epoch, itemId)
     if (!row) {
       return undefined
@@ -139,7 +158,7 @@ FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id = ?`)
       typeof row.saved_at !== 'number' ||
       typeof row.observed_at !== 'number'
     ) {
-      throw new Error('journal pruning lost its saved item frontier')
+      throw new Error('journal pruning lost its temporary item frontier')
     }
     return {
       seq: row.seq,
@@ -153,7 +172,7 @@ FROM ${ITEMS} WHERE session_id = ? AND epoch = ? AND item_id = ?`)
 
   set(itemId: string, candidate: JournalPruneCandidate): void {
     this.db
-      .prepare(`INSERT INTO ${ITEMS}
+      .prepare(`INSERT INTO temp.journal_prune_items
 (session_id, epoch, item_id, seq, revision, signature, removable, saved_at, observed_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, epoch, item_id) DO UPDATE SET
 seq = excluded.seq, revision = excluded.revision, signature = excluded.signature,
@@ -173,7 +192,7 @@ removable = excluded.removable, saved_at = excluded.saved_at, observed_at = excl
 
   delete(itemId: string): void {
     this.db
-      .prepare(`DELETE FROM ${ITEMS}
+      .prepare(`DELETE FROM temp.journal_prune_items
 WHERE session_id = ? AND epoch = ? AND item_id = ?`)
       .run(this.sessionId, this.epoch, itemId)
   }
@@ -201,8 +220,7 @@ WHERE session_id = ? AND epoch = ? AND seq = ?`)
   }
 }
 
-/** One bounded chunk of a retired epoch's or refused epoch's bookkeeping: items, then queued
- *  payloads, then the frontier last, so a refusal outlives its own cleanup. */
+/** Retire legacy candidates even for live epochs; only retired/refused keys lose current work. */
 export function collectJournalPruneGarbage(
   db: Database.Database,
   transaction: JournalTransaction,
@@ -219,10 +237,12 @@ ORDER BY session_id, epoch LIMIT 32`)
         through.sessionId,
         through.epoch
       )
-    const eligible = db.prepare(`SELECT s.epoch AS live FROM ${PROGRESS} p
+    const eligible = db.prepare(`SELECT s.epoch AS live, p.refused FROM ${PROGRESS} p
 LEFT JOIN journal_sessions s ON s.session_id = p.session_id
-WHERE p.session_id = ? AND p.epoch = ? AND (s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
+WHERE p.session_id = ? AND p.epoch = ? AND (
   EXISTS (SELECT 1 FROM ${ITEMS} i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
+  OR s.epoch IS NULL OR s.epoch != p.epoch OR (p.refused = 1 AND (
+  EXISTS (SELECT 1 FROM temp.journal_prune_items i WHERE i.session_id = p.session_id AND i.epoch = p.epoch)
   OR EXISTS (SELECT 1 FROM ${WORK} w WHERE w.session_id = p.session_id AND w.epoch = p.epoch))))`)
     for (const row of rows) {
       if (typeof row.session_id !== 'string' || typeof row.epoch !== 'string') {
@@ -240,6 +260,17 @@ WHERE p.session_id = ? AND p.epoch = ? AND (s.epoch IS NULL OR s.epoch != p.epoc
 SELECT item_id FROM ${ITEMS} WHERE session_id = ? AND epoch = ? LIMIT 32)`)
         .run(sessionId, epoch, sessionId, epoch)
       if (items.changes > 0) {
+        return { collected: true, more: true }
+      }
+      if (garbage.live === epoch && garbage.refused !== 1) {
+        cursor.after = { sessionId, epoch }
+        continue
+      }
+      const temporary = db
+        .prepare(`DELETE FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? AND item_id IN (
+SELECT item_id FROM temp.journal_prune_items WHERE session_id = ? AND epoch = ? LIMIT 32)`)
+        .run(sessionId, epoch, sessionId, epoch)
+      if (temporary.changes > 0) {
         return { collected: true, more: true }
       }
       const work = db

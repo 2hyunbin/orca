@@ -11,7 +11,11 @@ import {
 import { JournalMaintenance } from './journal-maintenance'
 import { replayJournal } from './journal-open'
 import { JournalPrunePass } from './journal-prune-pass'
-import { journalPruneEpochLookup, JournalPruneState } from './journal-prune-state'
+import {
+  collectJournalPruneGarbage,
+  journalPruneEpochLookup,
+  JournalPruneState
+} from './journal-prune-state'
 import type { SqliteStatement } from '../../sqlite/sqlite-statement'
 import { renderJournalState } from './journal-reducer'
 import { insertJournalRow, publishJournalSessionEpoch } from './journal-row-table'
@@ -145,8 +149,8 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
       itemId: 'new',
       revision: 4
     })
-    for (let revision = 5; revision <= 7; revision++) {
-      item(309 + revision, 'new', revision)
+    for (let revision = 1; revision <= 3; revision++) {
+      item(313 + revision, 'new', revision)
     }
   })
   const before = snapshot()
@@ -159,6 +163,8 @@ it('continues only the appended suffix across lifecycle and tombstone boundaries
     expect(bodyAt(seq)).toMatchObject({ blocks: [] })
   }
   expect(drain()).toEqual({ scanned: 0, compacted: 0 })
+  db.exec(`INSERT INTO journal_prune_items_v1
+SELECT * FROM temp.journal_prune_items WHERE item_id LIKE 'earlier-%'`)
   for (let batch = 0; batch < 2; batch++) {
     insertJournalRow(db, 'chat', {
       v: 1,
@@ -330,9 +336,29 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
       item(priorIdentities + 1 + revision, 'reply', revision)
     }
   })
-  const pass = new JournalPrunePass(db, 'chat', 'epoch')
+  let pass = new JournalPrunePass(db, 'chat', 'epoch')
   const original = snapshot()
-  let scanned = 0
+  let scanned = pass.step(db, transaction).scanned
+  const candidates = db.prepare('SELECT * FROM temp.journal_prune_items').all()
+  const rollback: JournalTransaction = (run, mode) =>
+    transaction((connection) => {
+      run(connection)
+      throw new Error('scan rollback')
+    }, mode)
+  expect(() => pass.step(db, rollback)).toThrow('scan rollback')
+  expect(db.prepare('SELECT * FROM temp.journal_prune_items').all()).toEqual(candidates)
+  expect(new JournalPruneState(db, 'chat', 'epoch').progress().scanned).toBe(0)
+  while (scanned < 5000) {
+    scanned += pass.step(db, transaction).scanned
+  }
+  const saved = new JournalPruneState(db, 'chat', 'epoch').progress().scanned
+  expect(saved).toBeGreaterThanOrEqual(4096)
+  expect(scanned - saved).toBeLessThanOrEqual(4127)
+  db.close()
+  db = openJournalDatabase(join(root, 'journal.db')).db
+  expect(db.prepare('SELECT * FROM temp.journal_prune_items').all()).toEqual([])
+  pass = new JournalPrunePass(db, 'chat', 'epoch')
+  scanned = saved
   while (scanned < tip) {
     scanned += pass.step(db, transaction).scanned
   }
@@ -352,7 +378,9 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
       item(priorIdentities + 1 + revision, 'reply', revision)
     }
   })
-  expect(drain()).toEqual({ scanned: 4, compacted: 4 })
+  expect(drain()).toEqual({ scanned: 4, compacted: 2 })
+  expect(bodyAt(tip)).not.toMatchObject({ blocks: [] })
+  expect(bodyAt(tip + 1)).not.toMatchObject({ blocks: [] })
   transaction(() => {
     for (let seq = tip + 5; seq <= tip + 1028; seq++) {
       item(seq, 'empty', seq, 'chat', 'epoch', 0)
@@ -385,6 +413,7 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
 })
 
 it('pages healthy keys, resumes ordered garbage and discovers changes beyond finite cursors', async () => {
+  const healthy = new JournalPruneState(db, 'z-owed', 'epoch')
   transaction(() => {
     for (let ordinal = 0; ordinal < 70; ordinal++) {
       const sessionId = `a${String(ordinal).padStart(3, '0')}`
@@ -399,7 +428,7 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
     for (let revision = 1; revision <= 3; revision++) {
       item(revision + 1, 'reply', revision, 'z-owed', 'epoch', 20_000)
     }
-    for (const sessionId of ['z-refused', 'z-retired']) {
+    for (const sessionId of ['z-owed', 'z-refused', 'z-retired']) {
       const state = new JournalPruneState(db, sessionId, 'epoch')
       state.initialize()
       if (sessionId === 'z-refused') {
@@ -415,10 +444,24 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
           savedAt: 1,
           observedAt: 1
         })
-        state.enqueue(ordinal)
+        if (sessionId !== 'z-owed') {
+          state.enqueue(ordinal)
+        }
       }
     }
+    healthy.advance(4)
+    healthy.enqueue(3)
+    db.exec('INSERT INTO journal_prune_items_v1 SELECT * FROM temp.journal_prune_items')
   })
+  const legacy = {
+    after: { sessionId: 'z-owec', epoch: '' },
+    through: { sessionId: 'z-owed', epoch: 'epoch' }
+  }
+  for (let chunk = 0; chunk < 4; chunk++) {
+    collectJournalPruneGarbage(db, transaction, legacy)
+  }
+  expect(healthy.progress()).toEqual({ scanned: 4, refused: false })
+  expect(healthy.next()).toBe(3)
   const pages: { at: number; size: number }[] = []
   const watched = new Set<SqliteStatement>()
   const prepare = db.prepare.bind(db)
@@ -448,6 +491,7 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
   try {
     await vi.advanceTimersByTimeAsync(60)
     expect(count('journal_prune_items_v1')).toBe(33)
+    expect(count('temp.journal_prune_items')).toBe(65)
     expect(count('journal_prune_work_v1')).toBe(65)
     expect(count('journal_prune_progress_v1')).toBe(1)
     maintenance.close()
@@ -468,6 +512,7 @@ it('pages healthy keys, resumes ordered garbage and discovers changes beyond fin
     expect(bodyAt(3, 'a000')).toMatchObject({ blocks: [] })
     expect(bodyAt(3, 'zz-new')).toMatchObject({ blocks: [] })
     expect(count('journal_prune_items_v1')).toBe(0)
+    expect(count('temp.journal_prune_items')).toBe(0)
     expect(count('journal_prune_work_v1')).toBe(0)
     expect(count('journal_prune_progress_v1')).toBe(1)
     expect(count('journal_prune_progress_v1', 'z-retired')).toBe(0)

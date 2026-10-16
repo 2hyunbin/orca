@@ -10,6 +10,7 @@ import { readJournalRowsAfter, readJournalSessionEpoch } from './journal-row-tab
 export const JOURNAL_PRUNE_MAX_ROWS = 32
 const MAX_PASS_BYTES = 256 * 1024
 const PASS_BUDGET_MS = 4
+const CHECKPOINT_ROWS = 4096
 
 function journalPruneUpper(db: Database.Database, sessionId: string, epoch: string): number {
   const seq = db
@@ -19,12 +20,13 @@ WHERE session_id = ? AND epoch = ?`)
   return typeof seq === 'number' ? seq : 0
 }
 
-/** A continuing epoch scan from the saved frontier; each slice commits its frontier with its work. */
+/** An unfinished pass retains its transient frontier until its completed horizon is saved. */
 export class JournalPrunePass {
   private readonly state: JournalPruneState
   private readonly policy: JournalPrunePolicy
   private readonly initialUpper: number
   private initialized = false
+  private scanned = 0
 
   constructor(
     db: Database.Database,
@@ -54,6 +56,7 @@ export class JournalPrunePass {
     }
     if (!this.initialized) {
       transaction(() => this.state.initialize(), 'DEFERRED')
+      this.scanned = this.state.progress().scanned
       this.initialized = true
     }
     const progress = this.state.progress()
@@ -61,14 +64,17 @@ export class JournalPrunePass {
       return { done: true, compacted: 0, scanned: 0 }
     }
     const upper = this.initialUpper
-    if (upper < progress.scanned) {
+    if (upper < this.scanned) {
       throw new JournalPruneRefusal('journal pruning refused a shortened epoch')
     }
-    if (progress.scanned < upper) {
-      const scanned = transaction(
-        () => this.scanSuffix(db, progress.scanned, upper),
+    if (this.scanned < upper) {
+      const through = transaction(
+        () => this.scanSuffix(db, this.scanned, upper, progress.scanned),
         'DEFERRED'
       )
+      // Publish only after COMMIT and the host's foreground durability restoration succeed.
+      const scanned = through - this.scanned
+      this.scanned = through
       return { done: false, compacted: 0, scanned }
     }
     const obsolete = this.state.next()
@@ -79,10 +85,11 @@ export class JournalPrunePass {
     return { done: false, compacted: Number(compacted), scanned: 0 }
   }
 
-  private scanSuffix(db: Database.Database, after: number, upper: number): number {
+  private scanSuffix(db: Database.Database, after: number, upper: number, saved: number): number {
     const started = performance.now()
     let scanned = 0
     let bytes = 0
+    const obsolete: number[] = []
     while (after < upper && scanned < JOURNAL_PRUNE_MAX_ROWS && bytes < MAX_PASS_BYTES) {
       const stored = readJournalRowsAfter(db, this.sessionId, this.epoch, after, 1)[0]
       if (!stored || stored.seq !== after + 1 || stored.seq > upper) {
@@ -95,9 +102,9 @@ export class JournalPrunePass {
       if (after === 0 && parsed.row.kind !== 'epoch') {
         throw new JournalPruneRefusal('journal pruning refused a missing epoch row')
       }
-      const obsolete = this.policy.observe(parsed.row, stored.ts)
-      if (obsolete !== null) {
-        this.state.enqueue(obsolete)
+      const sequence = this.policy.observe(parsed.row, stored.ts)
+      if (sequence !== null) {
+        obsolete.push(sequence)
       }
       after = stored.seq
       scanned++
@@ -106,8 +113,13 @@ export class JournalPrunePass {
         break
       }
     }
-    this.state.advance(after)
-    return scanned
+    if (after === upper || after - saved >= CHECKPOINT_ROWS || obsolete.length > 0) {
+      for (const sequence of obsolete) {
+        this.state.enqueue(sequence)
+      }
+      this.state.advance(after)
+    }
+    return after
   }
 }
 
