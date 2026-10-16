@@ -45,21 +45,38 @@ export function installOrcadShutdownSignals(
   deadlineMs = ORCAD_SHUTDOWN_DEADLINE_MS
 ): OrcadShutdownTrigger {
   let stopping = false
+  let exitCode = 0
+  let failed = false
+  let retractClean: (() => void) | undefined
+  const markFailed = (): void => {
+    if (!failed) {
+      failed = true
+      retractClean?.()
+    }
+  }
   const shutdown: OrcadShutdownTrigger = (signal, onFailed, stoppedExitCode = 0) => {
     if (stopping) {
+      // A fatal fault during a clean stop must still exit as a failure, not as that clean stop.
+      if (stoppedExitCode !== 0 && exitCode === 0) {
+        exitCode = stoppedExitCode
+        onFailed?.()
+        markFailed()
+      }
       return false
     }
     stopping = true
+    exitCode = stoppedExitCode
+    retractClean = onFailed
     setTimeout(() => {
       console.error(`orcad: shutdown after ${signal} exceeded ${deadlineMs}ms — exiting`)
-      onFailed?.()
+      markFailed()
       process.exit(1)
     }, deadlineMs)
     stop()
-      .then(() => process.exit(stoppedExitCode))
+      .then(() => process.exit(exitCode))
       .catch((error) => {
         console.error(`orcad: shutdown after ${signal} failed:`, error)
-        onFailed?.()
+        markFailed()
         process.exit(resolveOrcadExitCode(error))
       })
     return true
