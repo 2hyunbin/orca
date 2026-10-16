@@ -1,6 +1,5 @@
 import type { RpcClient } from '../transport/rpc-client'
 import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
-import type { MobileNativeChatSendErrorReporter } from './use-mobile-native-chat-send-error'
 import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
 import type { MobileNativeChatVisualSource } from './mobile-native-chat-visual-read'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
@@ -11,7 +10,10 @@ import type { NativeChatResolvedPrompt } from '../../../src/shared/native-chat-r
 import type { useMobileStructuredAgentOptions } from './use-mobile-structured-agent-options'
 import type { useMobileStructuredAgentTurnTiming } from './use-mobile-structured-agent-turn-timing'
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
-import type { MobileNativeChatCommandRefusalCauses } from './use-mobile-native-chat-send-error'
+import type {
+  MobileNativeChatCommandRefusalCauses,
+  MobileNativeChatSendErrorReporter
+} from './use-mobile-native-chat-send-error'
 import type { MobileStructuredQueuedMessageControls } from './use-mobile-structured-queued-message-controls'
 import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
 
