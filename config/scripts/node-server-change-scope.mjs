@@ -3,7 +3,11 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { nodeServerTestPaths } from './node-server-test-paths.mjs'
 import { nodeServerQualification } from './node-server-qualification.mjs'
-import { classifyNativeCompatChanges } from './node-server-native-compat-scope.mjs'
+import {
+  classifyNativeCompatChanges,
+  isRepositoryPath,
+  readNativeCompatDiff
+} from './node-server-native-compat-scope.mjs'
 
 const ROOT = resolve(import.meta.dirname, '../..')
 const BUILD_SCRIPTS = [
@@ -27,8 +31,11 @@ const BUILD_SCRIPTS = [
 ]
 const NODE_SERVER_POLICY_TESTS = new Set([
   'config/scripts/node-server-change-scope.test.mjs',
+  'config/scripts/node-server-runtime-registration-scope.test.mjs',
   'config/scripts/node-server-qualification.test.mjs'
 ])
+const RUNTIME_TEST_ROOT = 'src/main/runtime/orca-runtime.test.ts'
+const RUNTIME_TEST_REGISTRATION = /^src\/main\/runtime\/orca-runtime-tests\/[^/]+\.spec\.ts$/
 const ALWAYS_FILES = new Set([
   'package.json',
   'pnpm-lock.yaml',
@@ -137,12 +144,16 @@ export async function collectNodeServerInputs({ root = ROOT, entryPoints } = {})
   if (result.warnings.length > 0) {
     throw new Error(result.warnings.map((warning) => warning.text).join('\n'))
   }
-  return new Set([
+  const inputs = new Set([
     ...manifests,
     ...Object.keys(result.metafile.inputs).map((file) =>
       file.replaceAll('\\', '/').replace(/\?.*$/, '')
     )
   ])
+  if (![...inputs].every(isRepositoryPath) || !entries.every((entry) => inputs.has(entry))) {
+    throw new Error('Dependency graph has invalid paths or is missing a requested entry point')
+  }
+  return inputs
 }
 
 function isSourceUnitTest(file) {
@@ -156,7 +167,12 @@ function isSourceUnitTest(file) {
 export async function classifyNodeServerChanges(
   changedFiles,
   collect = collectNodeServerInputs,
-  { deferGraph = false, modifiedFiles } = {}
+  {
+    deferGraph = false,
+    modifiedFiles,
+    rawDiff,
+    collectRegistrationInputs = collectNodeServerInputs
+  } = {}
 ) {
   if (changedFiles.length === 0) {
     return { shouldRun: true, reason: 'No complete changed-file evidence' }
@@ -167,11 +183,21 @@ export async function classifyNodeServerChanges(
     new Set(modifiedFiles).size === modifiedFiles.length &&
     modifiedFiles.length === changedFiles.length &&
     changedFiles.every((file) => modifiedFiles.includes(file))
+  const entries = modifiedOnly ? readNativeCompatDiff(changedFiles, rawDiff) : null
+  const headers = typeof rawDiff === 'string' ? rawDiff.split('\0') : []
+  const ordinaryModifications = entries?.every(
+    ({ status }, index) => status === 'M' && /^:(100644|100755) \1 /.test(headers[index * 2])
+  )
+  const registrations = ordinaryModifications
+    ? changedFiles.filter((file) => RUNTIME_TEST_REGISTRATION.test(file))
+    : []
   const selectors = nodeServerTestPaths({ artifact: true, crossRuntime: true, template: true })
   const forced = changedFiles.find(
     (file) =>
       (ALWAYS_FILES.has(file) && !(modifiedOnly && NODE_SERVER_POLICY_TESTS.has(file))) ||
-      (ALWAYS_PREFIXES.some((prefix) => file.startsWith(prefix)) && !isSourceUnitTest(file)) ||
+      (ALWAYS_PREFIXES.some((prefix) => file.startsWith(prefix)) &&
+        !isSourceUnitTest(file) &&
+        !registrations.includes(file)) ||
       /^config\/scripts\/[^/]*orcad[^/]*$/.test(file) ||
       selectors.some((selector) => file.includes(selector))
   )
@@ -183,6 +209,20 @@ export async function classifyNodeServerChanges(
   }
   try {
     const inputs = await collect()
+    if (registrations.length > 0) {
+      const roots = [RUNTIME_TEST_ROOT]
+      const registrationInputs = await collectRegistrationInputs({ entryPoints: roots })
+      if (
+        !(inputs instanceof Set) ||
+        inputs.size === 0 ||
+        ![...inputs].every(isRepositoryPath) ||
+        !(registrationInputs instanceof Set) ||
+        ![...registrationInputs].every(isRepositoryPath) ||
+        ![...roots, ...registrations].every((file) => registrationInputs.has(file))
+      ) {
+        throw new Error('Runtime test registration or server dependency graph is incomplete')
+      }
+    }
     const matchedFiles = changedFiles.filter((file) => inputs.has(file))
     const matched = matchedFiles[0]
     return {
@@ -210,22 +250,24 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       : readFileSync(process.argv[modifiedArgument + 1], 'utf8')
           .split('\0')
           .filter(Boolean)
+  const diffArgument = process.argv.indexOf('--diff-paths')
+  const rawDiff =
+    diffArgument === -1 ? undefined : readFileSync(process.argv[diffArgument + 1], 'utf8')
   const result = await classifyNodeServerChanges(changedFiles, collectNodeServerInputs, {
     deferGraph: process.argv.includes('--defer-graph'),
-    modifiedFiles
+    modifiedFiles,
+    rawDiff
   })
   console.log(result.reason)
   const policy = nodeServerQualification(changedFiles, result, {
     fullQualification: process.argv.includes('--full-qualification')
   })
-  const diffArgument = process.argv.indexOf('--diff-paths')
   const native = result.graphUnavailable
     ? { nativeCompatibility: true, reason: 'Server dependency graph unavailable' }
     : await classifyNativeCompatChanges(changedFiles, collectNodeServerInputs, {
         pullRequest: process.argv.includes('--pull-request'),
         fullQualification: process.argv.includes('--full-qualification'),
-        rawDiff:
-          diffArgument === -1 ? undefined : readFileSync(process.argv[diffArgument + 1], 'utf8'),
+        rawDiff,
         deferGraph: process.argv.includes('--defer-graph')
       })
   console.log(native.reason)

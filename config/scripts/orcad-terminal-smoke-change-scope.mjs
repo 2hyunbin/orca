@@ -30,7 +30,8 @@ export function collectOrcadTerminalSmokeInputs() {
 
 export async function classifyOrcadTerminalSmokeChanges(
   changedFiles,
-  collect = collectOrcadTerminalSmokeInputs
+  collect = collectOrcadTerminalSmokeInputs,
+  evidence = {}
 ) {
   const forced = changedFiles.find(
     (file) =>
@@ -49,12 +50,27 @@ export async function classifyOrcadTerminalSmokeChanges(
     return { shouldRun: true, reason: `Smoke input changed: ${forced}` }
   }
   // Retain the headless-server gate's native, worker, toolchain and failed-analysis safeguards.
-  return classifyNodeServerChanges(changedFiles, collect)
+  return classifyNodeServerChanges(changedFiles, collect, evidence)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const changedFiles = readFileSync(process.argv[2], 'utf8').split('\0').filter(Boolean)
-  const result = await classifyOrcadTerminalSmokeChanges(changedFiles)
+  const modifiedArgument = process.argv.indexOf('--modified-paths')
+  const diffArgument = process.argv.indexOf('--diff-paths')
+  const result = await classifyOrcadTerminalSmokeChanges(
+    changedFiles,
+    collectOrcadTerminalSmokeInputs,
+    {
+      modifiedFiles:
+        modifiedArgument === -1
+          ? undefined
+          : readFileSync(process.argv[modifiedArgument + 1], 'utf8')
+              .split('\0')
+              .filter(Boolean),
+      rawDiff:
+        diffArgument === -1 ? undefined : readFileSync(process.argv[diffArgument + 1], 'utf8')
+    }
+  )
   console.error(result.reason)
   process.stdout.write(`${result.shouldRun}\n`)
 }
