@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { dispatchWorkspaceTabCommand } from '@/lib/workspace-tab-commands'
 import type { KeybindingActionId } from '../../../shared/keybindings'
+import type { TuiAgent } from '../../../shared/tui-agent'
 import { keybindingMatchesAction } from '../../../shared/keybindings'
 import { matchesRecentTabSwitcherChord } from '../../../shared/window-shortcut-policy'
 import { useAppStore } from '../store'
@@ -81,15 +82,27 @@ export function handleTerminalWorkspaceKeyDown(
     if (agentShortcut.actionId) {
       event.preventDefault()
       notifyTerminalCapture(agentShortcut.actionId)
-      if (agentShortcut.agent) {
-        handleNewAgentTab(agentShortcut.agent)
-      } else {
+      const launchOrReport = (agent: TuiAgent | null): void => {
+        if (agent) {
+          handleNewAgentTab(agent)
+          return
+        }
         toast.message(
           translate(
             'auto.components.Terminal.5b2c1a9e44',
             'No agent CLI detected — install one or pick a default agent in Settings.'
           )
         )
+      }
+      if (agentShortcut.pendingAgent) {
+        void agentShortcut.pendingAgent.then((agent) => {
+          // Why: a slow host probe must not open a tab in a workspace the user already left.
+          if (useAppStore.getState().activeWorktreeId === activeWorktreeId) {
+            launchOrReport(agent)
+          }
+        })
+      } else {
+        launchOrReport(agentShortcut.agent)
       }
       return
     }

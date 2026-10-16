@@ -6,6 +6,7 @@ import {
   type AgentDetectionOwnerState
 } from '@/hooks/useAgentDetectionTarget'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
 import type { TuiAgent } from '../../../shared/tui-agent'
 
 type DetectionReadState = Pick<
@@ -88,4 +89,46 @@ export function ensureDetectedAgentsForWorktree(
 ): Promise<TuiAgent[]> {
   const target = detectionTargetForWorktree(state, worktreeId)
   return target ? ensureDetectedAgentsForTarget(state, target) : Promise.resolve([])
+}
+
+/** The worktree host's list, probing that host only when nothing usable is cached. */
+export async function loadDetectedAgentsForWorktree(
+  state: WorktreeAgentInventoryState,
+  worktreeId: string | null
+): Promise<TuiAgent[]> {
+  const cached = readDetectedAgentsForWorktree(state, worktreeId)
+  // Why: a shortcut pressed before the tab bar's probe lands must wait for it, not report "none".
+  return cached?.length ? cached : ensureDetectedAgentsForWorktree(state, worktreeId)
+}
+
+export type RepoHostFields = { connectionId?: string | null; executionHostId?: string | null }
+
+/**
+ * A project's agents from its execution host, for launches that run before the workspace exists:
+ * a paired server's project (including one on that server's SSH target) asks the server.
+ */
+export function ensureDetectedAgentsForRepo(
+  state: DetectionActionState,
+  repo: RepoHostFields
+): Promise<TuiAgent[]> {
+  const host = parseExecutionHostId(getRepoExecutionHostId(repo))
+  if (host?.kind === 'runtime') {
+    return state.ensureRuntimeDetectedAgents(host.environmentId)
+  }
+  if (host?.kind === 'ssh') {
+    return state.ensureRemoteDetectedAgents(host.targetId)
+  }
+  return state.ensureDetectedAgents()
+}
+
+/** A just-created workspace's agents; uses its project's host while the new row hydrates. */
+export function ensureDetectedAgentsForNewWorktree(
+  state: WorktreeAgentInventoryState,
+  worktreeId: string,
+  repo: RepoHostFields
+): Promise<TuiAgent[]> {
+  const target = detectionTargetForWorktree(state, worktreeId)
+  return target
+    ? ensureDetectedAgentsForTarget(state, target)
+    : ensureDetectedAgentsForRepo(state, repo)
 }
