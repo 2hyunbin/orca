@@ -164,12 +164,7 @@ describe('applyWebSessionTabsSnapshot', () => {
         }
       ]
     }
-    const patch = applyWebSessionTabsSnapshot(
-      state,
-      promotionSnapshot,
-      ENV,
-      NOW + 10
-    ) as Partial<WebSessionTabsSyncState>
+    const patch = applyWebSessionTabsSnapshot(state, promotionSnapshot, ENV, NOW + 10)
 
     const promoted = toWebTerminalSurfaceTabId(shellTabId)
     const effective = { ...state, ...patch }
