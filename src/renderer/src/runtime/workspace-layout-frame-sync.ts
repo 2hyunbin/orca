@@ -283,6 +283,10 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
   const stopIdleListener = onWindowSessionWriteIdle(scheduleFlush)
   // Against the store, so every workspace's trees: the window may have drawn over main's since.
   const stopReleaseListener = onTabPaneTreeRedraw(() => {
+    // A closed stream's cache is frozen: the window draws its own answers then.
+    if (!streamOpen) {
+      return
+    }
     paneTreeKeys = new Set(Object.keys(cache))
     scheduleFlush()
   })

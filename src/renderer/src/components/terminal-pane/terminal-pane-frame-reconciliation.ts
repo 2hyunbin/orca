@@ -22,8 +22,6 @@ export function reconcileMountedPanesToLayout(args: {
   layout: TerminalLayoutSnapshot
   /** The window's own close of a pane main closed: its terminal, status and pane go. */
   closePane: (paneId: number, leafId: string, kind: PaneCloseKind) => void
-  /** Main never drops a tab's last pane; the window has lost the rest, so the tab goes. */
-  closeTab: () => void
   /** A zoomed pane hides its siblings; their shape and ratios wait until it collapses. */
   isExpanded: boolean
 }): boolean {
@@ -37,11 +35,9 @@ export function reconcileMountedPanesToLayout(args: {
 
   for (const pane of manager.getPanes()) {
     const kind = target.has(pane.leafId) ? null : takePaneCloseIntent(tabId, pane.leafId)
-    if (kind && manager.getPanes().length <= 1) {
-      args.closeTab()
-      return true
-    }
-    if (kind) {
+    // The window's last pane stays: main's tree then holds a pane the window lacks (a split whose
+    // source went), which main's notice brings; never a tab with no pane.
+    if (kind && manager.getPanes().length > 1) {
       args.closePane(pane.id, pane.leafId, kind)
       changed = true
     }

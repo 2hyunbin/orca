@@ -21,7 +21,7 @@ import { createStoreSessionMockApi } from '../store/slices/store-session-test-ha
 import { createTestStore } from '../store/slices/store-test-helpers'
 import type { LayoutFrameSlices } from '../store/workspace-layout-frame-slices'
 import { afterLayoutFrame, endLayoutFramePositions } from './layout-frame-position'
-import { holdTabPaneTree } from './layout-owner-pane-intents'
+import { holdTabPaneTree, requestTabPaneTreeRedraw } from './layout-owner-pane-intents'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -288,6 +288,26 @@ describe('the window drawn from layout frames', () => {
     await flushMicrotasks()
     expect(shellRoot()).toEqual(original)
     reportWindowSessionWriteActivity(false)
+    sync.close()
+  })
+
+  it('keeps the window’s own pane trees once the stream has ended', async () => {
+    const { store, sync } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    await flushMicrotasks()
+    stream.onStatus!({ state: 'lost' })
+    const drawn = { type: 'leaf' as const, leafId: 'drawn-by-the-window' }
+    store.setState({
+      terminalLayoutsByTabId: {
+        ...store.getState().terminalLayoutsByTabId,
+        'tab-shell': { ...store.getState().terminalLayoutsByTabId['tab-shell']!, root: drawn }
+      }
+    })
+
+    requestTabPaneTreeRedraw('tab-shell')
+    await flushMicrotasks()
+
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.root).toEqual(drawn)
     sync.close()
   })
 

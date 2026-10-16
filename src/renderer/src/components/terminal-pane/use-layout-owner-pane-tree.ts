@@ -20,7 +20,6 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
     expandedPaneIdRef,
     isolatedPaneKey,
     managerRef,
-    onCloseTab,
     persistLayoutSnapshot,
     restoredLayout,
     tabId
@@ -68,7 +67,6 @@ export function useLayoutOwnerPaneTree(controller: TerminalPaneCloseController):
           manager.closePane(paneId)
         }
       },
-      closeTab: onCloseTab,
       isExpanded: expandedPaneIdRef.current !== null || zoomed
     })
     if (changed) {
