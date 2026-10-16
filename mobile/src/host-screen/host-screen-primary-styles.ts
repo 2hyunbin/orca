@@ -122,18 +122,15 @@ export const hostScreenPrimaryStyles = StyleSheet.create({
   filterChipTextActive: {
     color: colors.textPrimary
   },
+  // minHeight, not height: large accessibility text must grow the chip instead of clipping.
   toolbarChip: {
-    height: 32,
+    minHeight: 32,
     paddingVertical: 0,
-    paddingHorizontal: spacing.md,
     borderRadius: 16
   },
   toolbarModeButton: {
-    height: 32,
+    minHeight: 32,
     paddingVertical: 0
-  },
-  toolbarChipText: {
-    fontSize: 13
   },
   modeButton: {
     flexDirection: 'row',
@@ -169,8 +166,12 @@ export const hostScreenPrimaryStyles = StyleSheet.create({
   toolbarIconDisabled: {
     opacity: 0.6
   },
+  // Flush 36pt-wide buttons get their 44pt only vertically, so the labels keep their width on 375pt phones.
+  toolbarIconGroup: {
+    flexDirection: 'row'
+  },
   toolbarIconButton: {
-    width: 40,
+    width: 36,
     height: MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center'
