@@ -122,6 +122,58 @@ describe('applyWindowLayoutCommand', () => {
     expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
   })
 
+  it('moves a dragged-out pane in every holder, and its pane-keyed owners follow', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    applyLayoutCommand.mockResolvedValueOnce({
+      ok: true,
+      result: { tabId: 'tab-new', ptyId: 'pty-1' }
+    })
+    const session = { unifiedTabs: { 'wt-1': [{ id: 'entry-1', entityId: 'term-1' }] } }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the move reads only unifiedTabs.
+    const withSession = { ...store, getWorkspaceSession: () => session } as unknown as RuntimeStore
+    const onPaneMoved = vi.fn()
+    const move: WindowLayoutCommand = {
+      type: 'movePaneToNewTab',
+      workspace: 'wt-1',
+      tabId: 'entry-1',
+      leafId: 'leaf-1',
+      groupId: 'g1',
+      // The window cannot name the new tab.
+      windowDetach: { ptyId: 'pty-1', tabId: 'tab-window' }
+    }
+
+    await applyWindowLayoutCommand(
+      withSession,
+      () => ['ssh:t', 'runtime:env-1', 'local'],
+      move,
+      onPaneMoved
+    )
+
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...move, windowDetach: { ptyId: 'pty-1' } }, [
+      'ssh:t',
+      'local'
+    ])
+    expect(onPaneMoved).toHaveBeenCalledWith({
+      worktreeId: 'wt-1',
+      sourceTabId: 'term-1',
+      targetTabId: 'tab-new',
+      leafId: 'leaf-1',
+      ptyId: 'pty-1'
+    })
+    applyLayoutCommand.mockResolvedValueOnce({ ok: false, code: 'pty_mismatch' })
+    await applyWindowLayoutCommand(withSession, () => ['local'], move, onPaneMoved)
+    expect(onPaneMoved).toHaveBeenCalledTimes(1)
+    // A committed move still answers ok when re-keying throws.
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    applyLayoutCommand.mockResolvedValueOnce({ ok: true, result: { tabId: 'tab-2', ptyId: null } })
+    onPaneMoved.mockImplementationOnce(() => {
+      throw new Error('rekey failed')
+    })
+    await expect(
+      applyWindowLayoutCommand(withSession, () => ['local'], move, onPaneMoved)
+    ).resolves.toMatchObject({ ok: true })
+  })
+
   it('refuses a tab a paired server routes, touching nothing', async () => {
     const { store, applyLayoutCommand } = storeWith()
 
