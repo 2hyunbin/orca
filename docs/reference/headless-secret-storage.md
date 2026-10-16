@@ -46,7 +46,8 @@ UI, a locked Keychain fails right away (exit 36) instead of prompting.
   decrypt saved Linear credential… reconnect Linear" error, and connecting the integration again
   fixes it. The server does not keep failing closed waiting for the keyring.
 
-Either way the replacement uses the same atomic write as other key-record changes, happens once,
+Either way the replacement holds a lock file beside the record (`<record>.lock`, so two starts
+agree on one key), uses the same atomic write as other key-record changes, happens once,
 and leaves the keyring item where it is. This migration is meant to be removed a few releases
 after it ships (`src/main/orcad/orcad-legacy-keyring-key.ts`).
 
