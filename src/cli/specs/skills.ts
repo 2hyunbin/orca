@@ -104,7 +104,8 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'skill', 'all', 'agent', 'local', 'force', 'dry-run'],
     notes: [
       'Runs the same install as `orca skills install`, which replaces each selected skill ' +
-        'with the copy this Orca build ships.',
+        'with the copy this Orca build ships. Only skills already installed here are ' +
+        'updated; use `orca skills install` to add one.',
       'Updates the global install (all projects) by default. Use --local to update the current ' +
         'project instead.',
       'A copy with changes Orca did not make is reported and left alone; use --force to ' +

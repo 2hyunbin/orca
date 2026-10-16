@@ -93,8 +93,8 @@ function installInput(flags: Map<string, string | boolean>): BundledOrcaSkillIns
         ? `global:${CLI_HOST_IDENTITY}`
         : `workspace:${CLI_HOST_IDENTITY}:${workspaceDirectory}`,
     discardLocalChanges: flags.get('force') === true,
-    // Why: stdout is this command's own output (JSON with --json).
-    discoveryLog: (line) => process.stderr.write(`${line}\n`)
+    // Why a no-op: discovery's per-skill scan line is app diagnostics, not CLI output.
+    discoveryLog: () => {}
   }
 }
 
@@ -127,6 +127,18 @@ function describePlan(plan: BundledOrcaSkillPlan): string {
   ].join('\n')
 }
 
+// Why: update refreshes copies already here, including an Orca-owned copy in an agent home;
+// install is the verb that adds a skill.
+function isInstalledHere(plan: BundledOrcaSkillPlan): boolean {
+  return (
+    plan.state !== 'missing' || plan.placements.some((placement) => placement.action === 'replace')
+  )
+}
+
+function describeNotInstalled(name: string): string {
+  return `${name}: not installed, so not updated. Install it with: orca skills install --skill ${name}`
+}
+
 function landed(result: SkillInstallResult): boolean {
   return (
     result.status === 'installed' || result.status === 'updated' || result.status === 'unchanged'
@@ -143,12 +155,16 @@ function formatSkillSelectionHelp(verb: SkillMutationVerb, skillNames: string[])
   ].join('\n')
 }
 
+function selectsAll(flags: Map<string, string | boolean>): boolean {
+  return flags.get('all') === true
+}
+
 function resolveSelectedSkillNames(
   flags: Map<string, string | boolean>,
   guides: BundledSkillGuide[]
 ): string[] {
   const requestedSkills = getRepeatedStringFlag(flags, 'skill')
-  const selectAll = flags.get('all') === true
+  const selectAll = selectsAll(flags)
   if (flags.has('skill') && requestedSkills.length === 0) {
     throw new RuntimeClientError('invalid_argument', 'Missing required --skill')
   }
@@ -207,29 +223,59 @@ export function createSkillMutationHandler(verb: SkillMutationVerb): CommandHand
 
     const input = installInput(flags)
     const global = input.scope === 'global'
-
-    if (flags.get('dry-run') === true) {
-      const plan = await planBundledOrcaSkills(skillNames, input)
+    const dryRun = flags.get('dry-run') === true
+    const fullPlan =
+      verb === 'update' || dryRun ? await planBundledOrcaSkills(skillNames, input) : null
+    const plan = verb === 'update' ? (fullPlan ?? []).filter(isInstalledHere) : fullPlan
+    const targetNames = plan && verb === 'update' ? plan.map((entry) => entry.name) : skillNames
+    const notInstalled = skillNames.filter((name) => !targetNames.includes(name))
+    // Why: --all names every bundled skill, so skipping the absent ones is expected there.
+    const reportNotInstalled = !selectsAll(flags)
+    if (reportNotInstalled && notInstalled.length > 0) {
+      process.exitCode = 1
+    }
+    const notInstalledJson = notInstalled.length > 0 ? { notInstalled } : {}
+    const notInstalledLines = reportNotInstalled ? notInstalled.map(describeNotInstalled) : []
+    if (targetNames.length === 0 && !json) {
       writeStdoutLine(
-        json
-          ? JSON.stringify({ skills: skillNames, global, executed: false, plan }, null, 2)
-          : `${plan.map(describePlan).join('\n')}\n\nRerun without --dry-run to ${verb} now.`
+        notInstalledLines.length > 0
+          ? notInstalledLines.join('\n')
+          : 'No Orca skills are installed here, so there is nothing to update. ' +
+              'Install one with: orca skills install --skill <name>'
       )
       return
     }
 
-    const results = await installBundledOrcaSkills(skillNames, input)
+    if (dryRun) {
+      writeStdoutLine(
+        json
+          ? JSON.stringify(
+              { skills: targetNames, global, executed: false, plan, ...notInstalledJson },
+              null,
+              2
+            )
+          : `${[...(plan ?? []).map(describePlan), ...notInstalledLines].join('\n')}\n\n` +
+              `Rerun without --dry-run to ${verb} now.`
+      )
+      return
+    }
+
+    const results = targetNames.length > 0 ? await installBundledOrcaSkills(targetNames, input) : []
     const failed = results.some((result) => !landed(result))
     if (failed) {
       process.exitCode = 1
     }
     if (json) {
       writeStdoutLine(
-        JSON.stringify({ skills: skillNames, global, executed: true, results }, null, 2)
+        JSON.stringify(
+          { skills: targetNames, global, executed: true, results, ...notInstalledJson },
+          null,
+          2
+        )
       )
       return
     }
-    const lines = results.map(describeBundledSkillInstallResult)
+    const lines = [...results.map(describeBundledSkillInstallResult), ...notInstalledLines]
     const replaceable = results.some(
       (result) => result.conflict?.kind === 'modified' || result.conflict?.kind === 'unowned'
     )

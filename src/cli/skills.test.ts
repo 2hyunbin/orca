@@ -118,6 +118,9 @@ describe('orca skills CLI', () => {
       names.map((name) => result(name, 'installed'))
     )
     planMock.mockReset()
+    planMock.mockImplementation(async (names: string[]) =>
+      names.map((name) => planEntry(name, 'unchanged'))
+    )
     process.exitCode = undefined
   })
 
@@ -485,6 +488,64 @@ describe('orca skills CLI', () => {
     })
   })
 
+  it('updates with --all only the skills already installed here', async () => {
+    planMock.mockImplementation(async () => [
+      planEntry('alpha', 'unchanged'),
+      planEntry('gamma', 'missing', [{ path: '/h/.claude/skills/gamma', action: 'link' }]),
+      planEntry('zeta', 'missing', [{ path: '/h/.claude/skills/zeta', action: 'replace' }])
+    ])
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'update', '--all'], '/tmp/repo')
+
+    expect(installMock).toHaveBeenCalledWith(['alpha', 'zeta'], expect.anything())
+    expect(stdoutText(stdoutSpy)).toBe(
+      'alpha: installed (/home/u/.agents/skills/alpha)\n' +
+        'zeta: installed (/home/u/.agents/skills/zeta)\n'
+    )
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('says there is nothing to update when no Orca skill is installed', async () => {
+    planMock.mockImplementation(async (names: string[]) =>
+      names.map((name) => planEntry(name, 'missing'))
+    )
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'update', '--all'], '/tmp/repo')
+
+    expect(installMock).not.toHaveBeenCalled()
+    expect(stdoutText(stdoutSpy)).toContain('No Orca skills are installed here')
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('refuses to update a named skill that is not installed, pointing at install', async () => {
+    planMock.mockImplementation(async (names: string[]) =>
+      names.map((name) => planEntry(name, 'missing'))
+    )
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'update', '--skill', 'gamma'], '/tmp/repo')
+
+    expect(installMock).not.toHaveBeenCalled()
+    expect(stdoutText(stdoutSpy)).toBe(
+      'gamma: not installed, so not updated. Install it with: orca skills install --skill gamma\n'
+    )
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('keeps discovery scan lines out of CLI output', async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
+    stdoutSpy.mockClear()
+    installMock.mock.calls[0]?.[1]?.discoveryLog?.('[skills] scan roots=1')
+
+    expect(stdoutSpy).not.toHaveBeenCalled()
+    expect(stderrSpy).not.toHaveBeenCalled()
+  })
+
   it('refuses to run when the shell forwards orca to the Orca host', async () => {
     vi.stubEnv('ORCA_CLI_CWD', '/home/alice/wt')
     detectCommandsMock.mockReturnValue(new Set<string>())
@@ -510,6 +571,21 @@ describe('orca skills CLI', () => {
     expect(help).not.toContain('Launch a known TUI agent')
   })
 })
+
+function planEntry(
+  name: string,
+  state: 'missing' | 'unchanged',
+  placements: { path: string; action: 'link' | 'replace' | 'keep' | 'skip' }[] = []
+) {
+  return {
+    name,
+    canonicalPath: `/home/u/.agents/skills/${name}`,
+    state,
+    replacesCanonical: state === 'missing',
+    placements,
+    willWrite: state === 'missing'
+  }
+}
 
 function stdoutText(spy: ReturnType<typeof vi.spyOn>): string {
   return spy.mock.calls.map((call) => String(call[0])).join('')

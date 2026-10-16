@@ -77,7 +77,7 @@ orca skills update --skill orca-cli --dry-run
 
 - Default scope is **global**; pass `--local` for the current project only.
 - Both commands write the shared `.agents/skills` directory and link each target agent's skills directory to it. Targets are the agents Orca detects on the host; use `--agent <name>[,<name>…]` (Orca agent ids such as `claude` or `codex`) to add agents detection missed, or `--agent universal` for the shared directory alone. Agents Orca already installed a skill for always stay targeted, so `--agent` never removes one.
-- `update` runs the same install. A copy with changes Orca did not make is reported and left alone; `--force` replaces it.
+- `update` runs the same install, but only for skills already installed on this machine; it never adds one (use `install` for that). A copy with changes Orca did not make is reported and left alone; `--force` replaces it.
 - `--dry-run` prints what would change without writing; `--json` prints the plan or the per-skill results.
 
 Prefer the in-app updater when Orca offers it so the same global placements the app scanned get rewritten. Rows marked **Skipped** explain why that skill cannot be updated automatically (for example a read-only folder or a link pointing outside Orca's skill folders) — fix the placement, then re-check.
