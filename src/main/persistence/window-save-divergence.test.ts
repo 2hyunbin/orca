@@ -168,6 +168,51 @@ describe('writeWindowSaveWatchingLayout', () => {
     )
   })
 
+  it('counts a pane’s first terminal binding as a rebind, not a layout change', () => {
+    const stored = session([{ id: 'tab-a' }])
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      ptyIdsByLeafId: { [leaf(1)]: 'pty-1' }
+    }
+
+    save(stored, next)
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({ paths: ['1 pane(s) rebound'] })
+    )
+  })
+
+  it('reports a default-tab record of a workspace with no tabs, and a terminal row owner', () => {
+    const stored = emptySession()
+    const next = {
+      ...emptySession(),
+      defaultTerminalTabsAppliedByWorktreeId: { 'repo-1::/Users/dev/notes': true as const },
+      tabsByWorktree: { 'repo-1::/Users/dev/empty': [] }
+    }
+
+    save(stored, next)
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({
+        workspace: 'repo-1::/Users/dev/notes',
+        paths: ['defaultTabsAppliedByWorkspace changed']
+      })
+    )
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({
+        workspace: 'repo-1::/Users/dev/empty',
+        paths: expect.arrayContaining(['terminal row owner changed'])
+      })
+    )
+  })
+
   it('leaves a paired server’s partition alone: its layout is the server’s', () => {
     const next = session([{ id: 'tab-c' }])
     expect(save(session([{ id: 'tab-a' }]), next, 'runtime:env-1')).toBe(next)

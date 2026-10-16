@@ -22,9 +22,12 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 const LOG_PATH_ENV = 'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG'
 const MAX_PATHS = 12
 const RECORDS = ['defaultTabsAppliedByWorkspace', 'clientHostedBrowserPagesByWorkspace'] as const
-const BINDING_ONLY = /^leaf \S+ changed: (ptyId|incarnationId)(, (ptyId|incarnationId))?$/
+/** A pane's terminal binding: it still reaches main only through saves, on every spawn. */
+const BINDING_FIELDS = new Set(['ptyId', 'incarnationId'])
 
 export type WindowSaveDivergence = { workspace: string; paths: string[] }
+
+type WorkspaceDiff = { paths: string[]; rebound: number }
 
 /** Main's layout model of one partition, as the session holds it. */
 export function layoutModelOf(
@@ -80,14 +83,51 @@ function recordById(items: Readonly<Record<string, unknown>> | undefined) {
   return new Map<string, unknown>(Object.entries(items ?? {}))
 }
 
-/** What a save changed in one workspace of main's model, as short paths; empty when nothing. */
+function bindingOnly(leaf: unknown): boolean {
+  return (
+    typeof leaf === 'object' &&
+    leaf !== null &&
+    Object.keys(leaf).every((key) => BINDING_FIELDS.has(key))
+  )
+}
+
+/** Panes whose only change is their terminal binding, first bind and unbind included. */
+function reboundLeaves(
+  before: Readonly<Record<string, unknown>> | undefined,
+  after: Readonly<Record<string, unknown>> | undefined
+): { rebound: Set<string>; was: Map<string, unknown>; now: Map<string, unknown> } {
+  const was = recordById(before)
+  const now = recordById(after)
+  const rebound = new Set<string>()
+  for (const id of new Set([...was.keys(), ...now.keys()])) {
+    const old = was.get(id)
+    const next = now.get(id)
+    const changed = old === undefined || next === undefined ? null : changedFields(old, next)
+    if (
+      changed
+        ? changed.length > 0 && changed.every((field) => BINDING_FIELDS.has(field))
+        : bindingOnly(old ?? next)
+    ) {
+      rebound.add(id)
+      was.delete(id)
+      now.delete(id)
+    }
+  }
+  return { rebound, was, now }
+}
+
+/** What a save changed in one workspace of main's model; empty paths and no rebound when nothing. */
 export function diffWorkspaceLayouts(
   before: WorkspaceLayout | undefined,
   after: WorkspaceLayout | undefined
-): string[] {
+): WorkspaceDiff {
   if (!before || !after) {
-    return before === after ? [] : [after ? 'workspace added' : 'workspace removed']
+    return {
+      paths: before === after ? [] : [after ? 'workspace added' : 'workspace removed'],
+      rebound: 0
+    }
   }
+  const leaves = reboundLeaves(before.leaves, after.leaves)
   const paths = [
     ...diffKeyed(
       'group',
@@ -115,16 +155,12 @@ export function diffWorkspaceLayouts(
       recordById(before.closedTerminalTabs),
       recordById(after.closedTerminalTabs)
     ),
-    ...diffKeyed('leaf', recordById(before.leaves), recordById(after.leaves))
+    ...diffKeyed('leaf', leaves.was, leaves.now)
   ]
   if (stableJson(before.groupLayout ?? null) !== stableJson(after.groupLayout ?? null)) {
     paths.push('group layout changed')
   }
-  // A pane's terminal binding still reaches main only through saves, on every spawn and reattach;
-  // counted last so it never crowds out a structural change.
-  const rebound = paths.filter((path) => BINDING_ONLY.test(path)).length
-  const structural = paths.filter((path) => !BINDING_ONLY.test(path))
-  return rebound > 0 ? [...structural, `${rebound} pane(s) rebound`] : structural
+  return { paths, rebound: leaves.rebound.size }
 }
 
 /** Each workspace whose part of main's model differs between two copies of one partition. */
@@ -146,7 +182,10 @@ export function windowSaveDivergences(
   )
   const result: WindowSaveDivergence[] = []
   for (const workspace of workspaces) {
-    const paths = diffWorkspaceLayouts(was?.workspaces[workspace], now?.workspaces[workspace])
+    const { paths, rebound } = diffWorkspaceLayouts(
+      was?.workspaces[workspace],
+      now?.workspaces[workspace]
+    )
     for (const record of RECORDS) {
       if (
         stableJson(was?.records[record]?.[workspace] ?? null) !==
@@ -161,8 +200,13 @@ export function windowSaveDivergences(
     ) {
       paths.push('terminal row owner changed')
     }
-    if (paths.length > 0) {
-      result.push({ workspace, paths: paths.slice(0, MAX_PATHS) })
+    // The binding count goes last and is never cut, so it crowds out no structural change.
+    const shown =
+      rebound > 0
+        ? [...paths.slice(0, MAX_PATHS - 1), `${rebound} pane(s) rebound`]
+        : paths.slice(0, MAX_PATHS)
+    if (shown.length > 0) {
+      result.push({ workspace, paths: shown })
     }
   }
   return result
