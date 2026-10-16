@@ -24,8 +24,8 @@ import {
 } from './host-mirrored-pane-liveness'
 import { parkUntilHostMirrorHandleLands } from './host-mirror-handle-gap-wait'
 import {
-  sleepingRecordNamesAnotherExecutionHost,
-  sleepingRecordsNameDifferentExecutionHosts
+  sleepingRecordHostAllowsSessionClaim,
+  sleepingRecordNamesAnotherExecutionHost
 } from './sleeping-record-execution-host-scope'
 import { resolveWorkspaceTerminalHostAuthority } from './workspace-terminal-host-authority'
 import { parkUntilHostSessionMirrorHydrates } from '@/runtime/host-session-mirror-hydration'
@@ -190,8 +190,7 @@ function providerSessionOwnedElsewhere(
       other.agent === record.agent &&
       !isInvalidWorktreeActivationRecord(other) &&
       !activationTreatsNoteAsFinished(other) &&
-      !sleepingRecordNamesAnotherExecutionHost(other, state) &&
-      !sleepingRecordsNameDifferentExecutionHosts(record, other, state) &&
+      sleepingRecordHostAllowsSessionClaim(other, record, state) &&
       agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession) &&
       recordPaneIsOwnedByPreservedPane(other, state)
   )
