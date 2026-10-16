@@ -183,7 +183,9 @@ export class AgentSessionSubscribers {
   ): void {
     const hostNow = this.now()
     const subscribers = this.subscribers(sessionId)
-    if (subscribers.length === 0) return
+    if (subscribers.length === 0) {
+      return
+    }
     const publication = captureLivePublication(sessionId, journal, this.hooks, subscribers)
     for (const subscriber of subscribers) {
       this.deliver(subscriber, journal, hostNow, false, activity, publication)
@@ -283,7 +285,7 @@ export class AgentSessionSubscribers {
         hooks: { ...this.hooks, ...publication?.fields },
         emit: (target, event, options) => this.emit(target, event, options, publication?.fields),
         isActive: (target) => this.isActive(target) &&
-          (!publication || journal.epoch === publication.history.snapshot.cursor.epoch),
+          (!publication || journal.epoch === publication.cursor.epoch),
         activity: (sessionId) => this.activityField(sessionId).activity
       },
       { subscriber, journal, hostNow, emitCheckpoint, activity, publication }

@@ -34,7 +34,9 @@ function compact(row: JournalRow): { row: JournalProjectionRow; bytes: number } 
     let bytes = 128
     for (const mutation of row.mutations) {
       bytes += 64 + 2 * mutation.itemId.length
-      if (bytes > MAX_BYTES) return null
+      if (bytes > MAX_BYTES) {
+        return null
+      }
     }
     return { row: { ...base, kind: row.kind,
       mutations: row.mutations.map(({ itemId }) => ({ itemId })) }, bytes }
@@ -85,7 +87,9 @@ export class JournalCommittedChanges {
     const rows = this.entries.map((entry) => entry.row)
     return (cursor, limit) => {
       if (cursor.epoch !== head.epoch || cursor.sequence > head.sequence ||
-          cursor.sequence < (rows[0]?.seq ?? head.sequence + 1) - 1) return undefined
+          cursor.sequence < (rows[0]?.seq ?? head.sequence + 1) - 1) {
+        return undefined
+      }
       return rows.filter((row) => row.seq > cursor.sequence).slice(0, limit)
     }
   }

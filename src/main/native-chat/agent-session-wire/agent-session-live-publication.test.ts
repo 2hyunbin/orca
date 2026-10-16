@@ -31,7 +31,7 @@ it('publishes committed text and all queue markers without hiding damage from sa
   await journal.appendItem(identity, { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: prefix }] }, options)
   subscribers.publish(SESSION, journal)
   const before = journal.cursor()
-  await journal.appendItem(identity, { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: prefix + 'end' }] }, options)
+  await journal.appendItem(identity, { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `${prefix}end` }] }, options)
   const db = openTestJournalHostDatabase(root).db
   const changed = db.prepare('UPDATE journal_text_pieces SET suffix = ? WHERE session_id = ? AND seq = ?').run('\\q', SESSION, before.sequence)
   expect(changed.changes).toBe(1)
@@ -39,7 +39,7 @@ it('publishes committed text and all queue markers without hiding damage from sa
   subscribers.publish(SESSION, journal)
   expect(saved).not.toHaveBeenCalled()
   expect(events.at(-1)).toMatchObject({ type: 'batch', batch: { cursor: journal.cursor(), items: [
-    { body: { blocks: [{ type: 'text', text: prefix + 'end' }] } }
+    { body: { blocks: [{ type: 'text', text: `${prefix}end` }] } }
   ] } })
   expect(journal.readSince(before)).toMatchObject({ ok: true, rows: [] })
   expect(replayJournal(db, SESSION)?.damage).toBeDefined()
@@ -55,7 +55,9 @@ it('publishes committed text and all queue markers without hiding damage from sa
   expect(saved).not.toHaveBeenCalled()
   expect(events.at(-1)).toMatchObject({ type: 'batch', batch: { cursor: journal.cursor(), removedItemIds: [] } })
   const lag = journal.cursor()
-  for (let i = 0; i < 202; i++) await journal.appendQueueResume(1)
+  for (let i = 0; i < 202; i++) {
+    await journal.appendQueueResume(1)
+  }
   subscribers.publish(SESSION, journal)
   expect(saved).toHaveBeenCalled()
   expect(events.at(-1)).toMatchObject({ type: 'batch', batch: { cursor: journal.cursor(), removedItemIds: [] } })
@@ -77,7 +79,9 @@ it('pins turn, prompts and working to the captured head when an earlier subscrib
   const writes: Promise<unknown>[] = []
   const second: AgentSessionSubscribeEvent[] = []
   subscribers.open({ id: 'first', sessionId: SESSION, journal, fence: 1, emit: (event) => {
-    if (event.type !== 'batch' || !mutate) return
+    if (event.type !== 'batch' || !mutate) {
+      return
+    }
     mutate = false
     writes.push(journal.appendItem(identity, { kind: 'turn', turnId: 'turn', state: 'completed' }, options))
     writes.push(journal.appendTombstone(prompt, { fence: 1 }))
@@ -92,4 +96,18 @@ it('pins turn, prompts and working to the captured head when an earlier subscrib
   subscribers.publish(SESSION, journal)
   expect(second.at(-1)).toMatchObject({ type: 'batch', batch: { cursor: journal.cursor(), removedItemIds: [promptId] },
     latestTurn: { turn: { state: 'completed' } }, actionablePromptIds: [], working: false })
+})
+
+it('publishes caught-up activity without capturing history or unchanged current work', async () => {
+  const journal = await open()
+  await journal.appendItem(identity, { kind: 'turn', turnId: 'turn', state: 'running' }, options)
+  const subscribers = new AgentSessionSubscribers({ readCurrentWork: () => new StructuredAgentSessionCurrentWork(journal, 1) })
+  const events: AgentSessionSubscribeEvent[] = []
+  subscribers.open({ id: 'live', sessionId: SESSION, journal, fence: 1, emit: (event) => events.push(event) })
+  const history = vi.spyOn(journal, 'capturePublication')
+  const snapshot = vi.spyOn(journal, 'snapshot')
+  subscribers.publish(SESSION, journal, null)
+  expect(history).not.toHaveBeenCalled()
+  expect(snapshot).not.toHaveBeenCalled()
+  expect(events.at(-1)).toMatchObject({ type: 'batch', batch: { cursor: journal.cursor(), items: [] }, activity: null })
 })
