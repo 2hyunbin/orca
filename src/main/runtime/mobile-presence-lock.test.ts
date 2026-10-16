@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import type * as GitUsernameModule from '../git/git-username'
 import { OrcaRuntimeService } from './orca-runtime'
+import type { RuntimePtyController } from './runtime-pty-controller-contract'
 
 vi.mock('../git/worktree', () => ({
   listWorktrees: vi.fn().mockResolvedValue([]),
@@ -82,7 +83,7 @@ function createRuntime(mobileAutoRestoreFitMs: number | null = 5_000) {
   const fitOverrideEvents: { ptyId: string; mode: string; cols: number; rows: number }[] = []
   let resizeSucceeds = true
 
-  runtime.setPtyController({
+  const controller: RuntimePtyController = {
     write: (_ptyId, data) => {
       writes.push(data)
       return true
@@ -98,7 +99,8 @@ function createRuntime(mobileAutoRestoreFitMs: number | null = 5_000) {
       return true
     },
     getSize: (ptyId) => ptySizes.get(ptyId) ?? null
-  })
+  }
+  runtime.setPtyController(controller)
   runtime.setNotifier({
     worktreesChanged: vi.fn(),
     reposChanged: vi.fn(),
@@ -119,6 +121,7 @@ function createRuntime(mobileAutoRestoreFitMs: number | null = 5_000) {
 
   return {
     runtime,
+    controller,
     ptySizes,
     resizes,
     writes,
@@ -140,19 +143,37 @@ describe('mobile presence lock — driver state machine', () => {
   })
 
   it('stops a preview paste when mobile claims the floor between chunks', async () => {
-    const { runtime, writes } = createRuntime()
-    let driverChecks = 0
-    vi.spyOn(runtime, 'getDriver').mockImplementation(() => {
-      driverChecks++
-      return driverChecks >= 3 ? { kind: 'mobile', clientId: 'phone-A' } : { kind: 'idle' }
+    const { runtime, controller, writes } = createRuntime()
+    runtime.setMobileDisplayMode('pty-1', 'desktop')
+    await runtime.handleMobileSubscribe('pty-1', 'phone-A', { cols: 45, rows: 20 })
+    expect(runtime.getDriver('pty-1')).toEqual({ kind: 'idle' })
+    expect(writes).toHaveLength(0)
+
+    const floorClaim: { current: ReturnType<OrcaRuntimeService['beginMobileInputFloor']> } = {
+      current: null
+    }
+    const originalWrite = controller.write
+    vi.spyOn(controller, 'write').mockImplementationOnce((ptyId, data, inputKind) => {
+      const accepted = originalWrite(ptyId, data, inputKind)
+      floorClaim.current = runtime.beginMobileInputFloor(ptyId, 'phone-A')
+      if (!floorClaim.current) {
+        throw new Error('phone floor reservation was refused')
+      }
+      return accepted
     })
 
-    const result = runtime.writeTerminalPreviewInput('pty-1', 'x'.repeat(32 * 1024))
-    await vi.advanceTimersByTimeAsync(0)
+    try {
+      const result = runtime.writeTerminalPreviewInput('pty-1', 'x'.repeat(32 * 1024))
+      await vi.advanceTimersByTimeAsync(0)
 
-    await expect(result).resolves.toBe(false)
-    expect(writes).toHaveLength(1)
-    expect(Buffer.byteLength(writes[0]!, 'utf8')).toBe(16 * 1024)
+      expect(floorClaim.current).not.toBeNull()
+      expect(runtime.getDriver('pty-1')).toEqual({ kind: 'mobile', clientId: 'phone-A' })
+      await expect(result).resolves.toBe(false)
+      expect(writes).toHaveLength(1)
+      expect(Buffer.byteLength(writes[0]!, 'utf8')).toBe(16 * 1024)
+    } finally {
+      floorClaim.current?.rollback()
+    }
   })
 
   it('handleMobileSubscribe in auto mode transitions idle → mobile{clientId}', async () => {
