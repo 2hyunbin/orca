@@ -20,6 +20,7 @@ import { reportWindowSessionWriteActivity } from '../lib/window-session-write-ac
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
 import type { LayoutFrameSlices } from '../store/workspace-layout-frame-slices'
+import { afterLayoutFrame } from './layout-frame-position'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -162,6 +163,30 @@ describe('the window drawn from layout frames', () => {
     })
     // Restore marks every row it builds; a row whose terminal bound since must not get it back.
     expect(shell).not.toHaveProperty('restoredFromSession')
+    sync.close()
+  })
+
+  it('runs a reply waiting on a frame after the store shows it, and every waiter when the stream ends', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: layouts[GIT_KEY]!, seq: 1 })
+    await flushMicrotasks()
+    const shellTitle = () =>
+      store.getState().tabsByWorktree[GIT_KEY]!.find((tab) => tab.id === 'tab-shell')!.customTitle
+    const seen: (string | null | undefined)[] = []
+    afterLayoutFrame(2, () => seen.push(shellTitle()))
+    expect(seen).toEqual([])
+
+    const renamed = structuredClone(layouts[GIT_KEY]!)
+    renamed.tabs.find((tab) => tab.id === 'tab-shell')!.customTitle = 'renamed'
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: renamed, seq: 2 })
+    await flushMicrotasks()
+    expect(seen).toEqual(['renamed'])
+
+    const released = vi.fn()
+    afterLayoutFrame(9, released)
+    stream.onStatus!({ state: 'lost' })
+    expect(released).toHaveBeenCalledTimes(1)
     sync.close()
   })
 

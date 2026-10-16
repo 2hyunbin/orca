@@ -1,6 +1,7 @@
 // Store-free so store slices can send; `layout-owner-command` reads the store for other callers.
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
+import { afterLayoutFrame } from '@/runtime/layout-frame-position'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
@@ -85,8 +86,8 @@ export type LayoutApplyHandlers = {
 }
 
 /**
- * A layout command in a layout-owner build: main applies it first, then `apply` shows main's
- * result. `asToday` runs instead when main cannot act on it: a paired server holds the tab
+ * A layout command in a layout-owner build: main applies it first, then, once the window holds the
+ * frame with main's change, `apply` shows main's result. `asToday` runs instead when main cannot act on it: a paired server holds the tab
  * (#18202), a move's workspaces are in two partitions, main's copy lacks the workspace, tab, pane
  * or group, or the call threw. `refused` on any other refusal. False when a paired server owns the
  * workspace's layout; the caller acts as today.
@@ -106,21 +107,7 @@ export function sendLayoutApply(
     command: { ...command, workspace: worktreeId }
   })
     .then(
-      (reply) => {
-        if (reply.ok) {
-          handlers.apply(reply.result)
-        } else if (
-          reply.code === 'host_not_owned' ||
-          reply.code === 'other_partition' ||
-          mainLacksTarget(reply.code)
-        ) {
-          // Why lacking: main's copy lags the window's here (the window still saves its own).
-          handlers.asToday()
-        } else {
-          console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
-          handlers.refused?.(reply.code)
-        }
-      },
+      (reply) => afterLayoutFrame(reply.frameSeq, () => handleReply(command, reply, handlers)),
       (error: unknown) => {
         // Why as today: a thrown write is rolled back. An indeterminate disk write is not, and may
         // leave a pane main minted; accepted until main is the only writer.
@@ -133,6 +120,26 @@ export function sendLayoutApply(
       console.warn(`[layout-owner] ${command.type} handler threw:`, errorMessage(error))
     })
   return true
+}
+
+function handleReply(
+  command: WindowLayoutCommand,
+  reply: LayoutApplyReply,
+  handlers: LayoutApplyHandlers
+): void {
+  if (reply.ok) {
+    handlers.apply(reply.result)
+  } else if (
+    reply.code === 'host_not_owned' ||
+    reply.code === 'other_partition' ||
+    mainLacksTarget(reply.code)
+  ) {
+    // Why lacking: main's copy lags the window's here (the window still saves its own).
+    handlers.asToday()
+  } else {
+    console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
+    handlers.refused?.(reply.code)
+  }
 }
 
 const keepWindowCopy = (): void => {}

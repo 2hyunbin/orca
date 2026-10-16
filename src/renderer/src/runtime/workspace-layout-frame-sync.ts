@@ -34,6 +34,7 @@ import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layo
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
+import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
 import { subscribeRuntimeLayout } from './runtime-layout-client'
 
 type FrameSyncStore = {
@@ -113,6 +114,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
   let live = false
   let snapshotReceived = false
   let flushQueued = false
+  let streamOpen = true
 
   const rebuild = (state: AppState, keys: string[]): void => {
     // The view and content facts are this window's: read them back out of what it saves.
@@ -205,10 +207,16 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
         live = started
       }
       scheduleFlush()
+      // After the flush queued above: a reply waiting on this frame then sees what one sent after it does.
+      queueMicrotask(() => streamOpen && noteLayoutFramePosition(frame.seq))
     },
     (status) => {
       if (status.state === 'lost' || status.state === 'refused') {
         console.warn('[layout-owner] layout stream stopped:', status)
+      }
+      if (status.state !== 'connecting' && status.state !== 'live') {
+        streamOpen = false
+        endLayoutFramePositions()
       }
     }
   )

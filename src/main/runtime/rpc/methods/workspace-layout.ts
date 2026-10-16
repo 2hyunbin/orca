@@ -30,7 +30,7 @@ export const WORKSPACE_LAYOUT_METHODS = [
         const subscriptionId = `layout-${connectionId ?? 'inproc'}-${++layoutSubscriptionSeq}`
         const cleanupKey = layoutCleanupKey(connectionId, subscriptionId)
         const release = (): void => runtime.cleanupSubscription(cleanupKey)
-        const { snapshot, unsubscribe } = runtime.subscribeWorkspaceLayouts((event) => {
+        const { snapshot, seq, unsubscribe } = runtime.subscribeWorkspaceLayouts((event) => {
           if (wanted(event.key)) {
             emit(event)
           }
@@ -49,7 +49,8 @@ export const WORKSPACE_LAYOUT_METHODS = [
         emit({
           type: 'snapshot',
           subscriptionId,
-          workspaces: snapshot.filter((entry) => wanted(entry.key))
+          workspaces: snapshot.filter((entry) => wanted(entry.key)),
+          seq
         })
         if (signal?.aborted) {
           release()

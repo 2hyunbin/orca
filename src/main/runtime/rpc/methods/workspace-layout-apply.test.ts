@@ -471,7 +471,9 @@ describe('layout.apply', () => {
 
     await expect(runtime.applyLayoutCommand(SPLIT)).resolves.toEqual({
       ok: true,
-      result: { leafId: 'minted' }
+      result: { leafId: 'minted' },
+      // No one subscribes, so the stream has sent nothing.
+      frameSeq: 0
     })
     expect(applyLayoutCommand).toHaveBeenCalledWith(SPLIT, ['ssh:target-1'])
   })
@@ -481,7 +483,8 @@ describe('layout.apply', () => {
 
     await expect(runtime.applyLayoutCommand(SPLIT)).resolves.toEqual({
       ok: false,
-      code: 'host_not_owned'
+      code: 'host_not_owned',
+      frameSeq: 0
     })
     expect(applyLayoutCommand).not.toHaveBeenCalled()
   })
