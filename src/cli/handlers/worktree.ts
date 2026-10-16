@@ -162,7 +162,9 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       ? readCliAgentLaunch(flags, startupAgent, { createsWorktree: true })
       : undefined
     const setupDecision = getOptionalSetupDecision(flags)
-    const noParent = flags.get('no-parent') === true
+    const noParent =
+      flags.get('no-parent') === true ||
+      (client.isRemote && !parentWorktreeRef && !explicitParentWorktree && !explicitParentWorkspace)
     const envParentWorkspace =
       !client.isRemote && !noParent && !explicitParentWorkspace && !explicitParentWorktree
         ? getEnvParentWorkspace()

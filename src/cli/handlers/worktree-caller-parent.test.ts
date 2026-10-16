@@ -148,6 +148,7 @@ describe('remote worktree caller lineage', () => {
       json: true
     })
     const create = remoteCall.mock.calls.find(([method]) => method === 'worktree.create')?.[1]
+    expect(create.noParent).toBe(true)
     expect(create).not.toHaveProperty('parentWorktreeRef')
     expect(create).not.toHaveProperty('envParentWorkspace')
     expect(create).not.toHaveProperty('cwdParentWorktree')
