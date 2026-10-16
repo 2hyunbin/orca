@@ -8,6 +8,7 @@ import {
   DESKTOP_BROWSER_BRIDGE_NOT_FORWARDED_CODE,
   DESKTOP_BROWSER_BRIDGE_SCOPE_CODE,
   DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE,
+  DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE,
   isDesktopBrowserBridgeMethod,
   type DesktopBrowserBridgeRequest
 } from '../../../shared/desktop-browser-bridge-protocol'
@@ -47,6 +48,8 @@ export type DesktopBrowserBridgeExecutorDeps = {
   worktreeIdForPage(browserPageId: string): string | null
   /** Records that a host drives this workspace's pages, so they lose programmatic clipboard reads. */
   markWorkspaceDriven(workspaceId: string): void
+  /** True when this host's desktop tabs browse through the host (SSH browser routing on for it). */
+  isHostBrowsingRouted(): boolean
   dispatch(method: string, params: Record<string, unknown>): Promise<RpcResponse>
   audit(entry: DesktopBrowserBridgeAuditEntry): void
 }
@@ -126,6 +129,13 @@ async function scopeRequest(
     throw new BridgeRefusal(
       DESKTOP_BROWSER_BRIDGE_NOT_FORWARDED_CODE,
       `${request.method} cannot run on this desktop from an SSH host.`
+    )
+  }
+  // Why: an unrouted page egresses from this desktop, so a host could reach its loopback and LAN.
+  if (!deps.isHostBrowsingRouted()) {
+    throw new BridgeRefusal(
+      DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE,
+      "This host's browser tabs browse from your desktop's own network, so its orca CLI cannot use them. Turn SSH browser routing back on for this host to allow it."
     )
   }
   const params: Record<string, unknown> = { ...request.params }

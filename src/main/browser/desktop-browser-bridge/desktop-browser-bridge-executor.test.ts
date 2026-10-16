@@ -4,6 +4,7 @@ import {
   type DesktopBrowserBridgeRequest
 } from '../../../shared/desktop-browser-bridge-protocol'
 import {
+  boundRemoteCliBrowserWork,
   captureRemoteCliBrowserRevocation,
   resolveRemoteCliBrowserScopeSelector,
   runInRemoteCliBrowserScope
@@ -64,6 +65,7 @@ function deps(overrides: Partial<DesktopBrowserBridgeExecutorDeps> = {}) {
     resolveWorkspace: rendererScope,
     worktreeIdForPage: (page) => MOUNTED_PAGE_OWNERS[page] ?? null,
     markWorkspaceDriven: (workspaceId) => driven.push(workspaceId),
+    isHostBrowsingRouted: () => true,
     dispatch: async (method, params) => {
       // Inside the dispatch, a selector for any other workspace must be refused.
       const scopeProbe = await resolveRemoteCliBrowserScopeSelector(`id:${LOCAL_WORKSPACE}`)?.catch(
@@ -487,6 +489,23 @@ describe('executeDesktopBrowserBridgeRequest', () => {
 
     expect(dispatched).toHaveLength(3)
   })
+
+  it("refuses every command while the host's tabs browse from this desktop's own network", async () => {
+    const { value, dispatched, driven } = deps({ isHostBrowsingRouted: () => false })
+
+    const outcome = await executeDesktopBrowserBridgeRequest(
+      request({
+        method: 'browser.goto',
+        workspaceId: HOST_WORKSPACE,
+        params: { url: 'http://127.0.0.1:8080', worktree: `id:${HOST_WORKSPACE}` }
+      }),
+      value
+    )
+
+    expect(outcome).toMatchObject({ ok: false, error: { code: 'desktop_browser_bridge_unrouted' } })
+    expect(dispatched).toEqual([])
+    expect(driven).toEqual([])
+  })
 })
 
 describe('resolveRemoteCliBrowserScopeSelector', () => {
@@ -512,5 +531,48 @@ describe('captureRemoteCliBrowserRevocation', () => {
   it('never blocks a command that did not come from a host', () => {
     const assertNotRevoked = captureRemoteCliBrowserRevocation()
     expect(() => assertNotRevoked()).not.toThrow()
+  })
+})
+
+describe('boundRemoteCliBrowserWork', () => {
+  it('returns page work unchanged outside a bridged command', async () => {
+    const cancel = vi.fn()
+    await expect(boundRemoteCliBrowserWork(Promise.resolve(1), cancel, 5)).resolves.toBe(1)
+    expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it('stops a bridged page script at its deadline and cancels it', async () => {
+    const cancel = vi.fn()
+    const outcome = runInRemoteCliBrowserScope(HOST_WORKSPACE, () =>
+      boundRemoteCliBrowserWork(new Promise(() => {}), cancel, 10)
+    )
+
+    await expect(outcome).rejects.toMatchObject({ code: 'browser_timeout' })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('stops a bridged page script when the bridge detaches', async () => {
+    const revoked = new AbortController()
+    const cancel = vi.fn()
+    const outcome = runInRemoteCliBrowserScope(
+      HOST_WORKSPACE,
+      () => boundRemoteCliBrowserWork(new Promise(() => {}), cancel, 60_000),
+      revoked.signal
+    )
+
+    revoked.abort()
+
+    await expect(outcome).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('lets a bridged script that finishes in time return its result', async () => {
+    const cancel = vi.fn()
+    const outcome = runInRemoteCliBrowserScope(HOST_WORKSPACE, () =>
+      boundRemoteCliBrowserWork(Promise.resolve('done'), cancel, 60_000)
+    )
+
+    await expect(outcome).resolves.toBe('done')
+    expect(cancel).not.toHaveBeenCalled()
   })
 })

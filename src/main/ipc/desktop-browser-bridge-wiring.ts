@@ -33,6 +33,7 @@ import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-connectivity-handlers'
 import { setDesktopBrowserBridgeControl } from './desktop-browser-bridge-reconcile'
 import { markRemoteCliDrivenWorkspace } from '../browser/desktop-browser-bridge/remote-cli-driven-workspaces'
+import { persistedStore } from './ssh-ipc-context'
 
 const ATTACH_TIMEOUT_MS = 15_000
 const BRIDGE_CLIENT_ID = randomUUID()
@@ -142,6 +143,7 @@ export function installDesktopBrowserBridge(options: {
               ...(scope.page ? { pageId: scope.page } : {})
             }),
           markWorkspaceDriven: markRemoteCliDrivenWorkspace,
+          isHostBrowsingRouted: () => isSshTargetBrowsingRouted(candidate.targetId),
           worktreeIdForPage: (browserPageId) =>
             browserManager.getWorktreeIdForTab(browserPageId) ?? null,
           dispatch: (method, params) =>
@@ -157,6 +159,15 @@ export function installDesktopBrowserBridge(options: {
     resetEnvironment: (environmentId) => manager?.resetEnvironment(environmentId)
   })
   manager.reconcile()
+}
+
+// Mirrors the renderer's route eligibility: routing on globally and not opted out for this host.
+function isSshTargetBrowsingRouted(targetId: string): boolean {
+  const settings = persistedStore?.getSettings()
+  return (
+    settings?.browserSshWorkspaceRoutingEnabled !== false &&
+    !settings?.browserSshWorkspaceRoutingDisabledTargetIds?.includes(targetId)
+  )
 }
 
 export function disposeDesktopBrowserBridge(): void {
