@@ -73,7 +73,9 @@ export function resolveLegacyRelayCliCaller(
   const replayed =
     replay && db.getMutationReceipt(replay.fingerprint, replay.requestId)?.state === 'completed'
   const dispatch = active ?? (replayed ? own(db.getLatestDispatchForTerminal(handle)) : undefined)
-  const replayDispatch = replay ? own(settledLegacyDispatch(db, handle, paneKey)) : undefined
+  const replayDispatch = replay
+    ? own(settledLegacyDispatch(db, handle, paneKey, replay.requestId))
+    : undefined
   const run = resolveCoordinatedRun(db, handle, paneKey)
   if (!dispatch && !replayDispatch && !run) {
     throw new Error(LEGACY_RELAY_CLI_UNVERIFIED)
@@ -93,7 +95,8 @@ export function resolveLegacyRelayCliCaller(
 function settledLegacyDispatch(
   db: OrchestrationDb,
   handle: string,
-  paneKey: string
+  paneKey: string,
+  requestId: string
 ): DispatchContextRow | undefined {
   const adoption = db.getLegacyAdoption()
   const principal = adoption
@@ -103,9 +106,11 @@ function settledLegacyDispatch(
         paneKey
       })
     : undefined
+  // Why the receipt: only an operation this principal committed under this request id replays.
   return principal?.status === 'settled' &&
     principal.terminal_handle === handle &&
-    principal.dispatch_id
+    principal.dispatch_id &&
+    db.getLegacyOperationReceipt(principal.id, `invocation:${requestId}`)
     ? db.getDispatchContextById(principal.dispatch_id)
     : undefined
 }
@@ -243,7 +248,7 @@ export function assertLegacyRelayCliScope(
   if (method === 'orchestration.reply') {
     const id = stringParam(params, 'id') ?? ''
     const original = db.getMessageById(id)
-    if (!original || !ownedAddresses(caller).has(original.to_handle)) {
+    if (!original || (!exactReplay && !ownedAddresses(caller).has(original.to_handle))) {
       throw outside(`message '${id}'`)
     }
     return

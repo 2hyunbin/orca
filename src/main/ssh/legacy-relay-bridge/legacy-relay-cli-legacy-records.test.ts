@@ -214,6 +214,39 @@ describe('the relay-era orca CLI on migrated legacy orchestration records', () =
     expect(afterReassignment.body).toMatchObject({ ok: true })
   })
 
+  it('admits a settled legacy worker only to replay an operation it committed', async () => {
+    const { runtime, taskId, dispatchId } = legacyRuntime()
+    const done = [
+      'orchestration',
+      'send',
+      '--to',
+      COORDINATOR,
+      '--type',
+      'worker_done',
+      '--subject',
+      'done',
+      '--task-id',
+      taskId,
+      '--dispatch-id',
+      dispatchId,
+      '--outcome',
+      'succeeded',
+      '--json'
+    ]
+    await run(runtime, [...done, '--retry-request', '77777777-7777-4777-8777-777777777777'])
+    const fresh = [
+      'orchestration',
+      'send',
+      '--to',
+      COORDINATOR,
+      '--subject',
+      'new',
+      '--retry-request',
+      '88888888-8888-4888-8888-888888888888'
+    ]
+    await expect(run(runtime, fresh)).rejects.toThrow(LEGACY_RELAY_CLI_UNVERIFIED)
+  })
+
   it('vouches only for the exact terminal its attachment carries', () => {
     const runtime = new OrcaRuntimeService()
     const terminal = { handle: WORKER, paneKey: WORKER_PANE, processIncarnation: `${PTY_ID}:inc-1` }

@@ -144,6 +144,50 @@ describe('limits on relay-era CLI calls', () => {
     ).rejects.toThrow(/outside it/)
   })
 
+  it('replays a committed reply after the worker took a new assignment', async () => {
+    const dispatch = db.getActiveDispatchForIdentity(WORKER, WORKER_PANE)
+    const question = db.insertMessage({
+      runId: dispatch?.run_id ?? '',
+      from: COORDINATOR,
+      to: `dispatch:${dispatch?.id ?? ''}`,
+      subject: 'q',
+      deliveryContract: 'current_delivery'
+    })
+    const reply = [
+      'orchestration',
+      'reply',
+      '--id',
+      question.id,
+      '--body',
+      'b',
+      '--retry-request',
+      '99999999-9999-4999-8999-999999999999',
+      '--json'
+    ]
+    const first = await server().cli({ argv: reply, env: ENV }, new AbortController().signal)
+    db.db.prepare(`UPDATE dispatch_contexts SET status = 'completed'`).run()
+    const next = db.createTask({
+      runId: dispatch?.run_id ?? '',
+      spec: 'next',
+      createdByTerminalHandle: COORDINATOR
+    })
+    db.createDispatchContext({
+      taskId: next.id,
+      assigneeHandle: WORKER,
+      assigneePaneKey: WORKER_PANE,
+      processIncarnation: `${PTY_ID}:inc-1`,
+      creator: { kind: 'system' },
+      maxDepth: Number.MAX_SAFE_INTEGER
+    })
+    const replay = await server().cli({ argv: reply, env: ENV }, new AbortController().signal)
+    const body = (result: unknown) =>
+      JSON.parse(
+        String(result && typeof result === 'object' && 'stdout' in result ? result.stdout : '')
+      )
+    expect(body(replay)).toMatchObject({ ok: true, result: { mutation: { replayed: true } } })
+    expect(body(replay).result.message).toEqual(body(first).result.message)
+  })
+
   it('names nobody when two hosts claim one handle', () => {
     const terminal = { handle: WORKER, paneKey: WORKER_PANE, processIncarnation: 'p-1' }
     const fresh = new OrcaRuntimeService()
