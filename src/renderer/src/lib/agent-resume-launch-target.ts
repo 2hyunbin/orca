@@ -7,7 +7,7 @@ import {
   resolveLocalWindowsAgentStartupShell,
   resolveWindowsShellStartupFamily
 } from '../../../shared/windows-terminal-shell'
-import type { ExecutionHostPlatformFact } from './execution-host-facts'
+import type { AppState } from '@/store/types'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 
@@ -36,11 +36,23 @@ function isRemoteResumeTarget(args: AgentResumeLaunchTargetArgs): boolean {
 }
 
 /**
- * The reported OS of an SSH host, else null. Why SSH only: a paired Orca server applies its own
- * Windows shell setting, which this client cannot see, so its resumes keep the old quoting.
+ * The OS an SSH execution host reported, else null. Why SSH only: a paired Orca server applies its
+ * own Windows shell setting, which this client cannot see, so its resumes keep the old quoting.
  */
-export function sshHostPlatformFromFact(fact: ExecutionHostPlatformFact): NodeJS.Platform | null {
-  return fact.kind === 'known' && fact.hostKind === 'ssh' ? fact.platform : null
+export function resolveSshHostReportedPlatform(
+  state: Pick<AppState, 'sshConnectionStates' | 'sshStateByEnvironment'>,
+  executionHostId: string | null,
+  /** Paired server that owns the SSH target, when it is not this client's own connection. */
+  sshOwnerEnvironmentId: string | null
+): NodeJS.Platform | null {
+  const host = parseExecutionHostId(executionHostId)
+  if (host?.kind !== 'ssh') {
+    return null
+  }
+  const sshState = sshOwnerEnvironmentId
+    ? state.sshStateByEnvironment.get(sshOwnerEnvironmentId)?.connectionStates.get(host.targetId)
+    : state.sshConnectionStates.get(host.targetId)
+  return sshState?.remotePlatform ?? null
 }
 
 function resolveResumeLaunchPlatform(args: AgentResumeLaunchTargetArgs): NodeJS.Platform {

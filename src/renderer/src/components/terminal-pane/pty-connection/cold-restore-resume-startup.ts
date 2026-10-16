@@ -2,10 +2,9 @@ import { useAppStore } from '@/store'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import {
-  sshHostPlatformFromFact,
+  resolveSshHostReportedPlatform,
   resolveAgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
-import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
 import {
   agentResumeOriginNamesAnotherExecutionHost,
   sleepingRecordNamesAnotherExecutionHost
@@ -83,8 +82,11 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
       worktreePath: session.worktree?.path,
       terminalWindowsShell: state.settings?.terminalWindowsShell,
       tabShellOverride: session.shellOverride,
-      remotePlatform: sshHostPlatformFromFact(
-        resolveWorktreeExecutionHostPlatform(state, session.deps.worktreeId, session.worktree?.path)
+      // Why the transport's runtime: the pane's own connection names the SSH target's owner.
+      remotePlatform: resolveSshHostReportedPlatform(
+        state,
+        session.executionHostId,
+        session.transport.getRuntimeEnvironmentId?.() ?? null
       )
     })
     const startupPlan = buildAgentResumeStartupPlan({

@@ -4,12 +4,14 @@ import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
 import {
-  sshHostPlatformFromFact,
+  resolveSshHostReportedPlatform,
   resolveAgentResumeLaunchTarget,
   type AgentResumeLaunchTarget
 } from '@/lib/agent-resume-launch-target'
-import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
-import { resolveWorktreeExecutionHostPlatform } from '@/lib/execution-host-facts'
+import {
+  getExecutionHostIdForWorktree,
+  getExplicitRuntimeEnvironmentIdForWorktree
+} from '@/lib/worktree-runtime-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import {
   resolveTuiAgentLaunchArgs,
@@ -35,14 +37,17 @@ function getResumeLaunchTarget(worktreeId: string): AgentResumeLaunchTarget {
   const worktree = state.getKnownWorktreeById(worktreeId)
   const repo = worktree ? state.repos.find((entry) => entry.id === worktree.repoId) : null
   // The resume tab is created without a shell override, so the global Windows shell wins.
+  const executionHostId = getExecutionHostIdForWorktree(state, worktreeId)
   return resolveAgentResumeLaunchTarget({
     projectRuntime: getLocalProjectExecutionRuntimeContext(state, worktreeId),
     connectionId: repo?.connectionId,
-    executionHostId: getExecutionHostIdForWorktree(state, worktreeId),
+    executionHostId,
     worktreePath: worktree?.path,
     terminalWindowsShell: state.settings?.terminalWindowsShell,
-    remotePlatform: sshHostPlatformFromFact(
-      resolveWorktreeExecutionHostPlatform(state, worktreeId, worktree?.path)
+    remotePlatform: resolveSshHostReportedPlatform(
+      state,
+      executionHostId,
+      getExplicitRuntimeEnvironmentIdForWorktree(state, worktreeId)
     )
   })
 }
