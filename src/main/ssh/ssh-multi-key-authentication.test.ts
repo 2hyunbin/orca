@@ -130,7 +130,9 @@ describe('ordered SSH private-key authentication', () => {
     const config = buildConnectConfig(makeTarget({ identityFile: undefined }), null)
 
     expect(nextAuth(config, true)).toMatchObject({ type: 'none' })
-    expect(nextAuth(config, false)).toMatchObject({ type: 'agent', agent: '/tmp/agent.sock' })
+    // The queued agent observes signing for the challenge deferral; ssh2 still reads the socket.
+    expect(config.agent).toBe('/tmp/agent.sock')
+    expect(nextAuth(config, false)).toMatchObject({ type: 'agent' })
     expect(nextAuth(config, false)).toBe('keyboard-interactive')
   })
 

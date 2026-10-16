@@ -46,7 +46,7 @@ export function configurePrivateKeyAuthentication(
   config: ConnectConfig,
   keys: PrivateKeyFile[],
   passphraseKeyPath?: string,
-  options: { deferKeyboardInteractive?: boolean } = {}
+  options: { deferKeyboardInteractive?: () => boolean } = {}
 ): void {
   const firstKey = keys[0]
   if (firstKey) {
@@ -92,12 +92,12 @@ export function configurePrivateKeyAuthentication(
     // accepted an agent key, so the challenge is its second factor; ssh2 hides that partial success.
     if (
       attempt === 'keyboard-interactive' &&
-      options.deferKeyboardInteractive &&
       !agentSigned &&
       partialSuccessStagesLeft === MAX_PARTIAL_SUCCESS_STAGES &&
       Array.isArray(authsLeft) &&
       authsLeft.includes('keyboard-interactive') &&
-      authsLeft.includes('publickey')
+      authsLeft.includes('publickey') &&
+      options.deferKeyboardInteractive?.()
     ) {
       attempt = queue.shift()
     }

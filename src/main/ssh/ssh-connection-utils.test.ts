@@ -692,6 +692,17 @@ describe('buildConnectConfig', () => {
     ])
   })
 
+  it('reads a deferred default key only once the agent-first attempt reaches the challenge', () => {
+    const defaultKeyPath = testHomePath('.ssh', 'id_ed25519')
+    mockExistsSync.mockImplementation((p: unknown) => String(p) === defaultKeyPath)
+    mockReadFileSync.mockReturnValue(UNENCRYPTED_KEY)
+    const config = buildConnectConfig(makeTarget(), null)
+    // A FIFO or slow mount there must not block an agent login that never needs the file.
+    expect(mockReadFileSync).not.toHaveBeenCalledWith(defaultKeyPath)
+    expect(walkInitialAuthLadder(config, PASSWORD_HOST_METHODS)).toEqual(['none', 'agent'])
+    expect(mockReadFileSync).toHaveBeenCalledWith(defaultKeyPath)
+  })
+
   it('keeps the challenge when several keys wait, which could spend the retry auth budget', () => {
     mockReadFileSync.mockReturnValue(UNENCRYPTED_KEY)
     const config = buildConnectConfig(

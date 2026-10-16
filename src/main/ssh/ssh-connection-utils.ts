@@ -224,11 +224,11 @@ export function buildConnectConfig(
     config.agentForward = true
   }
 
-  const availableKeys = resolvePrivateKeys(target, resolved)
   const keys =
     (options.includePrivateKey ?? !agent)
-      ? availableKeys
+      ? resolvePrivateKeys(target, resolved)
       : resolveUnencryptedExplicitPrivateKeys(target, resolved)
+  let deferralDecision: boolean | undefined
   configurePrivateKeyAuthentication(
     config as ConnectConfig,
     keys,
@@ -240,10 +240,19 @@ export function buildConnectConfig(
       // aborts the retry before any auth, so hold it back only if no deferred key needs input.
       // One key only: each rejected key spends the host's MaxAuthTries, so several could exhaust
       // the retry before it reaches the challenge this attempt skipped.
+      // Decided lazily so the deferred files are read only once the agent has failed, as the retry
+      // would read them anyway, never on an agent login that needs no file.
       deferKeyboardInteractive:
-        keys.length === 0 &&
-        availableKeys.length === 1 &&
-        isUnencryptedPrivateKey(availableKeys[0].contents)
+        keys.length === 0
+          ? () => {
+              if (deferralDecision === undefined) {
+                const deferredKeys = resolvePrivateKeys(target, resolved)
+                deferralDecision =
+                  deferredKeys.length === 1 && isUnencryptedPrivateKey(deferredKeys[0].contents)
+              }
+              return deferralDecision
+            }
+          : undefined
     }
   )
 
