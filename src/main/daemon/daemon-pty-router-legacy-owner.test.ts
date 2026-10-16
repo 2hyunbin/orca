@@ -72,6 +72,9 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
     const router = new DaemonPtyRouter({ current, legacy: [legacy] })
     await router.discoverLegacySessions()
 
+    // A dropped current connection answers the probe with null; the inventory reconnects.
+    vi.mocked(current.probePtyLiveness).mockResolvedValue(null)
+
     await router.spawn({ ...SPAWN, sessionId: 'current-session' })
 
     expect(current.spawn).toHaveBeenCalledOnce()

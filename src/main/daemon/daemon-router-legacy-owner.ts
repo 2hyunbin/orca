@@ -20,13 +20,13 @@ export async function findLegacySessionOwner(
     return undefined
   }
   // Why first: an unreachable legacy daemon must not block reattaching the current daemon's own session.
-  if ((await current.probePtyLiveness(sessionId).catch(() => null)) === true) {
+  if ((await probeOwnership(current, sessionId)) === true) {
     return current
   }
   const verdicts = await Promise.all(
     legacy.map(async (adapter) => ({
       adapter,
-      live: await probeLegacyOwnership(adapter, sessionId)
+      live: await probeOwnership(adapter, sessionId)
     }))
   )
   exitProof.record(legacy)
@@ -42,7 +42,7 @@ export async function findLegacySessionOwner(
 
 const LEGACY_OWNER_INVENTORY_MS = 2_000
 
-async function probeLegacyOwnership(
+async function probeOwnership(
   adapter: DaemonPtyAdapter,
   sessionId: string
 ): Promise<boolean | null> {
