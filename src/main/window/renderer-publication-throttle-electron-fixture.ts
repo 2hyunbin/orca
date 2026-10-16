@@ -1,16 +1,11 @@
-import { app, BrowserWindow, type WebContents } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { startBrowserScreencast } from '../browser/browser-screencast-stream'
 import { RendererPublicationThrottle } from './renderer-publication-throttle'
 
 async function run(): Promise<void> {
+  // Why: serve keeps running with no page open; Electron would otherwise quit at the first close.
+  app.on('window-all-closed', () => {})
   await app.whenReady()
-  const host = new BrowserWindow({
-    show: false,
-    width: 640,
-    height: 480,
-    webPreferences: { webviewTag: true, backgroundThrottling: false }
-  })
-  await host.loadURL('data:text/html,<body></body>')
   const throttle = new RendererPublicationThrottle()
   let frames = 0
   let releasesDuringDestruction = 0
@@ -18,16 +13,15 @@ async function run(): Promise<void> {
   let captureCalls = 0
 
   for (let iteration = 0; iteration < 3; iteration += 1) {
-    const attached = new Promise<WebContents>((resolve) => {
-      host.webContents.once('did-attach-webview', (_event, guest) => resolve(guest))
+    // Why: headless serve backs each page with a hidden top-level window; a <webview> guest's
+    // child-frame view never reached the crashing Aura path.
+    const page = new BrowserWindow({
+      show: false,
+      width: 640,
+      height: 480,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
     })
-    await host.webContents.executeJavaScript(`(() => {
-      const view = document.createElement('webview')
-      view.style.cssText = 'width:640px;height:480px'
-      view.src = 'about:blank'
-      document.body.appendChild(view)
-    })()`)
-    const guest = await attached
+    const guest = page.webContents
     const release = throttle.acquire({
       isDestroyed: () => guest.isDestroyed(),
       isFocused: () => guest.isFocused(),
@@ -42,7 +36,7 @@ async function run(): Promise<void> {
         return guest.capturePage(rect, options)
       }
     })
-    await guest.loadURL('data:text/html,<h1>Streamed page</h1>')
+    await page.loadURL('data:text/html,<h1>Streamed page</h1>')
     let firstFrame!: () => void
     const ready = new Promise<void>((resolve) => {
       firstFrame = resolve
@@ -69,7 +63,7 @@ async function run(): Promise<void> {
         release()
       })
     await ready
-    await host.webContents.executeJavaScript('document.querySelector("webview").remove()')
+    page.destroy()
     await released
     await new Promise((resolve) => setTimeout(resolve, 10))
     if (!guest.isDestroyed()) {
@@ -78,6 +72,7 @@ async function run(): Promise<void> {
   }
 
   // A surviving host must still be able to serve another browser operation.
+  const host = new BrowserWindow({ show: false, width: 640, height: 480 })
   await host.loadURL('data:text/html,<h1>Host is still reachable</h1>')
   const title = await host.webContents.executeJavaScript('document.querySelector("h1").textContent')
   console.log(
