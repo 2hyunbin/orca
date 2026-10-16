@@ -12,11 +12,11 @@ describe('getHostOperationOwnership', () => {
   })
 
   it('reads subscriptions as streams and forge namespaces as credential-sourced', () => {
+    expect(getHostOperationOwnership('desktopBrowserBridge.attach')).toBe('stream')
+    expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
     expect(getHostOperationOwnership('terminal.subscribe')).toBe('stream')
     expect(getHostOperationOwnership('files.unwatch')).toBe('stream')
     expect(getHostOperationOwnership('session.tabs.subscribeAll')).toBe('stream')
-    expect(getHostOperationOwnership('desktopBrowserBridge.attach')).toBe('stream')
-    expect(getHostOperationOwnership('desktopBrowserBridge.result')).toBe('host')
     expect(getHostOperationOwnership('accounts.list')).toBe('host')
     expect(getHostOperationOwnership('github.prChecks')).toBe('credential')
     expect(getHostOperationOwnership('jira.getIssueStream')).toBe('scope-picked')

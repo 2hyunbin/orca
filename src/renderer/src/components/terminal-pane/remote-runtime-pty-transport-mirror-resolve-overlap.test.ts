@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeMobileSessionClientTab } from '../../../../shared/runtime-mobile-session-tab-contracts'
 import {
   createRemoteRuntimeTransportMocks,
   type MultiplexSubscriptionCallbacks
@@ -13,7 +14,6 @@ vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
 let subscriptionCallbacks: MultiplexSubscriptionCallbacks = null
 let resolvedPaneHandle = 'terminal-1'
-type ActivatedSessionTab = { id: string; terminal: string; incarnationId?: string }
 
 const { runtimeCall, subscriptionSendBinary, resetRemoteRuntimeTransport } =
   createRemoteRuntimeTransportMocks({
@@ -147,7 +147,7 @@ describe('web mirror reveal: resolvePane overlaps the activation', () => {
           ...response,
           result: {
             ...response.result,
-            tabs: response.result.tabs.map((tab: ActivatedSessionTab) => ({
+            tabs: response.result.tabs.map((tab: RuntimeMobileSessionClientTab) => ({
               ...tab,
               incarnationId: 'incarnation-learned'
             }))
