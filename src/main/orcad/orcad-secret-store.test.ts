@@ -191,6 +191,25 @@ describe('createOrcadSecretStore', () => {
     }
   )
 
+  it('keeps its claim and fails closed when the keyring store result is uncertain', async () => {
+    const keyring = fakeKeyring()
+    const realStore = keyring.store.bind(keyring)
+    // Stores the value, then reports a timeout; the read-back is unreachable too.
+    keyring.store = async (account, value) => {
+      await realStore(account, value)
+      keyring.failure = { kind: 'unreachable', reason: 'timed out after 5s' }
+      return false
+    }
+    const uncertain = await prepare({ keyring })
+    expect(uncertain.ready).toBe(false)
+    expect(keyring.items.size).toBe(1)
+
+    keyring.failure = null
+    const recovered = await prepare({ keyring })
+    expect(recovered.ready).toBe(true)
+    expect(recovered.store.describeProtectionGap()).toBeNull()
+  })
+
   it('falls back to the profile key when the keyring cannot store one', async () => {
     const keyring = fakeKeyring()
     keyring.storeWorks = false

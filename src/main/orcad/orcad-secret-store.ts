@@ -202,11 +202,18 @@ async function createKey(
       }
       const encoded = master.toString('base64')
       // Why read back: `security -i` exits 0 even when its command failed.
-      const stored = (await keyring.store(account, encoded)) ? await keyring.lookup(account) : null
-      if (stored?.kind === 'found' && stored.value === encoded) {
+      await keyring.store(account, encoded)
+      // Why trust only the read-back: a store can time out after it succeeded, and a concurrent
+      // start may already have adopted the claimed key.
+      const stored = await keyring.lookup(account)
+      if (stored.kind === 'found' && stored.value === encoded) {
         return { kind: 'ready', key, gap: null }
       }
-      // The claim names a key the keyring never took; withdraw it and use the file instead.
+      if (stored.kind !== 'missing') {
+        // Uncertain: the key may be in the keyring and in use, so keep the claim and fail closed.
+        return paths.unavailable(`${keyring.label} did not confirm its new key; restart to retry`)
+      }
+      // Definitely never stored, so nobody can have adopted it: withdraw and use the file.
       withdrawRecord(paths.statePath, record.check)
     }
   }
