@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import {
   createRemoteRuntimeTransportMocks,
   type MultiplexSubscriptionCallbacks
@@ -146,10 +147,12 @@ describe('web mirror reveal: resolvePane overlaps the activation', () => {
           ...response,
           result: {
             ...response.result,
-            tabs: response.result.tabs.map((tab: object) => ({
-              ...tab,
-              incarnationId: 'incarnation-learned'
-            }))
+            tabs: response.result.tabs.map(
+              (tab: RuntimeMobileSessionTabsResult['tabs'][number]) => ({
+                ...tab,
+                incarnationId: 'incarnation-learned'
+              })
+            )
           }
         }
       }
