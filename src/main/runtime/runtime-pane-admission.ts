@@ -67,22 +67,30 @@ async function withdrawAdmittedPane(
   )
 }
 
+/** Writes a pane the runtime asks for into main's copy; what fills it is the caller's. */
+export async function admitRuntimePane(
+  store: RuntimeStore | null | undefined,
+  admission: TerminalPaneAdmission,
+  hostId: string | undefined
+): Promise<TerminalPaneAdmissionOutcome | undefined> {
+  return store?.admitTerminalPane?.(admission, hostId)
+}
+
 /**
  * Writes a pane before what fills it starts (design 4.1), then runs `start`. A start that fails
- * takes back a pane this wrote, unless `shown` says a client already holds it.
+ * takes back a pane this wrote.
  */
 export async function startInAdmittedPane<T>(
   store: RuntimeStore | null | undefined,
   admission: TerminalPaneAdmission,
   hostId: string | undefined,
-  start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>,
-  options: { shown?: () => boolean } = {}
+  start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>
 ): Promise<{ outcome: TerminalPaneAdmissionOutcome | undefined; result: T }> {
-  const outcome = await store?.admitTerminalPane?.(admission, hostId)
+  const outcome = await admitRuntimePane(store, admission, hostId)
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
-    if (outcome === 'admitted' && !options.shown?.()) {
+    if (outcome === 'admitted') {
       await withdrawAdmittedPane(store, admission, hostId)
     }
     throw error
