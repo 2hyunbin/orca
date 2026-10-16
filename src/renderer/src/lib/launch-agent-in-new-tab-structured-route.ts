@@ -2,7 +2,11 @@ import {
   adoptAgentSessionLaunchVerdict,
   type AgentSessionLaunchPlan
 } from '@/lib/agent-session-launch-plan'
-import type { AgentLaunchSurface, LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
+import type {
+  AgentLaunchSurface,
+  LaunchAgentInNewTabArgs,
+  LaunchAgentInNewTabResult
+} from '@/lib/launch-agent-in-new-tab'
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
 import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-session-launch-prompt'
 import type { StructuredLaunchTerminal } from '@/lib/structured-agent-session-launch-admission'
@@ -28,9 +32,7 @@ export function launchStructuredAgentFromNewTab(args: {
   focusIntent?: NativeChatComposerFocusIntent
   beforeSurfaceOpen?: LaunchAgentInNewTabArgs['beforeSurfaceOpen']
   onHostDeclined?: () => StructuredLaunchTerminal
-  openTerminal: (terminalPlan: AgentSessionLaunchPlan) => {
-    promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
-  } | null
+  openTerminal: (terminalPlan: AgentSessionLaunchPlan) => LaunchAgentInNewTabResult
 }): StructuredFromNewTab | null {
   const { plan, beforeSurfaceOpen } = args
   if (beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {
@@ -42,7 +44,7 @@ export function launchStructuredAgentFromNewTab(args: {
     ...(args.focusIntent ? { focusIntent: args.focusIntent } : {}),
     target: { worktreeId: args.worktreeId },
     ...(args.groupId ? { targetGroupId: args.groupId } : {}),
-    onHostDeclined: () => {
+    onHostDeclined: async () => {
       if (args.onHostDeclined) {
         return args.onHostDeclined()
       }
@@ -54,9 +56,15 @@ export function launchStructuredAgentFromNewTab(args: {
           worktreeId: args.worktreeId
         })
       )
+      const surface =
+        terminal === null
+          ? 'none'
+          : terminal.surface.kind === 'host-published'
+            ? await (terminal.surfaceReady ?? Promise.resolve<'none'>('none'))
+            : 'agent'
       return {
-        opened: terminal !== null,
-        surface: terminal === null ? 'none' : 'agent',
+        opened: surface === 'agent',
+        surface,
         ...(terminal?.promptDeliveryResult
           ? { promptDeliveryResult: terminal.promptDeliveryResult }
           : {})

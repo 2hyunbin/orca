@@ -127,6 +127,7 @@ describe('a structured chat launch on a paired server', () => {
     mocks.createSupport.mockResolvedValue({ supported: false, reason: 'wsl' })
     const onHostDeclined = vi.fn(() => ({
       opened: true,
+      surface: 'agent' as const,
       promptDeliveryResult: Promise.resolve({ delivered: true, failureNotified: false })
     }))
     const reveal = vi.fn()
@@ -288,6 +289,7 @@ describe('a structured chat launch on this machine', () => {
     mocks.createSupport.mockResolvedValue({ supported: false, reason: 'wsl' })
     const onHostDeclined = vi.fn(() => ({
       opened: true,
+      surface: 'agent' as const,
       promptDeliveryResult: Promise.resolve({ delivered: true, failureNotified: false })
     }))
     const reveal = vi.fn()
@@ -458,7 +460,7 @@ describe('a structured chat launch on this machine', () => {
 describe('a paired server that cannot resolve a new workspace yet', () => {
   it('keeps its terminal fallback, as before', async () => {
     mocks.createSupport.mockRejectedValue(new Error('selector_not_found'))
-    const onHostDeclined = vi.fn(() => ({ opened: true }))
+    const onHostDeclined = vi.fn(() => ({ opened: true, surface: 'agent' as const }))
 
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan: pairedPlan(),

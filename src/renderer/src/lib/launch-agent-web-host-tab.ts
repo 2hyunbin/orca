@@ -32,7 +32,7 @@ export function launchAgentInWebHostTab(args: {
   agentArgs?: string | null
   viewMode?: Tab['viewMode']
   onPromptDelivered?: () => void
-}): Promise<{ delivered: boolean; failureNotified: boolean }> {
+}): Promise<{ delivered: boolean; failureNotified: boolean; surfaceOpened: boolean }> {
   const {
     agent,
     worktreeId,

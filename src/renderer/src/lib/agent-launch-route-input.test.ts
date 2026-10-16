@@ -110,6 +110,7 @@ describe('buildAgentLaunchRouteInput', () => {
       agent: 'codex',
       settings: STRUCTURED_SETTINGS,
       executionHostId: 'local',
+      admissionHostId: 'local',
       hostCapabilities: [STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY],
       workspaceKind: 'git-worktree',
       projectRuntime: WSL_RUNTIME,
@@ -356,7 +357,6 @@ describe('buildAgentLaunchRouteInput', () => {
       workspace: { kind: 'git-worktree', worktreeId: 'wt-1' }
     })
     expect(input.hostCapabilities).toBeNull()
-    expect(input.admissionHostId).toBeUndefined()
   })
 
   describe('a workspace on a paired server', () => {
@@ -381,6 +381,7 @@ describe('buildAgentLaunchRouteInput', () => {
 
     beforeEach(() => {
       mocks.getExecutionHostIdForWorktree.mockReturnValue('runtime:server-1')
+      mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReturnValue('server-1')
       mocks.readLocalRuntimeCapabilitiesOrUnknown.mockReturnValue([])
     })
 

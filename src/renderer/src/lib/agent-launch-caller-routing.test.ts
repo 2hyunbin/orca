@@ -295,7 +295,7 @@ describe('agent launch caller routing', () => {
     store.settings = { ...store.settings, ...CHAT_DEFAULT_SETTINGS }
     await useActualAdmission()
     mockCreateSupport.mockResolvedValue({ supported: false })
-    const onStructuredHostDeclined = vi.fn(() => ({ opened: true }))
+    const onStructuredHostDeclined = vi.fn(() => ({ opened: true, surface: 'shell' as const }))
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
     const result = launchAgentInNewTab({
