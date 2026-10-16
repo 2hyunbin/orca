@@ -130,7 +130,7 @@ export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
       const localTabId = resolveWindowTabIdForHostTab(worktreeId, tabId)
       const store = useAppStore.getState()
       const tabs = store.unifiedTabsByWorktree[worktreeId] ?? []
-      // A browser row is named by its page, which is the unified tab's entity.
+      // Browser and editor rows may be keyed by their entity (workspace or file) id.
       const tab =
         tabs.find((candidate) => candidate.id === localTabId) ??
         tabs.find((candidate) => candidate.entityId === localTabId)
