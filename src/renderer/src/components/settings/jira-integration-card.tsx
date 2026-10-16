@@ -1,4 +1,5 @@
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
+import { KeychainCredentialNotice } from './keychain-credential-notice'
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, LoaderCircle, Unlink } from 'lucide-react'
 import { JiraConnectDialog } from '@/components/jira-connect-dialog'
@@ -138,6 +139,7 @@ export function JiraIntegrationCard(): React.JSX.Element {
             'Your Jira API token'
           )}
         />
+        <KeychainCredentialNotice service="Jira" status={jiraStatus} />
         <ProviderHostScopeControl
           labelPrefix={translate(
             'auto.components.settings.task.tracker.integration.cards.account_scope_prefix',

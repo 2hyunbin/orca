@@ -1,4 +1,5 @@
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
+import { KeychainCredentialNotice } from './keychain-credential-notice'
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, LoaderCircle, Unlink } from 'lucide-react'
 import { LinearIcon } from '@/components/icons/LinearIcon'
@@ -136,6 +137,7 @@ export function LinearIntegrationCard(): React.JSX.Element {
             'Your Linear API token'
           )}
         />
+        <KeychainCredentialNotice service="Linear" status={linearStatus} />
         {connected ? (
           <div className="space-y-2">
             {workspaces.map((workspace) => {

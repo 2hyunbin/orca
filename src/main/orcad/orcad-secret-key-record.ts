@@ -1,6 +1,6 @@
 /** orcad's key record on disk: naming, reading, and exclusive first publication. */
 import { createHash, randomBytes } from 'node:crypto'
-import { linkSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { linkSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import process from 'node:process'
@@ -145,6 +145,27 @@ export function publishRecordExclusively(path: string, record: StoredKeyState): 
     }
     bestEffortFsyncDirectorySync(dirname(path))
     return 'published'
+  } catch (error) {
+    return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
+  } finally {
+    rmSync(staging, { force: true })
+  }
+}
+
+/** Replaces the record only while it still holds `expectedCheck`'s key; otherwise says why not. */
+export function replaceRecord(path: string, record: StoredKeyState, expectedCheck: string): string {
+  const staging = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
+  try {
+    if (!writeSecureFile(staging, JSON.stringify(record), { durable: true })) {
+      return `its key record ${path} could not be restricted to this user`
+    }
+    const current = readStoredRecord(path)
+    if (current.kind !== 'record' || current.stored.check !== expectedCheck) {
+      return 'its key record changed while it was being moved'
+    }
+    renameSync(staging, path)
+    bestEffortFsyncDirectorySync(dirname(path))
+    return 'replaced'
   } catch (error) {
     return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
   } finally {
