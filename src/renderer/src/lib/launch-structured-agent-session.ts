@@ -46,7 +46,7 @@ export type StructuredAgentSessionLaunchIntent = {
   params: StructuredAgentSessionCreateParams
   createMessageSupport?: boolean
   createPrepared?: true
-  prepareCreate?: () => void | (() => void) | Promise<void | (() => void)>
+  prepareCreate?: () => void
   /** The saved selection create seeds, read when the intent is built. */
   seedOptions?: Readonly<Record<string, string>>
 }
@@ -86,22 +86,20 @@ export function createStructuredAgentSessionLaunchIntent(
   agent: TuiAgent,
   executionHostId?: ExecutionHostId,
   resumeFrom?: StructuredAgentSessionResumeSource,
-  hostSeedOptions?: LaunchSeed,
-  reservedSessionId?: string
+  hostSeedOptions?: LaunchSeed
 ): StructuredAgentSessionLaunchIntent {
   const owner = structuredAgentSessionOwnerTarget(
     worktreeId,
     executionHostId ?? resolveStructuredAgentSessionOwner(useAppStore.getState(), worktreeId)
   )
-  const sessionId = reservedSessionId ?? createStructuredAgentSessionId(agent, createBrowserUuid)
+  const sessionId = createStructuredAgentSessionId(agent, createBrowserUuid)
   return buildStructuredAgentSessionLaunchIntent(
     worktreeId,
     owner,
     agent,
     sessionId,
     resumeFrom,
-    hostSeedOptions,
-    reservedSessionId === undefined
+    hostSeedOptions
   )
 }
 
@@ -111,19 +109,16 @@ function buildStructuredAgentSessionLaunchIntent(
   agent: TuiAgent,
   sessionId: string,
   resumeFrom: StructuredAgentSessionResumeSource | undefined,
-  hostSeedOptions: LaunchSeed,
-  requestFocus = true
+  hostSeedOptions: LaunchSeed
 ): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
-  if (requestFocus) {
-    recordWebSessionFocusIntent(
-      structuredAgentSessionFocusOwner(owner.target),
-      worktreeId,
-      `agent-session:${sessionId}`,
-      undefined,
-      resolveWebSessionVisibleTabId(state, worktreeId)
-    )
-  }
+  recordWebSessionFocusIntent(
+    structuredAgentSessionFocusOwner(owner.target),
+    worktreeId,
+    `agent-session:${sessionId}`,
+    undefined,
+    resolveWebSessionVisibleTabId(state, worktreeId)
+  )
   return {
     sessionId,
     worktreeId,
@@ -173,6 +168,13 @@ export function restoreStructuredAgentSessionLaunchIntent(args: {
 }): StructuredAgentSessionLaunchIntent {
   const state = useAppStore.getState()
   const { target } = structuredAgentSessionOwnerTarget(args.worktreeId, args.executionHostId)
+  recordWebSessionFocusIntent(
+    structuredAgentSessionFocusOwner(target),
+    args.worktreeId,
+    `agent-session:${args.sessionId}`,
+    undefined,
+    resolveWebSessionVisibleTabId(state, args.worktreeId)
+  )
   return {
     sessionId: args.sessionId,
     worktreeId: args.worktreeId,

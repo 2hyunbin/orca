@@ -22,13 +22,10 @@ import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import { AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { AGENT_SESSION_WRITE_NOTICE_COPY } from '../../../../shared/agent-session-write-notice-copy'
-import {
-  AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY,
-  type AgentSessionReservedAttachmentSession,
-  type AgentSessionAttachmentPathUploadResult,
-  type AgentSessionAttachmentUploadTarget
+import type {
+  AgentSessionAttachmentPathUploadResult,
+  AgentSessionAttachmentUploadTarget
 } from '../../../../shared/agent-session-attachments'
-import { readNativeChatNewDraft } from './native-chat-new-draft'
 import type { AppState } from '@/store/types'
 import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
 import { findTerminalTabWorktreeId } from './native-chat-file-link'
@@ -134,10 +131,7 @@ export type NativeChatStructuredAttachmentSession = {
 export function resolveNativeChatRuntimeSessionAttachmentOwner(session: {
   sessionId: string
   runtimeEnvironmentId: string
-}, stageDraft = true): NativeChatAttachmentOwner {
-  if (stageDraft && readNativeChatNewDraft(session.sessionId)) {
-    return { kind: 'local' }
-  }
+}): NativeChatAttachmentOwner {
   const pairingRevision = getRuntimeEnvironmentRevision(session.runtimeEnvironmentId)
   if (pairingRevision === undefined) {
     return { kind: 'not-ready' }
@@ -203,8 +197,7 @@ export { nativeChatLocalAttachmentUnsupportedNotice } from './native-chat-compos
  * upload: a path from this machine would mean nothing to its agent.
  */
 export async function prepareNativeChatSessionAttachmentUpload(
-  owner: NativeChatRuntimeSessionAttachmentOwner,
-  reservedSession?: AgentSessionReservedAttachmentSession
+  owner: NativeChatRuntimeSessionAttachmentOwner
 ): Promise<
   { ok: true; target: AgentSessionAttachmentUploadTarget } | { ok: false; notice: string }
 > {
@@ -231,7 +224,6 @@ export async function prepareNativeChatSessionAttachmentUpload(
       sessionId: owner.sessionId,
       expectedEnvironmentPairingRevision: owner.pairingRevision,
       expectedEnvironmentRuntimeId: status.runtimeId
-      ,...(reservedSession && status.capabilities?.includes(AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY) ? { reservedSession } : {})
     }
   }
 }

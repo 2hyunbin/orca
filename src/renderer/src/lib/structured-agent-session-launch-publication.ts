@@ -1,10 +1,6 @@
-import { readNativeChatNewDraft, retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { deleteStructuredAgentLaunchRecord } from './structured-agent-session-launch-persistence'
-import { resolveHostSessionGroupIdForWebSessionTab, setHostSessionTabIdMapping } from '@/runtime/web-session-tabs-sync/tracking-mappings'
-import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
-import { structuredAgentSessionFocusOwner, structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import {
   getPersistedStructuredAgentLaunchRecord,
   getStructuredLaunchStateBySessionId,
@@ -32,16 +28,6 @@ export function markStructuredAgentSessionLaunchPublished(
   sessionId: string,
   executionHostId: ExecutionHostId
 ): boolean {
-  const draft = readNativeChatNewDraft(sessionId)
-  if (draft?.owner.workspaceId === worktreeId && draft.owner.executionHostId === executionHostId) {
-    const target = structuredAgentSessionTargetForHost(executionHostId)
-    if (target) {
-      const tabId = structuredAgentSessionTabId(sessionId)
-      const mapping = { ...structuredAgentSessionFocusOwner(target), worktreeId, tabId }
-      setHostSessionTabIdMapping(mapping, tabId, resolveHostSessionGroupIdForWebSessionTab(mapping) ?? undefined)
-    }
-    void retireNativeChatNewDraft(sessionId)
-  }
   const state = getStructuredLaunchStateBySessionId(sessionId)
   if (!state) {
     const persisted = getPersistedStructuredAgentLaunchRecord(sessionId)
@@ -63,8 +49,6 @@ export function markStructuredAgentSessionLaunchPublished(
   ) {
     return false
   }
-  state.hostPublished = true
-  notifyStructuredLaunchListeners()
   if (state.callers.outcome === 'published') {
     return true
   }

@@ -23,11 +23,3 @@ export function startNativeChatDraftLoad(): void {
 export function waitForNativeChatDraftsAtStartup(): Promise<void> {
   return waitForNativeChatComposerDrafts(DRAFT_LOAD_WAIT_MS)
 }
-
-/** Reconciliation reads host facts; a restored marker never grants execution or focus. */
-export function reconcileNativeChatDraftsAtStartup(): void {
-  void hydrateNativeChatComposerDrafts().then(async () => {
-    const { reconcileRestoredNativeChatDrafts } = await import('../lib/native-chat-draft-reload')
-    await reconcileRestoredNativeChatDrafts()
-  }).catch((error: unknown) => console.warn('[native-chat-drafts] recovery could not finish', error))
-}

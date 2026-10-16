@@ -200,12 +200,7 @@ let failedStarts = 0
 
 async function failStart(): Promise<void> {
   mocks.createIntent.mockReturnValueOnce(intent)
-  mocks.launch.mockImplementationOnce(async (intent: StructuredAgentSessionLaunchIntent) => {
-    await Promise.resolve()
-    const issue = await intent.prepareCreate?.()
-    issue?.()
-    throw new StructuredAgentSessionCreateRefusalError('refused')
-  })
+  mocks.launch.mockRejectedValueOnce(new StructuredAgentSessionCreateRefusalError('refused'))
   failedStarts += 1
   // Each failed start stands for its own user action.
   const launch = startStructuredAgentLaunch(WORKTREE_ID, 'claude', {
@@ -218,7 +213,6 @@ async function failStart(): Promise<void> {
 describe('a chat whose start failed', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    delete intent.createPrepared
     localStorage.clear()
     resetStructuredAgentLaunchRegistryForTests()
     resetStructuredAgentLaunchPersistenceForTests()

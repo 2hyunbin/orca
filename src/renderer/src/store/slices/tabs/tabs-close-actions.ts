@@ -1,5 +1,3 @@
-import { readNativeChatNewDraft, retireNativeChatNewDraft } from '@/components/native-chat/native-chat-new-draft'
-import { deleteNativeChatComposerDraft } from '@/components/native-chat/native-chat-composer-draft-store'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import {
@@ -12,8 +10,6 @@ import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order
 import { buildActiveSurfacePatch } from './tabs-surface'
 import { beginStructuredAgentSessionTabClose } from '@/runtime/structured-agent-session-tab-retirement'
 import {
-  getPersistedStructuredAgentLaunchRecord,
-  getStructuredLaunchStateBySessionId,
   hasStructuredAgentSessionLaunchCancellationTombstone,
   shouldRetainStructuredAgentSessionLaunchTab
 } from '@/lib/structured-agent-session-launch-registry'
@@ -62,12 +58,7 @@ export function createTabsCloseActions(
           shouldRetainStructuredAgentSessionLaunchTab(worktreeId, tab.entityId) ||
           hasStructuredAgentSessionLaunchCancellationTombstone(worktreeId, tab.entityId)
         const target = structuredAgentSessionTargetForTab(state, tab)
-        const unsent = readNativeChatNewDraft(tab.entityId) &&
-          !getStructuredLaunchStateBySessionId(tab.entityId) && !getPersistedStructuredAgentLaunchRecord(tab.entityId)
-        if (unsent) {
-          void retireNativeChatNewDraft(tab.entityId)
-          deleteNativeChatComposerDraft(`agent-session:${tab.entityId}`)
-        } else if (target) {
+        if (target) {
           if (provisional) {
             clearWebSessionFocusIntentIfMatches(
               structuredAgentSessionFocusOwner(target),

@@ -1,22 +1,27 @@
 import { toast } from 'sonner'
-import { readNativeChatNewDraft, updateNativeChatNewDraft } from './native-chat-new-draft'
 import { useCallback, useMemo } from 'react'
+import type {
+  AgentSessionOptionResult,
+  AgentSessionOptionsResult
+} from '../../../../shared/agent-session-wire'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
 import type { SessionOptionsSurface } from '../../../../shared/native-chat-session-options'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
 import {
+  applyStructuredAgentSessionOptions,
   canSetStructuredAgentSessionOption,
+  commitStructuredAgentSessionOptionValues,
   lockedStructuredAgentSessionOptionSnapshot,
   structuredAgentSessionOptionPicks,
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
-import { useStructuredAgentSessionOptionWrite } from './use-structured-agent-session-option-write'
 import { useHostModelCatalogUpgrade } from './use-host-model-catalog-upgrade'
 import { useStructuredAgentSessionOptionState } from './use-structured-agent-session-option-state'
 import { agentSessionWriteFailureText } from './agent-session-write-notice-text'
@@ -124,20 +129,91 @@ export function useStructuredAgentSessionOptions(args: {
     },
     [agent, target]
   )
-  const sendStructuredOption = useStructuredAgentSessionOptionWrite({
-    activeOptionRecordRef,
-    launchSeedOptions,
-    mutate,
-    optionCatalog,
-    optionMutationGeneration,
-    optionStateRef,
-    optionView,
-    pendingOptionRef,
-    rememberOptionPicks,
-    sessionId,
-    target,
-    updateOptionState
-  })
+  const sendStructuredOption = useCallback(
+    async (id: string, encoded: string): Promise<boolean> => {
+      const currentState = optionStateRef.current
+      const targetRecord = currentState.record
+      const mutationGeneration = ++optionMutationGeneration.current
+      const isCurrent = (): boolean =>
+        activeOptionRecordRef.current === targetRecord &&
+        optionMutationGeneration.current === mutationGeneration
+      // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
+      const shownAtOnce = id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
+      if (shownAtOnce) {
+        updateOptionState((current) =>
+          current.record === targetRecord
+            ? commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
+            : current
+        )
+      } else {
+        pendingOptionRef.current = { id, value: encoded }
+        updateOptionState((current) => ({ ...current, pendingId: id }))
+      }
+      let result: AgentSessionOptionResult | null = null
+      try {
+        result = await mutate<AgentSessionOptionResult>(
+          'agentSession.setOption',
+          'agentSession.setOption',
+          { key: id, value: encoded }
+        )
+        if (result && isCurrent()) {
+          const committed = result.options ?? { [id]: encoded }
+          updateOptionState((current) =>
+            current.record === targetRecord
+              ? commitStructuredAgentSessionOptionValues(current, committed)
+              : current
+          )
+          // The launch seed names the model an effort-only pick was made under.
+          rememberOptionPicks(
+            optionView(currentState, launchSeedOptions, NO_HELD_OPTIONS),
+            committed
+          )
+        }
+        return Boolean(result)
+      } finally {
+        // A settled write, or a shown one that failed, reads back what the host now holds.
+        if (isCurrent() && (result || shownAtOnce)) {
+          void callStructuredAgentSession<AgentSessionOptionsResult>(
+            target,
+            'agentSession.options',
+            { sessionId }
+          )
+            .then((refreshed) => {
+              if (isCurrent()) {
+                updateOptionState((latest) =>
+                  latest.record === targetRecord && optionCatalog
+                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
+                    : latest
+                )
+              }
+            })
+            .catch(() => {})
+        }
+        if (isCurrent()) {
+          pendingOptionRef.current = null
+          updateOptionState((current) =>
+            current.record === targetRecord && current.pendingId === id
+              ? { ...current, pendingId: null }
+              : current
+          )
+        }
+      }
+    },
+    [
+      activeOptionRecordRef,
+      launchSeedOptions,
+      mutate,
+      optionCatalog,
+      optionMutationGeneration,
+      optionStateRef,
+      optionView,
+      pendingOptionRef,
+      rememberOptionPicks,
+      sessionId,
+      target,
+      updateOptionState
+    ]
+  )
   const settleLaunchOptionPick = useCallback(
     (outcome: StructuredLaunchOptionOutcome) => {
       if (outcome.kind === 'refused') {
@@ -169,16 +245,6 @@ export function useStructuredAgentSessionOptions(args: {
         return false
       }
       if (!transportEnabled || fence === null) {
-        const draft = readNativeChatNewDraft(sessionId)
-        if (draft) {
-          const options = id === 'model'
-            ? { ...(draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: draft.options[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] } : {}), [id]: encoded }
-            : { ...draft.options, [id]: encoded }
-          updateNativeChatNewDraft(sessionId, { options })
-          if (!getStructuredAgentSessionLaunchSelection(sessionId)) {
-            return true
-          }
-        }
         // No fence yet: the launch holds it and applies it before anything else is sent.
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)
         void applied?.then(settleLaunchOptionPick)
@@ -207,7 +273,7 @@ export function useStructuredAgentSessionOptions(args: {
     async (id: string, value: string | boolean) => {
       await setStructuredOption(id, value)
       // Read, not rendered: a pick the launch just took is not in this render's props yet.
-      const currentHeld = readNativeChatNewDraft(sessionId)?.options ?? getStructuredAgentSessionLaunchSelection(sessionId)?.held
+      const currentHeld = getStructuredAgentSessionLaunchSelection(sessionId)?.held
       return {
         snapshot: structuredAgentSessionOptionSnapshot(
           optionView(optionStateRef.current, launchSeedOptions, currentHeld ?? NO_HELD_OPTIONS)

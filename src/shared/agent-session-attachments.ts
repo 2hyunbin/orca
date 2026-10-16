@@ -2,10 +2,6 @@
 // bytes, the server keeps them in a store it owns, and the agent only ever sees the server path.
 
 import type { ImportSkipReason } from './filesystem-import-result-types'
-import type { TuiAgent } from './tui-agent'
-
-export const AGENT_SESSION_DRAFT_ATTACHMENTS_RUNTIME_CAPABILITY = 'agent-session-draft-attachments-v1' as const
-export type AgentSessionReservedAttachmentSession = { worktree: string; agent: TuiAgent }
 
 /** Directory name of the server's store, under its userData. Also how a client recognizes a
  *  stored attachment's path without a round trip. */
@@ -96,7 +92,6 @@ export type AgentSessionAttachmentUploadTarget = {
   sessionId: string
   expectedEnvironmentPairingRevision?: number
   expectedEnvironmentRuntimeId: string
-  reservedSession?: AgentSessionReservedAttachmentSession
 }
 
 export type AgentSessionAttachmentPathUploadResult = {
@@ -110,7 +105,7 @@ export type AgentSessionAttachmentPathUploadResult = {
  *  by the save's `runtimeEnvironmentId`, instead of that server's temp directory. */
 export type AgentSessionAttachmentClipboardTarget = Omit<
   AgentSessionAttachmentUploadTarget,
-  'environmentId' | 'reservedSession'
+  'environmentId'
 >
 
 /** `orca-paste-…png`, the name every pasted image gets, so it reads as "Pasted image". */

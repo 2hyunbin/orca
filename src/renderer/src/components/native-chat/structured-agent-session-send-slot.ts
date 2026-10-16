@@ -6,7 +6,6 @@ import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
 } from '../../../../shared/structured-agent-session-send-mutation'
-import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import {
   getStructuredAgentSessionPendingSends,
@@ -25,7 +24,6 @@ export type StructuredAgentSessionSendInput = {
   options?: Readonly<Record<string, string>>
   /** The caller keeps the text if it comes back, instead of the chat's composer. */
   callerKeepsText?: true
-  sourceDraft?: NativeChatComposerDraft
   /** Made while the chat read Stopping: drawn after that turn until the host records it. */
   sentWhileStopping?: true
   now?: number
@@ -45,7 +43,6 @@ export function takeStructuredAgentSessionSendSlot(
     body: structuredAgentSessionSendBody(input.text, attachments),
     previewUris: attachments.map((attachment) => attachment.previewUri),
     queuedAt: input.now ?? Date.now(),
-    ...(input.sourceDraft ? { sourceDraft: input.sourceDraft } : {}),
     ...(input.delivery ? { delivery: input.delivery } : {}),
     ...(input.options ? { options: input.options } : {}),
     ...(input.callerKeepsText ? { callerKeepsText: true as const } : {}),

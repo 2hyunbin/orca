@@ -193,17 +193,14 @@ describe('picks made while a chat launches', () => {
       prompt: 'first turn'
     })
 
-    let commandSettled = false
-    void launch.launchResult.then(() => { commandSettled = true })
     const modelPick = holdStructuredAgentSessionLaunchOption(SESSION_ID, 'model', 'gpt-picked')
     holdStructuredAgentSessionLaunchOption(SESSION_ID, 'effort', 'high')
     created.resolve({ sessionId: SESSION_ID, fence: 7 })
     await settle()
 
-    // The hosted chat is usable while its original command still waits for held picks.
+    // The host published the tab, but the launch is not published until its picks land.
     markStructuredAgentSessionLaunchPublished(WORKTREE_ID, SESSION_ID, 'local')
-    expect(lifecycle()).toBe('published')
-    expect(commandSettled).toBe(false)
+    expect(lifecycle()).toBe('pending')
     expect(mutations()).toEqual([
       { method: 'agentSession.setOption', fence: 7, key: 'model', value: 'gpt-picked' }
     ])
@@ -216,8 +213,7 @@ describe('picks made while a chat launches', () => {
       options: { model: 'gpt-picked' }
     })
     await settle()
-    expect(lifecycle()).toBe('published')
-    expect(commandSettled).toBe(false)
+    expect(lifecycle()).toBe('pending')
     setOptionReplies[1]!.resolve(ACCEPTED)
     await launch.promptDeliveryResult
 

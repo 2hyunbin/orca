@@ -69,7 +69,7 @@ function fakeDatabase(): {
 }
 
 const DRAFT = { text: 'unsent', images: [], savedAt: 1 }
-const settledYet = async (promise: Promise<unknown>): Promise<boolean> => {
+const settledYet = async (promise: Promise<void>): Promise<boolean> => {
   let settled = false
   void promise.then(() => (settled = true))
   await new Promise((resolve) => setTimeout(resolve, 0))
@@ -97,7 +97,7 @@ describe('the IndexedDB draft storage', () => {
     expect(await settledYet(update)).toBe(false)
     expect(puts).toEqual([DRAFT])
     transactions[0]!.oncomplete?.()
-    await expect(update).resolves.toEqual(DRAFT)
+    await expect(update).resolves.toBeUndefined()
   })
 
   it('rejects a write whose transaction aborts, as on a full disk', async () => {

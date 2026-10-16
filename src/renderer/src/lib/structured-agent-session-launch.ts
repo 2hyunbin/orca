@@ -43,7 +43,6 @@ import {
   trackLaunchSettlement
 } from './structured-agent-session-launch-outcome-tracking'
 import {
-  boundStructuredLaunchReservation,
   trackStructuredLaunchPromptOutcome,
   trackStructuredLaunchConfirmationDeadline
 } from './structured-agent-session-launch-prompt-outcome'
@@ -110,9 +109,6 @@ function adoptPairedHostSeed(
   state: StructuredLaunchState,
   seedOptions: StructuredLaunchState['selection']['seed']
 ): void {
-  if (getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
-    return
-  }
   if (JSON.stringify(seedOptions) === JSON.stringify(state.intent.seedOptions)) {
     return
   }
@@ -206,13 +202,12 @@ function structuredAgentLaunchState(
     agent,
     options.executionHostId,
     options.resumeFrom,
-    options.hostSeedOptions,
-    options.reservedSessionId
+    options.hostSeedOptions
   )
   const text = launchPromptText(options)
-  const stagedPrompt = options.stagedPrompt ?? (text
+  const stagedPrompt = text
     ? stageStructuredLaunchPrompt(intent.sessionId, text, promptOwner(options))
-    : null)
+    : null
   launchDraft.seedStructuredAgentLaunchDraft(intent.sessionId, agent, options)
   const callers = createStructuredLaunchCallerGroup({
     kind: 'first',
@@ -228,13 +223,11 @@ function structuredAgentLaunchState(
     cancelled: false,
     onVisibilityChanged: notifyStructuredLaunchListeners,
     callers,
-    selection: { seed: intent.seedOptions, held: options.openingOptions ?? {} }
+    selection: { seed: intent.seedOptions, held: {} }
   }
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   callers.onSettled = () => maybeCleanupLaunchState(state)
-  setStructuredLaunchState(state)
-  const created = launchAndReconcile(state)
-  state.promise = publishWithHeldOptions(state, boundStructuredLaunchReservation(state, created, stagedPrompt))
+  state.promise = publishWithHeldOptions(state, launchAndReconcile(state))
   const caller = addStructuredLaunchCaller({
     group: state.callers,
     launchResult: state.promise,

@@ -1,4 +1,3 @@
-import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import type { AgentSessionHistoryResult } from '../../../shared/agent-session-wire'
 import type {
   AgentJournalCursor,
@@ -13,7 +12,6 @@ import {
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readStructuredSessionTabInventory } from '@/runtime/structured-session-tab-inventory'
 import { publishStructuredAgentSessionCreateHydration } from './structured-agent-session-create-hydration'
-import type { StructuredLaunchAttempt } from './structured-agent-session-launch-request'
 
 export type StructuredAgentLaunchReceipt = {
   sessionId: string
@@ -23,24 +21,12 @@ export type StructuredAgentLaunchReceipt = {
 }
 
 export type StructuredLaunchRecoveryState = {
-  callers?: { attempt: StructuredLaunchAttempt }
   intent: StructuredAgentSessionLaunchIntent
   promise: Promise<StructuredAgentLaunchReceipt>
   visibilityUnknown: boolean
   cancelled: boolean
   onVisibilityChanged?: () => void
   onHostSeed?: StructuredLaunchHostSeedListener
-}
-
-function issueLaunch(state: StructuredLaunchRecoveryState, unknown = false): Promise<StructuredAgentLaunchReceipt> {
-  const attempt = state.callers?.attempt
-  const reservedSubmission = attempt?.kind === 'first' && attempt.stagedPrompt?.sourceDraft !== undefined
-  if (reservedSubmission) {
-    return launchStructuredAgentSession(state.intent, state.onHostSeed, unknown, true)
-  }
-  return unknown
-    ? launchStructuredAgentSession(state.intent, state.onHostSeed, true)
-    : launchStructuredAgentSession(state.intent, state.onHostSeed)
 }
 
 export class StructuredAgentSessionLaunchCancelledError extends Error {
@@ -72,8 +58,7 @@ async function verifyPublishedSession(state: StructuredLaunchRecoveryState): Pro
 }
 
 export async function recoverPublishedSessionReceipt(
-  state: StructuredLaunchRecoveryState,
-  replayMissingMessage = true
+  state: StructuredLaunchRecoveryState
 ): Promise<StructuredAgentLaunchReceipt> {
   await verifyPublishedSession(state)
   const history = await callStructuredAgentSession<AgentSessionHistoryResult>(
@@ -87,13 +72,13 @@ export async function recoverPublishedSessionReceipt(
     throw new Error('structured session fence publication unavailable')
   }
   const firstMessage = state.intent.params.firstMessage
-    ? history.page.submissions.find((submission) => submission.clientMessageId === state.intent.params.firstMessage?.clientMessageId)
+    ? history.page.submissions.find(
+        (submission) =>
+          submission.clientMessageId === state.intent.params.firstMessage?.clientMessageId
+      )
     : undefined
   if (state.intent.params.firstMessage && !firstMessage) {
-    if (!replayMissingMessage) {
-      throw new Error('The opening message has not been confirmed.')
-    }
-    return issueLaunch(state, true)
+    return launchStructuredAgentSession(state.intent, state.onHostSeed, true)
   }
   if (state.intent.createMessageSupport === true) {
     publishStructuredAgentSessionCreateHydration(state.intent, history.page, fence)
@@ -113,7 +98,7 @@ async function retrySameIntent(
 ): Promise<StructuredAgentLaunchReceipt> {
   throwIfLaunchCancelled(state)
   try {
-    const receipt = await issueLaunch(state, true)
+    const receipt = await launchStructuredAgentSession(state.intent, state.onHostSeed, true)
     throwIfLaunchCancelled(state)
     if (state.intent.createMessageSupport !== true) {
       await verifyPublishedSession(state)
@@ -123,7 +108,7 @@ async function retrySameIntent(
     if (state.cancelled) {
       throw new StructuredAgentSessionLaunchCancelledError()
     }
-    if (error instanceof StructuredAgentSessionCreateRefusalError || error instanceof StructuredAgentSessionSubmissionEndedError) {
+    if (error instanceof StructuredAgentSessionCreateRefusalError) {
       throw error
     }
     try {
@@ -145,12 +130,12 @@ export async function launchAndReconcile(
   throwIfLaunchCancelled(state)
   let receipt: StructuredAgentLaunchReceipt
   try {
-    receipt = await issueLaunch(state)
+    receipt = await launchStructuredAgentSession(state.intent, state.onHostSeed)
   } catch (error) {
     if (state.cancelled) {
       throw new StructuredAgentSessionLaunchCancelledError()
     }
-    if (error instanceof StructuredAgentSessionCreateRefusalError || error instanceof StructuredAgentSessionSubmissionEndedError) {
+    if (error instanceof StructuredAgentSessionCreateRefusalError) {
       throw error
     }
     try {

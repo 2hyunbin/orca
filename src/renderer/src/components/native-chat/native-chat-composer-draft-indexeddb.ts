@@ -3,7 +3,7 @@
 
 import type {
   NativeChatComposerDraftStorage,
-  NativeChatStoredDraft
+  StoredNativeChatComposerDraft
 } from './native-chat-composer-draft-storage'
 
 const DATABASE_NAME = 'orca-native-chat-composer-drafts'
@@ -85,7 +85,7 @@ export function createIndexedDbNativeChatComposerDraftStorage(
     },
     read: async (scopeKey) =>
       settled((await database()).transaction(DRAFTS, 'readonly').objectStore(DRAFTS).get(scopeKey)),
-    write: (scopeKey, draft: NativeChatStoredDraft) =>
+    write: (scopeKey, draft: StoredNativeChatComposerDraft) =>
       change((drafts) => drafts.put(draft, scopeKey)),
     remove: (scopeKeys) =>
       change((drafts) => {
@@ -97,11 +97,10 @@ export function createIndexedDbNativeChatComposerDraftStorage(
       const transaction = (await database()).transaction(DRAFTS, 'readwrite')
       const done = committed(transaction)
       const drafts = transaction.objectStore(DRAFTS)
-      let next: NativeChatStoredDraft | null = null
       const read = drafts.get(scopeKey)
       // Why inside the read's callback: the write must land in the same transaction as the read.
       read.onsuccess = () => {
-        next = apply(read.result)
+        const next = apply(read.result)
         if (next) {
           drafts.put(next, scopeKey)
         } else {
@@ -110,7 +109,6 @@ export function createIndexedDbNativeChatComposerDraftStorage(
         transaction.commit?.()
       }
       await done
-      return next
     }
   }
 }

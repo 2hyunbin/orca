@@ -54,10 +54,6 @@ import { resetStructuredAgentLaunchPersistenceForTests } from '@/lib/structured-
 import { resetStructuredAgentLaunchRegistryForTests } from '@/lib/structured-agent-session-launch-registry'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSession } from './use-structured-agent-session'
-import { allocateNativeChatNewDraft, readNativeChatNewDraft } from './native-chat-new-draft'
-import { isNativeChatComposerDraftUnsaved } from './native-chat-composer-draft-store'
-import { createMemoryNativeChatComposerDraftStorage, setNativeChatComposerDraftStorageForTests } from './native-chat-composer-draft-storage'
-import { markStructuredAgentSessionLaunchPublished } from '@/lib/structured-agent-session-launch-publication'
 import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
 
 const LOCAL_TARGET = { kind: 'local' } as const
@@ -144,27 +140,6 @@ describe('a chat pane over its own launch', () => {
     mocks.launch.mockReturnValue(new Promise(() => {}))
     mocks.call.mockImplementation((_target, method) => answerCatalog(method))
     resetHostModelCatalogSnapshotsForTests()
-  })
-
-  it('uses ordinary hosted send policy while metadata retirement fails', async () => {
-    const storage = createMemoryNativeChatComposerDraftStorage()
-    setNativeChatComposerDraftStorageForTests(storage)
-    const sessionId = 'codex_hosted_cleanup'
-    const metadata = { owner: { workspaceId: 'wt-hosted', executionHostId: 'local' as const }, agent: 'codex' as const, groupId: 'group-1', options: {} }
-    allocateNativeChatNewDraft(sessionId, metadata)
-    await waitFor(async () => expect(await storage.read(`agent-session-new:${sessionId}`)).toEqual(metadata))
-    storage.refuseWrites = true
-    markStructuredAgentSessionLaunchPublished('wt-hosted', sessionId, 'local')
-    await waitFor(() => expect(isNativeChatComposerDraftUnsaved(`agent-session:${sessionId}`)).toBe(true))
-    const { result, unmount } = renderHook(() => useNativeChatProvisionalLaunch('wt-hosted', sessionId))
-    const send = vi.fn(() => 'queued' as const)
-    expect(result.current.sendThroughLaunch('follow-up', false, send)).toBe('queued')
-    expect(send).toHaveBeenCalledOnce()
-    expect(result.current.transportEnabled).toBe(true)
-    expect(readNativeChatNewDraft(sessionId)).toEqual(metadata)
-    unmount()
-    storage.refuseWrites = false
-    setNativeChatComposerDraftStorageForTests(null)
   })
 
   it('keeps the selection its create seeded when a pick in another chat saves a new one', async () => {

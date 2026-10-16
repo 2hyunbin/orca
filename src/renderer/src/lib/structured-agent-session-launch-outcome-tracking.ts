@@ -1,4 +1,3 @@
-import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
 import {
   settleStructuredLaunchCallers,
@@ -6,15 +5,12 @@ import {
 } from '@/lib/structured-agent-session-launch-callers'
 import type { StructuredAgentLaunchReceipt } from '@/lib/structured-agent-session-launch-recovery'
 import { structuredLaunchFailure } from './structured-agent-session-launch-failure'
-import { markStructuredAgentSessionLaunchPublished } from './structured-agent-session-launch-publication'
 import {
-  getStructuredLaunchStateBySessionId,
   deleteStructuredLaunchStateIfCurrent,
   notifyStructuredLaunchListeners,
   retireStructuredAgentSessionLaunchCancellationTombstone,
   type StructuredLaunchState
 } from './structured-agent-session-launch-registry'
-
 
 // How a launch's create outcome settles its callers: published, refused, failed or unknown.
 
@@ -53,15 +49,14 @@ export function trackLaunchSettlement(
 ): void {
   void promise.then(
     () => {
-      if (state.promise !== promise || getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
+      if (state.promise !== promise) {
         return
       }
-      markStructuredAgentSessionLaunchPublished(state.intent.worktreeId, state.intent.sessionId, state.intent.executionHostId)
       settleStructuredLaunchCallers(state.callers, 'published')
       notifyStructuredLaunchListeners()
     },
     (error) => {
-      if (state.promise !== promise || getStructuredLaunchStateBySessionId(state.intent.sessionId) !== state) {
+      if (state.promise !== promise) {
         return
       }
       if (state.cancelled) {
@@ -71,13 +66,6 @@ export function trackLaunchSettlement(
             state.intent.sessionId
           )
         }
-        return
-      }
-      if (error instanceof StructuredAgentSessionSubmissionEndedError) {
-        state.cancelled = true
-        state.visibilityUnknown = false
-        settleStructuredLaunchCallers(state.callers, 'failed')
-        cleanupLaunchState(state)
         return
       }
       // The chat's Retry line owns the failed start's guidance.

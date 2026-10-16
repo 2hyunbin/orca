@@ -294,7 +294,6 @@ describe('structured chat adoption guard on the launch path', () => {
       'codex',
       'local',
       undefined,
-      undefined,
       undefined
     )
     expect(mockLaunchStructuredCodexSession).toHaveBeenCalledWith(
@@ -328,7 +327,6 @@ describe('structured chat adoption guard on the launch path', () => {
       'codex',
       'local',
       undefined,
-      undefined,
       undefined
     )
     expect(mockCreateTab).not.toHaveBeenCalled()
@@ -349,7 +347,6 @@ describe('structured chat adoption guard on the launch path', () => {
       'wt-1',
       'claude',
       'local',
-      undefined,
       undefined,
       undefined
     )

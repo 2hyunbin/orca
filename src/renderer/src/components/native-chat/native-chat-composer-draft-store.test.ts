@@ -121,9 +121,10 @@ describe('native-chat composer draft store', () => {
     const slow = {
       ...storage,
       write: (scopeKey: string, draft: Parameters<typeof storage.write>[1]) =>
-        new Promise<void>((resolve, reject) => {
+        new Promise<void>((resolve) => {
           pending.push(() => {
-            void storage.write(scopeKey, draft).then(resolve, reject)
+            storage.drafts.set(scopeKey, draft)
+            resolve()
           })
         })
     }
@@ -161,7 +162,7 @@ describe('native-chat composer draft store', () => {
       ...storage,
       loadAll: () => new Promise<ReadonlyMap<string, unknown>>(() => {}),
       update: (scopeKey: string, apply: Parameters<typeof storage.update>[1]) =>
-        new Promise<Awaited<ReturnType<typeof storage.update>>>((resolve) => {
+        new Promise<void>((resolve) => {
           complete = () => {
             void storage.update(scopeKey, apply).then(resolve)
           }
@@ -209,12 +210,11 @@ describe('native-chat composer draft store', () => {
     const aStorage = {
       ...storage,
       write: (scopeKey: string, draft: Parameters<typeof storage.write>[1]) =>
-        new Promise<void>((resolve, reject) => {
+        new Promise<void>((resolve) => {
           commitA = () => {
-            void storage.write(scopeKey, draft).then(() => {
-              resolve()
-              aCommitted()
-            }, reject)
+            storage.drafts.set(scopeKey, draft)
+            resolve()
+            aCommitted()
           }
         })
     }
@@ -231,7 +231,7 @@ describe('native-chat composer draft store', () => {
       // IndexedDB orders B's write after A's, which was issued first.
       write: async (scopeKey: string, draft: Parameters<typeof storage.write>[1]) => {
         await aDone
-        await storage.write(scopeKey, draft)
+        storage.drafts.set(scopeKey, draft)
       }
     }
     const b = await reload({ using: bStorage, hydrate: false })
@@ -274,9 +274,9 @@ describe('native-chat composer draft store', () => {
     storage.drafts.set('agent-session:s1', { text: 'typed earlier', images: [], savedAt: 1 })
     const landsUnconfirmed = {
       ...storage,
-      write: async (scopeKey: string, draft: Parameters<typeof storage.write>[1]) => {
-        await storage.write(scopeKey, draft)
-        await new Promise<void>(() => {})
+      write: (scopeKey: string, draft: Parameters<typeof storage.write>[1]) => {
+        storage.drafts.set(scopeKey, draft)
+        return new Promise<void>(() => {})
       }
     }
     const crashed = await reload({ using: landsUnconfirmed })
@@ -302,7 +302,7 @@ describe('native-chat composer draft store', () => {
           land = () => resolve(snapshot)
         })
       },
-      update: () => new Promise<Awaited<ReturnType<typeof storage.update>>>(() => {})
+      update: () => new Promise<void>(() => {})
     }
     const crashed = await reload({ using: crashing, hydrate: false })
     await crashed.store.waitForNativeChatComposerDrafts(1)
@@ -733,9 +733,9 @@ describe('native-chat composer draft store', () => {
     // Tab A's write lands, but the page goes away before it is confirmed.
     const landsUnconfirmed = {
       ...storage,
-      write: async (scopeKey: string, draft: Parameters<typeof storage.write>[1]) => {
-        await storage.write(scopeKey, draft)
-        await new Promise<void>(() => {})
+      write: (scopeKey: string, draft: Parameters<typeof storage.write>[1]) => {
+        storage.drafts.set(scopeKey, draft)
+        return new Promise<void>(() => {})
       }
     }
     const tabA = await reload({ using: landsUnconfirmed })

@@ -25,7 +25,6 @@ import {
   removeLegacyLocalStorageNativeChatComposerDrafts,
   type StoredNativeChatComposerDraft
 } from './native-chat-composer-draft-storage'
-import { loadNativeChatNewDraft } from './native-chat-new-draft'
 
 // Why bounded: a database that will not open must not be retried for the whole run; after the
 // last try the drafts stay in memory and a refused save shows as one.
@@ -60,9 +59,6 @@ function applyLoaded(
 ): void {
   const drafts = new Map<string, StoredNativeChatComposerDraft | null>()
   for (const [scopeKey, value] of loaded) {
-    if (loadNativeChatNewDraft(scopeKey, value)) {
-      continue
-    }
     drafts.set(scopeKey, parseStoredNativeChatComposerDraft(value))
   }
   for (const scopeKey of replayNativeChatComposerDraftJournal(drafts, journal)) {

@@ -258,12 +258,7 @@ describe('a new start beside an unconfirmed or retried chat', () => {
   it("opens a new chat with its text, not a draft, while a restored chat's Retry is in flight", async () => {
     const failed = launchIntent('session-failed')
     mocks.createIntent.mockReturnValueOnce(failed).mockReturnValueOnce(fresh)
-    mocks.launch.mockImplementationOnce(async (intent: StructuredAgentSessionLaunchIntent) => {
-      await Promise.resolve()
-      const issue = await intent.prepareCreate?.()
-      issue?.()
-      throw new StructuredAgentSessionCreateRefusalError('unsupported')
-    })
+    mocks.launch.mockRejectedValueOnce(new StructuredAgentSessionCreateRefusalError('unsupported'))
     startStructuredAgentLaunch(WORKTREE_ID, 'codex', {
       requestId: 'request-3',
       prompt: 'first task'

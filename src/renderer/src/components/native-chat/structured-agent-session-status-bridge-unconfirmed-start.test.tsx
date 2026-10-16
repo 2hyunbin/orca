@@ -307,12 +307,7 @@ describe('a chat whose start was never confirmed', () => {
   it('re-checks a start a reload interrupted, without the user pressing Retry', async () => {
     await connect()
     mocks.createIntent.mockReturnValueOnce(launchIntent(CLAUDE_SESSION))
-    mocks.launch.mockImplementationOnce(async (intent: StructuredAgentSessionLaunchIntent) => {
-      await Promise.resolve()
-      const issue = await intent.prepareCreate?.()
-      issue?.()
-      return new Promise(() => {})
-    })
+    mocks.launch.mockReturnValueOnce(new Promise(() => {}))
     startStructuredAgentLaunch(WORKTREE_ID, 'claude', { requestId: `request-${CLAUDE_SESSION}` })
     await flush()
 

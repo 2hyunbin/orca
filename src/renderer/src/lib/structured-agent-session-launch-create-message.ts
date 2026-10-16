@@ -1,4 +1,3 @@
-import { StructuredAgentSessionSubmissionEndedError } from './structured-agent-session-launch-errors'
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
 import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
@@ -19,54 +18,36 @@ import {
 } from './structured-agent-session-launch-options'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload. */
-export async function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): Promise<void | (() => void)> {
+export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchState): void {
   const { intent } = state
   if (intent.createPrepared) {
     return
   }
-  const attempt = state.callers.attempt
-  const prompt = attempt.kind === 'first' ? attempt.stagedPrompt : null
-  if (prompt?.sourceDraft) {
-    if (!prompt.slot?.prepare()) {
-      throw new StructuredAgentSessionSubmissionEndedError()
-    }
-    await prompt.beforeCreate?.()
-  }
-  return () => {
-    if (prompt?.sourceDraft && !prompt.slot?.prepare()) {
-      throw new StructuredAgentSessionSubmissionEndedError()
-    }
-    if (intent.createMessageSupport !== true) {
-      prepareLegacyStructuredLaunchPrompts(intent.sessionId)
-      intent.createPrepared = true
-      notifyStructuredLaunchListeners()
-      return
-    }
-    const firstMessage = prompt?.beforeSend ? undefined : prepareStructuredLaunchPromptForCreate(
-      intent.sessionId, intent.target, prompt?.sourceDraft ? prompt : undefined
-    )
-    if (prompt?.sourceDraft && !prompt.beforeSend && !firstMessage) {
-      throw new StructuredAgentSessionSubmissionEndedError()
-    }
-    const options = structuredLaunchCreateOptions(state)
-    const params = {
-      ...intent.params,
-      ...(firstMessage ? { firstMessage } : {}),
-      ...(options ? { options } : {})
-    }
-    intent.params = {
-      ...params,
-      envelope: {
-        ...params.envelope,
-        payloadFingerprint: structuredAgentSessionCreateFingerprint({
-          sessionId: intent.sessionId,
-          ...params
-        })
-      }
-    }
+  if (intent.createMessageSupport !== true) {
+    prepareLegacyStructuredLaunchPrompts(intent.sessionId)
     intent.createPrepared = true
     notifyStructuredLaunchListeners()
+    return
   }
+  const firstMessage = prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
+  const options = structuredLaunchCreateOptions(state)
+  const params = {
+    ...intent.params,
+    ...(firstMessage ? { firstMessage } : {}),
+    ...(options ? { options } : {})
+  }
+  intent.params = {
+    ...params,
+    envelope: {
+      ...params.envelope,
+      payloadFingerprint: structuredAgentSessionCreateFingerprint({
+        sessionId: intent.sessionId,
+        ...params
+      })
+    }
+  }
+  intent.createPrepared = true
+  notifyStructuredLaunchListeners()
 }
 
 /** Picks held so far, and the model and effort the chat shows: a first message starts its turn
@@ -75,10 +56,6 @@ function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
-  const attempt = state.callers.attempt
-  if (attempt.kind === 'first' && attempt.stagedPrompt?.sourceDraft) {
-    return attempt.stagedPrompt.options
-  }
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,
@@ -99,27 +76,16 @@ function structuredLaunchCreateOptions(
 }
 
 /** Later picks use the normal option path without holding publication behind startup. */
-const optionPublications = new WeakMap<StructuredLaunchState, Promise<StructuredAgentLaunchReceipt>>()
-
 export function publishStructuredLaunchCreateOptions(
   state: StructuredLaunchState,
   receipt: StructuredAgentLaunchReceipt
-): Promise<StructuredAgentLaunchReceipt> {
-  const existing = optionPublications.get(state)
-  const publication = existing ?? Promise.resolve().then(() => {
-    if (state.intent.createMessageSupport === true) {
-      settleStructuredLaunchCreateOptions(state, state.intent.params.options ?? {})
-    }
-    return receipt
+): StructuredAgentLaunchReceipt | Promise<StructuredAgentLaunchReceipt> {
+  if (state.intent.createMessageSupport !== true) {
+    return applyStructuredLaunchHeldOptions(state, receipt)
+  }
+  settleStructuredLaunchCreateOptions(state, state.intent.params.options ?? {})
+  void applyStructuredLaunchHeldOptions(state, receipt).catch((error: unknown) => {
+    console.warn('[native-chat] applying a launch option failed', error)
   })
-  optionPublications.set(state, publication)
-  return publication.then(() => {
-    if (state.intent.createMessageSupport !== true) {
-      return applyStructuredLaunchHeldOptions(state, receipt)
-    }
-    void applyStructuredLaunchHeldOptions(state, receipt).catch((error: unknown) => {
-      console.warn('[native-chat] applying a launch option failed', error)
-    })
-    return receipt
-  })
+  return receipt
 }

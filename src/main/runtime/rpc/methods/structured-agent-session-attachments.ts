@@ -8,7 +8,6 @@
 import { defineMethod, type RpcContext } from '../core'
 import {
   requireInstalledStructuredHost,
-  requireStructuredCreateSupportAdmission,
   structuredCallerFor
 } from './structured-agent-session-gate'
 import {
@@ -20,8 +19,6 @@ import {
 import { remoteFileContentBudget } from './files-remote-content-budget'
 import type { AgentSessionAttachmentStore } from '../../../native-chat/agent-session-attachments/agent-session-attachment-store'
 import { getAgentSessionAttachmentStore } from '../../../native-chat/agent-session-attachments/agent-session-attachment-store-registry'
-import { isStructuredAgentSessionIdFor } from '../../../../shared/structured-agent-session-create'
-import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 
 async function requireStore(
   ctx: RpcContext
@@ -41,15 +38,7 @@ export const STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS = [
     params: AttachmentUploadStartParams,
     handler: async (params, ctx) => {
       const { store, callerKey } = await requireStore(ctx)
-      const reserved = params.reservedSession
-      if (reserved) {
-        requireStructuredCreateSupportAdmission(ctx, reserved.agent)
-        const support = await ctx.runtime.getStructuredAgentSessionCreateSupport(reserved.worktree, reserved.agent)
-        if (!support.supported || !isStructuredAgentSessionIdFor(reserved.agent, params.sessionId)) {
-          throw agentSessionRefusalError('structured_agent_session_unsupported', { reason: 'hostUnsupported' })
-        }
-      }
-      return store.startUpload({ callerKey, ...params, ...(reserved ? { reservedSessionAdmitted: true as const } : {}) })
+      return store.startUpload({ callerKey, ...params })
     }
   }),
   defineMethod({

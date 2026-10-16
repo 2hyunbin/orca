@@ -45,7 +45,6 @@ export type StructuredLaunchOptionOutcome =
 type OptionReply = (outcome: StructuredLaunchOptionOutcome) => void
 
 const optionReplies = new WeakMap<StructuredLaunchState, Map<string, OptionReply>>()
-const optionDrains = new WeakMap<StructuredLaunchState, Promise<StructuredAgentLaunchReceipt>>()
 
 function repliesFor(state: StructuredLaunchState): Map<string, OptionReply> {
   let replies = optionReplies.get(state)
@@ -164,20 +163,7 @@ export function settleStructuredLaunchCreateOptions(
  * effort lands under the model it was picked against, until none is left. A refused pick is
  * reported to its picker and never keeps the launch from publishing.
  */
-export function applyStructuredLaunchHeldOptions(
-  state: StructuredLaunchState,
-  receipt: StructuredAgentLaunchReceipt
-): Promise<StructuredAgentLaunchReceipt> {
-  const draining = optionDrains.get(state)
-  if (draining) {
-    return draining
-  }
-  const drain = drainStructuredLaunchHeldOptions(state, receipt).finally(() => optionDrains.delete(state))
-  optionDrains.set(state, drain)
-  return drain
-}
-
-async function drainStructuredLaunchHeldOptions(
+export async function applyStructuredLaunchHeldOptions(
   state: StructuredLaunchState,
   receipt: StructuredAgentLaunchReceipt
 ): Promise<StructuredAgentLaunchReceipt> {

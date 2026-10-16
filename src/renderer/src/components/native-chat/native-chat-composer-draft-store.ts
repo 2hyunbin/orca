@@ -4,7 +4,6 @@
 // skipped write is repaired by the next one.
 
 import type { JSONContent } from '@tiptap/react'
-import { deleteNativeChatNewDraftsOwnedBy, resetNativeChatNewDraftsForTests, nativeChatNewDraftKey } from './native-chat-new-draft'
 import {
   sameNativeChatComposerDraftDocument,
   sameNativeChatComposerDraftImages
@@ -120,9 +119,7 @@ export function markNativeChatComposerDraftVerified(scopeKey: string): void {
 
 /** A draft storage refused to save: it is kept in memory only until a later write lands. */
 export function isNativeChatComposerDraftUnsaved(scopeKey: string): boolean {
-  const sessionId = structuredAgentSessionIdOfDraftScope(scopeKey)
-  return (refusedScopes.has(scopeKey) && records.has(scopeKey)) ||
-    (sessionId !== null && refusedScopes.has(nativeChatNewDraftKey(sessionId)))
+  return refusedScopes.has(scopeKey) && records.has(scopeKey)
 }
 
 function isEmptyDraft(draft: NativeChatComposerDraft): boolean {
@@ -302,7 +299,6 @@ export function deleteNativeChatComposerDraftsForTab(tabId: string): void {
 
 /** Drops every draft written in a workspace the user removed, open and closed chats alike. */
 export function deleteNativeChatComposerDraftsOwnedBy(owner: NativeChatComposerDraftOwner): void {
-  deleteNativeChatNewDraftsOwnedBy(owner)
   deleteDraftsWhere(
     (_scopeKey, draft) =>
       draft?.owner?.workspaceId === owner.workspaceId &&
@@ -311,7 +307,6 @@ export function deleteNativeChatComposerDraftsOwnedBy(owner: NativeChatComposerD
 }
 
 export function clearNativeChatComposerDraftsForTests(): void {
-  resetNativeChatNewDraftsForTests()
   clearDraftMemoryForTests()
   resetNativeChatComposerDraftPersistenceForTests()
   resetNativeChatComposerDraftLoadForTests()
