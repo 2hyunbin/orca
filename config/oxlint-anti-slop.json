@@ -72,12 +72,9 @@
         "anti-slop/no-module-mocking": "off"
       }
     },
-    // Test-only side effects register RPC stubs and mobile rendering adapters.
+    // Test-only side effect for explicit RPC registries; real catalog tests never import it.
     {
-      "files": [
-        "**/src/main/runtime/rpc/unused-default-rpc-methods.test-fixture.ts",
-        "**/mobile/src/session/MobileNativeChatView.harness.test-fixture.ts"
-      ],
+      "files": ["**/src/main/runtime/rpc/unused-default-rpc-methods.test-fixture.ts"],
       "rules": {
         "anti-slop/no-module-mocking": "off"
       }
