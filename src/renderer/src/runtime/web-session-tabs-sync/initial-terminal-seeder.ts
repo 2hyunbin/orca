@@ -3,10 +3,13 @@ import { isWebRuntimeInitialTerminalBootstrapInFlight } from '../web-runtime-ini
 import { dispatchWebRuntimeInitialTerminalBootstrap } from '../web-runtime-initial-terminal-bootstrap-dispatch'
 import { shouldApplyRecoveredWebSessionTabsSnapshot } from './tracking'
 import { shouldBootstrapInitialWebRuntimeTerminal } from './tracking-decisions'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import type { SessionTabsStreamEvent } from './state'
 
+type SessionTabsFrame = RuntimeMobileSessionTabsResult & { type: 'snapshot' | 'updated' }
+
 type DeferredSeed = {
-  event: SessionTabsStreamEvent
+  event: SessionTabsFrame
   firstHostAnswer: boolean
   receivedFrame: number
   runtimeId: string | undefined
