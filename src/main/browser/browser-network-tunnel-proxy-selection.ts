@@ -33,7 +33,10 @@ export function selectBrowserNetworkTunnelProxy(
   const bypassRules = fromSettings
     ? normalizeProxyBypassRules(settings?.httpProxyBypassRules)
     : getProxyBypassRulesFromEnvironment(env)
-  if (isLoopbackHost(target.host) || matchesProxyBypassRules(target, bypassRules)) {
+  if (
+    isLoopbackHost(target.host) ||
+    matchesProxyBypassRules(target, bypassRules, fromSettings ? 'chromium' : 'no-proxy')
+  ) {
     return { kind: 'direct' }
   }
   const url = new URL(proxyUrl)
@@ -62,20 +65,29 @@ function isLoopbackHost(host: string): boolean {
   )
 }
 
-/** NO_PROXY / Chromium bypass rules: `*`, `<local>`, suffixes, exact hosts, `host:port`, IPv4 CIDR. */
+/**
+ * Bypass rules: `*`, `<local>`, `.suffix`/`*suffix`, `host:port`, IPv4 CIDR. A bare host is exact
+ * in Orca's setting (Chromium reads it so) and covers subdomains in NO_PROXY (curl/Go/Python).
+ */
 export function matchesProxyBypassRules(
   target: Pick<BrowserNetworkTunnelOpen, 'host' | 'port'>,
-  rules: string
+  rules: string,
+  style: 'chromium' | 'no-proxy'
 ): boolean {
   const host = normalizeHost(target.host)
   return rules
     .split(';')
     .map((rule) => rule.trim().toLowerCase())
     .filter(Boolean)
-    .some((rule) => matchesBypassRule(host, target.port, rule))
+    .some((rule) => matchesBypassRule(host, target.port, rule, style))
 }
 
-function matchesBypassRule(host: string, port: number, rule: string): boolean {
+function matchesBypassRule(
+  host: string,
+  port: number,
+  rule: string,
+  style: 'chromium' | 'no-proxy'
+): boolean {
   if (rule === '*') {
     return true
   }
@@ -94,12 +106,19 @@ function matchesBypassRule(host: string, port: number, rule: string): boolean {
   if (rulePort !== undefined && Number(rulePort) !== port) {
     return false
   }
-  const suffix = ruleHost.replace(/^\*?\./, '').replace(/^\*/, '')
-  if (!suffix) {
+  if (ruleHost.startsWith('*') && !ruleHost.startsWith('*.')) {
+    // Chromium `*foo.com`: any host ending in the text, the bare domain included.
+    return ruleHost.length > 1 && host.endsWith(ruleHost.slice(1))
+  }
+  const wildcard = ruleHost.startsWith('.') || ruleHost.startsWith('*.')
+  const domain = ruleHost.replace(/^\*?\./, '')
+  if (!domain) {
     return false
   }
-  // Why subdomains too: curl, Go and Python all read `example.com` as covering `a.example.com`.
-  return host === suffix || host.endsWith(`.${suffix}`)
+  if (style === 'chromium') {
+    return wildcard ? host.endsWith(`.${domain}`) : host === domain
+  }
+  return host === domain || host.endsWith(`.${domain}`)
 }
 
 function matchesIpv4Cidr(host: string, network: string, prefix: number): boolean {

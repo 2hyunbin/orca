@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { connect, isIP, type Socket } from 'node:net'
-import { connect as connectTls } from 'node:tls'
+import { connect as connectTls, type ConnectionOptions } from 'node:tls'
+import { separateElectronProxyCredentials } from '../network/electron-proxy-credentials'
 import type { BrowserNetworkTunnelOpen } from '../../shared/browser-network-tunnel-protocol'
 import type { BrowserNetworkTunnelSocket } from './browser-network-tunnel-stream-state'
 
@@ -23,9 +24,16 @@ export class HttpConnectTunnelSocket extends EventEmitter implements BrowserNetw
     const onConnected = (): void => {
       this.socket.write(request)
     }
+    // Why a variable: Node's tls.connect honors allowHalfOpen, but its typings omit it.
+    const tlsOptions: ConnectionOptions & { allowHalfOpen: boolean } = {
+      host,
+      port,
+      allowHalfOpen: true,
+      ...(isIP(host) ? {} : { servername: host })
+    }
     this.socket =
       proxy.protocol === 'https:'
-        ? connectTls({ host, port, ...(isIP(host) ? {} : { servername: host }) }, onConnected)
+        ? connectTls(tlsOptions, onConnected)
         : connect({ host, port, allowHalfOpen: true }, onConnected)
     this.socket.on('data', (bytes: Buffer | string) =>
       this.onData(typeof bytes === 'string' ? Buffer.from(bytes) : bytes)
@@ -125,9 +133,10 @@ function encodeConnectRequest(proxy: URL, target: BrowserNetworkTunnelOpen): str
   }
   const authority = `${host}:${target.port}`
   const lines = [`CONNECT ${authority} HTTP/1.1`, `Host: ${authority}`]
-  if (proxy.username || proxy.password) {
-    const credentials = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`
-    lines.push(`Proxy-Authorization: Basic ${Buffer.from(credentials).toString('base64')}`)
+  const { credentials } = separateElectronProxyCredentials(proxy.toString())
+  if (credentials) {
+    const basic = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')
+    lines.push(`Proxy-Authorization: Basic ${basic}`)
   }
   return `${lines.join('\r\n')}\r\n\r\n`
 }

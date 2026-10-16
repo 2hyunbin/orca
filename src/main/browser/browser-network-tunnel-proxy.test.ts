@@ -103,6 +103,18 @@ describe('native browser tunnel upstream proxy (#29154)', () => {
     ])
   })
 
+  it('sends a credential that is not valid percent-encoding as written', async () => {
+    const proxy = await startConnectProxy(await startEchoServer())
+    const socket = connectNativeBrowserNetworkTarget(
+      { host: 'site.invalid', port: 443 },
+      { HTTPS_PROXY: `http://user:p%ss@127.0.0.1:${proxy.port}` }
+    )
+    await expect(roundTrip(socket, 'd')).resolves.toBe('echo:d')
+    expect(proxy.requests[0]?.authorization).toBe(
+      `Basic ${Buffer.from('user:p%ss').toString('base64')}`
+    )
+  })
+
   it("prefers Orca's proxy setting and its bypass list over the environment", async () => {
     const proxy = await startConnectProxy(await startEchoServer())
     setNetworkProxySettingsSource(() => ({
@@ -161,20 +173,25 @@ describe('native browser tunnel upstream proxy (#29154)', () => {
 
 describe('proxy bypass rules', () => {
   it.each([
-    ['*', 'any.host', 443, true],
-    ['<local>', 'intranet', 80, true],
-    ['<local>', 'intranet.corp', 80, false],
-    ['.corp.test', 'a.corp.test', 443, true],
-    ['*.corp.test', 'corp.test', 443, true],
-    ['corp.test', 'deep.a.corp.test', 443, true],
-    ['corp.test', 'notcorp.test', 443, false],
-    ['corp.test:8443', 'corp.test', 443, false],
-    ['corp.test:8443', 'corp.test', 8443, true],
-    ['10.0.0.0/8', '10.20.30.40', 443, true],
-    ['10.0.0.0/8', '11.0.0.1', 443, false],
-    ['[fd00::1]', 'fd00::1', 443, true],
-    ['https://corp.test', 'corp.test', 443, true]
-  ])('%s against %s:%d is %s', (rule, host, port, expected) => {
-    expect(matchesProxyBypassRules({ host, port }, rule)).toBe(expected)
+    ['*', 'any.host', 443, true, true],
+    ['<local>', 'intranet', 80, true, true],
+    ['<local>', 'intranet.corp', 80, false, false],
+    ['.corp.test', 'a.corp.test', 443, true, true],
+    ['.corp.test', 'corp.test', 443, true, false],
+    ['*.corp.test', 'corp.test', 443, true, false],
+    ['*corp.test', 'corp.test', 443, true, true],
+    // A bare host covers subdomains in NO_PROXY, but is exact in Chromium (Orca's setting).
+    ['corp.test', 'deep.a.corp.test', 443, true, false],
+    ['corp.test', 'corp.test', 443, true, true],
+    ['corp.test', 'notcorp.test', 443, false, false],
+    ['corp.test:8443', 'corp.test', 443, false, false],
+    ['corp.test:8443', 'corp.test', 8443, true, true],
+    ['10.0.0.0/8', '10.20.30.40', 443, true, true],
+    ['10.0.0.0/8', '11.0.0.1', 443, false, false],
+    ['[fd00::1]', 'fd00::1', 443, true, true],
+    ['https://corp.test', 'corp.test', 443, true, true]
+  ])('%s against %s:%d (NO_PROXY %s, Chromium %s)', (rule, host, port, noProxy, chromium) => {
+    expect(matchesProxyBypassRules({ host, port }, rule, 'no-proxy')).toBe(noProxy)
+    expect(matchesProxyBypassRules({ host, port }, rule, 'chromium')).toBe(chromium)
   })
 })
