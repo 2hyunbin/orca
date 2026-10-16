@@ -65,8 +65,6 @@ export class MobileRelayHostCatalog {
     private readonly options: {
       hosts: MobileDesktopRelayHosts
       hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
-      /** The desktop's own "Hide other-client workspaces" setting. */
-      hidesWorkspacesFromOtherDevices: () => boolean
       /** The desktop's saved session for a host, as its sidebar last wrote it. */
       getWorkspaceSession: (hostId: ExecutionHostId) => WorkspaceSessionState | null
     }
@@ -102,9 +100,7 @@ export class MobileRelayHostCatalog {
     if (!current || (cached && cached.fence !== fenceOf(current))) {
       return { worktrees: null }
     }
-    const desktopDeviceIds = this.options.hidesWorkspacesFromOtherDevices()
-      ? getPairedDeviceIdsByEnvironment([current], statusByEnvironmentId)
-      : null
+    const desktopDeviceIds = getPairedDeviceIdsByEnvironment([current], statusByEnvironmentId)
     const sessionActivity = new Set(
       [
         ...getWorkspaceSessionTabActivityIds(
@@ -274,21 +270,19 @@ function relayVerdict(
 }
 
 /**
- * What the desktop's own sidebar decides and the server cannot: its "Hide other-client workspaces"
- * (marked, not dropped, so deep links still resolve), and its own browser and chat tabs as activity.
+ * What the desktop's own sidebar knows and the server cannot: which rows are another client's
+ * (marked, not dropped; the phone applies the shared filter), and its browser and chat tabs as activity.
  */
 function stampDesktopSidebarView(
   row: MobileRelayServerWorktreeRow,
   environmentId: string,
-  desktopDeviceIds: ReadonlyMap<string, string> | null,
+  desktopDeviceIds: ReadonlyMap<string, string>,
   sessionActivity: ReadonlySet<string>
 ): MobileRelayServerWorktreeRow {
-  const otherClient =
-    desktopDeviceIds !== null &&
-    isWorkspaceOwnedBySomeoneElse(
-      { creatorProvenance: row.creatorProvenance, runtimeOwnerEnvironmentId: environmentId },
-      desktopDeviceIds
-    )
+  const otherClient = isWorkspaceOwnedBySomeoneElse(
+    { creatorProvenance: row.creatorProvenance, runtimeOwnerEnvironmentId: environmentId },
+    desktopDeviceIds
+  )
   const active =
     typeof row.worktreeId === 'string' &&
     sessionActivity.has(runtimeWorktreeIdentityKey(row.worktreeId))
