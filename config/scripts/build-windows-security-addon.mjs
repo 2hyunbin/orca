@@ -30,6 +30,27 @@ export function windowsSecurityAddonOutput(root, arch) {
   return join(root, '.build', 'windows-security', arch, ORCAD_WINDOWS_SECURITY_FILENAME)
 }
 
+export function probeWindowsSecurityAddon(
+  runtimePath,
+  candidate,
+  arch,
+  run = runProcessSync,
+  cwd = ROOT
+) {
+  return run({
+    program: runtimePath,
+    args: [
+      '-e',
+      `if (process.platform !== 'win32' || process.arch !== ${JSON.stringify(arch)} || process.versions.electron) process.exit(1);` +
+        `const sid = require(${JSON.stringify(candidate)}).currentUserSid();` +
+        `if (typeof sid !== 'string' || !/^S-1-\\d+(?:-\\d+)+$/.test(sid)) process.exit(2);` +
+        `process.stdout.write('windows-security-ready');`
+    ],
+    cwd,
+    timeoutMs: 30_000
+  })
+}
+
 export function reusePreparedWindowsSecurityAddon(
   arch,
   output,
@@ -70,18 +91,7 @@ export function reusePreparedWindowsSecurityAddon(
     if (prepared.code !== 0 || prepared.timedOut || prepared.outputTruncated) {
       return false
     }
-    const probe = run({
-      program: runtimePath,
-      args: [
-        '-e',
-        `if (process.platform !== 'win32' || process.arch !== ${JSON.stringify(arch)} || process.versions.electron) process.exit(1);` +
-          `const sid = require(${JSON.stringify(candidate)}).currentUserSid();` +
-          `if (typeof sid !== 'string' || !/^S-1-\\d+(?:-\\d+)+$/.test(sid)) process.exit(2);` +
-          `process.stdout.write('windows-security-ready');`
-      ],
-      cwd: root,
-      timeoutMs: 30_000
-    })
+    const probe = probeWindowsSecurityAddon(runtimePath, candidate, arch, run, root)
     if (
       probe.code !== 0 ||
       probe.timedOut ||
