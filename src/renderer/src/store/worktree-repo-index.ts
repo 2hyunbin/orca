@@ -10,6 +10,7 @@ type WorktreeSnapshot = {
   allWorktrees: Worktree[]
   worktreeMap: Map<string, Worktree>
   worktreesById: Map<string, Worktree[]>
+  worktreesByIdentity: Map<string, Worktree>
 }
 
 // Why: Zustand reruns selectors on every write, so identity projections need
@@ -60,7 +61,10 @@ function getWorktreeSnapshot(worktreesByRepo: AppState['worktreesByRepo']): Work
       worktreesById.set(worktreeId, [worktree])
     }
   }
-  const snapshot = { allWorktrees, worktreeMap, worktreesById }
+  const worktreesByIdentity = new Map(
+    allWorktrees.flatMap((row) => (row.identity ? [[row.identity.key, row] as const] : []))
+  )
+  const snapshot = { allWorktrees, worktreeMap, worktreesById, worktreesByIdentity }
   worktreeSnapshotCache.set(worktreesByRepo, snapshot)
   return snapshot
 }
@@ -95,6 +99,13 @@ export function getIndexedWorktreeById(
   worktreeId: string
 ): Worktree | undefined {
   return getWorktreeSnapshot(worktreesByRepo).worktreeMap.get(worktreeId)
+}
+
+export function getIndexedWorktreeByIdentity(
+  worktreesByRepo: AppState['worktreesByRepo'],
+  identity: string
+): Worktree | undefined {
+  return getWorktreeSnapshot(worktreesByRepo).worktreesByIdentity.get(identity)
 }
 
 export function getIndexedRepoMap(repos: AppState['repos']): Map<string, Repo> {

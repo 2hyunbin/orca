@@ -1,4 +1,4 @@
-import { removedOwnerTabIds } from './worktree-removal-owner'
+import { matchesRemovedWorktreeOwner, removedOwnerTabIds } from './worktree-removal-owner'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import type { WorktreeCatalogVersion } from '../../../../../../shared/worktree/catalog-version'
@@ -87,7 +87,11 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   if (
     !get()
       .allWorktrees()
-      .some((row) => row.id === worktreeId && row.hostId !== (requiredExecutionHostId ?? hostId))
+      .some(
+        (row) =>
+          row.id === worktreeId &&
+          !matchesRemovedWorktreeOwner(get(), row, requiredExecutionHostId ?? hostId)
+      )
   ) {
     detachedHeadAutoDerivedDisplayNames.delete(worktreeId)
   }

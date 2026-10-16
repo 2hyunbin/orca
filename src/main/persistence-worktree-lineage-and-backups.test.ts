@@ -100,7 +100,11 @@ describe('Store', () => {
     const store = await createStore()
     const lineage = makeWorktreeLineage()
 
-    store.setWorktreeMeta(lineage.worktreeId, { displayName: 'child' })
+    store.addRepo(makeRepo())
+    store.setWorktreeMeta(lineage.worktreeId, {
+      displayName: 'child',
+      instanceId: lineage.worktreeInstanceId
+    })
     store.setWorktreeLineage(lineage.worktreeId, lineage)
 
     expect(store.getWorktreeLineage(lineage.worktreeId)).toEqual(lineage)
@@ -116,7 +120,11 @@ describe('Store', () => {
     const store = await createStore()
     const lineage = makeWorktreeLineage()
 
-    store.setWorktreeMeta(lineage.worktreeId, { displayName: 'child' })
+    store.addRepo(makeRepo())
+    store.setWorktreeMeta(lineage.worktreeId, {
+      displayName: 'child',
+      instanceId: lineage.worktreeInstanceId
+    })
     store.setWorktreeLineage(lineage.worktreeId, lineage)
 
     store.removeWorktreeMeta(lineage.worktreeId)
@@ -129,7 +137,11 @@ describe('Store', () => {
     const store = await createStore()
     const lineage = makeWorkspaceLineage()
 
-    store.setWorktreeMeta('r1::/path/child', { displayName: 'child' })
+    store.addRepo(makeRepo())
+    store.setWorktreeMeta('r1::/path/child', {
+      displayName: 'child',
+      instanceId: lineage.childInstanceId
+    })
     store.setWorkspaceLineage(lineage)
 
     expect(store.getWorkspaceLineage(lineage.childWorkspaceKey)).toEqual(lineage)
@@ -140,7 +152,7 @@ describe('Store', () => {
     expect(store.getWorkspaceLineage(lineage.childWorkspaceKey)).toBeUndefined()
   })
 
-  it('removeFolderWorkspace deletes child workspace lineage for that folder parent', async () => {
+  it('removeFolderWorkspace preserves lineage owned by surviving children', async () => {
     const store = await createStore()
     const group = store.createProjectGroup({
       name: 'Platform',
@@ -156,15 +168,20 @@ describe('Store', () => {
     })
     const unrelatedLineage = makeWorkspaceLineage({
       childWorkspaceKey: worktreeWorkspaceKey('r2::/other-child'),
+      childInstanceId: 'other-child-instance',
       parentWorkspaceKey: folderWorkspaceKey('other-folder')
     })
 
+    store.addRepo(makeRepo())
+    store.addRepo(makeRepo({ id: 'r2', path: '/repo2' }))
+    store.setWorktreeMeta('r1::/path/child', { instanceId: folderLineage.childInstanceId })
+    store.setWorktreeMeta('r2::/other-child', { instanceId: unrelatedLineage.childInstanceId })
     store.setWorkspaceLineage(folderLineage)
     store.setWorkspaceLineage(unrelatedLineage)
 
     store.removeFolderWorkspace(workspace.id)
 
-    expect(store.getWorkspaceLineage(folderLineage.childWorkspaceKey)).toBeUndefined()
+    expect(store.getWorkspaceLineage(folderLineage.childWorkspaceKey)).toEqual(folderLineage)
     expect(store.getWorkspaceLineage(unrelatedLineage.childWorkspaceKey)).toEqual(unrelatedLineage)
   })
 

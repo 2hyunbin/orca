@@ -220,12 +220,11 @@ it('gives workspaces the store cannot place no project node', () => {
   expect(container.querySelector('[aria-label="Select all chats in "]')).toBeNull()
 })
 
-// Why: the sidebar nests a child only under a parent on its own host; no host id matches only none.
 it.each([
   ['both local', 'local', 'local', true],
   ['neither with a host id', undefined, undefined, true],
-  ['parent without a host id, child local', undefined, 'local', false],
-  ['parent local, child without a host id', 'local', undefined, false]
+  ['parent without a host id, child local', undefined, 'local', true],
+  ['parent local, child without a host id', 'local', undefined, true]
 ] as const)(
   '%s: nests the child exactly as the sidebar does',
   (_, parentHost, childHost, nests) => {

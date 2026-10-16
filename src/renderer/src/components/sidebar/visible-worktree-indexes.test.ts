@@ -12,9 +12,11 @@ vi.mock('../../../../shared/resolved-worktree-lineage', async (importOriginal) =
   const actual = await importOriginal<typeof ResolvedWorktreeLineage>()
   return {
     ...actual,
-    getCyclicChildKeys: (...args: Parameters<typeof actual.getCyclicChildKeys>) => {
+    selectResolvedWorktreeLineage: (
+      ...args: Parameters<typeof actual.selectResolvedWorktreeLineage>
+    ) => {
       counters.cycleDetections += 1
-      return actual.getCyclicChildKeys(...args)
+      return actual.selectResolvedWorktreeLineage(...args)
     }
   }
 })
@@ -103,23 +105,30 @@ function visibleOptions(
 }
 
 describe('visible worktree indexes', () => {
-  it('reuses the lineage projection instead of rebuilding it on every store write', () => {
-    const parent = makeWorktree('parent')
-    const child = makeWorktree('child')
-    const worktreesByRepo = { repo1: [parent, child] }
-    const sortedIds = [parent.id, child.id]
-    const worktreeLineageById = { [child.id]: makeLineage(child, parent) }
+  it.each([null, ['local' as const]])(
+    'reuses the lineage projection across store writes with host filter %j',
+    (visibleWorkspaceHostIds) => {
+      const parent = makeWorktree('parent')
+      const child = makeWorktree('child')
+      const worktreesByRepo = { repo1: [parent, child] }
+      const sortedIds = [parent.id, child.id]
+      const worktreeLineageById = { [child.id]: makeLineage(child, parent) }
 
-    counters.cycleDetections = 0
-    // Each call stands for one store write that re-fires the sidebar memo
-    // (PTY spawn/exit, tab open/close, agent status transition) without
-    // changing `worktreesByRepo`.
-    for (let write = 0; write < 10; write += 1) {
-      computeVisibleWorktreeIds(worktreesByRepo, sortedIds, visibleOptions({ worktreeLineageById }))
+      counters.cycleDetections = 0
+      // Each call stands for one store write that re-fires the sidebar memo
+      // (PTY spawn/exit, tab open/close, agent status transition) without
+      // changing `worktreesByRepo`.
+      for (let write = 0; write < 10; write += 1) {
+        computeVisibleWorktreeIds(
+          worktreesByRepo,
+          sortedIds,
+          visibleOptions({ worktreeLineageById, visibleWorkspaceHostIds })
+        )
+      }
+
+      expect(counters.cycleDetections).toBe(1)
     }
-
-    expect(counters.cycleDetections).toBe(1)
-  })
+  )
 
   it('returns identity-stable index maps for unchanged store inputs', () => {
     const parent = makeWorktree('parent')

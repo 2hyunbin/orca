@@ -732,10 +732,18 @@ describe('fetchAllWorktrees hydration-time purge (design §4.4)', () => {
           {
             id: 'floating-group',
             worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
-            activeTabId: 'floating-unified-tab'
+            activeTabId: 'floating-unified-tab',
+            tabOrder: ['floating-unified-tab']
           }
         ],
-        [staleId]: [{ id: 'stale-group', worktreeId: staleId, activeTabId: 'stale-unified-tab' }]
+        [staleId]: [
+          {
+            id: 'stale-group',
+            worktreeId: staleId,
+            activeTabId: 'stale-unified-tab',
+            tabOrder: ['stale-unified-tab']
+          }
+        ]
       },
       layoutByWorktree: {
         [FLOATING_TERMINAL_WORKTREE_ID]: { type: 'leaf', groupId: 'floating-group' },

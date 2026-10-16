@@ -1,14 +1,33 @@
 import type { AppState } from '../../../types'
+import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { worktreeHostMatchOptions, worktreeMatchesHost } from '../listing/worktree-host-ownership'
 import { worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import {
   findAmbiguousWorktreeIds,
   isUnifiedTabOwnedByWorktree
 } from '@/lib/unified-tab-host-ownership'
 
+export function matchesRemovedWorktreeOwner(
+  state: Pick<AppState, 'repos'>,
+  row: Worktree,
+  hostId: ExecutionHostId | undefined
+): boolean {
+  return (
+    hostId === undefined ||
+    row.hostId === hostId ||
+    worktreeMatchesHost(row, hostId, worktreeHostMatchOptions(state, row.repoId, hostId))
+  )
+}
+
 export function removedOwnerTabIds(
   state: Pick<AppState, 'unifiedTabsByWorktree' | 'tabsByWorktree'> &
-    Partial<Pick<AppState, 'worktreesByRepo' | 'restoredRuntimeHostIdByWorkspaceSessionKey'>>,
+    Partial<
+      Pick<
+        AppState,
+        'worktreesByRepo' | 'browserTabsByWorktree' | 'restoredRuntimeHostIdByWorkspaceSessionKey'
+      >
+    >,
   worktreeId: string,
   hostId: ExecutionHostId | undefined
 ): Set<string> {
@@ -29,7 +48,10 @@ export function removedOwnerTabIds(
     state.restoredRuntimeHostIdByWorkspaceSessionKey?.[worktreeId] ??
     state.restoredRuntimeHostIdByWorkspaceSessionKey?.[worktreeWorkspaceKey(worktreeId)]
   if (hostId === undefined || (restored ? restored === hostId : !ambiguous.has(worktreeId))) {
-    for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
+    for (const tab of [
+      ...(state.tabsByWorktree[worktreeId] ?? []),
+      ...(state.browserTabsByWorktree?.[worktreeId] ?? [])
+    ]) {
       if (!unified.some((row) => row.entityId === tab.id)) {
         ids.add(tab.id)
       }

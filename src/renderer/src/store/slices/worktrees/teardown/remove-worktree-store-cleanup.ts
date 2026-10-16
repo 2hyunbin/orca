@@ -8,7 +8,7 @@ import { removeWorktreeVisitEntries } from '@/lib/worktree-visit-recency'
 import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings'
 import { omitRecordKeys } from './record-key-omission'
 import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
-import { removalActiveHost } from './worktree-removal-owner'
+import { matchesRemovedWorktreeOwner, removalActiveHost } from './worktree-removal-owner'
 
 /** Clears worktree-owned renderer state after successful removal so a reused identity cannot inherit stale preferences. */
 export function applyRemoveWorktreeSuccessState(
@@ -23,10 +23,7 @@ export function applyRemoveWorktreeSuccessState(
   set((s) => {
     const survivor = Object.values(s.worktreesByRepo)
       .flat()
-      .some(
-        (row) =>
-          row.id === worktreeId && executionHostId !== undefined && row.hostId !== executionHostId
-      )
+      .some((row) => row.id === worktreeId && !matchesRemovedWorktreeOwner(s, row, executionHostId))
     const worktreeIds = survivor ? [] : [worktreeId]
     const ownsFile = (file: (typeof s.openFiles)[number]) =>
       executionHostId === undefined
@@ -37,8 +34,7 @@ export function applyRemoveWorktreeSuccessState(
     const nextWorktreesByRepo = { ...s.worktreesByRepo }
     for (const repoId of Object.keys(nextWorktreesByRepo)) {
       nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter(
-        (w) =>
-          w.id !== worktreeId || (executionHostId !== undefined && w.hostId !== executionHostId)
+        (w) => w.id !== worktreeId || !matchesRemovedWorktreeOwner(s, w, executionHostId)
       )
     }
     // Why: clean up per-file editor state for the removed worktree so stale drafts/view modes don't accumulate.

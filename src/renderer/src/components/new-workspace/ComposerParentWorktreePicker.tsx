@@ -9,7 +9,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import {
+  getIndexedAllWorktrees,
+  getIndexedWorktreeById,
+  getIndexedWorktreeByIdentity
+} from '@/store/worktree-repo-index'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
 import { branchDisplayName } from '@/components/sidebar/WorktreeCardHelpers'
 import { getCyclicProjectedWorktreeLineageIds } from '@/components/sidebar/worktree-lineage-projection'
@@ -43,7 +47,7 @@ const NO_PARENT_ROW_KEY = 'no-parent'
 
 type ComposerParentWorktreePickerProps = {
   repoId: string
-  /** Parent must belong to the same execution host that will create the child. */
+  /** Execution host that will create the child. */
   executionHostId?: ExecutionHostId | null
   projectId?: string | null
   value: string | null
@@ -89,9 +93,9 @@ function ComposerParentWorktreePickerImpl({
     if (!value) {
       return null
     }
-    const parent = getIndexedAllWorktrees(s.worktreesByRepo).find((row) =>
-      row.identity ? `identity:${row.identity.key}` === value : row.id === value
-    )
+    const parent = value.startsWith('identity:')
+      ? getIndexedWorktreeByIdentity(s.worktreesByRepo, value.slice('identity:'.length))
+      : getIndexedWorktreeById(s.worktreesByRepo, value)
     return parent && !parent.isArchived ? parent.displayName : null
   })
 

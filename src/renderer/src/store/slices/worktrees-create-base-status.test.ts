@@ -307,7 +307,7 @@ describe('createWorktree base status merge', () => {
       })
     )
     expect(store.getState().workspaceLineageByChildKey).toEqual({
-      [workspaceLineage.childWorkspaceKey]: workspaceLineage
+      [`local|${workspaceLineage.childWorkspaceKey}`]: workspaceLineage
     })
   })
 

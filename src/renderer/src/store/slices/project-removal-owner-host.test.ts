@@ -177,8 +177,7 @@ describe('project removal stays on its owner host (#13071)', () => {
     expect(reposRemoveForHost).toHaveBeenCalledWith({ repoId: 'same-repo', hostId: 'ssh:target-1' })
   })
 
-  // Why: removal writes no tab state itself; the host-scoped purge of a twin id must still drop it.
-  it('drops terminal and editor state under a worktree id the other host also publishes', async () => {
+  it('preserves ambiguous tabs and removes owned editor state when another host shares the id', async () => {
     const store = createTestStore()
     const worktreeId = 'same-repo::/work/same'
     const sshTwin = makeWorktree({ id: worktreeId, repoId: 'same-repo', hostId: 'ssh:target-1' })
@@ -202,12 +201,12 @@ describe('project removal stays on its owner host (#13071)', () => {
 
     const state = store.getState()
     expect(state.worktreesByRepo['same-repo']).toEqual([sshTwin])
-    expect(state.tabsByWorktree[worktreeId]).toBeUndefined()
-    expect(state.terminalLayoutsByTabId['tab-1']).toBeUndefined()
-    expect(state.ptyIdsByTabId['tab-1']).toBeUndefined()
-    expect(state.activeTabId).toBeNull()
+    expect(state.tabsByWorktree[worktreeId]).toHaveLength(1)
+    expect(state.terminalLayoutsByTabId['tab-1']).toBeDefined()
+    expect(state.ptyIdsByTabId['tab-1']).toEqual(['pty-1'])
+    expect(state.activeTabId).toBe('tab-1')
     expect(state.openFiles).toEqual([])
-    expect(state.activeFileIdByWorktree[worktreeId]).toBeUndefined()
+    expect(state.activeFileIdByWorktree[worktreeId]).toBeNull()
   })
 })
 

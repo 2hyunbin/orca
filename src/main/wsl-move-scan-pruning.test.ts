@@ -72,6 +72,10 @@ afterEach(async () => {
 describe('lineage pruning under a WSL move', () => {
   const pruneMissingChild = (target: Repo): WorktreeLineage | undefined => {
     const childId = `${target.id}::/ws/${target.id}/gone`
+    store.setWorktreeMeta(childId, {
+      instanceId: `${childId}#instance`,
+      hostId: target.executionHostId ?? 'local'
+    })
     store.setWorktreeLineage(childId, lineage(childId, `${target.id}::${target.path}`))
     pruneLineageForMissingRepoWorktrees(store, target, [gitRow(target.path)])
     return store.getWorktreeLineage(childId)
@@ -196,6 +200,13 @@ describe('inferred lineage hydration under a WSL move', () => {
       ['task_staying', resolved(STAYING, 'parent', 'local')],
       ['task_remote', resolved(MOVING, 'parent-remote', 'ssh:target-1')]
     ])
+    store.addRepo(repo(MOVING, onSsh))
+    for (const row of [...children, ...parents.values()]) {
+      store.setWorktreeMetaForHost(row.id, row.hostId, {
+        instanceId: row.instanceId,
+        hostId: row.hostId
+      })
+    }
     const controller = new RuntimeWorktreeLineageController({
       getStore: () => store,
       getCachedWorktrees: () => null,

@@ -1,4 +1,8 @@
-import { readSavedWorktreeLineage, readSavedWorktreeOwners } from './saved-worktree-lineage-catalog'
+import {
+  readSavedLineageEdges,
+  readSavedWorktreeLineage,
+  readSavedWorktreeOwners
+} from './saved-worktree-lineage-catalog'
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
 import { getWorktreeHostIdentity } from '../shared/worktree/host-qualified-identity'
@@ -34,6 +38,9 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   _repo: Repo,
   rows: readonly T[]
 ) {
+  if (readSavedLineageEdges(store).length === 0) {
+    return projectResolvedWorktreeLineage(rows, {})
+  }
   const savedOwners = readSavedWorktreeOwners(store)
   const lineageById = readSavedWorktreeLineage(store, savedOwners)
   if (rows.length === 0) {

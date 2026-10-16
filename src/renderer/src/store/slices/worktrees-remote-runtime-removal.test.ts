@@ -37,7 +37,12 @@ describe('worktree remote runtime mutations', () => {
 
   it('removes worktrees through the active remote runtime environment', async () => {
     const store = createTestStore()
-    const wt = makeWorktree({ id: 'repo1::/path/wt1', repoId: 'repo1', path: '/path/wt1' })
+    const wt = makeWorktree({
+      id: 'repo1::/path/wt1',
+      repoId: 'repo1',
+      path: '/path/wt1',
+      hostId: 'runtime:env-1'
+    })
     runtimeEnvironmentCall.mockResolvedValue({
       id: 'rpc-rm',
       ok: true,
@@ -78,7 +83,8 @@ describe('worktree remote runtime mutations', () => {
     })
     expect(store.getState().shutdownWorktreeTerminals).toHaveBeenCalledWith(wt.id, {
       shutdownReason: 'remove-worktree',
-      backendOwnsPtyTeardown: true
+      backendOwnsPtyTeardown: true,
+      tabIds: new Set()
     })
     expect(store.getState().worktreesByRepo.repo1).toEqual([])
   })

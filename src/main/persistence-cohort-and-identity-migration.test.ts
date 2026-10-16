@@ -216,8 +216,13 @@ describe('Store.migrateWorktreeIdentity', () => {
 
   it('moves meta, lineage, tabs, active pointers, and records the prior id', async () => {
     const store = await createStore()
-    store.setWorktreeMeta(OLD, { displayName: 'Cunner', linkedIssue: 42 })
-    store.setWorktreeLineage(OLD, makeWorktreeLineage({ worktreeId: OLD }))
+    store.addRepo(makeRepo({ id: 'repo1', path: '/ws/main' }))
+    store.setWorktreeMeta(OLD, {
+      displayName: 'Cunner',
+      linkedIssue: 42,
+      instanceId: 'child-instance'
+    })
+    store.setWorktreeMeta('repo1::/ws/child', { instanceId: 'descendant-instance' })
     store.setWorkspaceLineage(
       makeWorkspaceLineage({
         childWorkspaceKey: OLD_WORKSPACE_KEY,
@@ -227,7 +232,9 @@ describe('Store.migrateWorktreeIdentity', () => {
     store.setWorkspaceLineage(
       makeWorkspaceLineage({
         childWorkspaceKey: worktreeWorkspaceKey('repo1::/ws/child'),
-        parentWorkspaceKey: OLD_WORKSPACE_KEY
+        childInstanceId: 'descendant-instance',
+        parentWorkspaceKey: OLD_WORKSPACE_KEY,
+        parentInstanceId: 'child-instance'
       })
     )
     store.setWorkspaceSession({
@@ -331,12 +338,11 @@ describe('Store.migrateWorktreeIdentity', () => {
     expect(meta?.priorWorktreeIds).toEqual([OLD])
 
     expect(store.getWorktreeLineage(OLD)).toBeUndefined()
-    expect(store.getWorktreeLineage(NEW)?.worktreeId).toBe(NEW)
     expect(store.getWorkspaceLineage(OLD_WORKSPACE_KEY)).toBeUndefined()
     expect(store.getWorkspaceLineage(NEW_WORKSPACE_KEY)?.childWorkspaceKey).toBe(NEW_WORKSPACE_KEY)
     expect(
       store.getWorkspaceLineage(worktreeWorkspaceKey('repo1::/ws/child'))?.parentWorkspaceKey
-    ).toBe(NEW_WORKSPACE_KEY)
+    ).toBe(OLD_WORKSPACE_KEY)
 
     // The live session's tab keeps its frozen ptyId but now belongs to the new id.
     expect(store.getWorktreeIdForTab('tab1')).toBe(NEW)
@@ -382,10 +388,12 @@ describe('Store.migrateWorktreeIdentity', () => {
     expect(hostSession.terminalSurfaceTombstonesByPaneKey).toEqual({})
   })
 
-  it('rewrites parentWorktreeId back-references in other lineage entries', async () => {
+  it('preserves parent instance and locator hint when the parent is renamed', async () => {
     const store = await createStore()
-    store.setWorktreeMeta(OLD, { displayName: 'Cunner' })
+    store.addRepo(makeRepo({ id: 'repo1', path: '/ws/main' }))
+    store.setWorktreeMeta(OLD, { displayName: 'Cunner', instanceId: 'parent-instance' })
     const CHILD = 'repo1::/ws/child'
+    store.setWorktreeMeta(CHILD, { instanceId: 'child-instance' })
     store.setWorktreeLineage(
       CHILD,
       makeWorktreeLineage({ worktreeId: CHILD, parentWorktreeId: OLD })
@@ -393,7 +401,10 @@ describe('Store.migrateWorktreeIdentity', () => {
 
     store.migrateWorktreeIdentity(OLD, NEW)
 
-    expect(store.getWorktreeLineage(CHILD)?.parentWorktreeId).toBe(NEW)
+    expect(store.getWorktreeLineage(CHILD)?.parentWorktreeId).toBe(OLD)
+    expect(store.getWorktreeLineage(CHILD)?.parentWorktreeInstanceId).toBe(
+      store.getWorktreeMeta(NEW)?.instanceId
+    )
   })
 
   it('moves persisted mobile selections across reloads', async () => {

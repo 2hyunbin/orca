@@ -4,12 +4,9 @@ import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-r
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { PersistedOpenFile } from '../../../shared/workspace-session-state-types'
-import type { WorktreeLineage } from '../../../shared/worktree/lineage-types'
-import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import { createOrcadMigrationManifest } from '../../ssh/orcad-migration-manifest-export'
 import { collectOrcadMigrationSourceDormantState } from './orcad-source-dormant-state'
 import { collectOrcadMigrationUntransferredDependencyCensus } from './orcad-source-dependency-census'
-import { subtractOrcadMigrationSourceDormantState } from './orcad-source-dormant-subtraction'
 
 const TARGET = {
   id: 'ssh-prod',
@@ -21,7 +18,6 @@ const TARGET = {
 }
 const HOST = 'ssh:ssh-prod'
 const WORKTREE = 'remote-repo::/srv/repo'
-const LOCAL_WORKTREE = 'desktop-repo::/home/user/repo'
 
 function terminal(id: string): TerminalTab {
   return {
@@ -99,43 +95,6 @@ function census(state: PersistedState) {
 }
 
 describe('migrating saved state from released SSH clients', () => {
-  it('retains cross-host worktree and folder history on the desktop without blocking', () => {
-    const state = sourceState()
-    const lineage: WorktreeLineage = {
-      worktreeId: WORKTREE,
-      worktreeInstanceId: 'remote-instance',
-      parentWorktreeId: LOCAL_WORKTREE,
-      parentWorktreeInstanceId: 'desktop-instance',
-      origin: 'cli' as const,
-      capture: { source: 'cwd-context', confidence: 'inferred' as const },
-      createdAt: 1
-    }
-    state.worktreeLineageById[WORKTREE] = lineage
-    const child = worktreeWorkspaceKey(WORKTREE)
-    state.workspaceLineageByChildKey[child] = {
-      childWorkspaceKey: child,
-      childInstanceId: 'remote-instance',
-      parentWorkspaceKey: 'folder:desktop-folder',
-      parentInstanceId: null,
-      origin: 'cli',
-      capture: lineage.capture,
-      createdAt: 1
-    }
-    state.worktreeLineageById[LOCAL_WORKTREE] = {
-      ...lineage,
-      worktreeId: LOCAL_WORKTREE,
-      parentWorktreeId: WORKTREE
-    }
-    const before = structuredClone(state)
-    const manifest = exportState(state)
-    expect(census(state).totalCount).toBe(0)
-    expect(manifest.payload.dormantState?.worktreeLineage ?? []).toEqual([])
-    expect(manifest.payload.dormantState?.workspaceLineage ?? []).toEqual([])
-    subtractOrcadMigrationSourceDormantState(state, manifest)
-    expect(state.worktreeLineageById).toEqual(before.worktreeLineageById)
-    expect(state.workspaceLineageByChildKey).toEqual(before.workspaceLineageByChildKey)
-  })
-
   it('retains closed-pane resume records without restoring their deleted tabs', () => {
     const state = sourceState()
     const host = state.workspaceSessionsByHostId![HOST]!

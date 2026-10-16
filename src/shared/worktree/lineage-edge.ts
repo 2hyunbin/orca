@@ -40,7 +40,7 @@ export function edgeToWorkspaceLineage(edge: LineageEdge): WorkspaceLineage {
     childWorkspaceKey: child.locator,
     childInstanceId: child.instanceId,
     parentWorkspaceKey: parent.locator,
-    parentInstanceId: parent.instanceId
+    parentInstanceId: parent.instanceId ?? null
   }
 }
 

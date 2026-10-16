@@ -548,10 +548,15 @@ describe('Store host-partitioned workspace sessions', () => {
     }
     store.setWorkspaceSession(session, 'local')
     store.setWorkspaceSession(session, 'runtime:env-b')
-    store.setWorktreeMeta(worktreeId, { hostId: 'local' })
+    store.addRepo(makeRepo({ id: 'repo-split', path: '/local/repo' }))
+    store.setWorktreeMeta(worktreeId, { hostId: 'local', instanceId: 'child-instance' })
     const worktreeLineage = makeWorktreeLineage({ worktreeId })
     const workspaceLineage = makeWorkspaceLineage({
-      childWorkspaceKey: worktreeWorkspaceKey(worktreeId)
+      childWorkspaceKey: worktreeWorkspaceKey(worktreeId),
+      parentWorkspaceKey: worktreeWorkspaceKey(worktreeLineage.parentWorktreeId),
+      parentInstanceId: worktreeLineage.parentWorktreeInstanceId,
+      origin: worktreeLineage.origin,
+      capture: worktreeLineage.capture
     })
     store.setWorktreeLineage(worktreeId, worktreeLineage)
     store.setWorkspaceLineage(workspaceLineage)

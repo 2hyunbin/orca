@@ -8,7 +8,10 @@ import { getIndexedAllWorktrees, getIndexedWorktreeById } from '@/store/worktree
 import { filterWorkspaceRows } from '../../../../shared/workspace-view/workspace-row-filters'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
-import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
+import {
+  getFilteredLineageAncestorIndex,
+  getSortedWorktreeRankIndex
+} from './visible-worktree-indexes'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getLineageRenderInfo
@@ -55,14 +58,13 @@ export function computeVisibleWorktrees(
   // every other valid ancestor can bypass filters so children never orphan.
   const boundaryFilters = sidebarWorkspaceRowFilters(opts)
   const facts = buildDesktopWorkspaceRowFactReader(opts)
-  const lineageAncestorById = new Map(
-    [...getLineageAncestorIndex(worktreesByRepo)].filter(
-      ([, row]) =>
-        (!boundaryFilters.visibleHostIds ||
-          boundaryFilters.visibleHostIds.includes(facts.hostId(row)!)) &&
-        (opts.filterRepoIds.length === 0 || opts.filterRepoIds.includes(row.repoId))
-    )
-  )
+  const lineageAncestorById = getFilteredLineageAncestorIndex(worktreesByRepo, {
+    visibleHostIds: boundaryFilters.visibleHostIds,
+    repoIds: opts.filterRepoIds,
+    repoMap: opts.repoMap,
+    defaultHostId: opts.defaultHostId,
+    hostIdForRow: facts.hostId
+  })
   const selectedRepoIds = opts.filterRepoIds.length > 0 ? new Set(opts.filterRepoIds) : null
 
   all = filterWorkspaceRows(

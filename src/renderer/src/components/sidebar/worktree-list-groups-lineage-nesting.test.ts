@@ -244,7 +244,7 @@ describe('buildRows workspace lineage nesting', () => {
     expect(rows.filter((row) => row.type === 'item').map((row) => row.depth)).toEqual([0, 0])
   })
 
-  it('keeps mixed cyclic lineage participants visible as roots', () => {
+  it('suppresses one cyclic edge and keeps every participant visible', () => {
     const parentLineage: WorktreeLineage = {
       ...lineage,
       worktreeId: parent.id,
@@ -275,7 +275,7 @@ describe('buildRows workspace lineage nesting', () => {
     ).toEqual([
       [grandchild.id, 0],
       [child.id, 0],
-      [parent.id, 0]
+      [parent.id, 1]
     ])
   })
 
@@ -319,9 +319,9 @@ describe('buildRows workspace lineage nesting', () => {
 
   it.each([
     ['repo', { repoId: 'other-repo' }, [0, 1]],
-    ['host', { hostId: 'ssh:other-host' as const }, [0, 0]],
+    ['host', { hostId: 'ssh:other-host' as const }, [0, 1]],
     ['project', { projectId: 'github:other/project' }, [0, 1]]
-  ] as const)('applies the known %s lineage boundary', (_label, boundary, depths) => {
+  ] as const)('resolves lineage across a different %s', (_label, boundary, depths) => {
     const boundedParent = {
       ...parent,
       repoId: 'repo-1',

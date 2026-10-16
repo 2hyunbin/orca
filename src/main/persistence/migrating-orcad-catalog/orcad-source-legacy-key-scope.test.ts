@@ -134,7 +134,8 @@ describe('legacy unqualified keys for a repo id two hosts share', () => {
 
     expect(state.worktreeMeta).toEqual(before.worktreeMeta)
     expect(state.automations).toEqual(before.automations)
-    expect(state.worktreeLineageById).toEqual(before.worktreeLineageById)
+    expect(state.worktreeLineageById).toEqual({})
+    expect(state.lineageByChildInstance).toBeDefined()
     expect(state.sparsePresetsByRepo).toEqual(before.sparsePresetsByRepo)
     expect(state.ui.lastActiveRepoId).toBe(REPO_A.id)
     expect(state.ui.filterRepoIds).toEqual([REPO_A.id])

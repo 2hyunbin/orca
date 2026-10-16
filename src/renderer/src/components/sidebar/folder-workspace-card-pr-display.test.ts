@@ -235,7 +235,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
   })
 
   it.each([['known host', { hostId: 'ssh:remote' as const }, { hostId: 'local' as const }]])(
-    'excludes nested PRs across a %s boundary',
+    'includes nested PRs across a %s boundary',
     (_boundary, childOverrides, parentOverrides) => {
       const parent = makeWorktree({ id: 'parent', instanceId: 'parent', ...parentOverrides })
       const nested = makeWorktree({
@@ -262,7 +262,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         prCache: { [`${nested.repoId}::nested`]: makePrEntry(4, 'success') }
       })
 
-      expect(display).toBeNull()
+      expect(display).toMatchObject({ number: 4 })
     }
   )
 

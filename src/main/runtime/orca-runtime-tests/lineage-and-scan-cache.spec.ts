@@ -392,7 +392,7 @@ describe('OrcaRuntimeService', () => {
       lineage: { noParent: true }
     })
 
-    expect(removeWorktreeLineage).toHaveBeenCalledWith(childId)
-    expect(removeWorkspaceLineage).toHaveBeenCalledWith(`worktree:${childId}`)
+    expect(removeWorktreeLineage).toHaveBeenCalledWith(childId, 'child-instance')
+    expect(removeWorkspaceLineage).toHaveBeenCalledWith(`worktree:${childId}`, 'child-instance')
   })
 })

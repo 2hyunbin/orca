@@ -251,15 +251,15 @@ describe('removeWorktree state cleanup', () => {
     store.setState({
       worktreesByRepo: { repo1: [wt] },
       worktreeLineageById: {
-        [wt.id]: childLineage,
-        'repo1::/path/wt2': siblingLineage
+        [`local|${wt.id}`]: childLineage,
+        'local|repo1::/path/wt2': siblingLineage
       }
     } as Partial<AppState>)
 
     await store.getState().removeWorktree({ id: wt.id, executionHostId: null })
 
     expect(store.getState().worktreeLineageById).toEqual({
-      'repo1::/path/wt2': siblingLineage
+      'local|repo1::/path/wt2': siblingLineage
     })
   })
 
@@ -499,10 +499,20 @@ describe('removeWorktree state cleanup', () => {
       },
       groupsByWorktree: {
         'repo1::/path/wt1': [
-          { id: 'group-1', worktreeId: 'repo1::/path/wt1', activeTabId: 'tab-1' }
+          {
+            id: 'group-1',
+            worktreeId: 'repo1::/path/wt1',
+            activeTabId: 'tab-1',
+            tabOrder: ['tab-1']
+          }
         ],
         'repo1::/path/wt2': [
-          { id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2' }
+          {
+            id: 'group-2',
+            worktreeId: 'repo1::/path/wt2',
+            activeTabId: 'tab-2',
+            tabOrder: ['tab-2']
+          }
         ]
       },
       activeGroupIdByWorktree: {
@@ -524,7 +534,9 @@ describe('removeWorktree state cleanup', () => {
       'repo1::/path/wt2': [{ id: 'tab-2', worktreeId: 'repo1::/path/wt2' }]
     })
     expect(store.getState().groupsByWorktree).toEqual({
-      'repo1::/path/wt2': [{ id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2' }]
+      'repo1::/path/wt2': [
+        { id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2', tabOrder: ['tab-2'] }
+      ]
     })
     expect(store.getState().activeGroupIdByWorktree).toEqual({
       'repo1::/path/wt2': 'group-2'

@@ -387,6 +387,9 @@ describe('Store', () => {
     store.addRepo(makeRepo({ id: 'r1' }))
     store.addRepo(makeRepo({ id: 'r2', path: '/repo2' }))
 
+    store.setWorktreeMeta('r1::/path/child', { instanceId: 'child-instance' })
+    store.setWorktreeMeta('r2::/other-child', { instanceId: 'other-child-instance' })
+    store.setWorktreeMeta('r2::/other', { instanceId: 'other-instance' })
     store.setWorktreeLineage(
       'r1::/path/child',
       makeWorktreeLineage({
@@ -398,6 +401,7 @@ describe('Store', () => {
       'r2::/other-child',
       makeWorktreeLineage({
         worktreeId: 'r2::/other-child',
+        worktreeInstanceId: 'other-child-instance',
         parentWorktreeId: 'r1::/path/parent'
       })
     )
@@ -405,6 +409,7 @@ describe('Store', () => {
       'r2::/other',
       makeWorktreeLineage({
         worktreeId: 'r2::/other',
+        worktreeInstanceId: 'other-instance',
         parentWorktreeId: 'r2::/parent'
       })
     )

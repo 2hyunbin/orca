@@ -177,9 +177,6 @@ it.each(['git', 'folder'] as const)(
         projectId: 'parent-project'
       })
     }
-    if (kind === 'folder') {
-      metaById[parentId].instanceId = undefined
-    }
     store.setWorktreeMeta.mockImplementation((id: string, updates: Partial<WorktreeMeta>) => {
       const meta = mergeWorktreeMetaForWrite(metaById[id], updates)
       metaById[id] = meta

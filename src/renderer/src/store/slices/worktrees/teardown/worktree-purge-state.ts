@@ -1,4 +1,8 @@
-import { removedOwnerTabIds, removalActiveHost } from './worktree-removal-owner'
+import {
+  matchesRemovedWorktreeOwner,
+  removedOwnerTabIds,
+  removalActiveHost
+} from './worktree-removal-owner'
 import {
   composeWorktreeHostIdentity,
   getWorktreeIdFromHostIdentity
@@ -52,7 +56,9 @@ export function buildWorktreePurgeState(
           !target.hostId ||
           !Object.values(s.worktreesByRepo)
             .flat()
-            .some((row) => row.id === target.id && row.hostId !== target.hostId)
+            .some(
+              (row) => row.id === target.id && !matchesRemovedWorktreeOwner(s, row, target.hostId)
+            )
       )
       .map((target) => target.id)
   )

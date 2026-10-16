@@ -211,7 +211,6 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.click(trigger())
 
     expect(indexSpies.getIndexedAllWorktrees).toHaveBeenCalled()
-    expect(indexSpies.getIndexedWorktreeMap).toHaveBeenCalled()
   })
 
   it('shows "No parent" on the closed trigger when nothing is picked', () => {
@@ -273,7 +272,7 @@ describe('ComposerParentWorktreePicker', () => {
     expect(candidateLabels().join(' ')).toContain('Other repo')
   })
 
-  it('offers another project on the same host and excludes another host', () => {
+  it('offers parents from other projects and hosts', () => {
     seed([
       makeWorktree({ id: 'same', displayName: 'Same host', hostId: 'local', projectId: 'proj1' }),
       makeWorktree({
@@ -302,7 +301,7 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.click(trigger())
 
     expect(candidateLabels().join(' ')).toContain('Same host')
-    expect(candidateLabels().join(' ')).not.toContain('Other host')
+    expect(candidateLabels().join(' ')).toContain('Other host')
     expect(candidateLabels().join(' ')).toContain('Other project')
   })
 
