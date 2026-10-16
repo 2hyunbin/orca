@@ -19,6 +19,10 @@ import {
 } from '../browser-client-host-protocol'
 import { BrowserClientPageMetadataParams } from '../browser-client-page-metadata-protocol'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
+import {
+  DesktopBrowserBridgeAttachParams,
+  DesktopBrowserBridgeResultParams
+} from '../desktop-browser-bridge-protocol'
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import {
@@ -55,6 +59,7 @@ import {
   AttachmentUploadIdParams,
   AttachmentUploadStartParams
 } from './agent-session-attachment-params'
+import { CurrentRequestsParams } from './agent-session-current-requests-params'
 import { CreateAgentSessionParams, EnsureAgentSessionParams } from './agent-session-params'
 import { ReadVisualParams } from './agent-session-visual-params'
 import {
@@ -564,10 +569,12 @@ import {
   TerminalInspectProcess,
   TerminalListParams,
   TerminalRead,
+  TerminalReadKittyFile,
   TerminalRecoverPane,
   TerminalRename,
   TerminalResolveActive,
   TerminalResolvePane,
+  TerminalReveal,
   TerminalSend,
   TerminalSetViewerColors,
   TerminalSplit,
@@ -662,6 +669,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.conversationOutline': OptionsParams,
   'agentSession.create': CreateParams,
   'agentSession.createSupport': CreateSupportParams,
+  'agentSession.currentRequests': CurrentRequestsParams,
   'agentSession.ensure': AttachParams,
   'agentSession.handoffStatus': HandoffStatusParams,
   'agentSession.history': HistoryParams,
@@ -828,6 +836,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'desktopBrowserBridge.attach': DesktopBrowserBridgeAttachParams,
+  'desktopBrowserBridge.result': DesktopBrowserBridgeResultParams,
   'diagnostics.memory': null,
   'emulator.attach': AttachParamsOfEmulatorParams,
   'emulator.availability': EmulatorAvailabilityParams,
@@ -1278,6 +1288,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.list': TerminalListParams,
   'terminal.multiplex': TerminalMultiplex,
   'terminal.read': TerminalRead,
+  'terminal.readKittyFile': TerminalReadKittyFile,
   'terminal.recoverPane': TerminalRecoverPane,
   'terminal.rename': TerminalRename,
   'terminal.resetInputModes': TerminalHandle,
@@ -1286,6 +1297,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.resolveIdentity': TerminalHandle,
   'terminal.resolvePane': TerminalResolvePane,
   'terminal.restoreFit': TerminalHandle,
+  'terminal.reveal': TerminalReveal,
   'terminal.send': TerminalSend,
   'terminal.setAutoRestoreFit': TerminalSetAutoRestoreFit,
   'terminal.setDisplayMode': TerminalSetDisplayMode,
