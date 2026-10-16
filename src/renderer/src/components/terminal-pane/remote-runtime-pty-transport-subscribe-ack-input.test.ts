@@ -17,6 +17,7 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamJson
 } from '../../../../shared/terminal-stream-protocol'
+import type { PtyTransport } from './pty-transport-types'
 import {
   createRemoteRuntimeTransportMocks,
   type MultiplexSubscriptionCallbacks
@@ -80,7 +81,7 @@ function acknowledgeSubscribe(streamId: number): void {
 }
 
 /** Connects, drops the link, and waits for the recovery resubscribe to go out. */
-async function recoveringTransport() {
+async function recoveringTransport(duringOutage?: (transport: PtyTransport) => void) {
   const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
   const transport = createRemoteRuntimePtyTransport('env-1', {
     worktreeId: 'wt-1',
@@ -97,6 +98,7 @@ async function recoveringTransport() {
     code: 'remote_runtime_unavailable',
     message: 'Remote runtime connection closed.'
   })
+  duringOutage?.(transport)
   await vi.waitFor(() => expect(subscribeFrameCount()).toBe(2))
   return { transport, streamId: latestSubscribePayload().streamId }
 }
@@ -153,13 +155,29 @@ describe('remote recovery input at the subscribed ack', () => {
 
   it('replays a viewport claim made during recovery before typing reaches the host', async () => {
     const { transport, streamId } = await recoveringTransport()
-    subscriptionSendBinary.mockClear()
     // Claim lands after the resubscribe went out but before the host acked it.
     expect(transport.claimViewport?.(120, 40)).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // A host still resolving the PTY ignores viewport frames, so none may be spent before its ack.
+    subscriptionSendBinary.mockClear()
     acknowledgeSubscribe(streamId)
     expect(transport.sendInput('typed', 'driving')).toBe(true)
     await vi.waitFor(() => expect(inputFrameTexts()).toEqual(['typed']))
-    expect(viewportAndInputFrames().slice(0, 3)).toEqual(['claim 120x40', 'resize 120x40', 'input'])
+    expect(viewportAndInputFrames()).toEqual(['claim 120x40', 'resize 120x40', 'input'])
+    transport.destroy?.()
+  })
+
+  it('keeps a claim made before the resubscribe until the host acks it', async () => {
+    const { transport, streamId } = await recoveringTransport((outage) => {
+      expect(outage.claimViewport?.(100, 30)).toBe(true)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // A host still resolving the PTY ignores viewport frames, so none may be spent before its ack.
+    subscriptionSendBinary.mockClear()
+    acknowledgeSubscribe(streamId)
+    expect(transport.sendInput('typed', 'driving')).toBe(true)
+    await vi.waitFor(() => expect(inputFrameTexts()).toEqual(['typed']))
+    expect(viewportAndInputFrames()).toEqual(['claim 100x30', 'resize 100x30', 'input'])
     transport.destroy?.()
   })
 

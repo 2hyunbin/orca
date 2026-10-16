@@ -2666,6 +2666,10 @@ export function createRemoteRuntimePtyTransport(
           subscriptionAttached = true
           setAttachmentReady(true)
           connecting = false
+          if (installedStream) {
+            // Why: hosts without a subscribed ack never reach the ack replay.
+            replayRecoveryDeferredViewport(installedStream)
+          }
           resetRecoveryReplacementPolicy()
           markRecoveryHealthy()
           emitRecoveryState()
@@ -2822,7 +2826,10 @@ export function createRemoteRuntimePtyTransport(
     }
     // Why: a viewport change during the subscribe round-trip hit the no-op one-shot fallback; replay the latest viewport so the PTY isn't stuck at subscribe-time size.
     if (recoveryDeferredViewport) {
-      replayRecoveryDeferredViewport(nextStream)
+      // Why ack-gated: a host still resolving the PTY ignores viewport frames sent after Subscribe.
+      if (inputReadySubscription === generation || subscriptionAttached) {
+        replayRecoveryDeferredViewport(nextStream)
+      }
     } else if (pendingViewportClaim && desiredViewport) {
       if (!isUnconfirmedClaim(nextStream, desiredViewport.cols, desiredViewport.rows)) {
         nextStream.claimViewport(desiredViewport.cols, desiredViewport.rows)
