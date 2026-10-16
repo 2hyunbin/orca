@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { DesktopBrowserBridgeEvent } from '../../../shared/desktop-browser-bridge-protocol'
 import {
   DesktopBrowserBridgeRegistry,
   MAX_PENDING_PER_ATTACHMENT
@@ -23,11 +24,11 @@ describe('DesktopBrowserBridgeRegistry', () => {
 
   it('gives the desktop a deadline that ends before orcad stops waiting', () => {
     const registry = new DesktopBrowserBridgeRegistry()
-    const events: { timeoutMs?: number }[] = []
+    const events: DesktopBrowserBridgeEvent[] = []
     registry.attach({ connectionId: 'c', pairedDeviceId: 'd', emit: (event) => events.push(event) })
 
     registry.forward({ method: 'browser.click', params: {} }, { timeoutMs: 60_000 }).catch(() => {})
 
-    expect(events[0]?.timeoutMs).toBe(50_000)
+    expect(events[0]).toMatchObject({ type: 'request', timeoutMs: 50_000 })
   })
 })
