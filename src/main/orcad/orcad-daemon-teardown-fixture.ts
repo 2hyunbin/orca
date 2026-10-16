@@ -9,6 +9,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
 import { readDaemonPidRecord } from '../daemon/daemon-endpoint-incarnation'
+import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
 import type { spawnProcess } from '@orca/process-host'
 
 const EXIT_WAIT_MS = 10_000
@@ -37,7 +38,20 @@ function hasExited(pid: number): boolean {
   }
 }
 
-/** SIGKILLs each pid and waits, bounded, until the OS no longer knows it. */
+/** Waits, bounded, until the OS no longer knows every pid. */
+export async function waitForProcessExit(pids: Iterable<number>): Promise<void> {
+  const pending = [...pids]
+  const deadline = Date.now() + EXIT_WAIT_MS
+  while (pending.some((pid) => !hasExited(pid)) && Date.now() < deadline) {
+    await sleep(POLL_MS)
+  }
+  const remaining = pending.filter((pid) => !hasExited(pid))
+  if (remaining.length > 0) {
+    throw new Error(`Processes did not exit: ${remaining.join(', ')}`)
+  }
+}
+
+/** SIGKILLs each pid and requires the OS to confirm its exit. */
 export async function killAndAwaitExit(pids: Iterable<number>): Promise<void> {
   const pending = [...pids]
   for (const pid of pending) {
@@ -45,13 +59,10 @@ export async function killAndAwaitExit(pids: Iterable<number>): Promise<void> {
       process.kill(pid, 'SIGKILL')
     } catch {}
   }
-  const deadline = Date.now() + EXIT_WAIT_MS
-  while (pending.some((pid) => !hasExited(pid)) && Date.now() < deadline) {
-    await sleep(POLL_MS)
-  }
+  await waitForProcessExit(pending)
 }
 
-/** Kills a spawned child and waits for its exit event, so nothing it spawned races teardown. */
+/** Kills a spawned child and waits for its exit event. */
 export async function killChildAndWait(child: ReturnType<typeof spawnProcess>): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return
@@ -61,16 +72,26 @@ export async function killChildAndWait(child: ReturnType<typeof spawnProcess>): 
   await exited
 }
 
-/** Kills every terminal daemon `<userData>/daemon` names and waits until each has exited. */
+/** Authenticates each profile daemon, shuts down its PTYs, and requires process exit. */
 export async function killProfileDaemons(userData: string): Promise<void> {
   const daemonDir = join(userData, 'daemon')
-  const pids = (existsSync(daemonDir) ? readdirSync(daemonDir) : []).flatMap((name) => {
-    const pid = /^daemon-v\d+\.pid$/u.test(name)
-      ? readDaemonPidRecord(join(daemonDir, name))?.pid
-      : undefined
-    return pid ? [pid] : []
+  const daemons = (existsSync(daemonDir) ? readdirSync(daemonDir) : []).flatMap((name) => {
+    const match = /^daemon-v(\d+)\.pid$/u.exec(name)
+    const pid = match ? readDaemonPidRecord(join(daemonDir, name))?.pid : undefined
+    return pid && match ? [{ pid, protocolVersion: Number(match[1]) }] : []
   })
-  await killAndAwaitExit(pids)
+  const results = await Promise.allSettled(
+    daemons.map(async ({ pid, protocolVersion }) => {
+      await cleanupDaemonForProtocol(daemonDir, protocolVersion, pid)
+      await waitForProcessExit([pid])
+    })
+  )
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : []
+  )
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Profile daemon shutdown incomplete')
+  }
 }
 
 /** Removes a test root, retrying a late writer's ENOTEMPTY/EBUSY on every platform. */
