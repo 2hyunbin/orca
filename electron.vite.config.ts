@@ -239,6 +239,8 @@ export const electronViteConfig: UserConfig = {
       },
       rollupOptions: {
         input: MAIN_BUILD_ENTRY_POINTS,
+        // CLI builds replace these public entry files; shared code must live in separate chunks.
+        preserveEntrySignatures: 'strict',
         // Why: Rolldown's SSR default is ESM, but Electron and sidecar launchers
         // consume these stable CommonJS paths.
         output: {
