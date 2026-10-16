@@ -13,7 +13,10 @@ import {
 } from '../../../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { call, runtimeCalls } from './structured-agent-session-rpc.test-fixture'
-import { resetStructuredAgentSessionClosesBeforeCreateForTests } from './structured-agent-session-close-before-create'
+import {
+  resetStructuredAgentSessionClosesBeforeCreateForTests,
+  structuredAgentSessionClosedBeforeCreate
+} from './structured-agent-session-close-before-create'
 
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -133,6 +136,24 @@ describe('a close that reaches main before its create', () => {
     expect(result).toMatchObject(refusedAsClosed)
     expect(retireTab).toHaveBeenCalledWith(SESSION)
     expect(rig.store.getSessionTabId(SESSION)).toBeNull()
+    expect(rig.host.hasSession(SESSION)).toBe(false)
+  })
+
+  it('a close before a create that fails past commit still closes what it made', async () => {
+    let closing: Promise<unknown> | undefined
+    const result = await create({
+      publishStructuredAgentSessionTab: vi.fn(async () => {
+        // Not awaited: the close's stop queues behind this create.
+        closing = close()
+        await vi.waitFor(() => expect(structuredAgentSessionClosedBeforeCreate(SESSION)).toBe(true))
+        throw new Error('tab write failed')
+      })
+    })
+
+    await closing
+    expect(result).toMatchObject(refusedAsClosed)
+    expect(rig.store.getRecord(SESSION)).not.toBeNull()
+    expect(retireTab).toHaveBeenCalledWith(SESSION)
     expect(rig.host.hasSession(SESSION)).toBe(false)
   })
 

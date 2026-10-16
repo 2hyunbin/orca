@@ -41,6 +41,7 @@ import {
   markStructuredAgentSessionLaunchCancelled,
   resetStructuredAgentLaunchRegistryForTests,
   setStructuredLaunchState,
+  subscribeStructuredAgentLaunchStatus,
   type StructuredLaunchState
 } from '@/lib/structured-agent-session-launch-registry'
 import {
@@ -128,14 +129,35 @@ beforeEach(() => {
 })
 
 describe('this machine, with main owning the layout', () => {
-  it('cancel before the create: tells main and keeps no tombstone', () => {
+  const hostTabClose = [
+    LOCAL,
+    'session.tabs.close',
+    { worktree: `id:${WORKTREE}`, tabId: `agent-session:${SESSION}`, reason: 'user' }
+  ]
+
+  it('cancel before the create: retires the chat on main at once and keeps no tombstone', async () => {
+    // The create has not landed, so main has no tab for it yet.
+    mocks.callRuntime.mockRejectedValueOnce(new Error('tab_not_found'))
+    pendingLaunch('local', LOCAL)
+
+    markStructuredAgentSessionLaunchCancelled(WORKTREE, SESSION, 'local')
+    await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalledWith(...hostTabClose))
+
+    expect(mocks.closeSession).toHaveBeenCalledWith(LOCAL, SESSION)
+    // Let the retirement settle, so a tombstone written on its answer would show.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(hasStructuredAgentSessionLaunchCancellationTombstone(WORKTREE, SESSION)).toBe(false)
+    expect(getStructuredAgentSessionLaunchLifecycle(WORKTREE, SESSION)).toBeNull()
+  })
+
+  it('create before the cancel (an aborted launch): closes the chat and its published tab', async () => {
     pendingLaunch('local', LOCAL)
 
     markStructuredAgentSessionLaunchCancelled(WORKTREE, SESSION, 'local')
 
+    await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalledWith(...hostTabClose))
     expect(mocks.closeSession).toHaveBeenCalledWith(LOCAL, SESSION)
     expect(hasStructuredAgentSessionLaunchCancellationTombstone(WORKTREE, SESSION)).toBe(false)
-    expect(getStructuredAgentSessionLaunchLifecycle(WORKTREE, SESSION)).toBeNull()
   })
 
   it('cancel after a reload, when only the saved launch is left: tells main and forgets it', () => {
@@ -159,12 +181,15 @@ describe('this machine, with main owning the layout', () => {
   it('a main that cannot be told gets the tombstone, so a late listing is still hidden', async () => {
     mocks.closeSession.mockRejectedValueOnce(new Error('host unavailable'))
     pendingLaunch('local', LOCAL)
+    const listener = vi.fn()
+    subscribeStructuredAgentLaunchStatus(listener)
 
     markStructuredAgentSessionLaunchCancelled(WORKTREE, SESSION, 'local')
     await vi.waitFor(() =>
       expect(hasStructuredAgentSessionLaunchCancellationTombstone(WORKTREE, SESSION)).toBe(true)
     )
 
+    expect(listener).toHaveBeenCalledTimes(2)
     expect(suppressCancelledStructuredSessionTabs(hostFrame(), LOCAL).tabs).toEqual([])
   })
 

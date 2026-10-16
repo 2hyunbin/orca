@@ -51,21 +51,27 @@ export function refusingStructuredAgentSessionCreatesClosedFirst<
   return async (params, ctx) => {
     const { sessionId } = params.envelope
     createsUnderWay.set(sessionId, (createsUnderWay.get(sessionId) ?? 0) + 1)
+    let closedFirst = false
     try {
       const result = await create(params, ctx)
-      if (!closedBeforeCreate.has(sessionId)) {
-        return result
-      }
-      if (result.ok) {
-        await closeCreatedChat(ctx, sessionId)
-      }
-      return { ok: false, refusal: structuredAgentSessionClosedBeforeCreateRefusal() }
+      closedFirst = closedBeforeCreate.has(sessionId)
+      // The record stays on disk, as for any closed chat; the refusal only says the launch is off.
+      return closedFirst
+        ? { ok: false, refusal: structuredAgentSessionClosedBeforeCreateRefusal() }
+        : result
+    } catch (error) {
+      closedFirst = closedBeforeCreate.has(sessionId)
+      throw error
     } finally {
       const remaining = (createsUnderWay.get(sessionId) ?? 1) - 1
       if (remaining > 0) {
         createsUnderWay.set(sessionId, remaining)
       } else {
         createsUnderWay.delete(sessionId)
+      }
+      // Any answer, a refusal or a throw past commit included, may have left the chat made.
+      if (closedFirst) {
+        await closeCreatedChat(ctx, sessionId)
       }
     }
   }
