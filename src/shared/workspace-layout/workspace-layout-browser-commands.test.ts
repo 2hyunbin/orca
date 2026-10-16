@@ -74,6 +74,35 @@ describe('openBrowserTab under the window’s ids', () => {
     ])
   })
 
+  it('places a tab whose group main lacks beside its anchor', () => {
+    const { ctx, model } = setup()
+    const split = build(
+      ctx,
+      [
+        {
+          type: 'splitGroup',
+          workspace: WS,
+          tabId: 'entry-1',
+          besideGroupId: model.workspaces[WS]!.groups[0]!.id,
+          direction: 'right'
+        },
+        {
+          ...WINDOW_OPEN,
+          tabId: 'entry-2',
+          browserTabId: 'browser-2',
+          pageId: 'p-2',
+          groupId: 'unknown-group',
+          afterTabId: 'entry-1'
+        }
+      ],
+      model
+    ).model
+    expect(split.workspaces[WS]!.groups.map((group) => group.tabOrder)).toEqual([
+      [expect.any(String)],
+      ['entry-1', 'entry-2']
+    ])
+  })
+
   it('changes nothing when sent again, and refuses an id another tab or page holds', () => {
     const { model, hostTab } = setup()
     const again = outcome(model, WINDOW_OPEN)

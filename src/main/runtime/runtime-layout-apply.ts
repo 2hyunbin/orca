@@ -15,6 +15,7 @@ export type WindowLayoutCommand = LayoutCommand &
     | { tabId: string }
     | { type: 'setGroupRatios' }
     | { type: 'closeTabs'; tabIds: [string] }
+    // A browser tab's record lives in its workspace's partition, so it routes by workspace.
     | { browserTabId: string }
   )
 

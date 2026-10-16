@@ -124,6 +124,41 @@ describe('served browser tabs in a layout-owner build', () => {
     expect(host.session().unifiedTabs?.[WT] ?? []).toEqual([])
   })
 
+  it('saves the address a page reached while main was writing its tab', async () => {
+    const host = servedHost()
+
+    host.tabs.opened(PAGE)
+    host.tabs.navigated({ ...PAGE, url: 'https://example.com/next', title: 'Next' })
+    await settle()
+
+    expect(host.session().browserPagesByWorkspace?.['page-1']).toEqual([
+      expect.objectContaining({ url: 'https://example.com/next', title: 'Next' })
+    ])
+    expect(host.session().browserTabsByWorktree?.[WT]?.[0]).toMatchObject({ title: 'Next' })
+  })
+
+  it('closes a tab closed while main was writing it, and saves no page for it', async () => {
+    const host = servedHost()
+
+    host.tabs.opened(PAGE)
+    expect(host.tabs.closed(WT, 'page-1')).toBe(true)
+    await settle()
+
+    expect(host.session().browserTabsByWorktree?.[WT] ?? []).toEqual([])
+    expect(host.session().browserPagesByWorkspace?.['page-1']).toBeUndefined()
+    expect(host.tabs.listUnstarted(WT)).toEqual([])
+  })
+
+  it('stops listing a closed tab before main answers', async () => {
+    const host = servedHost()
+    host.tabs.opened(PAGE)
+    await settle()
+
+    host.tabs.closed(WT, 'page-1')
+
+    expect(host.tabs.listUnstarted(WT)).toEqual([])
+  })
+
   it('saves no page when main refuses the open', async () => {
     const host = servedHost()
     host.applyLayout.mockResolvedValueOnce({ ok: false, code: 'invalid_params' })
