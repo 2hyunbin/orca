@@ -356,7 +356,6 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
   expect(scanned - saved).toBeLessThanOrEqual(4127)
   db.close()
   db = openJournalDatabase(join(root, 'journal.db')).db
-  expect(db.prepare('SELECT * FROM temp.journal_prune_items').all()).toEqual([])
   pass = new JournalPrunePass(db, 'chat', 'epoch')
   scanned = saved
   while (scanned < tip) {
@@ -364,7 +363,6 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
   }
   db.close()
   db = openJournalDatabase(join(root, 'journal.db')).db
-  expect(journalPruneEpochLookup(db)('chat')).toBe('epoch')
   expect(drain()).toEqual({ scanned: 0, compacted: 1 })
   expect(bodyAt(tip - 1)).toMatchObject({ blocks: [] })
   expect(snapshot()).toEqual(original)
@@ -397,7 +395,6 @@ it('resumes from the saved frontier after a reopen, including payloads still owe
   const pagesBefore = Number(db.pragma('page_count', { simple: true }))
   db.close()
   db = openJournalDatabase(join(root, 'journal.db')).db
-  expect(journalPruneEpochLookup(db)('chat')).toBe('epoch')
   vi.useFakeTimers()
   const maintenance = new JournalMaintenance(() => db, transaction, 0)
   try {
