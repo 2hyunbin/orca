@@ -12,6 +12,7 @@ import { runCopy, type MoveCopyOptions } from './database-move-copy.js'
 import { logMoveEvent, MoveRefusal } from './database-move-events.js'
 import {
   replayClaims,
+  requireCurrentCopy,
   requireTracking,
   runSyncLoop,
   takeSyncLock,
@@ -112,7 +113,25 @@ export async function uninstallTrackingCommand(
   ctx: MoveCommandContext,
   side: MoveSide
 ): Promise<void> {
-  await withClients([ctx.databases.connect(side, 'app', 'uninstall-tracking')], async ([app]) => {
+  // A side a cutover left is fenced: the relay role cannot log in there any more, and
+  // restore-password refuses it. Its triggers go with the database.
+  const connecting = ctx.databases
+    .connect(side, 'app', 'uninstall-tracking')
+    .catch((error: unknown) => {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === '28P01'
+      ) {
+        throw new MoveRefusal('side_is_fenced', {
+          side,
+          run: 'once the move is finished, drop the old database through the Cloud SQL API (gcloud sql databases delete), which needs no login'
+        })
+      }
+      throw error
+    })
+  await withClients([connecting], async ([app]) => {
     if (!app) throw new MoveRefusal('session_missing')
     const tables = await readMoveTables(app)
     await uninstallTracking(app, tables)
@@ -178,6 +197,7 @@ export async function syncCommand(
     await takeSyncLock(sessions.source)
     await refuseWritingTheActiveSide(sessions, from)
     await requireTracking(sessions.source, tables)
+    await requireCurrentCopy(sessions)
     const replayed = await replayClaims(sessions, tables)
     logMoveEvent('sync_started', { from, replayed })
     const result = await runSyncLoop(sessions, tables, { ...options, label: { from } })

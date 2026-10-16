@@ -1,7 +1,7 @@
 import pg from 'pg'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { readMoveTables, type MoveTable } from './database-move-catalog.js'
-import { prepareTargetCommand } from './database-move-commands.js'
+import { prepareTargetCommand, syncCommand } from './database-move-commands.js'
 import type { MoveDatabases } from './database-move-connections.js'
 import { runCopy } from './database-move-copy.js'
 import { runSyncLoop, type MoveSyncSessions } from './database-move-sync.js'
@@ -231,6 +231,32 @@ describePostgres('database move: tracking, copy, sync and verify', () => {
     const startedAt = Date.now()
     await runCopy(sessions, tables, { maxBytesPerSecond: 1e9, maxRowsPerSecond: 500 })
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(550)
+  })
+
+  it('refuses a copy made before tracking was installed again, until it is redone', async () => {
+    await track()
+    await app.query(
+      `INSERT INTO relay_audit_events (id, at, type, detail_json)
+       SELECT 'u' || n, n, 't', '{}' FROM generate_series(1, 200) n`
+    )
+    await runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })
+    await drain()
+    // Tracking off, relay writes, tracking on: nothing recorded those writes.
+    await uninstallTracking(app, tables)
+    await app.query(`UPDATE relay_audit_events SET at = -at WHERE at <= 50`)
+    await app.query(`DELETE FROM relay_audit_events WHERE at > 150`)
+    await track()
+    await expect(runCopy(sessions, tables, { maxBytesPerSecond: 1e9 })).rejects.toThrow(
+      'copy_predates_tracking'
+    )
+    await expect(
+      syncCommand({ databases, google: null }, 'primary', { stopAtBacklog: 0 })
+    ).rejects.toThrow('copy_predates_tracking')
+    expect(await equal(['relay_audit_events'])).toBe(false)
+    const redone = await runCopy(sessions, tables, { restart: true, maxBytesPerSecond: 1e9 })
+    expect(redone.rows).toBe(150)
+    await drain()
+    expect(await equal()).toBe(true)
   })
 
   it('keeps BIGINTs past 2^53 exact through copy and sync', async () => {
