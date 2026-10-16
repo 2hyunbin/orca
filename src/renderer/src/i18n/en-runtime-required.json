@@ -2709,7 +2709,9 @@
         },
         "space": {
           "WorkspaceSpacePage": {
-            "8d0048e1cb": "Workspace disk usage and reclaimable worktree storage."
+            "45f6302dbc": "Space",
+            "8d0048e1cb": "Workspace disk usage and reclaimable worktree storage.",
+            "e8d6ba11ab": "Beta"
           }
         }
       }

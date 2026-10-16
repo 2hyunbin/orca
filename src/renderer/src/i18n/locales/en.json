@@ -20192,6 +20192,13 @@
     }
   },
   "workspaceSpace": {
+    "deleteOne": "Delete {{value0}}",
+    "table": {
+      "lastActive": "Last active"
+    },
+    "breakdown": {
+      "viewAll": "Show more folder details"
+    },
     "compact": {
       "linkedAndUnavailable": "{{value0}} in linked worktrees · {{value1}} unavailable",
       "linkedAndScanned": "{{value0}} in linked worktrees · {{value1}} workspaces",
@@ -20208,8 +20215,8 @@
     "metric": {
       "linkedWorktrees": "Linked worktrees"
     },
-    "summary": {
-      "linkedWorktrees": "{{value0}} is used by linked worktrees. Managed worktrees can be removed here."
+    "scan": {
+      "moreErrors": "{{value0}} more scan errors"
     },
     "status": {
       "notManaged": "Not managed"
@@ -20220,7 +20227,6 @@
       "clickToZoom": "Click a workspace to zoom"
     },
     "window": {
-      "close": "Close",
       "errorTitle": "Space hit an error.",
       "errorDescription": "Close and reopen Space to try again."
     }
