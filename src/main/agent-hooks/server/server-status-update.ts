@@ -96,14 +96,15 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       (restoredStatusWatermark ?? -1) + 1
     )
     const identity = resolveAgentStatusIdentity({
-      existing: previous
-        ? {
-            agentType: previous.payload.agentType,
-            state: previous.payload.state,
-            updatedAt: previous.receivedAt,
-            restoredUnconfirmed: previous.restoredUnconfirmed
-          }
-        : undefined,
+      existing:
+        previous && this.sameTerminalOwner(previous, terminalOwnedPayload)
+          ? {
+              agentType: previous.payload.agentType,
+              state: previous.payload.state,
+              updatedAt: previous.receivedAt,
+              restoredUnconfirmed: previous.restoredUnconfirmed
+            }
+          : undefined,
       incoming: terminalOwnedPayload.payload.agentType,
       now
     })

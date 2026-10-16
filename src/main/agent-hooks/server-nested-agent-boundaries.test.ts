@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from './server'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../shared/agent-status-types'
-import { PANE } from './server.test-fixtures'
+import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 
 vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../telemetry/cohort-classifier', () => ({
@@ -22,6 +22,80 @@ afterEach(() => {
 })
 
 describe('nested provider ownership boundaries', () => {
+  it.each([
+    ['ssh-b', 'wt-1', 'codex'],
+    ['conn-1', 'wt-2', 'codex'],
+    ['conn-1', 'wt-1', 'claude']
+  ] as const)(
+    'scopes ownership to host %s and workspace %s',
+    (connectionId, worktreeId, agentType) => {
+      const server = new AgentHookServer()
+      server.ingestRemote(
+        { ...route, payload: { state: 'working', prompt: 'Parent', agentType: 'claude' } },
+        'conn-1'
+      )
+      server.ingestRemote(
+        {
+          ...route,
+          worktreeId,
+          payload: { state: 'working', prompt: 'Other', agentType: 'codex' }
+        },
+        connectionId
+      )
+      expect(server.getStatusSnapshot()[0]).toMatchObject({ agentType, connectionId, worktreeId })
+    }
+  )
+
+  it.each([
+    [null, 'wsl:Ubuntu'],
+    ['wsl:Ubuntu', null]
+  ] as const)('retains WSL ownership across %s to %s transport', (before, after) => {
+    const server = new AgentHookServer()
+    const worktreeId = 'repo:://wsl.localhost/Ubuntu/home/user/project'
+    server.ingestRemote(
+      {
+        ...route,
+        worktreeId,
+        payload: { state: 'working', prompt: 'Parent', agentType: 'claude' }
+      },
+      before
+    )
+    server.ingestRemote(
+      { ...route, worktreeId, payload: { state: 'working', prompt: 'Nested', agentType: 'codex' } },
+      after
+    )
+    expect(server.getStatusSnapshot()[0]).toMatchObject({ agentType: 'claude', prompt: 'Parent' })
+  })
+
+  it('admits a local HTTP owner despite a remote pane-key collision', async () => {
+    const server = new AgentHookServer()
+    await server.start({ env: 'production' })
+    try {
+      server.ingestRemote(
+        { ...route, payload: { state: 'working', prompt: 'Remote', agentType: 'claude' } },
+        'ssh-a'
+      )
+      const response = await postHookEvent(
+        server,
+        buildBody({
+          hook_event_name: 'UserPromptSubmit',
+          session_id: 'local-codex',
+          prompt: 'Local'
+        }),
+        '/hook/codex'
+      )
+      expect(response.status).toBe(204)
+      expect(server.getStatusSnapshot()[0]).toMatchObject({
+        connectionId: null,
+        agentType: 'codex',
+        prompt: 'Local',
+        providerSession: { id: 'local-codex' }
+      })
+    } finally {
+      server.stop()
+    }
+  })
+
   it('uses the retained connection clock to allow a stale provider replacement after rollback', () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)

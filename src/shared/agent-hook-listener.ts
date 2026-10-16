@@ -1,5 +1,6 @@
 import { readAgentProcessIdentity } from './agent-process-presence'
 import { resolveAgentStatusIdentity } from './agent-status-identity'
+import { sameAgentStatusTerminalOwner } from './agent-status-terminal-owner'
 import { normalizeAgentStatusPayload, type AgentMainAgentStatus } from './agent-status-types'
 import type { AgentHookSource } from './agent-hook-relay'
 import { extractAgentProviderSession } from './agent-session-resume'
@@ -163,6 +164,10 @@ export function normalizeHookPayload(
   if (
     previousStatus &&
     previousReceivedAt !== undefined &&
+    sameAgentStatusTerminalOwner(
+      { connectionId: previousStatus.connectionId ?? null, worktreeId: previousStatus.worktreeId },
+      { connectionId: null, worktreeId }
+    ) &&
     resolveAgentStatusIdentity({
       existing: {
         agentType: previousStatus.payload.agentType,
