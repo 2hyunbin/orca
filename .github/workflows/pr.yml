@@ -941,7 +941,21 @@ jobs:
       - name: Install WebKit for the drawer check
         id: webkit
         background: true
-        run: pnpm exec playwright-core install --with-deps webkit
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # Azure downloads held this required job for 25 minutes; use the e2e mirror policy.
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$source" ]; then
+              sudo sed -i 's|https*://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+            fi
+          done
+          sudo tee /etc/apt/apt.conf.d/99-orca-mobile-webkit >/dev/null <<'APTCONF'
+          Acquire::http::Timeout "15";
+          Acquire::https::Timeout "15";
+          Acquire::Retries "1";
+          APTCONF
+          timeout --kill-after=10s 540s pnpm exec playwright-core install --with-deps webkit
 
       # The entry lives in mobile/ so one React resolves; without this every RN import is nothing.
       - uses: ./.github/actions/install-mobile-dependencies
