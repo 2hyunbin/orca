@@ -5,6 +5,7 @@ import path from 'node:path'
 import { cleanupE2ECrashpad } from './electron-crashpad-cleanup'
 import { recordElectronShutdownTiming } from './electron-shutdown-timing'
 import { releaseExitedElectronBrowserTransport } from './electron-browser-transport-shutdown'
+import { observeElectronCloseStages } from './electron-close-stage-observation.mjs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
 
 const GRACEFUL_CLOSE_TIMEOUT_MS = 10_000
@@ -220,59 +221,64 @@ export async function closeElectronAppForE2E(
   app: ElectronApplication,
   options: { cleanupDaemonsForUserDataDir?: string } = {}
 ): Promise<void> {
-  const proc = app.process()
-  const started = performance.now()
-  let rootExitMs: number | null = hasExited(proc) ? 0 : null
-  let pipesClosedMs: number | null = null
-  let outcome = 'closed'
-  let daemonCleanup: Promise<void> | undefined
-  const startDaemonCleanup = (): void => {
-    if (options.cleanupDaemonsForUserDataDir && !daemonCleanup) {
-      daemonCleanup = cleanupE2EDaemons(options.cleanupDaemonsForUserDataDir)
-      void daemonCleanup.catch(() => undefined)
-    }
-  }
-  const releasePipes = (): void => {
-    if (hasExited(proc)) {
-      rootExitMs ??= performance.now() - started
-      // Linux daemon trees retain Chromium sockets that block Playwright's public close.
-      startDaemonCleanup()
-    }
-    releaseExitedProcessPipes(proc)
-  }
-  const pipesClosed = (): void => {
-    pipesClosedMs = performance.now() - started
-    releaseExitedElectronBrowserTransport(app, proc)
-  }
-  proc.once('exit', releasePipes)
-  proc.once('close', pipesClosed)
-  releasePipes()
+  const observation = observeElectronCloseStages(app)
   try {
-    await withTimeout(app.close(), GRACEFUL_CLOSE_TIMEOUT_MS, 'Timed out closing Electron app')
-    if (proc) {
-      const exited = await waitForExit(proc, PROCESS_EXIT_TIMEOUT_MS)
-      if (!exited) {
-        await forceKillProcessTree(proc)
+    const proc = app.process()
+    const started = performance.now()
+    let rootExitMs: number | null = hasExited(proc) ? 0 : null
+    let pipesClosedMs: number | null = null
+    let outcome = 'closed'
+    let daemonCleanup: Promise<void> | undefined
+    const startDaemonCleanup = (): void => {
+      if (options.cleanupDaemonsForUserDataDir && !daemonCleanup) {
+        daemonCleanup = cleanupE2EDaemons(options.cleanupDaemonsForUserDataDir)
+        void daemonCleanup.catch(() => undefined)
       }
     }
-  } catch {
-    outcome = 'fallback'
-    if (proc) {
-      await forceKillProcessTree(proc)
+    const releasePipes = (): void => {
+      if (hasExited(proc)) {
+        rootExitMs ??= performance.now() - started
+        // Linux daemon trees retain Chromium sockets that block Playwright's public close.
+        startDaemonCleanup()
+      }
+      releaseExitedProcessPipes(proc)
     }
-  } finally {
-    proc.off('exit', releasePipes)
-    proc.off('close', pipesClosed)
+    const pipesClosed = (): void => {
+      pipesClosedMs = performance.now() - started
+      releaseExitedElectronBrowserTransport(app, proc)
+    }
+    proc.once('exit', releasePipes)
+    proc.once('close', pipesClosed)
     releasePipes()
-    recordElectronShutdownTiming('close', started, {
-      pid: proc.pid,
-      outcome,
-      rootExitMs,
-      pipesClosedMs
-    })
+    try {
+      await withTimeout(app.close(), GRACEFUL_CLOSE_TIMEOUT_MS, 'Timed out closing Electron app')
+      if (proc) {
+        const exited = await waitForExit(proc, PROCESS_EXIT_TIMEOUT_MS)
+        if (!exited) {
+          await forceKillProcessTree(proc)
+        }
+      }
+    } catch {
+      outcome = 'fallback'
+      if (proc) {
+        await forceKillProcessTree(proc)
+      }
+    } finally {
+      proc.off('exit', releasePipes)
+      proc.off('close', pipesClosed)
+      releasePipes()
+      recordElectronShutdownTiming('close', started, {
+        pid: proc.pid,
+        outcome,
+        rootExitMs,
+        pipesClosedMs
+      })
+    }
+    startDaemonCleanup()
+    await daemonCleanup
+  } finally {
+    observation.dispose()
   }
-  startDaemonCleanup()
-  await daemonCleanup
 }
 
 function readDaemonPidFiles(userDataDir: string): number[] {
