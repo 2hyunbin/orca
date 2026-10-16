@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 
 const electronMocks = vi.hoisted(() => {
   const ipcMain = {
@@ -33,7 +34,7 @@ const SSH_CONNECTION_ID = 'ssh-remote-1'
 const SSH_HOST_ID = `ssh:${SSH_CONNECTION_ID}`
 const LOCAL_REPO_PATH = '/Users/me/dev/app'
 
-function makeMeta(overrides: Record<string, unknown> = {}) {
+function makeMeta(overrides: Partial<WorktreeMeta> = {}): WorktreeMeta {
   return {
     displayName: 'feature',
     comment: '',

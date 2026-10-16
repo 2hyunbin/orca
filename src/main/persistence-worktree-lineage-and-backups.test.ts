@@ -140,7 +140,7 @@ describe('Store', () => {
     store.addRepo(makeRepo())
     store.setWorktreeMeta('r1::/path/child', {
       displayName: 'child',
-      instanceId: lineage.childInstanceId
+      instanceId: lineage.childInstanceId ?? undefined
     })
     store.setWorkspaceLineage(lineage)
 
@@ -174,8 +174,12 @@ describe('Store', () => {
 
     store.addRepo(makeRepo())
     store.addRepo(makeRepo({ id: 'r2', path: '/repo2' }))
-    store.setWorktreeMeta('r1::/path/child', { instanceId: folderLineage.childInstanceId })
-    store.setWorktreeMeta('r2::/other-child', { instanceId: unrelatedLineage.childInstanceId })
+    store.setWorktreeMeta('r1::/path/child', {
+      instanceId: folderLineage.childInstanceId ?? undefined
+    })
+    store.setWorktreeMeta('r2::/other-child', {
+      instanceId: unrelatedLineage.childInstanceId ?? undefined
+    })
     store.setWorkspaceLineage(folderLineage)
     store.setWorkspaceLineage(unrelatedLineage)
 

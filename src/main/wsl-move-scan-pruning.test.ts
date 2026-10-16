@@ -202,7 +202,7 @@ describe('inferred lineage hydration under a WSL move', () => {
     ])
     store.addRepo(repo(MOVING, onSsh))
     for (const row of [...children, ...parents.values()]) {
-      store.setWorktreeMetaForHost(row.id, row.hostId, {
+      store.setWorktreeMetaForHost(row.id, row.hostId ?? 'local', {
         instanceId: row.instanceId,
         hostId: row.hostId
       })
