@@ -72,6 +72,7 @@ import {
 import {
   REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS,
   RemoteRuntimePtyRecoveryState,
+  registerRemoteRuntimePtyControlReadyReviver,
   type RemoteRuntimePtyRecoveryPhase
 } from './remote-runtime-pty-recovery-state'
 import { createBrowserUuid } from '@/lib/browser-uuid'
@@ -3374,9 +3375,15 @@ export function createRemoteRuntimePtyTransport(
         outputProcessor.disposePendingSideEffectGauge()
       }
       recovery.dispose()
+      unregisterControlReadyReviver()
       inputBatcher.clear()
       viewportBatcher.clear()
     }
   }
+  // Why: a backoff advances and a latched pane replays its attach, exactly as online/resume/Reconnect would.
+  const unregisterControlReadyReviver = registerRemoteRuntimePtyControlReadyReviver(
+    runtimeEnvironmentId,
+    () => !destroyed && (recovery.retryNow() || (transport.retryRecovery?.() ?? false))
+  )
   return transport
 }
