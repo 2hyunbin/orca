@@ -10,6 +10,16 @@ import { startInAdmittedPane } from '../../runtime-pane-admission'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
+  /** Pane id of each split main wrote and awaits → whether the window already recorded it. */
+  private readonly awaitedSplitLeafIds = new Map<string, boolean>()
+
+  /** The window recorded a split it mounted: one main awaits counts as shown before its graph says so. */
+  protected noteWindowMountedSplit(leafId: string): void {
+    if (this.awaitedSplitLeafIds.has(leafId)) {
+      this.awaitedSplitLeafIds.set(leafId, true)
+    }
+  }
+
   protected abstract splitPtyBackedTerminal(
     pty: RuntimePtyWorktreeRecord,
     opts?: TerminalSplitOptions,
@@ -51,6 +61,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       : []
     if (hostId && parseExecutionHostId(hostId)?.kind !== 'runtime') {
       const newLeafId = randomUUID()
+      this.awaitedSplitLeafIds.set(newLeafId, false)
       const { result: newHandle } = await startInAdmittedPane(
         this.store,
         {
@@ -76,10 +87,12 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
         },
         {
           // A pane the window holds but whose terminal is still starting (a slow SSH start) stays.
-          shown: () => this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
+          shown: () =>
+            this.awaitedSplitLeafIds.get(newLeafId) === true ||
+            this.leaves.has(this.getLeafKey(leaf.tabId, newLeafId)),
           startIfWriteFails: true
         }
-      )
+      ).finally(() => this.awaitedSplitLeafIds.delete(newLeafId))
       return {
         handle: newHandle,
         tabId: leaf.tabId,

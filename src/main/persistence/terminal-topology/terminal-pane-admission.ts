@@ -29,6 +29,7 @@ import {
   followRemoteSessionAfterPaneDetach
 } from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
 export type TerminalPaneAdmission =
@@ -52,7 +53,7 @@ export function admitPaneToSession(
   if (workspace && locatePane(workspace, paneKeyOf(admission.tabId, leafId))) {
     return { value: 'exists', session: null }
   }
-  const change = applyToSession(loaded, admission)
+  const change = applyToSession(loaded, admission, touchedRecordsWrite(session, loaded))
   return { ...change, value: change.value.ok ? 'admitted' : change.value.code }
 }
 
@@ -61,8 +62,20 @@ export function withdrawPaneFromSession(
   session: WorkspaceSessionState,
   pane: CommandOf<'closePane'>
 ): PaneLayoutChange<LayoutRefusalCode | null> {
-  const change = applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), pane)
+  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const change = applyToSession(loaded, pane, touchedRecordsWrite(session, loaded))
   return { ...change, value: change.value.ok ? null : change.value.code }
+}
+
+/** Switch point: in a layout-owner build a runtime pane writes only the records it changes, as
+ *  `layout.apply` does; window-owned builds rewrite the whole partition. */
+function touchedRecordsWrite(
+  session: WorkspaceSessionState,
+  loaded: LoadedWorkspaceLayout
+): ((after: WorkspaceSessionState) => WorkspaceSessionState) | undefined {
+  return ORCA_LAYOUT_OWNER_IS_MAIN
+    ? (after) => patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+    : undefined
 }
 
 /**

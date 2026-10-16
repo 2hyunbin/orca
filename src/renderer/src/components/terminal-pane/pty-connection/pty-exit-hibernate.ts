@@ -32,12 +32,12 @@ export function noteArmsHibernatedPaneWake(record: SleepingAgentSessionRecord): 
   )
 }
 
-/** PTY exit handling, hibernated-pane wake targets, and post-exit focus transfer. */
 /** A tab's sole pane keeps a dead terminal it freshly spawned and the user never typed into. */
 function keepsUntouchedFreshPane(session: ConnectPanePtySession, ptyId: string): boolean {
   return session.spawnedFreshPtyId === ptyId && !Number.isFinite(session.lastTerminalInputAt)
 }
 
+/** PTY exit handling, hibernated-pane wake targets, and post-exit focus transfer. */
 export function installPtyExitHibernate(session: ConnectPanePtySession): void {
   type ProcessExitState = {
     startup: PtyPaneStartup
