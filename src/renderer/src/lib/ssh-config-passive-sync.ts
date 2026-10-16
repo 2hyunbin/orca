@@ -1,0 +1,43 @@
+import { useAppStore } from '../store'
+
+// Why: launch, the hosts menu and Settings → SSH can all ask within a second; one sync covers them.
+const SSH_CONFIG_SYNC_MIN_INTERVAL_MS = 10_000
+
+let inFlight: Promise<void> | null = null
+let lastStartedAt = Number.NEGATIVE_INFINITY
+
+/**
+ * Non-destructive ~/.ssh/config sync: no reAdopt, so hosts the user deleted stay deleted. Settings →
+ * SSH used to be its only trigger, which left the status-bar hosts menu stale for everyone else.
+ */
+export function syncSshConfigTargetsPassively(): Promise<void> {
+  if (inFlight) {
+    return inFlight
+  }
+  const now = Date.now()
+  if (now - lastStartedAt < SSH_CONFIG_SYNC_MIN_INTERVAL_MS) {
+    return Promise.resolve()
+  }
+  lastStartedAt = now
+  inFlight = (async () => {
+    try {
+      const result = await window.api.ssh.importConfig()
+      const store = useAppStore.getState()
+      store.recordSshRepoReadoptions(result.repoReadoptions)
+      // Unchanged config is the common case; skip the extra listing and store write.
+      if (result.targets.length > 0) {
+        store.setSshTargetsMetadata(await window.api.ssh.listTargets())
+      }
+    } catch {
+      // Best-effort; the explicit Import button surfaces failures.
+    } finally {
+      inFlight = null
+    }
+  })()
+  return inFlight
+}
+
+export function resetSshConfigPassiveSyncForTests(): void {
+  inFlight = null
+  lastStartedAt = Number.NEGATIVE_INFINITY
+}

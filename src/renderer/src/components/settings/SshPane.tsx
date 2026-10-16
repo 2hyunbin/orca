@@ -19,6 +19,7 @@ import { getAllWorktreesFromState } from '@/store/selectors'
 import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { useSshAddTargetIntent } from './use-ssh-add-target-intent'
+import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync'
 export { getSshPaneSearchEntries } from './ssh-search'
 
 type SshPaneProps = { addTargetIntentSignal?: number }
@@ -76,12 +77,7 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     // and newly added hosts appear without a manual Import click. Best-effort —
     // a sync failure must not block listing the already-known targets.
     void (async () => {
-      try {
-        const result = await window.api.ssh.importConfig()
-        useAppStore.getState().recordSshRepoReadoptions(result.repoReadoptions)
-      } catch {
-        // Surfaced on demand via the explicit Import button; ignore here.
-      }
+      await syncSshConfigTargetsPassively()
       if (abortController.signal.aborted) {
         return
       }
