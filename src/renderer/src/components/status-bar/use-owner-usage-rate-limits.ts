@@ -18,6 +18,9 @@ import {
 
 // Why: accounts.list({refreshUsage}) waits for the host's provider fetches.
 const REMOTE_USAGE_REFRESH_TIMEOUT_MS = 30_000
+// Matches the desktop's own usage poll cadence.
+const REMOTE_USAGE_STALE_REOPEN_MS = 5 * 60_000
+const REMOTE_USAGE_RECONNECT_DELAY_MS = 5_000
 
 /** A snapshot only counts under the owner it came from, so A's numbers never render as B's. */
 type OwnedUsage = {
@@ -78,11 +81,29 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
     [apply, fail]
   )
 
+  const ownerIdRef = useRef(ownerId)
+  useEffect(() => {
+    ownerIdRef.current = ownerId
+  }, [ownerId])
+  // Why: bumping reopens the stream; each open makes the host refresh stale usage.
+  const [streamGeneration, setStreamGeneration] = useState(0)
+
   useEffect(() => {
     if (!ownerId) {
       return
     }
     let active = true
+    const reopen = (): void => setStreamGeneration((value) => value + 1)
+    // Why: orcad does not poll on its own, so a long-lived stream would freeze the meters.
+    const staleTimer = setTimeout(reopen, REMOTE_USAGE_STALE_REOPEN_MS)
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    const lost = (): void => {
+      if (active) {
+        fail(ownerId, 'unreachable')
+        clearTimeout(reconnectTimer)
+        reconnectTimer = setTimeout(reopen, REMOTE_USAGE_RECONNECT_DELAY_MS)
+      }
+    }
     const watcher = watchProviderAccounts(
       { kind: 'environment', environmentId: ownerId },
       {
@@ -92,18 +113,17 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
           }
         },
         // Why: timeout, closed stream and RPC failure all mean the owner's usage is unverifiable.
-        onError: () => {
-          if (active) {
-            fail(ownerId, 'unreachable')
-          }
-        }
+        onError: lost,
+        onClosedAfterSnapshot: lost
       }
     )
     return () => {
       active = false
+      clearTimeout(staleTimer)
+      clearTimeout(reconnectTimer)
       watcher.close()
     }
-  }, [ownerId, applySnapshot, fail])
+  }, [ownerId, streamGeneration, applySnapshot, fail])
 
   const refreshRemote = useCallback(async () => {
     if (!ownerId) {
@@ -116,11 +136,14 @@ export function useOwnerUsageRateLimits(local: RateLimitState): OwnerUsageRateLi
         { refreshUsage: true },
         { timeoutMs: REMOTE_USAGE_REFRESH_TIMEOUT_MS }
       )
-      applySnapshot(ownerId, snapshot)
+      // Why: a refresh that outlives an owner switch must not overwrite the new owner's usage.
+      if (ownerIdRef.current === ownerId) {
+        applySnapshot(ownerId, snapshot)
+      }
     } catch {
-      fail(ownerId, 'unreachable')
+      // Why: a slow forced refresh is not loss of contact; the stream owns reachability.
     }
-  }, [ownerId, applySnapshot, fail])
+  }, [ownerId, applySnapshot])
 
   const ownerState = useMemo<OwnerUsageState>(() => {
     if (!ownerId) {

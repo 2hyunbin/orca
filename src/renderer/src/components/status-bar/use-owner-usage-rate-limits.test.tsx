@@ -9,6 +9,7 @@ import type { ProviderAccountsSnapshot } from '@/runtime/runtime-provider-accoun
 type Handlers = {
   onSnapshot: (snapshot: ProviderAccountsSnapshot) => void
   onError: (error: unknown) => void
+  onClosedAfterSnapshot?: () => void
 }
 
 type Watcher = { target: RuntimeClientTarget; handlers: Handlers; closed: boolean }
@@ -155,5 +156,67 @@ describe('useOwnerUsageRateLimits', () => {
       expect.anything()
     )
     await waitFor(() => expect(result.current.rateLimits.claude?.session?.usedPercent).toBe(12))
+  })
+
+  it('marks usage unverifiable when the stream closes after its first snapshot, then reconnects', () => {
+    vi.useFakeTimers()
+    try {
+      mocks.owner = { kind: 'environment', environmentId: 'mini' }
+      const { result } = renderHook(() => useOwnerUsageRateLimits(local))
+      act(() =>
+        mocks.watchers[0].handlers.onSnapshot(
+          snapshot(createEmptyRateLimitState({ codex: provider('codex', 30) }))
+        )
+      )
+      act(() => mocks.watchers[0].handlers.onClosedAfterSnapshot?.())
+      expect(result.current.rateLimits.codex?.session).toBeNull()
+      expect(result.current.rateLimits.codex?.error).toContain('cannot reach Mac Mini')
+      act(() => {
+        vi.advanceTimersByTime(5_000)
+      })
+      expect(mocks.watchers[0].closed).toBe(true)
+      expect(mocks.watchers).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reopens the stream periodically so a host that does not poll still refreshes', () => {
+    vi.useFakeTimers()
+    try {
+      mocks.owner = { kind: 'environment', environmentId: 'mini' }
+      renderHook(() => useOwnerUsageRateLimits(local))
+      act(() => {
+        vi.advanceTimersByTime(5 * 60_000)
+      })
+      expect(mocks.watchers).toHaveLength(2)
+      expect(mocks.watchers[0].closed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores a refresh that completes after the owner changed', async () => {
+    mocks.owner = { kind: 'environment', environmentId: 'mini' }
+    let resolveRefresh: (value: ProviderAccountsSnapshot) => void = () => {}
+    mocks.callRuntimeRpc.mockReturnValue(
+      new Promise<ProviderAccountsSnapshot>((resolve) => {
+        resolveRefresh = resolve
+      })
+    )
+    const { result, rerender } = renderHook(() => useOwnerUsageRateLimits(local))
+    const pending = result.current.refreshRemote?.()
+    mocks.owner = { kind: 'environment', environmentId: 'devbox' }
+    rerender()
+    act(() =>
+      mocks.watchers[1].handlers.onSnapshot(
+        snapshot(createEmptyRateLimitState({ claude: provider('claude', 20) }))
+      )
+    )
+    await act(async () => {
+      resolveRefresh(snapshot(createEmptyRateLimitState({ claude: provider('claude', 99) })))
+      await pending
+    })
+    expect(result.current.rateLimits.claude?.session?.usedPercent).toBe(20)
   })
 })
