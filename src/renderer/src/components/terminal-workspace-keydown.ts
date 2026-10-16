@@ -22,7 +22,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import { translate } from '@/i18n/i18n'
 import { getKeybindingContext } from './terminal-workspace-model'
 import { resolveTerminalAgentTabShortcut } from './terminal-agent-tab-shortcut'
-import { getAgentDetectionTargetKeyForWorktree } from '@/hooks/useAgentDetectionTarget'
+import { getDetectionTargetIdentityForWorktree } from '@/lib/agent-detection-target-inventory'
 import { handleTerminalWorkspaceEditorShortcut } from './terminal-workspace-editor-shortcuts'
 import type { TerminalActivationController } from './use-terminal-activation-actions'
 
@@ -96,7 +96,7 @@ export function handleTerminalWorkspaceKeyDown(
         )
       }
       if (agentShortcut.pendingAgent) {
-        const detectionTarget = getAgentDetectionTargetKeyForWorktree(
+        const detectionTarget = getDetectionTargetIdentityForWorktree(
           useAppStore.getState(),
           activeWorktreeId
         )
@@ -105,7 +105,7 @@ export function handleTerminalWorkspaceKeyDown(
           const latest = useAppStore.getState()
           if (
             latest.activeWorktreeId === activeWorktreeId &&
-            getAgentDetectionTargetKeyForWorktree(latest, activeWorktreeId) === detectionTarget
+            getDetectionTargetIdentityForWorktree(latest, activeWorktreeId) === detectionTarget
           ) {
             launchOrReport(agent)
           }

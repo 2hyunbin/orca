@@ -91,6 +91,15 @@ export function ensureDetectedAgentsForWorktree(
   return target ? ensureDetectedAgentsForTarget(state, target) : Promise.resolve([])
 }
 
+/** Which host's list a worktree reads now; changes when the workspace moves to another host. */
+export function getDetectionTargetIdentityForWorktree(
+  state: AgentDetectionOwnerState,
+  worktreeId: string | null
+): string | null {
+  const target = detectionTargetForWorktree(state, worktreeId)
+  return target ? JSON.stringify(target) : null
+}
+
 /** The worktree host's list, probing that host only when nothing usable is cached. */
 export async function loadDetectedAgentsForWorktree(
   state: WorktreeAgentInventoryState,
