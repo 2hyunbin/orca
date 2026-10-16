@@ -1,11 +1,13 @@
 import {
   consumeRelayCellInventoryHold,
+  isRelayDatabaseNothingRanError,
   type RelayDatabase,
   type RelayLockOptions,
   type RelayTransactionOptions,
   type SqlRow
 } from './database.js'
 import type { CellInventoryHoldCounts } from './cell-inventory-hold-samples.js'
+import { markRelayDatabaseError } from './relay-database-rejection-fence.js'
 import {
   sameDedicatedDatabaseTarget,
   type DatabaseQuiesce,
@@ -14,6 +16,7 @@ import {
 } from './relay-database-target-pointer.js'
 import type {
   OpenedRelayDatabaseTarget,
+  RelayDatabaseProbeResult,
   RelayDatabaseTarget,
   RelayDatabaseTargetName
 } from './relay-database-targets.js'
@@ -21,15 +24,27 @@ import type {
 const PROBE_TIMEOUT_MS = 3_000
 const PROBE_INTERVAL_MS = 250
 const BOOT_SELECTION_CAP_MS = 10_000
+// Residual: a pointer read slower than this at boot starts the process on primary; a fenced
+// primary then refuses it, and the refusal (or the pointer, once read) re-selects.
+const FIRST_POINTER_WAIT_MS = 2_000
+// With no eligible target and a pointer generation above 0, operations fail fast meanwhile.
+const UNAVAILABLE_REPROBE_MS = 1_000
 // A refused login probes the other target at most this often.
 const REFUSAL_PROBE_SPACING_MS = 1_000
+// Bounds the re-runs of an operation that failed before any statement ran.
+const NOTHING_RAN_RETRIES = 3
 // The only evidence a fence gives: the target refused the relay's password.
 const AUTH_REFUSAL_CODES = new Set(['28P01', '28000'])
 
-type Active = { name: RelayDatabaseTargetName; opened: OpenedRelayDatabaseTarget; generation: number }
-type ProbeResult = { generation: number; opened: OpenedRelayDatabaseTarget }
+// `generation` is null until the target has answered: unknown is never read as 0.
+type Active = {
+  name: RelayDatabaseTargetName
+  opened: OpenedRelayDatabaseTarget
+  generation: number | null
+}
 type Choice = Active & { reason: string }
 type Hold = { id: string; clear: () => void }
+type Phase = 'boot' | 'pointer-appeared' | 'refused' | 'below-pointer-generation' | 'reprobe'
 
 export type SwitchingRelayDatabaseInput = {
   primary: RelayDatabaseTarget & { opened: OpenedRelayDatabaseTarget }
@@ -39,6 +54,16 @@ export type SwitchingRelayDatabaseInput = {
   probeTimeoutMs?: number
   probeIntervalMs?: number
   bootSelectionCapMs?: number
+  firstPointerWaitMs?: number
+  unavailableReprobeMs?: number
+}
+
+// 57P03 is transient everywhere the relay classifies errors, so routes answer 503.
+export class RelayDatabaseTargetUnavailableError extends Error {
+  readonly code = '57P03'
+  constructor() {
+    super('relay_database_no_eligible_target')
+  }
 }
 
 function log(event: string, fields: Record<string, unknown>): void {
@@ -56,7 +81,7 @@ function isAuthRefusal(error: unknown): boolean {
 
 function sleep(ms: number, wake?: (resolve: () => void) => void): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms)
+    const timer = setTimeout(resolve, Math.max(0, ms))
     timer.unref?.()
     wake?.(() => {
       clearTimeout(timer)
@@ -65,15 +90,36 @@ function sleep(ms: number, wake?: (resolve: () => void) => void): Promise<void> 
   })
 }
 
+async function within<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), Math.max(0, timeoutMs))
+    timer.unref?.()
+  })
+  try {
+    return await Promise.race([promise, timedOut])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // DATABASE_URL (primary) plus the pointer's dedicated instance. One target serves at a time;
-// the authority generation each one reports decides which, and only a successful read of a
-// higher generation moves it. Losing contact is never evidence: a timeout or reset never switches.
+// the authority generation each one reports decides which. Rules:
+// - never serve from a target known to be below the pointer's generation, or not known at all
+//   once that generation is above 0;
+// - only a successful read of a higher generation moves a serving process: a timeout, reset or
+//   silence never does, and an unanswered target's generation is unknown, not 0.
 export class SwitchingRelayDatabase implements RelayDatabase {
   readonly dialect = 'postgres' as const
   private active: Active
+  private pointer: DatabaseTargetPointer | null = null
   private dedicated: { config: DedicatedDatabaseTarget; target: RelayDatabaseTarget } | null = null
-  private selection: 'pending' | 'running' | 'without-pointer' | 'done' = 'pending'
+  private booted = false
+  private bootDeadline = 0
+  private bootWithoutPointer = false
   private selecting: Promise<void> | null = null
+  private unavailable = false
+  private reprobing = false
   private readonly blockers = new Set<Promise<void>>()
   private readonly releases = new Set<() => void>()
   private waiters = 0
@@ -86,20 +132,24 @@ export class SwitchingRelayDatabase implements RelayDatabase {
   private readonly probeTimeoutMs: number
   private readonly probeIntervalMs: number
   private readonly bootSelectionCapMs: number
+  private readonly firstPointerWaitMs: number
+  private readonly unavailableReprobeMs: number
 
   constructor(private readonly input: SwitchingRelayDatabaseInput) {
-    this.active = { name: 'primary', opened: input.primary.opened, generation: 0 }
+    this.active = { name: 'primary', opened: input.primary.opened, generation: null }
     this.probeTimeoutMs = input.probeTimeoutMs ?? PROBE_TIMEOUT_MS
     this.probeIntervalMs = input.probeIntervalMs ?? PROBE_INTERVAL_MS
     this.bootSelectionCapMs = input.bootSelectionCapMs ?? BOOT_SELECTION_CAP_MS
+    this.firstPointerWaitMs = input.firstPointerWaitMs ?? FIRST_POINTER_WAIT_MS
+    this.unavailableReprobeMs = input.unavailableReprobeMs ?? UNAVAILABLE_REPROBE_MS
   }
 
   async query(sql: string, params?: unknown[]): Promise<SqlRow[]> {
-    return await this.run((database) => database.query(sql, params))
+    return await this.run(({ opened }) => opened.database.query(sql, params))
   }
 
   async queryPriority(sql: string, params?: unknown[]): Promise<SqlRow[]> {
-    return await this.run((database) =>
+    return await this.run(({ opened: { database } }) =>
       database.queryPriority ? database.queryPriority(sql, params) : database.query(sql, params)
     )
   }
@@ -109,7 +159,7 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     params?: unknown[],
     options?: RelayLockOptions
   ): Promise<SqlRow[]> {
-    return await this.run((database) => database.queryLocked(sql, params, options))
+    return await this.run(({ opened }) => opened.database.queryLocked(sql, params, options))
   }
 
   // The whole transaction stays on the pool it started on, even if a switch lands meanwhile.
@@ -117,7 +167,7 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     operation: (transaction: RelayDatabase) => Promise<T>,
     options?: RelayTransactionOptions
   ): Promise<T> {
-    return await this.run((database) => database.transaction(operation, options))
+    return await this.run(({ opened }) => opened.database.transaction(operation, options))
   }
 
   activeRelayDatabase(): RelayDatabase {
@@ -132,23 +182,27 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     return consumeRelayCellInventoryHold(this.active.opened.database)
   }
 
-  // Waits like any operation, so a director booting inside a hold migrates the target it lands on.
+  // Runs like any operation: it waits out a hold, and a refusal at boot re-selects.
   async applySchemaToActiveTarget(): Promise<void> {
-    const active = await this.acquire()
-    await active.opened.applySchema()
+    await this.run(async ({ opened }) => await opened.applySchema())
   }
 
   // Resolves once the boot selection has; starts it if nothing has yet.
   async ready(): Promise<void> {
-    if (this.selection === 'pending') this.startBootSelection()
+    if (!this.booted) this.startBoot()
     await this.selecting
   }
 
   applyPointer(pointer: DatabaseTargetPointer | null): void {
     if (!pointer || this.closed) return
+    this.pointer = pointer
     this.adoptDedicated(pointer.dedicated)
-    if (this.selection === 'without-pointer') this.startLateSelection()
+    if (this.bootWithoutPointer) {
+      this.bootWithoutPointer = false
+      if (this.floor() === 0) this.checkLatePointer()
+    }
     this.applyQuiesce(pointer.quiesce)
+    this.ensureEligible()
   }
 
   async close(): Promise<void> {
@@ -162,18 +216,38 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     ])
   }
 
-  private async run<T>(operation: (database: RelayDatabase) => Promise<T>): Promise<T> {
-    const active = await this.acquire()
-    try {
-      return await operation(active.opened.database)
-    } catch (error) {
-      if (isAuthRefusal(error)) this.probeAfterRefusal(active)
-      throw error
+  private floor(): number {
+    return this.pointer?.generation ?? 0
+  }
+
+  // A serving process moves only onto a generation at or above the pointer's and above what
+  // its own target last answered (unknown counts as 0 here: the floor still applies).
+  private mayMoveTo(generation: number): boolean {
+    return generation >= this.floor() && generation > (this.active.generation ?? 0)
+  }
+
+  private async run<T>(operation: (active: Active) => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const used = await this.acquire()
+      try {
+        return await operation(used)
+      } catch (error) {
+        if (attempt < NOTHING_RAN_RETRIES && isRelayDatabaseNothingRanError(error)) {
+          // Inside a window, or after a switch: wait for (or use) the post-switch target.
+          if (this.hold !== null || this.active.name !== used.name) continue
+          if (isAuthRefusal(error) && this.pointer !== null && Date.now() < this.bootDeadline) {
+            await this.reselect(this.bootDeadline, 'refused')
+            continue
+          }
+        }
+        if (isAuthRefusal(error)) this.probeAfterRefusal(used)
+        throw error
+      }
     }
   }
 
   private async acquire(): Promise<Active> {
-    if (this.selection === 'pending') this.startBootSelection()
+    if (!this.booted) this.startBoot()
     while (this.blockers.size > 0) {
       this.waiters += 1
       try {
@@ -181,6 +255,11 @@ export class SwitchingRelayDatabase implements RelayDatabase {
       } finally {
         this.waiters -= 1
       }
+    }
+    if (this.unavailable) {
+      const error = new RelayDatabaseTargetUnavailableError()
+      markRelayDatabaseError(error)
+      throw error
     }
     return this.active
   }
@@ -201,17 +280,8 @@ export class SwitchingRelayDatabase implements RelayDatabase {
   private async probe(
     target: RelayDatabaseTarget,
     timeoutMs = this.probeTimeoutMs
-  ): Promise<ProbeResult | null> {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timedOut = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), timeoutMs)
-      timer.unref?.()
-    })
-    try {
-      return await Promise.race([target.probe(timeoutMs).catch(() => null), timedOut])
-    } finally {
-      clearTimeout(timer)
-    }
+  ): Promise<RelayDatabaseProbeResult | null> {
+    return await within(target.probe(timeoutMs).catch(() => null), timeoutMs, null)
   }
 
   private otherTarget(): { name: RelayDatabaseTargetName; target: RelayDatabaseTarget } | null {
@@ -231,33 +301,31 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     void previous?.target.close().catch(() => undefined)
   }
 
-  // An unanswered primary counts as generation 0, so a primary timeout can never hand the
-  // process to a dedicated target that was never cut over to.
-  private async choose(): Promise<Choice> {
+  // One round over both targets. Eligible: answered, at or above the pointer's generation.
+  // A tie goes to primary; so does dedicated at 0 while primary is unknown, since it was
+  // never cut over to.
+  private async chooseOnce(timeoutMs = this.probeTimeoutMs): Promise<Choice | null> {
     const dedicated = this.dedicated?.target
     const [primary, other] = await Promise.all([
-      this.probe(this.input.primary),
-      dedicated ? this.probe(dedicated) : null
+      this.probe(this.input.primary, timeoutMs),
+      dedicated ? this.probe(dedicated, timeoutMs) : null
     ])
-    const primaryGeneration = primary?.generation ?? 0
-    if (other && other.generation > primaryGeneration) {
+    const floor = this.floor()
+    if (other && other.generation >= floor && other.generation > (primary?.generation ?? 0)) {
       return { name: 'dedicated', ...other, reason: 'higher-generation' }
     }
+    if (!primary || primary.generation < floor) return null
     const reason =
-      primary === null
-        ? other === null
-          ? 'none-accepting'
-          : 'tie'
-        : other === null
-          ? 'dedicated-unavailable'
-          : other.generation === primaryGeneration
-            ? 'tie'
-            : 'higher-generation'
-    const opened = this.input.primary.opened
-    return { name: 'primary', opened, generation: primaryGeneration, reason }
+      other === null
+        ? 'dedicated-unavailable'
+        : other.generation === primary.generation
+          ? 'tie'
+          : 'higher-generation'
+    return { name: 'primary', ...primary, reason }
   }
 
-  private adopt(choice: Choice, phase: 'boot' | 'pointer-appeared'): void {
+  private adopt(choice: Choice, phase: Phase): void {
+    this.unavailable = false
     this.active = { name: choice.name, opened: choice.opened, generation: choice.generation }
     log('orca_relay_database_target_selected', {
       target: choice.name,
@@ -267,53 +335,112 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     })
   }
 
-  private startBootSelection(): void {
-    this.selection = 'running'
+  // Holds operations while it runs; one selection at a time.
+  private runSelection(body: () => Promise<void>): Promise<void> {
+    if (this.selecting) return this.selecting
     const release = this.block()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const capped = new Promise<'timeout'>((resolve) => {
-      timer = setTimeout(() => resolve('timeout'), this.bootSelectionCapMs)
-      timer.unref?.()
-    })
-    const choosing = (async (): Promise<Choice | null> => {
-      const pointer = await this.input.firstPointer().catch(() => null)
-      if (!pointer || this.closed) return null
-      this.adoptDedicated(pointer.dedicated)
-      return await this.choose()
-    })()
-    this.selecting = Promise.race([choosing, capped])
-      .then((choice) => {
-        if (choice === 'timeout') {
-          // A pointer that arrives later still gets a selection; one already read does not.
-          this.selection = this.dedicated ? 'done' : 'without-pointer'
-          this.adopt({ ...this.active, reason: 'timeout' }, 'boot')
-        } else if (choice === null) {
-          this.selection = 'without-pointer'
-          this.adopt({ ...this.active, reason: 'no-pointer' }, 'boot')
-        } else {
-          this.selection = 'done'
-          this.adopt(choice, 'boot')
-        }
-      })
+    this.selecting = body()
+      .catch(() => undefined)
       .finally(() => {
-        clearTimeout(timer)
         release()
         this.selecting = null
       })
+    return this.selecting
   }
 
-  // The pointer reached a process that booted without it. Nothing waits: work keeps running on
-  // primary, and only a higher generation elsewhere moves it.
-  private startLateSelection(): void {
-    this.selection = 'running'
-    this.selecting = this.choose()
-      .then((choice) => {
-        this.selection = 'done'
-        if (!this.closed) this.adopt(choice, 'pointer-appeared')
-      })
+  private startBoot(): void {
+    this.booted = true
+    this.bootDeadline = Date.now() + this.bootSelectionCapMs
+    void this.runSelection(async () => {
+      const pointer =
+        this.pointer ??
+        (await within(
+          this.input.firstPointer().catch(() => null),
+          this.firstPointerWaitMs,
+          null
+        )) ??
+        this.pointer
+      if (!pointer || this.closed) {
+        this.bootWithoutPointer = true
+        this.adopt({ ...this.active, reason: 'no-pointer' }, 'boot')
+        return
+      }
+      if (!this.pointer) this.applyPointer(pointer)
+      await this.selectUntil(this.bootDeadline, 'boot')
+    }).catch(() => undefined)
+  }
+
+  private async reselect(deadline: number, phase: Phase): Promise<void> {
+    await this.runSelection(async () => await this.selectUntil(deadline, phase))
+  }
+
+  // Probes every interval until an eligible target answers or the deadline passes. Past it,
+  // primary only if the pointer's generation is 0; otherwise fail fast and keep probing.
+  private async selectUntil(deadline: number, phase: Phase): Promise<void> {
+    for (;;) {
+      const remainingMs = deadline - Date.now()
+      const timeoutMs = Math.max(1, Math.min(this.probeTimeoutMs, remainingMs))
+      const choice = await this.chooseOnce(timeoutMs)
+      if (this.closed) return
+      if (choice) {
+        this.adopt(choice, phase)
+        return
+      }
+      if (Date.now() >= deadline) break
+      await sleep(Math.min(this.probeIntervalMs, deadline - Date.now()))
+    }
+    if (this.floor() === 0) {
+      const opened = this.input.primary.opened
+      this.adopt({ name: 'primary', opened, generation: null, reason: 'none-eligible' }, phase)
+      return
+    }
+    this.unavailable = true
+    log('orca_relay_database_target_unavailable', { floor: this.floor(), phase })
+    this.startReprobe()
+  }
+
+  private startReprobe(): void {
+    if (this.reprobing) return
+    this.reprobing = true
+    void (async () => {
+      while (this.unavailable && !this.closed) {
+        await sleep(this.unavailableReprobeMs)
+        if (this.selecting || this.hold) continue
+        const choice = await this.chooseOnce()
+        if (choice && this.unavailable && !this.closed) this.adopt(choice, 'reprobe')
+      }
+    })()
+      .catch(() => undefined)
       .finally(() => {
-        this.selecting = null
+        this.reprobing = false
       })
+  }
+
+  // The serving target must be known to be at or above the pointer's generation.
+  private ensureEligible(): void {
+    if (!this.booted || this.selecting || this.hold || this.unavailable || this.closed) return
+    const floor = this.floor()
+    if (floor === 0) return
+    if (this.active.generation !== null && this.active.generation >= floor) return
+    void this.reselect(Date.now() + this.bootSelectionCapMs, 'below-pointer-generation').catch(
+      () => undefined
+    )
+  }
+
+  // A pointer at generation 0 reached a process that booted without it. Nothing waits: work
+  // keeps running on primary, and only a higher generation elsewhere moves it.
+  private checkLatePointer(): void {
+    const dedicated = this.dedicated?.target
+    if (!dedicated) return
+    void this.probe(dedicated)
+      .then((result) => {
+        if (this.closed || this.selecting || this.hold || this.active.name !== 'primary') return
+        if (result && this.mayMoveTo(result.generation)) {
+          const choice = { name: 'dedicated' as const, ...result, reason: 'higher-generation' }
+          this.adopt(choice, 'pointer-appeared')
+        }
+      })
+      .catch(() => undefined)
   }
 
   private applyQuiesce(quiesce: DatabaseQuiesce | undefined): void {
@@ -355,18 +482,27 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     }
     this.hold = hold
     log('orca_relay_database_quiesce_started', { id: quiesce.id })
+    let session: { close: () => void } | null = null
     try {
-      if (this.selection === 'pending') this.startBootSelection()
+      if (!this.booted) this.startBoot()
       await this.selecting
+      const other = this.otherTarget()
+      // One session held open through the window: the tool checks every marked process
+      // reached the target before it fences the source.
+      const probes = other ? other.target.probeSession() : null
+      session = probes
       for (;;) {
         const remainingMs = quiesce.until - Date.now()
         if (remainingMs <= 0 || this.closed) break
         const probeStartedAt = Date.now()
-        const other = this.otherTarget()
-        const result = other
-          ? await this.probe(other.target, Math.min(this.probeTimeoutMs, remainingMs))
+        const result = probes
+          ? await within(
+              probes.probe(Math.min(this.probeTimeoutMs, remainingMs)).catch(() => null),
+              Math.min(this.probeTimeoutMs, remainingMs),
+              null
+            )
           : null
-        if (other && result && result.generation > this.active.generation && !this.closed) {
+        if (other && result && this.mayMoveTo(result.generation) && !this.closed) {
           this.switchTo(other.name, result, startedAt)
           return
         }
@@ -387,11 +523,24 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     } finally {
       if (this.hold === hold) this.hold = null
       release()
+      const held = session
+      if (held && cleared.at === null && Date.now() < quiesce.until && !this.closed) {
+        const timer = setTimeout(() => held.close(), quiesce.until - Date.now())
+        timer.unref?.()
+      } else {
+        held?.close()
+      }
+      this.ensureEligible()
     }
   }
 
-  private switchTo(to: RelayDatabaseTargetName, result: ProbeResult, startedAt: number): void {
+  private switchTo(
+    to: RelayDatabaseTargetName,
+    result: RelayDatabaseProbeResult,
+    startedAt: number
+  ): void {
     const from = this.active.name
+    this.unavailable = false
     this.active = { name: to, opened: result.opened, generation: result.generation }
     log('orca_relay_database_switched', {
       from,
@@ -405,7 +554,7 @@ export class SwitchingRelayDatabase implements RelayDatabase {
   // A process that missed the window (the pointer unreadable through it) is left on a fenced
   // target. Its refusal is evidence, and the same rule applies: only a higher generation moves it.
   private probeAfterRefusal(failed: Active): void {
-    if (this.refusalProbing || this.hold || this.selection !== 'done' || this.active !== failed) return
+    if (this.refusalProbing || this.hold || this.selecting || this.active !== failed) return
     if (Date.now() - this.refusalProbeAt < REFUSAL_PROBE_SPACING_MS) return
     const other = this.otherTarget()
     if (!other) return
@@ -414,7 +563,7 @@ export class SwitchingRelayDatabase implements RelayDatabase {
     const startedAt = Date.now()
     void this.probe(other.target)
       .then((result) => {
-        if (result && this.active === failed && !this.hold && result.generation > failed.generation) {
+        if (result && this.active === failed && !this.hold && this.mayMoveTo(result.generation)) {
           this.switchTo(other.name, result, startedAt)
         }
       })

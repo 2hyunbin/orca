@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import type { RelayDatabase, SqlRow } from './database.js'
+import { markRelayDatabaseNothingRan, type RelayDatabase, type SqlRow } from './database.js'
 import type { DatabaseQuiesce, DatabaseTargetPointer } from './relay-database-target-pointer.js'
-import type { OpenedRelayDatabaseTarget, RelayDatabaseTarget } from './relay-database-targets.js'
+import type {
+  OpenedRelayDatabaseTarget,
+  RelayDatabaseProbeResult,
+  RelayDatabaseTarget
+} from './relay-database-targets.js'
 import { SwitchingRelayDatabase } from './switching-relay-database.js'
 
 // `null` refuses the probe; `hang` never answers, like a timeout or a dead socket.
@@ -10,19 +14,29 @@ type Answer = number | null | 'hang'
 type FakeTarget = RelayDatabaseTarget & {
   opened: OpenedRelayDatabaseTarget
   answer: Answer
+  // Every operation's login is refused (28P01, before any statement ran).
+  refuses: boolean
   probes: number
-  // A query whose SQL is `fail:<code>` rejects with that code.
+  openSessions: number
+  // `fail:<code>` rejects with that code after running; `wait:<ms>` delays, then runs.
   queries: string[]
+}
+
+function refusal(): Error {
+  const error = Object.assign(new Error('password authentication failed'), { code: '28P01' })
+  markRelayDatabaseNothingRan(error)
+  return error
 }
 
 function fakeTarget(name: string, answer: Answer): FakeTarget {
   const queries: string[] = []
   const run = async (sql: string): Promise<SqlRow[]> => {
+    if (sql.startsWith('wait:')) await new Promise((resolve) => setTimeout(resolve, Number(sql.slice(5))))
+    if (target.refuses) throw refusal()
     queries.push(sql)
     if (sql.startsWith('fail:')) {
-      throw Object.assign(new Error('refused'), { code: sql.slice('fail:'.length) })
+      throw Object.assign(new Error('failed'), { code: sql.slice('fail:'.length) })
     }
-    if (sql.startsWith('wait:')) await new Promise((resolve) => setTimeout(resolve, Number(sql.slice(5))))
     return [{ target: name }]
   }
   const database: RelayDatabase = {
@@ -32,16 +46,42 @@ function fakeTarget(name: string, answer: Answer): FakeTarget {
     transaction: async (operation) => await operation(database),
     close: async () => undefined
   }
+  const probe = async (): Promise<RelayDatabaseProbeResult | null> => {
+    target.probes += 1
+    const current = target.answer
+    if (current === 'hang') return await new Promise(() => undefined)
+    return current === null ? null : { generation: current, opened: target.opened }
+  }
   const target: FakeTarget = {
-    opened: { database, applySchema: async () => void queries.push('schema') },
+    opened: {
+      database,
+      applySchema: async () => {
+        if (target.refuses) throw refusal()
+        queries.push('schema')
+      }
+    },
     answer,
+    refuses: false,
     probes: 0,
+    openSessions: 0,
     queries,
-    probe: async () => {
-      target.probes += 1
-      const current = target.answer
-      if (current === 'hang') return await new Promise(() => undefined)
-      return current === null ? null : { generation: current, opened: target.opened }
+    probe,
+    probeSession: () => {
+      let open = false
+      return {
+        probe: async () => {
+          const result = await probe()
+          if (result && !open) {
+            open = true
+            target.openSessions += 1
+          }
+          return result
+        },
+        close: () => {
+          if (open) target.openSessions -= 1
+          open = false
+        }
+      }
     },
     close: async () => undefined
   }
@@ -53,8 +93,13 @@ const DEDICATED = {
   databaseUrlSecret: 'projects/onorca-cloud/secrets/relay-db-url/versions/latest'
 }
 
-function pointer(quiesce?: DatabaseQuiesce): DatabaseTargetPointer {
-  return { version: 1, dedicated: DEDICATED, ...(quiesce ? { quiesce } : {}) }
+function pointer(quiesce?: DatabaseQuiesce, generation?: number): DatabaseTargetPointer {
+  return {
+    version: 1,
+    dedicated: DEDICATED,
+    ...(generation === undefined ? {} : { generation }),
+    ...(quiesce ? { quiesce } : {})
+  }
 }
 
 function quiesceFromNow(id: string, startsInMs: number, lastsMs: number): DatabaseQuiesce {
@@ -84,7 +129,9 @@ function setup(input: {
       first === 'hang' ? await new Promise<null>(() => undefined) : first,
     probeTimeoutMs: 40,
     probeIntervalMs: 10,
-    bootSelectionCapMs: 150
+    bootSelectionCapMs: 150,
+    firstPointerWaitMs: 60,
+    unavailableReprobeMs: 20
   })
   return { primary, dedicated, openDedicated, database }
 }
@@ -132,11 +179,14 @@ describe('switching relay database', () => {
     expect(await servedBy(second.database)).toBe('primary')
   })
 
-  it('boots on primary when neither target accepts', async () => {
-    const { database } = setup({ primary: null, dedicated: null })
+  it('boots on primary, after probing through the cap, when neither target accepts', async () => {
+    const { database, primary } = setup({ primary: null, dedicated: null })
+    const startedAt = Date.now()
     expect(await servedBy(database)).toBe('primary')
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(140)
+    expect(primary.probes).toBeGreaterThan(3)
     expect(events('orca_relay_database_target_selected')).toEqual([
-      expect.objectContaining({ target: 'primary', reason: 'none-accepting' })
+      expect.objectContaining({ target: 'primary', generation: null, reason: 'none-eligible' })
     ])
   })
 
@@ -147,14 +197,15 @@ describe('switching relay database', () => {
     expect(await servedBy(cutOver.database)).toBe('dedicated')
   })
 
-  it('holds operations until the boot selection resolves, capped', async () => {
+  it('waits for an unanswered first pointer read only briefly, then serves primary', async () => {
     const { database, primary } = setup({ primary: 0, dedicated: 0, firstPointer: 'hang' })
     const startedAt = Date.now()
     expect(await servedBy(database)).toBe('primary')
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(140)
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(55)
+    expect(Date.now() - startedAt).toBeLessThan(140)
     expect(primary.queries).toEqual(['SELECT 1'])
     expect(events('orca_relay_database_target_selected')).toEqual([
-      expect.objectContaining({ target: 'primary', reason: 'timeout' })
+      expect.objectContaining({ target: 'primary', reason: 'no-pointer' })
     ])
   })
 
@@ -281,5 +332,133 @@ describe('switching relay database', () => {
     await database.applySchemaToActiveTarget()
     expect(dedicated.queries).toEqual(['schema'])
     expect(primary.queries).toEqual([])
+  })
+
+  describe('pointer generation', () => {
+    it('never boots on a target below the pointer generation, and an unknown one is not 0', async () => {
+      // Primary answers 0 but the pointer says 1 was written: only dedicated at 1 is eligible.
+      const fenced = setup({ primary: 0, dedicated: 1, firstPointer: pointer(undefined, 1) })
+      expect(await servedBy(fenced.database)).toBe('dedicated')
+      const silent = setup({ primary: 'hang', dedicated: 1, firstPointer: pointer(undefined, 1) })
+      expect(await servedBy(silent.database)).toBe('dedicated')
+    })
+
+    it('keeps probing within the cap until an eligible target answers', async () => {
+      const { database, dedicated } = setup({
+        primary: 0,
+        dedicated: 'hang',
+        firstPointer: pointer(undefined, 1)
+      })
+      const startedAt = Date.now()
+      const served = servedBy(database)
+      await sleep(60)
+      dedicated.answer = 1
+      expect(await served).toBe('dedicated')
+      expect(Date.now() - startedAt).toBeLessThan(140)
+    })
+
+    it('fails fast with no eligible target past the cap, and re-probes until one answers', async () => {
+      const { database, primary, dedicated } = setup({
+        primary: 0,
+        dedicated: 'hang',
+        firstPointer: pointer(undefined, 1)
+      })
+      await expect(database.query('SELECT 1')).rejects.toMatchObject({
+        code: '57P03',
+        message: 'relay_database_no_eligible_target'
+      })
+      const fastAt = Date.now()
+      await expect(database.query('SELECT 1')).rejects.toMatchObject({ code: '57P03' })
+      expect(Date.now() - fastAt).toBeLessThan(20)
+      // Never written to the lower-generation target meanwhile.
+      expect(primary.queries).toEqual([])
+      dedicated.answer = 1
+      await sleep(80)
+      expect(await servedBy(database)).toBe('dedicated')
+      expect(events('orca_relay_database_target_unavailable')).toEqual([
+        expect.objectContaining({ floor: 1 })
+      ])
+    })
+
+    it('re-selects when a pointer raises the generation above the serving target', async () => {
+      const { database, dedicated } = setup({ primary: 0, dedicated: 0 })
+      expect(await servedBy(database)).toBe('primary')
+      dedicated.answer = 1
+      database.applyPointer(pointer(undefined, 1))
+      expect(await servedBy(database)).toBe('dedicated')
+      expect(events('orca_relay_database_target_selected').at(-1)).toMatchObject({
+        target: 'dedicated',
+        phase: 'below-pointer-generation'
+      })
+    })
+
+    it('never moves on a generation below the pointer, whatever it last remembered', async () => {
+      // Primary was last read at 0 and now holds 2; the stale dedicated copy still answers 1.
+      const { database, primary, dedicated } = setup({ primary: 0, dedicated: 0 })
+      await database.ready()
+      primary.answer = 2
+      dedicated.answer = 1
+      database.applyPointer(pointer(quiesceFromNow('rollback', 0, 80), 2))
+      await sleep(5)
+      expect(await servedBy(database)).toBe('primary')
+      await expect(database.query('fail:28P01')).rejects.toMatchObject({ code: '28P01' })
+      await sleep(20)
+      expect(await servedBy(database)).toBe('primary')
+      expect(events('orca_relay_database_switched')).toEqual([])
+    })
+  })
+
+  it('keeps one marked session open on the other target through the window', async () => {
+    const { database, dedicated } = setup({ primary: 0, dedicated: 0 })
+    await database.ready()
+    database.applyPointer(pointer(quiesceFromNow('cut-6', 0, 200)))
+    await sleep(40)
+    expect(dedicated.openSessions).toBe(1)
+    dedicated.answer = 1
+    expect(await servedBy(database)).toBe('dedicated')
+    // Still open after the switch, until the window ends.
+    expect(dedicated.openSessions).toBe(1)
+    await sleep(200)
+    expect(dedicated.openSessions).toBe(0)
+  })
+
+  it('re-selects at boot when the selected target refuses the password, schema included', async () => {
+    const { database, primary, dedicated } = setup({ primary: 0, dedicated: 0 })
+    await database.ready()
+    primary.refuses = true
+    primary.answer = null
+    dedicated.answer = 1
+    expect(await servedBy(database)).toBe('dedicated')
+    expect(events('orca_relay_database_target_selected').at(-1)).toMatchObject({ phase: 'refused' })
+
+    // The fence lands between the director's selection and its schema step.
+    const director = setup({ primary: 0, dedicated: 'hang' })
+    await director.database.ready()
+    director.primary.refuses = true
+    director.primary.answer = null
+    const schema = director.database.applySchemaToActiveTarget()
+    await sleep(30)
+    director.dedicated.answer = 1
+    await schema
+    expect(director.dedicated.queries).toEqual(['schema'])
+  })
+
+  it('re-runs work that failed before any statement ran in the window on the new target', async () => {
+    const { database, primary, dedicated } = setup({ primary: 0, dedicated: 0 })
+    await database.ready()
+    // Past the boot window, so only the hold can re-run it.
+    await sleep(160)
+    database.applyPointer(pointer(quiesceFromNow('cut-7', 20, 2_000)))
+    // Started before the window; its login lands after the fence.
+    const inFlight = servedBy(database, 'wait:80')
+    await sleep(40)
+    primary.refuses = true
+    dedicated.answer = 1
+    expect(await inFlight).toBe('dedicated')
+    expect(dedicated.queries).toEqual(['wait:80'])
+    // Work that may have run is never re-run.
+    const ran = database.query('fail:57P01')
+    await expect(ran).rejects.toMatchObject({ code: '57P01' })
+    expect(dedicated.queries.filter((sql) => sql === 'fail:57P01')).toHaveLength(1)
   })
 })
