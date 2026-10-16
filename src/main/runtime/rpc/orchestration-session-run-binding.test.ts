@@ -18,6 +18,7 @@ import {
   idOf,
   SESSION_X,
   SESSION_Y,
+  PROVIDER_ID_X,
   type SessionCallerHarness
 } from './orchestration-session-caller-test-fixture'
 
@@ -102,6 +103,25 @@ describe('structured lead Run binding through the RPC dispatcher', () => {
       expect(h.db.getInbox()).toHaveLength(1)
     }
   )
+
+  it('preserves a usable hand-over when a replacement names no Orca session', async () => {
+    const runId = idOf((await call(SESSION_X, 'runCreate', { objective: 'transfer' })).run)
+    await call(SESSION_X, 'runHandover', { id: runId, to: `orca_session_id:${SESSION_Y}` })
+    const grant = getRunHandover(h.db, runId)
+    for (const recipient of ['11111111-1111-4111-8111-111111111111', PROVIDER_ID_X]) {
+      const response = await h.dispatch(
+        orchestrationRequest(
+          'orchestration.runHandover',
+          { id: runId, to: `orca_session_id:${recipient}` },
+          { sessionId: SESSION_X }
+        )
+      )
+      expect(response).toMatchObject({ ok: false, error: { data: { effectsApplied: false } } })
+      expect(getRunHandover(h.db, runId)).toEqual(grant)
+    }
+    expect((await call(SESSION_Y, 'runUse', { id: runId })).run).toMatchObject({ id: runId })
+    expect(getRunHandover(h.db, runId)).toBeUndefined()
+  })
 
   it('keeps a parked Run check when its worker confirms the unchanged seat', async () => {
     const child = idOf((await call(SESSION_Y, 'runCreate', { objective: 'child' })).run)
