@@ -531,3 +531,8 @@ push_base_url        = "https://push.onorca.dev"
 push_max_instances         = 2
 push_database_pool_max     = 6
 manage_push_domain_mapping = true
+
+# Step 4 G2 (needs Jinwoo's go): Enterprise, because Enterprise Plus had no us-central1 capacity on 10-16.
+relay_dedicated_database_enabled = true
+relay_dedicated_database_edition = "ENTERPRISE"
+relay_dedicated_database_tier    = "db-custom-4-15360"
