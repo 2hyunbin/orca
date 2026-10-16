@@ -8992,8 +8992,8 @@
           "8c922dffba": "Reuse SSH connection for faster setup",
           "53e9aabfc0": "Uses OpenSSH multiplexing when available. Turn off for hosts with custom SSH restrictions.",
           "allowRemoteCliControl": "Allow this host's orca CLI to control Orca",
-          "allowRemoteCliControlHelp": "When on, orca commands run on this host can open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server.",
-          "allowRemoteCliControlReset": "Orca turned this off after an update, because it now lets this host drive your desktop browser. Turn it on again only if you want that.",
+          "allowRemoteCliControlHelp": "When on, orca commands run on this host can open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected. Terminals started by an older Orca on this host can also run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server.",
+          "allowRemoteCliControlReset": "Orca turned this off after an update, because it now lets this host drive your desktop browser and lets terminals started by an older Orca on this host run orchestration commands. Turn it on again only if you want that.",
           "editTitle": "Edit SSH host",
           "addTitle": "Add SSH host",
           "editDescription": "Update connection details for this machine. Changes apply on next connect.",
@@ -20180,6 +20180,40 @@
       "truncated": "Some favourites could not be listed. Manage your favourites in Jira to narrow the list.",
       "clear": "Clear Jira favourite",
       "activeLabel": "Jira favourites: {{name}}"
+    }
+  },
+  "workspaceSpace": {
+    "compact": {
+      "linkedAndUnavailable": "{{value0}} in linked worktrees · {{value1}} unavailable",
+      "linkedAndScanned": "{{value0}} in linked worktrees · {{value1}} workspaces",
+      "linked": "Linked"
+    },
+    "savedScan": {
+      "folderDetailsUnavailable": "Folder details are not saved with past scans. Refresh to inspect this workspace."
+    },
+    "empty": {
+      "title": "See where workspace storage goes",
+      "description": "Scan your workspaces to compare sizes, inspect their largest folders, and review space you can reclaim.",
+      "scan": "Scan workspaces"
+    },
+    "metric": {
+      "linkedWorktrees": "Linked worktrees"
+    },
+    "summary": {
+      "linkedWorktrees": "{{value0}} is used by linked worktrees. Managed worktrees can be removed here."
+    },
+    "status": {
+      "notManaged": "Not managed"
+    },
+    "chart": {
+      "folderSizes": "Folder sizes",
+      "workspaceSizes": "Workspace sizes",
+      "clickToZoom": "Click a workspace to zoom"
+    },
+    "window": {
+      "close": "Close",
+      "errorTitle": "Space hit an error.",
+      "errorDescription": "Close and reopen Space to try again."
     }
   }
 }

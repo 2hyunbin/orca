@@ -896,6 +896,7 @@ jobs:
     with:
       node_versions: '["24"]'
       runner: blacksmith-4vcpu-ubuntu-2404
+      phase_diagnostics: true
       shards: ${{ needs.preflight.outputs.shards }}
       run_shards: ${{ needs.code_paths.outputs.mobile_ci_tools != 'true' }}
       browser_contract: ${{ needs.code_paths.outputs.orcad_browser == 'true' }}

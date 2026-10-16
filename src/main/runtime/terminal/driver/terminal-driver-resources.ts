@@ -42,13 +42,6 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
 export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
-  protected get canonicalFetchKeyCache(): ReadonlyMap<string, string> {
-    return this.remoteFetches.getCanonicalFetchKeyCache()
-  }
-  protected get fetchLastCompletedAt(): ReadonlyMap<string, number> {
-    return this.remoteFetches.getFetchLastCompletedAt()
-  }
-
   declare registerSubscriptionCleanup: RuntimeServiceCommandSurface['registerSubscriptionCleanup']
   declare cleanupSubscription: RuntimeServiceCommandSurface['cleanupSubscription']
 
