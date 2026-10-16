@@ -189,7 +189,7 @@ export function installActiveSessionTabsSubscription({
     if (decision.apply && isCurrent()) {
       // Why: a warm stream may get its only empty answer while unselected; selection re-decides it.
       seeder.noteAppliedFrame(
-        bootstrap ? { event: recoveredEvent, firstHostAnswer } : null,
+        bootstrap ? { event: recoveredEvent, firstHostAnswer, receivedFrame, runtimeId } : null,
         isSelected()
       )
     }

@@ -1,10 +1,16 @@
 import { useAppStore } from '../../store'
 import { isWebRuntimeInitialTerminalBootstrapInFlight } from '../web-runtime-initial-terminal-bootstrap'
 import { dispatchWebRuntimeInitialTerminalBootstrap } from '../web-runtime-initial-terminal-bootstrap-dispatch'
+import { shouldApplyRecoveredWebSessionTabsSnapshot } from './tracking'
 import { shouldBootstrapInitialWebRuntimeTerminal } from './tracking-decisions'
 import type { SessionTabsStreamEvent } from './state'
 
-type DeferredSeed = { event: SessionTabsStreamEvent; firstHostAnswer: boolean }
+type DeferredSeed = {
+  event: SessionTabsStreamEvent
+  firstHostAnswer: boolean
+  receivedFrame: number
+  runtimeId: string | undefined
+}
 
 export type InitialTerminalSeeder = {
   /** Whether an applied, fresh frame asks for the worktree's first terminal. */
@@ -65,6 +71,17 @@ export function createInitialTerminalSeeder(
         return
       }
       deferred = null
+      // Why: newer evidence (often via the all-worktrees stream) supersedes the held empty answer.
+      if (
+        !shouldApplyRecoveredWebSessionTabsSnapshot(
+          environmentId,
+          pending.event,
+          pending.receivedFrame,
+          pending.runtimeId
+        )
+      ) {
+        return
+      }
       // Why re-decide: local tabs or another closure's create may have filled the worktree since.
       if (!decide(pending.event, pending.firstHostAnswer)) {
         return
