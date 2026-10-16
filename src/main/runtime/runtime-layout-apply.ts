@@ -112,7 +112,8 @@ async function moveTabToWorkspace(
   hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
   command: CommandOf<'moveTabToWorkspace'>
 ): Promise<LayoutApplyReply> {
-  const [from] = hostIdsFor(command.workspace, command.tabs[0]?.tabId ?? null)
+  // An editor tab lives in its workspace's routed partition.
+  const [from] = hostIdsFor(command.workspace, null)
   const [to] = hostIdsFor(command.toWorkspace, null)
   if (
     !from ||

@@ -218,6 +218,11 @@ describe('moveTabToWorkspace', () => {
         ctx
       )
     ).toEqual({ ok: false, code: 'tab_exists' })
+    const twice = { tabId: PATH, newTabId: NEW_ID, newEntityId: NEW_ID }
+    expect(applyLayoutCommand(model, move({ tabs: [twice, twice] }), ctx)).toEqual({
+      ok: false,
+      code: 'invalid_params'
+    })
     expect(applyLayoutCommand(model, move({ toWorkspace: WS }), ctx)).toEqual({
       ok: false,
       code: 'invalid_params'

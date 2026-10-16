@@ -14,6 +14,13 @@ import type { LayoutTab, WorkspaceLayout, WorkspaceLayoutModel } from './workspa
 import { removeTabFromWorkspace, withWorkspace } from './workspace-layout-removal'
 import { withoutKey } from './stored-record-fields'
 
+const EDITOR_KINDS = new Set<LayoutTab['kind']>([
+  'editor',
+  'diff',
+  'conflict-review',
+  'check-details'
+])
+
 /**
  * Each tab leaves its workspace and is appended to `groupId` under its new ids, as the window
  * moves it; the file's record moves with it. A tab already moved (the window's save got there
@@ -25,7 +32,12 @@ export function moveTabToWorkspace(
   context: LayoutContext
 ): Applied {
   const { workspace: fromKey, toWorkspace: toKey } = command
-  if (fromKey === toKey) {
+  const distinct = (ids: string[]) => new Set(ids).size === ids.length
+  if (
+    fromKey === toKey ||
+    !distinct(command.tabs.map((move) => move.tabId)) ||
+    !distinct(command.tabs.map((move) => move.newTabId))
+  ) {
     return refuse('invalid_params')
   }
   let source = model.workspaces[fromKey]!
@@ -40,7 +52,7 @@ export function moveTabToWorkspace(
       }
       return refuse('tab_not_found')
     }
-    if (tab.kind === 'terminal' || tab.kind === 'browser' || tab.kind === 'agent-session') {
+    if (!EDITOR_KINDS.has(tab.kind)) {
       return refuse('invalid_params')
     }
     const held = Object.values(model.workspaces).some((workspace) =>
@@ -85,19 +97,17 @@ export function moveTabToWorkspace(
   return applied(next, { tabId: moves.at(-1)!.newTabId, groupId: command.groupId })
 }
 
-/** The file's record leaves the source unless a tab there still shows it, and replaces the target's. */
+/** The file's record moves with its tabs. */
 function moveEditorFile(
   source: WorkspaceLayout,
   target: WorkspaceLayout,
   file: NonNullable<CommandOf<'moveTabToWorkspace'>['file']>
 ): { source: WorkspaceLayout; target: WorkspaceLayout } {
-  const stillShown = source.tabs.some((tab) => tab.entityId === file.filePath)
-  const sourceFiles = stillShown
-    ? source.editorFiles
-    : source.editorFiles?.filter((entry) => entry.filePath !== file.filePath)
-  const targetFiles = (target.editorFiles ?? []).filter((entry) => entry.filePath !== file.filePath)
+  const others = (files: WorkspaceLayout['editorFiles']) =>
+    files?.filter((entry) => entry.filePath !== file.filePath)
+  const sourceFiles = others(source.editorFiles)
   return {
     source: sourceFiles ? { ...source, editorFiles: sourceFiles } : source,
-    target: { ...target, editorFiles: [...targetFiles, file] }
+    target: { ...target, editorFiles: [...(others(target.editorFiles) ?? []), file] }
   }
 }

@@ -219,7 +219,7 @@ describe('applyWindowLayoutCommand', () => {
 
     await applyWindowLayoutCommand(store, hostIdsFor, move)
     expect(hostIdsFor.mock.calls).toEqual([
-      ['wt-1', 'tab-1'],
+      ['wt-1', null],
       ['wt-2', null]
     ])
     expect(applyLayoutCommand).toHaveBeenCalledWith(move, ['ssh:target-1'])
