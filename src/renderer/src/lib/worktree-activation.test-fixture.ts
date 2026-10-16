@@ -1,6 +1,6 @@
 import { afterEach, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { SetupScriptLaunchMode } from '../../../shared/worktree/launch-types'
+import { getDefaultSettings } from '../../../shared/constants'
 import { resetHookCommandDelayedDeliveryForTests } from './hook-command-delayed-delivery'
 import { useAppStore } from '@/store'
 
@@ -12,13 +12,11 @@ const initialGetKnownWorktreeById = useAppStore.getState().getKnownWorktreeById
 const initialPendingIssueCommandSplitByTabId =
   useAppStore.getState().pendingIssueCommandSplitByTabId
 
-export function setSetupScriptLaunchMode(mode: SetupScriptLaunchMode | null): void {
+export function setLegacySetupScriptLaunchMode(
+  mode: 'split-vertical' | 'split-horizontal' | 'new-tab' | null
+): void {
   useAppStore.setState((state) => ({
-    settings: state.settings
-      ? { ...state.settings, setupScriptLaunchMode: mode ?? 'new-tab' }
-      : mode !== null
-        ? ({ setupScriptLaunchMode: mode } as unknown as typeof state.settings)
-        : state.settings
+    settings: { ...(state.settings ?? getDefaultSettings('')), setupScriptLaunchMode: mode }
   }))
 }
 
@@ -31,7 +29,7 @@ export function registerWorktreeActivationReset(): void {
         ? { ...state.settings, activeRuntimeEnvironmentId: null }
         : ({ activeRuntimeEnvironmentId: null } as unknown as typeof state.settings)
     }))
-    setSetupScriptLaunchMode('new-tab')
+    setLegacySetupScriptLaunchMode(null)
     resetHookCommandDelayedDeliveryForTests()
     useAppStore.setState({
       tabsByWorktree: initialTabsByWorktree,
@@ -53,22 +51,21 @@ export type MockActivationStore = {
   markDefaultTerminalTabsApplied: Mock<() => void>
   reconcileWorktreeTabModel: Mock<() => { renderableTabCount: number }>
   queueTabInitialCwd: Mock<() => void>
-  queueTabSetupSplit: Mock<() => void>
   queueTabIssueCommandSplit: Mock<() => void>
 }
 
 export function createMockStore(overrides: Record<string, unknown> = {}): MockActivationStore {
+  let created = 0
   return {
     tabsByWorktree: {} as Record<string, { id: string }[]>,
     defaultTerminalTabsAppliedByWorktreeId: {} as Record<string, true>,
-    createTab: vi.fn(() => ({ id: 'tab-1' })),
+    createTab: vi.fn(() => ({ id: `tab-${++created}` })),
     setActiveTab: vi.fn(),
     setTabCustomTitle: vi.fn(),
     setTabColor: vi.fn(),
     markDefaultTerminalTabsApplied: vi.fn(),
     reconcileWorktreeTabModel: vi.fn(() => ({ renderableTabCount: 0 })),
     queueTabInitialCwd: vi.fn(),
-    queueTabSetupSplit: vi.fn(),
     queueTabIssueCommandSplit: vi.fn(),
     ...overrides
   }

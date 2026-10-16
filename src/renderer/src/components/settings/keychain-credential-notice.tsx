@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ export type KeychainCredentialStatus = {
 }
 
 type CredentialService = 'Linear' | 'Jira'
+
+const KEYCHAIN_UNLOCK_POLL_MS = 10_000
 
 export function keychainLockedCredentialMessage(service: CredentialService, host: string): string {
   return translate(
@@ -81,8 +83,31 @@ function KeychainCredentialNoticeBody({
   const checkJiraConnection = useAppStore((state) => state.checkJiraConnection)
   const [moving, setMoving] = useState(false)
   const [moveError, setMoveError] = useState<string | null>(null)
+  const locked = status.credentialErrorReason === 'keychain_locked'
 
-  if (status.credentialErrorReason === 'keychain_locked') {
+  useEffect(() => {
+    if (!locked) {
+      return
+    }
+    // Why poll: the unlock happens outside Orca, and the host only sees it on its next status read.
+    // Why skip while in flight: a newer read discards an older one, so overlaps could never land.
+    let inFlight = false
+    const timer = setInterval(() => {
+      if (inFlight) {
+        return
+      }
+      inFlight = true
+      const read = service === 'Linear' ? checkLinearConnection(true) : checkJiraConnection()
+      void read
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false
+        })
+    }, KEYCHAIN_UNLOCK_POLL_MS)
+    return () => clearInterval(timer)
+  }, [locked, service, checkLinearConnection, checkJiraConnection])
+
+  if (locked) {
     return (
       <div
         role="alert"

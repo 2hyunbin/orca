@@ -58,6 +58,82 @@ describe('KeychainCredentialNotice', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  it('re-reads its provider status while locked, so an unlock shows up on its own', async () => {
+    vi.useFakeTimers()
+    try {
+      const { rerender, unmount } = render(
+        <KeychainCredentialNotice
+          statusContextKey={CONTEXT}
+          service="Jira"
+          status={{ credentialErrorReason: 'keychain_locked' }}
+        />
+      )
+      expect(mocks.checkJiraConnection).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.checkJiraConnection).toHaveBeenCalledTimes(1)
+      expect(mocks.checkLinearConnection).not.toHaveBeenCalled()
+      rerender(
+        <KeychainCredentialNotice
+          statusContextKey={CONTEXT}
+          service="Jira"
+          status={{ canMoveCredentialKeyToFile: true }}
+        />
+      )
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(mocks.checkJiraConnection).toHaveBeenCalledTimes(1)
+      unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('forces the Linear re-read while locked and stops polling on unmount', async () => {
+    vi.useFakeTimers()
+    try {
+      const { unmount } = render(
+        <KeychainCredentialNotice
+          statusContextKey={CONTEXT}
+          service="Linear"
+          status={{ credentialErrorReason: 'keychain_locked' }}
+        />
+      )
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(mocks.checkLinearConnection).toHaveBeenCalledTimes(2)
+      expect(mocks.checkLinearConnection).toHaveBeenCalledWith(true)
+      unmount()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(mocks.checkLinearConnection).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('waits for a slow status read before starting the next one', async () => {
+    vi.useFakeTimers()
+    let settle: () => void = () => {}
+    mocks.checkLinearConnection.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (settle = resolve))
+    )
+    try {
+      const { unmount } = render(
+        <KeychainCredentialNotice
+          statusContextKey={CONTEXT}
+          service="Linear"
+          status={{ credentialErrorReason: 'keychain_locked' }}
+        />
+      )
+      await vi.advanceTimersByTimeAsync(40_000)
+      // A newer read would discard this one, so none may start while it is in flight.
+      expect(mocks.checkLinearConnection).toHaveBeenCalledTimes(1)
+      settle()
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.checkLinearConnection).toHaveBeenCalledTimes(2)
+      unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('offers the switch to file storage once unlocked, then refreshes both providers', async () => {
     mocks.callRuntimeRpc.mockResolvedValueOnce({ ok: true })
     render(

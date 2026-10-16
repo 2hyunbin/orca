@@ -49,7 +49,7 @@ function log(message: string): void {
   console.info(`[desktop-browser-bridge] ${message}`)
 }
 
-export function listDesktopBrowserBridgeCandidates(
+function listDesktopBrowserBridgeCandidates(
   userDataPath: string,
   connections: Pick<SshConnectionManager, 'getState'> | null
 ): DesktopBrowserBridgeCandidate[] {

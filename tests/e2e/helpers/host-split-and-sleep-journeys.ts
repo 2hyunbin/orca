@@ -1,5 +1,5 @@
 /**
- * Journeys ported from the closed layout-core branch: STA-9417's host-created setup split, and an
+ * Host-created manual split restore, and an
  * agent pane slept through the sidebar so quit and relaunch resume it.
  */
 
@@ -18,38 +18,8 @@ import { splitActiveTerminalPane, waitForActiveTerminalManager } from './termina
 import { waitForBoundPanes, type FolderWorkspaceSetup } from './terminal-layout-journeys'
 import { bootstrapFirstLaunch, seededRepoPathOrSkip } from './terminal-restart-persistence'
 
-/**
- * Main reveals the split to the window only if the window's runtime graph already lists the first
- * terminal. The natural repro lost that race; an idle e2e window wins it in ~80 ms, so hold the
- * window busy from just after the first reveal until well past main's split.
- */
-async function stallRendererOnFirstSetupTab(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const store = window.__store!
-    const unsubscribe = store.subscribe((state) => {
-      const revealed = Object.entries(state.tabsByWorktree).some(
-        ([worktreeId, tabs]) => worktreeId.endsWith('parity-setup') && (tabs ?? []).length > 0
-      )
-      if (!revealed) {
-        return
-      }
-      unsubscribe()
-      // After the reveal's own task, before the graph sync it scheduled.
-      setTimeout(() => {
-        const until = performance.now() + 3_000
-        while (performance.now() < until) {
-          // Busy, as a loaded renderer is: no timer or IPC runs.
-        }
-      }, 0)
-    })
-  })
-}
-
-/**
- * STA-9417's shape: the CLI creates a worktree whose setup script runs in a split of its first
- * terminal, with the window open on another worktree; the user then opens it for the first time.
- */
-export async function addHostCreatedSetupSplitWorktree(
+/** Create and split a host terminal, then leave it for the reactivation layout check. */
+export async function addHostCreatedSplitWorktree(
   page: Page,
   userDataDir: string
 ): Promise<FolderWorkspaceSetup> {
@@ -61,13 +31,9 @@ export async function addHostCreatedSetupSplitWorktree(
   git('init', '-b', 'main')
   git('config', 'user.email', 'e2e@test.local')
   git('config', 'user.name', 'E2E Test')
-  writeFileSync(path.join(repoPath, 'orca.yaml'), 'scripts:\n  setup: echo SETUP_COMPLETE\n')
+  writeFileSync(path.join(repoPath, 'README.md'), 'Host split fixture\n')
   git('add', '-A')
   git('commit', '-m', 'setup hook')
-  await page.evaluate(() =>
-    window.__store!.getState().updateSettings({ setupScriptLaunchMode: 'split-vertical' })
-  )
-  await stallRendererOnFirstSetupTab(page)
   const client = new RuntimeClient(userDataDir, 30_000)
   const added = await client.call<{ repo: { id: string } }>('repo.add', {
     path: repoPath,
@@ -78,8 +44,17 @@ export async function addHostCreatedSetupSplitWorktree(
     name: 'parity-setup',
     noParent: true,
     activate: false,
-    setupDecision: 'run'
+    setupDecision: 'skip'
   })
+  const terminals = await client.call<RuntimeTerminalListResult>('terminal.list', {
+    worktree: `id:${created.result.worktree.id}`
+  })
+  const primary = terminals.result.terminals[0]
+  if (!primary) {
+    throw new Error('Host did not create the primary terminal')
+  }
+  await client.call('terminal.split', { terminal: primary.handle, direction: 'vertical' })
+  await activateWorkspaceByClick(page, worktreeId)
   const worktreePath = created.result.worktree.path
   return {
     worktreeId,
@@ -91,8 +66,8 @@ export async function addHostCreatedSetupSplitWorktree(
   }
 }
 
-/** Opens the setup worktree the way a user does; returns its id once main ran both terminals. */
-export async function openSetupSplitWorktree(page: Page, userDataDir: string): Promise<string> {
+/** Reopens the host-split worktree once both terminals are running. */
+export async function openHostSplitWorktree(page: Page, userDataDir: string): Promise<string> {
   let setupWorktreeId: string | undefined
   await expect
     .poll(async () => {
@@ -110,7 +85,7 @@ export async function openSetupSplitWorktree(page: Page, userDataDir: string): P
     })
     .toBeDefined()
   const client = new RuntimeClient(userDataDir, 30_000)
-  // Main has spawned the first terminal and the setup split before the user opens the worktree.
+  // Main has spawned the first terminal and its manual split before the user opens the worktree.
   let hostPtyIds: string[] = []
   await expect
     .poll(async () => {

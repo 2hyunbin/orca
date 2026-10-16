@@ -42,7 +42,6 @@ import type {
   SourceControlViewMode,
   TaskViewPresetId
 } from './ui-chrome-types'
-import type { SetupScriptLaunchMode } from './worktree/launch-types'
 import type { WorktreeVisibilityDefaults } from './repo-types'
 
 export type { WorktreeVisibilityDefaults } from './repo-types'
@@ -201,8 +200,6 @@ export type GlobalSettings = GlobalSettingsBase & {
   terminalAllowOsc52ClipboardDefaultedOnForAllUsers?: boolean
   /** Experimental Claude Agent Teams; native panes use a tmux-compatible shim so teammate output stays on the normal PTY path. */
   claudeAgentTeamsMode?: ClaudeAgentTeamsMode
-  /** Where the repo setup script runs on workspace create; defaults to a background "Setup" tab to keep the main terminal usable. */
-  setupScriptLaunchMode: SetupScriptLaunchMode
   terminalScrollbackRows: number
   /** Optional app-level proxy for Electron networking and local PTYs; empty preserves system/inherited proxy env. */
   httpProxyUrl?: string

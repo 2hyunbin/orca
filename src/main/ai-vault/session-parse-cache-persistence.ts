@@ -17,7 +17,6 @@ import {
 import {
   seedSessionParseCache,
   observeSessionParseCacheChanges,
-  MAX_CACHE_ENTRIES,
   type PersistedSessionParseCacheEntry
 } from './session-parse-cache-store'
 import type { SessionSidecarObservation } from './session-sidecar-stat'
@@ -136,12 +135,6 @@ async function parsePersistedFile(
       }
       entries.delete(entry[0])
       entries.set(entry[0], entry[1])
-      if (entries.size > MAX_CACHE_ENTRIES) {
-        const oldest = entries.keys().next()
-        if (!oldest.done) {
-          entries.delete(oldest.value)
-        }
-      }
     }
   })
   // Why: application releases that keep this schema promise compatible cached
@@ -220,6 +213,9 @@ async function persistSnapshot(
   const directory = dirname(current.filePath)
   const tempPath = join(directory, `session-parse-cache-${process.pid}-${Date.now()}.tmp`)
   try {
+    // The serializer keeps the newest suffix that fits; order by transcript age
+    // so that is the newest transcripts, not the last ones a scan happened to store.
+    entries.sort((left, right) => left[1].mtimeMs - right[1].mtimeMs)
     const payload = await serializeSessionParseCacheSnapshotPiecesCooperatively(
       entries,
       current.appVersion

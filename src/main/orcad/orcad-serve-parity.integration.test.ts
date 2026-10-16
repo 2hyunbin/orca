@@ -24,7 +24,8 @@ import {
   killProfileDaemons,
   recordProfileDaemons,
   removeTestRoot,
-  waitForProcessExit
+  waitForProcessExit,
+  WINDOWS_WSL_PROFILE_HOLD_MS
 } from './orcad-daemon-teardown-fixture'
 
 const slotDir = resolve('out/orcad')
@@ -35,6 +36,7 @@ const skip = skipForMissingInputs('artifact', runtime ? [] : ['a Node orcad slot
 const roots: string[] = []
 const cleanupDiagnostics = new Set<ServeCleanupDiagnostics>()
 
+// Past the 60s hook default: daemon cleanup plus the Windows WSL profile hold.
 afterEach(async () => {
   const failures: unknown[] = []
   // Stop every profile before removing any project root it may still use.
@@ -59,7 +61,7 @@ afterEach(async () => {
     const diagnostics = [...cleanupDiagnostics].find((entry) => entry.owns(root))
     const startedAt = Date.now()
     try {
-      await removeTestRoot(root)
+      await removeTestRoot(root, WINDOWS_WSL_PROFILE_HOLD_MS)
       roots.splice(roots.indexOf(root), 1)
       if (diagnostics?.rootRemoved(root)) {
         cleanupDiagnostics.delete(diagnostics)
@@ -74,7 +76,7 @@ afterEach(async () => {
   if (failures.length > 0) {
     throw new AggregateError(failures, 'Test root removal incomplete')
   }
-})
+}, 150_000)
 
 /** Without Vitest's markers: daemon-entry.js does not start its server under VITEST. */
 function serveEnv(userData: string): NodeJS.ProcessEnv {

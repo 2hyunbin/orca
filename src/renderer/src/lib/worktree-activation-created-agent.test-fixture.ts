@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../shared/constants'
 import path from 'node:path'
 import { vi } from 'vitest'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -58,9 +59,9 @@ function baseSeedState(worktree: Worktree, worktrees: Worktree[]): Partial<Store
     tabBarOrderByWorktree: {},
     pendingStartupByTabId: {},
     settings: {
-      agentCmdOverrides: {},
-      setupScriptLaunchMode: 'new-tab'
-    } as unknown as StoreState['settings'],
+      ...getDefaultSettings(''),
+      agentCmdOverrides: {}
+    },
     refreshGitHubForWorktreeIfStale: vi.fn()
   }
 }

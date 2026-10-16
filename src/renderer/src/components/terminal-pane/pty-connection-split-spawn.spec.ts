@@ -22,7 +22,7 @@ import {
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
 
-export function registerPtyConnectionSetupSplitSpawnTests(): void {
+export function registerPtyConnectionSplitSpawnTests(): void {
   const { notifyCodexPaneBoundForStaleSweep } = ptyConnectionTestMocks
 
   let mockStoreState: StoreState
@@ -175,93 +175,6 @@ export function registerPtyConnectionSetupSplitSpawnTests(): void {
       }
     })
 
-    it('waits for setup-split geometry before spawning the initial startup command', async () => {
-      const frameCallbacks: FrameRequestCallback[] = []
-      globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
-        frameCallbacks.push(callback)
-        return frameCallbacks.length
-      })
-      const runNextFrame = (): void => {
-        const callback = frameCallbacks.shift()
-        if (!callback) {
-          throw new Error('expected a queued animation frame')
-        }
-        callback(0)
-      }
-
-      const { connectPanePty } = await import('./pty-connection')
-      const transport = createMockTransport()
-      transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
-        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-        ptyIdsByTabId: { 'tab-1': [] }
-      }
-
-      const pane = createPane(1)
-      const siblingPane = createPane(2)
-      let panes = [pane]
-      let proposedGrid = { cols: 240, rows: 50 }
-      let splitMounted = false
-      const root = createMeasuredElement({ rect: () => createRect(1200, 800) })
-      const split = createMeasuredElement({
-        className: () => (splitMounted ? 'pane-split is-vertical' : ''),
-        rect: () => createRect(1200, 800)
-      })
-      const mainContainer = createMeasuredElement({
-        parentElement: () => (splitMounted ? split : root),
-        rect: () => (splitMounted ? createRect(600, 800) : createRect(1200, 800))
-      })
-      const setupContainer = createMeasuredElement({
-        parentElement: () => (splitMounted ? split : null),
-        rect: () => createRect(599, 800, 601, 0)
-      })
-      pane.container = mainContainer
-      siblingPane.container = setupContainer
-      ;(
-        pane.fitAddon as unknown as {
-          proposeDimensions: () => { cols: number; rows: number }
-        }
-      ).proposeDimensions = vi.fn(() => proposedGrid)
-      pane.fitAddon.fit = vi.fn(() => {
-        pane.terminal.cols = proposedGrid.cols
-        pane.terminal.rows = proposedGrid.rows
-      })
-
-      const manager = createManager(1)
-      manager.getPanes = vi.fn(() => panes)
-      connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          startup: { command: 'codex', waitForSetupSplitDirection: 'vertical' }
-        }) as never
-      )
-
-      runNextFrame()
-      for (let i = 0; i < 8; i++) {
-        runNextFrame()
-      }
-      expect(transport.connect).not.toHaveBeenCalled()
-
-      splitMounted = true
-      panes = [pane, siblingPane]
-      proposedGrid = { cols: 120, rows: 50 }
-      let postSplitFrames = 0
-      while (frameCallbacks.length > 0 && transport.connect.mock.calls.length === 0) {
-        if (postSplitFrames >= 12) {
-          throw new Error('startup did not connect after setup split became ready')
-        }
-        postSplitFrames += 1
-        runNextFrame()
-      }
-
-      expect(createdTransportOptions[0]?.command).toBe('codex')
-      expect(transport.connect).toHaveBeenCalledWith(
-        expect.objectContaining({ cols: 120, rows: 50 })
-      )
-    })
-
     it.each(['before', 'during'] as const)(
       'spawns a startup command without waiting for frames when the window is hidden %s the grid settle',
       async (hiddenWhen) => {
@@ -319,20 +232,7 @@ export function registerPtyConnectionSetupSplitSpawnTests(): void {
       }
     )
 
-    it('spawns the delayed main setup-split pane when its sibling owns the tab PTY fallback', async () => {
-      const frameCallbacks: FrameRequestCallback[] = []
-      globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
-        frameCallbacks.push(callback)
-        return frameCallbacks.length
-      })
-      const runNextFrame = (): void => {
-        const callback = frameCallbacks.shift()
-        if (!callback) {
-          throw new Error('expected a queued animation frame')
-        }
-        callback(0)
-      }
-
+    it('spawns the delayed primary pane of an issue-command split when its sibling owns the tab PTY fallback', async () => {
       const { connectPanePty } = await import('./pty-connection')
       let mainPtyId: string | null = null
       const mainTransport = createMockTransport()
@@ -348,18 +248,18 @@ export function registerPtyConnectionSetupSplitSpawnTests(): void {
         onPtySpawn?.(mainPtyId)
         return mainPtyId
       })
-      let setupPtyId: string | null = null
-      const setupTransport = createMockTransport()
-      setupTransport.getPtyId.mockImplementation(() => setupPtyId)
-      setupTransport.connect.mockImplementation(async () => {
-        setupPtyId = 'pty-setup'
+      let issuePtyId: string | null = null
+      const issueTransport = createMockTransport()
+      issueTransport.getPtyId.mockImplementation(() => issuePtyId)
+      issueTransport.connect.mockImplementation(async () => {
+        issuePtyId = 'pty-issue'
         const onPtySpawn = createdTransportOptions[1]?.onPtySpawn as
           | ((ptyId: string) => void)
           | undefined
-        onPtySpawn?.(setupPtyId)
-        return setupPtyId
+        onPtySpawn?.(issuePtyId)
+        return issuePtyId
       })
-      transportFactoryQueue.push(mainTransport, setupTransport)
+      transportFactoryQueue.push(mainTransport, issueTransport)
       mockStoreState = {
         ...mockStoreState,
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
@@ -374,73 +274,54 @@ export function registerPtyConnectionSetupSplitSpawnTests(): void {
       })
 
       const mainPane = createPane(1)
-      const setupPane = createPane(2)
-      let splitMounted = false
-      const root = createMeasuredElement({ rect: () => createRect(1200, 800) })
-      const split = createMeasuredElement({
-        className: () => (splitMounted ? 'pane-split is-vertical' : ''),
-        rect: () => createRect(1200, 800)
-      })
-      const mainContainer = createMeasuredElement({
-        parentElement: () => (splitMounted ? split : root),
-        rect: () => (splitMounted ? createRect(600, 800) : createRect(1200, 800))
-      })
-      const setupContainer = createMeasuredElement({
-        parentElement: () => split,
-        rect: () => createRect(599, 800, 601, 0)
-      })
-      mainPane.container = mainContainer
-      setupPane.container = setupContainer
+      const issuePane = createPane(2)
       const manager = createManager(2)
-      manager.getPanes = vi.fn(() => [mainPane, setupPane])
+      manager.getPanes = vi.fn(() => [mainPane, issuePane])
+      const primaryCwd = createDeferred<string>()
       const sharedTransportsRef = { current: new Map() }
 
-      connectPanePty(
-        mainPane as never,
-        manager as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pane, manager and dependency doubles implement every member reached by fresh split connection.
+      const mainArgs = [
+        mainPane,
+        manager,
         createDeps({
-          startup: { command: 'codex', waitForSetupSplitDirection: 'vertical' },
+          startup: { command: 'codex' },
+          cwdPromise: primaryCwd.promise,
+          isVisibleRef: { current: false },
           paneTransportsRef: sharedTransportsRef,
           updateTabPtyId: updateStoreTabPtyId
-        }) as never
-      )
-      connectPanePty(
-        setupPane as never,
-        manager as never,
+        })
+      ] as unknown as Parameters<typeof connectPanePty>
+      connectPanePty(...mainArgs)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sibling uses the same checked fixture shape with its own command and transport.
+      const issueArgs = [
+        issuePane,
+        manager,
         createDeps({
-          startup: { command: 'bash setup-runner.sh' },
+          startup: { command: 'echo issue' },
+          isVisibleRef: { current: false },
           paneTransportsRef: sharedTransportsRef,
           updateTabPtyId: updateStoreTabPtyId
-        }) as never
-      )
+        })
+      ] as unknown as Parameters<typeof connectPanePty>
+      connectPanePty(...issueArgs)
 
-      for (let frame = 0; frame < 40 && setupTransport.connect.mock.calls.length === 0; frame++) {
-        runNextFrame()
-      }
-      expect(setupTransport.connect).toHaveBeenCalledTimes(1)
-      expect(mockStoreState.tabsByWorktree['wt-1'][0].ptyId).toBe('pty-setup')
+      await flushAsyncTicks(20)
+      expect(issueTransport.connect).toHaveBeenCalledTimes(1)
+      expect(mockStoreState.tabsByWorktree['wt-1'][0].ptyId).toBe('pty-issue')
       expect(mainTransport.connect).not.toHaveBeenCalled()
 
-      splitMounted = true
-      for (
-        let frame = 0;
-        frame < 20 &&
-        mainTransport.connect.mock.calls.length === 0 &&
-        mainTransport.attach.mock.calls.length === 0;
-        frame++
-      ) {
-        runNextFrame()
-      }
-
+      primaryCwd.resolve('/workspace')
+      await flushAsyncTicks(20)
       expect(mainTransport.attach).not.toHaveBeenCalled()
       expect(mainTransport.connect).toHaveBeenCalledTimes(1)
       expect(mainTransport.connect).toHaveBeenCalledWith(
         expect.not.objectContaining({ sessionId: expect.any(String) })
       )
       expect(createdTransportOptions[0]?.command).toBe('codex')
-      expect(createdTransportOptions[1]?.command).toBe('bash setup-runner.sh')
+      expect(createdTransportOptions[1]?.command).toBe('echo issue')
       expect(mainPtyId).toBe('pty-main')
-      expect(setupPtyId).toBe('pty-setup')
+      expect(issuePtyId).toBe('pty-issue')
     })
 
     it('does not reuse a sibling split pane pending spawn after remount', async () => {
