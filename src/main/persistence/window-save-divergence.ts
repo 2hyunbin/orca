@@ -1,6 +1,6 @@
 // A layout-owner build's check that the window's session saves no longer carry layout: every tab
-// change should reach main as a command, so a save that changes main's published layout is a
-// change main learned only from the save. Dark: reports only, never alters the write.
+// change should reach main as a command, so a save that changes main's layout model is a change
+// main learned only from the save. Dark: reports only, never alters or fails the write.
 
 import { appendFileSync } from 'node:fs'
 import {
@@ -12,39 +12,34 @@ import {
 import { loadWorkspaceLayoutWithoutReport } from '../../shared/workspace-layout/workspace-layout-load'
 import { stableJson } from '../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
-import {
-  publishWorkspaceLayout,
-  type PublishedWorkspaceLayout
-} from '../../shared/workspace-layout/workspace-layout-published'
+import type {
+  WorkspaceLayout,
+  WorkspaceLayoutModel
+} from '../../shared/workspace-layout/workspace-layout-model'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 /** Set by evidence runs: each divergence is appended there as one JSON line. */
 const LOG_PATH_ENV = 'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG'
 const MAX_PATHS = 12
+const RECORDS = ['defaultTabsAppliedByWorkspace', 'clientHostedBrowserPagesByWorkspace'] as const
 
 export type WindowSaveDivergence = { workspace: string; paths: string[] }
 
-export function publishedLayouts(
+/** Main's layout model of one partition, as the session holds it. */
+export function layoutModelOf(
   session: WorkspaceSessionState | null | undefined,
   hostId: ExecutionHostId
-): Map<string, PublishedWorkspaceLayout> {
-  const result = new Map<string, PublishedWorkspaceLayout>()
-  if (!session) {
-    return result
-  }
-  const { layout } = loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext())
-  for (const [key, workspace] of Object.entries(layout.workspaces)) {
-    result.set(key, publishWorkspaceLayout(workspace, hostId))
-  }
-  return result
-}
-
-function byId<T extends object>(items: readonly T[], id: (item: T) => string): Map<string, T> {
-  return new Map(items.map((item) => [id(item), item]))
+): WorkspaceLayoutModel | null {
+  return session
+    ? loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext()).layout
+    : null
 }
 
 /** The fields two copies of one record differ in. */
-function changedFields(before: object, after: object): string[] {
+function changedFields(before: unknown, after: unknown): string[] {
+  if (typeof before !== 'object' || typeof after !== 'object' || !before || !after) {
+    return stableJson(before ?? null) === stableJson(after ?? null) ? [] : ['value']
+  }
   const was = new Map(Object.entries(before))
   const now = new Map(Object.entries(after))
   return [...new Set([...was.keys(), ...now.keys()])].filter(
@@ -52,19 +47,18 @@ function changedFields(before: object, after: object): string[] {
   )
 }
 
-function diffById<T extends object>(
+function diffKeyed(
   prefix: string,
-  before: Map<string, T>,
-  after: Map<string, T>
+  before: Map<string, unknown>,
+  after: Map<string, unknown>
 ): string[] {
   const paths: string[] = []
   for (const [id, item] of after) {
-    const old = before.get(id)
-    if (old === undefined) {
+    if (!before.has(id)) {
       paths.push(`${prefix} ${id} added`)
       continue
     }
-    const fields = changedFields(old, item)
+    const fields = changedFields(before.get(id), item)
     if (fields.length > 0) {
       paths.push(`${prefix} ${id} changed: ${fields.join(', ')}`)
     }
@@ -77,57 +71,77 @@ function diffById<T extends object>(
   return paths
 }
 
-/** What a save changed in one workspace's published layout, as short paths; empty when nothing. */
-export function diffPublishedLayouts(
-  before: PublishedWorkspaceLayout | undefined,
-  after: PublishedWorkspaceLayout | undefined
+function listById<T>(items: readonly T[] | undefined, id: (item: T) => string) {
+  return new Map<string, unknown>((items ?? []).map((item) => [id(item), item]))
+}
+
+function recordById(items: Readonly<Record<string, unknown>> | undefined) {
+  return new Map<string, unknown>(Object.entries(items ?? {}))
+}
+
+/** What a save changed in one workspace of main's model, as short paths; empty when nothing. */
+export function diffWorkspaceLayouts(
+  before: WorkspaceLayout | undefined,
+  after: WorkspaceLayout | undefined
 ): string[] {
   if (!before || !after) {
     return before === after ? [] : [after ? 'workspace added' : 'workspace removed']
   }
   const paths = [
-    ...diffById(
+    ...diffKeyed(
       'group',
-      byId(before.groups, (g) => g.id),
-      byId(after.groups, (g) => g.id)
+      listById(before.groups, (g) => g.id),
+      listById(after.groups, (g) => g.id)
     ),
-    ...diffById(
+    ...diffKeyed(
       'tab',
-      byId(before.tabs, (t) => t.id),
-      byId(after.tabs, (t) => t.id)
+      listById(before.tabs, (t) => t.id),
+      listById(after.tabs, (t) => t.id)
     ),
-    ...diffById(
+    ...diffKeyed(
       'file',
-      byId(before.editorFiles, (f) => f.filePath),
-      byId(after.editorFiles, (f) => f.filePath)
+      listById(before.editorFiles, (f) => f.filePath),
+      listById(after.editorFiles, (f) => f.filePath)
     ),
-    ...diffById(
+    ...diffKeyed('editor view', recordById(before.editorViews), recordById(after.editorViews)),
+    ...diffKeyed(
       'browser',
-      byId(before.browserTabs, (b) => b.id),
-      byId(after.browserTabs, (b) => b.id)
+      listById(before.browserTabs, (b) => b.id),
+      listById(after.browserTabs, (b) => b.id)
+    ),
+    ...diffKeyed('leaf', recordById(before.leaves), recordById(after.leaves)),
+    ...diffKeyed(
+      'closed tab',
+      recordById(before.closedTerminalTabs),
+      recordById(after.closedTerminalTabs)
     )
   ]
   if (stableJson(before.groupLayout ?? null) !== stableJson(after.groupLayout ?? null)) {
     paths.push('group layout changed')
   }
-  // Same members, another order: the one tab order moved.
-  if (
-    paths.length === 0 &&
-    stableJson(before.tabs.map((t) => t.id)) !== stableJson(after.tabs.map((t) => t.id))
-  ) {
-    paths.push('tab order changed')
-  }
   return paths
 }
 
-/** Each workspace whose published layout differs between two projections of one partition. */
+/** Each workspace whose part of main's model differs between two copies of one partition. */
 export function windowSaveDivergences(
-  was: Map<string, PublishedWorkspaceLayout>,
-  now: Map<string, PublishedWorkspaceLayout>
+  was: WorkspaceLayoutModel | null,
+  now: WorkspaceLayoutModel | null
 ): WindowSaveDivergence[] {
+  const workspaces = new Set([
+    ...Object.keys(was?.workspaces ?? {}),
+    ...Object.keys(now?.workspaces ?? {})
+  ])
   const result: WindowSaveDivergence[] = []
-  for (const workspace of new Set([...was.keys(), ...now.keys()])) {
-    const paths = diffPublishedLayouts(was.get(workspace), now.get(workspace))
+  for (const workspace of workspaces) {
+    const paths = diffWorkspaceLayouts(was?.workspaces[workspace], now?.workspaces[workspace])
+    for (const record of RECORDS) {
+      if (
+        stableJson(was?.records[record]?.[workspace] ?? null) !==
+        stableJson(now?.records[record]?.[workspace] ?? null)
+      ) {
+        paths.push(`${record} changed`)
+      }
+    }
     if (paths.length > 0) {
       result.push({ workspace, paths: paths.slice(0, MAX_PATHS) })
     }
@@ -135,9 +149,26 @@ export function windowSaveDivergences(
   return result
 }
 
+function report(source: string, partition: ExecutionHostId, divergence: WindowSaveDivergence) {
+  console.warn('[layout-owner] window save changed main layout:', source, divergence)
+  const logPath = process.env[LOG_PATH_ENV]
+  if (!logPath) {
+    return
+  }
+  try {
+    appendFileSync(
+      logPath,
+      `${JSON.stringify({ at: Date.now(), source, partition, ...divergence })}\n`
+    )
+  } catch (error) {
+    console.warn('[layout-owner] save divergence log write failed:', error)
+  }
+}
+
 /**
- * Runs the window's save `write` and reports what it changed in main's published layout. A paired
- * server's partition is skipped: its layout is the server's, mirrored by the window.
+ * Runs the window's save `write` and reports what it changed in main's layout model. A paired
+ * server's partition is skipped: its layout is the server's, mirrored by the window. Nothing here
+ * can fail the save: the write's own errors propagate, the check's are only logged.
  */
 export function writeWindowSaveWatchingLayout(
   read: () => WorkspaceSessionState | null | undefined,
@@ -150,28 +181,21 @@ export function writeWindowSaveWatchingLayout(
     write()
     return
   }
-  const project = (): Map<string, PublishedWorkspaceLayout> | null => {
-    try {
-      return publishedLayouts(read(), partition)
-    } catch (error) {
-      console.warn('[layout-owner] save divergence check failed:', error)
-      return null
-    }
+  let was: WorkspaceLayoutModel | null | undefined
+  try {
+    was = layoutModelOf(read(), partition)
+  } catch (error) {
+    console.warn('[layout-owner] save divergence check failed:', error)
   }
-  const was = project()
   write()
-  const now = was && project()
-  if (!was || !now) {
+  if (was === undefined) {
     return
   }
-  for (const divergence of windowSaveDivergences(was, now)) {
-    console.warn('[layout-owner] window save changed main layout:', source, divergence)
-    const logPath = process.env[LOG_PATH_ENV]
-    if (logPath) {
-      appendFileSync(
-        logPath,
-        `${JSON.stringify({ at: Date.now(), source, partition, ...divergence })}\n`
-      )
+  try {
+    for (const divergence of windowSaveDivergences(was, layoutModelOf(read(), partition))) {
+      report(source, partition, divergence)
     }
+  } catch (error) {
+    console.warn('[layout-owner] save divergence check failed:', error)
   }
 }

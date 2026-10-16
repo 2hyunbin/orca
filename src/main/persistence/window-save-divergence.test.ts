@@ -72,7 +72,7 @@ describe('writeWindowSaveWatchingLayout', () => {
       expect.arrayContaining([
         'tab tab-a removed',
         'tab tab-c added',
-        'group group-1 changed: tabIds'
+        'group group-1 changed: tabOrder'
       ])
     )
     expect(warn).toHaveBeenCalledOnce()
@@ -84,7 +84,40 @@ describe('writeWindowSaveWatchingLayout', () => {
     expect(warn).toHaveBeenCalledWith(
       '[layout-owner] window save changed main layout:',
       'session:set',
-      expect.objectContaining({ paths: expect.arrayContaining(['group group-1 changed: tabIds']) })
+      expect.objectContaining({
+        paths: expect.arrayContaining(['group group-1 changed: tabOrder'])
+      })
+    )
+  })
+
+  it('still writes the save when its log cannot be written', () => {
+    vi.stubEnv(
+      'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG',
+      join(tmpdir(), 'orca-missing-dir', 'x', 'log.jsonl')
+    )
+    const next = session([{ id: 'tab-c' }])
+
+    expect(save(session([{ id: 'tab-a' }]), next)).toBe(next)
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] save divergence log write failed:',
+      expect.anything()
+    )
+  })
+
+  it('reports a pane record the save changed, which the published layout does not carry', () => {
+    const stored = session([{ id: 'tab-a' }])
+    const next = structuredClone(stored)
+    next.terminalLayoutsByTabId['tab-a'] = {
+      ...next.terminalLayoutsByTabId['tab-a']!,
+      titlesByLeafId: { [leaf(1)]: 'build' }
+    }
+
+    save(stored, next)
+
+    expect(warn).toHaveBeenCalledWith(
+      '[layout-owner] window save changed main layout:',
+      'session:set',
+      expect.objectContaining({ paths: [`leaf ${leaf(1)} added`] })
     )
   })
 
