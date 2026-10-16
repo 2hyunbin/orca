@@ -63,12 +63,12 @@ async function resolveSavedAgentOverride(
     return { kind: 'launch-default' }
   }
   const pendingAgents = ensureDetectedAgentsForRepo(useAppStore.getState(), repo ?? {})
-  if (!pendingAgents) {
-    // Why: a paired server answers per workspace; the direct launch checks this on the new one.
-    return { kind: 'agent', agent: savedAgent }
-  }
-  const detectedAgents = await pendingAgents
-  if (!isAgentAvailable(savedAgent, detectedAgents)) {
+  // Why: a paired server answers per workspace, so only the enabled check can run before it exists;
+  // the direct launch checks installation on the new workspace.
+  const available = pendingAgents
+    ? isAgentAvailable(savedAgent, await pendingAgents)
+    : isTuiAgentEnabled(savedAgent, useAppStore.getState().settings?.disabledTuiAgents)
+  if (!available) {
     toast.error(
       translate(
         'auto.lib.fix.checks.agent.launch.4c7f783a7a',

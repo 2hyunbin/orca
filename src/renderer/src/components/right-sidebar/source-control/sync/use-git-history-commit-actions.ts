@@ -10,6 +10,7 @@ import { detectLanguage } from '@/lib/language-detect'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { resolveDefaultAgentForWorktreeNewTab } from '@/lib/agent-tab-shortcuts'
+import { getDetectionTargetIdentityForWorktree } from '@/lib/agent-detection-target-inventory'
 import { translate } from '@/i18n/i18n'
 import type { GitHistoryItem } from '../../../../../../shared/git-history'
 import type {
@@ -264,7 +265,14 @@ async function explainCommitWithDefaultAgent(
   worktreeId: string,
   item: GitHistoryItem
 ): Promise<void> {
+  const detectionTarget = getDetectionTargetIdentityForWorktree(useAppStore.getState(), worktreeId)
   const agent = await resolveDefaultAgentForWorktreeNewTab(useAppStore.getState(), worktreeId)
+  // Why: the agent was picked from that host's list; never launch it on a host the workspace moved to.
+  if (
+    getDetectionTargetIdentityForWorktree(useAppStore.getState(), worktreeId) !== detectionTarget
+  ) {
+    return
+  }
   if (!agent) {
     toast.error(
       translate(
