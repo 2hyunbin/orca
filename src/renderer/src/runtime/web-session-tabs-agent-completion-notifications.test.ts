@@ -322,7 +322,7 @@ describe('paired session-tab agent completion notifications', () => {
   })
 
   describe('reconnect hydration of a host-owned done', () => {
-    let dispatchCompletion: ReturnType<typeof vi.fn>
+    let dispatchCompletion = vi.fn()
 
     beforeEach(() => {
       dispatchCompletion = vi.fn()
