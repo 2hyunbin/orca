@@ -93,6 +93,16 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup'])
 })
 
+/** A window's drag-out of one pane into a new tab; main mints the tab's id. */
+const MovePaneToNewTabCommand = z.object({
+  type: z.literal('movePaneToNewTab'),
+  ...OnPane,
+  groupId: z.string().min(1),
+  index: z.number().int().nonnegative().optional(),
+  /** The terminal the window's pane shows now, when it has one. */
+  windowDetach: z.object({ ptyId: z.string().min(1).max(512).nullable() })
+})
+
 /**
  * A terminal tab under the ids the window drew it with: its callers and the pane's terminal need
  * them at once. Main refuses an id another tab holds; the same create again changes nothing.
@@ -152,6 +162,7 @@ export const LayoutApplyParams = z.object({
     SetGroupRatiosCommand,
     CloseTabsCommand,
     RenameTabCommand,
-    SetTabPropsCommand
+    SetTabPropsCommand,
+    MovePaneToNewTabCommand
   ])
 })

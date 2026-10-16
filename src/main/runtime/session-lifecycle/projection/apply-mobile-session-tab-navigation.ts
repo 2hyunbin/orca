@@ -177,7 +177,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     )
     if (
       sharedWithAnotherPane ||
-      this.isProviderSessionLiveInAnotherPane(record) ||
+      (await this.isProviderSessionLiveInAnotherPane(record)) ||
       this.hookStoreNamesAnotherSessionForPane(record)
     ) {
       return {}
@@ -191,7 +191,9 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
   }
 
   /** The host's hook store places this conversation in another pane not proven exited. */
-  private isProviderSessionLiveInAnotherPane(record: SleepingAgentSessionRecord): boolean {
+  private async isProviderSessionLiveInAnotherPane(
+    record: SleepingAgentSessionRecord
+  ): Promise<boolean> {
     const otherPaneKeys = new Set(
       (this.getAgentProviderSessionSnapshotFn?.() ?? [])
         .filter(
@@ -201,21 +203,25 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
         )
         .map((row) => row.paneKey)
     )
-    if (otherPaneKeys.size === 0) {
-      return false
-    }
     // Why: only a proven exit clears a holder; an unverifiable PTY (dropped SSH relay) or one not
     // yet hydrated after a restart may still be writing the transcript.
-    const provenExitedPaneKeys = new Set<string>()
-    for (const pty of this.ptysById.values()) {
-      if (pty.paneKey && otherPaneKeys.has(pty.paneKey)) {
-        if (!this.isPtyKnownExited(pty.ptyId)) {
-          return true
-        }
-        provenExitedPaneKeys.add(pty.paneKey)
-      }
+    const ptys = [...this.ptysById.values()]
+    const holderPaneKeys = [...otherPaneKeys].filter((paneKey) => {
+      const panePtys = ptys.filter((pty) => pty.paneKey === paneKey)
+      return panePtys.length === 0 || panePtys.some((pty) => !this.isPtyKnownExited(pty.ptyId))
+    })
+    if (holderPaneKeys.length === 0) {
+      return false
     }
-    return [...otherPaneKeys].some((paneKey) => !provenExitedPaneKeys.has(paneKey))
+    // Why: a shell can outlive the agent; the hook store's proven exit releases a pane whose PTY lives.
+    const verdicts = await Promise.all(
+      holderPaneKeys.map((paneKey) =>
+        this.checkHookAgentPresenceFn
+          ? this.checkHookAgentPresenceFn(paneKey, 0).catch(() => null)
+          : Promise.resolve(null)
+      )
+    )
+    return verdicts.some((verdict) => verdict !== 'exited')
   }
 
   /** The pane moved on to another conversation after the record was saved; the hook store is authoritative. */
