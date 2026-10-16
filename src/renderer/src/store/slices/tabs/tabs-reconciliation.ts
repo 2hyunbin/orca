@@ -1,7 +1,7 @@
 import type { AppState } from '../../types'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import { preferredWorkspaceViewerTab } from '@/lib/workspace-creation-tab-selection'
-import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { resolveWorktreeOperationRoute } from '@/lib/worktree-operation-route'
 import { findKnownWorktreeById } from '../worktrees/listing/detected-worktree-meta'
 import { deriveActiveSurfaceForWorktree } from './tabs-surface'
 import type { Tab } from '../../../../../shared/tab-types'
@@ -34,10 +34,10 @@ export function projectWorktreeTabModelReconciliation(
   state: AppState,
   worktreeId: string,
   batch?: WorktreeTabModelReconciliationBatch,
-  executionHostId: ExecutionHostId | null | undefined = getKnownExecutionHostIdForWorktree(
+  executionHostId: ExecutionHostId | null | undefined = resolveWorktreeOperationRoute(
     state,
     worktreeId
-  ) ?? undefined
+  )?.executionHostId
 ): WorktreeTabModelReconciliation {
   const unifiedTabs = state.unifiedTabsByWorktree[worktreeId] ?? []
   const groups = state.groupsByWorktree[worktreeId] ?? []

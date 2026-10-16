@@ -164,11 +164,14 @@ describe('a structured chat launch on a paired server', () => {
       }
       if (file) {
         siblings.push({
-          ...file,
           type: 'file',
           mode: 'edit',
           id: fileTab!.id,
           title: 'index.ts',
+          filePath: file.filePath,
+          relativePath: file.relativePath,
+          language: file.language,
+          isDirty: file.isDirty,
           isActive: false
         })
       }
