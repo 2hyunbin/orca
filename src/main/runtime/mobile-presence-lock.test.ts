@@ -496,7 +496,11 @@ describe('mobile presence lock — multi-mobile semantics', () => {
 
     expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
     expect(resizes.at(-1)).toEqual({ ptyId: 'pty-1', cols: 132, rows: 44 })
-    expect(runtime.getLastRendererSize('pty-1')).toEqual({ cols: 132, rows: 44 })
+    // Why: controller drift must not replace the remembered renderer geometry.
+    ptySizes.set('pty-1', { cols: 160, rows: 50 })
+    await runtime.handleMobileSubscribe('pty-1', 'phone-A', { cols: 49, rows: 20 })
+    expect(await runtime.reclaimTerminalForDesktop('pty-1')).toBe(true)
+    expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
   })
 
   it('updateMobileViewport records viewport without applying layout in desktop mode', async () => {
@@ -522,18 +526,6 @@ describe('mobile presence lock — multi-mobile semantics', () => {
     expect(ptySizes.get('pty-1')).toEqual({ cols: 49, rows: 38 })
   })
 
-  it('updateDesktopViewport records geometry without resizing while mobile is driving', async () => {
-    const { runtime, ptySizes, resizes } = createRuntime()
-    await runtime.handleMobileSubscribe('pty-1', 'phone-A', { cols: 49, rows: 20 })
-    resizes.length = 0
-
-    expect(await runtime.updateDesktopViewport('pty-1', { cols: 132, rows: 44 })).toBe(true)
-
-    expect(ptySizes.get('pty-1')).toEqual({ cols: 49, rows: 20 })
-    expect(resizes).toEqual([])
-    expect(runtime.getLastRendererSize('pty-1')).toEqual({ cols: 132, rows: 44 })
-  })
-
   it('updateDesktopViewport records restore geometry while phone-fit override is held', async () => {
     const { runtime, ptySizes, resizes } = createRuntime()
     await runtime.handleMobileSubscribe('pty-1', 'phone-A', { cols: 49, rows: 20 })
@@ -544,7 +536,6 @@ describe('mobile presence lock — multi-mobile semantics', () => {
 
     expect(ptySizes.get('pty-1')).toEqual({ cols: 49, rows: 20 })
     expect(resizes).toEqual([])
-    expect(runtime.getLastRendererSize('pty-1')).toEqual({ cols: 132, rows: 44 })
 
     expect(await runtime.reclaimTerminalForDesktop('pty-1')).toBe(true)
     expect(ptySizes.get('pty-1')).toEqual({ cols: 132, rows: 44 })
