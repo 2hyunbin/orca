@@ -1,10 +1,12 @@
-import { net, session } from 'electron'
 import { ensureElectronProxyFromEnvironment } from '../network/proxy-settings'
+import { getMainHttpClient } from '../network/http-client'
 import { abortSignalWithTimeout } from '../lib/abort-signal-with-timeout'
 import {
   parseOpenCodeGoUsageApiPayload,
   type OpenCodeGoUsageWindows
 } from './opencode-go-status-parsing'
+import { classifyThrownUsageRequestError } from './usage-request-failure-kind'
+import type { UsageRateLimitFailureKind } from '../../shared/rate-limit-types'
 
 export const OPENCODE_GO_USAGE_API_URL = 'https://opencode.ai/zen/go/v1/usage'
 const API_TIMEOUT_MS = 15_000
@@ -20,7 +22,7 @@ export type OpenCodeGoUsageApiOutcome =
   | { kind: 'ok'; windows: OpenCodeGoUsageWindows }
   | { kind: 'unauthorized' }
   | { kind: 'no-subscription' }
-  | { kind: 'failed'; message: string }
+  | { kind: 'failed'; message: string; failureKind?: UsageRateLimitFailureKind }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -71,13 +73,12 @@ export async function fetchOpenCodeGoUsageWithApiKey(
   signal?: AbortSignal
 ): Promise<OpenCodeGoUsageApiOutcome> {
   await ensureElectronProxyFromEnvironment({
-    proxySession: session.defaultSession,
     probeUrl: OPENCODE_GO_USAGE_API_URL
   }).catch(() => {})
 
   let response: Response
   try {
-    response = await net.fetch(OPENCODE_GO_USAGE_API_URL, {
+    response = await getMainHttpClient().fetch(OPENCODE_GO_USAGE_API_URL, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -90,7 +91,8 @@ export async function fetchOpenCodeGoUsageWithApiKey(
     // request carries the key.
     return {
       kind: 'failed',
-      message: `OpenCode Go usage request failed (${error instanceof Error ? error.name : 'network error'})`
+      message: `OpenCode Go usage request failed (${error instanceof Error ? error.name : 'network error'})`,
+      failureKind: classifyThrownUsageRequestError(error)
     }
   }
 

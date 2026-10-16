@@ -1,10 +1,11 @@
-import { net } from 'electron'
+import { getMainHttpClient } from '../network/http-client'
 import type {
   ProviderRateLimits,
   RateLimitWindow,
   UsageRateLimitMetadata
 } from '../../shared/rate-limit-types'
 import { abortSignalWithTimeout } from '../lib/abort-signal-with-timeout'
+import { classifyThrownUsageRequestError } from './usage-request-failure-kind'
 import {
   isGrokAccessTokenFresh,
   readGrokAuthSession,
@@ -243,7 +244,7 @@ async function fetchBillingData(
   session: GrokAuthSession,
   signal?: AbortSignal
 ): Promise<GrokBillingFetchOutcome> {
-  const res = await net.fetch(url, {
+  const res = await getMainHttpClient().fetch(url, {
     headers: grokRequestHeaders(session),
     signal: abortSignalWithTimeout(signal, API_TIMEOUT_MS)
   })
@@ -347,6 +348,7 @@ export async function fetchGrokRateLimits(
       ? result('unavailable', 'Grok did not report a usage percentage for this account')
       : result('unavailable', 'Grok billing response did not include credit usage')
   } catch (err) {
-    return result('error', err instanceof Error ? err.message : 'Grok usage request failed')
+    const message = err instanceof Error ? err.message : 'Grok usage request failed'
+    return result('error', message, { failureKind: classifyThrownUsageRequestError(err) })
   }
 }

@@ -1,3 +1,4 @@
+import { prepareStructuredChatCliFork } from '../../../ai-vault/structured-chat-cli-fork'
 import {
   AiVaultSearchRequestSchema,
   AiVaultSearchStatusRequestSchema,
@@ -10,15 +11,20 @@ import {
 import { defineMethod } from '../core'
 import { conditionalAiVaultListResult } from '../../../ai-vault/session-list-fingerprint'
 import { restampAiVaultListResult } from '../../../ai-vault/session-list-results'
+import { copyStructuredChatConversation } from '../../../ai-vault/structured-chat-conversation-copy'
 import type { AiVaultPrepareSessionResumeArgs } from '../../../../shared/ai-vault-resume-preparation'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { isWslUncPath } from '../../../../shared/wsl-paths'
 import { describeAiVaultScanError } from '../../../../shared/ai-vault-scan-error-message'
 import {
   assertLegacyAiVaultResumeAllowed,
   projectStructuredAiVaultSessions,
   searchWithStructuredOwners
 } from '../../../ai-vault/structured-session-ownership'
-import { ensureStructuredAgentSessionHostUnlessRefused } from '../../structured-agent-session-host-refusal'
+import {
+  ensureStructuredAgentSessionHostUnlessRefused,
+  tryEnsureStructuredAgentSessionHostForResume
+} from '../../structured-agent-session-host-refusal'
 import {
   clientOpensStructuredChatFromHistory,
   supportsStructuredAgentSessions
@@ -128,6 +134,12 @@ export const AI_VAULT_METHODS = [
     permission: 'workspace',
     params: AiVaultPrepareSessionResumeParams,
     handler: async (params, { runtime }) => {
+      if ('sourceChat' in params) {
+        await runtime.ensureStructuredAgentSessionHost()
+        return prepareStructuredChatCliFork(params, (args) =>
+          runtime.prepareAiVaultSessionResume(args)
+        )
+      }
       const args: AiVaultPrepareSessionResumeArgs = {
         agent: params.agent,
         ...(params.sessionId ? { sessionId: params.sessionId } : {}),
@@ -138,11 +150,16 @@ export const AI_VAULT_METHODS = [
         // client-provided runtime/SSH stamp escape that host boundary.
         executionHostId: LOCAL_EXECUTION_HOST_ID
       }
-      await ensureStructuredAgentSessionHostUnlessRefused(() =>
-        runtime.ensureStructuredAgentSessionHost()
+      if (!isWslUncPath(args.filePath)) {
+        const ensureHost = () => runtime.ensureStructuredAgentSessionHost()
+        await (args.codexHome === null && !args.fork
+          ? tryEnsureStructuredAgentSessionHostForResume(ensureHost)
+          : ensureStructuredAgentSessionHostUnlessRefused(ensureHost))
+        assertLegacyAiVaultResumeAllowed(args)
+      }
+      return (
+        (await copyStructuredChatConversation(args)) ?? runtime.prepareAiVaultSessionResume(args)
       )
-      assertLegacyAiVaultResumeAllowed(args)
-      return runtime.prepareAiVaultSessionResume(args)
     }
   })
 ]

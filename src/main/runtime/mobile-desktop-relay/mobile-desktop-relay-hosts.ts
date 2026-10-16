@@ -22,6 +22,8 @@ export type MobileDesktopRelayHostListing = {
   orcadDeployment?: ManagedOrcadDeploymentSummary | null
   pairingRevision: number
   runtimeId: string | null
+  /** The desktop's own device id on that server, as pairing recorded it. */
+  pairedDeviceId?: string
 }
 
 /** Bounds a call; `expected` refuses it once the server was re-paired or its runtime changed. */
@@ -51,6 +53,8 @@ export type MobileDesktopRelayHosts = {
     params: unknown,
     options?: MobileDesktopRelayCallOptions
   ) => Promise<RuntimeRpcResponse<unknown>>
+  /** Whether this desktop renders the page itself as a client-placed page of that server. */
+  hostsBrowserPage: (environmentId: string, browserPageId: string) => boolean
   /** Fires when a server is removed, re-paired or disconnected; returns an unsubscribe. */
   onEnvironmentRetired: (listener: (environmentId: string) => void) => () => void
 }

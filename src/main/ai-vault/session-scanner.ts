@@ -14,10 +14,7 @@ import {
   type AntigravityWorkspaceResolver
 } from './session-scanner-antigravity-history'
 import { sessionCandidatesFromDiscoveries } from './session-scanner-candidates'
-import {
-  ensureSessionParseCacheLoaded,
-  scheduleSessionParseCachePersist
-} from './session-parse-cache-persistence'
+import { ensureSessionParseCacheLoaded } from './session-parse-cache-persistence'
 import {
   createSessionParseStats,
   parseAgentSessionFileCached,
@@ -39,6 +36,7 @@ import type {
 } from './session-scanner-types'
 import { clampPositiveInteger, errorMessage } from './session-scanner-values'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
+import { noteAiVaultScanFilesRead, noteAiVaultScanReading } from './ai-vault-scan-progress'
 import { DEFAULT_AI_VAULT_SCAN_LIMIT } from '../../shared/ai-vault-session-depth'
 import { withDevinSessionsDbScan } from './session-scanner-devin-db'
 import { withOpenCodeSqliteScanScope } from './session-scanner-opencode-sqlite-scan-scope'
@@ -87,13 +85,19 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
         // the cold scan gains nothing from the cache file (#9210).
         throwIfAiVaultScanCancelled(options.signal)
         await ensureSessionParseCacheLoaded()
-        const discoveries = await discoverAiVaultSessionSources({ options, limitPerAgent, issues })
+        const discoveries = await discoverAiVaultSessionSources({
+          options,
+          limitPerAgent,
+          issues
+        })
         throwIfAiVaultScanCancelled(options.signal)
 
         const candidates = await sessionCandidatesFromDiscoveries(discoveries, options)
+        const parseCandidates = candidates.slice(0, limit * SESSION_PARSE_CANDIDATE_MULTIPLIER)
+        noteAiVaultScanReading(options.signal, parseCandidates.length)
 
         const parsedSessions = await parseSessionCandidates({
-          candidates: candidates.slice(0, limit * SESSION_PARSE_CANDIDATE_MULTIPLIER),
+          candidates: parseCandidates,
           limit,
           platform,
           executionHostId,
@@ -137,8 +141,6 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
         span.setAttribute('earlyStopped', parseStats.earlyStopped)
         span.setAttribute('bytesRead', parseStats.bytesRead)
         span.setAttribute('issues', issues.length)
-
-        scheduleSessionParseCachePersist(parseStats)
 
         return {
           sessions: mergeSessions(cappedSessions, scopeSessions),
@@ -201,6 +203,7 @@ async function scanInScopeSessions(args: {
   if (candidates.length === 0) {
     return []
   }
+  noteAiVaultScanReading(args.signal, candidates.length)
   // Parse every in-scope candidate (limit === candidate count never early-stops).
   return parseSessionCandidates({
     candidates,
@@ -224,9 +227,8 @@ async function parseSessionCandidates(args: {
   antigravityWorkspaceResolver?: AntigravityWorkspaceResolver
 }): Promise<AiVaultSession[]> {
   const sessions = new ScannedSessionCollection()
-  let index = 0
 
-  while (index < args.candidates.length) {
+  for (let index = 0; index < args.candidates.length;) {
     throwIfAiVaultScanCancelled(args.signal)
     if (
       canStopParsingSessions(sessions, args.limit, candidateFileTime(args.candidates[index]?.file))
@@ -253,6 +255,7 @@ async function parseSessionCandidates(args: {
     // An abort can land while a batch settles: a read it cut short is not that
     // file's issue, and a partial parse must never be cached or returned.
     throwIfAiVaultScanCancelled(args.signal)
+    noteAiVaultScanFilesRead(args.signal, batch.length)
 
     for (const result of results) {
       if (result.issue) {

@@ -15,6 +15,7 @@ import { isStableCliVersionFrom, isStableCliVersionOnLine } from '../agent-cli-v
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
 import type { InitializeResponse } from './generated/acp-protocol.generated'
+import type { ManagedRuntime } from '../node-runtime/managed-runtime-release'
 import { readGrokModelCatalog } from './acp-dialects/grok-model-catalog'
 import {
   OPENCODE_MODEL_LISTING_ARGS,
@@ -34,6 +35,7 @@ import type {
 import { GROK_SESSION_HISTORY } from '../grok/grok-session-history'
 import { GROK_TRANSCRIPT_IMPORT } from '../grok/grok-transcript-import'
 import { OPENCODE_SESSION_HISTORY } from '../opencode/opencode-session-history'
+import { OPENCODE_TRANSCRIPT_IMPORT } from '../opencode/opencode-transcript-import'
 import { OMP_SESSION_HISTORY } from '../omp/omp-session-history'
 import { OMP_TRANSCRIPT_IMPORT } from '../omp/omp-transcript-import'
 
@@ -87,6 +89,9 @@ export type AcpLaunchSpec = {
   supportsVersion?(version: string): boolean
   /** Where the agent installs its own binary, searched after PATH. */
   installDirectories(input: { env: Readonly<Record<string, string>>; homePath: string }): string[]
+  /** A pinned copy Orca installs under its data folder when the person asks, searched last; a
+   *  start never installs it. A spec with one names no `supportsVersion`. */
+  managedRuntime?: ManagedRuntime
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
@@ -100,6 +105,8 @@ export type AcpLaunchSpec = {
   transcriptImport: StructuredAgentTranscriptImport | null
   /** How the agent's chats own the Session History rows their conversations list as. */
   sessionHistory: StructuredAgentSessionHistory
+  /** Each process gets its own temp folder: the agent's temp files collide across processes. */
+  privateTempDirectory?: true
 }
 
 const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
@@ -173,7 +180,7 @@ const OPENCODE_LAUNCH_SPEC: AcpLaunchSpec = {
   },
   visualsSkill: loadOpenCodeVisualsSkill,
   compaction: true,
-  transcriptImport: null,
+  transcriptImport: OPENCODE_TRANSCRIPT_IMPORT,
   sessionHistory: OPENCODE_SESSION_HISTORY
 }
 

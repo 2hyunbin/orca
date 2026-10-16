@@ -1,21 +1,13 @@
 import { memo } from 'react'
-import {
-  Bell,
-  ChevronDown,
-  ChevronRight,
-  GitBranch,
-  GitPullRequest,
-  Monitor,
-  Server
-} from 'lucide-react-native'
+import { Bell, ChevronDown, ChevronRight, GitBranch, GitPullRequest } from 'lucide-react-native'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { parseExecutionHostId } from '../../../src/shared/execution-host'
 import type { MobileRenderableRepoIcon } from '../host-screen/host-screen-reply-schema'
 import { triggerMediumImpact } from '../platform/haptics'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { Worktree } from '../worktree/workspace-list-types'
 import { areStructurallyEqual } from '../worktree/structural-equality'
 import { AgentSpinner } from './AgentSpinner'
+import { HostKindIcon } from './HostKindIcon'
 import { MobileRepoIcon } from './MobileRepoIcon'
 import { WorktreeAgentList } from './WorktreeAgentList'
 import { WorktreeMetaGlyphs, prStateColor } from './WorktreeMetaGlyphs'
@@ -60,6 +52,7 @@ function WorktreeListRowComponent({
   const metaText = isFolderWorkspace ? folderMeta : displayBranch(item.branch)
   const lineageDepth = Math.max(0, item.lineageDepth ?? 0)
   const lineageChildCount = item.lineageChildCount ?? 0
+  const shouldHideRepo = hideRepo && !item.showProjectName
 
   return (
     <Pressable
@@ -140,13 +133,7 @@ function WorktreeListRowComponent({
                 .filter(Boolean)
                 .join(', ')}
             >
-              {/* Rows from hosts that predate hostId stamping are local: a remote row always carries one. */}
-              {(parseExecutionHostId(item.hostContextHostId ?? item.hostId)?.kind ?? 'local') ===
-              'local' ? (
-                <Monitor size={10} color={colors.textMuted} />
-              ) : (
-                <Server size={10} color={colors.textMuted} />
-              )}
+              <HostKindIcon hostId={item.hostContextHostId ?? item.hostId} size={10} />
               <Text style={[styles.childBadgeText, styles.hostBadgeText]} numberOfLines={1}>
                 {item.hostContextLabel}
               </Text>
@@ -161,7 +148,7 @@ function WorktreeListRowComponent({
           {/* Repo glyph+name only when not already grouped under this repo;
               MobileRepoIcon falls back to a Folder (matching desktop's default)
               rather than a bare colored dot. */}
-          {!hideRepo && (
+          {!shouldHideRepo && (
             <>
               <MobileRepoIcon repoIcon={repoIcon} size={11} color={repoColor} />
               <Text style={styles.repoName} numberOfLines={1}>
@@ -299,7 +286,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMuted,
     fontFamily: typography.monoFamily,
-    flexShrink: 1
+    // Why: path takes only leftover space so badges truncate last.
+    flex: 1
   },
   childBadge: {
     flexDirection: 'row',
@@ -314,12 +302,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textMuted
   },
+  // Why the cap is on the name, not the badge: a health word after a long name must stay readable.
   hostBadge: {
-    flexShrink: 1,
-    maxWidth: 140
+    flexShrink: 1
   },
   hostBadgeText: {
-    flexShrink: 1
+    flexShrink: 1,
+    maxWidth: 100
   },
   hostHealthText: {
     flexShrink: 0

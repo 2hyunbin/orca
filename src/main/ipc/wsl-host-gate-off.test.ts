@@ -76,7 +76,7 @@ vi.mock('./runtime-environment-request-connections', async () => {
 
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { channelHandlerLookup, pairingCode } from './runtime-environments-ipc-test-harness'
-import { registerWslHostHandlers } from './wsl-host-handlers'
+import { registerWslHostHandlers, WSL_HOST_HANDLER_CHANNELS } from './wsl-host-handlers'
 import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
 import { getWslHostService, setWslHostService } from '../wsl/wsl-host-service-instance'
 import { getSavedRuntimeAiVaultHostInfos } from '../ai-vault/runtime-session-scanner'
@@ -103,6 +103,12 @@ function persistWslHost(userDataPath: string): void {
       remotePort: 6768
     }
   })
+}
+
+function registeredWslHostChannels(): unknown[] {
+  return mocks.handle.mock.calls
+    .map((call) => call[0])
+    .filter((channel) => String(channel).startsWith('wslHosts:'))
 }
 
 function touchedWslHost(mock: { mock: { calls: unknown[][] } }): boolean {
@@ -154,6 +160,7 @@ describe('WSL hosts with the internal gate closed', () => {
     startApp()
 
     expect(getWslHostService()).toBeNull()
+    expect(store.onSettingsChanged).not.toHaveBeenCalled()
     expect(mocks.createConnector).not.toHaveBeenCalled()
     expect(mocks.createFakeConnector).not.toHaveBeenCalled()
     expect(getRuntimeEnvironmentStatusSnapshots().map((s) => s.environmentId)).not.toContain(WSL_ID)
@@ -165,8 +172,7 @@ describe('WSL hosts with the internal gate closed', () => {
     expect(
       getSavedRuntimeAiVaultHostInfos(userDataPath).map((host) => host.environmentId)
     ).not.toContain(WSL_ID)
-    expect(await handler('wslHosts:listDistros')(null, undefined)).toEqual([])
-    expect(await handler('wslHosts:getStatuses')(null, undefined)).toEqual([])
+    expect(registeredWslHostChannels()).toEqual([])
     expect(mocks.spawnProcess).not.toHaveBeenCalled()
     expect(mocks.runProcess).not.toHaveBeenCalled()
   })
@@ -174,17 +180,7 @@ describe('WSL hosts with the internal gate closed', () => {
   it('refuses every WSL host operation and leaves the persisted host on disk', async () => {
     startApp()
 
-    expect(await handler('wslHosts:add')(null, { distro: 'Ubuntu' })).toMatchObject({
-      ok: false,
-      kind: 'disabled',
-      message: GATED
-    })
-    await expect(
-      Promise.resolve().then(() => handler('wslHosts:connect')(null, { environmentId: WSL_ID }))
-    ).rejects.toThrow(GATED)
-    await expect(
-      Promise.resolve().then(() => handler('wslHosts:remove')(null, { environmentId: WSL_ID }))
-    ).rejects.toThrow(GATED)
+    expect(registeredWslHostChannels()).toEqual([])
     await expect(
       handler('runtimeEnvironments:connect')(null, { selector: WSL_ID })
     ).rejects.toThrow(GATED)
@@ -216,5 +212,31 @@ describe('WSL hosts with the internal gate closed', () => {
 
     expect(getWslHostService()).not.toBeNull()
     expect(mocks.createFakeConnector).toHaveBeenCalledTimes(1)
+    expect(registeredWslHostChannels().sort()).toEqual([...WSL_HOST_HANDLER_CHANNELS].sort())
+    expect(store.onSettingsChanged).toHaveBeenCalledTimes(1)
+
+    // Registering again (another window) reuses the service and its one settings listener.
+    mocks.handle.mockClear()
+    startApp()
+    expect(mocks.createFakeConnector).toHaveBeenCalledTimes(1)
+    expect(store.onSettingsChanged).toHaveBeenCalledTimes(1)
+    expect(registeredWslHostChannels().sort()).toEqual([...WSL_HOST_HANDLER_CHANNELS].sort())
+  })
+
+  it('registers nothing with the gate open on a non-Windows host without the fake', () => {
+    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'linux' })
+    try {
+      startApp()
+    } finally {
+      if (platform) {
+        Object.defineProperty(process, 'platform', platform)
+      }
+    }
+
+    expect(getWslHostService()).toBeNull()
+    expect(registeredWslHostChannels()).toEqual([])
+    expect(store.onSettingsChanged).not.toHaveBeenCalled()
   })
 })
