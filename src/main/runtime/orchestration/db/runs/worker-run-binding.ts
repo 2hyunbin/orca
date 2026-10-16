@@ -7,9 +7,6 @@ import {
   type OrchestrationCoordinatorKey
 } from '../../orchestration-caller-identity'
 
-// Creator links point at older rows; this caps corrupt chains without limiting real nesting.
-const MAX_LINEAGE_STEPS = 32
-
 /** The caller's active delegated Dispatches, matched by address then pane as check and send do. */
 export function findCallerWorkerDispatches(
   db: OrchestrationDb,
@@ -32,10 +29,12 @@ function callerDispatchWorkingForRun(
 ): DispatchContextRow | undefined {
   for (const own of dispatches) {
     let row: DispatchContextRow | undefined = own
-    for (let step = 0; row && step < MAX_LINEAGE_STEPS; step++) {
-      if (row.run_id === runId) {
+    const visited = new Set<string>()
+    while (row) {
+      if (row.run_id === runId || visited.has(row.id)) {
         return own
       }
+      visited.add(row.id)
       row = row.creator_dispatch_id ? db.getDispatchContextById(row.creator_dispatch_id) : undefined
     }
   }

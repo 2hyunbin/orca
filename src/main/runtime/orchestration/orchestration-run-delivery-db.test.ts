@@ -257,6 +257,15 @@ describe('OrchestrationDb Run state', () => {
       expect(() =>
         d.bindRun({ runId: parent.id, coordinatorHandle: 'term_grand', coordinatorPaneKey: null })
       ).toThrow(expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' }))
+      let creatorHandle = 'term_grand'
+      for (let depth = 0; depth < 33; depth++) {
+        const handle = `term_deep_${depth}`
+        dispatchIn(sub.id, handle, { kind: 'terminal', handle: creatorHandle })
+        creatorHandle = handle
+      }
+      expect(() =>
+        d.bindRun({ runId: parent.id, coordinatorHandle: creatorHandle, coordinatorPaneKey: null })
+      ).toThrow(expect.objectContaining({ code: 'worker_cannot_coordinate_own_run' }))
       expect(d.getRun(parent.id)?.coordinator_handle).toBe('term_coord')
     })
 
