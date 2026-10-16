@@ -62,6 +62,22 @@ describe('a bridged pane no visible view shows', () => {
     expect(sent).toEqual(['data:\x1b[c\x1b[6n'])
   })
 
+  it('carries a query split across chunks until it completes', () => {
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, 'bulk\x1b[')
+    subject.onData(PTY, 'c')
+    expect(sent).toEqual(['data:\x1b[c'])
+  })
+
+  it('still sends command marks, titles and bells, but not an oversized OSC', () => {
+    subject.setPaused(PTY, true)
+    subject.onData(PTY, 'out\x1b]133;D;0\x07text\x1b]0;')
+    subject.onData(PTY, 'title\x1b\\ding\x07')
+    subject.onData(PTY, `\x1b]1337;File=${'x'.repeat(5000)}`)
+    subject.onData(PTY, 'y\x07after\x07')
+    expect(sent).toEqual(['data:\x1b]133;D;0\x07', 'data:\x1b]0;title\x1b\\\x07', 'data:\x07'])
+  })
+
   it('re-reads nothing for a pane that printed nothing while hidden', async () => {
     subject.setPaused(PTY, true)
     subject.setPaused(PTY, false)

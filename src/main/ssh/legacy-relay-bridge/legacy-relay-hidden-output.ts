@@ -3,7 +3,11 @@
  * and the reveal re-reads the screen the relay kept, since main holds no model of these terminals.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
-import { extractDroppedPtyQueryBytes } from '../../ipc/pty/delivery/pending'
+import {
+  EMPTY_OUTPUT_SALVAGE,
+  salvageHiddenOutput,
+  type OutputSalvageState
+} from './legacy-relay-output-salvage'
 
 export type LegacyRelayHiddenOutputDeps = {
   onData: (ptyId: string, data: string) => void
@@ -17,7 +21,7 @@ export type LegacyRelayHiddenOutputDeps = {
 }
 
 /** Present while output is dropped; `revealing` once a view wants it and its screen is on the way. */
-type HiddenPane = { dropped: boolean; revealing: boolean }
+type HiddenPane = { dropped: boolean; revealing: boolean; salvage: OutputSalvageState }
 
 export class LegacyRelayHiddenOutput {
   private readonly hidden = new Map<string, HiddenPane>()
@@ -31,10 +35,10 @@ export class LegacyRelayHiddenOutput {
       return
     }
     hidden.dropped = true
-    // Why: the renderer's xterm answers terminal queries; a dropped one leaves its program waiting.
-    const queries = extractDroppedPtyQueryBytes(data)
-    if (queries) {
-      this.deps.onData(ptyId, queries)
+    const { kept, state } = salvageHiddenOutput(data, hidden.salvage)
+    hidden.salvage = state
+    if (kept) {
+      this.deps.onData(ptyId, kept)
     }
   }
 
@@ -44,7 +48,7 @@ export class LegacyRelayHiddenOutput {
       if (hidden) {
         hidden.revealing = false
       } else {
-        this.hidden.set(ptyId, { dropped: false, revealing: false })
+        this.hidden.set(ptyId, { dropped: false, revealing: false, salvage: EMPTY_OUTPUT_SALVAGE })
       }
       return
     }
@@ -85,6 +89,10 @@ export class LegacyRelayHiddenOutput {
     if (this.hidden.get(ptyId) === pane && pane.revealing) {
       // Unreadable: the pane goes live again, and its reattach brings the whole screen.
       this.hidden.delete(ptyId)
+      if (pane.salvage.tail && !pane.salvage.skippingOsc) {
+        // A sequence split at the drop boundary; the next live chunk finishes it.
+        this.deps.onData(ptyId, pane.salvage.tail)
+      }
     }
   }
 }
