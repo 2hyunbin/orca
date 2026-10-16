@@ -38,6 +38,12 @@ async function createPackage() {
 // Why: the generator resolves its repo root from its own location, so a copy of
 // the script inside a throwaway tree exercises the real CLI without touching
 // resources/skills.
+function localGitEnv() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('GITHUB_'))
+  )
+}
+
 async function createGeneratorSandbox() {
   // Node resolves the entry point through symlinks, so the script's own
   // repo-root check only matches when the sandbox path is already resolved.
@@ -51,7 +57,14 @@ async function createGeneratorSandbox() {
   }
   await writeFile(path.join(skillRoot, 'SKILL.md'), 'demo skill\n')
   return {
-    generate: (...args) => execFileSync(process.execPath, [script, ...args], { stdio: 'pipe' }),
+    // Why strip GITHUB_*: on a CI pull_request the base-ledger check would look for a base this sandbox lacks.
+    generate: (...args) =>
+      execFileSync(process.execPath, [script, ...args], { stdio: 'pipe', env: localGitEnv() }),
+    generateOnPullRequest: (...args) =>
+      execFileSync(process.execPath, [script, ...args], {
+        stdio: 'pipe',
+        env: { ...localGitEnv(), GITHUB_EVENT_NAME: 'pull_request' }
+      }),
     read: (name) => readFile(path.join(root, 'resources', 'skills', name), 'utf8'),
     readRepoFile: (name) => readFile(path.join(root, ...name.split('/')), 'utf8'),
     editSkill: (body) => writeFile(path.join(skillRoot, 'SKILL.md'), body)
@@ -125,6 +138,12 @@ describe('skill bundle manifest generator', () => {
 
     await sandbox.editSkill('changed\n')
     expect(() => sandbox.generate()).toThrow()
+  })
+
+  it('fails verification on a pull request whose base it cannot read', async () => {
+    const sandbox = await createGeneratorSandbox()
+    sandbox.generate('--write')
+    expect(() => sandbox.generateOnPullRequest()).toThrow(/Cannot read the pull request base/)
   })
 
   it('merges ledger digests without duplicates and reports any the base had but HEAD lost', () => {

@@ -14,18 +14,14 @@ import {
   resolveDetectedTuiAgentIds
 } from '../../shared/tui-agent-detection-commands'
 import {
-  installBundledOrcaSkills,
-  type BundledOrcaSkillInstallInput
-} from '../../main/skills/bundled-orca-skill-install'
-import {
-  planBundledOrcaSkills,
-  type BundledOrcaSkillPlan
-} from '../../main/skills/bundled-orca-skill-plan'
-import {
   describeBundledSkillInstallResult,
-  describeSkillConflictReason
-} from '../../main/skills/bundled-orca-skill-install-report'
-import { resolveEnvironmentSkillProviderRoots } from '../../main/skills/skill-provider-runtime-roots'
+  describeSkillConflictReason,
+  installBundledOrcaSkills,
+  planBundledOrcaSkills,
+  resolveEnvironmentSkillProviderRoots,
+  type BundledOrcaSkillInstallInput,
+  type BundledOrcaSkillPlan
+} from '../../main/skills/bundled-orca-skill-cli-entry'
 
 export type SkillMutationVerb = 'install' | 'update'
 
