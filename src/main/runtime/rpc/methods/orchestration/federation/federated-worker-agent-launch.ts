@@ -2,7 +2,7 @@
  * A federated worker's agent, started by the host that runs it through the shared executor.
  *
  * The receiving host owns execution, and federation creates terminal agents only, so the launch is
- * `terminalOnly`. What makes it federation's is in the factories: a new top-level worktree created
+ * `terminalOnly`. What makes it federation's is in the factories: a new worktree created
  * agent-first with the attachment's stages and effects, or a background `worker-<task>` terminal in
  * an existing one. The dispatch brief is a later turn, outside the launch.
  */
@@ -29,7 +29,7 @@ export async function launchFederatedWorkerAgent(args: {
   params: FederationAttachStartInput
   agent: TuiAgent | undefined
   launchPreferences: AgentLaunchPreferences | undefined
-  /** The workspace to start in; absent creates the new top-level worktree the params describe. */
+  /** The workspace to start in; absent creates the new worktree the params describe. */
   worktree?: { id: string }
   setupSource: string
   effects: FederationEffect[]
@@ -69,7 +69,7 @@ export async function launchFederatedWorkerAgent(args: {
         const { repo, name } = params
         if (!repo || !name) {
           // Validation refuses this before the attachment exists; this only narrows the types.
-          throw new Error('A remote new-top-level worktree requires --name and an explicit --repo.')
+          throw new Error('A remote new worktree requires --name and an explicit --repo.')
         }
         db.recordRemoteAttachmentStage({
           dispatchId: params.dispatchId,
