@@ -652,6 +652,16 @@ describe('retained agent exit lifetime', () => {
     expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
   })
 
+  it('keeps a moved pane exit when its former tab closes', async () => {
+    const server = await serverWithExit()
+    const moved = makePaneKey('tab-moved', LEAF_1)
+    server.transferPaneAuthority(PANE, moved)
+    server.dropStatusEntriesByTabPrefix('tab-1')
+    expect(await server.checkAgentPresenceSince(moved, 0)).toBe('exited')
+    server.dropStatusEntriesByTabPrefix('tab-moved')
+    expect(await server.checkAgentPresenceSince(moved, 0)).toBeNull()
+  })
+
   it('drops the exit when the pane retires', async () => {
     const server = await serverWithExit()
     server.retirePaneAuthority(PANE)

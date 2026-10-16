@@ -1,7 +1,7 @@
 import { clearPaneCacheState } from '../../../shared/agent-hook-listener/listener-state'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { AgentHookServerAuthorityAliases } from './server-authority-aliases'
-import { forgetAgentExit } from './agent-exit-evidence'
+import { releaseAgentExitKey } from './agent-exit-evidence'
 import type {
   EnrichedAgentHookEventPayload,
   RetiredPaneAlias,
@@ -62,7 +62,7 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
       this.currentAuthorityObservations.delete(key)
       this.promptSentDedupeByPaneKey.delete(key)
       this.observations.forget(key)
-      exitsChanged = forgetAgentExit(this.agentExitedAtByPaneKey, key) || exitsChanged
+      exitsChanged = releaseAgentExitKey(this.agentExitedAtByPaneKey, key) || exitsChanged
     }
     if (aliasChanged) {
       this.notifyPaneKeyAliasPersistenceListener()

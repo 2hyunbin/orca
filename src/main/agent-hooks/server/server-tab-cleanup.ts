@@ -2,7 +2,7 @@ import { clearPaneCacheState } from '../../../shared/agent-hook-listener/listene
 import { paneCacheKeyMatchesTab } from './server-status-identity'
 import { AgentHookServerCleanup } from './server-cleanup'
 import type { EnrichedAgentHookEventPayload } from './server-types'
-import { forgetAgentExit } from './agent-exit-evidence'
+import { releaseAgentExitKey } from './agent-exit-evidence'
 
 export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
   /** Drop every status/cache claim attributable to a closed tab prefix. */
@@ -90,7 +90,7 @@ export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
     let exitsChanged = false
     for (const key of this.agentExitedAtByPaneKey.keys()) {
       if (paneCacheKeyMatchesTab(key, tabId)) {
-        exitsChanged = forgetAgentExit(this.agentExitedAtByPaneKey, key) || exitsChanged
+        exitsChanged = releaseAgentExitKey(this.agentExitedAtByPaneKey, key) || exitsChanged
       }
     }
     if (aliasChanged) {
