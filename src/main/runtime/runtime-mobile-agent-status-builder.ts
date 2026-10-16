@@ -22,6 +22,8 @@ type RuntimeMobileAgentStatusHost = {
   getPaneKey(tab: RuntimeMobileSessionTerminalTab): string
   getLeaf(tab: RuntimeMobileSessionTerminalTab): RuntimeLeafRecord | null
   getTrackedTitle(ptyId: string | null): string | null
+  /** Wall clock of the PTY's latest live OSC title; seeded restore titles leave it unset. */
+  getPtyTitleObservedAtEpochMs?(ptyId: string | null): number | null
 }
 
 export function buildRuntimeMobileAgentStatus(
@@ -133,7 +135,8 @@ export function buildRuntimeMobileAgentStatus(
   const shellTitleRetiredRestored =
     nonAgentTitle &&
     hookRow.restored !== null &&
-    (pty?.lastOscTitleEpochMs ?? 0) >= hookRow.restored.updatedAt
+    (pty?.lastOscTitleEpochMs ?? host.getPtyTitleObservedAtEpochMs?.(leaf?.ptyId ?? null) ?? 0) >=
+      hookRow.restored.updatedAt
   const restored = !pty?.lastAgentStatus && !shellTitleRetiredRestored ? hookRow.restored : null
   if (restored) {
     const restoredAgentType = ownerAgent ?? restored.payload.agentType
